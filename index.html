@@ -6524,7 +6524,11 @@
            (11/14px). At least the avatar's 30px, the avatar in its middle. */
         .card-body--custom .card-head { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 30px; }
         .card-body--custom .card-head-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
-        .card-body--custom .name .name-text { line-height: 19px; }
+        /* A name of rows, or a name with the years under it, sits on 19px rows
+           (the header's computed height); a lone name on one row keeps the
+           card's own 1.15 line, centred by the avatar as it always was. */
+        .card-body--custom .name--rows .name-text,
+        .card-body--custom .card-head-text > .name:not(:only-child) .name-text { line-height: 19px; }
         .card-body--custom .name--rows .name-row { display: block; min-width: 0; overflow: hidden; white-space: nowrap; }
         .card-body--custom .card-years {
             font-size: 11px; line-height: 14px; font-weight: 400; color: var(--text-light);

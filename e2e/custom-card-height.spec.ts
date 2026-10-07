@@ -351,3 +351,54 @@ test.describe('card height by content (U02 V3)', () => {
         });
     }
 });
+
+test.describe('the compact custom card (1 line, Equal) is drawn as in 3.10.0-beta.6 (N14)', () => {
+    // Measured on 3.10.0-beta.6 (9435f50) with the sample tree, from each card's top-left
+    // (1px border; the focused card's 2px border puts everything 1px further in).
+    test('the name, the avatar and the rows sit where they were', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await seedSetting(page, 'cardDensity', 'custom');
+        await seedSetting(page, 'cardFields', { lines: 1, height: 'view' });
+        await openApp(page);
+        await page.getByRole('button', { name: 'Try a sample tree' }).click();
+        await expect(card(page, 'Johan')).toBeVisible();
+        await page.evaluate(() => document.fonts.ready);
+        await expect.poll(() => cardBoxesMatchLayout(page)).toBe(true);
+        const cards = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('#tree-canvas .person-card')].map(el => {
+            const c = el.getBoundingClientRect();
+            const s = c.width / el.offsetWidth;
+            const rel = (r: DOMRect | undefined) => r ? [(r.x - c.x) / s, (r.y - c.y) / s, r.width / s, r.height / s].map(v => Math.round(v * 1000) / 1000) : null;
+            const name = el.querySelector<HTMLElement>('.name-text')!;
+            const ink = document.createRange();
+            ink.selectNodeContents(name);
+            return {
+                name: name.textContent ?? '', focused: el.classList.contains('focused'), height: el.offsetHeight,
+                lineHeight: getComputedStyle(name).lineHeight,
+                avatar: rel(el.querySelector('.card-avatar')?.getBoundingClientRect()),
+                nameBox: rel(name.getBoundingClientRect()), nameInkTop: rel(ink.getBoundingClientRect())![1],
+                rows: [...el.querySelectorAll('.card-line')].map(l => rel(l.getBoundingClientRect())),
+            };
+        }));
+        expect(cards.length).toBeGreaterThan(10);
+        expect(cards.filter(c => c.focused)).toHaveLength(1);
+        for (const c of cards) {
+            const d = c.focused ? 1 : 0;
+            expect(c.lineHeight, c.name).toBe('17.25px');
+            expect(c.avatar, c.name).toEqual([13, 11 + d, 30, 30]);
+            expect([c.nameBox![0], c.nameBox![1], c.nameBox![3]], c.name).toEqual([51, 17.375 + d, 17.25]);
+            expect(c.nameInkTop, c.name).toBe(15.375 + d);
+            c.rows.forEach((r, i) => expect(r, `${c.name} row ${i}`).toEqual([13, 47 + d + 17 * i, 174, 17]));
+            expect(c.height, c.name).toBe(56 + 17 * 3);
+        }
+        // With the years under the name the name keeps its 19px row: 19 + 14 = the 33px header.
+        await page.evaluate(() => {
+            const st = window.Strom.SettingsManager;
+            st.setCardFields({ ...st.getCardFields(), years: true });
+            window.Strom.TreeRenderer.render();
+        });
+        const johan = card(page, 'Johan');
+        await expect(johan.locator('.card-years')).toHaveCount(1);
+        expect(await johan.locator('.name-text').evaluate(el => getComputedStyle(el).lineHeight)).toBe('19px');
+        expect(await johan.locator('.card-head').evaluate(el => (el as HTMLElement).offsetHeight)).toBe(33);
+    });
+});
