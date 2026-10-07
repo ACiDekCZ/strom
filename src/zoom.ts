@@ -25,6 +25,13 @@ const ZOOM_EDGE_BAR = 0.6;
 const ZOOM_EDGE_LABELS = 0.999;
 const ZOOM_BUTTON_FACTOR = 1.3;
 const ZOOM_ANIMATION_DURATION = 200; // ms
+/**
+ * A wheel zoom has no end event: the canvas keeps its compositor layer until
+ * the wheel has been quiet this long, then it is drawn sharp again.
+ */
+const WHEEL_IDLE_MS = 150;
+/** Class on #tree-canvas while it moves (drag, pinch, wheel, animation): will-change: transform. */
+const MOVING_CLASS = 'is-moving';
 /** Views drawn in their own container over the (hidden) tree canvas. */
 // The welcome of an empty tree scrolls itself too (a phone held sideways is shorter than it).
 const STANDALONE_VIEW_SELECTOR = '.timeline-container, .fan-container, .map-container, #empty-state';
@@ -57,6 +64,9 @@ class ZoomPanClass {
 
     // Animation
     private animationFrame: number | null = null;
+
+    // Wheel zoom idle timer (the layer hint stays on until it fires)
+    private wheelIdleTimer: ReturnType<typeof setTimeout> | null = null;
 
     // Listeners notified after every transform change (minimap viewport sync).
     private changeListeners: Array<() => void> = [];
@@ -93,6 +103,7 @@ class ZoomPanClass {
 
     private onMouseMove(e: MouseEvent): void {
         if (!this.dragging) return;
+        this.beginMotion();
         this.tx = e.clientX - this.dragStartX;
         this.ty = e.clientY - this.dragStartY;
         this.apply();
@@ -100,6 +111,7 @@ class ZoomPanClass {
 
     private onMouseUp(): void {
         this.dragging = false;
+        this.endMotion();
     }
 
     private onWheel(e: WheelEvent): void {
@@ -118,6 +130,13 @@ class ZoomPanClass {
 
         // Calculate zoom factor
         const delta = e.deltaY > 0 ? 0.9 : 1.1;
+
+        this.beginMotion();
+        if (this.wheelIdleTimer !== null) clearTimeout(this.wheelIdleTimer);
+        this.wheelIdleTimer = setTimeout(() => {
+            this.wheelIdleTimer = null;
+            this.endMotion();
+        }, WHEEL_IDLE_MS);
 
         // Zoom toward mouse position
         this.zoomToPoint(mouseX, mouseY, delta);
@@ -165,6 +184,7 @@ class ZoomPanClass {
             const center = this.getTouchCenter(e.touches);
             this.lastPinchCenterX = center.x;
             this.lastPinchCenterY = center.y;
+            this.beginMotion();
         }
     }
 
@@ -184,6 +204,7 @@ class ZoomPanClass {
                 if (!this.touchState.isPanning) {
                     // Start panning
                     this.touchState.isPanning = true;
+                    this.beginMotion();
                     this.touchState.lastX = touch.clientX;
                     this.touchState.lastY = touch.clientY;
                 }
@@ -237,6 +258,7 @@ class ZoomPanClass {
             // All fingers lifted
             this.lastPinchDistance = 0;
             this.touchState = null;
+            this.endMotion();
         } else if (e.touches.length === 1 && this.lastPinchDistance > 0) {
             // Went from pinch to single finger - reset to pan mode
             this.lastPinchDistance = 0;
@@ -256,6 +278,26 @@ class ZoomPanClass {
     private onTouchCancel(): void {
         this.touchState = null;
         this.lastPinchDistance = 0;
+        this.endMotion();
+    }
+
+    // ==================== LAYER HINT ====================
+
+    /**
+     * While the canvas moves it is its own compositor layer (will-change:
+     * transform), so dragging stays smooth. A layer kept for good is drawn
+     * once and then only scaled, which blurs the cards; at rest the hint is
+     * dropped and the browser draws the cards sharp at the current scale.
+     */
+    private beginMotion(): void {
+        document.getElementById('tree-canvas')?.classList.add(MOVING_CLASS);
+    }
+
+    /** Drop the layer hint, unless something still moves the canvas. */
+    private endMotion(): void {
+        if (this.dragging || this.touchState?.isPanning || this.lastPinchDistance > 0
+            || this.animationFrame !== null || this.wheelIdleTimer !== null) return;
+        document.getElementById('tree-canvas')?.classList.remove(MOVING_CLASS);
     }
 
     // ==================== HELPER METHODS ====================
@@ -360,9 +402,11 @@ class ZoomPanClass {
                 this.animationFrame = requestAnimationFrame(animate);
             } else {
                 this.animationFrame = null;
+                this.endMotion();
             }
         };
 
+        this.beginMotion();
         this.animationFrame = requestAnimationFrame(animate);
     }
 
@@ -395,6 +439,7 @@ class ZoomPanClass {
         if (this.animationFrame) {
             cancelAnimationFrame(this.animationFrame);
             this.animationFrame = null;
+            this.endMotion();
         }
         this.scale = 1;
         this.tx = 0;
@@ -614,7 +659,9 @@ class ZoomPanClass {
             this.ty = startTy + (endTy - startTy) * eased;
             this.apply();
             this.animationFrame = progress < 1 ? requestAnimationFrame(animate) : null;
+            if (this.animationFrame === null) this.endMotion();
         };
+        this.beginMotion();
         this.animationFrame = requestAnimationFrame(animate);
         return true;
     }
@@ -639,6 +686,7 @@ class ZoomPanClass {
             this.tx = endTx;
             this.ty = endTy;
             this.apply();
+            this.endMotion();
             return true;
         }
         const startScale = this.scale, startTx = this.tx, startTy = this.ty;
@@ -651,7 +699,9 @@ class ZoomPanClass {
             this.ty = startTy + (endTy - startTy) * eased;
             this.apply();
             this.animationFrame = progress < 1 ? requestAnimationFrame(step) : null;
+            if (this.animationFrame === null) this.endMotion();
         };
+        this.beginMotion();
         this.animationFrame = requestAnimationFrame(step);
         return true;
     }
@@ -733,7 +783,9 @@ class ZoomPanClass {
     private apply(): void {
         const canvas = document.getElementById('tree-canvas');
         if (canvas) {
-            canvas.style.transform = `translate(${this.tx}px, ${this.ty}px) scale(${this.scale})`;
+            // Whole-pixel pan: a fractional translate puts every card between
+            // device pixels and blurs its text and borders.
+            canvas.style.transform = `translate(${Math.round(this.tx)}px, ${Math.round(this.ty)}px) scale(${this.scale})`;
             // Far out the card badges turn into dots that keep a readable size.
             canvas.classList.toggle('zoom-far', this.scale < ZOOM_FAR);
             // The research edge: a stretch of the top edge far out, its words from 100 %.

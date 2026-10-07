@@ -689,7 +689,8 @@ class TreePreviewClass {
         if (!this.canvas) return;
 
         const svg = this.overlay?.querySelector('.tree-preview-lines') as SVGElement;
-        const transform = `translate(${this.zoomState.tx}px, ${this.zoomState.ty}px) scale(${this.zoomState.scale})`;
+        // Whole-pixel pan keeps the cards sharp.
+        const transform = `translate(${Math.round(this.zoomState.tx)}px, ${Math.round(this.zoomState.ty)}px) scale(${this.zoomState.scale})`;
 
         this.canvas.style.transform = transform;
         if (svg) {
@@ -1237,7 +1238,7 @@ class TreeCompareClass {
         const pane = paneName === 'left' ? this.leftPane : this.rightPane;
         if (!pane) return;
 
-        const transform = `translate(${pane.zoomState.tx}px, ${pane.zoomState.ty}px) scale(${pane.zoomState.scale})`;
+        const transform = `translate(${Math.round(pane.zoomState.tx)}px, ${Math.round(pane.zoomState.ty)}px) scale(${pane.zoomState.scale})`;
         pane.canvas.style.transform = transform;
         pane.svg.style.transform = transform;
     }

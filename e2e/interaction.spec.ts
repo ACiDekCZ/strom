@@ -80,6 +80,40 @@ test('dragging the canvas pans the tree', async ({ page }) => {
     await expect.poll(() => canvasTransform(page)).not.toBe(before);
 });
 
+test('the canvas is a compositor layer only while it moves, and pans in whole pixels (sharp cards) (T01)', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    const willChange = () => page.locator('#tree-canvas').evaluate((el) => getComputedStyle(el).willChange);
+
+    // At rest: no layer hint (a kept layer is scaled, not redrawn — blurry cards).
+    await expect.poll(willChange).toBe('auto');
+
+    // Dragging: the hint is on while the mouse is down and moving, off after.
+    const box = (await page.locator('#tree-container').boundingBox())!;
+    await page.mouse.move(box.x + box.width - 40, box.y + 40);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width - 120, box.y + 120, { steps: 4 });
+    expect(await willChange()).toBe('transform');
+    await page.mouse.up();
+    expect(await willChange()).toBe('auto');
+
+    // Wheel zoom has no end event: on while wheeling, off once it is quiet.
+    const whileWheeling = await page.evaluate(([x, y]) => {
+        const container = document.getElementById('tree-container')!;
+        container.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, clientX: x, clientY: y, bubbles: true, cancelable: true }));
+        return getComputedStyle(document.getElementById('tree-canvas')!).willChange;
+    }, [box.x + box.width - 40, box.y + 40]);
+    expect(whileWheeling).toBe('transform');
+    await expect.poll(willChange).toBe('auto');
+
+    // A fractional pan is written as whole pixels.
+    await page.evaluate(() => window.Strom.ZoomPan.centerOnWorldPoint(100.37, 50.61));
+    const t = await canvasTransform(page);
+    const m = /translate\((-?[\d.]+)px, (-?[\d.]+)px\)/.exec(t);
+    expect(m, t).not.toBeNull();
+    expect(Number.isInteger(Number(m![1])) && Number.isInteger(Number(m![2])), t).toBe(true);
+});
+
 test('expanded mode: a multi-marriage person shows all partners inline', async ({ page }) => {
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();

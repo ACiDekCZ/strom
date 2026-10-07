@@ -899,8 +899,10 @@
         #tree-canvas {
             position: absolute;
             transform-origin: 0 0;
-            will-change: transform;
         }
+        /* Its own compositor layer only while it moves (src/zoom.ts): a layer
+           kept for good is drawn once and then scaled, which blurs the cards. */
+        #tree-canvas.is-moving { will-change: transform; }
 
         #tree-lines {
             position: absolute;
@@ -8714,7 +8716,8 @@
             top: 0;
             left: 0;
             transform-origin: 0 0;
-            will-change: transform;
+            /* No permanent will-change: a kept layer is scaled, not redrawn,
+               and blurs the cards (as on the tree canvas). */
         }
         .tree-preview-lines {
             position: absolute;
