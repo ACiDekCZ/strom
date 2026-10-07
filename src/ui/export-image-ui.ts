@@ -23,6 +23,7 @@ import { SettingsManager } from '../settings.js';
 import { safeFileName } from '../filenames.js';
 import { cardLines } from '../card-fields.js';
 import { measureCardTexts } from '../card-width.js';
+import { appFontFaceCss, POSTER_SERIF_FACES, POSTER_LINE_FACES } from '../poster-fonts.js';
 
 /** Browsers cap canvas dimensions; keep well under the common ~16k limit. */
 const MAX_CANVAS_PX = 15000;
@@ -189,6 +190,8 @@ function buildCurrentPoster(): PosterBuild | null {
         branchMap,
         deceasedSet: presumedDeceasedSet(data),
         ...(dimmedIds ? { dimmedIds } : {}),
+        // The faces the cards are drawn in: the serif always, the lines' sans for the custom card.
+        fontFaceCss: appFontFaceCss(custom ? [...POSTER_SERIF_FACES, ...POSTER_LINE_FACES] : POSTER_SERIF_FACES),
         ...(custom ? {
             config: cardConfig, cardLines: cardLinesMap,
             cardDateColumn: TreeRenderer.getCustomCardMetrics()?.dateColumn ?? 0,

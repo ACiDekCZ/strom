@@ -145,6 +145,11 @@ export interface PosterOptions {
     cardDateColumn?: number;
     /** Text widths in the card's fonts (the screen measures them); estimated when absent. */
     measureCardTexts?: MeasureTexts;
+    /**
+     * @font-face rules of the app's fonts (src/poster-fonts.ts), embedded so
+     * the SVG and the PNG made from it draw in the screen's fonts.
+     */
+    fontFaceCss?: string;
 }
 
 /** What the poster needs of a custom card line. */
@@ -219,18 +224,24 @@ function customCardSvg(
         : nameAt15 * fs / 15 > nameRoom ? ` textLength="${nameRoom.toFixed(0)}" lengthAdjust="spacingAndGlyphs"` : '';
     out.push(`<text x="${textX.toFixed(1)}" y="${(pos.y + 10 + 20).toFixed(1)}" font-size="${fs}" font-weight="600" fill="${COLORS.text}"${clamp}>${escapeXml(name)}</text>`);
     const dateX = left + CARD_MARK_WIDTH + CARD_COLUMN_GAP;
+    // The date and the place at their measured widths: in another font the
+    // date still ends before the place's column and a shortened place inside the card.
+    const pin = (w: number): string => exact && w > 0 ? ` textLength="${w.toFixed(1)}" lengthAdjust="spacingAndGlyphs"` : '';
     lines.forEach((l, i) => {
         const y = (pos.y + 10 + 30 + 6 + 17 * i + 12.5).toFixed(1);
-        if (l.mark) out.push(`<text x="${(left + CARD_MARK_WIDTH / 2).toFixed(1)}" y="${y}" text-anchor="middle" font-size="12" fill="${COLORS.textFaint}">${escapeXml(l.mark)}</text>`);
+        if (l.mark) out.push(`<text x="${(left + CARD_MARK_WIDTH / 2).toFixed(1)}" y="${y}" text-anchor="middle" font-size="12" fill="${COLORS.textFaint}" ${LINE_FONT}>${escapeXml(l.mark)}</text>`);
         if (!l.wide && l.date) {
-            out.push(`<text class="card-line-date" x="${dateX.toFixed(1)}" y="${y}" font-size="12" font-weight="500" fill="${COLORS.text}" ${LINE_FONT}>${escapeXml(l.date)}</text>`);
+            const dateW = measure('date', [l.date]).get(l.date) ?? 0;
+            out.push(`<text class="card-line-date" x="${dateX.toFixed(1)}" y="${y}" font-size="12" font-weight="500" fill="${COLORS.text}"${pin(dateW)} ${LINE_FONT}>${escapeXml(l.date)}</text>`);
         }
         const placeX = l.wide ? dateX : left + cardPlaceOffset(dateColumn);
         const more = l.more ? ` ${l.more}` : '';
         const moreW = more ? measure('place', [more]).get(more) ?? 0 : 0;
-        const place = fitPlace(l.rest, right - placeX - moreW, measure) + more;
+        const rest = fitPlace(l.rest, right - placeX - moreW, measure);
+        const place = rest + more;
         if (place.trim()) {
-            out.push(`<text class="card-line-place" x="${placeX.toFixed(1)}" y="${y}" font-size="12" fill="${COLORS.textLight}" ${LINE_FONT}>${escapeXml(place)}</text>`);
+            const restW = rest ? measure('place', [rest]).get(rest) ?? 0 : 0;
+            out.push(`<text class="card-line-place" x="${placeX.toFixed(1)}" y="${y}" font-size="12" fill="${COLORS.textLight}"${pin(Math.min(restW + moreW, right - placeX))} ${LINE_FONT}>${escapeXml(place)}</text>`);
         }
     });
     return out.join('');
@@ -310,6 +321,8 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
 
     const out: string[] = [];
     out.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${width.toFixed(0)}" height="${height.toFixed(0)}" viewBox="0 0 ${width.toFixed(0)} ${height.toFixed(0)}" font-family="${FONT}">`);
+    // The app's fonts travel with the image (CDATA: the CSS is not markup).
+    if (options.fontFaceCss) out.push(`<defs><style><![CDATA[\n${options.fontFaceCss}\n]]></style></defs>`);
     out.push(`<rect x="0" y="0" width="${width.toFixed(0)}" height="${height.toFixed(0)}" fill="${COLORS.background}"/>`);
     out.push(`<g transform="translate(${ox.toFixed(1)}, ${oy.toFixed(1)})">`);
 

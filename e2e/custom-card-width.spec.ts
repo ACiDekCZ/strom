@@ -94,15 +94,21 @@ async function posterSvg(page: Page): Promise<string> {
     return readFileSync(await download.path(), 'utf-8');
 }
 
+/** The SVG without its embedded faces and every family replaced by a wide fallback (monospace). */
+function withoutAppFonts(svg: string): string {
+    return svg.replace(/<defs><style>[\s\S]*?<\/style><\/defs>/, '').replace(/font-family="[^"]*"/g, 'font-family="monospace"');
+}
+
 /**
- * The SVG as a viewer without the app's fonts sets it: the embedded faces
- * dropped and every family replaced by a wide fallback (monospace), on a page
- * of its own. Per card: its box and the drawn boxes of its name, dates, places.
+ * The SVG set on a page of its own (no app, no app fonts but what it carries).
+ * Per card: its box and the drawn boxes of its name, dates, places; and the
+ * faces the page loaded.
  */
-async function renderWithoutAppFonts(page: Page, svg: string) {
-    const bare = svg.replace(/<defs><style>[\s\S]*?<\/style><\/defs>/, '').replace(/font-family="[^"]*"/g, 'font-family="monospace"');
+async function renderStandalone(page: Page, svg: string) {
     const view = await page.context().newPage();
-    await view.setContent(`<!doctype html><html><body style="margin:0">${bare}</body></html>`);
+    await view.setContent(`<!doctype html><html><body style="margin:0">${svg}</body></html>`);
+    await view.evaluate(() => document.fonts.ready);
+    const loaded = await view.evaluate(() => [...document.fonts].filter(f => f.status === 'loaded').map(f => `${f.family.replace(/"/g, '')} ${f.weight}`).sort());
     const cards = await view.evaluate(() => {
         const box = (el: SVGGraphicsElement) => { const b = el.getBBox(); return { left: b.x, right: b.x + b.width }; };
         return [...document.querySelectorAll<SVGRectElement>('g.cards > rect[rx="8"]')].map(r => {
@@ -122,7 +128,13 @@ async function renderWithoutAppFonts(page: Page, svg: string) {
         });
     });
     await view.close();
-    return cards;
+    return { cards, loaded };
+}
+
+/** A card's lines in pairs: the date and the place drawn on one row. */
+function rows(lines: { kind: string; y: number; text: string; left: number; right: number }[]) {
+    const ys = [...new Set(lines.map(l => l.y))];
+    return ys.map(y => ({ date: lines.find(l => l.y === y && l.kind === 'date'), place: lines.find(l => l.y === y && l.kind === 'place') }));
 }
 
 test.describe('the custom card width', () => {
@@ -196,12 +208,74 @@ test.describe('the custom card width', () => {
     test('in the poster a long name stays inside its card also in a wider font than the screen\'s (T12)', async ({ page }) => {
         const name = 'Bartoloměj Wolfensteiner';
         await setup(page, 'Brno', 1440, `${name.split(' ')[0]} /${name.split(' ')[1]}/`);
-        const cards = await renderWithoutAppFonts(page, await posterSvg(page));
+        const { cards } = await renderStandalone(page, withoutAppFonts(await posterSvg(page)));
         const bart = cards.find(c => c.name?.text === name);
         expect(bart).toBeTruthy();
         // The name sets the card width; drawn in monospace it ran ~25px past without the fix.
         expect(bart!.name.right).toBeLessThanOrEqual(bart!.right - 12 + 0.5);
         for (const c of cards) expect(c.name.right).toBeLessThanOrEqual(c.right - 12 + 0.5);
+    });
+
+    test('the poster carries the app\'s fonts; the date ends 6px before the place and a shortened place stays in the card in any font (T05)', async ({ page }) => {
+        await setup(page, LONG_PLACE);
+        const svg = await posterSvg(page);
+        const faces = [...svg.matchAll(/@font-face\s*\{[^}]*font-family:\s*"([^"]+)";[^}]*font-weight:\s*(\d+);[^}]*src:\s*url\("data:font\/woff2;base64,/g)]
+            .map(m => `${m[1]} ${m[2]}`).sort();
+        expect(faces).toEqual(['Instrument Sans 400', 'Instrument Sans 500', 'Source Serif 4 400', 'Source Serif 4 600']);
+        const dateCol = await page.evaluate(() => parseFloat(getComputedStyle(document.body).getPropertyValue('--card-date-col')));
+        for (const [variant, text] of [['app fonts', svg], ['fallback', withoutAppFonts(svg)]] as const) {
+            const { cards, loaded } = await renderStandalone(page, text);
+            if (variant === 'app fonts') {
+                // The faces the cards are set in came with the file.
+                expect(loaded).toEqual(expect.arrayContaining(['Instrument Sans 400', 'Instrument Sans 500', 'Source Serif 4 600']));
+            }
+            let cut = 0;
+            for (const c of cards) {
+                for (const { date, place } of rows(c.lines)) {
+                    if (date && place) {
+                        expect(date.right + 6, `${variant}: ${date.text} | ${place.text}`).toBeLessThanOrEqual(place.left + 0.5);
+                        expect(place.left - (c.left + 12 + 17), variant).toBeCloseTo(dateCol + 6, 0);
+                    }
+                    if (place) {
+                        expect(place.right, `${variant}: ${place.text}`).toBeLessThanOrEqual(c.right - 12 + 0.5);
+                        if (place.text.includes('…')) cut++;
+                    }
+                }
+            }
+            expect(cut, variant).toBe(1);
+        }
+    });
+
+    test('the PNG is drawn in the app\'s fonts the SVG carries (T05)', async ({ page }) => {
+        await setup(page, MEDIUM_PLACE);
+        const svg = await posterSvg(page);
+        await page.evaluate(() => window.Strom.UI.showPosterDialog());
+        const [download] = await Promise.all([
+            page.waitForEvent('download'),
+            page.locator('#poster-modal .menu-option', { hasText: 'PNG' }).click(),
+        ]);
+        const { readFileSync } = await import('fs');
+        const png = `data:image/png;base64,${readFileSync(await download.path()).toString('base64')}`;
+        // The downloaded PNG against the same SVG rasterised with its fonts and without them.
+        const same = await page.evaluate(async ({ png, svg }) => {
+            const load = (src: string) => new Promise<HTMLImageElement>((res, rej) => {
+                const img = new Image(); img.onload = () => res(img); img.onerror = rej; img.src = src;
+            });
+            const shot = await load(png);
+            const pixels = async (src: string) => {
+                const img = await load(src);
+                const c = document.createElement('canvas'); c.width = shot.naturalWidth; c.height = shot.naturalHeight;
+                const ctx = c.getContext('2d')!; ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, c.width, c.height);
+                ctx.drawImage(img, 0, 0, c.width, c.height);
+                return ctx.getImageData(0, 0, c.width, c.height).data;
+            };
+            const toUrl = (s: string) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(s)}`;
+            const [got, withFonts, without] = await Promise.all([pixels(png), pixels(toUrl(svg)),
+                pixels(toUrl(svg.replace(/<defs><style>[\s\S]*?<\/style><\/defs>/, '')))]);
+            const differ = (a: Uint8ClampedArray, b: Uint8ClampedArray) => a.some((v, i) => v !== b[i]);
+            return { asWithFonts: !differ(got, withFonts), asWithout: !differ(got, without) };
+        }, { png, svg });
+        expect(same).toEqual({ asWithFonts: true, asWithout: false });
     });
 
     test('phone 360: the same width rule, no page scroll', async ({ page }) => {

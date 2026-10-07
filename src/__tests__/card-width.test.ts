@@ -119,6 +119,24 @@ describe('the poster draws the custom card like the screen', () => {
         expect(svg).toMatch(/<text x="350.0" y="30.0" font-size="13" font-weight="600"[^>]*textLength="138.0"[^>]*>Bartoloměj Wolfensteiner<\/text>/);
     });
 
+    it('the date and the place are drawn at their measured widths and the fonts travel with the image (T05)', () => {
+        const a: Person = { id: 'a' as PersonId, firstName: 'Anna', lastName: 'Vlková', gender: 'female', isPlaceholder: false,
+            partnerships: [], parentIds: [], childIds: [] };
+        const data: StromData = { persons: { [a.id]: a }, partnerships: {} as Record<PartnershipId, never> };
+        const layout: PosterLayout = { positions: new Map([[a.id, { x: 0, y: 0 }]]), connections: [], spouseLines: [] };
+        const face = "@font-face { font-family: \"Instrument Sans\"; font-weight: 500; src: url(\"data:font/woff2;base64,AAAA\"); }";
+        const svg = buildTreeSvg(data, layout, {
+            config: { cardWidth: 320, cardHeight: 73 } as never,
+            cardLines: new Map([['a', [line('after 1919', 'P'.repeat(80), { more: '+1' })]]]), cardDateColumn: 60, measureCardTexts: measure,
+            fontFaceCss: face,
+        });
+        expect(svg).toContain(`<defs><style><![CDATA[\n${face}\n]]></style></defs>`);
+        // "after 1919": 10 × 6 = 60px.
+        expect(svg).toMatch(/<text class="card-line-date"[^>]*textLength="60.0" lengthAdjust="spacingAndGlyphs"[^>]*>after 1919<\/text>/);
+        // Room: 320 − 12 − (12 + 17 + 60 + 6) = 213, less " +1" (18) = 195 → 31 P and the ellipsis (192) + 18 = 210.
+        expect(svg).toMatch(new RegExp(`<text class="card-line-place"[^>]*textLength="210.0"[^>]*>${'P'.repeat(31)}… \\+1</text>`));
+    });
+
     it('only the place shortens; the date and "+1" stay whole', () => {
         const a: Person = { id: 'a' as PersonId, firstName: 'Anna', lastName: 'Vlková', gender: 'female', isPlaceholder: false,
             partnerships: [], parentIds: [], childIds: [] };
