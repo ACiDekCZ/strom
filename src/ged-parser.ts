@@ -66,6 +66,10 @@ import { excerptFromDataUrl } from './excerpts';
 import { normalizeSha256 } from './sha256';
 import { ORIGINAL_ONLY_DATA_URL } from './validation';
 import { parseRegion, regionFromStored } from './originals';
+import { parseName, readGedcomName, type GedcomNameParts } from './gedcom-names';
+
+/** The name parser lives with the rules it shares with the research (gedcom-names.ts). */
+export { parseName };
 
 /**
  * Words that name a role in RELA, in the languages registers and genealogy
@@ -721,6 +725,11 @@ interface GedcomIndividual {
      */
     primaryNameType: string;
     variantNameTypes: string[];
+    /** NAME > GIVN / SURN / SPFX / NPFX / NSFX of the primary name and of each variant. */
+    primaryNameParts: GedcomNameParts;
+    variantNameParts: GedcomNameParts[];
+    /** A description the file wrote instead of the given name — goes to the note. */
+    nameDescription?: string;
     sex: string;
     birthDate: string;
     birthPlace: string;
@@ -1049,40 +1058,6 @@ function readGedcomDate(dateStr: string): { date: string; lossy: boolean; phrase
 }
 
 /**
- * Parse GEDCOM name format to first/last name
- * Handles: "John /Surname/", "/Surname/", "John /Surname/ Jr.", "FirstName"
- *
- * The slashes mark the surname wherever they fall — the name may carry a suffix
- * after them ("John /Smith/ Jr."), which is ordinary in GEDCOM. Insisting the
- * name END at the closing slash made those fall through to the guesswork below,
- * which splits at the first space: "Lt. Cmndr. Joseph "John" /de Allen/ jr."
- * came out as a man called Lt. with the surname 'Cmndr. Joseph "John" de Allen
- * jr.' (gedcom.io maximal70-tree1).
- *
- * The suffix joins the surname because a person here has only two name fields
- * and that is the order they are shown in: "John Smith Jr.".
- */
-export function parseName(nameStr: string): { firstName: string; lastName: string } {
-    // Try to match "Given /Surname/ [suffix]" pattern
-    const match = nameStr.match(/^(.*?)\/([^/]*)\/(.*)$/);
-    if (match) {
-        const surname = match[2].trim();
-        const suffix = match[3].trim();
-        return {
-            firstName: match[1].trim(),
-            lastName: suffix ? `${surname} ${suffix}`.trim() : surname
-        };
-    }
-    // Fallback: no surname delimiter - split by whitespace
-    const cleaned = nameStr.replace(/\//g, '').trim();
-    const parts = cleaned.split(/\s+/).filter(p => p);
-    return {
-        firstName: parts[0] || '',
-        lastName: parts.slice(1).join(' ') || ''
-    };
-}
-
-/**
  * Generate unique ID with prefix
  */
 function generateId(prefix: string): string {
@@ -1288,9 +1263,15 @@ function preprocessGedcomLines(lines: string[]): {
     return { records, noteRecords, inlineSources };
 }
 
+/** NAME sub-tags that carry the name's own parts, and where each is kept. */
+const NAME_PART_TAGS = new Map<string, keyof GedcomNameParts>([
+    ['GIVN', 'givn'], ['SURN', 'surn'], ['SPFX', 'spfx'], ['NPFX', 'npfx'], ['NSFX', 'nsfx'],
+]);
+
 /**
  * Parse GEDCOM file content into structured data
  */
+
 /** Level-1 INDI tags the parser understands (everything else is counted as dropped). */
 const KNOWN_INDI_TAGS = new Set(['NAME', 'SEX', 'FAMS', 'FAMC', 'NOTE', 'SOUR', 'BIRT', 'DEAT', 'OBJE', 'REFN', 'ASSO', '_STORY', '_QUESTION',
     ...Object.keys(EVENT_TAG_TO_TYPE)]);
@@ -1611,6 +1592,8 @@ export function parseGedcom(content: string): ParsedGedcom {
     const surnameGroups: string[][] = [];
     /** Header `1 SOUR STROM_RESEARCH` / `1 _STROM_ASOF`. */
     let stromResearch = false;
+    /** Written by the Strom app itself (HEAD > SOUR STROM). */
+    let stromApp = false;
     let researchAsOf = '';
     /** The _STROM_CONFLICT / _HYPO / _SEARCHED block being read. */
     let currentResearch: OpenResearch | null = null;
@@ -1736,6 +1719,8 @@ export function parseGedcom(content: string): ParsedGedcom {
                     nameVariants: [],
                     primaryNameType: '',
                     variantNameTypes: [],
+                    primaryNameParts: {},
+                    variantNameParts: [],
                     sourceRefs: [],
                     birthSourceRefs: [],
                     deathSourceRefs: [],
@@ -1818,6 +1803,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                 // Strom Research's own lines: who wrote the file, and when
                 // its knowledge about people was current.
                 if (tag === 'SOUR' && value.trim() === 'STROM_RESEARCH') stromResearch = true;
+                else if (tag === 'SOUR' && value.trim() === 'STROM') stromApp = true;
                 else if (tag === '_STROM_ASOF') researchAsOf = value.trim();
             } else if (level === 2 && inSurnameNote && (tag === 'CONT' || tag === 'CONC')) {
                 const group = value.split(SURNAME_GROUP_SEP.trim())
@@ -1933,15 +1919,15 @@ export function parseGedcom(content: string): ParsedGedcom {
                                 if (value.trim()) {
                                     indi.nameVariants.push(value.trim());
                                     indi.variantNameTypes.push('');
+                                    indi.variantNameParts.push({});
                                     currentNameSlot = indi.nameVariants.length - 1;
                                 }
                                 break;
                             }
+                            // Read into first/last name once the record is
+                            // complete: its GIVN / SURN lines come after it.
                             currentNameSlot = -1;
-                            const parsed = parseName(value);
                             indi.name = value;
-                            indi.firstName = parsed.firstName;
-                            indi.lastName = parsed.lastName;
                             break;
                         }
                         case 'SEX':
@@ -2325,6 +2311,10 @@ export function parseGedcom(content: string): ParsedGedcom {
                             else indi.variantNameTypes[currentNameSlot] = type;
                         } else if (tag === 'SOUR' && value) {
                             cite(indi.sourceRefs, value);
+                        } else if (NAME_PART_TAGS.has(tag) && currentNameSlot !== null && value.trim()) {
+                            // 2 GIVN / SURN / SPFX / NPFX / NSFX: the name's own parts.
+                            const parts = currentNameSlot === -1 ? indi.primaryNameParts : indi.variantNameParts[currentNameSlot];
+                            parts[NAME_PART_TAGS.get(tag)!] = value.trim();
                         }
                     } else if (currentSubTag === 'REFN') {
                         // Who issued the number — kept so it goes back out with it.
@@ -2569,13 +2559,26 @@ export function parseGedcom(content: string): ParsedGedcom {
         const k = indi.variantNameTypes.findIndex(t => t === 'birth' || t === 'maiden');
         if (k < 0) continue;
         const birthName = indi.nameVariants[k];
+        const birthParts = indi.variantNameParts[k];
         indi.nameVariants[k] = indi.name;
         indi.variantNameTypes[k] = indi.primaryNameType;
+        indi.variantNameParts[k] = indi.primaryNameParts;
         indi.name = birthName;
         indi.primaryNameType = 'birth';
-        const parsed = parseName(birthName);
-        indi.firstName = parsed.firstName;
-        indi.lastName = parsed.lastName;
+        indi.primaryNameParts = birthParts;
+    }
+
+    // The primary name into the two name fields, by the rules shared with the
+    // research (GIVN / SURN first, the last pair of slashes, "N/A" is "?").
+    // A file of Strom's own (the app's or the research's) holds names someone
+    // typed in Strom: a given name "Syn" there is what was typed and comes
+    // back as it went out, as the research reads the app's file in a sync.
+    const descriptions = !stromApp && !stromResearch;
+    for (const indi of individuals.values()) {
+        const read = readGedcomName(indi.name, indi.primaryNameParts, { descriptions });
+        indi.firstName = read.firstName;
+        indi.lastName = read.lastName;
+        if (read.description) indi.nameDescription = read.description;
     }
 
     // A child the file links only from its own side (INDI > FAMC, no CHIL in
@@ -2785,6 +2788,10 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         // whatever free text the file wrote (see NOTED_INDI_TAGS).
         const factLines = indi.noteFacts.map(factToNoteLine);
         const allNotes = [...factLines, ...(indi.notes ? [indi.notes] : [])];
+        // What the file wrote in place of a name ("Mrtvě narozený"), kept as
+        // written — after the rest, and only once.
+        const description = indi.nameDescription;
+        if (description && !allNotes.some(n => n.split('\n').some(l => l.trim() === description))) allNotes.push(description);
         if (allNotes.length > 0) person.notes = allNotes.join('\n');
         if (indi.refn) person.refn = indi.refn;
         if (indi.question) person.question = indi.question;

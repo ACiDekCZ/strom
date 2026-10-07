@@ -341,11 +341,11 @@ describe('S11 / S14: family structure', () => {
         const d = conv(GED([
             '0 @I1@ INDI', '1 NAME Otec /A/', '1 SEX M', '1 FAMS @F1@',
             '0 @I2@ INDI', '1 NAME Matka /A/', '1 SEX F', '1 FAMS @F1@',
-            '0 @I3@ INDI', '1 NAME Dite /A/', '1 SEX M', '1 FAMC @F1@',
+            '0 @I3@ INDI', '1 NAME Vojta /A/', '1 SEX M', '1 FAMC @F1@',
             '0 @F1@ FAM', '1 HUSB @I1@', '1 WIFE @I2@',
         ].join('\n'))).data;
-        expect(byFirst(d, 'Dite').parentIds).toHaveLength(2);
-        expect(Object.values(d.partnerships)[0].childIds).toEqual([byFirst(d, 'Dite').id]);
+        expect(byFirst(d, 'Vojta').parentIds).toHaveLength(2);
+        expect(Object.values(d.partnerships)[0].childIds).toEqual([byFirst(d, 'Vojta').id]);
     });
 
     it('a family with children but no parents keeps them siblings', () => {

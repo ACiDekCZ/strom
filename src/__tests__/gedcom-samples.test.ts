@@ -481,7 +481,7 @@ describe('person-level associations (level-1 ASSO, GEDCOM 5.5.1)', () => {
 1 GEDC
 2 VERS 5.5.1
 0 @I1@ INDI
-1 NAME Child /Smith/
+1 NAME Pavel /Smith/
 1 BAPM
 2 DATE 3 JUN 1900
 1 ASSO @I2@
@@ -490,7 +490,7 @@ describe('person-level associations (level-1 ASSO, GEDCOM 5.5.1)', () => {
 1 NAME Karel /Novák/
 1 SEX M
 0 TRLR`);
-        const child = named(data, 'Child');
+        const child = named(data, 'Pavel');
         const karel = named(data, 'Karel');
         const baptism = child.events?.find(e => e.type === 'baptism');
         expect(baptism?.participants).toHaveLength(1);
