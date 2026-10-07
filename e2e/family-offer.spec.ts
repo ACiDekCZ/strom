@@ -18,9 +18,13 @@ test('the family offer gets out of the way of an open dialog', async ({ page }) 
     await expect(page.locator('#person-modal')).toHaveClass(/active/);
     await expect(page.locator('.family-offer')).toBeHidden();
 
-    // Every button of the dialog is actually reachable.
-    for (const name of ['Save', 'Cancel']) {
-        const btn = page.locator('#person-modal').getByRole('button', { name, exact: true });
+    // Every button of the dialog is actually reachable: Save in the footer and
+    // the × that closes it (a phone footer has no Cancel, T24).
+    const buttons = {
+        Save: page.locator('#person-modal').getByRole('button', { name: 'Save', exact: true }),
+        close: page.locator('#person-modal .pm-header .close-btn'),
+    };
+    for (const [name, btn] of Object.entries(buttons)) {
         const box = await btn.boundingBox();
         const onTop = await page.evaluate(([x, y]) => {
             const el = document.elementFromPoint(x, y);
@@ -30,7 +34,7 @@ test('the family offer gets out of the way of an open dialog', async ({ page }) 
     }
 
     // Closing the dialog brings it back — the offer has not been used yet.
-    await page.locator('#person-modal').getByRole('button', { name: 'Cancel' }).click();
+    await buttons.close.click();
     await expect(page.locator('.family-offer')).toBeVisible();
 });
 
