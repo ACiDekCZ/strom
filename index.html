@@ -3659,8 +3659,12 @@
             cursor: pointer;
         }
         .modal button.pm-lifeline-childtoggle[hidden] { display: none; }
-        /* The tap area reaches 44 px over the head's own height. */
-        .pm-lifeline-childtoggle::after { content: ''; position: absolute; left: 0; right: 0; top: -9px; bottom: -9px; }
+        /* The tap area reaches 44 px over the head's own height, centred on the
+           chip whatever its height and border (the box is the padding box). */
+        .pm-lifeline-childtoggle::after {
+            content: ''; position: absolute; left: 0; right: 0;
+            top: 50%; height: 44px; transform: translateY(-50%);
+        }
         .pm-lifeline-childtoggle-box {
             width: 12px;
             height: 12px;
@@ -3690,7 +3694,6 @@
         }
         @media (max-width: 640px), (pointer: coarse) {
             .modal button.pm-lifeline-childtoggle { height: 32px; }
-            .pm-lifeline-childtoggle::after { top: -6px; bottom: -6px; }
         }
 
         .form-grid {

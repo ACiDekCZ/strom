@@ -283,3 +283,43 @@ test.describe('N9: the places manager opened from the life timeline shows the pl
         });
     }
 });
+
+/** The vertical extent around the element's middle where a tap lands on it. */
+async function tapExtent(page: Page, selector: string): Promise<{ top: number; bottom: number; coarse: boolean }> {
+    return page.evaluate((selector) => {
+        const el = document.querySelector(selector) as HTMLElement;
+        const r = el.getBoundingClientRect();
+        const x = r.left + r.width / 2;
+        const mid = r.top + r.height / 2;
+        const hits = (y: number): boolean => {
+            const at = document.elementFromPoint(x, y);
+            return !!at && (at === el || el.contains(at));
+        };
+        let top = mid;
+        while (hits(top - 0.5)) top -= 0.5;
+        let bottom = mid;
+        while (hits(bottom + 0.5)) bottom += 0.5;
+        return { top, bottom, coarse: matchMedia('(pointer: coarse)').matches };
+    }, selector);
+}
+
+test.describe('P3: the children\'s events chip is a full touch target', () => {
+    for (const [label, width, height] of [['phone', 390, 844], ['tablet', 820, 1180]] as const) {
+        test.describe(label, () => {
+            test.use({ hasTouch: true, isMobile: true, viewport: { width, height } });
+            test(`${label}: a tap lands on the chip over at least 44 px`, async ({ page }) => {
+                await setup(page, width, height);
+                await openCard(page, 'Jan');
+                const chip = page.locator('#pm-lifeline-child-toggle');
+                await chip.scrollIntoViewIfNeeded();
+                await expect(chip).toBeVisible();
+                const hit = await tapExtent(page, '#pm-lifeline-child-toggle');
+                expect(hit.coarse).toBe(true);
+                expect(hit.bottom - hit.top).toBeGreaterThanOrEqual(44);
+                // The tap area does what the chip does.
+                await page.touchscreen.tap((await chip.boundingBox())!.x + 20, hit.top + 1);
+                await expect(chip).toHaveAttribute('aria-checked', 'true');
+            });
+        });
+    }
+});
