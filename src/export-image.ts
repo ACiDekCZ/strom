@@ -15,7 +15,7 @@ import type { CardLine, CardLineStyle, CardValueLines } from './card-fields.js';
 import {
     CARD_MARK_WIDTH, CARD_COLUMN_GAP, CUSTOM_CARD_PAD_X, CARD_ROW_HEIGHT, CARD_DETAIL_GAP, CARD_LABEL_GAP,
     CARD_VALUE_DATE_GAP, CARD_NAME_ROW_HEIGHT, CARD_YEARS_ROW_HEIGHT, CARD_AVATAR_WIDTH, CARD_HEAD_GAP,
-    MeasureTexts, cardPlaceOffset, cardLinesTop, customCardRows,
+    MeasureTexts, CardRow, cardPlaceOffset, cardLinesTop, customCardRows,
 } from './card-width.js';
 import { shownName } from './person-name.js';
 
@@ -179,7 +179,7 @@ const LINE_FONT = `font-family="'Instrument Sans', -apple-system, 'Segoe UI', sa
 const estimateCardTexts: MeasureTexts = (kind, texts) => {
     const out = new Map<string, number>();
     for (const t of texts) {
-        out.set(t, kind === 'name' ? estWidth(t, 15, true) : kind === 'label' ? estWidth(t, 12, true)
+        out.set(t, kind === 'name' ? estWidth(t, 15, true) : kind === 'label' || kind === 'more' ? estWidth(t, 12, true)
             : kind === 'years' ? estWidth(t, 11, false) : estWidth(t, 12, false));
     }
     return out;
@@ -288,6 +288,17 @@ function customCardSvg(
         const w = measure('place', [text]).get(text) ?? 0;
         return `<text class="card-line-place" x="${x.toFixed(1)}" y="${y}" font-size="12" fill="${COLORS.textLight}"${pin(Math.min(w, right - x))} ${LINE_FONT}>${escapeXml(text)}</text>`;
     };
+    // A row of the place column: its text, then the "+1" right after it, at 600 (as on screen).
+    const placeRow = (row: CardRow, x: number, y: string): string => {
+        const out: string[] = [];
+        if (row.text.trim()) out.push(place(row.text, x, y));
+        if (row.tail) {
+            const tx = x + (row.text ? measure('place', [row.text]).get(row.text) ?? 0 : 0);
+            const w = measure('more', [row.tail]).get(row.tail) ?? 0;
+            out.push(`<text class="card-line-more" x="${tx.toFixed(1)}" y="${y}" font-size="12" font-weight="600" fill="${COLORS.textLight}" xml:space="preserve"${pin(Math.min(w, right - tx))} ${LINE_FONT}>${escapeXml(row.tail)}</text>`);
+        }
+        return out.join('');
+    };
     const date = (text: string, x: number, y: string): string => {
         const w = measure('date', [text]).get(text) ?? 0;
         return `<text class="card-line-date" x="${x.toFixed(1)}" y="${y}" font-size="12" font-weight="500" fill="${COLORS.text}"${pin(Math.min(w, right - x))} ${LINE_FONT}>${escapeXml(text)}</text>`;
@@ -309,8 +320,7 @@ function customCardSvg(
                     // As the screen sets it: the date's own width, then 5px.
                     x += (measure('date', [row.date]).get(row.date) ?? 0) + CARD_VALUE_DATE_GAP;
                 }
-                const text = row.text + (row.tail ?? '');
-                if (text.trim()) out.push(place(text, x, rowY));
+                out.push(placeRow(row, x, rowY));
             });
         } else {
             if (l.mark) out.push(`<text x="${(left + CARD_MARK_WIDTH / 2).toFixed(1)}" y="${y}" text-anchor="middle" font-size="12" fill="${COLORS.textFaint}" ${LINE_FONT}>${escapeXml(l.mark)}</text>`);
@@ -322,9 +332,7 @@ function customCardSvg(
                 : longOneRow ? dateX + (measure('date', [l.date]).get(l.date) ?? 0) + CARD_COLUMN_GAP
                     : left + cardPlaceOffset(dateColumn);
             drawn.forEach((row, k) => {
-                const text = row.text + (row.tail ?? '');
-                if (!text.trim()) return;
-                out.push(place(text, placeX, (top + CARD_ROW_HEIGHT * k + 12.5).toFixed(1)));
+                out.push(placeRow(row, placeX, (top + CARD_ROW_HEIGHT * k + 12.5).toFixed(1)));
             });
         }
         top += CARD_ROW_HEIGHT * Math.max(1, drawn.length) + detailGap;

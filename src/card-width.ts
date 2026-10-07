@@ -71,8 +71,12 @@ export function cardPlaceOffset(dateColumn: number): number {
     return CARD_MARK_WIDTH + CARD_COLUMN_GAP + dateColumn + CARD_COLUMN_GAP;
 }
 
-/** The card's text styles: the name, a date, a place, a label (labels style), the years under the name. */
-export type CardTextKind = 'name' | 'date' | 'place' | 'label' | 'years';
+/**
+ * The card's text styles: the name, a date, a place, a label (labels style),
+ * the years under the name, the "+1" after the marriage's place (with its
+ * space; the place's font at 600).
+ */
+export type CardTextKind = 'name' | 'date' | 'place' | 'label' | 'years' | 'more';
 
 /** Widths of texts in one style; returns a width for every text asked for. */
 export type MeasureTexts = (kind: CardTextKind, texts: Iterable<string>) => Map<string, number>;
@@ -145,6 +149,7 @@ export function customCardMetrics<L extends CardLineText>(entries: Iterable<Cust
     const years = new Set<string>();
     const dates = new Set<string>();
     const places = new Set<string>();
+    const tails = new Set<string>();
     const labelTexts = new Set<string>();
     for (const e of list) {
         names.add(e.name);
@@ -152,13 +157,17 @@ export function customCardMetrics<L extends CardLineText>(entries: Iterable<Cust
         for (const l of e.lines) {
             if (l.date) dates.add(l.date);
             if (labels && l.label) labelTexts.add(l.label);
-            for (const p of cardLineParts(l, valueLines)) places.add(p.text + (p.tail ?? ''));
+            for (const p of cardLineParts(l, valueLines)) {
+                places.add(p.text);
+                if (p.tail) tails.add(p.tail);
+            }
         }
     }
     const nameW = measure('name', names);
     const yearsW = years.size ? measure('years', years) : new Map<string, number>();
     const dateW = measure('date', dates);
     const placeW = measure('place', places);
+    const tailW = tails.size ? measure('more', tails) : new Map<string, number>();
     const labelW = labelTexts.size ? measure('label', labelTexts) : new Map<string, number>();
     const w = (m: Map<string, number>, t: string): number => Math.ceil(m.get(t) ?? 0);
 
@@ -180,7 +189,9 @@ export function customCardMetrics<L extends CardLineText>(entries: Iterable<Cust
         content = Math.max(content, (e.avatar ? CARD_AVATAR_WIDTH + CARD_HEAD_GAP : 0) + head);
         for (const l of e.lines) {
             // Unwrapped: each piece of the place column on one row.
-            const parts = cardLineParts(l, valueLines).map(p => w(placeW, p.text + (p.tail ?? '')));
+            // The place and its "+1" (set at 600) side by side.
+            const parts = cardLineParts(l, valueLines)
+                .map(p => Math.ceil((placeW.get(p.text) ?? 0) + (p.tail ? tailW.get(p.tail) ?? 0 : 0)));
             let row: number;
             if (labels) {
                 // The date, 5px and the first piece on one row; a whole cause on a row of its own.
@@ -275,7 +286,14 @@ interface WrapState {
     phase: 'fill' | 'chars' | 'ellipsis';
     /** Ellipsis: try at most this many characters of what is left. */
     bound: number;
-    candidates: string[];
+    /** The rows to try this round: the text, and whether the tail follows it. */
+    candidates: Candidate[];
+}
+
+/** A row to try: its text, and whether the tail follows it on that row. */
+interface Candidate {
+    text: string;
+    tail: boolean;
 }
 
 const SLACK = 0.01;
@@ -291,7 +309,8 @@ const SLACK = 0.01;
  * (`maxLines` 0); otherwise the text stops there with "…". When a limited text
  * goes on past its last row, that row ends in "…" (as many characters as fit).
  * The tail ("+1") stays glued to the last word and is never cut: after "…"
- * when the text is cut. A text that fits is one row; an empty text with a tail
+ * when the text is cut. It is measured in its own style ('more', the place's
+ * font at 600) and added to the width of the text before it. A text that fits is one row; an empty text with a tail
  * is a row of the tail alone; nothing at all is no row. With `firstWidth` the
  * first row has less room (see WrapRequest).
  *
@@ -313,13 +332,13 @@ export function wrapCardTexts(requests: readonly WrapRequest[], measure: Measure
         const text = s.pieces.slice(from, to + 1).join('').trimEnd();
         return to === s.pieces.length - 1 && s.req.tail ? { text, tail: s.req.tail } : { text };
     };
-    // The width a candidate row is measured with: the text and, on the last row, the tail.
-    const fillCandidate = (s: WrapState, to: number): string =>
-        s.pieces.slice(s.at, to + 1).join('').trimEnd() + (to === s.pieces.length - 1 ? tailOf(s) : '');
-    const ellipsisCandidates = (s: WrapState): string[] => {
+    // A candidate row: the text and, on the last row, the tail after it.
+    const fillCandidate = (s: WrapState, to: number): Candidate =>
+        ({ text: s.pieces.slice(s.at, to + 1).join('').trimEnd(), tail: to === s.pieces.length - 1 && !!tailOf(s) });
+    const ellipsisCandidates = (s: WrapState): Candidate[] => {
         const left = Array.from(s.pieces.slice(s.at).join(''));
-        const out: string[] = [];
-        for (let k = Math.min(s.bound, left.length); k >= 1; k--) out.push(`${left.slice(0, k).join('').trimEnd()}…${tailOf(s)}`);
+        const out: Candidate[] = [];
+        for (let k = Math.min(s.bound, left.length); k >= 1; k--) out.push({ text: `${left.slice(0, k).join('').trimEnd()}…`, tail: !!tailOf(s) });
         return out;
     };
 
@@ -335,23 +354,29 @@ export function wrapCardTexts(requests: readonly WrapRequest[], measure: Measure
             } else if (s.phase === 'chars') {
                 const piece = Array.from(s.pieces[s.at]);
                 s.candidates = [];
-                for (let k = 1; k < piece.length; k++) s.candidates.push(piece.slice(0, k).join('').trimEnd());
+                for (let k = 1; k < piece.length; k++) s.candidates.push({ text: piece.slice(0, k).join('').trimEnd(), tail: false });
             } else {
                 s.candidates = ellipsisCandidates(s);
             }
-            const kind = s.req.kind ?? 'place';
-            const set = byKind.get(kind) ?? new Set<string>();
-            for (const c of s.candidates) set.add(c);
-            byKind.set(kind, set);
+            const add = (kind: CardTextKind, text: string): void => {
+                const set = byKind.get(kind) ?? new Set<string>();
+                set.add(text);
+                byKind.set(kind, set);
+            };
+            for (const c of s.candidates) {
+                add(s.req.kind ?? 'place', c.text);
+                if (c.tail) add('more', tailOf(s));
+            }
         }
         const widths = new Map<CardTextKind, Map<string, number>>();
         for (const [kind, texts] of byKind) widths.set(kind, measure(kind, texts));
 
         for (const s of active) {
-            const width = (t: string): number => widths.get(s.req.kind ?? 'place')?.get(t) ?? 0;
+            const width = (c: Candidate): number => (widths.get(s.req.kind ?? 'place')?.get(c.text) ?? 0)
+                + (c.tail ? widths.get('more')?.get(tailOf(s)) ?? 0 : 0);
             const firstRow = s.rows.length === 0 && s.req.firstWidth !== undefined;
             const room = firstRow ? Math.min(s.req.width, s.req.firstWidth!) : s.req.width;
-            const fits = (t: string): boolean => width(t) <= room + SLACK;
+            const fits = (c: Candidate): boolean => width(c) <= room + SLACK;
             const last = s.pieces.length - 1;
             if (s.phase === 'fill') {
                 let to = -1;
@@ -395,10 +420,9 @@ export function wrapCardTexts(requests: readonly WrapRequest[], measure: Measure
                 s.pieces[s.at] = piece.slice(k).join('');
                 s.phase = 'fill';
             } else {
-                const hit = s.candidates.find(fits);
-                const text = (hit ?? `…${tailOf(s)}`);
+                const text = s.candidates.find(fits)?.text ?? '…';
                 const tail = tailOf(s);
-                s.rows.push(tail ? { text: text.slice(0, text.length - tail.length), tail } : { text });
+                s.rows.push(tail ? { text, tail } : { text });
                 s.cut = true;
                 s.done = true;
             }
@@ -685,6 +709,7 @@ const KIND_STYLE: Record<CardTextKind, string> = {
     date: 'font: 500 12px var(--font-sans); font-variant-numeric: tabular-nums;',
     place: 'font: 400 12px var(--font-sans); font-variant-numeric: tabular-nums;',
     label: 'font: 600 12px var(--font-sans); font-variant-numeric: tabular-nums;',
+    more: 'font: 600 12px var(--font-sans); font-variant-numeric: tabular-nums;',
     years: 'font: 400 11px var(--font-sans); font-variant-numeric: tabular-nums;',
 };
 /** The faces those styles use, to know whether they are loaded yet. */

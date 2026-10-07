@@ -196,8 +196,10 @@ describe('the poster draws the custom card like the screen', () => {
         expect(svg).toContain(`<defs><style><![CDATA[\n${face}\n]]></style></defs>`);
         // "after 1919": 10 × 6 = 60px.
         expect(svg).toMatch(/<text class="card-line-date"[^>]*textLength="60.0" lengthAdjust="spacingAndGlyphs"[^>]*>after 1919<\/text>/);
-        // Room: 320 − 12 − (12 + 17 + 60 + 6) = 213, less " +1" (18) = 195 → 31 P and the ellipsis (192) + 18 = 210.
-        expect(svg).toMatch(new RegExp(`<text class="card-line-place"[^>]*textLength="210.0"[^>]*>${'P'.repeat(31)}… \\+1</text>`));
+        // Room: 320 − 12 − (12 + 17 + 60 + 6) = 213, less " +1" (18) = 195 → 31 P and the ellipsis (192),
+        // then " +1" right after it (95 + 192), at 600.
+        expect(svg).toMatch(new RegExp(`<text class="card-line-place" x="95.0"[^>]*textLength="192.0"[^>]*>${'P'.repeat(31)}…</text>`));
+        expect(svg).toMatch(/<text class="card-line-more" x="287.0"[^>]*font-weight="600"[^>]*xml:space="preserve"[^>]*textLength="18.0"[^>]*> \+1<\/text>/);
     });
 
     it('only the place shortens; the date and "+1" stay whole', () => {
@@ -211,7 +213,38 @@ describe('the poster draws the custom card like the screen', () => {
         });
         expect(svg).toContain('>14. 11. 1919</text>');
         // Room: 320 − 12 − (12 + 17 + 72 + 6) = 201, less " +1" (18) = 183 → 29 characters and the ellipsis (30 × 6 = 180).
-        expect(svg).toContain(`>${'P'.repeat(29)}… +1</text>`);
+        expect(svg).toContain(`>${'P'.repeat(29)}…</text>`);
+        expect(svg).toContain('> +1</text>');
+    });
+
+    it('"+1" is set at 600: measured in its own style, its row and the card\'s width count its own width', () => {
+        // A "+1" at 600 a third wider than the place's text (8px a character instead of 6).
+        const bold: MeasureTexts = (kind, texts) => {
+            const out = new Map<string, number>();
+            for (const t of texts) out.set(t, t.length * (kind === 'name' || kind === 'more' ? 8 : 6));
+            return out;
+        };
+        const married = line('1888', 'p'.repeat(20), { key: 'marriage', more: '+1' });
+        // 11 + 6 + 24 + 6 + 20 × 6 + " +1" (3 × 8 = 24) = 191 → 217 → 220 (one place style for all: 212).
+        expect(customCardMetrics([{ name: 'A', avatar: true, lines: [married] }], bold).cardWidth).toBe(220);
+        // 66px: "Dolní" (30) + " +1" (24) = 54 fits; "Dolní Lhota" (66) + 24 does not.
+        expect(wrapCardText({ text: 'Dolní Lhota', tail: ' +1', width: 66, maxLines: 0 }, bold))
+            .toEqual({ rows: [{ text: 'Dolní' }, { text: 'Lhota', tail: ' +1' }], cut: false });
+        // 84px: "Dolní Lhota" (66) + 18 at the place's weight would fit; at 600 (24) it does not.
+        expect(wrapCardText({ text: 'Dolní Lhota', tail: ' +1', width: 84, maxLines: 1 }, bold))
+            .toEqual({ rows: [{ text: 'Dolní Lho…', tail: ' +1' }], cut: true });
+        // The image export draws it at 600, right after the place, at its own width.
+        const a: Person = { id: 'a' as PersonId, firstName: 'Anna', lastName: 'Vlková', gender: 'female', isPlaceholder: false,
+            partnerships: [], parentIds: [], childIds: [] };
+        const data: StromData = { persons: { [a.id]: a }, partnerships: {} as Record<PartnershipId, never> };
+        const layout: PosterLayout = { positions: new Map([[a.id, { x: 0, y: 0 }]]), connections: [], spouseLines: [] };
+        const svg = buildTreeSvg(data, layout, {
+            config: { cardWidth: 220, cardHeight: 73 } as never,
+            cardLines: new Map([['a', [married]]]), cardDateColumn: 24, measureCardTexts: bold,
+        });
+        // The place at 12 + 11 + 6 + 24 + 6 = 59, 120px wide; "+1" at 179, 24px wide.
+        expect(svg).toMatch(new RegExp(`<text class="card-line-place" x="59.0"[^>]*textLength="120.0"[^>]*>${'p'.repeat(20)}</text>`));
+        expect(svg).toMatch(/<text class="card-line-more" x="179.0" [^>]*font-weight="600"[^>]*textLength="24.0"[^>]*> \+1<\/text>/);
     });
 });
 

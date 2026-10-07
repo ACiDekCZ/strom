@@ -6547,7 +6547,8 @@
         .card-line-place { display: flex; min-width: 0; color: var(--text-light); font-weight: 400; }
         .card-line-place--wide { grid-column: 2 / 4; }
         .card-line-rest { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-        .card-line-more { flex: none; white-space: pre; }
+        /* "+1" (another marriage) after the marriage's place, at 600 (measured so: src/card-width.ts 'more'). */
+        .card-line-more { flex: none; white-space: pre; font-weight: 600; }
         /* Details that wrap (Detail length 2 lines / Full): the rows are
            computed (src/card-width.ts wrapCardTexts) and each drawn as is, never
            wrapped by the browser; the place's rows stay in its column, the mark

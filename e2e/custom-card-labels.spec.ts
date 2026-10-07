@@ -349,3 +349,64 @@ test.describe('card presets (U02)', () => {
         });
     }
 });
+
+test.describe('"+1" after the marriage\'s place (U02)', () => {
+    /** Jan married twice: his marriage line ends in "+1". */
+    function twice(): string {
+        return [
+            '0 HEAD', '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8',
+            '0 @I1@ INDI', '1 NAME Jan /Vlk/', '1 SEX M', '1 BIRT', '2 DATE 1862', '2 PLAC Horní Lhota',
+            '1 FAMS @F1@', '1 FAMS @F2@',
+            '0 @I2@ INDI', '1 NAME Marie /Dvořáková/', '1 SEX F', '1 BIRT', '2 DATE 1869', '1 FAMS @F1@',
+            '0 @I3@ INDI', '1 NAME Eva /Malá/', '1 SEX F', '1 BIRT', '2 DATE 1875', '1 FAMS @F2@',
+            '0 @F1@ FAM', '1 HUSB @I1@', '1 WIFE @I2@', '1 MARR', '2 DATE 1888', '2 PLAC ' + LONG_PLACE,
+            '0 @F2@ FAM', '1 HUSB @I1@', '1 WIFE @I3@', '1 MARR', '2 DATE 1901', '2 PLAC Brno',
+            '0 TRLR',
+        ].join('\n');
+    }
+
+    for (const style of ['marks', 'labels'] as const) {
+        test(`${style}: "+1" is set at 600 on the card and in the image export, whole inside its row`, async ({ page }) => {
+            await page.setViewportSize({ width: 1440, height: 900 });
+            await seedSetting(page, 'cardDensity', 'custom');
+            await seedSetting(page, 'cardFields', { style, on: ['birth', 'marriage'], place: ['birth', 'marriage'], lines: 2 });
+            await openApp(page);
+            await dropFile(page, twice());
+            await page.locator('.modal-overlay.active').getByText('Import as a new tree', { exact: true }).first().click();
+            await page.locator('.modal-overlay.active button.primary', { hasText: 'Import' }).click();
+            await expect(card(page, 'Jan')).toBeVisible();
+            await page.evaluate(() => {
+                const jan = window.Strom.DataManager.getAllPersons().find(p => p.firstName === 'Jan')!;
+                window.Strom.TreeRenderer.setFocus(jan.id);
+            });
+            await page.evaluate(() => document.fonts.ready);
+            await settled(page);
+
+            const more = card(page, 'Jan').locator('.card-line--marriage .card-line-more');
+            await expect(more).toHaveText(' +1');
+            expect(await more.evaluate(el => getComputedStyle(el).fontWeight)).toBe('600');
+            // The place's text stays at 400; the "+1" ends inside its row (the row was measured with it at 600).
+            expect(await card(page, 'Jan').locator('.card-line--marriage .card-line-row').first()
+                .evaluate(el => getComputedStyle(el).fontWeight)).toBe('400');
+            const fits = await more.evaluate(el => {
+                const row = el.closest('.card-line-row')!.getBoundingClientRect();
+                const own = el.getBoundingClientRect();
+                return own.right <= row.right + 0.5 && own.width > 0;
+            });
+            expect(fits).toBe(true);
+
+            await page.evaluate(() => window.Strom.UI.showPosterDialog());
+            const [download] = await Promise.all([
+                page.waitForEvent('download'),
+                page.locator('#poster-modal .menu-option', { hasText: 'SVG' }).click(),
+            ]);
+            const { readFileSync } = await import('fs');
+            const svg = readFileSync(await download.path(), 'utf-8');
+            const tails = [...svg.matchAll(/<text class="card-line-more"[^>]*>([^<]*)<\/text>/g)];
+            expect(tails.map(m => m[1])).toEqual([' +1']);
+            expect(tails[0][0]).toContain('font-weight="600"');
+            // The place's rows carry no "+1" of their own.
+            expect(svg).not.toMatch(/<text class="card-line-place"[^>]*>[^<]*\+1<\/text>/);
+        });
+    }
+});
