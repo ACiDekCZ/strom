@@ -209,18 +209,13 @@ function pushName(lines: string[], person: Person): void {
 }
 
 /**
- * Format name to GEDCOM format: FirstName /LastName/
+ * Format name to GEDCOM format: FirstName /LastName/. No surname is an empty
+ * pair of slashes ("? //"), never a word a reader would take for one (the
+ * app wrote "? /Unknown/" before 3.10; the parser reads that back as no
+ * surname from a file of Strom's own).
  */
 function formatGedcomName(firstName: string, lastName: string): string {
-    const first = firstName || '';
-    const last = lastName || '';
-
-    // Skip placeholder names
-    if (first === '?' && !last) {
-        return '? /Unknown/';
-    }
-
-    return `${first} /${last}/`;
+    return `${firstName || ''} /${lastName || ''}/`;
 }
 
 /**

@@ -167,7 +167,10 @@ export interface GedcomNameRead {
  *   reads the app's file in a sync (only its NO_NAME, no descriptions);
  *   `descriptions: false` asks for this alone;
  * - a title keeps its commas ("Prof., Dr." as typed), where another
- *   program's NPFX / NSFX list reads as the title is shown ("Prof. Dr.").
+ *   program's NPFX / NSFX list reads as the title is shown ("Prof. Dr.");
+ * - "? /Unknown/", which the app wrote for a person of no name and no
+ *   surname before 3.10, is no surname (a surname Unknown someone typed
+ *   comes with its SURN) — the research's appNoSurname.
  *
  * NPFX / NSFX are the titles before and after the name ("Ing.", "ml."), kept
  * apart from it. A file writes them in the NAME line too ("Ing. Jan /Novák/
@@ -176,6 +179,10 @@ export interface GedcomNameRead {
  * the surname as text after the slashes. A line without NPFX / NSFX is never
  * searched for titles: telling "Ing." or "Dr." by a word list would be a
  * guess that damages a name which only looks like one (as in the research).
+ *
+ * A line without slashes, with GIVN and no SURN ("Petr Novotný" + GIVN
+ * Petr), keeps its surname: the rest of the line after the given name, or
+ * after its first word where the line does not start with the GIVN.
  */
 export function readGedcomName(
     line: string,
@@ -184,7 +191,8 @@ export function readGedcomName(
 ): GedcomNameRead {
     const npfx = parts.npfx?.replace(/\s+/g, ' ').trim();
     const nsfx = parts.nsfx?.replace(/\s+/g, ' ').trim();
-    const split = splitNameLine(stripTitles(line, npfx, nsfx));
+    const bare = stripTitles(line, npfx, nsfx);
+    const split = splitNameLine(bare);
     const givn = parts.givn?.replace(/\s*,\s*/g, ' ').replace(/\s+/g, ' ').trim();
     const surn = parts.surn?.replace(/\s+/g, ' ').trim();
     const written = givn || split.given;
@@ -205,7 +213,10 @@ export function readGedcomName(
 
     let lastName: string;
     if (surn) lastName = split.slashed && (surn.includes(',') || parts.spfx?.trim()) ? split.surname : surn;
-    else lastName = split.slashed || !givn ? split.surname : '';
+    else if (split.slashed || !givn) lastName = split.surname;
+    else lastName = surnameAfterGiven(bare, givn) ?? split.surname;
+    // The app's "? /Unknown/" of old: no surname, not the surname Unknown.
+    if (fromStrom && !surn && lastName === 'Unknown' && noName(written)) lastName = '';
 
     return {
         firstName, lastName,
@@ -213,6 +224,20 @@ export function readGedcomName(
         ...(titleAfter ? { titleAfter } : {}),
         ...(description ? { description } : {}),
     };
+}
+
+/**
+ * A line without slashes that starts with the GIVN ("Petr Novotný", GIVN
+ * Petr): the rest of it is the surname ('' when the line is the given name
+ * alone). Undefined when the line does not start with the GIVN.
+ */
+function surnameAfterGiven(line: string, givn: string): string | undefined {
+    // GIVN's commas read as spaces (see readGedcomName); the line's likewise.
+    const s = line.trim().replace(/\s*,\s*/g, ' ').replace(/\s+/g, ' ');
+    if (s.slice(0, givn.length).toLocaleLowerCase() !== givn.toLocaleLowerCase()) return undefined;
+    const rest = s.slice(givn.length);
+    if (rest && rest[0] !== ' ') return undefined;
+    return rest.replace(/\//g, '').trim();
 }
 
 /**

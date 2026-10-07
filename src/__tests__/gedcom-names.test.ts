@@ -127,6 +127,19 @@ describe('GIVN and SURN come before the NAME line', () => {
         expect(readGedcomName('Hans /Baur/', { surn: 'Bauer' })).toEqual({ firstName: 'Hans', lastName: 'Bauer' });
     });
 
+    it('keep the surname of a line without slashes with GIVN and no SURN: the rest after the given name', () => {
+        expect(readGedcomName('Petr Novotný', { givn: 'Petr' })).toEqual({ firstName: 'Petr', lastName: 'Novotný' });
+        expect(readGedcomName('Jan Petr Novák', { givn: 'Jan, Petr' })).toEqual({ firstName: 'Jan Petr', lastName: 'Novák' });
+        expect(readGedcomName('Marie Anna Nováková Svobodová', { givn: 'Marie Anna' }))
+            .toEqual({ firstName: 'Marie Anna', lastName: 'Nováková Svobodová' });
+        // A line that does not start with the GIVN splits after its first word, as without GIVN.
+        expect(readGedcomName('Johann Novotný', { givn: 'Hans' })).toEqual({ firstName: 'Hans', lastName: 'Novotný' });
+        // "Petra" is not "Petr" followed by a surname.
+        expect(readGedcomName('Petra Nová', { givn: 'Petr' })).toEqual({ firstName: 'Petr', lastName: 'Nová' });
+        expect(readGedcomName('Ing. Petr Novotný', { givn: 'Petr', npfx: 'Ing.' }))
+            .toEqual({ firstName: 'Petr', lastName: 'Novotný', titleBefore: 'Ing.' });
+    });
+
     it('keep a title the tags name (NPFX / NSFX) in a field of its own (T07)', () => {
         expect(readGedcomName('Ing. Jan /Novák/ ml.', { npfx: 'Ing.', givn: 'Jan', surn: 'Novák', nsfx: 'ml.' }))
             .toEqual({ firstName: 'Jan', lastName: 'Novák', titleBefore: 'Ing.', titleAfter: 'ml.' });
@@ -190,10 +203,64 @@ describe('import of a family tree file (T08)', () => {
         expect(again.map(p => p.notes)).toEqual(people(first).map(p => p.notes));
     });
 
+    it('reads a NAME line without slashes, with GIVN and no SURN, with its surname', () => {
+        const file = [
+            '0 HEAD', '1 SOUR MYHERITAGE', '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8',
+            '0 @I1@ INDI', '1 NAME Petr Novotný', '2 GIVN Petr', '1 SEX M',
+            '0 TRLR',
+        ].join('\n');
+        expect(people(importGed(file)).map(nameOf)).toEqual(['Petr | Novotný']);
+    });
+
     it('brings a name typed in Strom back from the app\'s own file unchanged', () => {
         const own = ged.replace('1 SOUR MYHERITAGE', '1 SOUR STROM');
         const persons = people(importGed(own));
         expect(nameOf(persons[3])).toBe('Mrtvě narozený | Chrpa');
         expect(nameOf(persons[0])).toBe('? | Chrpa');
+    });
+});
+
+describe('a person of no name and no surname (T08)', () => {
+    const tree: StromData = {
+        persons: {
+            ['p1' as Person['id']]: {
+                id: 'p1' as Person['id'], firstName: '?', lastName: '', gender: 'male', isPlaceholder: false,
+                partnerships: [], parentIds: [], childIds: [],
+            },
+        },
+        partnerships: {},
+    };
+    const file = (source: string, name: string[]): string => [
+        '0 HEAD', `1 SOUR ${source}`, '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8',
+        '0 @I1@ INDI', ...name, '1 SEX M', '0 TRLR',
+    ].join('\n');
+
+    it('is written with an empty pair of slashes, never a surname "Unknown", and comes back the same', () => {
+        const out = exportToGedcom(tree).content;
+        expect(out).toContain('1 NAME ? //');
+        expect(out).not.toContain('Unknown');
+        const [again] = people(importGed(out));
+        expect(nameOf(again)).toBe('? | ');
+        // A person the app knows, not a stand-in (that one the app writes "1 NAME //").
+        expect(again.isPlaceholder).toBe(false);
+    });
+
+    it('reads the "? /Unknown/" the app wrote before as no surname, from a file of Strom\'s own', () => {
+        for (const source of ['STROM', 'STROM_RESEARCH']) {
+            expect(people(importGed(file(source, ['1 NAME ? /Unknown/']))).map(nameOf)).toEqual(['? | ']);
+            expect(people(importGed(file(source, ['1 NAME ? /Unknown/', '2 GIVN ?']))).map(nameOf)).toEqual(['? | ']);
+        }
+        expect(people(importGed(file('STROM', ['1 NAME ? /Unknown/'])))[0].isPlaceholder).toBe(false);
+    });
+
+    it('keeps the app\'s stand-in ("1 NAME //") a stand-in, and "? //" of another program too', () => {
+        expect(people(importGed(file('STROM', ['1 NAME //'])))[0].isPlaceholder).toBe(true);
+        expect(people(importGed(file('MYHERITAGE', ['1 NAME ? //'])))[0].isPlaceholder).toBe(true);
+    });
+
+    it('keeps a surname Unknown someone gave: with its SURN, with a name, or in another program\'s file', () => {
+        expect(people(importGed(file('STROM', ['1 NAME ? /Unknown/', '2 GIVN ?', '2 SURN Unknown']))).map(nameOf)).toEqual(['? | Unknown']);
+        expect(people(importGed(file('STROM', ['1 NAME Jan /Unknown/']))).map(nameOf)).toEqual(['Jan | Unknown']);
+        expect(people(importGed(file('MYHERITAGE', ['1 NAME ? /Unknown/']))).map(nameOf)).toEqual(['? | Unknown']);
     });
 });

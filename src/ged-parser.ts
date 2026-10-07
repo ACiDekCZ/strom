@@ -730,6 +730,8 @@ interface GedcomIndividual {
     variantNameParts: GedcomNameParts[];
     /** A description the file wrote instead of the given name — goes to the note. */
     nameDescription?: string;
+    /** The app's own file names a person it knows without a name ("? //"): no stand-in. */
+    knownNameless?: boolean;
     /** NAME > NPFX / NSFX of the primary name: the titles before and after it. */
     titleBefore?: string;
     titleAfter?: string;
@@ -2583,6 +2585,11 @@ export function parseGedcom(content: string): ParsedGedcom {
         indi.firstName = read.firstName;
         indi.lastName = read.lastName;
         if (read.description) indi.nameDescription = read.description;
+        // The app writes a stand-in as "1 NAME //" and a person it knows
+        // without a name as "? //" ("? /Unknown/" before 3.10): in its own
+        // file only the first is a stand-in.
+        const line = indi.name.trim();
+        if (stromApp && read.firstName === '?' && !read.lastName && line && !/^\/\s*\/$/.test(line)) indi.knownNameless = true;
         if (read.titleBefore) indi.titleBefore = read.titleBefore;
         if (read.titleAfter) indi.titleAfter = read.titleAfter;
     }
@@ -2770,7 +2777,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
             firstName: indi.firstName || '?',
             lastName: noLast ? '' : indi.lastName,
             gender,
-            isPlaceholder: noFirst && noLast,
+            isPlaceholder: noFirst && noLast && !indi.knownNameless,
             partnerships: [],
             parentIds: [],
             childIds: []
