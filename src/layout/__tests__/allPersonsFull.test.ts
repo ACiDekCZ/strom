@@ -8,6 +8,13 @@
  * Checks: valid positions, no card overlap, no edge crossings,
  * built-in validateLayout diagnostics.
  *
+ * The "-v3" modes lay every focus out once more with cards of their own
+ * heights (custom card "by content": deterministic synthetic heights of
+ * 56–294 px per person, partner line at the header) and audit the bands too
+ * (helpers/bandAudit.ts): cards top-aligned in bands as tall as their
+ * tallest card, buses between the bands, stems from the right card's bottom,
+ * and the X placement and bus lanes of the uniform-card layout unchanged.
+ *
  * Fixtures: set FIXTURES env var (comma-separated, without .json) to override.
  */
 
@@ -21,7 +28,8 @@ import {
     assertValidPositions,
 } from './helpers/assertions.js';
 import { auditGeometry } from './helpers/geometryAudit.js';
-import { PersonId, DEFAULT_LAYOUT_CONFIG } from '../../types.js';
+import { auditBands, syntheticPersonHeights } from './helpers/bandAudit.js';
+import { PersonId, LayoutConfig, DEFAULT_LAYOUT_CONFIG } from '../../types.js';
 
 const DEFAULT_FIXTURES = [
     'comprehensive',
@@ -66,8 +74,10 @@ interface PersonFailure {
 }
 
 const MODES = [
-    { name: 'standard', displayPolicy: { mode: 'standard' as const, autoExpand: false } },
-    { name: 'expanded', displayPolicy: { mode: 'standard' as const, autoExpand: true } },
+    { name: 'standard', base: 'standard', heights: false, displayPolicy: { mode: 'standard' as const, autoExpand: false } },
+    { name: 'expanded', base: 'expanded', heights: false, displayPolicy: { mode: 'standard' as const, autoExpand: true } },
+    { name: 'standard-v3', base: 'standard', heights: true, displayPolicy: { mode: 'standard' as const, autoExpand: false } },
+    { name: 'expanded-v3', base: 'expanded', heights: true, displayPolicy: { mode: 'standard' as const, autoExpand: true } },
 ];
 
 /**
@@ -102,6 +112,8 @@ for (const fixtureName of FIXTURES) {
     const personIds = Object.keys(data.persons) as PersonId[];
     const allFailures: PersonFailure[] = [];
     const outputFile = join(process.cwd(), 'test', `failures-full-${fixtureName}.txt`);
+    // Cards of their own heights, the partner line at the header (as the custom card)
+    const v3Config: LayoutConfig = { ...config, spouseLineY: 25, personHeights: syntheticPersonHeights(personIds) };
 
     describe(`Full Pipeline Invariants [${fixtureName}.json, depth=${DEPTH}]`, () => {
         for (const personId of personIds) {
@@ -111,20 +123,22 @@ for (const fixtureName of FIXTURES) {
             for (const mode of MODES) {
                 it(`${displayName} (${personId}) [${mode.name}]`, () => {
                     const failures: string[] = [];
+                    const modeConfig = mode.heights ? v3Config : config;
+                    const run = (cfg: LayoutConfig) => runLayoutPipeline({
+                        data,
+                        focusPersonId: personId,
+                        config: cfg,
+                        ancestorDepth: DEPTH,
+                        descendantDepth: DEPTH,
+                        includeSpouseAncestors: true,
+                        includeParentSiblings: true,
+                        includeParentSiblingDescendants: true,
+                        displayPolicy: mode.displayPolicy,
+                    });
 
                     let result;
                     try {
-                        result = runLayoutPipeline({
-                            data,
-                            focusPersonId: personId,
-                            config,
-                            ancestorDepth: DEPTH,
-                            descendantDepth: DEPTH,
-                            includeSpouseAncestors: true,
-                            includeParentSiblings: true,
-                            includeParentSiblingDescendants: true,
-                            displayPolicy: mode.displayPolicy,
-                        });
+                        result = run(modeConfig);
                     } catch (e: unknown) {
                         failures.push(`Pipeline error: ${(e as Error).message}`);
                         allFailures.push({ personId, name: displayName, mode: mode.name, failures });
@@ -141,7 +155,7 @@ for (const fixtureName of FIXTURES) {
 
                     // 2. No card overlap (all generations)
                     try {
-                        assertNoNodeOverlap(result.positions, config.cardWidth, config.cardHeight);
+                        assertNoNodeOverlap(result.positions, modeConfig.cardWidth, modeConfig.cardHeight);
                     } catch (e: unknown) {
                         failures.push(`Overlap: ${(e as Error).message.split('\n')[0]}`);
                     }
@@ -157,7 +171,7 @@ for (const fixtureName of FIXTURES) {
                     // of topologically forced ones between cross-married
                     // unions), collinear line merges, endpoint touches on
                     // foreign lines, lines through cards
-                    const violations = auditGeometry(result, config, data);
+                    const violations = auditGeometry(result, modeConfig, data);
                     const inherent = violations.filter(v => v.type === 'inherent-crossing');
                     const hard = violations.filter(v => v.type !== 'inherent-crossing');
                     for (const violation of hard.slice(0, 5)) {
@@ -173,7 +187,16 @@ for (const fixtureName of FIXTURES) {
                         });
                     }
 
-                    const limitationKey = `${fixtureName}/${personId}/${mode.name}`;
+                    // 5. Cards of their own heights: bands, stems, drops, and
+                    // the uniform layout's X placement and bus lanes
+                    if (mode.heights) {
+                        for (const v of auditBands(result, modeConfig, run(config)).slice(0, 5)) {
+                            failures.push(`Bands: ${v}`);
+                        }
+                    }
+
+                    // The same known knots with cards of any height (X is the same)
+                    const limitationKey = `${fixtureName}/${personId}/${mode.base}`;
                     if (KNOWN_LINE_KNOTS.has(limitationKey) &&
                         failures.every(f =>
                             f.startsWith('Validation: Bus line overlap') ||

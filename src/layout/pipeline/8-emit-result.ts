@@ -16,6 +16,7 @@ import {
     SpouseLine,
     BranchModel
 } from './types.js';
+import { computeGenerationBands } from './bands.js';
 
 /**
  * Emit the final layout result.
@@ -28,14 +29,8 @@ export function emitLayoutResult(input: EmitInput): LayoutResult {
     const { genModel } = measured;
     const { model, personGen, minGen, maxGen } = genModel;
 
-    // Calculate Y for each generation
-    const rowHeight = config.cardHeight + config.verticalGap;
-    const genY = new Map<number, number>();
-
-    for (let gen = minGen; gen <= maxGen; gen++) {
-        const row = gen - minGen;
-        genY.set(gen, config.padding + row * rowHeight);
-    }
+    // Band of each generation: every card's top is its band's top
+    const { bands, top: genY } = computeGenerationBands(genModel, personX, config);
 
     // Build positions map
     const positions = new Map<PersonId, Position>();
@@ -80,7 +75,8 @@ export function emitLayoutResult(input: EmitInput): LayoutResult {
         connections,
         spouseLines,
         diagnostics,
-        partnerChains
+        partnerChains,
+        bands
     };
 }
 

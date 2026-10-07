@@ -8,7 +8,7 @@
  * 4. All connections reference existing persons
  */
 
-import { PersonId, Position, LayoutConfig } from '../../types.js';
+import { PersonId, Position, LayoutConfig, personCardHeight } from '../../types.js';
 import { LayoutResult, ValidationResult, Connection } from './types.js';
 
 /**
@@ -59,7 +59,8 @@ function checkCardOverlaps(
             const [id1, pos1] = posArray[i];
             const [id2, pos2] = posArray[j];
 
-            if (rectanglesOverlap(pos1, pos2, config.cardWidth, config.cardHeight, minGap)) {
+            if (rectanglesOverlap(pos1, pos2, config.cardWidth,
+                personCardHeight(config, id1), personCardHeight(config, id2), minGap)) {
                 errors.push(`Card overlap: ${id1} and ${id2}`);
             }
         }
@@ -69,23 +70,24 @@ function checkCardOverlaps(
 }
 
 /**
- * Check if two rectangles overlap (with gap).
+ * Check if two cards overlap (with gap). Cards share the width; each has
+ * its own height.
  */
 function rectanglesOverlap(
     pos1: Position,
     pos2: Position,
     width: number,
-    height: number,
+    height1: number,
+    height2: number,
     gap: number
 ): boolean {
     const w = width + gap;
-    const h = height + gap;
 
     // Check if rectangles don't overlap
     if (pos1.x + w <= pos2.x) return false;  // pos1 is left of pos2
     if (pos2.x + w <= pos1.x) return false;  // pos2 is left of pos1
-    if (pos1.y + h <= pos2.y) return false;  // pos1 is above pos2
-    if (pos2.y + h <= pos1.y) return false;  // pos2 is above pos1
+    if (pos1.y + height1 + gap <= pos2.y) return false;  // pos1 is above pos2
+    if (pos2.y + height2 + gap <= pos1.y) return false;  // pos2 is above pos1
 
     return true;  // Rectangles overlap
 }

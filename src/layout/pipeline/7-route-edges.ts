@@ -12,8 +12,11 @@
  * Also creates spouse lines between partners in unions.
  */
 
-import { PersonId, LayoutConfig, spouseLineOffset } from '../../types.js';
+import { PersonId, LayoutConfig, spouseLineOffset, personCardHeight } from '../../types.js';
+import { computeGenerationBands } from './bands.js';
+import { findChainExtraPartner } from './6-constraints.js';
 import {
+    FamilyBlockModel,
     RouteEdgesInput,
     RoutedModel,
     Connection,
@@ -32,19 +35,13 @@ export function routeEdges(input: RouteEdgesInput): RoutedModel {
     const { placed } = constrained;
     const { measured, unionX, personX } = placed;
     const { genModel } = measured;
-    const { model, unionGen, minGen, maxGen } = genModel;
+    const { model, unionGen } = genModel;
 
     const connections: Connection[] = [];
     const spouseLines: SpouseLine[] = [];
 
-    // Calculate Y position for each generation
-    const rowHeight = config.cardHeight + config.verticalGap;
-    const genY = new Map<number, number>();
-
-    for (let gen = minGen; gen <= maxGen; gen++) {
-        const row = gen - minGen;
-        genY.set(gen, config.padding + row * rowHeight);
-    }
+    // Band top and height of each generation (cards are top-aligned in it)
+    const bands = computeGenerationBands(genModel, personX, config);
 
     // Build set of secondary chain union IDs (stem from card bottom, not spouse line)
     const secondaryChainUnions = new Set<UnionId>();
@@ -53,6 +50,26 @@ export function routeEdges(input: RouteEdgesInput): RoutedModel {
         for (const uid of chain.unionIds) {
             if (uid !== primaryUnionId) {
                 secondaryChainUnions.add(uid);
+            }
+        }
+    }
+
+    // The partner whose card a secondary chain union's stem leaves: the
+    // extra partner of the chain block, the same person whose centre the
+    // union's X was taken from (6-constraints recomputePositions).
+    const chainStemPerson = new Map<UnionId, PersonId>();
+    const blocks = (measured as FamilyBlockModel).blocks;
+    if (blocks) {
+        for (const block of blocks.values()) {
+            const chainInfo = block.chainInfo;
+            if (!chainInfo) continue;
+            const primaryUnionId = model.personToUnion.get(chainInfo.chainPersonId);
+            for (const uid of chainInfo.unionIds) {
+                if (uid === primaryUnionId) continue;
+                const union = model.unions.get(uid);
+                if (!union) continue;
+                // No extra partner: the union's X is partnerA's centre there too
+                chainStemPerson.set(uid, findChainExtraPartner(union, chainInfo, model) ?? union.partnerA);
             }
         }
     }
@@ -78,10 +95,11 @@ export function routeEdges(input: RouteEdgesInput): RoutedModel {
             unionGen,
             unionX,
             personX,
-            genY,
+            bands,
             config,
             secondaryChainUnions.has(unionId),
-            knownParentOf(union)
+            knownParentOf(union),
+            chainStemPerson.get(unionId) ?? null
         );
 
         if (connection) {
@@ -98,7 +116,7 @@ export function routeEdges(input: RouteEdgesInput): RoutedModel {
             union,
             personX,
             unionGen,
-            genY,
+            bands.top,
             config
         );
 
@@ -118,7 +136,7 @@ export function routeEdges(input: RouteEdgesInput): RoutedModel {
     const spouseLineY = new Map<UnionId, number>();
     for (const sl of spouseLines) spouseLineY.set(sl.unionId, sl.y);
     for (const conn of connections) {
-        if (secondaryChainUnions.has(conn.unionId)) continue;
+        if (secondaryChainUnions.has(conn.unionId) || conn.stemPersonId) continue;
         const y = spouseLineY.get(conn.unionId);
         if (y !== undefined && model.unions.get(conn.unionId)?.partnerB) conn.stemTopY = y;
     }
@@ -212,10 +230,11 @@ function createConnection(
     unionGen: Map<UnionId, number>,
     unionX: Map<UnionId, number>,
     personX: Map<PersonId, number>,
-    genY: Map<number, number>,
-    config: { cardWidth: number; cardHeight: number; verticalGap: number; spouseLineY?: number },
+    bands: { top: Map<number, number>; height: Map<number, number> },
+    config: Pick<LayoutConfig, 'cardWidth' | 'cardHeight' | 'verticalGap' | 'spouseLineY' | 'personHeights'>,
     isSecondaryChain: boolean = false,
-    soloParentId: PersonId | null = null
+    soloParentId: PersonId | null = null,
+    chainStemPersonId: PersonId | null = null
 ): Connection | null {
     const soloParentX = soloParentId ? personX.get(soloParentId) : undefined;
     const parentCenterX = soloParentX !== undefined ? soloParentX + config.cardWidth / 2 : unionX.get(unionId);
@@ -225,8 +244,9 @@ function createConnection(
         return null;
     }
 
-    const parentY = genY.get(parentGen);
-    if (parentY === undefined) {
+    const parentY = bands.top.get(parentGen);
+    const parentBandHeight = bands.height.get(parentGen);
+    if (parentY === undefined || parentBandHeight === undefined) {
         return null;
     }
 
@@ -249,24 +269,37 @@ function createConnection(
     // Stem position (center of parent union, or extra partner center for secondary chains,
     // or the known parent's center beside a hidden stand-in)
     const stemX = parentCenterX;
-    // Secondary chain unions: stem from card bottom (like MyHeritage)
+    // Secondary chain unions: stem from the extra partner's card bottom (like MyHeritage)
     // Standard two-partner unions: stem from spouse line level
-    // Single-parent unions (and a hidden stand-in's): stem from card bottom
-    const stemTopY = isSecondaryChain || soloParentX !== undefined
-        ? parentY + config.cardHeight
-        : union.partnerB
-            ? parentY + spouseLineOffset(config)
-            : parentY + config.cardHeight;
+    // Single-parent unions (and a hidden stand-in's): stem from the parent's card bottom
+    let stemPersonId: PersonId | undefined;
+    if (soloParentX !== undefined) stemPersonId = soloParentId!;
+    else if (!union.partnerB) stemPersonId = union.partnerA;
+    else if (isSecondaryChain) stemPersonId = chainStemPersonId ?? undefined;
+    const fromCardBottom = isSecondaryChain || stemPersonId !== undefined;
+    let stemTopY: number;
+    if (stemPersonId !== undefined) {
+        stemTopY = parentY + personCardHeight(config, stemPersonId);
+    } else if (fromCardBottom) {
+        // A chain union outside a chain block: the stem stands between the
+        // two cards, below the taller one
+        stemTopY = parentY + Math.max(
+            personCardHeight(config, union.partnerA), personCardHeight(config, union.partnerB!));
+    } else {
+        stemTopY = parentY + spouseLineOffset(config);
+    }
 
-    // Child Y (next generation down)
+    // Child Y (next generation down): the top of the child band, where
+    // every child card has its top
     const childGen = parentGen + 1;
-    const childY = genY.get(childGen);
+    const childY = bands.top.get(childGen);
     if (childY === undefined) {
         return null;
     }
 
-    // Bus Y is midpoint between parent card bottom and child card top
-    const parentBottomY = parentY + config.cardHeight;
+    // Bus Y is midpoint between the parent band's bottom (its tallest card)
+    // and the child band's top
+    const parentBottomY = parentY + parentBandHeight;
     const branchY = (parentBottomY + childY) / 2;
 
     // Create drops for each child
@@ -301,7 +334,6 @@ function createConnection(
     // blocks horizontalGap apart, so a chain child sits a multiple of the
     // difference (13, 26, 39 px…) beside its parent; up to a quarter card the
     // drop still comes down in the stem's axis.
-    const fromCardBottom = stemTopY === parentY + config.cardHeight;
     alignNearDropToStem(drops, stemX, config.cardWidth,
         fromCardBottom ? config.cardWidth * DROP_STEM_SNAP_CARD_BOTTOM : DROP_STEM_SNAP);
 
@@ -330,7 +362,8 @@ function createConnection(
         connectorFromX,
         connectorToX,
         connectorY: branchY,    // SAME as branchY - no staircase
-        drops
+        drops,
+        ...(stemPersonId !== undefined ? { stemPersonId } : {})
     };
 }
 

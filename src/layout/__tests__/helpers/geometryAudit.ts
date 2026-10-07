@@ -14,7 +14,7 @@
  *  - line-through-card: a segment passes through a person card's interior
  */
 
-import { PersonId, Position, LayoutConfig, StromData } from '../../../types.js';
+import { PersonId, Position, LayoutConfig, StromData, personCardHeight } from '../../../types.js';
 import { Connection, SpouseLine, LayoutResult } from '../../pipeline/types.js';
 
 const EPS = 1.5;          // same-line tolerance (lane offsets are >= 8px apart)
@@ -225,7 +225,7 @@ export function auditGeometry(
             left: pos.x + CARD_INSET,
             top: pos.y + CARD_INSET,
             right: pos.x + config.cardWidth - CARD_INSET,
-            bottom: pos.y + config.cardHeight - CARD_INSET
+            bottom: pos.y + personCardHeight(config, personId) - CARD_INSET
         });
     }
 

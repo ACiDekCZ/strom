@@ -438,9 +438,18 @@ The H/W separation rule applies to **EVERY couple** in the ancestor tree, not ju
 ## 6. Step 7: routeEdges
 
 For each union with children:
-- **Stem**: vertical line from couple center down
-- **Bus**: horizontal line at `busY = (parentBottomY + childTopY) / 2`
-- **Drops**: vertical lines from bus to children
+- **Stem**: vertical line from couple center down. A couple's stem starts on
+  its partner line (`spouseLineOffset`: `spouseLineY` from the card top, else
+  the card's middle). A stem from a card starts at the bottom of that
+  person's own card and names the person in `Connection.stemPersonId`: a
+  single parent, a marriage chain's extra partner (the same person whose
+  centre is the union's X, `findChainExtraPartner`), a parent beside a hidden
+  "?" stand-in.
+- **Bus**: horizontal line at `busY = (parentBandBottom + childBandTop) / 2`,
+  where `parentBandBottom = top(parentGen) + height(parentGen)` (see
+  Generation bands)
+- **Drops**: vertical lines from bus to children, ending at the child band's
+  top (every child card's top)
 - **Connector**: horizontal segment from stem to bus (if stem outside bus range)
 
 Post-processing:
@@ -451,9 +460,36 @@ Post-processing:
 
 ## 7. Step 8: emitLayoutResult
 
-1. Computes Y positions: `y = padding + (gen - minGen) * rowHeight`
+1. Computes Y positions: every card's `y` is its generation band's top
+   (see Generation bands); `LayoutResult.bands` lists the bands
 2. Normalizes X: shifts everything so minX = padding
 3. Normalization includes: positions, connections, spouseLines, branch bounds
+
+### Generation bands
+
+One shared function (`computeGenerationBands`, `pipeline/bands.ts`) gives the
+band of every generation to steps 7 and 8 and the debug geometry:
+
+```
+top(minGen) = padding
+top(g + 1)  = top(g) + height(g) + verticalGap
+height(g)   = tallest card drawn in generation g
+```
+
+A card's height is `LayoutConfig.personHeights` for that person, else
+`cardHeight` (`personCardHeight`). Cards stand top-aligned in their band.
+Without `personHeights` every band is `cardHeight` tall and
+`top(g) = padding + (g - minGen) * (cardHeight + verticalGap)`, exactly as
+before. Hidden "?" stand-ins and unplaced persons do not count towards a
+band's height. X placement and the single card width do not depend on the
+heights, so invariants 7 (horizontal bands) and 8 (bus between the bands)
+hold with band bottoms at the tallest card. Validation (card overlap) and
+the strict geometry audit (lines through cards) use each person's height.
+
+The custom card's "by content" height (U02 V3) passes its measured heights
+as `personHeights` together with the header partner line (`spouseLineY`).
+Default custom card height changed by the author on 7 Oct 2026 to
+by-content (V3).
 
 ---
 

@@ -906,11 +906,24 @@ export interface LayoutConfig {
      * header (src/card-width.ts customCardSpouseLineY).
      */
     spouseLineY?: number;
+    /**
+     * Card height per person (custom card "by content"). A person missing
+     * here has cardHeight. Unset: every card is cardHeight tall. Each
+     * generation band is as tall as its tallest card; cards stand top-aligned
+     * in it (LayoutResult.bands). Meant together with spouseLineY, so the
+     * partner line runs at the same height on every card of a row.
+     */
+    personHeights?: ReadonlyMap<PersonId, number>;
 }
 
 /** The partner line's distance from the card's top: the set offset, else the card's middle. */
 export function spouseLineOffset(config: Pick<LayoutConfig, 'cardHeight' | 'spouseLineY'>): number {
     return config.spouseLineY ?? config.cardHeight / 2;
+}
+
+/** The height of one person's card: its own (personHeights), else cardHeight. */
+export function personCardHeight(config: Pick<LayoutConfig, 'cardHeight' | 'personHeights'>, personId: PersonId): number {
+    return config.personHeights?.get(personId) ?? config.cardHeight;
 }
 
 /**

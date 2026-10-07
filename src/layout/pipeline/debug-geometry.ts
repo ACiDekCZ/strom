@@ -4,7 +4,8 @@
  * Computes geometric primitives for the debug overlay visualization.
  */
 
-import { LayoutConfig } from '../../types.js';
+import { LayoutConfig, personCardHeight } from '../../types.js';
+import { computeGenerationBands } from './bands.js';
 import {
     DebugSnapshot,
     DebugGeometry,
@@ -42,7 +43,7 @@ export function computeDebugGeometry(
 
     const { placed, genModel } = snapshot;
     const { personX, unionX } = placed;
-    const { model, unionGen, minGen, maxGen, personGen } = genModel;
+    const { model, unionGen, personGen } = genModel;
 
     // Compute normalization shift (same as 8-emit-result.ts normalizePositions)
     // This shifts all X so that minX = padding
@@ -62,13 +63,10 @@ export function computeDebugGeometry(
         normalizedUnionX.set(uid, x + normShift);
     }
 
-    // Compute Y for each generation
-    const rowHeight = config.cardHeight + config.verticalGap;
-    const genY = new Map<number, number>();
-    for (let gen = minGen; gen <= maxGen; gen++) {
-        const row = gen - minGen;
-        genY.set(gen, config.padding + row * rowHeight);
-    }
+    // Band top and height of each generation (cards top-aligned in it)
+    const bands = computeGenerationBands(genModel, personX, config);
+    const genY = bands.top;
+    const bandHeight = (gen: number) => bands.height.get(gen) ?? config.cardHeight;
 
     // Person boxes (use normalized X)
     const personBoxes: DebugRect[] = [];
@@ -84,7 +82,7 @@ export function computeDebugGeometry(
             x,
             y,
             width: config.cardWidth,
-            height: config.cardHeight,
+            height: personCardHeight(config, personId),
             label: person ? `${person.firstName} ${person.lastName}`.trim() : personId
         });
     }
@@ -116,7 +114,7 @@ export function computeDebugGeometry(
             x: boxX - 2,
             y: y - 2,
             width: boxWidth + 4,
-            height: config.cardHeight + 4
+            height: bandHeight(gen) + 4
         });
     }
 
@@ -147,7 +145,7 @@ export function computeDebugGeometry(
                 unionId,
                 x1: minX,
                 x2: maxX,
-                y: childY + config.cardHeight + 5
+                y: childY + bandHeight(childGen) + 5
             });
         }
     }
@@ -178,7 +176,7 @@ export function computeDebugGeometry(
         anchorPoints.push({
             id: `p_${personId}`,
             x: x + config.cardWidth / 2,
-            y: y + config.cardHeight / 2,
+            y: y + personCardHeight(config, personId) / 2,
             type: 'person'
         });
     }
@@ -193,7 +191,7 @@ export function computeDebugGeometry(
         anchorPoints.push({
             id: `u_${unionId}`,
             x: centerX,
-            y: y + config.cardHeight,
+            y: y + bandHeight(gen),
             type: 'union'
         });
     }
@@ -212,14 +210,11 @@ export function computeDebugGeometry(
 
     // Generation bands
     const generationBands: DebugGenerationBand[] = [];
-    for (let gen = minGen; gen <= maxGen; gen++) {
-        const y = genY.get(gen);
-        if (y === undefined) continue;
-
+    for (const band of bands.bands) {
         generationBands.push({
-            gen,
-            y: y - 10,
-            height: config.cardHeight + 20
+            gen: band.generation,
+            y: band.top - 10,
+            height: band.height + 20
         });
     }
 
@@ -239,7 +234,7 @@ export function computeDebugGeometry(
                     const blockY = genY.get(block.generation);
                     if (blockY === undefined) continue;
                     minBranchY = Math.min(minBranchY, blockY);
-                    maxBranchY = Math.max(maxBranchY, blockY + config.cardHeight);
+                    maxBranchY = Math.max(maxBranchY, blockY + bandHeight(block.generation));
                 }
 
                 if (!isFinite(minBranchY)) continue;
@@ -308,7 +303,7 @@ export function computeDebugGeometry(
 
                                 // Compute cluster extents using actual placed positions
                                 const extents = computeClusterExtents(
-                                    blockId, fbm.blocks, model, config, genY, normalizedPersonX, normShift
+                                    blockId, fbm.blocks, model, config, bands, normalizedPersonX, normShift
                                 );
 
                                 // Use both partner names for label
@@ -377,7 +372,7 @@ function computeClusterExtents(
     blocks: Map<FamilyBlockId, FamilyBlock>,
     model: { unions: Map<string, { partnerA: PersonId; partnerB: PersonId | null; childIds: PersonId[] }> },
     config: { cardWidth: number; partnerGap: number; cardHeight: number },
-    genY: Map<number, number>,
+    bands: { top: Map<number, number>; height: Map<number, number> },
     normalizedPersonX: Map<PersonId, number>,
     normShift: number
 ): {
@@ -436,10 +431,10 @@ function computeClusterExtents(
         }
 
         // Y extent
-        const y = genY.get(block.generation);
+        const y = bands.top.get(block.generation);
         if (y !== undefined) {
             minY = Math.min(minY, y);
-            maxY = Math.max(maxY, y + config.cardHeight);
+            maxY = Math.max(maxY, y + (bands.height.get(block.generation) ?? config.cardHeight));
         }
 
         // Recurse to children

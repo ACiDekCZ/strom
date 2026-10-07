@@ -27,7 +27,7 @@ import {
  * Find the "extra partner" in a secondary chain union.
  * In a merged chain, the extra partner is the person NOT in the primary couple.
  */
-function findChainExtraPartner(
+export function findChainExtraPartner(
     union: UnionNode,
     chainInfo: NonNullable<FamilyBlock['chainInfo']>,
     model: LayoutModel

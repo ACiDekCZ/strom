@@ -397,7 +397,13 @@ export interface ChildDrop {
 export interface Connection {
     unionId: UnionId;
     stemX: number;           // X center of union (where stem comes down)
-    stemTopY: number;        // Bottom of union cards
+    stemTopY: number;        // Partner line of the couple, or stemPersonId's card bottom
+    /**
+     * Set when the stem starts at the bottom of this person's card: a single
+     * parent, a marriage chain's extra partner, a parent beside a hidden "?"
+     * stand-in. Unset: the stem starts on the couple's partner line.
+     */
+    stemPersonId?: PersonId;
     stemBottomY: number;     // = connectorY (where stem meets connector)
     branchY: number;         // Horizontal line Y (bus over children)
     branchLeftX: number;     // Left extent of branch (min of drops)
@@ -466,6 +472,22 @@ export interface LayoutResult {
     spouseLines: SpouseLine[];
     diagnostics: LayoutDiagnostics;
     partnerChains?: Map<PersonId, PartnerChain>;
+    /**
+     * Generation bands top to bottom (set by runLayoutPipeline). Every card
+     * of a generation has its top at the band's top; the band is as tall as
+     * its tallest card (LayoutConfig.personHeights), verticalGap between bands.
+     */
+    bands?: GenerationBand[];
+}
+
+/**
+ * One generation's horizontal band. `generation` counts from the focus
+ * person's generation (0); ancestors are negative.
+ */
+export interface GenerationBand {
+    generation: number;
+    top: number;
+    height: number;
 }
 
 // ==================== PIPELINE ORCHESTRATION ====================
