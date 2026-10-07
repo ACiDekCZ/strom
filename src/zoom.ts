@@ -15,7 +15,19 @@ export function setTreeRendererGetter(getter: () => { getFocusPersonId: () => Pe
 // Constants for touch handling
 const TAP_THRESHOLD_MS = 200;  // Max time for a tap
 const TAP_THRESHOLD_PX = 10;   // Max movement for a tap
+/**
+ * Manual zoom floor (wheel, pinch, the − button) for a tree that fits the
+ * screen at this scale or above. A wider tree lowers the floor to its own fit
+ * scale (see minScale), so "fit to screen" shows all of it and zooming out by
+ * hand still reaches that view (T04: wide custom cards on a phone).
+ */
 const MIN_SCALE = 0.15;
+/** Hard floor of the fit scale: below it cards are specks (and --zoom-inv stops growing). */
+const FIT_MIN_SCALE = 0.05;
+/** Fit to screen never zooms a small tree in past this. */
+const FIT_MAX_SCALE = 1.5;
+/** Margin (world px) around the cards when the whole tree is fitted to the screen. */
+const FIT_PADDING = 50;
 const MAX_SCALE = 4;
 /** Below this scale the card badges become dots and the status icons hide. */
 const ZOOM_FAR = 0.55;
@@ -335,7 +347,8 @@ class ZoomPanClass {
      */
     private zoomToPoint(pointX: number, pointY: number, scaleFactor: number): void {
         const oldScale = this.scale;
-        const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, this.scale * scaleFactor));
+        const newScale = Math.max(this.zoomOutFloor(oldScale * scaleFactor),
+            Math.min(MAX_SCALE, oldScale * scaleFactor));
 
         if (newScale === oldScale) return;
 
@@ -429,7 +442,9 @@ class ZoomPanClass {
 
     zoomOut(): void {
         if (this.isStandaloneViewActive()) return;
-        const targetScale = Math.max(MIN_SCALE, this.scale / ZOOM_BUTTON_FACTOR);
+        const wanted = this.scale / ZOOM_BUTTON_FACTOR;
+        const targetScale = Math.max(this.zoomOutFloor(wanted), wanted);
+        if (targetScale === this.scale) return;
         this.animateZoom(targetScale);
     }
 
@@ -475,63 +490,70 @@ class ZoomPanClass {
     }
 
     /**
-     * Fit the entire tree to screen with optimal zoom level
+     * The scale and centre that show every card with a margin, or null when
+     * nothing is rendered. The scale is not clamped.
      */
-    fitToScreen(): void {
+    private computeFit(): { scale: number; centerX: number; centerY: number } | null {
         const container = document.getElementById('tree-container');
         const canvas = document.getElementById('tree-canvas');
-        if (!container || !canvas) return;
+        if (!container || !canvas) return null;
 
-        // Get all person cards
         const cards = canvas.querySelectorAll('.person-card') as NodeListOf<HTMLElement>;
-        if (cards.length === 0) return;
+        if (cards.length === 0) return null;
 
-        // Calculate bounding box of all cards
+        // Bounding box of all cards (canvas coordinates)
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-
         cards.forEach(card => {
             const left = parseFloat(card.style.left) || 0;
             const top = parseFloat(card.style.top) || 0;
-            const width = card.offsetWidth;
-            const height = card.offsetHeight;
-
             minX = Math.min(minX, left);
             minY = Math.min(minY, top);
-            maxX = Math.max(maxX, left + width);
-            maxY = Math.max(maxY, top + height);
+            maxX = Math.max(maxX, left + card.offsetWidth);
+            maxY = Math.max(maxY, top + card.offsetHeight);
         });
 
-        // Add padding around the tree
-        const padding = 50;
-        minX -= padding;
-        minY -= padding;
-        maxX += padding;
-        maxY += padding;
+        const treeWidth = maxX - minX + 2 * FIT_PADDING;
+        const treeHeight = maxY - minY + 2 * FIT_PADDING;
+        const scale = Math.min(container.clientWidth / treeWidth, container.clientHeight / treeHeight);
+        if (!isFinite(scale) || scale <= 0) return null;
+        return { scale, centerX: (minX + maxX) / 2, centerY: (minY + maxY) / 2 };
+    }
 
-        // Calculate tree dimensions
-        const treeWidth = maxX - minX;
-        const treeHeight = maxY - minY;
+    /**
+     * The manual zoom floor: MIN_SCALE, or the fit scale of a tree too big to
+     * fit at MIN_SCALE, so zooming out by hand reaches the fit-to-screen view.
+     */
+    private minScale(): number {
+        const fit = this.computeFit();
+        if (!fit) return MIN_SCALE;
+        return Math.min(MIN_SCALE, Math.max(FIT_MIN_SCALE, fit.scale));
+    }
 
-        // Get container dimensions
-        const containerWidth = container.clientWidth;
-        const containerHeight = container.clientHeight;
+    /**
+     * Lowest scale a zoom-out step towards `wanted` may land on. The fit is
+     * measured only when the step would go below MIN_SCALE. A view already
+     * below the floor (the tree got narrower since) never jumps back in: the
+     * floor is then the current scale.
+     */
+    private zoomOutFloor(wanted: number): number {
+        if (wanted >= MIN_SCALE) return MIN_SCALE;
+        return Math.min(this.minScale(), this.scale);
+    }
 
-        // Calculate scale to fit tree in container
-        const scaleX = containerWidth / treeWidth;
-        const scaleY = containerHeight / treeHeight;
-        let newScale = Math.min(scaleX, scaleY);
+    /**
+     * Fit the entire tree to screen with optimal zoom level. A tree too wide
+     * or tall for MIN_SCALE goes below it (down to FIT_MIN_SCALE), so all of
+     * it is on screen (T04).
+     */
+    fitToScreen(): void {
+        const container = document.getElementById('tree-container');
+        const fit = this.computeFit();
+        if (!container || !fit) return;
 
-        // Clamp scale to reasonable bounds (don't zoom in too much if tree is small)
-        newScale = Math.max(MIN_SCALE, Math.min(1.5, newScale));
-
-        // Calculate center of tree
-        const treeCenterX = (minX + maxX) / 2;
-        const treeCenterY = (minY + maxY) / 2;
-
-        // Calculate translation to center the tree
-        this.scale = newScale;
-        this.tx = containerWidth / 2 - treeCenterX * this.scale;
-        this.ty = containerHeight / 2 - treeCenterY * this.scale;
+        // Don't zoom in too much if the tree is small
+        this.scale = Math.max(FIT_MIN_SCALE, Math.min(FIT_MAX_SCALE, fit.scale));
+        this.tx = container.clientWidth / 2 - fit.centerX * this.scale;
+        this.ty = container.clientHeight / 2 - fit.centerY * this.scale;
 
         this.apply();
     }
@@ -640,7 +662,7 @@ class ZoomPanClass {
 
         const cardCenterX = (parseFloat(card.style.left) || 0) + card.offsetWidth / 2;
         const cardCenterY = (parseFloat(card.style.top) || 0) + card.offsetHeight / 2;
-        const endScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, targetScale));
+        const endScale = Math.max(Math.min(MIN_SCALE, this.scale), Math.min(MAX_SCALE, targetScale));
         const endTx = container.clientWidth / 2 - cardCenterX * endScale;
         const endTy = container.clientHeight / 2 - cardCenterY * endScale;
 
@@ -676,7 +698,8 @@ class ZoomPanClass {
         if (!container || !card) return false;
         const cx = (parseFloat(card.style.left) || 0) + card.offsetWidth / 2;
         const cy = (parseFloat(card.style.top) || 0) + card.offsetHeight / 2;
-        const endScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, targetScale));
+        // A view fitted below MIN_SCALE keeps its scale (no jump in).
+        const endScale = Math.max(Math.min(MIN_SCALE, this.scale), Math.min(MAX_SCALE, targetScale));
         const endTx = container.clientWidth / 2 - cx * endScale;
         const endTy = container.clientHeight / 2 - cy * endScale;
         if (this.animationFrame) cancelAnimationFrame(this.animationFrame);
