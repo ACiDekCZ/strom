@@ -19,7 +19,8 @@ import { TreeManager } from './tree-manager.js';
 import { chainLinkSvg, iconSvg } from './icons.js';
 import * as CrossTree from './cross-tree.js';
 import { ViewMode, STANDALONE_VIEWS, ResearchEdgeMode } from './types.js';
-import { cardLines } from './card-fields.js';
+import { cardLines, CardLine, cardLineHtml } from './card-fields.js';
+import { CustomCardMetrics, customCardMetrics, measureCardTexts, cardFontsPending } from './card-width.js';
 import { checkRecordedAge, ageBirthDate } from './recorded-age.js';
 import { ACTION_GLYPH, AGENT_DONE_MS, AGENT_DONE_FADE_MS, AGENT_SPIN_MS, CardSignalContext, CardSignalInfo, cardSignalInfo, researchCardInfoNow, sharedPhaseDelay, stateStripesHtml } from './card-signals.js';
 import { EvidenceLevel, treeHasAnySource, unionsByPerson } from './evidence-level.js';
@@ -71,6 +72,10 @@ export interface GenerationBand {
 
 class TreeRendererClass {
     private config = DEFAULT_LAYOUT_CONFIG;
+    /** The custom card's width and date column for the current view (null in other densities). */
+    private customMetrics: CustomCardMetrics | null = null;
+    /** The custom card's lines per drawn person, computed once per render. */
+    private customLines = new Map<PersonId, CardLine[]>();
     private positions = new Map<PersonId, Position>();
 
     /** Generation bands for the sticky label overlay (rebuilt each render). */
@@ -210,65 +215,37 @@ class TreeRendererClass {
         // with the density (and the CSS box) or cards overlap / drift apart.
         const density = SettingsManager.getCardDensity();
         const size = SettingsManager.getCardSize();
-        this.config = { ...this.config, ...size };
+        const custom = density === 'custom' && !STANDALONE_VIEWS.includes(this.viewMode);
+        // The custom card is as wide as the view's longest text: start from the
+        // width the last view had (usually the same), measure once laid out.
+        this.config = { ...this.config, ...size, ...(custom && this.customMetrics ? { cardWidth: this.customMetrics.cardWidth } : {}) };
         document.body.dataset.cardDensity = density;
         // The custom card's height follows how many lines it shows.
         document.body.style.setProperty('--card-custom-h', `${size.cardHeight}px`);
         this.updatePlacesDatalist();
-        const request: LayoutRequest = {
-            data: DataManager.getData(),
-            focusPersonId: this.focusPersonId,
-            policy: {
-                ancestorDepth: descendantsOnly ? 0 : this.focusDepthUp,
-                descendantDepth: this.focusDepthDown,
-                includeAuntsUncles: !descendantsOnly,
-                includeCousins: !descendantsOnly
-            },
-            config: this.config,
-            displayPolicy: {
-                mode: this.showAllPartnerships ? 'expanded' : 'standard',
-                autoExpand: this.showAllPartnerships,
-                expandLineageOnly: descendantsOnly && !this.isDescendantsFullFamilies()
+        const result = this.computeTreeLayout(descendantsOnly);
+        if (custom) {
+            const metrics = this.measureCustomCards(result.positions);
+            this.customMetrics = metrics;
+            document.body.style.setProperty('--card-custom-w', `${metrics.cardWidth}px`);
+            document.body.style.setProperty('--card-date-col', `${metrics.dateColumn}px`);
+            // The settings preview states the card size: keep it in step with the view.
+            if (document.getElementById('settings-modal')?.classList.contains('active')) UI.renderCardPreview?.();
+            if (metrics.cardWidth !== this.config.cardWidth) {
+                // The person set does not depend on the card size: lay out again at the measured width.
+                this.config = { ...this.config, cardWidth: metrics.cardWidth };
+                const again = this.computeTreeLayout(descendantsOnly);
+                result.positions = again.positions;
+                result.connections = again.connections;
+                result.spouseLines = again.spouseLines;
             }
-        };
-
-        let result;
-
-        // Use debug pipeline if debug mode is enabled
-        if (this.debugOptions?.enabled) {
-            const debugResult = runLayoutPipelineWithDebug(
-                {
-                    data: request.data,
-                    focusPersonId: request.focusPersonId,
-                    config: request.config,
-                    ancestorDepth: request.policy.ancestorDepth,
-                    descendantDepth: request.policy.descendantDepth,
-                    includeSpouseAncestors: false,
-                    includeParentSiblings: request.policy.includeAuntsUncles,
-                    includeParentSiblingDescendants: request.policy.includeCousins
-                },
-                this.debugOptions
-            );
-
-            result = debugResult.result;
-
-            // Store current snapshot (last one for the target step)
-            this.currentDebugSnapshot = debugResult.snapshots[debugResult.snapshots.length - 1] || null;
-
-            // Set global debug context for DevTools inspection
-            const debugContext: LayoutDebugContext = {
-                query: {
-                    debug: this.debugOptions.enabled,
-                    step: this.debugOptions.step
-                },
-                snapshots: debugResult.snapshots,
-                result: debugResult.result
-            };
-            window.__LAYOUT_DEBUG__ = debugContext;
+            // Measured before the card fonts were in: measure again once they are.
+            cardFontsPending()?.then(() => {
+                if (seq === this.renderSeq && SettingsManager.getCardDensity() === 'custom') this.render();
+            });
         } else {
-            const engine = new StromLayoutEngine();
-            result = computeLayout(engine, request);
-            this.currentDebugSnapshot = null;
+            this.customMetrics = null;
+            this.customLines.clear();
         }
 
         // Apply layout result
@@ -322,6 +299,90 @@ class TreeRendererClass {
         UI.updateMinimap?.();
         // Rebuild the sticky generation-label overlay for the new layout.
         UI.updateGenLabels?.();
+    }
+
+    /** Lay out the current view at the current card size (this.config). */
+    private computeTreeLayout(descendantsOnly: boolean): ReturnType<typeof computeLayout> {
+        const request: LayoutRequest = {
+            data: DataManager.getData(),
+            focusPersonId: this.focusPersonId!,
+            policy: {
+                ancestorDepth: descendantsOnly ? 0 : this.focusDepthUp,
+                descendantDepth: this.focusDepthDown,
+                includeAuntsUncles: !descendantsOnly,
+                includeCousins: !descendantsOnly
+            },
+            config: this.config,
+            displayPolicy: {
+                mode: this.showAllPartnerships ? 'expanded' : 'standard',
+                autoExpand: this.showAllPartnerships,
+                expandLineageOnly: descendantsOnly && !this.isDescendantsFullFamilies()
+            }
+        };
+
+        // Use debug pipeline if debug mode is enabled
+        if (this.debugOptions?.enabled) {
+            const debugResult = runLayoutPipelineWithDebug(
+                {
+                    data: request.data,
+                    focusPersonId: request.focusPersonId,
+                    config: request.config,
+                    ancestorDepth: request.policy.ancestorDepth,
+                    descendantDepth: request.policy.descendantDepth,
+                    includeSpouseAncestors: false,
+                    includeParentSiblings: request.policy.includeAuntsUncles,
+                    includeParentSiblingDescendants: request.policy.includeCousins
+                },
+                this.debugOptions
+            );
+
+            // Store current snapshot (last one for the target step)
+            this.currentDebugSnapshot = debugResult.snapshots[debugResult.snapshots.length - 1] || null;
+
+            // Set global debug context for DevTools inspection
+            const debugContext: LayoutDebugContext = {
+                query: {
+                    debug: this.debugOptions.enabled,
+                    step: this.debugOptions.step
+                },
+                snapshots: debugResult.snapshots,
+                result: debugResult.result
+            };
+            window.__LAYOUT_DEBUG__ = debugContext;
+            return debugResult.result;
+        }
+        const engine = new StromLayoutEngine();
+        this.currentDebugSnapshot = null;
+        return computeLayout(engine, request);
+    }
+
+    /**
+     * The custom card's lines for every drawn person (kept for the cards) and
+     * the width and date column they need (src/card-width.ts).
+     */
+    private measureCustomCards(positions: Map<PersonId, Position>): CustomCardMetrics {
+        const data = DataManager.getData();
+        const fields = SettingsManager.getCardFields();
+        this.customLines.clear();
+        const entries = [];
+        for (const id of positions.keys()) {
+            const person = DataManager.getPerson(id);
+            if (!person) continue;
+            const lines = person.isPlaceholder ? [] : cardLines(person, data, fields);
+            this.customLines.set(id, lines);
+            entries.push({ name: `${person.firstName || '?'} ${person.lastName}`.trim(), avatar: !person.isPlaceholder, lines });
+        }
+        return customCardMetrics(entries, measureCardTexts);
+    }
+
+    /** The custom card's width and date column of the drawn view (null in other densities). */
+    getCustomCardMetrics(): CustomCardMetrics | null {
+        return this.customMetrics;
+    }
+
+    /** The card box the drawn view is laid out with. */
+    getCardBox(): { cardWidth: number; cardHeight: number } {
+        return { cardWidth: this.config.cardWidth, cardHeight: this.config.cardHeight };
     }
 
     // ============= Focus Mode Methods =============
@@ -1227,7 +1288,8 @@ class TreeRendererClass {
             // normal = avatar + name + life-year meta, detailed = + occupation & age.
             const density = SettingsManager.getCardDensity();
             const customLines = density === 'custom'
-                ? (person.isPlaceholder ? [] : cardLines(person, DataManager.getData(), SettingsManager.getCardFields()))
+                ? (this.customLines.get(id)
+                    ?? (person.isPlaceholder ? [] : cardLines(person, DataManager.getData(), SettingsManager.getCardFields())))
                 : null;
             if (customLines?.length) {
                 card.setAttribute('aria-label',
@@ -1299,8 +1361,7 @@ class TreeRendererClass {
             html += customLines ? `
                 <div class="card-body card-body--custom">
                     <div class="card-head">${avatarHtml}${nameHtml}</div>
-                    <div class="card-lines">${customLines.map(l =>
-                        `<div class="card-line card-line--${l.key}"><span class="card-line-mark" aria-hidden="true">${this.escapeHtml(l.mark)}</span><span class="card-line-text">${this.escapeHtml(l.text)}</span></div>`).join('')}</div>
+                    <div class="card-lines">${customLines.map(l => cardLineHtml(l, t => this.escapeHtml(t))).join('')}</div>
                 </div>` : `
                 ${avatarHtml}
                 <div class="card-body">

@@ -224,7 +224,11 @@ test.describe('the custom card', () => {
         await expect(host.locator('.card-fields-status')).toHaveText('5 lines at most. Untick one to add another.');
         await expect(row('divorce').locator('input')).toHaveAttribute('aria-disabled', 'true');
         await expect(row('divorce')).toHaveClass(/is-disabled/);
-        await expect(page.locator('.card-preview-size')).toHaveText('card 200 × 141 px');
+        // The width follows the view's longest line (full dates, the cause): the size says the drawn one.
+        await expect.poll(async () => {
+            const w = await card(page, 'Marie').evaluate(el => (el as HTMLElement).offsetWidth);
+            return (await page.locator('.card-preview-size').textContent()) === `card ${w} × 141 px` && w > 200;
+        }).toBe(true);
         // Death to the top.
         await row('death').locator('.card-field-up').click();
         await row('death').locator('.card-field-up').click();
@@ -249,7 +253,8 @@ test.describe('the custom card', () => {
         ]);
         const { readFileSync } = await import('fs');
         const svg = readFileSync(await download.path(), 'utf-8');
-        for (const text of ['1862 Horní Lhota', '1919 Horní Lhota', 'mlynář', 'after 1919', '1869 Dolní Lhota']) {
+        // The date and the place of a line are two texts (the place at the view's date column).
+        for (const text of ['>1862<', '>1919<', '>Horní Lhota<', '>mlynář<', '>after 1919<', '>1869<', '>Dolní Lhota<']) {
             expect(svg).toContain(text);
         }
         expect(svg).toContain('height="107"');

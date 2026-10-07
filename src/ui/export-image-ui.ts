@@ -22,6 +22,7 @@ import { computeIndirectIds } from '../indirect.js';
 import { SettingsManager } from '../settings.js';
 import { safeFileName } from '../filenames.js';
 import { cardLines } from '../card-fields.js';
+import { measureCardTexts } from '../card-width.js';
 
 /** Browsers cap canvas dimensions; keep well under the common ~16k limit. */
 const MAX_CANVAS_PX = 15000;
@@ -172,9 +173,10 @@ function buildCurrentPoster(): PosterBuild | null {
     const dimmedIds = (focusId && (mode === 'descendants' || mode === 'family'))
         ? computeIndirectIds(data, focusId, mode, [...layout.positions.keys()] as unknown as string[]) as unknown as Set<string>
         : undefined;
-    // The custom card is drawn as on screen: its size and its lines.
+    // The custom card is drawn as on screen: the size the view was laid out
+    // with (its width follows the view's longest text), its date column, its lines.
     const custom = SettingsManager.getCardDensity() === 'custom';
-    const cardConfig = custom ? { ...DEFAULT_LAYOUT_CONFIG, ...SettingsManager.getCardSize() } : DEFAULT_LAYOUT_CONFIG;
+    const cardConfig = custom ? { ...DEFAULT_LAYOUT_CONFIG, ...TreeRenderer.getCardBox() } : DEFAULT_LAYOUT_CONFIG;
     const fields = SettingsManager.getCardFields();
     const cardLinesMap = custom
         ? new Map([...layout.positions.keys()].map(id => {
@@ -187,7 +189,11 @@ function buildCurrentPoster(): PosterBuild | null {
         branchMap,
         deceasedSet: presumedDeceasedSet(data),
         ...(dimmedIds ? { dimmedIds } : {}),
-        ...(custom ? { config: cardConfig, cardLines: cardLinesMap } : {}),
+        ...(custom ? {
+            config: cardConfig, cardLines: cardLinesMap,
+            cardDateColumn: TreeRenderer.getCustomCardMetrics()?.dateColumn ?? 0,
+            measureCardTexts,
+        } : {}),
     };
     const svg = buildTreeSvg(data, layout, options);
 

@@ -84,7 +84,11 @@ export function normalizeCardFields(raw: Partial<CardFieldSettings> | undefined)
     };
 }
 
-/** The card box for a number of lines: 200 wide, the name row plus 17px a line. */
+/**
+ * The card box for a number of lines: the name row plus 17px a line. The width
+ * is the narrowest one; the renderer widens every card of a view to its
+ * longest text (src/card-width.ts).
+ */
 export function customCardSize(lines: number): { cardWidth: number; cardHeight: number } {
     return { cardWidth: 200, cardHeight: 56 + 17 * Math.max(0, Math.min(MAX_CARD_LINES, lines)) };
 }
@@ -94,6 +98,14 @@ export interface CardLine {
     mark: string;
     /** "1919 Horní Lhota · souchotiny". */
     text: string;
+    /** The date column: "1919", "after 1875", "1850–1855" ('' when the line has no date). */
+    date: string;
+    /** The place column: the place and, for a death, the cause ("Horní Lhota · souchotiny"). */
+    rest: string;
+    /** "+1" after the place for further marriages; never cut. */
+    more?: string;
+    /** The line has no date column (the occupation): its text starts where the dates do. */
+    wide?: boolean;
     /** The line in words, for the aria-label: "Death 1919 Horní Lhota · souchotiny". */
     spoken: string;
     /** The place, said in full in the tooltip when the line is cut. */
@@ -145,10 +157,11 @@ export function cardLines(person: Person, data: StromData, s: CardFieldSettings)
     const add = (key: CardFieldKey, mark: string, label: string, date: string | undefined, place: string | undefined,
         extra?: string): void => {
         const placeText = s.place.includes(key) ? place?.trim() ?? '' : '';
-        const head = [cardDate(date, s.fullDate), placeText].filter(Boolean).join(' ');
-        const text = [head, extra?.trim() ?? ''].filter(Boolean).join(' · ');
+        const dateText = cardDate(date, s.fullDate);
+        const rest = [placeText, extra?.trim() ?? ''].filter(Boolean).join(' · ');
+        const text = [[dateText, placeText].filter(Boolean).join(' '), extra?.trim() ?? ''].filter(Boolean).join(' · ');
         if (!text) return;
-        out.push({ key, mark, text, spoken: `${label} ${text}`, ...(placeText ? { place: placeText } : {}) });
+        out.push({ key, mark, text, date: dateText, rest, spoken: `${label} ${text}`, ...(placeText ? { place: placeText } : {}) });
     };
     for (const key of s.order) {
         if (!s.on.includes(key)) continue;
@@ -186,7 +199,7 @@ export function cardLines(person: Person, data: StromData, s: CardFieldSettings)
             case 'occupation': {
                 const jobs = (person.events ?? []).filter(e => e.type === 'occupation' && e.note?.trim());
                 const job = newestLifeEvent(jobs)?.note?.trim().split('\n')[0];
-                if (job) out.push({ key, mark: '', text: job, spoken: `${types.occupation} ${job}` });
+                if (job) out.push({ key, mark: '', text: job, date: '', rest: job, wide: true, spoken: `${types.occupation} ${job}` });
                 break;
             }
             case 'marriage': {
@@ -199,6 +212,7 @@ export function cardLines(person: Person, data: StromData, s: CardFieldSettings)
                     const line = out[out.length - 1];
                     line.text = `${line.text} ${more}`;
                     line.spoken = `${line.spoken} ${more}`;
+                    line.more = more;
                 }
                 break;
             }
@@ -212,4 +226,19 @@ export function cardLines(person: Person, data: StromData, s: CardFieldSettings)
         }
     }
     return out;
+}
+
+/**
+ * A line on the card: the mark, the date and the place in a grid (index.html
+ * .card-line); the occupation has no date and spans both columns. The space
+ * between the date and the place is not drawn (grid) but keeps the line's
+ * text readable when copied. "+1" stays outside the part that shortens.
+ */
+export function cardLineHtml(l: CardLine, esc: (text: string) => string): string {
+    const mark = `<span class="card-line-mark" aria-hidden="true">${esc(l.mark)}</span>`;
+    const more = l.more ? `<span class="card-line-more"> ${esc(l.more)}</span>` : '';
+    const place = `<span class="card-line-place${l.wide ? ' card-line-place--wide' : ''}">`
+        + `<span class="card-line-rest">${esc(l.rest)}</span>${more}</span>`;
+    const date = l.wide ? '' : `<span class="card-line-date">${esc(l.date)}</span>${l.rest || l.more ? ' ' : ''}`;
+    return `<div class="card-line card-line--${l.key}">${mark}${date}${place}</div>`;
 }

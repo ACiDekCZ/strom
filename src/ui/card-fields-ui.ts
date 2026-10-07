@@ -14,8 +14,9 @@ import { strings } from '../strings.js';
 import { Person, PersonId, Partnership, PartnershipId, StromData } from '../types.js';
 import { ActionSignal, ACTION_GLYPH, stateStripesHtml } from '../card-signals.js';
 import {
-    CardFieldKey, CardFieldSettings, CARD_MARKS, MAX_CARD_LINES, PLACE_KEYS, cardLines,
+    CardFieldKey, CardFieldSettings, CARD_MARKS, MAX_CARD_LINES, PLACE_KEYS, cardLines, cardLineHtml,
 } from '../card-fields.js';
+import { customCardMetrics, measureCardTexts } from '../card-width.js';
 import { uiModule } from './module.js';
 
 const esc = (text: string): string => text.replace(/[&<>"']/g, c =>
@@ -58,10 +59,13 @@ export const cardFieldsUiMethods = uiModule({
         const host = document.getElementById('card-preview-settings');
         if (!host) return;
         const size = SettingsManager.getCardSize();
+        // The custom card is as wide as the drawn view needs (src/card-width.ts).
+        const width = SettingsManager.getCardDensity() === 'custom'
+            ? TreeRenderer.getCustomCardMetrics()?.cardWidth ?? size.cardWidth : size.cardWidth;
         host.innerHTML = `
             <div class="card-preview-head">
                 <span class="card-signals-preview-title">${esc(strings.cardDensity.cardPreview)}</span>
-                <span class="card-preview-size">${esc(strings.cardDensity.size(size.cardWidth, size.cardHeight))}</span>
+                <span class="card-preview-size">${esc(strings.cardDensity.size(width, size.cardHeight))}</span>
             </div>
             <div class="card-signals-preview" aria-hidden="true">${this.cardPreviewHtml(SettingsManager.getCardSignals())}</div>`;
     },
@@ -78,12 +82,13 @@ export const cardFieldsUiMethods = uiModule({
         if (density === 'custom') {
             const { person, data } = samplePerson();
             const lines = cardLines(person, data, SettingsManager.getCardFields());
+            // The view's card width; the date column of the sample's own lines.
+            const { dateColumn } = customCardMetrics([{ name: 'Jan Vlk', avatar: true, lines }], measureCardTexts);
             return `
-                <div class="person-card male preview-card${action ? ' has-signal' : ''}" data-density="custom">
+                <div class="person-card male preview-card${action ? ' has-signal' : ''}" data-density="custom" style="--card-date-col: ${dateColumn}px">
                     <div class="card-body card-body--custom">
                         <div class="card-head">${avatar('JV')}<div class="name"><span class="name-text">Jan Vlk</span></div></div>
-                        <div class="card-lines">${lines.map(l =>
-                            `<div class="card-line"><span class="card-line-mark">${esc(l.mark)}</span><span class="card-line-text">${esc(l.text)}</span></div>`).join('')}</div>
+                        <div class="card-lines">${lines.map(l => cardLineHtml(l, esc)).join('')}</div>
                     </div>
                     ${stripes}
                     ${dot}
