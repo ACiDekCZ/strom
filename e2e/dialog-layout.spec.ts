@@ -290,3 +290,23 @@ test('1000px is a tablet: the dialog × is a 44px target (the tablet band runs t
     expect(Math.round(box.width)).toBe(44);
     expect(Math.round(box.height)).toBe(44);
 });
+
+test('segment switches in dialogs: square inner buttons, the rounded container clips the outer corners (T02)', async ({ page }) => {
+    await openApp(page);
+    await page.evaluate(() => window.Strom.UI.showAddPersonModal());
+    await expect(page.locator('#person-modal')).toBeVisible();
+    const m = await page.evaluate(() => {
+        const seg = document.querySelector('#person-modal .segment') as HTMLElement;
+        const radii = (el: Element) => {
+            const cs = getComputedStyle(el);
+            return [cs.borderTopLeftRadius, cs.borderTopRightRadius, cs.borderBottomRightRadius, cs.borderBottomLeftRadius];
+        };
+        return {
+            buttons: Array.from(seg.querySelectorAll('.segment-btn')).map(b => radii(b).join(' ')),
+            container: radii(seg).every(r => parseFloat(r) > 0),
+            clips: getComputedStyle(seg).overflow === 'hidden',
+        };
+    });
+    expect(m).toEqual({ buttons: ['0px 0px 0px 0px', '0px 0px 0px 0px'], container: true, clips: true });
+});
+

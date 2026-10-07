@@ -3626,6 +3626,9 @@
             transition: background 0.15s, color 0.15s;
         }
         .segment-btn + .segment-btn { border-left: 1px solid var(--border); }
+        /* Inner buttons are square: the rounded container clips the outer
+           corners (.modal button would round each one on its own). */
+        .segment .segment-btn { border-radius: 0; }
         .segment-btn.active { background: var(--primary); color: var(--on-primary); }
         .segment-btn:disabled { cursor: default; opacity: 0.6; }
 
