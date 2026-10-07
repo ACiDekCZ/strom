@@ -19,6 +19,31 @@ export const INSTALL_OSES: readonly InstallOs[] = ['mac', 'win', 'linux'];
 export const INSTALL_RELEASE_URL = 'https://github.com/ACiDekCZ/strom-research/releases/latest';
 const DOWNLOAD = `${INSTALL_RELEASE_URL}/download`;
 
+/**
+ * The beta app's lines lead to the research's beta channel (its branch `beta`,
+ * STROM_CHANNEL=beta, npm's `beta` tag). Off until the research's first beta
+ * is out (the branch exists from then on): flipping this one literal is all.
+ */
+export const INSTALL_BETA_CHANNEL = true;
+
+/** Which research the line installs: its releases (`stable`) or its beta channel. */
+export type InstallChannel = 'stable' | 'beta';
+
+/** The channel for this app: the beta channel only in the beta build, and only while INSTALL_BETA_CHANNEL is on. */
+export function installChannel(betaBuild: boolean, betaChannelOn: boolean = INSTALL_BETA_CHANNEL): InstallChannel {
+    return betaBuild && betaChannelOn ? 'beta' : 'stable';
+}
+
+/** The beta channel's install scripts (the research's branch `beta`). */
+const BETA_DOWNLOAD = 'https://raw.githubusercontent.com/ACiDekCZ/strom-research/beta/install';
+/** Every release, prereleases (the betas) among them. */
+export const INSTALL_RELEASES_URL = 'https://github.com/ACiDekCZ/strom-research/releases';
+
+/** The page with the research's releases for the line's channel (under the npm way). */
+export function installReleasePage(channel: InstallChannel = 'stable'): string {
+    return channel === 'beta' ? INSTALL_RELEASES_URL : INSTALL_RELEASE_URL;
+}
+
 /** The public app: the research opens it by itself, its address needs no saying. */
 export const PUBLIC_APP_URL = 'https://stromapp.info/run/';
 
@@ -71,24 +96,31 @@ export function installFromValue(token: string, appUrl: string | null, name: str
     return ['1', token, c.browser ?? '', file, app, name].join('|');
 }
 
-/** The line for Terminal (macOS, Linux) or Win + R (Windows), with the tree's token (and this app's address, see installAppUrl). */
-export function installLine(os: InstallOs, token: string, appUrl: string | null = null, treeName = '', extra: InstallExtra = {}): string {
+/**
+ * The line for Terminal (macOS, Linux) or Win + R (Windows), with the tree's
+ * token (and this app's address, see installAppUrl). The beta channel: the
+ * scripts from the research's branch `beta` and STROM_CHANNEL=beta (a redirect
+ * would not carry the variable, so the line says it).
+ */
+export function installLine(os: InstallOs, token: string, appUrl: string | null = null, treeName = '', extra: InstallExtra = {}, channel: InstallChannel = 'stable'): string {
     if (!INSTALL_LINE_STROM_FROM) return legacyInstallLine(os, token, appUrl, treeName, extra);
     const name = installTreeName(treeName);
-    if (os !== 'win') return `curl -fsSL ${DOWNLOAD}/install.sh | STROM_FROM=${shQuote(installFromValue(token, appUrl, name, extra))} sh`;
+    const beta = channel === 'beta';
+    const from = beta ? BETA_DOWNLOAD : DOWNLOAD;
+    if (os !== 'win') return `curl -fsSL ${from}/install.sh | ${beta ? 'STROM_CHANNEL=beta ' : ''}STROM_FROM=${shQuote(installFromValue(token, appUrl, name, extra))} sh`;
     const line = (n: string): string =>
-        `powershell -ExecutionPolicy Bypass -c "${winSet('STROM_FROM', installFromValue(token, appUrl, n, extra).replace(/'/g, "''"))}irm ${DOWNLOAD}/install.ps1 | iex"`;
+        `powershell -ExecutionPolicy Bypass -c "${beta ? winSet('STROM_CHANNEL', 'beta') : ''}${winSet('STROM_FROM', installFromValue(token, appUrl, n, extra).replace(/'/g, "''"))}irm ${from}/install.ps1 | iex"`;
     // Win + R takes 259 characters: only the name is shortened (or left out under 3 characters).
     let fit = name;
     while (fit && line(fit).length > WIN_RUN_MAX) fit = fit.slice(0, -1).trim();
     return line(fit.length >= 3 ? fit : '');
 }
 
-/** The npm way for technical users: install, then start with the token (and this app's address). */
-export function npmLines(os: InstallOs, token: string, appUrl: string | null = null, treeName = '', extra: InstallExtra = {}): [string, string] {
+/** The npm way for technical users: install (the beta channel: npm's `beta` tag), then start with the token (and this app's address). */
+export function npmLines(os: InstallOs, token: string, appUrl: string | null = null, treeName = '', extra: InstallExtra = {}, channel: InstallChannel = 'stable'): [string, string] {
     if (!INSTALL_LINE_STROM_FROM) return legacyNpmLines(os, token, appUrl, treeName, extra);
     const value = installFromValue(token, appUrl, installTreeName(treeName), extra);
-    return ['npm i -g strom-research', os === 'win'
+    return [channel === 'beta' ? 'npm i -g strom-research@beta' : 'npm i -g strom-research', os === 'win'
         ? psSet('STROM_FROM', value.replace(/'/g, "''")) + 'strom-research'
         : `STROM_FROM=${shQuote(value)} strom-research`];
 }

@@ -21,14 +21,14 @@ import { newAdoptToken, researchNewUrl } from '../research-link.js';
 import { isPromoAvailable } from '../research-promo.js';
 import { announcedResearchScheme } from '../research-device.js';
 import {
-    InstallOs, InstallRecord, INSTALL_OSES, INSTALL_RELEASE_URL,
+    InstallOs, InstallRecord, INSTALL_OSES, installChannel, installReleasePage,
     detectInstallOs, installLine, npmLines, installAppUrl, installPhase, newInstallRecord, INSTALL_KEY,
     readInstallRecord, writeInstallRecord, clearInstallRecord,
 } from '../research-install.js';
 import { onComputer } from './research-ui.js';
 import { AppBrowser, appBrowserName, currentAppBrowser, needsTransfer, transferFileName, buildTransferJson } from '../research-transfer.js';
 import { isIosDevice } from '../file-copy.js';
-import { isStandaloneDisplay } from '../pwa.js';
+import { isStandaloneDisplay, isBetaBuildHere } from '../pwa.js';
 import { SettingsManager } from '../settings.js';
 import { STROM_DATA_VERSION, StromData } from '../types.js';
 import { TreeRenderer } from '../renderer.js';
@@ -305,8 +305,11 @@ export const researchInstallMethods = uiModule({
         const browser = currentAppBrowser();
         const transfer = needsTransfer(browser);
         const extra = { browser, ...(record.file ? { file: record.file } : {}) };
-        const line = installLine(os, record.token, appUrl, treeName, extra);
-        const [npm1, npm2] = npmLines(os, record.token, appUrl, treeName, extra);
+        // The beta app: the research's beta channel (once it is out, INSTALL_BETA_CHANNEL).
+        const channel = installChannel(isBetaBuildHere());
+        const line = installLine(os, record.token, appUrl, treeName, extra, channel);
+        const [npm1, npm2] = npmLines(os, record.token, appUrl, treeName, extra, channel);
+        const releases = installReleasePage(channel);
         const lineShown = !transfer || !!record.file;
         return `
             <div class="modal-content install-body">
@@ -332,7 +335,7 @@ export const researchInstallMethods = uiModule({
                         <code class="install-line install-npm" tabindex="0" data-line="${esc(`${npm1}\n${npm2}`)}">${esc(npm1)}<br>${lineHtml(npm2, record.token)}</code>
                         <button type="button" class="install-copy" data-act="copy-npm">${esc(s.copy)}</button>
                     </div>
-                    <a class="install-release" href="${esc(INSTALL_RELEASE_URL)}" target="_blank" rel="noopener">${esc(INSTALL_RELEASE_URL.replace(/^https:\/\//, ''))} ↗</a>
+                    <a class="install-release" href="${esc(releases)}" target="_blank" rel="noopener">${esc(releases.replace(/^https:\/\//, ''))} ↗</a>
                 </details>` : ''}
             </div>
             <div class="buttons">
@@ -807,7 +810,7 @@ export const researchInstallMethods = uiModule({
         const canShare = typeof (navigator as Navigator & { share?: unknown }).share === 'function';
         let lineBlock = '';
         if (record && file) {
-            const line = installLine(st.os, record.token, installAppUrl(window.location.href), treeName, { browser: 'mobile', file });
+            const line = installLine(st.os, record.token, installAppUrl(window.location.href), treeName, { browser: 'mobile', file }, installChannel(isBetaBuildHere()));
             lineBlock = `
                 <p class="install-mobile-line-label">${esc(s.mobileLine)}</p>
                 <div class="install-os" role="radiogroup" aria-label="${esc(s.mobileLine)}">

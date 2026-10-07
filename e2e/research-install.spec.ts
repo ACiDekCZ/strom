@@ -1,6 +1,6 @@
 import { test, expect, Page, Browser } from '@playwright/test';
 import fs from 'fs';
-import { openApp, card, createFirstPerson, addRelation, waitForPersist } from './helpers.js';
+import { openApp, card, createFirstPerson, addRelation, waitForPersist, seedResearchPromoSeen, seedSetting } from './helpers.js';
 
 /**
  * Installing Strom Research from the app: "What it is" → the line for this
@@ -830,6 +830,89 @@ test.describe('installing the research from the app', () => {
             expect(overflow.right).toBeLessThanOrEqual(0);
         });
     }
+});
+
+/** The switch of the beta channel as the source has it (one literal; the built app under test is built from it). */
+const BETA_CHANNEL_ON = /export const INSTALL_BETA_CHANNEL = true;/.test(fs.readFileSync('src/research-install.ts', 'utf8'));
+const RAW_BETA = 'https://raw.githubusercontent.com/ACiDekCZ/strom-research/beta/install';
+const RELEASES = 'https://github.com/ACiDekCZ/strom-research/releases/latest';
+
+/** The app as hosted at `origin` (the public app, or the beta), answered from the built file; Windows; a tree with Jan; the Install step. */
+async function hostedInstallStep(browser: Browser, origin: string): Promise<Page> {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block' });
+    const html = await fs.promises.readFile('e2e-dist/strom.html', 'utf8');
+    await ctx.route(`${origin}/**`, (route) => /\/run\/(index\.html)?$/.test(new URL(route.request().url()).pathname)
+        ? route.fulfill({ status: 200, contentType: 'text/html', body: html })
+        : route.fulfill({ status: 404, body: '' }));
+    const page = await ctx.newPage();
+    await asPlatform(page, 'Windows');
+    await seedResearchPromoSeen(page);
+    await seedSetting(page, 'fileCopyReminders', false);
+    await page.addInitScript(() => { try { localStorage.setItem('strom-tour-offered', '1'); } catch { /* none */ } });
+    await page.goto(`${origin}/run/`);
+    await expect(page.locator('html')).not.toHaveClass(/app-loading/);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    await toInstallStep(page);
+    return page;
+}
+
+const lineOf = async (page: Page, os: 'mac' | 'win' | 'linux'): Promise<string> => {
+    await dialog(page).locator(`.install-os-btn[data-os="${os}"]`).click();
+    return (await dialog(page).locator('.install-line').first().getAttribute('data-line'))!;
+};
+
+test.describe('the research\'s beta channel: only the beta app\'s lines', () => {
+    test('the beta app (beta.stromapp.info): the beta line for all three systems, Windows within 259, npm\'s beta tag', async ({ browser }) => {
+        const page = await hostedInstallStep(browser, 'https://beta.stromapp.info');
+        const token = (await installRecord(page))!.token;
+        const from = `'1|${token}|chromium||beta|My Family Tree'`;
+        const win = await lineOf(page, 'win');
+        const mac = await lineOf(page, 'mac');
+        const linux = await lineOf(page, 'linux');
+        await dialog(page).locator('details.install-other summary').click();
+        const npm = (await dialog(page).locator('.install-npm').getAttribute('data-line'))!;
+        const release = dialog(page).locator('.install-release');
+        if (BETA_CHANNEL_ON) {
+            expect(win).toBe(`powershell -ExecutionPolicy Bypass -c "si env:STROM_CHANNEL 'beta'; si env:STROM_FROM ${from}; irm ${RAW_BETA}/install.ps1 | iex"`);
+            expect(mac).toBe(`curl -fsSL ${RAW_BETA}/install.sh | STROM_CHANNEL=beta STROM_FROM=${from} sh`);
+            expect(linux).toBe(mac);
+            expect(npm).toBe(`npm i -g strom-research@beta\nSTROM_FROM=${from} strom-research`);
+            await expect(release).toHaveAttribute('href', 'https://github.com/ACiDekCZ/strom-research/releases');
+        } else {
+            // The switch off (the research's first beta not out yet): the releases, as the public app.
+            expect(win).toBe(`powershell -ExecutionPolicy Bypass -c "si env:STROM_FROM ${from}; irm ${RELEASES}/download/install.ps1 | iex"`);
+            expect(npm.split('\n')[0]).toBe('npm i -g strom-research');
+            await expect(release).toHaveAttribute('href', RELEASES);
+        }
+        expect(win.length).toBeLessThanOrEqual(259);
+        // A long tree name: shortened so the Windows line still fits.
+        await page.evaluate(() => window.Strom.UI.closeResearchInstall());
+        await page.evaluate(() => {
+            const tm = window.Strom.TreeManager;
+            tm.renameTree(tm.getActiveTreeId()!, 'Velmi dlouhý název rodiny Víšků z Čáslavi a okolí, Novákovi a další příbuzní');
+        });
+        await page.evaluate(() => window.Strom.UI.showResearchInstall('install'));
+        const long = await lineOf(page, 'win');
+        expect(long.length).toBeLessThanOrEqual(259);
+        expect(long).toMatch(/\|beta\|Velmi d[^|']*'; irm /);
+        if (BETA_CHANNEL_ON) expect(long).toContain(`irm ${RAW_BETA}/install.ps1 | iex"`);
+        await page.context().close();
+    });
+
+    test('the public app (stromapp.info): the releases\' lines, not a word of the beta channel', async ({ browser }) => {
+        const page = await hostedInstallStep(browser, 'https://stromapp.info');
+        const token = (await installRecord(page))!.token;
+        const from = `'1|${token}|chromium|||My Family Tree'`;
+        expect(await lineOf(page, 'win')).toBe(`powershell -ExecutionPolicy Bypass -c "si env:STROM_FROM ${from}; irm ${RELEASES}/download/install.ps1 | iex"`);
+        expect(await lineOf(page, 'mac')).toBe(`curl -fsSL ${RELEASES}/download/install.sh | STROM_FROM=${from} sh`);
+        expect(await lineOf(page, 'linux')).toBe(`curl -fsSL ${RELEASES}/download/install.sh | STROM_FROM=${from} sh`);
+        await dialog(page).locator('details.install-other summary').click();
+        expect(await dialog(page).locator('.install-npm').getAttribute('data-line')).toBe(`npm i -g strom-research\nSTROM_FROM=${from} strom-research`);
+        await expect(dialog(page).locator('.install-release')).toHaveAttribute('href', RELEASES);
+        // Nothing in the dialog (texts, lines, links) speaks of a beta.
+        expect(await dialog(page).evaluate(e => e.innerHTML)).not.toMatch(/beta|STROM_CHANNEL/i);
+        await page.context().close();
+    });
 });
 
 test.describe('installing the research from a phone', () => {

@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { shouldRegisterServiceWorker, pwaBasePath, isBetaLocation, watchForUpdate } from '../pwa.js';
+import { shouldRegisterServiceWorker, pwaBasePath, isBetaLocation, watchForUpdate, appModeFor, isBetaBuildHere } from '../pwa.js';
 
 describe('shouldRegisterServiceWorker', () => {
     it('registers only on the hosted PWA', () => {
@@ -43,6 +43,31 @@ describe('isBetaLocation', () => {
     it('leaves the public app alone', () => {
         expect(isBetaLocation('stromapp.info', '/run/')).toBe(false);
         expect(isBetaLocation('www.stromapp.info', '/run/')).toBe(false);
+    });
+});
+
+describe('appModeFor / isBetaBuildHere (the beta build, for the research install line)', () => {
+    afterEach(() => vi.unstubAllGlobals());
+    it('tells the app\'s mode by its host', () => {
+        expect(appModeFor('localhost')).toBe('dev');
+        expect(appModeFor('127.0.0.1')).toBe('dev');
+        expect(appModeFor('stromapp.info')).toBe('pwa');
+        expect(appModeFor('beta.stromapp.info')).toBe('pwa');
+        expect(appModeFor('stromapp.local')).toBe('pwa');
+        expect(appModeFor('')).toBe('embedded');
+        expect(appModeFor('example.com')).toBe('embedded');
+    });
+    it('is the beta build only on the hosted beta', () => {
+        const at = (hostname: string, pathname: string): boolean => {
+            vi.stubGlobal('location', { hostname, pathname });
+            return isBetaBuildHere();
+        };
+        expect(at('beta.stromapp.info', '/run/')).toBe(true);
+        expect(at('stromapp.info', '/beta/')).toBe(true);
+        expect(at('stromapp.info', '/run/')).toBe(false);
+        // A copy on this computer or a file is never the beta, whatever its path.
+        expect(at('localhost', '/beta/')).toBe(false);
+        expect(at('', '/Users/jan/beta/strom.html')).toBe(false);
     });
 });
 

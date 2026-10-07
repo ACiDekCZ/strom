@@ -6,7 +6,7 @@
  * update handshake. Data (IndexedDB) is never touched by the SW.
  */
 
-import { AppMode, BETA_HOSTNAME } from './types.js';
+import { AppMode, BETA_HOSTNAME, PWA_HOSTNAME } from './types.js';
 import { detectAppBrowser } from './research-transfer.js';
 import { isIosDevice } from './file-copy.js';
 
@@ -30,6 +30,22 @@ export function isBetaLocation(hostname: string, pathname: string): boolean {
 /** True when this page is the pre-release test build. */
 export function isBetaBuild(mode: AppMode): boolean {
     return mode === 'pwa' && typeof location !== 'undefined' && isBetaLocation(location.hostname, location.pathname);
+}
+
+/**
+ * The app's mode by its address: a dev server on this computer, the hosted
+ * PWA (stromapp.info, the beta on beta.stromapp.info, stromapp.local for
+ * testing), else an embedded HTML file (file://, another server). Pure for testing.
+ */
+export function appModeFor(hostname: string): AppMode {
+    if (hostname === 'localhost' || hostname === '127.0.0.1') return 'dev';
+    if (hostname === PWA_HOSTNAME || hostname === BETA_HOSTNAME || hostname === 'stromapp.local') return 'pwa';
+    return 'embedded';
+}
+
+/** This page is the pre-release test build (for modules that do not get the app's mode handed). */
+export function isBetaBuildHere(): boolean {
+    return typeof location !== 'undefined' && isBetaBuild(appModeFor(location.hostname));
 }
 
 /** Where the hosted PWA serves its service worker (web repo, scope = base path). */

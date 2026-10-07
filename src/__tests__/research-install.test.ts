@@ -7,6 +7,7 @@ import { describe, it, expect } from 'vitest';
 import {
     installTreeName,
     detectInstallOs, installLine, npmLines, legacyInstallLine, legacyNpmLines, installFromValue, INSTALL_LINE_STROM_FROM, installAppUrl, sanitizeInstallRecord, newInstallRecord, installPhase,
+    INSTALL_BETA_CHANNEL, installChannel, installReleasePage, INSTALL_OSES,
     readInstallRecord, writeInstallRecord, clearInstallRecord, INSTALL_KEY, INSTALL_TTL_MS, INSTALL_LONG_MS,
 } from '../research-install.js';
 import { TreeId } from '../types.js';
@@ -55,6 +56,75 @@ describe('the line\'s one variable, STROM_FROM (research 1.12.1+)', () => {
             .toBe(`curl -fsSL https://github.com/ACiDekCZ/strom-research/releases/latest/download/install.sh | STROM_FROM='1|${T}|safari|AAAAAAAA|beta|Novákovi'\\''s' sh`);
         expect(npmLines('win', T, null, "O'Brien", { browser: 'edge' })).toEqual(['npm i -g strom-research', `$env:STROM_FROM='1|${T}|edge|||O''Brien'; strom-research`]);
         expect(npmLines('linux', T, BETA)[1]).toBe(`STROM_FROM='1|${T}|||beta|' strom-research`);
+    });
+});
+
+describe('the beta app\'s lines: the research\'s beta channel', () => {
+    const T = 'A'.repeat(43);
+    const FILE = `strom-prenos-${T.slice(0, 8)}.json`;
+    const BETA = 'https://beta.stromapp.info/run/';
+    const LONG = 'Velmi dlouhý název rodiny Víšků z Čáslavi a okolí, Novákovi\'s větev a další příbuzní';
+    const RAW = 'https://raw.githubusercontent.com/ACiDekCZ/strom-research/beta/install';
+    const value = (line: string): string => line.match(/STROM_FROM[ =]'((?:[^']|'')*)'/)![1].replace(/''/g, "'");
+
+    it('only the beta build, and only while the switch is on (one literal)', () => {
+        expect(typeof INSTALL_BETA_CHANNEL).toBe('boolean');
+        expect(installChannel(true, true)).toBe('beta');
+        expect(installChannel(true, false)).toBe('stable');
+        expect(installChannel(false, true)).toBe('stable');
+        expect(installChannel(false, false)).toBe('stable');
+        expect(installChannel(false)).toBe('stable');
+        expect(installChannel(true)).toBe(INSTALL_BETA_CHANNEL ? 'beta' : 'stable');
+    });
+
+    it('macOS and Linux: the script from the branch beta, STROM_CHANNEL=beta, STROM_FROM as ever', () => {
+        for (const os of ['mac', 'linux'] as const) {
+            expect(installLine(os, T, BETA, 'Víškovi', { browser: 'chrome' }, 'beta'))
+                .toBe(`curl -fsSL ${RAW}/install.sh | STROM_CHANNEL=beta STROM_FROM='1|${T}|chrome||beta|Víškovi' sh`);
+        }
+    });
+
+    it('Windows: the same shape with STROM_CHANNEL and the branch beta; fits Win + R with a long name', () => {
+        expect(installLine('win', T, BETA, 'Víškovi', { browser: 'edge' }, 'beta')).toBe(
+            `powershell -ExecutionPolicy Bypass -c "si env:STROM_CHANNEL 'beta'; si env:STROM_FROM '1|${T}|edge||beta|Víškovi'; irm ${RAW}/install.ps1 | iex"`);
+        for (const extra of [{}, { browser: 'edge' as const }, { browser: 'chromium' as const, file: FILE }, { browser: 'mobile' as const, file: FILE }]) {
+            const line = installLine('win', T, BETA, LONG, extra, 'beta');
+            expect(line.length).toBeLessThanOrEqual(259);
+            expect(line).toContain("si env:STROM_CHANNEL 'beta'; ");
+            expect(line).toContain(`${RAW}/install.ps1`);
+            expect(line).not.toMatch(/[$`]/);
+            const v = value(line);
+            expect(v.startsWith(`1|${T}|${extra.browser ?? ''}|${'file' in extra ? 'AAAAAAAA' : ''}|beta|`)).toBe(true);
+            // Shortened earlier than on the stable line, yet still a beginning of the name.
+            const name = v.split('|').slice(5).join('|');
+            expect(name.length).toBeGreaterThanOrEqual(3);
+            expect(LONG.startsWith(name)).toBe(true);
+            expect(name.length).toBeLessThan(value(installLine('win', T, BETA, LONG, extra)).split('|').slice(5).join('|').length);
+        }
+    });
+
+    it('npm: the beta tag, the second line unchanged', () => {
+        for (const os of INSTALL_OSES) {
+            const [first, second] = npmLines(os, T, BETA, 'Víškovi', { browser: 'edge' }, 'beta');
+            expect(first).toBe('npm i -g strom-research@beta');
+            expect(second).toBe(npmLines(os, T, BETA, 'Víškovi', { browser: 'edge' })[1]);
+        }
+        expect(installReleasePage('beta')).toBe('https://github.com/ACiDekCZ/strom-research/releases');
+    });
+
+    it('the stable channel (production, or the switch off): no word of the beta channel, the releases as before', () => {
+        for (const os of INSTALL_OSES) {
+            for (const channel of [undefined, 'stable' as const]) {
+                const line = installLine(os, T, null, 'Víškovi', { browser: 'edge' }, channel);
+                const npm = npmLines(os, T, null, 'Víškovi', { browser: 'edge' }, channel).join('\n');
+                expect(line).toContain('https://github.com/ACiDekCZ/strom-research/releases/latest/download/install.');
+                for (const text of [line, npm]) {
+                    expect(text).not.toMatch(/STROM_CHANNEL|@beta|raw\.githubusercontent|\/beta\//);
+                }
+            }
+        }
+        expect(installReleasePage()).toBe('https://github.com/ACiDekCZ/strom-research/releases/latest');
+        expect(installReleasePage('stable')).toBe('https://github.com/ACiDekCZ/strom-research/releases/latest');
     });
 });
 

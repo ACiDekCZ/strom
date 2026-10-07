@@ -16,7 +16,7 @@ import { TreePreview, TreeCompare } from './tree-preview.js';
 import { initModalSkeleton } from './ui/modal-skeleton.js';
 import { DebugOptions, DebugStep, DebugPhase } from './layout/pipeline/debug-types.js';
 import { CryptoSession } from './crypto.js';
-import { AppMode, PWA_HOSTNAME, BETA_HOSTNAME, APP_VERSION, TreeId } from './types.js';
+import { AppMode, APP_VERSION, TreeId } from './types.js';
 import { strings } from './strings.js';
 import { onTreeSavedElsewhere } from './tab-sync.js';
 import { StorageManager } from './storage.js';
@@ -24,7 +24,7 @@ import { PERSISTENCE_EVENT } from './persistence.js';
 import { FILE_COPY_EVENT, RESEARCH_BASE_EVENT } from './tree-manager.js';
 import { SNAPSHOTS_TRIMMED_EVENT, SNAPSHOT_CREATED_EVENT, SnapshotTrim } from './snapshots.js';
 import { collectPoolGarbage } from './media-pool.js';
-import { shouldRegisterServiceWorker, registerServiceWorker, linkManifest, isBetaBuild, captureInstallPrompt, INSTALL_AVAILABILITY_EVENT, isSafariOnComputer, safariAppName } from './pwa.js';
+import { shouldRegisterServiceWorker, registerServiceWorker, linkManifest, isBetaBuild, appModeFor, captureInstallPrompt, INSTALL_AVAILABILITY_EVENT, isSafariOnComputer, safariAppName } from './pwa.js';
 
 // Make modules available globally for HTML event handlers
 declare global {
@@ -45,29 +45,10 @@ declare global {
 }
 
 /**
- * Detect application mode based on hostname/protocol
+ * Detect application mode based on hostname (see appModeFor in pwa.ts)
  */
 function detectAppMode(): AppMode {
-    const hostname = window.location.hostname;
-    const protocol = window.location.protocol;
-
-    // Dev server (localhost)
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
-        return 'dev';
-    }
-
-    // PWA on stromapp.info, the beta on beta.stromapp.info (or stromapp.local for testing)
-    if (hostname === PWA_HOSTNAME || hostname === BETA_HOSTNAME || hostname === 'stromapp.local') {
-        return 'pwa';
-    }
-
-    // file:// protocol or other domain = embedded HTML file
-    if (protocol === 'file:') {
-        return 'embedded';
-    }
-
-    // Other domains (e.g., testing on different server) - treat as embedded
-    return 'embedded';
+    return appModeFor(window.location.hostname);
 }
 
 /** Current application mode */
