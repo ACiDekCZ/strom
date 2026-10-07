@@ -18,7 +18,7 @@ import { ActionSignal, ACTION_GLYPH, stateStripesHtml } from '../card-signals.js
 import {
     CardFieldKey, CardFieldSettings, CardLineStyle, CardPresetKey, CardValueLines, CardWidthCap, CARD_FIELD_KEYS,
     CARD_LINE_STYLES, CARD_MARKS, CARD_PRESET_KEYS, CARD_VALUE_LINES, CARD_WIDTH_CAPS, PLACE_KEYS, cardLines,
-    cardLineHtml, cardPreset, cardYears, matchCardPreset,
+    cardLineHtml, cardPreset, cardYears, matchCardPreset, cardDateReferences,
 } from '../card-fields.js';
 import { CardHead, customCardMetrics, customCardRows, measureCardTexts } from '../card-width.js';
 import { uiModule } from './module.js';
@@ -98,12 +98,13 @@ function samplePreview(viewWidth: number | undefined): {
     const years = fields.years ? cardYears(person, true) : '';
     const entry = { name: 'Jan Vlk', avatar: true, lines, ...(years ? { years } : {}) };
     // The view's card width; the date (or label) column of the sample's own lines.
-    const own = customCardMetrics([entry], measureCardTexts, fields.widthCap, fields.lines, fields.style);
+    const own = customCardMetrics([entry], measureCardTexts, fields.widthCap, fields.lines, fields.style,
+        cardDateReferences(fields.fullDate));
     const metrics = { ...own, cardWidth: viewWidth ?? own.cardWidth };
     const { rows, heights, heads } = customCardRows([entry], metrics, measureCardTexts, fields.lines, fields.style);
     const wrapped = fields.lines !== 1;
     const html = `<div class="card-lines${wrapped ? ' card-lines--rows' : ''}">${lines.map(l =>
-        cardLineHtml(l, esc, false, wrapped ? rows.get(l) : undefined, fields.style)).join('')}</div>`;
+        cardLineHtml(l, esc, false, wrapped ? rows.get(l) : undefined, fields.style, !!rows.get(l)?.longDate)).join('')}</div>`;
     const height = wrapped ? heights[0] : SettingsManager.getCardSize().cardHeight;
     return { html, head: heads[0], wrapped, width: metrics.cardWidth, height, dateColumn: own.dateColumn, labelColumn: own.labelColumn ?? 0 };
 }

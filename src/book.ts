@@ -248,7 +248,7 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
     // Photo (circular) or initials.
     const photoImg = (p: Person) => p.photo
         ? `<img class="book-portrait" src="${esc(p.photo)}" alt="">`
-        : `<div class="book-portrait book-portrait-empty">${esc(personInitials(p.firstName, p.lastName))}</div>`;
+        : `<div class="book-portrait book-portrait-empty">${esc(personInitials(p.firstName, p.lastName) || '?')}</div>`;
 
     // A person medallion. `cite(id)` returns a footnote-marker string for a
     // source id, collecting per-chapter footnotes as a side effect.

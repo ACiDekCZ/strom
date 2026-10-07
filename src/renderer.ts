@@ -19,7 +19,7 @@ import { TreeManager } from './tree-manager.js';
 import { chainLinkSvg, iconSvg } from './icons.js';
 import * as CrossTree from './cross-tree.js';
 import { ViewMode, STANDALONE_VIEWS, ResearchEdgeMode } from './types.js';
-import { cardLines, CardLine, cardLineHtml, cardYears, CardLineStyle } from './card-fields.js';
+import { cardLines, CardLine, cardLineHtml, cardYears, CardLineStyle, cardDateReferences } from './card-fields.js';
 import {
     CustomCardMetrics, CardLineRows, CardHead, customCardMetrics, customCardRows, customCardViewHeight, customCardSpouseLineY,
     measureCardTexts, cardFontsPending,
@@ -413,7 +413,9 @@ class TreeRendererClass {
             });
         }
         // The chosen width's cap (narrow / medium / wide); the poster takes this width too.
-        const metrics = customCardMetrics(entries, measureCardTexts, fields.widthCap, fields.lines, fields.style);
+        // The date column at most as wide as the language's ordinary dates; a longer date goes its own way.
+        const metrics = customCardMetrics(entries, measureCardTexts, fields.widthCap, fields.lines, fields.style,
+            cardDateReferences(fields.fullDate));
         const { rows, heights, heads } = customCardRows(entries, metrics, measureCardTexts, fields.lines, fields.style);
         this.customRows = rows;
         this.customWrapped = fields.lines !== 1;
@@ -1353,7 +1355,7 @@ class TreeRendererClass {
             // Full name on one row (never shrunk — overflow ellipsizes).
             const fullName = `${displayName} ${displaySurname}`.trim();
             // Avatar initials (first name + surname, never a title), used when there is no photo.
-            const initials = personInitials(person.firstName || '?', person.lastName) || '?';
+            const initials = personInitials(person.firstName, person.lastName) || '?';
 
             // Meta row (row 2): life-year range. The year range carries the
             // "deceased" cue (the † dagger is gone from the name row): a dead
@@ -1419,7 +1421,8 @@ class TreeRendererClass {
                         : nameHtml}${head?.years ? `<div class="card-years">${this.escapeHtml(head.years)}</div>` : ''}</div></div>
                     <div class="card-lines${this.customWrapped ? ' card-lines--rows' : ''}">${customLines.map(l => {
                         const rows = this.customRows.get(l);
-                        return cardLineHtml(l, t => this.escapeHtml(t), !!rows?.cut, this.customWrapped ? rows : undefined, this.customStyle);
+                        return cardLineHtml(l, t => this.escapeHtml(t), !!rows?.cut, this.customWrapped ? rows : undefined, this.customStyle,
+                            !!rows?.longDate);
                     }).join('')}</div>
                 </div>` : `
                 ${avatarHtml}

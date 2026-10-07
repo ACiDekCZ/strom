@@ -241,6 +241,18 @@ export function cardDate(value: string | undefined, full: boolean): string {
 }
 
 /**
+ * The ordinary dates of the current language and date setting (`full`: the
+ * whole date, else the year): the longest of them is as wide as the date
+ * column of a card may get (src/card-width.ts customCardMetrics). A whole
+ * date with two-digit day and month, an estimate in words, a range of years.
+ * A wider date (a range of whole dates, "about" a whole date, a text that is
+ * no date) does not widen the column; it goes its own way on its line.
+ */
+export function cardDateReferences(full: boolean): string[] {
+    return ['1888-12-28', '~1888', '<1888', '>1888', '1888..1888'].map(d => cardDate(d, full));
+}
+
+/**
  * The life years under the name (the option "Years under the name"), as the
  * detailed card says them: "1841 – 1922", estimates in words ("c. 1855 –
  * after 1919"), "* 1958" for the living, "1841 †" for one presumed dead
@@ -375,19 +387,25 @@ export function cardLines(person: Person, data: StromData, s: CardFieldSettings)
  * (the one-row card, as before).
  * `style` 'labels': the event's word in the label column instead of the mark,
  * then the value: the date, 5px, the place (cardLabelLineHtml).
+ * `longDate` (marks): the date is wider than the view's date column
+ * (card-line--longdate): with `rows` it takes the first row across both
+ * columns and the place's rows start under it (its empty first row is not
+ * drawn); on one row the place follows the date and shortens.
  * `esc` must escape quotes as well (the text goes into an attribute).
  */
 export function cardLineHtml(l: CardLine, esc: (text: string) => string, cut = false, rows?: CardLineRows,
-    style: CardLineStyle = 'marks'): string {
+    style: CardLineStyle = 'marks', longDate = false): string {
     if (style === 'labels') return cardLabelLineHtml(l, esc, cut, rows);
+    const long = longDate && !l.wide && !!l.date ? ' card-line--longdate' : '';
     const mark = `<span class="card-line-mark" aria-hidden="true">${esc(l.mark)}</span>`;
     const date = l.wide ? '' : `<span class="card-line-date">${esc(l.date)}</span>${l.rest || l.more ? ' ' : ''}`;
     const placeClass = `card-line-place${l.wide ? ' card-line-place--wide' : ''}`;
     if (rows) {
         const title = rows.cut && l.rest ? ` title="${esc(l.rest)}"` : '';
-        const drawn = rows.rows.map(r => `<span class="card-line-row${r.cause ? ' card-line-row--cause' : ''}">${esc(r.text)}`
+        const shown = long && rows.rows[0] && !rows.rows[0].text && !rows.rows[0].tail ? rows.rows.slice(1) : rows.rows;
+        const drawn = shown.map(r => `<span class="card-line-row${r.cause ? ' card-line-row--cause' : ''}">${esc(r.text)}`
             + `${r.tail ? `<span class="card-line-more">${esc(r.tail)}</span>` : ''}</span>`).join('');
-        return `<div class="card-line card-line--${l.key} card-line--rows">${mark}${date}<span class="${placeClass}"${title}>${drawn}</span></div>`;
+        return `<div class="card-line card-line--${l.key} card-line--rows${long}">${mark}${date}<span class="${placeClass}"${title}>${drawn}</span></div>`;
     }
     const more = l.more ? `<span class="card-line-more"> ${esc(l.more)}</span>` : '';
     // A place cut short (an ellipsis, card-width.ts customCardCutLines) is said
@@ -395,7 +413,7 @@ export function cardLineHtml(l: CardLine, esc: (text: string) => string, cut = f
     const title = cut && l.rest ? ` title="${esc(l.rest)}"` : '';
     const place = `<span class="${placeClass}">`
         + `<span class="card-line-rest"${title}>${esc(l.rest)}</span>${more}</span>`;
-    return `<div class="card-line card-line--${l.key}">${mark}${date}${place}</div>`;
+    return `<div class="card-line card-line--${l.key}${long}">${mark}${date}${place}</div>`;
 }
 
 /**

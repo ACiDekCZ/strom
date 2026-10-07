@@ -146,7 +146,7 @@ export interface PosterOptions {
      * them, at the size in `config` — what the screen shows.
      */
     cardLines?: Map<string, PosterCardLine[]>;
-    /** The custom card's date column (the view's longest date, src/card-width.ts). */
+    /** The custom card's date column (the view's longest ordinary date, src/card-width.ts); a longer date is drawn on its own. */
     cardDateColumn?: number;
     /**
      * Rows a custom card's detail may take (src/card-fields.ts `lines`): 1
@@ -201,7 +201,9 @@ interface CustomCardLook {
  * geometry: 10/12px padding, a 30px avatar and the name (and the years under
  * it) in the header, then 17px rows of 12px text. Marks: the mark in an 11px
  * column, the date, and the place where the view's date column ends
- * (separate texts, so the places of all cards start at one x). Labels: the
+ * (separate texts, so the places of all cards start at one x); a long date
+ * takes its row alone and the place starts under it, or, on the one-row
+ * card, the place follows it 6px after it. Labels: the
  * event's word in the label column, the value 8px after it (the date, 5px,
  * the place; every row at the value's start). The rows are the screen's (the
  * same wrapping, src/card-width.ts customCardRows), one text a row, 3px
@@ -313,7 +315,12 @@ function customCardSvg(
         } else {
             if (l.mark) out.push(`<text x="${(left + CARD_MARK_WIDTH / 2).toFixed(1)}" y="${y}" text-anchor="middle" font-size="12" fill="${COLORS.textFaint}" ${LINE_FONT}>${escapeXml(l.mark)}</text>`);
             if (!l.wide && l.date) out.push(date(l.date, dateX, y));
-            const placeX = l.wide ? dateX : left + cardPlaceOffset(dateColumn);
+            // A long date (src/card-width.ts): on one row the place follows it 6px after it;
+            // with rows its first row is the date's alone and the place goes on in its column.
+            const longOneRow = !!rows.get(l)?.longDate && valueLines === 1;
+            const placeX = l.wide ? dateX
+                : longOneRow ? dateX + (measure('date', [l.date]).get(l.date) ?? 0) + CARD_COLUMN_GAP
+                    : left + cardPlaceOffset(dateColumn);
             drawn.forEach((row, k) => {
                 const text = row.text + (row.tail ?? '');
                 if (!text.trim()) return;

@@ -49,14 +49,20 @@ const ONE_ROW = { lines: 1, height: 'view' };
 
 async function setup(page: Page, childPlace: string, width = 1440, childName?: string,
     fields: Record<string, unknown> = ONE_ROW, janCause = ''): Promise<void> {
+    await setupGed(page, ged(childPlace, childName, janCause), (childName ?? 'Anna').split(' ')[0], width, fields);
+}
+
+/** The custom card set up with `fields`, the GEDCOM imported, the cards measured in their fonts. */
+async function setupGed(page: Page, content: string, shown: string, width = 1440,
+    fields: Record<string, unknown> = ONE_ROW): Promise<void> {
     await page.setViewportSize({ width, height: 900 });
     await seedSetting(page, 'cardDensity', 'custom');
     await seedSetting(page, 'cardFields', fields);
     await openApp(page);
-    await dropFile(page, ged(childPlace, childName, janCause));
+    await dropFile(page, content);
     await page.locator('.modal-overlay.active').getByText('Import as a new tree', { exact: true }).first().click();
     await page.locator('.modal-overlay.active button.primary', { hasText: 'Import' }).click();
-    await expect(card(page, (childName ?? 'Anna').split(' ')[0])).toBeVisible();
+    await expect(card(page, shown)).toBeVisible();
     await expect.poll(() => page.evaluate(() => document.body.dataset.cardDensity)).toBe('custom');
     // Measured in the card fonts: once they are in, the boxes match the layout.
     await page.evaluate(() => document.fonts.ready);
@@ -568,5 +574,175 @@ test.describe('details that wrap (U02)', () => {
         const spouseY = Number(/<g class="spouse-lines">\s*<line x1="[\d.-]+" y1="([\d.-]+)"/.exec(svg)![1]);
         const tops = [...svg.matchAll(/<rect x="-?[\d.]+" y="(-?[\d.]+)" width="\d+" height="\d+" rx="8"/g)].map(m => Number(m[1]));
         expect(tops.some(t => Math.abs(t + 25 - spouseY) < 0.05)).toBe(true);
+    });
+});
+
+/** Marie's birth is a range of whole dates (GEDCOM BET … AND …): a long date with the whole date shown. */
+function gedLongDate(place: string): string {
+    return [
+        '0 HEAD', '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8',
+        '0 @I1@ INDI', '1 NAME Jan /Vlk/', '1 SEX M',
+        '1 BIRT', '2 DATE 15 JUN 1862', '2 PLAC Horní Lhota',
+        '1 DEAT', '2 DATE 3 FEB 1919', '2 PLAC Brno', '1 FAMS @F1@',
+        '0 @I2@ INDI', '1 NAME Marie /Dvořáková/', '1 SEX F',
+        '1 BIRT', '2 DATE BET 22 NOV 1868 AND 28 DEC 1869', '2 PLAC ' + place,
+        '1 DEAT', '2 DATE 12 MAR 1931', '2 PLAC Brno', '1 FAMS @F1@',
+        '0 @I3@ INDI', '1 NAME Anna /Vlková/', '1 SEX F',
+        '1 BIRT', '2 DATE 5 SEP 1890', '2 PLAC Dolní Lhota', '1 FAMC @F1@',
+        '0 @F1@ FAM', '1 HUSB @I1@', '1 WIFE @I2@', '1 CHIL @I3@',
+        '0 TRLR',
+    ].join('\n');
+}
+
+const RANGE_DATE = '11/22/1868–12/28/1869';
+
+/** The widest of the ordinary dates (English, whole dates: src/card-fields.ts cardDateReferences) in the card's date font. */
+async function referenceWidth(page: Page): Promise<number> {
+    return page.evaluate(() => {
+        const refs = ['12/28/1888', 'c. 1888', 'before 1888', 'after 1888', '1888–1888'];
+        return Math.max(...refs.map(t => {
+            const el = document.createElement('span');
+            el.style.cssText = 'position:absolute;visibility:hidden;white-space:pre;font: 500 12px var(--font-sans); font-variant-numeric: tabular-nums;';
+            el.textContent = t;
+            document.body.appendChild(el);
+            const w = el.getBoundingClientRect().width;
+            el.remove();
+            return Math.ceil(w);
+        }));
+    });
+}
+
+/** Every line of the view: its date and place boxes in its card (unscaled), its rows, its classes and titles. */
+async function viewLines(page: Page) {
+    return page.evaluate(() => [...document.querySelectorAll<HTMLElement>('#tree-canvas .person-card .card-line')].map(line => {
+        const cardEl = line.closest('.person-card') as HTMLElement;
+        const c = cardEl.getBoundingClientRect();
+        const scale = c.width / cardEl.offsetWidth;
+        const rel = (el: Element) => {
+            const b = el.getBoundingClientRect();
+            return { left: (b.left - c.left) / scale, right: (b.right - c.left) / scale, top: (b.top - c.top) / scale };
+        };
+        const date = line.querySelector<HTMLElement>('.card-line-date');
+        const place = line.querySelector<HTMLElement>('.card-line-place');
+        const rest = line.querySelector<HTMLElement>('.card-line-rest');
+        // The first text the place column draws: the one-row place, or its first row.
+        const first = line.querySelector('.card-line-row') ?? rest;
+        return {
+            name: cardEl.querySelector('.name-text')?.textContent ?? '',
+            long: line.classList.contains('card-line--longdate'),
+            date: date ? { text: date.textContent ?? '', ...rel(date), cut: date.scrollWidth > date.clientWidth + 0.5, title: date.getAttribute('title') } : null,
+            place: first ? rel(first) : null,
+            rows: [...line.querySelectorAll('.card-line-row')].map(r => r.textContent ?? ''),
+            title: (rest ?? place)?.getAttribute('title') ?? null,
+            restCut: rest ? (() => {
+                const range = document.createRange();
+                range.selectNodeContents(rest);
+                return range.getBoundingClientRect().width > rest.getBoundingClientRect().width + 0.01 * scale;
+            })() : false,
+        };
+    }));
+}
+
+test.describe('a long date (U02)', () => {
+    for (const [mode, fields] of [
+        ['whole', { fullDate: true, lines: 0, height: 'view' }],
+        ['two rows', { fullDate: true, lines: 2, height: 'view' }],
+        ['one row', { fullDate: true, lines: 1, height: 'view' }],
+    ] as const) {
+        test(`${mode}: the range of whole dates does not widen the date column; it is drawn whole and the poster draws the same`, async ({ page }) => {
+            await setupGed(page, gedLongDate(LONG_PLACE), 'Marie', 1440, fields);
+            const dateCol = await page.evaluate(() => parseFloat(getComputedStyle(document.body).getPropertyValue('--card-date-col')));
+            const ref = await referenceWidth(page);
+            expect(dateCol).toBeGreaterThan(0);
+            expect(dateCol).toBeLessThanOrEqual(ref);
+            const lines = await viewLines(page);
+            const long = lines.filter(l => l.long);
+            expect(long).toHaveLength(1);
+            const range = long[0];
+            expect(range.name).toBe('Marie Dvořáková');
+            // The date whole: not cut, no title, wider than the column it does not widen.
+            expect(range.date).toMatchObject({ text: RANGE_DATE, cut: false, title: null });
+            expect(range.date!.right - range.date!.left).toBeGreaterThan(dateCol + 6);
+            // Every ordinary place starts at one x: the date column's end, 6px.
+            const normal = lines.filter(l => !l.long && l.place);
+            const xs = new Set(normal.map(l => Math.round(l.place!.left)));
+            expect(xs.size).toBe(1);
+            const placeX = [...xs][0];
+            expect(placeX).toBe(Math.round(13 + 17 + dateCol + 6));
+            if (mode === 'one row') {
+                // On the date's row, 6px after the date, shortened with its title.
+                expect(range.place!.top).toBeCloseTo(range.date!.top, 0);
+                expect(range.place!.left).toBeCloseTo(range.date!.right + 6, 0);
+                expect(range.restCut).toBe(true);
+                expect(range.title).toBe(LONG_PLACE);
+            } else {
+                // The first row is the date's; the place starts under it in the place column.
+                expect(Math.round(range.place!.left)).toBe(placeX);
+                expect(range.place!.top - range.date!.top).toBeCloseTo(17, 0);
+                if (mode === 'whole') {
+                    expect(range.rows.join(' ')).toBe(LONG_PLACE);
+                    expect(range.title).toBeNull();
+                } else {
+                    expect(range.rows).toHaveLength(1);
+                    expect(range.rows[0].endsWith('…')).toBe(true);
+                    expect(range.title).toBe(LONG_PLACE);
+                }
+                // The card is as tall as the date's row and the place's rows.
+                const height = await card(page, 'Marie').evaluate(el => (el as HTMLElement).offsetHeight);
+                const rowsOf = (l: typeof lines[number]) => (l.long ? 1 : 0) + Math.max(1, l.rows.length);
+                const marie = lines.filter(l => l.name === 'Marie Dvořáková');
+                const own = 56 + 17 * marie.reduce((n, l) => n + rowsOf(l), 0) + 3 * (marie.length - 1);
+                expect(height).toBeGreaterThanOrEqual(own);
+            }
+
+            // The poster: the same date whole, the place where the screen has it.
+            const { cards } = await renderStandalone(page, await posterSvg(page));
+            const marieCard = cards.find(c => c.name?.text === 'Marie Dvořáková')!;
+            expect(marieCard).toBeTruthy();
+            const date = marieCard.lines.find(l => l.kind === 'date' && l.text === RANGE_DATE)!;
+            expect(date).toBeTruthy();
+            const places = marieCard.lines.filter(l => l.kind === 'place' && l.y >= date.y && l.y < date.y + 17 * 6)
+                .sort((a, b) => a.y - b.y);
+            const firstPlace = places[0];
+            if (mode === 'one row') {
+                expect(firstPlace.y).toBe(date.y);
+                expect(firstPlace.left - date.right).toBeCloseTo(6, 0);
+                expect(firstPlace.text.endsWith('…')).toBe(true);
+                // The poster's content starts 12px into the card, the screen's 13px (its 1px border).
+                expect(firstPlace.left - marieCard.left).toBeCloseTo(range.place!.left - 1, 0);
+            } else {
+                expect(firstPlace.y - date.y).toBeCloseTo(17, 1);
+                expect(firstPlace.left - marieCard.left).toBeCloseTo(12 + 17 + dateCol + 6, 0);
+                expect(places.slice(0, range.rows.length).map(p => p.text)).toEqual(range.rows);
+            }
+            // Ordinary places of every card at the screen's one x.
+            for (const c of cards) {
+                for (const { date: d, place } of rows(c.lines)) {
+                    if (d && place && d.text !== RANGE_DATE) expect(place.left - (c.left + 12 + 17)).toBeCloseTo(dateCol + 6, 0);
+                }
+            }
+        });
+    }
+});
+
+test.describe('avatar initials (U02)', () => {
+    test('a word that does not start with a letter gives no initial; with none at all the avatar shows "?"', async ({ page }) => {
+        const content = [
+            '0 HEAD', '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8',
+            '0 @I1@ INDI', '1 NAME František /[?]an[?]rlík/', '1 SEX M', '1 FAMS @F1@',
+            '0 @I2@ INDI', '1 NAME ? /Nováková/', '1 SEX F', '1 FAMS @F1@',
+            '0 @I3@ INDI', '1 NAME [?] /…/', '1 SEX F', '1 FAMC @F1@',
+            '0 @F1@ FAM', '1 HUSB @I1@', '1 WIFE @I2@', '1 CHIL @I3@',
+            '0 TRLR',
+        ].join('\n');
+        await setupGed(page, content, 'František');
+        const initials = () => page.evaluate(() => Object.fromEntries([...document.querySelectorAll<HTMLElement>('#tree-canvas .person-card')]
+            .map(c => [c.querySelector('.name-text')?.textContent?.trim() ?? '', c.querySelector('.avatar-initials')?.textContent ?? ''])));
+        const shown = await initials();
+        expect(Object.values(shown).sort()).toEqual(['?', 'F', 'N']);
+        // The poster's avatars the same.
+        const svg = await posterSvg(page);
+        const drawn = [...svg.matchAll(/<text [^>]*text-anchor="middle" font-size="11" font-weight="600"[^>]*>([^<]*)<\/text>/g)].map(m => m[1]).sort();
+        expect(drawn).toEqual(['?', 'F', 'N']);
     });
 });

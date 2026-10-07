@@ -3,7 +3,8 @@
  * initials shown in round avatars (on-screen cards, the person modal header,
  * the printable family book and the SVG poster export).
  *
- * It takes the first letter of the first two "real" name words, skipping
+ * It takes the first letter of the first two "real" name words (a word that
+ * does not start with a letter, such as "?" or "[?]an…", has none), skipping
  * nobiliary particles / prepositions ("of", "von", "van der", "de", "di"…)
  * and generational roman-numeral suffixes ("IV", "VII"…). The result is
  * uppercased. Language-neutral: the particle list covers a broad international
@@ -52,8 +53,27 @@ export function personInitials(firstName?: string, lastName?: string): string {
         .split(/\s+/)
         .filter(w => w.length > 0 && !isParticle(w) && !isRomanNumeral(w));
     const letters = words
-        .map(w => [...w][0] ?? '')
+        .map(initialOf)
         .filter(ch => ch.length > 0)
         .slice(0, 2);
     return letters.join('').toUpperCase();
+}
+
+/** Opening quotes and brackets a name word may start with ("(Jan)", "„Pepa“"). */
+const LEADING_MARKS = /^[\p{Ps}\p{Pi}\p{Pf}"']+/u;
+/** A letter with its combining marks (a decomposed "Č" stays whole). */
+const LETTER = /^\p{L}\p{M}*/u;
+
+/**
+ * The initial of one name word: its first letter, after opening quotes or
+ * brackets ("(Jan)" → "J", "„Pepa“" → "P"). A word that does not start with a
+ * letter gives none ("?", "…", "3.", a transcriber's "[?]an…" for an
+ * unreadable letter): a later letter inside it is no initial.
+ */
+function initialOf(word: string): string {
+    const marks = LEADING_MARKS.exec(word);
+    let rest = word;
+    // "[?]", "(…)": an unreadable start, not a bracketed name.
+    if (marks && !/^[?…]/u.test(word.slice(marks[0].length))) rest = word.slice(marks[0].length);
+    return LETTER.exec(rest)?.[0] ?? '';
 }

@@ -6531,8 +6531,8 @@
         body[data-card-density="custom"] .card-avatar { width: 30px; height: 30px; border-width: 1.5px; }
         .card-lines { display: flex; flex-direction: column; min-width: 0; }
         /* A line is a grid: mark | date | place. The date column is the view's
-           longest date (--card-date-col), so places of all cards start at one
-           x; digits of one width. Only the place shortens. */
+           longest ordinary date (--card-date-col), so places of all cards
+           start at one x; digits of one width. Only the place shortens. */
         .card-line {
             display: grid; grid-template-columns: 11px var(--card-date-col, max-content) minmax(0, 1fr);
             column-gap: 6px; min-width: 0;
@@ -6554,6 +6554,15 @@
         .card-line--rows { align-items: start; }
         .card-line--rows .card-line-place { flex-direction: column; }
         .card-line-row { display: block; min-width: 0; overflow: hidden; white-space: nowrap; }
+        /* A long date (wider than the view's date column, src/card-width.ts):
+           never shortened, never wrapped. With rows it takes the first row
+           across the date and place columns and the place's rows start under
+           it in the place column; on one row the place follows it, 6px after
+           it, and shortens. */
+        .card-line--longdate { grid-template-columns: 11px max-content minmax(0, 1fr); }
+        .card-line--longdate.card-line--rows { grid-template-columns: 11px var(--card-date-col, max-content) minmax(0, 1fr); }
+        .card-line--longdate.card-line--rows .card-line-date { grid-column: 2 / 4; grid-row: 1; white-space: nowrap; }
+        .card-line--longdate.card-line--rows .card-line-place { grid-column: 3; grid-row: 2; }
         /* Labels style: the event's word (12/600, faint) in a column as wide as
            the view's longest label (--card-label-col), 8px, then the value: the
            date, 5px, the place. Its rows start at the value's start. */

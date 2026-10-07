@@ -15,11 +15,17 @@
  *
  * A detail line is a grid: the mark (11px), the date, the place, 6px apart.
  * The date column is as wide as the longest date of the view, so the places
- * of all cards start at one x. In the labels style a line is the event's word
- * (the label column, as wide as the longest label of the view, 8px) and its
- * value: the date, 5px, the place, wrapping under the value's start. The
- * image export draws the same geometry with the same numbers
- * (src/export-image.ts).
+ * of all cards start at one x, but never wider than the longest ordinary date
+ * of the language and the date setting (cardDateReferences): a date wider
+ * than that (a range of whole dates, "about" a whole date, a text that is no
+ * date) is a long date, drawn whole and never wrapped. When a detail may take
+ * more rows it takes the line's first row across the date and the place
+ * columns and the place starts on the next row in its column; on the one-row
+ * card the place follows it, 6px after it, and shortens. In the labels style
+ * a line is the event's word (the label column, as wide as the longest label
+ * of the view, 8px) and its value: the date, 5px, the place, wrapping under
+ * the value's start. The image export draws the same geometry with the same
+ * numbers (src/export-image.ts).
  *
  * The arithmetic is pure; the browser part measures the texts in the card's
  * real fonts (one hidden batch, every string cached), so a tree of thousands
@@ -114,12 +120,24 @@ function cardLineParts(l: CardLineText, valueLines: CardValueLines): CardLinePar
 }
 
 /**
+ * Whether a line's date is a long date (wider than the view's date column):
+ * it does not go into the column (see the top of this file). `dateWidth` is
+ * the date's measured width.
+ */
+export function isLongCardDate(l: CardLineText, dateWidth: number, dateColumn: number): boolean {
+    return !l.wide && !!l.date && Math.ceil(dateWidth) > dateColumn;
+}
+
+/**
  * The view's card width (at most `cap`) and its date column (marks) or label
  * column (labels) from its cards' texts. The labels counted are the ones the
  * lines show: a stand-in says its own event ("Baptism" on the birth line).
+ * `dateReferences` (src/card-fields.ts cardDateReferences): the date column
+ * is at most as wide as the widest of them; none, no such limit.
  */
 export function customCardMetrics<L extends CardLineText>(entries: Iterable<CustomCardEntry<L>>, measure: MeasureTexts,
-    cap: number = CUSTOM_CARD_MAX_WIDTH, valueLines: CardValueLines = 1, style: CardLineStyle = 'marks'): CustomCardMetrics {
+    cap: number = CUSTOM_CARD_MAX_WIDTH, valueLines: CardValueLines = 1, style: CardLineStyle = 'marks',
+    dateReferences: Iterable<string> = []): CustomCardMetrics {
     const list = [...entries];
     const labels = style === 'labels';
     const names = new Set<string>();
@@ -146,7 +164,14 @@ export function customCardMetrics<L extends CardLineText>(entries: Iterable<Cust
     let dateColumn = 0;
     let labelColumn = 0;
     if (labels) for (const t of labelTexts) labelColumn = Math.max(labelColumn, w(labelW, t));
-    else for (const d of dates) dateColumn = Math.max(dateColumn, w(dateW, d));
+    else {
+        // The widest date that fits under the widest ordinary date; a longer one goes its own way.
+        const refs = new Set(dateReferences);
+        const refW = refs.size ? measure('date', refs) : new Map<string, number>();
+        let dateCap = refs.size ? 0 : Infinity;
+        for (const r of refs) dateCap = Math.max(dateCap, w(refW, r));
+        for (const d of dates) if (w(dateW, d) <= dateCap) dateColumn = Math.max(dateColumn, w(dateW, d));
+    }
 
     let content = 0;
     for (const e of list) {
@@ -163,9 +188,18 @@ export function customCardMetrics<L extends CardLineText>(entries: Iterable<Cust
                 row = labelColumn + CARD_LABEL_GAP + Math.max(first, ...parts.slice(1));
             } else {
                 const place = Math.max(0, ...parts);
-                row = l.wide
-                    ? CARD_MARK_WIDTH + CARD_COLUMN_GAP + place
-                    : place > 0 ? cardPlaceOffset(dateColumn) + place : CARD_MARK_WIDTH + CARD_COLUMN_GAP + dateColumn;
+                const date = l.date ? w(dateW, l.date) : 0;
+                if (isLongCardDate(l, date, dateColumn)) {
+                    // A long date: the place 6px after it on the one-row card, else on the rows under it.
+                    const dateRow = CARD_MARK_WIDTH + CARD_COLUMN_GAP + date;
+                    row = valueLines === 1
+                        ? dateRow + (place > 0 ? CARD_COLUMN_GAP + place : 0)
+                        : Math.max(dateRow, place > 0 ? cardPlaceOffset(dateColumn) + place : 0);
+                } else {
+                    row = l.wide
+                        ? CARD_MARK_WIDTH + CARD_COLUMN_GAP + place
+                        : place > 0 ? cardPlaceOffset(dateColumn) + place : CARD_MARK_WIDTH + CARD_COLUMN_GAP + dateColumn;
+                }
             }
             content = Math.max(content, row);
         }
@@ -394,6 +428,13 @@ export interface CardRow extends WrappedRow {
 export interface CardLineRows {
     rows: CardRow[];
     cut: boolean;
+    /**
+     * Marks style: the date is wider than the view's date column (a long
+     * date). When a detail may take more rows the first row is the date's
+     * alone (an empty row here) and the place starts on the next; on the
+     * one-row card the place follows the date (the room after it).
+     */
+    longDate?: boolean;
 }
 
 /** The name and the years under it as a card draws them. */
@@ -525,15 +566,28 @@ export function customCardRows<L extends CardLineText>(entries: Iterable<CustomC
             entry.cut = entry.cut || r.cut;
         });
     } else {
+        const dates = new Set<string>();
+        for (const e of list) for (const l of e.lines) if (!l.wide && l.date) dates.add(l.date);
+        const dateW = dates.size ? measure('date', dates) : new Map<string, number>();
         const requests: WrapRequest[] = [];
         const owners: { line: L; cause: boolean }[] = [];
         for (const e of list) {
             for (const l of e.lines) {
-                const width = Math.max(1, room - (l.wide ? CARD_MARK_WIDTH + CARD_COLUMN_GAP : cardPlaceOffset(metrics.dateColumn)));
-                for (const p of cardLineParts(l, valueLines)) {
-                    requests.push({ text: p.text, ...(p.tail ? { tail: p.tail } : {}), width, maxLines: valueLines });
+                const date = l.date ? dateW.get(l.date) ?? 0 : 0;
+                const long = isLongCardDate(l, date, metrics.dateColumn);
+                if (long) rows.get(l)!.longDate = true;
+                // One row with a long date: the place in the room 6px after the date.
+                const width = Math.max(1, room - (l.wide ? CARD_MARK_WIDTH + CARD_COLUMN_GAP
+                    : long && valueLines === 1 ? CARD_MARK_WIDTH + CARD_COLUMN_GAP + date + CARD_COLUMN_GAP
+                        : cardPlaceOffset(metrics.dateColumn)));
+                cardLineParts(l, valueLines).forEach((p, i) => {
+                    // Rows with a long date: the date's row stays empty here, the place has one row less.
+                    const under = long && valueLines !== 1 && i === 0;
+                    if (under) rows.get(l)!.rows.push({ text: '' });
+                    const maxLines = under && valueLines === 2 ? 1 : valueLines;
+                    requests.push({ text: p.text, ...(p.tail ? { tail: p.tail } : {}), width, maxLines });
                     owners.push({ line: l, cause: !!p.cause });
-                }
+                });
             }
         }
         wrapCardTexts(requests, measure).forEach((r, i) => {

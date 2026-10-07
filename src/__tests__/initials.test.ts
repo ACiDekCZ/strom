@@ -44,4 +44,34 @@ describe('personInitials', () => {
         expect(personInitials('', '')).toBe('');
         expect(personInitials(undefined, undefined)).toBe('');
     });
+
+    it('skips a word that does not start with a letter, never a later letter inside it (U02)', () => {
+        // A transcriber's "[?]" for an unreadable letter: no "[" and no "a" as an initial.
+        expect(personInitials('František', '[?]an[?]rlík')).toBe('F');
+        expect(personInitials('?', 'Novák')).toBe('N');
+        expect(personInitials('[?]', 'Novák')).toBe('N');
+        expect(personInitials('Jan', '(…)ová')).toBe('J');
+        expect(personInitials('3.', 'Jan')).toBe('J');
+        expect(personInitials('3. Jan', '')).toBe('J');
+    });
+
+    it('nothing but marks gives no initials (the avatar shows "?") (U02)', () => {
+        expect(personInitials('…', '')).toBe('');
+        expect(personInitials('?', '')).toBe('');
+        expect(personInitials('?', '?')).toBe('');
+        expect(personInitials('[?]', '…')).toBe('');
+    });
+
+    it('opening quotes and brackets before a name are passed over (U02)', () => {
+        expect(personInitials('(Jan)', 'Novák')).toBe('JN');
+        expect(personInitials('„Pepa“', 'Novák')).toBe('PN');
+        expect(personInitials('"Pepa"', 'Novák')).toBe('PN');
+        expect(personInitials('«Jean»', 'Dupont')).toBe('JD');
+    });
+
+    it('a letter keeps its combining marks (U02)', () => {
+        // "Č" written as C + combining caron.
+        expect(personInitials('C\u030Cenek', 'S\u030Ctěpán')).toBe('C\u030CS\u030C');
+        expect(personInitials('Čeněk', 'Šťastný')).toBe('ČŠ');
+    });
 });

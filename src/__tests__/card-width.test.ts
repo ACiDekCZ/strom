@@ -9,7 +9,7 @@ import {
     customCardWidth, customCardMetrics, customCardCutLines, MeasureTexts, CustomCardEntry, wrapCardText, wrapCardTexts,
     customCardRows, customCardHeight, customCardViewHeight, customCardSpouseLineY, WrapRequest,
 } from '../card-width.js';
-import { cardLines, cardLineHtml, normalizeCardFields, DEFAULT_CARD_FIELDS } from '../card-fields.js';
+import { cardLines, cardLineHtml, cardDateReferences, cardDate, normalizeCardFields, DEFAULT_CARD_FIELDS } from '../card-fields.js';
 import { buildTreeSvg, PosterLayout } from '../export-image.js';
 import { setLanguage } from '../strings.js';
 import { Person, PersonId, PartnershipId, StromData } from '../types.js';
@@ -416,5 +416,148 @@ describe('the poster draws the wrapped card like the screen (U02)', () => {
             cardLines: new Map([['a', [death]]]), cardDateColumn: 24, measureCardTexts: measure, cardValueLines: 2,
         });
         expect(places(svg).map(p => p.text)).toEqual(['Horní Lhota, čp. 13 ·', 'náhlé zapálení mozko…']);
+    });
+});
+
+describe('a long date does not widen the date column (U02)', () => {
+    beforeEach(() => setLanguage('cs'));
+    const esc = (t: string) => t.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+    // "15. 6. 1797": 66px; the range of whole dates: 25 × 6 = 150px; the place 22 × 6 = 132px.
+    const normal = line('15. 6. 1797', 'Brno');
+    const range = line('22. 11. 1790–28. 12. 1795', 'Horní Lhota u Bystřice', { key: 'death', mark: '†' });
+    const entries: CustomCardEntry[] = [
+        { name: 'Jan Vlk', avatar: true, lines: [line('1862', 'Brno')] },
+        { name: 'Anna', avatar: true, lines: [normal, range] },
+    ];
+    const refs = () => cardDateReferences(true);
+    const texts = (r: { rows: { text: string; tail?: string }[] }) => r.rows.map(x => x.text + (x.tail ?? ''));
+
+    it('the ordinary dates of each language and date setting', () => {
+        expect(cardDateReferences(true)).toEqual(['28. 12. 1888', 'kolem 1888', 'před 1888', 'po 1888', '1888–1888']);
+        expect(cardDateReferences(false)).toEqual(['1888', 'kolem 1888', 'před 1888', 'po 1888', '1888–1888']);
+        setLanguage('en');
+        expect(cardDateReferences(true)).toEqual(['12/28/1888', 'c. 1888', 'before 1888', 'after 1888', '1888–1888']);
+        expect(cardDateReferences(false)).toEqual(['1888', 'c. 1888', 'before 1888', 'after 1888', '1888–1888']);
+        setLanguage('de');
+        expect(cardDateReferences(true)).toEqual(['28.12.1888', 'um 1888', 'vor 1888', 'nach 1888', '1888–1888']);
+        expect(cardDateReferences(false)).toEqual(['1888', 'um 1888', 'vor 1888', 'nach 1888', '1888–1888']);
+    });
+
+    it('the column is the widest date under the widest ordinary date: a range of whole dates does not widen it', () => {
+        expect(customCardMetrics(entries, measure, 320, 0, 'marks', refs()).dateColumn).toBe(66);
+        // Without the limit (as before) the range set the column for every card.
+        expect(customCardMetrics(entries, measure, 320, 0).dateColumn).toBe(150);
+        // An ordinary date as wide as the limit still sets the column, exactly.
+        const widest = [{ name: 'A', avatar: true, lines: [line('28. 12. 1888', 'Brno'), range] }];
+        expect(customCardMetrics(widest, measure, 320, 0, 'marks', refs()).dateColumn).toBe(72);
+        // "about" a whole date and a text that is no date are long too.
+        const about = [{ name: 'A', avatar: true, lines: [normal, line('kolem 22. 11. 1797', 'Brno'), line('zima roku 1790 (nejisté)', 'Brno')] }];
+        expect(customCardMetrics(about, measure, 320, 0, 'marks', refs()).dateColumn).toBe(66);
+    });
+
+    it('the limit per language and date setting: cs 72 / 60, en 66 / 66, de 60 / 54 (6px a character)', () => {
+        const all = (full: boolean) => [{ name: 'A', avatar: true, lines: [
+            ...cardDateReferences(full).map(d => line(d, 'Brno')), line('x'.repeat(30), 'Brno'),
+        ] }];
+        const column = (full: boolean) => customCardMetrics(all(full), measure, 320, 0, 'marks', cardDateReferences(full)).dateColumn;
+        expect([column(true), column(false)]).toEqual([72, 60]);
+        setLanguage('en');
+        expect([column(true), column(false)]).toEqual([66, 66]);
+        setLanguage('de');
+        expect([column(true), column(false)]).toEqual([60, 54]);
+        // Years only, a range of whole dates is a range of years: an ordinary date.
+        setLanguage('cs');
+        expect(cardDate('1790-11-22..1795-12-28', false)).toBe('1790–1795');
+        expect(cardDate('1790-11-22..1795-12-28', true)).toBe('22. 11. 1790–28. 12. 1795');
+    });
+
+    it('whole: the long date takes the first row alone, the place goes on under it in the place column', () => {
+        const metrics = customCardMetrics(entries, measure, 320, 0, 'marks', refs());
+        // The long date's row: 17 + 150 = 167; the place under it: 89 + 132 = 221 → 247 → 248.
+        expect(metrics).toEqual({ cardWidth: 248, dateColumn: 66 });
+        const { rows, heights } = customCardRows(entries, metrics, measure, 0);
+        expect(rows.get(range)).toEqual({ rows: [{ text: '' }, { text: 'Horní Lhota u Bystřice' }], cut: false, longDate: true });
+        expect(rows.get(normal)).toEqual({ rows: [{ text: 'Brno' }], cut: false });
+        // Anna: 1 + 2 rows, 3px between the details.
+        expect(heights[1]).toBe(50 + 6 + 3 * 17 + 3);
+        // On a narrower card the place wraps in its column (174 − 89 = 85: 14 characters).
+        const narrow = customCardRows(entries, { cardWidth: 200, dateColumn: 66 }, measure, 0).rows.get(range)!;
+        expect(texts(narrow)).toEqual(['', 'Horní Lhota u', 'Bystřice']);
+        expect(narrow.cut).toBe(false);
+    });
+
+    it('two rows: the place has the one row under the date, ending in "…"', () => {
+        const r = customCardRows(entries, { cardWidth: 200, dateColumn: 66 }, measure, 2).rows.get(range)!;
+        expect(r).toEqual({ rows: [{ text: '' }, { text: 'Horní Lhota u…' }], cut: true, longDate: true });
+        // A place that fits stays whole.
+        const fits = customCardRows(entries, { cardWidth: 248, dateColumn: 66 }, measure, 2).rows.get(range)!;
+        expect(texts(fits)).toEqual(['', 'Horní Lhota u Bystřice']);
+        expect(fits.cut).toBe(false);
+    });
+
+    it('one row: the place follows the date 6px after it and shortens; the width counts the whole row', () => {
+        const metrics = customCardMetrics(entries, measure, 320, 1, 'marks', refs());
+        // 17 + 150 + 6 + 132 = 305 → past the medium cap.
+        expect(metrics).toEqual({ cardWidth: 320, dateColumn: 66 });
+        expect(customCardMetrics(entries, measure, 400, 1, 'marks', refs()).cardWidth).toBe(332);
+        // Room 294 − 173 = 121: 19 characters and "…".
+        const r = customCardRows(entries, metrics, measure, 1).rows.get(range)!;
+        expect(r).toEqual({ rows: [{ text: 'Horní Lhota u Bystř…' }], cut: true, longDate: true });
+        expect([...customCardCutLines(entries, metrics, measure)]).toEqual([range]);
+        expect(customCardCutLines(entries, { cardWidth: 332, dateColumn: 66 }, measure).size).toBe(0);
+    });
+
+    it('the labels style is not affected: no date column, the same label column and rows', () => {
+        const a = customCardMetrics(entries, measure, 320, 0, 'labels', refs());
+        expect(a).toEqual(customCardMetrics(entries, measure, 320, 0, 'labels'));
+        expect(a.dateColumn).toBe(0);
+        const withRefs = customCardRows(entries, a, measure, 0, 'labels').rows.get(range)!;
+        expect(withRefs.longDate).toBeUndefined();
+        expect(withRefs.rows[0].date).toBe('22. 11. 1790–28. 12. 1795');
+    });
+
+    it('the card draws the long date across both columns: the place\'s rows under it, the one-row place after it', () => {
+        const metrics = { cardWidth: 200, dateColumn: 66 };
+        const whole = customCardRows(entries, metrics, measure, 0).rows.get(range)!;
+        const html = cardLineHtml(range, esc, false, whole, 'marks', true);
+        expect(html).toContain('class="card-line card-line--death card-line--rows card-line--longdate"');
+        expect(html).toContain('<span class="card-line-date">22. 11. 1790–28. 12. 1795</span>');
+        // The empty first row is the date's: not drawn in the place column.
+        expect([...html.matchAll(/<span class="card-line-row">([^<]*)<\/span>/g)].map(m => m[1])).toEqual(['Horní Lhota u', 'Bystřice']);
+        expect(html).not.toContain('title=');
+        const two = customCardRows(entries, metrics, measure, 2).rows.get(range)!;
+        expect(cardLineHtml(range, esc, false, two, 'marks', true)).toContain(`<span class="card-line-place" title="${range.rest}">`);
+        const one = cardLineHtml(range, esc, true, undefined, 'marks', true);
+        expect(one).toContain('class="card-line card-line--death card-line--longdate"');
+        expect(one).toContain(`<span class="card-line-rest" title="${range.rest}">`);
+        // An ordinary line and the labels style carry no such class.
+        expect(cardLineHtml(normal, esc, false, undefined, 'marks', false)).not.toContain('longdate');
+        expect(cardLineHtml(range, esc, false, undefined, 'labels', true)).not.toContain('longdate');
+    });
+
+    it('the poster draws the same: the place under the long date (rows) or 6px after it (one row)', () => {
+        const a: Person = { id: 'a' as PersonId, firstName: 'Anna', lastName: 'Vlková', gender: 'female', isPlaceholder: false,
+            partnerships: [], parentIds: [], childIds: [] };
+        const data: StromData = { persons: { [a.id]: a }, partnerships: {} as Record<PartnershipId, never> };
+        const layout: PosterLayout = { positions: new Map([[a.id, { x: 0, y: 0 }]]), connections: [], spouseLines: [] };
+        const draw = (cardWidth: number, cardValueLines: 0 | 1 | 2) => buildTreeSvg(data, layout, {
+            config: { cardWidth, cardHeight: 110 } as never, cardLines: new Map([['a', [normal, range]]]),
+            cardDateColumn: 66, measureCardTexts: measure, cardValueLines,
+        });
+        const placesOf = (svg: string) => [...svg.matchAll(/<text class="card-line-place" x="([\d.]+)" y="([\d.]+)"[^>]*>([^<]*)<\/text>/g)]
+            .map(m => ({ x: Number(m[1]), y: Number(m[2]), text: m[3] }));
+        // Whole: the dates at 12 + 17 = 29, places at 29 + 66 + 6 = 101; the range's line from 46 + 17 + 3 = 66.
+        const whole = draw(248, 0);
+        expect(whole).toMatch(/<text class="card-line-date" x="29.0" y="78.5"[^>]*>22. 11. 1790–28. 12. 1795<\/text>/);
+        expect(placesOf(whole)).toEqual([
+            { x: 101, y: 58.5, text: 'Brno' },
+            { x: 101, y: 95.5, text: 'Horní Lhota u Bystřice' },
+        ]);
+        expect(placesOf(draw(200, 2))[1]).toEqual({ x: 101, y: 95.5, text: 'Horní Lhota u…' });
+        // One row: the place on the date's row, 29 + 150 + 6 = 185, shortened as on screen.
+        expect(placesOf(draw(320, 1))).toEqual([
+            { x: 101, y: 58.5, text: 'Brno' },
+            { x: 185, y: 75.5, text: 'Horní Lhota u Bystř…' },
+        ]);
     });
 });

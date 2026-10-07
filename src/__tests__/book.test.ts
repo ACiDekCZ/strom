@@ -287,3 +287,21 @@ describe('a narrative is not squeezed into the medallion', () => {
         expect(html.indexOf('Její příběh.')).toBeLessThan(html.indexOf('Jejich příběh.'));
     });
 });
+
+describe('Portrait initials (U02)', () => {
+    it('a name without a letter to start with shows "?", an unreadable letter is no initial', () => {
+        const data: StromData = {
+            persons: mkPersons(
+                p('dad', '?', '…', 'male', { birthDate: '1800', deathDate: '1850', childIds: ['kid'], partnerships: ['u'] }),
+                p('mom', 'Františka', '[?]an[?]rlíková', 'female', { birthDate: '1805', deathDate: '1860', childIds: ['kid'], partnerships: ['u'] }),
+                p('kid', '?', 'Novák', 'male', { birthDate: '1830', deathDate: '1890', parentIds: ['dad', 'mom'] }),
+            ),
+            partnerships: union('u', 'dad', 'mom', ['kid']),
+        };
+        const html = buildFamilyBook(data, { lang: 'cs', privacyMode: 'full' });
+        const portraits = [...html.matchAll(/<div class="book-portrait book-portrait-empty">([^<]*)<\/div>/g)].map(m => m[1]);
+        expect(portraits).toEqual(expect.arrayContaining(['?', 'F']));
+        expect(portraits.every(x => x.length > 0 && /^[\p{Lu}?]+$/u.test(x))).toBe(true);
+        expect(portraits).not.toContain('F[');
+    });
+});
