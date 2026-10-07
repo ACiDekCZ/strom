@@ -730,6 +730,9 @@ interface GedcomIndividual {
     variantNameParts: GedcomNameParts[];
     /** A description the file wrote instead of the given name — goes to the note. */
     nameDescription?: string;
+    /** NAME > NPFX / NSFX of the primary name: the titles before and after it. */
+    titleBefore?: string;
+    titleAfter?: string;
     sex: string;
     birthDate: string;
     birthPlace: string;
@@ -2579,6 +2582,8 @@ export function parseGedcom(content: string): ParsedGedcom {
         indi.firstName = read.firstName;
         indi.lastName = read.lastName;
         if (read.description) indi.nameDescription = read.description;
+        if (read.titleBefore) indi.titleBefore = read.titleBefore;
+        if (read.titleAfter) indi.titleAfter = read.titleAfter;
     }
 
     // A child the file links only from its own side (INDI > FAMC, no CHIL in
@@ -2769,6 +2774,9 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
             parentIds: [],
             childIds: []
         };
+
+        if (indi.titleBefore) person.titleBefore = indi.titleBefore;
+        if (indi.titleAfter) person.titleAfter = indi.titleAfter;
 
         // Add extended info if present
         if (indi.birthDate) person.birthDate = indi.birthDate;

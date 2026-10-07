@@ -8,6 +8,7 @@ import { computeLayout, runLayoutPipeline, LayoutResult, StromLayoutEngine, Sele
 import { extractSubtree } from './subtree.js';
 import { bestRenderFocus } from './split-families.js';
 import { strings } from './strings.js';
+import { shownName, shownNameParts } from './person-name.js';
 
 /** Escape text for HTML content and attribute values (titles and names come from foreign files). */
 function esc(text: string): string {
@@ -449,8 +450,7 @@ class TreePreviewClass {
             card.dataset.id = personId;
 
             // Card content
-            const displayName = person.firstName || '?';
-            const displaySurname = person.lastName || '';
+            const { given: displayName, surname: displaySurname } = shownNameParts(person, '?');
 
             let birthYear = '';
             if (person.birthDate) {
@@ -488,7 +488,7 @@ class TreePreviewClass {
         const person = this.options.data.persons[shownId];
         const nameEl = this.overlay.querySelector('.tree-preview-focus-name');
         if (nameEl && person) {
-            nameEl.textContent = `${person.firstName || '?'} ${person.lastName || ''}`.trim();
+            nameEl.textContent = shownName(person, '?');
         }
     }
 
@@ -992,8 +992,7 @@ class TreeCompareClass {
             card.style.height = config.cardHeight + 'px';
             card.dataset.id = personId;
 
-            const displayName = person.firstName || '?';
-            const displaySurname = person.lastName || '';
+            const { given: displayName, surname: displaySurname } = shownNameParts(person, '?');
 
             card.innerHTML = `
                 <div class="preview-card-name">${esc(displayName)}</div>
@@ -1018,7 +1017,7 @@ class TreeCompareClass {
         const person = pane.options.data.persons[pane.currentFocusId];
 
         if (nameEl && person) {
-            nameEl.textContent = `${person.firstName || '?'} ${person.lastName || ''}`.trim();
+            nameEl.textContent = shownName(person, '?');
         }
     }
 

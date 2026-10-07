@@ -49,6 +49,7 @@ import { presumedDeceasedSet, isLivingPerson } from './privacy.js';
 import { placeList } from './places.js';
 import { SettingsManager } from './settings.js';
 import { personInitials } from './initials.js';
+import { shownName, shownNameParts } from './person-name.js';
 import { extractSubtree } from './subtree.js';
 import { buildFanModel, buildFanSvg } from './fan-chart.js';
 import { computeIndirectIds } from './indirect.js';
@@ -377,7 +378,7 @@ class TreeRendererClass {
             if (!person) continue;
             const lines = person.isPlaceholder ? [] : cardLines(person, data, fields);
             this.customLines.set(id, lines);
-            entries.push({ name: `${person.firstName || '?'} ${person.lastName}`.trim(), avatar: !person.isPlaceholder, lines });
+            entries.push({ name: shownName(person, '?'), avatar: !person.isPlaceholder, lines });
         }
         const metrics = customCardMetrics(entries, measureCardTexts);
         this.customCutLines = customCardCutLines(entries, metrics, measureCardTexts);
@@ -835,7 +836,7 @@ class TreeRendererClass {
 
         if (this.focusPersonId) {
             const person = DataManager.getPerson(this.focusPersonId);
-            const displayName = person ? (`${person.firstName} ${person.lastName}`.trim() || '?') : '?';
+            const displayName = person ? shownName(person) : '?';
 
             // Update floating focus controls
             if (focusName) {
@@ -1152,10 +1153,10 @@ class TreeRendererClass {
             // Touch: long-press opens the mobile bottom sheet (coarse pointer only).
             UI.attachCardLongPress(card, id);
 
-            const displayName = person.firstName || '?';
-
-            // Always display person's own lastName (maiden name for women)
-            const displaySurname = person.lastName;
+            // The name as shown: the given name with the title before it, the
+            // person's own lastName (maiden name for women) with the title
+            // after it (src/person-name.ts) — the two lines of a split name.
+            const { given: displayName, surname: displaySurname } = shownNameParts(person, '?');
 
             // Birth year for the card meta row (the year range replaces the dagger).
             const birthYear = person.birthDate ? displayYear(person.birthDate) : '';
@@ -1222,7 +1223,7 @@ class TreeRendererClass {
                         .map(pid => DataManager.getPerson(pid))
                         .filter((p): p is Person => p !== null);
                     const parentItems = hiddenParents.map(p => {
-                        const name = `${p.firstName || '?'} ${p.lastName || ''}`.trim();
+                        const name = shownName(p, '?');
                         const year = displayYear(p.birthDate);
                         return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(name)}</span>${year ? `<span class="badge-tooltip-detail"> *${this.escapeHtml(year)}</span>` : ''}</div>`;
                     }).join('');
@@ -1231,7 +1232,7 @@ class TreeRendererClass {
                 if (hasHiddenSiblings) {
                     const hiddenSiblings = siblings.filter(s => !this.positions.has(s.id));
                     const siblingItems = hiddenSiblings.map(s => {
-                        const name = `${s.firstName || '?'} ${s.lastName || ''}`.trim();
+                        const name = shownName(s, '?');
                         const year = displayYear(s.birthDate);
                         return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(name)}</span>${year ? `<span class="badge-tooltip-detail"> *${this.escapeHtml(year)}</span>` : ''}</div>`;
                     }).join('');
@@ -1243,7 +1244,7 @@ class TreeRendererClass {
                         .map(cid => DataManager.getPerson(cid))
                         .filter((c): c is Person => c !== null);
                     const childItems = hiddenChildren.map(c => {
-                        const name = `${c.firstName || '?'} ${c.lastName || ''}`.trim();
+                        const name = shownName(c, '?');
                         const year = displayYear(c.birthDate);
                         return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(name)}</span>${year ? `<span class="badge-tooltip-detail"> *${this.escapeHtml(year)}</span>` : ''}</div>`;
                     }).join('');
@@ -1259,7 +1260,7 @@ class TreeRendererClass {
                     // Build rich tooltip with list of hidden partners
                     const hiddenPartners = allPartners.filter(p => !this.positions.has(p.id));
                     const partnerItems = hiddenPartners.map(p => {
-                        const name = `${p.firstName || '?'} ${p.lastName || ''}`.trim();
+                        const name = shownName(p, '?');
                         const year = displayYear(p.birthDate);
                         return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(name)}</span>${year ? `<span class="badge-tooltip-detail"> *${this.escapeHtml(year)}</span>` : ''}</div>`;
                     }).join('');
@@ -1275,13 +1276,13 @@ class TreeRendererClass {
                         .map(p => {
                             const pid = p.person1Id === id ? p.person2Id : p.person1Id;
                             const partner = DataManager.getPerson(pid);
-                            const partnerName = partner ? `${partner.firstName || '?'} ${partner.lastName || ''}`.trim() : '?';
+                            const partnerName = partner ? shownName(partner, '?') : '?';
                             const partnerYear = displayYear(partner?.birthDate);
                             const childLabels = p.childIds
                                 .map(cid => DataManager.getPerson(cid))
                                 .filter((c): c is Person => c !== null)
                                 .map(c => {
-                                    const name = `${c.firstName || '?'} ${c.lastName || ''}`.trim();
+                                    const name = shownName(c, '?');
                                     const year = displayYear(c.birthDate);
                                     return this.escapeHtml(name) + (year ? ` *${this.escapeHtml(year)}` : '');
                                 });
@@ -1312,8 +1313,8 @@ class TreeRendererClass {
 
             // Full name on one row (never shrunk — overflow ellipsizes).
             const fullName = `${displayName} ${displaySurname}`.trim();
-            // Avatar initials (first name + surname), used when there is no photo.
-            const initials = personInitials(displayName, displaySurname) || '?';
+            // Avatar initials (first name + surname, never a title), used when there is no photo.
+            const initials = personInitials(person.firstName || '?', person.lastName) || '?';
 
             // Meta row (row 2): life-year range. The year range carries the
             // "deceased" cue (the † dagger is gone from the name row): a dead
@@ -1505,7 +1506,7 @@ class TreeRendererClass {
             if (primaryPartnership) {
                 const ppid = primaryPartnership.person1Id === id ? primaryPartnership.person2Id : primaryPartnership.person1Id;
                 const pp = DataManager.getPerson(ppid);
-                if (pp) ttPartnerName = `${pp.firstName || '?'} ${pp.lastName || ''}`.trim();
+                if (pp) ttPartnerName = shownName(pp, '?');
             }
             const ttChildCount = person.childIds.length;
             if (ttPartnerName || ttChildCount > 0) {
@@ -1935,7 +1936,7 @@ class TreeRendererClass {
     /** The card's accessible name: the name, then its status and what waits. */
     private cardAriaLabel(person: Person, s: CardSignalInfo): string {
         const c = strings.card;
-        const parts = [`${person.firstName} ${person.lastName}`.trim() || '?'];
+        const parts = [shownName(person)];
         if (s.showEvidence && s.evidence) parts.push(c.ariaEv[s.evidence.level]);
         if (s.showStory) parts.push(s.story === 'draft' ? c.ariaStoryDraft : s.storyNew ? c.ariaStoryNew : c.ariaStory);
         if (s.action === 'waiting') parts.push(c.ariaWaiting);

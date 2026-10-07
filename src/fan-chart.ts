@@ -7,6 +7,7 @@
 
 import { StromData, Person, PersonId, ParentChildRelType } from './types.js';
 import { displayYear } from './dates.js';
+import { shownName } from './person-name.js';
 import {
     posterFooterSvg, PosterFooterMeta, FOOTER_HEIGHT, POSTER_PADDING, POSTER_FONT, POSTER_BG,
 } from './export-image.js';
@@ -259,7 +260,7 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
         }
 
         const p = s.person;
-        const name = `${p.firstName} ${p.lastName}`.trim() || '?';
+        const name = shownName(p);
         const years = yearsOf(p);
         const gcls = p.gender === 'female' ? 'female' : 'male';
         let textSvg = '';
@@ -354,7 +355,7 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
     }
 
     // Focus disc at the fan's center bottom.
-    const fname = `${model.focus.firstName} ${model.focus.lastName}`.trim() || '?';
+    const fname = shownName(model.focus);
     const fyears = yearsOf(model.focus);
     const fcls = model.focus.gender === 'female' ? 'female' : 'male';
     parts.push(`<g class="fan-focus ${fcls}" data-fan-person="${esc(model.focus.id)}">`

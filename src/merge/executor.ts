@@ -763,6 +763,12 @@ export function mergePersonData(
         if (incoming.photoOriginalName) existing.photoOriginalName = incoming.photoOriginalName;
     }
 
+    // Titles of the name: fill when missing. Two different titles are no
+    // conflict to ask about (they never decide who the person is): the
+    // existing tree's stay.
+    if (!existing.titleBefore && incoming.titleBefore) existing.titleBefore = incoming.titleBefore;
+    if (!existing.titleAfter && incoming.titleAfter) existing.titleAfter = incoming.titleAfter;
+
     // Open question / reference number / death-status: fill when missing.
     if (!existing.question && incoming.question) existing.question = incoming.question;
     if (!existing.refn && incoming.refn) {

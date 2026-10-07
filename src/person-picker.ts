@@ -9,6 +9,7 @@ import { DataManager } from './data.js';
 import { normalizeSearchText as normalizeText, alternateNames, nameMatchesQuery } from './name-search.js';
 import { detailMatch } from './search-filter.js';
 import { displayYear } from './dates.js';
+import { shownName } from './person-name.js';
 
 /**
  * Sort persons by name (lastName, firstName)
@@ -456,7 +457,9 @@ export class PersonPicker {
      * Render a single item
      */
     private renderItem(person: Person, index: number): string {
-        const name = this.formatPersonName(person);
+        // The list shows the name with its titles; the input keeps the bare
+        // name (formatPersonName), which is what the search matches.
+        const name = shownName(person);
         const birthYear = this.options.showBirthYear && person.birthDate
             ? `<span class="birth-year">(*${this.escapeHtml(person.birthDate.split('-')[0])})</span>`
             : '';

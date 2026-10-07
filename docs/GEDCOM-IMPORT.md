@@ -78,11 +78,25 @@ unsupported tag.
 | `NAME` (repeated) | Further spellings of the same person, kept as name variants |
 | `NAME` > `TYPE` | Read to keep the birth surname as the person's surname: a `married` name listed first swaps places with the `birth` (or `maiden`) one. The type itself is not stored |
 | `NAME` > `SOUR` | The record the name comes from — cites the person, with `PAGE` and `QUAY` |
+| `NAME` > `GIVN`, `SURN` | Win over the `NAME` line, which is only how a program wrote them. Without them the surname is the last pair of slashes |
+| `NAME` > `NPFX`, `NSFX` | The titles before and after the name (`Ing.`, `MUDr.` / `ml.`, `Ph.D.`), kept in fields of their own and shown with the name (Settings → "Show titles"). Written in the `NAME` line too, they are taken off its start and end, so a title never doubles. A `NAME` line without these tags is never searched for titles |
 | `SEX` | `M` / `F`. `U` or missing is inferred from the family role where possible |
 | `BIRT`, `DEAT` | The dedicated date and place fields, not events. `1 DEAT Y` with no date marks the person as dead, and Strom exports it that way |
 | `_QUESTION` | Strom's own tag: the open question about the person ("does anyone know when she was born?"), with `CONT` / `CONC` |
 | `REFN` | Reference number — your own id in an archive or another program. A `2 TYPE` under it is kept (not shown) and written back on export, so the program that issued the number can recognise its own person |
 | `FAMS`, `FAMC` | Links to families as spouse / as child |
+
+A person with a title is exported with the whole name in the `NAME` line, so a
+program that reads no sub-tags still shows it, and its parts spelled out below;
+every other name stays one plain line:
+
+```
+1 NAME Ing. Jan /Novák/ ml.
+2 NPFX Ing.
+2 GIVN Jan
+2 SURN Novák
+2 NSFX ml.
+```
 
 A second `BIRT` or `DEAT` block does not overwrite the first: it is kept as a
 labelled event, because two contradictory birth records are a research finding,

@@ -294,6 +294,9 @@ function stripDetails(person: Person): void {
     // under "Living person"); the open question is free text about the person;
     // a REFN is an identifier that finds them in other databases.
     delete person.nameVariants;
+    // Titles ("Ing.", "ml.") narrow down who someone is as much as a name variant.
+    delete person.titleBefore;
+    delete person.titleAfter;
     delete person.question;
     delete person.refn;
     delete person.refnType;

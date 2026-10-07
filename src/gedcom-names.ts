@@ -150,6 +150,9 @@ export interface GedcomNameParts {
 export interface GedcomNameRead {
     firstName: string;
     lastName: string;
+    /** NPFX / NSFX: the titles before and after the name ("Ing.", "ml."), as the file wrote them. */
+    titleBefore?: string;
+    titleAfter?: string;
     /** A description the file wrote instead of a given name ("Mrtvě narozený"), kept for the note. */
     description?: string;
 }
@@ -162,22 +165,27 @@ export interface GedcomNameRead {
  * there a given name like "Syn" is what someone typed, as the research reads
  * the app's file in a sync (only its NO_NAME, no descriptions).
  *
- * NPFX / NSFX (a title before or after the name) have no field of their own
- * yet. Before GIVN and SURN won over the line, a title written in the line
- * stayed in the name; when GIVN / SURN replace the line, the title tags put
- * it back where the line had it, so a title is not lost on the way.
+ * NPFX / NSFX are the titles before and after the name ("Ing.", "ml."), kept
+ * apart from it. A file writes them in the NAME line too ("Ing. Jan /Novák/
+ * ml.", for programs that read no sub-tags), so there they are taken off the
+ * line's start and end before it is read — a title never doubles, nor joins
+ * the surname as text after the slashes. A line without NPFX / NSFX is never
+ * searched for titles: telling "Ing." or "Dr." by a word list would be a
+ * guess that damages a name which only looks like one (as in the research).
  */
 export function readGedcomName(
     line: string,
     parts: GedcomNameParts = {},
     opts: { descriptions?: boolean } = {},
 ): GedcomNameRead {
-    const split = splitNameLine(line);
+    const titleBefore = parts.npfx?.replace(/\s+/g, ' ').trim();
+    const titleAfter = parts.nsfx?.replace(/\s+/g, ' ').trim();
+    const split = splitNameLine(stripTitles(line, titleBefore, titleAfter));
     const givn = parts.givn?.replace(/\s*,\s*/g, ' ').replace(/\s+/g, ' ').trim();
     const surn = parts.surn?.replace(/\s+/g, ' ').trim();
     const written = givn || split.given;
 
-    let firstName = noName(written) ? '?' : (givn || parseName(line).firstName);
+    let firstName = noName(written) ? '?' : (givn || (split.slashed ? split.given : split.given.replace(/\//g, '')));
     // A word that describes the person in place of a name (stillborn, son,
     // N.N.): the name is "?", the words go to the note as the file wrote them.
     const describes = opts.descriptions !== false;
@@ -188,10 +196,41 @@ export function readGedcomName(
     if (surn) lastName = split.slashed && (surn.includes(',') || parts.spfx?.trim()) ? split.surname : surn;
     else lastName = split.slashed || !givn ? split.surname : '';
 
-    const npfx = parts.npfx?.trim();
-    if (npfx && givn && firstName !== '?' && !firstName.startsWith(npfx)) firstName = `${npfx} ${firstName}`;
-    const nsfx = parts.nsfx?.trim();
-    if (nsfx && surn && lastName && !lastName.endsWith(nsfx)) lastName = `${lastName} ${nsfx}`;
+    return {
+        firstName, lastName,
+        ...(titleBefore ? { titleBefore } : {}),
+        ...(titleAfter ? { titleAfter } : {}),
+        ...(description ? { description } : {}),
+    };
+}
 
-    return { firstName, lastName, ...(description ? { description } : {}) };
+/**
+ * The NAME line without the titles its NPFX / NSFX name: the title before at
+ * the line's start, the title after at its end, each a whole word (a list of
+ * titles may be written with GEDCOM's commas in the tag and spaces in the
+ * line: "Prof., Dr." is "Prof. Dr. Jan"). A title written elsewhere in the
+ * line stays where it is.
+ */
+function stripTitles(line: string, before: string | undefined, after: string | undefined): string {
+    let s = line.trim().replace(/\s+/g, ' ');
+    const forms = (title: string): string[] => [...new Set([title, title.replace(/\s*,\s*/g, ' ')])];
+    if (before) {
+        for (const t of forms(before)) {
+            if (s.startsWith(t) && (s.length === t.length || /[\s/]/.test(s[t.length]))) {
+                s = s.slice(t.length).trim();
+                break;
+            }
+        }
+    }
+    if (after) {
+        for (const t of forms(after)) {
+            const at = s.length - t.length;
+            if (at >= 0 && s.endsWith(t) && (at === 0 || /[\s/,]/.test(s[at - 1]))) {
+                // "Novák, Ph.D." — the comma before a title after the name goes with it.
+                s = s.slice(0, at).trim().replace(/,$/, '').trim();
+                break;
+            }
+        }
+    }
+    return s;
 }

@@ -3782,6 +3782,8 @@
         }
         .age-check strong { font-weight: 600; }
         .age-check--warn { color: var(--warning-text); }
+        /* The two titles are short: side by side on every screen, the phone too. */
+        .detail-group .name-titles { grid-template-columns: 1fr 1fr; }
         @media (max-width: 640px) {
             .detail-group .detail-spacer { display: none; }
             /* A tap target, not a hairline of text. */
@@ -12952,6 +12954,21 @@
                         <input type="text" id="input-lastname" data-i18n-placeholder="placeholders.lastName" autocomplete="off">
                     </div>
                 </div>
+                <!-- Titles of the name ("Ing.", "ml."): shown when filled, otherwise
+                     behind the quiet "+ title" link (src/ui/event-details-ui.ts). -->
+                <div class="detail-group" id="name-details">
+                    <div class="form-grid detail-field name-titles" data-detail="title">
+                        <div class="form-group">
+                            <label for="input-title-before" data-i18n="labels.titleBefore"></label>
+                            <input type="text" id="input-title-before" data-i18n-placeholder="placeholders.titleBefore" autocomplete="off">
+                        </div>
+                        <div class="form-group">
+                            <label for="input-title-after" data-i18n="labels.titleAfter"></label>
+                            <input type="text" id="input-title-after" data-i18n-placeholder="placeholders.titleAfter" autocomplete="off">
+                        </div>
+                    </div>
+                    <button type="button" class="detail-more" hidden></button>
+                </div>
                 <div class="form-group">
                     <label data-i18n="labels.gender"></label>
                     <div class="segment gender-segment" id="gender-segment" role="group">
@@ -13695,6 +13712,13 @@
                     <div class="settings-row card-preview-settings" id="card-preview-settings"></div>
                     <div class="settings-row card-fields-settings" id="card-fields-settings" hidden></div>
                     <div class="settings-row card-signals-settings" id="card-signals-settings"></div>
+                    <label class="settings-checkbox settings-row">
+                        <input type="checkbox" id="show-titles-toggle" onchange="window.Strom.UI.toggleShowTitles(this.checked)">
+                        <span class="settings-text">
+                            <span class="settings-name" data-i18n="titles.settingLabel"></span>
+                            <span class="settings-desc" data-i18n="titles.settingHint"></span>
+                        </span>
+                    </label>
                     <label class="settings-checkbox settings-row">
                         <input type="checkbox" id="cross-tree-badges-toggle" onchange="window.Strom.UI.toggleCrossTreeBadges(this.checked)">
                         <span class="settings-text">

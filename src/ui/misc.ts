@@ -283,6 +283,8 @@ export const miscMethods = uiModule({
         this.renderResearchEdgeSettings();
         const kekuleToggle = document.getElementById('fan-kekule-toggle') as HTMLInputElement | null;
         if (kekuleToggle) kekuleToggle.checked = SettingsManager.isFanKekuleEnabled();
+        const titlesToggle = document.getElementById('show-titles-toggle') as HTMLInputElement | null;
+        if (titlesToggle) titlesToggle.checked = SettingsManager.isShowTitles();
         const crossTreeToggle = document.getElementById('cross-tree-badges-toggle') as HTMLInputElement | null;
         if (crossTreeToggle) crossTreeToggle.checked = SettingsManager.isCrossTreeBadgesEnabled();
         const branchColorsToggle = document.getElementById('branch-colors-toggle') as HTMLInputElement | null;

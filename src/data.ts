@@ -1745,6 +1745,8 @@ class DataManagerClass {
         };
         if (updates.firstName !== undefined && updates.firstName !== person.firstName) diff(strings.labels.firstName, person.firstName, updates.firstName);
         if (updates.lastName !== undefined && updates.lastName !== person.lastName) diff(strings.labels.lastName, person.lastName, updates.lastName);
+        if (updates.titleBefore !== undefined && (updates.titleBefore.trim() || undefined) !== person.titleBefore) diff(strings.labels.titleBefore, person.titleBefore, updates.titleBefore);
+        if (updates.titleAfter !== undefined && (updates.titleAfter.trim() || undefined) !== person.titleAfter) diff(strings.labels.titleAfter, person.titleAfter, updates.titleAfter);
         if (updates.gender !== undefined && updates.gender !== person.gender) diff(strings.labels.gender, strings.gender[person.gender], strings.gender[updates.gender]);
         if (updates.birthDate !== undefined && (updates.birthDate || undefined) !== person.birthDate) diff(strings.labels.birthDate, person.birthDate, updates.birthDate);
         if (updates.birthPlace !== undefined && (updates.birthPlace || undefined) !== person.birthPlace) diff(strings.labels.birthPlace, person.birthPlace, updates.birthPlace);
@@ -1774,6 +1776,11 @@ class DataManagerClass {
             }
         }
         if (updates.gender !== undefined) person.gender = updates.gender;
+        // The titles of the name ("Ing.", "ml."); an empty one means none.
+        for (const key of ['titleBefore', 'titleAfter'] as const) {
+            const v = updates[key];
+            if (v !== undefined) person[key] = v.trim() || undefined;
+        }
 
         // Extended info
         if (updates.birthDate !== undefined) person.birthDate = updates.birthDate || undefined;
@@ -3440,7 +3447,8 @@ class DataManagerClass {
         if (resolvedFields.deathPlace !== undefined) keepPerson.deathPlace = resolvedFields.deathPlace || undefined;
         // What the register adds to the birth and death: the kept person's own
         // wins, the removed one's fills a gap.
-        for (const key of ['birthAddress', 'deathCause', 'deathAge', 'deathAddress'] as const) {
+        // The titles of the name likewise.
+        for (const key of ['birthAddress', 'deathCause', 'deathAge', 'deathAddress', 'titleBefore', 'titleAfter'] as const) {
             if (!keepPerson[key] && removePerson[key]) keepPerson[key] = removePerson[key];
         }
 

@@ -22,8 +22,12 @@ export { ageBirthDate } from '../recorded-age.js';
 const escapeHtml = (text: string): string => text.replace(/[&<>"']/g, c =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
-export type DetailKey = 'cause' | 'age' | 'address';
-export const DETAIL_KEYS: readonly DetailKey[] = ['cause', 'age', 'address'];
+/** The details of an event (LifeEvent fields). */
+export type EventDetailKey = 'cause' | 'age' | 'address';
+export const DETAIL_KEYS: readonly EventDetailKey[] = ['cause', 'age', 'address'];
+/** …and 'title': the titles of a person's name, the same quiet pattern under the name fields. */
+export type DetailKey = EventDetailKey | 'title';
+const GROUP_KEYS: readonly DetailKey[] = [...DETAIL_KEYS, 'title'];
 
 /** Which details an event type offers behind the link (one that has a value shows anyway). */
 export function offeredDetails(type: LifeEventType | 'marriage'): DetailKey[] {
@@ -40,7 +44,8 @@ export function offeredDetails(type: LifeEventType | 'marriage'): DetailKey[] {
 }
 
 const shortName = (key: DetailKey): string =>
-    key === 'cause' ? strings.fields.causeShort : key === 'age' ? strings.fields.ageShort : strings.fields.addressShort;
+    key === 'cause' ? strings.fields.causeShort : key === 'age' ? strings.fields.ageShort
+        : key === 'title' ? strings.fields.titleShort : strings.fields.addressShort;
 
 const fieldOf = (group: HTMLElement, key: DetailKey): HTMLElement | null =>
     group.querySelector<HTMLElement>(`.detail-field[data-detail="${key}"]`);
@@ -55,7 +60,7 @@ const hasValue = (field: HTMLElement): boolean =>
 export function refreshDetailGroup(group: HTMLElement, offered: DetailKey[], readOnly = false): void {
     const open = group.dataset.open === '1';
     const hidden: DetailKey[] = [];
-    for (const key of DETAIL_KEYS) {
+    for (const key of GROUP_KEYS) {
         const field = fieldOf(group, key);
         if (!field) continue;
         const show = hasValue(field) || (open && offered.includes(key));

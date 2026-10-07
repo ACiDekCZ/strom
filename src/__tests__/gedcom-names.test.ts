@@ -127,9 +127,9 @@ describe('GIVN and SURN come before the NAME line', () => {
         expect(readGedcomName('Hans /Baur/', { surn: 'Bauer' })).toEqual({ firstName: 'Hans', lastName: 'Bauer' });
     });
 
-    it('keep a title the tags name (NPFX / NSFX) where the line had it', () => {
+    it('keep a title the tags name (NPFX / NSFX) in a field of its own (T07)', () => {
         expect(readGedcomName('Ing. Jan /Novák/ ml.', { npfx: 'Ing.', givn: 'Jan', surn: 'Novák', nsfx: 'ml.' }))
-            .toEqual({ firstName: 'Ing. Jan', lastName: 'Novák ml.' });
+            .toEqual({ firstName: 'Jan', lastName: 'Novák', titleBefore: 'Ing.', titleAfter: 'ml.' });
     });
 });
 

@@ -309,6 +309,14 @@ export interface Person {
     id: PersonId;
     firstName: string;
     lastName: string;  // For women this is maiden name
+    /**
+     * Titles of the name: before it ("Ing.", "MUDr.", "hrabě") and after it
+     * ("ml.", "st.", "Ph.D."), GEDCOM NAME > NPFX / NSFX. Kept apart from the
+     * name so search and duplicate matching never weigh them; shown with the
+     * name while Settings → "Show titles" is on (src/person-name.ts).
+     */
+    titleBefore?: string;
+    titleAfter?: string;
     gender: Gender;
     isPlaceholder: boolean;
     partnerships: PartnershipId[];
@@ -757,6 +765,9 @@ export function partnershipParticipants(u: Pick<Partnership, 'participants' | 'e
  * original only carries a page icon as its data (ORIGINAL_ONLY_DATA_URL), which
  * 3.8.x keeps (it drops an attachment without image or PDF data);
  * transcriptVerified stays on a transcript edited in 3.8.x.
+ * Person.titleBefore / titleAfter (3.10) came without a bump: an older app
+ * carries persons whole (migrateData) and edits them in place (updatePerson),
+ * so it keeps the titles on a re-save; it only shows the name without them.
  */
 export const STROM_DATA_VERSION = 11;
 
@@ -1060,6 +1071,7 @@ export interface AppSettings {
     cardFields?: import('./card-fields.js').CardFieldSettings;
     familyButton?: boolean;  // default: false - toolbar shortcut to the family wizard
     descendantsFullFamilies?: boolean;  // default: false - descendants view shows partners' other families
+    showTitles?: boolean;  // default: true - titles before/after the name (Person.titleBefore / titleAfter) shown with it
     advancedFields?: boolean;  // default: false (basic mode) - sources/attachments/refn/name variants/question on a person
     geocoding?: boolean;   // default: undefined (never asked) - user allowed sending place names to the geocoder
     mapTiles?: boolean;    // default: undefined (not seen) - user saw that map tiles come from openstreetmap.org

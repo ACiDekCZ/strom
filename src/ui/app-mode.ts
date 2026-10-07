@@ -766,6 +766,12 @@ export const appModeMethods = uiModule({
         TreeRenderer.render();
     },
 
+    /** Titles of the name on cards and in lists: the view is drawn again (card names, their widths). */
+    toggleShowTitles(enabled: boolean): void {
+        SettingsManager.setShowTitles(enabled);
+        TreeRenderer.render();
+    },
+
     toggleCrossTreeBadges(enabled: boolean): void {
         SettingsManager.setCrossTreeBadges(enabled);
         TreeRenderer.render();

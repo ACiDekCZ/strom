@@ -184,6 +184,31 @@ function pushPlace(lines: string[], level: number, place: string, places?: Recor
 }
 
 /**
+ * The person's main NAME. A name with a title (Person.titleBefore /
+ * titleAfter) carries it in the line, so a program that reads no sub-tags
+ * still shows it ("Ing. Jan /Novák/ ml."), and spells its parts out below:
+ * NPFX, GIVN, SURN, NSFX — the shape the research writes and reads. A name
+ * without a title stays one plain line, as ever. A part holding a comma gets
+ * no GIVN / SURN (GEDCOM reads commas there as a list); the line has it.
+ */
+function pushName(lines: string[], person: Person): void {
+    const before = person.titleBefore?.trim() ?? '';
+    const after = person.titleAfter?.trim() ?? '';
+    const name = formatGedcomName(person.firstName, person.lastName);
+    if (!before && !after) {
+        pushWrapped(lines, 1, 'NAME', name);
+        return;
+    }
+    pushWrapped(lines, 1, 'NAME', [before, name.trim(), after].filter(Boolean).join(' '));
+    const first = (person.firstName ?? '').trim();
+    const last = (person.lastName ?? '').trim();
+    if (before) pushWrapped(lines, 2, 'NPFX', before);
+    if (first && !first.includes(',')) pushWrapped(lines, 2, 'GIVN', first);
+    if (last && !last.includes(',')) pushWrapped(lines, 2, 'SURN', last);
+    if (after) pushWrapped(lines, 2, 'NSFX', after);
+}
+
+/**
  * Format name to GEDCOM format: FirstName /LastName/
  */
 function formatGedcomName(firstName: string, lastName: string): string {
@@ -512,8 +537,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         if (person.isPlaceholder && (person.firstName === '?' || !person.firstName) && !person.lastName) {
             lines.push('1 NAME //');
         } else {
-            const name = formatGedcomName(person.firstName, person.lastName);
-            pushWrapped(lines, 1, 'NAME', name);
+            pushName(lines, person);
         }
         // Other spellings as further NAME lines — the first one above stays the
         // primary, which is what every reader expects.

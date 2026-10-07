@@ -13,6 +13,7 @@ import { personInitials } from './initials.js';
 import { parentRelKind, parentRelDash, connectionDash } from './parent-rel-style.js';
 import type { CardLine } from './card-fields.js';
 import { CARD_MARK_WIDTH, CARD_COLUMN_GAP, CUSTOM_CARD_PAD_X, MeasureTexts, cardPlaceOffset } from './card-width.js';
+import { shownName } from './person-name.js';
 
 /** The subset of a LayoutResult the poster needs (no diagnostics required). */
 export type PosterLayout = Pick<LayoutResult, 'positions' | 'connections' | 'spouseLines'>;
@@ -208,7 +209,7 @@ function customCardSvg(
         }
         textX = left + 30 + 8;
     }
-    const name = `${person.firstName || '?'} ${person.lastName || ''}`.trim();
+    const name = shownName(person, '?');
     const nameRoom = right - textX;
     const nameAt15 = measure('name', [name]).get(name) ?? 0;
     let fs = 15;
@@ -448,7 +449,7 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
             const contentW = cw - (contentX - pos.x) - 10;
             const cx = contentX + contentW / 2;
 
-            const fullName = `${person.firstName || '?'} ${person.lastName || ''}`.trim();
+            const fullName = shownName(person, '?');
             // Meta row: life-year range + place; the range carries the deceased cue.
             const birthY = displayYear(person.birthDate);
             const deathY = displayYear(person.deathDate);

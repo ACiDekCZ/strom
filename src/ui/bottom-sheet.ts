@@ -16,6 +16,7 @@ import { DataManager } from '../data.js';
 import { ZoomPan } from '../zoom.js';
 import { isPhoneBar } from '../breakpoints.js';
 import { menuItemBody, menuItemAria, PersonMenuAction } from './context-menu.js';
+import { shownName } from '../person-name.js';
 
 /** A row / section in a menu-style bottom sheet (the "More" and "Tree" sheets). */
 interface MenuRow {
@@ -69,7 +70,7 @@ export const bottomSheetMethods = uiModule({
         if (actions.length === 0) return;
 
         const person = DataManager.getPerson(personId);
-        const personName = person ? `${person.firstName} ${person.lastName}`.trim() : '';
+        const personName = person ? shownName(person) : '';
 
         // The tiles: in this order, each when the menu offers it.
         const tiles = TILE_ACTIONS.map(t => actions.find(a => a.action === t)).filter((a): a is PersonMenuAction => !!a);

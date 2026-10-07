@@ -13,6 +13,7 @@ import { uiModule } from './module.js';
 import { isCoarsePointer } from './bottom-sheet.js';
 import { isTabletOrMobile } from '../breakpoints.js';
 import { fitFlyout, FLYOUT_MARGIN } from './flyout.js';
+import { shownName } from '../person-name.js';
 
 /** One entry in the person action menu (context menu / bottom sheet). */
 export interface PersonMenuAction {
@@ -318,7 +319,7 @@ export const contextMenuMethods = uiModule({
         menu.setAttribute('role', 'menu');
         // Header names the person the menu acts on (serif, per the Letopis design).
         const person = DataManager.getPerson(personId);
-        const personName = person ? `${person.firstName} ${person.lastName}`.trim() : '';
+        const personName = person ? shownName(person) : '';
         const header = personName
             ? `<div class="context-menu-header">${this.escapeHtml(personName)}</div>`
             : '';

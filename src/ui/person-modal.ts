@@ -29,6 +29,7 @@ import { strings } from '../strings.js';
 import { isLivingPerson, inferBirthUpperBounds } from '../privacy.js';
 import { compressPhoto, dataUrlByteSize, rotatePhotoDataUrl } from '../photo.js';
 import { personInitials } from '../initials.js';
+import { shownName } from '../person-name.js';
 import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-parser.js';
 import {
     validateJsonImport,
@@ -80,6 +81,8 @@ function placePersonDeleteLink(): void {
 
 /** The person dialog's detail inputs and the Person fields they edit. */
 const PERSON_DETAIL_FIELDS = [
+    ['input-title-before', 'titleBefore'],
+    ['input-title-after', 'titleAfter'],
     ['input-birth-address', 'birthAddress'],
     ['input-death-cause', 'deathCause'],
     ['input-death-age', 'deathAge'],
@@ -325,16 +328,20 @@ export const personModalMethods = uiModule({
      */
     updatePersonModalName(): void {
         const nameEl = document.getElementById('pm-name');
-        const first = (document.getElementById('input-firstname') as HTMLInputElement | null)?.value.trim() || '';
-        const last = (document.getElementById('input-lastname') as HTMLInputElement | null)?.value.trim() || '';
-        const full = `${first} ${last}`.trim();
+        const val = (id: string) => (document.getElementById(id) as HTMLInputElement | null)?.value.trim() || '';
+        const first = val('input-firstname');
+        const last = val('input-lastname');
+        // With its titles, as the cards show it — the titles only beside a name.
+        const full = first || last
+            ? shownName({ firstName: first, lastName: last, titleBefore: val('input-title-before'), titleAfter: val('input-title-after') })
+            : '';
         if (nameEl) nameEl.textContent = full || strings.personModal.newPersonName;
         this.updateHeaderAvatar();
     },
 
     /** Wire the name inputs to the header once (listeners survive reopening). */
     bindLivePersonModalName(): void {
-        for (const id of ['input-firstname', 'input-lastname']) {
+        for (const id of ['input-firstname', 'input-lastname', 'input-title-before', 'input-title-after']) {
             const input = document.getElementById(id) as HTMLInputElement | null;
             if (!input || input.dataset.liveHeader) continue;
             input.dataset.liveHeader = '1';
@@ -1198,6 +1205,7 @@ export const personModalMethods = uiModule({
             if (input) input.value = person?.[key] ?? '';
         }
         const readOnly = !!person && DataManager.isPersonLocked(person.id);
+        resetDetailGroup(document.getElementById('name-details'), ['title'], readOnly);
         resetDetailGroup(document.getElementById('birth-details'), offeredDetails('birth'), readOnly);
         resetDetailGroup(document.getElementById('death-details'), offeredDetails('death'), readOnly);
         for (const id of ['input-death-age', 'input-birthdate', 'input-deathdate']) {

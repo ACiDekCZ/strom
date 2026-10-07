@@ -116,6 +116,16 @@ class SettingsManagerClass {
         this.save();
     }
 
+    /** Titles of the name ("Ing.", "ml.") shown with it, default ON (undefined = shown). */
+    isShowTitles(): boolean {
+        return this.settings.showTitles !== false;
+    }
+
+    setShowTitles(enabled: boolean): void {
+        this.settings.showTitles = enabled;
+        this.save();
+    }
+
     /** Sticky generation labels default ON (undefined = enabled). */
     isGenLabelsEnabled(): boolean {
         return this.settings.genLabels !== false;

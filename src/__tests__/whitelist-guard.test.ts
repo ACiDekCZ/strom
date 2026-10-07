@@ -46,6 +46,7 @@ const UNION = toPartnershipId('u_alice_bob');
 function person(id: PersonId, firstName: string): Person {
     return {
         id, firstName, lastName: 'Novak', gender: 'female',
+        titleBefore: 'Ing.', titleAfter: 'ml.',
         isPlaceholder: false, partnerships: [UNION], parentIds: [], childIds: [],
         // extractSubtree prunes coordinates to used places and sources to live
         // citations, so the fixture must actually use both ('kolin', 's1').
@@ -290,7 +291,7 @@ describe('validateJsonImport on the real devel-demo fixture', () => {
  * change in the person modal belongs here.
  */
 type EditedByUpdatePerson =
-    | 'firstName' | 'lastName' | 'gender' | 'nameVariants'
+    | 'firstName' | 'lastName' | 'titleBefore' | 'titleAfter' | 'gender' | 'nameVariants'
     | 'birthDate' | 'birthPlace' | 'birthAddress' | 'deathDate' | 'deathPlace'
     | 'deathCause' | 'deathAge' | 'deathAddress'
     | 'notes' | 'refn' | 'question' | 'isDeceased' | 'isLocked' | 'photo' | 'story';
@@ -358,6 +359,8 @@ describe('updatePerson applies every field it owns', () => {
     const edits: Required<Pick<Person, EditedByUpdatePerson>> = {
         firstName: 'Marie',
         lastName: 'Nováková',
+        titleBefore: 'MUDr.',
+        titleAfter: 'st.',
         gender: 'female',
         nameVariants: ['Wischek', 'u Kováře'],
         birthDate: '1901-02-03',

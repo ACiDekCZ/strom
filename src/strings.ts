@@ -433,6 +433,7 @@ const stringsEN = {
         ageRecorded: (age: string) => `recorded as ${age}`,
         address: 'House / address',
         addressShort: 'address',
+        titleShort: 'title',
         addressPh: 'e.g. No. 13, Mill Lane',
         addMore: (list: string[]) => `+ ${list.join(', ')}`,
         addDivorce: '+ divorce',
@@ -715,6 +716,12 @@ const stringsEN = {
         title: 'Overview minimap',
         settingLabel: 'Minimap',
         settingHint: 'Show an overview minimap for large trees',
+    },
+
+    // Titles of the name shown with it (Person.titleBefore / titleAfter)
+    titles: {
+        settingLabel: 'Show titles',
+        settingHint: 'Titles before and after names (Dr., Jr.) on cards and in lists',
     },
 
     // Sticky generation labels
@@ -1803,6 +1810,8 @@ const stringsEN = {
     // Labels
     labels: {
         nameVariants: 'Other spellings of the name',
+        titleBefore: 'Title before name',
+        titleAfter: 'Title after name',
         showHint: 'Show help for this field',
         nameVariantsHint: 'How the registers actually write it (Wischek, Vissek), an alias, or the farm the family was known by. Separate with commas. Search and merge find the person under any of them. Applies to this person only — surname spellings shared by the whole family belong in Manage trees → Surname spellings.',
         firstName: 'First name',
@@ -1852,6 +1861,8 @@ const stringsEN = {
     // Placeholders
     placeholders: {
         nameVariants: 'Wischek, Vissek, Kovářovic',
+        titleBefore: 'e.g. Dr., Prof.',
+        titleAfter: 'e.g. Jr., Ph.D.',
         firstName: 'First name',
         lastName: 'Last name',
         maidenName: 'Maiden name',
@@ -4014,6 +4025,7 @@ const stringsCZ: StringsType = {
         ageRecorded: (age: string) => `podle zápisu ${age}`,
         address: 'Dům / adresa',
         addressShort: 'dům',
+        titleShort: 'titul',
         addressPh: 'např. čp. 13',
         addMore: (list: string[]) => `+ ${list.join(', ')}`,
         addDivorce: '+ rozvod',
@@ -4293,6 +4305,12 @@ const stringsCZ: StringsType = {
         title: 'Přehledová minimapa',
         settingLabel: 'Minimapa',
         settingHint: 'Zobrazovat přehledovou minimapu u velkých stromů',
+    },
+
+    // Titles of the name shown with it (Person.titleBefore / titleAfter)
+    titles: {
+        settingLabel: 'Zobrazovat tituly',
+        settingHint: 'Tituly před jménem a za ním (Ing., ml.) na kartách a v seznamech',
     },
 
     // Sticky generation labels
@@ -5374,6 +5392,8 @@ const stringsCZ: StringsType = {
     // Labels
     labels: {
         nameVariants: 'Další tvary jména',
+        titleBefore: 'Titul před jménem',
+        titleAfter: 'Titul za jménem',
         showHint: 'Zobrazit nápovědu k poli',
         nameVariantsHint: 'Jak to píší matriky (Wischek, Vissek), alias, nebo jméno po chalupě. Více tvarů se odděluje čárkami. Hledání i slučování pak osobu najdou pod kterýmkoli z nich. Platí jen pro tuto osobu — tvary příjmení společné celé rodině patří do Správa stromů → Tvary příjmení.',
         firstName: 'Jméno',
@@ -5423,6 +5443,8 @@ const stringsCZ: StringsType = {
     // Placeholders
     placeholders: {
         nameVariants: 'Wischek, Vissek, Kovářovic',
+        titleBefore: 'např. Ing., MUDr.',
+        titleAfter: 'např. ml., Ph.D.',
         firstName: 'Jméno',
         lastName: 'Příjmení',
         maidenName: 'Rodné příjmení',
@@ -7578,6 +7600,7 @@ const stringsDE: StringsType = {
         ageRecorded: (age: string) => `laut Eintrag ${age}`,
         address: 'Haus / Adresse',
         addressShort: 'Adresse',
+        titleShort: 'Titel',
         addressPh: 'z. B. Haus Nr. 13',
         addMore: (list: string[]) => `+ ${list.join(', ')}`,
         addDivorce: '+ Scheidung',
@@ -7857,6 +7880,12 @@ const stringsDE: StringsType = {
         title: 'Übersichts-Minikarte',
         settingLabel: 'Minikarte',
         settingHint: 'Eine Übersichts-Minikarte für große Stammbäume anzeigen',
+    },
+
+    // Titles of the name shown with it (Person.titleBefore / titleAfter)
+    titles: {
+        settingLabel: 'Titel anzeigen',
+        settingHint: 'Titel vor und nach dem Namen (Dr., jun.) auf Karten und in Listen',
     },
 
     // Sticky generation labels
@@ -8938,6 +8967,8 @@ const stringsDE: StringsType = {
     // Labels
     labels: {
         nameVariants: 'Andere Schreibweisen des Namens',
+        titleBefore: 'Titel vor dem Namen',
+        titleAfter: 'Titel nach dem Namen',
         showHint: 'Hilfe zu diesem Feld anzeigen',
         nameVariantsHint: 'Wie die Kirchenbücher ihn tatsächlich schreiben (Wischek, Vissek), ein Beiname oder der Hof, unter dem die Familie bekannt war. Mit Kommas trennen. Suche und Zusammenführen finden die Person unter jedem davon. Gilt nur für diese Person — Namensschreibweisen, die die ganze Familie teilt, gehören unter Stammbäume verwalten → Namensschreibweisen.',
         firstName: 'Vorname',
@@ -8983,6 +9014,8 @@ const stringsDE: StringsType = {
     // Placeholders
     placeholders: {
         nameVariants: 'Wischek, Vissek, Schmieds',
+        titleBefore: 'z. B. Dr., Prof.',
+        titleAfter: 'z. B. jun., Ph.D.',
         firstName: 'Vorname',
         lastName: 'Nachname',
         maidenName: 'Geburtsname',

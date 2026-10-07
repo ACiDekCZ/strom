@@ -43,6 +43,7 @@ import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
 import { isPhoneBar } from '../breakpoints.js';
+import { shownName } from '../person-name.js';
 
 /** The phone top bar (≤640px, or a phone sideways): the search folds to a magnifier there. */
 export function isPhoneToolbar(): boolean {
@@ -339,7 +340,7 @@ export const searchMethods = uiModule({
             opt.className = 'confirm-option';
             opt.innerHTML = `
                 <input type="radio" name="search-result" value="${this.escapeHtml(person.id)}">
-                <span>${this.escapeHtml(person.firstName)} ${this.escapeHtml(person.lastName)} ${birthYear ? `(${this.escapeHtml(birthYear)})` : ''}</span>
+                <span>${this.escapeHtml(shownName(person, ''))} ${birthYear ? `(${this.escapeHtml(birthYear)})` : ''}</span>
             `;
             opt.onclick = () => {
                 options.querySelectorAll('.confirm-option').forEach(o => o.classList.remove('selected'));
