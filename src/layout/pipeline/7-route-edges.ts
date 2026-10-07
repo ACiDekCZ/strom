@@ -296,7 +296,14 @@ function createConnection(
     // A stem just beside the outermost drop would make a small step (stem →
     // a few px of bus → drop). When it is that close and still above the
     // child's card, the drop comes down in the stem's axis instead (T09).
-    alignNearDropToStem(drops, stemX, config.cardWidth);
+    // A stem from a card's bottom (marriage chain partner, single parent) may
+    // be further off: chain partners stand partnerGap apart but the children's
+    // blocks horizontalGap apart, so a chain child sits a multiple of the
+    // difference (13, 26, 39 px…) beside its parent; up to a quarter card the
+    // drop still comes down in the stem's axis.
+    const fromCardBottom = stemTopY === parentY + config.cardHeight;
+    alignNearDropToStem(drops, stemX, config.cardWidth,
+        fromCardBottom ? config.cardWidth * DROP_STEM_SNAP_CARD_BOTTOM : DROP_STEM_SNAP);
 
     // Bus extends from leftmost to rightmost child drop
     const branchLeftX = Math.min(...drops.map(d => d.x));
@@ -332,10 +339,12 @@ function createConnection(
  */
 /** Largest stem/drop offset straightened instead of drawn as a step (px). */
 export const DROP_STEM_SNAP = 12;
+/** The same for a stem from a card's bottom, as a share of the card width. */
+export const DROP_STEM_SNAP_CARD_BOTTOM = 0.25;
 /** Snapped drop keeps this far from its card's side edges (rounded corners). */
 const DROP_CARD_MARGIN = 16;
 
-function alignNearDropToStem(drops: ChildDrop[], stemX: number, cardWidth: number): void {
+function alignNearDropToStem(drops: ChildDrop[], stemX: number, cardWidth: number, maxOffset: number): void {
     const xs = drops.map(d => d.x);
     const left = Math.min(...xs);
     const right = Math.max(...xs);
@@ -344,7 +353,7 @@ function alignNearDropToStem(drops: ChildDrop[], stemX: number, cardWidth: numbe
         ? drops.find(d => d.x === left)!
         : drops.find(d => d.x === right)!;
     const offset = Math.abs(stemX - outer.x);
-    if (offset < 0.5 || offset > DROP_STEM_SNAP) return;
+    if (offset < 0.5 || offset > maxOffset) return;
     const cardLeft = outer.x - cardWidth / 2;
     if (stemX < cardLeft + DROP_CARD_MARGIN || stemX > cardLeft + cardWidth - DROP_CARD_MARGIN) return;
     outer.x = stemX;
