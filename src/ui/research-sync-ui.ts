@@ -41,7 +41,7 @@ import { loadResearchCopy } from '../research-copy.js';
 import {
     noteResearchLinks, noteResearchWaiting, noteResearchBridgeStatus, storedResearchBridge, researchLinksEnabled,
     researchAutoState, patchResearchAutoState, researchAutoIntroSeen, noteResearchAutoIntroSeen, forgetResearchWaitingItems, anyResearchBridgeKnown,
-    researchSendPreviewSkipped,
+    researchSendPreviewSkipped, announcedResearchScheme,
     ResearchHeldConflicts,
 } from '../research-device.js';
 import {
@@ -552,7 +552,7 @@ export const researchSyncMethods = uiModule({
         runtime.set(researchId, { up: !!status, checkedAt: Date.now(), status, blocked: !status && blocked, downSince,
             busyUntil: busyFor ? Date.now() + busyFor : 0, why: status ? '' : why });
         if (status) {
-            noteResearchLinks(status.links);
+            noteResearchLinks(status.links, status.linkScheme);
             noteResearchWaiting(researchId, status.waiting, status);
             noteResearchBridgeStatus(researchId, status.accepts, status.head);
         }
@@ -1346,7 +1346,7 @@ export const researchSyncMethods = uiModule({
         } else if (writing) {
             if (!opts.auto) this.showToast(strings.sync.markWriting, 4000);
         } else if (!opts.auto) {
-            const open = this.researchLinkAvailable('open') ? researchSchemeUrl('open', { tree: link.id }) : null;
+            const open = this.researchLinkAvailable('open') ? researchSchemeUrl('open', { tree: link.id }, announcedResearchScheme()) : null;
             this.showToast(s.sentToast(reply.changes), 6000, open
                 ? { action: { label: s.openResearch, run: () => this.launchResearchLink(open) } } : {});
         }

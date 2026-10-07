@@ -50,7 +50,7 @@ import { exportToGedcom, countFamilies } from '../ged-exporter.js';
 import { formatRelativeDateTime } from '../format.js';
 import { safeFileName } from '../filenames.js';
 import {
-    noteResearchLinks, announcedResearchLinks, researchLinksEnabled, noteResearchWaiting, storedResearchWaiting,
+    noteResearchLinks, announcedResearchLinks, announcedResearchScheme, researchLinksEnabled, noteResearchWaiting, storedResearchWaiting,
     noteResearchBridge, noteResearchBridgeStatus, patchResearchAutoState, researchAutoState, researchIdAtBridge, ResearchLinkBefore,
 } from '../research-device.js';
 import { rememberBridgeStatus, researchSendMode } from './research-sync-ui.js';
@@ -581,7 +581,7 @@ export async function fetchStatus(url: string, ms = 10000): Promise<LiveStatus |
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const status = sanitizeLiveStatus(await res.json());
     // The bridge runs on this computer: what it announces holds here.
-    if (status) noteResearchLinks(status.links);
+    if (status) noteResearchLinks(status.links, status.linkScheme);
     if (status?.treeId) {
         noteResearchWaiting(status.treeId, status.waiting, status);
         // Where this research's bridge is now (the port can change between runs).
@@ -1007,7 +1007,7 @@ export const researchUiMethods = uiModule({
             }
             // Served from 127.0.0.1: the research is on this computer.
             const header = readResearchHeader(text);
-            if (header.isStromResearch) noteResearchLinks(header.links);
+            if (header.isStromResearch) noteResearchLinks(header.links, header.scheme);
             // Served by the research's bridge (…/tree.ged): where it runs, and how (its mode, what it
             // takes) — asked, so the tree knows its bridge from now on, not only after a ?live=.
             if (header.isStromResearch && header.treeId && /\/tree\.ged$/.test(url.pathname)) {
@@ -1470,7 +1470,7 @@ export const researchUiMethods = uiModule({
             return pick as 'sendThenLoad' | 'update' | 'copy' | null;
         }
         const message = [u.bridgeDownBody(treeName), names, u.bridgeDownAdvice, mediaLine].filter(Boolean).join('\n\n');
-        const start = link && this.researchLinkAvailable('open') ? researchSchemeUrl('open', { tree: link.id }) : null;
+        const start = link && this.researchLinkAvailable('open') ? researchSchemeUrl('open', { tree: link.id }, announcedResearchScheme()) : null;
         const pick = await this.showChoice(message, r.editedTitle, [{ id: 'copy', label: r.openCopy }], images, {
             aside: { id: 'update', label: u.overwrite },
             ...(start ? { link: { label: u.startResearch, run: () => this.launchResearchLink(start) } } : {}),
@@ -1674,7 +1674,7 @@ export const researchUiMethods = uiModule({
     activeResearchLink(action: ResearchLinkAction, params: Omit<ResearchLinkParams, 'tree'> = {}): string | null {
         if (!this.researchLinkAvailable(action)) return null;
         const tree = this.activeResearchId();
-        return tree ? researchSchemeUrl(action, { tree, ...params }) : null;
+        return tree ? researchSchemeUrl(action, { tree, ...params }, announcedResearchScheme()) : null;
     },
 
     /** What waits for the user in the active tree's research (null: nothing known, or older than a week). */
@@ -1750,7 +1750,7 @@ export const researchUiMethods = uiModule({
     /** Tree menu "Send changes to the research": one click when the research handles it, else the way there. */
     async sendTreeToResearch(treeId: TreeId): Promise<void> {
         const link = TreeManager.getTreeMetadata(treeId)?.research;
-        const url = link && this.researchLinkAvailable('send') ? researchSchemeUrl('send', { tree: link.id }) : null;
+        const url = link && this.researchLinkAvailable('send') ? researchSchemeUrl('send', { tree: link.id }, announcedResearchScheme()) : null;
         if (url) this.launchResearchLink(url, 'terminal');
         else await this.showSendToResearchHelp(treeId);
     },
@@ -1767,7 +1767,7 @@ export const researchUiMethods = uiModule({
         const source = DataManager.getData().sources?.[sourceId];
         const clip = source?.excerpts?.[index]?.clip;
         if (!link || !source?.refn || !clip) return null;
-        return researchSchemeUrl('excerpt', { tree: link.id, source: source.refn, clip });
+        return researchSchemeUrl('excerpt', { tree: link.id, source: source.refn, clip }, announcedResearchScheme());
     },
 
     /** Download the faithful GEDCOM of a research tree (naming its research and version). */

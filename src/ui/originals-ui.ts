@@ -19,7 +19,7 @@ import { TreeManager } from '../tree-manager.js';
 import { SettingsManager } from '../settings.js';
 import { StorageManager } from '../storage.js';
 import { MediaOriginal, PersonId, StromData, TreeId } from '../types.js';
-import { storedResearchBridge, researchLinksEnabled } from '../research-device.js';
+import { storedResearchBridge, researchLinksEnabled, announcedResearchScheme } from '../research-device.js';
 import { parseLiveBridge, withAppVersion, researchSchemeUrl } from '../research-link.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { sha256OfBlob, normalizeSha256 } from '../sha256.js';
@@ -325,7 +325,7 @@ export const originalsMethods = uiModule({
         const link = this.researchOriginalsLink();
         const hash = normalizeSha256(sha);
         if (!link || !hash) return null;
-        const external = this.researchLinkAvailable('media') && researchSchemeUrl('media', { tree: link.researchId, sha: hash }) ? 'external' : null;
+        const external = this.researchLinkAvailable('media') && researchSchemeUrl('media', { tree: link.researchId, sha: hash }, announcedResearchScheme()) ? 'external' : null;
         // Up at the last poll is enough: a failed fetch says so and offers the research.
         const here = this.researchBridgeUp(link.researchId) && !!storedResearchBridge(link.researchId)?.base
             && FULL_QUALITY_TYPES.includes(mimeType) && bytes > 0 && bytes <= FULL_QUALITY_MAX_BYTES;
@@ -335,7 +335,7 @@ export const originalsMethods = uiModule({
     /** Open the original in the research (strom-research://media). */
     openOriginalInResearch(sha: string): void {
         const link = this.researchOriginalsLink();
-        const url = link ? researchSchemeUrl('media', { tree: link.researchId, sha }) : null;
+        const url = link ? researchSchemeUrl('media', { tree: link.researchId, sha }, announcedResearchScheme()) : null;
         if (url) this.launchResearchLink(url);
     },
 

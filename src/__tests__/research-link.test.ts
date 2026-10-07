@@ -13,6 +13,7 @@ import { changeKind, changeAdds, sanitizeLiveLog, textKind, textPersonRefs, text
     isGedcomFileName, normalizeResearchId, parseEventData, isSafariBrowser,
     sanitizeResearchLinks, researchSchemeUrl, researchSourceRef, researchClip, researchPersonRef, researchTaskRef,
     researchNewUrl, researchAdoptToken, researchConflictRef, researchIntakeRef,
+    researchLinkScheme, DEFAULT_RESEARCH_SCHEME, RESEARCH_LINK_ACTIONS,
 } from '../research-link.js';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import {
@@ -751,6 +752,80 @@ describe('strom-research:// links', () => {
         expect(researchIntakeRef('I12345678')).toBeNull();
         expect(sanitizeResearchLinks('new update sessions conflict story sync-undo setup'))
             .toEqual(['new', 'update', 'sessions', 'conflict', 'story', 'sync-undo', 'setup']);
+    });
+});
+
+describe('the research\'s own link scheme (a second install beside the main one)', () => {
+    const UUID = '3f2c9a10-7b1e-4c55-9d2a-0e8f6b4a1c77';
+    const SHA = 'a'.repeat(64);
+    const token = 'aB3_-xYz0123456789abcdefGHIJ';
+
+    it('strom-research or strom-research-<a-z0-9->; anything else is the default', () => {
+        expect(DEFAULT_RESEARCH_SCHEME).toBe('strom-research');
+        expect(researchLinkScheme('strom-research-beta')).toBe('strom-research-beta');
+        expect(researchLinkScheme(' strom-research-test-2 ')).toBe('strom-research-test-2');
+        expect(researchLinkScheme('strom-research')).toBe('strom-research');
+        for (const bad of [undefined, null, 42, '', 'javascript', 'https', 'strom-research-', 'strom-research-Beta', 'strom-research_beta',
+            'strom-research-beta://x', 'strom-research-beta x', 'xstrom-research', 'strom-research-' + 'a'.repeat(33), ['strom-research-beta']]) {
+            expect(researchLinkScheme(bad)).toBe('strom-research');
+        }
+    });
+
+    it('every link the app builds takes the scheme the research named; without it strom-research', () => {
+        const params = {
+            tree: UUID, source: 'S0042', clip: 'c3', person: 'P0012', task: 'T0003', conflict: 'X0007', intake: 'I0042',
+            sha: SHA, research: 'G0002', directionDo: 'pause' as const, session: 'N0132',
+        };
+        let built = 0;
+        for (const action of RESEARCH_LINK_ACTIONS) {
+            const plain = researchSchemeUrl(action, params);
+            if (!plain) continue;
+            built++;
+            expect(plain.startsWith(`strom-research://${action}?tree=${UUID}`)).toBe(true);
+            expect(researchSchemeUrl(action, params, 'strom-research-beta')).toBe(plain.replace(/^strom-research:/, 'strom-research-beta:'));
+            // A scheme that is not one: the main install's.
+            expect(researchSchemeUrl(action, params, 'javascript')).toBe(plain);
+        }
+        expect(built).toBeGreaterThanOrEqual(17);
+        expect(researchSchemeUrl('open', { tree: UUID }, 'strom-research-beta')).toBe(`strom-research-beta://open?tree=${UUID}`);
+        expect(researchSchemeUrl('chat', { tree: UUID, person: 'P0012' }, 'strom-research-beta')).toBe(`strom-research-beta://chat?tree=${UUID}&person=P0012`);
+        expect(researchSchemeUrl('task', { tree: UUID, task: 'T0003' }, 'strom-research-beta')).toBe(`strom-research-beta://task?tree=${UUID}&task=T0003`);
+        expect(researchSchemeUrl('excerpt', { tree: UUID, source: 'S0042', clip: 'c3' }, 'strom-research-beta'))
+            .toBe(`strom-research-beta://excerpt?tree=${UUID}&source=S0042&clip=c3`);
+        expect(researchSchemeUrl('media', { tree: UUID, sha: SHA }, 'strom-research-beta')).toBe(`strom-research-beta://media?tree=${UUID}&sha=${SHA}`);
+        expect(researchNewUrl(token, 'chrome', undefined, 'strom-research-beta')).toBe(`strom-research-beta://new?app=${token}&browser=chrome`);
+        expect(researchNewUrl(token)).toBe(`strom-research://new?app=${token}`);
+        expect(researchNewUrl(token, undefined, undefined, 'evil://x?')).toBe(`strom-research://new?app=${token}`);
+    });
+
+    it('the bridge status names it only when not the default; a bad one is dropped', () => {
+        expect(sanitizeLiveStatus({ tree: UUID, linkScheme: 'strom-research-beta' })?.linkScheme).toBe('strom-research-beta');
+        expect(sanitizeLiveStatus({ tree: UUID })).not.toHaveProperty('linkScheme');
+        expect(sanitizeLiveStatus({ tree: UUID, linkScheme: 'strom-research' })).not.toHaveProperty('linkScheme');
+        expect(sanitizeLiveStatus({ tree: UUID, linkScheme: 'javascript' })).not.toHaveProperty('linkScheme');
+    });
+
+    it('the GEDCOM bridge: 2 _SCHEME under 1 _STROM_LINKS, Strom Research files only', () => {
+        const head = (sour: string, scheme: string, under = '_STROM_LINKS') =>
+            `0 HEAD\n1 SOUR ${sour}\n1 _STROM_TREE ${UUID}\n1 ${under} send open\n2 _SCHEME ${scheme}\n1 CHAR UTF-8\n0 TRLR`;
+        const h = readResearchHeader(head('STROM_RESEARCH', 'strom-research-beta'));
+        expect(h.links).toEqual(['send', 'open']);
+        expect(h.scheme).toBe('strom-research-beta');
+        expect(readResearchHeader(head('STROM_RESEARCH', 'strom-research'))).not.toHaveProperty('scheme');
+        expect(readResearchHeader(head('STROM_RESEARCH', 'javascript:alert(1)'))).not.toHaveProperty('scheme');
+        expect(readResearchHeader(head('OTHER', 'strom-research-beta'))).not.toHaveProperty('scheme');
+        // Under another tag it is not the links' scheme.
+        expect(readResearchHeader(head('STROM_RESEARCH', 'strom-research-beta', '_STROM_MODE'))).not.toHaveProperty('scheme');
+        expect(readResearchHeader(`0 HEAD\n1 SOUR STROM_RESEARCH\n1 _STROM_LINKS send\n0 TRLR`)).not.toHaveProperty('scheme');
+    });
+});
+
+describe('the research\'s channel (/status.channel)', () => {
+    it('"beta" only; a missing or other value says nothing', () => {
+        expect(sanitizeLiveStatus({ tree: UUID, channel: 'beta' })?.channel).toBe('beta');
+        expect(sanitizeLiveStatus({ tree: UUID })).not.toHaveProperty('channel');
+        expect(sanitizeLiveStatus({ tree: UUID, channel: 'stable' })).not.toHaveProperty('channel');
+        expect(sanitizeLiveStatus({ tree: UUID, channel: '<b>beta</b>' })).not.toHaveProperty('channel');
     });
 });
 

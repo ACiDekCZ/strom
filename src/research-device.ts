@@ -9,7 +9,7 @@
 
 import {
     ResearchLinkAction, LiveWaiting, LiveIntake, ResearchAccepts, sanitizeResearchLinks, sanitizeWaiting, sanitizeUpdate, sanitizeIntake,
-    sanitizeAccepts, parseLiveBridge, isResearchHead,
+    sanitizeAccepts, parseLiveBridge, isResearchHead, researchLinkScheme, DEFAULT_RESEARCH_SCHEME,
 } from './research-link.js';
 import { ResearchConflict, ResearchSend } from './types.js';
 
@@ -20,12 +20,29 @@ const BRIDGE_KEY = 'strom-research-bridge:';
 /** A remembered "Waiting for you" older than this is not shown any more. */
 const WAITING_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
-/** Remember what the research on this computer announced (an empty list forgets it). */
-export function noteResearchLinks(links: readonly ResearchLinkAction[]): void {
+/**
+ * Remember what the research on this computer announced (an empty list forgets
+ * it), and the link scheme it named (a second install's own, e.g.
+ * strom-research-beta; not named: the main one, strom-research).
+ */
+export function noteResearchLinks(links: readonly ResearchLinkAction[], scheme?: string): void {
     try {
+        const own = researchLinkScheme(scheme);
         if (links.length === 0) localStorage.removeItem(LINKS_KEY);
-        else localStorage.setItem(LINKS_KEY, JSON.stringify({ actions: links, at: new Date().toISOString() }));
+        else localStorage.setItem(LINKS_KEY, JSON.stringify({
+            actions: links, at: new Date().toISOString(), ...(own !== DEFAULT_RESEARCH_SCHEME ? { scheme: own } : {}),
+        }));
     } catch { /* no storage: the features just stay hidden */ }
+}
+
+/** The link scheme of the research on this computer, as it last said (none known: strom-research). */
+export function announcedResearchScheme(): string {
+    try {
+        const raw = localStorage.getItem(LINKS_KEY);
+        return researchLinkScheme(raw ? (JSON.parse(raw) as { scheme?: unknown }).scheme : null);
+    } catch {
+        return DEFAULT_RESEARCH_SCHEME;
+    }
 }
 
 /** The announced actions, whether or not the user switched them off. */

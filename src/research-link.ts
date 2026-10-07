@@ -20,6 +20,21 @@ export const STROM_HEAD_TAG = '_STROM_HEAD';
 /** Header tag listing the strom-research:// links this computer handles. */
 export const STROM_LINKS_TAG = '_STROM_LINKS';
 
+/** The research's link scheme: the main install's (a second install, e.g. the beta beside production, names its own). */
+export const DEFAULT_RESEARCH_SCHEME = 'strom-research';
+
+/**
+ * The link scheme a research names (`/status.linkScheme`, `2 _SCHEME` under
+ * `1 _STROM_LINKS`): `strom-research` or `strom-research-<suffix>` (a-z, 0-9,
+ * '-'); anything else is the default — a bad status never makes the app hand
+ * over another kind of address.
+ */
+export function researchLinkScheme(value: unknown): string {
+    if (typeof value !== 'string') return DEFAULT_RESEARCH_SCHEME;
+    const v = value.trim();
+    return /^strom-research(-[a-z0-9-]{1,32})?$/.test(v) ? v : DEFAULT_RESEARCH_SCHEME;
+}
+
 /** Actions of the strom-research:// scheme the app knows how to use. */
 export const RESEARCH_LINK_ACTIONS = [
     'send', 'excerpt', 'app', 'open', 'chat', 'task', 'review', 'research',
@@ -133,24 +148,25 @@ export type ResearchConflictDo = 'decide' | 'agent';
 const CONFLICT_DOS: readonly string[] = ['decide', 'agent'];
 
 /** "Start research with this tree": the one link without a tree (the research makes one). */
-export function researchNewUrl(token: string, browser?: string, file?: string): string | null {
+export function researchNewUrl(token: string, browser?: string, file?: string, scheme: string = DEFAULT_RESEARCH_SCHEME): string | null {
     const app = researchAdoptToken(token);
     if (!app) return null;
     // The browser it came from (research-transfer.ts AppBrowser): the research opens that one again;
     // from Safari, the file the tree moves by (STROM_FROM_FILE of the line).
     const b = browser && /^[a-z]{1,16}$/.test(browser) ? `&browser=${browser}` : '';
     const f = file && /^strom-prenos-[A-Za-z0-9_-]{8}\.json$/.test(file) ? `&file=${file}` : '';
-    return `strom-research://new?app=${app}${b}${f}`;
+    return `${researchLinkScheme(scheme)}://new?app=${app}${b}${f}`;
 }
 
 /**
  * A strom-research:// link, or null when a parameter is not what the research
- * accepts (it checks again: any web page can open such a link).
+ * accepts (it checks again: any web page can open such a link). `scheme`: the
+ * one the research on this computer named (researchLinkScheme), else the main one.
  */
-export function researchSchemeUrl(action: ResearchLinkAction, p: ResearchLinkParams): string | null {
+export function researchSchemeUrl(action: ResearchLinkAction, p: ResearchLinkParams, scheme: string = DEFAULT_RESEARCH_SCHEME): string | null {
     const tree = normalizeResearchId(p.tree);
     if (!tree) return null;
-    const base = `strom-research://${action}?tree=${tree}`;
+    const base = `${researchLinkScheme(scheme)}://${action}?tree=${tree}`;
     switch (action) {
         case 'send':
         case 'app':
@@ -248,6 +264,8 @@ export interface ResearchHeader {
     head: string | null;
     /** `1 _STROM_LINKS`: strom-research:// actions this computer handles (Strom Research files only). */
     links: ResearchLinkAction[];
+    /** `2 _SCHEME` under `1 _STROM_LINKS`: the research's own link scheme (a second install); absent: the default. */
+    scheme?: string;
     /** `1 _STROM_MODE archive`: the research works without an agent (missing: with one). */
     mode: 'archive' | null;
 }
@@ -292,6 +310,8 @@ export function readResearchHeader(text: string): ResearchHeader {
     let treeRaw: string | null = null;
     let headRaw: string | null = null;
     let linksRaw = '';
+    let schemeRaw = '';
+    let inLinks = false;
     let modeRaw = '';
     let date: string | null = null;
     let noteLines: string[] | null = null;
@@ -306,6 +326,7 @@ export function readResearchHeader(text: string): ResearchHeader {
         if (level === 0) break;
         if (level === 1) {
             inFirstNote = false;
+            inLinks = tag === STROM_LINKS_TAG;
             if (tag === 'SOUR') source = value.trim();
             else if (tag === STROM_TREE_TAG) treeRaw = value;
             else if (tag === STROM_HEAD_TAG) headRaw = value;
@@ -316,6 +337,8 @@ export function readResearchHeader(text: string): ResearchHeader {
                 noteLines = [value];
                 inFirstNote = true;
             }
+        } else if (level === 2 && inLinks && tag === '_SCHEME') {
+            schemeRaw = value;
         } else if (level === 2 && inFirstNote && noteLines) {
             if (tag === 'CONC') noteLines[noteLines.length - 1] += value;
             else if (tag === 'CONT') noteLines.push(value);
@@ -331,6 +354,7 @@ export function readResearchHeader(text: string): ResearchHeader {
         date,
         head: isStromResearch ? isResearchHead(headRaw) : null,
         links: isStromResearch ? sanitizeResearchLinks(linksRaw) : [],
+        ...(isStromResearch && researchLinkScheme(schemeRaw) !== DEFAULT_RESEARCH_SCHEME ? { scheme: researchLinkScheme(schemeRaw) } : {}),
         mode: isStromResearch && modeRaw === 'archive' ? 'archive' : null,
     };
 }
@@ -904,6 +928,10 @@ export interface LiveStatus {
     features: string[] | null;
     /** Batches of "Add materials" of the last days and any not yet sorted; null: an older research. */
     batches: LiveBatch[] | null;
+    /** `linkScheme`: the research's own link scheme (a second install, "strom-research-beta"); absent: the default. */
+    linkScheme?: string;
+    /** `channel: "beta"`: the research runs in its beta channel; absent: production (or an older research). */
+    channel?: 'beta';
 }
 
 /** One batch as the research keeps it (`/status.batches`). */
@@ -1358,6 +1386,8 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         features: Array.isArray(r.features)
             ? r.features.slice(0, 50).filter((f): f is string => typeof f === 'string' && /^[a-z][a-zA-Z0-9.-]{0,40}$/.test(f)) : null,
         batches: sanitizeBatches(r.batches),
+        ...(researchLinkScheme(r.linkScheme) !== DEFAULT_RESEARCH_SCHEME ? { linkScheme: researchLinkScheme(r.linkScheme) } : {}),
+        ...(r.channel === 'beta' ? { channel: 'beta' as const } : {}),
     };
 }
 

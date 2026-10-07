@@ -16,7 +16,7 @@ import { AppBrowser, appBrowserName, bridgeMovesTrees, bridgeTakesEmpty, current
 import { validateJsonImport } from '../merge/validation.js';
 import { TreeId, TreeMetadata, StromData, STROM_DATA_VERSION, ResearchSendMode } from '../types.js';
 import { readInstallRecord, clearInstallRecord, installPhase, INSTALL_TTL_MS } from '../research-install.js';
-import { noteResearchBridge, patchResearchAutoState } from '../research-device.js';
+import { noteResearchBridge, patchResearchAutoState, announcedResearchScheme } from '../research-device.js';
 import { SettingsManager } from '../settings.js';
 import { countImages, stripMedia } from '../attachments.js';
 import { exportToGedcom, countFamilies } from '../ged-exporter.js';
@@ -113,7 +113,7 @@ export const researchAdoptMethods = uiModule({
             return;
         }
         const token = newAdoptToken();
-        const url = researchNewUrl(token, currentAppBrowser());
+        const url = researchNewUrl(token, currentAppBrowser(), undefined, announcedResearchScheme());
         if (!url || !TreeManager.getTreeMetadata(treeId)) return;
         TreeManager.setResearchAdoptToken(treeId, { token, at: new Date().toISOString() });
         this.handOverResearchLink(url);
@@ -386,7 +386,7 @@ export const researchAdoptMethods = uiModule({
             }
         } catch { /* the rows the status gives are left out */ }
         document.getElementById(READY_ID)?.remove();
-        const open = this.researchLinkAvailable('open') ? researchSchemeUrl('open', { tree: researchId }) : null;
+        const open = this.researchLinkAvailable('open') ? researchSchemeUrl('open', { tree: researchId }, announcedResearchScheme()) : null;
         // Moved here from another browser: Strom installed as this browser's app (Chromium offers it only while it
         // is not), so its icon opens these trees — not the old app of the browser it came from (a Safari Dock app).
         const offerApp = !!movedFrom && hasPeople && canPromptInstall();

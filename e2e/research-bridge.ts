@@ -82,6 +82,8 @@ export interface FakeBridge {
     waiting?: unknown[];
     /** What the bridge says it can do (`/status.features`, 1.12.0-rc.20). */
     features?: string[];
+    /** More fields of `/status` (e.g. `channel`, `linkScheme`). */
+    statusExtra?: Record<string, unknown>;
     /** Stuck (SIGSTOP): `/status` never answers. */
     statusHang?: boolean;
     /** `/status` answers with this code instead (404: an old token). */
@@ -156,6 +158,7 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
                 ...(b.waiting ? { waiting: b.waiting } : {}),
                 ...(b.features ? { features: b.features } : {}),
                 ...(b.accepts ? { sends: b.sends } : {}),
+                ...(b.statusExtra ?? {}),
             });
         }
         // A send taken back, written again from what the research kept (1.12): like a write at once.

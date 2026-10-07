@@ -14,7 +14,7 @@ import { PersonId } from '../types.js';
 import { sha256OfBlob } from '../sha256.js';
 import { originalTargets, mediaReplyId } from '../originals.js';
 import { parseLiveBridge, withAppVersion, researchSchemeUrl } from '../research-link.js';
-import { storedResearchBridge } from '../research-device.js';
+import { storedResearchBridge, announcedResearchScheme } from '../research-device.js';
 import {
     BatchSkip, BatchFolder, batchSkip, batchLimitsOf, batchOverLimit, batchEstimate, batchDefaultName, batchTree,
     batchFolderFiles, newBatchId, batchPathHeader, isZip, UnfinishedBatch, sanitizeUnfinishedBatch,
@@ -499,7 +499,7 @@ export const batchMethods = uiModule({
             ? `<div class="batch-done-row is-warn"><span>${esc(b.refusedRow(r.refused[0].path, r.refused[0].why))}</span></div>`
             : r.refused.length > 1 ? `<details class="batch-refused"><summary>${esc(b.refused)} · ${r.refused.length}</summary><ul>${r.refused.slice(0, 200)
                 .map(x => `<li>${esc(`${x.path}: ${x.why}`)}</li>`).join('')}</ul></details>` : '';
-        const open = link && this.researchLinkAvailable('open') ? researchSchemeUrl('open', { tree: link.researchId }) : null;
+        const open = link && this.researchLinkAvailable('open') ? researchSchemeUrl('open', { tree: link.researchId }, announcedResearchScheme()) : null;
         return `
                 <div class="modal-content batch-content batch-done">
                     <h3 class="batch-confirm-title">✓ ${esc(archive ? b.doneTitleArchive(r.name) : b.doneTitle(r.name))}</h3>
@@ -564,7 +564,7 @@ export const batchMethods = uiModule({
                 case 'cancel-run': void this.cancelBatchRun(); break;
                 case 'open-research': {
                     const link = this.researchOriginalsLink();
-                    const url = link ? researchSchemeUrl('open', { tree: link.researchId }) : null;
+                    const url = link ? researchSchemeUrl('open', { tree: link.researchId }, announcedResearchScheme()) : null;
                     if (url) this.launchResearchLink(url);
                     break;
                 }

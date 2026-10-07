@@ -7,10 +7,11 @@
 import { describe, it, expect } from 'vitest';
 import {
     detectAppBrowser, needsTransfer, appBrowserName, transferFileName, isTransferFileName,
-    buildTransferJson, readTransferJson, TRANSFER_KEY, bridgeMovesTrees,
+    buildTransferJson, readTransferJson, TRANSFER_KEY, bridgeMovesTrees, bridgeTakesEmpty,
 } from '../research-transfer.js';
 import { legacyInstallLine, legacyNpmLines, sanitizeInstallRecord, newInstallRecord } from '../research-install.js';
 import { researchNewUrl, sanitizeAdoptOffer } from '../research-link.js';
+import { researchKeepsTakenBack } from '../research-sync.js';
 import { STROM_DATA_VERSION, StromData, PersonId } from '../types.js';
 
 const TOKEN = 'AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-abcd';
@@ -154,5 +155,20 @@ describe('an older research', () => {
         expect(bridgeMovesTrees({ strom: '1.11.0' })).toBe(false);
         expect(bridgeMovesTrees({ features: 'adopt.transfer' })).toBe(false);
         expect(bridgeMovesTrees(null)).toBe(false);
+    });
+});
+
+describe('a newer research\'s features go by /status.features, never by its version (beta and production side by side)', () => {
+    it('a beta research without a feature in its list: not on, however new its version', () => {
+        const beta = { strom: '9.0.0-beta.3', channel: 'beta', features: ['sync.ids'] };
+        expect(bridgeMovesTrees(beta)).toBe(false);
+        expect(bridgeTakesEmpty(beta)).toBe(false);
+        expect(researchKeepsTakenBack(beta.strom, beta.features)).toBe(false);
+    });
+    it('an older-numbered research that lists the feature: on', () => {
+        const prod = { strom: '1.12.1', features: ['adopt.transfer', 'adopt.empty', 'sync.takenBack'] };
+        expect(bridgeMovesTrees(prod)).toBe(true);
+        expect(bridgeTakesEmpty(prod)).toBe(true);
+        expect(researchKeepsTakenBack('1.0.0', prod.features)).toBe(true);
     });
 });

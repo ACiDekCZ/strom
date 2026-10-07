@@ -19,6 +19,7 @@ import { TreeManager } from '../tree-manager.js';
 import { TreeId } from '../types.js';
 import { newAdoptToken, researchNewUrl } from '../research-link.js';
 import { isPromoAvailable } from '../research-promo.js';
+import { announcedResearchScheme } from '../research-device.js';
 import {
     InstallOs, InstallRecord, INSTALL_OSES, INSTALL_RELEASE_URL,
     detectInstallOs, installLine, npmLines, installAppUrl, installPhase, newInstallRecord, INSTALL_KEY,
@@ -947,7 +948,7 @@ export const researchInstallMethods = uiModule({
             return;
         }
         const record = this.ensureInstallRecord();
-        const url = researchNewUrl(record.token, currentAppBrowser(), record.file);
+        const url = researchNewUrl(record.token, currentAppBrowser(), record.file, announcedResearchScheme());
         if (url) this.handOverResearchLink(url);
         this.goResearchInstallStep('wait');
     },

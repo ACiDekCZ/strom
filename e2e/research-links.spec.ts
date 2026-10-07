@@ -54,13 +54,13 @@ async function setup(page: Page): Promise<void> {
 
 const launched = (page: Page) => page.evaluate(() => (window as unknown as { __launched: string[] }).__launched);
 
-/** The research answers the bridge status — with or without its links. */
-async function contact(page: Page, links: string[] | null): Promise<void> {
+/** The research answers the bridge status — with or without its links (and anything else it says). */
+async function contact(page: Page, links: string[] | null, more: Record<string, unknown> = {}): Promise<void> {
     await page.route(`${BRIDGE}/**`, (route) => {
         const url = new URL(route.request().url()).pathname;
         if (url.endsWith('/status')) {
             return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' },
-                body: JSON.stringify({ tree: UUID, name: 'Víškovi', ...(links ? { links } : {}) }) });
+                body: JSON.stringify({ tree: UUID, name: 'Víškovi', ...(links ? { links } : {}), ...more }) });
         }
         return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: '{"ok":true}' });
     });
@@ -155,3 +155,65 @@ test('_STROM_LINKS in a file opened by hand is not believed, and does not wipe w
     await page.waitForTimeout(300);
     expect(await page.evaluate(() => window.Strom.UI.researchLinkAvailable('send'))).toBe(true);
 });
+
+test('a second install names its own scheme (linkScheme): every link goes there; a contact without it, back to strom-research', async ({ page }) => {
+    await setup(page);
+    const ALL = ['send', 'excerpt', 'open', 'chat', 'task', 'media'];
+    await contact(page, ALL, { linkScheme: 'strom-research-beta' });
+    await openSource(page);
+    await page.locator('.viewer-full-quality').click();
+    await page.keyboard.press('Escape');
+    const treeId = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeId());
+    await page.evaluate((id) => window.Strom.UI.sendTreeToResearch(id), treeId);
+    const built = () => page.evaluate(() => [
+        window.Strom.UI.activeResearchLink('open'),
+        window.Strom.UI.activeResearchLink('chat', { person: 'P0001' }),
+        window.Strom.UI.activeResearchLink('task', { task: 'T0003' }),
+        window.Strom.UI.activeResearchLink('media', { sha: 'a'.repeat(64) }),
+    ]);
+    const sha = 'a'.repeat(64);
+    expect(await launched(page)).toEqual([
+        `strom-research-beta://excerpt?tree=${UUID}&source=S0042&clip=c3`,
+        `strom-research-beta://send?tree=${UUID}`,
+    ]);
+    expect(await built()).toEqual([
+        `strom-research-beta://open?tree=${UUID}`,
+        `strom-research-beta://chat?tree=${UUID}&person=P0001`,
+        `strom-research-beta://task?tree=${UUID}&task=T0003`,
+        `strom-research-beta://media?tree=${UUID}&sha=${sha}`,
+    ]);
+
+    // A scheme that is not one of the research's: the main one.
+    await contact(page, ALL, { linkScheme: 'javascript' });
+    expect((await built())[0]).toBe(`strom-research://open?tree=${UUID}`);
+    // The research said it again, then a research without the field (every one before): strom-research.
+    await contact(page, ALL, { linkScheme: 'strom-research-beta' });
+    expect((await built())[0]).toBe(`strom-research-beta://open?tree=${UUID}`);
+    await contact(page, ALL);
+    expect(await built()).toEqual([
+        `strom-research://open?tree=${UUID}`,
+        `strom-research://chat?tree=${UUID}&person=P0001`,
+        `strom-research://task?tree=${UUID}&task=T0003`,
+        `strom-research://media?tree=${UUID}&sha=${sha}`,
+    ]);
+});
+
+test('the GEDCOM bridge names the scheme (2 _SCHEME under 1 _STROM_LINKS): the links take it', async ({ page }) => {
+    await openApp(page);
+    const ged = researchGed().replace('1 CHAR UTF-8', '1 _STROM_LINKS send open\n2 _SCHEME strom-research-beta\n1 CHAR UTF-8');
+    await page.route('http://127.0.0.1:5998/**', (route) => route.fulfill({
+        status: 200, headers: { ...cors, 'content-type': 'text/plain; charset=utf-8' }, body: ged,
+    }));
+    await page.evaluate((url) => window.Strom.UI.openExternalRequest(new URLSearchParams({ 'import-url': url })), `${BRIDGE}/tree-strom.ged`);
+    await expect(card(page, 'Jan')).toBeVisible();
+    expect(await page.evaluate(() => window.Strom.UI.activeResearchLink('open'))).toBe(`strom-research-beta://open?tree=${UUID}`);
+    // A served file without it: strom-research again.
+    await page.unrouteAll();
+    await page.route('http://127.0.0.1:5998/**', (route) => route.fulfill({
+        status: 200, headers: { ...cors, 'content-type': 'text/plain; charset=utf-8' },
+        body: researchGed().replace('1 CHAR UTF-8', '1 _STROM_LINKS send open\n1 CHAR UTF-8'),
+    }));
+    await page.evaluate((url) => window.Strom.UI.openExternalRequest(new URLSearchParams({ 'import-url': url })), `${BRIDGE}/tree-strom.ged`);
+    await expect.poll(() => page.evaluate(() => window.Strom.UI.activeResearchLink('open'))).toBe(`strom-research://open?tree=${UUID}`);
+});
+

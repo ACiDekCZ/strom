@@ -14,7 +14,7 @@ import { TreeManager } from '../tree-manager.js';
 import { strings } from '../strings.js';
 import { TreeId, ResearchTranscripts, ResearchSendMode, StromData } from '../types.js';
 import { researchSchemeUrl } from '../research-link.js';
-import { researchAutoState, patchResearchAutoState, researchSendPreviewSkipped, noteResearchSendPreviewSkipped } from '../research-device.js';
+import { researchAutoState, patchResearchAutoState, researchSendPreviewSkipped, noteResearchSendPreviewSkipped, announcedResearchScheme } from '../research-device.js';
 import { sourceReadingHash, unverifiedOlderSources } from '../research-sync.js';
 import { uiModule } from './module.js';
 import { normalizeModal } from './modal-skeleton.js';
@@ -176,10 +176,12 @@ export const researchTreeSettingsMethods = uiModule({
                     <span class="research-transcripts-desc">${esc(desc)}</span>
                 </span>
             </label>`;
-        const setup = onComputer() && this.researchLinkAvailable('setup') ? researchSchemeUrl('setup', { tree: link.id }) : null;
+        const setup = onComputer() && this.researchLinkAvailable('setup') ? researchSchemeUrl('setup', { tree: link.id }, announcedResearchScheme()) : null;
         const s = strings.sync;
         const archive = this.researchModeOf(link.id, link) === 'archive';
         const modeLine = this.researchModeSinceLine(treeId);
+        // The research runs in its beta channel (its status said so in this page; production says nothing).
+        const betaChannel = this.researchStatusOf(link.id)?.channel === 'beta';
         // How changes go: a research that tells what it takes (an older one sends the old way only).
         const sendingShown = this.researchSyncCapable(link.id);
         const compact = compactScreen();
@@ -225,6 +227,7 @@ export const researchTreeSettingsMethods = uiModule({
                         <div class="audit-log-subtitle">${esc(t.subtitle(meta.name, researchDisplayName(link.id), meta.personCount))}</div>
                         <div class="research-trial-sentence">${esc(t.trialSentence)}</div>
                         ${modeLine ? `<div class="research-mode-line">${esc(modeLine)}</div>` : ''}
+                        ${betaChannel ? `<div class="research-mode-line research-channel-line">${esc(t.channelBeta)}</div>` : ''}
                     </div>
                     <button type="button" class="close-btn" id="research-tree-settings-x" aria-label="${esc(strings.buttons.close)}">&times;</button>
                 </div>
