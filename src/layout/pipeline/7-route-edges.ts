@@ -96,33 +96,20 @@ export function routeEdges(input: RouteEdgesInput): RoutedModel {
         }
     }
 
-    // Y-offset overlapping spouse lines: only fan out lines that actually
-    // share the same X range (e.g., two unions from the same person going
-    // in the same direction). Lines in separate X ranges stay at card center.
-    const LINE_SPACING = 3;
-    for (let i = 0; i < spouseLines.length; i++) {
-        const slA = spouseLines[i];
-        // Find all lines that overlap with slA in X (and are at the same base Y)
-        const group = [i];
-        for (let j = i + 1; j < spouseLines.length; j++) {
-            const slB = spouseLines[j];
-            if (Math.abs(slA.y - slB.y) > 1) continue; // Different generation
-            // Check X overlap
-            if (slA.xMax > slB.xMin && slB.xMax > slA.xMin) {
-                group.push(j);
-            }
-        }
-        if (group.length <= 1) continue;
+    // Spouse lines that overlap in X in one generation (a marriage chain:
+    // the far partner's line runs over the same gap as the near one) are
+    // fanned out so every marriage keeps its own visible line.
+    fanOutSpouseLines(spouseLines);
 
-        // Fan out this group symmetrically around card center Y
-        const baseY = slA.y;
-        const centerOffset = (group.length - 1) / 2 * LINE_SPACING;
-        for (let k = 0; k < group.length; k++) {
-            spouseLines[group[k]].y = baseY + k * LINE_SPACING - centerOffset;
-        }
-
-        // Skip already-processed lines
-        i = Math.max(i, group[group.length - 1]);
+    // A couple's stem starts on its own spouse line, wherever the fan-out
+    // put it (secondary chain unions and single parents start at the card
+    // bottom and are left alone).
+    const spouseLineY = new Map<UnionId, number>();
+    for (const sl of spouseLines) spouseLineY.set(sl.unionId, sl.y);
+    for (const conn of connections) {
+        if (secondaryChainUnions.has(conn.unionId)) continue;
+        const y = spouseLineY.get(conn.unionId);
+        if (y !== undefined && model.unions.get(conn.unionId)?.partnerB) conn.stemTopY = y;
     }
 
     // Resolve bus collisions via lane allocation (branch-aware)
@@ -143,6 +130,64 @@ export function routeEdges(input: RouteEdgesInput): RoutedModel {
         connections,
         spouseLines
     };
+}
+
+/** Vertical distance between spouse lines that overlap in X (T14). */
+export const SPOUSE_LINE_SPACING = 6;
+
+/**
+ * Fan out spouse lines that overlap in X at the same base Y.
+ *
+ * Overlap groups are the connected components of the overlap relation, so
+ * the result does not depend on the order of the unions. Within a group
+ * every line takes the lowest free track among the lines it overlaps,
+ * shortest line first: the nearest partner's line stays lowest (a couple's
+ * stem leaves it downward without crossing the longer lines above), and a
+ * group only grows as tall as its deepest stack of overlapping lines. The
+ * tracks are centred on the card centre line.
+ */
+function fanOutSpouseLines(lines: SpouseLine[]): void {
+    const overlaps = (a: SpouseLine, b: SpouseLine) =>
+        Math.abs(a.y - b.y) <= 1 && a.xMax > b.xMin && b.xMax > a.xMin;
+
+    const seen = new Set<number>();
+    for (let i = 0; i < lines.length; i++) {
+        if (seen.has(i)) continue;
+        // Connected component of the overlap relation, starting at line i
+        const group: number[] = [];
+        const stack = [i];
+        seen.add(i);
+        while (stack.length > 0) {
+            const k = stack.pop()!;
+            group.push(k);
+            for (let j = 0; j < lines.length; j++) {
+                if (!seen.has(j) && overlaps(lines[k], lines[j])) {
+                    seen.add(j);
+                    stack.push(j);
+                }
+            }
+        }
+        if (group.length <= 1) continue;
+
+        const baseY = lines[i].y;
+        const ordered = group.map(k => lines[k]).sort((a, b) =>
+            (a.xMax - a.xMin) - (b.xMax - b.xMin) || a.xMin - b.xMin || String(a.unionId).localeCompare(String(b.unionId)));
+        const track = new Map<SpouseLine, number>();
+        for (const line of ordered) {
+            const used = new Set<number>();
+            for (const [other, t] of track) {
+                if (line.xMax > other.xMin && other.xMax > line.xMin) used.add(t);
+            }
+            let t = 0;
+            while (used.has(t)) t++;
+            track.set(line, t);
+        }
+        const maxTrack = Math.max(...track.values());
+        for (const [line, t] of track) {
+            // Track 0 is the lowest line (largest y)
+            line.y = baseY + (maxTrack / 2 - t) * SPOUSE_LINE_SPACING;
+        }
+    }
 }
 
 /**
