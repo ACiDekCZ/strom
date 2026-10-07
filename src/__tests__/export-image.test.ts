@@ -4,7 +4,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { buildTreeSvg, computeBounds, PosterLayout } from '../export-image.js';
-import { StromData, Person, PersonId, PartnershipId, Position } from '../types.js';
+import { StromData, Person, PersonId, PartnershipId, Position, DEFAULT_LAYOUT_CONFIG } from '../types.js';
 
 function person(id: string, over: Partial<Person> = {}): Person {
     return {
@@ -228,5 +228,47 @@ describe('branch stripe (T06)', () => {
         const ys = [...d.matchAll(/(-?\d+\.\d+) (-?\d+\.\d+)/g)].map(m => Number(m[2]));
         expect(Math.min(...ys)).toBeLessThan(1);
         expect(Math.max(...ys)).toBeGreaterThan(63);
+    });
+});
+
+describe('cards by content (U02 V3)', () => {
+    // Custom cards 240 wide: a 140px card, a 73px one, and one without its own height (the view's 100).
+    const config = {
+        ...DEFAULT_LAYOUT_CONFIG, cardWidth: 240, cardHeight: 100,
+        personHeights: new Map([['a' as PersonId, 140], ['b' as PersonId, 73]]),
+    };
+
+    it('the bounds take each card\'s own height', () => {
+        const l = layout({ a: { x: 0, y: 0 }, b: { x: 300, y: 300 }, c: { x: 600, y: 300 } });
+        expect(computeBounds(l, config)).toMatchObject({ maxY: 400, height: 400 });
+        expect(computeBounds(layout({ a: { x: 0, y: 0 }, b: { x: 300, y: 300 } }), config)).toMatchObject({ maxY: 373 });
+    });
+
+    it('every card rect and its branch stripe are as tall as that person\'s card', () => {
+        const data = makeData(person('a'), person('b', { gender: 'female' }), person('c'));
+        const svg = buildTreeSvg(data, layout({ a: { x: 0, y: 0 }, b: { x: 300, y: 300 }, c: { x: 600, y: 300 } }), {
+            config, branchMap: new Map([['a', 'paternal'], ['b', 'maternal'], ['c', 'paternal']]),
+        });
+        const rects = [...svg.matchAll(/<rect x="(-?[\d.]+)" y="(-?[\d.]+)" width="(\d+)" height="(\d+)" rx="8"/g)]
+            .map(m => [Number(m[1]), Number(m[4])]);
+        expect(rects).toEqual([[0, 140], [300, 73], [600, 100]]);
+        const stripes = [...svg.matchAll(/<path class="branch-stripe" d="([^"]+)"/g)].map(m => {
+            // The path's points: after M, L and each arc's flags.
+            const ys = [...m[1].matchAll(/(?:M|L|0 0 0 )(-?[\d.]+) (-?[\d.]+)/g)].map(p => Number(p[2]));
+            return Math.max(...ys) - Math.min(...ys);
+        });
+        // From the outer edge of the border (1px taller than the card), its inner edge 1px into each corner arc.
+        expect(stripes).toEqual([140 - 1, 73 - 1, 100 - 1]);
+    });
+
+    it('a partner line splits only around a card it really crosses, by that card\'s height', () => {
+        const data = makeData(person('a'), person('b'), person('c'));
+        // Line at y 32 from a (x 0) to c (x 600) over b at x 300: b's short card spans 0..73.
+        const base = layout({ a: { x: 0, y: 0 }, b: { x: 300, y: 0 }, c: { x: 600, y: 0 } });
+        const l = { ...base, spouseLines: [{ ...base.spouseLines[0], y: 120, xMin: 240, xMax: 600 }] };
+        const spouse = (svg: string) => (svg.split('class="spouse-lines"')[1].split('</g>')[0].match(/<line /g) ?? []).length;
+        // At 120 the line passes under b's 73px card: one piece; a card of the view's 140 would split it.
+        expect(spouse(buildTreeSvg(data, l, { config }))).toBe(1);
+        expect(spouse(buildTreeSvg(data, l, { config: { ...config, personHeights: new Map([['b' as PersonId, 140]]) } }))).toBe(2);
     });
 });

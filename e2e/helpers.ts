@@ -123,6 +123,23 @@ export function card(page: Page, firstName: string): Locator {
 }
 
 /**
+ * Every drawn card's box is the size the layout gave it: the view's card
+ * width and the person's own height (custom card "by content",
+ * LayoutConfig.personHeights) or the view's one height. True once the custom
+ * cards are measured in their fonts and laid out again.
+ */
+export async function cardBoxesMatchLayout(page: Page): Promise<boolean> {
+    return page.evaluate(() => {
+        const cards = [...document.querySelectorAll<HTMLElement>('#tree-canvas .person-card')];
+        const config = (window.Strom.TreeRenderer as unknown as {
+            config: { cardWidth: number; cardHeight: number; personHeights?: Map<string, number> };
+        }).config;
+        return cards.length > 0 && cards.every(c => c.offsetWidth === config.cardWidth
+            && c.offsetHeight === (config.personHeights?.get(c.dataset.id ?? '') ?? config.cardHeight));
+    });
+}
+
+/**
  * Open the person menu for a card and click an action. Above 1024px (fine
  * pointer) it is the floating `.context-menu`; in the bottom-navigation regime
  * (≤ 1024px) and on touch it is the `.bottom-sheet-person` sheet.

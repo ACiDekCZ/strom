@@ -9,7 +9,8 @@
  * the place column gives: with one row a detail it shortens (ellipsis, the
  * full text in a native tooltip, customCardCutLines), with two rows or the
  * whole detail it wraps into rows (wrapCardTexts, customCardRows) and the
- * card grows (customCardViewHeight). The date always fits, unless it alone is
+ * card grows (customCardViewHeight; with the height "by content" each card
+ * by its own rows, customCardRows heights). The date always fits, unless it alone is
  * wider than its column; a name wider than the widest card shrinks on the
  * one-row card and wraps into two rows otherwise (customCardRows).
  *
@@ -32,7 +33,7 @@
  * costs one layout for the strings it has not seen yet.
  */
 
-import type { CardLine, CardLineStyle, CardValueLines } from './card-fields.js';
+import type { CardHeightMode, CardLine, CardLineStyle, CardValueLines } from './card-fields.js';
 
 export const CUSTOM_CARD_MIN_WIDTH = 200;
 /** The medium width's cap: the card before the width choice, and the default. */
@@ -502,9 +503,10 @@ export function cardLinesTop(block: number = CARD_AVATAR_SIZE): number {
  * "…". The years row comes under it when the entry has years.
  *
  * `heights`: each card's height for those rows and its header
- * (customCardHeight), in the entries' order. With one row a detail the rows
- * only say what is cut (the screen shortens that row itself) and the heights
- * are not the view's (see customCardViewHeight).
+ * (customCardHeight), in the entries' order: the card's own height (the
+ * height "by content"). With one row a detail the rows only say what is cut
+ * (the screen shortens that row itself) and a card is its header and 17px a
+ * line, no gap between details; the view's one height is customCardViewHeight.
  */
 export function customCardRows<L extends CardLineText>(entries: Iterable<CustomCardEntry<L>>, metrics: CustomCardMetrics,
     measure: MeasureTexts, valueLines: CardValueLines, style: CardLineStyle = 'marks',
@@ -609,30 +611,34 @@ export function customCardRows<L extends CardLineText>(entries: Iterable<CustomC
         const years = e.years ?? '';
         return { name, cut: !!wrapped?.cut, years, block: cardHeadBlock(name.length, !!years) };
     });
-    const heights = list.map((e, i) => customCardHeight(e.lines.map(l => rows.get(l)!.rows.length), heads[i].block));
+    const detailGap = valueLines === 1 ? 0 : CARD_DETAIL_GAP;
+    const heights = list.map((e, i) => customCardHeight(e.lines.map(l => valueLines === 1 ? 1 : rows.get(l)!.rows.length),
+        heads[i].block, detailGap));
     return { rows, heights, heads };
 }
 
 /**
  * A card's height for its lines' row counts (a line without a place is one
  * row) and its header's content (cardHeadBlock, the avatar's 30px by
- * default): 10px, the header, then 6px, 17px a row and 3px between details,
- * 10px; the header alone (with its paddings) without lines.
+ * default): 10px, the header, then 6px, 17px a row and `detailGap` (3px)
+ * between details, 10px; the header alone (with its paddings) without lines.
+ * The one-row card has no gap between details (`detailGap` 0).
  */
-export function customCardHeight(rowCounts: readonly number[], headBlock: number = CARD_AVATAR_SIZE): number {
+export function customCardHeight(rowCounts: readonly number[], headBlock: number = CARD_AVATAR_SIZE,
+    detailGap: number = CARD_DETAIL_GAP): number {
     const head = CARD_HEAD_HEIGHT - CARD_AVATAR_SIZE + headBlock;
     if (rowCounts.length === 0) return head;
     const rows = rowCounts.reduce((sum, n) => sum + Math.max(1, n), 0);
-    return head + CARD_LINES_GAP + CARD_ROW_HEIGHT * rows + CARD_DETAIL_GAP * (rowCounts.length - 1);
+    return head + CARD_LINES_GAP + CARD_ROW_HEIGHT * rows + detailGap * (rowCounts.length - 1);
 }
 
 /**
- * The one card height of a view (the layout spaces every card by it). One row
- * a detail: 56 + 17 × the details on (3px more with the years under the
- * name), the card as it always was (it does not change with the focus). Two
- * rows or the whole detail: the tallest card of the view (`heights`,
- * customCardRows). The height mode "by content" draws the same until each
- * card gets its own height in the layout (K4).
+ * The one card height of a view (the height "equal": the layout spaces every
+ * card by it). One row a detail: 56 + 17 × the details on (3px more with the
+ * years under the name), the card as it always was (it does not change with
+ * the focus). Two rows or the whole detail: the tallest card of the view
+ * (`heights`, customCardRows). With the height "by content" every card is
+ * its own height (customCardRows heights, LayoutConfig.personHeights).
  */
 export function customCardViewHeight(detailsOn: number, valueLines: CardValueLines, heights: Iterable<number>,
     years = false): number {
@@ -646,13 +652,14 @@ export function customCardViewHeight(detailsOn: number, valueLines: CardValueLin
 
 /**
  * Where the partner line runs on the custom card (LayoutConfig.spouseLineY):
- * the card's middle on the one-row card (undefined), the middle of the header
- * on a card whose details may take more rows, so it stays by the names
- * however tall the card grows: 25px, 26.5px with the years under the name
- * (one value for every card of the view).
+ * the card's middle on the one-row card of one height (undefined), the
+ * middle of the header on a card whose details may take more rows or whose
+ * height is its own ("by content"), so it stays by the names however tall
+ * the card is: 25px, 26.5px with the years under the name (one value for
+ * every card of the view).
  */
-export function customCardSpouseLineY(valueLines: CardValueLines, years = false): number | undefined {
-    if (valueLines === 1) return undefined;
+export function customCardSpouseLineY(valueLines: CardValueLines, years = false, height: CardHeightMode = 'view'): number | undefined {
+    if (valueLines === 1 && height !== 'content') return undefined;
     return years ? CARD_HEAD_LINE_Y_YEARS : CARD_HEAD_LINE_Y;
 }
 

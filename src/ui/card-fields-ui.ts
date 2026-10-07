@@ -16,8 +16,8 @@ import { strings } from '../strings.js';
 import { Person, PersonId, Partnership, PartnershipId, StromData } from '../types.js';
 import { ActionSignal, ACTION_GLYPH, stateStripesHtml } from '../card-signals.js';
 import {
-    CardFieldKey, CardFieldSettings, CardLineStyle, CardPresetKey, CardValueLines, CardWidthCap, CARD_FIELD_KEYS,
-    CARD_LINE_STYLES, CARD_MARKS, CARD_PRESET_KEYS, CARD_VALUE_LINES, CARD_WIDTH_CAPS, PLACE_KEYS, cardLines,
+    CardFieldKey, CardFieldSettings, CardHeightMode, CardLineStyle, CardPresetKey, CardValueLines, CardWidthCap, CARD_FIELD_KEYS,
+    CARD_HEIGHT_MODES, CARD_LINE_STYLES, CARD_MARKS, CARD_PRESET_KEYS, CARD_VALUE_LINES, CARD_WIDTH_CAPS, PLACE_KEYS, cardLines,
     cardLineHtml, cardPreset, cardYears, matchCardPreset, cardDateReferences,
 } from '../card-fields.js';
 import { CardHead, customCardMetrics, customCardRows, measureCardTexts } from '../card-width.js';
@@ -64,6 +64,12 @@ const WIDTH_LABEL: Record<CardWidthCap, () => string> = {
     400: () => strings.cardDensity.widthWide,
 };
 
+/** The card height choice's words: one height for the view, or each card by its content. */
+const HEIGHT_LABEL: Record<CardHeightMode, () => string> = {
+    view: () => strings.cardDensity.heightSame,
+    content: () => strings.cardDensity.heightContent,
+};
+
 /** The line style choice's words. */
 const STYLE_LABEL: Record<CardLineStyle, () => string> = {
     marks: () => strings.cardDensity.styleMarks,
@@ -87,7 +93,8 @@ const LINES_LABEL: Record<CardValueLines, () => string> = {
 /**
  * The sample card of the preview: its header and lines, their rows at the
  * drawn view's width (wrapped as the canvas wraps them) and its height — the
- * view's one-row height, or the sample's own when its details wrap.
+ * view's one-row height, or the sample's own when its details wrap or the
+ * height is "by content".
  */
 function samplePreview(viewWidth: number | undefined): {
     html: string; head: CardHead; wrapped: boolean; width: number; height: number; dateColumn: number; labelColumn: number;
@@ -105,7 +112,8 @@ function samplePreview(viewWidth: number | undefined): {
     const wrapped = fields.lines !== 1;
     const html = `<div class="card-lines${wrapped ? ' card-lines--rows' : ''}">${lines.map(l =>
         cardLineHtml(l, esc, false, wrapped ? rows.get(l) : undefined, fields.style, !!rows.get(l)?.longDate)).join('')}</div>`;
-    const height = wrapped ? heights[0] : SettingsManager.getCardSize().cardHeight;
+    // The sample's own height when its details wrap or every card is as tall as its content.
+    const height = wrapped || fields.height === 'content' ? heights[0] : SettingsManager.getCardSize().cardHeight;
     return { html, head: heads[0], wrapped, width: metrics.cardWidth, height, dateColumn: own.dateColumn, labelColumn: own.labelColumn ?? 0 };
 }
 
@@ -278,6 +286,9 @@ export const cardFieldsUiMethods = uiModule({
                     ${lookSegment('lines', d.lines, CARD_VALUE_LINES.map(n => ({
                         value: String(n), label: LINES_LABEL[n](), active: s.lines === n,
                     })))}
+                    ${lookSegment('height', d.height, CARD_HEIGHT_MODES.map(h => ({
+                        value: h, label: HEIGHT_LABEL[h](), active: s.height === h,
+                    })))}
                     ${lookSegment('width', d.width, CARD_WIDTH_CAPS.map(cap => ({
                         value: String(cap), label: WIDTH_LABEL[cap](), active: s.widthCap === cap,
                     })))}
@@ -341,6 +352,12 @@ export const cardFieldsUiMethods = uiModule({
             btn.onclick = () => {
                 const lines = Number(btn.dataset.value) as CardValueLines;
                 apply({ ...s, lines }, `.card-look-lines [data-value="${btn.dataset.value}"]`);
+            };
+        });
+        host.querySelectorAll<HTMLButtonElement>('.card-look-height .segment-btn').forEach(btn => {
+            btn.onclick = () => {
+                const height = btn.dataset.value as CardHeightMode;
+                apply({ ...s, height }, `.card-look-height [data-value="${height}"]`);
             };
         });
         host.querySelectorAll<HTMLButtonElement>('.card-preset-segment .segment-btn').forEach(btn => {

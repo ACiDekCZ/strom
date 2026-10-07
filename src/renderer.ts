@@ -12,8 +12,10 @@ import {
     PersonId,
     Position,
     DEFAULT_LAYOUT_CONFIG,
+    LayoutConfig,
     TreeId,
-    StromData
+    StromData,
+    personCardHeight
 } from './types.js';
 import { TreeManager } from './tree-manager.js';
 import { chainLinkSvg, iconSvg } from './icons.js';
@@ -22,7 +24,7 @@ import { ViewMode, STANDALONE_VIEWS, ResearchEdgeMode } from './types.js';
 import { cardLines, CardLine, cardLineHtml, cardYears, CardLineStyle, cardDateReferences } from './card-fields.js';
 import {
     CustomCardMetrics, CardLineRows, CardHead, customCardMetrics, customCardRows, customCardViewHeight, customCardSpouseLineY,
-    measureCardTexts, cardFontsPending,
+    measureCardTexts, cardFontsPending, CARD_HEAD_HEIGHT,
 } from './card-width.js';
 import { checkRecordedAge, ageBirthDate } from './recorded-age.js';
 import { ACTION_GLYPH, AGENT_DONE_MS, AGENT_DONE_FADE_MS, AGENT_SPIN_MS, CardSignalContext, CardSignalInfo, cardSignalInfo, researchCardInfoNow, sharedPhaseDelay, stateStripesHtml } from './card-signals.js';
@@ -39,7 +41,8 @@ import {
     collectBloodDescendants,
     DebugOptions,
     DebugSnapshot,
-    LayoutDebugContext
+    LayoutDebugContext,
+    GenerationBand as LayoutBand
 } from './layout/index.js';
 import { renderDebugOverlay, clearDebugOverlay } from './debug-overlay.js';
 import { debugPanel } from './debug-panel.js';
@@ -78,10 +81,26 @@ export interface GenerationBand {
     guideRightX?: number; // world X where the rule ends
 }
 
+/** The custom card's measures for a view: one width, the view's height, each card's own height ("by content"). */
+type CustomCardViewMetrics = CustomCardMetrics & { cardHeight: number; personHeights?: Map<PersonId, number> };
+
+/** Whether two layouts give each of `ids` the same card box (no new layout needed). */
+function sameCardSizes(a: LayoutConfig, b: LayoutConfig, ids: Iterable<PersonId>): boolean {
+    if (a.cardWidth !== b.cardWidth || a.cardHeight !== b.cardHeight) return false;
+    if (!a.personHeights !== !b.personHeights) return false;
+    if (!b.personHeights) return true;
+    for (const id of ids) if (personCardHeight(a, id) !== personCardHeight(b, id)) return false;
+    return true;
+}
+
 class TreeRendererClass {
     private config = DEFAULT_LAYOUT_CONFIG;
-    /** The custom card's width, date column and height for the current view (null in other densities). */
-    private customMetrics: (CustomCardMetrics & { cardHeight: number }) | null = null;
+    /**
+     * The custom card's width, date column and height for the current view
+     * (null in other densities); with the height "by content" each drawn
+     * person's own card height too (the layout's personHeights).
+     */
+    private customMetrics: CustomCardViewMetrics | null = null;
     /** The custom card's lines per drawn person, computed once per render. */
     private customLines = new Map<PersonId, CardLine[]>();
     /** The custom card lines' rows (src/card-width.ts customCardRows): what wraps, what is cut. */
@@ -96,6 +115,8 @@ class TreeRendererClass {
 
     /** Generation bands for the sticky label overlay (rebuilt each render). */
     private generationBands: GenerationBand[] = [];
+    /** The layout's generation bands (LayoutResult.bands): each as tall as its tallest card. */
+    private layoutBands: LayoutBand[] = [];
 
     // Connections for line rendering from layout engine
     private connections: Connection[] = [];
@@ -204,6 +225,7 @@ class TreeRendererClass {
         this.positions.clear();
         this.connections = [];
         this.generationBands = [];
+        this.layoutBands = [];
 
         const persons = DataManager.getAllPersons();
         // The first render knows whether the tree is empty: the welcome may show now.
@@ -235,11 +257,15 @@ class TreeRendererClass {
         // The custom card is as wide as the view's longest text and (details
         // that wrap) as tall as its tallest card: start from the size the last
         // view had (usually the same), measure once laid out.
-        const { lines: valueLines, years } = SettingsManager.getCardFields();
-        const spouseLineY = custom ? customCardSpouseLineY(valueLines, years) : undefined;
+        // With the height "by content" every card is its own height (the last
+        // view's, the view's tallest for one not measured yet), cards top-aligned in their band.
+        const { lines: valueLines, years, height: heightMode } = SettingsManager.getCardFields();
+        const ownHeights = custom && heightMode === 'content';
+        const spouseLineY = custom ? customCardSpouseLineY(valueLines, years, heightMode) : undefined;
         this.config = {
-            ...this.config, ...size, spouseLineY,
+            ...this.config, ...size, spouseLineY, personHeights: undefined,
             ...(custom && this.customMetrics ? { cardWidth: this.customMetrics.cardWidth, cardHeight: this.customMetrics.cardHeight } : {}),
+            ...(ownHeights && this.customMetrics?.personHeights ? { personHeights: this.customMetrics.personHeights } : {}),
         };
         document.body.dataset.cardDensity = density;
         // The partner line (and the "+ partner" pill) at the header of a card that grows.
@@ -250,7 +276,7 @@ class TreeRendererClass {
         // The custom card's height follows how many lines it shows.
         document.body.style.setProperty('--card-custom-h', `${this.config.cardHeight}px`);
         this.updatePlacesDatalist();
-        const result = this.computeTreeLayout(descendantsOnly);
+        let result = this.computeTreeLayout(descendantsOnly);
         if (custom) {
             const metrics = this.measureCustomCards(result.positions);
             this.customMetrics = metrics;
@@ -260,14 +286,15 @@ class TreeRendererClass {
             document.body.style.setProperty('--card-label-col', `${metrics.labelColumn ?? 0}px`);
             // The settings preview states the card size: keep it in step with the view.
             if (document.getElementById('settings-modal')?.classList.contains('active')) UI.renderCardPreview?.();
-            if (metrics.cardWidth !== this.config.cardWidth || metrics.cardHeight !== this.config.cardHeight) {
+            const measured: LayoutConfig = {
+                ...this.config, cardWidth: metrics.cardWidth, cardHeight: metrics.cardHeight,
+                personHeights: metrics.personHeights,
+            };
+            if (!sameCardSizes(this.config, measured, result.positions.keys())) {
                 // The person set does not depend on the card size: lay out again at the measured size.
-                this.config = { ...this.config, cardWidth: metrics.cardWidth, cardHeight: metrics.cardHeight };
-                const again = this.computeTreeLayout(descendantsOnly);
-                result.positions = again.positions;
-                result.connections = again.connections;
-                result.spouseLines = again.spouseLines;
-            }
+                this.config = measured;
+                result = this.computeTreeLayout(descendantsOnly);
+            } else this.config = measured;
             // Measured before the card fonts were in: measure again once they are.
             cardFontsPending()?.then(() => {
                 if (seq === this.renderSeq && SettingsManager.getCardDensity() === 'custom') this.render();
@@ -284,6 +311,7 @@ class TreeRendererClass {
         this.positions = result.positions;
         this.connections = result.connections;
         this.spouseLines = result.spouseLines;
+        this.layoutBands = result.bands ?? [];
 
         // Timeline, fan and map show the same person selection drawn their own
         // way, in their own container (the pipeline above only served to pick
@@ -393,7 +421,7 @@ class TreeRendererClass {
      * width and date column they need, their rows at that width and the
      * view's card height (src/card-width.ts).
      */
-    private measureCustomCards(positions: Map<PersonId, Position>): CustomCardMetrics & { cardHeight: number } {
+    private measureCustomCards(positions: Map<PersonId, Position>): CustomCardViewMetrics {
         const data = DataManager.getData();
         const fields = SettingsManager.getCardFields();
         // The years under the name say "1841 †" for one presumed dead, as the detailed card.
@@ -421,8 +449,13 @@ class TreeRendererClass {
         this.customWrapped = fields.lines !== 1;
         this.customStyle = fields.style;
         this.customHeads = new Map(ids.map((id, i) => [id, heads[i]]));
-        // fields.height 'content' (each card its own height) lays out like 'view'
-        // until the per-card height reaches the layout pipeline (K4).
+        if (fields.height === 'content') {
+            // Each card as tall as its own content; the view's height is its tallest
+            // (a band with no card, the CSS default).
+            let tallest = CARD_HEAD_HEIGHT;
+            for (const h of heights) tallest = Math.max(tallest, h);
+            return { ...metrics, cardHeight: tallest, personHeights: new Map(ids.map((id, i) => [id, heights[i]])) };
+        }
         return { ...metrics, cardHeight: customCardViewHeight(fields.on.length, fields.lines, heights, fields.years) };
     }
 
@@ -431,9 +464,19 @@ class TreeRendererClass {
         return this.customMetrics;
     }
 
-    /** The card box the drawn view is laid out with. */
-    getCardBox(): { cardWidth: number; cardHeight: number } {
-        return { cardWidth: this.config.cardWidth, cardHeight: this.config.cardHeight };
+    /**
+     * The card box the drawn view is laid out with; with the height "by
+     * content" each drawn person's own height (personHeights) and the partner
+     * line's offset, so the image export draws every card as the screen does.
+     */
+    getCardBox(): Pick<LayoutConfig, 'cardWidth' | 'cardHeight' | 'personHeights' | 'spouseLineY'> {
+        const { cardWidth, cardHeight, personHeights, spouseLineY } = this.config;
+        return { cardWidth, cardHeight, ...(personHeights ? { personHeights } : {}), ...(spouseLineY !== undefined ? { spouseLineY } : {}) };
+    }
+
+    /** A drawn person's card height: its own ("by content"), else the view's. */
+    private cardHeightOf(id: PersonId): number {
+        return personCardHeight(this.config, id);
     }
 
     // ============= Focus Mode Methods =============
@@ -1160,6 +1203,8 @@ class TreeRendererClass {
             card.className = classes;
             card.style.left = pos.x + 'px';
             card.style.top = pos.y + 'px';
+            // The height "by content": the card's own height (top-aligned in its band).
+            if (this.config.personHeights) card.style.setProperty('--card-custom-h', `${this.cardHeightOf(id)}px`);
             card.dataset.id = id;
 
             card.onclick = (e) => {
@@ -1875,7 +1920,7 @@ class TreeRendererClass {
             const target = this.positions.get(joinId);
             const pill = document.createElement(target ? 'div' : 'button');
             if (target) {
-                const w = this.config.cardWidth, h = this.config.cardHeight;
+                const w = this.config.cardWidth, h = this.cardHeightOf(joinId);
                 // Into the island card's nearest side (its top when it is above).
                 const above = target.y + h < tip.y;
                 const tx = above ? target.x + w / 2 : (target.x + w / 2 < tip.x ? target.x + w : target.x);
@@ -2055,40 +2100,52 @@ class TreeRendererClass {
         if (!this.focusPersonId || this.positions.size === 0) return;
         const focusPos = this.positions.get(this.focusPersonId);
         if (!focusPos) return;
-        const step = this.config.cardHeight + this.config.verticalGap;
-        if (step <= 0) return;
-
-        // Distinct band tops (Y) and the overall horizontal extent.
-        const bandYs = new Set<number>();
+        // The layout's bands (each as tall as its tallest card, generations counted
+        // from the focus); only those with a card drawn get a rule and a label.
+        const bands = this.drawnBands(focusPos.y);
         let minX = Infinity, maxX = -Infinity;
         for (const pos of this.positions.values()) {
-            bandYs.add(Math.round(pos.y));
             if (pos.x < minX) minX = pos.x;
             if (pos.x + this.config.cardWidth > maxX) maxX = pos.x + this.config.cardWidth;
         }
-        if (!isFinite(minX)) return;
+        if (!isFinite(minX) || bands.length === 0) return;
 
         const pad = 48;
         const lineLeft = minX - pad;
         const lineRight = maxX + pad;
         const halfGap = this.config.verticalGap / 2;
 
-        for (const bandY of Array.from(bandYs).sort((a, b) => a - b)) {
-            const offset = Math.round((bandY - focusPos.y) / step);
+        for (const band of bands) {
             // Boundary rule just above the band.
-            const boundaryY = bandY - halfGap;
+            const boundaryY = band.top - halfGap;
             const guideLine = this.drawLine(svg, lineLeft, boundaryY, lineRight, boundaryY, { className: 'gen-guide-line' });
             // Record the band for the sticky HTML label overlay.
             this.generationBands.push({
-                label: this.generationLabel(offset),
-                rowCenterY: bandY + this.config.cardHeight / 2,
-                bandTopY: bandY - halfGap,
-                bandBottomY: bandY + this.config.cardHeight + halfGap,
+                label: this.generationLabel(band.generation),
+                rowCenterY: band.top + band.height / 2,
+                bandTopY: band.top - halfGap,
+                bandBottomY: band.top + band.height + halfGap,
                 guideLine,
                 guideLeftX: lineLeft,
                 guideRightX: lineRight,
             });
         }
+    }
+
+    /**
+     * The generation bands that have a card drawn, top to bottom: the
+     * layout's (LayoutResult.bands); a result without them (a debug step
+     * before the end) has one card height a band, counted from the focus row.
+     */
+    private drawnBands(focusY: number): LayoutBand[] {
+        const tops = new Set<number>();
+        for (const pos of this.positions.values()) tops.add(Math.round(pos.y));
+        if (this.layoutBands.length > 0) return this.layoutBands.filter(b => tops.has(Math.round(b.top)));
+        const step = this.config.cardHeight + this.config.verticalGap;
+        if (step <= 0) return [];
+        return [...tops].sort((a, b) => a - b).map(top => ({
+            generation: Math.round((top - focusY) / step), top, height: this.config.cardHeight,
+        }));
     }
 
     private renderLines(svg: SVGSVGElement): void {
@@ -2118,8 +2175,8 @@ class TreeRendererClass {
                     const cardRight = pos.x + this.config.cardWidth;
                     // Card overlaps line's X range and is at same Y (within card height)
                     if (cardRight > spouseLine.xMin && cardLeft < spouseLine.xMax) {
-                        const cardCenterY = pos.y + this.config.cardHeight / 2;
-                        if (Math.abs(cardCenterY - spouseLine.y) < this.config.cardHeight / 2 + 2) {
+                        const h = this.cardHeightOf(personId);
+                        if (Math.abs(pos.y + h / 2 - spouseLine.y) < h / 2 + 2) {
                             gaps.push({ left: cardLeft - cardGap, right: cardRight + cardGap });
                         }
                     }
@@ -2240,10 +2297,11 @@ class TreeRendererClass {
     private renderDebugOverlay(svg: SVGSVGElement): void {
         if (!this.debugOverlay) return;
 
-        const { cardWidth, cardHeight } = this.config;
+        const { cardWidth } = this.config;
 
         // Anchor points on cards
-        for (const [_personId, pos] of this.positions) {
+        for (const [personId, pos] of this.positions) {
+            const cardHeight = this.cardHeightOf(personId);
             // topCenter (green) - where connections from parents arrive
             this.drawDebugDot(svg, pos.x + cardWidth / 2, pos.y, '#00FF00');
             // bottomCenter (blue) - where connections to children depart
@@ -2337,9 +2395,9 @@ class TreeRendererClass {
         let maxX = 500;
         let maxY = 500;
 
-        for (const pos of this.positions.values()) {
+        for (const [id, pos] of this.positions) {
             maxX = Math.max(maxX, pos.x + this.config.cardWidth + 100);
-            maxY = Math.max(maxY, pos.y + this.config.cardHeight + 100);
+            maxY = Math.max(maxY, pos.y + this.cardHeightOf(id) + 100);
         }
 
         svg.setAttribute('width', String(maxX));
@@ -2496,10 +2554,9 @@ class TreeRendererClass {
      */
     getCardWorldRects(): { x: number; y: number; w: number; h: number }[] {
         const w = this.config.cardWidth;
-        const h = this.config.cardHeight;
         const rects: { x: number; y: number; w: number; h: number }[] = [];
-        for (const pos of this.positions.values()) {
-            rects.push({ x: pos.x, y: pos.y, w, h });
+        for (const [id, pos] of this.positions) {
+            rects.push({ x: pos.x, y: pos.y, w, h: this.cardHeightOf(id) });
         }
         return rects;
     }

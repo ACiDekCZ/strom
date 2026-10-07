@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, card, seedSetting } from './helpers.js';
+import { openApp, card, seedSetting, cardBoxesMatchLayout } from './helpers.js';
 
 /**
  * The "Custom" card's labels style, the years under the name, a long name in
@@ -57,11 +57,7 @@ async function setup(page: Page, fields: Record<string, unknown> | null, width =
 
 /** Every card's box is the layout's size (measured in the card fonts, laid out again). */
 async function settled(page: Page): Promise<void> {
-    await expect.poll(() => page.evaluate(() => {
-        const cards = [...document.querySelectorAll<HTMLElement>('#tree-canvas .person-card')];
-        const config = (window.Strom.TreeRenderer as unknown as { config: { cardWidth: number; cardHeight: number } }).config;
-        return cards.length > 0 && cards.every(c => c.offsetWidth === config.cardWidth && c.offsetHeight === config.cardHeight);
-    })).toBe(true);
+    await expect.poll(() => cardBoxesMatchLayout(page)).toBe(true);
 }
 
 /** Per card: its height, its labels (text, unscaled width) and its value rows (text, x from the card, top). */
@@ -295,6 +291,7 @@ test.describe('card presets (U02)', () => {
         // The segments say it too, and the diagram draws labels.
         await expect(page.locator('#card-fields-settings .card-look-style [aria-pressed="true"]')).toHaveText('Labels');
         await expect(page.locator('#card-fields-settings .card-look-lines [aria-pressed="true"]')).toHaveText('Full');
+        await expect(page.locator('#card-fields-settings .card-look-height [aria-pressed="true"]')).toHaveText('By content');
         await expect(page.locator('#card-fields-settings .card-fields-date [aria-pressed="true"]')).toHaveText('Full date');
         await expect(page.locator('#card-fields-settings .card-look-years')).not.toBeChecked();
         await expect(page.locator('#tree-canvas .card-line--label').first()).toBeVisible();
@@ -330,7 +327,7 @@ test.describe('card presets (U02)', () => {
             await expect(host.locator('.card-look-check')).toContainText('Jahre unter dem Namen');
             // The panel's content width: the details list spans it.
             const panel = (await host.locator('.card-fields-list').boundingBox())!;
-            for (const sel of ['.card-preset-segment', '.card-look-style', '.card-look-lines', '.card-look-width']) {
+            for (const sel of ['.card-preset-segment', '.card-look-style', '.card-look-lines', '.card-look-height', '.card-look-width']) {
                 const seg = host.locator(sel);
                 await seg.scrollIntoViewIfNeeded();
                 expect(Math.abs((await seg.boundingBox())!.width - panel.width), sel).toBeLessThan(1);

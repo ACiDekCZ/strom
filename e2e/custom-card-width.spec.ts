@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, card, seedSetting } from './helpers.js';
+import { openApp, card, seedSetting, cardBoxesMatchLayout } from './helpers.js';
 
 /**
  * The "Custom" card is as wide as the view's longest text (T04, T12): one
@@ -66,10 +66,7 @@ async function setupGed(page: Page, content: string, shown: string, width = 1440
     await expect.poll(() => page.evaluate(() => document.body.dataset.cardDensity)).toBe('custom');
     // Measured in the card fonts: once they are in, the boxes match the layout.
     await page.evaluate(() => document.fonts.ready);
-    await expect.poll(async () => {
-        const { widths, layout, heights, layoutHeight } = await cardWidths(page);
-        return widths.length > 0 && widths.every(w => w === layout) && heights.every(h => h === layoutHeight);
-    }).toBe(true);
+    await expect.poll(() => cardBoxesMatchLayout(page)).toBe(true);
 }
 
 /** Every card's box size (not as zoomed on screen) and the layout's card size. */
@@ -458,8 +455,8 @@ async function partnerLine(page: Page): Promise<{ line: number; pill: number | n
 }
 
 test.describe('details that wrap (U02)', () => {
-    test('whole (the default): a long place wraps in its column, the cause takes a row of its own, nothing is cut, every card is as tall as the tallest', async ({ page }) => {
-        await setup(page, LONG_PLACE, 1440, undefined, { cause: true }, CAUSE);
+    test('whole (the default) and one height: a long place wraps in its column, the cause takes a row of its own, nothing is cut, every card is as tall as the tallest', async ({ page }) => {
+        await setup(page, LONG_PLACE, 1440, undefined, { cause: true, height: 'view' }, CAUSE);
         expect(await page.evaluate(() => window.Strom.SettingsManager.getCardFields().lines)).toBe(0);
         const { widths, heights, layoutHeight } = await cardWidths(page);
         expect(widths).toEqual([320, 320, 320]);
@@ -528,7 +525,7 @@ test.describe('details that wrap (U02)', () => {
     });
 
     test('the detail length segment re-draws the view: 1 line, 2 lines, Full', async ({ page }) => {
-        await setup(page, LONG_PLACE, 1440, undefined, { cause: true }, CAUSE);
+        await setup(page, LONG_PLACE, 1440, undefined, { cause: true, height: 'view' }, CAUSE);
         await page.evaluate(() => window.Strom.UI.showSettingsDialog());
         const segment = page.locator('#card-fields-settings .card-look-lines');
         await expect(segment).toHaveAttribute('role', 'group');

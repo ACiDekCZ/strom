@@ -55,9 +55,8 @@ export interface CardFieldSettings {
     fullDate: boolean;
     /*
      * The card's appearance (src/card-width.ts: the width, the rows a detail
-     * wraps into, the label column, the header, the view's card height);
-     * `height` draws 'content' like 'view' until the per-card height lands in
-     * the layout.
+     * wraps into, the label column, the header, the view's card height or,
+     * with `height` 'content', each card's own).
      */
     /** Marks or words in front of the lines. */
     style: CardLineStyle;

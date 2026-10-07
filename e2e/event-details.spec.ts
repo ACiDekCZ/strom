@@ -190,7 +190,7 @@ async function openCardSettings(page: Page): Promise<void> {
 const lines = (page: Page, first: string) => card(page, first).locator('.card-line');
 
 test.describe('the custom card', () => {
-    test('first time: the detailed preset; one height for all; the baptism stands in', async ({ page }) => {
+    test('first time: the Brief preset; each card as tall as its content; the baptism stands in', async ({ page }) => {
         await setup(page);
         await openCardSettings(page);
         await page.locator('#card-density-select').selectOption('custom');
@@ -204,10 +204,11 @@ test.describe('the custom card', () => {
 
         await expect(lines(page, 'Jan')).toHaveText(['*1862 Horní Lhota', '†1919 Horní Lhota', 'mlynář']);
         await expect(lines(page, 'Marie')).toHaveText(['≈1869 Dolní Lhota', '†after 1919']);
-        // The box itself, not as zoomed on screen: one size for every card.
-        for (const name of ['Jan', 'Marie', 'Anna']) {
+        // The box itself, not as zoomed on screen: one width, each card as tall as its own
+        // details (U02 V3, the default): Jan's three 113, the two of Marie and Anna 56 + 2 × 17 + 3.
+        for (const [name, height] of [['Jan', 113], ['Marie', 93], ['Anna', 93]] as const) {
             const size = await card(page, name).evaluate(el => [(el as HTMLElement).offsetWidth, (el as HTMLElement).offsetHeight]);
-            expect(size).toEqual([200, 113]);
+            expect(size, name).toEqual([200, height]);
         }
     });
 
@@ -216,8 +217,9 @@ test.describe('the custom card', () => {
         await openCardSettings(page);
         await page.locator('#card-density-select').selectOption('custom');
         const host = page.locator('#card-fields-settings');
-        // One row a detail: the card is 56 + 17 a detail on, whoever is in the view.
+        // One row a detail and one height: the card is 56 + 17 a detail on, whoever is in the view.
         await host.locator('.card-look-lines').getByRole('button', { name: '1 line', exact: true }).click();
+        await host.locator('.card-look-height').getByRole('button', { name: 'Equal', exact: true }).click();
         const row = (key: string) => host.locator(`.card-field-row[data-key="${key}"]`);
         // Baptism gets a line of its own: Marie's birth line no longer borrows it.
         await row('baptism').locator('input').check();

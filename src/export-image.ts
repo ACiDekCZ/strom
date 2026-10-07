@@ -6,7 +6,7 @@
  * It reads a LayoutResult but never touches the layout engine.
  */
 
-import { StromData, LayoutConfig, DEFAULT_LAYOUT_CONFIG, PartnershipStatus } from './types.js';
+import { StromData, LayoutConfig, DEFAULT_LAYOUT_CONFIG, PartnershipStatus, personCardHeight } from './types.js';
 import { LayoutResult } from './layout/pipeline/types.js';
 import { displayYear } from './dates.js';
 import { personInitials } from './initials.js';
@@ -359,14 +359,17 @@ export function posterFooterSvg(meta: PosterFooterMeta, totalHeight: number): st
     return `<text x="${PADDING}" y="${fy.toFixed(1)}" dominant-baseline="middle">${parts.join('')}</text>`;
 }
 
-/** Bounding box of all cards (card top-left..bottom-right) in layout space. */
+/**
+ * Bounding box of all cards (card top-left..bottom-right) in layout space;
+ * each card as tall as its own height (config.personHeights) when it has one.
+ */
 export function computeBounds(result: PosterLayout, config: LayoutConfig = DEFAULT_LAYOUT_CONFIG): SvgBounds {
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (const pos of result.positions.values()) {
+    for (const [id, pos] of result.positions) {
         minX = Math.min(minX, pos.x);
         minY = Math.min(minY, pos.y);
         maxX = Math.max(maxX, pos.x + config.cardWidth);
-        maxY = Math.max(maxY, pos.y + config.cardHeight);
+        maxY = Math.max(maxY, pos.y + personCardHeight(config, id));
     }
     if (!isFinite(minX)) {
         minX = minY = maxX = maxY = 0;
@@ -389,12 +392,14 @@ function line(x1: number, y1: number, x2: number, y2: number, stroke: string, da
 
 /**
  * Build a self-contained SVG string for the laid-out tree. Deterministic:
- * cards are emitted in id order.
+ * cards are emitted in id order. A card is as tall as the person's own
+ * height (config.personHeights, the custom card "by content"), else
+ * config.cardHeight.
  */
 export function buildTreeSvg(data: StromData, result: PosterLayout, options: PosterOptions = {}): string {
     const config = options.config ?? DEFAULT_LAYOUT_CONFIG;
     const cw = config.cardWidth;
-    const ch = config.cardHeight;
+    const heightOf = (id: string): number => personCardHeight(config, id as keyof StromData['persons']);
     const bounds = computeBounds(result, config);
 
     const hasFooter = !!(options.treeName || options.dateLabel || options.viewLabel);
@@ -459,8 +464,8 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
             const cardLeft = pos.x;
             const cardRight = pos.x + cw;
             if (cardRight > sl.xMin && cardLeft < sl.xMax) {
-                const cardCenterY = pos.y + ch / 2;
-                if (Math.abs(cardCenterY - sl.y) < ch / 2 + 2) {
+                const h = heightOf(personId);
+                if (Math.abs(pos.y + h / 2 - sl.y) < h / 2 + 2) {
                     gaps.push({ left: cardLeft - cardGap, right: cardRight + cardGap });
                 }
             }
@@ -485,6 +490,7 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
     const entries = [...result.positions.entries()].sort((a, b) => String(a[0]).localeCompare(String(b[0])));
     for (const [personId, pos] of entries) {
         const person = data.persons[personId];
+        const ch = heightOf(personId);
         const isPlaceholder = person?.isPlaceholder;
         const ring = isPlaceholder ? COLORS.placeholderRing
             : (person?.gender === 'male' ? COLORS.male : COLORS.female);

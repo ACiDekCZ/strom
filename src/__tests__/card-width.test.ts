@@ -330,6 +330,13 @@ describe('the rows and the height of the custom card (U02)', () => {
         expect(customCardViewHeight(7, 1, [])).toBe(175);
     });
 
+    it('one row by content: a card is its header and 17px a detail, no gap between details (U02 V3)', () => {
+        const { heights } = customCardRows([...entries, { name: 'Bez údajů', avatar: true, lines: [] }], metrics, measure, 1);
+        // Two details: 50 + 6 + 2 × 17, the one-row card of before with two lines; no lines: the header alone.
+        expect(heights).toEqual([56 + 2 * 17, 50]);
+        expect(customCardHeight([1, 1], 30, 0)).toBe(90);
+    });
+
     it('the occupation wraps from the date column; the whole cause counts alone for the width', () => {
         const job = { key: 'occupation' as const, mark: '', text: '', spoken: '', date: '', rest: 'mlynář a hostinský v Dolní Lhotě u kostela', wide: true };
         // 174 − 17 = 157: 26 characters.
@@ -358,6 +365,10 @@ describe('the rows and the height of the custom card (U02)', () => {
         expect(customCardSpouseLineY(1)).toBeUndefined();
         expect(customCardSpouseLineY(2)).toBe(25);
         expect(customCardSpouseLineY(0)).toBe(25);
+        // Each card its own height: the header even on the one-row card (decision D).
+        expect(customCardSpouseLineY(1, false, 'content')).toBe(25);
+        expect(customCardSpouseLineY(1, true, 'content')).toBe(26.5);
+        expect(customCardSpouseLineY(1, false, 'view')).toBeUndefined();
     });
 
     it('the card draws the rows as they are: each its own element, "+1" in the last, a title when it ended in "…"', () => {

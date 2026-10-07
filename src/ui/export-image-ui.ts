@@ -15,7 +15,7 @@ import { buildFanModel, buildFanPosterSvg, fanPosterGeometry } from '../fan-char
 import { computeTimelineModel } from '../timeline.js';
 import { buildTimelinePosterSvg, timelinePosterGeometry } from '../timeline-chart.js';
 import { uiModule } from './module.js';
-import { DEFAULT_LAYOUT_CONFIG, StromData, ViewMode } from '../types.js';
+import { DEFAULT_LAYOUT_CONFIG, StromData, ViewMode, personCardHeight } from '../types.js';
 import { applyLivingPrivacy, PrivacyMode, presumedDeceasedSet } from '../privacy.js';
 import { classifyBranches } from '../branch-colors.js';
 import { computeIndirectIds } from '../indirect.js';
@@ -176,7 +176,8 @@ function buildCurrentPoster(): PosterBuild | null {
         ? computeIndirectIds(data, focusId, mode, [...layout.positions.keys()] as unknown as string[]) as unknown as Set<string>
         : undefined;
     // The custom card is drawn as on screen: the size the view was laid out
-    // with (its width follows the view's longest text), its date column, its lines.
+    // with (its width follows the view's longest text; with the height "by
+    // content" each card's own height), its date column, its lines.
     const custom = SettingsManager.getCardDensity() === 'custom';
     const cardConfig = custom ? { ...DEFAULT_LAYOUT_CONFIG, ...TreeRenderer.getCardBox() } : DEFAULT_LAYOUT_CONFIG;
     const fields = SettingsManager.getCardFields();
@@ -222,12 +223,12 @@ function buildCurrentPoster(): PosterBuild | null {
     const widthPx = bounds.width + POSTER_PADDING * 2;
     const heightPx = bounds.height + POSTER_PADDING * 2 + FOOTER_HEIGHT;
     const occupied: Array<{ x: number; y: number; w: number; h: number }> = [];
-    for (const pos of layout.positions.values()) {
+    for (const [id, pos] of layout.positions) {
         occupied.push({
             x: pos.x - bounds.minX + POSTER_PADDING,
             y: pos.y - bounds.minY + POSTER_PADDING,
             w: cfg.cardWidth,
-            h: cfg.cardHeight,
+            h: personCardHeight(cfg, id),
         });
     }
     occupied.push({ x: POSTER_PADDING, y: heightPx - FOOTER_HEIGHT, w: 420, h: FOOTER_HEIGHT });

@@ -6504,7 +6504,9 @@
            row, then a 17px line per chosen event. One row a detail: height =
            56 + 17 × lines; details that wrap: the view's tallest card (rows
            computed in src/card-width.ts, 3px between details). The renderer
-           sets it in --card-custom-h (the layout spaces by it). Width = the
+           sets it in --card-custom-h (the layout spaces by it); with the
+           height "by content" every card carries its own --card-custom-h
+           (top-aligned in its generation band, LayoutConfig.personHeights). Width = the
            view's longest text, 200 up to the chosen cap, one for every card
            (src/card-width.ts → --card-custom-w). Lines pack upwards; who lacks
            a detail has free space at the bottom. */
