@@ -298,6 +298,34 @@ test.describe('card height by content (U02 V3)', () => {
         expect(svg).toMatch(new RegExp(`<line x1="[\\d.-]+" y1="${(anna.y + 25).toFixed(1)}"`));
     });
 
+    test('the minimap draws every card with the view\'s width and its own height', async ({ page }) => {
+        await setup(page);
+        const cards = await drawn(page);
+        for (let i = 0; i < 4; i++) await page.evaluate(() => window.Strom.ZoomPan.zoomIn());
+        await expect(page.locator('#minimap-panel')).toBeVisible();
+        // The box the minimap fits and steers in: the cards' own outline.
+        const box = await page.evaluate(() => (window.Strom.UI as unknown as { minimapBox: object }).minimapBox);
+        expect(box).toEqual({
+            minX: Math.min(...cards.map(c => c.x)), minY: Math.min(...cards.map(c => c.y)),
+            maxX: Math.max(...cards.map(c => c.x + c.width)), maxY: Math.max(...cards.map(c => c.y + c.height)),
+        });
+        // Each rectangle: painted near its card's own bottom and right edge, empty just below a short card.
+        const painted = (wx: number, wy: number) => page.evaluate(({ wx, wy }) => {
+            const t = (window.Strom.UI as unknown as { minimapTransform: { scale: number; offsetX: number; offsetY: number } }).minimapTransform;
+            const ctx = (document.getElementById('minimap-canvas') as HTMLCanvasElement).getContext('2d')!;
+            return ctx.getImageData(Math.floor(wx * t.scale + t.offsetX), Math.floor(wy * t.scale + t.offsetY), 1, 1).data[3] > 0;
+        }, { wx, wy });
+        const scale = await page.evaluate(() => (window.Strom.UI as unknown as { minimapTransform: { scale: number } }).minimapTransform.scale);
+        const inset = 2 / scale;
+        for (const c of cards) {
+            expect(await painted(c.x + c.width - inset, c.y + c.height - inset), c.name).toBe(true);
+        }
+        const marie = byName(cards, 'Marie');
+        const jan = byName(cards, 'Jan');
+        expect(jan.height - marie.height).toBeGreaterThan(3 * inset);
+        expect(await painted(marie.x + marie.width / 2, marie.y + marie.height + inset)).toBe(false);
+    });
+
     for (const theme of ['light', 'dark'] as const) {
         test(`phone 360, ${theme}: the cards keep their own heights, the hit box is the card, no page scroll`, async ({ page }) => {
             await setup(page, 360);

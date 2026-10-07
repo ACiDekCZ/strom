@@ -12,7 +12,7 @@ import { TreeRenderer } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
 import { DataManager } from '../data.js';
 import { SettingsManager } from '../settings.js';
-import { DEFAULT_LAYOUT_CONFIG, PersonId, Position, STANDALONE_VIEWS } from '../types.js';
+import { PersonId, Position, STANDALONE_VIEWS } from '../types.js';
 import { uiModule } from './module.js';
 import { isMobile as isMobileViewport } from '../breakpoints.js';
 
@@ -43,17 +43,20 @@ export function computeMinimapTransform(
     return { scale, offsetX, offsetY };
 }
 
-/** World bounding box over all card rectangles (pos = top-left corner). */
+/**
+ * World bounding box over all card rectangles (pos = top-left corner); a card
+ * with its own height (`heights`, the custom card "by content") is that tall.
+ */
 export function worldBoundingBox(
-    positions: Map<PersonId, Position>, cardW: number, cardH: number
+    positions: Map<PersonId, Position>, cardW: number, cardH: number, heights?: ReadonlyMap<PersonId, number>
 ): WorldBox | null {
     if (positions.size === 0) return null;
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (const pos of positions.values()) {
+    for (const [id, pos] of positions) {
         minX = Math.min(minX, pos.x);
         minY = Math.min(minY, pos.y);
         maxX = Math.max(maxX, pos.x + cardW);
-        maxY = Math.max(maxY, pos.y + cardH);
+        maxY = Math.max(maxY, pos.y + (heights?.get(id) ?? cardH));
     }
     return { minX, minY, maxX, maxY };
 }
@@ -132,8 +135,9 @@ export const minimapMethods = uiModule({
         // the minimap has no docked home and CSS hides it — mirror that here so
         // the JS never re-shows a detached panel.
         const isMobile = isMobileViewport();
-        const { cardWidth, cardHeight } = DEFAULT_LAYOUT_CONFIG;
-        const box = worldBoundingBox(positions, cardWidth, cardHeight);
+        // The cards as the view laid them out (a custom card's width and heights).
+        const { cardWidth, cardHeight, personHeights } = TreeRenderer.getCardBox();
+        const box = worldBoundingBox(positions, cardWidth, cardHeight, personHeights);
 
         // The minimap navigates the tree canvas; the views with their own
         // container (timeline, fan, map) have nothing for it to steer.
@@ -172,7 +176,7 @@ export const minimapMethods = uiModule({
         if (!ctx) return;
 
         ctx.clearRect(0, 0, MINIMAP_W, MINIMAP_H);
-        const { cardWidth, cardHeight } = DEFAULT_LAYOUT_CONFIG;
+        const { cardWidth, cardHeight, personHeights } = TreeRenderer.getCardBox();
         const positions = TreeRenderer.getPosterLayout().positions;
         const data = DataManager.getData();
 
@@ -187,7 +191,7 @@ export const minimapMethods = uiModule({
         for (const [id, pos] of positions) {
             const person = data.persons[id];
             const w = Math.max(1, cardWidth * t.scale);
-            const h = Math.max(1, cardHeight * t.scale);
+            const h = Math.max(1, (personHeights?.get(id) ?? cardHeight) * t.scale);
             ctx.fillStyle = person?.gender === 'female' ? femaleColor : maleColor;
             ctx.fillRect(pos.x * t.scale + t.offsetX, pos.y * t.scale + t.offsetY, w, h);
         }

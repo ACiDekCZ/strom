@@ -61,6 +61,16 @@ describe('worldBoundingBox', () => {
         const box = worldBoundingBox(m, cardW, cardH)!;
         expect(box).toEqual({ minX: 0, minY: 0, maxX: 300 + cardW, maxY: 200 + cardH });
     });
+
+    it('a card with its own height (the custom card by content) is that tall', () => {
+        const m = new Map<PersonId, Position>([
+            ['a' as PersonId, pos(0, 0)],
+            ['b' as PersonId, pos(300, 200)],
+        ]);
+        const heights = new Map<PersonId, number>([['a' as PersonId, 400], ['b' as PersonId, 90]]);
+        expect(worldBoundingBox(m, 320, cardH, heights)).toEqual({ minX: 0, minY: 0, maxX: 620, maxY: 400 });
+        expect(worldBoundingBox(m, 320, cardH, new Map([['a' as PersonId, 90]]))!.maxY).toBe(200 + cardH);
+    });
 });
 
 describe('clampToBox (where a minimap drag may centre the view)', () => {
