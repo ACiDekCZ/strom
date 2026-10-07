@@ -13,12 +13,14 @@ describe('pickFontFaceCss', () => {
     const rules = [
         rule('"Source Serif 4"', '400'), rule('"Source Serif 4"', '600'),
         rule("'Instrument Sans'", 'normal'), rule('"Instrument Sans"', '500'), rule('"Instrument Sans"', '600'),
+        rule('"Instrument Sans"', '700'),
     ];
 
     it('copies only the faces asked for, in their order, quotes and "normal" understood', () => {
         const css = pickFontFaceCss(rules, [...POSTER_SERIF_FACES, ...POSTER_LINE_FACES]);
-        expect(css.split('\n')).toEqual([rules[0].cssText, rules[1].cssText, rules[2].cssText, rules[3].cssText]);
-        expect(css).not.toContain(rules[4].cssText);
+        // The lines' faces: 400, 500 and the labels' 600 (U02); never a face not asked for (700).
+        expect(css.split('\n')).toEqual([rules[0].cssText, rules[1].cssText, rules[2].cssText, rules[3].cssText, rules[4].cssText]);
+        expect(css).not.toContain(rules[5].cssText);
     });
 
     it('leaves out a face it cannot find and gives nothing when none is there', () => {

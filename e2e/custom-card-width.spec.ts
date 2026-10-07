@@ -255,7 +255,8 @@ test.describe('the custom card width', () => {
         const svg = await posterSvg(page);
         const faces = [...svg.matchAll(/@font-face\s*\{[^}]*font-family:\s*"([^"]+)";[^}]*font-weight:\s*(\d+);[^}]*src:\s*url\("data:font\/woff2;base64,/g)]
             .map(m => `${m[1]} ${m[2]}`).sort();
-        expect(faces).toEqual(['Instrument Sans 400', 'Instrument Sans 500', 'Source Serif 4 400', 'Source Serif 4 600']);
+        // The lines' faces: places 400, dates 500, labels 600 (U02).
+        expect(faces).toEqual(['Instrument Sans 400', 'Instrument Sans 500', 'Instrument Sans 600', 'Source Serif 4 400', 'Source Serif 4 600']);
         const dateCol = await page.evaluate(() => parseFloat(getComputedStyle(document.body).getPropertyValue('--card-date-col')));
         for (const [variant, text] of [['app fonts', svg], ['fallback', withoutAppFonts(svg)]] as const) {
             const { cards, loaded } = await renderStandalone(page, text);

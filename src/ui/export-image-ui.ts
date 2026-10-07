@@ -21,7 +21,7 @@ import { classifyBranches } from '../branch-colors.js';
 import { computeIndirectIds } from '../indirect.js';
 import { SettingsManager } from '../settings.js';
 import { safeFileName } from '../filenames.js';
-import { cardLines } from '../card-fields.js';
+import { cardLines, cardYears } from '../card-fields.js';
 import { measureCardTexts } from '../card-width.js';
 import { appFontFaceCss, POSTER_SERIF_FACES, POSTER_LINE_FACES } from '../poster-fonts.js';
 
@@ -185,10 +185,18 @@ function buildCurrentPoster(): PosterBuild | null {
             return [id as string, p && !p.isPlaceholder ? cardLines(p, data, fields) : []];
         }))
         : undefined;
+    const deceasedSet = presumedDeceasedSet(data);
+    // The years under the name, as the screen says them ("1841 †" for one presumed dead).
+    const cardYearsMap = custom && fields.years
+        ? new Map([...layout.positions.keys()].map(id => {
+            const p = data.persons[id];
+            return [id as string, p ? cardYears(p, deceasedSet.has(id)) : ''];
+        }))
+        : undefined;
     const options: PosterOptions = {
         ...meta,
         branchMap,
-        deceasedSet: presumedDeceasedSet(data),
+        deceasedSet,
         ...(dimmedIds ? { dimmedIds } : {}),
         // The faces the cards are drawn in: the serif always, the lines' sans for the custom card.
         fontFaceCss: appFontFaceCss(custom ? [...POSTER_SERIF_FACES, ...POSTER_LINE_FACES] : POSTER_SERIF_FACES),
@@ -197,6 +205,9 @@ function buildCurrentPoster(): PosterBuild | null {
             cardDateColumn: TreeRenderer.getCustomCardMetrics()?.dateColumn ?? 0,
             // The rows a detail takes, wrapped as on screen (same function, same measure).
             cardValueLines: fields.lines,
+            cardStyle: fields.style,
+            cardLabelColumn: TreeRenderer.getCustomCardMetrics()?.labelColumn ?? 0,
+            ...(cardYearsMap ? { cardYears: cardYearsMap } : {}),
             measureCardTexts,
         } : {}),
     };

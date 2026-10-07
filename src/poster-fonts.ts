@@ -28,10 +28,11 @@ export const POSTER_SERIF_FACES: FontFaceWant[] = [
     { family: 'Source Serif 4', weight: 400 },
     { family: 'Source Serif 4', weight: 600 },
 ];
-/** The sans faces of the custom card's lines (dates 500, places 400). */
+/** The sans faces of the custom card's lines (places and years 400, dates 500, labels 600). */
 export const POSTER_LINE_FACES: FontFaceWant[] = [
     { family: 'Instrument Sans', weight: 400 },
     { family: 'Instrument Sans', weight: 500 },
+    { family: 'Instrument Sans', weight: 600 },
 ];
 
 function normalizeFamily(family: string): string {

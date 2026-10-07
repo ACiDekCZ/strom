@@ -11,10 +11,11 @@ import { LayoutResult } from './layout/pipeline/types.js';
 import { displayYear } from './dates.js';
 import { personInitials } from './initials.js';
 import { parentRelKind, parentRelDash, connectionDash } from './parent-rel-style.js';
-import type { CardLine, CardValueLines } from './card-fields.js';
+import type { CardLine, CardLineStyle, CardValueLines } from './card-fields.js';
 import {
-    CARD_MARK_WIDTH, CARD_COLUMN_GAP, CUSTOM_CARD_PAD_X, CARD_LINES_TOP, CARD_ROW_HEIGHT, CARD_DETAIL_GAP,
-    MeasureTexts, cardPlaceOffset, customCardRows,
+    CARD_MARK_WIDTH, CARD_COLUMN_GAP, CUSTOM_CARD_PAD_X, CARD_ROW_HEIGHT, CARD_DETAIL_GAP, CARD_LABEL_GAP,
+    CARD_VALUE_DATE_GAP, CARD_NAME_ROW_HEIGHT, CARD_YEARS_ROW_HEIGHT, CARD_AVATAR_WIDTH, CARD_HEAD_GAP,
+    MeasureTexts, cardPlaceOffset, cardLinesTop, customCardRows,
 } from './card-width.js';
 import { shownName } from './person-name.js';
 
@@ -153,6 +154,12 @@ export interface PosterOptions {
      * rows are the screen's (src/card-width.ts customCardRows).
      */
     cardValueLines?: CardValueLines;
+    /** The custom card's line style: marks (default) or labels (the event's word before the value). */
+    cardStyle?: CardLineStyle;
+    /** Labels style: the label column (the view's longest label, src/card-width.ts). */
+    cardLabelColumn?: number;
+    /** The years under the name per person (the option "Years under the name"; src/card-fields.ts cardYears). */
+    cardYears?: Map<string, string>;
     /** Text widths in the card's fonts (the screen measures them); estimated when absent. */
     measureCardTexts?: MeasureTexts;
     /**
@@ -163,7 +170,7 @@ export interface PosterOptions {
 }
 
 /** What the poster needs of a custom card line. */
-export type PosterCardLine = Pick<CardLine, 'mark' | 'date' | 'rest' | 'more' | 'wide' | 'place' | 'cause'>;
+export type PosterCardLine = Pick<CardLine, 'mark' | 'date' | 'rest' | 'more' | 'wide' | 'place' | 'cause' | 'label'>;
 
 /** The font of the custom card's lines (the screen's --font-sans), digits of one width. */
 const LINE_FONT = `font-family="'Instrument Sans', -apple-system, 'Segoe UI', sans-serif" style="font-variant-numeric: tabular-nums"`;
@@ -171,34 +178,57 @@ const LINE_FONT = `font-family="'Instrument Sans', -apple-system, 'Segoe UI', sa
 /** Widths estimated per character, for a poster built without the screen's measure. */
 const estimateCardTexts: MeasureTexts = (kind, texts) => {
     const out = new Map<string, number>();
-    for (const t of texts) out.set(t, kind === 'name' ? estWidth(t, 15, true) : estWidth(t, 12, false));
+    for (const t of texts) {
+        out.set(t, kind === 'name' ? estWidth(t, 15, true) : kind === 'label' ? estWidth(t, 12, true)
+            : kind === 'years' ? estWidth(t, 11, false) : estWidth(t, 12, false));
+    }
     return out;
 };
 
+/** How a custom card is drawn: its columns, the rows a detail may take, its style. */
+interface CustomCardLook {
+    dateColumn: number;
+    labelColumn: number;
+    valueLines: CardValueLines;
+    style: CardLineStyle;
+    measure: MeasureTexts;
+    /** Widths measured by the screen: texts are drawn at them. */
+    exact: boolean;
+}
+
 /**
  * A custom-density card's content (src/card-fields.ts), in the on-screen
- * geometry: 10/12px padding, a 30px avatar and the name on the first row,
- * then 17px rows of 12px text: the mark in an 11px column, the date, and the
- * place where the view's date column ends (separate texts, so the places of
- * all cards start at one x). The place column has the screen's rows (the same
- * wrapping, src/card-width.ts customCardRows), one text a row, 3px between
- * details that may wrap. Only the place shortens; the name only when it
- * alone is wider than the widest card, as on screen. With `exact` (widths
- * measured by the screen) texts are drawn at their measured widths, so the
- * geometry holds in whatever font a viewer sets them.
+ * geometry: 10/12px padding, a 30px avatar and the name (and the years under
+ * it) in the header, then 17px rows of 12px text. Marks: the mark in an 11px
+ * column, the date, and the place where the view's date column ends
+ * (separate texts, so the places of all cards start at one x). Labels: the
+ * event's word in the label column, the value 8px after it (the date, 5px,
+ * the place; every row at the value's start). The rows are the screen's (the
+ * same wrapping, src/card-width.ts customCardRows), one text a row, 3px
+ * between details that may wrap. When details may wrap a long name takes the
+ * screen's two rows; with one row a detail it shrinks to 13px and only then
+ * shortens, as on screen. With `exact` (widths measured by the screen) texts
+ * are drawn at their measured widths, so the geometry holds in whatever font
+ * a viewer sets them.
  */
 function customCardSvg(
     person: StromData['persons'][keyof StromData['persons']], pos: { x: number; y: number }, cw: number,
-    lines: PosterCardLine[], ring: string, clipId: string, dateColumn: number, measure: MeasureTexts,
-    exact: boolean, valueLines: CardValueLines,
+    lines: PosterCardLine[], ring: string, clipId: string, years: string, look: CustomCardLook,
 ): string {
+    const { dateColumn, labelColumn, valueLines, style, measure, exact } = look;
     const out: string[] = [];
     const left = pos.x + CUSTOM_CARD_PAD_X;
     const right = pos.x + cw - CUSTOM_CARD_PAD_X;
+    const name = shownName(person, '?');
+    const metrics = { cardWidth: cw, dateColumn, ...(style === 'labels' ? { labelColumn } : {}) };
+    const { rows, heads } = customCardRows([{ name, avatar: !person.isPlaceholder, lines, ...(years ? { years } : {}) }],
+        metrics, measure, valueLines, style);
+    const head = heads[0];
     let textX = left;
     if (!person.isPlaceholder) {
         const cx = left + 15;
-        const cy = pos.y + 10 + 15;
+        // The avatar in the middle of the header.
+        const cy = pos.y + 10 + head.block / 2;
         if (person.photo) {
             out.push(`<clipPath id="${clipId}"><circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="15"/></clipPath>`);
             out.push(`<image href="${escapeXml(person.photo)}" x="${(cx - 15).toFixed(1)}" y="${(cy - 15).toFixed(1)}" width="30" height="30" preserveAspectRatio="xMidYMid slice" clip-path="url(#${clipId})"/>`);
@@ -208,47 +238,88 @@ function customCardSvg(
             out.push(`<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="15" fill="${COLORS.avatarBg}" stroke="${ring}" stroke-width="1.5"/>`);
             out.push(`<text x="${cx.toFixed(1)}" y="${(cy + 4).toFixed(1)}" text-anchor="middle" font-size="11" font-weight="600" fill="${COLORS.initials}">${escapeXml(initials)}</text>`);
         }
-        textX = left + 30 + 8;
+        textX = left + CARD_AVATAR_WIDTH + CARD_HEAD_GAP;
     }
-    const name = shownName(person, '?');
     const nameRoom = right - textX;
-    const nameAt15 = measure('name', [name]).get(name) ?? 0;
-    let fs = 15;
-    for (const size of [15, 14, 13]) {
-        fs = size;
-        if (nameAt15 * size / 15 <= nameRoom) break;
+    // The name's rows and the years, as a block in the middle of the header; a 15px text's baseline 14.5px into its 19px row.
+    const blockTop = pos.y + 10 + (head.block - CARD_NAME_ROW_HEIGHT * head.name.length - (head.years ? CARD_YEARS_ROW_HEIGHT : 0)) / 2;
+    if (valueLines === 1) {
+        const nameAt15 = measure('name', [name]).get(name) ?? 0;
+        let fs = 15;
+        for (const size of [15, 14, 13]) {
+            fs = size;
+            if (nameAt15 * size / 15 <= nameRoom) break;
+        }
+        // Measured in the screen's font, the name is drawn at that width: a viewer
+        // that sets it in another (wider) font still keeps it inside the card.
+        const nameW = Math.min(nameAt15 * fs / 15, nameRoom);
+        const clamp = exact && nameW > 0
+            ? ` textLength="${nameW.toFixed(1)}" lengthAdjust="spacingAndGlyphs"`
+            : nameAt15 * fs / 15 > nameRoom ? ` textLength="${nameRoom.toFixed(0)}" lengthAdjust="spacingAndGlyphs"` : '';
+        out.push(`<text x="${textX.toFixed(1)}" y="${(blockTop + 14.5).toFixed(1)}" font-size="${fs}" font-weight="600" fill="${COLORS.text}"${clamp}>${escapeXml(name)}</text>`);
+    } else {
+        // The rows the screen draws (two at most), each at its measured width.
+        const widths = measure('name', head.name);
+        head.name.forEach((row, i) => {
+            const w = Math.min(widths.get(row) ?? 0, nameRoom);
+            const clamp = exact && w > 0 ? ` textLength="${w.toFixed(1)}" lengthAdjust="spacingAndGlyphs"`
+                : (widths.get(row) ?? 0) > nameRoom ? ` textLength="${nameRoom.toFixed(0)}" lengthAdjust="spacingAndGlyphs"` : '';
+            out.push(`<text class="card-name-row" x="${textX.toFixed(1)}" y="${(blockTop + CARD_NAME_ROW_HEIGHT * i + 14.5).toFixed(1)}" font-size="15" font-weight="600" fill="${COLORS.text}"${clamp}>${escapeXml(row)}</text>`);
+        });
     }
-    // Measured in the screen's font, the name is drawn at that width: a viewer
-    // that sets it in another (wider) font still keeps it inside the card.
-    const nameW = Math.min(nameAt15 * fs / 15, nameRoom);
-    const clamp = exact && nameW > 0
-        ? ` textLength="${nameW.toFixed(1)}" lengthAdjust="spacingAndGlyphs"`
-        : nameAt15 * fs / 15 > nameRoom ? ` textLength="${nameRoom.toFixed(0)}" lengthAdjust="spacingAndGlyphs"` : '';
-    out.push(`<text x="${textX.toFixed(1)}" y="${(pos.y + 10 + 20).toFixed(1)}" font-size="${fs}" font-weight="600" fill="${COLORS.text}"${clamp}>${escapeXml(name)}</text>`);
+    // The 11px years 10.5px into their 14px row, under the name.
+    const pin = (w: number): string => exact && w > 0 ? ` textLength="${w.toFixed(1)}" lengthAdjust="spacingAndGlyphs"` : '';
+    if (head.years) {
+        const w = Math.min(measure('years', [head.years]).get(head.years) ?? 0, nameRoom);
+        const y = blockTop + CARD_NAME_ROW_HEIGHT * head.name.length + 10.5;
+        out.push(`<text class="card-years" x="${textX.toFixed(1)}" y="${y.toFixed(1)}" font-size="11" fill="${COLORS.textLight}"${pin(w)} ${LINE_FONT}>${escapeXml(head.years)}</text>`);
+    }
+
+    const labels = style === 'labels';
     const dateX = left + CARD_MARK_WIDTH + CARD_COLUMN_GAP;
+    const valueX = left + labelColumn + CARD_LABEL_GAP;
     // The date and the place at their measured widths: in another font the
     // date still ends before the place's column and a shortened place inside the card.
-    const pin = (w: number): string => exact && w > 0 ? ` textLength="${w.toFixed(1)}" lengthAdjust="spacingAndGlyphs"` : '';
-    const { rows } = customCardRows([{ name, avatar: !person.isPlaceholder, lines }], { cardWidth: cw, dateColumn }, measure, valueLines);
     const detailGap = valueLines === 1 ? 0 : CARD_DETAIL_GAP;
-    let top = pos.y + CARD_LINES_TOP;
+    let top = pos.y + cardLinesTop(head.block);
+    const place = (text: string, x: number, y: string): string => {
+        const w = measure('place', [text]).get(text) ?? 0;
+        return `<text class="card-line-place" x="${x.toFixed(1)}" y="${y}" font-size="12" fill="${COLORS.textLight}"${pin(Math.min(w, right - x))} ${LINE_FONT}>${escapeXml(text)}</text>`;
+    };
+    const date = (text: string, x: number, y: string): string => {
+        const w = measure('date', [text]).get(text) ?? 0;
+        return `<text class="card-line-date" x="${x.toFixed(1)}" y="${y}" font-size="12" font-weight="500" fill="${COLORS.text}"${pin(Math.min(w, right - x))} ${LINE_FONT}>${escapeXml(text)}</text>`;
+    };
     for (const l of lines) {
         // The text's baseline in its 17px row (12px text).
         const y = (top + 12.5).toFixed(1);
-        if (l.mark) out.push(`<text x="${(left + CARD_MARK_WIDTH / 2).toFixed(1)}" y="${y}" text-anchor="middle" font-size="12" fill="${COLORS.textFaint}" ${LINE_FONT}>${escapeXml(l.mark)}</text>`);
-        if (!l.wide && l.date) {
-            const dateW = measure('date', [l.date]).get(l.date) ?? 0;
-            out.push(`<text class="card-line-date" x="${dateX.toFixed(1)}" y="${y}" font-size="12" font-weight="500" fill="${COLORS.text}"${pin(dateW)} ${LINE_FONT}>${escapeXml(l.date)}</text>`);
-        }
-        const placeX = l.wide ? dateX : left + cardPlaceOffset(dateColumn);
         const drawn = rows.get(l)?.rows ?? [];
-        drawn.forEach((row, k) => {
-            const text = row.text + (row.tail ?? '');
-            if (!text.trim()) return;
-            const w = measure('place', [text]).get(text) ?? 0;
-            const rowY = (top + CARD_ROW_HEIGHT * k + 12.5).toFixed(1);
-            out.push(`<text class="card-line-place" x="${placeX.toFixed(1)}" y="${rowY}" font-size="12" fill="${COLORS.textLight}"${pin(Math.min(w, right - placeX))} ${LINE_FONT}>${escapeXml(text)}</text>`);
-        });
+        if (labels) {
+            if (l.label) {
+                const w = measure('label', [l.label]).get(l.label) ?? 0;
+                out.push(`<text class="card-line-label" x="${left.toFixed(1)}" y="${y}" font-size="12" font-weight="600" fill="${COLORS.textFaint}"${pin(Math.min(w, labelColumn))} ${LINE_FONT}>${escapeXml(l.label)}</text>`);
+            }
+            drawn.forEach((row, k) => {
+                const rowY = (top + CARD_ROW_HEIGHT * k + 12.5).toFixed(1);
+                let x = valueX;
+                if (row.date) {
+                    out.push(date(row.date, x, rowY));
+                    // As the screen sets it: the date's own width, then 5px.
+                    x += (measure('date', [row.date]).get(row.date) ?? 0) + CARD_VALUE_DATE_GAP;
+                }
+                const text = row.text + (row.tail ?? '');
+                if (text.trim()) out.push(place(text, x, rowY));
+            });
+        } else {
+            if (l.mark) out.push(`<text x="${(left + CARD_MARK_WIDTH / 2).toFixed(1)}" y="${y}" text-anchor="middle" font-size="12" fill="${COLORS.textFaint}" ${LINE_FONT}>${escapeXml(l.mark)}</text>`);
+            if (!l.wide && l.date) out.push(date(l.date, dateX, y));
+            const placeX = l.wide ? dateX : left + cardPlaceOffset(dateColumn);
+            drawn.forEach((row, k) => {
+                const text = row.text + (row.tail ?? '');
+                if (!text.trim()) return;
+                out.push(place(text, placeX, (top + CARD_ROW_HEIGHT * k + 12.5).toFixed(1)));
+            });
+        }
         top += CARD_ROW_HEIGHT * Math.max(1, drawn.length) + detailGap;
     }
     return out.join('');
@@ -432,8 +503,11 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
 
         if (person && options.cardLines) {
             out.push(customCardSvg(person, pos, cw, options.cardLines.get(personId) ?? [], ring, `av${clipCounter++}`,
-                options.cardDateColumn ?? 0, options.measureCardTexts ?? estimateCardTexts, !!options.measureCardTexts,
-                options.cardValueLines ?? 1));
+                options.cardYears?.get(personId) ?? '', {
+                    dateColumn: options.cardDateColumn ?? 0, labelColumn: options.cardLabelColumn ?? 0,
+                    valueLines: options.cardValueLines ?? 1, style: options.cardStyle ?? 'marks',
+                    measure: options.measureCardTexts ?? estimateCardTexts, exact: !!options.measureCardTexts,
+                }));
         } else if (person && !isPlaceholder) {
             // Avatar: gender-ring circle with a photo or initials (like on
             // screen). 34px avatar (r=17), 10px left padding — matches the CSS.

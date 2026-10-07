@@ -4,9 +4,10 @@
  * (src/card-fields.ts). A row per event: a checkbox, the mark and the name,
  * small toggles for what the line adds (place, cause, the baptism or burial
  * standing in) and arrows to reorder — no dragging, seven rows is few enough.
- * Any number of them can be on. Under the list, "Card appearance": how the
- * card is drawn (the detail length, the width; further options join them as
- * they come).
+ * Any number of them can be on. Above the list a preset sets all of it at
+ * once (the one these settings are exactly is pressed, none after a change of
+ * one's own); under it, "Card appearance": how the card is drawn (the line
+ * style, the detail length, the width, the years under the name).
  */
 
 import { TreeRenderer } from '../renderer.js';
@@ -15,10 +16,11 @@ import { strings } from '../strings.js';
 import { Person, PersonId, Partnership, PartnershipId, StromData } from '../types.js';
 import { ActionSignal, ACTION_GLYPH, stateStripesHtml } from '../card-signals.js';
 import {
-    CardFieldKey, CardFieldSettings, CardValueLines, CardWidthCap, CARD_FIELD_KEYS, CARD_MARKS, CARD_VALUE_LINES,
-    CARD_WIDTH_CAPS, PLACE_KEYS, cardLines, cardLineHtml,
+    CardFieldKey, CardFieldSettings, CardLineStyle, CardPresetKey, CardValueLines, CardWidthCap, CARD_FIELD_KEYS,
+    CARD_LINE_STYLES, CARD_MARKS, CARD_PRESET_KEYS, CARD_VALUE_LINES, CARD_WIDTH_CAPS, PLACE_KEYS, cardLines,
+    cardLineHtml, cardPreset, cardYears, matchCardPreset,
 } from '../card-fields.js';
-import { customCardMetrics, customCardRows, measureCardTexts } from '../card-width.js';
+import { CardHead, customCardMetrics, customCardRows, measureCardTexts } from '../card-width.js';
 import { uiModule } from './module.js';
 
 const esc = (text: string): string => text.replace(/[&<>"']/g, c =>
@@ -62,6 +64,19 @@ const WIDTH_LABEL: Record<CardWidthCap, () => string> = {
     400: () => strings.cardDensity.widthWide,
 };
 
+/** The line style choice's words. */
+const STYLE_LABEL: Record<CardLineStyle, () => string> = {
+    marks: () => strings.cardDensity.styleMarks,
+    labels: () => strings.cardDensity.styleLabels,
+};
+
+/** The presets' words. */
+const PRESET_LABEL: Record<CardPresetKey, () => string> = {
+    brief: () => strings.cardDensity.presetBrief,
+    register: () => strings.cardDensity.presetRegister,
+    all: () => strings.cardDensity.presetAll,
+};
+
 /** The detail length choice's words. */
 const LINES_LABEL: Record<CardValueLines, () => string> = {
     1: () => strings.cardDensity.lines1,
@@ -70,24 +85,27 @@ const LINES_LABEL: Record<CardValueLines, () => string> = {
 };
 
 /**
- * The sample card of the preview: its lines, their rows at the drawn view's
- * width (wrapped as the canvas wraps them) and its height — the view's
- * one-row height, or the sample's own when its details wrap.
+ * The sample card of the preview: its header and lines, their rows at the
+ * drawn view's width (wrapped as the canvas wraps them) and its height — the
+ * view's one-row height, or the sample's own when its details wrap.
  */
-function samplePreview(viewWidth: number | undefined): { html: string; width: number; height: number; dateColumn: number } {
+function samplePreview(viewWidth: number | undefined): {
+    html: string; head: CardHead; wrapped: boolean; width: number; height: number; dateColumn: number; labelColumn: number;
+} {
     const fields = SettingsManager.getCardFields();
     const { person, data } = samplePerson();
     const lines = cardLines(person, data, fields);
-    const entry = { name: 'Jan Vlk', avatar: true, lines };
-    // The view's card width; the date column of the sample's own lines.
-    const own = customCardMetrics([entry], measureCardTexts, fields.widthCap, fields.lines);
-    const metrics = { cardWidth: viewWidth ?? own.cardWidth, dateColumn: own.dateColumn };
-    const { rows, heights } = customCardRows([entry], metrics, measureCardTexts, fields.lines);
+    const years = fields.years ? cardYears(person, true) : '';
+    const entry = { name: 'Jan Vlk', avatar: true, lines, ...(years ? { years } : {}) };
+    // The view's card width; the date (or label) column of the sample's own lines.
+    const own = customCardMetrics([entry], measureCardTexts, fields.widthCap, fields.lines, fields.style);
+    const metrics = { ...own, cardWidth: viewWidth ?? own.cardWidth };
+    const { rows, heights, heads } = customCardRows([entry], metrics, measureCardTexts, fields.lines, fields.style);
     const wrapped = fields.lines !== 1;
     const html = `<div class="card-lines${wrapped ? ' card-lines--rows' : ''}">${lines.map(l =>
-        cardLineHtml(l, esc, false, wrapped ? rows.get(l) : undefined)).join('')}</div>`;
+        cardLineHtml(l, esc, false, wrapped ? rows.get(l) : undefined, fields.style)).join('')}</div>`;
     const height = wrapped ? heights[0] : SettingsManager.getCardSize().cardHeight;
-    return { html, width: metrics.cardWidth, height, dateColumn: own.dateColumn };
+    return { html, head: heads[0], wrapped, width: metrics.cardWidth, height, dateColumn: own.dateColumn, labelColumn: own.labelColumn ?? 0 };
 }
 
 /** A row of "Card appearance": its label and a segment of choices (one pressed). */
@@ -169,11 +187,17 @@ export const cardFieldsUiMethods = uiModule({
         if (density === 'custom') {
             const sample = samplePreview(TreeRenderer.getCustomCardMetrics()?.cardWidth);
             // The width it was wrapped for (the view's; before any view, the sample's own) and its height.
-            const box = `--card-date-col: ${sample.dateColumn}px; width: ${sample.width}px; height: ${sample.height}px`;
+            const box = `--card-date-col: ${sample.dateColumn}px; --card-label-col: ${sample.labelColumn}px; `
+                + `width: ${sample.width}px; height: ${sample.height}px`;
+            const { head } = sample;
+            const name = sample.wrapped
+                ? `<div class="name name--rows"><span class="name-text">${head.name.map(r => `<span class="name-row">${esc(r)}</span>`).join('')}</span></div>`
+                : '<div class="name"><span class="name-text">Jan Vlk</span></div>';
+            const years = head.years ? `<div class="card-years">${esc(head.years)}</div>` : '';
             return `
                 <div class="person-card male preview-card${action ? ' has-signal' : ''}" data-density="custom" style="${box}">
                     <div class="card-body card-body--custom">
-                        <div class="card-head">${avatar('JV')}<div class="name"><span class="name-text">Jan Vlk</span></div></div>
+                        <div class="card-head">${avatar('JV')}<div class="card-head-text">${name}${years}</div></div>
                         ${sample.html}
                     </div>
                     ${stripes}
@@ -227,7 +251,14 @@ export const cardFieldsUiMethods = uiModule({
                     </div>
                 </div>`;
         }).join('');
+        const preset = matchCardPreset(s);
         host.innerHTML = `
+            <div class="card-preset">
+                <span class="settings-name card-preset-title" id="card-preset-label">${esc(d.preset)}</span>
+                <div class="segment card-look-segment card-preset-segment" role="group" aria-labelledby="card-preset-label">${
+                    CARD_PRESET_KEYS.map(key => `<button type="button" class="segment-btn${preset === key ? ' active' : ''}" data-value="${key}" aria-pressed="${preset === key}">${esc(PRESET_LABEL[key]())}</button>`).join('')
+                }</div>
+            </div>
             <div class="card-fields-head">
                 <span class="settings-name">${esc(d.fieldsTitle)}</span>
                 <div class="segment card-fields-date" role="group" aria-label="${esc(d.fieldsTitle)}">
@@ -240,6 +271,9 @@ export const cardFieldsUiMethods = uiModule({
             <div class="card-look">
                 <span class="settings-name card-look-title">${esc(d.lookTitle)}</span>
                 <div class="card-look-grid">
+                    ${lookSegment('style', d.style, CARD_LINE_STYLES.map(st => ({
+                        value: st, label: STYLE_LABEL[st](), active: s.style === st,
+                    })))}
                     ${lookSegment('lines', d.lines, CARD_VALUE_LINES.map(n => ({
                         value: String(n), label: LINES_LABEL[n](), active: s.lines === n,
                     })))}
@@ -247,6 +281,10 @@ export const cardFieldsUiMethods = uiModule({
                         value: String(cap), label: WIDTH_LABEL[cap](), active: s.widthCap === cap,
                     })))}
                 </div>
+                <label class="card-look-check">
+                    <input type="checkbox" class="card-look-years"${s.years ? ' checked' : ''}>
+                    <span>${esc(d.years)}</span>
+                </label>
                 <div class="card-look-scope">${esc(d.scope)}</div>
             </div>`;
 
@@ -304,6 +342,20 @@ export const cardFieldsUiMethods = uiModule({
                 apply({ ...s, lines }, `.card-look-lines [data-value="${btn.dataset.value}"]`);
             };
         });
+        host.querySelectorAll<HTMLButtonElement>('.card-preset-segment .segment-btn').forEach(btn => {
+            btn.onclick = () => {
+                const key = btn.dataset.value as CardPresetKey;
+                apply(cardPreset(key, s), `.card-preset-segment [data-value="${key}"]`);
+            };
+        });
+        host.querySelectorAll<HTMLButtonElement>('.card-look-style .segment-btn').forEach(btn => {
+            btn.onclick = () => {
+                const style = btn.dataset.value as CardLineStyle;
+                apply({ ...s, style }, `.card-look-style [data-value="${style}"]`);
+            };
+        });
+        const yearsBox = host.querySelector<HTMLInputElement>('.card-look-years');
+        if (yearsBox) yearsBox.onchange = () => apply({ ...s, years: yearsBox.checked }, '.card-look-years');
         host.querySelectorAll<HTMLButtonElement>('.card-fields-date .segment-btn').forEach(btn => {
             btn.onclick = () => apply({ ...s, fullDate: btn.dataset.full === '1' }, `.card-fields-date [data-full="${btn.dataset.full}"]`);
         });

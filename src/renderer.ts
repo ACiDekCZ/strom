@@ -19,9 +19,9 @@ import { TreeManager } from './tree-manager.js';
 import { chainLinkSvg, iconSvg } from './icons.js';
 import * as CrossTree from './cross-tree.js';
 import { ViewMode, STANDALONE_VIEWS, ResearchEdgeMode } from './types.js';
-import { cardLines, CardLine, cardLineHtml } from './card-fields.js';
+import { cardLines, CardLine, cardLineHtml, cardYears, CardLineStyle } from './card-fields.js';
 import {
-    CustomCardMetrics, CardLineRows, customCardMetrics, customCardRows, customCardViewHeight, customCardSpouseLineY,
+    CustomCardMetrics, CardLineRows, CardHead, customCardMetrics, customCardRows, customCardViewHeight, customCardSpouseLineY,
     measureCardTexts, cardFontsPending,
 } from './card-width.js';
 import { checkRecordedAge, ageBirthDate } from './recorded-age.js';
@@ -88,6 +88,10 @@ class TreeRendererClass {
     private customRows = new Map<CardLine, CardLineRows>();
     /** The details wrap into rows (not the one-row card): the cards draw the computed rows. */
     private customWrapped = false;
+    /** The custom card's line style (marks or labels) the view was measured in. */
+    private customStyle: CardLineStyle = 'marks';
+    /** The custom card's header per drawn person: the name's rows, the years under it. */
+    private customHeads = new Map<PersonId, CardHead>();
     private positions = new Map<PersonId, Position>();
 
     /** Generation bands for the sticky label overlay (rebuilt each render). */
@@ -231,16 +235,18 @@ class TreeRendererClass {
         // The custom card is as wide as the view's longest text and (details
         // that wrap) as tall as its tallest card: start from the size the last
         // view had (usually the same), measure once laid out.
-        const valueLines = SettingsManager.getCardFields().lines;
-        const spouseLineY = custom ? customCardSpouseLineY(valueLines) : undefined;
+        const { lines: valueLines, years } = SettingsManager.getCardFields();
+        const spouseLineY = custom ? customCardSpouseLineY(valueLines, years) : undefined;
         this.config = {
             ...this.config, ...size, spouseLineY,
             ...(custom && this.customMetrics ? { cardWidth: this.customMetrics.cardWidth, cardHeight: this.customMetrics.cardHeight } : {}),
         };
         document.body.dataset.cardDensity = density;
         // The partner line (and the "+ partner" pill) at the header of a card that grows.
-        if (spouseLineY !== undefined) document.body.dataset.cardSpouseLine = 'head';
-        else delete document.body.dataset.cardSpouseLine;
+        if (spouseLineY !== undefined) {
+            document.body.dataset.cardSpouseLine = 'head';
+            document.body.style.setProperty('--card-head-line', `${spouseLineY}px`);
+        } else delete document.body.dataset.cardSpouseLine;
         // The custom card's height follows how many lines it shows.
         document.body.style.setProperty('--card-custom-h', `${this.config.cardHeight}px`);
         this.updatePlacesDatalist();
@@ -251,6 +257,7 @@ class TreeRendererClass {
             document.body.style.setProperty('--card-custom-w', `${metrics.cardWidth}px`);
             document.body.style.setProperty('--card-custom-h', `${metrics.cardHeight}px`);
             document.body.style.setProperty('--card-date-col', `${metrics.dateColumn}px`);
+            document.body.style.setProperty('--card-label-col', `${metrics.labelColumn ?? 0}px`);
             // The settings preview states the card size: keep it in step with the view.
             if (document.getElementById('settings-modal')?.classList.contains('active')) UI.renderCardPreview?.();
             if (metrics.cardWidth !== this.config.cardWidth || metrics.cardHeight !== this.config.cardHeight) {
@@ -269,6 +276,7 @@ class TreeRendererClass {
             this.customMetrics = null;
             this.customLines.clear();
             this.customRows.clear();
+            this.customHeads.clear();
             this.customWrapped = false;
         }
 
@@ -388,23 +396,32 @@ class TreeRendererClass {
     private measureCustomCards(positions: Map<PersonId, Position>): CustomCardMetrics & { cardHeight: number } {
         const data = DataManager.getData();
         const fields = SettingsManager.getCardFields();
+        // The years under the name say "1841 †" for one presumed dead, as the detailed card.
+        const presumed = fields.years ? this.computePresumedDeceased() : null;
         this.customLines.clear();
+        const ids: PersonId[] = [];
         const entries = [];
         for (const id of positions.keys()) {
             const person = DataManager.getPerson(id);
             if (!person) continue;
             const lines = person.isPlaceholder ? [] : cardLines(person, data, fields);
             this.customLines.set(id, lines);
-            entries.push({ name: shownName(person, '?'), avatar: !person.isPlaceholder, lines });
+            ids.push(id);
+            entries.push({
+                name: shownName(person, '?'), avatar: !person.isPlaceholder, lines,
+                ...(presumed ? { years: cardYears(person, presumed.has(id)) } : {}),
+            });
         }
         // The chosen width's cap (narrow / medium / wide); the poster takes this width too.
-        const metrics = customCardMetrics(entries, measureCardTexts, fields.widthCap, fields.lines);
-        const { rows, heights } = customCardRows(entries, metrics, measureCardTexts, fields.lines);
+        const metrics = customCardMetrics(entries, measureCardTexts, fields.widthCap, fields.lines, fields.style);
+        const { rows, heights, heads } = customCardRows(entries, metrics, measureCardTexts, fields.lines, fields.style);
         this.customRows = rows;
         this.customWrapped = fields.lines !== 1;
+        this.customStyle = fields.style;
+        this.customHeads = new Map(ids.map((id, i) => [id, heads[i]]));
         // fields.height 'content' (each card its own height) lays out like 'view'
         // until the per-card height reaches the layout pipeline (K4).
-        return { ...metrics, cardHeight: customCardViewHeight(fields.on.length, fields.lines, heights) };
+        return { ...metrics, cardHeight: customCardViewHeight(fields.on.length, fields.lines, heights, fields.years) };
     }
 
     /** The custom card's width and date column of the drawn view (null in other densities). */
@@ -1386,16 +1403,23 @@ class TreeRendererClass {
                 : `<span class="avatar-initials">${this.escapeHtml(initials)}</span>`;
             const avatarHtml = showAvatar
                 ? `<div class="card-avatar-wrap"><div class="card-avatar">${avatarInner}</div>${badgeHtml}</div>` : '';
-            const nameHtml = `<div class="name"><span class="name-text" title="${this.escapeHtml(fullName)}" data-given="${this.escapeHtml(displayName)}" data-surname="${this.escapeHtml(displaySurname)}">${this.escapeHtml(fullName)}</span></div>`;
+            const nameAttrs = `title="${this.escapeHtml(fullName)}" data-given="${this.escapeHtml(displayName)}" data-surname="${this.escapeHtml(displaySurname)}"`;
+            const nameHtml = `<div class="name"><span class="name-text" ${nameAttrs}>${this.escapeHtml(fullName)}</span></div>`;
+            const head = customLines ? this.customHeads.get(id) : undefined;
 
-            // Custom: the avatar and the name on one row, then one line per
-            // chosen event (src/card-fields.ts) — the lines carry the years.
+            // Custom: the avatar and the name (and the years under it) on one
+            // row, then one line per chosen event (src/card-fields.ts). When
+            // details may wrap, a long name takes the two rows computed with
+            // the card's height (src/card-width.ts), as the image export does.
             html += customLines ? `
                 <div class="card-body card-body--custom">
-                    <div class="card-head">${avatarHtml}${nameHtml}</div>
+                    <div class="card-head">${avatarHtml}<div class="card-head-text">${head && this.customWrapped
+                        ? `<div class="name name--rows"><span class="name-text" ${nameAttrs}>${head.name.map(r =>
+                            `<span class="name-row">${this.escapeHtml(r)}</span>`).join('')}</span></div>`
+                        : nameHtml}${head?.years ? `<div class="card-years">${this.escapeHtml(head.years)}</div>` : ''}</div></div>
                     <div class="card-lines${this.customWrapped ? ' card-lines--rows' : ''}">${customLines.map(l => {
                         const rows = this.customRows.get(l);
-                        return cardLineHtml(l, t => this.escapeHtml(t), !!rows?.cut, this.customWrapped ? rows : undefined);
+                        return cardLineHtml(l, t => this.escapeHtml(t), !!rows?.cut, this.customWrapped ? rows : undefined, this.customStyle);
                     }).join('')}</div>
                 </div>` : `
                 ${avatarHtml}
@@ -1684,7 +1708,8 @@ class TreeRendererClass {
         const items: Item[] = [];
         canvas.querySelectorAll<HTMLElement>('.person-card .name').forEach(nameEl => {
             const textEl = nameEl.querySelector<HTMLElement>('.name-text');
-            if (!textEl) return;
+            // A custom card's name in computed rows is drawn as it is (src/card-width.ts).
+            if (!textEl || nameEl.classList.contains('name--rows')) return;
             const given = textEl.dataset.given ?? '';
             const surname = textEl.dataset.surname ?? '';
             const full = `${given} ${surname}`.trim();

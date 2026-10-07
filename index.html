@@ -6516,8 +6516,18 @@
            text room the width was measured for. */
         body[data-card-density="custom"] .person-card.focused { padding-left: 11px; padding-right: 11px; }
         .card-body--custom { flex: 0 0 auto; justify-content: flex-start; gap: 6px; }
-        .card-body--custom .card-head { display: flex; align-items: center; gap: 8px; min-width: 0; height: 30px; }
-        .card-body--custom .card-head .name { flex: 1 1 auto; }
+        /* The header: the avatar and, beside it, the name (one 19px row, two
+           when details may wrap and it is long: src/card-width.ts computes
+           them, as the image export draws them) and the years under it
+           (11/14px). At least the avatar's 30px, the avatar in its middle. */
+        .card-body--custom .card-head { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 30px; }
+        .card-body--custom .card-head-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+        .card-body--custom .name .name-text { line-height: 19px; }
+        .card-body--custom .name--rows .name-row { display: block; min-width: 0; overflow: hidden; white-space: nowrap; }
+        .card-body--custom .card-years {
+            font-size: 11px; line-height: 14px; font-weight: 400; color: var(--text-light);
+            font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
         body[data-card-density="custom"] .card-avatar { width: 30px; height: 30px; border-width: 1.5px; }
         .card-lines { display: flex; flex-direction: column; min-width: 0; }
         /* A line is a grid: mark | date | place. The date column is the view's
@@ -6544,11 +6554,21 @@
         .card-line--rows { align-items: start; }
         .card-line--rows .card-line-place { flex-direction: column; }
         .card-line-row { display: block; min-width: 0; overflow: hidden; white-space: nowrap; }
+        /* Labels style: the event's word (12/600, faint) in a column as wide as
+           the view's longest label (--card-label-col), 8px, then the value: the
+           date, 5px, the place. Its rows start at the value's start. */
+        .card-line--label { grid-template-columns: var(--card-label-col, max-content) minmax(0, 1fr); column-gap: 8px; }
+        .card-line-label { color: var(--text-faint); font-weight: 600; white-space: nowrap; overflow: hidden; }
+        .card-line-value { display: flex; min-width: 0; color: var(--text-light); font-weight: 400; }
+        .card-line-value > .card-line-date { flex: none; }
+        .card-line--rows .card-line-value { flex-direction: column; }
+        .card-line--label .card-line-date:not(:last-child) { margin-right: 5px; }
         /* The partner line runs at the header of a card that grows (25px from
-           its top, LayoutConfig.spouseLineY); the "+ partner" pill goes with it
+           its top, 26.5px with the years under the name: --card-head-line,
+           LayoutConfig.spouseLineY); the "+ partner" pill goes with it
            (inside the 1px border, the focused card's 2px). */
-        body[data-card-density="custom"][data-card-spouse-line="head"] .person-card .edge-right-center { top: 24px; }
-        body[data-card-density="custom"][data-card-spouse-line="head"] .person-card.focused .edge-right-center { top: 23px; }
+        body[data-card-density="custom"][data-card-spouse-line="head"] .person-card .edge-right-center { top: calc(var(--card-head-line, 25px) - 1px); }
+        body[data-card-density="custom"][data-card-spouse-line="head"] .person-card.focused .edge-right-center { top: calc(var(--card-head-line, 25px) - 2px); }
         .card-trade {
             font-size: 10px; line-height: 1.3; font-style: italic;
             color: var(--text-light);
@@ -7004,7 +7024,14 @@
         .card-look-segment { justify-self: start; max-width: 100%; }
         .card-look-segment .segment-btn { padding: 6px 14px; font-size: 13px; }
         .card-look-scope { font-size: 12px; line-height: 1.45; color: var(--text-faint); }
+        /* "Years under the name": a checkbox under the segments. */
+        .modal label.card-look-check { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 14px; font-weight: 400; color: var(--text); cursor: pointer; }
+        .card-look-check input { margin: 0; }
+        /* The preset above the details: its title and a segment (Brief / Register / All). */
+        .card-preset { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; }
         @media (max-width: 640px) {
+            .card-preset { flex-direction: column; align-items: stretch; gap: 6px; }
+            .card-look-check { min-height: 44px; }
             /* The toggles go under the name, the arrows grow to a thumb. */
             .card-field-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
             .card-field-chips { grid-column: 1 / -1; grid-row: 2; padding-left: 52px; }
@@ -7017,6 +7044,7 @@
         }
         @media (pointer: coarse) {
             .card-look-segment .segment-btn { min-height: 44px; }
+            .card-look-check { min-height: 44px; }
         }
         @media (hover: hover) { .person-card.indirect:hover { opacity: 1; } }
 

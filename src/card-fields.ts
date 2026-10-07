@@ -16,7 +16,7 @@ import { Person, StromData, LifeEvent, Partnership } from './types.js';
 import { parseFlexDate, formatFlexDate, toCanonical } from './dates.js';
 import { newestLifeEvent, sortLifeEvents } from './events.js';
 import { strings } from './strings.js';
-import type { CardLineRows } from './card-width.js';
+import type { CardLineRows, CardRow } from './card-width.js';
 
 export type CardFieldKey = 'birth' | 'baptism' | 'death' | 'burial' | 'occupation' | 'marriage' | 'divorce';
 
@@ -54,10 +54,10 @@ export interface CardFieldSettings {
     /** Full dates instead of years. */
     fullDate: boolean;
     /*
-     * The card's appearance. `widthCap` and `lines` take effect (src/card-width.ts:
-     * the width, the rows a detail wraps into, the view's card height); `height`
-     * draws 'content' like 'view' until the per-card height lands in the layout,
-     * and `style` and `years` are kept and normalized but not drawn yet.
+     * The card's appearance (src/card-width.ts: the width, the rows a detail
+     * wraps into, the label column, the header, the view's card height);
+     * `height` draws 'content' like 'view' until the per-card height lands in
+     * the layout.
      */
     /** Marks or words in front of the lines. */
     style: CardLineStyle;
@@ -194,8 +194,9 @@ export function matchCardPreset(settings: CardFieldSettings): CardPresetKey | nu
  * detail; when details wrap the renderer measures the view's tallest card
  * instead (customCardViewHeight) and starts from this one.
  */
-export function customCardSize(lines: number): { cardWidth: number; cardHeight: number } {
-    return { cardWidth: 200, cardHeight: 56 + 17 * Math.max(0, lines) };
+export function customCardSize(lines: number, years = false): { cardWidth: number; cardHeight: number } {
+    // The years under the name make the header 3px taller (19 + 14 instead of the avatar's 30).
+    return { cardWidth: 200, cardHeight: 56 + (years ? 3 : 0) + 17 * Math.max(0, lines) };
 }
 
 export interface CardLine {
@@ -213,6 +214,11 @@ export interface CardLine {
     wide?: boolean;
     /** The line in words, for the aria-label: "Death 1919 Horní Lhota · souchotiny". */
     spoken: string;
+    /**
+     * The event's word, the line's label in the labels style: the event the
+     * line shows, so a stand-in says its own ("Baptism" on the birth line).
+     */
+    label?: string;
     /** The place alone (without the cause). */
     place?: string;
     /** The cause of death alone: after the place with " · " in `rest`, its own row when a detail is whole. */
@@ -232,6 +238,21 @@ export function cardDate(value: string | undefined, full: boolean): string {
     const c = strings.card;
     const word = d.qualifier === '~' ? c.dateAbout : d.qualifier === '<' ? c.dateBefore : d.qualifier === '>' ? c.dateAfter : '';
     return word ? `${word} ${core(d)}` : core(d);
+}
+
+/**
+ * The life years under the name (the option "Years under the name"), as the
+ * detailed card says them: "1841 – 1922", estimates in words ("c. 1855 –
+ * after 1919"), "* 1958" for the living, "1841 †" for one presumed dead
+ * without a death date; '' without any year (no such row).
+ */
+export function cardYears(person: Person, presumedDead = false): string {
+    if (person.isPlaceholder) return '';
+    const birth = cardDate(person.birthDate, false);
+    const death = cardDate(person.deathDate, false);
+    if (death) return `${birth || '?'} – ${death}`;
+    if (birth) return presumedDead ? `${birth} †` : `* ${birth}`;
+    return '';
 }
 
 const firstOf = (person: Person, types: LifeEvent['type'][]): LifeEvent | undefined => {
@@ -269,7 +290,7 @@ export function cardLines(person: Person, data: StromData, s: CardFieldSettings)
         const rest = [placeText, cause].filter(Boolean).join(' · ');
         const text = [[dateText, placeText].filter(Boolean).join(' '), cause].filter(Boolean).join(' · ');
         if (!text) return;
-        out.push({ key, mark, text, date: dateText, rest, spoken: `${label} ${text}`,
+        out.push({ key, mark, text, date: dateText, rest, spoken: `${label} ${text}`, label,
             ...(placeText ? { place: placeText } : {}), ...(cause ? { cause } : {}) });
     };
     for (const key of s.order) {
@@ -308,7 +329,10 @@ export function cardLines(person: Person, data: StromData, s: CardFieldSettings)
             case 'occupation': {
                 const jobs = (person.events ?? []).filter(e => e.type === 'occupation' && e.note?.trim());
                 const job = newestLifeEvent(jobs)?.note?.trim().split('\n')[0];
-                if (job) out.push({ key, mark: '', text: job, date: '', rest: job, wide: true, spoken: `${types.occupation} ${job}` });
+                if (job) {
+                    out.push({ key, mark: '', text: job, date: '', rest: job, wide: true, spoken: `${types.occupation} ${job}`,
+                        label: types.occupation });
+                }
                 break;
             }
             case 'marriage': {
@@ -349,9 +373,13 @@ export function cardLines(person: Person, data: StromData, s: CardFieldSettings)
  * the image export were computed from; a value that ended in "…" says itself
  * in full in a title. Without `rows` the line is one row the browser shortens
  * (the one-row card, as before).
+ * `style` 'labels': the event's word in the label column instead of the mark,
+ * then the value: the date, 5px, the place (cardLabelLineHtml).
  * `esc` must escape quotes as well (the text goes into an attribute).
  */
-export function cardLineHtml(l: CardLine, esc: (text: string) => string, cut = false, rows?: CardLineRows): string {
+export function cardLineHtml(l: CardLine, esc: (text: string) => string, cut = false, rows?: CardLineRows,
+    style: CardLineStyle = 'marks'): string {
+    if (style === 'labels') return cardLabelLineHtml(l, esc, cut, rows);
     const mark = `<span class="card-line-mark" aria-hidden="true">${esc(l.mark)}</span>`;
     const date = l.wide ? '' : `<span class="card-line-date">${esc(l.date)}</span>${l.rest || l.more ? ' ' : ''}`;
     const placeClass = `card-line-place${l.wide ? ' card-line-place--wide' : ''}`;
@@ -368,4 +396,30 @@ export function cardLineHtml(l: CardLine, esc: (text: string) => string, cut = f
     const place = `<span class="${placeClass}">`
         + `<span class="card-line-rest"${title}>${esc(l.rest)}</span>${more}</span>`;
     return `<div class="card-line card-line--${l.key}">${mark}${date}${place}</div>`;
+}
+
+/**
+ * A line in the labels style (index.html .card-line--label): the label in
+ * the view's label column, the value after it. One row: the date, 5px, the
+ * place shortened by the browser. Rows: each drawn as it is, the date (or
+ * its piece) at the start of its row, every row starting at the value's
+ * start; a value that ended in "…" says itself (date and place) in a title.
+ */
+function cardLabelLineHtml(l: CardLine, esc: (text: string) => string, cut: boolean, rows?: CardLineRows): string {
+    const label = `<span class="card-line-label">${esc(l.label ?? '')}</span>`;
+    const whole = l.more ? l.text.slice(0, l.text.length - l.more.length).trimEnd() : l.text;
+    if (rows) {
+        const title = rows.cut ? ` title="${esc(whole)}"` : '';
+        const row = (r: CardRow): string => `<span class="card-line-row${r.cause ? ' card-line-row--cause' : ''}">`
+            + `${r.date ? `<span class="card-line-date">${esc(r.date)}</span>` : ''}`
+            + `${r.text ? `<span class="card-line-text">${esc(r.text)}</span>` : ''}`
+            + `${r.tail ? `<span class="card-line-more">${esc(r.tail)}</span>` : ''}</span>`;
+        return `<div class="card-line card-line--label card-line--${l.key} card-line--rows">${label}`
+            + `<span class="card-line-value"${title}>${rows.rows.map(row).join('')}</span></div>`;
+    }
+    const date = l.date ? `<span class="card-line-date">${esc(l.date)}</span>` : '';
+    const more = l.more ? `<span class="card-line-more"> ${esc(l.more)}</span>` : '';
+    const title = cut ? ` title="${esc(whole)}"` : '';
+    const rest = l.rest ? `<span class="card-line-rest"${title}>${esc(l.rest)}</span>` : '';
+    return `<div class="card-line card-line--label card-line--${l.key}">${label}<span class="card-line-value">${date}${rest}${more}</span></div>`;
 }

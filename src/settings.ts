@@ -379,7 +379,9 @@ class SettingsManagerClass {
     /** The card box for the current density (the layout spaces cards by it). */
     getCardSize(): { cardWidth: number; cardHeight: number } {
         const density = this.getCardDensity();
-        return density === 'custom' ? customCardSize(this.getCardFields().on.length) : CARD_SIZE[density];
+        if (density !== 'custom') return CARD_SIZE[density];
+        const fields = this.getCardFields();
+        return customCardSize(fields.on.length, fields.years);
     }
 
     /** What the card shows at a glance, for this device. */
