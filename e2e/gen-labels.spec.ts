@@ -261,3 +261,72 @@ test('a band name lies over a connector line with a halo, beneath the cards: the
     expect(dark.stroke).toBe(dark.bg);
     expect(dark.bg).not.toBe(probe.bg);
 });
+
+test('the halo covers a band name whole, word gaps included: a line under the name never shows between its words (P4)', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(page.locator('.person-card').first()).toBeVisible();
+    await expect(page.locator('#gen-labels.gen-labels--line')).toBeAttached();
+    await expect(page.locator('#gen-labels:not(.panning) .gen-label:visible').first()).toBeVisible();
+
+    // Lay a bright test line through the middle of a two-word name, in the
+    // lines SVG (beneath the names), running on well past both ends.
+    const geo = await page.evaluate(() => {
+        const label = Array.from(document.querySelectorAll<HTMLElement>('#gen-labels .gen-label'))
+            .find(el => el.style.display !== 'none' && !el.classList.contains('covered')
+                && (el.querySelector('.gen-label-text')?.textContent ?? '').trim().includes(' '));
+        if (!label) return null;
+        const text = label.querySelector('.gen-label-text') as HTMLElement;
+        const t = text.getBoundingClientRect();
+        const node = text.firstChild as Text;
+        const range = document.createRange();
+        const at = node.data.indexOf(' ');
+        range.setStart(node, at);
+        range.setEnd(node, at + 1);
+        const space = range.getBoundingClientRect();
+        const svg = document.getElementById('tree-lines') as unknown as SVGSVGElement;
+        const inv = svg.getScreenCTM()!.inverse();
+        const toWorld = (x: number, y: number) => new DOMPoint(x, y).matrixTransform(inv);
+        const y = t.top + t.height / 2;
+        const a = toWorld(Math.max(0, t.left - 60), y), b = toWorld(t.right + 60, y);
+        const width = toWorld(0, 3).y - toWorld(0, 0).y;
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.id = 'p4-probe-line';
+        line.setAttribute('x1', String(a.x)); line.setAttribute('y1', String(a.y));
+        line.setAttribute('x2', String(b.x)); line.setAttribute('y2', String(b.y));
+        line.setAttribute('style', `stroke: rgb(255, 0, 0); stroke-width: ${width}px`);
+        svg.appendChild(line);
+        return { t: { left: t.left, right: t.right, width: t.width }, space: { left: space.left, width: space.width }, y };
+    });
+    expect(geo).not.toBeNull();
+    const { t, space, y } = geo!;
+    expect(space.width).toBeGreaterThan(0);
+
+    const redPixels = async (x: number, width: number): Promise<number> => {
+        const png = await page.screenshot({ clip: { x, y: y - 1, width, height: 2 } });
+        return page.evaluate(async (src) => {
+            const img = new Image();
+            await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = src; });
+            const c = document.createElement('canvas');
+            c.width = img.naturalWidth; c.height = img.naturalHeight;
+            const ctx = c.getContext('2d')!;
+            ctx.drawImage(img, 0, 0);
+            const d = ctx.getImageData(0, 0, c.width, c.height).data;
+            let n = 0;
+            for (let i = 0; i < d.length; i += 4) if (d[i] > 160 && d[i + 1] < 110 && d[i + 2] < 110) n++;
+            return n;
+        }, `data:image/png;base64,${png.toString('base64')}`);
+    };
+
+    for (const theme of ['light', 'dark']) {
+        await page.evaluate((theme) => document.documentElement.setAttribute('data-theme', theme), theme);
+        await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+        // The line is drawn and shows beside the name…
+        expect(await redPixels(Math.max(0, t.left - 40), 24), theme).toBeGreaterThan(0);
+        expect(await redPixels(t.right + 16, 24), theme).toBeGreaterThan(0);
+        // …and nowhere within the name: not under the letters, not in the gap between the words.
+        expect(await redPixels(space.left, space.width), `${theme}: word gap`).toBe(0);
+        expect(await redPixels(t.left, t.width), theme).toBe(0);
+    }
+});

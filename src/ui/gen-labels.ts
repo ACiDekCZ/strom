@@ -5,7 +5,7 @@
  * here, in an HTML layer that undoes the pan/zoom transform, so they hold their
  * place while the tree moves underneath. The layer sits inside #tree-canvas
  * between the lines SVG and the cards: a name is painted over the connector
- * lines (its halo breaks a line only around the glyphs) and beneath every card
+ * lines (its halo breaks a line only around the text) and beneath every card
  * (T11).
  *
  * Like the minimap, this reads TreeRenderer/ZoomPan and never writes back. It
@@ -31,7 +31,8 @@ import { uiModule } from './module.js';
  *      card — the `.covered` fade is unused in this mode. The connector buses
  *      run along the same boundary: the name lies over them with a halo in the
  *      canvas colour, so a bus stays whole on both sides of the name and is
- *      broken only within the halo around the glyphs (T11); no opaque box.
+ *      broken only within the halo around the text, word gaps included (T11,
+ *      P4); the padding around the name stays clear.
  *
  *  'row' — the previous behaviour: the name floats at the row centre and fades
  *      out (`.covered`) under any card that pans over it.

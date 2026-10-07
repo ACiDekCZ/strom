@@ -927,7 +927,7 @@
            so its coordinates are the container's screen pixels. Painted above
            the connector lines and beneath the cards: a name never covers a
            person, and a line crossing a name is hidden only within the halo
-           around the glyphs (.gen-label), staying whole on both sides (T11). */
+           around the name's text (.gen-label), staying whole on both sides (T11). */
         .gen-labels {
             position: absolute;
             left: 0;
@@ -961,9 +961,13 @@
             transition: opacity 0.15s;
             /* A halo in the canvas colour, like a name on a map: a connector
                line under the text breaks only within it (stroke painted first,
-               the glyphs over it; --bg follows the theme). */
+               the glyphs over it; --bg follows the theme). The stroke hugs the
+               glyphs only, so the name's own line box is filled in the same
+               colour too (clipped to the content box, the line-mode padding
+               stays clear): the gaps between words never let a line through. */
             -webkit-text-stroke: 4px var(--bg);
             paint-order: stroke fill;
+            background: var(--bg) content-box;
         }
         /* Cards take precedence: a label a card has panned over fades out
            (gen-labels.ts toggles this), so the band name never prints on top
@@ -975,7 +979,7 @@
            fieldset legend (— PARENTS ———). The guide rule gets a gap the size of
            the label box (padding included; gen-labels.ts sets it), so the line
            appears to break around the name, while a connector line on the same
-           boundary runs on through the name, broken only by the glyphs' halo.
+           boundary runs on through the name, broken only by the text's halo.
            --text-ghost keeps it quiet; it sits in the empty world-space gutter
            between rows, so it never covers a card. */
         .gen-labels--line .gen-label {
