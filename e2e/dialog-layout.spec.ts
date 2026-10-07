@@ -310,3 +310,73 @@ test('segment switches in dialogs: square inner buttons, the rounded container c
     expect(m).toEqual({ buttons: ['0px 0px 0px 0px', '0px 0px 0px 0px'], container: true, clips: true });
 });
 
+/** Where the person card's footer buttons are (edit mode of a saved person). */
+async function personFooter(page: import('@playwright/test').Page) {
+    return page.evaluate(() => {
+        const modal = document.querySelector('#person-modal .modal') as HTMLElement;
+        const footer = modal.querySelector('.pm-footer') as HTMLElement;
+        const content = modal.querySelector('.modal-content') as HTMLElement;
+        const shown = (id: string) => {
+            const el = document.getElementById(id) as HTMLElement;
+            return !!el.offsetParent && el.getBoundingClientRect().height > 0;
+        };
+        const del = document.getElementById('btn-delete') as HTMLElement;
+        const save = document.getElementById('btn-save')!.getBoundingClientRect();
+        const merge = document.getElementById('btn-merge')!.getBoundingClientRect();
+        return {
+            cancel: shown('pm-dismiss'),
+            save: shown('btn-save'),
+            merge: shown('btn-merge'),
+            delete: shown('btn-delete'),
+            // One row: the same vertical centre (a bordered secondary is 2px taller).
+            saveMergeOneRow: Math.abs((save.top + save.bottom) / 2 - (merge.top + merge.bottom) / 2) < 1,
+            deleteIn: footer.contains(del) ? 'footer' : content.contains(del) ? 'content' : 'elsewhere',
+            // At the end of the content: nothing below it in the scroll body.
+            deleteLast: content.contains(del) ? del.getBoundingClientRect().bottom >= Math.max(
+                ...Array.from(content.querySelectorAll('*')).filter(e => !del.contains(e) && !e.contains(del)
+                    && (e as HTMLElement).offsetParent).map(e => e.getBoundingClientRect().bottom)) - 0.5 : false,
+            overflow: Array.from(footer.children).some(b => (b as HTMLElement).offsetParent
+                && (b.getBoundingClientRect().right > footer.getBoundingClientRect().right + 0.5)),
+        };
+    });
+}
+
+test('phone: the person card footer has Merge and Save side by side, no Cancel, Delete person at the end of the content (T24)', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    const id = await card(page, 'Jan').getAttribute('data-id');
+    await page.evaluate((pid) => window.Strom.UI.showEditPersonModal(pid as never), id);
+    await expect(page.locator('#person-modal')).toBeVisible();
+    expect(await personFooter(page)).toEqual({
+        cancel: false, save: true, merge: true, delete: true, saveMergeOneRow: true,
+        deleteIn: 'content', deleteLast: true, overflow: false,
+    });
+    // The × still closes it.
+    await page.locator('#person-modal .pm-header .close-btn').click();
+    await expect(page.locator('#person-modal')).toBeHidden();
+
+    // A locked (read-only) card keeps its Close: nothing else would be in the footer.
+    await page.evaluate((pid) => window.Strom.DataManager.updatePerson(pid as never, { isLocked: true }), id);
+    await page.evaluate((pid) => window.Strom.UI.showEditPersonModal(pid as never), id);
+    await expect(page.locator('#person-modal #pm-dismiss')).toBeVisible();
+    await expect(page.locator('#person-modal #pm-dismiss')).toHaveText('Close');
+    await page.locator('#person-modal #pm-dismiss').click();
+    await page.evaluate((pid) => window.Strom.DataManager.updatePerson(pid as never, { isLocked: false }), id);
+
+    // Back to a tablet width: the footer gets Delete and Cancel back.
+    await page.setViewportSize({ width: 800, height: 844 });
+    await page.evaluate((pid) => window.Strom.UI.showEditPersonModal(pid as never), id);
+    const tablet = await personFooter(page);
+    expect(tablet).toMatchObject({ cancel: true, save: true, merge: true, delete: true, saveMergeOneRow: true, deleteIn: 'footer' });
+});
+
+test('desktop: the person card footer keeps Delete person, Merge, Cancel and Save in one row (T24)', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    const id = await card(page, 'Jan').getAttribute('data-id');
+    await page.evaluate((pid) => window.Strom.UI.showEditPersonModal(pid as never), id);
+    await expect(page.locator('#person-modal')).toBeVisible();
+    expect(await personFooter(page)).toMatchObject({ cancel: true, save: true, merge: true, delete: true, saveMergeOneRow: true, deleteIn: 'footer' });
+});

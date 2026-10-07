@@ -47,11 +47,35 @@ import { validateTreeData, ValidationResult as TreeValidationResult, ValidationI
 import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
+import { isMobile, MQ_MOBILE } from '../breakpoints.js';
 import { isValidDateInput, normalizeDateInput, formatDateForInput } from '../dates.js';
 import { autoGrowAll } from './autogrow.js';
 import { computePersonLifeline, LifelinePoint } from '../timeline.js';
 import { storyWithDraft } from './story-compare-ui.js';
 import { offeredDetails, resetDetailGroup, renderAgeCheck, ageBirthDate, eventDetailLine } from './event-details-ui.js';
+
+/**
+ * Delete person sits in the footer, except on a phone (T24): there the footer
+ * keeps only Merge and Save, and the delete link goes to the end of the
+ * content (#pm-delete-slot). Called on every open and on crossing the phone
+ * breakpoint.
+ */
+let deleteLinkWatch = false;
+function placePersonDeleteLink(): void {
+    const btn = document.getElementById('btn-delete');
+    const slot = document.getElementById('pm-delete-slot');
+    const footer = document.querySelector('#person-modal .pm-footer');
+    if (!btn || !slot || !footer) return;
+    if (isMobile()) {
+        if (btn.parentElement !== slot) slot.appendChild(btn);
+    } else if (btn.parentElement !== footer) {
+        footer.prepend(btn);
+    }
+    if (!deleteLinkWatch && typeof window.matchMedia === 'function') {
+        deleteLinkWatch = true;
+        window.matchMedia(MQ_MOBILE).addEventListener?.('change', placePersonDeleteLink);
+    }
+}
 
 /** The person dialog's detail inputs and the Person fields they edit. */
 const PERSON_DETAIL_FIELDS = [
@@ -161,6 +185,7 @@ export const personModalMethods = uiModule({
         if (attachmentsSection) attachmentsSection.style.display = 'none';
         document.querySelectorAll('#person-modal .pm-conflict-tag').forEach(n => n.remove());
 
+        placePersonDeleteLink();
         modal.classList.add('active');
         firstNameInput.focus();
 
@@ -181,6 +206,8 @@ export const personModalMethods = uiModule({
     setPersonModalDismiss(readOnly: boolean): void {
         const btn = document.getElementById('pm-dismiss');
         if (btn) btn.textContent = readOnly ? strings.buttons.close : strings.buttons.cancel;
+        // On a phone Cancel gives way to the ×; a read-only card keeps Close.
+        btn?.parentElement?.classList.toggle('is-read-only', readOnly);
     },
 
     setPersonFormReadOnly(readOnly: boolean): void {
@@ -757,6 +784,7 @@ export const personModalMethods = uiModule({
         // "conflict ›" at the fields the research has an open conflict about.
         this.markResearchConflicts(id);
 
+        placePersonDeleteLink();
         modal.classList.add('active');
         // Now that the dialog has a layout, let the long text fields take the
         // height their content needs.
