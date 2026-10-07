@@ -5,7 +5,10 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { customCardWidth, customCardMetrics, customCardCutLines, MeasureTexts, CustomCardEntry } from '../card-width.js';
+import {
+    customCardWidth, customCardMetrics, customCardCutLines, MeasureTexts, CustomCardEntry, wrapCardText, wrapCardTexts,
+    customCardRows, customCardHeight, customCardViewHeight, customCardSpouseLineY, WrapRequest,
+} from '../card-width.js';
 import { cardLines, cardLineHtml, normalizeCardFields, DEFAULT_CARD_FIELDS } from '../card-fields.js';
 import { buildTreeSvg, PosterLayout } from '../export-image.js';
 import { setLanguage } from '../strings.js';
@@ -209,5 +212,209 @@ describe('the poster draws the custom card like the screen', () => {
         expect(svg).toContain('>14. 11. 1919</text>');
         // Room: 320 − 12 − (12 + 17 + 72 + 6) = 201, less " +1" (18) = 183 → 29 characters and the ellipsis (30 × 6 = 180).
         expect(svg).toContain(`>${'P'.repeat(29)}… +1</text>`);
+    });
+});
+
+describe('wrapping a value into rows (U02)', () => {
+    const wrap = (text: string, width: number, maxLines: 0 | 1 | 2, tail?: string) =>
+        wrapCardText({ text, width, maxLines, ...(tail ? { tail } : {}) }, measure);
+    const texts = (r: { rows: { text: string; tail?: string }[] }) => r.rows.map(x => x.text + (x.tail ?? ''));
+
+    it('a text that fits is one row; nothing is no row; an empty text with "+1" is the "+1" alone', () => {
+        expect(wrap('Brno', 60, 0)).toEqual({ rows: [{ text: 'Brno' }], cut: false });
+        expect(wrap('Brno', 60, 1)).toEqual({ rows: [{ text: 'Brno' }], cut: false });
+        expect(wrap('', 60, 0)).toEqual({ rows: [], cut: false });
+        expect(wrap('', 60, 2, ' +1')).toEqual({ rows: [{ text: '', tail: ' +1' }], cut: false });
+    });
+
+    it('breaks after a space, keeping as much as fits on a row', () => {
+        // 10 characters a row at 6px.
+        expect(texts(wrap('aaaa bbbb cccc', 60, 0))).toEqual(['aaaa bbbb', 'cccc']);
+        expect(texts(wrap('aaaa bbbb cccc', 30, 0))).toEqual(['aaaa', 'bbbb', 'cccc']);
+        // A row never starts with the spaces it broke at.
+        expect(texts(wrap('aaaa    bbbb', 30, 0))).toEqual(['aaaa', 'bbbb']);
+    });
+
+    it('breaks after "-", "–" and "/" too (the sign stays on the first row), not after other signs', () => {
+        expect(texts(wrap('Frýdek-Místek', 50, 0))).toEqual(['Frýdek-', 'Místek']);
+        expect(texts(wrap('aaaa–bbbb', 30, 0))).toEqual(['aaaa–', 'bbbb']);
+        expect(texts(wrap('aaaa/bbbb', 30, 0))).toEqual(['aaaa/', 'bbbb']);
+        // A comma or a dot is no break: the word is wider than the column and breaks by characters.
+        expect(texts(wrap('aaaa.bbbb', 30, 0))).toEqual(['aaaa.', 'bbbb']);
+        expect(texts(wrap('aaa.bbbbbb', 30, 0))).toEqual(['aaa.b', 'bbbbb']);
+    });
+
+    it('a word wider than the column breaks by characters only when the whole text is shown', () => {
+        expect(wrap('x'.repeat(25), 60, 0)).toEqual({ rows: [{ text: 'x'.repeat(10) }, { text: 'x'.repeat(10) }, { text: 'x'.repeat(5) }], cut: false });
+        // Limited to rows: the text stops at that word with "…", even with a row to spare.
+        expect(wrap('x'.repeat(25), 60, 2)).toEqual({ rows: [{ text: `${'x'.repeat(9)}…` }], cut: true });
+        expect(wrap('x'.repeat(25), 60, 1)).toEqual({ rows: [{ text: `${'x'.repeat(9)}…` }], cut: true });
+        expect(wrap(`aa ${'x'.repeat(25)}`, 60, 2)).toEqual({ rows: [{ text: 'aa' }, { text: `${'x'.repeat(9)}…` }], cut: true });
+    });
+
+    it('two rows: a third is never drawn, the second ends in "…" with as many characters as fit', () => {
+        const r = wrap('aaaa bbbb cccc dddd', 30, 2);
+        expect(r).toEqual({ rows: [{ text: 'aaaa' }, { text: 'bbbb…' }], cut: true });
+        // Characters of the next word fill the row up to the ellipsis.
+        expect(wrap('aaaa bb cccccccc', 30, 2)).toEqual({ rows: [{ text: 'aaaa' }, { text: 'bb c…' }], cut: true });
+        // One row: today's shortening of the place.
+        expect(wrap('aaaa bbbb cccc', 60, 1)).toEqual({ rows: [{ text: 'aaaa bbbb…' }], cut: true });
+        expect(wrap('aaaa bbbb', 60, 2)).toEqual({ rows: [{ text: 'aaaa bbbb' }], cut: false });
+    });
+
+    it('"+1" stays glued to the last word and is never cut', () => {
+        // "Dolní Lhota" alone fits 66px, with " +1" it does not: the last word goes down with it.
+        expect(wrap('Dolní Lhota', 66, 0, ' +1')).toEqual({ rows: [{ text: 'Dolní' }, { text: 'Lhota', tail: ' +1' }], cut: false });
+        // Shortened, the place ends in "…" and "+1" follows whole.
+        expect(wrap('Dolní Lhota', 60, 1, ' +1')).toEqual({ rows: [{ text: 'Dolní…', tail: ' +1' }], cut: true });
+        expect(wrap('aaaa bbbb cccc dddd', 30, 2, ' +1')).toEqual({ rows: [{ text: 'aaaa' }, { text: 'b…', tail: ' +1' }], cut: true });
+        // A long last word broken by characters: "+1" goes with its end, at least one character of it.
+        expect(texts(wrap('x'.repeat(12), 60, 0, ' +1'))).toEqual(['x'.repeat(10), 'xx +1']);
+        expect(texts(wrap('x'.repeat(10), 60, 0, ' +1'))).toEqual(['x'.repeat(9), 'x +1']);
+    });
+
+    it('no row is wider than its column, whatever the width; every word is kept when whole', () => {
+        const text = 'Nové Město na Moravě, okres Žďár nad Sázavou/Vysočina, Frýdek-Místek – Česká republika';
+        for (let width = 30; width <= 300; width += 7) {
+            const whole = wrap(text, width, 0);
+            for (const row of whole.rows) expect(row.text.length * 6).toBeLessThanOrEqual(width);
+            expect(whole.rows.map(r => r.text).join('').replace(/\s/g, '')).toBe(text.replace(/\s/g, ''));
+            const two = wrap(text, width, 2);
+            expect(two.rows.length).toBeLessThanOrEqual(2);
+            for (const row of two.rows) expect(row.text.length * 6).toBeLessThanOrEqual(width);
+            expect(two.cut).toBe(text.length * 6 > 2 * width || two.rows[two.rows.length - 1].text.endsWith('…'));
+        }
+    });
+
+    it('wraps every text of a view together: one measuring batch a round, not a call per text', () => {
+        let calls = 0;
+        const counting: MeasureTexts = (kind, t) => { calls++; return measure(kind, t); };
+        const requests: WrapRequest[] = Array.from({ length: 50 }, (_, i) => ({ text: `aaaa bbbb cccc ${i}`, width: 30, maxLines: 0 }));
+        const results = wrapCardTexts(requests, counting);
+        expect(results.every(r => r.rows.length === 4)).toBe(true);
+        expect(calls).toBe(4);
+    });
+});
+
+describe('the rows and the height of the custom card (U02)', () => {
+    // Width 200: room 174; "1919" makes a 24px date column, so the place column is 174 − 47 = 127 (21 characters).
+    const death = line('1919', 'Horní Lhota, čp. 13 · náhlé zapálení mozkových blan', {
+        key: 'death', mark: '†', place: 'Horní Lhota, čp. 13', cause: 'náhlé zapálení mozkových blan',
+    });
+    const birth = line('1862', 'Brno');
+    const entries: CustomCardEntry[] = [{ name: 'Jan Vlk', avatar: true, lines: [birth, death] }];
+    const metrics = { cardWidth: 200, dateColumn: 24 };
+
+    it('whole: the place wraps in its column and the cause takes rows of its own under it', () => {
+        const { rows, heights } = customCardRows(entries, metrics, measure, 0);
+        expect(rows.get(death)).toEqual({
+            rows: [{ text: 'Horní Lhota, čp. 13' }, { text: 'náhlé zapálení', cause: true }, { text: 'mozkových blan', cause: true }],
+            cut: false,
+        });
+        expect(rows.get(birth)).toEqual({ rows: [{ text: 'Brno' }], cut: false });
+        // 50 header + 6 + 4 rows × 17 + 3 between the two details.
+        expect(heights).toEqual([50 + 6 + 4 * 17 + 3]);
+    });
+
+    it('two rows: the cause after the place with " · ", the second row ends in "…"', () => {
+        const { rows, heights } = customCardRows(entries, metrics, measure, 2);
+        expect(rows.get(death)).toEqual({ rows: [{ text: 'Horní Lhota, čp. 13 ·' }, { text: 'náhlé zapálení mozko…' }], cut: true });
+        expect(heights).toEqual([50 + 6 + 3 * 17 + 3]);
+    });
+
+    it('one row: the line shortens, the card keeps today\'s height', () => {
+        const { rows } = customCardRows(entries, metrics, measure, 1);
+        expect(rows.get(death)!.cut).toBe(true);
+        expect(rows.get(death)!.rows).toHaveLength(1);
+        expect(customCardViewHeight(3, 1, [500])).toBe(107);
+        expect(customCardViewHeight(7, 1, [])).toBe(175);
+    });
+
+    it('the occupation wraps from the date column; the whole cause counts alone for the width', () => {
+        const job = { key: 'occupation' as const, mark: '', text: '', spoken: '', date: '', rest: 'mlynář a hostinský v Dolní Lhotě u kostela', wide: true };
+        // 174 − 17 = 157: 26 characters.
+        const { rows } = customCardRows([{ name: 'A', avatar: true, lines: [job] }], metrics, measure, 0);
+        expect(rows.get(job)!.rows.map(r => r.text)).toEqual(['mlynář a hostinský v Dolní', 'Lhotě u kostela']);
+        // Whole: the widest piece is the cause (29 × 6 = 174) → 47 + 174 = 221 → 247 → 248;
+        // one row: "place · cause" (51 × 6 = 306) → past the cap.
+        expect(customCardMetrics(entries, measure, 320, 0).cardWidth).toBe(248);
+        expect(customCardMetrics(entries, measure, 320, 1).cardWidth).toBe(320);
+    });
+
+    it('the card height: the header alone, else 6px, 17px a row and 3px between details', () => {
+        expect(customCardHeight([])).toBe(50);
+        expect(customCardHeight([1])).toBe(73);
+        expect(customCardHeight([1, 1, 1])).toBe(56 + 51 + 6);
+        expect(customCardHeight([0, 3])).toBe(56 + 4 * 17 + 3);
+    });
+
+    it('the view\'s height: the tallest card when details wrap, today\'s formula for one row', () => {
+        expect(customCardViewHeight(3, 0, [73, 127, 90])).toBe(127);
+        expect(customCardViewHeight(3, 2, [73])).toBe(73);
+        expect(customCardViewHeight(3, 0, [])).toBe(50);
+    });
+
+    it('the partner line: the card\'s middle on the one-row card, 25px (the header) on a card that grows', () => {
+        expect(customCardSpouseLineY(1)).toBeUndefined();
+        expect(customCardSpouseLineY(2)).toBe(25);
+        expect(customCardSpouseLineY(0)).toBe(25);
+    });
+
+    it('the card draws the rows as they are: each its own element, "+1" in the last, a title when it ended in "…"', () => {
+        const esc = (t: string) => t.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+        const { rows } = customCardRows(entries, metrics, measure, 2);
+        const html = cardLineHtml(death, esc, false, rows.get(death));
+        expect(html).toContain('class="card-line card-line--death card-line--rows"');
+        expect([...html.matchAll(/<span class="card-line-row">([^<]*)<\/span>/g)].map(m => m[1]))
+            .toEqual(['Horní Lhota, čp. 13 ·', 'náhlé zapálení mozko…']);
+        expect(html).toContain(`<span class="card-line-place" title="${death.rest}">`);
+        const whole = customCardRows(entries, metrics, measure, 0).rows.get(death)!;
+        const wholeHtml = cardLineHtml(death, esc, false, whole);
+        expect(wholeHtml).not.toContain('title=');
+        expect(wholeHtml.match(/card-line-row--cause/g)).toHaveLength(2);
+        const married = line('1888', 'Dolní Lhota', { key: 'marriage', mark: '⚭', more: '+1' });
+        const m = customCardRows([{ name: 'A', avatar: true, lines: [married] }], metrics, measure, 0).rows.get(married)!;
+        expect(cardLineHtml(married, esc, false, m)).toContain('<span class="card-line-row">Dolní Lhota<span class="card-line-more"> +1</span></span>');
+    });
+});
+
+describe('the poster draws the wrapped card like the screen (U02)', () => {
+    beforeEach(() => setLanguage('en'));
+    const a: Person = { id: 'a' as PersonId, firstName: 'Anna', lastName: 'Vlková', gender: 'female', isPlaceholder: false,
+        partnerships: [], parentIds: [], childIds: [] };
+    const data: StromData = { persons: { [a.id]: a }, partnerships: {} as Record<PartnershipId, never> };
+    const layout: PosterLayout = { positions: new Map([[a.id, { x: 0, y: 0 }]]), connections: [], spouseLines: [] };
+    const death = line('1919', 'Horní Lhota, čp. 13 · náhlé zapálení mozkových blan', {
+        key: 'death', mark: '†', place: 'Horní Lhota, čp. 13', cause: 'náhlé zapálení mozkových blan',
+    });
+    const job = { key: 'occupation' as const, mark: '', text: '', spoken: '', date: '', rest: 'mlynář', wide: true };
+    const places = (svg: string) => [...svg.matchAll(/<text class="card-line-place" x="([\d.]+)" y="([\d.]+)"[^>]*>([^<]*)<\/text>/g)]
+        .map(m => ({ x: Number(m[1]), y: Number(m[2]), text: m[3] }));
+
+    it('whole: one text a row in the place column, the cause on rows of its own, 3px before the next detail', () => {
+        const svg = buildTreeSvg(data, layout, {
+            config: { cardWidth: 200, cardHeight: 50 + 6 + 4 * 17 + 3 } as never,
+            cardLines: new Map([['a', [death, job]]]), cardDateColumn: 24, measureCardTexts: measure, cardValueLines: 0,
+        });
+        expect(svg).toMatch(/<rect x="0.0" y="0.0" width="200" height="127" rx="8"/);
+        // Place column at 12 + 17 + 24 + 6 = 59; rows 17px apart from 46 + 12.5.
+        expect(places(svg)).toEqual([
+            { x: 59, y: 58.5, text: 'Horní Lhota, čp. 13' },
+            { x: 59, y: 75.5, text: 'náhlé zapálení' },
+            { x: 59, y: 92.5, text: 'mozkových blan' },
+            // The occupation: 3 rows and 3px later, from the date column.
+            { x: 29, y: 112.5, text: 'mlynář' },
+        ]);
+        expect(svg).toMatch(/<text class="card-line-date" x="29.0" y="58.5"[^>]*>1919<\/text>/);
+        // No row is drawn shortened per character any more.
+        expect(svg).not.toContain('…');
+    });
+
+    it('two rows: the second ends in "…" and no third is drawn', () => {
+        const svg = buildTreeSvg(data, layout, {
+            config: { cardWidth: 200, cardHeight: 90 } as never,
+            cardLines: new Map([['a', [death]]]), cardDateColumn: 24, measureCardTexts: measure, cardValueLines: 2,
+        });
+        expect(places(svg).map(p => p.text)).toEqual(['Horní Lhota, čp. 13 ·', 'náhlé zapálení mozko…']);
     });
 });

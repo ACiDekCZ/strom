@@ -897,6 +897,17 @@ export interface LayoutConfig {
     partnerGap: number;
     padding: number;
     minEdgeClearance: number;  // Min gap between non-related edge segments (px)
+    /**
+     * Where partner lines run, from the card's top (px). Unset: the card's
+     * middle. The custom card taller than one row a detail keeps it at its
+     * header (src/card-width.ts customCardSpouseLineY).
+     */
+    spouseLineY?: number;
+}
+
+/** The partner line's distance from the card's top: the set offset, else the card's middle. */
+export function spouseLineOffset(config: Pick<LayoutConfig, 'cardHeight' | 'spouseLineY'>): number {
+    return config.spouseLineY ?? config.cardHeight / 2;
 }
 
 /**

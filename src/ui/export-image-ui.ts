@@ -195,6 +195,8 @@ function buildCurrentPoster(): PosterBuild | null {
         ...(custom ? {
             config: cardConfig, cardLines: cardLinesMap,
             cardDateColumn: TreeRenderer.getCustomCardMetrics()?.dateColumn ?? 0,
+            // The rows a detail takes, wrapped as on screen (same function, same measure).
+            cardValueLines: fields.lines,
             measureCardTexts,
         } : {}),
     };

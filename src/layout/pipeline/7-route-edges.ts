@@ -12,7 +12,7 @@
  * Also creates spouse lines between partners in unions.
  */
 
-import { PersonId, LayoutConfig } from '../../types.js';
+import { PersonId, LayoutConfig, spouseLineOffset } from '../../types.js';
 import {
     RouteEdgesInput,
     RoutedModel,
@@ -213,7 +213,7 @@ function createConnection(
     unionX: Map<UnionId, number>,
     personX: Map<PersonId, number>,
     genY: Map<number, number>,
-    config: { cardWidth: number; cardHeight: number; verticalGap: number },
+    config: { cardWidth: number; cardHeight: number; verticalGap: number; spouseLineY?: number },
     isSecondaryChain: boolean = false,
     soloParentId: PersonId | null = null
 ): Connection | null {
@@ -255,7 +255,7 @@ function createConnection(
     const stemTopY = isSecondaryChain || soloParentX !== undefined
         ? parentY + config.cardHeight
         : union.partnerB
-            ? parentY + config.cardHeight / 2
+            ? parentY + spouseLineOffset(config)
             : parentY + config.cardHeight;
 
     // Child Y (next generation down)
@@ -365,7 +365,7 @@ function createSpouseLine(
     personX: Map<PersonId, number>,
     unionGen: Map<UnionId, number>,
     genY: Map<number, number>,
-    config: { cardWidth: number; cardHeight: number }
+    config: { cardWidth: number; cardHeight: number; spouseLineY?: number }
 ): SpouseLine | null {
     if (!union.partnerB) {
         return null;
@@ -384,7 +384,8 @@ function createSpouseLine(
         return null;
     }
 
-    const lineY = y + config.cardHeight / 2;
+    // The card's middle, or the header of a taller custom card (config.spouseLineY).
+    const lineY = y + spouseLineOffset(config);
     // Use min/max to handle either partner ordering (chain blocks may reverse visual order)
     const leftX = Math.min(xA, xB);
     const rightX = Math.max(xA, xB);

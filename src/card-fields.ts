@@ -16,6 +16,7 @@ import { Person, StromData, LifeEvent, Partnership } from './types.js';
 import { parseFlexDate, formatFlexDate, toCanonical } from './dates.js';
 import { newestLifeEvent, sortLifeEvents } from './events.js';
 import { strings } from './strings.js';
+import type { CardLineRows } from './card-width.js';
 
 export type CardFieldKey = 'birth' | 'baptism' | 'death' | 'burial' | 'occupation' | 'marriage' | 'divorce';
 
@@ -53,10 +54,10 @@ export interface CardFieldSettings {
     /** Full dates instead of years. */
     fullDate: boolean;
     /*
-     * The card's appearance. Only `widthCap` takes effect so far: until the
-     * wrapping and the per-card height land, `style`, `lines`, `height` and
-     * `years` are kept and normalized but every card still draws one row per
-     * detail (cut with an ellipsis) at the height customCardSize gives.
+     * The card's appearance. `widthCap` and `lines` take effect (src/card-width.ts:
+     * the width, the rows a detail wraps into, the view's card height); `height`
+     * draws 'content' like 'view' until the per-card height lands in the layout,
+     * and `style` and `years` are kept and normalized but not drawn yet.
      */
     /** Marks or words in front of the lines. */
     style: CardLineStyle;
@@ -189,8 +190,9 @@ export function matchCardPreset(settings: CardFieldSettings): CardPresetKey | nu
 /**
  * The card box for a number of lines: the name row plus 17px a line. The width
  * is the narrowest one; the renderer widens every card of a view to its
- * longest text (src/card-width.ts). This is the one height of the view until
- * the measured heights (the "lines" and "height" options) replace it.
+ * longest text (src/card-width.ts). This is the view's height with one row a
+ * detail; when details wrap the renderer measures the view's tallest card
+ * instead (customCardViewHeight) and starts from this one.
  */
 export function customCardSize(lines: number): { cardWidth: number; cardHeight: number } {
     return { cardWidth: 200, cardHeight: 56 + 17 * Math.max(0, lines) };
@@ -211,8 +213,10 @@ export interface CardLine {
     wide?: boolean;
     /** The line in words, for the aria-label: "Death 1919 Horní Lhota · souchotiny". */
     spoken: string;
-    /** The place, said in full in the tooltip when the line is cut. */
+    /** The place alone (without the cause). */
     place?: string;
+    /** The cause of death alone: after the place with " · " in `rest`, its own row when a detail is whole. */
+    cause?: string;
 }
 
 /**
@@ -261,10 +265,12 @@ export function cardLines(person: Person, data: StromData, s: CardFieldSettings)
         extra?: string): void => {
         const placeText = s.place.includes(key) ? place?.trim() ?? '' : '';
         const dateText = cardDate(date, s.fullDate);
-        const rest = [placeText, extra?.trim() ?? ''].filter(Boolean).join(' · ');
-        const text = [[dateText, placeText].filter(Boolean).join(' '), extra?.trim() ?? ''].filter(Boolean).join(' · ');
+        const cause = extra?.trim() ?? '';
+        const rest = [placeText, cause].filter(Boolean).join(' · ');
+        const text = [[dateText, placeText].filter(Boolean).join(' '), cause].filter(Boolean).join(' · ');
         if (!text) return;
-        out.push({ key, mark, text, date: dateText, rest, spoken: `${label} ${text}`, ...(placeText ? { place: placeText } : {}) });
+        out.push({ key, mark, text, date: dateText, rest, spoken: `${label} ${text}`,
+            ...(placeText ? { place: placeText } : {}), ...(cause ? { cause } : {}) });
     };
     for (const key of s.order) {
         if (!s.on.includes(key)) continue;
@@ -337,16 +343,29 @@ export function cardLines(person: Person, data: StromData, s: CardFieldSettings)
  * between the date and the place is not drawn (grid) but keeps the line's
  * text readable when copied. "+1" stays outside the part that shortens.
  * `cut`: the place does not fit and shortens — its full text goes to a title.
+ * `rows`: the place column wrapped into rows (src/card-width.ts
+ * customCardRows, a detail longer than one row): each row its own element,
+ * never wrapped by the browser, so the screen draws the rows the height and
+ * the image export were computed from; a value that ended in "…" says itself
+ * in full in a title. Without `rows` the line is one row the browser shortens
+ * (the one-row card, as before).
  * `esc` must escape quotes as well (the text goes into an attribute).
  */
-export function cardLineHtml(l: CardLine, esc: (text: string) => string, cut = false): string {
+export function cardLineHtml(l: CardLine, esc: (text: string) => string, cut = false, rows?: CardLineRows): string {
     const mark = `<span class="card-line-mark" aria-hidden="true">${esc(l.mark)}</span>`;
+    const date = l.wide ? '' : `<span class="card-line-date">${esc(l.date)}</span>${l.rest || l.more ? ' ' : ''}`;
+    const placeClass = `card-line-place${l.wide ? ' card-line-place--wide' : ''}`;
+    if (rows) {
+        const title = rows.cut && l.rest ? ` title="${esc(l.rest)}"` : '';
+        const drawn = rows.rows.map(r => `<span class="card-line-row${r.cause ? ' card-line-row--cause' : ''}">${esc(r.text)}`
+            + `${r.tail ? `<span class="card-line-more">${esc(r.tail)}</span>` : ''}</span>`).join('');
+        return `<div class="card-line card-line--${l.key} card-line--rows">${mark}${date}<span class="${placeClass}"${title}>${drawn}</span></div>`;
+    }
     const more = l.more ? `<span class="card-line-more"> ${esc(l.more)}</span>` : '';
     // A place cut short (an ellipsis, card-width.ts customCardCutLines) is said
     // in full in a native tooltip; `esc` escapes quotes, so it is safe in the attribute.
     const title = cut && l.rest ? ` title="${esc(l.rest)}"` : '';
-    const place = `<span class="card-line-place${l.wide ? ' card-line-place--wide' : ''}">`
+    const place = `<span class="${placeClass}">`
         + `<span class="card-line-rest"${title}>${esc(l.rest)}</span>${more}</span>`;
-    const date = l.wide ? '' : `<span class="card-line-date">${esc(l.date)}</span>${l.rest || l.more ? ' ' : ''}`;
     return `<div class="card-line card-line--${l.key}">${mark}${date}${place}</div>`;
 }

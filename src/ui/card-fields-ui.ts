@@ -5,7 +5,8 @@
  * small toggles for what the line adds (place, cause, the baptism or burial
  * standing in) and arrows to reorder — no dragging, seven rows is few enough.
  * Any number of them can be on. Under the list, "Card appearance": how the
- * card is drawn (its width; further options join it as they come).
+ * card is drawn (the detail length, the width; further options join them as
+ * they come).
  */
 
 import { TreeRenderer } from '../renderer.js';
@@ -14,10 +15,10 @@ import { strings } from '../strings.js';
 import { Person, PersonId, Partnership, PartnershipId, StromData } from '../types.js';
 import { ActionSignal, ACTION_GLYPH, stateStripesHtml } from '../card-signals.js';
 import {
-    CardFieldKey, CardFieldSettings, CardWidthCap, CARD_FIELD_KEYS, CARD_MARKS, CARD_WIDTH_CAPS, PLACE_KEYS,
-    cardLines, cardLineHtml,
+    CardFieldKey, CardFieldSettings, CardValueLines, CardWidthCap, CARD_FIELD_KEYS, CARD_MARKS, CARD_VALUE_LINES,
+    CARD_WIDTH_CAPS, PLACE_KEYS, cardLines, cardLineHtml,
 } from '../card-fields.js';
-import { customCardMetrics, measureCardTexts } from '../card-width.js';
+import { customCardMetrics, customCardRows, measureCardTexts } from '../card-width.js';
 import { uiModule } from './module.js';
 
 const esc = (text: string): string => text.replace(/[&<>"']/g, c =>
@@ -60,6 +61,34 @@ const WIDTH_LABEL: Record<CardWidthCap, () => string> = {
     320: () => strings.cardDensity.widthMedium,
     400: () => strings.cardDensity.widthWide,
 };
+
+/** The detail length choice's words. */
+const LINES_LABEL: Record<CardValueLines, () => string> = {
+    1: () => strings.cardDensity.lines1,
+    2: () => strings.cardDensity.lines2,
+    0: () => strings.cardDensity.linesAll,
+};
+
+/**
+ * The sample card of the preview: its lines, their rows at the drawn view's
+ * width (wrapped as the canvas wraps them) and its height — the view's
+ * one-row height, or the sample's own when its details wrap.
+ */
+function samplePreview(viewWidth: number | undefined): { html: string; width: number; height: number; dateColumn: number } {
+    const fields = SettingsManager.getCardFields();
+    const { person, data } = samplePerson();
+    const lines = cardLines(person, data, fields);
+    const entry = { name: 'Jan Vlk', avatar: true, lines };
+    // The view's card width; the date column of the sample's own lines.
+    const own = customCardMetrics([entry], measureCardTexts, fields.widthCap, fields.lines);
+    const metrics = { cardWidth: viewWidth ?? own.cardWidth, dateColumn: own.dateColumn };
+    const { rows, heights } = customCardRows([entry], metrics, measureCardTexts, fields.lines);
+    const wrapped = fields.lines !== 1;
+    const html = `<div class="card-lines${wrapped ? ' card-lines--rows' : ''}">${lines.map(l =>
+        cardLineHtml(l, esc, false, wrapped ? rows.get(l) : undefined)).join('')}</div>`;
+    const height = wrapped ? heights[0] : SettingsManager.getCardSize().cardHeight;
+    return { html, width: metrics.cardWidth, height, dateColumn: own.dateColumn };
+}
 
 /** A row of "Card appearance": its label and a segment of choices (one pressed). */
 function lookSegment(name: string, label: string, options: { value: string; label: string; active: boolean }[]): string {
@@ -112,13 +141,16 @@ export const cardFieldsUiMethods = uiModule({
         const host = document.getElementById('card-preview-settings');
         if (!host) return;
         const size = SettingsManager.getCardSize();
-        // The custom card is as wide as the drawn view needs (src/card-width.ts).
-        const width = SettingsManager.getCardDensity() === 'custom'
-            ? TreeRenderer.getCustomCardMetrics()?.cardWidth ?? size.cardWidth : size.cardWidth;
+        // The custom card is as wide as the drawn view needs (src/card-width.ts);
+        // as tall as the sample's details when they wrap.
+        const sample = SettingsManager.getCardDensity() === 'custom'
+            ? samplePreview(TreeRenderer.getCustomCardMetrics()?.cardWidth) : null;
+        const width = sample?.width ?? size.cardWidth;
+        const height = sample?.height ?? size.cardHeight;
         host.innerHTML = `
             <div class="card-preview-head">
                 <span class="card-signals-preview-title">${esc(strings.cardDensity.cardPreview)}</span>
-                <span class="card-preview-size">${esc(strings.cardDensity.size(width, size.cardHeight))}</span>
+                <span class="card-preview-size">${esc(strings.cardDensity.size(width, height))}</span>
             </div>
             <div class="card-signals-preview" aria-hidden="true"><div class="card-preview-fit">${this.cardPreviewHtml(SettingsManager.getCardSignals())}</div></div>`;
         fitCardPreview(host);
@@ -135,15 +167,14 @@ export const cardFieldsUiMethods = uiModule({
         const avatar = (initials: string) =>
             `<div class="card-avatar-wrap"><div class="card-avatar"><span class="avatar-initials">${initials}</span></div>${badge}</div>`;
         if (density === 'custom') {
-            const { person, data } = samplePerson();
-            const lines = cardLines(person, data, SettingsManager.getCardFields());
-            // The view's card width; the date column of the sample's own lines.
-            const { dateColumn } = customCardMetrics([{ name: 'Jan Vlk', avatar: true, lines }], measureCardTexts);
+            const sample = samplePreview(TreeRenderer.getCustomCardMetrics()?.cardWidth);
+            // The width it was wrapped for (the view's; before any view, the sample's own) and its height.
+            const box = `--card-date-col: ${sample.dateColumn}px; width: ${sample.width}px; height: ${sample.height}px`;
             return `
-                <div class="person-card male preview-card${action ? ' has-signal' : ''}" data-density="custom" style="--card-date-col: ${dateColumn}px">
+                <div class="person-card male preview-card${action ? ' has-signal' : ''}" data-density="custom" style="${box}">
                     <div class="card-body card-body--custom">
                         <div class="card-head">${avatar('JV')}<div class="name"><span class="name-text">Jan Vlk</span></div></div>
-                        <div class="card-lines">${lines.map(l => cardLineHtml(l, esc)).join('')}</div>
+                        ${sample.html}
                     </div>
                     ${stripes}
                     ${dot}
@@ -209,6 +240,9 @@ export const cardFieldsUiMethods = uiModule({
             <div class="card-look">
                 <span class="settings-name card-look-title">${esc(d.lookTitle)}</span>
                 <div class="card-look-grid">
+                    ${lookSegment('lines', d.lines, CARD_VALUE_LINES.map(n => ({
+                        value: String(n), label: LINES_LABEL[n](), active: s.lines === n,
+                    })))}
                     ${lookSegment('width', d.width, CARD_WIDTH_CAPS.map(cap => ({
                         value: String(cap), label: WIDTH_LABEL[cap](), active: s.widthCap === cap,
                     })))}
@@ -262,6 +296,12 @@ export const cardFieldsUiMethods = uiModule({
             btn.onclick = () => {
                 const widthCap = Number(btn.dataset.value) as CardWidthCap;
                 apply({ ...s, widthCap }, `.card-look-width [data-value="${btn.dataset.value}"]`);
+            };
+        });
+        host.querySelectorAll<HTMLButtonElement>('.card-look-lines .segment-btn').forEach(btn => {
+            btn.onclick = () => {
+                const lines = Number(btn.dataset.value) as CardValueLines;
+                apply({ ...s, lines }, `.card-look-lines [data-value="${btn.dataset.value}"]`);
             };
         });
         host.querySelectorAll<HTMLButtonElement>('.card-fields-date .segment-btn').forEach(btn => {

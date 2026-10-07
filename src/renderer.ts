@@ -20,7 +20,10 @@ import { chainLinkSvg, iconSvg } from './icons.js';
 import * as CrossTree from './cross-tree.js';
 import { ViewMode, STANDALONE_VIEWS, ResearchEdgeMode } from './types.js';
 import { cardLines, CardLine, cardLineHtml } from './card-fields.js';
-import { CustomCardMetrics, customCardMetrics, customCardCutLines, measureCardTexts, cardFontsPending } from './card-width.js';
+import {
+    CustomCardMetrics, CardLineRows, customCardMetrics, customCardRows, customCardViewHeight, customCardSpouseLineY,
+    measureCardTexts, cardFontsPending,
+} from './card-width.js';
 import { checkRecordedAge, ageBirthDate } from './recorded-age.js';
 import { ACTION_GLYPH, AGENT_DONE_MS, AGENT_DONE_FADE_MS, AGENT_SPIN_MS, CardSignalContext, CardSignalInfo, cardSignalInfo, researchCardInfoNow, sharedPhaseDelay, stateStripesHtml } from './card-signals.js';
 import { EvidenceLevel, treeHasAnySource, unionsByPerson } from './evidence-level.js';
@@ -77,12 +80,14 @@ export interface GenerationBand {
 
 class TreeRendererClass {
     private config = DEFAULT_LAYOUT_CONFIG;
-    /** The custom card's width and date column for the current view (null in other densities). */
-    private customMetrics: CustomCardMetrics | null = null;
+    /** The custom card's width, date column and height for the current view (null in other densities). */
+    private customMetrics: (CustomCardMetrics & { cardHeight: number }) | null = null;
     /** The custom card's lines per drawn person, computed once per render. */
     private customLines = new Map<PersonId, CardLine[]>();
-    /** The custom card lines whose place shortens in the drawn view (a title says it in full). */
-    private customCutLines = new Set<CardLine>();
+    /** The custom card lines' rows (src/card-width.ts customCardRows): what wraps, what is cut. */
+    private customRows = new Map<CardLine, CardLineRows>();
+    /** The details wrap into rows (not the one-row card): the cards draw the computed rows. */
+    private customWrapped = false;
     private positions = new Map<PersonId, Position>();
 
     /** Generation bands for the sticky label overlay (rebuilt each render). */
@@ -223,24 +228,34 @@ class TreeRendererClass {
         const density = SettingsManager.getCardDensity();
         const size = SettingsManager.getCardSize();
         const custom = density === 'custom' && !STANDALONE_VIEWS.includes(this.viewMode);
-        // The custom card is as wide as the view's longest text: start from the
-        // width the last view had (usually the same), measure once laid out.
-        this.config = { ...this.config, ...size, ...(custom && this.customMetrics ? { cardWidth: this.customMetrics.cardWidth } : {}) };
+        // The custom card is as wide as the view's longest text and (details
+        // that wrap) as tall as its tallest card: start from the size the last
+        // view had (usually the same), measure once laid out.
+        const valueLines = SettingsManager.getCardFields().lines;
+        const spouseLineY = custom ? customCardSpouseLineY(valueLines) : undefined;
+        this.config = {
+            ...this.config, ...size, spouseLineY,
+            ...(custom && this.customMetrics ? { cardWidth: this.customMetrics.cardWidth, cardHeight: this.customMetrics.cardHeight } : {}),
+        };
         document.body.dataset.cardDensity = density;
+        // The partner line (and the "+ partner" pill) at the header of a card that grows.
+        if (spouseLineY !== undefined) document.body.dataset.cardSpouseLine = 'head';
+        else delete document.body.dataset.cardSpouseLine;
         // The custom card's height follows how many lines it shows.
-        document.body.style.setProperty('--card-custom-h', `${size.cardHeight}px`);
+        document.body.style.setProperty('--card-custom-h', `${this.config.cardHeight}px`);
         this.updatePlacesDatalist();
         const result = this.computeTreeLayout(descendantsOnly);
         if (custom) {
             const metrics = this.measureCustomCards(result.positions);
             this.customMetrics = metrics;
             document.body.style.setProperty('--card-custom-w', `${metrics.cardWidth}px`);
+            document.body.style.setProperty('--card-custom-h', `${metrics.cardHeight}px`);
             document.body.style.setProperty('--card-date-col', `${metrics.dateColumn}px`);
             // The settings preview states the card size: keep it in step with the view.
             if (document.getElementById('settings-modal')?.classList.contains('active')) UI.renderCardPreview?.();
-            if (metrics.cardWidth !== this.config.cardWidth) {
-                // The person set does not depend on the card size: lay out again at the measured width.
-                this.config = { ...this.config, cardWidth: metrics.cardWidth };
+            if (metrics.cardWidth !== this.config.cardWidth || metrics.cardHeight !== this.config.cardHeight) {
+                // The person set does not depend on the card size: lay out again at the measured size.
+                this.config = { ...this.config, cardWidth: metrics.cardWidth, cardHeight: metrics.cardHeight };
                 const again = this.computeTreeLayout(descendantsOnly);
                 result.positions = again.positions;
                 result.connections = again.connections;
@@ -253,7 +268,8 @@ class TreeRendererClass {
         } else {
             this.customMetrics = null;
             this.customLines.clear();
-            this.customCutLines.clear();
+            this.customRows.clear();
+            this.customWrapped = false;
         }
 
         // Apply layout result
@@ -365,10 +381,11 @@ class TreeRendererClass {
     }
 
     /**
-     * The custom card's lines for every drawn person (kept for the cards) and
-     * the width and date column they need (src/card-width.ts).
+     * The custom card's lines for every drawn person (kept for the cards), the
+     * width and date column they need, their rows at that width and the
+     * view's card height (src/card-width.ts).
      */
-    private measureCustomCards(positions: Map<PersonId, Position>): CustomCardMetrics {
+    private measureCustomCards(positions: Map<PersonId, Position>): CustomCardMetrics & { cardHeight: number } {
         const data = DataManager.getData();
         const fields = SettingsManager.getCardFields();
         this.customLines.clear();
@@ -381,9 +398,13 @@ class TreeRendererClass {
             entries.push({ name: shownName(person, '?'), avatar: !person.isPlaceholder, lines });
         }
         // The chosen width's cap (narrow / medium / wide); the poster takes this width too.
-        const metrics = customCardMetrics(entries, measureCardTexts, fields.widthCap);
-        this.customCutLines = customCardCutLines(entries, metrics, measureCardTexts);
-        return metrics;
+        const metrics = customCardMetrics(entries, measureCardTexts, fields.widthCap, fields.lines);
+        const { rows, heights } = customCardRows(entries, metrics, measureCardTexts, fields.lines);
+        this.customRows = rows;
+        this.customWrapped = fields.lines !== 1;
+        // fields.height 'content' (each card its own height) lays out like 'view'
+        // until the per-card height reaches the layout pipeline (K4).
+        return { ...metrics, cardHeight: customCardViewHeight(fields.on.length, fields.lines, heights) };
     }
 
     /** The custom card's width and date column of the drawn view (null in other densities). */
@@ -1372,7 +1393,10 @@ class TreeRendererClass {
             html += customLines ? `
                 <div class="card-body card-body--custom">
                     <div class="card-head">${avatarHtml}${nameHtml}</div>
-                    <div class="card-lines">${customLines.map(l => cardLineHtml(l, t => this.escapeHtml(t), this.customCutLines.has(l))).join('')}</div>
+                    <div class="card-lines${this.customWrapped ? ' card-lines--rows' : ''}">${customLines.map(l => {
+                        const rows = this.customRows.get(l);
+                        return cardLineHtml(l, t => this.escapeHtml(t), !!rows?.cut, this.customWrapped ? rows : undefined);
+                    }).join('')}</div>
                 </div>` : `
                 ${avatarHtml}
                 <div class="card-body">

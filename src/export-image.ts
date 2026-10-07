@@ -11,8 +11,11 @@ import { LayoutResult } from './layout/pipeline/types.js';
 import { displayYear } from './dates.js';
 import { personInitials } from './initials.js';
 import { parentRelKind, parentRelDash, connectionDash } from './parent-rel-style.js';
-import type { CardLine } from './card-fields.js';
-import { CARD_MARK_WIDTH, CARD_COLUMN_GAP, CUSTOM_CARD_PAD_X, MeasureTexts, cardPlaceOffset } from './card-width.js';
+import type { CardLine, CardValueLines } from './card-fields.js';
+import {
+    CARD_MARK_WIDTH, CARD_COLUMN_GAP, CUSTOM_CARD_PAD_X, CARD_LINES_TOP, CARD_ROW_HEIGHT, CARD_DETAIL_GAP,
+    MeasureTexts, cardPlaceOffset, customCardRows,
+} from './card-width.js';
 import { shownName } from './person-name.js';
 
 /** The subset of a LayoutResult the poster needs (no diagnostics required). */
@@ -144,6 +147,12 @@ export interface PosterOptions {
     cardLines?: Map<string, PosterCardLine[]>;
     /** The custom card's date column (the view's longest date, src/card-width.ts). */
     cardDateColumn?: number;
+    /**
+     * Rows a custom card's detail may take (src/card-fields.ts `lines`): 1
+     * (default) shortens it to one row, 2 to two rows, 0 shows it whole; the
+     * rows are the screen's (src/card-width.ts customCardRows).
+     */
+    cardValueLines?: CardValueLines;
     /** Text widths in the card's fonts (the screen measures them); estimated when absent. */
     measureCardTexts?: MeasureTexts;
     /**
@@ -154,7 +163,7 @@ export interface PosterOptions {
 }
 
 /** What the poster needs of a custom card line. */
-export type PosterCardLine = Pick<CardLine, 'mark' | 'date' | 'rest' | 'more' | 'wide'>;
+export type PosterCardLine = Pick<CardLine, 'mark' | 'date' | 'rest' | 'more' | 'wide' | 'place' | 'cause'>;
 
 /** The font of the custom card's lines (the screen's --font-sans), digits of one width. */
 const LINE_FONT = `font-family="'Instrument Sans', -apple-system, 'Segoe UI', sans-serif" style="font-variant-numeric: tabular-nums"`;
@@ -166,22 +175,14 @@ const estimateCardTexts: MeasureTexts = (kind, texts) => {
     return out;
 };
 
-/** The longest start of a place that fits a width with an ellipsis (the whole place when it fits). */
-function fitPlace(text: string, maxW: number, measure: MeasureTexts): string {
-    if (!text) return '';
-    if ((measure('place', [text]).get(text) ?? 0) <= maxW) return text;
-    const cuts: string[] = [];
-    for (let n = text.length - 1; n >= 1; n--) cuts.push(`${text.slice(0, n).trimEnd()}…`);
-    const widths = measure('place', cuts);
-    return cuts.find(c => (widths.get(c) ?? 0) <= maxW) ?? '…';
-}
-
 /**
  * A custom-density card's content (src/card-fields.ts), in the on-screen
  * geometry: 10/12px padding, a 30px avatar and the name on the first row,
- * then 17px lines of 12px text: the mark in an 11px column, the date, and the
- * place where the view's date column ends (two texts a line, so the places of
- * all cards start at one x). Only the place shortens; the name only when it
+ * then 17px rows of 12px text: the mark in an 11px column, the date, and the
+ * place where the view's date column ends (separate texts, so the places of
+ * all cards start at one x). The place column has the screen's rows (the same
+ * wrapping, src/card-width.ts customCardRows), one text a row, 3px between
+ * details that may wrap. Only the place shortens; the name only when it
  * alone is wider than the widest card, as on screen. With `exact` (widths
  * measured by the screen) texts are drawn at their measured widths, so the
  * geometry holds in whatever font a viewer sets them.
@@ -189,7 +190,7 @@ function fitPlace(text: string, maxW: number, measure: MeasureTexts): string {
 function customCardSvg(
     person: StromData['persons'][keyof StromData['persons']], pos: { x: number; y: number }, cw: number,
     lines: PosterCardLine[], ring: string, clipId: string, dateColumn: number, measure: MeasureTexts,
-    exact: boolean,
+    exact: boolean, valueLines: CardValueLines,
 ): string {
     const out: string[] = [];
     const left = pos.x + CUSTOM_CARD_PAD_X;
@@ -228,23 +229,28 @@ function customCardSvg(
     // The date and the place at their measured widths: in another font the
     // date still ends before the place's column and a shortened place inside the card.
     const pin = (w: number): string => exact && w > 0 ? ` textLength="${w.toFixed(1)}" lengthAdjust="spacingAndGlyphs"` : '';
-    lines.forEach((l, i) => {
-        const y = (pos.y + 10 + 30 + 6 + 17 * i + 12.5).toFixed(1);
+    const { rows } = customCardRows([{ name, avatar: !person.isPlaceholder, lines }], { cardWidth: cw, dateColumn }, measure, valueLines);
+    const detailGap = valueLines === 1 ? 0 : CARD_DETAIL_GAP;
+    let top = pos.y + CARD_LINES_TOP;
+    for (const l of lines) {
+        // The text's baseline in its 17px row (12px text).
+        const y = (top + 12.5).toFixed(1);
         if (l.mark) out.push(`<text x="${(left + CARD_MARK_WIDTH / 2).toFixed(1)}" y="${y}" text-anchor="middle" font-size="12" fill="${COLORS.textFaint}" ${LINE_FONT}>${escapeXml(l.mark)}</text>`);
         if (!l.wide && l.date) {
             const dateW = measure('date', [l.date]).get(l.date) ?? 0;
             out.push(`<text class="card-line-date" x="${dateX.toFixed(1)}" y="${y}" font-size="12" font-weight="500" fill="${COLORS.text}"${pin(dateW)} ${LINE_FONT}>${escapeXml(l.date)}</text>`);
         }
         const placeX = l.wide ? dateX : left + cardPlaceOffset(dateColumn);
-        const more = l.more ? ` ${l.more}` : '';
-        const moreW = more ? measure('place', [more]).get(more) ?? 0 : 0;
-        const rest = fitPlace(l.rest, right - placeX - moreW, measure);
-        const place = rest + more;
-        if (place.trim()) {
-            const restW = rest ? measure('place', [rest]).get(rest) ?? 0 : 0;
-            out.push(`<text class="card-line-place" x="${placeX.toFixed(1)}" y="${y}" font-size="12" fill="${COLORS.textLight}"${pin(Math.min(restW + moreW, right - placeX))} ${LINE_FONT}>${escapeXml(place)}</text>`);
-        }
-    });
+        const drawn = rows.get(l)?.rows ?? [];
+        drawn.forEach((row, k) => {
+            const text = row.text + (row.tail ?? '');
+            if (!text.trim()) return;
+            const w = measure('place', [text]).get(text) ?? 0;
+            const rowY = (top + CARD_ROW_HEIGHT * k + 12.5).toFixed(1);
+            out.push(`<text class="card-line-place" x="${placeX.toFixed(1)}" y="${rowY}" font-size="12" fill="${COLORS.textLight}"${pin(Math.min(w, right - placeX))} ${LINE_FONT}>${escapeXml(text)}</text>`);
+        });
+        top += CARD_ROW_HEIGHT * Math.max(1, drawn.length) + detailGap;
+    }
     return out.join('');
 }
 
@@ -426,7 +432,8 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
 
         if (person && options.cardLines) {
             out.push(customCardSvg(person, pos, cw, options.cardLines.get(personId) ?? [], ring, `av${clipCounter++}`,
-                options.cardDateColumn ?? 0, options.measureCardTexts ?? estimateCardTexts, !!options.measureCardTexts));
+                options.cardDateColumn ?? 0, options.measureCardTexts ?? estimateCardTexts, !!options.measureCardTexts,
+                options.cardValueLines ?? 1));
         } else if (person && !isPlaceholder) {
             // Avatar: gender-ring circle with a photo or initials (like on
             // screen). 34px avatar (r=17), 10px left padding — matches the CSS.

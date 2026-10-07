@@ -122,3 +122,32 @@ describe('spouse lines of a marriage chain (T14)', () => {
         }
     });
 });
+
+describe('the partner line at the header of a taller card (U02)', () => {
+    const run = (config: typeof DEFAULT_LAYOUT_CONFIG) => runLayoutPipeline({
+        data: build(UNIONS), focusPersonId: 'F' as PersonId, config,
+        ancestorDepth: 1, descendantDepth: 1,
+        includeSpouseAncestors: false, includeParentSiblings: true, includeParentSiblingDescendants: true,
+        displayPolicy: { mode: 'expanded', autoExpand: true } as never,
+    });
+
+    it('runs spouseLineY below the card top instead of the middle, the couple\'s stem with it; nothing else moves', () => {
+        const tall = { ...DEFAULT_LAYOUT_CONFIG, cardHeight: 160 };
+        const middle = run(tall);
+        const head = run({ ...tall, spouseLineY: 25 });
+        expect(head.positions).toEqual(middle.positions);
+        const couple = (r: LayoutResult) => r.spouseLines.find(l => l.unionId === 'union_GF_GM')!;
+        const top = head.positions.get('GF' as PersonId)!.y;
+        expect(couple(middle).y).toBe(top + 80);
+        expect(couple(head).y).toBe(top + 25);
+        // Fanned-out chain lines keep their spacing around the header line.
+        for (const [a, b] of [['union_F_W3', 'union_F_W2']] as const) {
+            const la = head.spouseLines.find(l => l.unionId === a)!, lb = head.spouseLines.find(l => l.unionId === b)!;
+            expect(lb.y - la.y).toBeCloseTo(SPOUSE_LINE_SPACING, 6);
+            expect(Math.abs((la.y + lb.y) / 2 - (head.positions.get('F' as PersonId)!.y + 25))).toBeLessThan(SPOUSE_LINE_SPACING);
+        }
+        const stem = head.connections.find(c => c.unionId === 'union_GF_GM')!;
+        expect(stem.stemTopY).toBe(top + 25);
+        expect(stem.branchY).toBe(middle.connections.find(c => c.unionId === 'union_GF_GM')!.branchY);
+    });
+});

@@ -196,7 +196,9 @@ test.describe('the custom card', () => {
         await page.locator('#card-density-select').selectOption('custom');
         await expect(page.locator('#card-fields-settings')).toBeVisible();
         await expect(page.locator('#card-fields-settings input[type="checkbox"]:checked')).toHaveCount(3);
-        await expect(page.locator('.card-preview-size')).toHaveText('card 200 × 107 px');
+        // The default shows every detail whole (U02, the author's choice): 3px between
+        // details, so three one-row details make 56 + 3 × 17 + 2 × 3.
+        await expect(page.locator('.card-preview-size')).toHaveText('card 200 × 113 px');
         await expect(page.locator('.card-fields-status')).toHaveText('3 of 7 details on. A missing detail is left out.');
         await page.keyboard.press('Escape');
 
@@ -205,7 +207,7 @@ test.describe('the custom card', () => {
         // The box itself, not as zoomed on screen: one size for every card.
         for (const name of ['Jan', 'Marie', 'Anna']) {
             const size = await card(page, name).evaluate(el => [(el as HTMLElement).offsetWidth, (el as HTMLElement).offsetHeight]);
-            expect(size).toEqual([200, 107]);
+            expect(size).toEqual([200, 113]);
         }
     });
 
@@ -214,6 +216,8 @@ test.describe('the custom card', () => {
         await openCardSettings(page);
         await page.locator('#card-density-select').selectOption('custom');
         const host = page.locator('#card-fields-settings');
+        // One row a detail: the card is 56 + 17 a detail on, whoever is in the view.
+        await host.locator('.card-look-lines').getByRole('button', { name: '1 line', exact: true }).click();
         const row = (key: string) => host.locator(`.card-field-row[data-key="${key}"]`);
         // Baptism gets a line of its own: Marie's birth line no longer borrows it.
         await row('baptism').locator('input').check();
@@ -266,7 +270,10 @@ test.describe('the custom card', () => {
         for (const text of ['>1862<', '>1919<', '>Horní Lhota<', '>mlynář<', '>after 1919<', '>1869<', '>Dolní Lhota<']) {
             expect(svg).toContain(text);
         }
-        expect(svg).toContain('height="107"');
+        // The card's height as on screen (the default: the tallest card of the view).
+        const height = await card(page, 'Jan').evaluate(el => (el as HTMLElement).offsetHeight);
+        expect(height).toBe(113);
+        expect(svg).toContain(`height="${height}"`);
     });
 
     test('phone 360: the toggles under the name, thumb-sized arrows', async ({ page }) => {

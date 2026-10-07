@@ -6501,9 +6501,11 @@
         }
         body[data-card-density="detailed"] .avatar-initials { font-size: 16px; }
         /* Custom density (src/card-fields.ts): the avatar and the name on one
-           row, then one 17px line per chosen event. Height = 56 + 17 × lines,
-           set by the renderer in --card-custom-h (the layout spaces by it).
-           Width = the view's longest text, 200–320px, one for every card
+           row, then a 17px line per chosen event. One row a detail: height =
+           56 + 17 × lines; details that wrap: the view's tallest card (rows
+           computed in src/card-width.ts, 3px between details). The renderer
+           sets it in --card-custom-h (the layout spaces by it). Width = the
+           view's longest text, 200 up to the chosen cap, one for every card
            (src/card-width.ts → --card-custom-w). Lines pack upwards; who lacks
            a detail has free space at the bottom. */
         body[data-card-density="custom"] .person-card {
@@ -6534,6 +6536,19 @@
         .card-line-place--wide { grid-column: 2 / 4; }
         .card-line-rest { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
         .card-line-more { flex: none; white-space: pre; }
+        /* Details that wrap (Detail length 2 lines / Full): the rows are
+           computed (src/card-width.ts wrapCardTexts) and each drawn as is, never
+           wrapped by the browser; the place's rows stay in its column, the mark
+           and the date on the first row, 3px between details. */
+        .card-lines--rows { gap: 3px; }
+        .card-line--rows { align-items: start; }
+        .card-line--rows .card-line-place { flex-direction: column; }
+        .card-line-row { display: block; min-width: 0; overflow: hidden; white-space: nowrap; }
+        /* The partner line runs at the header of a card that grows (25px from
+           its top, LayoutConfig.spouseLineY); the "+ partner" pill goes with it
+           (inside the 1px border, the focused card's 2px). */
+        body[data-card-density="custom"][data-card-spouse-line="head"] .person-card .edge-right-center { top: 24px; }
+        body[data-card-density="custom"][data-card-spouse-line="head"] .person-card.focused .edge-right-center { top: 23px; }
         .card-trade {
             font-size: 10px; line-height: 1.3; font-style: italic;
             color: var(--text-light);

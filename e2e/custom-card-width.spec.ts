@@ -10,12 +10,12 @@ import { openApp, card, seedSetting } from './helpers.js';
  * Invented data.
  */
 
-function ged(childPlace: string, childName = 'Anna /Vlková/'): string {
+function ged(childPlace: string, childName = 'Anna /Vlková/', janCause = ''): string {
     return [
         '0 HEAD', '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8',
         '0 @I1@ INDI', '1 NAME Jan /Vlk/', '1 SEX M',
         '1 BIRT', '2 DATE 1862', '2 PLAC Horní Lhota',
-        '1 DEAT', '2 DATE 1919', '2 PLAC Brno', '1 FAMS @F1@',
+        '1 DEAT', '2 DATE 1919', '2 PLAC Brno', ...(janCause ? [`2 CAUS ${janCause}`] : []), '1 FAMS @F1@',
         '0 @I2@ INDI', '1 NAME Marie /Dvořáková/', '1 SEX F',
         '1 BIRT', '2 DATE 1869', '2 PLAC Dolní Lhota',
         '1 DEAT', '2 DATE AFT 1919', '2 PLAC Brno', '1 FAMS @F1@',
@@ -44,11 +44,16 @@ async function dropFile(page: Page, content: string): Promise<void> {
     for (const type of ['dragenter', 'dragover', 'drop']) await page.dispatchEvent('#tree-container', type, { dataTransfer });
 }
 
-async function setup(page: Page, childPlace: string, width = 1440, childName?: string): Promise<void> {
+/** The one-row card: a detail shortened to one row, one height for the view (U02 decision A). */
+const ONE_ROW = { lines: 1, height: 'view' };
+
+async function setup(page: Page, childPlace: string, width = 1440, childName?: string,
+    fields: Record<string, unknown> = ONE_ROW, janCause = ''): Promise<void> {
     await page.setViewportSize({ width, height: 900 });
     await seedSetting(page, 'cardDensity', 'custom');
+    await seedSetting(page, 'cardFields', fields);
     await openApp(page);
-    await dropFile(page, ged(childPlace, childName));
+    await dropFile(page, ged(childPlace, childName, janCause));
     await page.locator('.modal-overlay.active').getByText('Import as a new tree', { exact: true }).first().click();
     await page.locator('.modal-overlay.active button.primary', { hasText: 'Import' }).click();
     await expect(card(page, (childName ?? 'Anna').split(' ')[0])).toBeVisible();
@@ -56,17 +61,21 @@ async function setup(page: Page, childPlace: string, width = 1440, childName?: s
     // Measured in the card fonts: once they are in, the boxes match the layout.
     await page.evaluate(() => document.fonts.ready);
     await expect.poll(async () => {
-        const { widths, layout } = await cardWidths(page);
-        return widths.length > 0 && widths.every(w => w === layout);
+        const { widths, layout, heights, layoutHeight } = await cardWidths(page);
+        return widths.length > 0 && widths.every(w => w === layout) && heights.every(h => h === layoutHeight);
     }).toBe(true);
 }
 
-/** Every card's box width (not as zoomed on screen) and the layout's card width. */
-async function cardWidths(page: Page): Promise<{ widths: number[]; layout: number }> {
-    return page.evaluate(() => ({
-        widths: [...document.querySelectorAll<HTMLElement>('#tree-canvas .person-card')].map(el => el.offsetWidth),
-        layout: (window.Strom.TreeRenderer as unknown as { config: { cardWidth: number } }).config.cardWidth,
-    }));
+/** Every card's box size (not as zoomed on screen) and the layout's card size. */
+async function cardWidths(page: Page): Promise<{ widths: number[]; layout: number; heights: number[]; layoutHeight: number }> {
+    return page.evaluate(() => {
+        const cards = [...document.querySelectorAll<HTMLElement>('#tree-canvas .person-card')];
+        const config = (window.Strom.TreeRenderer as unknown as { config: { cardWidth: number; cardHeight: number } }).config;
+        return {
+            widths: cards.map(el => el.offsetWidth), layout: config.cardWidth,
+            heights: cards.map(el => el.offsetHeight), layoutHeight: config.cardHeight,
+        };
+    });
 }
 
 /** Per line of a card: date and place cells, where the place starts in the card, whether a cell is cut. */
@@ -130,7 +139,7 @@ async function renderStandalone(page: Page, svg: string) {
             };
             const texts = [...document.querySelectorAll<SVGTextElement>('g.cards text')].filter(inCard);
             return {
-                left: x, right: x + w,
+                left: x, right: x + w, top: y, height: h,
                 name: texts.filter(t => t.getAttribute('font-size') !== '12' && t.getAttribute('font-weight') === '600' && !t.hasAttribute('text-anchor'))
                     .map(t => ({ text: t.textContent ?? '', ...box(t) }))[0],
                 lines: texts.filter(t => t.classList.contains('card-line-date') || t.classList.contains('card-line-place'))
@@ -353,6 +362,13 @@ test.describe('the custom card width', () => {
         expect(label!.y + label!.height).toBeLessThanOrEqual(seg!.y + 0.5);
         expect(Math.abs(seg!.width - grid!.width)).toBeLessThan(1);
         for (const b of await segment.locator('.segment-btn').all()) expect(Math.round((await b.boundingBox())!.height)).toBeGreaterThanOrEqual(44);
+        // The detail length segment the same: across the panel, a thumb high, its words inside their buttons.
+        const lengths = page.locator('#card-fields-settings .card-look-lines');
+        expect(Math.abs((await lengths.boundingBox())!.width - grid!.width)).toBeLessThan(1);
+        for (const b of await lengths.locator('.segment-btn').all()) {
+            expect(Math.round((await b.boundingBox())!.height)).toBeGreaterThanOrEqual(44);
+            expect(await b.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+        }
         // The 400px preview card shrinks to the panel, in a box of its scaled height.
         await expect.poll(() => page.evaluate(() => {
             const box = document.querySelector<HTMLElement>('#card-preview-settings .card-signals-preview')!;
@@ -378,5 +394,178 @@ test.describe('the custom card width', () => {
         expect(widths[0] % 4).toBe(0);
         expect(layout).toBe(widths[0]);
         expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+    });
+});
+
+/** A cause of death that fits one row of the place column. */
+const CAUSE = 'náhlé zapálení mozkových blan';
+
+/** Per line of a card: its rows as drawn (text, position in the card, cut by its box), the place's title. */
+async function lineRows(page: Page, first: string) {
+    return card(page, first).locator('.card-line').evaluateAll(lines => lines.map(line => {
+        const cardEl = line.closest('.person-card') as HTMLElement;
+        const c = cardEl.getBoundingClientRect();
+        const scale = c.width / cardEl.offsetWidth;
+        const place = line.querySelector('.card-line-place');
+        return {
+            wrapped: line.classList.contains('card-line--rows'),
+            title: place?.getAttribute('title') ?? null,
+            bottom: (line.getBoundingClientRect().bottom - c.top) / scale,
+            rows: [...line.querySelectorAll<HTMLElement>('.card-line-row')].map(r => {
+                const b = r.getBoundingClientRect();
+                const range = document.createRange();
+                range.selectNodeContents(r);
+                return {
+                    text: r.textContent ?? '',
+                    cause: r.classList.contains('card-line-row--cause'),
+                    x: Math.round((b.left - c.left) / scale),
+                    top: Math.round((b.top - c.top) / scale),
+                    clipped: range.getBoundingClientRect().width > b.width + 0.01 * scale,
+                    nowrap: getComputedStyle(r).whiteSpace === 'nowrap',
+                    color: getComputedStyle(r).color,
+                    placeColor: getComputedStyle(place!).color,
+                };
+            }),
+        };
+    }));
+}
+
+type Lines = Awaited<ReturnType<typeof lineRows>>;
+/** A card's height for its rows: 56, 17px a row, 3px between details. */
+const heightFor = (lines: Lines) => 56 + 17 * lines.reduce((n, l) => n + Math.max(1, l.rows.length), 0) + 3 * (lines.length - 1);
+
+/** Where the couple's partner line runs, from the top of the cards, and the "+ partner" pill's middle. */
+async function partnerLine(page: Page): Promise<{ line: number; pill: number | null }> {
+    return page.evaluate(() => {
+        const r = window.Strom.TreeRenderer as unknown as {
+            spouseLines: { y: number; person1Id: string }[]; positions: Map<string, { y: number }>;
+        };
+        const sl = r.spouseLines[0];
+        const cardEl = document.querySelector<HTMLElement>(`#tree-canvas .person-card[data-id="${sl.person1Id}"]`)!;
+        const pill = cardEl.querySelector<HTMLElement>('.edge-right-center');
+        const c = cardEl.getBoundingClientRect();
+        const scale = c.width / cardEl.offsetWidth;
+        const p = pill?.getBoundingClientRect();
+        return { line: sl.y - r.positions.get(sl.person1Id)!.y, pill: p ? Math.round(((p.top + p.bottom) / 2 - c.top) / scale) : null };
+    });
+}
+
+test.describe('details that wrap (U02)', () => {
+    test('whole (the default): a long place wraps in its column, the cause takes a row of its own, nothing is cut, every card is as tall as the tallest', async ({ page }) => {
+        await setup(page, LONG_PLACE, 1440, undefined, { cause: true }, CAUSE);
+        expect(await page.evaluate(() => window.Strom.SettingsManager.getCardFields().lines)).toBe(0);
+        const { widths, heights, layoutHeight } = await cardWidths(page);
+        expect(widths).toEqual([320, 320, 320]);
+        const [anna, jan, marie] = [await lineRows(page, 'Anna'), await lineRows(page, 'Jan'), await lineRows(page, 'Marie')];
+        // Anna's birth place: rows in the place column, 17px apart, the whole text, each row drawn as it is.
+        const birth = anna[0];
+        expect(birth.wrapped).toBe(true);
+        expect(birth.rows.length).toBeGreaterThan(1);
+        expect(birth.rows.map(r => r.text).join(' ')).toBe(LONG_PLACE);
+        birth.rows.forEach((r, i) => expect(r.top - birth.rows[0].top).toBe(17 * i));
+        // Jan's death: the place, then the cause on a row of its own, no " · ".
+        expect(jan[1].rows.map(r => [r.text, r.cause])).toEqual([['Brno', false], [CAUSE, true]]);
+        const all = [...anna, ...jan, ...marie];
+        // Every row starts at the one place column of the view (T05), nothing is cut, no tooltip.
+        expect(new Set(all.flatMap(l => l.rows.map(r => r.x))).size).toBe(1);
+        for (const l of all) {
+            expect(l.title).toBeNull();
+            for (const r of l.rows) expect(r).toMatchObject({ clipped: false, nowrap: true });
+            for (const r of l.rows) expect(r.text).not.toContain('…');
+        }
+        // One height for the view (V1): the tallest card's rows.
+        const tallest = Math.max(heightFor(anna), heightFor(jan), heightFor(marie));
+        expect(tallest).toBe(heightFor(anna));
+        expect(tallest).toBeGreaterThan(107);
+        expect(new Set(heights)).toEqual(new Set([tallest]));
+        expect(layoutHeight).toBe(tallest);
+        expect(anna[anna.length - 1].bottom).toBeLessThanOrEqual(tallest);
+        // The card grew: the partner line and the "+ partner" pill stay at the header, 25px from the top.
+        expect(await partnerLine(page)).toEqual({ line: 25, pill: 25 });
+        // The rows take the place's colour, in the light and the dark theme.
+        const colors = async () => (await lineRows(page, 'Anna'))[0].rows.map(r => [r.color, r.placeColor]);
+        const light = await colors();
+        await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+        const dark = await colors();
+        for (const [row, place] of [...light, ...dark]) expect(row).toBe(place);
+        expect(dark[0][0]).not.toBe(light[0][0]);
+    });
+
+    test('two rows: no third row is drawn, the second ends in "…" and the title says the whole place', async ({ page }) => {
+        await setup(page, LONG_PLACE, 1440, undefined, { lines: 2, height: 'view' });
+        const anna = await lineRows(page, 'Anna');
+        const rows = anna[0].rows;
+        expect(rows).toHaveLength(2);
+        expect(rows[0].text.endsWith('…')).toBe(false);
+        expect(rows[1].text.endsWith('…')).toBe(true);
+        expect(LONG_PLACE.startsWith(`${rows[0].text} ${rows[1].text.slice(0, -1)}`.trimEnd())).toBe(true);
+        expect(anna[0].title).toBe(LONG_PLACE);
+        for (const r of rows) expect(r.clipped).toBe(false);
+        // Lines that fit carry no title; the view is as tall as Anna's card.
+        const jan = await lineRows(page, 'Jan');
+        expect([...jan, anna[1]].every(l => l.title === null && l.rows.length === 1)).toBe(true);
+        const { heights } = await cardWidths(page);
+        expect(new Set(heights)).toEqual(new Set([heightFor(anna)]));
+        expect(heights[0]).toBe(56 + 17 * 3 + 3);
+        expect(await partnerLine(page)).toEqual({ line: 25, pill: 25 });
+    });
+
+    test('one row and one height: the card of before, 56 + 17 a detail, the partner line in its middle', async ({ page }) => {
+        await setup(page, LONG_PLACE);
+        const { heights, layoutHeight } = await cardWidths(page);
+        // Three details on: 107px for everybody, also for Marie with two lines.
+        expect(heights).toEqual([107, 107, 107]);
+        expect(layoutHeight).toBe(107);
+        await expect(page.locator('#tree-canvas .card-line--rows, #tree-canvas .card-lines--rows')).toHaveCount(0);
+        expect(await partnerLine(page)).toEqual({ line: 53.5, pill: 54 });
+    });
+
+    test('the detail length segment re-draws the view: 1 line, 2 lines, Full', async ({ page }) => {
+        await setup(page, LONG_PLACE, 1440, undefined, { cause: true }, CAUSE);
+        await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+        const segment = page.locator('#card-fields-settings .card-look-lines');
+        await expect(segment).toHaveAttribute('role', 'group');
+        await expect(segment.locator('.segment-btn')).toHaveText(['1 line', '2 lines', 'Full']);
+        await expect(segment.locator('[aria-pressed="true"]')).toHaveText('Full');
+        const heightOf = async () => (await cardWidths(page)).layoutHeight;
+        const full = await heightOf();
+        await segment.getByRole('button', { name: '1 line', exact: true }).click();
+        await expect(segment.getByRole('button', { name: '1 line', exact: true })).toHaveAttribute('aria-pressed', 'true');
+        await expect.poll(heightOf).toBe(107);
+        await expect(page.locator('.card-preview-size')).toHaveText('card 320 × 107 px');
+        expect(await page.evaluate(() => window.Strom.SettingsManager.getCardFields().lines)).toBe(1);
+        await segment.getByRole('button', { name: '2 lines', exact: true }).click();
+        await expect.poll(heightOf).toBe(56 + 17 * 3 + 3);
+        await segment.getByRole('button', { name: 'Full', exact: true }).click();
+        await expect.poll(heightOf).toBe(full);
+        await expect(segment.locator('[aria-pressed="true"]')).toHaveCount(1);
+    });
+
+    test('the image export draws the same rows and the same height as the screen, the partner line at the header', async ({ page }) => {
+        await setup(page, LONG_PLACE, 1440, undefined, { cause: true }, CAUSE);
+        const dom = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('#tree-canvas .person-card')].map(c => ({
+            name: c.querySelector('.name-text')!.textContent ?? '',
+            height: c.offsetHeight,
+            rows: [...c.querySelectorAll('.card-line-row')].map(r => r.textContent ?? ''),
+        })));
+        expect(dom.some(c => c.rows.length > 3)).toBe(true);
+        const svg = await posterSvg(page);
+        const { cards } = await renderStandalone(page, svg);
+        expect(cards).toHaveLength(dom.length);
+        for (const d of dom) {
+            const c = cards.find(x => x.name?.text === d.name)!;
+            expect(c, d.name).toBeTruthy();
+            expect(c.height, d.name).toBe(d.height);
+            // One text a row, top to bottom, the same rows.
+            const places = c.lines.filter(l => l.kind === 'place').sort((a, b) => a.y - b.y);
+            expect(places.map(p => p.text), d.name).toEqual(d.rows);
+            expect(new Set(places.map(p => p.y)).size).toBe(d.rows.length);
+            for (const p of places) expect(p.right).toBeLessThanOrEqual(c.right - 12 + 0.5);
+        }
+        expect(svg).not.toContain('…');
+        // The couple's line 25px below the top of their cards.
+        const spouseY = Number(/<g class="spouse-lines">\s*<line x1="[\d.-]+" y1="([\d.-]+)"/.exec(svg)![1]);
+        const tops = [...svg.matchAll(/<rect x="-?[\d.]+" y="(-?[\d.]+)" width="\d+" height="\d+" rx="8"/g)].map(m => Number(m[1]));
+        expect(tops.some(t => Math.abs(t + 25 - spouseY) < 0.05)).toBe(true);
     });
 });
