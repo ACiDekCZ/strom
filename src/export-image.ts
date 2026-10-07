@@ -10,6 +10,7 @@ import { StromData, LayoutConfig, DEFAULT_LAYOUT_CONFIG, PartnershipStatus } fro
 import { LayoutResult } from './layout/pipeline/types.js';
 import { displayYear } from './dates.js';
 import { personInitials } from './initials.js';
+import { parentRelKind, parentRelDash, connectionDash } from './parent-rel-style.js';
 
 /** The subset of a LayoutResult the poster needs (no diagnostics required). */
 export type PosterLayout = Pick<LayoutResult, 'positions' | 'connections' | 'spouseLines'>;
@@ -60,13 +61,9 @@ function statusDash(status: PartnershipStatus | undefined): { dash?: string; col
     }
 }
 
-/** Child-drop dash per the child's parent-rel types (mirror of the renderer). */
-function relDash(data: StromData, childId: string): string | undefined {
-    const child = data.persons[childId as keyof typeof data.persons];
-    const types = child?.parentRelTypes ? Object.values(child.parentRelTypes) : [];
-    if (types.includes('adoptive')) return '6,4';
-    if (types.includes('step') || types.includes('foster')) return '2,3';
-    return undefined;
+/** Non-biological kind of a child's link (mirror of the renderer). */
+function relKind(data: StromData, childId: string) {
+    return parentRelKind(data.persons[childId as keyof typeof data.persons]);
 }
 
 /**
@@ -257,28 +254,31 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
     // --- Connections (parent -> children bus routing) ---
     out.push('<g class="connections">');
     for (const conn of result.connections) {
+        // All children adopted (step/foster): the whole path is dashed, as on
+        // screen; with a biological sibling only the drops are.
+        const shared = connectionDash(conn.drops.map(d => relKind(data, d.personId)));
         // Stem — down to the CONNECTOR lane, not stemBottomY: lane allocation
         // can place the connector lower (secondary unions in partner chains),
         // and stopping short left visible gaps in the printed lines.
-        out.push(line(conn.stemX, conn.stemTopY, conn.stemX, conn.connectorY, COLORS.line));
+        out.push(line(conn.stemX, conn.stemTopY, conn.stemX, conn.connectorY, COLORS.line, shared));
         if (Math.abs(conn.connectorFromX - conn.connectorToX) > 0.5) {
             // Connector (horizontal), then its drop to the bus lane.
-            out.push(line(conn.connectorFromX, conn.connectorY, conn.connectorToX, conn.connectorY, COLORS.line));
+            out.push(line(conn.connectorFromX, conn.connectorY, conn.connectorToX, conn.connectorY, COLORS.line, shared));
             if (Math.abs(conn.connectorY - conn.branchY) > 0.5) {
-                out.push(line(conn.connectorToX, conn.connectorY, conn.connectorToX, conn.branchY, COLORS.line));
+                out.push(line(conn.connectorToX, conn.connectorY, conn.connectorToX, conn.branchY, COLORS.line, shared));
             }
         } else if (Math.abs(conn.connectorY - conn.branchY) > 0.5) {
             // Stem sits within the bus range — extend it straight to the bus.
-            out.push(line(conn.stemX, conn.connectorY, conn.stemX, conn.branchY, COLORS.line));
+            out.push(line(conn.stemX, conn.connectorY, conn.stemX, conn.branchY, COLORS.line, shared));
         }
         // Bus (horizontal branch)
         if (Math.abs(conn.branchRightX - conn.branchLeftX) > 0.5) {
-            out.push(line(conn.branchLeftX, conn.branchY, conn.branchRightX, conn.branchY, COLORS.line));
+            out.push(line(conn.branchLeftX, conn.branchY, conn.branchRightX, conn.branchY, COLORS.line, shared));
         }
         // Drops to each child (adoptive dashed, step/foster dotted — parity
         // with the on-screen renderer)
         for (const drop of conn.drops) {
-            out.push(line(drop.x, drop.topY ?? conn.branchY, drop.x, drop.bottomY, COLORS.line, relDash(data, drop.personId)));
+            out.push(line(drop.x, drop.topY ?? conn.branchY, drop.x, drop.bottomY, COLORS.line, parentRelDash(relKind(data, drop.personId))));
         }
     }
     out.push('</g>');

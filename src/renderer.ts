@@ -52,6 +52,7 @@ import { extractSubtree } from './subtree.js';
 import { buildFanModel, buildFanSvg } from './fan-chart.js';
 import { computeIndirectIds } from './indirect.js';
 import { isMobile as isMobileViewport } from './breakpoints.js';
+import { parentRelKind, parentRelDash, connectionDash } from './parent-rel-style.js';
 import { openCardMenuFromKeyboard } from './ui/keyboard-access.js';
 import { syncDepthStepper } from './ui/depth-stepper.js';
 
@@ -2034,26 +2035,32 @@ class TreeRendererClass {
      */
     private renderClusterConnections(svg: SVGSVGElement): void {
         for (const conn of this.connections) {
+            // When every child is adopted (step/foster), the whole path is
+            // dashed, not just the drops; with a biological sibling the shared
+            // part stays solid.
+            const sharedDash = connectionDash(conn.drops.map(d => parentRelKind(DataManager.getPerson(d.personId) ?? undefined)));
+            const shared = { dashArray: sharedDash, className: 'child-link' };
+
             // Vertical stem from parent down to connectorY (= stemBottomY)
-            this.drawLine(svg, conn.stemX, conn.stemTopY, conn.stemX, conn.connectorY);
+            this.drawLine(svg, conn.stemX, conn.stemTopY, conn.stemX, conn.connectorY, shared);
 
             // Horizontal connector from stem to bus junction point (if stem outside bus range)
             if (conn.connectorFromX !== conn.connectorToX) {
-                this.drawLine(svg, conn.connectorFromX, conn.connectorY, conn.connectorToX, conn.connectorY);
+                this.drawLine(svg, conn.connectorFromX, conn.connectorY, conn.connectorToX, conn.connectorY, shared);
 
                 // Vertical junction from connectorY to branchY (if connector on different lane)
                 if (Math.abs(conn.connectorY - conn.branchY) > 0.5) {
-                    this.drawLine(svg, conn.connectorToX, conn.connectorY, conn.connectorToX, conn.branchY);
+                    this.drawLine(svg, conn.connectorToX, conn.connectorY, conn.connectorToX, conn.branchY, shared);
                 }
             } else {
                 // Stem is within bus range - extend stem to branchY if needed
                 if (Math.abs(conn.connectorY - conn.branchY) > 0.5) {
-                    this.drawLine(svg, conn.stemX, conn.connectorY, conn.stemX, conn.branchY);
+                    this.drawLine(svg, conn.stemX, conn.connectorY, conn.stemX, conn.branchY, shared);
                 }
             }
 
             // Horizontal bus (branch) - only over children
-            this.drawLine(svg, conn.branchLeftX, conn.branchY, conn.branchRightX, conn.branchY);
+            this.drawLine(svg, conn.branchLeftX, conn.branchY, conn.branchRightX, conn.branchY, shared);
 
             // Drops to each child - simple vertical lines from bus. The stroke
             // style reflects the parent→child relationship type (adoptive/step/
@@ -2188,16 +2195,11 @@ class TreeRendererClass {
      * colour unchanged. Only the drop's stroke changes — never its geometry.
      */
     private getParentRelDropStyle(childId: PersonId): { dashArray?: string; className: string; title?: string } {
-        const child = DataManager.getPerson(childId);
-        const types = child?.parentRelTypes ? Object.values(child.parentRelTypes) : [];
-        if (types.includes('adoptive')) {
-            return { dashArray: '6,4', className: 'child-drop', title: strings.parentRelType.adoptive };
-        }
-        if (types.includes('step') || types.includes('foster')) {
-            const t = types.includes('foster') ? strings.parentRelType.foster : strings.parentRelType.step;
-            return { dashArray: '2,3', className: 'child-drop', title: t };
-        }
-        return { className: 'child-drop' };
+        const kind = parentRelKind(DataManager.getPerson(childId) ?? undefined);
+        if (!kind) return { className: 'child-drop' };
+        const title = kind === 'adoptive' ? strings.parentRelType.adoptive
+            : kind === 'foster' ? strings.parentRelType.foster : strings.parentRelType.step;
+        return { dashArray: parentRelDash(kind), className: 'child-drop', title };
     }
 
     private updateSVGSize(svg: SVGSVGElement): void {

@@ -121,6 +121,33 @@ describe('buildTreeSvg', () => {
         expect(svg).toContain('#d08a5a');                         // paternal stripe
     });
 
+    it('an only adopted child gets a fully dashed line; with a biological sibling only its drop is dashed (T03)', () => {
+        const linesOf = (svg: string) => svg.split('class="connections"')[1].split('</g>')[0].match(/<line [^>]*>/g) ?? [];
+        // Stem 65→80, connector 65→265 (stem outside the bus), bus 265→465, two drops.
+        const twoKids = (kids: string[]): PosterLayout => {
+            const l = layout({ a: { x: 0, y: 0 }, b: { x: 200, y: 300 }, c: { x: 400, y: 300 } });
+            l.connections = [{
+                unionId: 'u1' as never,
+                stemX: 65, stemTopY: 64, stemBottomY: 80,
+                branchY: 100, branchLeftX: 265, branchRightX: kids.length > 1 ? 465 : 265,
+                connectorFromX: 65, connectorToX: 265, connectorY: 80,
+                drops: kids.map((id, i) => ({ personId: id as PersonId, x: 265 + i * 200, topY: 100, bottomY: 300 })),
+            }];
+            return l;
+        };
+
+        const only = makeData(person('a'), person('b', { parentRelTypes: { a: 'adoptive' } as never }));
+        const onlyLines = linesOf(buildTreeSvg(only, twoKids(['b'])));
+        expect(onlyLines.length).toBe(4); // stem, connector, junction, drop
+        for (const l of onlyLines) expect(l).toContain('stroke-dasharray="6,4"');
+
+        const mixed = makeData(person('a'), person('b', { parentRelTypes: { a: 'adoptive' } as never }), person('c'));
+        const mixedLines = linesOf(buildTreeSvg(mixed, twoKids(['b', 'c'])));
+        expect(mixedLines.length).toBe(6); // stem, connector, junction, bus, 2 drops
+        expect(mixedLines.filter(l => l.includes('stroke-dasharray')).length).toBe(1);
+        expect(mixedLines.find(l => l.includes('stroke-dasharray'))).toContain('x1="265.0"');
+    });
+
     it('draws dimmed (context-only) persons at half opacity, others at full', () => {
         const data = makeData(person('a'), person('b', { gender: 'female' }));
         const svg = buildTreeSvg(data, layout({ a: { x: 0, y: 0 }, b: { x: 200, y: 300 } }), {
