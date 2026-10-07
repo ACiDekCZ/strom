@@ -11,7 +11,8 @@ import { describe, it, expect } from 'vitest';
 import { DESCRIPTIONS, NO_NAME, noName, notAName, parseName, readGedcomName } from '../gedcom-names.js';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { exportToGedcom } from '../ged-exporter.js';
-import { Person, StromData } from '../types.js';
+import { APP_VERSION, Person, StromData } from '../types.js';
+import { appUnknownIsNoSurname, compareAppVersions, isAppVersion } from '../app-version.js';
 
 const importGed = (ged: string): StromData => convertToStrom(parseGedcom(ged)).data;
 const people = (data: StromData): Person[] => Object.values(data.persons);
@@ -262,5 +263,83 @@ describe('a person of no name and no surname (T08)', () => {
         expect(people(importGed(file('STROM', ['1 NAME ? /Unknown/', '2 GIVN ?', '2 SURN Unknown']))).map(nameOf)).toEqual(['? | Unknown']);
         expect(people(importGed(file('STROM', ['1 NAME Jan /Unknown/']))).map(nameOf)).toEqual(['Jan | Unknown']);
         expect(people(importGed(file('MYHERITAGE', ['1 NAME ? /Unknown/']))).map(nameOf)).toEqual(['? | Unknown']);
+    });
+});
+
+describe('"? /Unknown/" by the version of the app that wrote the file (T08, N13)', () => {
+    /** A file of the app: its version as HEAD > SOUR STROM > VERS (none: `null`). */
+    const appFile = (vers: string | null, name: string[], source = 'STROM'): string => [
+        '0 HEAD', `1 SOUR ${source}`, ...(vers === null ? [] : [`2 VERS ${vers}`]), '2 NAME Strom Family Tree',
+        '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8',
+        '0 @I1@ INDI', ...name, '1 SEX M', '0 TRLR',
+    ].join('\n');
+    const read = (ged: string): string[] => people(importGed(ged)).map(nameOf);
+
+    it('the export says the app\'s version in its header', () => {
+        const out = exportToGedcom({ persons: {}, partnerships: {} }).content;
+        expect(out).toMatch(new RegExp(`^0 HEAD\n1 SOUR STROM\n2 VERS ${APP_VERSION.replace(/[.+]/g, '\\$&')}\n2 NAME Strom Family Tree\n`));
+        expect(out).not.toContain('2 VERS 1.0');
+        expect(isAppVersion(APP_VERSION)).toBe(true);
+    });
+
+    it('an app of no version it names (1.0, none, not a version) or before 3.10.0-beta.7: no surname', () => {
+        for (const vers of ['1.0', null, '', 'Strom', '3.10', '3.9.2', '3.10.0-beta.6', '3.10.0-alpha.9']) {
+            expect(read(appFile(vers, ['1 NAME ? /Unknown/'])), String(vers)).toEqual(['? | ']);
+        }
+    });
+
+    it('an app from 3.10.0-beta.7 on (it writes "? //"): the surname Unknown someone typed', () => {
+        for (const vers of ['3.10.0-beta.7', '3.10.0-beta.8', '3.10.0-beta.10', '3.10.0-rc.1', '3.10.0', '3.10.1', '4.0.0', '3.10.0+build.5']) {
+            expect(read(appFile(vers, ['1 NAME ? /Unknown/'])), vers).toEqual(['? | Unknown']);
+        }
+    });
+
+    it('"? //" is no surname in every version; another program\'s and the research\'s files as before', () => {
+        for (const vers of ['1.0', null, '3.10.0-beta.6', '3.10.0-beta.7', '3.10.0']) {
+            expect(read(appFile(vers, ['1 NAME ? //'])), String(vers)).toEqual(['? | ']);
+        }
+        // Another program: Unknown is a surname, whatever its VERS.
+        expect(read(appFile('1.0', ['1 NAME ? /Unknown/'], 'MYHERITAGE'))).toEqual(['? | Unknown']);
+        // The research's file (its own version under SOUR): its "? /Unknown/" stays no surname.
+        expect(read(appFile('1.13.0', ['1 NAME ? /Unknown/'], 'STROM_RESEARCH'))).toEqual(['? | ']);
+        // A VERS of another header line (GEDC) is not the app's.
+        expect(read(appFile(null, ['1 NAME ? /Unknown/']).replace('2 VERS 5.5.1', '2 VERS 3.10.0'))).toEqual(['? | ']);
+    });
+
+    it('"?" with the surname Unknown entered in the app survives export and import', () => {
+        const tree: StromData = {
+            persons: {
+                ['p1' as Person['id']]: {
+                    id: 'p1' as Person['id'], firstName: '?', lastName: 'Unknown', gender: 'male', isPlaceholder: false,
+                    partnerships: [], parentIds: [], childIds: [],
+                },
+                ['p2' as Person['id']]: {
+                    id: 'p2' as Person['id'], firstName: '?', lastName: '', gender: 'female', isPlaceholder: false,
+                    partnerships: [], parentIds: [], childIds: [],
+                },
+            },
+            partnerships: {},
+        };
+        const out = exportToGedcom(tree).content;
+        expect(out).toContain('1 NAME ? /Unknown/');
+        expect(out).toContain('1 NAME ? //');
+        const again = people(importGed(out));
+        expect(again.map(nameOf)).toEqual(['? | Unknown', '? | ']);
+        expect(again.every(p => !p.isPlaceholder)).toBe(true);
+    });
+
+    it('compares app versions by semver precedence', () => {
+        const order = ['3.9.0', '3.10.0-alpha.1', '3.10.0-beta.6', '3.10.0-beta.7', '3.10.0-beta.9', '3.10.0-beta.10',
+            '3.10.0-rc.1', '3.10.0-rc.2', '3.10.0', '3.10.1', '3.11.0', '10.0.0'];
+        for (let i = 0; i < order.length; i++) {
+            for (let j = 0; j < order.length; j++) {
+                expect(Math.sign(compareAppVersions(order[i], order[j])), `${order[i]} vs ${order[j]}`).toBe(Math.sign(i - j));
+            }
+        }
+        expect(compareAppVersions('3.10.0-beta', '3.10.0-beta.1')).toBeLessThan(0);
+        expect(compareAppVersions('3.10.0+a', '3.10.0+b')).toBe(0);
+        expect(isAppVersion('1.0')).toBe(false);
+        expect(appUnknownIsNoSurname(undefined)).toBe(true);
+        expect(appUnknownIsNoSurname(' 3.10.0-beta.7 ')).toBe(false);
     });
 });

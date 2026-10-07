@@ -24,7 +24,7 @@
 
 import { researchHeaderLines, ResearchHeaderInfo } from './research-link.js';
 import { isPurePlaceholder } from './single-parent.js';
-import { StromData, Person, Partnership, PersonId, PartnershipId, LifeEventType, ParticipantRole, PlaceGeo, Story, ParentChildRelType, MediaOriginal, Attachment, FactStatus } from './types.js';
+import { APP_VERSION, StromData, Person, Partnership, PersonId, PartnershipId, LifeEventType, ParticipantRole, PlaceGeo, Story, ParentChildRelType, MediaOriginal, Attachment, FactStatus } from './types.js';
 import { normalizeSha256 } from './sha256.js';
 import { regionHeader, regionToStored } from './originals.js';
 import { strings } from './strings.js';
@@ -493,7 +493,9 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
     // ==================== HEADER ====================
     lines.push('0 HEAD');
     lines.push('1 SOUR STROM');
-    lines.push('2 VERS 1.0');
+    // The app's version (older apps wrote a fixed "1.0"): a reader knows what the
+    // file means by it ("? /Unknown/" is no surname only from an app before 3.10.0-beta.7).
+    lines.push(`2 VERS ${APP_VERSION}`);
     lines.push('2 NAME Strom Family Tree');
     lines.push('1 DEST ANSTFILE');
     lines.push(`1 DATE ${headerDate}`);

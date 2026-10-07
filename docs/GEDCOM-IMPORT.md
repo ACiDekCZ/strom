@@ -31,6 +31,34 @@ field for it, but only if it arrives under a tag the importer knows.
   them to its own ids on import. A record without an id still imports — it is
   given an anonymous one — but then nothing can point at it.
 
+### Files Strom wrote itself
+
+The app's own export starts its header with
+
+```
+0 HEAD
+1 SOUR STROM
+2 VERS 3.10.0
+2 NAME Strom Family Tree
+```
+
+`2 VERS` under `1 SOUR STROM` is the version of the app that wrote the file
+(a semantic version, pre-releases included; older apps wrote a fixed `1.0`). It
+decides one name rule:
+
+- `1 NAME ? /Unknown/` with no `2 SURN` is a person of no name **and no
+  surname** when the version is before 3.10.0-beta.7, or when the file names
+  no app version (`2 VERS 1.0`, no `2 VERS`, or a value that is not a
+  version): those apps wrote a nameless person that way.
+- From 3.10.0-beta.7 on (the app writes such a person `? //`) it is the
+  surname `Unknown` someone typed. Versions compare by semver precedence:
+  3.10.0-beta.6 < 3.10.0-beta.7 < 3.10.0-beta.10 < 3.10.0-rc.1 < 3.10.0.
+- `1 NAME ? //` is no surname in every version.
+- A Strom Research file (`1 SOUR STROM_RESEARCH`, its own version under it)
+  keeps the old rule; a file of any other program reads `Unknown` as a surname.
+
+Strom Research reads the app's files by the same rule.
+
 ### CONC and CONT are not interchangeable
 
 - `CONC` continues the same line. The two pieces are joined with **nothing**
@@ -74,7 +102,7 @@ unsupported tag.
 
 | Tag | Where it lands |
 |---|---|
-| `NAME` | Given name and surname; the surname goes between slashes. A person with neither (`1 NAME //`, or `?`) is an unknown stand-in; a surname alone (`1 NAME /Nováková/`) is a real person. Strom writes its stand-in as `1 NAME //` and a person it knows without a name as `1 NAME ? //` (`? /Unknown/` before 3.10, read back as no surname): in its own file the latter stays a person |
+| `NAME` | Given name and surname; the surname goes between slashes. A person with neither (`1 NAME //`, or `?`) is an unknown stand-in; a surname alone (`1 NAME /Nováková/`) is a real person. Strom writes its stand-in as `1 NAME //` and a person it knows without a name as `1 NAME ? //` (`? /Unknown/` before 3.10.0-beta.7, read back as no surname from such a file — see "Files Strom wrote itself"): in its own file the latter stays a person |
 | `NAME` (repeated) | Further spellings of the same person, kept as name variants |
 | `NAME` > `TYPE` | Read to keep the birth surname as the person's surname: a `married` name listed first swaps places with the `birth` (or `maiden`) one. The type itself is not stored |
 | `NAME` > `SOUR` | The record the name comes from — cites the person, with `PAGE` and `QUAY` |

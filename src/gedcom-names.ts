@@ -169,8 +169,10 @@ export interface GedcomNameRead {
  * - a title keeps its commas ("Prof., Dr." as typed), where another
  *   program's NPFX / NSFX list reads as the title is shown ("Prof. Dr.");
  * - "? /Unknown/", which the app wrote for a person of no name and no
- *   surname before 3.10, is no surname (a surname Unknown someone typed
- *   comes with its SURN) — the research's appNoSurname.
+ *   surname before 3.10.0-beta.7, is no surname (a surname Unknown someone
+ *   typed comes with its SURN) — the research's appNoSurname. A file of a
+ *   later app (its HEAD > SOUR STROM > VERS) writes that person "? //": there
+ *   `unknownIsNoSurname: false` keeps the surname Unknown someone typed.
  *
  * NPFX / NSFX are the titles before and after the name ("Ing.", "ml."), kept
  * apart from it. A file writes them in the NAME line too ("Ing. Jan /Novák/
@@ -187,7 +189,7 @@ export interface GedcomNameRead {
 export function readGedcomName(
     line: string,
     parts: GedcomNameParts = {},
-    opts: { descriptions?: boolean; fromStrom?: boolean } = {},
+    opts: { descriptions?: boolean; fromStrom?: boolean; unknownIsNoSurname?: boolean } = {},
 ): GedcomNameRead {
     const npfx = parts.npfx?.replace(/\s+/g, ' ').trim();
     const nsfx = parts.nsfx?.replace(/\s+/g, ' ').trim();
@@ -216,7 +218,7 @@ export function readGedcomName(
     else if (split.slashed || !givn) lastName = split.surname;
     else lastName = surnameAfterGiven(bare, givn) ?? split.surname;
     // The app's "? /Unknown/" of old: no surname, not the surname Unknown.
-    if (fromStrom && !surn && lastName === 'Unknown' && noName(written)) lastName = '';
+    if ((opts.unknownIsNoSurname ?? fromStrom) && !surn && lastName === 'Unknown' && noName(written)) lastName = '';
 
     return {
         firstName, lastName,

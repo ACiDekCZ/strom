@@ -67,6 +67,7 @@ import { normalizeSha256 } from './sha256';
 import { ORIGINAL_ONLY_DATA_URL } from './validation';
 import { parseRegion, regionFromStored } from './originals';
 import { parseName, readGedcomName, type GedcomNameParts } from './gedcom-names';
+import { appUnknownIsNoSurname } from './app-version';
 
 /** The name parser lives with the rules it shares with the research (gedcom-names.ts). */
 export { parseName };
@@ -1599,6 +1600,10 @@ export function parseGedcom(content: string): ParsedGedcom {
     let stromResearch = false;
     /** Written by the Strom app itself (HEAD > SOUR STROM). */
     let stromApp = false;
+    /** The app's version under it (HEAD > SOUR STROM > VERS; the older apps wrote a fixed "1.0"). */
+    let stromAppVersion: string | undefined;
+    /** The header line being read is under HEAD > SOUR STROM. */
+    let inStromSour = false;
     let researchAsOf = '';
     /** The _STROM_CONFLICT / _HYPO / _SEARCHED block being read. */
     let currentResearch: OpenResearch | null = null;
@@ -1807,9 +1812,12 @@ export function parseGedcom(content: string): ParsedGedcom {
                 inSurnameNote = tag === 'NOTE' && value.trim() === SURNAME_GROUPS_MARKER;
                 // Strom Research's own lines: who wrote the file, and when
                 // its knowledge about people was current.
+                inStromSour = tag === 'SOUR' && value.trim() === 'STROM';
                 if (tag === 'SOUR' && value.trim() === 'STROM_RESEARCH') stromResearch = true;
-                else if (tag === 'SOUR' && value.trim() === 'STROM') stromApp = true;
+                else if (inStromSour) stromApp = true;
                 else if (tag === '_STROM_ASOF') researchAsOf = value.trim();
+            } else if (level === 2 && inStromSour && tag === 'VERS') {
+                stromAppVersion = value.trim();
             } else if (level === 2 && inSurnameNote && (tag === 'CONT' || tag === 'CONC')) {
                 const group = value.split(SURNAME_GROUP_SEP.trim())
                     .map(s => s.trim()).filter(Boolean);
@@ -2580,8 +2588,12 @@ export function parseGedcom(content: string): ParsedGedcom {
     // back as it went out, as the research reads the app's file in a sync;
     // a title keeps its commas as typed.
     const fromStrom = stromApp || stromResearch;
+    // "? /Unknown/" is no surname in a file of the app from before 3.10.0-beta.7 or of no
+    // version it names (HEAD > SOUR STROM > VERS "1.0" or missing), and in the research's
+    // file; from that app version on (it writes "? //") it is the surname Unknown (N13).
+    const unknownIsNoSurname = stromResearch || (stromApp && appUnknownIsNoSurname(stromAppVersion));
     for (const indi of individuals.values()) {
-        const read = readGedcomName(indi.name, indi.primaryNameParts, { fromStrom });
+        const read = readGedcomName(indi.name, indi.primaryNameParts, { fromStrom, unknownIsNoSurname });
         indi.firstName = read.firstName;
         indi.lastName = read.lastName;
         if (read.description) indi.nameDescription = read.description;
