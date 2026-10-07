@@ -20,7 +20,7 @@ import { chainLinkSvg, iconSvg } from './icons.js';
 import * as CrossTree from './cross-tree.js';
 import { ViewMode, STANDALONE_VIEWS, ResearchEdgeMode } from './types.js';
 import { cardLines, CardLine, cardLineHtml } from './card-fields.js';
-import { CustomCardMetrics, customCardMetrics, measureCardTexts, cardFontsPending } from './card-width.js';
+import { CustomCardMetrics, customCardMetrics, customCardCutLines, measureCardTexts, cardFontsPending } from './card-width.js';
 import { checkRecordedAge, ageBirthDate } from './recorded-age.js';
 import { ACTION_GLYPH, AGENT_DONE_MS, AGENT_DONE_FADE_MS, AGENT_SPIN_MS, CardSignalContext, CardSignalInfo, cardSignalInfo, researchCardInfoNow, sharedPhaseDelay, stateStripesHtml } from './card-signals.js';
 import { EvidenceLevel, treeHasAnySource, unionsByPerson } from './evidence-level.js';
@@ -80,6 +80,8 @@ class TreeRendererClass {
     private customMetrics: CustomCardMetrics | null = null;
     /** The custom card's lines per drawn person, computed once per render. */
     private customLines = new Map<PersonId, CardLine[]>();
+    /** The custom card lines whose place shortens in the drawn view (a title says it in full). */
+    private customCutLines = new Set<CardLine>();
     private positions = new Map<PersonId, Position>();
 
     /** Generation bands for the sticky label overlay (rebuilt each render). */
@@ -250,6 +252,7 @@ class TreeRendererClass {
         } else {
             this.customMetrics = null;
             this.customLines.clear();
+            this.customCutLines.clear();
         }
 
         // Apply layout result
@@ -376,7 +379,9 @@ class TreeRendererClass {
             this.customLines.set(id, lines);
             entries.push({ name: `${person.firstName || '?'} ${person.lastName}`.trim(), avatar: !person.isPlaceholder, lines });
         }
-        return customCardMetrics(entries, measureCardTexts);
+        const metrics = customCardMetrics(entries, measureCardTexts);
+        this.customCutLines = customCardCutLines(entries, metrics, measureCardTexts);
+        return metrics;
     }
 
     /** The custom card's width and date column of the drawn view (null in other densities). */
@@ -1365,7 +1370,7 @@ class TreeRendererClass {
             html += customLines ? `
                 <div class="card-body card-body--custom">
                     <div class="card-head">${avatarHtml}${nameHtml}</div>
-                    <div class="card-lines">${customLines.map(l => cardLineHtml(l, t => this.escapeHtml(t))).join('')}</div>
+                    <div class="card-lines">${customLines.map(l => cardLineHtml(l, t => this.escapeHtml(t), this.customCutLines.has(l))).join('')}</div>
                 </div>` : `
                 ${avatarHtml}
                 <div class="card-body">

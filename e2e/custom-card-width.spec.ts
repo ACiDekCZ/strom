@@ -78,6 +78,13 @@ async function lineCells(page: Page, first: string) {
             dateCut: date ? date.scrollWidth > date.clientWidth : false,
             place: rest?.textContent ?? '',
             placeCut: rest ? rest.scrollWidth > rest.clientWidth : false,
+            // Cut by any fraction of a pixel (an ellipsis is drawn), which scrollWidth rounds away.
+            placeClipped: rest ? (() => {
+                const range = document.createRange();
+                range.selectNodeContents(rest);
+                return range.getBoundingClientRect().width > rest.getBoundingClientRect().width + 0.01 * scale;
+            })() : false,
+            placeTitle: rest?.getAttribute('title') ?? null,
             placeX: rest ? Math.round((rest.getBoundingClientRect().left - cardEl.getBoundingClientRect().left) / scale) : -1,
         };
     }));
@@ -151,6 +158,10 @@ test.describe('the custom card width', () => {
         // The place that set the width is shown whole.
         const anna = await lineCells(page, 'Anna');
         expect(anna[0]).toMatchObject({ date: '1890', place: MEDIUM_PLACE, placeCut: false, dateCut: false });
+        // A native tooltip says a place in full exactly when the card cuts it (U02).
+        for (const c of [...anna, ...await lineCells(page, 'Jan'), ...await lineCells(page, 'Marie')]) {
+            expect(c.placeTitle).toBe(c.placeClipped ? c.place : null);
+        }
         // Cards spaced for that width never overlap.
         const overlaps = await page.evaluate(() => {
             const r = [...document.querySelectorAll('#tree-canvas .person-card')].map(c => c.getBoundingClientRect());
@@ -169,13 +180,23 @@ test.describe('the custom card width', () => {
         expect(widths).toEqual([320, 320, 320]);
         const anna = await lineCells(page, 'Anna');
         expect(anna[0]).toMatchObject({ date: '1890', place: LONG_PLACE, placeCut: true, dateCut: false });
+        // The shortened place is said in full in a native tooltip (U02); whole places carry none.
+        expect(anna[0].placeTitle).toBe(LONG_PLACE);
         // "after 1919" sets the date column; "1862" and "1890" leave it alone.
         const marie = await lineCells(page, 'Marie');
         const jan = await lineCells(page, 'Jan');
-        expect(marie[1]).toMatchObject({ date: 'after 1919', dateCut: false, place: 'Brno', placeCut: false });
+        expect(marie[1]).toMatchObject({ date: 'after 1919', dateCut: false, place: 'Brno', placeCut: false, placeTitle: null });
+        expect([...jan, ...marie, ...anna.slice(1)].every(c => !c.placeClipped && c.placeTitle === null)).toBe(true);
         const xs = [...jan, ...marie, ...anna].map(c => c.placeX);
         expect(new Set(xs).size).toBe(1);
         expect(xs[0]).toBeGreaterThan(0);
+    });
+
+    test('a shortened place with quotes, angle brackets and an ampersand is said in full in its tooltip (U02)', async ({ page }) => {
+        const place = 'Nové Město "na" Moravě <okres> Žďár & Sázava, Kraj Vysočina, Česká republika, Evropa';
+        await setup(page, place);
+        const anna = await lineCells(page, 'Anna');
+        expect(anna[0]).toMatchObject({ place, placeCut: true, placeTitle: place });
     });
 
     test('the poster draws the same width and the date and the place as two texts at the date column', async ({ page }) => {

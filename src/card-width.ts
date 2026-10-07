@@ -5,7 +5,7 @@
  * size): the longest name row or detail line among the persons drawn, plus
  * the card's 12px side padding and its 1px border, rounded up to 4px, at
  * least 200 and at most 320. Above 320 only the place shortens (ellipsis, the
- * full text stays in the card's tooltip); the name and the date always fit,
+ * full text in a native tooltip on the place, customCardCutLines); the name and the date always fit,
  * unless a name alone is wider than the widest card.
  *
  * A detail line is a grid: the mark (11px), the date, the place, 6px apart.
@@ -103,6 +103,33 @@ export function customCardMetrics(entries: Iterable<CustomCardEntry>, measure: M
         }
     }
     return { cardWidth: customCardWidth(content), dateColumn };
+}
+
+/**
+ * The lines whose place shortens (an ellipsis) on the cards of a view laid out
+ * with `metrics`: the card says their place in full in a native tooltip
+ * (cardLineHtml). Measured as the width is, in the same fonts and grid, so it
+ * agrees with what the card draws; texts are already cached by then.
+ */
+export function customCardCutLines(entries: Iterable<CustomCardEntry>, metrics: CustomCardMetrics,
+    measure: MeasureTexts): Set<CardLine> {
+    const lines = [...entries].flatMap(e => e.lines.filter(l => l.rest));
+    const cut = new Set<CardLine>();
+    if (lines.length === 0) return cut;
+    const texts = new Set<string>();
+    for (const l of lines) {
+        texts.add(l.rest);
+        if (l.more) texts.add(` ${l.more}`);
+    }
+    const placeW = measure('place', texts);
+    const room = customCardContentWidth(metrics.cardWidth);
+    for (const l of lines) {
+        const start = l.wide ? CARD_MARK_WIDTH + CARD_COLUMN_GAP : cardPlaceOffset(metrics.dateColumn);
+        const width = (placeW.get(l.rest) ?? 0) + (l.more ? placeW.get(` ${l.more}`) ?? 0 : 0);
+        // A hair of slack for float noise: a text that just fits is not cut.
+        if (start + width > room + 0.01) cut.add(l);
+    }
+    return cut;
 }
 
 // ============= Browser: measuring in the card's fonts =============

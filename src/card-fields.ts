@@ -233,12 +233,17 @@ export function cardLines(person: Person, data: StromData, s: CardFieldSettings)
  * .card-line); the occupation has no date and spans both columns. The space
  * between the date and the place is not drawn (grid) but keeps the line's
  * text readable when copied. "+1" stays outside the part that shortens.
+ * `cut`: the place does not fit and shortens — its full text goes to a title.
+ * `esc` must escape quotes as well (the text goes into an attribute).
  */
-export function cardLineHtml(l: CardLine, esc: (text: string) => string): string {
+export function cardLineHtml(l: CardLine, esc: (text: string) => string, cut = false): string {
     const mark = `<span class="card-line-mark" aria-hidden="true">${esc(l.mark)}</span>`;
     const more = l.more ? `<span class="card-line-more"> ${esc(l.more)}</span>` : '';
+    // A place cut short (an ellipsis, card-width.ts customCardCutLines) is said
+    // in full in a native tooltip; `esc` escapes quotes, so it is safe in the attribute.
+    const title = cut && l.rest ? ` title="${esc(l.rest)}"` : '';
     const place = `<span class="card-line-place${l.wide ? ' card-line-place--wide' : ''}">`
-        + `<span class="card-line-rest">${esc(l.rest)}</span>${more}</span>`;
+        + `<span class="card-line-rest"${title}>${esc(l.rest)}</span>${more}</span>`;
     const date = l.wide ? '' : `<span class="card-line-date">${esc(l.date)}</span>${l.rest || l.more ? ' ' : ''}`;
     return `<div class="card-line card-line--${l.key}">${mark}${date}${place}</div>`;
 }

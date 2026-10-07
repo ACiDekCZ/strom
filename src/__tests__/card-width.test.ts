@@ -5,8 +5,8 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { customCardWidth, customCardMetrics, MeasureTexts, CustomCardEntry } from '../card-width.js';
-import { cardLines, normalizeCardFields, DEFAULT_CARD_FIELDS } from '../card-fields.js';
+import { customCardWidth, customCardMetrics, customCardCutLines, MeasureTexts, CustomCardEntry } from '../card-width.js';
+import { cardLines, cardLineHtml, normalizeCardFields, DEFAULT_CARD_FIELDS } from '../card-fields.js';
 import { buildTreeSvg, PosterLayout } from '../export-image.js';
 import { setLanguage } from '../strings.js';
 import { Person, PersonId, PartnershipId, StromData } from '../types.js';
@@ -74,6 +74,36 @@ describe('customCardMetrics', () => {
         const lines = cardLines(p, data, normalizeCardFields(DEFAULT_CARD_FIELDS));
         expect(lines).toEqual([expect.objectContaining({ date: 'after 1919', rest: 'Brno', text: 'after 1919 Brno' })]);
         expect(customCardMetrics([{ name: 'Marie Vlková', avatar: true, lines }], measure).dateColumn).toBe(60);
+    });
+});
+
+describe('a place cut short is said in full (U02)', () => {
+    // At 320px the room is 294; "1862" makes a 24px date column, so the place starts at 47 and has 247.
+    it('marks only the lines whose place does not fit the widest card', () => {
+        const fits = line('1862', 'f'.repeat(41));                       // 246 ≤ 247
+        const cut = line('1862', 'c'.repeat(42));                        // 252 > 247
+        const cutByMore = line('1862', 'm'.repeat(39), { more: '+1' });  // 234 + 18 > 247
+        const job = { key: 'occupation' as const, mark: '', text: '', spoken: '', date: '', rest: 'o'.repeat(46), wide: true }; // 17 + 276 < 294
+        const entries: CustomCardEntry[] = [{ name: 'A', avatar: true, lines: [fits, cut, cutByMore, job, line('1862', '')] }];
+        const metrics = customCardMetrics(entries, measure);
+        expect(metrics).toEqual({ cardWidth: 320, dateColumn: 24 });
+        expect([...customCardCutLines(entries, metrics, measure)]).toEqual([cut, cutByMore]);
+        // A view whose card grew to fit every place cuts nothing.
+        const narrow: CustomCardEntry[] = [{ name: 'A', avatar: true, lines: [line('1862', 'x'.repeat(30))] }];
+        expect(customCardCutLines(narrow, customCardMetrics(narrow, measure), measure).size).toBe(0);
+    });
+
+    it('the cut place carries its whole text (place · cause) in an escaped title; a whole one none', () => {
+        const esc = (t: string) => t.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+        const l = line('1919', 'Nové "Město" <u> Brna & okolí · tyfus');
+        const html = cardLineHtml(l, esc, true);
+        expect(html).toContain('<span class="card-line-rest" title="Nové &#34;Město&#34; &#60;u&#62; Brna &#38; okolí · tyfus">');
+        // The attribute ends at its closing quote only: no raw quote, < or & inside it.
+        const attr = /title="([^"]*)"/.exec(html)?.[1] ?? '';
+        expect(attr).not.toMatch(/[<>'"]|&(?!#\d+;)/);
+        expect(attr.replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))).toBe(l.rest);
+        expect(cardLineHtml(l, esc)).not.toContain('title=');
+        expect(cardLineHtml(line('1919', ''), esc, true)).not.toContain('title=');
     });
 });
 
