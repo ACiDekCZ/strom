@@ -220,6 +220,63 @@ describe('computePersonLifeline', () => {
         expect(ev.place).toBe('Praha');
     });
 
+    // T16: a burial in the year of death sorted ahead of the death, whose key
+    // was pinned to the end of the year whatever its day.
+    it('puts burial, cremation and probate after the death, also in the same year', () => {
+        const p = lp('p', 'Antonín', 'male', {
+            birthDate: '1868', deathDate: '1941-03-10',
+            events: [
+                { id: 'b', type: 'burial', date: '1941-03-13', place: 'Kozmice' } as LifeEvent,
+                { id: 'c', type: 'cremation', date: '1941-03-12' } as LifeEvent,
+                { id: 'r', type: 'residence', date: '1941-06' } as LifeEvent,
+            ],
+        });
+        const pts = computePersonLifeline(data([p]), 'p');
+        // The death sorts by its day: a residence later that year follows it.
+        expect(pts.map(x => x.eventType ?? x.kind)).toEqual(['birth', 'death', 'cremation', 'burial', 'residence']);
+    });
+
+    it('keeps posthumous events after a death with an equal or missing day', () => {
+        const yearOnly = lp('p', 'Jan', 'male', {
+            birthDate: '1868', deathDate: '1941',
+            events: [
+                { id: 'pr', type: 'probate', date: '1941' } as LifeEvent,
+                { id: 'b', type: 'burial', date: '1941-02-01' } as LifeEvent,
+                { id: 'o', type: 'occupation', date: '1941-05' } as LifeEvent,
+            ],
+        });
+        expect(computePersonLifeline(data([yearOnly]), 'p').map(x => x.eventType ?? x.kind))
+            .toEqual(['birth', 'occupation', 'death', 'burial', 'probate']);
+        // Same day, and a burial recorded a day early: still after the death.
+        const sameDay = lp('p', 'Jan', 'male', {
+            birthDate: '1868', deathDate: '1941-03-10',
+            events: [
+                { id: 'b', type: 'burial', date: '1941-03-10' } as LifeEvent,
+                { id: 'pr', type: 'probate', date: '1941-03-09' } as LifeEvent,
+            ],
+        });
+        expect(computePersonLifeline(data([sameDay]), 'p').map(x => x.eventType ?? x.kind))
+            .toEqual(['birth', 'death', 'burial', 'probate']);
+    });
+
+    it('puts baptism after birth, also with an equal or missing day', () => {
+        const p = lp('p', 'Anna', 'female', {
+            birthDate: '1868-05-04', deathDate: '1930',
+            events: [
+                { id: 'bp', type: 'baptism', date: '1867' } as LifeEvent,
+                { id: 'r', type: 'residence', date: '1868' } as LifeEvent,
+            ],
+        });
+        expect(computePersonLifeline(data([p]), 'p').map(x => x.eventType ?? x.kind))
+            .toEqual(['birth', 'baptism', 'residence', 'death']);
+        const same = lp('q', 'Eva', 'female', {
+            birthDate: '1868', deathDate: '1930',
+            events: [{ id: 'bp', type: 'baptism', date: '1868' } as LifeEvent],
+        });
+        expect(computePersonLifeline(data([same]), 'q').map(x => x.eventType ?? x.kind))
+            .toEqual(['birth', 'baptism', 'death']);
+    });
+
     it('returns empty for placeholders and skips undated points', () => {
         const p = lp('p', 'Ghost', 'male', { isPlaceholder: true });
         expect(computePersonLifeline(data([p]), 'p')).toEqual([]);

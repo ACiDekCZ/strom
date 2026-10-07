@@ -132,7 +132,11 @@ export type LifelineKind = 'birth' | 'death' | 'marriage' | 'child' | 'event' | 
 export interface LifelinePoint {
     /** Display year. */
     year: number;
-    /** Numeric sort key: birth sorts first, death last within the same year. */
+    /**
+     * Numeric sort key: year plus the fraction of it the date gives. Birth opens
+     * its year; a death known only by the year closes it. Baptism never sorts
+     * before birth, burial / cremation / probate never before death.
+     */
     sortKey: number;
     kind: LifelineKind;
     /** Underlying life-event type (kind === 'event'). */
@@ -190,8 +194,9 @@ function personName(data: StromData, id: string | undefined): string | undefined
 /**
  * Build the chronological life timeline for one person from existing data:
  * birth, own life events (with participants), marriages (partner named), each
- * child's birth, and death. Points are sorted oldest-first, birth ahead of and
- * death behind same-year events. Pure — no DOM. The caller decides whether to
+ * child's birth, and death. Points are sorted oldest-first by date; birth
+ * opens its year, baptism follows birth, burial / cremation / probate follow
+ * death (see `lifelineRank`). Pure — no DOM. The caller decides whether to
  * show the section (convention: hide when fewer than 2 points).
  */
 export function computePersonLifeline(data: StromData, personId: string): LifelinePoint[] {
@@ -289,12 +294,46 @@ export function computePersonLifeline(data: StromData, personId: string): Lifeli
 
     const deathY = yearOf(person.deathDate);
     if (deathY !== null) {
-        points.push({ year: deathY, sortKey: deathY + 0.999, kind: 'death', place: person.deathPlace || undefined,
+        // A death with a month sorts by its date; one known only by the year
+        // closes that year (the person's dated events of that year came first).
+        const deathKey = parseFlexDate(person.deathDate)?.month !== undefined
+            ? deathY + yearFraction(person.deathDate) : deathY + 0.999;
+        points.push({ year: deathY, sortKey: deathKey, kind: 'death', place: person.deathPlace || undefined,
             ...detailsOf({ cause: person.deathCause, age: person.deathAge, address: person.deathAddress }) });
     }
 
-    points.sort((a, b) => a.sortKey - b.sortKey);
+    // Rites that follow birth or death keep their side of it whatever the
+    // dates say: a baptism never sorts ahead of the birth, a burial, cremation
+    // or probate never ahead of the death — with an equal or missing day
+    // (a year-only date) as much as with a slip in the record.
+    const birthKey = points.find(pt => pt.kind === 'birth')?.sortKey;
+    const deathKey = points.find(pt => pt.kind === 'death')?.sortKey;
+    for (const pt of points) {
+        if (pt.kind !== 'event') continue;
+        if (pt.eventType === 'baptism' && birthKey !== undefined) pt.sortKey = Math.max(pt.sortKey, birthKey);
+        if (isPosthumous(pt.eventType) && deathKey !== undefined) pt.sortKey = Math.max(pt.sortKey, deathKey);
+    }
+
+    points.sort((a, b) => a.sortKey - b.sortKey || lifelineRank(a) - lifelineRank(b));
     return points;
+}
+
+/** Events recorded after a death: what happened to the body and the estate. */
+function isPosthumous(type: LifeEventType | undefined): boolean {
+    return type === 'burial' || type === 'cremation' || type === 'probate';
+}
+
+/**
+ * Order of points that share a sort key: birth, then baptism, then the rest,
+ * then death, then the burial or cremation, then the probate.
+ */
+function lifelineRank(pt: LifelinePoint): number {
+    if (pt.kind === 'birth') return 0;
+    if (pt.kind === 'death') return 8;
+    if (pt.kind === 'event' && pt.eventType === 'baptism') return 1;
+    if (pt.kind === 'event' && pt.eventType === 'probate') return 10;
+    if (pt.kind === 'event' && isPosthumous(pt.eventType)) return 9;
+    return 5;
 }
 
 /** Fraction (0..1) of a year across the axis span; clamped to the axis. */
