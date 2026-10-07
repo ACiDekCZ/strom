@@ -113,3 +113,76 @@ test.describe('on a 360 px phone', () => {
         await expectCardName(page, 'Marie', 'MUDr. Marie', 'Svobodová');
     });
 });
+
+test('the undo toast, the duplicate hint and the timeline name a person with the titles', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openApp(page);
+    await createFirstPerson(page, 'Petr', 'Dvořák');
+    // A new person entered with the titles: the undo step says the name as the card does.
+    await page.evaluate(() => window.Strom.UI.showAddPersonModal());
+    const modal = personModal(page);
+    await modal.locator('#input-firstname').fill('Jan');
+    await modal.locator('#input-lastname').fill('Novák');
+    await modal.locator('#input-birthdate').fill('1901');
+    await modal.locator('#name-details .detail-more').click();
+    await modal.locator('#input-title-before').fill('Ing.');
+    await modal.locator('#input-title-after').fill('ml.');
+    await modal.getByRole('button', { name: 'Save' }).click();
+    await expect(modal).toBeHidden();
+    await expect(page.locator('.undo-toast .undo-toast-msg').last()).toHaveText('adding Ing. Jan Novák ml.');
+
+    // Typing the bare name of a new person offers him, with the titles.
+    await page.evaluate(() => window.Strom.UI.showAddPersonModal());
+    await modal.locator('#input-firstname').fill('Jan');
+    await modal.locator('#input-lastname').fill('Novák');
+    await modal.locator('#input-birthdate').fill('1901');
+    const panel = page.locator('#duplicate-suggest-person');
+    await expect(panel.locator('.duplicate-suggest-name')).toHaveText('Ing. Jan Novák ml.');
+    await panel.getByRole('button', { name: 'Go to person' }).click();
+    await expect(modal).toBeHidden();
+
+    // The timeline view's row.
+    await page.locator('#view-mode-timeline').click();
+    await expect(page.locator('#timeline-container .tl-name')).toHaveText(['Ing. Jan Novák ml. 1901–?']);
+});
+
+test('a research conflict about a title is named in words and marks the title\'s field', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openApp(page);
+    await addTitles(page);
+    const modal = personModal(page);
+    await modal.getByRole('button', { name: 'Save' }).click();
+    await expect(modal).toBeHidden();
+    // What Strom Research writes (_STROM_CONFLICT, TYPE NPFX / NSFX), already read onto the person.
+    await page.evaluate(() => {
+        const p = window.Strom.DataManager.getAllPersons()[0];
+        p.research = {
+            conflicts: [
+                { id: 'X0001', fact: 'NPFX', status: 'open', values: [{ value: 'Ing.' }, { value: '—' }] },
+                { id: 'X0002', fact: 'NSFX', status: 'open', values: [{ value: 'ml.' }, { value: 'st.' }] },
+            ],
+        };
+    });
+    await cardAction(page, 'Jan', 'edit');
+    const before = modal.locator('label[for="input-title-before"] .pm-conflict-tag');
+    await expect(before).toHaveText('conflict ›');
+    await expect(before).toHaveAttribute('aria-label', /^Title before name: /);
+    await expect(modal.locator('label[for="input-title-after"] .pm-conflict-tag')).toHaveAttribute('aria-label', /^Title after name: /);
+    await before.click();
+    const dialog = page.locator('#person-research-modal');
+    await expect(dialog.locator('.person-research-fact')).toHaveText(['Title before name', 'Title after name']);
+    await expect(dialog).not.toContainText('NPFX');
+    await expect(dialog).not.toContainText('NSFX');
+    await page.keyboard.press('Escape');
+    await modal.getByRole('button', { name: 'Cancel' }).click();
+
+    // With no title left (the field folded behind "+ title"), the given name carries the mark.
+    await page.evaluate(() => {
+        const p = window.Strom.DataManager.getAllPersons()[0];
+        delete p.titleBefore;
+        delete p.titleAfter;
+    });
+    await cardAction(page, 'Jan', 'edit');
+    await expect(modal.locator('#input-title-before')).toBeHidden();
+    await expect(modal.locator('label[for="input-firstname"] .pm-conflict-tag')).toHaveCount(1);
+});

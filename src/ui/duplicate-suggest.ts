@@ -15,6 +15,7 @@ import { strings } from '../strings.js';
 import { findSimilarPersons, SimilarPersonResult } from '../merge/matching.js';
 import { normalizeDateInput, displayYear } from '../dates.js';
 import { uiModule } from './module.js';
+import { shownNameOrEmpty } from '../person-name.js';
 
 /** Debounce so we don't re-score on every keystroke. */
 const DEBOUNCE_MS = 300;
@@ -105,12 +106,12 @@ export const duplicateSuggestMethods = uiModule({
         panel.innerHTML = `
             <div class="duplicate-suggest-title">${esc(strings.duplicates.title)}</div>
             ${results.map(({ person }) => {
-                const name = `${person.firstName} ${person.lastName}`.trim();
+                const name = shownNameOrEmpty(person);
                 const year = displayYear(person.birthDate);
                 const parents = person.parentIds
                     .map(id => DataManager.getPerson(id))
                     .filter(p => p && !p.isPlaceholder)
-                    .map(p => `${p!.firstName} ${p!.lastName}`.trim())
+                    .map(p => shownNameOrEmpty(p!))
                     .join(', ');
                 const meta = [year ? `*${year}` : '', parents ? strings.duplicates.parentsLabel(parents) : '']
                     .filter(Boolean).join(' · ');

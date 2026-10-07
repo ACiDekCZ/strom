@@ -53,6 +53,7 @@ import { extraParticipantRole } from '../godparents.js';
 import { sourceChipOpenHtml } from './sources.js';
 import { offeredDetails, refreshDetailGroup, resetDetailGroup, renderAgeCheck, ageBirthDate } from './event-details-ui.js';
 import { factStatusHtml } from './fact-status.js';
+import { shownName, shownNameOrEmpty } from '../person-name.js';
 export const relationshipsPanelMethods = uiModule({
     showRelationshipsPanel(personId: PersonId, returnToEdit: boolean = false, preservePending: boolean = false): void {
         // Setup dialog stack for standalone mode (when opened directly from card, not from edit dialog)
@@ -84,7 +85,7 @@ export const relationshipsPanelMethods = uiModule({
 
         if (!modal || !title || !content) return;
 
-        const name = `${person.firstName} ${person.lastName}`.trim();
+        const name = shownNameOrEmpty(person);
         title.textContent = strings.relationships.title(name);
 
         // Build relationships content
@@ -555,7 +556,7 @@ export const relationshipsPanelMethods = uiModule({
                         <div class="partnership-witnesses sources-chips">
                             ${(partnership.participants ?? []).map(part => {
                                 const linked = part.personId ? DataManager.getPerson(part.personId) : null;
-                                const name = linked ? `${linked.firstName} ${linked.lastName}`.trim() : (part.name ?? '');
+                                const name = linked ? shownNameOrEmpty(linked) : (part.name ?? '');
                                 // A witness is the usual role at a wedding; any other says so.
                                 const extra = extraParticipantRole(part);
                                 const role = part.role === 'witness' ? ''
@@ -573,7 +574,7 @@ export const relationshipsPanelMethods = uiModule({
                 <div class="rel-item">
                     <span class="rel-item-name">
                         <span class="rel-item-icon">${iconSvg('user', { size: 16 })}</span>
-                        ${this.escapeHtml(`${p.firstName} ${p.lastName}`)}
+                        ${this.escapeHtml(shownNameOrEmpty(p))}
                     </span>
                     ${statusHtml}
                     ${relTypeHtml}
@@ -608,7 +609,7 @@ export const relationshipsPanelMethods = uiModule({
         const child = DataManager.getPerson(childId);
         const oldParent = DataManager.getPerson(oldParentId);
         if (!child || !oldParent) return;
-        const name = (p: Person) => `${p.firstName} ${p.lastName}`.trim() || '?';
+        const name = (p: Person) => shownName(p);
 
         document.getElementById('reassign-modal')?.remove();
         const overlay = document.createElement('div');
@@ -710,7 +711,7 @@ export const relationshipsPanelMethods = uiModule({
         // Check if the removed person is now an orphan (no relationships left)
         const removedPerson = DataManager.getPerson(relatedId);
         if (removedPerson && this.isOrphan(removedPerson)) {
-            const name = `${removedPerson.firstName} ${removedPerson.lastName}`.trim();
+            const name = shownNameOrEmpty(removedPerson);
             // Hide relationships panel temporarily for confirm dialog
             this.closeDialogById('relationships-modal');
             // Setup stack: relationships-modal is parent of confirmation

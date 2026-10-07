@@ -45,6 +45,7 @@ import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
 
 import { chainLinkSvg } from '../icons.js';
+import { shownNameOrEmpty } from '../person-name.js';
 export const relationModalMethods = uiModule({
     // ---- RELATION MODAL ----
     addRelation(personId: PersonId, relationType: RelationType): void {
@@ -108,7 +109,7 @@ export const relationModalMethods = uiModule({
                     if (partner.isPlaceholder) {
                         nameStr = strings.addChild.unknownPerson + (statusText ? ` (${statusText})` : '');
                     } else {
-                        nameStr = `${partner.firstName} ${partner.lastName}`.trim();
+                        nameStr = shownNameOrEmpty(partner);
                         const detail = [birthYear ? `*${birthYear}` : '', statusText].filter(Boolean).join(', ');
                         if (detail) nameStr += ` (${detail})`;
                     }
@@ -157,7 +158,7 @@ export const relationModalMethods = uiModule({
                 const box = document.createElement('input');
                 box.type = 'checkbox';
                 box.value = sid;
-                label.append(box, document.createTextNode(`${sib.firstName} ${sib.lastName}`.trim()));
+                label.append(box, document.createTextNode(shownNameOrEmpty(sib)));
                 alsoList.appendChild(label);
             }
         }
@@ -316,7 +317,7 @@ export const relationModalMethods = uiModule({
         if (!person) return;
 
         const data = DataManager.getData();
-        const name = `${person.firstName || ''} ${person.lastName || ''}`.trim();
+        const name = shownNameOrEmpty(person);
         const year = person.birthDate?.split('-')[0];
         const subtitle = year ? `${name} (*${year})` : name;
 

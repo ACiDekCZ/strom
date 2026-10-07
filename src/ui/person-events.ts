@@ -23,6 +23,7 @@ import { uiModule } from './module.js';
 import { factStatusHtml } from './fact-status.js';
 import { autoGrowAll } from './autogrow.js';
 import { DETAIL_KEYS, offeredDetails, refreshDetailGroup, resetDetailGroup, renderAgeCheck, ageBirthDate, eventDetailLine } from './event-details-ui.js';
+import { shownNameOrEmpty } from '../person-name.js';
 
 /** HTML-escape a user string for safe innerHTML insertion. */
 function esc(text: string): string {
@@ -138,7 +139,7 @@ export const personEventsMethods = uiModule({
     participantsSummary(event: LifeEvent): string {
         return (event.participants ?? []).map(p => {
             const person = p.personId ? DataManager.getPerson(p.personId) : null;
-            const name = person ? `${person.firstName} ${person.lastName}`.trim() : (p.name ?? '');
+            const name = person ? shownNameOrEmpty(person) : (p.name ?? '');
             const extra = extraParticipantRole(p);
             return `${extra ? strings.events.extraRoles[extra.role] : strings.events.roles[p.role]}: ${name}`;
         }).join('  ·  ');
@@ -231,7 +232,7 @@ export const personEventsMethods = uiModule({
 
         list.innerHTML = this.eventParticipants.map((p, i) => {
             const linked = p.personId ? DataManager.getPerson(p.personId) : null;
-            const shownName = linked ? `${linked.firstName} ${linked.lastName}`.trim() : (p.name ?? '');
+            const nameShown = linked ? shownNameOrEmpty(linked) : (p.name ?? '');
             // A role the app has no name for (a midwife from the research): its
             // own word on the "Present" option, the rest of the note in the field.
             const extra = extraParticipantRole(p);
@@ -243,7 +244,7 @@ export const personEventsMethods = uiModule({
                 <div class="participant-row" data-index="${i}">
                     <select class="participant-role" aria-label="${esc(strings.events.participants)}">${roles}</select>
                     <input type="text" class="participant-name${linked ? ' is-linked' : ''}"
-                           value="${esc(shownName)}" placeholder="${esc(strings.events.participantName)}"
+                           value="${esc(nameShown)}" placeholder="${esc(strings.events.participantName)}"
                            aria-label="${esc(strings.events.participantName)}"${linked ? ' readonly' : ''}>
                     <input type="text" class="participant-note" value="${esc(noteShown)}"
                            placeholder="${esc(strings.events.participantNote)}"

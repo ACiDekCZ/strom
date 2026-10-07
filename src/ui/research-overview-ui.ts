@@ -29,6 +29,7 @@ import {
 } from './research-ui.js';
 import { taskDirectionName } from './research-directions-ui.js';
 import { researchValueText } from './person-research-ui.js';
+import { shownName } from '../person-name.js';
 
 /** The overview stays open over a reload / the next following (per device). */
 const OPEN_KEY = 'strom-live-overview-open';
@@ -70,7 +71,7 @@ function personByRefn(refn: string | undefined): Person | null {
     return Object.values(DataManager.getData().persons).find(p => p.refn === refn) ?? null;
 }
 
-const fullName = (p: Person): string => `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim() || '?';
+const fullName = (p: Person): string => shownName(p);
 
 function hhmm(ts: number): string {
     return new Date(ts).toLocaleTimeString(getCurrentLanguage(), { hour: 'numeric', minute: '2-digit' });

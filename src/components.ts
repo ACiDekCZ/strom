@@ -19,6 +19,7 @@
 
 import { StromData, Person, PersonId } from './types.js';
 import { yearOf } from './dates.js';
+import { shownNameOrEmpty } from './person-name.js';
 
 /** One family: a set of people no link connects to anyone outside it. */
 export interface TreeComponent {
@@ -83,7 +84,7 @@ function describe(personIds: PersonId[], data: StromData): TreeComponent {
         const year = yearOf(p.birthDate);
         if (year === null) continue;
         if (!oldest || year < oldest.year) {
-            oldest = { name: `${p.firstName} ${p.lastName}`.trim(), year };
+            oldest = { name: shownNameOrEmpty(p), year };
         }
     }
 

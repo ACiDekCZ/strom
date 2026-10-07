@@ -49,3 +49,12 @@ export function shownName(person: Named, emptyGiven = '', show = titlesShown()):
     const { given, surname } = shownNameParts(person, emptyGiven, show);
     return `${given} ${surname}`.trim() || '?';
 }
+
+/**
+ * The whole name as shown, '' for a person with no name at all — for a place
+ * that has a stand-in of its own (a note's name, the person's id).
+ */
+export function shownNameOrEmpty(person: Named, show = titlesShown()): string {
+    const { given, surname } = shownNameParts(person, '', show);
+    return `${given} ${surname}`.trim();
+}

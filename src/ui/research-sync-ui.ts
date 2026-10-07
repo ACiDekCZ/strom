@@ -55,6 +55,7 @@ import { researchWrittenList } from './research-changes-ui.js';
 import {
     fetchWithTimeout, fetchGedcomText, postSync, onComputer, readTree, researchGedcom, researchGedcomExport,
 } from './research-ui.js';
+import { shownNameOrEmpty } from '../person-name.js';
 
 /** The "told once" mark of sending held for want of the research's numbers (see tellResearchNoIds). */
 const NO_IDS = 'no-ids';
@@ -1872,7 +1873,7 @@ export const researchSyncMethods = uiModule({
                 const actions: Action[] = [];
                 if (conflicts > 0) {
                     const one = persons.length === 1 ? DataManager.getPerson(persons[0]) : null;
-                    const name = one ? `${one.firstName} ${one.lastName}`.trim() : '';
+                    const name = one ? shownNameOrEmpty(one) : '';
                     actions.push({ action: 'showConflicts', label: name ? `${name} ›` : `${s.showConflicts} ›`, asLink: true });
                     if (treeId && this.researchDecideUrl(treeId)) actions.push({ action: 'decideInResearch', label: s.decideInResearch, asLink: true });
                 }
@@ -1883,7 +1884,7 @@ export const researchSyncMethods = uiModule({
                 const conflicts = treeId ? this.researchHeldConflictCount(treeId, state.sent) : 0;
                 const persons = treeId ? this.researchWrittenConflictPersons(treeId) : [];
                 const one = persons.length === 1 ? DataManager.getPerson(persons[0]) : null;
-                const name = one ? `${one.firstName} ${one.lastName}`.trim() : '';
+                const name = one ? shownNameOrEmpty(one) : '';
                 const actions: Action[] = [];
                 if (treeId && this.researchDecideUrl(treeId)) actions.push({ action: 'decideInResearch', label: s.decideInResearch, asLink: true });
                 if (persons.length) actions.push({ action: 'showConflicts', label: name ? `${name} ›` : `${s.showConflicts} ›`, asLink: true });
@@ -2053,7 +2054,7 @@ export const researchSyncMethods = uiModule({
             sub.push(at ? `${s.flyConflict(conflicts)} (${at}).` : `${s.flyConflict(conflicts)}.`);
             const persons = this.researchWrittenConflictPersons(treeId);
             const one = persons.length === 1 ? DataManager.getPerson(persons[0]) : null;
-            const name = one ? `${one.firstName} ${one.lastName}`.trim() : '';
+            const name = one ? shownNameOrEmpty(one) : '';
             actions.push({ action: 'showConflicts', label: name ? `${name} ›` : `${s.showConflicts} ›`, asLink: true });
             if (this.researchDecideUrl(treeId)) actions.push({ action: 'decideInResearch', label: s.decideInResearch, asLink: true });
         }
@@ -2419,7 +2420,7 @@ export const researchSyncMethods = uiModule({
     showResearchConflictNote(conflicts: number, persons: readonly PersonId[]): void {
         const s = strings.sync;
         const one = persons.length === 1 ? DataManager.getPerson(persons[0]) : null;
-        const name = one ? `${one.firstName} ${one.lastName}`.trim() : '';
+        const name = one ? shownNameOrEmpty(one) : '';
         // No room for the note under the mark: a toast says it, with the way to the conflicts.
         if (!toolbarWide()) {
             this.showToast(s.flyConflict(conflicts), CONFLICT_NOTE_MS,

@@ -13,6 +13,7 @@ import { countFamilies } from '../ged-exporter.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { formatFileSize, formatRelativeDateTime } from '../format.js';
 import { uiModule } from './module.js';
+import { shownNameOrEmpty } from '../person-name.js';
 
 /** Drag on the sheet's head: this far up expands it, this far down closes it. */
 const SHEET_EXPAND_PX = 40;
@@ -75,7 +76,7 @@ export const treeActionsMethods = uiModule({
             defaultPerson = s.defaultPersonLastFocused;
         } else if (defaultSetting && treeData?.persons[defaultSetting]) {
             const p = treeData.persons[defaultSetting];
-            defaultPerson = `${p.firstName} ${p.lastName}`.trim();
+            defaultPerson = shownNameOrEmpty(p);
         }
         const auditOffered = isActive && (AuditLogManager.isEnabled() || await AuditLogManager.hasEntries(id));
 

@@ -19,9 +19,10 @@ import {
 } from '../anniversaries.js';
 import { uiModule } from './module.js';
 import { emptyStateHtml } from './empty-state.js';
+import { shownNameOrEmpty } from '../person-name.js';
 
 function personName(p?: Person): string {
-    return p ? `${p.firstName} ${p.lastName}`.trim() : '';
+    return p ? shownNameOrEmpty(p) : '';
 }
 
 export const anniversariesUiMethods = uiModule({

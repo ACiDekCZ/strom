@@ -15,6 +15,7 @@ import { PersonId, Gender, FamilyWizardMember, FamilyWizardSpec } from '../types
 import { findSimilarPersons } from '../merge/matching.js';
 import { normalizeDateInput } from '../dates.js';
 import { uiModule } from './module.js';
+import { shownNameOrEmpty } from '../person-name.js';
 
 type RowKind = 'father' | 'mother' | 'partner' | 'sibling' | 'child';
 
@@ -44,7 +45,7 @@ export const familyWizardMethods = uiModule({
         const fw = strings.familyWizard;
 
         const surname = anchor.lastName;
-        document.getElementById('family-wizard-anchor')!.textContent = fw.aroundName(`${anchor.firstName} ${anchor.lastName}`.trim());
+        document.getElementById('family-wizard-anchor')!.textContent = fw.aroundName(shownNameOrEmpty(anchor));
         document.getElementById('wiz-parents')!.innerHTML =
             this.wizardRowHtml('father', 'male', surname) + this.wizardRowHtml('mother', 'female', surname);
         document.getElementById('wiz-partner')!.innerHTML = this.wizardRowHtml('partner', 'female', '');
@@ -259,7 +260,7 @@ export const familyWizardMethods = uiModule({
         const matches = findSimilarPersons(DataManager.getData(), { firstName: first, lastName: last, gender, birthDate });
         const top = matches.filter(m => m.person.id !== this.wizardAnchorId).slice(0, 1)[0];
         if (!top) { hint.innerHTML = ''; return; }
-        const name = `${top.person.firstName} ${top.person.lastName}`.trim();
+        const name = shownNameOrEmpty(top.person);
         hint.innerHTML = `<span class="wiz-hint-text">${strings.familyWizard.maybe(this.escapeHtml(name))}</span>`
             + `<button class="wiz-use" type="button" data-existing="${this.escapeHtml(top.person.id)}">${strings.familyWizard.useExisting}</button>`;
     },

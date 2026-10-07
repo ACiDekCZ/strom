@@ -28,6 +28,7 @@ import {
 import { uiModule } from './module.js';
 import { DetailKey, refreshDetailGroup, renderAgeCheck, resetDetailGroup, ageBirthDate } from './event-details-ui.js';
 import { factStatusHtml } from './fact-status.js';
+import { shownName } from '../person-name.js';
 
 function esc(text: string): string {
     return text
@@ -35,7 +36,7 @@ function esc(text: string): string {
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-const fullName = (p: Person | null): string => p ? `${p.firstName} ${p.lastName}`.trim() || '?' : '?';
+const fullName = (p: Person | null): string => p ? shownName(p) : '?';
 
 /** Change a label's words, keeping the "?" a long field hint hangs on it (installFieldHints). */
 function setLabelText(label: HTMLElement | null, text: string): void {

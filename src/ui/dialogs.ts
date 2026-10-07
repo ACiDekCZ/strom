@@ -41,6 +41,7 @@ import { validateTreeData, ValidationResult as TreeValidationResult, ValidationI
 import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
+import { shownName } from '../person-name.js';
 
 /** Options of UI.showConfirm (see there). */
 export interface ConfirmOptions {
@@ -341,7 +342,7 @@ export const dialogsMethods = uiModule({
         const person = DataManager.getPerson(personId);
         if (!person) return Promise.resolve(false);
         const d = strings.danger;
-        const name = `${person.firstName} ${person.lastName}`.trim() || '?';
+        const name = shownName(person);
         const birthYear = person.birthDate?.split('-')[0];
         const label = birthYear ? `${name} (*${birthYear})` : name;
         const partners = new Set<string>();

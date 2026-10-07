@@ -12,6 +12,7 @@ import { StromData, Person, PersonId } from './types.js';
 import { parseFlexDate, ageBetween } from './dates.js';
 import { assignGenerations } from './generations.js';
 import { personEvidence, unionsByPerson } from './evidence-level.js';
+import { shownNameOrEmpty } from './person-name.js';
 
 export interface NameCount { name: string; count: number; }
 export interface GenLifespan { generation: number; avgYears: number; n: number; }
@@ -40,7 +41,7 @@ export interface FamilyStats {
 }
 
 function fullName(p: Person): string {
-    return `${p.firstName} ${p.lastName}`.trim();
+    return shownNameOrEmpty(p);
 }
 
 /** Share of real persons carrying each key fact (R4 tree-health completeness). */

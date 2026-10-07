@@ -8,6 +8,7 @@ import { parseFlexDate, FlexDate } from './dates.js';
 import { collectPlaces } from './places.js';
 import { godparentLeads } from './godparents.js';
 import { strings } from './strings.js';
+import { shownNameOrEmpty } from './person-name.js';
 
 // ==================== ISSUE TYPES ====================
 
@@ -106,7 +107,7 @@ function checkLifeEvents(
 ): void {
     for (const person of Object.values(data.persons)) {
         if (!person.events) continue;
-        const name = `${person.firstName} ${person.lastName}`.trim() || person.id;
+        const name = shownNameOrEmpty(person) || person.id;
         for (const ev of person.events) {
             if (ev.type === 'birth' || ev.type === 'death') {
                 addIssue('error', 'event-birth-death',
@@ -1133,7 +1134,7 @@ function checkRecurringGodparents(data: StromData, addIssue: AddIssue): void {
 
 function getPersonName(person: Person | undefined): string {
     if (!person) return '(unknown)';
-    return `${person.firstName} ${person.lastName}`.trim() || '(unnamed)';
+    return shownNameOrEmpty(person) || '(unnamed)';
 }
 
 function parseYear(dateStr: string | undefined): number | null {

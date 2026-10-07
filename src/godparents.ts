@@ -14,6 +14,7 @@
  */
 
 import { StromData, Person, PersonId, EventParticipant } from './types.js';
+import { shownNameOrEmpty } from './person-name.js';
 
 /** Someone who appears as a participant more than once. */
 export interface RecurringParticipant {
@@ -100,7 +101,7 @@ export function recurringParticipants(data: StromData): RecurringParticipant[] {
         };
         entry.count++;
         if (!entry.subjects.some(s => s.id === subject.id)) {
-            entry.subjects.push({ id: subject.id, name: fullName(subject) });
+            entry.subjects.push({ id: subject.id, name: shownNameOrEmpty(subject) });
         }
         seen.set(key, entry);
     };

@@ -46,6 +46,7 @@ import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
 import { yearOf } from '../dates.js';
 import { twoFiguresSvg } from '../icons.js';
+import { shownNameOrEmpty } from '../person-name.js';
 
 export const miscMethods = uiModule({
     // ---- ABOUT DIALOG ----
@@ -378,7 +379,7 @@ export const miscMethods = uiModule({
             const vm = strings.viewModeSwitch;
             const focusId = TreeRenderer.getFocusPersonId();
             const person = focusId ? DataManager.getPerson(focusId) : null;
-            const name = person ? `${person.firstName} ${person.lastName}`.trim() : '';
+            const name = person ? shownNameOrEmpty(person) : '';
             if (text) {
                 // Fixed structure: faint prefix, serif name, faint person count.
                 // Name/count via textContent so a person's name can never inject markup.

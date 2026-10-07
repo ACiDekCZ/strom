@@ -16,6 +16,7 @@ import {
 } from '../research-edge.js';
 import { researchCardInfoNow } from '../card-signals.js';
 import { uiModule } from './module.js';
+import { shownName } from '../person-name.js';
 
 const BUBBLE_ID = 'research-edge-bubble';
 const SHOW_DELAY_MS = 150;
@@ -61,7 +62,7 @@ function personByRefn(refn: string): PersonId | null {
 
 function personName(id: PersonId): string {
     const p = DataManager.getPerson(id);
-    return p ? `${p.firstName} ${p.lastName}`.trim() || '?' : '?';
+    return p ? shownName(p) : '?';
 }
 
 export const researchEdgeUiMethods = uiModule({

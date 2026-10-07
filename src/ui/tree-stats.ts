@@ -49,6 +49,7 @@ import { yearOf, parseFlexDate } from '../dates.js';
 import { computeFamilyStats, computeCompleteness } from '../stats.js';
 import { findComponents, componentName } from '../components.js';
 import { orphanedPlaceKeys } from '../places.js';
+import { shownNameOrEmpty } from '../person-name.js';
 
 /** Escape text for safe inclusion in SVG/HTML (names come from user data). */
 function escXml(s: string): string {
@@ -324,7 +325,7 @@ export const treeStatsMethods = uiModule({
             // Create clickable person links with data attributes
             const personLinks = issue.personIds?.map(id => {
                 const person = treeData.persons[id];
-                const name = person ? `${person.firstName} ${person.lastName}`.trim() : id;
+                const name = person ? shownNameOrEmpty(person) : id;
                 return `<a href="#" class="validation-person-link" data-tree-id="${this.escapeHtml(treeId)}" data-person-id="${this.escapeHtml(id)}">${this.escapeHtml(name)}</a>`;
             }).join(', ') || '';
 
@@ -514,7 +515,7 @@ export const treeStatsMethods = uiModule({
         const topIssuesHtml = sortedIssues.slice(0, TOP).map(issue => {
             const links = (issue.personIds ?? []).map(id => {
                 const person = data.persons[id];
-                const name = person ? `${person.firstName} ${person.lastName}`.trim() : id;
+                const name = person ? shownNameOrEmpty(person) : id;
                 return `<a href="#" class="validation-person-link" data-tree-id="${this.escapeHtml(treeId)}" data-person-id="${this.escapeHtml(id)}">${this.escapeHtml(name)}</a>`;
             }).join(', ');
             return `<div class="health-issue ${issue.severity}">`
@@ -865,7 +866,7 @@ export const treeStatsMethods = uiModule({
         return items.map(item => {
             const names = item.personIds.map(id => {
                 const p = treeData.persons[id as PersonId];
-                return p ? `${p.firstName} ${p.lastName}`.trim() : '';
+                return p ? shownNameOrEmpty(p) : '';
             });
             const label = this.anniversaryLabel(item, names);
             const when = item.daysUntil === 0 ? a.today

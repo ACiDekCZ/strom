@@ -16,6 +16,7 @@ import { normalizeModal } from './modal-skeleton.js';
 import { storyWithDraft, draftDate } from './story-compare-ui.js';
 import { eventTypeLabel } from './person-events.js';
 import { CitationContext, qualityLabel, sourceThumbHtml, hydrateThumbs } from './sources.js';
+import { shownName } from '../person-name.js';
 
 const SOURCES_ID = 'person-sources-modal';
 const STORY_ID = 'person-story-modal';
@@ -30,7 +31,7 @@ function esc(text: string): string {
 function fullName(personId: PersonId): string {
     const p = DataManager.getPerson(personId);
     if (!p) return '?';
-    return [p.firstName, p.lastName].filter(Boolean).join(' ') || '?';
+    return shownName(p);
 }
 
 /** "Jan Novák · 1865–1932" (the years only when known). */

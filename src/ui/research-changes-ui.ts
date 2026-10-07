@@ -20,6 +20,7 @@ import { researchAutoState, patchResearchAutoState, noteResearchSendPreviewSkipp
 import { researchSendMode, personsByResearchRefs } from './research-sync-ui.js';
 import { researchFactLabel } from './person-research-ui.js';
 import { uiModule } from './module.js';
+import { shownNameOrEmpty } from '../person-name.js';
 
 const PANEL_ID = 'research-changes-panel';
 /** The fingerprint the kept copy stands for (the tie's base, or the written send's). */
@@ -252,7 +253,7 @@ export const researchChangesMethods = uiModule({
                     const id = n.person ? personsByResearchRefs(data, [n.person])[0] : undefined;
                     if (id) named.add(id);
                     const p = id ? data.persons[id] : undefined;
-                    const who = p ? `${p.firstName} ${p.lastName}`.trim() : n.name || n.person;
+                    const who = p ? shownNameOrEmpty(p) : n.name || n.person;
                     const what = n.fact ? researchFactLabel(n.fact) : '';
                     const why = n.why === 'kept' ? s.notWrittenKept : n.why === 'report' ? s.notWrittenReport : n.why === 'pick' ? s.notWrittenPick : c.noReason;
                     const name = id && p

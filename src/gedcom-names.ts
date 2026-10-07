@@ -161,9 +161,13 @@ export interface GedcomNameRead {
  * Read one GEDCOM name: the NAME line with its GIVN / SURN / SPFX parts, by
  * the rules shared with the research (see the top of this file).
  *
- * `descriptions: false` (a file Strom itself wrote) applies rule 3 only:
- * there a given name like "Syn" is what someone typed, as the research reads
- * the app's file in a sync (only its NO_NAME, no descriptions).
+ * `fromStrom` (a file Strom itself wrote: HEAD > SOUR STROM or
+ * STROM_RESEARCH) reads what someone typed in Strom as it was typed:
+ * - rule 3 only: a given name like "Syn" is a name there, as the research
+ *   reads the app's file in a sync (only its NO_NAME, no descriptions);
+ *   `descriptions: false` asks for this alone;
+ * - a title keeps its commas ("Prof., Dr." as typed), where another
+ *   program's NPFX / NSFX list reads as the title is shown ("Prof. Dr.").
  *
  * NPFX / NSFX are the titles before and after the name ("Ing.", "ml."), kept
  * apart from it. A file writes them in the NAME line too ("Ing. Jan /Novák/
@@ -176,19 +180,26 @@ export interface GedcomNameRead {
 export function readGedcomName(
     line: string,
     parts: GedcomNameParts = {},
-    opts: { descriptions?: boolean } = {},
+    opts: { descriptions?: boolean; fromStrom?: boolean } = {},
 ): GedcomNameRead {
-    const titleBefore = parts.npfx?.replace(/\s+/g, ' ').trim();
-    const titleAfter = parts.nsfx?.replace(/\s+/g, ' ').trim();
-    const split = splitNameLine(stripTitles(line, titleBefore, titleAfter));
+    const npfx = parts.npfx?.replace(/\s+/g, ' ').trim();
+    const nsfx = parts.nsfx?.replace(/\s+/g, ' ').trim();
+    const split = splitNameLine(stripTitles(line, npfx, nsfx));
     const givn = parts.givn?.replace(/\s*,\s*/g, ' ').replace(/\s+/g, ' ').trim();
     const surn = parts.surn?.replace(/\s+/g, ' ').trim();
     const written = givn || split.given;
+    const fromStrom = opts.fromStrom === true;
+    // GEDCOM lists several titles with commas ("Prof., Dr."); shown, they
+    // read as a line says them ("Prof. Dr."). Strom's own file has them as typed.
+    const asShown = (t: string | undefined): string | undefined =>
+        t && !fromStrom ? t.replace(/\s*,\s*/g, ' ').replace(/^[\s,]+|[\s,]+$/g, '').trim() || undefined : t;
+    const titleBefore = asShown(npfx);
+    const titleAfter = asShown(nsfx);
 
     let firstName = noName(written) ? '?' : (givn || (split.slashed ? split.given : split.given.replace(/\//g, '')));
     // A word that describes the person in place of a name (stillborn, son,
     // N.N.): the name is "?", the words go to the note as the file wrote them.
-    const describes = opts.descriptions !== false;
+    const describes = opts.descriptions ?? !fromStrom;
     if (describes && notAName(firstName)) firstName = '?';
     const description = describes && notAName(written) ? written.trim() : undefined;
 

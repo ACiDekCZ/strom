@@ -47,6 +47,7 @@ import { treeActionsAsSheet } from './tree-actions.js';
 import { isPhoneToolbar } from './search.js';
 
 import { iconSvg } from '../icons.js';
+import { shownNameOrEmpty } from '../person-name.js';
 
 /** Room (px) a row menu needs beside ⋯ to show a useful part of its rows. */
 const TREE_MENU_MIN_ROOM = 240;
@@ -641,7 +642,7 @@ export const treeManagementMethods = uiModule({
             } else if (defaultPersonSetting && treeData?.persons[defaultPersonSetting]) {
                 const person = treeData.persons[defaultPersonSetting];
                 const birthYear = person.birthDate ? person.birthDate.split('-')[0] : '';
-                const name = `${person.firstName} ${person.lastName}`.trim();
+                const name = shownNameOrEmpty(person);
                 defaultPersonDisplay = birthYear ? `${name} (*${birthYear})` : name;
             }
             // If undefined, don't show anything (first person is implicit default)
@@ -1257,7 +1258,7 @@ export const treeManagementMethods = uiModule({
         // Get first person name for display
         const persons = treeData ? Object.values(treeData.persons).filter(p => !p.isPlaceholder) : [];
         const firstPerson = persons[0];
-        const firstPersonName = firstPerson ? `${firstPerson.firstName} ${firstPerson.lastName}`.trim() : '?';
+        const firstPersonName = firstPerson ? shownNameOrEmpty(firstPerson) : '?';
 
         // Update "First person" label to show who that is
         const firstPersonLabel = document.getElementById('default-person-first-label');

@@ -11,6 +11,7 @@ import { StromData, Gender, LifeEventType, CoupleEventType, PartnershipId, Partn
 import { yearOf, parseFlexDate } from './dates.js';
 import { eventValueIsOnTag } from './events.js';
 import { isLivingPerson } from './privacy.js';
+import { shownNameOrEmpty } from './person-name.js';
 
 export interface TimelineEvent {
     year: number;
@@ -93,7 +94,7 @@ export function computeTimelineModel(
 
         rows.push({
             personId: id,
-            name: `${p.firstName} ${p.lastName}`.trim(),
+            name: shownNameOrEmpty(p),
             gender: p.gender,
             startYear,
             endYear: Math.max(endYear, startYear),
@@ -103,7 +104,12 @@ export function computeTimelineModel(
         });
     }
 
-    rows.sort((a, b) => a.startYear - b.startYear || a.name.localeCompare(b.name) || a.personId.localeCompare(b.personId));
+    // Ordered by the bare name: a title says nothing about who comes first.
+    const bare = (id: string): string => {
+        const p = data.persons[id as keyof typeof data.persons];
+        return p ? `${p.firstName} ${p.lastName}`.trim() : '';
+    };
+    rows.sort((a, b) => a.startYear - b.startYear || bare(a.personId).localeCompare(bare(b.personId)) || a.personId.localeCompare(b.personId));
 
     let minYear = Infinity, maxYear = -Infinity;
     for (const r of rows) {
@@ -230,7 +236,7 @@ function personName(data: StromData, id: string | undefined): string | undefined
     if (!id) return undefined;
     const p = data.persons[id as keyof typeof data.persons];
     if (!p) return undefined;
-    return `${p.firstName} ${p.lastName}`.trim() || undefined;
+    return shownNameOrEmpty(p) || undefined;
 }
 
 /**

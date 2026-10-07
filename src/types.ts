@@ -521,7 +521,7 @@ export interface ResearchConflictValue {
 export interface ResearchConflict {
     /** The research's id ("X0007"). */
     id: string;
-    /** The fact: a GEDCOM event tag (BIRT, DEAT, CHR …), NAME or SEX; EVEN when the research does not know which. */
+    /** The fact: a GEDCOM event tag (BIRT, DEAT, CHR …), NAME, a title of the name (NPFX before it, NSFX after it) or SEX; EVEN when the research does not know which. */
     fact: string;
     /** The question in words ("Year of Jan's birth"). */
     title?: string;
@@ -855,6 +855,9 @@ export interface NewPersonData {
     birthPlace?: string;
     deathDate?: string;
     deathPlace?: string;
+    /** The titles of the name ("Ing.", "ml."), set with the person so its first undo step names them. */
+    titleBefore?: string;
+    titleAfter?: string;
 }
 
 // ==================== RENDERING TYPES ====================

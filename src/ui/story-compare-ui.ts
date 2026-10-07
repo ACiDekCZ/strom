@@ -18,6 +18,7 @@ import { storyCompareHtml, wireStoryCompare, STORY_COMPARE_CSS } from '../story-
 import { ResearchStoryDo, LiveWaiting } from '../research-link.js';
 import { uiModule } from './module.js';
 import { normalizeModal } from './modal-skeleton.js';
+import { shownName } from '../person-name.js';
 
 const COMPARE_ID = 'story-compare-modal';
 const STYLE_ID = 'story-compare-style';
@@ -46,7 +47,7 @@ export function storyBannerHtml(text: string): string {
 
 function personName(id: PersonId): string {
     const p = DataManager.getPerson(id);
-    return p ? ([p.firstName, p.lastName].filter(Boolean).join(' ') || '?') : '?';
+    return p ? shownName(p) : '?';
 }
 
 /** The story a target carries, when a new version waits beside it. */

@@ -27,12 +27,15 @@ function esc(text: string): string {
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-/** The fact a conflict is about, in words ("Birth", "Baptism", "Name"). */
+/** The fact a conflict is about, in words ("Birth", "Baptism", "Name", "Title before name"). */
 export function researchFactLabel(fact: string): string {
     const tag = fact.toUpperCase();
     if (tag === 'BIRT') return strings.events.types.birth;
     if (tag === 'DEAT') return strings.events.types.death;
     if (tag === 'NAME') return strings.research.factName;
+    // The titles of the name (GEDCOM's NPFX / NSFX): named as the dialog's fields are.
+    if (tag === 'NPFX') return strings.labels.titleBefore;
+    if (tag === 'NSFX') return strings.labels.titleAfter;
     if (tag === 'SEX') return strings.labels.gender;
     const type = gedcomTagEventType(tag);
     return type ? strings.events.types[type] : tag;
@@ -228,11 +231,15 @@ export const personResearchMethods = uiModule({
      * The edit form: "conflict ›" at the label of each field the research has
      * an open conflict about (birth date or place, death, sex, name). Clicking
      * it opens the dialog above the form. Cards in the tree stay as they are.
+     * A title's conflict marks its field, or the given name while the titles
+     * are folded away behind "+ title".
      */
     markResearchConflicts(personId: PersonId): void {
         document.querySelectorAll('#person-modal .pm-conflict-tag').forEach(n => n.remove());
         const r = strings.research;
         const marked = new Set<string>();
+        const titleInput = (id: string): string =>
+            document.getElementById(id)?.closest('[hidden]') ? 'input-firstname' : id;
         for (const c of this.personOpenConflicts(personId)) {
             const fact = c.fact.toUpperCase();
             const date = isDateConflict(c);
@@ -240,6 +247,8 @@ export const personResearchMethods = uiModule({
                 : fact === 'DEAT' ? (date ? 'input-deathdate' : 'input-deathplace')
                 : fact === 'NAME' ? 'input-firstname'
                 : fact === 'SEX' ? 'gender-segment'
+                : fact === 'NPFX' ? titleInput('input-title-before')
+                : fact === 'NSFX' ? titleInput('input-title-after')
                 : null;
             if (!input || marked.has(input)) continue;
             const label = input === 'gender-segment'

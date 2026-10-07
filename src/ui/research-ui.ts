@@ -58,6 +58,7 @@ import { sourceReadings, researchSendVouches, conflictTakeovers, heldConflicts }
 import { currentAppBrowser, appBrowserName } from '../research-transfer.js';
 import { localNetworkStatus } from '../local-network.js';
 import { pendingAdopt } from './pending-adopt.js';
+import { shownName, shownNameOrEmpty } from '../person-name.js';
 
 /** What a research open needs to know from the file (or the bridge). */
 export interface ResearchSource {
@@ -1215,7 +1216,7 @@ export const researchUiMethods = uiModule({
                 sexUnknown = [...unknownSex].filter(id => {
                     const refn = persons[id]?.refn?.trim();
                     return !!refn && before.get(refn) === persons[id].gender;
-                }).map(id => ({ name: `${persons[id].firstName} ${persons[id].lastName}`.trim() || '?', gender: persons[id].gender }));
+                }).map(id => ({ name: shownName(persons[id]), gender: persons[id].gender }));
             }
             action = decideResearchOpen(existing.research, previous ? fingerprintLike(previous, existing.research?.fingerprint) : null);
             // The app's images stay (carryOverMedia); those of people or sources
@@ -1298,7 +1299,7 @@ export const researchUiMethods = uiModule({
                         // Values the user has where a conflict is open there: said, by name (finding 37).
                         takesOver ? strings.research.conflictTakeover(takeovers.map(id => {
                             const p = previous!.persons[id];
-                            return p ? `${p.firstName} ${p.lastName}`.trim() : '';
+                            return p ? shownNameOrEmpty(p) : '';
                         }).filter(Boolean).slice(0, 5).join(', ')) : '',
                         lost > 0 ? strings.research.mediaLost(lost)
                             : ownMedia.photos + ownMedia.attachments + ownMedia.excerpts > 0 ? strings.research.mediaKept : '',
@@ -2094,7 +2095,7 @@ export const researchUiMethods = uiModule({
         const nameOf = (ref: string): string | null => {
             const [id] = personsByRefs(data, [ref]);
             const p = id ? data.persons[id] : undefined;
-            return p ? `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim() || null : null;
+            return p ? shownNameOrEmpty(p) || null : null;
         };
         // An older research does not say when it changed: a change says it.
         if (change.at && Date.parse(change.at) > (Date.parse(s.headAt) || 0)) s.headAt = change.at;
@@ -2148,7 +2149,7 @@ export const researchUiMethods = uiModule({
         const nameOf = (ref: string): string | null => {
             const [id] = data ? personsByRefs(data, [ref]) : [];
             const p = id && data ? data.persons[id] : undefined;
-            return p ? `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim() || null : null;
+            return p ? shownNameOrEmpty(p) || null : null;
         };
         const items = entries.flatMap(e => entryItems(e, data, nameOf));
         const fresh = items.length - s.changes.length;

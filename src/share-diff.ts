@@ -26,6 +26,7 @@
 
 import { StromData, Person, Partnership, Source, PlaceGeo, PersonId, PartnershipId, STROM_DATA_VERSION } from './types.js';
 import { addSurnameGroup } from './surnames.js';
+import { shownNameOrEmpty } from './person-name.js';
 
 export interface EntityChanges<T> {
     added: T[];
@@ -244,7 +245,7 @@ const PREVIEW_FIELD_KEYS: (keyof Person)[] = [
 ];
 
 function personLabel(p: Person): string {
-    const name = `${p.firstName} ${p.lastName}`.trim();
+    const name = shownNameOrEmpty(p);
     const year = p.birthDate?.split('-')[0] || '';
     return year ? `${name} (*${year})` : name;
 }

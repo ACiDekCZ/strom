@@ -47,6 +47,7 @@ import {
     listMergeSessionsInfo,
     hasPendingMerges
 } from './persistence.js';
+import { shownNameOrEmpty } from '../person-name.js';
 
 // Auto-save debounce delay (ms)
 const AUTO_SAVE_DELAY = 2000;
@@ -859,7 +860,7 @@ class MergerUIClass {
      * Format person info for display
      */
     private formatPersonInfo(person: Person): string {
-        const name = `${person.firstName} ${person.lastName}`.trim();
+        const name = shownNameOrEmpty(person);
         const year = person.birthDate?.split('-')[0] || '';
         return year ? `${name} (*${year})` : name;
     }
@@ -1178,7 +1179,7 @@ class MergerUIClass {
         const titleEl = dialog.querySelector('.modal-header h2');
         if (titleEl) {
             const p = this.mergeState.incomingData.persons[match.incomingId];
-            const name = p ? `${p.firstName} ${p.lastName}`.trim() : '';
+            const name = p ? shownNameOrEmpty(p) : '';
             titleEl.textContent = name ? `${strings.merge.conflicts}: ${name}` : strings.merge.conflicts;
         }
 
@@ -1238,7 +1239,7 @@ class MergerUIClass {
         if (!data || !p) return '';
         const name = (id: PersonId): string => {
             const person = data.persons[id];
-            return person ? `${person.firstName} ${person.lastName}`.trim() : '';
+            return person ? shownNameOrEmpty(person) : '';
         };
         return strings.merge.partnershipCouple(name(p.person1Id), name(p.person2Id));
     }

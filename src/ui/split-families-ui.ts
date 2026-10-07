@@ -26,6 +26,7 @@ import { AuditLogManager } from '../audit-log.js';
 import { PersonPicker } from '../person-picker.js';
 import * as CrossTree from '../cross-tree.js';
 import { uiModule } from './module.js';
+import { shownName } from '../person-name.js';
 
 /** Everything the shared split-families dialog needs, whatever opened it. */
 interface SplitFamiliesRun {
@@ -49,7 +50,7 @@ export const splitFamiliesMethods = uiModule({
     splitFamilyPersonLabel(id: PersonId): string {
         const person = this.splitFamiliesData?.persons[id];
         if (!person) return '?';
-        const name = `${person.firstName ?? ''} ${person.lastName ?? ''}`.trim() || '?';
+        const name = shownName(person);
         const year = person.birthDate?.split('-')[0];
         return year ? `${name} (*${year})` : name;
     },

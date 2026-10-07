@@ -79,7 +79,7 @@ unsupported tag.
 | `NAME` > `TYPE` | Read to keep the birth surname as the person's surname: a `married` name listed first swaps places with the `birth` (or `maiden`) one. The type itself is not stored |
 | `NAME` > `SOUR` | The record the name comes from — cites the person, with `PAGE` and `QUAY` |
 | `NAME` > `GIVN`, `SURN` | Win over the `NAME` line, which is only how a program wrote them. Without them the surname is the last pair of slashes |
-| `NAME` > `NPFX`, `NSFX` | The titles before and after the name (`Ing.`, `MUDr.` / `ml.`, `Ph.D.`), kept in fields of their own and shown with the name (Settings → "Show titles"). Written in the `NAME` line too, they are taken off its start and end, so a title never doubles. A `NAME` line without these tags is never searched for titles |
+| `NAME` > `NPFX`, `NSFX` | The titles before and after the name (`Ing.`, `MUDr.` / `ml.`, `Ph.D.`), kept in fields of their own and shown with the name (Settings → "Show titles"). Written in the `NAME` line too, they are taken off its start and end, so a title never doubles. A `NAME` line without these tags is never searched for titles. A list of titles with GEDCOM's commas (`Prof., Dr.`) reads with spaces (`Prof. Dr.`); a file written by Strom keeps a title as it was typed |
 | `SEX` | `M` / `F`. `U` or missing is inferred from the family role where possible |
 | `BIRT`, `DEAT` | The dedicated date and place fields, not events. `1 DEAT Y` with no date marks the person as dead, and Strom exports it that way |
 | `_QUESTION` | Strom's own tag: the open question about the person ("does anyone know when she was born?"), with `CONT` / `CONC` |

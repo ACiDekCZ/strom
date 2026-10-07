@@ -19,6 +19,7 @@ import { getStringsForLang } from './strings.js';
 import { personInitials } from './initials.js';
 import { storyProseHtml } from './story-text.js';
 import { storyCompareHtml, STORY_COMPARE_CSS } from './story-compare.js';
+import { shownName, shownNameOrEmpty } from './person-name.js';
 
 export interface BookOptions {
     title?: string;
@@ -67,7 +68,7 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
     const partnerships = tree.partnerships;
     const sources = tree.sources ?? {};
 
-    const name = (p?: Person) => p ? esc(`${p.firstName} ${p.lastName}`.trim()) : '';
+    const name = (p?: Person) => p ? esc(shownNameOrEmpty(p)) : '';
     const dates = (p: Person) => {
         const b = formatFlexDate(p.birthDate, lang);
         const d = formatFlexDate(p.deathDate, lang);
@@ -200,7 +201,7 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
 
     /** The comparison dialogs of new versions, set at the end of the body (outside the pages). */
     const compareDialogs: string[] = [];
-    const plainName = (p?: Person): string => p ? ([p.firstName, p.lastName].filter(Boolean).join(' ') || '?') : '?';
+    const plainName = (p?: Person): string => p ? shownName(p) : '?';
 
     /** The banner above a story whose new version waits, and its comparison dialog. */
     const newVersionHtml = (story: Story, owner: { person: Person } | { couple: Partnership }): string => {
@@ -307,7 +308,7 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
             const where = [ev.place?.trim(), ev.address?.trim()].filter(Boolean).join(' ');
             const people = (ev.participants ?? []).map(part => {
                 const linked = part.personId ? persons[part.personId] : undefined;
-                const who = linked ? `${linked.firstName} ${linked.lastName}`.trim() : (part.name ?? '').trim();
+                const who = linked ? shownNameOrEmpty(linked) : (part.name ?? '').trim();
                 return who ? (part.note?.trim() ? `${who} (${part.note.trim()})` : who) : '';
             }).filter(Boolean);
             const list = people.length > 1
@@ -336,7 +337,7 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
             const label = B.childRel[type];
             if (has1 && has2) { parts.push(label); continue; }
             const parent = persons[has1 ? u.person1Id : u.person2Id];
-            const pn = parent ? `${parent.firstName} ${parent.lastName}`.trim() : '';
+            const pn = parent ? shownNameOrEmpty(parent) : '';
             parts.push(pn ? B.childRelOf(label, pn) : label);
         }
         return parts.join(', ');

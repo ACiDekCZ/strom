@@ -55,6 +55,7 @@ import { cloneTreeData } from './clone.js';
 import { UndoManager } from './undo.js';
 import { applyLivingPrivacy, applyContentOptions, resolveContentOptions, ContentOptions, PrivacyMode } from './privacy.js';
 import { safeFileName } from './filenames.js';
+import { shownName } from './person-name.js';
 
 /** Extended updates for Partnership */
 
@@ -86,7 +87,7 @@ export function auditPersonName(person: Person | null | undefined): string {
     if (person.isPlaceholder) {
         return `? (${strings.gender[person.gender].toLowerCase()})`;
     }
-    const name = [person.firstName, person.lastName].filter(Boolean).join(' ') || '?';
+    const name = shownName(person);
     const year = person.birthDate?.split('-')[0];
     return year ? `${name} (*${year})` : name;
 }
@@ -1576,6 +1577,11 @@ class DataManagerClass {
             deathDate: personData.deathDate,
             deathPlace: personData.deathPlace
         };
+        // The titles of the name; an empty one means none, a placeholder has none.
+        for (const key of ['titleBefore', 'titleAfter'] as const) {
+            const v = isPlaceholder ? undefined : personData[key]?.trim();
+            if (v) person[key] = v;
+        }
 
         this.data.persons[person.id] = person;
         this.commitMutation(strings.undo.addPerson(auditPersonName(person)));

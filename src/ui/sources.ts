@@ -31,6 +31,7 @@ import { openCropEditor, compressWholeImage, CropRegion } from './crop-editor.js
 import { coupleEventLabel } from '../events.js';
 import { eventTypeLabel } from './person-events.js';
 import { verifiedOffer, isOlderSource, researchReadSource, unverifiedOlderSources } from '../research-sync.js';
+import { shownName } from '../person-name.js';
 
 /** What a citation applies to: a person, one of their events, or a partnership. */
 /** What a citation is made on: a person (as a whole, or their birth / death), one of their events, a union. */
@@ -127,7 +128,7 @@ export function sourceChipOpenHtml(src: Source): string {
 function personName(personId: PersonId): string {
     const p = DataManager.getPerson(personId);
     if (!p) return '?';
-    return [p.firstName, p.lastName].filter(Boolean).join(' ') || '?';
+    return shownName(p);
 }
 
 /** Does the page run on a touch screen (no keyboard hint then)? */

@@ -10,11 +10,12 @@ import { PersonId } from '../types.js';
 import { PersonPicker } from '../person-picker.js';
 import { findRelationship } from '../kinship.js';
 import { uiModule } from './module.js';
+import { shownName } from '../person-name.js';
 
 function personName(id: PersonId): string {
     const p = DataManager.getPerson(id);
     if (!p) return '?';
-    return `${p.firstName} ${p.lastName}`.trim() || '?';
+    return shownName(p);
 }
 
 export const kinshipUiMethods = uiModule({

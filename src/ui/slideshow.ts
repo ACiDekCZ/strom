@@ -17,6 +17,7 @@ import { strings } from '../strings.js';
 import { PersonId, Person, STANDALONE_VIEWS } from '../types.js';
 import { formatFlexDate } from '../dates.js';
 import { uiModule } from './module.js';
+import { shownName } from '../person-name.js';
 
 /** How long a stop lasts (ms). Stops with a story stay longer to be readable. */
 const STOP_PLAIN = 4500;
@@ -143,7 +144,7 @@ export const slideshowMethods = uiModule({
     renderSlideshowCaption(person: Person): void {
         const box = document.getElementById('slideshow-caption');
         if (!box) return;
-        const name = `${person.firstName} ${person.lastName}`.trim() || '?';
+        const name = shownName(person);
         const years = [person.birthDate, person.deathDate]
             .map(d => (d ? formatFlexDate(d) : ''))
             .filter(Boolean).join(' – ');

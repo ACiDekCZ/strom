@@ -14,6 +14,7 @@ import { Person, PersonId } from '../types.js';
 import { LiveDirection, LiveDirectionKind, ResearchDirectionDo } from '../research-link.js';
 import { uiModule } from './module.js';
 import { LiveSession, el, liveSection, liveSession } from './research-ui.js';
+import { shownName } from '../person-name.js';
 
 type Mode = 'docked' | 'overlay' | 'sheet';
 
@@ -38,7 +39,7 @@ function personByRefn(refn: string | undefined): Person | null {
     return Object.values(DataManager.getData().persons).find(p => p.refn === refn) ?? null;
 }
 
-const fullName = (p: Person): string => `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim() || '?';
+const fullName = (p: Person): string => shownName(p);
 
 function shortDate(iso: string): string {
     const ts = Date.parse(iso);

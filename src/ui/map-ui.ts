@@ -31,6 +31,7 @@ import { uiModule } from './module.js';
 import { normalizeModal } from './modal-skeleton.js';
 
 import { iconSvg } from '../icons.js';
+import { shownName } from '../person-name.js';
 /** A place that has coordinates and therefore something to draw. */
 export interface MappedPlace {
     key: string;
@@ -570,7 +571,7 @@ export const mapMethods = uiModule({
             .filter((p): p is NonNullable<typeof p> => !!p)
             .map(p => `
                 <button type="button" class="map-popup-person" data-person-id="${this.escapeHtml(p.id)}">
-                    ${this.escapeHtml(`${p.firstName} ${p.lastName}`.trim() || '?')}
+                    ${this.escapeHtml(shownName(p))}
                 </button>`)
             .join('');
 

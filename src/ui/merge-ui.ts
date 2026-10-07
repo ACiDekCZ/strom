@@ -42,6 +42,7 @@ import { validateTreeData, ValidationResult as TreeValidationResult, ValidationI
 import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
+import { shownNameOrEmpty } from '../person-name.js';
 
 export const mergeUiMethods = uiModule({
     // ---- PENDING MERGES ----
@@ -209,7 +210,7 @@ export const mergeUiMethods = uiModule({
 
         // Show keep person info
         const birthYear = person.birthDate?.split('-')[0] || '';
-        const name = `${person.firstName} ${person.lastName}`.trim();
+        const name = shownNameOrEmpty(person);
         keepDisplay.textContent = birthYear ? `${name} (*${birthYear})` : name;
 
         // Hide sections initially
@@ -271,13 +272,13 @@ export const mergeUiMethods = uiModule({
         // Show other person info
         if (otherDisplay) {
             const birthYear = otherPerson.birthDate?.split('-')[0] || '';
-            const name = `${otherPerson.firstName} ${otherPerson.lastName}`.trim();
+            const name = shownNameOrEmpty(otherPerson);
             otherDisplay.textContent = birthYear ? `${name} (*${birthYear})` : name;
         }
 
         // Show delete warning
         if (deleteInfo) {
-            const name = `${otherPerson.firstName} ${otherPerson.lastName}`.trim();
+            const name = shownNameOrEmpty(otherPerson);
             deleteInfo.textContent = `"${name}" ${strings.personMerge.willBeDeleted}. ${strings.personMerge.relationshipsTransferred}.`;
         }
 
@@ -336,7 +337,7 @@ export const mergeUiMethods = uiModule({
 
         if (partnershipConflicts.length > 0 && partnershipSection && partnershipList) {
             partnershipList.innerHTML = partnershipConflicts.map(conflict => {
-                const partnerName = `${conflict.partner.firstName} ${conflict.partner.lastName}`.trim();
+                const partnerName = shownNameOrEmpty(conflict.partner);
                 return `
                     <div class="person-merge-conflict-row" data-partnership="${this.escapeHtml(conflict.keepPartnership.id)}">
                         <div class="person-merge-conflict-label">
@@ -496,7 +497,7 @@ export const mergeUiMethods = uiModule({
 
         const data = DataManager.getData();
         const formatPerson = (p: Person) => {
-            const name = `${p.firstName || ''} ${p.lastName || ''}`.trim();
+            const name = shownNameOrEmpty(p);
             const year = p.birthDate?.split('-')[0];
             return year ? `${name} (*${year})` : name;
         };

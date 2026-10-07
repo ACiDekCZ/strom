@@ -1332,9 +1332,12 @@ export const personModalMethods = uiModule({
             // Create new — create + details + quick events are ONE undo step.
             const story = this.collectStory(undefined);
             const newPerson = DataManager.runBatch(null, () => {
-                const created = DataManager.createPerson({ firstName, lastName, gender });
-                // Update with extended info if provided
                 const details = this.collectPersonDetails();
+                // The titles with the name, so the undo step says it as the card does.
+                const created = DataManager.createPerson({
+                    firstName, lastName, gender, titleBefore: details.titleBefore, titleAfter: details.titleAfter,
+                });
+                // Update with extended info if provided
                 if (birthDate || birthPlace || deathDate || deathPlace || notes || refn || question
                     || photo || story || nameVariants.length > 0 || (deceasedChecked && !deathDate)
                     || Object.values(details).some(Boolean)) {

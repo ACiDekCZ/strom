@@ -2575,10 +2575,11 @@ export function parseGedcom(content: string): ParsedGedcom {
     // research (GIVN / SURN first, the last pair of slashes, "N/A" is "?").
     // A file of Strom's own (the app's or the research's) holds names someone
     // typed in Strom: a given name "Syn" there is what was typed and comes
-    // back as it went out, as the research reads the app's file in a sync.
-    const descriptions = !stromApp && !stromResearch;
+    // back as it went out, as the research reads the app's file in a sync;
+    // a title keeps its commas as typed.
+    const fromStrom = stromApp || stromResearch;
     for (const indi of individuals.values()) {
-        const read = readGedcomName(indi.name, indi.primaryNameParts, { descriptions });
+        const read = readGedcomName(indi.name, indi.primaryNameParts, { fromStrom });
         indi.firstName = read.firstName;
         indi.lastName = read.lastName;
         if (read.description) indi.nameDescription = read.description;

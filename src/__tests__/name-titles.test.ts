@@ -20,6 +20,10 @@ import { findSimilarPersons, quickMatchScore } from '../merge/matching.js';
 import { mergePersonData } from '../merge/executor.js';
 import { applyLivingPrivacy } from '../privacy.js';
 import { diffByPerson } from '../research-changes.js';
+import { computeTimelineModel, computePersonLifeline } from '../timeline.js';
+import { researchFactLabel } from '../ui/person-research-ui.js';
+import { humanizeChange } from '../research-link.js';
+import { getStringsForLang, setLanguage, strings } from '../strings.js';
 import { Person, PersonId, StromData, TreeId, toPersonId } from '../types.js';
 
 const importGed = (ged: string): StromData => convertToStrom(parseGedcom(ged)).data;
@@ -54,8 +58,13 @@ describe('reading NPFX / NSFX', () => {
     });
 
     it('reads a list of titles (GEDCOM commas in the tag, spaces in the line) and a comma before a title after', () => {
+        // Shown as a line says it: the list's commas read as spaces.
         expect(readGedcomName('Prof. Dr. Jan /Novák/', { npfx: 'Prof., Dr.' }))
-            .toEqual({ firstName: 'Jan', lastName: 'Novák', titleBefore: 'Prof., Dr.' });
+            .toEqual({ firstName: 'Jan', lastName: 'Novák', titleBefore: 'Prof. Dr.' });
+        expect(readGedcomName('Prof., Dr. Jan /Novák/', { npfx: 'Prof., Dr.' }))
+            .toEqual({ firstName: 'Jan', lastName: 'Novák', titleBefore: 'Prof. Dr.' });
+        expect(readGedcomName('Jan /Novák/ Ph.D., CSc.', { nsfx: 'Ph.D., CSc.' }))
+            .toEqual({ firstName: 'Jan', lastName: 'Novák', titleAfter: 'Ph.D. CSc.' });
         expect(readGedcomName('Jan /Novák/, Ph.D.', { nsfx: 'Ph.D.' }))
             .toEqual({ firstName: 'Jan', lastName: 'Novák', titleAfter: 'Ph.D.' });
     });
@@ -91,6 +100,88 @@ describe('reading NPFX / NSFX', () => {
         ])));
         expect(result.stats.droppedTagSummary).not.toMatch(/NPFX|NSFX/);
         expect(result.stats.unsupportedTags).toBe(0);
+    });
+});
+
+describe('the research\'s name shape (Strom Research writes the title in the line and spells the parts out)', () => {
+    const RESEARCH = (name: string[]): string => GED(['1 _STROM_TREE 0b4c7a52-1c1f-4d7e-9a53-2f4a3c1e8b10',
+        '0 @I1@ INDI', ...name, '1 SEX M', '1 REFN P0001'], 'STROM_RESEARCH');
+    const read = (name: string[]) => {
+        const [p] = people(importGed(RESEARCH(name)));
+        return { firstName: p.firstName, lastName: p.lastName, titleBefore: p.titleBefore, titleAfter: p.titleAfter };
+    };
+
+    it('reads both titles without doubling them', () => {
+        expect(read(['1 NAME Ing. Jan /Novák/ ml.', '2 NPFX Ing.', '2 GIVN Jan', '2 SURN Novák', '2 NSFX ml.']))
+            .toEqual({ firstName: 'Jan', lastName: 'Novák', titleBefore: 'Ing.', titleAfter: 'ml.' });
+    });
+
+    it('reads a title before only, and after only', () => {
+        expect(read(['1 NAME MUDr. Marie /Svobodová/', '2 NPFX MUDr.', '2 GIVN Marie', '2 SURN Svobodová']))
+            .toEqual({ firstName: 'Marie', lastName: 'Svobodová', titleBefore: 'MUDr.', titleAfter: undefined });
+        expect(read(['1 NAME Petr /Dvořák/ Ph.D.', '2 GIVN Petr', '2 SURN Dvořák', '2 NSFX Ph.D.']))
+            .toEqual({ firstName: 'Petr', lastName: 'Dvořák', titleBefore: undefined, titleAfter: 'Ph.D.' });
+    });
+
+    it('reads a list of titles as the research has it, its commas kept (what the research compares in a sync)', () => {
+        expect(read(['1 NAME Prof., Dr. Karel /Novák/', '2 NPFX Prof., Dr.', '2 GIVN Karel', '2 SURN Novák']))
+            .toEqual({ firstName: 'Karel', lastName: 'Novák', titleBefore: 'Prof., Dr.', titleAfter: undefined });
+        expect(read(['1 NAME Prof. Dr. Karel /Novák/', '2 NPFX Prof., Dr.', '2 GIVN Karel', '2 SURN Novák']))
+            .toEqual({ firstName: 'Karel', lastName: 'Novák', titleBefore: 'Prof., Dr.', titleAfter: undefined });
+    });
+});
+
+describe('a list of titles (GEDCOM commas)', () => {
+    it('reads with spaces from another program\'s file, the commas kept in Strom\'s own', () => {
+        const name = ['0 @I1@ INDI', '1 NAME Prof., Dr. Karel /Novák/', '2 NPFX Prof., Dr.', '2 NSFX Ph.D., CSc.', '1 SEX M'];
+        expect(people(importGed(GED(name)))[0]).toMatchObject({ firstName: 'Karel', titleBefore: 'Prof. Dr.', titleAfter: 'Ph.D. CSc.' });
+        expect(people(importGed(GED(name, 'STROM')))[0]).toMatchObject({ firstName: 'Karel', titleBefore: 'Prof., Dr.', titleAfter: 'Ph.D., CSc.' });
+    });
+
+    it('a title typed with commas is kept as typed, written out as stored and comes back the same', () => {
+        const typed: StromData = {
+            persons: { [toPersonId('p1')]: person('p1', 'Karel', 'Novák', { titleBefore: 'Prof., Dr.' }) },
+            partnerships: {},
+        };
+        const out = exportToGedcom(typed).content.split(/\r?\n/);
+        expect(out).toContain('1 NAME Prof., Dr. Karel /Novák/');
+        expect(out).toContain('2 NPFX Prof., Dr.');
+        expect(people(importGed(out.join('\n')))[0]).toMatchObject({ firstName: 'Karel', lastName: 'Novák', titleBefore: 'Prof., Dr.' });
+        // Read from another program's file once ("Prof. Dr."), it goes out and comes back as stored.
+        const spaced: StromData = {
+            persons: { [toPersonId('p1')]: person('p1', 'Karel', 'Novák', { titleBefore: 'Prof. Dr.' }) },
+            partnerships: {},
+        };
+        const again = exportToGedcom(spaced).content;
+        expect(again).toContain('2 NPFX Prof. Dr.');
+        expect(people(importGed(again))[0]).toMatchObject({ firstName: 'Karel', lastName: 'Novák', titleBefore: 'Prof. Dr.' });
+    });
+});
+
+describe('a research conflict about a title', () => {
+    afterEach(() => setLanguage('en'));
+
+    it('is named as the title before or after the name, never by its tag', () => {
+        expect(researchFactLabel('NPFX')).toBe('Title before name');
+        expect(researchFactLabel('nsfx')).toBe('Title after name');
+        setLanguage('cs');
+        expect(researchFactLabel('NPFX')).toBe('Titul před jménem');
+        expect(researchFactLabel('NSFX')).toBe('Titul za jménem');
+        setLanguage('de');
+        expect(researchFactLabel('NPFX')).toBe('Titel vor dem Namen');
+        expect(researchFactLabel('NSFX')).toBe('Titel nach dem Namen');
+    });
+
+    it('reads in words in the research\'s change lines and the overview\'s fact words', () => {
+        expect(humanizeChange('+P0006 Jan Novák · E0006 NPFX Ing.', undefined, strings.research.changeWords))
+            .toBe('New person: Jan Novák · title before the name Ing.');
+        expect(getStringsForLang('cs').research.changeWords.facts.NSFX).toBe('titul za jménem');
+        expect(getStringsForLang('de').research.changeWords.facts.NPFX).toBe('Titel vor dem Namen');
+        for (const lang of ['en', 'cs', 'de'] as const) {
+            const facts = getStringsForLang(lang).research.changeWords.facts;
+            expect(facts.NPFX).toBeTruthy();
+            expect(facts.NSFX).toBeTruthy();
+        }
     });
 });
 
@@ -159,6 +250,28 @@ describe('the name as shown', () => {
     });
 });
 
+describe('the name with its titles in the timeline, the undo step and the duplicate hint', () => {
+    const jan = person('p1', 'Jan', 'Novák', { birthDate: '1870', titleBefore: 'Ing.', titleAfter: 'ml.' });
+    const marie = person('p2', 'Marie', 'Svobodová', { gender: 'female', birthDate: '1874', titleBefore: 'MUDr.', partnerships: [] });
+    const data: StromData = {
+        persons: { [jan.id]: { ...jan, partnerships: ['u1' as never] }, [marie.id]: { ...marie, partnerships: ['u1' as never] } },
+        partnerships: { ['u1' as never]: { id: 'u1', person1Id: jan.id, person2Id: marie.id, childIds: [], status: 'married', startDate: '1895' } as never },
+    };
+
+    it('the timeline view names its rows with the titles, ordered by the bare name', () => {
+        const rows = computeTimelineModel(data, [jan.id, marie.id], 2026).rows;
+        expect(rows.map(r => r.name)).toEqual(['Ing. Jan Novák ml.', 'MUDr. Marie Svobodová']);
+        const off = vi.spyOn(SettingsManager, 'isShowTitles').mockReturnValue(false);
+        expect(computeTimelineModel(data, [jan.id, marie.id], 2026).rows.map(r => r.name)).toEqual(['Jan Novák', 'Marie Svobodová']);
+        off.mockRestore();
+    });
+
+    it('the life timeline names the partner with the titles', () => {
+        const points = computePersonLifeline(data, jan.id);
+        expect(points.find(p => p.relatedId === marie.id)?.relatedName).toBe('MUDr. Marie Svobodová');
+    });
+});
+
 describe('titles never weigh in matching', () => {
     const plain = person('p1', 'Jan', 'Novák', { birthDate: '1900-01-01' });
     const titled = person('p2', 'Jan', 'Novák', { birthDate: '1900-01-01', titleBefore: 'Ing.', titleAfter: 'ml.' });
@@ -208,6 +321,25 @@ describe('titles in the data', () => {
         expect(DataManager.getPerson(p.id)?.titleAfter).toBeUndefined();
         DataManager.undo();
         expect(DataManager.getPerson(p.id)).toMatchObject({ titleBefore: 'Ing.', titleAfter: 'ml.' });
+    });
+
+    it('the undo step names the person with the titles (set with the person, or edited later)', () => {
+        const p = DataManager.createPerson({ firstName: 'Marie', lastName: 'Svobodová', gender: 'female', titleBefore: ' MUDr. ', titleAfter: '' });
+        expect(DataManager.getPerson(p.id)).toMatchObject({ titleBefore: 'MUDr.' });
+        expect(DataManager.getPerson(p.id)?.titleAfter).toBeUndefined();
+        expect(DataManager.lastUndoDescription()).toBe(strings.undo.addPerson('MUDr. Marie Svobodová'));
+        DataManager.updatePerson(p.id, { titleAfter: 'Ph.D.' });
+        DataManager.updatePerson(p.id, { notes: 'x' });
+        expect(DataManager.lastUndoDescription()).toBe(strings.undo.editPerson('MUDr. Marie Svobodová Ph.D.'));
+        const off = vi.spyOn(SettingsManager, 'isShowTitles').mockReturnValue(false);
+        DataManager.updatePerson(p.id, { notes: 'y' });
+        expect(DataManager.lastUndoDescription()).toBe(strings.undo.editPerson('Marie Svobodová'));
+        off.mockRestore();
+    });
+
+    it('a placeholder takes no titles', () => {
+        const p = DataManager.createPerson({ firstName: '?', lastName: '', gender: 'male', titleBefore: 'Ing.' }, true);
+        expect(DataManager.getPerson(p.id)?.titleBefore).toBeUndefined();
     });
 
     it('search over the tree ignores them', () => {

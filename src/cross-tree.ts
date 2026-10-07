@@ -5,6 +5,7 @@
 
 import { PersonId, Person, StromData, TreeId } from './types.js';
 import { quickMatchScore } from './merge/matching.js';
+import { shownNameOrEmpty } from './person-name.js';
 
 // ==================== TYPES ====================
 
@@ -106,7 +107,7 @@ export function findCrossTreeMatches(
             const score = quickMatchScore(person, otherPerson, currentData, tree.data);
 
             if (score >= MATCH_THRESHOLD) {
-                const personName = `${otherPerson.firstName} ${otherPerson.lastName}`.trim();
+                const personName = shownNameOrEmpty(otherPerson);
                 const birthYear = otherPerson.birthDate?.split('-')[0];
 
                 matches.push({

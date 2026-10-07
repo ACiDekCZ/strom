@@ -24,6 +24,7 @@ import { safeFileName } from '../filenames.js';
 import { cardLines, cardYears } from '../card-fields.js';
 import { measureCardTexts } from '../card-width.js';
 import { appFontFaceCss, POSTER_SERIF_FACES, POSTER_LINE_FACES } from '../poster-fonts.js';
+import { shownNameOrEmpty } from '../person-name.js';
 
 /** Browsers cap canvas dimensions; keep well under the common ~16k limit. */
 const MAX_CANVAS_PX = 15000;
@@ -61,7 +62,7 @@ interface PosterViewInfo {
 function focusNameFrom(source: StromData): string {
     const id = TreeRenderer.getFocusPersonId();
     const p = id ? source.persons[id] : null;
-    return p ? `${p.firstName} ${p.lastName}`.trim() : '';
+    return p ? shownNameOrEmpty(p) : '';
 }
 
 /** The view label (no "Prints…" prefix), given the focus name to embed. */

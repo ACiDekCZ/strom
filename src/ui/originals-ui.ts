@@ -29,6 +29,7 @@ import {
 } from '../originals.js';
 import { onComputer, fetchWithTimeout, bridgeFailure } from './research-ui.js';
 import { uiModule } from './module.js';
+import { shownNameOrEmpty } from '../person-name.js';
 
 /** Head of the file read for its EXIF orientation. */
 const EXIF_HEAD_BYTES = 256 * 1024;
@@ -518,7 +519,7 @@ export const originalsMethods = uiModule({
             if (r.treeId !== openTree) return TreeManager.getTreeMetadata(r.treeId)?.name ?? '';
             const person = r.personId ? data.persons[r.personId] : undefined;
             const source = r.sourceId ? data.sources?.[r.sourceId] : undefined;
-            return person ? `${person.firstName} ${person.lastName}`.trim() : source?.title ?? '';
+            return person ? shownNameOrEmpty(person) : source?.title ?? '';
         };
         const since = (ms: number): string => new Date(ms).toLocaleDateString(getCurrentLanguage(), { day: 'numeric', month: 'numeric' })
             + ' ' + new Date(ms).toLocaleTimeString(getCurrentLanguage(), { hour: '2-digit', minute: '2-digit' });
