@@ -176,11 +176,14 @@ function fitPlace(text: string, maxW: number, measure: MeasureTexts): string {
  * then 17px lines of 12px text: the mark in an 11px column, the date, and the
  * place where the view's date column ends (two texts a line, so the places of
  * all cards start at one x). Only the place shortens; the name only when it
- * alone is wider than the widest card, as on screen.
+ * alone is wider than the widest card, as on screen. With `exact` (widths
+ * measured by the screen) texts are drawn at their measured widths, so the
+ * geometry holds in whatever font a viewer sets them.
  */
 function customCardSvg(
     person: StromData['persons'][keyof StromData['persons']], pos: { x: number; y: number }, cw: number,
     lines: PosterCardLine[], ring: string, clipId: string, dateColumn: number, measure: MeasureTexts,
+    exact: boolean,
 ): string {
     const out: string[] = [];
     const left = pos.x + CUSTOM_CARD_PAD_X;
@@ -208,7 +211,12 @@ function customCardSvg(
         fs = size;
         if (nameAt15 * size / 15 <= nameRoom) break;
     }
-    const clamp = nameAt15 * fs / 15 > nameRoom ? ` textLength="${nameRoom.toFixed(0)}" lengthAdjust="spacingAndGlyphs"` : '';
+    // Measured in the screen's font, the name is drawn at that width: a viewer
+    // that sets it in another (wider) font still keeps it inside the card.
+    const nameW = Math.min(nameAt15 * fs / 15, nameRoom);
+    const clamp = exact && nameW > 0
+        ? ` textLength="${nameW.toFixed(1)}" lengthAdjust="spacingAndGlyphs"`
+        : nameAt15 * fs / 15 > nameRoom ? ` textLength="${nameRoom.toFixed(0)}" lengthAdjust="spacingAndGlyphs"` : '';
     out.push(`<text x="${textX.toFixed(1)}" y="${(pos.y + 10 + 20).toFixed(1)}" font-size="${fs}" font-weight="600" fill="${COLORS.text}"${clamp}>${escapeXml(name)}</text>`);
     const dateX = left + CARD_MARK_WIDTH + CARD_COLUMN_GAP;
     lines.forEach((l, i) => {
@@ -404,7 +412,7 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
 
         if (person && options.cardLines) {
             out.push(customCardSvg(person, pos, cw, options.cardLines.get(personId) ?? [], ring, `av${clipCounter++}`,
-                options.cardDateColumn ?? 0, options.measureCardTexts ?? estimateCardTexts));
+                options.cardDateColumn ?? 0, options.measureCardTexts ?? estimateCardTexts, !!options.measureCardTexts));
         } else if (person && !isPlaceholder) {
             // Avatar: gender-ring circle with a photo or initials (like on
             // screen). 34px avatar (r=17), 10px left padding — matches the CSS.

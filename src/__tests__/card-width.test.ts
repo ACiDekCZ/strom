@@ -101,6 +101,24 @@ describe('the poster draws the custom card like the screen', () => {
         expect(svg).toMatch(/<text class="card-line-place" x="129.0" y="142.5"[^>]*>mlynář<\/text>/);
     });
 
+    it('the name is drawn at its measured width, so another font cannot push it past the card (T12)', () => {
+        const a: Person = { id: 'a' as PersonId, firstName: 'Anna', lastName: 'Vlková', gender: 'female', isPlaceholder: false,
+            partnerships: [], parentIds: [], childIds: [] };
+        const b: Person = { ...a, id: 'b' as PersonId, firstName: 'Bartoloměj', lastName: 'Wolfensteiner' };
+        const data: StromData = { persons: { [a.id]: a, [b.id]: b }, partnerships: {} as Record<PartnershipId, never> };
+        const layout: PosterLayout = {
+            positions: new Map([[a.id, { x: 0, y: 0 }], [b.id, { x: 300, y: 0 }]]), connections: [], spouseLines: [],
+        };
+        const svg = buildTreeSvg(data, layout, {
+            config: { cardWidth: 200, cardHeight: 56 } as never,
+            cardLines: new Map([['a', []], ['b', []]]), cardDateColumn: 0, measureCardTexts: measure,
+        });
+        // "Anna Vlková": 11 × 8 = 88px, within the room (200 − 24 − 38 = 138): drawn at 88.
+        expect(svg).toMatch(/<text x="50.0" y="30.0" font-size="15" font-weight="600"[^>]*textLength="88.0" lengthAdjust="spacingAndGlyphs"[^>]*>Anna Vlková<\/text>/);
+        // 24 × 8 = 192px: 13px still 166.4 > 138, so drawn into the room.
+        expect(svg).toMatch(/<text x="350.0" y="30.0" font-size="13" font-weight="600"[^>]*textLength="138.0"[^>]*>Bartoloměj Wolfensteiner<\/text>/);
+    });
+
     it('only the place shortens; the date and "+1" stay whole', () => {
         const a: Person = { id: 'a' as PersonId, firstName: 'Anna', lastName: 'Vlková', gender: 'female', isPlaceholder: false,
             partnerships: [], parentIds: [], childIds: [] };
