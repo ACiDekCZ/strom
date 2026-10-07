@@ -327,13 +327,22 @@ test.describe('card presets (U02)', () => {
             await expect(host.locator('.card-look-check')).toContainText('Jahre unter dem Namen');
             // The panel's content width: the details list spans it.
             const panel = (await host.locator('.card-fields-list').boundingBox())!;
-            for (const sel of ['.card-preset-segment', '.card-look-style', '.card-look-lines', '.card-look-height', '.card-look-width']) {
+            await expect(host.locator('.card-fields-date .segment-btn')).toHaveText(['Nur Jahr', 'Ganzes Datum']);
+            for (const sel of ['.card-preset-segment', '.card-fields-date', '.card-look-style', '.card-look-lines', '.card-look-height', '.card-look-width']) {
                 const seg = host.locator(sel);
                 await seg.scrollIntoViewIfNeeded();
                 expect(Math.abs((await seg.boundingBox())!.width - panel.width), sel).toBeLessThan(1);
                 for (const b of await seg.locator('.segment-btn').all()) {
                     expect(Math.round((await b.boundingBox())!.height), sel).toBeGreaterThanOrEqual(44);
                     expect(await b.evaluate(el => el.scrollWidth <= el.clientWidth), sel).toBe(true);
+                }
+            }
+            // A detail's checkbox and name, and its arrows, a thumb high.
+            for (const row of (await host.locator('.card-field-row').all()).slice(0, 3)) {
+                expect(Math.round((await row.locator('.card-field-main').boundingBox())!.height)).toBeGreaterThanOrEqual(44);
+                for (const b of await row.locator('.card-field-move button').all()) {
+                    const box = (await b.boundingBox())!;
+                    expect([Math.round(box.width), Math.round(box.height)]).toEqual([44, 44]);
                 }
             }
             // The preset's title above its segment.
@@ -409,4 +418,28 @@ test.describe('"+1" after the marriage\'s place (U02)', () => {
             expect(svg).not.toMatch(/<text class="card-line-place"[^>]*>[^<]*\+1<\/text>/);
         });
     }
+});
+
+test.describe('touch on a tablet (pointer: coarse) (U02)', () => {
+    test.use({ viewport: { width: 800, height: 1000 }, hasTouch: true, isMobile: true });
+    test('the date toggle, the appearance segments, the details\' checkboxes and arrows are a thumb high', async ({ page }) => {
+        await setup(page, null, 800);
+        expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
+        await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+        const host = page.locator('#card-fields-settings');
+        for (const sel of ['.card-preset-segment', '.card-fields-date', '.card-look-style', '.card-look-lines', '.card-look-height', '.card-look-width']) {
+            for (const b of await host.locator(`${sel} .segment-btn`).all()) {
+                expect(Math.round((await b.boundingBox())!.height), sel).toBeGreaterThanOrEqual(44);
+            }
+        }
+        for (const row of (await host.locator('.card-field-row').all()).slice(0, 3)) {
+            expect(Math.round((await row.locator('.card-field-main').boundingBox())!.height)).toBeGreaterThanOrEqual(44);
+            for (const b of await row.locator('.card-field-move button').all()) {
+                const box = (await b.boundingBox())!;
+                expect([Math.round(box.width), Math.round(box.height)]).toEqual([44, 44]);
+            }
+        }
+        expect(Math.round((await host.locator('.card-look-check').boundingBox())!.height)).toBeGreaterThanOrEqual(44);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(800);
+    });
 });

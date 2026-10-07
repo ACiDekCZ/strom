@@ -348,6 +348,14 @@ test.describe('card height by content (U02 V3)', () => {
             expect(bg).not.toBe(pageBg);
             const dark = (rgb: string) => rgb.match(/\d+/g)!.slice(0, 3).map(Number).reduce((a, b) => a + b, 0) < 3 * 128;
             expect(dark(bg)).toBe(theme === 'dark');
+            // In German the cards are measured again and every row stays inside its card; still no page scroll.
+            await page.evaluate(() => window.Strom.UI.setLanguage('de'));
+            await expect.poll(() => cardBoxesMatchLayout(page)).toBe(true);
+            const spill = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('#tree-canvas .person-card .card-line-row, #tree-canvas .person-card .name-text')]
+                .filter(el => el.scrollWidth > el.clientWidth + 0.5).map(el => el.textContent));
+            expect(spill).toEqual([]);
+            expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+            await page.evaluate(() => window.Strom.UI.setLanguage('en'));
         });
     }
 });
