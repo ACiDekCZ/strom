@@ -15,7 +15,7 @@ import { buildFanModel, buildFanPosterSvg, fanPosterGeometry } from '../fan-char
 import { computeTimelineModel } from '../timeline.js';
 import { buildTimelinePosterSvg, timelinePosterGeometry } from '../timeline-chart.js';
 import { uiModule } from './module.js';
-import { DEFAULT_LAYOUT_CONFIG, StromData, ViewMode, personCardHeight } from '../types.js';
+import { DEFAULT_LAYOUT_CONFIG, LayoutConfig, StromData, ViewMode, personCardHeight } from '../types.js';
 import { applyLivingPrivacy, PrivacyMode, presumedDeceasedSet } from '../privacy.js';
 import { classifyBranches } from '../branch-colors.js';
 import { computeIndirectIds } from '../indirect.js';
@@ -103,6 +103,67 @@ interface PosterBuild {
 }
 
 /**
+ * How the tree's cards are drawn in an image, as on screen: the branch
+ * colours (when the setting is on), the presumed-deceased markers, the dimmed
+ * context-only people, and for the custom card the size the view was laid out
+ * with (its width follows the view's longest text; with the height "by
+ * content" each card's own height), its date and label columns, its lines and
+ * its fonts. Shared by the poster and the family book's tree page, so both
+ * draw the cards the layout was made for. `data` is the (privacy-filtered)
+ * data the cards are drawn from.
+ */
+export function treeCardDrawing(data: StromData, layout: ReturnType<typeof TreeRenderer.getPosterLayout>): {
+    cardConfig: LayoutConfig; drawing: PosterOptions;
+} {
+    const mode = TreeRenderer.getViewMode();
+    const focusId = TreeRenderer.getFocusPersonId();
+    const branchMap = (SettingsManager.isBranchColorsEnabled() && focusId)
+        ? classifyBranches(data, focusId) as unknown as Map<string, string>
+        : null;
+    // Draw parity: the descendants / family views dim context-only people on
+    // screen (opacity 0.5). Reuse the SAME membership rule so the image dims
+    // exactly that set instead of printing everyone at full strength.
+    const dimmedIds = (focusId && (mode === 'descendants' || mode === 'family'))
+        ? computeIndirectIds(data, focusId, mode, [...layout.positions.keys()] as unknown as string[]) as unknown as Set<string>
+        : undefined;
+    const custom = SettingsManager.getCardDensity() === 'custom';
+    const cardConfig: LayoutConfig = custom ? { ...DEFAULT_LAYOUT_CONFIG, ...TreeRenderer.getCardBox() } : DEFAULT_LAYOUT_CONFIG;
+    const fields = SettingsManager.getCardFields();
+    const cardLinesMap = custom
+        ? new Map([...layout.positions.keys()].map(id => {
+            const p = data.persons[id];
+            return [id as string, p && !p.isPlaceholder ? cardLines(p, data, fields) : []];
+        }))
+        : undefined;
+    const deceasedSet = presumedDeceasedSet(data);
+    // The years under the name, as the screen says them ("1841 †" for one presumed dead).
+    const cardYearsMap = custom && fields.years
+        ? new Map([...layout.positions.keys()].map(id => {
+            const p = data.persons[id];
+            return [id as string, p ? cardYears(p, deceasedSet.has(id)) : ''];
+        }))
+        : undefined;
+    const drawing: PosterOptions = {
+        branchMap,
+        deceasedSet,
+        ...(dimmedIds ? { dimmedIds } : {}),
+        // The faces the cards are drawn in: the serif always, the lines' sans for the custom card.
+        fontFaceCss: appFontFaceCss(custom ? [...POSTER_SERIF_FACES, ...POSTER_LINE_FACES] : POSTER_SERIF_FACES),
+        ...(custom ? {
+            config: cardConfig, cardLines: cardLinesMap,
+            cardDateColumn: TreeRenderer.getCustomCardMetrics()?.dateColumn ?? 0,
+            // The rows a detail takes, wrapped as on screen (same function, same measure).
+            cardValueLines: fields.lines,
+            cardStyle: fields.style,
+            cardLabelColumn: TreeRenderer.getCustomCardMetrics()?.labelColumn ?? 0,
+            ...(cardYearsMap ? { cardYears: cardYearsMap } : {}),
+            measureCardTexts,
+        } : {}),
+    };
+    return { cardConfig, drawing };
+}
+
+/**
  * Build the poster for whatever view is on screen: the fan chart in fan view,
  * the timeline in timeline view, the tree card layout otherwise. Returns null
  * when there is nothing printable (empty tree, or the blocked map view).
@@ -163,56 +224,8 @@ function buildCurrentPoster(): PosterBuild | null {
     // Tree / descendants: the card layout as currently laid out.
     const layout = TreeRenderer.getPosterLayout();
     if (layout.positions.size === 0) return null;
-    // Draw-parity inputs shared with the on-screen renderer: branch colours
-    // (when the setting is on) and the presumed-deceased † markers.
-    const focusId = TreeRenderer.getFocusPersonId();
-    const branchMap = (SettingsManager.isBranchColorsEnabled() && focusId)
-        ? classifyBranches(data, focusId) as unknown as Map<string, string>
-        : null;
-    // Draw parity: the descendants / family views dim context-only people on
-    // screen (opacity 0.5). Reuse the SAME membership rule so the poster dims
-    // exactly that set instead of printing everyone at full strength.
-    const dimmedIds = (focusId && (mode === 'descendants' || mode === 'family'))
-        ? computeIndirectIds(data, focusId, mode, [...layout.positions.keys()] as unknown as string[]) as unknown as Set<string>
-        : undefined;
-    // The custom card is drawn as on screen: the size the view was laid out
-    // with (its width follows the view's longest text; with the height "by
-    // content" each card's own height), its date column, its lines.
-    const custom = SettingsManager.getCardDensity() === 'custom';
-    const cardConfig = custom ? { ...DEFAULT_LAYOUT_CONFIG, ...TreeRenderer.getCardBox() } : DEFAULT_LAYOUT_CONFIG;
-    const fields = SettingsManager.getCardFields();
-    const cardLinesMap = custom
-        ? new Map([...layout.positions.keys()].map(id => {
-            const p = data.persons[id];
-            return [id as string, p && !p.isPlaceholder ? cardLines(p, data, fields) : []];
-        }))
-        : undefined;
-    const deceasedSet = presumedDeceasedSet(data);
-    // The years under the name, as the screen says them ("1841 †" for one presumed dead).
-    const cardYearsMap = custom && fields.years
-        ? new Map([...layout.positions.keys()].map(id => {
-            const p = data.persons[id];
-            return [id as string, p ? cardYears(p, deceasedSet.has(id)) : ''];
-        }))
-        : undefined;
-    const options: PosterOptions = {
-        ...meta,
-        branchMap,
-        deceasedSet,
-        ...(dimmedIds ? { dimmedIds } : {}),
-        // The faces the cards are drawn in: the serif always, the lines' sans for the custom card.
-        fontFaceCss: appFontFaceCss(custom ? [...POSTER_SERIF_FACES, ...POSTER_LINE_FACES] : POSTER_SERIF_FACES),
-        ...(custom ? {
-            config: cardConfig, cardLines: cardLinesMap,
-            cardDateColumn: TreeRenderer.getCustomCardMetrics()?.dateColumn ?? 0,
-            // The rows a detail takes, wrapped as on screen (same function, same measure).
-            cardValueLines: fields.lines,
-            cardStyle: fields.style,
-            cardLabelColumn: TreeRenderer.getCustomCardMetrics()?.labelColumn ?? 0,
-            ...(cardYearsMap ? { cardYears: cardYearsMap } : {}),
-            measureCardTexts,
-        } : {}),
-    };
+    const { cardConfig, drawing } = treeCardDrawing(data, layout);
+    const options: PosterOptions = { ...meta, ...drawing };
     const svg = buildTreeSvg(data, layout, options);
 
     // Occupied rectangles in poster-px space (cards + footer strip). Sheets

@@ -14,6 +14,7 @@ import { PrivacyMode, applyLivingPrivacy } from '../privacy.js';
 import { stripMedia } from '../attachments.js';
 import { buildFamilyBook } from '../book.js';
 import { buildTreeSvg } from '../export-image.js';
+import { treeCardDrawing } from './export-image-ui.js';
 import { uiModule } from './module.js';
 
 export const bookUiMethods = uiModule({
@@ -67,9 +68,13 @@ export const bookUiMethods = uiModule({
             // the book body — otherwise the tree page leaks living names.
             let svgData = applyLivingPrivacy(data, privacyMode);
             if (dropMedia) svgData = stripMedia(svgData);
+            // The cards drawn as the layout was made for them (the poster's
+            // drawing): a custom card's width, heights, columns and lines, not
+            // the default 188x64 card under lines laid out for a wider one.
             treeSvg = buildTreeSvg(svgData, layout, {
                 treeName: TreeManager.getActiveTreeMetadata()?.name,
                 dateLabel: new Date().toLocaleDateString(),
+                ...treeCardDrawing(svgData, layout).drawing,
             });
         }
 

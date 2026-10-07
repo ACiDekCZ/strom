@@ -268,6 +268,36 @@ test.describe('card height by content (U02 V3)', () => {
         expect(height).toBe(Math.round(bottom - top + 2 * 40 + 44));
     });
 
+    test('the family book\'s tree page draws the custom cards the layout was made for', async ({ page, context }) => {
+        await setup(page);
+        const cards = await drawn(page);
+        expect(new Set(cards.map(c => c.height)).size).toBeGreaterThan(2);
+        await page.evaluate(() => window.Strom.UI.showBookDialog());
+        const dialog = page.locator('#book-modal');
+        await dialog.locator('#book-privacy-mode').selectOption('full');
+        const [book] = await Promise.all([
+            context.waitForEvent('page'),
+            dialog.getByRole('button', { name: 'Open book' }).click(),
+        ]);
+        await book.waitForLoadState('domcontentloaded');
+        const svg = await book.locator('.book-tree-wrap svg').evaluate(el => el.outerHTML);
+        const rects = [...svg.matchAll(/<rect x="(-?[\d.]+)" y="(-?[\d.]+)" width="(\d+)" height="(\d+)" rx="8"/g)]
+            .map(m => ({ x: Number(m[1]), y: Number(m[2]), width: Number(m[3]), height: Number(m[4]) }));
+        expect(rects).toHaveLength(cards.length);
+        // Each card as wide and as tall as on screen (not the default 188x64 card).
+        for (const c of cards) {
+            const r = rects.find(x => Math.abs(x.x - c.x) < 0.05 && Math.abs(x.y - c.y) < 0.05)!;
+            expect(r, c.name).toBeTruthy();
+            expect([r.width, r.height], c.name).toEqual([c.width, c.height]);
+        }
+        // The custom card's details are drawn, in the fonts they were measured with.
+        expect(svg).toContain('Horní Lhota');
+        expect(svg).toContain('@font-face');
+        // The partner line runs at the cards' header, 25px below their top (inside the cards).
+        const anna = byName(cards, 'Anna');
+        expect(svg).toMatch(new RegExp(`<line x1="[\\d.-]+" y1="${(anna.y + 25).toFixed(1)}"`));
+    });
+
     for (const theme of ['light', 'dark'] as const) {
         test(`phone 360, ${theme}: the cards keep their own heights, the hit box is the card, no page scroll`, async ({ page }) => {
             await setup(page, 360);
