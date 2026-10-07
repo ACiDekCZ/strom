@@ -7,7 +7,7 @@
  * omitted. A living person's bar runs to `todayYear`.
  */
 
-import { StromData, Gender, LifeEventType, CoupleEventType, PartnershipId } from './types.js';
+import { StromData, Gender, LifeEventType, CoupleEventType, PartnershipId, Partnership } from './types.js';
 import { yearOf, parseFlexDate } from './dates.js';
 import { eventValueIsOnTag } from './events.js';
 import { isLivingPerson } from './privacy.js';
@@ -122,7 +122,10 @@ export function computeTimelineModel(
 // ==================== PERSON LIFELINE (R2) ====================
 
 /** The kinds of dated point on a single person's life timeline. */
-export type LifelineKind = 'birth' | 'death' | 'marriage' | 'child' | 'event' | 'coupleEvent';
+export type LifelineKind = 'birth' | 'death' | 'marriage' | 'divorce' | 'child' | 'event' | 'coupleEvent' | 'childEvent';
+
+/** What a child's point on a parent's timeline records (kind === 'childEvent'). */
+export type ChildLifelineEvent = 'death' | 'burial' | 'marriage' | 'divorce';
 
 /**
  * One dated point on a person's life timeline (R2). Structured, not localized —
@@ -156,7 +159,17 @@ export interface LifelinePoint {
      * out the only thing it was recorded for.
      */
     detail?: string;
-    /** Related person's name — the partner (marriage, couple event) or the child (child). */
+    /**
+     * Ends a relationship (kind === 'divorce', or a child's 'divorce'): true for a
+     * couple that never married — the row says the relationship ended, not divorce.
+     */
+    unmarried?: boolean;
+    /** A child's event on the parent's timeline (kind === 'childEvent'). */
+    childEvent?: ChildLifelineEvent;
+    /**
+     * Related person's name — the partner (marriage, divorce, couple event) or
+     * the child (child, childEvent).
+     */
     relatedName?: string;
     /** Participant names for an event (godparents, witnesses, the officiant…). */
     participants?: string[];
@@ -193,13 +206,16 @@ function personName(data: StromData, id: string | undefined): string | undefined
 
 /**
  * Build the chronological life timeline for one person from existing data:
- * birth, own life events (with participants), marriages (partner named), each
- * child's birth, and death. Points are sorted oldest-first by date; birth
+ * birth, own life events (with participants), marriages and their ends
+ * (partner named), each child's birth, and death; with `childEvents`, also the
+ * children's deaths, burials, marriages and divorces. Points are sorted oldest-first by date; birth
  * opens its year, baptism follows birth, burial / cremation / probate follow
  * death (see `lifelineRank`). Pure — no DOM. The caller decides whether to
  * show the section (convention: hide when fewer than 2 points).
  */
-export function computePersonLifeline(data: StromData, personId: string): LifelinePoint[] {
+export function computePersonLifeline(
+    data: StromData, personId: string, opts: { childEvents?: boolean } = {},
+): LifelinePoint[] {
     const person = data.persons[personId as keyof typeof data.persons];
     if (!person || person.isPlaceholder) return [];
     const points: LifelinePoint[] = [];
@@ -278,6 +294,24 @@ export function computePersonLifeline(data: StromData, personId: string): Lifeli
         }
     }
 
+    // The end of each dated partnership: a divorce, or the end of a
+    // relationship that was never a marriage.
+    for (const unionId of person.partnerships) {
+        const u = data.partnerships[unionId];
+        if (!u) continue;
+        const y = yearOf(u.endDate);
+        if (y === null) continue;
+        const otherId = u.person1Id === personId ? u.person2Id : u.person1Id;
+        points.push({
+            year: y,
+            sortKey: y + yearFraction(u.endDate),
+            kind: 'divorce',
+            ...(isUnmarried(u.status) ? { unmarried: true } : {}),
+            ...(personName(data, otherId) ? { relatedName: personName(data, otherId) } : {}),
+            ...(u.endPlace ? { place: u.endPlace } : {}),
+        });
+    }
+
     // Each child's birth.
     for (const childId of person.childIds) {
         const child = data.persons[childId];
@@ -314,8 +348,59 @@ export function computePersonLifeline(data: StromData, personId: string): Lifeli
         if (isPosthumous(pt.eventType) && deathKey !== undefined) pt.sortKey = Math.max(pt.sortKey, deathKey);
     }
 
+    if (opts.childEvents) points.push(...childLifelinePoints(data, person.childIds));
+
     points.sort((a, b) => a.sortKey - b.sortKey || lifelineRank(a) - lifelineRank(b));
     return points;
+}
+
+function isUnmarried(status: Partnership['status']): boolean {
+    return status === 'partners' || status === 'separated';
+}
+
+/**
+ * The children's own milestones for a parent's timeline (T15): each child's
+ * death, burial, marriages and divorces. A child's birth is the parent's own
+ * point ('child') and is not repeated here.
+ */
+function childLifelinePoints(data: StromData, childIds: readonly string[]): LifelinePoint[] {
+    const out: LifelinePoint[] = [];
+    for (const childId of childIds) {
+        const child = data.persons[childId as keyof typeof data.persons];
+        if (!child || child.isPlaceholder) continue;
+        const name = personName(data, childId);
+        const base = (year: number, sortKey: number, childEvent: ChildLifelineEvent, place?: string): LifelinePoint => ({
+            year, sortKey, kind: 'childEvent', childEvent,
+            ...(name ? { relatedName: name } : {}),
+            ...(place ? { place } : {}),
+        });
+        const deathY = yearOf(child.deathDate);
+        let deathKey: number | undefined;
+        if (deathY !== null) {
+            deathKey = parseFlexDate(child.deathDate)?.month !== undefined
+                ? deathY + yearFraction(child.deathDate) : deathY + 0.999;
+            out.push(base(deathY, deathKey, 'death', child.deathPlace || undefined));
+        }
+        for (const ev of child.events ?? []) {
+            if (ev.type !== 'burial') continue;
+            const y = yearOf(ev.date);
+            if (y === null) continue;
+            const key = y + yearFraction(ev.date);
+            out.push(base(y, deathKey !== undefined ? Math.max(key, deathKey) : key, 'burial', ev.place));
+        }
+        for (const unionId of child.partnerships) {
+            const u = data.partnerships[unionId];
+            if (!u) continue;
+            const wy = yearOf(u.startDate);
+            if (wy !== null) out.push(base(wy, wy + yearFraction(u.startDate), 'marriage', u.startPlace));
+            const dy = yearOf(u.endDate);
+            if (dy !== null) {
+                out.push({ ...base(dy, dy + yearFraction(u.endDate), 'divorce', u.endPlace),
+                    ...(isUnmarried(u.status) ? { unmarried: true } : {}) });
+            }
+        }
+    }
+    return out;
 }
 
 /** Events recorded after a death: what happened to the body and the estate. */
@@ -333,6 +418,7 @@ function lifelineRank(pt: LifelinePoint): number {
     if (pt.kind === 'event' && pt.eventType === 'baptism') return 1;
     if (pt.kind === 'event' && pt.eventType === 'probate') return 10;
     if (pt.kind === 'event' && isPosthumous(pt.eventType)) return 9;
+    if (pt.kind === 'childEvent') return pt.childEvent === 'burial' ? 7 : 6;
     return 5;
 }
 

@@ -801,21 +801,34 @@ export const personModalMethods = uiModule({
      * death, in chronological order. The section is hidden entirely when the
      * person has fewer than two dated points (nothing worth a timeline).
      */
-    renderPersonLifeline(id: PersonId): void {
+    renderPersonLifeline(id: PersonId, keepState = false): void {
         const section = document.getElementById('pm-lifeline-section');
         const body = document.getElementById('pm-lifeline-body');
         if (!section || !body) return;
 
-        const points = computePersonLifeline(DataManager.getData(), id);
-        if (points.length < 2) {
+        // The children's events (T15) sit behind the head's chip; the chip
+        // only appears when there is something for it to show.
+        const all = computePersonLifeline(DataManager.getData(), id, { childEvents: true });
+        const hasChildEvents = all.some(pt => pt.kind === 'childEvent');
+        const showChildEvents = SettingsManager.isLifelineChildEvents();
+        const points = showChildEvents ? all : all.filter(pt => pt.kind !== 'childEvent');
+        const toggle = document.getElementById('pm-lifeline-child-toggle');
+        if (toggle) {
+            toggle.hidden = !hasChildEvents;
+            toggle.setAttribute('aria-checked', String(showChildEvents));
+        }
+        if (points.length < 2 && !(hasChildEvents && all.length >= 2)) {
             section.style.display = 'none';
             body.innerHTML = '';
             return;
         }
         section.style.display = '';
-        section.classList.remove('collapsed');
-        const head = document.getElementById('pm-lifeline-head');
-        if (head) head.setAttribute('aria-expanded', 'true');
+        // A redraw for the chip keeps the section as it was.
+        if (!keepState) {
+            section.classList.remove('collapsed');
+            const head = document.getElementById('pm-lifeline-head');
+            if (head) head.setAttribute('aria-expanded', 'true');
+        }
 
         // A couple's event opens its editor (over this dialog) unless the tree is locked.
         const editable = !DataManager.isTreeLocked();
@@ -829,7 +842,7 @@ export const personModalMethods = uiModule({
             const link = pt.kind === 'coupleEvent' && editable && pt.partnershipId && pt.eventId
                 ? ` is-link" role="button" tabindex="0" data-partnership-id="${this.escapeHtml(pt.partnershipId)}" data-event-id="${this.escapeHtml(pt.eventId)}`
                 : '';
-            return `<div class="pm-lifeline-row${link}">`
+            return `<div class="pm-lifeline-row k-${pt.kind}${link}">`
                 + `<span class="pm-lifeline-year">${this.escapeHtml(pt.yearLabel ?? String(pt.year))}</span>`
                 + `<span class="pm-lifeline-glyph k-${pt.kind}">${this.lifelineGlyph(pt)}</span>`
                 + `<span class="pm-lifeline-desc">${desc}${extra
@@ -844,6 +857,13 @@ export const personModalMethods = uiModule({
                 if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
             });
         });
+    },
+
+    /** The head's chip (T15): the children's events on or off, for every person. */
+    toggleLifelineChildEvents(): void {
+        SettingsManager.setLifelineChildEvents(!SettingsManager.isLifelineChildEvents());
+        const id = this.currentId;
+        if (id) this.renderPersonLifeline(id, true);
     },
 
     /** Collapse / expand the life-timeline section (R2). */
@@ -866,8 +886,20 @@ export const personModalMethods = uiModule({
                 return `${pm.lifelineDied}${place}`;
             case 'marriage':
                 return `${pt.relatedName ? pm.lifelineMarried(this.escapeHtml(pt.relatedName)) : pm.lifelineMarriedUnknown}${place}`;
+            case 'divorce':
+                if (pt.unmarried) {
+                    return `${pt.relatedName ? pm.lifelineRelationEnded(this.escapeHtml(pt.relatedName)) : pm.lifelineRelationEndedUnknown}${place}`;
+                }
+                return `${pt.relatedName ? pm.lifelineDivorced(this.escapeHtml(pt.relatedName)) : pm.lifelineDivorcedUnknown}${place}`;
             case 'child':
                 return pt.relatedName ? pm.lifelineChild(this.escapeHtml(pt.relatedName)) : pm.lifelineChildUnknown;
+            case 'childEvent': {
+                // "Marie Nováková: marriage · Praha" — the child named first.
+                const types = pm.lifelineChildEventTypes;
+                const what = pt.childEvent === 'divorce' && pt.unmarried ? types.relationEnded
+                    : types[pt.childEvent ?? 'death'];
+                return `${pm.lifelineChildEvent(this.escapeHtml(pt.relatedName ?? '?'), what)}${place}`;
+            }
             case 'coupleEvent': {
                 // "Banns — Marie Dvořáková · Dolní Lhota"; witnesses and house go below.
                 const label = this.escapeHtml(coupleEventLabel({ type: pt.coupleType ?? 'custom', customLabel: pt.customLabel }));
@@ -902,6 +934,20 @@ export const personModalMethods = uiModule({
                 return svg('<circle cx="9" cy="13" r="5"/><circle cx="15" cy="13" r="5"/>');
             case 'child':
                 return svg('<circle cx="12" cy="7" r="3"/><path d="M7 21c0-3 2.2-5 5-5s5 2 5 5"/>');
+            case 'divorce':
+                // Two rings apart, a bar between them (⚮).
+                return svg('<circle cx="6" cy="13" r="4"/><circle cx="18" cy="13" r="4"/><path d="M12 5v16"/>');
+            case 'childEvent':
+                switch (pt.childEvent) {
+                    case 'marriage':
+                        return svg('<circle cx="9" cy="13" r="5"/><circle cx="15" cy="13" r="5"/>');
+                    case 'divorce':
+                        return svg('<circle cx="6" cy="13" r="4"/><circle cx="18" cy="13" r="4"/><path d="M12 5v16"/>');
+                    case 'burial':
+                        return svg('<path d="M8 21V9a4 4 0 0 1 8 0v12M5 21h14"/>');
+                    default:
+                        return svg('<path d="M12 3v18M6 8h12"/>');
+                }
             case 'coupleEvent':
                 // Only the wedding carries the rings; the couple's other events no mark.
                 return svg('');

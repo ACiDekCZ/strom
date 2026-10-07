@@ -1053,6 +1053,7 @@ export interface AppSettings {
     onThisDayAllTrees?: boolean;   // default: false - "on this day" also from the other visible trees
     crossTreeBadges?: boolean;  // default: true - show cross-tree connection badges
     fanKekule?: boolean;  // default: false - show Kekule (ahnentafel) numbers in the fan chart
+    lifelineChildEvents?: boolean;  // default: false - person card's life timeline also lists the children's events
     cardDensity?: CardDensity;  // default: 'normal' - how much detail a card shows
     exportScope?: 'tree' | 'view';  // default: 'tree' - the export dialog's whole tree / current view switch
     /** The custom density's lines (src/card-fields.ts); set the first time "Custom" is chosen. */

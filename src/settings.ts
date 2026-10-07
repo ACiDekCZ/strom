@@ -126,6 +126,19 @@ class SettingsManagerClass {
         this.save();
     }
 
+    /**
+     * Does the person card's life timeline list the children's deaths,
+     * burials, marriages and divorces? Default OFF; one choice for everybody.
+     */
+    isLifelineChildEvents(): boolean {
+        return this.settings.lifelineChildEvents === true;
+    }
+
+    setLifelineChildEvents(enabled: boolean): void {
+        this.settings.lifelineChildEvents = enabled;
+        this.save();
+    }
+
     /** Floating zoom buttons default ON (undefined = enabled). */
     /**
      * Has the user allowed the map to look place names up online? Default is

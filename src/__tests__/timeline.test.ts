@@ -277,6 +277,57 @@ describe('computePersonLifeline', () => {
             .toEqual(['birth', 'baptism', 'death']);
     });
 
+    // T15: a divorce (the end of a partnership) was missing from the timeline.
+    it('shows a divorce and the end of an unmarried relationship as own points', () => {
+        const p = lp('p', 'Jan', 'male', { birthDate: '1841', deathDate: '1922', partnerships: ['u1', 'u2'] });
+        const anna = lp('a', 'Anna', 'female');
+        const eva = lp('e', 'Eva', 'female');
+        const u1: Partnership = {
+            id: 'u1' as PartnershipId, person1Id: 'p' as PersonId, person2Id: 'a' as PersonId,
+            childIds: [], status: 'divorced', startDate: '1866', endDate: '1898-04-02', endPlace: 'Brno',
+        };
+        const u2: Partnership = {
+            id: 'u2' as PartnershipId, person1Id: 'p' as PersonId, person2Id: 'e' as PersonId,
+            childIds: [], status: 'separated', startDate: '1900', endDate: '1905',
+        };
+        const pts = computePersonLifeline(data([p, anna, eva], [u1, u2]), 'p');
+        expect(pts.map(x => x.kind)).toEqual(['birth', 'marriage', 'divorce', 'marriage', 'divorce', 'death']);
+        const [divorce, ended] = pts.filter(x => x.kind === 'divorce');
+        expect(divorce).toMatchObject({ year: 1898, relatedName: 'Anna Novák', place: 'Brno' });
+        expect(divorce.unmarried).toBeUndefined();
+        expect(ended).toMatchObject({ year: 1905, relatedName: 'Eva Novák', unmarried: true });
+    });
+
+    // T15: the children's deaths, burials, marriages and divorces, on request.
+    it("lists the children's events only when asked, the child named", () => {
+        const marie = lp('m', 'Marie', 'female', { birthDate: '1867', partnerships: ['um'] });
+        const vaclav = lp('v', 'Václav', 'male', {
+            birthDate: '1870', deathDate: '1894', deathPlace: 'Bystřice',
+            events: [{ id: 'b', type: 'burial', date: '1894-02-01', place: 'Bystřice' } as LifeEvent],
+        });
+        const groom = lp('g', 'Karel', 'male');
+        const um: Partnership = {
+            id: 'um' as PartnershipId, person1Id: 'g' as PersonId, person2Id: 'm' as PersonId,
+            childIds: [], status: 'divorced', startDate: '1889', startPlace: 'Praha', endDate: '1912',
+        };
+        const p = lp('p', 'Jan', 'male', { birthDate: '1841', deathDate: '1922', childIds: ['m', 'v'] });
+        const d = data([p, marie, vaclav, groom], [um]);
+
+        expect(computePersonLifeline(d, 'p').some(x => x.kind === 'childEvent')).toBe(false);
+        const pts = computePersonLifeline(d, 'p', { childEvents: true });
+        const child = pts.filter(x => x.kind === 'childEvent')
+            .map(x => [x.year, x.relatedName, x.childEvent, x.place ?? '']);
+        expect(child).toEqual([
+            [1889, 'Marie Novák', 'marriage', 'Praha'],
+            [1894, 'Václav Novák', 'death', 'Bystřice'],
+            [1894, 'Václav Novák', 'burial', 'Bystřice'],
+            [1912, 'Marie Novák', 'divorce', ''],
+        ]);
+        // A child's birth stays the parent's own point, not repeated.
+        expect(pts.filter(x => x.kind === 'child')).toHaveLength(2);
+        expect(pts[pts.length - 1].kind).toBe('death');
+    });
+
     it('returns empty for placeholders and skips undated points', () => {
         const p = lp('p', 'Ghost', 'male', { isPlaceholder: true });
         expect(computePersonLifeline(data([p]), 'p')).toEqual([]);
