@@ -78,6 +78,9 @@ export interface GraphSelection {
     focusPersonId: PersonId;
     maxAncestorGen: number;
     maxDescendantGen: number;
+    /** Persons in the deepest shown descendant generation (and their partners):
+     *  display expansion must not pull in their children (T19). */
+    depthLimitPersons?: Set<PersonId>;
 }
 
 // ==================== STEP 2: BUILD MODEL ====================

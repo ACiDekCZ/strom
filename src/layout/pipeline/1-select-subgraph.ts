@@ -32,6 +32,7 @@ export function selectSubgraph(input: SelectSubgraphInput): GraphSelection {
     const persons = new Set<PersonId>();
     const partnerships = new Set<PartnershipId>();
     const processedPartnerships = new Set<PartnershipId>();
+    const depthLimit = new Set<PersonId>();
 
     const focusPerson = data.persons[focusPersonId];
     if (!focusPerson) {
@@ -51,6 +52,7 @@ export function selectSubgraph(input: SelectSubgraphInput): GraphSelection {
     // 1. Focus person and their partners
     persons.add(focusPersonId);
     addPartners(data, focusPersonId, persons, partnerships);
+    if (descendantDepth <= 0) markWithPartners(data, focusPersonId, depthLimit);
 
     // 2. Siblings of focus + their partners + their descendants
     // Note: Half-siblings (sharing one parent) are included, but their OTHER parent
@@ -60,14 +62,16 @@ export function selectSubgraph(input: SelectSubgraphInput): GraphSelection {
         persons.add(sibling.id);
         addPartners(data, sibling.id, persons, partnerships);
         if (descendantDepth > 0) {
-            const depth = addDescendantsRecursive(data, sibling.id, descendantDepth, persons, partnerships);
+            const depth = addDescendantsRecursive(data, sibling.id, descendantDepth, persons, partnerships, depthLimit);
             actualDescendantDepth = Math.max(actualDescendantDepth, depth);
+        } else {
+            markWithPartners(data, sibling.id, depthLimit);
         }
     }
 
     // 3. Descendants of focus
     if (descendantDepth > 0) {
-        const depth = addDescendantsRecursive(data, focusPersonId, descendantDepth, persons, partnerships);
+        const depth = addDescendantsRecursive(data, focusPersonId, descendantDepth, persons, partnerships, depthLimit);
         actualDescendantDepth = Math.max(actualDescendantDepth, depth);
     }
 
@@ -122,7 +126,9 @@ export function selectSubgraph(input: SelectSubgraphInput): GraphSelection {
 
                                 // Add cousin's descendants
                                 if (descendantDepth > 0) {
-                                    addDescendantsRecursive(data, cousinId, descendantDepth, persons, partnerships);
+                                    addDescendantsRecursive(data, cousinId, descendantDepth, persons, partnerships, depthLimit);
+                                } else {
+                                    markWithPartners(data, cousinId, depthLimit);
                                 }
                             }
                         }
@@ -140,8 +146,22 @@ export function selectSubgraph(input: SelectSubgraphInput): GraphSelection {
         partnerships,
         focusPersonId,
         maxAncestorGen: actualAncestorDepth,
-        maxDescendantGen: actualDescendantDepth
+        maxDescendantGen: actualDescendantDepth,
+        depthLimitPersons: depthLimit
     };
+}
+
+/**
+ * Mark a person of the deepest shown generation together with their partners
+ * (who stand in the same generation): their children lie beyond the depth.
+ */
+function markWithPartners(data: StromData, personId: PersonId, depthLimit: Set<PersonId>): void {
+    depthLimit.add(personId);
+    for (const partnershipId of data.persons[personId]?.partnerships ?? []) {
+        const partnership = data.partnerships[partnershipId];
+        if (!partnership) continue;
+        depthLimit.add(partnership.person1Id === personId ? partnership.person2Id : partnership.person1Id);
+    }
 }
 
 /**
@@ -175,6 +195,7 @@ function addDescendantsRecursive(
     maxDepth: number,
     persons: Set<PersonId>,
     partnerships: Set<PartnershipId>,
+    depthLimit: Set<PersonId>,
     currentDepth: number = 0
 ): number {
     if (maxDepth <= 0) return currentDepth;
@@ -194,9 +215,10 @@ function addDescendantsRecursive(
 
             persons.add(childId);
             addPartners(data, childId, persons, partnerships);
+            if (maxDepth === 1) markWithPartners(data, childId, depthLimit);
 
             const depth = addDescendantsRecursive(
-                data, childId, maxDepth - 1, persons, partnerships, currentDepth + 1
+                data, childId, maxDepth - 1, persons, partnerships, depthLimit, currentDepth + 1
             );
             maxReached = Math.max(maxReached, depth);
         }
@@ -359,6 +381,9 @@ export function expandSelectionForDisplay(
             selection.persons.add(partnership.person1Id);
             selection.persons.add(partnership.person2Id);
             selection.partnerships.add(partnershipId);
+
+            // Children of the deepest shown generation lie beyond the depth (T19).
+            if (selection.depthLimitPersons?.has(personId)) continue;
 
             // Add children from this partnership
             for (const childId of partnership.childIds) {
