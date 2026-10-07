@@ -34,6 +34,19 @@ describe('customCardWidth', () => {
         expect(customCardWidth(5000)).toBe(320);
         for (let c = 0; c < 400; c += 7) expect(customCardWidth(c) % 4).toBe(0);
     });
+
+    it('narrow and wide are the same rule with another cap (U02)', () => {
+        expect(customCardWidth(174, 240)).toBe(200);
+        expect(customCardWidth(190, 240)).toBe(216);     // 216 is a multiple of 4
+        expect(customCardWidth(214, 240)).toBe(240);
+        expect(customCardWidth(215, 240)).toBe(240);
+        expect(customCardWidth(5000, 240)).toBe(240);
+        expect(customCardWidth(295, 400)).toBe(324);     // past the medium cap
+        expect(customCardWidth(374, 400)).toBe(400);
+        expect(customCardWidth(5000, 400)).toBe(400);
+        expect(customCardWidth(174, 400)).toBe(200);     // at least 200 whatever the cap
+        expect(customCardWidth(5000, 320)).toBe(customCardWidth(5000));
+    });
 });
 
 describe('customCardMetrics', () => {
@@ -74,6 +87,23 @@ describe('customCardMetrics', () => {
         const lines = cardLines(p, data, normalizeCardFields(DEFAULT_CARD_FIELDS));
         expect(lines).toEqual([expect.objectContaining({ date: 'after 1919', rest: 'Brno', text: 'after 1919 Brno' })]);
         expect(customCardMetrics([{ name: 'Marie Vlková', avatar: true, lines }], measure).dateColumn).toBe(60);
+    });
+});
+
+describe('the width cap (U02)', () => {
+    it('caps the view\'s width and the places cut against it', () => {
+        // 11 + 6 + 24 + 6 + 50 × 6 = 347 → 373 → 376.
+        const long = line('1862', 'x'.repeat(50));
+        const entries: CustomCardEntry[] = [{ name: 'A', avatar: true, lines: [long] }];
+        expect(customCardMetrics(entries, measure)).toEqual({ cardWidth: 320, dateColumn: 24 });
+        expect(customCardMetrics(entries, measure, 240).cardWidth).toBe(240);
+        expect(customCardMetrics(entries, measure, 400).cardWidth).toBe(376);
+        expect(customCardCutLines(entries, customCardMetrics(entries, measure, 240), measure).has(long)).toBe(true);
+        expect(customCardCutLines(entries, customCardMetrics(entries, measure, 320), measure).has(long)).toBe(true);
+        expect(customCardCutLines(entries, customCardMetrics(entries, measure, 400), measure).size).toBe(0);
+        // A short view is as wide under every cap.
+        const short: CustomCardEntry[] = [{ name: 'A', avatar: true, lines: [line('1862', 'Brno')] }];
+        for (const cap of [240, 320, 400]) expect(customCardMetrics(short, measure, cap).cardWidth).toBe(200);
     });
 });
 

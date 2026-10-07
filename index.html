@@ -6944,6 +6944,9 @@
         }
         /* The preview right under the density select (one for both). */
         .card-preview-settings { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+        /* A card wider than the panel is scaled down to it (src/ui/card-fields-ui.ts fitCardPreview). */
+        .card-preview-settings .card-signals-preview { max-width: 100%; min-width: 0; }
+        .card-preview-fit > .person-card { transform-origin: 0 0; }
         .card-preview-head { display: flex; gap: 12px; align-items: baseline; justify-content: space-between; width: 100%; max-width: 280px; }
         .card-preview-size { font-size: 12px; color: var(--text-faint); }
         .card-signals-preview .person-card[data-density="custom"] { width: var(--card-custom-w, 200px); height: var(--card-custom-h, 107px); }
@@ -6960,9 +6963,7 @@
             padding: 7px 10px;
         }
         .card-field-row + .card-field-row { border-top: 1px solid var(--divider); }
-        .card-field-row.is-disabled { opacity: 0.45; }
         .card-field-main { display: flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0; font-size: 14px; cursor: pointer; }
-        .card-field-row.is-disabled .card-field-main { cursor: default; }
         .card-field-mark { width: 14px; text-align: center; color: var(--text-faint); }
         .card-field-chips { display: flex; flex-wrap: wrap; gap: 4px; }
         .card-fields-settings .card-field-chip {
@@ -6981,13 +6982,26 @@
         @media (hover: hover) { .card-field-move button:hover:not(:disabled) { background: var(--hover-bg); } }
         .card-field-move button:disabled { opacity: 0.3; cursor: default; }
         .card-fields-status { font-size: 12px; color: var(--text-faint); }
-        .card-fields-status.is-full { color: var(--warning-text); }
+        /* "Card appearance": a label and a segment a row (the label above it on a phone). */
+        .card-look { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--divider); padding-top: 12px; margin-top: 4px; }
+        .card-look-grid { display: grid; grid-template-columns: minmax(96px, max-content) minmax(0, 1fr); align-items: center; gap: 10px 12px; }
+        .card-look-label { font-size: 13px; color: var(--text-light); }
+        .card-look-segment { justify-self: start; max-width: 100%; }
+        .card-look-segment .segment-btn { padding: 6px 14px; font-size: 13px; }
+        .card-look-scope { font-size: 12px; line-height: 1.45; color: var(--text-faint); }
         @media (max-width: 640px) {
             /* The toggles go under the name, the arrows grow to a thumb. */
             .card-field-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
             .card-field-chips { grid-column: 1 / -1; grid-row: 2; padding-left: 52px; }
             .card-fields-settings .card-field-chip { font-size: 13px; padding: 6px 12px; }
             .card-fields-settings .card-field-move button { width: 44px; height: 44px; }
+            .card-look-grid { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+            .card-look-grid .card-look-label:not(:first-child) { margin-top: 6px; }
+            .card-look-segment { display: flex; width: 100%; }
+            .card-look-segment .segment-btn { flex: 1; min-width: 0; min-height: 44px; padding: 6px 8px; font-size: 14px; }
+        }
+        @media (pointer: coarse) {
+            .card-look-segment .segment-btn { min-height: 44px; }
         }
         @media (hover: hover) { .person-card.indirect:hover { opacity: 1; } }
 

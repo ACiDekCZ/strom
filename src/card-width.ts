@@ -4,9 +4,11 @@
  * Every card of a view has one width (the layout spaces cards by a single
  * size): the longest name row or detail line among the persons drawn, plus
  * the card's 12px side padding and its 1px border, rounded up to 4px, at
- * least 200 and at most 320. Above 320 only the place shortens (ellipsis, the
- * full text in a native tooltip on the place, customCardCutLines); the name and the date always fit,
- * unless a name alone is wider than the widest card.
+ * least 200 and at most the chosen width's cap (240 narrow, 320 medium, 400
+ * wide; Settings → Person card). Above the cap only the place shortens
+ * (ellipsis, the full text in a native tooltip on the place,
+ * customCardCutLines); the name and the date always fit, unless a name alone
+ * is wider than the widest card.
  *
  * A detail line is a grid: the mark (11px), the date, the place, 6px apart.
  * The date column is as wide as the longest date of the view, so the places
@@ -21,6 +23,7 @@
 import type { CardLine } from './card-fields.js';
 
 export const CUSTOM_CARD_MIN_WIDTH = 200;
+/** The medium width's cap: the card before the width choice, and the default. */
 export const CUSTOM_CARD_MAX_WIDTH = 320;
 /** Side padding of the card's content. */
 export const CUSTOM_CARD_PAD_X = 12;
@@ -34,11 +37,11 @@ export const CARD_COLUMN_GAP = 6;
 export const CARD_AVATAR_WIDTH = 30;
 export const CARD_HEAD_GAP = 8;
 
-/** The card width for the widest content: padding and border added, up to 4px, within 200–320. */
-export function customCardWidth(contentWidth: number): number {
+/** The card width for the widest content: padding and border added, up to 4px, within 200 and the cap. */
+export function customCardWidth(contentWidth: number, cap: number = CUSTOM_CARD_MAX_WIDTH): number {
     const raw = Math.ceil(Math.max(0, contentWidth)) + 2 * (CUSTOM_CARD_PAD_X + CUSTOM_CARD_BORDER);
     const rounded = Math.ceil(raw / 4) * 4;
-    return Math.min(CUSTOM_CARD_MAX_WIDTH, Math.max(CUSTOM_CARD_MIN_WIDTH, rounded));
+    return Math.min(Math.max(CUSTOM_CARD_MIN_WIDTH, cap), Math.max(CUSTOM_CARD_MIN_WIDTH, rounded));
 }
 
 /** The room inside a card of a given width (between its paddings). */
@@ -69,8 +72,9 @@ export interface CustomCardMetrics {
     dateColumn: number;
 }
 
-/** The view's card width and date column from its cards' texts. */
-export function customCardMetrics(entries: Iterable<CustomCardEntry>, measure: MeasureTexts): CustomCardMetrics {
+/** The view's card width (at most `cap`) and date column from its cards' texts. */
+export function customCardMetrics(entries: Iterable<CustomCardEntry>, measure: MeasureTexts,
+    cap: number = CUSTOM_CARD_MAX_WIDTH): CustomCardMetrics {
     const list = [...entries];
     const names = new Set<string>();
     const dates = new Set<string>();
@@ -102,14 +106,15 @@ export function customCardMetrics(entries: Iterable<CustomCardEntry>, measure: M
             content = Math.max(content, row);
         }
     }
-    return { cardWidth: customCardWidth(content), dateColumn };
+    return { cardWidth: customCardWidth(content, cap), dateColumn };
 }
 
 /**
  * The lines whose place shortens (an ellipsis) on the cards of a view laid out
  * with `metrics`: the card says their place in full in a native tooltip
  * (cardLineHtml). Measured as the width is, in the same fonts and grid, so it
- * agrees with what the card draws; texts are already cached by then.
+ * agrees with what the card draws; texts are already cached by then. The
+ * width's cap is in `metrics.cardWidth` already.
  */
 export function customCardCutLines(entries: Iterable<CustomCardEntry>, metrics: CustomCardMetrics,
     measure: MeasureTexts): Set<CardLine> {

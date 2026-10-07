@@ -22,13 +22,25 @@ export type CardFieldKey = 'birth' | 'baptism' | 'death' | 'burial' | 'occupatio
 export const CARD_FIELD_KEYS: readonly CardFieldKey[] =
     ['birth', 'baptism', 'death', 'burial', 'occupation', 'marriage', 'divorce'];
 
-/** Lines a card holds at most: more would make every card in the chart tall. */
-export const MAX_CARD_LINES = 5;
+/** How a line names its event: a mark ("* 1862") or a word ("Birth 1862"). */
+export type CardLineStyle = 'marks' | 'labels';
+/** How many rows one detail may take: 1, 2, or 0 = the whole text. */
+export type CardValueLines = 0 | 1 | 2;
+/** One height for every card of the view, or each card as tall as its content. */
+export type CardHeightMode = 'view' | 'content';
+/** The widest a custom card gets (src/card-width.ts); all three start at 200 and grow with the text. */
+export type CardWidthCap = 240 | 320 | 400;
+
+export const CARD_LINE_STYLES: readonly CardLineStyle[] = ['marks', 'labels'];
+export const CARD_VALUE_LINES: readonly CardValueLines[] = [1, 2, 0];
+export const CARD_HEIGHT_MODES: readonly CardHeightMode[] = ['view', 'content'];
+/** Narrow, medium (the card before the width choice), wide. */
+export const CARD_WIDTH_CAPS: readonly CardWidthCap[] = [240, 320, 400];
 
 export interface CardFieldSettings {
     /** All seven keys, in the order the lines appear. */
     order: CardFieldKey[];
-    /** The ticked ones (at most MAX_CARD_LINES). */
+    /** The ticked ones (any number of the seven). */
     on: CardFieldKey[];
     /** Keys whose line carries the place. */
     place: CardFieldKey[];
@@ -40,11 +52,29 @@ export interface CardFieldSettings {
     burialFallback: boolean;
     /** Full dates instead of years. */
     fullDate: boolean;
+    /*
+     * The card's appearance. Only `widthCap` takes effect so far: until the
+     * wrapping and the per-card height land, `style`, `lines`, `height` and
+     * `years` are kept and normalized but every card still draws one row per
+     * detail (cut with an ellipsis) at the height customCardSize gives.
+     */
+    /** Marks or words in front of the lines. */
+    style: CardLineStyle;
+    /** Rows one detail may take (0 = the whole text). */
+    lines: CardValueLines;
+    /** One height for the view, or each card by its content. */
+    height: CardHeightMode;
+    /** The widest the card gets. */
+    widthCap: CardWidthCap;
+    /** The life years under the name. */
+    years: boolean;
 }
 
 /**
  * What "Custom" starts with the first time: what the detailed card shows
- * (birth and death with their places, the occupation), years only.
+ * (birth and death with their places, the occupation), years only, marks,
+ * every detail whole, each card as tall as its content, medium width. This is
+ * also the "Brief" preset.
  */
 export const DEFAULT_CARD_FIELDS: CardFieldSettings = {
     order: [...CARD_FIELD_KEYS],
@@ -54,6 +84,11 @@ export const DEFAULT_CARD_FIELDS: CardFieldSettings = {
     baptismFallback: true,
     burialFallback: true,
     fullDate: false,
+    style: 'marks',
+    lines: 0,
+    height: 'content',
+    widthCap: 320,
+    years: false,
 };
 
 /** Keys whose line can carry a place (an occupation has none). */
@@ -64,15 +99,21 @@ export const CARD_MARKS: Record<CardFieldKey, string> = {
     birth: '*', baptism: '≈', death: '†', burial: '⚰︎', occupation: '', marriage: '⚭', divorce: '⚮',
 };
 
-/** Repair whatever was stored: unknown keys out, all keys in the order, at most five on. */
+/**
+ * Repair whatever was stored: unknown keys out, all keys in the order, every
+ * appearance option valid. Settings saved before an option existed (or with a
+ * value it does not know) get its default.
+ */
 export function normalizeCardFields(raw: Partial<CardFieldSettings> | undefined): CardFieldSettings {
     const d = DEFAULT_CARD_FIELDS;
     const known = (list: unknown): CardFieldKey[] => Array.isArray(list)
         ? [...new Set(list.filter((k): k is CardFieldKey => CARD_FIELD_KEYS.includes(k as CardFieldKey)))]
         : [];
+    const oneOf = <T>(value: unknown, allowed: readonly T[], fallback: T): T =>
+        allowed.includes(value as T) ? value as T : fallback;
     const order = known(raw?.order);
     for (const k of CARD_FIELD_KEYS) if (!order.includes(k)) order.push(k);
-    const on = raw?.on ? known(raw.on).slice(0, MAX_CARD_LINES) : [...d.on];
+    const on = raw?.on ? known(raw.on) : [...d.on];
     return {
         order,
         on,
@@ -81,16 +122,78 @@ export function normalizeCardFields(raw: Partial<CardFieldSettings> | undefined)
         baptismFallback: typeof raw?.baptismFallback === 'boolean' ? raw.baptismFallback : d.baptismFallback,
         burialFallback: typeof raw?.burialFallback === 'boolean' ? raw.burialFallback : d.burialFallback,
         fullDate: typeof raw?.fullDate === 'boolean' ? raw.fullDate : d.fullDate,
+        style: oneOf(raw?.style, CARD_LINE_STYLES, d.style),
+        lines: oneOf(raw?.lines, CARD_VALUE_LINES, d.lines),
+        height: oneOf(raw?.height, CARD_HEIGHT_MODES, d.height),
+        widthCap: oneOf(raw?.widthCap, CARD_WIDTH_CAPS, d.widthCap),
+        years: typeof raw?.years === 'boolean' ? raw.years : d.years,
     };
+}
+
+// ============= Presets =============
+
+export type CardPresetKey = 'brief' | 'register' | 'all';
+export const CARD_PRESET_KEYS: readonly CardPresetKey[] = ['brief', 'register', 'all'];
+
+/** What each preset sets; the details it leaves unticked follow in the order they had. */
+const PRESETS: Record<CardPresetKey, Omit<CardFieldSettings, 'order'>> = {
+    // The default card.
+    brief: { ...DEFAULT_CARD_FIELDS, on: [...DEFAULT_CARD_FIELDS.on], place: [...DEFAULT_CARD_FIELDS.place] },
+    // What a parish register records, each with its place, the cause of death, full dates, words.
+    register: {
+        ...DEFAULT_CARD_FIELDS,
+        on: ['birth', 'baptism', 'marriage', 'death', 'burial'],
+        place: [...PLACE_KEYS], cause: true, fullDate: true,
+        style: 'labels', lines: 0, height: 'content', widthCap: 320, years: false,
+    },
+    // Everything a card can carry, on the wide card.
+    all: {
+        ...DEFAULT_CARD_FIELDS,
+        on: ['birth', 'baptism', 'marriage', 'divorce', 'death', 'burial', 'occupation'],
+        place: [...PLACE_KEYS], cause: true, fullDate: true,
+        style: 'labels', lines: 0, height: 'content', widthCap: 400, years: false,
+    },
+};
+
+/**
+ * The settings a preset makes: its details ticked in its order, the rest after
+ * them in the order they had in `from`, the baptism and burial standing in as
+ * by default.
+ */
+export function cardPreset(key: CardPresetKey, from: CardFieldSettings = DEFAULT_CARD_FIELDS): CardFieldSettings {
+    const p = PRESETS[key];
+    const rest = normalizeCardFields(from).order.filter(k => !p.on.includes(k));
+    return normalizeCardFields({ ...p, on: [...p.on], place: [...p.place], order: [...p.on, ...rest] });
+}
+
+/**
+ * The preset these settings are exactly, or null. Compared: the ticked details
+ * in their order, the place and the cause on them, full dates, and the
+ * appearance (style, length, height, width, years). Not compared: the order of
+ * unticked details, places of unticked ones, the stand-ins.
+ */
+export function matchCardPreset(settings: CardFieldSettings): CardPresetKey | null {
+    const s = normalizeCardFields(settings);
+    const shown = s.order.filter(k => s.on.includes(k));
+    const same = (p: CardFieldSettings): boolean => {
+        const want = p.order.filter(k => p.on.includes(k));
+        return want.length === shown.length && want.every((k, i) => shown[i] === k)
+            && shown.filter(k => PLACE_KEYS.includes(k)).every(k => p.place.includes(k) === s.place.includes(k))
+            && (!shown.includes('death') || p.cause === s.cause)
+            && p.fullDate === s.fullDate && p.style === s.style && p.lines === s.lines
+            && p.height === s.height && p.widthCap === s.widthCap && p.years === s.years;
+    };
+    return CARD_PRESET_KEYS.find(k => same(cardPreset(k))) ?? null;
 }
 
 /**
  * The card box for a number of lines: the name row plus 17px a line. The width
  * is the narrowest one; the renderer widens every card of a view to its
- * longest text (src/card-width.ts).
+ * longest text (src/card-width.ts). This is the one height of the view until
+ * the measured heights (the "lines" and "height" options) replace it.
  */
 export function customCardSize(lines: number): { cardWidth: number; cardHeight: number } {
-    return { cardWidth: 200, cardHeight: 56 + 17 * Math.max(0, Math.min(MAX_CARD_LINES, lines)) };
+    return { cardWidth: 200, cardHeight: 56 + 17 * Math.max(0, lines) };
 }
 
 export interface CardLine {

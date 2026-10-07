@@ -164,9 +164,10 @@ class DemoFamily {
 }
 
 /**
- * The card the sample opens with when the user has not chosen one: the fullest
- * custom card, five lines with the cause of death — the tree has the details
- * to fill it, and it shows at first sight what a card can carry.
+ * The card the sample opens with when the user has not chosen one: a custom
+ * card of five lines with the cause of death, in the default appearance — the
+ * tree has the details to fill it, and it shows at first sight what a card can
+ * carry.
  */
 export const DEMO_CARD_FIELDS: CardFieldSettings = {
     ...DEFAULT_CARD_FIELDS,

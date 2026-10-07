@@ -3,7 +3,8 @@ import { openApp, card, seedSetting } from './helpers.js';
 
 /**
  * The "Custom" card is as wide as the view's longest text (T04, T12): one
- * width for every card, 200–320px in 4px steps, the layout spaced by it and
+ * width for every card, 200–320px in 4px steps (the medium width; narrow caps
+ * it at 240, wide at 400, U02), the layout spaced by it and
  * the poster drawn with it. A line is a grid — mark, date, place — with one
  * date column for the view, so places of all cards start at one x (T05).
  * Invented data.
@@ -26,8 +27,11 @@ function ged(childPlace: string, childName = 'Anna /Vlková/'): string {
     ].join('\n');
 }
 
-/** Wide enough to widen the card, narrow enough to fit under 320px. */
-const MEDIUM_PLACE = 'Horní Lhota u Bystřice nad Pernštejnem';
+/**
+ * Wide enough to widen the card, narrow enough to fit under 320px (with the
+ * view's "after 1919" date column; "… nad Pernštejnem" was 0.48px too wide).
+ */
+const MEDIUM_PLACE = 'Horní Lhota u Bystřice pod Hostýnem';
 /** Wider than any card: shortened with an ellipsis. */
 const LONG_PLACE = 'Nové Město na Moravě, okres Žďár nad Sázavou, Kraj Vysočina, Česká republika';
 
@@ -152,12 +156,12 @@ test.describe('the custom card width', () => {
         const w = widths[0];
         expect(new Set(widths).size).toBe(1);
         expect(w).toBeGreaterThan(200);
-        expect(w).toBeLessThanOrEqual(320);
+        expect(w).toBeLessThan(320);
         expect(w % 4).toBe(0);
         expect(layout).toBe(w);
-        // The place that set the width is shown whole.
+        // The place that set the width is shown whole, not a fraction of a pixel cut.
         const anna = await lineCells(page, 'Anna');
-        expect(anna[0]).toMatchObject({ date: '1890', place: MEDIUM_PLACE, placeCut: false, dateCut: false });
+        expect(anna[0]).toMatchObject({ date: '1890', place: MEDIUM_PLACE, placeCut: false, placeClipped: false, placeTitle: null, dateCut: false });
         // A native tooltip says a place in full exactly when the card cuts it (U02).
         for (const c of [...anna, ...await lineCells(page, 'Jan'), ...await lineCells(page, 'Marie')]) {
             expect(c.placeTitle).toBe(c.placeClipped ? c.place : null);
@@ -297,6 +301,73 @@ test.describe('the custom card width', () => {
             return { asWithFonts: !differ(got, withFonts), asWithout: !differ(got, without) };
         }, { png, svg });
         expect(same).toEqual({ asWithFonts: true, asWithout: false });
+    });
+
+    test('the width choice caps the card on screen and in the poster: narrow 240, medium 320, wide 400 (U02)', async ({ page }) => {
+        await setup(page, LONG_PLACE);
+        expect((await cardWidths(page)).widths).toEqual([320, 320, 320]);
+        const posterWidths = async () => [...(await posterSvg(page)).matchAll(/<rect x="-?[\d.]+" y="-?[\d.]+" width="(\d+)" height="\d+" rx="8"/g)]
+            .map(m => Number(m[1]));
+        const choose = async (label: string, width: number) => {
+            await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+            const segment = page.locator('#card-fields-settings .card-look-width');
+            await expect(segment).toHaveAttribute('role', 'group');
+            await segment.getByRole('button', { name: label, exact: true }).click();
+            await expect(segment.getByRole('button', { name: label, exact: true })).toHaveAttribute('aria-pressed', 'true');
+            await expect(segment.locator('[aria-pressed="true"]')).toHaveCount(1);
+            await expect.poll(async () => {
+                const { widths, layout } = await cardWidths(page);
+                return [...new Set(widths), layout];
+            }).toEqual([width, width]);
+            // The preview states the drawn card's size.
+            await expect(page.locator('.card-preview-size')).toHaveText(`card ${width} × 107 px`);
+            await page.keyboard.press('Escape');
+            await expect(page.locator('#settings-modal')).not.toBeVisible();
+            expect(await page.evaluate(() => window.Strom.SettingsManager.getCardFields().widthCap)).toBe(width);
+            expect(await posterWidths()).toEqual([width, width, width]);
+            await page.keyboard.press('Escape');
+            // The place still too long for the widest card is cut and says itself in full.
+            const anna = await lineCells(page, 'Anna');
+            expect(anna[0]).toMatchObject({ placeClipped: true, placeTitle: LONG_PLACE });
+        };
+        await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+        await expect(page.locator('#card-fields-settings .card-look-width [aria-pressed="true"]')).toHaveText('Medium');
+        await expect(page.locator('#card-fields-settings .card-look-scope')).toHaveText('Applies to the diagram and image export on this device.');
+        await page.keyboard.press('Escape');
+        await choose('Narrow', 240);
+        await choose('Wide', 400);
+        await choose('Medium', 320);
+    });
+
+    test('phone 360: the appearance segment spans the panel at 44px, a wide card\'s preview is scaled to it, nothing scrolls sideways (U02)', async ({ page }) => {
+        await setup(page, LONG_PLACE, 360);
+        await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+        const segment = page.locator('#card-fields-settings .card-look-width');
+        await segment.getByRole('button', { name: 'Wide', exact: true }).click();
+        await expect.poll(async () => (await cardWidths(page)).layout).toBe(400);
+        await expect(page.locator('.card-preview-size')).toHaveText('card 400 × 107 px');
+        // The label above its segment, the segment across the panel, every button a thumb high.
+        const label = await page.locator('#card-fields-settings .card-look-label').first().boundingBox();
+        const seg = await segment.boundingBox();
+        const grid = await page.locator('#card-fields-settings .card-look-grid').boundingBox();
+        expect(label!.y + label!.height).toBeLessThanOrEqual(seg!.y + 0.5);
+        expect(Math.abs(seg!.width - grid!.width)).toBeLessThan(1);
+        for (const b of await segment.locator('.segment-btn').all()) expect(Math.round((await b.boundingBox())!.height)).toBeGreaterThanOrEqual(44);
+        // The 400px preview card shrinks to the panel, in a box of its scaled height.
+        await expect.poll(() => page.evaluate(() => {
+            const box = document.querySelector<HTMLElement>('#card-preview-settings .card-signals-preview')!;
+            const cardEl = box.querySelector<HTMLElement>('.person-card')!;
+            const b = box.getBoundingClientRect(), c = cardEl.getBoundingClientRect();
+            const pad = parseFloat(getComputedStyle(box).paddingLeft);
+            return {
+                scaled: c.width < cardEl.offsetWidth - 1,
+                inside: c.left >= b.left + pad - 0.5 && c.right <= b.right - pad + 0.5,
+                noEmptySpace: Math.abs(b.height - 2 * parseFloat(getComputedStyle(box).paddingTop) - c.height) < 1,
+                noScroll: box.scrollWidth <= box.clientWidth,
+            };
+        })).toEqual({ scaled: true, inside: true, noEmptySpace: true, noScroll: true });
+        expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+        expect(await page.locator('#settings-modal .modal').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
     });
 
     test('phone 360: the same width rule, no page scroll', async ({ page }) => {

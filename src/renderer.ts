@@ -380,7 +380,8 @@ class TreeRendererClass {
             this.customLines.set(id, lines);
             entries.push({ name: shownName(person, '?'), avatar: !person.isPlaceholder, lines });
         }
-        const metrics = customCardMetrics(entries, measureCardTexts);
+        // The chosen width's cap (narrow / medium / wide); the poster takes this width too.
+        const metrics = customCardMetrics(entries, measureCardTexts, fields.widthCap);
         this.customCutLines = customCardCutLines(entries, metrics, measureCardTexts);
         return metrics;
     }

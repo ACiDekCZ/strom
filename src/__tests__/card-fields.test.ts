@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
     cardLines, cardDate, normalizeCardFields, customCardSize, DEFAULT_CARD_FIELDS, CardFieldSettings,
+    CARD_FIELD_KEYS, cardPreset, matchCardPreset,
 } from '../card-fields.js';
 import { setLanguage } from '../strings.js';
 import { Person, PersonId, Partnership, PartnershipId, StromData } from '../types.js';
@@ -81,12 +82,98 @@ describe('the custom card', () => {
         expect(cardDate('~1855', false)).toBe('c. 1855');
     });
 
-    it('repairs stored settings and sizes the card by its lines', () => {
+    it('repairs stored settings and sizes the card by its lines, all seven of them', () => {
         const s = normalizeCardFields({ order: ['death', 'nope' as never], on: ['birth', 'baptism', 'death', 'burial', 'occupation', 'marriage'] });
         expect(s.order).toHaveLength(7);
         expect(s.order[0]).toBe('death');
-        expect(s.on).toHaveLength(5);
+        // No limit: every detail can be on.
+        expect(s.on).toEqual(['birth', 'baptism', 'death', 'burial', 'occupation', 'marriage']);
+        expect(normalizeCardFields({ on: [...CARD_FIELD_KEYS] }).on).toHaveLength(7);
         expect(customCardSize(3)).toEqual({ cardWidth: 200, cardHeight: 107 });
         expect(customCardSize(5).cardHeight).toBe(141);
+        expect(customCardSize(7).cardHeight).toBe(175);
+    });
+});
+
+describe('the custom card appearance (U02)', () => {
+    const LOOK = { style: 'marks', lines: 0, height: 'content', widthCap: 320, years: false };
+
+    it('starts as the brief card: marks, whole details, height by content, medium width, no years', () => {
+        expect(DEFAULT_CARD_FIELDS).toMatchObject(LOOK);
+        expect(normalizeCardFields(undefined)).toEqual(DEFAULT_CARD_FIELDS);
+    });
+
+    it('settings saved before the options existed get their defaults and keep the rest', () => {
+        const saved = { order: [...CARD_FIELD_KEYS], on: ['death', 'birth'], place: ['birth'], cause: true,
+            baptismFallback: false, burialFallback: true, fullDate: true } as Partial<CardFieldSettings>;
+        expect(normalizeCardFields(saved)).toEqual({ ...saved, ...LOOK });
+    });
+
+    it('a value it does not know becomes the default; known ones stay', () => {
+        const bad = { style: 'bold', lines: 3, height: 'band', widthCap: 500, years: 'yes' } as unknown as Partial<CardFieldSettings>;
+        expect(normalizeCardFields(bad)).toMatchObject(LOOK);
+        const good = { style: 'labels', lines: 2, height: 'view', widthCap: 240, years: true } as const;
+        expect(normalizeCardFields(good)).toMatchObject(good);
+        expect(normalizeCardFields({ lines: 1 }).lines).toBe(1);
+        expect(normalizeCardFields({ widthCap: 400 }).widthCap).toBe(400);
+        expect(normalizeCardFields({ widthCap: '400' as never }).widthCap).toBe(320);
+    });
+});
+
+describe('card presets (U02)', () => {
+    const shown = (s: CardFieldSettings) => s.order.filter(k => s.on.includes(k));
+
+    it('brief is the default card', () => {
+        const s = cardPreset('brief');
+        expect(shown(s)).toEqual(['birth', 'death', 'occupation']);
+        expect({ ...s, order: [] }).toEqual({ ...DEFAULT_CARD_FIELDS, order: [] });
+        expect(matchCardPreset(DEFAULT_CARD_FIELDS)).toBe('brief');
+        expect(matchCardPreset(normalizeCardFields(undefined))).toBe('brief');
+    });
+
+    it('register: the register events with places and the cause, full dates, labels, whole, by content, medium', () => {
+        const s = cardPreset('register');
+        expect(shown(s)).toEqual(['birth', 'baptism', 'marriage', 'death', 'burial']);
+        expect(s).toMatchObject({ cause: true, fullDate: true, style: 'labels', lines: 0, height: 'content', widthCap: 320, years: false,
+            baptismFallback: true, burialFallback: true });
+        for (const k of ['birth', 'baptism', 'marriage', 'death', 'burial'] as const) expect(s.place).toContain(k);
+        // The unticked follow, in the order they had.
+        expect(s.order.slice(5)).toEqual(['occupation', 'divorce']);
+        expect(matchCardPreset(s)).toBe('register');
+    });
+
+    it('all: every detail, wide', () => {
+        const s = cardPreset('all');
+        expect(shown(s)).toEqual(['birth', 'baptism', 'marriage', 'divorce', 'death', 'burial', 'occupation']);
+        expect(s).toMatchObject({ cause: true, fullDate: true, style: 'labels', lines: 0, height: 'content', widthCap: 400, years: false });
+        expect(matchCardPreset(s)).toBe('all');
+    });
+
+    it('the unticked details keep their order after the preset\'s', () => {
+        const from = normalizeCardFields({ order: ['divorce', 'occupation', 'burial', 'death', 'marriage', 'baptism', 'birth'] });
+        expect(cardPreset('register', from).order).toEqual(['birth', 'baptism', 'marriage', 'death', 'burial', 'divorce', 'occupation']);
+    });
+
+    it('matches on the ticked details in order, their place and cause, the date and the appearance only', () => {
+        const reg = cardPreset('register');
+        // Ignored: the order of the unticked, places of unticked details, the stand-ins.
+        expect(matchCardPreset({ ...reg, order: [...reg.order.slice(0, 5), 'divorce', 'occupation'] })).toBe('register');
+        expect(matchCardPreset({ ...reg, place: reg.place.filter(k => k !== 'divorce') })).toBe('register');
+        expect(matchCardPreset({ ...reg, baptismFallback: false, burialFallback: false })).toBe('register');
+        const brief = cardPreset('brief');
+        expect(matchCardPreset({ ...brief, place: [...brief.place, 'occupation'] })).toBe('brief');
+        expect(matchCardPreset({ ...brief, place: brief.place.filter(k => k !== 'marriage') })).toBe('brief');
+        // Any of these makes it no preset.
+        const off: Partial<CardFieldSettings>[] = [
+            { order: ['baptism', 'birth', 'marriage', 'death', 'burial', 'occupation', 'divorce'] },
+            { on: ['birth', 'baptism', 'marriage', 'death'] },
+            { on: [...reg.on, 'occupation'] },
+            { place: reg.place.filter(k => k !== 'burial') },
+            { cause: false }, { fullDate: false }, { style: 'marks' }, { lines: 1 }, { lines: 2 },
+            { height: 'view' }, { widthCap: 400 }, { years: true },
+        ];
+        for (const o of off) expect(matchCardPreset({ ...reg, ...o }), JSON.stringify(o)).toBeNull();
+        expect(matchCardPreset({ ...brief, widthCap: 240 })).toBeNull();
+        expect(matchCardPreset({ ...brief, lines: 1, height: 'view' })).toBeNull();
     });
 });

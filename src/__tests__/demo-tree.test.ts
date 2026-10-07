@@ -6,7 +6,7 @@
 
 import { describe, it, expect, afterEach } from 'vitest';
 import { getDemoTree, DEMO_FOCUS, DEMO_CARD_FIELDS, DemoImageMaker } from '../demo-tree.js';
-import { customCardSize } from '../card-fields.js';
+import { customCardSize, DEFAULT_CARD_FIELDS, normalizeCardFields } from '../card-fields.js';
 import { validateTreeData, stripUnsafeMediaDataUrls } from '../validation.js';
 import { collectPlaces } from '../places.js';
 import { checkRecordedAge } from '../recorded-age.js';
@@ -33,6 +33,12 @@ afterEach(() => setLanguage('en'));
 describe('sample tree', () => {
     const data = getDemoTree();
     const personIds = Object.keys(data.persons) as PersonId[];
+
+    it('opens on its own details with the default card appearance', () => {
+        const { style, lines, height, widthCap, years } = DEFAULT_CARD_FIELDS;
+        expect(DEMO_CARD_FIELDS).toMatchObject({ style, lines, height, widthCap, years });
+        expect(normalizeCardFields(DEMO_CARD_FIELDS)).toEqual(DEMO_CARD_FIELDS);
+    });
 
     it('passes validateTreeData with no errors', () => {
         const result = validateTreeData(data);

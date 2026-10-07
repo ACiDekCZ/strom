@@ -4,8 +4,8 @@
  * (src/card-fields.ts). A row per event: a checkbox, the mark and the name,
  * small toggles for what the line adds (place, cause, the baptism or burial
  * standing in) and arrows to reorder — no dragging, seven rows is few enough.
- * At most five lines: with five ticked the rest wait, greyed, with a sentence
- * saying why.
+ * Any number of them can be on. Under the list, "Card appearance": how the
+ * card is drawn (its width; further options join it as they come).
  */
 
 import { TreeRenderer } from '../renderer.js';
@@ -14,7 +14,8 @@ import { strings } from '../strings.js';
 import { Person, PersonId, Partnership, PartnershipId, StromData } from '../types.js';
 import { ActionSignal, ACTION_GLYPH, stateStripesHtml } from '../card-signals.js';
 import {
-    CardFieldKey, CardFieldSettings, CARD_MARKS, MAX_CARD_LINES, PLACE_KEYS, cardLines, cardLineHtml,
+    CardFieldKey, CardFieldSettings, CardWidthCap, CARD_FIELD_KEYS, CARD_MARKS, CARD_WIDTH_CAPS, PLACE_KEYS,
+    cardLines, cardLineHtml,
 } from '../card-fields.js';
 import { customCardMetrics, measureCardTexts } from '../card-width.js';
 import { uiModule } from './module.js';
@@ -53,6 +54,58 @@ function samplePerson(): { person: Person; data: StromData } {
     return { person, data: { persons: { [jan]: person }, partnerships: { [union]: partnership } } };
 }
 
+/** The width choice's words. */
+const WIDTH_LABEL: Record<CardWidthCap, () => string> = {
+    240: () => strings.cardDensity.widthNarrow,
+    320: () => strings.cardDensity.widthMedium,
+    400: () => strings.cardDensity.widthWide,
+};
+
+/** A row of "Card appearance": its label and a segment of choices (one pressed). */
+function lookSegment(name: string, label: string, options: { value: string; label: string; active: boolean }[]): string {
+    const id = `card-look-${name}-label`;
+    const buttons = options.map(o =>
+        `<button type="button" class="segment-btn${o.active ? ' active' : ''}" data-value="${esc(o.value)}" aria-pressed="${o.active}">${esc(o.label)}</button>`).join('');
+    return `<span class="card-look-label" id="${id}">${esc(label)}</span>
+        <div class="segment card-look-segment card-look-${name}" role="group" aria-labelledby="${id}">${buttons}</div>`;
+}
+
+/**
+ * The preview card shrinks to the panel when it is wider (a wide card on a
+ * phone): scaled as a whole, so it wraps as on the canvas, inside a box of
+ * the scaled size, so nothing scrolls sideways and no empty space is left.
+ */
+function fitCardPreview(host: HTMLElement): void {
+    const box = host.querySelector<HTMLElement>('.card-signals-preview');
+    const fit = box?.querySelector<HTMLElement>('.card-preview-fit');
+    const card = fit?.firstElementChild as HTMLElement | null;
+    if (!box || !fit || !card) return;
+    card.style.transform = '';
+    fit.style.width = '';
+    fit.style.height = '';
+    const style = getComputedStyle(box);
+    const room = box.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    const width = card.offsetWidth;
+    if (room <= 0 || width <= room) return;
+    const k = room / width;
+    card.style.transform = `scale(${k})`;
+    fit.style.width = `${room}px`;
+    fit.style.height = `${card.offsetHeight * k}px`;
+}
+
+/** Fit the preview again when the panel's width changes (the dialog opens, the window turns). */
+const watchedPreviews = new WeakSet<HTMLElement>();
+function watchCardPreview(host: HTMLElement): void {
+    if (watchedPreviews.has(host) || typeof ResizeObserver === 'undefined') return;
+    watchedPreviews.add(host);
+    let lastWidth = -1;
+    new ResizeObserver(() => {
+        if (host.clientWidth === lastWidth) return;
+        lastWidth = host.clientWidth;
+        fitCardPreview(host);
+    }).observe(host);
+}
+
 export const cardFieldsUiMethods = uiModule({
     /** The preview card under the density select, with the card's size. */
     renderCardPreview(): void {
@@ -67,7 +120,9 @@ export const cardFieldsUiMethods = uiModule({
                 <span class="card-signals-preview-title">${esc(strings.cardDensity.cardPreview)}</span>
                 <span class="card-preview-size">${esc(strings.cardDensity.size(width, size.cardHeight))}</span>
             </div>
-            <div class="card-signals-preview" aria-hidden="true">${this.cardPreviewHtml(SettingsManager.getCardSignals())}</div>`;
+            <div class="card-signals-preview" aria-hidden="true"><div class="card-preview-fit">${this.cardPreviewHtml(SettingsManager.getCardSignals())}</div></div>`;
+        fitCardPreview(host);
+        watchCardPreview(host);
     },
 
     /** A made-up card in the current density with the chosen signals. */
@@ -116,12 +171,10 @@ export const cardFieldsUiMethods = uiModule({
         if (!custom) { host.innerHTML = ''; return; }
         const d = strings.cardDensity;
         const s = SettingsManager.getCardFields();
-        const full = s.on.length >= MAX_CARD_LINES;
         const chip = (key: CardFieldKey, opt: string, label: string, pressed: boolean) =>
             `<button type="button" class="card-field-chip" data-key="${key}" data-opt="${opt}" aria-pressed="${pressed}">${esc(label)}</button>`;
         const rows = s.order.map((key, i) => {
             const on = s.on.includes(key);
-            const disabled = !on && full;
             const chips = !on ? [] : [
                 PLACE_KEYS.includes(key) ? chip(key, 'place', d.optPlace, s.place.includes(key)) : '',
                 key === 'death' ? chip(key, 'cause', d.optCause, s.cause) : '',
@@ -130,9 +183,9 @@ export const cardFieldsUiMethods = uiModule({
             ].filter(Boolean);
             const label = fieldLabel(key);
             return `
-                <div class="card-field-row${on ? ' is-on' : ''}${disabled ? ' is-disabled' : ''}" data-key="${key}">
+                <div class="card-field-row${on ? ' is-on' : ''}" data-key="${key}">
                     <label class="card-field-main">
-                        <input type="checkbox" data-key="${key}"${on ? ' checked' : ''}${disabled ? ' disabled aria-disabled="true"' : ''}>
+                        <input type="checkbox" data-key="${key}"${on ? ' checked' : ''}>
                         <span class="card-field-mark" aria-hidden="true">${esc(CARD_MARKS[key])}</span>
                         <span class="card-field-name">${esc(label)}</span>
                     </label>
@@ -152,7 +205,16 @@ export const cardFieldsUiMethods = uiModule({
                 </div>
             </div>
             <div class="card-fields-list">${rows}</div>
-            <div class="card-fields-status${full ? ' is-full' : ''}" role="status">${esc(full ? d.max : d.count(s.on.length))}</div>`;
+            <div class="card-fields-status" role="status">${esc(d.count(s.on.length, CARD_FIELD_KEYS.length))}</div>
+            <div class="card-look">
+                <span class="settings-name card-look-title">${esc(d.lookTitle)}</span>
+                <div class="card-look-grid">
+                    ${lookSegment('width', d.width, CARD_WIDTH_CAPS.map(cap => ({
+                        value: String(cap), label: WIDTH_LABEL[cap](), active: s.widthCap === cap,
+                    })))}
+                </div>
+                <div class="card-look-scope">${esc(d.scope)}</div>
+            </div>`;
 
         const apply = (next: CardFieldSettings, focus?: string): void => {
             SettingsManager.setCardFields(next);
@@ -194,6 +256,12 @@ export const cardFieldsUiMethods = uiModule({
                 // Keep the keyboard on the row it moved; at the end, on the other arrow.
                 const cls = edge ? (up ? 'card-field-down' : 'card-field-up') : (up ? 'card-field-up' : 'card-field-down');
                 apply({ ...s, order, on: order.filter(k => s.on.includes(k)) }, `.${cls}[data-key="${key}"]`);
+            };
+        });
+        host.querySelectorAll<HTMLButtonElement>('.card-look-width .segment-btn').forEach(btn => {
+            btn.onclick = () => {
+                const widthCap = Number(btn.dataset.value) as CardWidthCap;
+                apply({ ...s, widthCap }, `.card-look-width [data-value="${btn.dataset.value}"]`);
             };
         });
         host.querySelectorAll<HTMLButtonElement>('.card-fields-date .segment-btn').forEach(btn => {

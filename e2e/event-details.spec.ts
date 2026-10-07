@@ -197,7 +197,7 @@ test.describe('the custom card', () => {
         await expect(page.locator('#card-fields-settings')).toBeVisible();
         await expect(page.locator('#card-fields-settings input[type="checkbox"]:checked')).toHaveCount(3);
         await expect(page.locator('.card-preview-size')).toHaveText('card 200 × 107 px');
-        await expect(page.locator('.card-fields-status')).toHaveText('3 of 5 lines. People without a detail get empty space.');
+        await expect(page.locator('.card-fields-status')).toHaveText('3 of 7 details on. A missing detail is left out.');
         await page.keyboard.press('Escape');
 
         await expect(lines(page, 'Jan')).toHaveText(['*1862 Horní Lhota', '†1919 Horní Lhota', 'mlynář']);
@@ -209,7 +209,7 @@ test.describe('the custom card', () => {
         }
     });
 
-    test('ticks, chips, order, full dates and the five-line limit', async ({ page }) => {
+    test('ticks, chips, order, full dates, and all seven details can be on', async ({ page }) => {
         await setup(page);
         await openCardSettings(page);
         await page.locator('#card-density-select').selectOption('custom');
@@ -221,9 +221,18 @@ test.describe('the custom card', () => {
         await row('death').locator('[data-opt="cause"]').click();
         await host.locator('.card-fields-date [data-full="1"]').click();
         await row('marriage').locator('input').check();
-        await expect(host.locator('.card-fields-status')).toHaveText('5 lines at most. Untick one to add another.');
-        await expect(row('divorce').locator('input')).toHaveAttribute('aria-disabled', 'true');
-        await expect(row('divorce')).toHaveClass(/is-disabled/);
+        await expect(host.locator('.card-fields-status')).toHaveText('5 of 7 details on. A missing detail is left out.');
+        // No limit (U02): nothing waits greyed, the sixth and the seventh go on too and the card grows for them.
+        await expect(host.locator('.card-field-row.is-disabled, input[type="checkbox"]:disabled')).toHaveCount(0);
+        await row('divorce').locator('input').check();
+        await row('burial').locator('input').check();
+        await expect(host.locator('input[type="checkbox"]:checked')).toHaveCount(7);
+        await expect(host.locator('.card-fields-status')).toHaveText('7 of 7 details on. A missing detail is left out.');
+        await expect(page.locator('#card-fields-settings').getByText(/at most/)).toHaveCount(0);
+        await expect.poll(() => card(page, 'Marie').evaluate(el => (el as HTMLElement).offsetHeight)).toBe(175);
+        await row('divorce').locator('input').uncheck();
+        await row('burial').locator('input').uncheck();
+        await expect(host.locator('.card-fields-status')).toHaveText('5 of 7 details on. A missing detail is left out.');
         // The width follows the view's longest line (full dates, the cause): the size says the drawn one.
         await expect.poll(async () => {
             const w = await card(page, 'Marie').evaluate(el => (el as HTMLElement).offsetWidth);
