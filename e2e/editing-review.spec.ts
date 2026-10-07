@@ -166,8 +166,8 @@ test('"Add child" to a single person is one undo step, placeholder partner inclu
 
     await addRelation(page, 'Jan', 'child', 'Petr', 'Novak');
     await expect(card(page, 'Petr')).toBeVisible();
-    // Jan, the "?" placeholder partner and Petr.
-    await expect(cards).toHaveCount(3);
+    // Jan and Petr: the "?" placeholder partner is in the data but has no card (T11).
+    await expect(cards).toHaveCount(2);
     expect((await persons(page)).filter(p => p.isPlaceholder)).toHaveLength(1);
 
     await page.locator('#tree-container').click({ position: { x: 5, y: 5 } });

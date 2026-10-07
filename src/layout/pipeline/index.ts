@@ -61,6 +61,7 @@ import { emitLayoutResult } from './8-emit-result.js';
 import { validateLayout } from './validation.js';
 import { computeDebugValidation } from './debug-validation.js';
 import { computeDebugGeometry } from './debug-geometry.js';
+import { foldPlaceholderFamilies, hidePlaceholders } from './placeholders.js';
 
 /**
  * Find persons with multiple partnerships for auto-expansion.
@@ -371,7 +372,7 @@ export function collectBloodRelatives(data: StromData, personId: PersonId): Set<
  */
 export function runLayoutPipeline(input: PipelineInput): LayoutResult {
     const {
-        data,
+        data: inputData,
         focusPersonId,
         config,
         ancestorDepth,
@@ -383,6 +384,9 @@ export function runLayoutPipeline(input: PipelineInput): LayoutResult {
         tolerance = 0.5,
         displayPolicy = DEFAULT_DISPLAY_POLICY
     } = input;
+
+    // Several "?" families of one parent are drawn as one (T11)
+    const data = foldPlaceholderFamilies(inputData, focusPersonId);
 
     // Step 1: Select subgraph
     const selection = selectSubgraph({
@@ -434,6 +438,9 @@ export function runLayoutPipeline(input: PipelineInput): LayoutResult {
     // Expand selection for expanded persons (add missing partners/children)
     expandSelectionForDisplay(data, selection, effectivePolicy);
 
+    // Empty "?" stand-ins are not drawn (T11)
+    const hiddenPersonIds = hidePlaceholders(data, selection, focusPersonId);
+
     // Step 2: Build layout model
     const model = buildLayoutModel({
         data,
@@ -441,6 +448,7 @@ export function runLayoutPipeline(input: PipelineInput): LayoutResult {
         focusPersonId,
         displayPolicy: effectivePolicy
     });
+    if (hiddenPersonIds.size > 0) model.hiddenPersonIds = hiddenPersonIds;
 
     // Step 3: Assign generations
     const genModel = assignGenerations({
@@ -530,7 +538,7 @@ export function runLayoutPipelineWithDebug(
     const { step: targetStep } = debugOptions;
 
     const {
-        data,
+        data: inputData,
         focusPersonId,
         config,
         ancestorDepth,
@@ -542,6 +550,9 @@ export function runLayoutPipelineWithDebug(
         tolerance = 0.5,
         displayPolicy = DEFAULT_DISPLAY_POLICY
     } = input;
+
+    // Several "?" families of one parent are drawn as one (T11)
+    const data = foldPlaceholderFamilies(inputData, focusPersonId);
 
     // Helper to create a snapshot
     const createSnapshot = (step: DebugStep, state: Partial<DebugSnapshot>): DebugSnapshot => {
@@ -603,6 +614,7 @@ export function runLayoutPipelineWithDebug(
 
     // Expand selection for expanded persons (add missing partners/children)
     expandSelectionForDisplay(data, selection, effectivePolicyDebug);
+    const hiddenPersonIdsDebug = hidePlaceholders(data, selection, focusPersonId);
 
     snapshots.push(createSnapshot(1, { selection }));
     if (targetStep === 1 || selection.persons.size === 0) {
@@ -616,6 +628,7 @@ export function runLayoutPipelineWithDebug(
         focusPersonId,
         displayPolicy: effectivePolicyDebug
     });
+    if (hiddenPersonIdsDebug.size > 0) model.hiddenPersonIds = hiddenPersonIdsDebug;
 
     snapshots.push(createSnapshot(2, { selection, model }));
     if (targetStep === 2) {

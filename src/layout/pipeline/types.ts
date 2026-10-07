@@ -146,6 +146,9 @@ export interface LayoutModel {
     childToParentUnion: Map<PersonId, UnionId>;  // Parent union of a child
     // Partner chains (expanded display mode):
     partnerChains: Map<PersonId, PartnerChain>;
+    /** "?" stand-ins laid out as a slot of a partner chain but not emitted:
+     *  their children's line starts at the known parent's card (T11). */
+    hiddenPersonIds?: Set<PersonId>;
 }
 
 // ==================== STEP 3: ASSIGN GENERATIONS ====================

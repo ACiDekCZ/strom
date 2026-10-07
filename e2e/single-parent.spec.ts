@@ -205,3 +205,26 @@ test.describe('"married, the spouse unknown" and the research\'s version', () =>
         });
     }
 });
+
+test.describe('the "?" stand-in in the diagram (T11)', () => {
+    test('"Add child" to one person: no empty "?" card, the child hangs below the parent, the stand-in stays in the data', async ({ page }) => {
+        await openApp(page);
+        await createFirstPerson(page, 'Ole', 'Berg', 'male');
+        await addRelation(page, 'Ole', 'child', 'Ida', 'Berg', 'female');
+        expect(await parentsOf(page, 'Ida')).toEqual(['?', 'Ole']);
+        await expect(card(page, 'Ida')).toBeVisible();
+        await expect(page.locator('.person-card.placeholder')).toHaveCount(0);
+        // Not offered as a hidden partner either.
+        await expect(card(page, 'Ole').locator('.hidden-partners-btn')).toHaveCount(0);
+        // The child's card straight below the parent's.
+        const ole = (await card(page, 'Ole').boundingBox())!;
+        const ida = (await card(page, 'Ida').boundingBox())!;
+        expect(Math.abs((ole.x + ole.width / 2) - (ida.x + ida.width / 2))).toBeLessThan(1);
+        expect(ida.y).toBeGreaterThan(ole.y + ole.height);
+        // The father can still be filled in from the child.
+        await focusViaSearch(page, 'Ida');
+        await addRelation(page, 'Ida', 'parent', 'Marta', 'Berg', 'female');
+        expect(await parentsOf(page, 'Ida')).toEqual(['Marta', 'Ole']);
+        await expect(card(page, 'Marta')).toBeVisible();
+    });
+});

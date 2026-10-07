@@ -57,6 +57,16 @@ export function routeEdges(input: RouteEdgesInput): RoutedModel {
         }
     }
 
+    // A union with a hidden "?" stand-in (T11): its children's line starts
+    // at the bottom of the known parent's card, and no spouse line is drawn.
+    const hidden = model.hiddenPersonIds;
+    const knownParentOf = (union: UnionNode): PersonId | null => {
+        if (!hidden || !union.partnerB) return null;
+        if (hidden.has(union.partnerB)) return union.partnerA;
+        if (hidden.has(union.partnerA)) return union.partnerB;
+        return null;
+    };
+
     // Create connections for each union with children
     for (const [unionId, union] of model.unions) {
         if (union.childIds.length === 0) continue;
@@ -70,7 +80,8 @@ export function routeEdges(input: RouteEdgesInput): RoutedModel {
             personX,
             genY,
             config,
-            secondaryChainUnions.has(unionId)
+            secondaryChainUnions.has(unionId),
+            knownParentOf(union)
         );
 
         if (connection) {
@@ -80,7 +91,7 @@ export function routeEdges(input: RouteEdgesInput): RoutedModel {
 
     // Create spouse lines
     for (const [unionId, union] of model.unions) {
-        if (!union.partnerB) continue;
+        if (!union.partnerB || knownParentOf(union)) continue;
 
         const spouseLine = createSpouseLine(
             unionId,
@@ -203,9 +214,11 @@ function createConnection(
     personX: Map<PersonId, number>,
     genY: Map<number, number>,
     config: { cardWidth: number; cardHeight: number; verticalGap: number },
-    isSecondaryChain: boolean = false
+    isSecondaryChain: boolean = false,
+    soloParentId: PersonId | null = null
 ): Connection | null {
-    const parentCenterX = unionX.get(unionId);
+    const soloParentX = soloParentId ? personX.get(soloParentId) : undefined;
+    const parentCenterX = soloParentX !== undefined ? soloParentX + config.cardWidth / 2 : unionX.get(unionId);
     const parentGen = unionGen.get(unionId);
 
     if (parentCenterX === undefined || parentGen === undefined) {
@@ -233,12 +246,13 @@ function createConnection(
         return null;
     }
 
-    // Stem position (center of parent union, or extra partner center for secondary chains)
+    // Stem position (center of parent union, or extra partner center for secondary chains,
+    // or the known parent's center beside a hidden stand-in)
     const stemX = parentCenterX;
     // Secondary chain unions: stem from card bottom (like MyHeritage)
     // Standard two-partner unions: stem from spouse line level
-    // Single-parent unions: stem from card bottom
-    const stemTopY = isSecondaryChain
+    // Single-parent unions (and a hidden stand-in's): stem from card bottom
+    const stemTopY = isSecondaryChain || soloParentX !== undefined
         ? parentY + config.cardHeight
         : union.partnerB
             ? parentY + config.cardHeight / 2

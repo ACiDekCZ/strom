@@ -41,6 +41,8 @@ export function emitLayoutResult(input: EmitInput): LayoutResult {
     const positions = new Map<PersonId, Position>();
 
     for (const personId of model.persons.keys()) {
+        // A hidden "?" stand-in keeps its slot but has no card (T11)
+        if (model.hiddenPersonIds?.has(personId)) continue;
         const x = personX.get(personId);
         const gen = personGen.get(personId);
 

@@ -53,6 +53,7 @@ import { buildFanModel, buildFanSvg } from './fan-chart.js';
 import { computeIndirectIds } from './indirect.js';
 import { isMobile as isMobileViewport } from './breakpoints.js';
 import { parentRelKind, parentRelDash, connectionDash } from './parent-rel-style.js';
+import { isDiagramStandIn } from './layout/pipeline/placeholders.js';
 import { openCardMenuFromKeyboard } from './ui/keyboard-access.js';
 import { syncDepthStepper } from './ui/depth-stepper.js';
 
@@ -1089,9 +1090,10 @@ class TreeRendererClass {
             // Birth year for the card meta row (the year range replaces the dagger).
             const birthYear = person.birthDate ? displayYear(person.birthDate) : '';
 
-            // Check for hidden partners (partners not in the visible/rendered set)
+            // Check for hidden partners (partners not in the visible/rendered set).
+            // An empty "?" stand-in is never drawn (T11) — not a hidden partner.
             let hiddenPartnersCount = 0;
-            const allPartners = DataManager.getAllPartners(id);
+            const allPartners = DataManager.getAllPartners(id).filter(p => !isDiagramStandIn(DataManager.getData(), p.id));
             for (const partner of allPartners) {
                 if (!this.positions.has(partner.id)) {
                     hiddenPartnersCount++;
@@ -1105,7 +1107,8 @@ class TreeRendererClass {
             for (const partnership of partnerships) {
                 const partnerId = partnership.person1Id === id ? partnership.person2Id : partnership.person1Id;
                 // Count if: partner not visible AND partnership has children
-                if (!this.positions.has(partnerId) && partnership.childIds.length > 0) {
+                if (!this.positions.has(partnerId) && partnership.childIds.length > 0
+                    && !isDiagramStandIn(DataManager.getData(), partnerId)) {
                     hiddenFamiliesCount++;
                 }
             }
