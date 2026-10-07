@@ -3052,6 +3052,21 @@ class DataManagerClass {
             }
         }
 
+        // A partner's children from the partner's other unions are shown one
+        // generation down too, within the depth (T19): the depth must reach them.
+        for (const partnershipId of person.partnerships) {
+            const partnership = this.data.partnerships[partnershipId];
+            if (!partnership) continue;
+            const partnerId = partnership.person1Id === personId ? partnership.person2Id : partnership.person1Id;
+            for (const otherId of this.data.persons[partnerId]?.partnerships ?? []) {
+                if (otherId === partnershipId) continue;
+                for (const childId of this.data.partnerships[otherId]?.childIds ?? []) {
+                    if (visited.has(childId)) continue;
+                    maxDepth = Math.max(maxDepth, 1 + this.getMaxDescendantDepth(childId, visited));
+                }
+            }
+        }
+
         return maxDepth;
     }
 
