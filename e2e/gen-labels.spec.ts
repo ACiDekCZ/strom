@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { openApp } from './helpers.js';
+import { openApp, createFirstPerson, card } from './helpers.js';
 
 test('generation labels survive zooming out a step or two', async ({ page }) => {
     await openApp(page);
@@ -129,4 +129,82 @@ test('no left-fade veil: the focus card at the left edge keeps full opacity', as
         return !!el && (el === f || f.contains(el));
     });
     expect(onCard).toBe(true);
+});
+
+test('a band name never hides a connector line: the bus on its boundary passes over it (T11, phone, fit to screen)', async ({ page }) => {
+    // A mother with a marriage and a family without a father, focus on the
+    // fatherless child: the line runs from the mother's card bottom sideways
+    // along the band boundary to the child, right where the phone pins the
+    // FOCUSED GENERATION name. The opaque name used to cut that stretch out.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openApp(page);
+    await createFirstPerson(page, 'Ludmila', 'Habrova', { gender: 'female' });
+    await page.evaluate(() => {
+        const dm = window.Strom.DataManager;
+        const ludmila = dm.getAllPersons().find((p: { firstName: string }) => p.firstName === 'Ludmila')!;
+        const add = (firstName: string, lastName: string, gender: 'male' | 'female', birthDate: string) =>
+            dm.createPerson({ firstName, lastName, gender, birthDate });
+        const hubert = add('Hubert', 'Habr', 'male', '1850');
+        const helena = add('Helena', 'Habrova', 'female', '1852');
+        const top = dm.createPartnership(hubert.id, helena.id);
+        dm.addParentChild(hubert.id, ludmila.id, top.id);
+        dm.addParentChild(helena.id, ludmila.id, top.id);
+        const petr = add('Petr', 'Buk', 'male', '1878');
+        const marriage = dm.createPartnership(petr.id, ludmila.id);
+        for (const [first, gender, born] of [['Pavel', 'male', '1902'], ['Pavla', 'female', '1905']] as const) {
+            const kid = add(first, 'Buk', gender, born);
+            dm.addParentChild(petr.id, kid.id, marriage.id);
+            dm.addParentChild(ludmila.id, kid.id, marriage.id);
+        }
+        const sabina = add('Sabina', 'Habrova', 'female', '1899');
+        dm.addParentChild(ludmila.id, sabina.id);
+        dm.ensureSingleParentFamilies();
+        window.Strom.TreeRenderer.setFocus(sabina.id);
+    });
+    await expect(card(page, 'Sabina')).toBeVisible();
+    await expect(card(page, 'Pavla')).toBeVisible();
+    await page.evaluate(() => window.Strom.ZoomPan.fitToScreen());
+    await page.waitForTimeout(600);
+
+    const probe = await page.evaluate(() => {
+        const centreX = (first: string) => {
+            const el = Array.from(document.querySelectorAll('.person-card'))
+                .find(c => c.querySelector('.name-text')?.textContent?.includes(first))!;
+            const r = el.getBoundingClientRect();
+            return r.left + r.width / 2;
+        };
+        const a = centreX('Ludmila'), b = centreX('Sabina');
+        const lo = Math.min(a, b), hi = Math.max(a, b);
+        // The sideways stretch of the line to Sabina.
+        const seg = Array.from(document.querySelectorAll('#tree-lines line:not(.gen-guide-line)'))
+            .map(l => l.getBoundingClientRect())
+            .find(r => r.height < 1 && Math.abs(r.left - lo) < 2 && Math.abs(r.right - hi) < 2);
+        if (!seg) return { error: 'no sideways line between Ludmila and Sabina' };
+        // The band name lying on it.
+        const label = Array.from(document.querySelectorAll('#gen-labels .gen-label'))
+            .filter(el => (el as HTMLElement).style.display !== 'none')
+            .map(el => el.getBoundingClientRect())
+            .find(r => r.top <= seg.top && r.bottom >= seg.top && r.left < seg.right && r.right > seg.left);
+        if (!label) return { error: 'no band name over the line' };
+        const x = (Math.max(seg.left, label.left) + Math.min(seg.right, label.right)) / 2;
+        // Make lines and names hit-testable to see which one is painted on top.
+        const style = document.createElement('style');
+        style.textContent = '#tree-lines line { pointer-events: stroke !important; } #gen-labels, #gen-labels * { pointer-events: auto !important; }';
+        document.head.appendChild(style);
+        const hit = document.elementFromPoint(x, seg.top);
+        style.remove();
+        const rule = Array.from(document.querySelectorAll('#tree-lines line.gen-guide-line'))
+            .find(l => Math.abs(l.getBoundingClientRect().top - seg.top) < 1);
+        return {
+            hitTag: hit?.tagName.toLowerCase() ?? null,
+            hitIsLabel: !!hit?.closest('#gen-labels'),
+            ruleBroken: !!rule?.getAttribute('stroke-dasharray'),
+        };
+    });
+    expect(probe.error).toBeUndefined();
+    // The connector is on top of the name, not cut by it…
+    expect(probe.hitIsLabel).toBe(false);
+    expect(probe.hitTag).toBe('line');
+    // …while the faint boundary rule still breaks around the name.
+    expect(probe.ruleBroken).toBe(true);
 });

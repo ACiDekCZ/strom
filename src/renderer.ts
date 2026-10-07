@@ -68,6 +68,10 @@ export interface GenerationBand {
     rowCenterY: number;   // where the label sits when the row is on screen
     bandTopY: number;     // top boundary of the band's span
     bandBottomY: number;  // bottom boundary of the band's span
+    /** The boundary rule at bandTopY; the overlay breaks it around the band's name. */
+    guideLine?: SVGLineElement;
+    guideLeftX?: number;  // world X where the rule starts
+    guideRightX?: number; // world X where the rule ends
 }
 
 class TreeRendererClass {
@@ -2014,13 +2018,16 @@ class TreeRendererClass {
             const offset = Math.round((bandY - focusPos.y) / step);
             // Boundary rule just above the band.
             const boundaryY = bandY - halfGap;
-            this.drawLine(svg, lineLeft, boundaryY, lineRight, boundaryY, { className: 'gen-guide-line' });
+            const guideLine = this.drawLine(svg, lineLeft, boundaryY, lineRight, boundaryY, { className: 'gen-guide-line' });
             // Record the band for the sticky HTML label overlay.
             this.generationBands.push({
                 label: this.generationLabel(offset),
                 rowCenterY: bandY + this.config.cardHeight / 2,
                 bandTopY: bandY - halfGap,
                 bandBottomY: bandY + this.config.cardHeight + halfGap,
+                guideLine,
+                guideLeftX: lineLeft,
+                guideRightX: lineRight,
             });
         }
     }
@@ -2230,7 +2237,7 @@ class TreeRendererClass {
         }
     }
 
-    private drawLine(svg: SVGSVGElement, x1: number, y1: number, x2: number, y2: number, style?: { dashArray?: string; color?: string; className?: string; title?: string }): void {
+    private drawLine(svg: SVGSVGElement, x1: number, y1: number, x2: number, y2: number, style?: { dashArray?: string; color?: string; className?: string; title?: string }): SVGLineElement {
         const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
         line.setAttribute('x1', String(x1));
         line.setAttribute('y1', String(y1));
@@ -2251,6 +2258,7 @@ class TreeRendererClass {
             line.appendChild(t);
         }
         svg.appendChild(line);
+        return line;
     }
 
     /**

@@ -21,10 +21,14 @@ import { uiModule } from './module.js';
  * Two placements for the generation names. Flip this constant to switch.
  *
  *  'line' (default) — the name is written INTO the band's top boundary line,
- *      a fieldset-legend look (— PARENTS ———) with a var(--bg) mask under the
- *      text that hides the guide rule beneath it. The boundary lives in the
- *      empty world-space gutter between two generation rows, so the label can
- *      NEVER collide with a card — the `.covered` fade is unused in this mode.
+ *      a fieldset-legend look (— PARENTS ———): the guide rule is broken around
+ *      the name (a gap in the rule's dash pattern, set here on every
+ *      reprojection). The boundary lives in the empty world-space gutter
+ *      between two generation rows, so the label can NEVER collide with a
+ *      card — the `.covered` fade is unused in this mode. The connector buses
+ *      run along the same boundary, so the overlay lies BENEATH the tree's
+ *      lines and cards and never hides a line (T11): only the guide rule
+ *      makes way for the name.
  *
  *  'row' — the previous behaviour: the name floats at the row centre and fades
  *      out (`.covered`) under any card that pans over it.
@@ -73,6 +77,27 @@ function topChromeRects(): { toolbar: DOMRect | null; floating: DOMRect[] } {
 }
 
 interface GenLabelEl { row: HTMLElement; text: HTMLElement; arrow: HTMLElement; band: GenerationBand; }
+
+/**
+ * Break a band's guide rule between world X `from` and `to` (the label box),
+ * or draw it whole again (null). The rule lies above the label in the tree's
+ * SVG, so the gap is what keeps the name readable.
+ */
+function setGuideGap(band: GenerationBand, gap: { from: number; to: number } | null): void {
+    const line = band.guideLine;
+    if (!line) return;
+    const x1 = band.guideLeftX ?? 0;
+    const x2 = band.guideRightX ?? x1;
+    const len = x2 - x1;
+    const from = gap ? Math.min(Math.max(gap.from, x1), x2) : x2;
+    const to = gap ? Math.min(Math.max(gap.to, x1), x2) : x2;
+    if (!gap || to - from <= 0 || len <= 0) {
+        line.removeAttribute('stroke-dasharray');
+        return;
+    }
+    // dash up to the label, gap over it, dash for the rest of the rule
+    line.setAttribute('stroke-dasharray', `${from - x1} ${to - from} ${len}`);
+}
 
 export const genLabelsMethods = uiModule({
     /** Wire the overlay once at startup (ZoomPan sync + resize). */
@@ -139,6 +164,8 @@ export const genLabelsMethods = uiModule({
             overlay.style.display = 'none';
             return;
         }
+        // Every rule is drawn whole unless its label is shown on it below.
+        for (const { band } of els) setGuideGap(band, null);
 
         const { scale, tx, ty } = ZoomPan.getTransform();
         const { height } = ZoomPan.getViewportSize();
@@ -256,7 +283,11 @@ export const genLabelsMethods = uiModule({
                 // sits inside the band, though: hide it (never print it over a
                 // person) when a card is under it.
                 row.classList.remove('covered');
-                if (pinned) {
+                if (!pinned) {
+                    // The rule makes way for the name (world X of the label box).
+                    const l = row.offsetLeft, r = l + row.offsetWidth;
+                    setGuideGap(band, { from: (l - tx) / scale, to: (r - tx) / scale });
+                } else {
                     const l = row.offsetLeft, r = l + row.offsetWidth;
                     const t = centerY - halfH, b = centerY + halfH;
                     if (getCardRects().some(c => c.left < r && c.right > l && c.top < b && c.bottom > t)) {

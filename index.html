@@ -922,7 +922,10 @@
         }
         /* Sticky generation labels — an HTML overlay pinned to the left edge,
            OUTSIDE the pan/zoom transform (the guide LINES stay in the SVG and
-           scroll). Positioned by src/ui/gen-labels.ts on every transform change. */
+           scroll). Positioned by src/ui/gen-labels.ts on every transform change.
+           It comes before #tree-canvas at the same level, so it is painted
+           BENEATH the connector lines and cards: a bus running along a band
+           boundary under a label stays whole (T11). */
         .gen-labels {
             position: absolute;
             inset: 0;
@@ -930,7 +933,7 @@
             overflow: hidden;
             opacity: 1;
             transition: opacity 0.15s;
-            z-index: 4;
+            z-index: 0;
         }
         /* Dimmed while the tree is actively panning/zooming. */
         .gen-labels.panning { opacity: 0.6; }
@@ -961,15 +964,15 @@
         .gen-label-arrow { margin-right: 4px; font-weight: 700; }
 
         /* Line mode: the band name is written INTO the top boundary rule as a
-           fieldset legend (— PARENTS ———). A var(--bg) background with a little
-           padding masks the guide rule under the text, so the line appears to
-           break around the name. --text-ghost keeps it quiet; it sits in the
-           empty world-space gutter between rows, so it never covers a card. */
+           fieldset legend (— PARENTS ———). The guide rule gets a gap the size of
+           the label box (padding included; gen-labels.ts sets it), so the line
+           appears to break around the name, while connector lines on the same
+           boundary pass over the label unbroken. --text-ghost keeps it quiet;
+           it sits in the empty world-space gutter between rows, so it never
+           covers a card. */
         .gen-labels--line .gen-label {
             color: var(--text-ghost);
-            background: var(--bg);
             padding: 4px 8px;
-            border-radius: 3px;
         }
 
         /* ==================== PERSON CARD ==================== */
@@ -12654,12 +12657,13 @@
     </div>
 
     <div id="tree-container">
+        <!-- Sticky generation labels: fixed to the left edge, outside the
+             pan/zoom transform. Populated + projected by src/ui/gen-labels.ts.
+             Before the canvas: painted beneath the tree's lines and cards. -->
+        <div id="gen-labels" class="gen-labels" aria-hidden="true"></div>
         <div id="tree-canvas">
             <svg id="tree-lines"></svg>
         </div>
-        <!-- Sticky generation labels: fixed to the left edge, outside the
-             pan/zoom transform. Populated + projected by src/ui/gen-labels.ts. -->
-        <div id="gen-labels" class="gen-labels" aria-hidden="true"></div>
         <div id="timeline-container" class="timeline-container"></div>
         <div id="map-container" class="map-container"></div>
         <div id="fan-container" class="fan-container">
