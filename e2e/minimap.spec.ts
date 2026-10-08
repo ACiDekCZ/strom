@@ -32,6 +32,20 @@ test.describe('Minimap', () => {
         await expect(panel).toBeHidden();
     });
 
+    // Quick presses of + (or −) add up: a press while the previous zoom still
+    // glides builds on where that zoom is heading, not on the scale reached so far.
+    test('quick zoom presses add up while the zoom still glides', async ({ page }) => {
+        await openApp(page);
+        await page.getByRole('button', { name: 'Try a sample tree' }).click();
+        await expect(card(page, 'Johan')).toBeVisible();
+        const scale = () => page.evaluate(() => window.Strom.ZoomPan.getTransform().scale);
+        const s0 = await scale();
+        await page.evaluate(() => { for (let i = 0; i < 3; i++) window.Strom.ZoomPan.zoomIn(); });
+        await expect.poll(scale).toBeCloseTo(s0 * 1.3 ** 3, 5);
+        await page.evaluate(() => { for (let i = 0; i < 2; i++) window.Strom.ZoomPan.zoomOut(); });
+        await expect.poll(scale).toBeCloseTo(s0 * 1.3, 5);
+    });
+
     // Dragging the frame stops the same way on all four sides: the view's centre
     // at the tree's edge (the frame overhangs it by half of itself at most),
     // however far past the minimap the pointer goes.

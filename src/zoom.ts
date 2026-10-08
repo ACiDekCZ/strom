@@ -78,6 +78,12 @@ class ZoomPanClass {
 
     // Animation
     private animationFrame: number | null = null;
+    /**
+     * The scale the running button zoom (animateZoom) heads for: a further
+     * + or − pressed before it lands builds on it, so quick presses add up
+     * instead of restarting from the scale reached so far.
+     */
+    private zoomTarget: number | null = null;
 
     // Wheel zoom idle timer (the layer hint stays on until it fires)
     private wheelIdleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -383,6 +389,7 @@ class ZoomPanClass {
         if (this.animationFrame) {
             cancelAnimationFrame(this.animationFrame);
         }
+        this.zoomTarget = targetScale;
 
         const startScale = this.scale;
         const startTx = this.tx;
@@ -417,6 +424,7 @@ class ZoomPanClass {
                 this.animationFrame = requestAnimationFrame(animate);
             } else {
                 this.animationFrame = null;
+                this.zoomTarget = null;
                 this.endMotion();
             }
         };
@@ -436,17 +444,23 @@ class ZoomPanClass {
         return !!canvas && canvas.style.display === 'none';
     }
 
+    /** The scale a button zoom starts from: the running button zoom's target, else the current scale. */
+    private zoomBase(): number {
+        return this.animationFrame !== null && this.zoomTarget !== null ? this.zoomTarget : this.scale;
+    }
+
     zoomIn(): void {
         if (this.isStandaloneViewActive()) return;
-        const targetScale = Math.min(MAX_SCALE, this.scale * ZOOM_BUTTON_FACTOR);
+        const targetScale = Math.min(MAX_SCALE, this.zoomBase() * ZOOM_BUTTON_FACTOR);
         this.animateZoom(targetScale);
     }
 
     zoomOut(): void {
         if (this.isStandaloneViewActive()) return;
-        const wanted = this.scale / ZOOM_BUTTON_FACTOR;
+        const base = this.zoomBase();
+        const wanted = base / ZOOM_BUTTON_FACTOR;
         const targetScale = Math.max(this.zoomOutFloor(wanted), wanted);
-        if (targetScale === this.scale) return;
+        if (targetScale === base) return;
         this.animateZoom(targetScale);
     }
 
@@ -456,6 +470,7 @@ class ZoomPanClass {
         if (this.animationFrame) {
             cancelAnimationFrame(this.animationFrame);
             this.animationFrame = null;
+            this.zoomTarget = null;
             this.endMotion();
         }
         this.scale = 1;
@@ -669,6 +684,7 @@ class ZoomPanClass {
         const endTy = container.clientHeight / 2 - cardCenterY * endScale;
 
         if (this.animationFrame) cancelAnimationFrame(this.animationFrame);
+        this.zoomTarget = null;
         const startScale = this.scale, startTx = this.tx, startTy = this.ty;
         const startTime = performance.now();
 
@@ -706,6 +722,7 @@ class ZoomPanClass {
         const endTy = container.clientHeight / 2 - cy * endScale;
         if (this.animationFrame) cancelAnimationFrame(this.animationFrame);
         this.animationFrame = null;
+        this.zoomTarget = null;
         if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches || duration <= 0) {
             this.scale = endScale;
             this.tx = endTx;
