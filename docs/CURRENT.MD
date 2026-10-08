@@ -515,11 +515,21 @@ status, newest date). The extra partners on one side of a person stand in the
 order of the marriages, the earliest next to the person: `expandPartnerChains`
 lists each person's unions chronologically (wedding date, then data order, an
 undated union last — `compareMarriages` in `src/marriage-order.ts`) and
-`buildChainBlockPersonOrder` walks them in that order. The renderer and the
-image export mark each partner of a person with two or more unions in view
-with a marriage-order pill ("1. ∞ 1866", numbered by the same order over all
-of the person's unions in the data) at the top-edge corner pointing to that
-person.
+`buildChainBlockPersonOrder` walks them in that order. The renderer, the
+image export and the book mark a partner of a person with two or more unions
+in view with a marriage-order pill ("1. ∞ 1866", numbered by the same order
+over all of the person's unions in the data) at the top-edge corner pointing
+to that person (`unionOrderBadges`). Each union gets at most one pill and each
+card at most one: when both persons of a union have several unions in view,
+the number counts the focus's marriages if the focus is one of them, else
+those of the one with more unions in view, else the union's first person's;
+the hover bubble names that person ("Jan Novák's 2nd marriage, 1885").
+`placeUnionOrderPill` lays the pill out with the hidden-relatives tabs by one
+rule for every card size: the middle of the top edge stays free (the drop line
+to the parents arrives there), the tabs keep their corners, the pill sits on
+the edge beside them in its own half of the card, and where it does not fit
+(or a line is in the way) it moves above the tabs, wholly above the top edge
+and within the card's width.
 
 ### Who gets expanded
 

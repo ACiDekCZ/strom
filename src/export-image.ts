@@ -6,7 +6,7 @@
  * It reads a LayoutResult but never touches the layout engine.
  */
 
-import { StromData, LayoutConfig, DEFAULT_LAYOUT_CONFIG, PartnershipStatus, personCardHeight } from './types.js';
+import { StromData, LayoutConfig, DEFAULT_LAYOUT_CONFIG, PartnershipStatus, PersonId, personCardHeight } from './types.js';
 import { LayoutResult } from './layout/pipeline/types.js';
 import { displayYear } from './dates.js';
 import { personInitials } from './initials.js';
@@ -20,7 +20,10 @@ import {
 } from './card-width.js';
 import { shownName } from './person-name.js';
 import { strings } from './strings.js';
-import { unionOrderBadges, UnionOrderBadge } from './marriage-order.js';
+import {
+    unionOrderBadges, UnionOrderBadge, PillMetrics, estimatePillMetrics, placeUnionOrderPill, viewLineSegments,
+    segmentsNearCard, EDGE_INSET,
+} from './marriage-order.js';
 
 /** The subset of a LayoutResult the poster needs (no diagnostics required). */
 export type PosterLayout = Pick<LayoutResult, 'positions' | 'connections' | 'spouseLines'>;
@@ -135,39 +138,21 @@ function placeRows(place: string, maxW: number, fontSize: number): string[] {
     return rest ? [first, rest] : [first];
 }
 
-/** Width of a 10px semibold pill text in the card's sans (digits of one width). */
-function pillTextWidth(text: string): number {
-    let w = 0;
-    for (const c of text) w += /[0-9~<>]/.test(c) ? 6 : c === '.' ? 2.8 : c === ' ' ? 2.6 : 5.6;
-    return w;
-}
-
 /**
- * A marriage-order pill (T13) at x = 0, its top at `y`: "1. ∞ 1866" in an
- * 18px pill — the screen's .union-order-pill (padding 7, 3px between the
- * parts, a 1px hairline), without its shadow.
+ * A marriage-order pill (T13) with its left edge at `x`, its top at `y`:
+ * "1. ∞ 1866" in an 18px pill — the screen's .union-order-pill (its parts
+ * where the screen's measure puts them, a 1px hairline), without its shadow.
  */
-const PILL_GLYPH_W = 9;
-
-/** Width of a marriage-order pill (see unionOrderPillSvg). */
-export function unionOrderPillWidth(b: UnionOrderBadge): number {
-    const numW = pillTextWidth(strings.focus.unionOrdinal(b.number));
-    return 8 + numW + 3 + PILL_GLYPH_W + (b.year ? 3 + pillTextWidth(b.year) : 0) + 8;
-}
-
-export function unionOrderPillSvg(b: UnionOrderBadge, x: number, y: number, dimmed = false): string {
+export function unionOrderPillSvg(b: UnionOrderBadge, m: PillMetrics, x: number, y: number, dimmed = false): string {
     const num = strings.focus.unionOrdinal(b.number);
-    const numW = pillTextWidth(num);
-    const glyphW = PILL_GLYPH_W;
-    const width = unionOrderPillWidth(b);
     const base = (y + 12.5).toFixed(1);
     const font = `${LINE_FONT} font-size="10" font-weight="600" fill="${COLORS.textLight}"`;
     const parts = [
-        `<rect x="${(x + 0.5).toFixed(1)}" y="${(y + 0.5).toFixed(1)}" width="${(width - 1).toFixed(1)}" height="17" rx="8.5" fill="${COLORS.cardBg}" stroke="${COLORS.cardBorder}" stroke-width="1"/>`,
-        `<text x="${(x + 8).toFixed(1)}" y="${base}" ${font}>${escapeXml(num)}</text>`,
-        `<text x="${(x + 8 + numW + 3 + glyphW / 2).toFixed(1)}" y="${base}" text-anchor="middle" ${LINE_FONT} font-size="11" font-weight="600" fill="${COLORS.accent}">∞</text>`,
+        `<rect x="${(x + 0.5).toFixed(2)}" y="${(y + 0.5).toFixed(1)}" width="${(m.width - 1).toFixed(2)}" height="17" rx="8.5" fill="${COLORS.cardBg}" stroke="${COLORS.cardBorder}" stroke-width="1"/>`,
+        `<text x="${(x + m.numX).toFixed(2)}" y="${base}" ${font}>${escapeXml(num)}</text>`,
+        `<text x="${(x + m.glyphX).toFixed(2)}" y="${base}" text-anchor="middle" ${LINE_FONT} font-size="11" font-weight="600" fill="${COLORS.accent}">∞</text>`,
     ];
-    if (b.year) parts.push(`<text x="${(x + 8 + numW + 3 + glyphW + 3).toFixed(1)}" y="${base}" ${font}>${escapeXml(b.year)}</text>`);
+    if (b.year) parts.push(`<text x="${(x + m.yearX).toFixed(2)}" y="${base}" ${font}>${escapeXml(b.year)}</text>`);
     return `<g class="union-order-pill" data-union-order="${b.number}" data-person="${escapeXml(b.personId)}" data-toward="${escapeXml(b.towardId)}"${dimmed ? ' opacity="0.5"' : ''}>${parts.join('')}</g>`;
 }
 
@@ -238,6 +223,10 @@ export interface PosterOptions {
      * date out — the numbers stay the screen's, the years shown are `data`'s.
      */
     orderData?: StromData;
+    /** The person in focus: decides whose marriage a pill counts when both partners have several (T13). */
+    focusId?: string | null;
+    /** The pill measured as the screen draws it (src/union-order-measure.ts); estimated when absent. */
+    measureUnionOrderPill?: (ordinal: string, year: string) => PillMetrics;
 }
 
 /** What the poster needs of a custom card line. */
@@ -677,23 +666,25 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
     }
     out.push('</g>');
 
-    // --- Marriage-order pills (T13): always whole, the screen's size and
-    //     colours, no shadow; above the cards they straddle ---
-    const badges = unionOrderBadges(data, result, options.orderData ?? data);
+    // --- Marriage-order pills (T13): always whole, the screen's size,
+    //     colours and place (placeUnionOrderPill; the image draws no tabs),
+    //     no shadow; above the cards they straddle ---
+    const badges = unionOrderBadges(data, result, options.orderData ?? data, (options.focusId ?? null) as PersonId | null);
     if (badges.size > 0) {
+        const measure = options.measureUnionOrderPill ?? estimatePillMetrics;
+        const segments = viewLineSegments(result);
         out.push('<g class="union-order-pills">');
-        for (const [personId, list] of [...badges.entries()].sort((a, b) => String(a[0]).localeCompare(String(b[0])))) {
+        for (const [personId, b] of [...badges.entries()].sort((a, b) => String(a[0]).localeCompare(String(b[0])))) {
             const pos = result.positions.get(personId);
             if (!pos) continue;
-            const dimmed = !!options.dimmedIds?.has(personId);
-            let leftX = pos.x + 12;
-            let rightX = pos.x + cw - 12;
-            for (const b of [...list.filter(x => x.side === 'left'), ...list.filter(x => x.side === 'right').reverse()]) {
-                const w = unionOrderPillWidth(b);
-                const x = b.side === 'left' ? leftX : rightX - w;
-                if (b.side === 'left') leftX += w + 4; else rightX -= w + 4;
-                out.push(unionOrderPillSvg(b, x, pos.y - 9, dimmed));
-            }
+            const m = measure(strings.focus.unionOrdinal(b.number), b.year);
+            // The card's 1px border: the screen's corner groups stand 12px inside it.
+            const slot = placeUnionOrderPill({
+                cardWidth: cw, side: b.side, pillWidth: m.width, leftTabs: 0, rightTabs: 0,
+                leftInset: 1 + EDGE_INSET, rightInset: 1 + EDGE_INSET,
+                segments: segmentsNearCard(segments, pos.x, pos.y, cw),
+            });
+            out.push(unionOrderPillSvg(b, m, pos.x + slot.x, pos.y + slot.y, !!options.dimmedIds?.has(personId)));
         }
         out.push('</g>');
     }

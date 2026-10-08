@@ -94,18 +94,18 @@ describe('unionOrderBadges', () => {
         const result = layout(data, 'H', true);
         const badges = unionOrderBadges(data, result);
         const hx = result.positions.get(P('H'))!.x;
-        const got = (id: string) => badges.get(P(id))?.map(b => ({ n: b.number, year: b.year, toward: b.towardId }));
-        expect(got('W1')).toEqual([{ n: 1, year: '1866', toward: 'H' }]);
-        expect(got('W3')).toEqual([{ n: 2, year: '1880', toward: 'H' }]);
-        expect(got('W2')).toEqual([{ n: 3, year: '1908', toward: 'H' }]);
+        const got = (id: string) => { const b = badges.get(P(id)); return b && { n: b.number, year: b.year, toward: b.towardId }; };
+        expect(got('W1')).toEqual({ n: 1, year: '1866', toward: 'H' });
+        expect(got('W3')).toEqual({ n: 2, year: '1880', toward: 'H' });
+        expect(got('W2')).toEqual({ n: 3, year: '1908', toward: 'H' });
         for (const w of ['W1', 'W2', 'W3']) {
-            const b = badges.get(P(w))![0];
+            const b = badges.get(P(w))!;
             const x = result.positions.get(P(w))!.x;
             expect(b.side).toBe(x < hx ? 'right' : 'left');
         }
         // The shared person and the persons of a single union have none.
         for (const id of ['H', 'gf', 'gm', 'c1', 'c2', 'c3']) expect(badges.has(P(id))).toBe(false);
-        expect(badges.get(P('W1'))![0].place).toBe('Dolní Lhota');
+        expect(badges.get(P('W1'))!.place).toBe('Dolní Lhota');
     });
 
     it('shows no pill while only one union of the person is in view', () => {
@@ -123,20 +123,21 @@ describe('unionOrderBadges', () => {
             { person1Id: P('H'), person2Id: P('W2'), partnershipId: 'u2' as PartnershipId },
             { person1Id: P('W3'), person2Id: P('H'), partnershipId: 'u3' as PartnershipId },
         ] });
-        expect(two.get(P('W2'))![0]).toMatchObject({ number: 3, side: 'left' });
-        expect(two.get(P('W3'))![0]).toMatchObject({ number: 2, side: 'right' });
+        expect(two.get(P('W2'))!).toMatchObject({ number: 3, side: 'left' });
+        expect(two.get(P('W3'))!).toMatchObject({ number: 2, side: 'right' });
     });
 
-    it('words its bubble per language and kind of union', () => {
-        expect(strings.focus.unionOrderTip(1, '1866', 'Dolní Lhota', true)).toBe('1st marriage 1866, Dolní Lhota');
+    it('words its bubble per language and kind of union, naming whose marriage it is', () => {
+        expect(strings.focus.unionOrderTip(2, '1885', '', true, 'Jan Novák')).toBe("Jan Novák's 2nd marriage, 1885");
+        expect(strings.focus.unionOrderTip(1, '1866', 'Dolní Lhota', true, 'Jan Novák')).toBe("Jan Novák's 1st marriage, 1866, Dolní Lhota");
         expect(strings.focus.unionOrdinal(2)).toBe('2nd');
         expect(strings.focus.unionOrdinal(13)).toBe('13th');
         setLanguage('cs');
-        expect(strings.focus.unionOrderTip(1, '1866', 'Dolní Lhota', true)).toBe('1. sňatek 1866, Dolní Lhota');
-        expect(strings.focus.unionOrderTip(2, '', '', false)).toBe('2. svazek');
+        expect(strings.focus.unionOrderTip(2, '1885', 'Dolní Lhota', true, 'Jan Novák')).toBe('Jan Novák: 2. sňatek, 1885, Dolní Lhota');
+        expect(strings.focus.unionOrderTip(2, '', '', false, 'Jan Novák')).toBe('Jan Novák: 2. svazek');
         expect(strings.focus.unionOrdinal(2)).toBe('2.');
         setLanguage('de');
-        expect(strings.focus.unionOrderTip(1, '1866', '', true)).toBe('1. Ehe 1866');
+        expect(strings.focus.unionOrderTip(2, '1885', '', true, 'Jan Novák')).toBe('2. Ehe von Jan Novák, 1885');
     });
 });
 
@@ -185,5 +186,28 @@ describe('the image export draws the pills', () => {
         expect((svg.match(/<g opacity="0.5">/g) || []).length).toBe(1);
         // The cards keep their own rect (rx 8); the pills are rx 8.5.
         expect((plain.match(/rx="8" fill="#fffdf8"/g) || []).length).toBe(result.positions.size);
+    });
+
+    it('draws the pill at the measured width and lays it out as the screen does (above the edge on a narrow card)', () => {
+        setLanguage('cs');
+        const data = family();
+        const config = { ...DEFAULT_LAYOUT_CONFIG, cardWidth: 150, cardHeight: 44 };
+        const result = runLayoutPipeline({
+            data, focusPersonId: P('H'), config, ancestorDepth: 3, descendantDepth: 3,
+            includeSpouseAncestors: true, includeParentSiblings: true, includeParentSiblingDescendants: true,
+            displayPolicy: { mode: 'standard', autoExpand: true },
+        });
+        const measure = () => ({ width: 64.25, numX: 8, glyphX: 22, yearX: 30 });
+        const svg = buildTreeSvg(data, result, { config, cardDensity: 'compact', measureUnionOrderPill: measure });
+        const w1 = /<g class="union-order-pill" data-union-order="1" data-person="W1"[^>]*>(.*?)<\/g>/.exec(svg)![1];
+        const [, x, y, w] = /<rect x="([^"]+)" y="([^"]+)" width="([^"]+)"/.exec(w1)!.map(Number);
+        expect(w).toBeCloseTo(63.25, 2);
+        const card = result.positions.get(P('W1'))!;
+        const hx = result.positions.get(P('H'))!.x;
+        // 13 + 64.25 does not fit in the half of 150 (71): above the edge, in the half toward H.
+        expect(y).toBeCloseTo(card.y - 29 + 0.5, 1);
+        if (hx < card.x) expect(x - 0.5 + 64.25).toBeLessThanOrEqual(card.x + 75 - 4 + 0.01);
+        else expect(x - 0.5).toBeGreaterThanOrEqual(card.x + 75 + 4 - 0.01);
+        expect(w1).toContain('<text x="' + (x - 0.5 + 22).toFixed(2) + '"');
     });
 });

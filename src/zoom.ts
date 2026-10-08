@@ -35,10 +35,8 @@ const ZOOM_FAR = 0.55;
 const ZOOM_EDGE_BAR = 0.6;
 /** From this scale on the stub has its word (a hair under 1: a reset lands on 1 exactly). */
 const ZOOM_EDGE_LABELS = 0.999;
-/** Below this scale the marriage-order pill shows only its number ("1.", T13). */
-const ZOOM_UNION_ORDER_SHORT = 0.6;
-/** Below this scale the marriage-order pill hides. */
-const ZOOM_UNION_ORDER_HIDDEN = 0.4;
+/** Below this scale the marriage-order pill hides (T13). */
+const ZOOM_UNION_ORDER_HIDDEN = 0.6;
 const ZOOM_BUTTON_FACTOR = 1.3;
 const ZOOM_ANIMATION_DURATION = 200; // ms
 /**
@@ -828,8 +826,7 @@ class ZoomPanClass {
             // The research edge: a stretch of the top edge far out, its words from 100 %.
             canvas.classList.toggle('zoom-edge-bar', this.scale < ZOOM_EDGE_BAR);
             canvas.classList.toggle('zoom-edge-labels', this.scale >= ZOOM_EDGE_LABELS);
-            // The marriage-order pill: whole from 60 %, its number only down to 40 %, none below.
-            canvas.classList.toggle('zoom-order-short', this.scale < ZOOM_UNION_ORDER_SHORT);
+            // The marriage-order pill: whole from 60 %, none below.
             canvas.classList.toggle('zoom-order-hidden', this.scale < ZOOM_UNION_ORDER_HIDDEN);
             canvas.style.setProperty('--zoom-inv', String(1 / Math.max(this.scale, 0.05)));
             // Fonts scale naturally with CSS transform - no counter-scaling needed

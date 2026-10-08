@@ -62,7 +62,11 @@ import { computeIndirectIds } from './indirect.js';
 import { isMobile as isMobileViewport } from './breakpoints.js';
 import { parentRelKind, parentRelDash, connectionDash } from './parent-rel-style.js';
 import { isDiagramStandIn } from './layout/pipeline/placeholders.js';
-import { unionOrderBadges, UnionOrderBadge } from './marriage-order.js';
+import {
+    unionOrderBadges, UnionOrderBadge, hiddenRelativesTabs, HiddenRelativesTab, placeUnionOrderPill, PillPlacement,
+    viewLineSegments, segmentsNearCard, EDGE_INSET,
+} from './marriage-order.js';
+import { measureUnionOrderPills, measureTabRows, rowKey, unionOrderPillKey, unionOrderPillPartsHtml, pillFontsPending } from './union-order-measure.js';
 import { openCardMenuFromKeyboard } from './ui/keyboard-access.js';
 import { syncDepthStepper } from './ui/depth-stepper.js';
 
@@ -1152,10 +1156,12 @@ class TreeRendererClass {
         const spinDelay = sharedPhaseDelay(AGENT_SPIN_MS, document.timeline?.currentTime as number ?? performance.now());
         const renderedAt = Date.now();
         this.observeTreeOnScreen();
-        // Marriage-order pills (T13): on each partner of a person with two or
-        // more unions in view, at the corner pointing to that person.
+        // Marriage-order pills (T13): one per union, at most one per card, at
+        // the corner pointing to the person whose marriages it counts; laid
+        // out with the card's top-edge tabs (placeUnionOrderPill).
         const orderBadges = unionOrderBadges(DataManager.getData(),
-            { positions: this.positions, spouseLines: this.spouseLines });
+            { positions: this.positions, spouseLines: this.spouseLines }, DataManager.getData(), this.focusPersonId);
+        const orderSlots = this.unionOrderSlots(orderBadges, partnershipChildIds, signalCtx);
 
         for (const [id, pos] of this.positions) {
             const person = DataManager.getPerson(id);
@@ -1275,27 +1281,14 @@ class TreeRendererClass {
                 }
             }
 
-            // Check if parents are currently visible
-            const hasParents = person.parentIds.length > 0;
-            const parentsVisible = hasParents &&
-                person.parentIds.some(pid => this.positions.has(pid));
-
-            // Check if children are currently visible
-            const hasChildren = person.childIds.length > 0;
-            const childrenVisible = hasChildren &&
-                person.childIds.some(cid => this.positions.has(cid));
-
-            // Check if siblings are currently visible
-            // Filter to only siblings that are in a partnership.childIds (same as layout engine)
-            const siblings = DataManager.getSiblings(id).filter(s => partnershipChildIds.has(s.id));
-            const hasSiblings = siblings.length > 0;
-            const siblingsVisible = hasSiblings &&
-                siblings.some(s => this.positions.has(s.id));
-
-            // Show branch tab if has hidden parents, children, or siblings
-            const hasHiddenParents = hasParents && !parentsVisible;
-            const hasHiddenChildren = hasChildren && !childrenVisible;
-            const hasHiddenSiblings = hasSiblings && !siblingsVisible;
+            // Hidden parents, siblings (children of a union, as the layout
+            // counts them) or children: a branch tab each (one rule with the
+            // marriage-order pill's layout, src/marriage-order.ts).
+            const hiddenTabs = hiddenRelativesTabs(DataManager.getData(), id, pid => this.positions.has(pid), partnershipChildIds);
+            const hasHiddenParents = hiddenTabs.includes('parents');
+            const hasHiddenChildren = hiddenTabs.includes('children');
+            const hasHiddenSiblings = hiddenTabs.includes('siblings');
+            const siblings = hasHiddenSiblings ? DataManager.getSiblings(id).filter(s => partnershipChildIds.has(s.id)) : [];
 
             let html = '';
 
@@ -1535,20 +1528,24 @@ class TreeRendererClass {
                 }
             }
 
-            // Marriage-order pills (T13) on the top edge, at the corner that
-            // points to the person they count for. The left one takes the
-            // corner (the "+ parent" tab appears beside it on hover); on the
-            // right the branch tabs keep the corner pinned and the pill sits
-            // just inside them.
-            const myOrder = orderBadges.get(id) ?? [];
-            const leftOrderHtml = myOrder.filter(b => b.side === 'left').map(b => this.unionOrderPillHtml(b)).join('');
-            const rightOrderHtml = myOrder.filter(b => b.side === 'right').map(b => this.unionOrderPillHtml(b)).join('');
+            // The marriage-order pill (T13), where placeUnionOrderPill put it:
+            // on the edge at the left corner (the "+ parent" tab appears
+            // beside it on hover), on the edge just inside the branch tabs
+            // pinned to the right corner, or above the tabs.
+            const orderBadge = orderBadges.get(id);
+            const orderSlot = orderSlots.get(id);
+            const orderHtml = orderBadge && orderSlot ? this.unionOrderPillHtml(orderBadge) : '';
+            const leftOrderHtml = orderSlot?.row === 'edge' && orderBadge!.side === 'left' ? orderHtml : '';
+            const rightOrderHtml = orderSlot?.row === 'edge' && orderBadge!.side === 'right' ? orderHtml : '';
+            if (orderSlot) card.classList.add(orderSlot.row === 'edge' ? 'has-order-edge' : 'has-order-above');
 
             // Assemble one flex container per card edge. Containers are
             // pointer-events:none (children re-enable auto) so the gaps between
             // pills never steal a click meant for the card.
             if (leftOrderHtml || parentAddHtml) html += `<div class="card-edge edge-top-left">${leftOrderHtml}${parentAddHtml}</div>`;
             if (chainHtml || rightOrderHtml || branchTabsHtml) html += `<div class="card-edge edge-top-right">${chainHtml}${rightOrderHtml}${branchTabsHtml}</div>`;
+            // Above the tabs: placed from the card's padding edge (the border inside the box).
+            if (orderSlot?.row === 'above') html += `<div class="card-edge edge-top-above" style="left:${(orderSlot.x - orderSlot.border).toFixed(2)}px">${orderHtml}</div>`;
             if (hiddenIndicatorsHtml) html += `<div class="card-edge edge-bottom-left">${hiddenIndicatorsHtml}</div>`;
             if (crossTreeHtml) {
                 html += `<div class="card-edge edge-bottom-right">${crossTreeHtml}</div>`;
@@ -2538,29 +2535,63 @@ class TreeRendererClass {
     /**
      * A marriage-order pill (T13): "1. ∞ 1866" ("1. ∞" without a date), the
      * look of the other card-edge pills. Not clickable (a click is the
-     * card's); a mouse shows its bubble "1. sňatek 1866, Dolní Lhota".
+     * card's); a mouse shows its bubble, which names whose marriage the
+     * number counts ("Jan Novák's 2nd marriage, 1885, Dolní Lhota"); the
+     * aria-label says the same.
      */
     private unionOrderPillHtml(b: UnionOrderBadge): string {
-        const tip = strings.focus.unionOrderTip(b.number, b.year, b.place, b.married);
+        const toward = DataManager.getPerson(b.towardId);
+        const tip = strings.focus.unionOrderTip(b.number, b.year, b.place, b.married, toward ? shownName(toward, '?') : '?');
         return `<span class="union-order-pill" role="img" aria-label="${this.escapeHtml(tip)}"`
             + ` data-union-order="${b.number}" data-toward="${this.escapeHtml(b.towardId)}" data-side="${b.side}">`
-            + `<span class="uo-num">${this.unionOrdinalHtml(b.number)}</span>`
-            + `<span class="pill-glyph uo-glyph">∞</span>`
-            + (b.year ? `<span class="uo-year">${this.escapeHtml(b.year)}</span>` : '')
+            + unionOrderPillPartsHtml(strings.focus.unionOrdinal(b.number), b.year)
             + `<span class="badge-tooltip uo-tip">${this.escapeHtml(tip)}</span></span>`;
     }
 
     /**
-     * The ordinal of a marriage-order pill: the number, then its letter suffix
-     * ("st", "nd" in English) in its own span, which the zoomed-out pill drops
-     * so it stays a round 18px badge; a dot ("1.") stays.
+     * Where each marriage-order pill sits on its card (placeUnionOrderPill):
+     * the pill and the resting branch tabs measured in the screen's styles,
+     * the corner groups 12px inside the border (the compact card's right
+     * group 8px further in beside a status badge), the view's lines.
      */
-    private unionOrdinalHtml(n: number): string {
-        const text = strings.focus.unionOrdinal(n);
-        const m = /^(\d+)(\p{L}+)$/u.exec(text);
-        return m
-            ? `${this.escapeHtml(m[1])}<span class="uo-suffix">${this.escapeHtml(m[2])}</span>`
-            : this.escapeHtml(text);
+    private unionOrderSlots(badges: Map<PersonId, UnionOrderBadge>, unionChildIds: ReadonlySet<PersonId>, signalCtx: CardSignalContext):
+        Map<PersonId, PillPlacement & { border: number }> {
+        const out = new Map<PersonId, PillPlacement & { border: number }>();
+        if (badges.size === 0) return out;
+        const data = DataManager.getData();
+        const showTabs = this.viewMode !== 'descendants';
+        const pills = measureUnionOrderPills([...badges.values()].map(b => ({ ordinal: strings.focus.unionOrdinal(b.number), year: b.year })));
+        const tabsOf = new Map<PersonId, HiddenRelativesTab[]>();
+        for (const id of badges.keys()) {
+            tabsOf.set(id, showTabs ? hiddenRelativesTabs(data, id, pid => this.positions.has(pid), unionChildIds) : []);
+        }
+        const tabRows = measureTabRows(tabsOf.values());
+        const segments = viewLineSegments({ connections: this.connections, spouseLines: this.spouseLines });
+        const compact = SettingsManager.getCardDensity() === 'compact';
+        const W = this.config.cardWidth;
+        for (const [id, b] of badges) {
+            const pos = this.positions.get(id);
+            const person = DataManager.getPerson(id);
+            if (!pos || !person) continue;
+            const border = id === this.focusPersonId ? 2 : 1;
+            const signals = compact && cardSignalInfo(person, signalCtx);
+            const signal = !!signals && (!!signals.action || signals.showAgent || signals.doneSince !== null);
+            const slot = placeUnionOrderPill({
+                cardWidth: W,
+                side: b.side,
+                pillWidth: pills.get(unionOrderPillKey(strings.focus.unionOrdinal(b.number), b.year))!.width,
+                leftTabs: 0,
+                rightTabs: tabRows.get(rowKey(tabsOf.get(id)!)) ?? 0,
+                leftInset: border + EDGE_INSET,
+                rightInset: border + EDGE_INSET + (signal ? 8 : 0),
+                segments: segmentsNearCard(segments, pos.x, pos.y, W),
+            });
+            out.set(id, { ...slot, border });
+        }
+        // Measured before the pill font was in: lay the pills out again once it is.
+        const seq = this.renderSeq;
+        pillFontsPending()?.then(() => { if (seq === this.renderSeq) this.render(); });
+        return out;
     }
 
     private escapeHtml(text: string): string {

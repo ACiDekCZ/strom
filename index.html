@@ -1426,6 +1426,8 @@
         .card-edge > * { pointer-events: auto; }
         .edge-top-left     { top: -9px; left: 12px; }
         .edge-top-right    { top: -9px; right: 12px; }
+        /* The marriage-order pill above the tabs (its left set by the renderer). */
+        .edge-top-above    { top: -29px; }
         .edge-bottom-left  { bottom: -9px; left: 12px; }
         .edge-bottom-right { bottom: -9px; right: 12px; }
         .edge-right-center { top: 50%; left: 100%; transform: translate(-9px, -50%); }
@@ -2565,11 +2567,12 @@
             font-weight: 600;
         }
         /* Marriage-order pill (T13): "1. ∞ 1866" on the top edge of a partner's
-           card, at the corner pointing to the person with several unions in
-           view (src/marriage-order.ts). The nav-pill look, but not a control:
-           a click is the card's, a mouse shows the bubble. Zoomed out it
-           shortens to "1." in an 18px circle (40–60 %) and hides below 40 %
-           (src/zoom.ts); the image export always draws it whole. */
+           card, at the corner pointing to the person whose marriages it counts
+           (src/marriage-order.ts): beside the branch tabs, or above them
+           (.edge-top-above) where it does not fit in its half of the card.
+           The nav-pill look, but not a control: a click is the card's, a mouse
+           shows the bubble. Whole from 60 % zoom, hidden below (src/zoom.ts);
+           the image export always draws it whole. */
         .union-order-pill {
             position: relative;
             height: 18px;
@@ -2596,11 +2599,10 @@
         .union-order-pill .uo-glyph { color: var(--accent); font-size: 11px; line-height: 1; }
         .union-order-pill .uo-tip { min-width: 0; white-space: nowrap; font-variant-numeric: normal; }
         @media (hover: hover) { .union-order-pill:hover .badge-tooltip { display: block; } }
-        #tree-canvas.zoom-order-short .union-order-pill { padding: 0 3px; }
-        #tree-canvas.zoom-order-short .union-order-pill .uo-glyph,
-        #tree-canvas.zoom-order-short .union-order-pill .uo-year,
-        #tree-canvas.zoom-order-short .union-order-pill .uo-suffix { display: none; }
         #tree-canvas.zoom-order-hidden .union-order-pill { display: none; }
+        /* The detailed card's name starts 4px lower under a pill on the edge,
+           so the pill does not sit on it. */
+        body[data-card-density="detailed"] .person-card.has-order-edge { padding-top: 12px; }
         /* The action badge on the avatar's corner stays whole above a left pill. */
         .person-card:has(.edge-top-left .union-order-pill) .card-avatar-wrap { z-index: 7; }
 

@@ -7,9 +7,12 @@ import { openApp, card } from './helpers.js';
  * 1866 — in the expanded view. Each wife's card carries a pill on its top
  * edge at the corner pointing to him ("1st ∞ 1866", "2nd ∞ 1908", "3rd ∞"),
  * he has none, a couple of one marriage has none; the wives on one side
- * stand in the order of the marriages. Zoomed out the pill shortens, then
- * hides; the image export draws it whole; a mouse shows its bubble.
- * Invented data.
+ * stand in the order of the marriages. Below 60 % zoom the pill hides; the
+ * image export draws it whole, measured as the screen draws it; a mouse shows
+ * its bubble, which names whose marriage it is. A union has one pill (a widow
+ * who married a widower), and the pill never covers a hidden-relatives tab,
+ * a neighbouring card, the middle of the top edge or a line at any density
+ * (N18). Invented data.
  */
 
 async function setup(page: Page, width = 1440, height = 900): Promise<void> {
@@ -58,8 +61,8 @@ async function pillText(page: Page, name: string): Promise<string> {
     });
 }
 
-async function zoomTo(page: Page, scale: number): Promise<void> {
-    await page.evaluate(s => window.Strom.ZoomPan.glideToPerson('j' as never, s, 0), scale);
+async function zoomTo(page: Page, scale: number, around = 'j'): Promise<void> {
+    await page.evaluate(([s, id]) => window.Strom.ZoomPan.glideToPerson(id as never, s as number, 0), [scale, around] as const);
     await expect.poll(() => page.evaluate(() => window.Strom.ZoomPan.getScale())).toBeCloseTo(scale, 2);
 }
 
@@ -95,41 +98,40 @@ test.describe('marriage-order pill (T13)', () => {
         }
     });
 
-    test('a mouse shows the bubble with the number, year and place; the card\'s hover card stays away', async ({ page }) => {
+    test('a mouse shows the bubble naming whose marriage it is, with the year and place; the card\'s hover card stays away', async ({ page }) => {
         await setup(page);
         await zoomTo(page, 1);
         const tip = pill(page, 'Anna').locator('.uo-tip');
         await expect(tip).toBeHidden();
         await pill(page, 'Anna').hover();
         await expect(tip).toBeVisible();
-        await expect(tip).toHaveText('1st marriage 1866, Dolní Lhota');
+        await expect(tip).toHaveText("Josef Víšek's 1st marriage, 1866, Dolní Lhota");
         await expect(card(page, 'Anna').locator('.card-tooltip')).not.toBeVisible();
-        await expect(pill(page, 'Marie')).toHaveAttribute('aria-label', '2nd marriage 1908, Praha');
+        await expect(pill(page, 'Marie')).toHaveAttribute('aria-label', "Josef Víšek's 2nd marriage, 1908, Praha");
         await expect(pill(page, 'Anna')).toHaveCSS('cursor', 'default');
     });
 
-    test('zoomed out it shows only the number in an 18px circle, below 40 % it hides', async ({ page }) => {
+    test('whole from 60 % zoom, hidden below', async ({ page }) => {
         await setup(page);
         await zoomTo(page, 0.6);
         expect(await pillText(page, 'Anna')).toBe('1st ∞ 1866');
-        await zoomTo(page, 0.5);
-        // the number alone, its "st"/"nd" dropped, in a round 18px badge whatever the font
-        expect(await pillText(page, 'Anna')).toBe('1');
-        expect(await pillText(page, 'Marie')).toBe('2');
-        for (const name of ['Anna', 'Marie', 'Eva']) {
-            expect(await pill(page, name).evaluate(el => el.offsetWidth)).toBe(18);
-            expect(await pill(page, name).evaluate(el => el.offsetHeight)).toBe(18);
-        }
-        await zoomTo(page, 0.39);
+        await expect(pill(page, 'Anna')).toBeVisible();
+        await zoomTo(page, 0.59);
         await expect(pill(page, 'Anna')).toBeHidden();
         await expect(pill(page, 'Marie')).toBeHidden();
         await zoomTo(page, 1);
         await expect(pill(page, 'Anna')).toBeVisible();
+        expect(await pillText(page, 'Marie')).toBe('2nd ∞ 1908');
     });
 
-    test('the SVG export draws the pills whole', async ({ page }) => {
+    test('the SVG export draws the pills whole, as wide as the screen draws them', async ({ page }) => {
         await setup(page);
-        await zoomTo(page, 0.3);   // the screen's zoom does not shorten the export
+        await zoomTo(page, 1);
+        const screenW: Record<string, number> = {};
+        for (const [id, name] of [['a', 'Anna'], ['m', 'Marie'], ['e', 'Eva']]) {
+            screenW[id] = await pill(page, name).evaluate(el => el.getBoundingClientRect().width);
+        }
+        await zoomTo(page, 0.3);   // the screen's zoom does not hide the export's pills
         await page.evaluate(() => window.Strom.UI.showExportDialog());
         await page.locator('#export-modal .menu-option', { hasText: 'Poster' }).click();
         const poster = page.locator('#poster-modal');
@@ -146,6 +148,11 @@ test.describe('marriage-order pill (T13)', () => {
         expect(anna).toContain('>∞</text>');
         expect(anna).toContain('>1866</text>');
         expect(svg).not.toMatch(/drop-shadow|<filter/);
+        // The pill's outer width (the hairline rect + its 1px stroke) is the screen's.
+        for (const m of pills) {
+            const w = Number(/<rect [^>]*width="([\d.]+)" height="17"/.exec(m[3])![1]) + 1;
+            expect(Math.abs(w - screenW[m[2]]), `pill of ${m[2]}: SVG ${w} vs screen ${screenW[m[2]]}`).toBeLessThanOrEqual(0.5);
+        }
     });
 
     test('the descendants view shows the pills too', async ({ page }) => {
@@ -181,4 +188,205 @@ test.describe('marriage-order pill (T13)', () => {
         expect(colours.bg).not.toBe('rgb(255, 253, 248)');
         await page.evaluate(() => window.Strom.SettingsManager.setTheme('system'));
     });
+
+    test('a widow who married a widower: one pill for their marriage, counted for the focus, the bubble names her', async ({ page }) => {
+        await loadTree(page, widowWidower(), 'Ludmila');
+        await zoomTo(page, 1, 'Ludmila');
+        // Karel carries Ludmila's 2nd marriage; she carries none (no "1st" of Karel's beside it).
+        await expect(byId(page, 'Karel').locator('.union-order-pill')).toHaveCount(1);
+        expect(await byId(page, 'Karel').locator('.union-order-pill').getAttribute('data-toward')).toBe('Ludmila');
+        await expect(byId(page, 'Karel').locator('.union-order-pill')).toHaveAttribute('aria-label', "Ludmila Černá's 2nd marriage, 1885, Čáslav");
+        await expect(byId(page, 'Ludmila').locator('.union-order-pill')).toHaveCount(0);
+        // Each card at most one pill; each union one.
+        const perCard = await page.evaluate(() => [...document.querySelectorAll('#tree-canvas .person-card')]
+            .map(c => c.querySelectorAll('.union-order-pill').length));
+        expect(Math.max(...perCard)).toBe(1);
+        // In Czech the name comes first (no genitive needed).
+        await page.evaluate(() => window.Strom.UI.setLanguage('cs' as never));
+        await expect(byId(page, 'Karel').locator('.union-order-pill')).toHaveAttribute('aria-label', 'Ludmila Černá: 2. sňatek, 1885, Čáslav');
+    });
+
+    test('on the detailed card a pill on the edge keeps clear of the name', async ({ page }) => {
+        await setup(page);
+        await page.evaluate(() => window.Strom.UI.setCardDensity('detailed' as never));
+        await zoomTo(page, 1);
+        for (const name of ['Anna', 'Marie', 'Eva']) {
+            const p = (await pill(page, name).boundingBox())!;
+            const n = (await card(page, name).locator('.name').boundingBox())!;
+            expect(n.y - (p.y + p.height), name).toBeGreaterThanOrEqual(2);
+        }
+    });
 });
+
+// ---------------------------------------------------------------------------
+// N18: the pill and the hidden-relatives tabs at every density (a harness)
+// ---------------------------------------------------------------------------
+
+type Tree = { persons: Record<string, unknown>; partnerships: Record<string, unknown> };
+
+function builder() {
+    const persons: Record<string, { id: string; firstName: string; lastName: string; gender: string; birthDate?: string;
+        isPlaceholder: boolean; partnerships: string[]; parentIds: string[]; childIds: string[] }> = {};
+    const partnerships: Record<string, unknown> = {};
+    const person = (id: string, first: string, last: string, gender: 'male' | 'female', birthDate?: string) => {
+        persons[id] = { id, firstName: first, lastName: last, gender, isPlaceholder: false, partnerships: [], parentIds: [], childIds: [],
+            ...(birthDate ? { birthDate } : {}) };
+    };
+    const union = (id: string, a: string, b: string, startDate: string, kids: string[] = [], startPlace?: string) => {
+        partnerships[id] = { id, person1Id: a, person2Id: b, childIds: kids, status: 'married', startDate, ...(startPlace ? { startPlace } : {}) };
+        persons[a].partnerships.push(id); persons[b].partnerships.push(id);
+        for (const k of kids) { persons[k].parentIds.push(a, b); persons[a].childIds.push(k); persons[b].childIds.push(k); }
+    };
+    /** Parents and two siblings (the "parents" and "siblings" tabs while they are out of view). */
+    const kin = (id: string) => {
+        const last = persons[id].lastName;
+        person(`${id}_f`, 'Otec', last, 'male', '1790'); person(`${id}_m`, 'Matka', last, 'female', '1795');
+        person(`${id}_s1`, 'Sestra', last, 'female', '1815'); person(`${id}_s2`, 'Bratr', last, 'male', '1817');
+        union(`${id}_pu`, `${id}_f`, `${id}_m`, '1812', [id, `${id}_s1`, `${id}_s2`]);
+    };
+    return { person, union, kin, tree: (): Tree => ({ persons, partnerships }) };
+}
+
+/** Barbora married twice; both husbands have parents and siblings in the data. */
+function widow(): Tree {
+    const t = builder();
+    t.person('Barbora', 'Barbora', 'Hrubá', 'female', '1825');
+    t.person('Ondrej', 'Ondřej Maxmilián', 'Hrubý-Kratochvíl', 'male', '1818');
+    t.person('Pavel', 'Pavel', 'Novotný', 'male', '1820');
+    t.kin('Barbora'); t.kin('Ondrej'); t.kin('Pavel');
+    t.person('c1', 'Jan', 'Hrubý', 'male', '1846'); t.person('c2', 'Marie', 'Novotná', 'female', '1852');
+    t.union('w2', 'Pavel', 'Barbora', '1850', ['c2']);
+    t.union('w1', 'Ondrej', 'Barbora', '1845', ['c1'], 'Dolní Lhota');
+    return t.tree();
+}
+
+/** Jiří married Anna, Berta and Cecílie, each of whom married once more. */
+function chain(): Tree {
+    const t = builder();
+    t.person('Jiri', 'Jiří', 'Chrpan', 'male', '1850');
+    t.kin('Jiri');
+    for (const [w, wn, h, hn, d1, d2] of [['Anna', 'Anna Bělá', 'Daniel', 'Daniel Erben', '1872', '1879'],
+        ['Berta', 'Berta Cihlová', 'Emil', 'Emil Fiala', '1876', '1884'], ['Cecilie', 'Cecílie Doubková', 'Frantisek', 'František Gregor', '1878', '1882']]) {
+        const [wf, wl] = wn.split(' '); const [hf, hl] = hn.split(' ');
+        t.person(w, wf, wl, 'female', '1852'); t.person(h, hf, hl, 'male', '1848');
+        t.kin(w);
+        t.person(`${w}_k1`, 'Syn', hl, 'male', String(+d1 + 1)); t.person(`${w}_k2`, 'Dcera', 'Chrpanová', 'female', String(+d2 + 1));
+        t.union(`u_${w}_J`, 'Jiri', w, d2, [`${w}_k2`]);
+        t.union(`u_${w}_${h}`, h, w, d1, [`${w}_k1`]);
+    }
+    return t.tree();
+}
+
+/** Ludmila married Tomáš, then the widower Karel, who married Rozálie after her. */
+function widowWidower(): Tree {
+    const t = builder();
+    t.person('Ludmila', 'Ludmila', 'Černá', 'female', '1860'); t.person('Tomas', 'Tomáš', 'Bílý', 'male', '1855');
+    t.person('Karel', 'Karel', 'Dušek', 'male', '1852'); t.person('Rozalie', 'Rozálie', 'Malá', 'female', '1865');
+    t.kin('Ludmila'); t.kin('Karel');
+    t.person('k1', 'Josef', 'Bílý', 'male', '1881'); t.person('k2', 'Anna', 'Dušková', 'female', '1886');
+    t.person('k3', 'Václav', 'Dušek', 'male', '1895');
+    t.union('l1', 'Tomas', 'Ludmila', '1880', ['k1']);
+    t.union('lk', 'Karel', 'Ludmila', '1885', ['k2'], 'Čáslav');
+    t.union('kr', 'Karel', 'Rozalie', '1894', ['k3']);
+    return t.tree();
+}
+
+const byId = (page: Page, id: string) => page.locator(`#tree-canvas .person-card[data-id="${id}"]`);
+
+async function loadTree(page: Page, tree: Tree, focus: string, width = 1440, height = 900): Promise<void> {
+    await page.setViewportSize({ width, height });
+    await openApp(page);
+    await page.evaluate(async ([t, f]) => {
+        await window.Strom.DataManager.importAsNewTree(t as never, 'T13');
+        window.Strom.TreeRenderer.setFocus(f as never);
+    }, [tree, focus] as const);
+    await expect(byId(page, focus)).toBeVisible();
+}
+
+/**
+ * Every pill of the view against the tabs, the cards and the lines, in
+ * screen pixels: no pill covers a hidden-relatives tab or another card,
+ * leaves its own card's width, covers the middle of its card's top edge or
+ * has a line running under it.
+ */
+async function pillCollisions(page: Page): Promise<{ pills: number; above: number; besideTabs: number; errors: string[] }> {
+    return page.evaluate(() => {
+        type R = { left: number; top: number; right: number; bottom: number };
+        const hit = (a: R, b: R, m = 0.5) => a.left < b.right - m && b.left < a.right - m && a.top < b.bottom - m && b.top < a.bottom - m;
+        const visible = (el: Element) => { const r = el.getBoundingClientRect(); return r.width > 0.5 && getComputedStyle(el).visibility !== 'hidden'; };
+        const cards = [...document.querySelectorAll<HTMLElement>('#tree-canvas .person-card')];
+        const tabs = [...document.querySelectorAll('#tree-canvas .branch-tab')].filter(visible).map(t => t.getBoundingClientRect());
+        const svg = document.querySelector<SVGSVGElement>('#tree-lines')!;
+        const ctm = svg.getScreenCTM()!;
+        const pt = (x: number, y: number) => new DOMPoint(x, y).matrixTransform(ctm);
+        const lines = [...svg.querySelectorAll('line')].map(l => {
+            const a = pt(+l.getAttribute('x1')!, +l.getAttribute('y1')!), b = pt(+l.getAttribute('x2')!, +l.getAttribute('y2')!);
+            return { cls: l.getAttribute('class') ?? '', r: { left: Math.min(a.x, b.x), right: Math.max(a.x, b.x), top: Math.min(a.y, b.y), bottom: Math.max(a.y, b.y) } };
+        }).filter(l => !/gen-guide|gen-band|debug/.test(l.cls));
+        const errors: string[] = [];
+        let pills = 0, above = 0, besideTabs = 0;
+        for (const c of cards) {
+            const cr = c.getBoundingClientRect();
+            for (const p of c.querySelectorAll('.union-order-pill')) {
+                if (!visible(p)) continue;
+                pills++;
+                const r = p.getBoundingClientRect();
+                const tag = `pill of ${c.dataset.id} (${p.parentElement!.className.replace('card-edge ', '')})`;
+                if (p.parentElement!.classList.contains('edge-top-above')) above++;
+                if (p.parentElement!.classList.contains('edge-top-right') && c.querySelector('.branch-tab')) besideTabs++;
+                if (r.left < cr.left - 0.5 || r.right > cr.right + 0.5) errors.push(`${tag}: leaves its card's width`);
+                const mid = (cr.left + cr.right) / 2;
+                if (r.left < mid + 2 && r.right > mid - 2) errors.push(`${tag}: covers the middle of the top edge`);
+                for (const t of tabs) if (hit(r, t)) errors.push(`${tag}: covers a tab`);
+                for (const o of cards) if (o !== c && hit(r, o.getBoundingClientRect())) errors.push(`${tag}: reaches the card of ${o.dataset.id}`);
+                for (const q of c.querySelectorAll('.union-order-pill')) if (q !== p) errors.push(`${tag}: a second pill on the card`);
+                for (const l of lines) {
+                    // a line (1.5px stroke) through the pill's inside
+                    const s = { left: l.r.left - 0.75, right: l.r.right + 0.75, top: l.r.top - 0.75, bottom: l.r.bottom + 0.75 };
+                    if (hit(r, s, 1)) errors.push(`${tag}: a line (${l.cls}) runs under it`);
+                }
+            }
+        }
+        return { pills, above, besideTabs, errors };
+    });
+}
+
+const HARNESS: Array<[string, () => Tree, string[]]> = [
+    ['widow', widow, ['Barbora', 'Ondrej', 'Pavel', 'c1', 'Barbora_f']],
+    ['chain', chain, ['Jiri', 'Anna', 'Berta', 'Cecilie', 'Daniel', 'Anna_k2', 'Jiri_f']],
+    ['widow-widower', widowWidower, ['Ludmila', 'Karel', 'Tomas', 'Rozalie', 'k2']],
+];
+
+for (const density of ['compact', 'normal', 'detailed', 'custom'] as const) {
+    test(`N18 harness (${density}): no pill covers a tab, a neighbouring card, the middle of the top edge or a line`, async ({ page }) => {
+        test.setTimeout(120_000);
+        let views = 0, pills = 0, above = 0, besideTabs = 0;
+        const errors: string[] = [];
+        for (const [name, make, focuses] of HARNESS) {
+            await loadTree(page, make(), focuses[0]);
+            await page.evaluate((d) => window.Strom.UI.setCardDensity(d as never), density);
+            for (const view of ['expanded', 'standard', 'descendants'] as const) {
+                if (view === 'standard') await page.evaluate(() => window.Strom.TreeRenderer.toggleShowAllPartnerships());
+                if (view === 'descendants') {
+                    await page.evaluate(() => window.Strom.TreeRenderer.toggleShowAllPartnerships());
+                    await page.locator('#view-mode-descendants').click();
+                }
+                for (const focus of focuses) {
+                    await page.evaluate((f) => window.Strom.TreeRenderer.setFocus(f as never), focus);
+                    await page.evaluate(() => document.fonts.ready);
+                    await zoomTo(page, 1, focus);
+                    const r = await pillCollisions(page);
+                    views++; pills += r.pills; above += r.above; besideTabs += r.besideTabs;
+                    errors.push(...r.errors.map(e => `${name}/${view}/focus ${focus}: ${e}`));
+                }
+                if (view === 'descendants') await page.locator('#view-mode-family').click();
+            }
+        }
+        console.log(`N18 harness ${density}: ${views} views, ${pills} pills (${above} above the tabs, ${besideTabs} beside tabs), ${errors.length} collisions`);
+        expect(errors).toEqual([]);
+        expect(pills).toBeGreaterThan(20);
+        // compact and normal cards meet the case the fix is for: a pill above the tabs
+        if (density === 'compact' || density === 'normal') expect(above).toBeGreaterThan(0);
+    });
+}
+

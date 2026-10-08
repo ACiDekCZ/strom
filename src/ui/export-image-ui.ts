@@ -25,6 +25,11 @@ import { cardLines, cardYears } from '../card-fields.js';
 import { measureCardTexts } from '../card-width.js';
 import { appFontFaceCss, POSTER_SERIF_FACES, POSTER_LINE_FACES } from '../poster-fonts.js';
 import { shownNameOrEmpty } from '../person-name.js';
+import { unionOrderBadges } from '../marriage-order.js';
+import { measureUnionOrderPill } from '../union-order-measure.js';
+
+/** The face of the marriage-order pill's text (index.html .union-order-pill). */
+const PILL_FACE = { family: 'Instrument Sans', weight: 600 };
 
 /** Browsers cap canvas dimensions; keep well under the common ~16k limit. */
 const MAX_CANVAS_PX = 15000;
@@ -155,8 +160,14 @@ export function treeCardDrawing(data: StromData, layout: ReturnType<typeof TreeR
         branchMap,
         deceasedSet,
         ...(dimmedIds ? { dimmedIds } : {}),
+        // Marriage-order pills (T13): whose marriage a pill counts follows the
+        // focus, and the pill is measured as the screen draws it.
+        focusId,
+        measureUnionOrderPill,
         // The faces the cards are drawn in: the serif always, the lines' sans for the custom card.
-        fontFaceCss: appFontFaceCss(custom ? [...POSTER_SERIF_FACES, ...POSTER_LINE_FACES] : POSTER_SERIF_FACES),
+        // A view with marriage-order pills brings their sans (600) too.
+        fontFaceCss: appFontFaceCss(custom ? [...POSTER_SERIF_FACES, ...POSTER_LINE_FACES]
+            : unionOrderBadges(data, layout).size > 0 ? [...POSTER_SERIF_FACES, PILL_FACE] : POSTER_SERIF_FACES),
         ...(custom ? {
             cardLines: cardLinesMap,
             cardDateColumn: TreeRenderer.getCustomCardMetrics()?.dateColumn ?? 0,
