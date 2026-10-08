@@ -212,6 +212,33 @@ export function matchCardPreset(settings: CardFieldSettings): CardPresetKey | nu
 }
 
 /**
+ * "Edit as Custom" on a preset type: the preset's settings for the Custom
+ * card (its unticked details keep the order they had in `stored`), and
+ * whether the Custom settings it replaces are worth bringing back — not when
+ * they already were that preset.
+ */
+export function presetAsCustom(key: CardPresetKey, stored: CardFieldSettings): { fields: CardFieldSettings; restorable: boolean } {
+    return { fields: cardPreset(key, stored), restorable: matchCardPreset(stored) !== key };
+}
+
+/**
+ * The card type a key moves to in the row of types (a radio group): the
+ * arrows step to the next or the previous one, wrapping around; Home and End
+ * go to the first and the last. Null for any other key.
+ */
+export function cardTypeForKey(current: CardDensity, key: string): CardDensity | null {
+    const n = CARD_DENSITIES.length;
+    const i = Math.max(0, CARD_DENSITIES.indexOf(current));
+    switch (key) {
+        case 'ArrowRight': case 'ArrowDown': return CARD_DENSITIES[(i + 1) % n];
+        case 'ArrowLeft': case 'ArrowUp': return CARD_DENSITIES[(i - 1 + n) % n];
+        case 'Home': return CARD_DENSITIES[0];
+        case 'End': return CARD_DENSITIES[n - 1];
+        default: return null;
+    }
+}
+
+/**
  * The card box for a number of lines: the name row plus 17px a line. The width
  * is the narrowest one; the renderer widens every card of a view to its
  * longest text (src/card-width.ts). This is the view's height with one row a

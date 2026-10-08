@@ -8,6 +8,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
     cardLines, cardDate, normalizeCardFields, customCardSize, DEFAULT_CARD_FIELDS, CardFieldSettings,
     CARD_FIELD_KEYS, cardPreset, matchCardPreset, effectiveCardFields, normalizeCardDensity, isFieldCardDensity, CARD_PRESET_KEYS,
+    presetAsCustom, cardTypeForKey,
 } from '../card-fields.js';
 import { setLanguage } from '../strings.js';
 import { Person, PersonId, Partnership, PartnershipId, StromData } from '../types.js';
@@ -237,5 +238,33 @@ describe('card types (U03a)', () => {
     it('cards of details are Detailed, Register and Custom', () => {
         expect((['compact', 'normal', 'detailed', 'register', 'custom'] as const).filter(isFieldCardDensity))
             .toEqual(['detailed', 'register', 'custom']);
+    });
+});
+
+describe('the row of card types (Settings)', () => {
+    it('"Edit as Custom": the preset\'s settings, the unticked details in their old order; restorable unless already the preset', () => {
+        const mine = normalizeCardFields({ on: ['marriage'], order: ['divorce', 'occupation', 'marriage'], style: 'labels', widthCap: 400 });
+        const { fields, restorable } = presetAsCustom('register', mine);
+        expect(fields).toEqual(cardPreset('register', mine));
+        expect(matchCardPreset(fields)).toBe('register');
+        expect(fields.order.slice(5)).toEqual(['divorce', 'occupation', 'age']);
+        expect(restorable).toBe(true);
+        // Already the preset: nothing worth bringing back; another preset is.
+        expect(presetAsCustom('register', fields).restorable).toBe(false);
+        expect(presetAsCustom('detailed', fields).restorable).toBe(true);
+        expect(presetAsCustom('detailed', DEFAULT_CARD_FIELDS).restorable).toBe(false);
+    });
+
+    it('the arrows step through the types and wrap; Home and End; other keys do nothing', () => {
+        expect(cardTypeForKey('normal', 'ArrowRight')).toBe('detailed');
+        expect(cardTypeForKey('normal', 'ArrowDown')).toBe('detailed');
+        expect(cardTypeForKey('normal', 'ArrowLeft')).toBe('compact');
+        expect(cardTypeForKey('normal', 'ArrowUp')).toBe('compact');
+        expect(cardTypeForKey('custom', 'ArrowRight')).toBe('compact');
+        expect(cardTypeForKey('compact', 'ArrowLeft')).toBe('custom');
+        expect(cardTypeForKey('register', 'Home')).toBe('compact');
+        expect(cardTypeForKey('register', 'End')).toBe('custom');
+        expect(cardTypeForKey('register', 'Enter')).toBeNull();
+        expect(cardTypeForKey('register', 'a')).toBeNull();
     });
 });

@@ -143,8 +143,9 @@ export const cardSignalsUiMethods = uiModule({
                 </div>
                 <div class="settings-desc">${this.escapeHtml(`${d.cardShowHint} ${d.sameEverywhere}`)}</div>
             </div>`;
-        // One preview for the density and the signals, under the density
-        // select; the custom density's details below it.
+        // The row of card types, one preview for the type and the signals
+        // under it, the custom type's details below it.
+        this.renderCardTypeSettings();
         this.renderCardPreview();
         this.renderCardFieldsSettings();
         host.querySelectorAll<HTMLInputElement>('input[data-signal]').forEach(input => {

@@ -193,7 +193,7 @@ test.describe('the custom card', () => {
     test('first time: the Detailed fields with the age; each card as tall as its content; the baptism stands in', async ({ page }) => {
         await setup(page);
         await openCardSettings(page);
-        await page.locator('#card-density-select').selectOption('custom');
+        await page.locator('#card-type-row').getByRole('radio', { name: 'Custom…' }).click();
         await expect(page.locator('#card-fields-settings')).toBeVisible();
         await expect(page.locator('#card-fields-settings input[type="checkbox"]:checked')).toHaveCount(4);
         // The default shows every detail whole (U02, the author's choice): 3px between
@@ -217,7 +217,7 @@ test.describe('the custom card', () => {
     test('ticks, chips, order, full dates, and all eight details can be on', async ({ page }) => {
         await setup(page);
         await openCardSettings(page);
-        await page.locator('#card-density-select').selectOption('custom');
+        await page.locator('#card-type-row').getByRole('radio', { name: 'Custom…' }).click();
         const host = page.locator('#card-fields-settings');
         // One row a detail and one height: the card is 56 + 17 a detail on, whoever is in the view.
         await host.locator('.card-look-lines').getByRole('button', { name: '1 line', exact: true }).click();
@@ -261,7 +261,7 @@ test.describe('the custom card', () => {
     test('the poster draws the same lines as the screen', async ({ page }) => {
         await setup(page);
         await openCardSettings(page);
-        await page.locator('#card-density-select').selectOption('custom');
+        await page.locator('#card-type-row').getByRole('radio', { name: 'Custom…' }).click();
         await page.keyboard.press('Escape');
         await page.evaluate(() => window.Strom.UI.showPosterDialog());
         const [download] = await Promise.all([
@@ -283,7 +283,7 @@ test.describe('the custom card', () => {
     test('phone 360: the toggles under the name, thumb-sized arrows', async ({ page }) => {
         await setup(page, 360);
         await openCardSettings(page);
-        await page.locator('#card-density-select').selectOption('custom');
+        await page.locator('#card-type-row').getByRole('radio', { name: 'Custom…' }).click();
         const row = page.locator('#card-fields-settings .card-field-row[data-key="birth"]');
         const up = await row.locator('.card-field-down').boundingBox();
         expect(Math.round(up!.width)).toBe(44);

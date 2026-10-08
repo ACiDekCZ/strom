@@ -1,6 +1,8 @@
 /**
- * Settings → Person card: the preview card (one for the density and the
- * signals) and, for the "Custom" density, the list of details its lines show
+ * Settings → Person card: the row of card types (a tile with a small sample
+ * card each, a radio group), the sentence on the chosen type with "Edit as
+ * Custom" for the preset types, the preview card (one for the type and the
+ * signals) and, for the "Custom" type, the list of details its lines show
  * (src/card-fields.ts). A row per detail: a checkbox, the mark and the name,
  * small toggles for what the line adds (place, cause, the baptism or burial
  * standing in) and arrows to reorder — no dragging, eight rows is few enough.
@@ -12,12 +14,13 @@
 import { TreeRenderer } from '../renderer.js';
 import { SettingsManager, CardSignals } from '../settings.js';
 import { strings } from '../strings.js';
-import { Person, PersonId, Partnership, PartnershipId, StromData } from '../types.js';
+import { CARD_SIZE, CardDensity, Person, PersonId, Partnership, PartnershipId, StromData } from '../types.js';
 import { ActionSignal, ACTION_GLYPH, stateStripesHtml } from '../card-signals.js';
 import {
     CardFieldKey, CardFieldSettings, CardHeightMode, CardLineStyle, CardValueLines, CardWidthCap, CARD_FIELD_KEYS,
     CARD_HEIGHT_MODES, CARD_LINE_STYLES, CARD_MARKS, CARD_VALUE_LINES, CARD_WIDTH_CAPS, PLACE_KEYS, cardLines,
-    cardLineHtml, cardYears, cardDateReferences, isFieldCardDensity,
+    cardLineHtml, cardYears, cardDateReferences, isFieldCardDensity, CARD_DENSITIES, CardPresetKey, cardTypeForKey,
+    customCardSize, matchCardPreset, presetAsCustom,
 } from '../card-fields.js';
 import { CardHead, customCardMetrics, customCardRows, measureCardTexts } from '../card-width.js';
 import { uiModule } from './module.js';
@@ -89,11 +92,11 @@ const LINES_LABEL: Record<CardValueLines, () => string> = {
  * view's one-row height, or the sample's own when its details wrap or the
  * height is "by content".
  */
-function samplePreview(viewWidth: number | undefined): {
+function samplePreview(density: CardPresetKey | 'custom', viewWidth: number | undefined): {
     html: string; head: CardHead; wrapped: boolean; width: number; height: number; dateColumn: number; labelColumn: number;
 } {
     // The card type's own lines (Detailed, Register), Custom's stored ones.
-    const fields = SettingsManager.getEffectiveCardFields() ?? SettingsManager.getCardFields();
+    const fields = SettingsManager.getEffectiveCardFields(density) ?? SettingsManager.getCardFields();
     const { person, data } = samplePerson();
     const lines = cardLines(person, data, fields);
     const years = fields.years ? cardYears(person, true) : '';
@@ -107,7 +110,7 @@ function samplePreview(viewWidth: number | undefined): {
     const html = `<div class="card-lines${wrapped ? ' card-lines--rows' : ''}">${lines.map(l =>
         cardLineHtml(l, esc, false, wrapped ? rows.get(l) : undefined, fields.style, !!rows.get(l)?.longDate)).join('')}</div>`;
     // The sample's own height when its details wrap or every card is as tall as its content.
-    const height = wrapped || fields.height === 'content' ? heights[0] : SettingsManager.getCardSize().cardHeight;
+    const height = wrapped || fields.height === 'content' ? heights[0] : customCardSize(fields.on.length, fields.years).cardHeight;
     return { html, head: heads[0], wrapped, width: metrics.cardWidth, height, dateColumn: own.dateColumn, labelColumn: own.labelColumn ?? 0 };
 }
 
@@ -156,68 +159,201 @@ function watchCardPreview(host: HTMLElement): void {
     }).observe(host);
 }
 
+/** No signals: the tiles' small cards (unreadable at a quarter of the size). */
+const NO_SIGNALS: CardSignals = { evidence: false, story: false, waiting: false, conflict: false, question: false, agent: false };
+
+/** The scale of the small cards in the row of types (one for every type). */
+const THUMB_SCALE = 0.25;
+
+/** A card type's name; in a sentence without the "…" of Custom's. */
+function typeName(density: CardDensity): string {
+    return strings.cardDensity[density];
+}
+
+/** The sentence on a type under the row (Custom has none: its panel says it). */
+function typeDescription(density: CardDensity): string {
+    const d = strings.cardDensity;
+    switch (density) {
+        case 'compact': return d.compactDesc;
+        case 'normal': return d.normalDesc;
+        case 'detailed': return d.detailedDesc;
+        case 'register': return d.registerDesc;
+        default: return '';
+    }
+}
+
+/**
+ * After "Edit as Custom": the preset Custom took over and the Custom settings
+ * it replaced (null when they already were that preset — nothing to bring
+ * back). Gone with the next change in the panel, another type, or when the
+ * Settings close.
+ */
+let customCopy: { type: CardPresetKey; prev: CardFieldSettings | null } | null = null;
+
+/** Forget the "Custom now has the … settings" notice and what it could restore. */
+export function forgetCardTypeCopy(): void {
+    customCopy = null;
+}
+
+/**
+ * A made-up card of a type with the chosen signals, and its box: the fixed
+ * size of Compact and Normal, the sample's own for a card of details (wrapped
+ * for `viewWidth`, the drawn view's card width, when given).
+ */
+function sampleCard(density: CardDensity, on: CardSignals, viewWidth: number | undefined): { html: string; width: number; height: number } {
+    const stripes = stateStripesHtml(on.evidence ? 'partial' : null, on.story ? 'draft' : null);
+    const action: ActionSignal | null = on.waiting ? 'waiting' : on.conflict ? 'conflict' : on.question ? 'question' : null;
+    const badge = action ? `<span class="card-signal signal-${action}">${ACTION_GLYPH[action]}</span>` : '';
+    const dot = action ? `<span class="card-signal-dot signal-${action}"></span>` : '';
+    const avatar = (initials: string) =>
+        `<div class="card-avatar-wrap"><div class="card-avatar"><span class="avatar-initials">${initials}</span></div>${badge}</div>`;
+    if (isFieldCardDensity(density)) {
+        const sample = samplePreview(density, viewWidth);
+        // The width it was wrapped for (the view's; before any view, the sample's own) and its height.
+        const box = `--card-date-col: ${sample.dateColumn}px; --card-label-col: ${sample.labelColumn}px; `
+            + `width: ${sample.width}px; height: ${sample.height}px`;
+        const { head } = sample;
+        const name = sample.wrapped
+            ? `<div class="name name--rows"><span class="name-text">${head.name.map(r => `<span class="name-row">${esc(r)}</span>`).join('')}</span></div>`
+            : '<div class="name"><span class="name-text">Jan Vlk</span></div>';
+        const years = head.years ? `<div class="card-years">${esc(head.years)}</div>` : '';
+        return {
+            width: sample.width, height: sample.height, html: `
+            <div class="person-card male preview-card${action ? ' has-signal' : ''}" data-density="${density}" data-fields style="${box}">
+                <div class="card-body card-body--custom">
+                    <div class="card-head">${avatar('JV')}<div class="card-head-text">${name}${years}</div></div>
+                    ${sample.html}
+                </div>
+                ${stripes}
+                ${dot}
+            </div>`,
+        };
+    }
+    const compact = density === 'compact';
+    const size = CARD_SIZE[compact ? 'compact' : 'normal'];
+    return {
+        width: size.cardWidth, height: size.cardHeight, html: `
+        <div class="person-card male preview-card${action ? ' has-signal' : ''}" data-density="${density}">
+            ${compact ? '' : avatar('JV')}
+            <div class="card-body">
+                <div class="name"><span class="name-text">Jan Vlk</span></div>
+                ${compact ? '' : '<div class="birth-date"><span class="meta-text">1862 – 1919 · Horní Lhota</span></div>'}
+            </div>
+            ${stripes}
+            ${dot}
+        </div>`,
+    };
+}
+
+/** A tile's small card: the type's sample at a quarter of its size, in a box of the scaled size. */
+function thumbHtml(density: CardDensity): string {
+    const { html, width, height } = sampleCard(density, NO_SIGNALS, undefined);
+    const w = Math.round(width * THUMB_SCALE * 100) / 100;
+    const h = Math.round(height * THUMB_SCALE * 100) / 100;
+    return `<span class="card-type-thumb-box" style="width: ${w}px; height: ${h}px"><span class="card-type-thumb-card">${html}</span></span>`;
+}
+
 export const cardFieldsUiMethods = uiModule({
-    /** The preview card under the density select, with the card's size. */
+    /**
+     * "Card detail": the row of the five types (a radio group — one tab stop,
+     * the arrows move the choice), under it the chosen type's sentence with
+     * "Edit as Custom" for Detailed and Register, or for Custom the notice of
+     * the settings it took over, or the note that it equals a preset.
+     */
+    renderCardTypeSettings(): void {
+        const host = document.getElementById('card-type-settings');
+        if (!host) return;
+        const d = strings.cardDensity;
+        const current = SettingsManager.getCardDensity();
+        const tiles = CARD_DENSITIES.map(density => {
+            const on = density === current;
+            return `<button type="button" class="card-type-tile${on ? ' is-selected' : ''}" role="radio" aria-checked="${on}" tabindex="${on ? 0 : -1}" data-density="${density}">
+                <span class="card-type-thumb" aria-hidden="true">${thumbHtml(density)}</span>
+                <span class="card-type-name">${esc(typeName(density))}</span>
+            </button>`;
+        }).join('');
+        let below = '';
+        if (current === 'custom') {
+            const same = customCopy ? null : matchCardPreset(SettingsManager.getCardFields());
+            if (customCopy) {
+                below = `<div class="card-type-notice" role="status" tabindex="-1">
+                    <span class="card-type-notice-text">${esc(d.copied(typeName(customCopy.type)))}</span>
+                    ${customCopy.prev ? `<button type="button" class="card-type-restore">${esc(d.restore)}</button>` : ''}
+                </div>`;
+            } else if (same) {
+                below = `<p class="card-type-same">${esc(d.sameAs(typeName(same)))}</p>`;
+            }
+        } else {
+            const edit = current === 'detailed' || current === 'register'
+                ? `<button type="button" class="secondary card-type-edit">${esc(d.editAsCustom)}</button>` : '';
+            below = `<div class="card-type-about"><p class="card-type-desc" id="card-type-desc">${esc(typeDescription(current))}</p>${edit}</div>`;
+        }
+        host.innerHTML = `
+            <span class="settings-name" id="card-type-label">${esc(d.settingLabel)}</span>
+            <div class="card-type-row" id="card-type-row" role="radiogroup" aria-labelledby="card-type-label"${current === 'custom' ? '' : ' aria-describedby="card-type-desc"'}>${tiles}</div>
+            ${below}`;
+
+        const choose = (density: CardDensity): void => {
+            if (density !== SettingsManager.getCardDensity()) this.setCardDensity(density);
+            document.querySelector<HTMLElement>(`#card-type-row [data-density="${density}"]`)?.focus();
+        };
+        host.querySelectorAll<HTMLButtonElement>('.card-type-tile').forEach(tile => {
+            tile.onclick = () => choose(tile.dataset.density as CardDensity);
+        });
+        const row = host.querySelector<HTMLElement>('.card-type-row');
+        if (row) row.onkeydown = (e: KeyboardEvent) => {
+            const from = (e.target as HTMLElement).closest<HTMLElement>('.card-type-tile')?.dataset.density as CardDensity | undefined;
+            const next = from && cardTypeForKey(from, e.key);
+            if (!next) return;
+            e.preventDefault();
+            e.stopPropagation();
+            choose(next);
+        };
+        const edit = host.querySelector<HTMLButtonElement>('.card-type-edit');
+        if (edit && (current === 'detailed' || current === 'register')) edit.onclick = () => {
+            const prev = SettingsManager.getCardFields();
+            const { fields, restorable } = presetAsCustom(current, prev);
+            SettingsManager.setCardFields(fields);
+            this.setCardDensity('custom');
+            customCopy = { type: current, prev: restorable ? prev : null };
+            this.renderCardTypeSettings();
+            // The button is gone with the type: the keyboard goes to the notice.
+            document.querySelector<HTMLElement>('#card-type-settings .card-type-notice')?.focus();
+        };
+        const restore = host.querySelector<HTMLButtonElement>('.card-type-restore');
+        if (restore) restore.onclick = () => {
+            const prev = customCopy?.prev;
+            customCopy = null;
+            if (prev) SettingsManager.setCardFields(prev);
+            this.renderCardTypeSettings();
+            this.renderCardPreview();
+            this.renderCardFieldsSettings();
+            TreeRenderer.render();
+            document.querySelector<HTMLElement>('#card-type-row [aria-checked="true"]')?.focus();
+        };
+    },
+
+    /** The preview card under the row of types, with the card's size. */
     renderCardPreview(): void {
         const host = document.getElementById('card-preview-settings');
         if (!host) return;
-        const size = SettingsManager.getCardSize();
-        // The custom card is as wide as the drawn view needs (src/card-width.ts);
+        // A card of details is as wide as the drawn view needs (src/card-width.ts);
         // as tall as the sample's details when they wrap.
-        const sample = isFieldCardDensity(SettingsManager.getCardDensity())
-            ? samplePreview(TreeRenderer.getCustomCardMetrics()?.cardWidth) : null;
-        const width = sample?.width ?? size.cardWidth;
-        const height = sample?.height ?? size.cardHeight;
+        const { html, width, height } = sampleCard(SettingsManager.getCardDensity(), SettingsManager.getCardSignals(),
+            TreeRenderer.getCustomCardMetrics()?.cardWidth);
         host.innerHTML = `
             <div class="card-preview-head">
                 <span class="card-signals-preview-title">${esc(strings.cardDensity.cardPreview)}</span>
                 <span class="card-preview-size">${esc(strings.cardDensity.size(width, height))}</span>
             </div>
-            <div class="card-signals-preview" aria-hidden="true"><div class="card-preview-fit">${this.cardPreviewHtml(SettingsManager.getCardSignals())}</div></div>`;
+            <div class="card-signals-preview" aria-hidden="true"><div class="card-preview-fit">${html}</div></div>`;
         fitCardPreview(host);
         watchCardPreview(host);
     },
 
-    /** A made-up card in the current density with the chosen signals. */
+    /** A made-up card in the current type with the chosen signals. */
     cardPreviewHtml(on: CardSignals): string {
-        const density = SettingsManager.getCardDensity();
-        const stripes = stateStripesHtml(on.evidence ? 'partial' : null, on.story ? 'draft' : null);
-        const action: ActionSignal | null = on.waiting ? 'waiting' : on.conflict ? 'conflict' : on.question ? 'question' : null;
-        const badge = action ? `<span class="card-signal signal-${action}">${ACTION_GLYPH[action]}</span>` : '';
-        const dot = action ? `<span class="card-signal-dot signal-${action}"></span>` : '';
-        const avatar = (initials: string) =>
-            `<div class="card-avatar-wrap"><div class="card-avatar"><span class="avatar-initials">${initials}</span></div>${badge}</div>`;
-        if (isFieldCardDensity(density)) {
-            const sample = samplePreview(TreeRenderer.getCustomCardMetrics()?.cardWidth);
-            // The width it was wrapped for (the view's; before any view, the sample's own) and its height.
-            const box = `--card-date-col: ${sample.dateColumn}px; --card-label-col: ${sample.labelColumn}px; `
-                + `width: ${sample.width}px; height: ${sample.height}px`;
-            const { head } = sample;
-            const name = sample.wrapped
-                ? `<div class="name name--rows"><span class="name-text">${head.name.map(r => `<span class="name-row">${esc(r)}</span>`).join('')}</span></div>`
-                : '<div class="name"><span class="name-text">Jan Vlk</span></div>';
-            const years = head.years ? `<div class="card-years">${esc(head.years)}</div>` : '';
-            return `
-                <div class="person-card male preview-card${action ? ' has-signal' : ''}" data-density="${density}" data-fields style="${box}">
-                    <div class="card-body card-body--custom">
-                        <div class="card-head">${avatar('JV')}<div class="card-head-text">${name}${years}</div></div>
-                        ${sample.html}
-                    </div>
-                    ${stripes}
-                    ${dot}
-                </div>`;
-        }
-        const compact = density === 'compact';
-        return `
-            <div class="person-card male preview-card${action ? ' has-signal' : ''}" data-density="${density}">
-                ${compact ? '' : avatar('JV')}
-                <div class="card-body">
-                    <div class="name"><span class="name-text">Jan Vlk</span></div>
-                    ${compact ? '' : '<div class="birth-date"><span class="meta-text">1862 – 1919 · Horní Lhota</span></div>'}
-                </div>
-                ${stripes}
-                ${dot}
-            </div>`;
+        return sampleCard(SettingsManager.getCardDensity(), on, TreeRenderer.getCustomCardMetrics()?.cardWidth).html;
     },
 
     /** "Details on the card": only for the custom density. */
@@ -293,6 +429,10 @@ export const cardFieldsUiMethods = uiModule({
 
         const apply = (next: CardFieldSettings, focus?: string): void => {
             SettingsManager.setCardFields(next);
+            // A change of its own: the notice of the taken-over preset goes, the tile's
+            // small card and the "Same as …" note follow the new settings.
+            forgetCardTypeCopy();
+            this.renderCardTypeSettings();
             this.renderCardFieldsSettings();
             this.renderCardPreview();
             TreeRenderer.render();

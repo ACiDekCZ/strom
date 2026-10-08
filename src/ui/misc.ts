@@ -47,6 +47,7 @@ import { uiModule } from './module.js';
 import { yearOf } from '../dates.js';
 import { twoFiguresSvg } from '../icons.js';
 import { shownNameOrEmpty } from '../person-name.js';
+import { forgetCardTypeCopy } from './card-fields-ui.js';
 
 export const miscMethods = uiModule({
     // ---- ABOUT DIALOG ----
@@ -216,6 +217,9 @@ export const miscMethods = uiModule({
     showSettingsDialog(): void {
         const modal = document.getElementById('settings-modal');
         if (!modal) return;
+        // A fresh opening (not a redraw while open, as on a language change): no
+        // notice of a preset taken over as Custom is left from the last time.
+        if (!modal.classList.contains('active')) forgetCardTypeCopy();
 
         // Set current theme selection
         const currentTheme = SettingsManager.getTheme();
@@ -283,8 +287,7 @@ export const miscMethods = uiModule({
         // Originals waiting for the research (only while some wait).
         void this.renderOriginalsQueueRow();
 
-        const densitySelect = document.getElementById('card-density-select') as HTMLSelectElement | null;
-        if (densitySelect) densitySelect.value = SettingsManager.getCardDensity();
+        // The row of card types is drawn with "Show on card" (renderCardSignalSettings).
         this.renderCardSignalSettings();
         this.renderResearchEdgeSettings();
         const kekuleToggle = document.getElementById('fan-kekule-toggle') as HTMLInputElement | null;
@@ -338,6 +341,7 @@ export const miscMethods = uiModule({
 
     closeSettingsDialog(): void {
         document.getElementById('settings-modal')?.classList.remove('active');
+        forgetCardTypeCopy();
     },
 
     setTheme(theme: ThemeMode): void {

@@ -1826,14 +1826,6 @@
             line-height: 1.4;
         }
         .settings-desc:empty { display: none; }
-        /* A select on the right (card detail). */
-        .settings-row-select {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-        }
-        .modal .settings-row-select select { width: auto; max-width: 60%; margin: 0; }
         /* Label above a full-width segment (language, theme). */
         .settings-row-stacked {
             display: flex;
@@ -2013,8 +2005,6 @@
         @media (max-width: 640px) {
             .settings-row, .settings-checkbox.settings-row { padding: 10px 12px; }
             .settings-row-dependent, .settings-checkbox.settings-row-dependent { padding-left: 42px; }
-            .settings-row-select { flex-wrap: wrap; }
-            .modal .settings-row-select select { max-width: 100%; }
             .settings-segment .settings-radio { padding: 9px 4px; }
             .settings-segment .settings-radio span { font-size: 12px; }
         }
@@ -7214,7 +7204,7 @@
         @media (max-width: 640px) {
             .card-signals-settings { flex-direction: column; gap: 12px; }
         }
-        /* The preview right under the density select (one for both). */
+        /* The preview under the row of card types (one for the type and the signals). */
         .card-preview-settings { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
         /* A card wider than the panel is scaled down to it (src/ui/card-fields-ui.ts fitCardPreview). */
         .card-preview-settings .card-signals-preview { max-width: 100%; min-width: 0; }
@@ -7222,6 +7212,92 @@
         .card-preview-head { display: flex; gap: 12px; align-items: baseline; justify-content: space-between; width: 100%; max-width: 280px; }
         .card-preview-size { font-size: 12px; color: var(--text-faint); }
         .card-signals-preview .person-card[data-fields] { width: var(--card-custom-w, 200px); height: var(--card-custom-h, 107px); }
+
+        /* Settings → "Card detail": the row of the five card types (src/ui/card-fields-ui.ts
+           renderCardTypeSettings), a radio group of tiles — the type's sample card at a
+           quarter of its size and its name; under it the chosen type's sentence with
+           "Edit as Custom", or Custom's notice / "Same as …" note. Phone: three columns;
+           phone held sideways: a segment of names, no small cards. */
+        .card-type-settings { display: flex; flex-direction: column; gap: 10px; }
+        .card-type-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+        .modal button.card-type-tile {
+            display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 4px;
+            min-width: 0; margin: 0; padding: 8px 4px 7px;
+            border: 1px solid var(--border); border-radius: 10px;
+            background: var(--surface); color: var(--text-light);
+            font: inherit; text-align: center; cursor: pointer;
+            transition: border-color 0.15s, background 0.15s;
+        }
+        /* Selected: a 2px accent frame (1px border + 1px inset, so nothing moves), the soft tint. */
+        .modal button.card-type-tile[aria-checked="true"] {
+            border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); background: var(--accent-soft);
+        }
+        @media (hover: hover) {
+            .modal button.card-type-tile:hover { border-color: var(--line-color); }
+            .modal button.card-type-tile[aria-checked="true"]:hover { border-color: var(--primary); }
+        }
+        .card-type-tile:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .card-type-thumb { display: flex; align-items: center; justify-content: center; width: 100%; height: 46px; overflow: hidden; pointer-events: none; }
+        .card-type-thumb-box { display: block; position: relative; flex: none; }
+        .card-type-thumb-card { position: absolute; left: 0; top: 0; transform: scale(0.25); transform-origin: 0 0; }
+        .card-type-name {
+            max-width: 100%; font-size: 12px; line-height: 1.3; color: var(--text-light);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .card-type-tile[aria-checked="true"] .card-type-name { font-weight: 600; color: var(--primary-dark); }
+        /* The small cards are drawn as their own type whatever type the view has
+           (the card rules above hang on body[data-card-density] / [data-card-fields]). */
+        .card-type-thumb .person-card { position: relative; left: auto; top: auto; margin: 0; box-shadow: none; transition: none; cursor: inherit; }
+        .card-type-thumb .person-card[data-density="normal"] { width: 188px; height: 64px; padding: 0 9px; flex-direction: row; align-items: center; justify-content: flex-start; gap: 8px; }
+        .card-type-thumb .person-card[data-density="normal"] .card-avatar { width: 34px; height: 34px; border-width: 2px; }
+        .card-type-thumb .person-card[data-density="normal"] .card-body { text-align: left; }
+        .card-type-thumb .person-card[data-density="normal"] .name .name-text { font-size: 15px; }
+        .card-type-thumb .person-card[data-density="compact"] { width: 150px; height: 44px; padding: 0 10px; flex-direction: row; align-items: center; justify-content: center; gap: 8px; }
+        .card-type-thumb .person-card[data-density="compact"] .card-body { text-align: center; }
+        .card-type-thumb .person-card[data-density="compact"] .name .name-text { font-size: 13px; }
+        .card-type-thumb .person-card[data-fields] { padding: 10px 12px; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 0; }
+        .card-type-thumb .person-card[data-fields] .card-avatar { width: 30px; height: 30px; border-width: 1.5px; }
+        /* The chosen type's sentence; "Edit as Custom" on its right. */
+        .card-type-about { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; }
+        .card-type-desc { flex: 1 1 auto; min-width: 0; margin: 0; font-size: 13px; line-height: 1.45; color: var(--text-light); }
+        .modal button.card-type-edit { flex: none; margin: 0; padding: 7px 14px; font-size: 13px; }
+        /* Custom took over a preset: the notice and "Restore previous" (a text button). */
+        .card-type-notice {
+            display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px;
+            padding: 8px 12px; border-radius: var(--r-md); background: var(--accent-soft);
+            font-size: 13px; line-height: 1.45; color: var(--text);
+        }
+        .modal button.card-type-restore {
+            margin: 0; padding: 4px 0; border: none; background: transparent;
+            font: inherit; font-size: 13px; font-weight: 600; color: var(--primary-dark);
+            text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+        }
+        .card-type-same { margin: 0; font-size: 13px; line-height: 1.45; color: var(--text-light); }
+        @media (max-width: 640px) {
+            .card-type-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+            .modal button.card-type-tile { min-height: 78px; }
+            .card-type-name { font-size: 13px; }
+            .card-type-about { flex-direction: column; align-items: stretch; }
+            .card-type-desc { font-size: 14px; }
+            .modal button.card-type-edit { width: 100%; min-height: 44px; font-size: 14px; }
+            .modal button.card-type-restore { min-height: 44px; }
+        }
+        @media (pointer: coarse) {
+            .modal button.card-type-tile, .modal button.card-type-edit, .modal button.card-type-restore { min-height: 44px; }
+        }
+        /* A phone held sideways: the tiles close up into a segment of five names, a thumb high. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .card-type-row { display: flex; gap: 0; border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; background: var(--surface-2); }
+            .card-type-thumb { display: none; }
+            .modal button.card-type-tile {
+                flex: 1 1 0; min-width: 0; min-height: 44px; padding: 6px 8px; justify-content: center;
+                border: none; border-radius: 0; background: transparent; box-shadow: none;
+            }
+            .modal button.card-type-tile + .card-type-tile { border-left: 1px solid var(--border); }
+            .modal button.card-type-tile[aria-checked="true"] { background: var(--primary); box-shadow: none; }
+            .card-type-name { font-size: 14px; }
+            .card-type-tile[aria-checked="true"] .card-type-name { color: var(--on-primary); }
+        }
 
         /* "Details on the card" (custom density): a row per event — checkbox,
            mark, name, the toggles for what the line adds, arrows to reorder. */
@@ -14024,18 +14100,7 @@
             <section class="settings-group" aria-labelledby="settings-group-card">
                 <h3 class="settings-group-title" id="settings-group-card" data-i18n="settings.groupCard"></h3>
                 <div class="settings-group-body">
-                    <div class="settings-row settings-row-select">
-                        <label for="card-density-select" class="settings-text">
-                            <span class="settings-name" data-i18n="cardDensity.settingLabel"></span>
-                        </label>
-                        <select id="card-density-select" onchange="window.Strom.UI.setCardDensity(this.value)">
-                            <option value="compact" data-i18n="cardDensity.compact"></option>
-                            <option value="normal" data-i18n="cardDensity.normal"></option>
-                            <option value="detailed" data-i18n="cardDensity.detailed"></option>
-                            <option value="register" data-i18n="cardDensity.register"></option>
-                            <option value="custom" data-i18n="cardDensity.custom"></option>
-                        </select>
-                    </div>
+                    <div class="settings-row card-type-settings" id="card-type-settings"></div>
                     <div class="settings-row card-preview-settings" id="card-preview-settings"></div>
                     <div class="settings-row card-fields-settings" id="card-fields-settings" hidden></div>
                     <div class="settings-row card-signals-settings" id="card-signals-settings"></div>

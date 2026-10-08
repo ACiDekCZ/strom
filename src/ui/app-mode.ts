@@ -49,6 +49,7 @@ import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
 import { safeFileName } from '../filenames.js';
+import { forgetCardTypeCopy } from './card-fields-ui.js';
 
 export const appModeMethods = uiModule({
     // ---- EMBEDDED MODE INFO ----
@@ -758,6 +759,7 @@ export const appModeMethods = uiModule({
 
     setCardDensity(density: string): void {
         SettingsManager.setCardDensity(normalizeCardDensity(density));
+        forgetCardTypeCopy();
         TreeRenderer.render();
         this.renderCardSignalSettings();
     },

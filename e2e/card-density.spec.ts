@@ -154,8 +154,11 @@ test('a new user gets the Normal card; a stored type this version does not know 
     expect(await page.evaluate(() => window.Strom.SettingsManager.getCardDensity())).toBe('normal');
     await expect(page.locator('body')).toHaveAttribute('data-card-density', 'normal');
     await page.evaluate(() => window.Strom.UI.showSettingsDialog());
-    await expect(page.locator('#card-density-select')).toHaveValue('normal');
-    await expect(page.locator('#card-density-select option')).toHaveText(['Compact', 'Normal', 'Detailed', 'Register', 'Custom…']);
+    await expect(page.locator('#card-type-row [aria-checked="true"] .card-type-name')).toHaveText('Normal');
+    await expect(page.locator('#card-type-row .card-type-name')).toHaveText(['Compact', 'Normal', 'Detailed', 'Register', 'Custom…']);
+    // The Normal card's sentence and no "Edit as Custom" (only the preset types have it).
+    await expect(page.locator('#card-type-settings .card-type-desc')).toHaveText('Name, years and place of birth.');
+    await expect(page.locator('#card-type-settings .card-type-edit')).toHaveCount(0);
     await page.keyboard.press('Escape');
 
     await page.evaluate(() => {
