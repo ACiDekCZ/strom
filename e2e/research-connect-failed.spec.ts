@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, card, createFirstPerson } from './helpers.js';
+import { openApp, card, createFirstPerson, AFTER_HAND_OVER } from './helpers.js';
 
 /**
  * A link from Strom Research (?live= / ?send= / ?adopt=) that cannot reach
@@ -210,7 +210,7 @@ test.describe('couldn\'t connect to the research', () => {
         });
         await expect(d).toHaveCount(0);
         await page.locator('#research-adopt-confirm').click();
-        await expect(page.locator('.toast')).toContainText('is now linked to the research');
+        await expect(page.locator('.toast')).toContainText('is now linked to the research', AFTER_HAND_OVER);
         expect(posted).toHaveLength(1);
         expect(await page.evaluate(() => sessionStorage.getItem('strom-pending-adopt'))).toBeNull();
     });

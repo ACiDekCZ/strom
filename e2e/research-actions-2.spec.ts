@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, card, openPersonSubmenu } from './helpers.js';
+import { openApp, card, openPersonSubmenu, AFTER_HAND_OVER } from './helpers.js';
 import { acceptLoad } from './research-bridge.js';
 
 /**
@@ -507,7 +507,7 @@ test.describe('Start research with this tree (G3)', () => {
         await expect(dialog.locator('.research-send-dialog-note')).toHaveText('A backup is saved before handing over.');
         await expect(dialog.locator('#research-adopt-images')).toHaveCount(0);
         await dialog.locator('#research-adopt-confirm').click();
-        await expect(page.locator('.toast')).toContainText('Dvořákovi is now linked to the research.');
+        await expect(page.locator('.toast')).toContainText('Dvořákovi is now linked to the research.', AFTER_HAND_OVER);
         expect(calls.posted[0]).toContain('1 NAME Karel /Dvořák/');
         // As the dialog said: a backup before handing over.
         const reasons = await page.evaluate(() => new Promise<string[]>((resolve, reject) => {
@@ -544,7 +544,7 @@ test.describe('Start research with this tree (G3)', () => {
         await routeBridge(page, token, calls);
         await page.evaluate((b) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: b })), BRIDGE);
         await page.locator('#research-adopt-confirm').click();
-        await expect(page.locator('.toast')).toContainText('Dvořákovi is now linked to the research.');
+        await expect(page.locator('.toast')).toContainText('Dvořákovi is now linked to the research.', AFTER_HAND_OVER);
         // The research never got the images.
         expect(calls.posted[0]).not.toContain('AAAA');
         return { img, att };

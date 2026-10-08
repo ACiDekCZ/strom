@@ -249,13 +249,19 @@ test.describe('follow the agent in the tree', () => {
         await follow(page, { size: { width: 360, height: 740 }, idle: 60_000 });
         const phoneBtn = page.locator('#live-panel .live-follow-btn--phone');
         await expect(phoneBtn).toBeVisible();
-        const box = (await phoneBtn.boundingBox())!;
-        expect(Math.round(box.width)).toBe(44);
-        expect(Math.round(box.height)).toBe(44);
+        // Each status from the bridge redraws the strip: a one-shot
+        // boundingBox() between the old button going and the new one coming
+        // read null. Measure the button that is there.
+        await expect.poll(async () => {
+            const box = await phoneBtn.boundingBox();
+            return box && [Math.round(box.width), Math.round(box.height)];
+        }).toEqual([44, 44]);
         await phoneBtn.click();
         await expect.poll(() => focusRefn(page)).toBe('P0012');
         await page.evaluate(() => window.Strom.UI.pauseLiveFollow());
-        const pill = (await page.locator('#live-follow-pill').boundingBox())!;
-        expect(pill.y + pill.height).toBeLessThanOrEqual(740 - 60);
+        await expect.poll(async () => {
+            const pill = await page.locator('#live-follow-pill').boundingBox();
+            return pill ? pill.y + pill.height : Infinity;
+        }).toBeLessThanOrEqual(740 - 60);
     });
 });

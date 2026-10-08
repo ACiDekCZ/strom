@@ -67,6 +67,16 @@ export async function openApp(
     await expect(page.locator('html')).not.toHaveClass(/app-loading/);
 }
 
+/**
+ * What the app says once a tree is handed over to the research (the "linked"
+ * toast, "The research is ready"): it first tries to load the research's
+ * version, 0, 1 and 3 s after the hand-over (ADOPT_LOAD_WAITS in
+ * src/ui/research-adopt-ui.ts). A research without a version yet takes all
+ * three tries, 4 s of the default 5 s expect timeout: too little on a loaded
+ * machine. Expectations right after a hand-over wait those 4 s more.
+ */
+export const AFTER_HAND_OVER = { timeout: 4_000 + 5_000 };
+
 /** The visible person modal (add/edit). */
 export function personModal(page: Page): Locator {
     return page.locator('#person-modal');

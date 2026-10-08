@@ -1,6 +1,6 @@
 import { test, expect, Page, Browser } from '@playwright/test';
 import fs from 'fs';
-import { openApp, card, createFirstPerson, addRelation, waitForPersist, seedResearchPromoSeen, seedSetting } from './helpers.js';
+import { openApp, card, createFirstPerson, addRelation, waitForPersist, seedResearchPromoSeen, seedSetting, AFTER_HAND_OVER } from './helpers.js';
 
 /**
  * Installing Strom Research from the app: "What it is" → the line for this
@@ -315,7 +315,7 @@ test.describe('installing the research from the app', () => {
         await adopt.locator('#research-adopt-confirm').click();
 
         const ready = page.locator('#research-ready-modal');
-        await expect(ready.locator('h2')).toContainText('The research is ready');
+        await expect(ready.locator('h2')).toContainText('The research is ready', AFTER_HAND_OVER);
         await expect(ready.locator('.install-ready-path')).toHaveText('/Users/jan/Strom/Novakovi');
         await expect(ready).toContainText('full quality');
         // An archive: no row for an agent.
@@ -583,7 +583,11 @@ test.describe('installing the research from the app', () => {
         await asBrowser(page, SAFARI_UA);
         await setup(page);
         await waitForPersist(page, 'Jan');
-        const mark = () => page.evaluate(() => window.Strom.TreeManager.setResearchTransfer(window.Strom.TreeManager.getActiveTreeId()!, { at: '2026-10-05T18:00:00.000Z' }));
+        // Marked, and stored before a reload reads it (the tree index is written in the background).
+        const mark = async () => {
+            await page.evaluate(() => window.Strom.TreeManager.setResearchTransfer(window.Strom.TreeManager.getActiveTreeId()!, { at: '2026-10-05T18:00:00.000Z' }));
+            await waitForPersist(page, '2026-10-05T18:00:00.000Z');
+        };
         await mark();
         await page.reload();
         const q = page.locator('#research-old-copy-modal');
@@ -651,6 +655,7 @@ test.describe('installing the research from the app', () => {
         await setup(page);
         await waitForPersist(page, 'Jan');
         await page.evaluate(() => window.Strom.TreeManager.setResearchTransfer(window.Strom.TreeManager.getActiveTreeId()!, { at: '2026-10-05T18:00:00.000Z' }));
+        await waitForPersist(page, '2026-10-05T18:00:00.000Z');
         await page.reload();
         const q = page.locator('#research-old-copy-modal');
         // Right under the question's text, before the answers.
@@ -924,6 +929,9 @@ test.describe('installing the research from a phone', () => {
         await createFirstPerson(page, 'Jan', 'Novak');
         await waitForPersist(page, 'Jan');
         await page.evaluate(() => window.Strom.TreeManager.setResearchTransfer(window.Strom.TreeManager.getActiveTreeId()!, { at: '2026-10-05T18:00:00.000Z', mobile: true }));
+        // The tree index is written in the background: reloaded before it
+        // landed (a loaded machine), the transfer was not there to ask about.
+        await waitForPersist(page, '2026-10-05T18:00:00.000Z');
         await page.reload();
         const q = page.locator('#research-old-copy-modal');
         await expect(q.locator('h2')).toHaveText('This tree is now on a computer');

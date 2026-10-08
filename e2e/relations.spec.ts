@@ -94,6 +94,11 @@ test('add-relation birth date rejects an unparseable value', async ({ page }) =>
 
 test('reassign moves a wrongly-linked child to the right parent without retyping', async ({ page }) => {
     await openApp(page);
+    // openApp returns once the tree is read; the startup still sets its focus
+    // before the first render (html.app-booting until then). On a loaded
+    // machine that came after the focus set below and moved it to the first
+    // person: wait for the first render.
+    await expect(page.locator('html')).not.toHaveClass(/app-booting/);
     // Two men + a child linked to the WRONG one (with a 'step' type to keep).
     await page.evaluate(async () => {
         const DM = window.Strom.DataManager;

@@ -328,8 +328,13 @@ test.describe('updating over changes the research does not have', () => {
         expect(bridge.posts[0]).not.toContain('Konopásek');
 
         // "Load without changes" replaces the research tree only.
+        // The closed dialog keeps the first question's text: wait for it to
+        // close, then for the new question, not for the text alone (under load
+        // the old text matched before the research tree was switched to).
+        await expect(dialog).not.toHaveClass(/active/);
         await page.evaluate((id) => window.Strom.UI.switchToTree(id), otherId);
         await page.evaluate((u) => { void window.Strom.UI.importResearchFromUrl(u); }, `${BRIDGE}/tree.ged`);
+        await expect(dialog).toHaveClass(/active/);
         await expect(dialog).toContainText("There are changes the research doesn't have");
         expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeId())).toBe(researchTreeId);
         await dialog.locator('.confirm-aside-btn').click();

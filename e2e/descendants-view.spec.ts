@@ -198,10 +198,12 @@ test('view switcher: the selected segment is visibly highlighted in dark theme',
     // text — it must stay visibly distinct from inactive tabs in the dark theme.
     // (Letopis phase 3 replaced the filled-background segment with underline
     // tabs, so this guard now reads the active indicator, not the background.)
+    // Read once the click has switched the mode: under load the segment is not
+    // marked yet right after the click, and both tabs read alike.
+    await expect(page.locator('#view-mode-descendants')).toHaveClass(/active/);
     const underline = (sel: string) => page.locator(sel).evaluate(el => getComputedStyle(el).borderBottomColor);
-    const activeUnderline = await underline('#view-mode-descendants');
     const inactiveUnderline = await underline('#view-mode-family');
-    expect(activeUnderline).not.toBe(inactiveUnderline);
+    await expect.poll(() => underline('#view-mode-descendants')).not.toBe(inactiveUnderline);
 
     // Hovering an underline tab must NOT restore the legacy filled-segment
     // background (that produced dark hover text on a dark-green fill). The

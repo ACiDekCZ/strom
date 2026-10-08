@@ -227,8 +227,10 @@ test.describe('research directions', () => {
         await expect(ov(page).locator('.research-direction__more')).toHaveCount(0);
         await expect(ov(page).locator('.research-direction__do')).toHaveCount(0);
         await expect(row(page, 'G0003').locator('.research-direction__empty')).toHaveText('Nothing to do · it can be ended in the research on the computer');
-        const box = await row(page, 'G0001').boundingBox();
-        expect(box!.height).toBeGreaterThanOrEqual(44);
+        // Every status the bridge sends redraws the overview (replaceChildren):
+        // a one-shot boundingBox() can land between the old row going and the
+        // new one coming and get null. Measure the row that is there.
+        await expect.poll(async () => (await row(page, 'G0001').boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
         await row(page, 'G0002').locator('.research-direction__head').click();
         await expect(ov(page)).toHaveCount(0);
         await expect(page.locator('#evidence-pill')).toContainText('Potomci: Josef');

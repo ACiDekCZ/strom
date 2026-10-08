@@ -109,8 +109,11 @@ test.describe('actions menu "Tree:" submenu', () => {
         await row.hover();
         await expect(submenu).toBeVisible();
 
-        const items = (await submenu.locator('.tree-switcher-action:visible, .menu-section-header:visible').allInnerTexts()).map(t => t.trim());
-        expect(items.filter(t => t !== 'Save to file…')).toEqual([
+        // The tree's actions show once the menu knows the tree has a person
+        // (refreshed after the save, late on a loaded machine): read them then.
+        const items = async () => (await submenu.locator('.tree-switcher-action:visible, .menu-section-header:visible').allInnerTexts())
+            .map(t => t.trim()).filter(t => t !== 'Save to file…');
+        await expect.poll(items).toEqual([
             'Statistics', 'Tree health',
             'Rename', 'Duplicate', 'Hide',
             'FROM THE CURRENT VIEW', 'Make a new tree', 'Merge view into…',

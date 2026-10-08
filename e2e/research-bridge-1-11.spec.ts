@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { cardAction, personModal } from './helpers.js';
+import { cardAction, personModal, AFTER_HAND_OVER } from './helpers.js';
 import { openResearch, openResearchMenu, editJan, poll, researchGed, dropFile, BRIDGE, UUID, HEAD, NEW_HEAD } from './research-bridge.js';
 
 /**
@@ -215,7 +215,7 @@ test.describe('the bridge of Strom Research 1.11.0', () => {
         expect(b.adoptToken).toBeTruthy();
         await page.evaluate((u) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: u })), BRIDGE);
         await page.locator('#research-adopt-confirm').click();
-        await expect(page.locator('.toast')).toContainText('linked to the research');
+        await expect(page.locator('.toast')).toContainText('linked to the research', AFTER_HAND_OVER);
         expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.id)).toBe(UUID);
         expect(b.requests.filter(r => r.method === 'POST' && r.path === 'adopt')).toHaveLength(1);
         // Its own version loaded right after (its numbers): the next send is the research's tree by its ids.

@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp } from './helpers.js';
+import { openApp, AFTER_HAND_OVER } from './helpers.js';
 
 /**
  * After "Start research with this tree": the copy in the app must name the
@@ -118,7 +118,7 @@ async function handOver(page: Page, init: Partial<Bridge> = {}, pick?: (page: Pa
     await page.evaluate((base) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: base })), BRIDGE);
     if (pick) await pick(page);
     await page.locator('#research-adopt-confirm').click();
-    await expect(page.locator('.toast')).toContainText('Test Win4 is now linked to the research.');
+    await expect(page.locator('.toast')).toContainText('Test Win4 is now linked to the research.', AFTER_HAND_OVER);
     // Sending by hand goes at once in these tests ("What will be sent" first: research-auto-send.spec.ts).
     await page.evaluate(() => {
         const key = `strom-research-auto:${window.Strom.TreeManager.getActiveTreeId()}`;
@@ -331,7 +331,7 @@ test.describe('a tree from older data, handed over by hand', () => {
         await routeBridge(page, url.match(TOKEN_RE)![1], { ids: true, treeGed: version });
         await page.evaluate((base) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: base })), BRIDGE);
         await page.locator('#research-adopt-confirm').click();
-        await expect(page.locator('.toast')).toContainText('Test Win4 is now linked to the research.');
+        await expect(page.locator('.toast')).toContainText('Test Win4 is now linked to the research.', AFTER_HAND_OVER);
         await page.evaluate(() => window.Strom.UI.pollResearchBridge());
         await page.waitForTimeout(1500);
         const state = await page.evaluate(() => window.Strom.UI.currentResearchSyncState());
@@ -371,7 +371,7 @@ test.describe('"married, the spouse unknown" through a hand-over', () => {
         const bridge = await routeBridge(page, url.match(TOKEN_RE)![1], { ids: true, treeGed: version });
         await page.evaluate((base) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: base })), BRIDGE);
         await page.locator('#research-adopt-confirm').click();
-        await expect(page.locator('.toast')).toContainText('Test Win4 is now linked to the research.');
+        await expect(page.locator('.toast')).toContainText('Test Win4 is now linked to the research.', AFTER_HAND_OVER);
         // What went over says it: the known spouse's family with the wedding, no nameless person.
         expect(bridge.adopted[0]).toMatch(/0 @F1@ FAM\n1 HUSB @I1@\n1 MARR\n/);
         expect(bridge.adopted[0]).not.toContain('1 NAME //');

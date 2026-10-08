@@ -36,6 +36,10 @@ async function addPerson(page: Page, firstName: string): Promise<void> {
 
 test('edits no file holds: an information-only notice, the indicator until the next save', { tag: '@smoke' }, async ({ page }) => {
     await stubPersistence(page, false);
+    // The page's clock runs as usual; only the pill's "Saved" flash (4 s) is
+    // skipped over below instead of waited out: under a loaded machine the
+    // whole test ran past its 30 s.
+    await page.clock.install();
     await openApp(page, { fileCopyReminders: true });
     const notice = page.locator('#file-copy-notice');
     const indicator = page.locator('#unsaved-copy-indicator');
@@ -71,7 +75,8 @@ test('edits no file holds: an information-only notice, the indicator until the n
     // Saved and changed again the same day: still quiet (at most once a day).
     await exportTreeJson(page);
     await expect(indicator).toHaveClass(/is-saved/);
-    await expect(indicator).toBeHidden({ timeout: 6000 });
+    await page.clock.fastForward(4_500);
+    await expect(indicator).toBeHidden();
     await addPerson(page, 'Fourth');
     await expect(indicator).toBeVisible();
     await page.waitForTimeout(300);

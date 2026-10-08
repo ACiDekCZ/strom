@@ -869,6 +869,21 @@ test('connected again by ?live= with changes here: Follow live on the toast asks
     expect(await janWhere(page)).not.toBe('');
 });
 
+/**
+ * The research's version loaded here as the user asks for it. "Update" is
+ * asked when there is something to update over: pressed whenever it shows,
+ * until the version is the tree's (a fixed 3 s for it to come missed it on a
+ * loaded machine, and the load then waited for the answer for good).
+ */
+async function loadNewer(page: Page, head: string): Promise<void> {
+    await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+    const update = page.locator('.dialog-confirm').getByRole('button', { name: 'Update' });
+    await expect.poll(async () => {
+        if (await update.isVisible()) await update.click().catch(() => undefined);
+        return page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head);
+    }).toBe(head);
+}
+
 test('rc.23 / N1: a copy built on a written send whose version was not loaded says so (_STROM_SINCE), always when known; a version loaded since is the base then', async ({ page }) => {
     const bridge = await autoTree(page, { features: ['sync.again', 'sync.undoneSince', 'sync.takenBack', 'sync.since'] });
     bridge.syncReply = { status: 200, body: { ...WRITE.body, conflicts: [{ id: 'X0001', person: 'P0003', fact: 'NAME' }] } };
@@ -896,9 +911,7 @@ test('rc.23 / N1: a copy built on a written send whose version was not loaded sa
     expect(bridge.posts[2]).toContain(`1 _STROM_SINCE ${second}`);
     // The research's version loaded here (asked): it is the base — no SINCE of an older copy.
     const loaded = bridge.head;
-    await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
-    await page.locator('.dialog-confirm').getByRole('button', { name: 'Update' }).click({ timeout: 3000 }).catch(() => undefined);
-    await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe(loaded);
+    await loadNewer(page, loaded);
     await janBirthPlace(page, 'Kolín');
     await page.clock.fastForward(QUIET + 1000);
     await expect.poll(() => bridge.posts.length).toBe(4);
@@ -921,9 +934,7 @@ test('a restored backup sends the base it kept: _STROM_HEAD and _STROM_SINCE of 
     expect(snap).toBeTruthy();
     // Then the research's version is loaded here (a newer head) and an edit goes on it.
     const loaded = bridge.head;
-    await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
-    await page.locator('.dialog-confirm').getByRole('button', { name: 'Update' }).click({ timeout: 3000 }).catch(() => undefined);
-    await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe(loaded);
+    await loadNewer(page, loaded);
     bridge.syncReply = WRITE;
     await janBirthPlace(page, 'Praha');
     await page.clock.fastForward(QUIET + 1000);
@@ -1494,6 +1505,10 @@ test.describe('Research for this tree: sending changes', () => {
         await editJan(page);
         await page.clock.fastForward(QUIET + 1000);
         await expect.poll(() => bridge.posts.length).toBe(1);
+        // The dialog reads the state when it opens: wait for the write to be
+        // taken in, not only sent (a loaded machine opened it in between).
+        await expect.poll(() => page.evaluate(() =>
+            !!JSON.parse(localStorage.getItem(`strom-research-auto:${window.Strom.TreeManager.getActiveTreeId()}`) ?? '{}').lastWritten)).toBe(true);
         await page.evaluate(() => window.Strom.UI.researchActionTreeSettings());
         const dialog = page.locator('#research-tree-settings-modal');
         await expect(dialog.locator('legend', { hasText: 'Sending changes' })).toBeVisible();

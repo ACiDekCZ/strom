@@ -303,6 +303,12 @@ test.describe('card height by content (U02 V3)', () => {
         const cards = await drawn(page);
         for (let i = 0; i < 4; i++) await page.evaluate(() => window.Strom.ZoomPan.zoomIn());
         await expect(page.locator('#minimap-panel')).toBeVisible();
+        // The zoom glides, and the minimap's viewport frame follows it (a redraw
+        // 30 ms after each step): probed before the last redraw, the moving
+        // frame could cross the empty spot below a short card on a slow machine.
+        await expect.poll(() => page.evaluate(() =>
+            (window.Strom.ZoomPan as unknown as { animationFrame: number | null }).animationFrame === null
+            && (window.Strom.UI as unknown as { minimapViewportTimer: unknown }).minimapViewportTimer == null)).toBe(true);
         // The box the minimap fits and steers in: the cards' own outline.
         const box = await page.evaluate(() => (window.Strom.UI as unknown as { minimapBox: object }).minimapBox);
         expect(box).toEqual({
