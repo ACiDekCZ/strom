@@ -239,6 +239,41 @@ test.describe('"Export all" now and then (only with a research)', () => {
         await page.evaluate(() => window.Strom.UI.closeSnapshotsDialog());
     });
 
+    test('A3: Export all in the research menu is a whole link like the one in Backups, not a toolbar fill cut to its glyphs (light, dark, hover)', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await manualTree(page);
+        const look = (el: Element) => {
+            const cs = getComputedStyle(el);
+            return { background: cs.backgroundColor, color: cs.color, decoration: cs.textDecorationLine };
+        };
+        const button = reminder(page).getByRole('menuitem', { name: 'Export all' });
+        for (const scheme of ['light', 'dark'] as const) {
+            await page.emulateMedia({ colorScheme: scheme });
+            await page.evaluate(() => window.Strom.UI.showSnapshotsDialog());
+            const backupsLink = page.locator('#snapshots-export').getByRole('button', { name: 'Export all' });
+            await expect(backupsLink).toBeVisible();
+            const backupsLook = await backupsLink.evaluate(look);
+            await page.evaluate(() => window.Strom.UI.closeSnapshotsDialog());
+            await openResearchMenu(page);
+            await expect(button).toBeVisible();
+            // The ".toolbar button" fill (the menu lives in the toolbar) must not reach it: a fill
+            // without padding hugs the line box and cuts the tops and tails of its letters.
+            expect(await button.evaluate(look)).toEqual(backupsLook);
+            await button.hover();
+            expect((await button.evaluate(look)).background).toBe('rgba(0, 0, 0, 0)');
+            // Whole inside its row and inside the menu's visible box.
+            const [b, row, menu] = await Promise.all([button, reminder(page), page.locator('#actions-research-submenu')].map(l => l.boundingBox()));
+            for (const outer of [row!, menu!]) {
+                expect(b!.y).toBeGreaterThanOrEqual(outer.y);
+                expect(b!.y + b!.height).toBeLessThanOrEqual(outer.y + outer.height);
+                expect(b!.x).toBeGreaterThanOrEqual(outer.x);
+                expect(b!.x + b!.width).toBeLessThanOrEqual(outer.x + outer.width);
+            }
+            await page.mouse.move(5, 5);
+            await page.evaluate(() => window.Strom.UI.closeActionsMenu());
+        }
+    });
+
     test('a browser without a research tree: no reminder in Backups', async ({ page }) => {
         await page.clock.install();
         await openResearch(page, { bridge: false });

@@ -10047,7 +10047,12 @@
         .snapshots-export[hidden] { display: none; }
         .snapshots-export .link-button { font-size: 13px; font-weight: 600; }
         .research-export-reminder { padding: 4px 14px 8px; font-size: 12px; color: var(--text-light); }
-        .research-export-reminder .link-button { display: block; margin-top: 2px; padding: 0; font-size: 13px; font-weight: 600; }
+        /* The research menu sits inside .toolbar: scoped under it so the link outranks the
+           ".toolbar button" fill (and its hover: 0,3,0 > 0,2,1), which painted a padding-less green box cut to the letters. */
+        .toolbar .research-export-reminder .link-button {
+            display: block; margin-top: 2px; padding: 0; font-size: 13px; font-weight: 600;
+            background: none; color: var(--primary); border-radius: 0;
+        }
         /* "Load the research version?" (research-load-ui.ts): every value here that changes, what it adds, the backup. */
         .research-load-warn { margin: 0 0 10px; padding: 10px 12px; border-radius: 8px; background: var(--warning-soft); color: var(--warning-text); font-size: 13px; line-height: 1.45; }
         .research-load-table-wrap { border: 1px solid var(--divider); border-radius: 8px; overflow: hidden; }
