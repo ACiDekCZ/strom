@@ -20,7 +20,8 @@ import { exifOrientation, originalTargets } from '../originals.js';
 import { dataUrlByteSize } from '../photo.js';
 import { compressImageAttachment, readFileAsDataUrl, MAX_PDF_BYTES, ATTACHMENT_IMAGE_TYPES } from '../attachments.js';
 import { personSubtitle } from './person-sources-ui.js';
-import { formatBytesShort, QueueOutcome, researchKnownAdded } from './originals-ui.js';
+import { formatBytesShort, QueueOutcome, researchKnownAdded, researchRefusalOf } from './originals-ui.js';
+import { mediaCodesOn, mediaRefusalText } from '../media-refusal.js';
 import { bridgeFailure } from './research-ui.js';
 import { uiModule } from './module.js';
 
@@ -260,7 +261,7 @@ export const materialMethods = uiModule({
                 if (a?.person) filled.person = true;
                 if (a?.note) filled.note = true;
             }
-            else if (outcome !== 'sent') failed.push({ name: file.name, why: this.materialWhy(outcome, link.researchId) });
+            else if (outcome !== 'sent') failed.push({ name: file.name, why: this.materialWhy(outcome, link.researchId, original.sha256) });
         }
         // What waits goes now when the bridge runs (one at a time); waited for, so the toast tells what is left.
         if (queuedShas.length) await this.researchOriginalsKick();
@@ -289,10 +290,14 @@ export const materialMethods = uiModule({
         }
     },
 
-    /** Why a file of the material went nowhere (the app's own reason: it never reached the research). */
-    materialWhy(outcome: QueueOutcome, researchId: string): string {
+    /**
+     * Why a file of the material went nowhere: the app's own reason (it never reached the research),
+     * or the research's when it refused the file (L3: in the app's language by its code).
+     */
+    materialWhy(outcome: QueueOutcome, researchId: string, sha: string): string {
         const m = strings.material;
         switch (outcome) {
+            case 'refused': return mediaRefusalText(researchRefusalOf(sha), mediaCodesOn(this.researchStatusOf(researchId)?.features), m.whyRefused);
             case 'tooLarge': return m.whyTooLarge(formatBytesShort(this.researchMediaAccepts(researchId)?.maxBytes ?? 0));
             case 'noRoom': return m.whyNoRoom;
             case 'safari': return m.whySafari;

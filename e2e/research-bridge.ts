@@ -66,6 +66,8 @@ export interface FakeBridge {
     mediaAsks: string[];
     /** Status of a PUT (200 = taken). */
     mediaPutStatus: number;
+    /** The body of a PUT turned down (default `{error: 'no'}`; L3: `{error, code, text, params}`). */
+    mediaPutReply?: unknown;
     /** Files it can serve in full (`GET /media/<sha>?file=1`); others answer 410. */
     mediaFiles: Map<string, { type: string; body: Buffer }>;
     /** Busy (starting up): every request answers 503 with Retry-After. */
@@ -154,7 +156,7 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
             if (route.request().method() === 'PUT') {
                 const body = route.request().postDataBuffer();
                 b.mediaPuts.push({ sha, headers: route.request().headers(), bytes: body?.length ?? 0 });
-                if (b.mediaPutStatus !== 200) return json(b.mediaPutStatus, { error: 'no' });
+                if (b.mediaPutStatus !== 200) return json(b.mediaPutStatus, b.mediaPutReply ?? { error: 'no' });
                 // Content it has: said so (as the research does), nothing new.
                 const prior = b.mediaKnown.get(sha);
                 if (prior) {

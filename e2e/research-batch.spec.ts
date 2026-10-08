@@ -246,11 +246,81 @@ test.describe('Add materials', () => {
         await expect(dialog.locator('.batch-refused li')).toHaveText(['Krabice/a.jpg: no', 'Krabice/b.jpg: no', 'Krabice/c.jpg: no']);
     });
 
+    test('a research that gives codes (media.codes): a refused file is said in the app\'s language with its params, not the research\'s sentence; a 404 of its own does not pause the batch (L3, N37)', async ({ page }) => {
+        const b = await fakeBridge(page, {
+            accepts: BATCH_ACCEPTS, features: ['media.codes'], mediaPutStatus: 404,
+            mediaPutReply: { error: 'no person P0042 in this research', code: 'media.no-person', text: 'no person P0042 in this research', params: { person: 'P0042' } },
+        });
+        await openResearch(page, { media: true });
+        await poll(page);
+        const dialog = page.locator('#batch-modal');
+        await sendThree(page);
+        await expect(dialog.locator('.batch-confirm-title')).toContainText('is in the research');
+        expect(b.batchDone).toHaveLength(1);
+        await expect(dialog.locator('.batch-refused li')).toHaveText([
+            'Krabice/a.jpg: the research has no person P0042', 'Krabice/b.jpg: the research has no person P0042', 'Krabice/c.jpg: the research has no person P0042',
+        ]);
+    });
+
+    test('a code the app does not know, and a research without media.codes: the research\'s own sentence, as before (L3)', async ({ page }) => {
+        const b = await fakeBridge(page, {
+            accepts: BATCH_ACCEPTS, features: ['media.codes'], mediaPutStatus: 422,
+            mediaPutReply: { error: 'something new went wrong', code: 'media.something-new', text: 'something new went wrong' },
+        });
+        await openResearch(page, { media: true });
+        await poll(page);
+        const dialog = page.locator('#batch-modal');
+        await sendThree(page);
+        await expect(dialog.locator('.batch-confirm-title')).toContainText('is in the research');
+        // An unknown code: the research's sentence, as before.
+        await expect(dialog.locator('.batch-refused li').first()).toHaveText('Krabice/a.jpg: something new went wrong');
+        await dialog.getByRole('button', { name: 'Done' }).click();
+        // An older research (no media.codes): its sentence even with a code.
+        b.features = [];
+        await poll(page);
+        b.mediaPutReply = { error: 'žádná osoba P0042', code: 'media.no-person', params: { person: 'P0042' } };
+        b.mediaPutStatus = 404;
+        await sendThree(page);
+        await expect(dialog.locator('.batch-confirm-title')).toContainText('is in the research');
+        await expect(dialog.locator('.batch-refused li').first()).toHaveText('Krabice/a.jpg: žádná osoba P0042');
+    });
+
+    test('a research that gives codes started again with a new token in the middle of a batch: paused, nothing refused (L3, N37)', async ({ page }) => {
+        const b = await fakeBridge(page, { accepts: BATCH_ACCEPTS, features: ['media.codes'] });
+        await openResearch(page, { media: true });
+        await poll(page);
+        const dialog = page.locator('#batch-modal');
+        await sendThree(page, () => { b.rotateAt = 1; });
+        await expect(dialog.locator('.batch-progress-title')).toHaveText('Paused');
+        await expect(dialog.locator('.batch-refused')).toHaveCount(0);
+        expect(b.batchDone ?? []).toHaveLength(0);
+    });
+
     test('a research that takes no batches: no "Add materials…"', async ({ page }) => {
         await fakeBridge(page, { accepts: { ...BATCH_ACCEPTS, media: { max: 500 * 1024 * 1024, region: true } } });
         await openResearch(page, { media: true });
         await poll(page);
         await openResearchMenu(page);
         await expect(page.locator('#research-item-batch')).toHaveCount(0);
+    });
+});
+
+test.describe('Add materials in Czech', () => {
+    test.use({ viewport: DESKTOP, locale: 'cs-CZ' });
+
+    test('a research that gives codes: a refused file said in Czech with its params (L3)', async ({ page }) => {
+        const b = await fakeBridge(page, {
+            accepts: BATCH_ACCEPTS, features: ['media.codes'], mediaPutStatus: 413,
+            mediaPutReply: { error: 'the batch has 2 files already (the most one takes)', code: 'batch.full-files', params: { batch: 'b-1', files: '2' } },
+        });
+        await openResearch(page, { media: true });
+        await poll(page);
+        await page.evaluate(() => (window.Strom.UI as any).showBatchDialog());
+        await addFiles(page, ['Krabice/a.jpg']);
+        const dialog = page.locator('#batch-modal');
+        await dialog.locator('[data-act="next"]').click();
+        await dialog.locator('[data-act="go"]').click();
+        await expect(dialog.locator('.batch-done-row.is-warn')).toHaveText('Výzkum odmítl (Krabice/a.jpg: dávka už má 2 soubory, víc nebere)');
+        expect(b.mediaPuts).toHaveLength(1);
     });
 });

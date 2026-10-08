@@ -549,6 +549,26 @@ test.describe('Send material… (beta.10)', () => {
         expect(b.mediaPuts).toEqual([]);
     });
 
+    for (const codes of [true, false]) {
+        test(`a file the research refuses for good${codes ? ' (media.codes)' : ' (an older research, no media.codes)'}: the toast says why ${codes ? 'in the app\'s language with its params' : 'in the research\'s own sentence'}, not "sent", nothing waits (L3)`, async ({ page }) => {
+            const b = await fakeBridge(page, {
+                accepts: MEDIA_ACCEPTS, mediaPutStatus: 413, ...(codes ? { features: ['media.codes'] } : {}),
+                mediaPutReply: { error: 'Soubor je větší, než výzkum z aplikace přijme (1 MB)', code: 'media.large', text: 'The file is larger than the research takes from the app (1 MB)', params: { mb: '1' }, max: 1048576 },
+            });
+            await openResearch(page, { media: true });
+            await poll(page);
+            await page.evaluate(() => (window.Strom.UI as any).showMaterialDialog({ personId: Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.firstName === 'Jan')!.id }));
+            const dialog = page.locator('#material-modal');
+            await dialog.locator('#material-input').setInputFiles(AVATAR);
+            await dialog.getByRole('button', { name: 'Send 1 file' }).click();
+            await expect(page.locator('.toast')).toContainText(codes
+                ? "Sent 0 of 1. avatar.png wasn't sent: the file is larger than the research takes (1 MB)."
+                : "Sent 0 of 1. avatar.png wasn't sent: Soubor je větší, než výzkum z aplikace přijme (1 MB).");
+            expect(b.mediaPuts).toHaveLength(1);
+            expect(await queued(page)).toEqual([]);
+        });
+    }
+
     test('material the research already has: sent with its note, and the toast says it had it (no task), not "sent"', async ({ page }) => {
         const b = await fakeBridge(page, { accepts: MEDIA_ACCEPTS });
         b.mediaKnown.set(AVATAR_SHA, 'I0013');

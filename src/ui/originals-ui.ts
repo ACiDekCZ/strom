@@ -44,7 +44,7 @@ const SENT_KEY = 'strom-originals-sent:';
 const SENT_MAX = 2000;
 
 /** Why an original was not queued (the attachment keeps its preview either way). 'sent': straight to a running research. */
-export type QueueOutcome = 'queued' | 'sent' | 'known' | 'knownFilled' | 'notLinked' | 'notTaken' | 'off' | 'safari' | 'encrypted' | 'tooLarge' | 'noRoom' | 'failed';
+export type QueueOutcome = 'queued' | 'sent' | 'known' | 'knownFilled' | 'notLinked' | 'notTaken' | 'off' | 'safari' | 'encrypted' | 'tooLarge' | 'noRoom' | 'failed' | 'refused';
 
 /** Why only the preview is in the tree (the title of "preview only"). */
 export type PreviewOnlyWhy = 'room' | 'encrypted' | 'off' | 'older' | 'safari';
@@ -106,6 +106,14 @@ function sentMap(researchId: string): Record<string, string> {
 const knownByResearch = new Set<string>();
 /** Of those, what the research added to its input from this send (`added`: a person, the note). */
 const knownAdded = new Map<string, { person: boolean; note: boolean }>();
+
+/** What the research answered a file it refused for good at its last send (by hash, this session): its reply's body. */
+const refusedReplies = new Map<string, unknown>();
+
+/** The research's answer to a file it refused at its last send ({error, code, params}), or undefined. */
+export function researchRefusalOf(sha: string): unknown {
+    return refusedReplies.get(sha);
+}
 
 /** What the research says it added to a file it had: a person, the note (none: nothing new). */
 export function researchKnownAdded(sha: string): { person: boolean; note: boolean } | null {
@@ -245,6 +253,8 @@ export const originalsMethods = uiModule({
             if (await this.sendOriginalNow(link, original, file, target)) {
                 return !knownByResearch.has(original.sha256) ? 'sent' : knownAdded.has(original.sha256) ? 'knownFilled' : 'known';
             }
+            // Refused for good (a size or kind it never takes): said why, never left to wait (it would be refused again).
+            if (refusedReplies.has(original.sha256)) return 'refused';
         }
         if (SettingsManager.isEncryptionEnabled()) {
             // Never kept in the browser in the clear: straight to a running research, or preview only.
@@ -794,6 +804,7 @@ export const originalsMethods = uiModule({
     async sendOneOriginal(base: string, rec: QueuedOriginal, targets: { person?: string; source?: string; region?: boolean },
         opts: { force?: boolean } = {}): Promise<string | 'refused' | 'retry' | 'down' | 'full'> {
         const url = `${base}/media/${rec.sha256}`;
+        refusedReplies.delete(rec.sha256);
         // Sent on purpose (material, a deleted attachment's original): no asking first — its note goes along.
         if (!opts.force) {
             try {
@@ -835,6 +846,7 @@ export const originalsMethods = uiModule({
             // Too large / a kind it does not take: never. Out of disk space: stop for now.
             if (res.status === 413 || res.status === 415) {
                 console.warn(`Strom Research refused the original ${rec.name} (HTTP ${res.status})`);
+                refusedReplies.set(rec.sha256, await res.json().catch(() => null));
                 return 'refused';
             }
             if (res.status === 507) {

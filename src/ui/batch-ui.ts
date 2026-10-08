@@ -19,6 +19,7 @@ import {
     BatchSkip, BatchFolder, batchSkip, batchLimitsOf, batchOverLimit, batchEstimate, batchDefaultName, batchTree,
     batchFolderFiles, newBatchId, batchPathHeader, isZip, UnfinishedBatch, sanitizeUnfinishedBatch,
 } from '../batch.js';
+import { mediaCodesOn, mediaRefusalText } from '../media-refusal.js';
 import { formatBytesShort } from './originals-ui.js';
 import { onComputer, fetchWithTimeout, bridgeFailure } from './research-ui.js';
 import { uiModule } from './module.js';
@@ -798,7 +799,7 @@ export const batchMethods = uiModule({
                     r.skipped += Array.isArray(z.known) ? z.known.length : 0;
                     for (const x of Array.isArray(z.refused) ? z.refused.slice(0, 200) : []) {
                         const rec = x as Record<string, unknown>;
-                        r.refused.push({ path: String(rec.path ?? item.path), why: String(rec.why ?? '') });
+                        r.refused.push({ path: String(rec.path ?? item.path), why: this.batchRefusalText(r, rec, '') });
                     }
                 } else if (body && typeof body.known === 'string') r.skipped++;
                 else r.received++;
@@ -818,13 +819,21 @@ export const batchMethods = uiModule({
             // unknown token 404, N37) — paused until its new address comes. A 404 of its own (a person it
             // does not have) while it answers at this address: that file refused, the batch goes on.
             if (await this.batchAddressGone(r, res.status)) return 'down';
-            r.refused.push({ path: item.path, why: typeof body?.error === 'string' ? body.error.slice(0, 200) : `HTTP ${res.status}` });
+            r.refused.push({ path: item.path, why: this.batchRefusalText(r, body, `HTTP ${res.status}`) });
             return 'ok';
         } catch {
             return 'down';
         } finally {
             if (timer) clearTimeout(timer);
         }
+    },
+
+    /**
+     * Why the research refused a file (L3): in the app's language by its code when the research
+     * gives codes (`media.codes`), else its own sentence as it said it, else `fallback`.
+     */
+    batchRefusalText(r: Run, body: unknown, fallback: string): string {
+        return mediaRefusalText(body, mediaCodesOn(this.researchStatusOf(r.researchId)?.features), fallback);
     },
 
     /**
