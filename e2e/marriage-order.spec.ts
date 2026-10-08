@@ -155,6 +155,60 @@ test.describe('marriage-order pill (T13)', () => {
         }
     });
 
+    test('a pill wider than its half of the compact card (a wide font) shows a shorter label, the bubble and the export say it all', async ({ page }) => {
+        await widenPillFont(page);
+        await setup(page);
+        await page.evaluate(() => window.Strom.UI.setCardDensity('compact' as never));
+        await zoomTo(page, 1);
+        // "2nd ∞ 1908" does not fit in the 71px half of the 150px card: the year goes.
+        for (const [name, text] of [['Anna', '1st ∞'], ['Marie', '2nd ∞']] as const) {
+            await expect(pill(page, name)).toHaveAttribute('data-label', 'noYear');
+            expect(await pillText(page, name)).toBe(text);
+            const c = (await card(page, name).boundingBox())!;
+            const b = (await pill(page, name).boundingBox())!;
+            const mid = c.x + c.width / 2;
+            expect(b.x + b.width <= mid - 2 || b.x >= mid + 2, `${name}: the middle of the top edge stays free`).toBe(true);
+        }
+        // "3rd ∞" (no date) fits whole.
+        await expect(pill(page, 'Eva')).toHaveAttribute('data-label', 'full');
+        expect(await pillText(page, 'Eva')).toBe('3rd ∞');
+        // Widths on the screen (no card hovered: a hovered card grows 3 %).
+        const screenW: Record<string, number> = {};
+        for (const [id, name] of [['a', 'Anna'], ['m', 'Marie'], ['e', 'Eva']]) {
+            screenW[id] = await pill(page, name).evaluate(el => el.getBoundingClientRect().width);
+        }
+        // The bubble and the accessible label keep the year and the place.
+        await expect(pill(page, 'Marie')).toHaveAttribute('aria-label', "Josef Víšek's 2nd marriage, 1908, Praha");
+        await pill(page, 'Marie').hover();
+        await expect(pill(page, 'Marie').locator('.uo-tip')).toBeVisible();
+        await expect(pill(page, 'Marie').locator('.uo-tip')).toHaveText("Josef Víšek's 2nd marriage, 1908, Praha");
+        await page.mouse.move(0, 0);
+
+        // The SVG export draws the same label, as wide as the screen.
+        await page.evaluate(() => window.Strom.UI.showExportDialog());
+        await page.locator('#export-modal .menu-option', { hasText: 'Poster' }).click();
+        const poster = page.locator('#poster-modal');
+        await expect(poster).toBeVisible();
+        const [download] = await Promise.all([
+            page.waitForEvent('download'),
+            poster.locator('.menu-option', { hasText: 'SVG' }).click(),
+        ]);
+        const svg = readFileSync(await download.path(), 'utf-8');
+        const pills = [...svg.matchAll(/<g class="union-order-pill" data-union-order="(\d+)" data-person="([^"]+)"([^>]*)>(.*?)<\/g>/g)];
+        expect(pills.map(m => `${m[2]}:${m[1]}`).sort()).toEqual(['a:1', 'e:3', 'm:2']);
+        const marie = pills.find(m => m[2] === 'm')!;
+        expect(marie[3]).toContain('data-label="noYear"');
+        expect(marie[4]).toContain('>2nd</text>');
+        expect(marie[4]).toContain('>∞</text>');
+        expect(marie[4]).not.toContain('1908');
+        expect(pills.find(m => m[2] === 'a')![4]).not.toContain('1866');
+        expect(pills.find(m => m[2] === 'e')![3]).not.toContain('data-label');
+        for (const m of pills) {
+            const w = Number(/<rect [^>]*width="([\d.]+)" height="17"/.exec(m[4])![1]) + 1;
+            expect(Math.abs(w - screenW[m[2]]), `pill of ${m[2]}: SVG ${w} vs screen ${screenW[m[2]]}`).toBeLessThanOrEqual(0.5);
+        }
+    });
+
     test('the descendants view shows the pills too', async ({ page }) => {
         await setup(page);
         await page.locator('#view-mode-descendants').click();
@@ -357,14 +411,34 @@ const HARNESS: Array<[string, () => Tree, string[]]> = [
     ['widow-widower', widowWidower, ['Ludmila', 'Karel', 'Tomas', 'Rozalie', 'k2']],
 ];
 
-for (const density of ['compact', 'normal', 'detailed', 'custom'] as const) {
+/**
+ * A wider pill font, as Linux draws the pill (CI: "2nd ∞ 1908" wider than
+ * the 71px half of the 150px compact card): every character of the pill's
+ * parts 2px wider, on screen and in the screen's own measure alike.
+ */
+async function widenPillFont(page: Page): Promise<void> {
+    await page.addInitScript(() => {
+        const add = () => {
+            const s = document.createElement('style');
+            s.textContent = '.union-order-pill .uo-num, .union-order-pill .uo-glyph, .union-order-pill .uo-year { letter-spacing: 2px; }';
+            document.documentElement.appendChild(s);
+        };
+        if (document.documentElement) add();
+        else new MutationObserver((_, o) => { if (document.documentElement) { o.disconnect(); add(); } }).observe(document, { childList: true });
+    });
+}
+
+for (const density of ['compact', 'normal', 'detailed', 'custom', 'compact-wide'] as const) {
     test(`N18 harness (${density}): no pill covers a tab, a neighbouring card, the middle of the top edge or a line`, async ({ page }) => {
         test.setTimeout(120_000);
-        let views = 0, pills = 0, above = 0, besideTabs = 0;
+        let views = 0, pills = 0, above = 0, besideTabs = 0, shortened = 0;
         const errors: string[] = [];
+        // A wide font (as on Linux): the whole pill no longer fits in its half of the compact card.
+        const wide = density === 'compact-wide';
+        if (wide) await widenPillFont(page);
         for (const [name, make, focuses] of HARNESS) {
             await loadTree(page, make(), focuses[0]);
-            await page.evaluate((d) => window.Strom.UI.setCardDensity(d as never), density);
+            await page.evaluate((d) => window.Strom.UI.setCardDensity(d as never), wide ? 'compact' : density);
             for (const view of ['expanded', 'standard', 'descendants'] as const) {
                 if (view === 'standard') await page.evaluate(() => window.Strom.TreeRenderer.toggleShowAllPartnerships());
                 if (view === 'descendants') {
@@ -377,16 +451,19 @@ for (const density of ['compact', 'normal', 'detailed', 'custom'] as const) {
                     await zoomTo(page, 1, focus);
                     const r = await pillCollisions(page);
                     views++; pills += r.pills; above += r.above; besideTabs += r.besideTabs;
+                    shortened += await page.locator('#tree-canvas .union-order-pill:is([data-label="noYear"], [data-label="ordinal"])').count();
                     errors.push(...r.errors.map(e => `${name}/${view}/focus ${focus}: ${e}`));
                 }
                 if (view === 'descendants') await page.locator('#view-mode-family').click();
             }
         }
-        console.log(`N18 harness ${density}: ${views} views, ${pills} pills (${above} above the tabs, ${besideTabs} beside tabs), ${errors.length} collisions`);
+        console.log(`N18 harness ${density}: ${views} views, ${pills} pills (${above} above the tabs, ${besideTabs} beside tabs, ${shortened} shortened), ${errors.length} collisions`);
         expect(errors).toEqual([]);
         expect(pills).toBeGreaterThan(20);
         // compact and normal cards meet the case the fix is for: a pill above the tabs
         if (density === 'compact' || density === 'normal') expect(above).toBeGreaterThan(0);
+        // the wide font meets the case of a whole pill wider than its half: a shorter label
+        if (wide) expect(shortened).toBeGreaterThan(0);
     });
 }
 

@@ -210,4 +210,28 @@ describe('the image export draws the pills', () => {
         else expect(x - 0.5).toBeGreaterThanOrEqual(card.x + 75 + 4 - 0.01);
         expect(w1).toContain('<text x="' + (x - 0.5 + 22).toFixed(2) + '"');
     });
+
+    it('a pill wider than its half of a narrow card (a wide font) draws the shorter label the screen shows, off the middle', () => {
+        const data = family();
+        const config = { ...DEFAULT_LAYOUT_CONFIG, cardWidth: 150, cardHeight: 44 };
+        const result = runLayoutPipeline({
+            data, focusPersonId: P('H'), config, ancestorDepth: 3, descendantDepth: 3,
+            includeSpouseAncestors: true, includeParentSiblings: true, includeParentSiblingDescendants: true,
+            displayPolicy: { mode: 'standard', autoExpand: true },
+        });
+        // A wide font: "1st ∞ 1866" 78px (the half holds 71), "1st ∞" 44px, "1st" 30px.
+        const measure = (_o: string, year: string, glyph = true) => !glyph ? { width: 30, numX: 8, glyphX: 0, yearX: 0 }
+            : year ? { width: 78, numX: 8, glyphX: 30, yearX: 40 } : { width: 44, numX: 8, glyphX: 30, yearX: 0 };
+        const svg = buildTreeSvg(data, result, { config, cardDensity: 'compact', measureUnionOrderPill: measure });
+        const m = /<g class="union-order-pill" data-union-order="1" data-person="W1"([^>]*)>(.*?)<\/g>/.exec(svg)!;
+        expect(m[1]).toContain('data-label="noYear"');
+        expect(m[2]).toContain('>1st</text>');
+        expect(m[2]).toContain('>∞</text>');
+        expect(m[2]).not.toContain('1866');
+        const [, x, , w] = /<rect x="([^"]+)" y="([^"]+)" width="([^"]+)"/.exec(m[2])!.map(Number);
+        expect(w).toBeCloseTo(43, 2);
+        const card = result.positions.get(P('W1'))!;
+        const left = x - 0.5, right = left + 44, mid = card.x + 75;
+        expect(right <= mid - 4 + 0.01 || left >= mid + 4 - 0.01).toBe(true);
+    });
 });

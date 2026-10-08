@@ -12,7 +12,9 @@
  *   person with two or more unions in view, at the corner that points to
  *   that person (the screen, the image export and the book): one pill per
  *   union, at most one per card (unionOrderBadges), laid out with the
- *   card's top-edge tabs by one rule for every density (placeUnionOrderPill).
+ *   card's top-edge tabs by one rule for every density (placeUnionOrderPill),
+ *   with a shorter label ("1. ∞", "1.") where the whole does not fit in its
+ *   half of the card.
  *
  * The number counts every union of the person in the data, so a marriage
  * keeps its number however much of the family the view shows. An empty "?"
@@ -239,11 +241,52 @@ const LINE_CLEARANCE = 1.5;
 /** An axis-parallel line, card-relative (x from the card's left edge, y from its top edge). */
 export interface PillSegment { x1: number; y1: number; x2: number; y2: number }
 
+/**
+ * The label a pill shows: whole ("2nd ∞ 1908"; "3rd ∞" without a date),
+ * without the year ("2nd ∞"), or the ordinal alone ("2nd"). The bubble and
+ * the accessible label always say it all.
+ */
+export type PillLabel = 'full' | 'noYear' | 'ordinal';
+
+/** One label of a pill: its parts (the screen's markup draws them, the measure measures them). */
+export interface PillLabelForm {
+    label: PillLabel;
+    ordinal: string;
+    /** '' when the label shows no year. */
+    year: string;
+    /** False for the ordinal alone (no ∞). */
+    glyph: boolean;
+}
+
+/**
+ * The labels a pill may show, longest first: the whole pill (the number, the
+ * ∞ and the year when there is one), then without the year, then the
+ * ordinal alone.
+ */
+export function pillLabelForms(ordinal: string, year: string): PillLabelForm[] {
+    const out: PillLabelForm[] = [{ label: 'full', ordinal, year, glyph: true }];
+    if (year) out.push({ label: 'noYear', ordinal, year: '', glyph: true });
+    out.push({ label: 'ordinal', ordinal, year: '', glyph: false });
+    return out;
+}
+
+/** The widths placeUnionOrderPill takes, from the labels (pillLabelForms) and their measures, in that order. */
+export function pillLabelWidths(forms: ReadonlyArray<PillLabelForm>, widths: ReadonlyArray<number>):
+    Pick<PillPlacementInput, 'pillWidth' | 'shorter'> {
+    return { pillWidth: widths[0], shorter: forms.slice(1).map((f, i) => ({ label: f.label, width: widths[i + 1] })) };
+}
+
 export interface PillPlacementInput {
     cardWidth: number;
     /** The corner of the person whose marriages the pill counts. */
     side: 'left' | 'right';
+    /** Width of the whole pill. */
     pillWidth: number;
+    /**
+     * Widths of its shorter labels, longest first (pillLabelForms): tried in
+     * turn when the whole pill does not fit in its half of the card.
+     */
+    shorter?: ReadonlyArray<{ label: PillLabel; width: number }>;
     /** Width of the tabs resting in each top corner (0: none). */
     leftTabs: number;
     rightTabs: number;
@@ -263,6 +306,10 @@ export interface PillPlacement {
     row: 'edge' | 'above';
     /** False when no place kept clear of every line (the above row's corner then). */
     clear: boolean;
+    /** The label shown: the whole pill, or a shorter one where the whole does not fit in its half. */
+    label: PillLabel;
+    /** The pill's width with that label. */
+    width: number;
 }
 
 function hitsLine(x: number, y: number, w: number, segments: ReadonlyArray<PillSegment>): boolean {
@@ -288,10 +335,34 @@ function hitsLine(x: number, y: number, w: number, segments: ReadonlyArray<PillS
  * - when it does not fit there (a narrow card, long tabs, a line in the way),
  *   it moves above the tabs, wholly above the top edge, still in its half
  *   and within the card's width, so it never reaches a neighbouring card —
- *   at the corner, or as close to it as the lines allow.
+ *   at the corner, or as close to it as the lines allow;
+ * - when the whole pill is wider than its half even there (a narrow card, a
+ *   wide font — the widths are the screen's own, measured in its font), it
+ *   shows a shorter label: without the year, then the ordinal alone, the
+ *   longest that fits; a label clear of the lines before one that is not.
+ *
+ * Null when not even the ordinal alone fits in the half: the card then
+ * shows no pill rather than one over the middle of its top edge.
  */
-export function placeUnionOrderPill(input: PillPlacementInput): PillPlacement {
-    const { cardWidth: W, side, pillWidth: w, leftTabs, rightTabs, leftInset, rightInset } = input;
+export function placeUnionOrderPill(input: PillPlacementInput): PillPlacement | null {
+    const forms: Array<{ label: PillLabel; width: number }> = [{ label: 'full', width: input.pillWidth }, ...(input.shorter ?? [])];
+    for (const clearOnly of [true, false]) {
+        for (const f of forms) {
+            const slot = placeWidth(input, f.width, clearOnly);
+            if (slot) return { ...slot, label: f.label, width: f.width };
+        }
+    }
+    return null;
+}
+
+/**
+ * Where a pill `w` wide sits (placeUnionOrderPill), or null when it is wider
+ * than its half of the card — or, with `clearOnly`, when no place in the half
+ * is clear of the lines.
+ */
+function placeWidth(input: PillPlacementInput, w: number, clearOnly: boolean):
+    { x: number; y: number; row: 'edge' | 'above'; clear: boolean } | null {
+    const { cardWidth: W, side, leftTabs, rightTabs, leftInset, rightInset } = input;
     const segments = input.segments ?? [];
     const mid = W / 2;
     const leftEnd = leftTabs > 0 ? leftInset + leftTabs : -Infinity;
@@ -311,8 +382,9 @@ export function placeUnionOrderPill(input: PillPlacementInput): PillPlacement {
     }
 
     // Above the tabs: in the half, within the card, the corner first.
-    const lo = side === 'left' ? 0 : Math.min(W - w, mid + CENTRE_CLEAR);
-    const hi = side === 'left' ? Math.max(0, mid - CENTRE_CLEAR - w) : Math.max(0, W - w);
+    const lo = side === 'left' ? 0 : mid + CENTRE_CLEAR;
+    const hi = side === 'left' ? mid - CENTRE_CLEAR - w : W - w;
+    if (hi < lo - 1e-9) return null;   // wider than its half: it would cover the middle
     const corner = side === 'left' ? Math.min(Math.max(leftInset, lo), hi) : Math.max(Math.min(W - rightInset - w, hi), lo);
     if (!hitsLine(corner, ABOVE_ROW_Y, w, segments)) return { x: corner, y: ABOVE_ROW_Y, row: 'above', clear: true };
     // The nearest free place to the corner, in half-pixel steps.
@@ -322,7 +394,7 @@ export function placeUnionOrderPill(input: PillPlacementInput): PillPlacement {
             if (!hitsLine(x, ABOVE_ROW_Y, w, segments)) return { x, y: ABOVE_ROW_Y, row: 'above', clear: true };
         }
     }
-    return { x: corner, y: ABOVE_ROW_Y, row: 'above', clear: false };
+    return clearOnly ? null : { x: corner, y: ABOVE_ROW_Y, row: 'above', clear: false };
 }
 
 /**
@@ -367,7 +439,7 @@ export function segmentsNearCard(segments: ReadonlyArray<PillSegment>, x: number
 export interface PillMetrics {
     width: number;
     numX: number;
-    /** The ∞ glyph's centre. */
+    /** The ∞ glyph's centre (0 for the ordinal alone). */
     glyphX: number;
     /** 0 without a year. */
     yearX: number;
@@ -383,12 +455,13 @@ export function estimatePillTextWidth(text: string): number {
 /**
  * The pill measured without a browser (tests, the export outside one): the
  * screen's .union-order-pill — 1px border, 7px padding, 3px between the
- * parts, a 9px ∞.
+ * parts, a 9px ∞. `glyph` false: the ordinal alone (no ∞, no year).
  */
-export function estimatePillMetrics(ordinal: string, year: string): PillMetrics {
+export function estimatePillMetrics(ordinal: string, year: string, glyph = true): PillMetrics {
     const numW = estimatePillTextWidth(ordinal);
-    const glyphW = 9;
     const numX = 8;
+    if (!glyph) return { width: numX + numW + 8, numX, glyphX: 0, yearX: 0 };
+    const glyphW = 9;
     const glyphX = numX + numW + 3 + glyphW / 2;
     const yearX = year ? numX + numW + 3 + glyphW + 3 : 0;
     const width = (year ? yearX + estimatePillTextWidth(year) : numX + numW + 3 + glyphW) + 8;

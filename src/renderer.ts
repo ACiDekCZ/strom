@@ -64,7 +64,7 @@ import { parentRelKind, parentRelDash, connectionDash } from './parent-rel-style
 import { isDiagramStandIn } from './layout/pipeline/placeholders.js';
 import {
     unionOrderBadges, UnionOrderBadge, hiddenRelativesTabs, HiddenRelativesTab, placeUnionOrderPill, PillPlacement,
-    viewLineSegments, segmentsNearCard, EDGE_INSET,
+    viewLineSegments, segmentsNearCard, EDGE_INSET, PillLabel, pillLabelForms, pillLabelWidths,
 } from './marriage-order.js';
 import { measureUnionOrderPills, measureTabRows, rowKey, unionOrderPillKey, unionOrderPillPartsHtml, pillFontsPending } from './union-order-measure.js';
 import { openCardMenuFromKeyboard } from './ui/keyboard-access.js';
@@ -1534,7 +1534,7 @@ class TreeRendererClass {
             // pinned to the right corner, or above the tabs.
             const orderBadge = orderBadges.get(id);
             const orderSlot = orderSlots.get(id);
-            const orderHtml = orderBadge && orderSlot ? this.unionOrderPillHtml(orderBadge) : '';
+            const orderHtml = orderBadge && orderSlot ? this.unionOrderPillHtml(orderBadge, orderSlot.label) : '';
             const leftOrderHtml = orderSlot?.row === 'edge' && orderBadge!.side === 'left' ? orderHtml : '';
             const rightOrderHtml = orderSlot?.row === 'edge' && orderBadge!.side === 'right' ? orderHtml : '';
             if (orderSlot) card.classList.add(orderSlot.row === 'edge' ? 'has-order-edge' : 'has-order-above');
@@ -2537,14 +2537,17 @@ class TreeRendererClass {
      * look of the other card-edge pills. Not clickable (a click is the
      * card's); a mouse shows its bubble, which names whose marriage the
      * number counts ("Jan Novák's 2nd marriage, 1885, Dolní Lhota"); the
-     * aria-label says the same.
+     * aria-label says the same. Where the whole pill does not fit in its
+     * half of the card it shows a shorter `label` ("2nd ∞", "2nd"); the
+     * bubble and the aria-label still say it all.
      */
-    private unionOrderPillHtml(b: UnionOrderBadge): string {
+    private unionOrderPillHtml(b: UnionOrderBadge, label: PillLabel): string {
         const toward = DataManager.getPerson(b.towardId);
         const tip = strings.focus.unionOrderTip(b.number, b.year, b.place, b.married, toward ? shownName(toward, '?') : '?');
+        const form = pillLabelForms(strings.focus.unionOrdinal(b.number), b.year).find(f => f.label === label)!;
         return `<span class="union-order-pill" role="img" aria-label="${this.escapeHtml(tip)}"`
-            + ` data-union-order="${b.number}" data-toward="${this.escapeHtml(b.towardId)}" data-side="${b.side}">`
-            + unionOrderPillPartsHtml(strings.focus.unionOrdinal(b.number), b.year)
+            + ` data-union-order="${b.number}" data-toward="${this.escapeHtml(b.towardId)}" data-side="${b.side}" data-label="${label}">`
+            + unionOrderPillPartsHtml(form.ordinal, form.year, form.glyph)
             + `<span class="badge-tooltip uo-tip">${this.escapeHtml(tip)}</span></span>`;
     }
 
@@ -2552,7 +2555,9 @@ class TreeRendererClass {
      * Where each marriage-order pill sits on its card (placeUnionOrderPill):
      * the pill and the resting branch tabs measured in the screen's styles,
      * the corner groups 12px inside the border (the compact card's right
-     * group 8px further in beside a status badge), the view's lines.
+     * group 8px further in beside a status badge), the view's lines; each
+     * label of a pill measured, for the shorter one where the whole does not
+     * fit in its half. A card whose half holds not even the ordinal shows none.
      */
     private unionOrderSlots(badges: Map<PersonId, UnionOrderBadge>, unionChildIds: ReadonlySet<PersonId>, signalCtx: CardSignalContext):
         Map<PersonId, PillPlacement & { border: number }> {
@@ -2560,7 +2565,8 @@ class TreeRendererClass {
         if (badges.size === 0) return out;
         const data = DataManager.getData();
         const showTabs = this.viewMode !== 'descendants';
-        const pills = measureUnionOrderPills([...badges.values()].map(b => ({ ordinal: strings.focus.unionOrdinal(b.number), year: b.year })));
+        const formsOf = (b: UnionOrderBadge) => pillLabelForms(strings.focus.unionOrdinal(b.number), b.year);
+        const pills = measureUnionOrderPills([...badges.values()].flatMap(formsOf));
         const tabsOf = new Map<PersonId, HiddenRelativesTab[]>();
         for (const id of badges.keys()) {
             tabsOf.set(id, showTabs ? hiddenRelativesTabs(data, id, pid => this.positions.has(pid), unionChildIds) : []);
@@ -2576,17 +2582,18 @@ class TreeRendererClass {
             const border = id === this.focusPersonId ? 2 : 1;
             const signals = compact && cardSignalInfo(person, signalCtx);
             const signal = !!signals && (!!signals.action || signals.showAgent || signals.doneSince !== null);
+            const forms = formsOf(b);
             const slot = placeUnionOrderPill({
                 cardWidth: W,
                 side: b.side,
-                pillWidth: pills.get(unionOrderPillKey(strings.focus.unionOrdinal(b.number), b.year))!.width,
+                ...pillLabelWidths(forms, forms.map(f => pills.get(unionOrderPillKey(f.ordinal, f.year, f.glyph))!.width)),
                 leftTabs: 0,
                 rightTabs: tabRows.get(rowKey(tabsOf.get(id)!)) ?? 0,
                 leftInset: border + EDGE_INSET,
                 rightInset: border + EDGE_INSET + (signal ? 8 : 0),
                 segments: segmentsNearCard(segments, pos.x, pos.y, W),
             });
-            out.set(id, { ...slot, border });
+            if (slot) out.set(id, { ...slot, border });
         }
         // Measured before the pill font was in: lay the pills out again once it is.
         const seq = this.renderSeq;

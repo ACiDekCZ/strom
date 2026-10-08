@@ -22,7 +22,7 @@ import { shownName } from './person-name.js';
 import { strings } from './strings.js';
 import {
     unionOrderBadges, UnionOrderBadge, PillMetrics, estimatePillMetrics, placeUnionOrderPill, viewLineSegments,
-    segmentsNearCard, EDGE_INSET,
+    segmentsNearCard, EDGE_INSET, PillLabel, pillLabelForms, pillLabelWidths,
 } from './marriage-order.js';
 
 /** The subset of a LayoutResult the poster needs (no diagnostics required). */
@@ -141,19 +141,23 @@ function placeRows(place: string, maxW: number, fontSize: number): string[] {
 /**
  * A marriage-order pill (T13) with its left edge at `x`, its top at `y`:
  * "1. ∞ 1866" in an 18px pill — the screen's .union-order-pill (its parts
- * where the screen's measure puts them, a 1px hairline), without its shadow.
+ * where the screen's measure puts them, a 1px hairline), without its shadow;
+ * with the shorter `label` the screen shows where the whole does not fit in
+ * its half of the card ("2nd ∞", "2nd").
  */
-export function unionOrderPillSvg(b: UnionOrderBadge, m: PillMetrics, x: number, y: number, dimmed = false): string {
+export function unionOrderPillSvg(b: UnionOrderBadge, m: PillMetrics, x: number, y: number, dimmed = false, label: PillLabel = 'full'): string {
     const num = strings.focus.unionOrdinal(b.number);
     const base = (y + 12.5).toFixed(1);
     const font = `${LINE_FONT} font-size="10" font-weight="600" fill="${COLORS.textLight}"`;
     const parts = [
         `<rect x="${(x + 0.5).toFixed(2)}" y="${(y + 0.5).toFixed(1)}" width="${(m.width - 1).toFixed(2)}" height="17" rx="8.5" fill="${COLORS.cardBg}" stroke="${COLORS.cardBorder}" stroke-width="1"/>`,
         `<text x="${(x + m.numX).toFixed(2)}" y="${base}" ${font}>${escapeXml(num)}</text>`,
-        `<text x="${(x + m.glyphX).toFixed(2)}" y="${base}" text-anchor="middle" ${LINE_FONT} font-size="11" font-weight="600" fill="${COLORS.accent}">∞</text>`,
     ];
-    if (b.year) parts.push(`<text x="${(x + m.yearX).toFixed(2)}" y="${base}" ${font}>${escapeXml(b.year)}</text>`);
-    return `<g class="union-order-pill" data-union-order="${b.number}" data-person="${escapeXml(b.personId)}" data-toward="${escapeXml(b.towardId)}"${dimmed ? ' opacity="0.5"' : ''}>${parts.join('')}</g>`;
+    if (label !== 'ordinal') {
+        parts.push(`<text x="${(x + m.glyphX).toFixed(2)}" y="${base}" text-anchor="middle" ${LINE_FONT} font-size="11" font-weight="600" fill="${COLORS.accent}">∞</text>`);
+    }
+    if (b.year && label === 'full') parts.push(`<text x="${(x + m.yearX).toFixed(2)}" y="${base}" ${font}>${escapeXml(b.year)}</text>`);
+    return `<g class="union-order-pill" data-union-order="${b.number}" data-person="${escapeXml(b.personId)}" data-toward="${escapeXml(b.towardId)}"${dimmed ? ' opacity="0.5"' : ''}${label !== 'full' ? ` data-label="${label}"` : ''}>${parts.join('')}</g>`;
 }
 
 export interface SvgBounds {
@@ -225,8 +229,11 @@ export interface PosterOptions {
     orderData?: StromData;
     /** The person in focus: decides whose marriage a pill counts when both partners have several (T13). */
     focusId?: string | null;
-    /** The pill measured as the screen draws it (src/union-order-measure.ts); estimated when absent. */
-    measureUnionOrderPill?: (ordinal: string, year: string) => PillMetrics;
+    /**
+     * The pill measured as the screen draws it (src/union-order-measure.ts);
+     * estimated when absent. `glyph` false: the ordinal alone.
+     */
+    measureUnionOrderPill?: (ordinal: string, year: string, glyph?: boolean) => PillMetrics;
 }
 
 /** What the poster needs of a custom card line. */
@@ -677,14 +684,18 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
         for (const [personId, b] of [...badges.entries()].sort((a, b) => String(a[0]).localeCompare(String(b[0])))) {
             const pos = result.positions.get(personId);
             if (!pos) continue;
-            const m = measure(strings.focus.unionOrdinal(b.number), b.year);
+            // Each label measured: the shorter one where the whole does not fit in its half.
+            const forms = pillLabelForms(strings.focus.unionOrdinal(b.number), b.year);
+            const metrics = forms.map(f => measure(f.ordinal, f.year, f.glyph));
             // The card's 1px border: the screen's corner groups stand 12px inside it.
             const slot = placeUnionOrderPill({
-                cardWidth: cw, side: b.side, pillWidth: m.width, leftTabs: 0, rightTabs: 0,
+                cardWidth: cw, side: b.side, ...pillLabelWidths(forms, metrics.map(m => m.width)), leftTabs: 0, rightTabs: 0,
                 leftInset: 1 + EDGE_INSET, rightInset: 1 + EDGE_INSET,
                 segments: segmentsNearCard(segments, pos.x, pos.y, cw),
             });
-            out.push(unionOrderPillSvg(b, m, pos.x + slot.x, pos.y + slot.y, !!options.dimmedIds?.has(personId)));
+            if (!slot) continue;
+            const m = metrics[forms.findIndex(f => f.label === slot.label)];
+            out.push(unionOrderPillSvg(b, m, pos.x + slot.x, pos.y + slot.y, !!options.dimmedIds?.has(personId), slot.label));
         }
         out.push('</g>');
     }

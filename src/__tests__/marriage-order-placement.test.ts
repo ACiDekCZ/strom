@@ -17,7 +17,7 @@ import { existsSync } from 'fs';
 import { join } from 'path';
 import {
     unionOrderBadges, placeUnionOrderPill, hiddenRelativesTabs, unionChildIdSet, viewLineSegments, segmentsNearCard,
-    PillSegment, EDGE_INSET, EDGE_ROW_Y, ABOVE_ROW_Y, PILL_HEIGHT, CENTRE_CLEAR,
+    PillSegment, EDGE_INSET, EDGE_ROW_Y, ABOVE_ROW_Y, PILL_HEIGHT, CENTRE_CLEAR, pillLabelForms, pillLabelWidths, estimatePillMetrics,
 } from '../marriage-order.js';
 import { measureUnionOrderPill, measureTabRows, rowKey } from '../union-order-measure.js';
 import { StromLayoutEngine, computeLayout } from '../layout/index.js';
@@ -195,14 +195,14 @@ describe('where the pill sits (N18)', () => {
 
     it('beside the tabs on the edge when it fits in its half, the corner when there are none', () => {
         expect(placeUnionOrderPill({ ...base, cardWidth: 188, side: 'left', pillWidth: 58, rightTabs: 50 }))
-            .toEqual({ x: 13, y: EDGE_ROW_Y, row: 'edge', clear: true });
+            .toEqual({ x: 13, y: EDGE_ROW_Y, row: 'edge', clear: true, label: 'full', width: 58 });
         const right = placeUnionOrderPill({ ...base, cardWidth: 320, side: 'right', pillWidth: 58, rightTabs: 50 });
-        expect(right).toEqual({ x: 320 - 13 - 50 - 4 - 58, y: EDGE_ROW_Y, row: 'edge', clear: true });
+        expect(right).toEqual({ x: 320 - 13 - 50 - 4 - 58, y: EDGE_ROW_Y, row: 'edge', clear: true, label: 'full', width: 58 });
     });
 
     it('above the tabs, in its half and within the card, when the tabs leave no room (the widow on a normal card)', () => {
         // "◂ parents" + "◆ siblings" take 135px of the right corner of 188.
-        const p = placeUnionOrderPill({ ...base, cardWidth: 188, side: 'right', pillWidth: 58, rightTabs: 135 });
+        const p = placeUnionOrderPill({ ...base, cardWidth: 188, side: 'right', pillWidth: 58, rightTabs: 135 })!;
         expect(p.row).toBe('above');
         expect(p.y).toBe(ABOVE_ROW_Y);
         expect(p.y + PILL_HEIGHT).toBeLessThan(EDGE_ROW_Y);
@@ -214,16 +214,65 @@ describe('where the pill sits (N18)', () => {
     });
 
     it('on the compact card a pill wider than its half moves above, toward the corner, off the middle', () => {
-        const p = placeUnionOrderPill({ ...base, cardWidth: 150, side: 'left', pillWidth: 64, rightTabs: 0 });
+        const p = placeUnionOrderPill({ ...base, cardWidth: 150, side: 'left', pillWidth: 64, rightTabs: 0 })!;
         expect(p.row).toBe('above');
+        expect(p.label).toBe('full');
         expect(p.x + 64).toBeLessThanOrEqual(75 - CENTRE_CLEAR);
         expect(p.x).toBeGreaterThanOrEqual(0);
+    });
+
+    // A wide font (Linux CI: "2nd ∞ 1908" 78px on the compact card, whose
+    // halves hold 71px each) must not stretch the pill over the middle of the
+    // top edge: the year goes, then the ∞, the longest label that fits.
+    describe('a pill wider than its half of a 150px card shows a shorter label, never over the middle', () => {
+        const W = 150, mid = W / 2;
+        const offMiddle = (p: { x: number; width: number }) => p.x + p.width <= mid - CENTRE_CLEAR || p.x >= mid + CENTRE_CLEAR;
+        for (const side of ['left', 'right'] as const) {
+            it(`${side}: without the year when that fits, on the edge when it fits there`, () => {
+                const shorter = [{ label: 'noYear' as const, width: 40 }, { label: 'ordinal' as const, width: 28 }];
+                const p = placeUnionOrderPill({ ...base, cardWidth: W, side, pillWidth: 78, shorter, rightTabs: 0 })!;
+                expect(p).toMatchObject({ label: 'noYear', width: 40, row: 'edge', clear: true });
+                expect(offMiddle(p)).toBe(true);
+                expect(p.x).toBeGreaterThanOrEqual(0);
+                expect(p.x + p.width).toBeLessThanOrEqual(W);
+            });
+            it(`${side}: the whole pill above the tabs when it fits in the half there, before a shorter one on the edge`, () => {
+                const shorter = [{ label: 'noYear' as const, width: 40 }, { label: 'ordinal' as const, width: 28 }];
+                const p = placeUnionOrderPill({ ...base, cardWidth: W, side, pillWidth: 70, shorter, rightTabs: 0 })!;
+                expect(p).toMatchObject({ label: 'full', width: 70, row: 'above' });
+                expect(offMiddle(p)).toBe(true);
+            });
+            it(`${side}: the ordinal alone when even "2nd ∞" is wider than the half`, () => {
+                const shorter = [{ label: 'noYear' as const, width: 74 }, { label: 'ordinal' as const, width: 34 }];
+                const p = placeUnionOrderPill({ ...base, cardWidth: W, side, pillWidth: 96, shorter, rightTabs: 0 })!;
+                expect(p).toMatchObject({ label: 'ordinal', width: 34 });
+                expect(offMiddle(p)).toBe(true);
+            });
+            it(`${side}: no pill at all rather than one over the middle`, () => {
+                const shorter = [{ label: 'noYear' as const, width: 80 }, { label: 'ordinal' as const, width: 72 }];
+                expect(placeUnionOrderPill({ ...base, cardWidth: W, side, pillWidth: 96, shorter, rightTabs: 0 })).toBeNull();
+                expect(placeUnionOrderPill({ ...base, cardWidth: W, side, pillWidth: 78, rightTabs: 0 })).toBeNull();
+            });
+        }
+    });
+
+    it('the labels of a pill, longest first: the year goes first, then the ∞', () => {
+        expect(pillLabelForms('2nd', '1908')).toEqual([
+            { label: 'full', ordinal: '2nd', year: '1908', glyph: true },
+            { label: 'noYear', ordinal: '2nd', year: '', glyph: true },
+            { label: 'ordinal', ordinal: '2nd', year: '', glyph: false },
+        ]);
+        expect(pillLabelForms('3.', '').map(f => f.label)).toEqual(['full', 'ordinal']);
+        // The ordinal alone is narrower than with the ∞, which is narrower than with the year.
+        const [a, b, c] = pillLabelForms('2nd', '1908').map(f => estimatePillMetrics(f.ordinal, f.year, f.glyph).width);
+        expect(a).toBeGreaterThan(b);
+        expect(b).toBeGreaterThan(c);
     });
 
     it('steps aside from a line in the way', () => {
         // A bus 2 lanes low runs over the card's top at y −24.
         const segments = [{ x1: -50, y1: -24, x2: 20, y2: -24 }];
-        const p = placeUnionOrderPill({ ...base, cardWidth: 188, side: 'left', pillWidth: 58, rightTabs: 135, segments });
+        const p = placeUnionOrderPill({ ...base, cardWidth: 188, side: 'left', pillWidth: 58, rightTabs: 135, segments })!;
         expect(p.row).toBe('above');
         expect(p.clear).toBe(true);
         expect(p.x).toBeGreaterThan(20);
@@ -271,13 +320,16 @@ describe('geometry harness: pills against tabs, cards and lines', () => {
                                 const pos = r.positions.get(id)!;
                                 const tabs = view === 'descendants' ? [] : hiddenRelativesTabs(data, id, x => r.positions.has(x), unionKids);
                                 const tabsW = measureTabRows([tabs]).get(rowKey(tabs))!;
-                                const pillW = measureUnionOrderPill(strings.focus.unionOrdinal(b.number), b.year).width;
+                                const forms = pillLabelForms(strings.focus.unionOrdinal(b.number), b.year);
                                 const border = id === focus ? 2 : 1;
                                 const inset = border + EDGE_INSET;
-                                const slot = placeUnionOrderPill({
-                                    cardWidth: W, side: b.side, pillWidth: pillW, leftTabs: 0, rightTabs: tabsW,
+                                const placed = placeUnionOrderPill({
+                                    cardWidth: W, side: b.side, leftTabs: 0, rightTabs: tabsW,
+                                    ...pillLabelWidths(forms, forms.map(f => measureUnionOrderPill(f.ordinal, f.year, f.glyph).width)),
                                     leftInset: inset, rightInset: inset, segments: segmentsNearCard(segments, pos.x, pos.y, W),
                                 });
+                                if (!placed) { failures.push(`${density.name}/${view}/${lang} focus ${focus}: pill of ${id}: no room for any label`); continue; }
+                                const slot = placed, pillW = slot.width;
                                 stats.pills++;
                                 if (slot.row === 'above') stats.above++; else stats.edge++;
                                 if (slot.row === 'edge' && tabsW > 0 && b.side === 'right') stats.besideTabs++;

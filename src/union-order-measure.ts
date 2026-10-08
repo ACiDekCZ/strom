@@ -41,8 +41,12 @@ export function pillFontsPending(): Promise<void> | null {
 const escapeHtml = (s: string): string =>
     s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-/** The visible inside of a pill: its number, the ∞ and the year (the screen's markup). */
-export function unionOrderPillPartsHtml(ordinal: string, year: string): string {
+/**
+ * The visible inside of a pill: its number, the ∞ and the year (the screen's
+ * markup); `glyph` false: the ordinal alone (the shortest label).
+ */
+export function unionOrderPillPartsHtml(ordinal: string, year: string, glyph = true): string {
+    if (!glyph) return `<span class="uo-num">${escapeHtml(ordinal)}</span>`;
     return `<span class="uo-num">${escapeHtml(ordinal)}</span>`
         + `<span class="pill-glyph uo-glyph">∞</span>`
         + (year ? `<span class="uo-year">${escapeHtml(year)}</span>` : '');
@@ -67,29 +71,30 @@ function hiddenHost(): HTMLElement {
     return host;
 }
 
-const pillKey = (ordinal: string, year: string): string => `${ordinal}\u0000${year}`;
+const pillKey = (ordinal: string, year: string, glyph = true): string => `${ordinal}\u0000${year}\u0000${glyph ? 1 : 0}`;
 
 /**
- * Pills measured in the screen's markup and styles: their widths and where
- * their parts sit. One hidden batch for the ones not cached yet; without a
- * document, the estimate.
+ * Pills measured in the screen's markup and styles, in the font the screen
+ * really draws (whatever the platform gives): their widths and where their
+ * parts sit. One hidden batch for the ones not cached yet; without a
+ * document, the estimate. `glyph` false: the ordinal alone.
  */
-export function measureUnionOrderPills(items: Iterable<{ ordinal: string; year: string }>): Map<string, PillMetrics> {
+export function measureUnionOrderPills(items: Iterable<{ ordinal: string; year: string; glyph?: boolean }>): Map<string, PillMetrics> {
     const out = new Map<string, PillMetrics>();
-    const todo: Array<{ ordinal: string; year: string; key: string }> = [];
-    for (const { ordinal, year } of items) {
-        const key = pillKey(ordinal, year);
+    const todo: Array<{ ordinal: string; year: string; glyph: boolean; key: string }> = [];
+    for (const { ordinal, year, glyph = true } of items) {
+        const key = pillKey(ordinal, year, glyph);
         if (out.has(key)) continue;
         const hit = pillCache.get(key);
         if (hit) out.set(key, hit);
-        else { out.set(key, estimatePillMetrics(ordinal, year)); todo.push({ ordinal, year, key }); }
+        else { out.set(key, estimatePillMetrics(ordinal, year, glyph)); todo.push({ ordinal, year, glyph, key }); }
     }
     if (todo.length === 0 || typeof document === 'undefined' || !document.body) return out;
     const host = hiddenHost();
     const els = todo.map(t => {
         const wrap = document.createElement('div');
         wrap.style.cssText = 'display:block;width:max-content;';
-        wrap.innerHTML = `<span class="union-order-pill">${unionOrderPillPartsHtml(t.ordinal, t.year)}</span>`;
+        wrap.innerHTML = `<span class="union-order-pill">${unionOrderPillPartsHtml(t.ordinal, t.year, t.glyph)}</span>`;
         host.appendChild(wrap);
         return wrap.firstElementChild as HTMLElement;
     });
@@ -100,11 +105,11 @@ export function measureUnionOrderPills(items: Iterable<{ ordinal: string; year: 
         const r = pill.getBoundingClientRect();
         const part = (sel: string) => pill.querySelector(sel)?.getBoundingClientRect();
         const num = part('.uo-num'), glyph = part('.uo-glyph'), year = part('.uo-year');
-        if (!r.width || !num || !glyph) return;   // not laid out (no styles): keep the estimate
+        if (!r.width || !num || (t.glyph && !glyph)) return;   // not laid out (no styles): keep the estimate
         const m: PillMetrics = {
             width: r.width,
             numX: num.left - r.left,
-            glyphX: glyph.left - r.left + glyph.width / 2,
+            glyphX: glyph ? glyph.left - r.left + glyph.width / 2 : 0,
             yearX: year ? year.left - r.left : 0,
         };
         out.set(t.key, m);
@@ -115,8 +120,8 @@ export function measureUnionOrderPills(items: Iterable<{ ordinal: string; year: 
 }
 
 /** One pill measured (see measureUnionOrderPills). */
-export function measureUnionOrderPill(ordinal: string, year: string): PillMetrics {
-    return measureUnionOrderPills([{ ordinal, year }]).get(pillKey(ordinal, year))!;
+export function measureUnionOrderPill(ordinal: string, year: string, glyph = true): PillMetrics {
+    return measureUnionOrderPills([{ ordinal, year, glyph }]).get(pillKey(ordinal, year, glyph))!;
 }
 
 /** The key of a pill in measureUnionOrderPills' result. */
