@@ -138,6 +138,10 @@ export interface LiveSession {
     seenChanges: number;
     es: EventSource | null;
     timer: ReturnType<typeof setTimeout> | null;
+    /** A status asked after someone started or stopped working (null: none waiting). */
+    statusSoon?: ReturnType<typeof setTimeout> | null;
+    /** When that status was last asked (ms). */
+    statusAskedAt?: number;
     failures: number;
     /** Since when the bridge does not answer (null: it does); it may come back (a restart). */
     lostSince: number | null;
@@ -149,6 +153,10 @@ export interface LiveSession {
 const RECONNECT_MS = 2000;
 /** Poll interval when the browser has no EventSource. */
 const POLL_MS = 10000;
+/** After someone starts or stops working: the status is asked this much later (the events settle)... */
+const WORKING_STATUS_DELAY_MS = 1000;
+/** ...and at most once in this long. */
+const WORKING_STATUS_MIN_MS = 5000;
 /**
  * How long the bridge may stay silent before following ends: strom can take a
  * moment to come back (a restart, a busy moment while two runs write), so the
@@ -1982,6 +1990,8 @@ export const researchUiMethods = uiModule({
         es.addEventListener('working', (e) => {
             s.working = sanitizeWorking(payload(e));
             this.renderLivePanel();
+            // The event names only who works: the directions (their spinner, tasks and what waits) come with a status.
+            this.liveStatusSoon(s);
         });
         es.onerror = () => {
             if (s.es !== es) return;
@@ -2014,6 +2024,24 @@ export const researchUiMethods = uiModule({
             if (now - s.lostSince >= lostGraceMs()) this.endLiveFollow(s, 'ended');
             else this.scheduleLive(s, () => this.probeLive(s), Math.min(RECONNECT_MS * s.failures, RETRY_MAX_MS));
         }
+    },
+
+    /**
+     * Someone started or stopped working: the status, for the directions'
+     * spinners and counts, asked once the events settle (`?poll=1`, at most
+     * once in WORKING_STATUS_MIN_MS; events meanwhile wait for that one).
+     */
+    liveStatusSoon(s: LiveSession): void {
+        if (s.statusSoon || s.ended || live !== s) return;
+        const wait = Math.max(WORKING_STATUS_DELAY_MS, (s.statusAskedAt ?? 0) + WORKING_STATUS_MIN_MS - Date.now());
+        s.statusSoon = setTimeout(() => {
+            s.statusSoon = null;
+            if (s.ended || live !== s) return;
+            s.statusAskedAt = Date.now();
+            fetchStatus(`${s.bridge.status}?poll=1`).then((status) => {
+                if (status && !s.ended && live === s) this.onLiveStatus(s, status);
+            }).catch(() => { /* the event stream says when the bridge is gone */ });
+        }, wait);
     },
 
     /** The bridge answered: following goes on (after a silence: say so by redrawing). */
@@ -2221,6 +2249,8 @@ export const researchUiMethods = uiModule({
         s.ended = true;
         if (s.timer) clearTimeout(s.timer);
         s.timer = null;
+        if (s.statusSoon) clearTimeout(s.statusSoon);
+        s.statusSoon = null;
         try {
             s.es?.close();
         } catch { /* already closed */ }

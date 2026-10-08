@@ -37,7 +37,15 @@ const DIRECTIONS = [
     { id: 'G0005', name: 'Kdo byl kmotr?', state: 'done', direction: 'question', since: ago(2880) },
 ];
 
-interface Bridge { researches: Record<string, unknown>[] }
+interface Bridge {
+    researches: Record<string, unknown>[];
+    /** Who works now (default: the agent on G0001). */
+    working?: Record<string, unknown>[];
+    /** Every `/status` asked. */
+    statusAsks: number;
+}
+
+const AGENT = { who: 'agent-matriky', since: ago(16), task: 'T0101 Matriky Chlumy', person: 'P0012', research: 'G0001', session: 'N0132' };
 
 async function follow(page: Page, researches: Record<string, unknown>[] = DIRECTIONS,
     size = { width: 1440, height: 900 }): Promise<Bridge> {
@@ -47,10 +55,10 @@ async function follow(page: Page, researches: Record<string, unknown>[] = DIRECT
         sessionStorage.setItem('seeded', '1');
         localStorage.setItem('strom-research-links', JSON.stringify({ actions: links, at: new Date().toISOString() }));
     }, ALL);
-    const bridge: Bridge = { researches };
+    const bridge: Bridge = { researches, statusAsks: 0 };
     const status = () => ({
         tree: { id: UUID, name: 'Víškovi' }, head: 'h1', persons: 3,
-        working: [{ who: 'agent-matriky', since: ago(16), task: 'T0101 Matriky Chlumy', person: 'P0012', research: 'G0001', session: 'N0132' }],
+        working: bridge.working ?? [AGENT],
         waiting: [{ id: 'T0004', what: 'Potvrďte otce Jana', person: 'P0012', research: 'G0001', at: ago(5) }],
         queue: [
             { id: 'T0101', text: 'Matriky Chlumy', state: 'next', research: 'G0001' },
@@ -62,6 +70,7 @@ async function follow(page: Page, researches: Record<string, unknown>[] = DIRECT
     });
     await page.route(`${BRIDGE}/**`, async (route) => {
         const path = new URL(route.request().url()).pathname;
+        if (path.endsWith('/status')) bridge.statusAsks++;
         if (path.endsWith('/status')) return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(status()) });
         if (path.endsWith('/tree.ged')) return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/plain; charset=utf-8' }, body: GED });
         if (path.endsWith('/events')) {
@@ -241,5 +250,49 @@ test.describe('research directions', () => {
         await follow(page);
         await openOverview(page);
         await expect(row(page, 'G0001').locator('.agent-mark--spin')).toHaveCSS('animation-name', 'none');
+    });
+
+    test('N41: the agent stops (a working event, the stream staying open): the spinner and the counts follow without a reconnect, one status for a burst', async ({ page }) => {
+        // An event stream that stays open: hello with the status, then only what the test sends.
+        await page.addInitScript(() => {
+            class FakeEventSource {
+                url: string;
+                readyState = 1;
+                onerror: ((e: Event) => void) | null = null;
+                private listeners: Record<string, ((e: MessageEvent) => void)[]> = {};
+                constructor(url: string) {
+                    this.url = url;
+                    (window as unknown as { __es: FakeEventSource }).__es = this;
+                    void fetch(url.replace(/\/events(\?.*)?$/, '/status')).then(r => r.json()).then(st => this.emit('hello', st));
+                }
+                addEventListener(type: string, fn: (e: MessageEvent) => void): void { (this.listeners[type] ??= []).push(fn); }
+                removeEventListener(): void { /* not needed */ }
+                close(): void { this.readyState = 2; }
+                emit(type: string, data: unknown): void {
+                    for (const fn of this.listeners[type] ?? []) fn(new MessageEvent(type, { data: JSON.stringify(data) }));
+                }
+            }
+            Object.defineProperty(window, 'EventSource', { value: FakeEventSource, configurable: true, writable: true });
+        });
+        const bridge = await follow(page);
+        await openOverview(page);
+        await expect(row(page, 'G0001').locator('.agent-mark--spin')).toHaveCount(1);
+        await expect(row(page, 'G0001').locator('.research-direction__meta')).toHaveText(/2 tasks.*1 awaiting an answer/);
+
+        // The agent is done: the research says so in its status, and the bridge sends who works (nobody), a few times.
+        bridge.working = [];
+        bridge.researches = DIRECTIONS.map(d => d.id === 'G0001' ? { ...d, working: false, tasks: 0, waiting: 1 } : d);
+        const before = bridge.statusAsks;
+        await page.evaluate(() => {
+            const es = (window as unknown as { __es: { emit(t: string, d: unknown): void } }).__es;
+            for (let i = 0; i < 5; i++) es.emit('working', []);
+        });
+        await expect(ov(page)).toContainText('Nobody is working');
+        await expect(row(page, 'G0001').locator('.agent-mark--spin')).toHaveCount(0);
+        await expect(row(page, 'G0001').locator('.research-direction__meta')).not.toContainText('tasks');
+        await expect(row(page, 'G0001').locator('.research-direction__meta')).toContainText('1 awaiting an answer');
+        // One status for the burst, not one per event.
+        await page.waitForTimeout(1500);
+        expect(bridge.statusAsks - before).toBe(1);
     });
 });
