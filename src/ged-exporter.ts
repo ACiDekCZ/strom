@@ -30,6 +30,7 @@ import { regionHeader, regionToStored } from './originals.js';
 import { strings } from './strings.js';
 import { COUPLE_EVENT_TAG, eventValueIsOnTag, sortCoupleEvents } from './events.js';
 import { placeKey } from './places.js';
+import { noName } from './gedcom-names.js';
 import { gedcomAge } from './recorded-age.js';
 import { applyContentOptions, ContentOptions } from './privacy.js';
 
@@ -190,18 +191,27 @@ function pushPlace(lines: string[], level: number, place: string, places?: Recor
  * NPFX, GIVN, SURN, NSFX — the shape the research writes and reads. A name
  * without a title stays one plain line, as ever. A part holding a comma gets
  * no GIVN / SURN (GEDCOM reads commas there as a list); the line has it.
+ * One more name gets its GIVN and SURN: a person of no name ("?") with the
+ * surname Unknown, so no reader takes it for no surname.
  */
 function pushName(lines: string[], person: Person): void {
     const before = person.titleBefore?.trim() ?? '';
     const after = person.titleAfter?.trim() ?? '';
     const name = formatGedcomName(person.firstName, person.lastName);
+    const first = (person.firstName ?? '').trim();
+    const last = (person.lastName ?? '').trim();
     if (!before && !after) {
         pushWrapped(lines, 1, 'NAME', name);
+        // "? /Unknown/" alone reads as no surname in a reader that takes it
+        // for the app's old "no name, no surname" (an app before
+        // 3.10.0-beta.7, the research); the SURN says Unknown was typed.
+        if (noName(first) && last === 'Unknown') {
+            if (!first.includes(',')) pushWrapped(lines, 2, 'GIVN', first);
+            pushWrapped(lines, 2, 'SURN', last);
+        }
         return;
     }
     pushWrapped(lines, 1, 'NAME', [before, name.trim(), after].filter(Boolean).join(' '));
-    const first = (person.firstName ?? '').trim();
-    const last = (person.lastName ?? '').trim();
     if (before) pushWrapped(lines, 2, 'NPFX', before);
     if (first && !first.includes(',')) pushWrapped(lines, 2, 'GIVN', first);
     if (last && !last.includes(',')) pushWrapped(lines, 2, 'SURN', last);

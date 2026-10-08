@@ -328,6 +328,44 @@ describe('"? /Unknown/" by the version of the app that wrote the file (T08, N13)
         expect(again.every(p => !p.isPlaceholder)).toBe(true);
     });
 
+    it('reads the research\'s surname Unknown (with its SURN) and its "? /Unknown/" without one as no surname', () => {
+        const research = (name: string[]): string => appFile('1.13.0-beta.3', name, 'STROM_RESEARCH');
+        expect(read(research(['1 NAME ? /Unknown/', '2 GIVN ?', '2 SURN Unknown']))).toEqual(['? | Unknown']);
+        expect(read(research(['1 NAME ? /Unknown/']))).toEqual(['? | ']);
+        expect(read(research(['1 NAME ? /Unknown/', '2 GIVN ?']))).toEqual(['? | ']);
+        expect(read(research(['1 NAME ? //']))).toEqual(['? | ']);
+    });
+
+    it('writes "?" with the surname Unknown with its GIVN and SURN, so a reader of any version keeps the surname', () => {
+        const person = (id: string, extra: Partial<Person>): Person => ({
+            id: id as Person['id'], firstName: '?', lastName: 'Unknown', gender: 'male', isPlaceholder: false,
+            partnerships: [], parentIds: [], childIds: [], ...extra,
+        });
+        const tree: StromData = {
+            persons: {
+                ['p1' as Person['id']]: person('p1', {}),
+                ['p2' as Person['id']]: person('p2', { lastName: '' }),
+                ['p3' as Person['id']]: person('p3', { titleBefore: 'Ing.' }),
+                ['p4' as Person['id']]: person('p4', { firstName: 'Jan' }),
+            },
+            partnerships: {},
+        };
+        const out = exportToGedcom(tree).content;
+        // The name lines of the people (the submitter's record has a NAME too).
+        const names = out.split(/\r?\n/).filter(l => /^(1 NAME|2 (NPFX|GIVN|SURN|NSFX)) /.test(l) && l !== '1 NAME Strom User');
+        expect(names).toEqual([
+            '1 NAME ? /Unknown/', '2 GIVN ?', '2 SURN Unknown',
+            '1 NAME ? //',
+            '1 NAME Ing. ? /Unknown/', '2 NPFX Ing.', '2 GIVN ?', '2 SURN Unknown',
+            '1 NAME Jan /Unknown/',
+        ]);
+        const expected = ['? | Unknown', '? | ', '? | Unknown', 'Jan | Unknown'];
+        expect(read(out)).toEqual(expected);
+        // An app before 3.10.0-beta.7 and the research read "? /Unknown/" alone as no surname; the SURN keeps it.
+        expect(read(out.replace(`2 VERS ${APP_VERSION}`, '2 VERS 3.9.2'))).toEqual(expected);
+        expect(read(out.replace('1 SOUR STROM\n', '1 SOUR STROM_RESEARCH\n'))).toEqual(expected);
+    });
+
     it('compares app versions by semver precedence', () => {
         const order = ['3.9.0', '3.10.0-alpha.1', '3.10.0-beta.6', '3.10.0-beta.7', '3.10.0-beta.9', '3.10.0-beta.10',
             '3.10.0-rc.1', '3.10.0-rc.2', '3.10.0', '3.10.1', '3.11.0', '10.0.0'];

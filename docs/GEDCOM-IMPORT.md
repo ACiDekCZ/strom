@@ -56,6 +56,10 @@ decides one name rule:
 - `1 NAME ? //` is no surname in every version.
 - A Strom Research file (`1 SOUR STROM_RESEARCH`, its own version under it)
   keeps the old rule; a file of any other program reads `Unknown` as a surname.
+- With `2 SURN Unknown` under the line the surname is `Unknown` in every file
+  and version. The app's export and Strom Research both write a
+  person `?` with the surname `Unknown` that way, `2 GIVN ?` included, so a
+  reader of any version keeps the surname.
 
 Strom Research reads the app's files by the same rule.
 
