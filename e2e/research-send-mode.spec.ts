@@ -414,6 +414,7 @@ test('after a send that added a person (the research gave its number) the next e
     expect(list).toEqual(['Jan Víšek']);
     // The same after a reload (the copy kept under the send's fingerprint).
     await page.reload();
+    await expect(page.locator('html')).not.toHaveClass(/app-booting/);
     await expect.poll(() => page.evaluate(async () => (await window.Strom.UI.researchChangesReady())?.length ?? null)).toBe(1);
 });
 

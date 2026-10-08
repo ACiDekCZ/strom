@@ -929,6 +929,11 @@ test('a restored backup sends the base it kept: _STROM_HEAD and _STROM_SINCE of 
     await page.clock.fastForward(QUIET + 1000);
     await expect.poll(() => bridge.posts.length).toBe(1);
     const first = bridge.sends[0].intake;
+    // The backup keeps the copy the research took in (lastCopy): wait until the
+    // app has taken the reply in, not only sent (a loaded machine took the
+    // backup in between, and it kept no _STROM_SINCE).
+    await expect.poll(() => page.evaluate(() =>
+        JSON.parse(localStorage.getItem(`strom-research-auto:${window.Strom.TreeManager.getActiveTreeId()}`) ?? '{}').lastCopy?.intake)).toBe(first);
     // A backup now: the copy the research took in, on the head the tree stands on.
     const snap = await page.evaluate(() => window.Strom.DataManager.snapshotNow('manual'));
     expect(snap).toBeTruthy();
