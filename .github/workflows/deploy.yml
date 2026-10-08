@@ -105,9 +105,12 @@ jobs:
         if: steps.pw-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
 
+      # apt runs only when a library is missing from the runner image
+      # (--dry-run simulates the install and fails then): its `apt-get update`
+      # took anywhere from 15 s to over 5 min, the slowest shard's whole wait.
       - name: Install Playwright system libraries
         if: steps.pw-cache.outputs.cache-hit == 'true'
-        run: npx playwright install-deps chromium
+        run: npx playwright install-deps --dry-run chromium || npx playwright install-deps chromium
 
       - name: E2E tests (shard ${{ matrix.shard }}/4)
         run: npx playwright test --shard=${{ matrix.shard }}/4

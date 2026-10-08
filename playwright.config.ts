@@ -51,7 +51,20 @@ export default defineConfig({
         // switch it back with page.emulateMedia({ reducedMotion: 'no-preference' }).
         contextOptions: { reducedMotion: 'reduce' },
         screenshot: 'only-on-failure',
-        trace: 'retain-on-failure',
+        // A full trace (DOM snapshots before and after every action, a
+        // screencast) more than doubled the CPU the suite takes, for every
+        // test, though only a failing one keeps it: the main cost of a run on
+        // a shared machine, and of the load flakes that came with it.
+        // CI retries a failure once, and that retry records the full trace.
+        // Locally (no retries) a failure keeps a light trace: the actions with
+        // their timing and call logs, console, network and the sources, and
+        // the failure screenshot beside it. E2E_TRACE=full keeps the full
+        // trace of a failure; `--trace on` records every test.
+        trace: process.env.CI
+            ? 'on-first-retry'
+            : process.env.E2E_TRACE === 'full'
+                ? 'retain-on-failure'
+                : { mode: 'retain-on-failure', snapshots: false, screenshots: false },
     },
     projects: [
         { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
