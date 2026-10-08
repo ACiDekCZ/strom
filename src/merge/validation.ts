@@ -7,7 +7,7 @@ import {
     PersonId,
     PartnershipId,
     StromData,
-    STROM_DATA_VERSION
+    STROM_DATA_VERSION, isGender
 } from '../types.js';
 import { migrateData } from '../data.js';
 import { ValidationResult } from './types.js';
@@ -83,7 +83,7 @@ export function validateJsonImport(content: string): ValidationResult {
         if (typeof p.lastName !== 'string') {
             errors.push(`missingLastName:${id}`);
         }
-        if (p.gender !== 'male' && p.gender !== 'female') {
+        if (!isGender(p.gender)) {
             errors.push(`invalidGender:${id}`);
         }
     }

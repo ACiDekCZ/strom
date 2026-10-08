@@ -3,7 +3,7 @@
  * Smart heuristics to detect genealogical inconsistencies and data errors
  */
 
-import { StromData, Person, Partnership, PersonId, PartnershipId, Source, personSourceIds, partnershipSourceIds, partnershipParticipants } from './types.js';
+import { StromData, Person, Partnership, PersonId, PartnershipId, Source, personSourceIds, partnershipSourceIds, partnershipParticipants, gendersCompatible } from './types.js';
 import { parseFlexDate, FlexDate } from './dates.js';
 import { collectPlaces } from './places.js';
 import { godparentLeads } from './godparents.js';
@@ -884,8 +884,10 @@ function checkDateConsistency(data: StromData, addIssue: AddIssue): void {
                             [personId, parentId], undefined, `* ${person.birthDate} > † ${parent.deathDate}`);
                     }
                 } else if (certainlyBefore(parentDeath, birth, POSTHUMOUS_FATHER_MONTHS)) {
-                    addIssue('warning', 'childAfterFatherDeath',
-                        `${name}: born more than ${POSTHUMOUS_FATHER_MONTHS} months after the death of father ${getPersonName(parent)}`,
+                    // A parent of unknown sex: the father's slack (the milder rule), said of a parent.
+                    const father = parent.gender === 'male';
+                    addIssue('warning', father ? 'childAfterFatherDeath' : 'childAfterParentDeath',
+                        `${name}: born more than ${POSTHUMOUS_FATHER_MONTHS} months after the death of ${father ? 'father' : 'parent'} ${getPersonName(parent)}`,
                         [personId, parentId], undefined, `* ${person.birthDate} > † ${parent.deathDate}`);
                 }
             }
@@ -1045,7 +1047,7 @@ function checkPossibleDuplicates(
         for (let i = 0; i < group.length; i++) {
             for (let j = i + 1; j < group.length; j++) {
                 const a = group[i], b = group[j];
-                if (a.gender !== b.gender) continue;
+                if (!gendersCompatible(a.gender, b.gender)) continue;
                 const firstEq = norm(a.firstName) === norm(b.firstName);
                 const lastEq = norm(a.lastName) === norm(b.lastName);
                 // Require the surname to match and the given name to match or be
@@ -1182,6 +1184,7 @@ const VALIDATION_TYPE_KEYS: Record<string, string> = {
     'childMarriage': 'valChildMarriage',
     'childAfterMotherDeath': 'valChildAfterMotherDeath',
     'childAfterFatherDeath': 'valChildAfterFatherDeath',
+    'childAfterParentDeath': 'valChildAfterParentDeath',
     'citationMissingSource': 'valCitationMissingSource',
     'attachmentNoData': 'valAttachmentNoData',
     'partnerAgeGap': 'valPartnerAgeGap',

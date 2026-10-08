@@ -1026,9 +1026,6 @@ const stringsEN = {
         loadAdded: (p: number, f: number) => `Added from the research: ${[p ? `+ ${nEn(p, 'person', 'people')}` : '', f ? nEn(f, 'fact', 'facts') : ''].filter(Boolean).join(', ')}`,
         nothingOverwritten: 'Nothing here will be overwritten.',
         /** A person whose sex the research leaves unknown (SEX U): the tree's stays. */
-        loadSexUnknown: (name: string, sex: string) => `${name}: the research gives no sex, ${sex} stays here.`,
-        loadSexUnknownThere: (sex: string) => `unknown (${sex} here)`,
-        loadSexUnknownMany: (n: number) => `The research gives no sex for ${nEn(n, 'person', 'people')}; the sex here stays.`,
         loadBackupNote: 'A backup is saved before loading; it can be restored.',
         offOverwrite: 'Changes from this tree are not sent to the research. These values here will be overwritten by the research version.',
         conflictTag: 'conflict',
@@ -2332,8 +2329,8 @@ const stringsEN = {
     gender: {
         male: 'Male',
         female: 'Female',
-        /** A research's SEX U (the tree itself knows only male and female). */
-        unknown: 'unknown'
+        /** A sex the records do not give (GEDCOM SEX U). */
+        unknown: 'Unknown'
     },
 
     // Partnership status
@@ -2540,7 +2537,7 @@ const stringsEN = {
         insertToTreeDesc: 'Load converted data into current tree',
         parseError: 'Failed to parse GEDCOM file',
         skippedTags: 'Skipped records',
-        unknownSex: (n: number) => `${n} person${n === 1 ? '' : 's'} with unknown sex (gender inferred from family role)`,
+        unknownSex: (n: number) => `${n} person${n === 1 ? '' : 's'} with unknown sex`,
         otherFamilyLinks: (n: number) =>
             `${n} ${n === 1 ? 'child was' : 'children were'} recorded in more than one family `
             + `(e.g. adopted); shown with the birth family, the rest noted on the person`,
@@ -2987,6 +2984,7 @@ const stringsEN = {
         valChildMarriage: 'Married as a child',
         valChildAfterMotherDeath: 'Child born after the mother\'s death',
         valChildAfterFatherDeath: 'Child born long after the father\'s death',
+        valChildAfterParentDeath: 'Child born long after a parent\'s death',
         valCitationMissingSource: 'Citation points to a missing source',
         valAttachmentNoData: 'Attachment has no usable data',
         valPhotoUnsafeData: 'Photo is not a supported image',
@@ -4637,9 +4635,6 @@ const stringsCZ: StringsType = {
         loadHide: 'Skrýt',
         loadAdded: (p: number, f: number) => `Z výzkumu přibude: ${[p ? `+ ${nCs(p, 'osoba', 'osoby', 'osob')}` : '', f ? nCs(f, 'údaj', 'údaje', 'údajů') : ''].filter(Boolean).join(', ')}`,
         nothingOverwritten: 'Tady se nic nepřepíše.',
-        loadSexUnknown: (name: string, sex: string) => `${name}: výzkum pohlaví neuvádí, tady zůstává ${sex}.`,
-        loadSexUnknownThere: (sex: string) => `neznámé (tady ${sex})`,
-        loadSexUnknownMany: (n: number) => `Výzkum neuvádí pohlaví u ${nCs(n, 'osoby', 'osob', 'osob')}; tady zůstává, jaké je.`,
         loadBackupNote: 'Před načtením se uloží záloha, půjde vrátit.',
         offOverwrite: 'Úpravy se z tohoto stromu do výzkumu neposílají. Tyto hodnoty tady se přepíšou verzí výzkumu.',
         conflictTag: 'rozpor',
@@ -5942,7 +5937,7 @@ const stringsCZ: StringsType = {
     gender: {
         male: 'Muž',
         female: 'Žena',
-        unknown: 'neznámé'
+        unknown: 'Neznámé'
     },
 
     // Partnership status
@@ -6149,7 +6144,7 @@ const stringsCZ: StringsType = {
         insertToTreeDesc: 'Načíst převedená data do aktuálního stromu',
         parseError: 'Nepodařilo se zpracovat GEDCOM soubor',
         skippedTags: 'Přeskočené záznamy',
-        unknownSex: (n: number) => `${n} ${plural('cs', n, 'osoba', 'osoby', 'osob')} s neznámým pohlavím (odvozeno z role v rodině)`,
+        unknownSex: (n: number) => `${n} ${plural('cs', n, 'osoba', 'osoby', 'osob')} s neznámým pohlavím`,
         otherFamilyLinks: (n: number) =>
             `${n} ${plural('cs', n, 'dítě je zapsáno', 'děti jsou zapsány', 'dětí je zapsáno')} ve více rodinách `
             + `(např. adopce); zobrazeno u rodné rodiny, zbytek zapsán v poznámce osoby`,
@@ -6604,6 +6599,7 @@ const stringsCZ: StringsType = {
         valChildMarriage: 'Sňatek v dětském věku',
         valChildAfterMotherDeath: 'Dítě narozené po smrti matky',
         valChildAfterFatherDeath: 'Dítě narozené dlouho po smrti otce',
+        valChildAfterParentDeath: 'Dítě narozené dlouho po smrti rodiče',
         valCitationMissingSource: 'Citace odkazuje na neexistující pramen',
         valAttachmentNoData: 'Příloha nemá použitelná data',
         valPhotoUnsafeData: 'Fotka není podporovaný obrázek',
@@ -8237,9 +8233,6 @@ const stringsDE: StringsType = {
         loadHide: 'Ausblenden',
         loadAdded: (p: number, f: number) => `Aus der Forschung kommen hinzu: ${[p ? `+ ${nDe(p, 'Person', 'Personen')}` : '', f ? nDe(f, 'Angabe', 'Angaben') : ''].filter(Boolean).join(', ')}`,
         nothingOverwritten: 'Hier wird nichts überschrieben.',
-        loadSexUnknown: (name: string, sex: string) => `${name}: Die Forschung nennt kein Geschlecht, hier bleibt ${sex}.`,
-        loadSexUnknownThere: (sex: string) => `unbekannt (hier ${sex})`,
-        loadSexUnknownMany: (n: number) => `Die Forschung nennt bei ${nDe(n, 'Person', 'Personen')} kein Geschlecht; das hiesige bleibt.`,
         loadBackupNote: 'Vor dem Laden wird gesichert; ein Zurück ist möglich.',
         offOverwrite: 'Änderungen aus diesem Stammbaum werden nicht an die Forschung gesendet. Diese Werte hier werden durch die Version der Forschung überschrieben.',
         conflictTag: 'Widerspruch',
@@ -9522,7 +9515,7 @@ const stringsDE: StringsType = {
     gender: {
         male: 'Männlich',
         female: 'Weiblich',
-        unknown: 'unbekannt'
+        unknown: 'Unbekannt'
     },
 
     // Partnership status
@@ -9728,7 +9721,7 @@ const stringsDE: StringsType = {
         insertToTreeDesc: 'Umgewandelte Daten in den aktuellen Stammbaum laden',
         parseError: 'GEDCOM-Datei konnte nicht gelesen werden',
         skippedTags: 'Übersprungene Einträge',
-        unknownSex: (n: number) => `${n} ${n === 1 ? 'Person' : 'Personen'} mit unbekanntem Geschlecht (Geschlecht aus der Familienrolle abgeleitet)`,
+        unknownSex: (n: number) => `${n} ${n === 1 ? 'Person' : 'Personen'} mit unbekanntem Geschlecht`,
         otherFamilyLinks: (n: number) =>
             `${n} ${n === 1 ? 'Kind wurde' : 'Kinder wurden'} in mehr als einer Familie erfasst `
             + `(z. B. adoptiert); mit der Geburtsfamilie angezeigt, der Rest bei der Person vermerkt`,
@@ -10155,6 +10148,7 @@ const stringsDE: StringsType = {
         valChildMarriage: 'Als Kind verheiratet',
         valChildAfterMotherDeath: 'Kind nach dem Tod der Mutter geboren',
         valChildAfterFatherDeath: 'Kind lange nach dem Tod des Vaters geboren',
+        valChildAfterParentDeath: 'Kind lange nach dem Tod eines Elternteils geboren',
         valCitationMissingSource: 'Zitat verweist auf eine fehlende Quelle',
         valAttachmentNoData: 'Anhang hat keine verwendbaren Daten',
         valPhotoUnsafeData: 'Foto ist kein unterstütztes Bild',

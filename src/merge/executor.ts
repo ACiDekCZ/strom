@@ -19,7 +19,7 @@ import {
     Source,
     generatePersonId,
     generatePartnershipId,
-    PERSON_CITATION_FIELDS,
+    PERSON_CITATION_FIELDS, isGender,
 } from '../types.js';
 import { addSurnameGroup, surnameKey } from '../surnames.js';
 import {
@@ -738,7 +738,11 @@ export function mergePersonData(
     personIdMap?: Map<PersonId, PersonId>,
     incomingPersons?: Record<PersonId, Person>
 ): void {
-    // Merge non-conflicting data (fill in missing values)
+    // Merge non-conflicting data (fill in missing values). An unknown sex is
+    // a missing value: the other side's known one fills it.
+    if (existing.gender === 'unknown' && incoming.gender !== 'unknown' && isGender(incoming.gender)) {
+        existing.gender = incoming.gender;
+    }
     if (!existing.birthDate && incoming.birthDate) {
         existing.birthDate = incoming.birthDate;
     }

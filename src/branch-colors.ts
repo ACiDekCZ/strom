@@ -8,26 +8,20 @@
  * overwrites the other. The focus person itself is never tagged.
  */
 
-import { StromData, PersonId, Person } from './types.js';
+import { StromData, PersonId, Person, parentSlots } from './types.js';
 
 export type Branch = 'paternal' | 'maternal' | 'descendant';
 
 /**
  * Split the focus person's parents into the two colour slots. Gender picks the
- * slot when it disambiguates; with two same-gender parents the second parent
- * still gets the remaining slot (both sides deserve a colour).
+ * slot when it disambiguates (a parent of unknown sex the slot the other one
+ * leaves free); with two same-gender parents the second parent still gets the
+ * remaining slot (both sides deserve a colour).
  */
 function identifyParents(focus: Person, data: StromData): [PersonId | null, PersonId | null] {
     const parents = focus.parentIds.map(id => data.persons[id]).filter(Boolean) as Person[];
-    if (parents.length === 0) return [null, null];
-    if (parents.length === 1) {
-        return parents[0].gender === 'female' ? [null, parents[0].id] : [parents[0].id, null];
-    }
-    const father = parents.find(p => p.gender === 'male');
-    const mother = parents.find(p => p.gender === 'female');
-    if (father && mother && father !== mother) return [father.id, mother.id];
-    // Same-gender or unresolved: keep declaration order.
-    return [parents[0].id, parents[1].id];
+    const [father, mother] = parentSlots(parents.slice(0, 2));
+    return [father?.id ?? null, mother?.id ?? null];
 }
 
 /**

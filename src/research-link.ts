@@ -8,7 +8,7 @@
  * in src/ui/research-ui.ts. Nothing here touches the DOM or storage.
  */
 
-import { StromData, PersonId, PartnershipId, Partnership, ResearchLink, Source, APP_VERSION, Gender } from './types.js';
+import { StromData, PersonId, PartnershipId, Partnership, ResearchLink, Source, APP_VERSION } from './types.js';
 import { withoutConvertedStandIns, isPurePlaceholder } from './single-parent.js';
 
 /** `1 SOUR` value that marks a file written by Strom Research. */
@@ -516,26 +516,26 @@ export function decideResearchOpen(
 // ==================== STABLE IDS ACROSS UPDATES ====================
 
 /**
- * People whose sex the research's version leaves unknown (SEX U, no family
- * role; the importer guesses female) keep the sex they have in the previous
- * state, matched by REFN: the app knows no "unknown", and a guess is no
- * change of the research's (N58-2). Returns a new object when any changed.
+ * A tie kept by an app before data version 12 names the people whose sex the
+ * research leaves unknown (`ResearchLink.sexU`: reference number → the sex
+ * the app gave them, its guess or the one kept from before). The app sent
+ * them as SEX U while that sex stayed; now 'unknown' is their sex: each
+ * person whose sex is still the one in the map becomes unknown, one whose
+ * sex the user changed since keeps it. Returns the new data, or null when no
+ * person changed; `data` is not changed.
  */
-export function keepKnownSex(next: StromData, previous: StromData, guessed: ReadonlySet<PersonId>): StromData {
-    if (guessed.size === 0) return next;
-    const prevByRefn = uniqueRefns(previous);
+export function unknownSexFromTie(data: StromData, sexU: unknown): StromData | null {
+    if (!sexU || typeof sexU !== 'object') return null;
+    const map = sexU as Record<string, unknown>;
     let persons: StromData['persons'] | null = null;
-    for (const id of guessed) {
-        const p = next.persons?.[id];
+    for (const [id, p] of Object.entries(data.persons ?? {})) {
         const refn = p?.refn?.trim();
-        if (!p || !refn) continue;
-        const prevId = prevByRefn.get(refn);
-        const was = prevId ? previous.persons[prevId]?.gender : undefined;
-        if (!was || was === p.gender) continue;
-        persons ??= { ...next.persons };
-        persons[id] = { ...p, gender: was };
+        if (!refn || !Object.prototype.hasOwnProperty.call(map, refn)) continue;
+        if (p.gender === 'unknown' || map[refn] !== p.gender) continue;
+        persons ??= { ...data.persons };
+        persons[id as PersonId] = { ...p, gender: 'unknown' };
     }
-    return persons ? { ...next, persons } : next;
+    return persons ? { ...data, persons } : null;
 }
 
 /**
@@ -567,21 +567,6 @@ export function keepTitles(next: StromData, previous: StromData, features: reado
         }
     }
     return persons ? { ...next, persons } : next;
-}
-
-/**
- * People whose sex the research's version leaves unknown, by reference
- * number, with the sex they have here after the load (kept or the
- * importer's): sent back as SEX U while that sex stays (N60-2).
- */
-export function sexUByRefn(data: StromData, unknown: ReadonlySet<PersonId>): Record<string, Gender> {
-    const out: Record<string, Gender> = {};
-    for (const id of unknown) {
-        const p = data.persons?.[id];
-        const refn = p?.refn?.trim();
-        if (p && refn) out[refn] = p.gender;
-    }
-    return out;
 }
 
 /** Reference numbers that occur exactly once, mapped to their person id. */
@@ -1692,8 +1677,6 @@ export interface ResearchHeaderInfo {
      * Only to a bridge that says `sync.since`.
      */
     since?: string;
-    /** People whose sex the research leaves unknown, with the sex kept here (ResearchLink.sexU): SEX U while it stays. */
-    sexU?: Record<string, Gender>;
 }
 
 /** `_STROM_SENT` / `_STROM_APP_TREE` values: what the research accepts (at most 64 of [A-Za-z0-9._:-]). */
@@ -1716,7 +1699,9 @@ export function researchHeaderLines(link: ResearchHeaderInfo | null | undefined)
         ...(link?.transcripts === 'evidence' || link?.transcripts === 'lead' ? [`1 _STROM_TRANSCRIPTS ${link.transcripts}`] : []),
         ...(sent ? [`1 _STROM_SENT ${sent}`] : []),
         ...(since ? [`1 _STROM_SINCE ${since}`] : []),
-        // SEX U is written where the research's unknown sex stayed (N60-2): any other sex is the user's.
+        // SEX U stands exactly where the sex is unknown here (Gender 'unknown', never a guess):
+        // a sex M or F the research has as U is the user's. The research (rc.47 on) reads its
+        // file so only with this mark; without it, it takes the file for an app that guesses.
         '1 _STROM_SEX_U Y',
     ];
 }

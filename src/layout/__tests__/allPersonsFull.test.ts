@@ -40,6 +40,12 @@ const DEFAULT_FIXTURES = [
     'edge-wide-family',
     'edge-placeholder-parents',
     'edge-marriage-cascade',
+    // Persons of unknown sex (U01): the comprehensive tree with every other
+    // person unknown (man + unknown, unknown + woman, two unknown in data
+    // order), and etalon E with each hub unknown, its partners men and women
+    // by turns (the hub's chain sides decided by its partners).
+    'edge-unknown-gender',
+    'edge-unknown-chains',
     // Synthetic etalon: systematically designed constellations (see docs/ETALON.md).
     'etalon-line-10gen',
     'etalon-ancestors-binary5',

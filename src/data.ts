@@ -29,7 +29,7 @@ import {
     generatePartnershipId,
     LAST_FOCUSED,
     LastFocusedMarker,
-    STROM_DATA_VERSION, PERSON_CITATION_FIELDS, PersonCitationField,
+    STROM_DATA_VERSION, PERSON_CITATION_FIELDS, PersonCitationField, isGender, oppositeGender,
     EmbeddedDataEnvelope,
     isEmbeddedEnvelope,
     FamilyWizardSpec,
@@ -168,6 +168,13 @@ export function migrateData(data: unknown): StromData {
         persons: (d.persons || {}) as Record<PersonId, Person>,
         partnerships
     };
+
+    // v11 -> v12: Gender 'unknown'. Older data keeps its male/female; a
+    // person with no (or no valid) gender has a sex nobody gave — unknown,
+    // never a guess (an older app drew such a person as a man).
+    for (const person of Object.values(result.persons)) {
+        if (person && typeof person === 'object' && !isGender(person.gender)) person.gender = 'unknown';
+    }
     // Preserve the source catalog if present.
     if (d.sources && typeof d.sources === 'object') {
         result.sources = d.sources as StromData['sources'];
@@ -1662,7 +1669,7 @@ class DataManagerClass {
             if (anchor.parentIds.length === 1 && !this.data.persons[anchor.parentIds[0]]?.isPlaceholder
                 && !Object.values(this.data.partnerships).some(u => u.childIds.includes(spec.anchorId))) {
                 const known = this.data.persons[anchor.parentIds[0]];
-                const stand = this.createPerson({ firstName: '?', lastName: '', gender: known.gender === 'male' ? 'female' : 'male' }, true);
+                const stand = this.createPerson({ firstName: '?', lastName: '', gender: oppositeGender(known.gender) }, true);
                 const u = this.createPartnership(known.id, stand.id);
                 if (u) {
                     this.addParentChild(stand.id, spec.anchorId, u.id);

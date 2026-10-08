@@ -108,6 +108,18 @@ describe('date consistency', () => {
         expect(t).toContain('childAfterFatherDeath');
     });
 
+    it('a parent of unknown sex: the father\'s slack, said of a parent (U01)', () => {
+        const parent = person('p', { gender: 'unknown', deathDate: '1878', childIds: ['c'] });
+        const child = person('c', { birthDate: '1885', parentIds: ['p'] });
+        const t = types(data([parent, child]));
+        expect(t).toContain('childAfterParentDeath');
+        expect(t).not.toContain('childAfterFatherDeath');
+        expect(t).not.toContain('childAfterMotherDeath');
+        // Within the father's slack: nothing.
+        const soon = person('p', { gender: 'unknown', deathDate: '1885-01', childIds: ['c'] });
+        expect(types(data([soon, person('c', { birthDate: '1885-06', parentIds: ['p'] })]))).not.toContain('childAfterParentDeath');
+    });
+
     it('does not apply posthumous-birth checks to adoptive parents', () => {
         const adoptive = person('m', { gender: 'female', deathDate: '1880', childIds: ['c'] });
         const child = person('c', { birthDate: '1885', parentIds: ['m'], parentRelTypes: { m: 'adoptive' } });

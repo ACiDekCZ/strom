@@ -18,7 +18,7 @@ import { changeKind, changeAdds, sanitizeLiveLog, textKind, textPersonRefs, text
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import {
     isResearchHead, parseSendBridge, pickSendDefault, researchHeaderLines, sanitizeResearchField,
-    sanitizeSyncReply, isFaithfulExport, readResearchHeader as readHeader, sanitizeLiveStatus as liveStatus,
+    sanitizeSyncReply, isFaithfulExport, readResearchHeader as readHeader, sanitizeLiveStatus as liveStatus, unknownSexFromTie,
 } from '../research-link.js';
 import { exportToGedcom } from '../ged-exporter.js';
 import { StromData, PersonId } from '../types.js';
@@ -632,18 +632,33 @@ describe('research version in the header (_STROM_HEAD)', () => {
         expect(exportToGedcom(data, 'T').content).not.toContain('_STROM_TREE');
     });
 
-    it('the research\'s unknown sex, kept here unchanged, goes back as SEX U; another sex is the user\'s (N60-2)', () => {
-        const person = (id: string, refn: string, gender: 'male' | 'female') =>
+    it('SEX U goes back exactly for a sex unknown here (U01): M and F are the user\'s, the header says so', () => {
+        const person = (id: string, refn: string, gender: 'male' | 'female' | 'unknown') =>
+            ({ id, firstName: id, lastName: 'X', gender, refn, parentIds: [], childIds: [], partnerships: [] });
+        const data = { persons: { a: person('a', 'P0001', 'unknown'), b: person('b', 'P0002', 'female'), c: person('c', 'P0003', 'male') }, partnerships: {} } as unknown as StromData;
+        const ged = exportToGedcom(data, 'T', { research: { id: RID } }).content;
+        const sexOf = (text: string, name: string) => new RegExp(`1 NAME ${name} /X/[\\s\\S]*?1 SEX (\\w)`).exec(text)?.[1];
+        expect(ged).toContain('1 _STROM_SEX_U Y');
+        expect(sexOf(ged, 'a')).toBe('U');
+        expect(sexOf(ged, 'b')).toBe('F');
+        expect(sexOf(ged, 'c')).toBe('M');
+        // Without a research the same: unknown is SEX U in every file.
+        const plain = exportToGedcom(data, 'T').content;
+        expect(sexOf(plain, 'a')).toBe('U');
+        expect(plain).not.toContain('_STROM_SEX_U');
+    });
+
+    it('a tie of an older app (ResearchLink.sexU): a person whose sex is still the one it names becomes unknown, a changed one stays (U01)', () => {
+        const person = (id: string, refn: string, gender: 'male' | 'female' | 'unknown') =>
             ({ id, firstName: id, lastName: 'X', gender, refn, parentIds: [], childIds: [], partnerships: [] });
         const data = { persons: { a: person('a', 'P0001', 'male'), b: person('b', 'P0002', 'female'), c: person('c', 'P0003', 'male') }, partnerships: {} } as unknown as StromData;
-        const ged = exportToGedcom(data, 'T', { research: { id: RID, sexU: { P0001: 'male', P0002: 'male' } } }).content;
-        const sexOf = (name: string) => new RegExp(`1 NAME ${name} /X/[\\s\\S]*?1 SEX (\\w)`).exec(ged)?.[1];
-        expect(ged).toContain('1 _STROM_SEX_U Y');
-        expect(sexOf('a')).toBe('U');      // kept as loaded
-        expect(sexOf('b')).toBe('F');      // changed since: the user's
-        expect(sexOf('c')).toBe('M');      // known there
-        // Without a research nothing is unknown.
-        expect(exportToGedcom(data, 'T').content).not.toContain('1 SEX U');
+        const next = unknownSexFromTie(data, { P0001: 'male', P0002: 'male' })!;
+        expect(next.persons['a' as PersonId].gender).toBe('unknown');   // as loaded: the research's unknown
+        expect(next.persons['b' as PersonId].gender).toBe('female');    // changed since: the user's
+        expect(next.persons['c' as PersonId].gender).toBe('male');      // known there
+        expect(data.persons['a' as PersonId].gender).toBe('male');      // the input stays
+        expect(unknownSexFromTie(data, { P0002: 'male' })).toBeNull();
+        expect(unknownSexFromTie(data, undefined)).toBeNull();
     });
 });
 

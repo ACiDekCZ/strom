@@ -319,17 +319,48 @@ describe('GEDCOM fidelity fixes (audit 2026-07)', () => {
         expect(r.stats.droppedTagSummary).toContain('RFN ×1');
     });
 
-    it('infers gender from the family role for SEX U, and counts it', () => {
+    it('reads SEX U and a missing SEX as unknown, never guessed from the family role, and counts it (U01)', () => {
         const ged = GED([
             '0 @I1@ INDI', '1 NAME Alex /Smith/', '1 SEX U', '1 FAMS @F1@',
             '0 @I2@ INDI', '1 NAME Kim /Smith/', '1 FAMS @F1@',
-            '0 @F1@ FAM', '1 HUSB @I1@', '1 WIFE @I2@',
+            '0 @I3@ INDI', '1 NAME Robin /Smith/', '1 SEX U', '1 FAMC @F1@',
+            '0 @I4@ INDI', '1 NAME Eva /Smith/', '1 SEX f',
+            '0 @F1@ FAM', '1 HUSB @I1@', '1 WIFE @I2@', '1 CHIL @I3@',
         ].join('\n'));
         const r = conv(ged);
         const persons = Object.values(r.data.persons);
-        expect(persons.find(p => p.firstName === 'Alex')?.gender).toBe('male');   // HUSB
-        expect(persons.find(p => p.firstName === 'Kim')?.gender).toBe('female');  // WIFE
-        expect(r.stats.unknownSexPersons).toBe(2);
+        expect(persons.find(p => p.firstName === 'Alex')?.gender).toBe('unknown');   // HUSB, SEX U
+        expect(persons.find(p => p.firstName === 'Kim')?.gender).toBe('unknown');    // WIFE, no SEX
+        expect(persons.find(p => p.firstName === 'Robin')?.gender).toBe('unknown');  // no role
+        expect(persons.find(p => p.firstName === 'Eva')?.gender).toBe('female');
+        expect(r.stats.unknownSexPersons).toBe(3);
+        // The family keeps its HUSB as person1 (the left side), the WIFE as person2.
+        const union = Object.values(r.data.partnerships)[0];
+        expect(r.data.persons[union.person1Id].firstName).toBe('Alex');
+        expect(r.data.persons[union.person2Id].firstName).toBe('Kim');
+    });
+
+    it('SEX U survives export and import; HUSB/WIFE go by sex, an unknown one takes the free role (U01)', () => {
+        const ged = GED([
+            '0 @I1@ INDI', '1 NAME Alex /Smith/', '1 SEX U', '1 FAMS @F1@', '1 FAMS @F2@',
+            '0 @I2@ INDI', '1 NAME Kim /Smith/', '1 SEX M', '1 FAMS @F1@',
+            '0 @I3@ INDI', '1 NAME Jo /Smith/', '1 SEX F', '1 FAMS @F2@',
+            // The husband named second: the export puts the man first anyway.
+            '0 @F1@ FAM', '1 HUSB @I2@', '1 WIFE @I1@',
+            '0 @F2@ FAM', '1 HUSB @I3@', '1 WIFE @I1@',
+        ].join('\n'));
+        const once = conv(ged).data;
+        const out = exportGed(once);
+        const alexId = /0 (@[^@]+@) INDI\n1 NAME Alex \/Smith\/\n1 SEX U/.exec(out)?.[1];
+        expect(alexId).toBeTruthy();
+        const kimId = /0 (@[^@]+@) INDI\n1 NAME Kim \/Smith\/\n1 SEX M/.exec(out)?.[1];
+        const joId = /0 (@[^@]+@) INDI\n1 NAME Jo \/Smith\/\n1 SEX F/.exec(out)?.[1];
+        // Man + unknown: the man is HUSB. Woman + unknown: the woman is WIFE, the unknown one HUSB.
+        expect(out).toContain(`1 HUSB ${kimId}\n1 WIFE ${alexId}`);
+        expect(out).toContain(`1 HUSB ${alexId}\n1 WIFE ${joId}`);
+        const twice = importGed(out);
+        expect(Object.values(twice.persons).find(p => p.firstName === 'Alex')?.gender).toBe('unknown');
+        expect(exportGed(twice)).toBe(out);
     });
 
     it('multi-line event notes survive the round-trip (level-3 CONT)', () => {

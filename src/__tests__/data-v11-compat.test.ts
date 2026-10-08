@@ -96,7 +96,8 @@ describe('data format 10 -> 11', () => {
     it('pins the versions an older app compares against', () => {
         // 3.8.1 knows data version 10 and IndexedDB schema 5. Raising either
         // decides what an older app does with this one's data (see header).
-        expect(STROM_DATA_VERSION).toBe(11);
+        // 3.10 raised the data version to 12 (Gender 'unknown', U01).
+        expect(STROM_DATA_VERSION).toBe(12);
         // A raise would stop an older build at its start (VersionError) — the
         // whole app, also an older exported HTML file: never raised again.
         const storage = readFileSync(new URL('../storage.ts', import.meta.url), 'utf8');

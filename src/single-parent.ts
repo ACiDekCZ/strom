@@ -10,7 +10,7 @@
  * one left behind with nothing to stand for goes. Pure: works on the data.
  */
 
-import { StromData, Person, PersonId, PartnershipId, Partnership } from './types.js';
+import { StromData, Person, PersonId, PartnershipId, Partnership, oppositeGender } from './types.js';
 
 /**
  * A stand-in and nothing more: no name, no data of its own, no parents —
@@ -72,7 +72,7 @@ export function normalizeSingleParents(data: StromData): boolean {
                 uId = `${uId}_` as PartnershipId;
             }
             data.persons[phId] = {
-                id: phId, firstName: '?', lastName: '', gender: parent.gender === 'male' ? 'female' : 'male',
+                id: phId, firstName: '?', lastName: '', gender: oppositeGender(parent.gender),
                 isPlaceholder: true, partnerships: [uId], parentIds: [], childIds: [cid],
             };
             data.partnerships[uId] = { id: uId, person1Id: pid, person2Id: phId, childIds: [cid], status: 'married' };

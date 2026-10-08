@@ -6,7 +6,7 @@
  * Dates are kept in the canonical flex form (unambiguous, sortable).
  */
 
-import { StromData, Person, PersonId } from './types.js';
+import { StromData, Person, PersonId, parentSlots } from './types.js';
 import { strings } from './strings.js';
 
 const SEP = ';';
@@ -32,7 +32,7 @@ export function csvField(raw: string): string {
     return value;
 }
 
-function personName(p?: Person): string {
+function personName(p?: Person | null): string {
     if (!p) return '';
     return `${p.firstName} ${p.lastName}`.trim();
 }
@@ -56,8 +56,8 @@ export function buildPersonsCsv(data: StromData): string {
         const parents = p.parentIds
             .map(id => data.persons[id])
             .filter((x): x is Person => !!x && !x.isPlaceholder);
-        const father = parents.find(x => x.gender === 'male');
-        const mother = parents.find(x => x.gender === 'female');
+        // A parent of unknown sex in the column the other one leaves free.
+        const [father, mother] = parentSlots(parents.slice(0, 2));
         const partnerNames = p.partnerships
             .map(uid => {
                 const u = data.partnerships[uid];
@@ -70,7 +70,7 @@ export function buildPersonsCsv(data: StromData): string {
 
         rows.push([
             p.firstName, p.lastName,
-            p.gender === 'male' ? strings.gender.male : strings.gender.female,
+            strings.gender[p.gender] ?? strings.gender.unknown,
             p.birthDate ?? '', p.birthPlace ?? '', p.birthAddress ?? '',
             // What the register adds to the death: kept as written.
             p.deathDate ?? '', p.deathPlace ?? '', p.deathCause ?? '', p.deathAge ?? '', p.deathAddress ?? '',

@@ -135,3 +135,50 @@ describe('audit fixes: EN great- offset and adoptive lines', () => {
         expect(clean.term.cs).not.toContain('adoptivní');
     });
 });
+
+/**
+ * U01: a person of unknown sex is named without a sex — child, parent,
+ * sibling, spouse — in every language; where a language has no neutral word
+ * both stand ("strýc / teta"). The same fixture with B's sex unknown.
+ */
+describe('findRelationship — a person of unknown sex (U01)', () => {
+    const unknownAs = (...ids: string[]): StromData => {
+        const copy = structuredClone(data);
+        for (const id of ids) copy.persons[id as PersonId].gender = 'unknown';
+        return copy;
+    };
+    const relU = (a: string, b: string) => findRelationship(unknownAs(b), a as PersonId, b as PersonId)!.term;
+
+    it('parent, grandparent and beyond', () => {
+        expect(relU('focus', 'father')).toEqual({ cs: 'rodič', en: 'parent', de: 'Elternteil' });
+        expect(relU('focus', 'gp_h_h')).toEqual({ cs: 'prarodič', en: 'grandparent', de: 'Großelternteil' });
+        expect(relU('focus', 'gggp_h_h')).toEqual({ cs: 'prapraprarodič', en: 'great-great-grandparent', de: 'Ururgroßelternteil' });
+    });
+
+    it('child, grandchild and beyond', () => {
+        expect(relU('father', 'focus')).toEqual({ cs: 'dítě', en: 'child', de: 'Kind' });
+        expect(relU('gp_h_h', 'focus')).toEqual({ cs: 'vnouče', en: 'grandchild', de: 'Enkelkind' });
+        expect(relU('gggp_h_h', 'focus')).toEqual({ cs: 'prapravnouče', en: 'great-great-grandchild', de: 'Ururenkelkind' });
+    });
+
+    it('sibling, half-sibling, uncle/aunt, nephew/niece, cousin', () => {
+        expect(relU('focus', 'sibling_1')).toEqual({ cs: 'sourozenec', en: 'sibling', de: 'Geschwister' });
+        expect(relU('focus', 'halfsibling_1').en).toBe('half-sibling');
+        expect(relU('focus', 'uncle_h_1')).toEqual({ cs: 'strýc / teta', en: 'uncle / aunt', de: 'Onkel / Tante' });
+        expect(relU('focus', 'nephew_1_1').en).toBe('nephew / niece');
+        expect(relU('focus', 'cousin_h_1').cs).toBe('bratranec / sestřenice');
+    });
+
+    it('spouse and in-laws', () => {
+        const spouseId = data.persons['focus' as PersonId].partnerships
+            .map(u => data.partnerships[u])
+            .map(u => (u.person1Id === 'focus' ? u.person2Id : u.person1Id))[0];
+        expect(relU('focus', spouseId).en).toBe('spouse / partner');
+        expect(relU('focus', spouseId).cs).toBe('choť / partner');
+        expect(relU(spouseId, 'father').en).toBe('parent-in-law');
+    });
+
+    it('a known sex keeps its word', () => {
+        expect(findRelationship(unknownAs('mother'), 'focus' as PersonId, 'father' as PersonId)!.term.cs).toBe('otec');
+    });
+});

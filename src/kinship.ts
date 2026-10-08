@@ -47,8 +47,13 @@ function collectAncestors(data: StromData, start: PersonId, maxDepth = 20): Map<
     return result;
 }
 
-function isMale(person: Person | undefined): boolean {
-    return person?.gender !== 'female';
+/**
+ * The term for B's sex: male, female, or — a sex the records do not give —
+ * the neutral one (child, parent, sibling…; a pair where a language has no
+ * neutral word).
+ */
+function bySex(gender: Gender | undefined, male: KinshipTerm, female: KinshipTerm, unknown: KinshipTerm): KinshipTerm {
+    return gender === 'male' ? male : gender === 'female' ? female : unknown;
 }
 
 /** 'pra' repeated n times (Czech) / 'great-' repeated n times (English). */
@@ -67,55 +72,64 @@ function ur(k: number, base: string): string {
 export interface KinshipTerm { cs: string; en: string; de: string }
 
 /** Blood term for (up m, down n) with B's gender. Returns null when uncovered. */
-function bloodTerm(m: number, n: number, bGender: Gender): KinshipTerm {
-    const male = bGender !== 'female';
+function bloodTerm(m: number, n: number, bGender: Gender | undefined): KinshipTerm {
+    const t = (male: KinshipTerm, female: KinshipTerm, unknown: KinshipTerm) => bySex(bGender, male, female, unknown);
 
     // Direct ancestor of A (B is m=0? no: B is the one n steps under CA...)
     // Convention here: A is m steps below the common ancestor, B is n steps below.
     // B is A's ANCESTOR when n === 0; B is A's DESCENDANT when m === 0.
     if (n === 0) {
         // B is ancestor, m generations up
-        if (m === 1) return male ? { cs: 'otec', en: 'father', de: 'Vater' } : { cs: 'matka', en: 'mother', de: 'Mutter' };
-        if (m === 2) return male ? { cs: 'děd', en: 'grandfather', de: 'Großvater' } : { cs: 'babička', en: 'grandmother', de: 'Großmutter' };
-        return male
-            ? { cs: `${pra(m - 2)}děd`, en: `${great(m - 2)}grandfather`, de: ur(m - 2, 'großvater') }
-            : { cs: `${pra(m - 2)}babička`, en: `${great(m - 2)}grandmother`, de: ur(m - 2, 'großmutter') };
+        if (m === 1) return t({ cs: 'otec', en: 'father', de: 'Vater' }, { cs: 'matka', en: 'mother', de: 'Mutter' },
+            { cs: 'rodič', en: 'parent', de: 'Elternteil' });
+        if (m === 2) return t({ cs: 'děd', en: 'grandfather', de: 'Großvater' }, { cs: 'babička', en: 'grandmother', de: 'Großmutter' },
+            { cs: 'prarodič', en: 'grandparent', de: 'Großelternteil' });
+        return t(
+            { cs: `${pra(m - 2)}děd`, en: `${great(m - 2)}grandfather`, de: ur(m - 2, 'großvater') },
+            { cs: `${pra(m - 2)}babička`, en: `${great(m - 2)}grandmother`, de: ur(m - 2, 'großmutter') },
+            { cs: `${pra(m - 2)}prarodič`, en: `${great(m - 2)}grandparent`, de: ur(m - 2, 'großelternteil') });
     }
     if (m === 0) {
         // B is descendant, n generations down
-        if (n === 1) return male ? { cs: 'syn', en: 'son', de: 'Sohn' } : { cs: 'dcera', en: 'daughter', de: 'Tochter' };
-        if (n === 2) return male ? { cs: 'vnuk', en: 'grandson', de: 'Enkel' } : { cs: 'vnučka', en: 'granddaughter', de: 'Enkelin' };
-        return male
-            ? { cs: `${pra(n - 2)}vnuk`, en: `${great(n - 2)}grandson`, de: ur(n - 2, 'enkel') }
-            : { cs: `${pra(n - 2)}vnučka`, en: `${great(n - 2)}granddaughter`, de: ur(n - 2, 'enkelin') };
+        if (n === 1) return t({ cs: 'syn', en: 'son', de: 'Sohn' }, { cs: 'dcera', en: 'daughter', de: 'Tochter' },
+            { cs: 'dítě', en: 'child', de: 'Kind' });
+        if (n === 2) return t({ cs: 'vnuk', en: 'grandson', de: 'Enkel' }, { cs: 'vnučka', en: 'granddaughter', de: 'Enkelin' },
+            { cs: 'vnouče', en: 'grandchild', de: 'Enkelkind' });
+        return t(
+            { cs: `${pra(n - 2)}vnuk`, en: `${great(n - 2)}grandson`, de: ur(n - 2, 'enkel') },
+            { cs: `${pra(n - 2)}vnučka`, en: `${great(n - 2)}granddaughter`, de: ur(n - 2, 'enkelin') },
+            { cs: `${pra(n - 2)}vnouče`, en: `${great(n - 2)}grandchild`, de: ur(n - 2, 'enkelkind') });
     }
     if (m === 1 && n === 1) {
-        return male ? { cs: 'bratr', en: 'brother', de: 'Bruder' } : { cs: 'sestra', en: 'sister', de: 'Schwester' };
+        return t({ cs: 'bratr', en: 'brother', de: 'Bruder' }, { cs: 'sestra', en: 'sister', de: 'Schwester' },
+            { cs: 'sourozenec', en: 'sibling', de: 'Geschwister' });
     }
     if (n === 1) {
         // B is a sibling of A's ancestor: uncle/aunt line (m >= 2)
-        if (m === 2) return male ? { cs: 'strýc', en: 'uncle', de: 'Onkel' } : { cs: 'teta', en: 'aunt', de: 'Tante' };
+        if (m === 2) return t({ cs: 'strýc', en: 'uncle', de: 'Onkel' }, { cs: 'teta', en: 'aunt', de: 'Tante' },
+            { cs: 'strýc / teta', en: 'uncle / aunt', de: 'Onkel / Tante' });
         // EN: 'granduncle' already encodes one grand-level, so the great-
         // prefix count is m-3 (grandparent's brother = granduncle, no great-).
         // DE likewise: Großonkel, Urgroßonkel, ...
-        return male
-            ? { cs: `${pra(m - 2)}strýc`, en: `${great(m - 3)}granduncle`, de: ur(m - 3, 'großonkel') }
-            : { cs: `${pra(m - 2)}teta`, en: `${great(m - 3)}grandaunt`, de: ur(m - 3, 'großtante') };
+        const male = { cs: `${pra(m - 2)}strýc`, en: `${great(m - 3)}granduncle`, de: ur(m - 3, 'großonkel') };
+        const female = { cs: `${pra(m - 2)}teta`, en: `${great(m - 3)}grandaunt`, de: ur(m - 3, 'großtante') };
+        return t(male, female, either(male, female));
     }
     if (m === 1) {
         // B is a descendant of A's sibling: nephew/niece line (n >= 2)
-        if (n === 2) return male ? { cs: 'synovec', en: 'nephew', de: 'Neffe' } : { cs: 'neteř', en: 'niece', de: 'Nichte' };
-        return male
-            ? { cs: `${pra(n - 2)}synovec`, en: `${great(n - 3)}grandnephew`, de: ur(n - 3, 'großneffe') }
-            : { cs: `${pra(n - 2)}neteř`, en: `${great(n - 3)}grandniece`, de: ur(n - 3, 'großnichte') };
+        if (n === 2) return t({ cs: 'synovec', en: 'nephew', de: 'Neffe' }, { cs: 'neteř', en: 'niece', de: 'Nichte' },
+            { cs: 'synovec / neteř', en: 'nephew / niece', de: 'Neffe / Nichte' });
+        const male = { cs: `${pra(n - 2)}synovec`, en: `${great(n - 3)}grandnephew`, de: ur(n - 3, 'großneffe') };
+        const female = { cs: `${pra(n - 2)}neteř`, en: `${great(n - 3)}grandniece`, de: ur(n - 3, 'großnichte') };
+        return t(male, female, either(male, female));
     }
 
     // Cousins: both m, n >= 2
     const degree = Math.min(m, n) - 1;
     const removal = Math.abs(m - n);
-    const csBase = male ? 'bratranec' : 'sestřenice';
-    const enBase = male ? 'cousin' : 'cousin';
-    const deBase = male ? 'Cousin' : 'Cousine';
+    const csBase = bGender === 'male' ? 'bratranec' : bGender === 'female' ? 'sestřenice' : 'bratranec / sestřenice';
+    const enBase = 'cousin';
+    const deBase = bGender === 'male' ? 'Cousin' : bGender === 'female' ? 'Cousine' : 'Cousin / Cousine';
     const csDegree = degree === 1 ? csBase : `${csBase} ${degree}. stupně`;
     const enDegree = `${ordinalEn(degree)} ${enBase}`;
     const deDegree = degree === 1 ? deBase : `${deBase} ${degree}. Grades`;
@@ -129,6 +143,11 @@ function bloodTerm(m: number, n: number, bGender: Gender): KinshipTerm {
     };
 }
 
+/** "uncle / aunt" — both words, for a person of unknown sex where a language has no neutral one. */
+function either(male: KinshipTerm, female: KinshipTerm): KinshipTerm {
+    return { cs: `${male.cs} / ${female.cs}`, en: `${male.en} / ${female.en}`, de: `${male.de} / ${female.de}` };
+}
+
 function ordinalEn(n: number): string {
     if (n === 1) return 'first';
     if (n === 2) return 'second';
@@ -140,23 +159,30 @@ function ordinalEn(n: number): string {
 function affinityTerm(
     viaPartnerOfA: boolean,   // true: B is blood relative of A's partner; false: B is partner of A's blood relative
     m: number, n: number,     // blood geometry between the blood-related pair
-    bGender: Gender
+    bGender: Gender | undefined
 ): KinshipTerm | null {
-    const male = bGender !== 'female';
+    const t = (male: KinshipTerm, female: KinshipTerm, unknown: KinshipTerm) => bySex(bGender, male, female, unknown);
 
     if (viaPartnerOfA) {
         // B is A's partner's blood relative
-        if (n === 0 && m === 1) return male ? { cs: 'tchán', en: 'father-in-law', de: 'Schwiegervater' } : { cs: 'tchyně', en: 'mother-in-law', de: 'Schwiegermutter' };
-        if (m === 1 && n === 1) return male ? { cs: 'švagr', en: 'brother-in-law', de: 'Schwager' } : { cs: 'švagrová', en: 'sister-in-law', de: 'Schwägerin' };
+        if (n === 0 && m === 1) return t({ cs: 'tchán', en: 'father-in-law', de: 'Schwiegervater' }, { cs: 'tchyně', en: 'mother-in-law', de: 'Schwiegermutter' },
+            { cs: 'tchán / tchyně', en: 'parent-in-law', de: 'Schwiegerelternteil' });
+        if (m === 1 && n === 1) return t({ cs: 'švagr', en: 'brother-in-law', de: 'Schwager' }, { cs: 'švagrová', en: 'sister-in-law', de: 'Schwägerin' },
+            { cs: 'švagr / švagrová', en: 'sibling-in-law', de: 'Schwager / Schwägerin' });
         // B is a child of A's partner but not A's own child.
-        if (m === 0 && n === 1) return male ? { cs: 'nevlastní syn', en: 'stepson', de: 'Stiefsohn' } : { cs: 'nevlastní dcera', en: 'stepdaughter', de: 'Stieftochter' };
+        if (m === 0 && n === 1) return t({ cs: 'nevlastní syn', en: 'stepson', de: 'Stiefsohn' }, { cs: 'nevlastní dcera', en: 'stepdaughter', de: 'Stieftochter' },
+            { cs: 'nevlastní dítě', en: 'stepchild', de: 'Stiefkind' });
     } else {
         // B is the partner of A's blood relative
-        if (m === 0 && n === 1) return male ? { cs: 'zeť', en: 'son-in-law', de: 'Schwiegersohn' } : { cs: 'snacha', en: 'daughter-in-law', de: 'Schwiegertochter' };
-        if (m === 1 && n === 1) return male ? { cs: 'švagr', en: 'brother-in-law', de: 'Schwager' } : { cs: 'švagrová', en: 'sister-in-law', de: 'Schwägerin' };
-        if (m === 2 && n === 1) return male ? { cs: 'strýc (přiženěný)', en: 'uncle (by marriage)', de: 'Onkel (angeheiratet)' } : { cs: 'teta (přivdaná)', en: 'aunt (by marriage)', de: 'Tante (angeheiratet)' };
+        if (m === 0 && n === 1) return t({ cs: 'zeť', en: 'son-in-law', de: 'Schwiegersohn' }, { cs: 'snacha', en: 'daughter-in-law', de: 'Schwiegertochter' },
+            { cs: 'zeť / snacha', en: 'child-in-law', de: 'Schwiegerkind' });
+        if (m === 1 && n === 1) return t({ cs: 'švagr', en: 'brother-in-law', de: 'Schwager' }, { cs: 'švagrová', en: 'sister-in-law', de: 'Schwägerin' },
+            { cs: 'švagr / švagrová', en: 'sibling-in-law', de: 'Schwager / Schwägerin' });
+        if (m === 2 && n === 1) return t({ cs: 'strýc (přiženěný)', en: 'uncle (by marriage)', de: 'Onkel (angeheiratet)' }, { cs: 'teta (přivdaná)', en: 'aunt (by marriage)', de: 'Tante (angeheiratet)' },
+            { cs: 'strýc / teta (sňatkem)', en: 'uncle / aunt (by marriage)', de: 'Onkel / Tante (angeheiratet)' });
         // B is the partner of A's parent, and not A's parent (no blood tie).
-        if (m === 1 && n === 0) return male ? { cs: 'nevlastní otec', en: 'stepfather', de: 'Stiefvater' } : { cs: 'nevlastní matka', en: 'stepmother', de: 'Stiefmutter' };
+        if (m === 1 && n === 0) return t({ cs: 'nevlastní otec', en: 'stepfather', de: 'Stiefvater' }, { cs: 'nevlastní matka', en: 'stepmother', de: 'Stiefmutter' },
+            { cs: 'nevlastní rodič', en: 'stepparent', de: 'Stiefelternteil' });
     }
     return null;
 }
@@ -253,12 +279,14 @@ function findRelationshipCore(data: StromData, aId: PersonId, bId: PersonId): Ki
         const ended = unions.length > 0 && unions.every(u =>
             u.status === 'divorced' || u.status === 'separated' || !!u.endDate);
         const term: KinshipTerm = ended
-            ? (isMale(b)
-                ? { cs: 'bývalý manžel / partner', en: 'ex-husband / ex-partner', de: 'Ex-Ehemann / Ex-Partner' }
-                : { cs: 'bývalá manželka / partnerka', en: 'ex-wife / ex-partner', de: 'Ex-Ehefrau / Ex-Partnerin' })
-            : (isMale(b)
-                ? { cs: 'manžel / partner', en: 'husband / partner', de: 'Ehemann / Partner' }
-                : { cs: 'manželka / partnerka', en: 'wife / partner', de: 'Ehefrau / Partnerin' });
+            ? bySex(b.gender,
+                { cs: 'bývalý manžel / partner', en: 'ex-husband / ex-partner', de: 'Ex-Ehemann / Ex-Partner' },
+                { cs: 'bývalá manželka / partnerka', en: 'ex-wife / ex-partner', de: 'Ex-Ehefrau / Ex-Partnerin' },
+                { cs: 'bývalý choť / partner', en: 'ex-spouse / ex-partner', de: 'Ex-Ehepartner / Ex-Partner' })
+            : bySex(b.gender,
+                { cs: 'manžel / partner', en: 'husband / partner', de: 'Ehemann / Partner' },
+                { cs: 'manželka / partnerka', en: 'wife / partner', de: 'Ehefrau / Partnerin' },
+                { cs: 'choť / partner', en: 'spouse / partner', de: 'Ehepartner / Partner' });
         return { path: [aId, bId], term, affinity: true };
     }
 
@@ -275,9 +303,10 @@ function findRelationshipCore(data: StromData, aId: PersonId, bId: PersonId): Ki
             const differ = aParents.length === 2 && bParents.length === 2
                 && !(aParents.every(p => bParents.includes(p)));
             if (differ) {
-                term = isMale(b)
-                    ? { cs: 'nevlastní bratr (společný jeden rodič)', en: 'half-brother', de: 'Halbbruder' }
-                    : { cs: 'nevlastní sestra (společný jeden rodič)', en: 'half-sister', de: 'Halbschwester' };
+                term = bySex(b.gender,
+                    { cs: 'nevlastní bratr (společný jeden rodič)', en: 'half-brother', de: 'Halbbruder' },
+                    { cs: 'nevlastní sestra (společný jeden rodič)', en: 'half-sister', de: 'Halbschwester' },
+                    { cs: 'nevlastní sourozenec (společný jeden rodič)', en: 'half-sibling', de: 'Halbgeschwister' });
             }
         }
         return { path: blood.path, term, affinity: false };
@@ -289,9 +318,10 @@ function findRelationshipCore(data: StromData, aId: PersonId, bId: PersonId): Ki
         if (rel && rel.m + rel.n <= 6) {
             const special = affinityTerm(true, rel.m, rel.n, b.gender);
             const partner = data.persons[partnerId];
-            const partnerLabel = isMale(partner)
-                ? { cs: 'manžela', en: "husband's", de: 'des Ehemanns' }
-                : { cs: 'manželky', en: "wife's", de: 'der Ehefrau' };
+            const partnerLabel = bySex(partner?.gender,
+                { cs: 'manžela', en: "husband's", de: 'des Ehemanns' },
+                { cs: 'manželky', en: "wife's", de: 'der Ehefrau' },
+                { cs: 'chotě', en: "spouse's", de: 'des Ehepartners' });
             const bloodDesc = bloodTerm(rel.m, rel.n, b.gender);
             const term = special ?? {
                 cs: `${bloodDesc.cs} ${partnerLabel.cs}`,
@@ -308,10 +338,11 @@ function findRelationshipCore(data: StromData, aId: PersonId, bId: PersonId): Ki
         if (rel && rel.m + rel.n <= 6) {
             const special = affinityTerm(false, rel.m, rel.n, b.gender);
             const relative = data.persons[partnerId];
-            const relDesc = bloodTerm(rel.m, rel.n, relative?.gender ?? 'male');
-            const term = special ?? (isMale(b)
-                ? { cs: `manžel — ${relDesc.cs}`, en: `husband of your ${relDesc.en}`, de: `Ehemann — ${relDesc.de}` }
-                : { cs: `manželka — ${relDesc.cs}`, en: `wife of your ${relDesc.en}`, de: `Ehefrau — ${relDesc.de}` });
+            const relDesc = bloodTerm(rel.m, rel.n, relative?.gender);
+            const term = special ?? bySex(b.gender,
+                { cs: `manžel — ${relDesc.cs}`, en: `husband of your ${relDesc.en}`, de: `Ehemann — ${relDesc.de}` },
+                { cs: `manželka — ${relDesc.cs}`, en: `wife of your ${relDesc.en}`, de: `Ehefrau — ${relDesc.de}` },
+                { cs: `choť — ${relDesc.cs}`, en: `spouse of your ${relDesc.en}`, de: `Ehepartner — ${relDesc.de}` });
             return { path: [...rel.path, bId], term, affinity: true };
         }
     }

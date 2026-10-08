@@ -5,7 +5,7 @@
  * 2n+1 = mother of n. The father's line fills the left half of the fan.
  */
 
-import { StromData, Person, PersonId, ParentChildRelType } from './types.js';
+import { StromData, Person, PersonId, ParentChildRelType, parentSlots } from './types.js';
 import { displayYear } from './dates.js';
 import { shownName } from './person-name.js';
 import {
@@ -39,21 +39,15 @@ export interface FanModel {
 
 /**
  * Split a person's parents into a father slot and a mother slot. Prefers
- * gender; falls back to declaration order when genders don't disambiguate.
+ * gender (a parent of unknown sex takes the slot the other leaves free);
+ * falls back to declaration order when genders don't disambiguate.
  */
 function fatherMotherOf(data: StromData, person: Person): [Person | null, Person | null] {
     const parents = person.parentIds
         .map(id => data.persons[id])
         .filter((p): p is Person => !!p)
         .slice(0, 2);
-    if (parents.length === 0) return [null, null];
-    if (parents.length === 1) {
-        return parents[0].gender === 'female' ? [null, parents[0]] : [parents[0], null];
-    }
-    const male = parents.find(p => p.gender === 'male');
-    const female = parents.find(p => p.gender === 'female');
-    if (male && female && male !== female) return [male, female];
-    return [parents[0], parents[1]];
+    return parentSlots(parents);
 }
 
 /** Build the ancestor model for `generations` rings above the focus. */

@@ -10,7 +10,7 @@
  * Partners are ordered: male left, otherwise alphabetically by ID.
  */
 
-import { PersonId, PartnershipId, StromData } from '../../types.js';
+import { PersonId, PartnershipId, StromData, coupleSides } from '../../types.js';
 import { compareMarriages } from '../../marriage-order.js';
 import {
     BuildModelInput,
@@ -334,26 +334,25 @@ function collectLineagePartnerships(
 }
 
 /**
- * Order partners: male left, otherwise alphabetical by ID.
+ * Order partners: male left, female right; a person of unknown sex on the
+ * side the other one leaves free; two of unknown sex in data order (the
+ * partnership's person1 first: GEDCOM HUSB); two men or two women
+ * alphabetical by ID.
  */
 function orderPartners(
     p1: PersonId,
     p2: PersonId,
     data: StromData
 ): [PersonId, PersonId] {
-    const person1 = data.persons[p1];
-    const person2 = data.persons[p2];
+    const g1 = data.persons[p1]?.gender;
+    const g2 = data.persons[p2]?.gender;
 
-    // Male on the left
-    if (person1?.gender === 'male' && person2?.gender === 'female') {
-        return [p1, p2];
-    }
-    if (person1?.gender === 'female' && person2?.gender === 'male') {
-        return [p2, p1];
-    }
+    // Same known gender: alphabetical by ID
+    if (g1 === g2 && g1 !== 'unknown') return p1 < p2 ? [p1, p2] : [p2, p1];
 
-    // Same gender or unknown: alphabetical by ID
-    return p1 < p2 ? [p1, p2] : [p2, p1];
+    // Male on the left, female on the right, unknown where the other leaves room
+    const [left, right] = coupleSides({ id: p1, gender: g1 }, { id: p2, gender: g2 });
+    return [left.id, right.id];
 }
 
 /**
@@ -549,7 +548,7 @@ function expandPartnerChains(
             } else {
                 // Partnership was folded (both partners already assigned) —
                 // create a new chain union and move children from primary union
-                const [partnerA, partnerB] = orderPartners(sharedPersonId, partnerId, data);
+                const [partnerA, partnerB] = orderPartners(partnership.person1Id, partnership.person2Id, data);
                 const chainUnionId = toUnionId(`chain_${sharedPersonId}_${partnershipId}`);
 
                 const partnershipChildIds = partnership.childIds.filter(id => selection.persons.has(id));

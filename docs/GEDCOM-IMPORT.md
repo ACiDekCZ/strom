@@ -112,7 +112,7 @@ unsupported tag.
 | `NAME` > `SOUR` | The record the name comes from — cites the person, with `PAGE` and `QUAY` |
 | `NAME` > `GIVN`, `SURN` | Win over the `NAME` line, which is only how a program wrote them. Without them the surname is the last pair of slashes. A line without slashes, with `GIVN` and no `SURN` (`Petr Novotný` + `GIVN Petr`), keeps the rest of the line after the given name as the surname |
 | `NAME` > `NPFX`, `NSFX` | The titles before and after the name (`Ing.`, `MUDr.` / `ml.`, `Ph.D.`), kept in fields of their own and shown with the name (Settings → "Show titles"). Written in the `NAME` line too, they are taken off its start and end, so a title never doubles. A `NAME` line without these tags is never searched for titles. A list of titles with GEDCOM's commas (`Prof., Dr.`) reads with spaces (`Prof. Dr.`); a file written by Strom keeps a title as it was typed |
-| `SEX` | `M` / `F`. `U` or missing is inferred from the family role where possible |
+| `SEX` | `M` / `F`; `U`, any other value or no `SEX` at all is an **unknown sex** — never guessed from the family role (`HUSB` / `WIFE` only says which side of the couple the person stands on). Strom writes an unknown sex back as `1 SEX U` |
 | `BIRT`, `DEAT` | The dedicated date and place fields, not events. `1 DEAT Y` with no date marks the person as dead, and Strom exports it that way |
 | `_QUESTION` | Strom's own tag: the open question about the person ("does anyone know when she was born?"), with `CONT` / `CONC` |
 | `REFN` | Reference number — your own id in an archive or another program. A `2 TYPE` under it is kept (not shown) and written back on export, so the program that issued the number can recognise its own person |
@@ -306,7 +306,13 @@ not its label, and is kept in the event's note:
   either one is enough. The same `CHIL` twice counts once, and a second `FAM`
   of the same two people is read as the same union (children, citations,
   witnesses and missing dates join the first).
-- A family with one parent gets a "?" stand-in for the other, and keeps its
+- `HUSB` / `WIFE`: Strom writes the man as `HUSB` and the woman as `WIFE`; a
+  person of unknown sex takes the role the other partner leaves free, and two
+  of one sex (or two unknown) keep the order of the couple. In the tree a
+  couple of two persons of unknown sex stands in the file's order, the `HUSB`
+  on the left.
+- A family with one parent gets a "?" stand-in for the other (of the opposite
+  sex; of unknown sex for a parent of unknown sex), and keeps its
   witnesses, story and everything else. A family naming two or more children
   but no parent at all gets two stand-ins, so the children stay siblings; a
   lone child without parents is left as it is.
@@ -614,6 +620,11 @@ the research in the header:
 - `_STROM_SENT` — the fingerprint of the tree as sent, only on a send straight
   to the bridge: the research's status (`inbox`, `sends`) names it back, so the
   app knows its send is waiting, written or discarded.
+- `_STROM_SEX_U Y` — `SEX U` stands exactly where the sex is unknown in the
+  app; an `M` or `F` the research has as `U` is the user's. Since data version
+  12 (3.10) the app keeps an unknown sex as such and never guesses one; an
+  older app (3.9) wrote `U` only where the research's unknown stayed unchanged
+  and guessed the sex elsewhere.
 
 ### What happens to an opened research
 

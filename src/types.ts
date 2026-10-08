@@ -71,7 +71,57 @@ export function generateAttachmentId(): string {
 
 // ==================== CORE ENTITIES ====================
 
-export type Gender = 'male' | 'female';
+/**
+ * A person's sex. 'unknown' (GEDCOM SEX U, or no SEX at all) is a sex the
+ * records do not give: nothing guesses one for it (data version 12).
+ */
+export type Gender = 'male' | 'female' | 'unknown';
+
+/** Every value of Gender, in the order the person dialog offers them. */
+export const GENDERS: readonly Gender[] = ['male', 'female', 'unknown'];
+
+/** True for a value of Gender (data from a file, a form, an older app). */
+export function isGender(value: unknown): value is Gender {
+    return value === 'male' || value === 'female' || value === 'unknown';
+}
+
+/** The other sex of a couple: male ↔ female; unknown stays unknown. */
+export function oppositeGender(gender: Gender | undefined): Gender {
+    return gender === 'male' ? 'female' : gender === 'female' ? 'male' : 'unknown';
+}
+
+/**
+ * Two persons who may be the same one as far as their sex goes: the same
+ * sex, or either of them unknown (merge, duplicate matching).
+ */
+export function gendersCompatible(a: Gender | undefined, b: Gender | undefined): boolean {
+    return a === b || a === 'unknown' || b === 'unknown' || a === undefined || b === undefined;
+}
+
+/**
+ * The two sides of a couple, left (the father's / husband's side) and right:
+ * a man on the left, a woman on the right, a person of unknown sex on the
+ * side the other one leaves free; two of one sex, or two unknown, keep the
+ * order they are given in.
+ */
+export function coupleSides<T extends { gender?: Gender }>(a: T, b: T): [T, T] {
+    if (a.gender === 'male' && b.gender !== 'male') return [a, b];
+    if (b.gender === 'male' && a.gender !== 'male') return [b, a];
+    if (b.gender === 'female' && a.gender !== 'female') return [a, b];
+    if (a.gender === 'female' && b.gender !== 'female') return [b, a];
+    return [a, b];
+}
+
+/**
+ * A person's (first two) parents in the father's and the mother's slot, by
+ * the rule of coupleSides; one parent alone stands in the father's slot
+ * unless she is a woman.
+ */
+export function parentSlots<T extends { gender?: Gender }>(parents: readonly T[]): [T | null, T | null] {
+    if (parents.length === 0) return [null, null];
+    if (parents.length === 1) return parents[0].gender === 'female' ? [null, parents[0]] : [parents[0], null];
+    return coupleSides(parents[0], parents[1]);
+}
 
 export type PartnershipStatus = 'married' | 'partners' | 'divorced' | 'separated';
 
@@ -768,8 +818,12 @@ export function partnershipParticipants(u: Pick<Partnership, 'participants' | 'e
  * Person.titleBefore / titleAfter (3.10) came without a bump: an older app
  * carries persons whole (migrateData) and edits them in place (updatePerson),
  * so it keeps the titles on a re-save; it only shows the name without them.
+ * v12 (2026-10): Gender 'unknown' (GEDCOM SEX U, or no SEX): a sex the records
+ *   do not give, no longer guessed from the family role (or female). Older
+ *   data keeps its male/female; a missing or invalid gender reads as unknown
+ *   (migrateData). An older app (v11) warns before it shows 'unknown' as male.
  */
-export const STROM_DATA_VERSION = 11;
+export const STROM_DATA_VERSION = 12;
 
 /**
  * Coordinates of one place, kept in the tree's own file so a place is looked up
@@ -1193,12 +1247,6 @@ export type ResearchEdgeMode = 'off' | 'mine' | 'all';
 export interface ResearchLink {
     /** The research tree's UUID (lower case). */
     id: string;
-    /**
-     * People whose sex the research's version leaves unknown (SEX U), by
-     * reference number, with the sex they have here since the load: sent back
-     * as SEX U while it stays, so another sex is the user's (N60-2).
-     */
-    sexU?: Record<string, Gender>;
     /** Content fingerprint of the tree right after the last import/update. */
     fingerprint: string;
     /** ISO time of the last import/update. */

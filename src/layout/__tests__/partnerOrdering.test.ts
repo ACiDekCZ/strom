@@ -135,3 +135,56 @@ describe('Chronological partner order (T13)', () => {
         expect(row(data, 'c1')).toBe('P3 P2 S P1');
     });
 });
+
+/**
+ * U01: a person of unknown sex stands on the side of the couple the other
+ * partner leaves free — right of a man, left of a woman; two of unknown sex
+ * in the order of the data (the partnership's person1 left, GEDCOM HUSB),
+ * whatever their ids. Their child below them, the couple atomic.
+ */
+describe('Couple order with an unknown sex (U01)', () => {
+    type G = 'male' | 'female' | 'unknown';
+    function couple(a: [string, G], b: [string, G]): StromData {
+        const persons: Record<string, Person> = {};
+        const mk = (id: string, gender: G) => {
+            persons[id] = { id: id as PersonId, firstName: id, lastName: 'X', gender, isPlaceholder: false,
+                partnerships: ['u' as PartnershipId], parentIds: [], childIds: ['kid' as PersonId] };
+        };
+        mk(a[0], a[1]); mk(b[0], b[1]);
+        persons.kid = { id: 'kid' as PersonId, firstName: 'kid', lastName: 'X', gender: 'unknown', isPlaceholder: false,
+            partnerships: [], parentIds: [a[0] as PersonId, b[0] as PersonId], childIds: [] };
+        const partnerships: Record<string, Partnership> = {
+            u: { id: 'u' as PartnershipId, person1Id: a[0] as PersonId, person2Id: b[0] as PersonId, childIds: ['kid' as PersonId], status: 'married' },
+        };
+        return { persons, partnerships } as unknown as StromData;
+    }
+    function leftRight(data: StromData): string {
+        const result = runLayoutPipeline({
+            data, focusPersonId: 'kid' as PersonId, config: DEFAULT_LAYOUT_CONFIG,
+            ancestorDepth: 2, descendantDepth: 2,
+            displayPolicy: { mode: 'standard', autoExpand: false },
+        });
+        const ids = Object.keys(data.persons).filter(id => id !== 'kid');
+        return ids.sort((x, y) => result.positions.get(x as PersonId)!.x - result.positions.get(y as PersonId)!.x).join(' ');
+    }
+
+    it('a man and a person of unknown sex: the man left, whichever comes first in the data', () => {
+        expect(leftRight(couple(['zz_man', 'male'], ['aa_unk', 'unknown']))).toBe('zz_man aa_unk');
+        expect(leftRight(couple(['aa_unk', 'unknown'], ['zz_man', 'male']))).toBe('zz_man aa_unk');
+    });
+
+    it('a woman and a person of unknown sex: the woman right', () => {
+        expect(leftRight(couple(['aa_woman', 'female'], ['zz_unk', 'unknown']))).toBe('zz_unk aa_woman');
+        expect(leftRight(couple(['zz_unk', 'unknown'], ['aa_woman', 'female']))).toBe('zz_unk aa_woman');
+    });
+
+    it('two of unknown sex: in data order (person1 left), not by id', () => {
+        expect(leftRight(couple(['zz_first', 'unknown'], ['aa_second', 'unknown']))).toBe('zz_first aa_second');
+        expect(leftRight(couple(['aa_first', 'unknown'], ['zz_second', 'unknown']))).toBe('aa_first zz_second');
+    });
+
+    it('two men or two women: still by id', () => {
+        expect(leftRight(couple(['zz_m', 'male'], ['aa_m', 'male']))).toBe('aa_m zz_m');
+        expect(leftRight(couple(['zz_f', 'female'], ['aa_f', 'female']))).toBe('aa_f zz_f');
+    });
+});

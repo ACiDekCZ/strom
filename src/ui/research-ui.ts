@@ -25,14 +25,14 @@ import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
 import { strings, getCurrentLanguage } from '../strings.js';
-import { StromData, TreeId, PersonId, Gender } from '../types.js';
-import { parseGedcom, convertToStrom, decodeGedcomFile, parseGedcomDate, sexGuessedIn, sexUnknownIn } from '../ged-parser.js';
+import { StromData, TreeId, PersonId } from '../types.js';
+import { parseGedcom, convertToStrom, decodeGedcomFile, parseGedcomDate } from '../ged-parser.js';
 import { formatFlexDate } from '../dates.js';
 import { formatLiveTime, formatLiveClock } from '../live-time.js';
 import { isMobile } from '../breakpoints.js';
 import {
     readResearchHeader, parseLoopbackUrl, parseLiveBridge, contentFingerprint, fingerprintLike,
-    decideResearchOpen, stabilizeIds, keepKnownSex, keepTitles, sexUByRefn, carryOverMedia, carryOverUnknownPartners, sanitizeLiveStatus, sanitizeLiveChange,
+    decideResearchOpen, stabilizeIds, keepTitles, carryOverMedia, carryOverUnknownPartners, sanitizeLiveStatus, sanitizeLiveChange,
     sanitizeWorking, parseEventData, extractChangedRefs, personsByRefs,
     humanizeChange, isGedcomFileName, isSafariBrowser,
     parseSendBridge, pickSendDefault, sanitizeSyncReply, researchSchemeUrl, researchTaskRef,
@@ -58,7 +58,7 @@ import { sourceReadings, researchSendVouches, conflictTakeovers, heldConflicts }
 import { currentAppBrowser, appBrowserName } from '../research-transfer.js';
 import { localNetworkStatus } from '../local-network.js';
 import { pendingAdopt } from './pending-adopt.js';
-import { shownName, shownNameOrEmpty } from '../person-name.js';
+import { shownNameOrEmpty } from '../person-name.js';
 
 /** What a research open needs to know from the file (or the bridge). */
 export interface ResearchSource {
@@ -1190,8 +1190,6 @@ export const researchUiMethods = uiModule({
         const name = source.name || strings.research.defaultName;
         const dateLabel = researchDateLabel(source.date);
         const existing = source.treeId ? TreeManager.findTreeByResearchId(source.treeId) : null;
-        // Whose sex the research leaves unknown (read before any copy of `data` loses it).
-        const unknownSex = sexUnknownIn(data);
 
         let previous: StromData | null = null;
         let includeImages = SettingsManager.isImportImages();
@@ -1200,25 +1198,12 @@ export const researchUiMethods = uiModule({
         let holdsSent = false;
         // "Load the research version?" with the values it overwrites (asked at every load the user asks for).
         let askLoad = false;
-        let sexUnknown: { name: string; gender: Gender }[] = [];
-        // Their reference numbers: a sex row of the load dialog says the research gives none (N61-2).
-        const sexUnknownRefns = new Set([...unknownSex].map(id => data.persons[id]?.refn?.trim() ?? '').filter(Boolean));
         if (existing) {
             const unreadable = TreeManager.isTreeUnreadable(existing.id);
             previous = unreadable ? null : await readTree(existing.id);
-            // A sex the research leaves unknown is no change to Female (the importer's guess): the tree's stays.
-            // "Load the research version?" says so for everyone whose sex the research leaves unknown and whose
-            // sex here stays (a husband's guess as well, N61-1); one that changes is a row of its table.
             if (previous) {
-                data = keepKnownSex(data, previous, sexGuessedIn(data));
                 // Titles a research that does not know them dropped stay (T07): never asked about, never lost.
                 data = keepTitles(data, previous, source.treeId ? this.researchStatusOf(source.treeId)?.features : null);
-                const persons = data.persons;
-                const before = new Map(Object.values(previous.persons ?? {}).filter(p => p?.refn?.trim()).map(p => [p.refn!.trim(), p.gender]));
-                sexUnknown = [...unknownSex].filter(id => {
-                    const refn = persons[id]?.refn?.trim();
-                    return !!refn && before.get(refn) === persons[id].gender;
-                }).map(id => ({ name: shownName(persons[id]), gender: persons[id].gender }));
             }
             action = decideResearchOpen(existing.research, previous ? fingerprintLike(previous, existing.research?.fingerprint) : null);
             // The app's images stay (carryOverMedia); those of people or sources
@@ -1342,8 +1327,6 @@ export const researchUiMethods = uiModule({
                 const bytes = incomingImageBytes(data);
                 const answer = await this.askResearchLoad(existing.name, dateLabel, previous, stabilizeIds(data, previous), {
                     off: researchSendMode(existing.research) === 'off', notWritten: nw,
-                    ...(sexUnknown.length ? { sexUnknown } : {}),
-                    ...(sexUnknownRefns.size ? { sexUnknownRefns } : {}),
                     ...(bytes > 0 ? { images: { label: strings.importImages.label, checked: includeImages, detail: strings.importImages.size((bytes / (1024 * 1024)).toFixed(1)) } } : {}),
                 });
                 if (!answer) return null;
@@ -1387,14 +1370,12 @@ export const researchUiMethods = uiModule({
 
         if (source.treeId) {
             const head = opts.head || source.head;
-            const sexU = sexUByRefn(data, unknownSex);
             TreeManager.setResearchLink(treeId, {
                 id: source.treeId,
                 fingerprint: contentFingerprint(DataManager.getData()),
                 syncedAt: new Date().toISOString(),
                 ...(head ? { head } : {}),
                 ...(source.mode === 'archive' ? { mode: 'archive' as const } : {}),
-                ...(Object.keys(sexU).length ? { sexU } : {}),
             });
             // The load itself counted as an edit (it went through the edit path before the tie moved on): nothing waits now.
             patchResearchAutoState(treeId, { edits: undefined, unsentSince: undefined });
@@ -1569,7 +1550,7 @@ export const researchUiMethods = uiModule({
         this.showToast(r.sending, 60000);
         let res: Response;
         try {
-            res = await postSync(bridge.sync, researchGedcom(data, tree.name, { id: link.id, head: link.head, appTree: tree.id, transcripts: this.researchTranscriptsLink(link).transcripts, sexU: link.sexU }), 120000);
+            res = await postSync(bridge.sync, researchGedcom(data, tree.name, { id: link.id, head: link.head, appTree: tree.id, transcripts: this.researchTranscriptsLink(link).transcripts }), 120000);
         } catch (err) {
             console.warn('Sending to the research failed', err);
             document.querySelector('.toast')?.remove();
@@ -1783,7 +1764,7 @@ export const researchUiMethods = uiModule({
             await this.showAlert(strings.storageSafety.treeLocked, 'warning');
             return;
         }
-        const research = { id: meta.research.id, head: meta.research.head, appTree: treeId, transcripts: this.researchTranscriptsLink(meta.research).transcripts, sexU: meta.research.sexU };
+        const research = { id: meta.research.id, head: meta.research.head, appTree: treeId, transcripts: this.researchTranscriptsLink(meta.research).transcripts };
         const blob = new Blob([researchGedcom(data, meta.name, research)], { type: 'text/plain;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -2190,9 +2171,6 @@ export const researchUiMethods = uiModule({
         } catch {
             return null;
         }
-        const guessed = sexGuessedIn(data);
-        // Whose sex the research leaves unknown, by reference number (ids change below).
-        const unknownRefns = new Set([...sexUnknownIn(data)].map(id => data.persons[id]?.refn?.trim() ?? '').filter(Boolean));
         // Following live asks nothing: the setting decides about images.
         if (!SettingsManager.isImportImages()) data = stripMedia(data);
         if (!TreeManager.getTreeMetadata(s.treeId)) {
@@ -2204,7 +2182,7 @@ export const researchUiMethods = uiModule({
         const previous = await readTree(s.treeId);
         // Images added in the app before following stay (the research has none of them).
         // Titles a research that does not know them dropped stay (T07).
-        const known = previous ? keepKnownSex(keepTitles(data, previous, this.researchStatusOf(s.researchId)?.features), previous, guessed) : data;
+        const known = previous ? keepTitles(data, previous, this.researchStatusOf(s.researchId)?.features) : data;
         const kept = previous ? carryOverMedia(stabilizeIds(known, previous), previous).data : data;
         const stable = migrateData(previous && !this.researchKeepsLoneFamilies(s.researchId) ? carryOverUnknownPartners(kept, previous) : kept);
         if (active) {
@@ -2216,14 +2194,12 @@ export const researchUiMethods = uiModule({
             TreeManager.updateTreeFromImport(s.treeId, stable);
         }
         if (head) s.head = head;
-        const sexU = sexUByRefn(stable, new Set(Object.values(stable.persons).filter(p => unknownRefns.has(p.refn?.trim() ?? '')).map(p => p.id)));
         TreeManager.setResearchLink(s.treeId, {
             id: s.researchId,
             fingerprint: contentFingerprint(active ? DataManager.getData() : stable),
             syncedAt: new Date().toISOString(),
             ...(s.head ? { head: s.head } : {}),
             ...(header.mode === 'archive' ? { mode: 'archive' as const } : {}),
-            ...(Object.keys(sexU).length ? { sexU } : {}),
         });
         this.researchKeepCopy(s.treeId, active ? DataManager.getData() : stable);
         return active ? DataManager.getData() : stable;

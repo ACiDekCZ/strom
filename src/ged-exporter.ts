@@ -24,7 +24,7 @@
 
 import { researchHeaderLines, ResearchHeaderInfo } from './research-link.js';
 import { isPurePlaceholder } from './single-parent.js';
-import { APP_VERSION, StromData, Person, Partnership, PersonId, PartnershipId, LifeEventType, ParticipantRole, PlaceGeo, Story, ParentChildRelType, MediaOriginal, Attachment, FactStatus } from './types.js';
+import { APP_VERSION, StromData, Person, Partnership, PersonId, PartnershipId, LifeEventType, ParticipantRole, PlaceGeo, Story, ParentChildRelType, MediaOriginal, Attachment, FactStatus, coupleSides } from './types.js';
 import { normalizeSha256 } from './sha256.js';
 import { regionHeader, regionToStored } from './originals.js';
 import { strings } from './strings.js';
@@ -552,11 +552,8 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
             pushWrapped(lines, 1, 'NAME', variant);
         }
 
-        // Sex
-        // The research's unknown sex, kept here unchanged: unknown there still (N60-2).
-        const refn = person.refn?.trim();
-        const unknown = !!refn && options.research?.sexU?.[refn] === person.gender;
-        lines.push(`1 SEX ${unknown ? 'U' : person.gender === 'male' ? 'M' : 'F'}`);
+        // Sex: M, F, or U for a sex the records do not give.
+        lines.push(`1 SEX ${person.gender === 'male' ? 'M' : person.gender === 'female' ? 'F' : 'U'}`);
 
         // Birth (with the citations of the birth entry: 2 SOUR)
         if (person.birthDate || person.birthPlace || person.birthAddress || person.birthSourceIds?.length) {
@@ -773,18 +770,14 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
 
         lines.push(`0 ${gedcomId} FAM`);
 
-        // Determine HUSB/WIFE by gender (male = HUSB, female = WIFE). For a
-        // mixed-gender couple this is independent of person1/person2 order, so
-        // HUSB is always emitted before WIFE and the GEDCOM is round-trip
-        // stable. Same-gender couples keep person1 = HUSB, person2 = WIFE.
-        const p1Id = partnership.person1Id;
-        const p2Id = partnership.person2Id;
-        let husbId = p1Id;
-        let wifeId = p2Id;
-        if (person1 && person2 && (person1.gender === 'male') !== (person2.gender === 'male')) {
-            husbId = person1.gender === 'male' ? p1Id : p2Id;
-            wifeId = person1.gender === 'male' ? p2Id : p1Id;
-        }
+        // Determine HUSB/WIFE by gender (male = HUSB, female = WIFE, a person
+        // of unknown sex the role the other one leaves free). For a mixed
+        // couple this is independent of person1/person2 order, so HUSB is
+        // always emitted before WIFE and the GEDCOM is round-trip stable.
+        // Two of one sex (or two unknown) keep person1 = HUSB, person2 = WIFE.
+        const [husbId, wifeId] = person1 && person2
+            ? coupleSides(person1, person2).map(p => p.id)
+            : [partnership.person1Id, partnership.person2Id];
         if (personIdMap.has(husbId)) {
             lines.push(`1 HUSB ${personIdMap.get(husbId)}`);
         }
@@ -819,7 +812,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         // A "?" family of one child keeps "married" to itself (the default, a child's one known parent). A
         // childless one ("married, the spouse unknown") and one of siblings say it: with siblings it is what
         // keeps them one family there and back (R1 of the N1 round: split into a family per child).
-        const withStandIn = (!personIdMap.has(p1Id) || !personIdMap.has(p2Id)) && partnership.childIds.length === 1;
+        const withStandIn = (!personIdMap.has(partnership.person1Id) || !personIdMap.has(partnership.person2Id)) && partnership.childIds.length === 1;
         const hasMarriage = ((partnership.status === 'married' || partnership.status === 'divorced') && !withStandIn) ||
             !!partnership.startDate || !!partnership.startPlace || !!partnership.address
             || Object.values(partnership.ages ?? {}).some(a => a.trim());
@@ -937,9 +930,8 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         if (!b) {
             husbId = data.persons[a]?.gender === 'male' ? a : undefined;
             wifeId = husbId ? undefined : a;
-        } else if ((data.persons[a]?.gender === 'male') !== (data.persons[b]?.gender === 'male')) {
-            husbId = data.persons[a]?.gender === 'male' ? a : b;
-            wifeId = husbId === a ? b : a;
+        } else {
+            [husbId, wifeId] = coupleSides({ id: a, gender: data.persons[a]?.gender }, { id: b, gender: data.persons[b]?.gender }).map(p => p.id);
         }
         if (husbId) lines.push(`1 HUSB ${personIdMap.get(husbId)}`);
         if (wifeId) lines.push(`1 WIFE ${personIdMap.get(wifeId)}`);

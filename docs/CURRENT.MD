@@ -62,6 +62,12 @@ Creates a graph of UnionNode (atomic unit = couple + children) and PersonNode.
 Each UnionNode has:
 - `partnerA` (always left, typically male)
 - `partnerB` (right, female, may be null)
+
+Couple order (`orderPartners`): a man left, a woman right; a person of unknown
+sex (`gender: 'unknown'`, GEDCOM `SEX U`) on the side the other partner leaves
+free; two of unknown sex in data order (the partnership's `person1Id` left —
+GEDCOM `HUSB`); two men or two women alphabetical by id. Later steps take
+`partnerA` as the husband side, so they need no rule of their own.
 - `childIds` (sorted by birthDate, then ID)
 
 Key maps:
@@ -497,7 +503,9 @@ by-content (V3).
 
 A **PartnerChain** inlines all marriages of one person into a single horizontal
 row: the shared person sits at their gender-side end (male = LEFT), all
-partners on the opposite side. Chains merge transitively when both partners of
+partners on the opposite side. A shared person of unknown sex sits where the
+primary couple puts them (the couple order above): their extra partners go
+on their outer side, whatever those partners' sex. Chains merge transitively when both partners of
 a couple have multiple marriages. The chain lives in one **chain block**
 (`FamilyBlock.chainInfo`) that is atomic for collision resolution.
 

@@ -26,6 +26,8 @@ import {
     Person,
     Partnership,
     PartnershipStatus,
+    Gender,
+    oppositeGender,
     StromData,
     LifeEvent,
     SourceExcerpt,
@@ -906,7 +908,7 @@ export interface GedcomConversionResult {
         unsupportedTags: number;
         /** Human-readable breakdown, e.g. "TITL ×3, SSN ×2". Empty when none. */
         droppedTagSummary: string;
-        /** Individuals with SEX other than M/F (gender inferred from family role). */
+        /** Individuals with SEX other than M/F (SEX U or none): imported with the sex unknown, never guessed. */
         unknownSexPersons: number;
         /**
          * Children recorded in more than one family (born to one, adopted into
@@ -2687,15 +2689,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
     // Family roles disambiguate individuals with SEX U/missing: a HUSB is
     // male, a WIFE female. Without any role we fall back to female (legacy
     // behaviour) but COUNT it so the import summary can say so.
-    const husbIds = new Set<string>();
-    const wifeIds = new Set<string>();
-    for (const fam of families.values()) {
-        if (fam.husb) husbIds.add(fam.husb);
-        if (fam.wife) wifeIds.add(fam.wife);
-    }
     let unknownSexPersons = 0;
-    const sexGuessed = new Set<PersonId>();
-    const sexUnknown = new Set<PersonId>();
     let otherFamilyLinks = 0;
     let skippedMedia = 0;
 
@@ -2769,15 +2763,11 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
     const externalMedia: ExternalMediaRef[] = [];
     for (const [gedId, indi] of validIndividuals) {
         const personId = personIdMap.get(gedId)!;
-        let gender: 'male' | 'female';
-        if (indi.sex === 'M') gender = 'male';
-        else if (indi.sex === 'F') gender = 'female';
-        else {
-            unknownSexPersons++;
-            gender = husbIds.has(gedId) ? 'male' : 'female';
-            if (!husbIds.has(gedId) && !wifeIds.has(gedId)) sexGuessed.add(personId);
-            sexUnknown.add(personId);
-        }
+        // SEX U, another value or none: the sex is unknown — the family role
+        // (HUSB/WIFE) says who stands on which side, not the person's sex.
+        const sex = indi.sex.trim().toUpperCase();
+        const gender: Gender = sex === 'M' ? 'male' : sex === 'F' ? 'female' : 'unknown';
+        if (gender === 'unknown') unknownSexPersons++;
         // A placeholder is someone the file gives no name at all. A surname
         // alone ("1 NAME /Nováková/") is a real, known person — treating her
         // as a stand-in exported her past the privacy filter and kept her out
@@ -3272,7 +3262,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
     }
 
     /** A "?" stand-in for a parent the family does not name. */
-    const makePlaceholder = (gender: 'male' | 'female'): PersonId => {
+    const makePlaceholder = (gender: Gender): PersonId => {
         const id = toPersonId(generateId('p'));
         persons[id] = {
             id, firstName: '?', lastName: '', gender,
@@ -3322,14 +3312,16 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         let person1Id: PersonId;
         let person2Id: PersonId;
         if (parentId) {
-            // Create placeholder for the missing parent (opposite gender). Keep
-            // the male partner as person1 (HUSB), matching the two-parent path
-            // and the exporter, so import->export->import is order-stable even
-            // when the known parent is the mother.
-            const parentIsMale = persons[parentId].gender === 'male';
-            const placeholderId = makePlaceholder(parentIsMale ? 'female' : 'male');
-            person1Id = parentIsMale ? parentId : placeholderId;
-            person2Id = parentIsMale ? placeholderId : parentId;
+            // Create placeholder for the missing parent (opposite gender; for a
+            // parent of unknown sex, unknown too). Keep the HUSB as person1,
+            // matching the two-parent path and the exporter, so
+            // import->export->import is order-stable even when the known
+            // parent is the mother: by sex, else by the role the file gives.
+            const parentGender = persons[parentId].gender;
+            const placeholderId = makePlaceholder(oppositeGender(parentGender));
+            const parentIsHusb = parentGender === 'male' || (parentGender === 'unknown' && parentId === husbId);
+            person1Id = parentIsHusb ? parentId : placeholderId;
+            person2Id = parentIsHusb ? placeholderId : parentId;
         } else {
             person1Id = makePlaceholder('male');
             person2Id = makePlaceholder('female');
@@ -3452,23 +3444,6 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
             totalGedFamilies: families.size
         }
     };
-    if (sexGuessed.size > 0) guessedSex.set(result.data, sexGuessed);
-    if (sexUnknown.size > 0) unknownSex.set(result.data, sexUnknown);
     return result;
 }
 
-/** People of a converted tree whose sex the file left unknown (SEX U or none, no family role): set to female as a guess. */
-const guessedSex = new WeakMap<StromData, ReadonlySet<PersonId>>();
-
-/** The people convertToStrom gave a guessed sex in this tree (by its new ids; empty for any other object). */
-export function sexGuessedIn(data: StromData): ReadonlySet<PersonId> {
-    return guessedSex.get(data) ?? new Set();
-}
-
-/** Everyone of a converted tree whose sex the file left unknown, a family role or not (SEX U or none). */
-const unknownSex = new WeakMap<StromData, ReadonlySet<PersonId>>();
-
-/** The people whose sex the file left unknown in this converted tree (by its new ids; empty for any other object). */
-export function sexUnknownIn(data: StromData): ReadonlySet<PersonId> {
-    return unknownSex.get(data) ?? new Set();
-}

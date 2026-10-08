@@ -31,10 +31,10 @@ import { localNetworkDenied } from '../local-network.js';
 import { currentAppBrowser } from '../research-transfer.js';
 import { isTreeStale } from '../tab-sync.js';
 import { formatFlexDate } from '../dates.js';
-import { parseGedcom, convertToStrom, sexGuessedIn } from '../ged-parser.js';
+import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import {
     LiveStatus, contentFingerprint, fingerprintLike, sanitizeLiveStatus, sanitizeSyncReply, isSafariBrowser,
-    parseLiveBridge, researchSchemeUrl, readResearchHeader, stabilizeIds, keepKnownSex, researchPersonRef, ResearchAccepts,
+    parseLiveBridge, researchSchemeUrl, readResearchHeader, stabilizeIds, researchPersonRef, ResearchAccepts,
     researchIdsByContent, holdsResearchIds, ResearchSendRecord, AdoptIds, ExportXrefs, applySyncIds,
 } from '../research-link.js';
 import { loadResearchCopy } from '../research-copy.js';
@@ -1142,7 +1142,7 @@ export const researchSyncMethods = uiModule({
         const lastCopy = researchAutoState(treeId).lastCopy;
         const since = lastCopy && lastCopy.base === (link.head ?? '') ? lastCopy.intake : undefined;
         const exported = again ? null : researchGedcomExport(data, meta?.name ?? '', {
-            id: link.id, head: link.head, appTree: treeId, transcripts: this.researchTranscriptsLink(link).transcripts, sent: fps.current, sexU: link.sexU,
+            id: link.id, head: link.head, appTree: treeId, transcripts: this.researchTranscriptsLink(link).transcripts, sent: fps.current,
             ...(since ? { since } : {}),
         });
         const gedcom = exported?.content ?? '';
@@ -2144,7 +2144,6 @@ export const researchSyncMethods = uiModule({
         const now = TreeManager.getTreeMetadata(treeId)?.research;
         if (DataManager.getCurrentTreeId() !== treeId || !now || now.head !== link.head) return false;
         const previous = DataManager.getData();
-        data = keepKnownSex(data, previous, sexGuessedIn(data));
         const head = header.head || runtime.get(link.id)?.status?.head || '';
         patchResearchAutoState(treeId, { held: heldConflicts(previous, stabilizeIds(data, previous), link.head ?? '', head) });
         this.refreshResearchSyncUi();

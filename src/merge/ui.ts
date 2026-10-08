@@ -9,7 +9,7 @@ import { TreeRenderer } from '../renderer.js';
 import { UI } from '../ui.js';
 import { ZoomPan } from '../zoom.js';
 import { TreePreview, TreeCompare } from '../tree-preview.js';
-import { PersonId, PartnershipId, Person, StromData, TreeId, PartnershipStatus } from '../types.js';
+import { PersonId, PartnershipId, Person, StromData, TreeId, PartnershipStatus, isGender } from '../types.js';
 import { strings } from '../strings.js';
 import {
     MergeState,
@@ -1564,7 +1564,7 @@ class MergerUIClass {
             }
             return '—';
         }
-        if (field === 'gender' && (v === 'male' || v === 'female')) return this.escapeHtml(strings.gender[v]);
+        if (field === 'gender' && isGender(v)) return this.escapeHtml(strings.gender[v]);
         return this.escapeHtml(v || '—');
     }
 

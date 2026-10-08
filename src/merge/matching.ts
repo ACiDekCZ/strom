@@ -4,7 +4,7 @@
  */
 
 import { parseFlexDate, yearOf } from '../dates.js';
-import { PersonId, Person, Partnership, StromData } from '../types.js';
+import { PersonId, Person, Partnership, StromData, gendersCompatible } from '../types.js';
 import { sameSurname } from '../surnames.js';
 import { detectPartnershipConflicts } from './executor.js';
 import {
@@ -542,7 +542,7 @@ function propagateFromMatches(
                 if (existingParent.isPlaceholder) continue;
 
                 // Gender must match for parents
-                if (existingParent.gender !== incomingParent.gender) continue;
+                if (!gendersCompatible(existingParent.gender, incomingParent.gender)) continue;
 
                 const baseResult = calculateMatchScore(
                     existingParent, incomingParent, existingData, incomingData
@@ -665,7 +665,7 @@ function calculateMatchScore(
     const reasons: MatchReason[] = [];
 
     // Gender must match
-    if (existing.gender !== incoming.gender) {
+    if (!gendersCompatible(existing.gender, incoming.gender)) {
         return { score: 0, reasons: [] };
     }
 
@@ -800,7 +800,7 @@ function calculateRelaxedMatchScore(
     const reasons: MatchReason[] = [];
 
     // Gender must still match
-    if (existing.gender !== incoming.gender) {
+    if (!gendersCompatible(existing.gender, incoming.gender)) {
         return { score: 0, reasons: [] };
     }
 
@@ -910,7 +910,7 @@ function calculateParentMatchScore(
             if (!incomingParent) continue;
 
             // Gender must match for parents
-            if (existingParent.gender !== incomingParent.gender) continue;
+            if (!gendersCompatible(existingParent.gender, incomingParent.gender)) continue;
 
             // Check if parents match by name
             const firstNameSim = stringSimilarity(existingParent.firstName, incomingParent.firstName);
@@ -952,7 +952,7 @@ function calculatePartnerMatchScore(
     for (const existingPartner of existingPartners) {
         for (const incomingPartner of incomingPartners) {
             // Gender must match
-            if (existingPartner.gender !== incomingPartner.gender) continue;
+            if (!gendersCompatible(existingPartner.gender, incomingPartner.gender)) continue;
 
             const firstNameSim = stringSimilarity(existingPartner.firstName, incomingPartner.firstName);
             const lastNameSim = stringSimilarity(existingPartner.lastName, incomingPartner.lastName);
@@ -1042,6 +1042,8 @@ export function detectConflicts(existing: Person, incoming: Person): FieldConfli
 
         // Skip if both are empty
         if (!existingValue && !incomingValue) continue;
+        // An unknown sex is no value: the known one fills it (mergePersonData), no conflict.
+        if (field === 'gender' && (existingValue === 'unknown' || incomingValue === 'unknown')) continue;
 
         // Conflict if both have values and they differ
         if (existingValue && incomingValue && existingValue !== incomingValue) {
@@ -1069,7 +1071,7 @@ export function detectConflicts(existing: Person, incoming: Person): FieldConfli
  */
 export function quickMatchScore(p1: Person, p2: Person, data1?: StromData, data2?: StromData): number {
     // Gender must match
-    if (p1.gender !== p2.gender) return 0;
+    if (!gendersCompatible(p1.gender, p2.gender)) return 0;
 
     // A name is required: two unnamed people share an empty string (similarity
     // 1.0) and would otherwise match on a coincidental birth year alone.

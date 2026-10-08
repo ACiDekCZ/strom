@@ -129,8 +129,8 @@ describe('the published GEDCOM import contract', () => {
         expect(Object.keys(imported().places ?? {}).length).toBeGreaterThan(0);
     });
 
-    it('infers a missing SEX from the role in the family', () => {
-        expect(bride(imported()).gender).toBe('female');
+    it('reads SEX U as an unknown sex, never guessed from the role in the family', () => {
+        expect(bride(imported()).gender).toBe('unknown');
     });
 
     it('makes wedding witnesses people, not a line in a note', () => {
