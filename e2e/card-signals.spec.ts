@@ -118,7 +118,7 @@ test.describe('card signals', () => {
 
     test('the stripes sit in the bottom-right corner in every density, over no text', async ({ page }) => {
         await setup(page);
-        for (const density of ['compact', 'normal', 'detailed']) {
+        for (const density of ['custom', 'compact', 'normal', 'detailed']) {
             await page.evaluate((d) => window.Strom.UI.setCardDensity(d as never), density);
             const jan = card(page, 'Jan');
             await expect(jan.locator(':scope > .card-state')).toBeVisible();
@@ -127,7 +127,7 @@ test.describe('card signals', () => {
             expect(box.x + box.width - (stripes.x + stripes.width)).toBeGreaterThan(4);
             expect(box.y + box.height - (stripes.y + stripes.height)).toBeGreaterThan(3);
             // No text line of the card runs under them.
-            for (const sel of ['.name-text', '.birth-date', '.card-place']) {
+            for (const sel of ['.name-text', '.birth-date', '.card-place', '.card-years']) {
                 const t = jan.locator(sel);
                 if (await t.count() === 0 || !(await t.isVisible())) continue;
                 const r = (await t.boundingBox())!;
@@ -138,6 +138,54 @@ test.describe('card signals', () => {
         }
         // Decoration only: a click there is a click on the card.
         await expect(card(page, 'Jan').locator(':scope > .card-state')).toHaveCSS('pointer-events', 'none');
+    });
+
+    test('every card type draws the lock, the status stripes, the story fold and the corner dot, the custom one too (N34)', async ({ page }) => {
+        await setup(page);
+        const jan = card(page, 'Jan');
+        // Jan's own lock (the card keeps its signals; the lock sits in the top-right corner).
+        await page.evaluate(() => {
+            const dm = window.Strom.DataManager;
+            const id = Object.values(dm.getData().persons).find((p: any) => p.firstName === 'Jan')!.id;
+            dm.updatePerson(id, { isLocked: true });
+            window.Strom.TreeRenderer.render();
+        });
+        for (const density of ['custom', 'compact', 'normal', 'detailed']) {
+            await page.evaluate((d) => window.Strom.UI.setCardDensity(d as never), density);
+            await expect(page.locator('body')).toHaveAttribute('data-card-density', density);
+            await expect(jan.locator(':scope > .lock-icon'), `${density}: lock`).toBeVisible();
+            await expect(jan.locator(':scope > .card-state .st-ev i'), `${density}: stripes`).toHaveCount(2);
+            await expect(jan.locator(':scope > .card-state'), `${density}: stripes`).toBeVisible();
+            await expect(jan.locator(':scope > .card-story'), `${density}: fold`).toBeVisible();
+            await expect(jan.locator(':scope > .card-signal-dot'), `${density}: corner dot`).toHaveCount(1);
+            // No text of the card runs under the lock, the stripes or the fold.
+            const clash = await jan.evaluate((el) => {
+                const marks = [...el.querySelectorAll<HTMLElement>(':scope > .lock-icon, :scope > .card-state, :scope > .card-story')]
+                    .map(m => m.getBoundingClientRect());
+                const body = el.querySelector('.card-body')!;
+                const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+                const out: string[] = [];
+                for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+                    if (!n.textContent?.trim()) continue;
+                    const range = document.createRange();
+                    range.selectNodeContents(n);
+                    for (const r of range.getClientRects()) {
+                        if (marks.some(m => r.left < m.right - 0.5 && m.left < r.right - 0.5 && r.top < m.bottom - 0.5 && m.top < r.bottom - 0.5)) out.push(n.textContent.trim());
+                    }
+                }
+                return out;
+            });
+            expect(clash, `${density}: text under a mark`).toEqual([]);
+        }
+        // Custom, zoomed far out: the dot stands for the badge as on the other cards.
+        await page.evaluate(() => window.Strom.UI.setCardDensity('custom'));
+        await expect.poll(async () => {
+            await page.evaluate(() => window.Strom.ZoomPan.zoomOut());
+            await page.waitForTimeout(260);
+            return page.evaluate(() => window.Strom.ZoomPan.getScale());
+        }, { timeout: 10000 }).toBeLessThan(0.55);
+        await expect(jan.locator('.card-signal')).toBeHidden();
+        await expect(jan.locator(':scope > .card-signal-dot')).toBeVisible();
     });
 
     test('the ⇄ other-trees pill: the stripes rise above it, the text keeps clear', async ({ page }) => {
@@ -155,7 +203,7 @@ test.describe('card signals', () => {
         const jan = card(page, 'Jan');
         const overlap = (a: { x: number; y: number; width: number; height: number }, b: typeof a) =>
             a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
-        for (const density of ['normal', 'compact', 'detailed']) {
+        for (const density of ['custom', 'normal', 'compact', 'detailed']) {
             await page.evaluate((d) => window.Strom.UI.setCardDensity(d as never), density);
             await expect(jan.locator('.cross-tree-badge')).toBeVisible();
             await expect(jan).toHaveClass(/has-edge-br/);

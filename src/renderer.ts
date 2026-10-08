@@ -1475,10 +1475,9 @@ class TreeRendererClass {
                     ${trade ? `<div class="card-trade">${this.escapeHtml(trade)}</div>` : ''}
                     ${density === 'detailed' && metaPlace ? `<div class="card-place">${this.escapeHtml(metaPlace)}</div>` : ''}
                 </div>
-                ${isLocked ? `<span class="lock-icon" title="${strings.lock.lockedTooltip}">${iconSvg('lock', { size: 10 })}</span>` : ''}
-                ${stateHtml}
-                ${dotHtml}
             `;
+            // The lock, the status stripes and the corner dot: on every card type, the custom one too (N34).
+            html += `${isLocked ? `<span class="lock-icon" title="${strings.lock.lockedTooltip}">${iconSvg('lock', { size: 10 })}</span>` : ''}${stateHtml}${dotHtml}`;
 
             // Chain-link "relations" tab — lives in the top-right edge slot,
             // to the LEFT of the branch tabs so those (always visible, pinned to
