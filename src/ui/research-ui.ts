@@ -2689,8 +2689,12 @@ export const researchUiMethods = uiModule({
             if (!menu.contains(e.target as Node)) this.closeLiveTaskMenu();
         };
         document.addEventListener('keydown', onKey, true);
-        setTimeout(() => document.addEventListener('mousedown', onDown, true), 0);
+        // Armed after the press that opened it. A menu closed before that
+        // (Escape at once, a panel redraw) disarms it too: added after the
+        // cleanup, the stray listener closed every later menu at its first press.
+        const arm = setTimeout(() => document.addEventListener('mousedown', onDown, true), 0);
         liveTaskMenuCleanup = () => {
+            clearTimeout(arm);
             document.removeEventListener('keydown', onKey, true);
             document.removeEventListener('mousedown', onDown, true);
             anchor.setAttribute('aria-expanded', 'false');

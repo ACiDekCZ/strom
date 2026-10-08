@@ -143,6 +143,18 @@ test.describe('research directions', () => {
         expect(await launched(page)).toEqual([`strom-research://direction?tree=${UUID}&id=G0002&do=pause`]);
     });
 
+    test('⋯ closed at once (Escape, a redraw) leaves the next menu working: Pause ↗ is not lost', async ({ page }) => {
+        await follow(page);
+        await openOverview(page);
+        const more = row(page, 'G0002').locator('.research-direction__more');
+        // Opened and closed in one go, before its press-outside guard is armed.
+        await more.evaluate((b: HTMLElement) => { b.click(); b.click(); });
+        await expect(page.locator('#live-direction-menu')).toHaveCount(0);
+        await more.click();
+        await page.locator('#live-direction-menu [data-do="pause"]').click();
+        expect(await launched(page)).toEqual([`strom-research://direction?tree=${UUID}&id=G0002&do=pause`]);
+    });
+
     test('detail: one at a time; generations for ancestors; Work on it ↗; Show in tree', async ({ page }) => {
         await follow(page);
         await openOverview(page);

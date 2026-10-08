@@ -234,6 +234,19 @@ test.describe('live panel: up next, update, spend', () => {
         await expect(rows).toHaveCount(5);
     });
 
+    test('a task menu closed at once (Escape, a redraw) leaves the next one working: Park ↗ is not lost', async ({ page }) => {
+        await follow(page, { queue: [{ id: 'T0101', text: 'Matriky Chlumy 1860–1870', state: 'next' }] });
+        const more = page.locator('#live-panel .live-queue-more').first();
+        await expect(more).toBeVisible();
+        // Opened and closed in one go, before its press-outside guard is armed
+        // (on a slow machine Escape or a status redraw came that early).
+        await more.evaluate((b: HTMLElement) => { b.click(); b.click(); });
+        await expect(page.locator('#live-task-menu')).toHaveCount(0);
+        await more.click();
+        await page.locator('#live-task-menu').getByText('Park ↗').click();
+        expect(await launched(page)).toEqual([`strom-research://task?tree=${UUID}&task=T0101&do=park`]);
+    });
+
     test('without the fields: no queue, no update strip, no spend; the idle panel has no queue', async ({ page }) => {
         await follow(page, {});
         const panel = page.locator('#live-panel');

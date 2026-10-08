@@ -337,8 +337,11 @@ export const researchDirectionsMethods = uiModule({
             if (!menu.contains(e.target as Node) && e.target !== anchor) this.closeDirectionMenu();
         };
         document.addEventListener('keydown', onKey, true);
-        setTimeout(() => document.addEventListener('pointerdown', onDown, true), 0);
+        // Armed after the press that opened it, and disarmed with the menu
+        // (closed at once, the stray listener closed every later menu).
+        const arm = setTimeout(() => document.addEventListener('pointerdown', onDown, true), 0);
         directionMenuCleanup = () => {
+            clearTimeout(arm);
             document.removeEventListener('keydown', onKey, true);
             document.removeEventListener('pointerdown', onDown, true);
             anchor.removeAttribute('aria-expanded');
