@@ -1,7 +1,7 @@
 import { test, expect, devices } from '@playwright/test';
 import { existsSync } from 'node:fs';
 import { webkit } from 'playwright';
-import { openApp, card } from './helpers.js';
+import { openApp, card, controlCardComesBack } from './helpers.js';
 import { expectFits, phoneScreens, sampleTree } from './mobile-screens.js';
 import { poll, openResearchMenu, researchGed, HEAD, UUID, BRIDGE, dropFile, block } from './research-bridge.js';
 
@@ -61,5 +61,9 @@ test.describe('Safari on a computer (WebKit)', () => {
         await expect(block(page)).toContainText("Safari can't reach the research");
         await expect(block(page)).toContainText('open the tree in Chrome, Edge or Firefox');
         await expect(block(page).locator('[data-action="downloadGedcom"]')).toBeVisible();
+    });
+    // B17-1: Safari reported the shown minimap inside the hidden card as hidden.
+    test('with the zoom buttons off the minimap and its card come back after the tree fitted', async ({ page }) => {
+        await controlCardComesBack(page);
     });
 });

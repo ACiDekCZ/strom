@@ -263,3 +263,46 @@ export async function importJsonAsNewTree(page: Page, filePath: string, treeName
     await dialog.getByRole('button', { name: 'Import' }).click();
     await expect(dialog).toBeHidden();
 }
+
+/**
+ * B17-1: with the zoom buttons off the bottom-right control card hides as
+ * empty while the tree fits, and must come back with the minimap when zoomed
+ * in, and with the buttons when they are turned on again. WebKit reports a
+ * shown minimap inside the hidden card as `display: none`, so a decision from
+ * computed style kept the card hidden until a reload. Sample tree, a desktop
+ * viewport set by the caller.
+ */
+export async function controlCardComesBack(page: Page): Promise<void> {
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(card(page, 'Johan')).toBeVisible();
+    const block = page.locator('.control-block');
+    const panel = page.locator('#minimap-panel');
+    // A fit while a zoom or the opening view still glides is taken over by the
+    // glide: fit again until the minimap has hidden.
+    const fit = () => expect(async () => {
+        await page.evaluate(() => window.Strom.ZoomPan.fitToScreen());
+        await expect(panel).toBeHidden({ timeout: 1000 });
+    }).toPass();
+
+    // Buttons off, the tree fits: no minimap, so no card.
+    await page.evaluate(() => window.Strom.UI.toggleZoomControls(false));
+    await fit();
+    await expect(block).toBeHidden();
+    // Zoomed in: the tree overflows, the minimap and its card show.
+    const scale = () => page.evaluate(() => window.Strom.ZoomPan.getTransform().scale);
+    const fitted = await scale();
+    for (let i = 0; i < 4; i++) await page.evaluate(() => window.Strom.ZoomPan.zoomIn());
+    await expect(panel).toBeVisible();
+    await expect(block).toBeVisible();
+    // Fitted again once the zoom has glided to its end: both hide.
+    await expect.poll(scale).toBeCloseTo(fitted * 1.3 ** 4, 5);
+    await fit();
+    await expect(block).toBeHidden();
+    // The buttons back on in Settings: they show, in their card.
+    await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+    await page.locator('#settings-modal #zoom-controls-toggle').check();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.zoom-controls')).toBeVisible();
+    await expect(block).toBeVisible();
+}

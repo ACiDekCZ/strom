@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, createFirstPerson, addRelation, card } from './helpers.js';
+import { openApp, createFirstPerson, addRelation, card, controlCardComesBack } from './helpers.js';
 
 function activeTreeId(page: Page): Promise<string> {
     return page.evaluate(() => window.Strom.TreeManager.getActiveTreeId());
@@ -126,6 +126,13 @@ test('B16-2: with the zoom buttons off the control card follows the minimap', as
     await page.evaluate(() => window.Strom.UI.toggleMinimap(true));
     await expect(page.locator('#minimap-panel')).toBeVisible();
     await expect(page.locator('.control-block')).toBeVisible();
+});
+
+// B17-1: the card hidden as empty comes back (the same scenario runs in
+// WebKit in mobile-webkit.spec.ts, where the bug was).
+test('B17-1: with the zoom buttons off the minimap and its card come back after the tree fitted', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await controlCardComesBack(page);
 });
 
 test('floating zoom buttons can be turned off in settings', async ({ page }) => {

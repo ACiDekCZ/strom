@@ -427,12 +427,10 @@ export const miscMethods = uiModule({
         // timeline and fan views (own scroll containers) they do nothing, so
         // hide them. The user can also turn them off entirely in settings.
         const zoomControls = document.querySelector('.zoom-controls') as HTMLElement | null;
-        if (zoomControls) {
-            const hidden = STANDALONE_VIEWS.includes(mode) || !SettingsManager.isZoomControlsEnabled();
-            zoomControls.style.display = hidden ? 'none' : '';
-        }
+        const zoomHidden = STANDALONE_VIEWS.includes(mode) || !SettingsManager.isZoomControlsEnabled();
+        if (zoomControls) zoomControls.style.display = zoomHidden ? 'none' : '';
         // No empty card left behind when nothing in the block shows.
-        syncControlBlock();
+        syncControlBlock({ zoom: !!zoomControls && !zoomHidden });
 
         // Toolbar "Add family" shortcut (opt-in setting).
         const familyBtn = document.getElementById('toolbar-family-btn');

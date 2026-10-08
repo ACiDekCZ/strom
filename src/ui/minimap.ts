@@ -23,18 +23,24 @@ const MINIMAP_PAD = 8;
 // Below this world-overflow ratio the tree fits comfortably — hide the minimap.
 const FIT_MARGIN = 1.05;
 
+/** What the control block holds as shown, by the decision of each part's owner. */
+const controlBlockParts = { zoom: true, minimap: false };
+
 /**
  * The bottom-right control block is a card (background, border, shadow) around
  * the minimap and the zoom buttons. With both hidden (the zoom buttons turned
  * off in settings, no minimap) the card would stay as an empty circle, so it
- * hides with them, and comes back as soon as either shows again. Called by
- * both writers: updateMinimap and the view-mode UI (zoom buttons).
+ * hides with them, and comes back as soon as either shows again. Each owner
+ * reports its part: updateMinimap the minimap, the view-mode UI the zoom
+ * buttons. Decided from that state only, never from the children's computed
+ * style or size: inside the hidden block WebKit reports a shown minimap as
+ * `display: none` (and nothing there has a size), so the block never came back.
  */
-export function syncControlBlock(): void {
+export function syncControlBlock(parts: Partial<typeof controlBlockParts>): void {
+    Object.assign(controlBlockParts, parts);
     const block = document.querySelector<HTMLElement>('.control-block');
     if (!block) return;
-    const shown = [...block.children].some(el => getComputedStyle(el).display !== 'none');
-    block.classList.toggle('control-block--empty', !shown);
+    block.classList.toggle('control-block--empty', !controlBlockParts.zoom && !controlBlockParts.minimap);
 }
 
 export interface WorldBox { minX: number; minY: number; maxX: number; maxY: number; }
@@ -159,7 +165,7 @@ export const minimapMethods = uiModule({
             || STANDALONE_VIEWS.includes(TreeRenderer.getViewMode())) {
             panel.style.display = 'none';
             this.minimapTransform = null;
-            syncControlBlock();
+            syncControlBlock({ minimap: false });
             return;
         }
 
@@ -172,12 +178,12 @@ export const minimapMethods = uiModule({
         if (!overflows) {
             panel.style.display = 'none';
             this.minimapTransform = null;
-            syncControlBlock();
+            syncControlBlock({ minimap: false });
             return;
         }
 
         panel.style.display = 'block';
-        syncControlBlock();
+        syncControlBlock({ minimap: true });
         this.minimapBox = box;
         this.minimapTransform = computeMinimapTransform(box, MINIMAP_W, MINIMAP_H, MINIMAP_PAD);
         this.drawMinimap();
