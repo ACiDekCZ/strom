@@ -2510,6 +2510,7 @@ const stringsEN = {
         createdBy: 'Created by',
         author: 'Author',
         authorName: 'Milan Víšek',
+        sourceCode: 'Source code',
         close: 'Close',
         currentData: 'Current data',
         stats: {
@@ -6122,6 +6123,7 @@ const stringsCZ: StringsType = {
         createdBy: 'Vytvořil',
         author: 'Autor',
         authorName: 'Milan Víšek',
+        sourceCode: 'Zdrojový kód',
         close: 'Zavřít',
         currentData: 'Aktuální data',
         stats: {
@@ -9702,6 +9704,7 @@ const stringsDE: StringsType = {
         createdBy: 'Erstellt von',
         author: 'Autor',
         authorName: 'Milan Víšek',
+        sourceCode: 'Quellcode',
         close: 'Schließen',
         currentData: 'Aktuelle Daten',
         stats: {

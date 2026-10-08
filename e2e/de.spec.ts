@@ -159,6 +159,15 @@ test('German UI: html lang and the main dialogs are free of English words', { ta
     await closeWithEscape(page, book);
 });
 
+test('German UI: About names the license and links the source code in German', async ({ page }) => {
+    await openApp(page);
+    await page.evaluate(() => window.Strom.UI.showAboutDialog());
+    const about = page.locator('#about-modal');
+    await expect(about.locator('#about-license')).toHaveText('AGPL-3.0-or-later');
+    await expect(about.getByRole('link', { name: 'Quellcode' }))
+        .toHaveAttribute('href', 'https://github.com/ACiDekCZ/strom');
+});
+
 test('German UI: the research — its menu, the states of the block, Research for this tree, the person, materials, installing', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.clock.install();

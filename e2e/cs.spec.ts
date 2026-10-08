@@ -33,4 +33,8 @@ test('Czech UI: about dialog shows the version and Czech labels', async ({ page 
     await expect(about).toContainText('Vytvořil');
     // The support link says it in Czech, addressing no one.
     await expect(about.getByRole('link', { name: 'Koupit kávu' })).toBeVisible();
+    // License and the link to the source code (AGPL section 13).
+    await expect(about.locator('#about-license')).toHaveText('AGPL-3.0-or-later');
+    await expect(about.getByRole('link', { name: 'Zdrojový kód' }))
+        .toHaveAttribute('href', 'https://github.com/ACiDekCZ/strom');
 });

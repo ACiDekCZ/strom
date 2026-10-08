@@ -112,12 +112,41 @@ npm test         # Run tests
 
 Copyright © 2026 Milan Víšek.
 
-This Source Code Form is subject to the terms of the Mozilla Public License,
-v. 2.0. If a copy of the MPL was not distributed with this file, You can
-obtain one at https://mozilla.org/MPL/2.0/. See [LICENSE](LICENSE).
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Affero General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for more
+details.
+
+You should have received a copy of the GNU Affero General Public License along
+with this program. If not, see https://www.gnu.org/licenses/. See
+[LICENSE](LICENSE).
+
+The source code of the running app (https://stromapp.info/run/) is at
+https://github.com/ACiDekCZ/strom; the app links to it in its About dialog.
 
 "Strom" is the name of the original project (https://stromapp.info);
 please give a modified version a name of its own.
+
+### Third-party components
+
+These keep their own licenses; their notices and license texts are also
+embedded in the app's HTML (a comment in `<head>`):
+
+- **Source Serif 4** font: Copyright 2014 - 2021 Adobe Systems Incorporated,
+  with Reserved Font Name "Source"; SIL Open Font License 1.1.
+- **Instrument Sans** font: Copyright 2022 The Instrument Sans Project
+  Authors; SIL Open Font License 1.1.
+- Some interface icons come from or are based on **Lucide** (ISC License,
+  Copyright (c) Lucide Icons and Contributors) and **Feather** (MIT License,
+  Copyright (c) 2013-2023 Cole Bemis).
+- Map tiles are loaded at run time from OpenStreetMap (© OpenStreetMap
+  contributors, https://www.openstreetmap.org/copyright); the map shows this
+  attribution.
 
 ## Author
 
