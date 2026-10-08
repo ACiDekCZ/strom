@@ -311,6 +311,10 @@ not its label, and is kept in the event's note:
   of one sex (or two unknown) keep the order of the couple. In the tree a
   couple of two persons of unknown sex stands in the file's order, the `HUSB`
   on the left.
+- Two `WIFE` or two `HUSB` in one family (a couple of one sex, as some
+  programs write it) are both partners, in the file's order, with the
+  family's children; the sex comes from each person's `SEX`, never from the
+  role. A third partner line is left out (counted as a dropped tag).
 - A family with one parent gets a "?" stand-in for the other (of the opposite
   sex; of unknown sex for a parent of unknown sex), and keeps its
   witnesses, story and everything else. A family naming two or more children
@@ -620,8 +624,12 @@ the research in the header:
 - `_STROM_SENT` — the fingerprint of the tree as sent, only on a send straight
   to the bridge: the research's status (`inbox`, `sends`) names it back, so the
   app knows its send is waiting, written or discarded.
-- `_STROM_SEX_U Y` — `SEX U` stands exactly where the sex is unknown in the
-  app; an `M` or `F` the research has as `U` is the user's. Since data version
+- `_STROM_SEX_U Y` — in the header of every GEDCOM the app writes (any export,
+  a send, the hand-over of a tree with no research yet), not only a tied one:
+  `SEX U` stands exactly where the sex is unknown in the
+  app; an `M` or `F` the research has as `U` is the user's. Strom Research
+  1.12.1 and 1.13.0-beta.2 read the app's `SEX U` so only with this mark; it
+  can go once the research tells by the header's `2 VERS` or data version 12. Since data version
   12 (3.10) the app keeps an unknown sex as such and never guesses one; an
   older app (3.9) wrote `U` only where the research's unknown stayed unchanged
   and guessed the sex elsewhere.

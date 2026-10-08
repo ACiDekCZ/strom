@@ -621,8 +621,8 @@ describe('research version in the header (_STROM_HEAD)', () => {
     });
 
     it('a linked export writes _STROM_TREE and _STROM_HEAD, not SOUR STROM_RESEARCH', () => {
-        expect(researchHeaderLines({ id: RID.toUpperCase(), head: 'ABCDEF1' })).toEqual([`1 _STROM_TREE ${RID}`, '1 _STROM_HEAD abcdef1', '1 _STROM_SEX_U Y']);
-        expect(researchHeaderLines({ id: RID })).toEqual([`1 _STROM_TREE ${RID}`, '1 _STROM_SEX_U Y']);
+        expect(researchHeaderLines({ id: RID.toUpperCase(), head: 'ABCDEF1' })).toEqual([`1 _STROM_TREE ${RID}`, '1 _STROM_HEAD abcdef1']);
+        expect(researchHeaderLines({ id: RID })).toEqual([`1 _STROM_TREE ${RID}`]);
         expect(researchHeaderLines({ id: 'nope' })).toEqual([]);
         const data: StromData = { persons: {}, partnerships: {} } as StromData;
         const ged = exportToGedcom(data, 'T', { research: { id: RID, head: 'abcdef1' } }).content;
@@ -630,6 +630,24 @@ describe('research version in the header (_STROM_HEAD)', () => {
         expect(ged).toContain('1 _STROM_HEAD abcdef1');
         expect(ged).not.toContain('STROM_RESEARCH');
         expect(exportToGedcom(data, 'T').content).not.toContain('_STROM_TREE');
+    });
+
+    // Strom Research 1.12.1 and 1.13.0-beta.2 read the app's SEX U as a sex left unknown only with
+    // this mark (else as an app's guess). It may go — this test with it — once the production
+    // research tells it by the header's 2 VERS (3.10.0-beta.11 on) or by the data version 12.
+    it('every GEDCOM the app writes has 1 _STROM_SEX_U Y in its header, once: an export, a send, a hand-over (U01)', () => {
+        const data = { persons: {}, partnerships: {} } as unknown as StromData;
+        const headerOf = (ged: string) => ged.split(/\r?\n(?=0 )/)[0].split(/\r?\n/);
+        for (const ged of [
+            exportToGedcom(data).content,                                            // a plain export, the hand-over
+            exportToGedcom(data, 'T', { research: { id: RID, head: 'abcdef1', sent: 'v2-1' } }).content,   // a send
+            exportToGedcom(data, 'T', { research: { id: 'nope' } }).content,          // a tie that is no research
+        ]) {
+            const head = headerOf(ged);
+            expect(head[0]).toBe('0 HEAD');
+            expect(head.filter(l => l === '1 _STROM_SEX_U Y')).toHaveLength(1);
+            expect(ged.match(/_STROM_SEX_U/g)).toHaveLength(1);
+        }
     });
 
     it('SEX U goes back exactly for a sex unknown here (U01): M and F are the user\'s, the header says so', () => {
@@ -642,10 +660,12 @@ describe('research version in the header (_STROM_HEAD)', () => {
         expect(sexOf(ged, 'a')).toBe('U');
         expect(sexOf(ged, 'b')).toBe('F');
         expect(sexOf(ged, 'c')).toBe('M');
-        // Without a research the same: unknown is SEX U in every file.
+        // Without a research the same: unknown is SEX U in every file, and the header says so
+        // (the hand-over of a tree with no research yet is such a file).
         const plain = exportToGedcom(data, 'T').content;
         expect(sexOf(plain, 'a')).toBe('U');
-        expect(plain).not.toContain('_STROM_SEX_U');
+        expect(plain.match(/^1 _STROM_SEX_U Y$/gm)).toHaveLength(1);
+        expect(ged.match(/^1 _STROM_SEX_U Y$/gm)).toHaveLength(1);
     });
 
     it('a tie of an older app (ResearchLink.sexU): a person whose sex is still the one it names becomes unknown, a changed one stays (U01)', () => {

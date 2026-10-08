@@ -170,6 +170,8 @@ test.describe('the research\'s numbers after a hand-over', () => {
         const b = await handOver(page);
         // The hand-over itself carries no numbers (a new tree).
         expect(people(b.adopted[0]).map(p => p.refn)).toEqual(['', '', '']);
+        // Its header says SEX U is a sex left unknown, as every file of the app does (U01: the research 1.12.1 needs it).
+        expect(b.adopted[0].split(/\n(?=0 )/)[0]).toMatch(/^1 _STROM_SEX_U Y$/m);
         // Its version loaded right after the hand-over: the research's numbers here.
         expect(b.gedAsks).toBeGreaterThan(0);
         await expect.poll(() => refns(page)).toEqual(['1:P0001', '2:P0002', '3:P0003']);

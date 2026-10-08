@@ -334,13 +334,13 @@ describe('the header of a send', () => {
         const lines = researchHeaderLines({ id: RID, head: 'aaaaaaa', appTree: 'tree_1700000000000_ab12c', transcripts: 'evidence', sent: 'v2-1k3f-abc-def' });
         expect(lines).toEqual([
             `1 _STROM_TREE ${RID}`, '1 _STROM_HEAD aaaaaaa', '1 _STROM_APP_TREE tree_1700000000000_ab12c',
-            '1 _STROM_TRANSCRIPTS evidence', '1 _STROM_SENT v2-1k3f-abc-def', '1 _STROM_SEX_U Y',
+            '1 _STROM_TRANSCRIPTS evidence', '1 _STROM_SENT v2-1k3f-abc-def',
         ]);
     });
 
     it('leaves out what does not fit the research\'s rules', () => {
         const lines = researchHeaderLines({ id: RID, appTree: 'tree with spaces', sent: 'x'.repeat(65) });
-        expect(lines).toEqual([`1 _STROM_TREE ${RID}`, '1 _STROM_SEX_U Y']);
+        expect(lines).toEqual([`1 _STROM_TREE ${RID}`]);
     });
 });
 

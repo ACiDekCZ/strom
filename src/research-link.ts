@@ -1699,10 +1699,7 @@ export function researchHeaderLines(link: ResearchHeaderInfo | null | undefined)
         ...(link?.transcripts === 'evidence' || link?.transcripts === 'lead' ? [`1 _STROM_TRANSCRIPTS ${link.transcripts}`] : []),
         ...(sent ? [`1 _STROM_SENT ${sent}`] : []),
         ...(since ? [`1 _STROM_SINCE ${since}`] : []),
-        // SEX U stands exactly where the sex is unknown here (Gender 'unknown', never a guess):
-        // a sex M or F the research has as U is the user's. The research (rc.47 on) reads its
-        // file so only with this mark; without it, it takes the file for an app that guesses.
-        '1 _STROM_SEX_U Y',
+        // `1 _STROM_SEX_U Y` follows in every file the app writes (src/ged-exporter.ts STROM_SEX_U_LINE).
     ];
 }
 

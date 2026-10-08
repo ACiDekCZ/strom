@@ -2082,11 +2082,20 @@ export function parseGedcom(content: string): ParsedGedcom {
                 } else if (currentType === 'FAM') {
                     const fam = currentRecord as GedcomFamily;
                     switch (tag) {
+                        // A couple of one sex as some programs write it: two WIFE or two HUSB.
+                        // The second partner takes the slot left free, the first one written
+                        // stays first (person1); the sexes come from SEX, never from the role.
                         case 'HUSB':
-                            fam.husb = value;
+                            if (!value || value === fam.husb || value === fam.wife) break;
+                            if (!fam.husb) fam.husb = value;
+                            else if (!fam.wife) fam.wife = value;
+                            else drop('HUSB');
                             break;
                         case 'WIFE':
-                            fam.wife = value;
+                            if (!value || value === fam.wife || value === fam.husb) break;
+                            if (!fam.wife) fam.wife = value;
+                            else if (!fam.husb) { fam.husb = fam.wife; fam.wife = value; }
+                            else drop('WIFE');
                             break;
                         case 'CHIL':
                             // The same child listed twice is one child.

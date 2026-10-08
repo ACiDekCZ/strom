@@ -400,6 +400,19 @@ export function countFamilies(data: StromData): number {
 /**
  * Export StromData to GEDCOM 5.5.1 format
  */
+/**
+ * In the header of EVERY file the app writes (an export, a send to the research,
+ * the hand-over of a tree that has no research yet): SEX U stands exactly where
+ * the sex is unknown here (Gender 'unknown', never a guess), and an M or F the
+ * research has as U is the user's. Strom Research 1.12.1 and 1.13.0-beta.2 read
+ * the app's SEX U as unknown only with this mark; without it they take the file
+ * for an app that guesses (a husband male, anyone else female).
+ * It may go once the production research tells it by the header's `2 VERS`
+ * (3.10.0-beta.11 or newer, as its development version does) or by the data
+ * version 12, and no research before that is in use.
+ */
+export const STROM_SEX_U_LINE = '1 _STROM_SEX_U Y';
+
 export function exportToGedcom(data: StromData, treeName?: string, options: GedcomExportOptions = {}): GedcomExportResult {
     if (options.content) data = applyContentOptions(data, options.content);
     const lines: string[] = [];
@@ -515,6 +528,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
     lines.push('2 FORM LINEAGE-LINKED');
     lines.push('1 CHAR UTF-8');
     lines.push(...researchHeaderLines(options.research));
+    lines.push(STROM_SEX_U_LINE);
 
     // Surname-variant groups: no GEDCOM structure fits "these spellings mean one
     // family", so they ride in a header NOTE (standard, kept by every reader).
