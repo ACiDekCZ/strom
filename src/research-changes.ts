@@ -44,6 +44,8 @@ export function stable(value: unknown): string {
 
 const differs = (a: unknown, b: unknown): boolean => stable(a) !== stable(b);
 const fullName = (p: Person): string => `${p.firstName} ${p.lastName}`.trim() || '?';
+/** The name with its titles ("Ing. Josef Novák st."): a title the load takes away is a value it overwrites (B18-1). */
+const titledName = (p: Person): string => [p.titleBefore, p.firstName, p.lastName, p.titleAfter].map(v => v?.trim() ?? '').filter(Boolean).join(' ');
 
 /**
  * The base kept for a tree: the data as the research last had them, images
@@ -315,7 +317,8 @@ export function diffValues(here: StromData, there: StromData): ValueDiff {
         }
         if (stable(h) === stable(t)) continue;
         const open = openConflictFacts(t);
-        field(h, 'name', fullName(h) === '?' ? '' : fullName(h), fullName(t) === '?' ? '' : fullName(t), open.has('NAME') ? { conflict: true } : {});
+        field(h, 'name', fullName(h) === '?' ? '' : titledName(h), fullName(t) === '?' ? '' : titledName(t),
+            open.has('NAME') || open.has('NPFX') || open.has('NSFX') ? { conflict: true } : {});
         if (h.gender !== t.gender && h.gender && t.gender) rows.push({ personId: h.id, name: fullName(h), field: 'gender', here: h.gender, there: t.gender, ...(open.has('SEX') ? { conflict: true } : {}) });
         const birth = open.has('BIRT') ? { conflict: true } : {};
         const death = open.has('DEAT') ? { conflict: true } : {};

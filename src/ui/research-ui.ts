@@ -32,7 +32,7 @@ import { formatLiveTime, formatLiveClock } from '../live-time.js';
 import { isMobile } from '../breakpoints.js';
 import {
     readResearchHeader, parseLoopbackUrl, parseLiveBridge, contentFingerprint, fingerprintLike,
-    decideResearchOpen, stabilizeIds, keepTitles, carryOverMedia, carryOverUnknownPartners, sanitizeLiveStatus, sanitizeLiveChange,
+    decideResearchOpen, stabilizeIds, keepTitles, researchHasTitles, withResearchTitles, TITLES_FEATURE, carryOverMedia, carryOverUnknownPartners, sanitizeLiveStatus, sanitizeLiveChange,
     sanitizeWorking, parseEventData, extractChangedRefs, personsByRefs,
     humanizeChange, isGedcomFileName, isSafariBrowser,
     parseSendBridge, pickSendDefault, sanitizeSyncReply, researchSchemeUrl, researchTaskRef,
@@ -543,6 +543,22 @@ export function postCancel(url: string, reason: SendCancelReason): void {
         headers: { 'Content-Type': 'text/plain; charset=utf-8' },
         body: JSON.stringify({ reason }),
     }).catch(() => { /* the research gives up on its own */ });
+}
+
+/**
+ * The base a loaded research version leaves (its fingerprint and kept copy)
+ * and whether the research has had the tree's titles (ResearchLink.titlesIn),
+ * B18-1. `loaded`: the tree as loaded; `research`: the research's version as
+ * it came, before keepTitles. A version with every title of the tree has had
+ * them (`titlesIn`: the one before, else 'load'). One that lacks some kept
+ * here has not: a research that keeps titles (`knowsTitles`) holds the tree
+ * with its own names, so those titles are changes to send; one that does not
+ * know titles (or not said yet) cannot take them — they stay here, in step.
+ */
+export function researchTitlesBase(loaded: StromData, research: StromData, knowsTitles: boolean, before: string | undefined): { base: StromData; titlesIn: string | undefined } {
+    const theirs = withResearchTitles(loaded, research);
+    if (theirs === loaded) return { base: loaded, titlesIn: before || 'load' };
+    return { base: knowsTitles ? theirs : loaded, titlesIn: undefined };
 }
 
 /**
@@ -1210,12 +1226,17 @@ export const researchUiMethods = uiModule({
         let holdsSent = false;
         // "Load the research version?" with the values it overwrites (asked at every load the user asks for).
         let askLoad = false;
+        /** The research's version as it came, before the titles it never got were kept (B18-1). */
+        const research = data;
+        const features = source.treeId ? this.researchStatusOf(source.treeId)?.features : null;
+        const knowsTitles = !!features?.includes(TITLES_FEATURE);
         if (existing) {
             const unreadable = TreeManager.isTreeUnreadable(existing.id);
             previous = unreadable ? null : await readTree(existing.id);
             if (previous) {
-                // Titles a research that does not know them dropped stay (T07): never asked about, never lost.
-                data = keepTitles(data, previous, source.treeId ? this.researchStatusOf(source.treeId)?.features : null);
+                // Titles a research that does not know them dropped stay (T07), and so do those a research that
+                // knows them never got (B18-1): never asked about, never lost.
+                data = keepTitles(data, previous, features, researchHasTitles(existing.research, features));
             }
             action = decideResearchOpen(existing.research, previous ? fingerprintLike(previous, existing.research?.fingerprint) : null);
             // The app's images stay (carryOverMedia); those of people or sources
@@ -1382,16 +1403,20 @@ export const researchUiMethods = uiModule({
 
         if (source.treeId) {
             const head = opts.head || source.head;
+            const loaded = DataManager.getCurrentTreeId() === treeId ? DataManager.getData() : data;
+            const { base, titlesIn } = researchTitlesBase(loaded, research, knowsTitles, existing?.research?.titlesIn);
             TreeManager.setResearchLink(treeId, {
                 id: source.treeId,
-                fingerprint: contentFingerprint(DataManager.getData()),
+                fingerprint: contentFingerprint(base),
                 syncedAt: new Date().toISOString(),
                 ...(head ? { head } : {}),
                 ...(source.mode === 'archive' ? { mode: 'archive' as const } : {}),
+                ...(titlesIn ? { titlesIn } : {}),
             });
+            if (!titlesIn) TreeManager.patchResearchLink(treeId, { titlesIn: undefined });
             // The load itself counted as an edit (it went through the edit path before the tie moved on): nothing waits now.
             patchResearchAutoState(treeId, { edits: undefined, unsentSince: undefined });
-            this.researchKeepCopy(treeId, DataManager.getCurrentTreeId() === treeId ? DataManager.getData() : data);
+            this.researchKeepCopy(treeId, base);
         }
         // "Restore the state before loading", offered while the tree is just what was loaded.
         if (backupId && DataManager.getCurrentTreeId() === treeId) {
@@ -2213,8 +2238,11 @@ export const researchUiMethods = uiModule({
         const active = DataManager.getCurrentTreeId() === s.treeId;
         const previous = await readTree(s.treeId);
         // Images added in the app before following stay (the research has none of them).
-        // Titles a research that does not know them dropped stay (T07).
-        const known = previous ? keepTitles(data, previous, this.researchStatusOf(s.researchId)?.features) : data;
+        // Titles a research that does not know them dropped stay (T07), and those it never got (B18-1).
+        const features = this.researchStatusOf(s.researchId)?.features;
+        const knowsTitles = !!features?.includes(TITLES_FEATURE);
+        const link = TreeManager.getTreeMetadata(s.treeId)?.research;
+        const known = previous ? keepTitles(data, previous, features, researchHasTitles(link, features)) : data;
         const kept = previous ? carryOverMedia(stabilizeIds(known, previous), previous).data : data;
         const stable = migrateData(previous && !this.researchKeepsLoneFamilies(s.researchId) ? carryOverUnknownPartners(kept, previous) : kept);
         if (active) {
@@ -2226,15 +2254,20 @@ export const researchUiMethods = uiModule({
             TreeManager.updateTreeFromImport(s.treeId, stable);
         }
         if (head) s.head = head;
+        // Titles kept that the research never got: its version without them is the base, they go with the next send.
+        const loaded = active ? DataManager.getData() : stable;
+        const { base, titlesIn } = researchTitlesBase(loaded, data, knowsTitles, link?.titlesIn);
         TreeManager.setResearchLink(s.treeId, {
             id: s.researchId,
-            fingerprint: contentFingerprint(active ? DataManager.getData() : stable),
+            fingerprint: contentFingerprint(base),
             syncedAt: new Date().toISOString(),
             ...(s.head ? { head: s.head } : {}),
             ...(header.mode === 'archive' ? { mode: 'archive' as const } : {}),
+            ...(titlesIn ? { titlesIn } : {}),
         });
-        this.researchKeepCopy(s.treeId, active ? DataManager.getData() : stable);
-        return active ? DataManager.getData() : stable;
+        if (!titlesIn) TreeManager.patchResearchLink(s.treeId, { titlesIn: undefined });
+        this.researchKeepCopy(s.treeId, base);
+        return loaded;
     },
 
     /** The user stops following (or a new ?live= replaces the session). */

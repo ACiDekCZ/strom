@@ -9,9 +9,8 @@
 
 import { strings } from '../strings.js';
 import { storedResearchBridge } from '../research-device.js';
-import { TITLES_FEATURE } from '../research-link.js';
+import { TITLES_FEATURE, hasTitles } from '../research-link.js';
 import { DataManager } from '../data.js';
-import { StromData } from '../types.js';
 import { onComputer } from './research-ui.js';
 import { installChannel, npmUpdateCommand } from '../research-install.js';
 import { isBetaBuildHere } from '../pwa.js';
@@ -28,11 +27,6 @@ function esc(text: string): string {
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-/** Someone in the tree has a title before or after the name. */
-function treeHasTitles(data: StromData | null | undefined): boolean {
-    return Object.values(data?.persons ?? {}).some(p => !!(p?.titleBefore?.trim() || p?.titleAfter?.trim()));
-}
-
 export const researchUpdateMethods = uiModule({
     /**
      * The open tree's research is an older version: its bridge is known on
@@ -46,7 +40,7 @@ export const researchUpdateMethods = uiModule({
         if (!storedResearchBridge(id)?.base) return null;
         if (!this.researchSyncCapable(id)) return { version: this.researchBridgeVersion(id) };
         // One that sends, but knows no titles (1.12) while this tree has some: they stay here only (B-1).
-        if (this.researchLacksTitles(id) && treeHasTitles(DataManager.getData())) return { version: this.researchBridgeVersion(id), titles: true };
+        if (this.researchLacksTitles(id) && hasTitles(DataManager.getData())) return { version: this.researchBridgeVersion(id), titles: true };
         return null;
     },
 

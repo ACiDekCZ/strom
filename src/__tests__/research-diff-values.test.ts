@@ -20,6 +20,14 @@ describe('values the research version would overwrite', () => {
         expect(d.addedPersons).toBe(0);
     });
 
+    it('B18-1: a title the version takes away is a value it overwrites ("Nothing is overwritten" never hides it)', () => {
+        const here = tree([person('a', 'Ida', { titleBefore: 'Ing.', titleAfter: 'st.' })]);
+        const there = tree([person('a', 'Ida')]);
+        expect(diffValues(here, there).rows).toEqual([{ personId: 'a', name: 'Ida Berg', field: 'name', here: 'Ing. Ida Berg st.', there: 'Ida Berg' }]);
+        // A title the version adds changes the name as any name change does.
+        expect(diffValues(there, here).rows).toEqual([{ personId: 'a', name: 'Ida Berg', field: 'name', here: 'Ida Berg', there: 'Ing. Ida Berg st.' }]);
+    });
+
     it('a citation cited here and not there goes (V-J), with the source titles', () => {
         const sources = { s1: { id: 's1', title: 'Křest – Ida Berg · s. 112' }, s2: { id: 's2', title: 'Křest – Ida Berg · s. 113' } };
         const here = tree([person('a', 'Ida', { birthSourceIds: ['s1', 's2'] })], sources);

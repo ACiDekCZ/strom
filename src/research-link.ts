@@ -8,7 +8,7 @@
  * in src/ui/research-ui.ts. Nothing here touches the DOM or storage.
  */
 
-import { StromData, PersonId, PartnershipId, Partnership, ResearchLink, Source, APP_VERSION } from './types.js';
+import { StromData, Person, PersonId, PartnershipId, Partnership, ResearchLink, Source, APP_VERSION } from './types.js';
 import { withoutConvertedStandIns, isPurePlaceholder } from './single-parent.js';
 
 /** `1 SOUR` value that marks a file written by Strom Research. */
@@ -565,7 +565,11 @@ export function researchGedcomTitles(status: { features: readonly string[] | nul
  * matched by REFN (as stabilizeIds matches them). A title the research's
  * version has stays. `features`: the research's (`/status.features`; not
  * known = an older research). With `person.titles` the research decides
- * them, a removed title included: `next` comes back as it is.
+ * them, a removed title included, once it has had them (`received`:
+ * researchHasTitles): `next` comes back as it is. A research that knows
+ * titles but never got this tree's (they stayed here while it was 1.12, or
+ * the tree went over before it said so: B18-1) lacks them because they never
+ * came, not because anybody took them off — they stay as with an older one.
  *
  * Idempotent: a kept title never doubles in the name. Such a research may
  * hold it as a part of the name (a NAME line with the title, read by 1.12 as
@@ -575,8 +579,8 @@ export function researchGedcomTitles(status: { features: readonly string[] | nul
  * (the title after), word by word, comes off, as long as some name is left.
  * Returns a new object when any person changed; neither input is changed.
  */
-export function keepTitles(next: StromData, previous: StromData, features: readonly string[] | null | undefined): StromData {
-    if (features?.includes(TITLES_FEATURE)) return next;
+export function keepTitles(next: StromData, previous: StromData, features: readonly string[] | null | undefined, received = false): StromData {
+    if (features?.includes(TITLES_FEATURE) && received) return next;
     const prevByRefn = uniqueRefns(previous);
     if (prevByRefn.size === 0) return next;
     let persons: StromData['persons'] | null = null;
@@ -600,6 +604,67 @@ export function keepTitles(next: StromData, previous: StromData, features: reado
         persons[id] = { ...p, ...changed };
     }
     return persons ? { ...next, persons } : next;
+}
+
+/**
+ * Whether the research has had this tree's titles: it keeps them
+ * (`person.titles` in `features`) and they went there in a NAME line with
+ * NPFX / NSFX that it wrote, or its version had them all
+ * (ResearchLink.titlesIn) — and the send that took them is not taken back
+ * there since. Until then a title its version lacks never came (B18-1).
+ */
+export function researchHasTitles(link: Pick<ResearchLink, 'titlesIn' | 'sent'> | null | undefined, features: readonly string[] | null | undefined): boolean {
+    if (!features?.includes(TITLES_FEATURE) || !link?.titlesIn) return false;
+    return !(link.sent?.state === 'undone' && !!link.sent.intake && link.sent.intake === link.titlesIn);
+}
+
+/** Someone in the tree has a title before or after the name. */
+export function hasTitles(data: StromData | null | undefined): boolean {
+    return Object.values(data?.persons ?? {}).some(p => !!(p?.titleBefore?.trim() || p?.titleAfter?.trim()));
+}
+
+/**
+ * The tree without any titles: what a research holds of it when they never
+ * went there (B18-1). `data` itself when nobody has one.
+ */
+export function withoutTitles(data: StromData): StromData {
+    let persons: StromData['persons'] | null = null;
+    for (const [id, p] of Object.entries(data.persons ?? {})) {
+        if (p?.titleBefore === undefined && p?.titleAfter === undefined) continue;
+        const { titleBefore: _b, titleAfter: _a, ...rest } = p;
+        persons ??= { ...data.persons };
+        persons[id as PersonId] = rest as Person;
+    }
+    return persons ? { ...data, persons } : data;
+}
+
+/**
+ * `tree` with the names of the research's version `research` (its given
+ * name, surname and titles) wherever their titles differ, matched by REFN:
+ * what the research holds of a tree that keepTitles gave the titles it never
+ * got (B18-1) — the base of the changes to send, so those titles go with the
+ * next send. `tree` itself when nothing differs.
+ */
+export function withResearchTitles(tree: StromData, research: StromData): StromData {
+    const theirs = uniqueRefns(research);
+    if (theirs.size === 0) return tree;
+    const keys = ['firstName', 'lastName', 'titleBefore', 'titleAfter'] as const;
+    let persons: StromData['persons'] | null = null;
+    for (const [refn, id] of uniqueRefns(tree)) {
+        const rid = theirs.get(refn);
+        const r = rid ? research.persons[rid] : undefined;
+        const p = tree.persons[id];
+        if (!r || !p) continue;
+        if ((p.titleBefore ?? '') === (r.titleBefore ?? '') && (p.titleAfter ?? '') === (r.titleAfter ?? '')) continue;
+        const next = { ...p } as Record<string, unknown>;
+        for (const k of keys) {
+            if (r[k] === undefined) delete next[k];
+            else next[k] = r[k];
+        }
+        persons ??= { ...tree.persons };
+        persons[id] = next as unknown as Person;
+    }
+    return persons ? { ...tree, persons } : tree;
 }
 
 /**

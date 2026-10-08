@@ -275,7 +275,8 @@ export const researchAdoptMethods = uiModule({
         }
         // The research does not take photos over yet: they stay here only.
         // A research that knows no titles gets the names without them (B-1): they stay here.
-        const exported = exportToGedcom(choice.images ? data : stripMedia(data), tree.name, { titles: await researchTitlesAt(bridge.base) });
+        const titles = await researchTitlesAt(bridge.base);
+        const exported = exportToGedcom(choice.images ? data : stripMedia(data), tree.name, { titles });
         let reply: { tree: string; head: string | null; ids: AdoptIds | null } | null = null;
         let refusedEmpty = false;
         try {
@@ -321,6 +322,8 @@ export const researchAdoptMethods = uiModule({
             ...(!numbered && hasPeople ? { awaitingIds: true as const } : {}),
             // As the user chose in the hand-over (asked there: no question later).
             sendMode: choice.sendMode,
+            // The titles went in the NAME line with NPFX / NSFX to a research that keeps them (B18-1).
+            ...(titles === 'line' ? { titlesIn: 'adopt' } : {}),
         });
         patchResearchAutoState(tree.id, { modeAsked: true });
         // What the research took is its version now: changes per person count from here.

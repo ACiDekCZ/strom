@@ -14,6 +14,7 @@ import { changeKind, changeAdds, sanitizeLiveLog, textKind, textPersonRefs, text
     sanitizeResearchLinks, researchSchemeUrl, researchSourceRef, researchClip, researchPersonRef, researchTaskRef,
     researchNewUrl, researchAdoptToken, researchConflictRef, researchIntakeRef,
     researchLinkScheme, DEFAULT_RESEARCH_SCHEME, RESEARCH_LINK_ACTIONS, researchGedcomTitles,
+    researchHasTitles, withResearchTitles, withoutTitles, hasTitles,
 } from '../research-link.js';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import {
@@ -330,13 +331,55 @@ describe('keepTitles — an older research drops titles (T07)', () => {
         expect(byRefn(out, 'P0001')).toMatchObject({ titleBefore: 'Doc.', titleAfter: 'st.' });
     });
 
-    it('a research with person.titles decides them: its titles win, a title removed there goes here too', () => {
+    it('a research with person.titles that has had them decides them: its titles win, a title removed there goes here too', () => {
         const next = importData(withTitles(researchGed()));
-        const out = keepTitles(next, here(), ['sync.ids', 'person.titles']);
+        const out = keepTitles(next, here(), ['sync.ids', 'person.titles'], true);
         expect(out).toBe(next);
         expect(byRefn(out, 'P0001').titleBefore).toBe('Doc.');
         expect(byRefn(out, 'P0001').titleAfter).toBeUndefined();
         expect(byRefn(out, 'P0003').titleBefore).toBeUndefined();
+    });
+
+    it('B18-1: a research with person.titles that never got them (updated from 1.12) loses none: they never came', () => {
+        const next = importData(researchGed());
+        for (const received of [undefined, false]) {
+            const out = keepTitles(next, here(), ['sync.ids', 'person.titles'], received);
+            expect(byRefn(out, 'P0001')).toMatchObject({ titleBefore: 'Ing.', titleAfter: 'st.', firstName: 'Josef' });
+            expect(byRefn(out, 'P0003').titleBefore).toBe('Mgr.');
+        }
+        // Its own titles still win.
+        expect(byRefn(keepTitles(importData(withTitles(researchGed())), here(), ['person.titles']), 'P0001').titleBefore).toBe('Doc.');
+    });
+
+    it('B18-1: the research has had the titles only once they went there with a research that keeps them, and not after that send is taken back', () => {
+        const features = ['sync.ids', 'person.titles'];
+        expect(researchHasTitles({ titlesIn: 'R1' }, features)).toBe(true);
+        expect(researchHasTitles({ titlesIn: 'adopt' }, features)).toBe(true);
+        expect(researchHasTitles({}, features)).toBe(false);
+        expect(researchHasTitles(null, features)).toBe(false);
+        // A research that does not say it keeps titles never has them.
+        expect(researchHasTitles({ titlesIn: 'R1' }, ['sync.ids'])).toBe(false);
+        expect(researchHasTitles({ titlesIn: 'R1' }, null)).toBe(false);
+        const undone = { fingerprint: 'f', at: '2026-10-08T10:00:00Z', changes: 1, head: '', state: 'undone' as const, intake: 'R1' };
+        expect(researchHasTitles({ titlesIn: 'R1', sent: undone }, features)).toBe(false);
+        expect(researchHasTitles({ titlesIn: 'R1', sent: { ...undone, intake: 'R0' } }, features)).toBe(true);
+    });
+
+    it('B18-1: the base of a research that never got the titles is the tree with its names; without titles is the tree with none', () => {
+        const research = importData(researchGed());
+        const tree = keepTitles(research, here(), ['person.titles']);
+        const base = withResearchTitles(tree, research);
+        expect(base).not.toBe(tree);
+        expect(contentFingerprint(base)).toBe(contentFingerprint(research));
+        expect(byRefn(base, 'P0001').titleBefore).toBeUndefined();
+        // The tree itself is left as it is.
+        expect(byRefn(tree, 'P0001').titleBefore).toBe('Ing.');
+        // Nothing kept: the tree itself.
+        expect(withResearchTitles(research, research)).toBe(research);
+        expect(contentFingerprint(withoutTitles(tree))).toBe(contentFingerprint(research));
+        expect(withoutTitles(research)).toBe(research);
+        expect(hasTitles(tree)).toBe(true);
+        expect(hasTitles(research)).toBe(false);
     });
 
     it('B-1: a title the research read into the name is never added again; the doubled form comes off', () => {

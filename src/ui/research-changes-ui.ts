@@ -183,6 +183,21 @@ export const researchChangesMethods = uiModule({
         return this.researchChangesNow();
     },
 
+    /**
+     * The research's version is not what the kept copy says: the titles never
+     * went there (B18-1). The copy standing for one of `from` becomes
+     * `change(copy)` standing for `to`, so the changes per person show what
+     * the research lacks. A copy not read yet is read first.
+     */
+    async researchRetagCopy(treeId: TreeId, from: readonly string[], to: string, change: (data: StromData) => StromData): Promise<void> {
+        if (copy?.treeId !== treeId && DataManager.getCurrentTreeId() === treeId) await this.researchChangesReady();
+        if (copy?.treeId !== treeId || !copy.base || !copy.fp || !from.includes(copy.fp)) return;
+        copy = { treeId, base: change(copy.base), fp: to };
+        memo = null;
+        try { localStorage.setItem(FP_KEY + treeId, to); } catch { /* not trusted next time */ }
+        void saveResearchCopy(treeId, copy.base!, to);
+    },
+
     /** A send is about to go: what it carries (for "What was written" once written). */
     researchNoteSending(treeId: TreeId, data: StromData, fingerprint: string): void {
         const list = DataManager.getCurrentTreeId() === treeId ? this.researchChangesNow() : null;

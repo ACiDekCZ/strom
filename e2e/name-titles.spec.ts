@@ -318,3 +318,210 @@ test('B-1: a research that knows no titles (1.12.1): three sends and loads never
     await expect(page.locator('#research-update-modal .research-update-intro')).toContainText("doesn't keep the titles before and after names");
 });
 
+
+/**
+ * B18-1: a fake Strom Research that is updated from 1.12.1 (no person.titles: it reads the NAME line only) to
+ * 1.13 (person.titles: NPFX / NSFX apart from the name) over the same data. Invented names.
+ */
+async function upgradingResearch(page: Page) {
+    const { fakeBridge, researchGed, HEAD } = await import('./research-bridge.js');
+    type Rec = { given: string; surname: string; before: string; after: string; birthPlace: string };
+    const research = new Map<string, Rec>([
+        ['P0001', { given: 'Josef', surname: 'Víšek', before: '', after: '', birthPlace: '' }],
+        ['P0002', { given: 'Anna', surname: 'Svobodová', before: '', after: '', birthPlace: '' }],
+        ['P0003', { given: 'Jan', surname: 'Víšek', before: '', after: '', birthPlace: '' }],
+    ]);
+    const state = { titles: false };
+    const old = ['sync.again', 'sync.undoneSince', 'sync.takenBack', 'sync.conflictEdit', 'sync.since', 'sync.ids', 'family.noCouple', 'family.alone', 'adopt.transfer', 'adopt.empty'];
+    // How each version reads a file: 1.12 the NAME line only (the text after the surname joined to the given
+    // name), 1.13 the titles from NPFX / NSFX, taken off the line.
+    const read = (ged: string): Map<string, Rec> => {
+        const out = new Map<string, Rec>();
+        for (const rec of ged.split(/\n(?=0 )/)) {
+            if (!/^0 @[^@]+@ INDI/.test(rec)) continue;
+            const refn = /\n1 REFN (\S+)/.exec(rec)?.[1];
+            const name = /\n1 NAME (.*?)\/(.*?)\/(.*)/.exec(rec);
+            if (!refn || !name) continue;
+            const before = state.titles ? /\n2 NPFX (.*)/.exec(rec)?.[1].trim() ?? '' : '';
+            const after = state.titles ? /\n2 NSFX (.*)/.exec(rec)?.[1].trim() ?? '' : '';
+            let given = [name[1].trim(), name[3].trim()].filter(Boolean).join(' ');
+            if (before && given.startsWith(`${before} `)) given = given.slice(before.length + 1);
+            if (after && given.endsWith(` ${after}`)) given = given.slice(0, -after.length - 1);
+            out.set(refn, {
+                given, surname: name[2].trim(), before, after,
+                birthPlace: /\n1 BIRT(?:\n[2-9] .*)*?\n2 PLAC (.*)/.exec(rec)?.[1].trim() ?? '',
+            });
+        }
+        return out;
+    };
+    const gedOf = (head: string): string => {
+        let ged = researchGed(head);
+        for (const [refn, r] of research) {
+            const line = [r.before, `${r.given} /${r.surname}/`, r.after].filter(Boolean).join(' ');
+            const tags = `${r.before ? `\n2 NPFX ${r.before}` : ''}${r.after ? `\n2 NSFX ${r.after}` : ''}`;
+            ged = ged.replace(new RegExp(`(0 @${refn}@ INDI)\n1 NAME [^\n]*`), `$1\n1 NAME ${line}${tags}${r.birthPlace ? `\n1 BIRT\n2 PLAC ${r.birthPlace}` : ''}`);
+        }
+        return ged;
+    };
+    const bridge = await fakeBridge(page, {
+        accepts: { mode: 'research', sync: { auto: 'off' }, sources: true, verified: true, media: null }, strom: '1.12.1',
+        features: old, head: HEAD, treeGed: gedOf(HEAD),
+    });
+    const written: number[] = [];
+    let heads = 0;
+    const nextHead = () => `${(++heads).toString(16).padStart(2, '0')}ab34ef56cd`;
+    bridge.syncReply = { status: 200, body: { ok: true, inbox: false, changes: 1, applied: 1, input: 'I0050' } };
+    bridge.onWrite = (posted) => {
+        let changes = 0;
+        for (const [refn, got] of read(posted)) {
+            const had = research.get(refn);
+            if (!had) continue;
+            for (const key of ['given', 'surname', 'birthPlace', ...(state.titles ? ['before', 'after'] as const : [])] as const) {
+                if ((got[key] || key === 'before' || key === 'after') && got[key] !== had[key]) { had[key] = got[key]; changes++; }
+            }
+        }
+        written.push(changes);
+        const head = nextHead();
+        return { head, ged: gedOf(head) };
+    };
+    bridge.replyExtra = () => ({ changes: written[written.length - 1], applied: written[written.length - 1] });
+    return {
+        bridge, research, written,
+        /** `strom update`: 1.13, the same data. */
+        upgrade(): void {
+            state.titles = true;
+            bridge.strom = '1.13.0-beta.9';
+            bridge.features = [...old, 'material.list', 'person.titles', 'media.codes'];
+        },
+        /** A new version of the research (something added there). */
+        newVersion(): string {
+            const head = nextHead();
+            bridge.head = head;
+            bridge.treeGed = gedOf(head);
+            return head;
+        },
+    };
+}
+
+const josefNow = (page: Page) => page.evaluate(() => {
+    const p = (Object.values(window.Strom.DataManager.getData().persons) as any[]).find(x => x.refn === 'P0001');
+    return { firstName: p.firstName, lastName: p.lastName, titleBefore: p.titleBefore ?? '', titleAfter: p.titleAfter ?? '' };
+});
+/** "What will be sent": the people and their kinds (null: not known). */
+const willSend = (page: Page) => page.evaluate(async () => (await window.Strom.UI.researchChangesReady())?.map(c => `${c.name}: ${c.kinds.join(',')}`) ?? null);
+const josefTitled = { firstName: 'Josef', lastName: 'Víšek', titleBefore: 'Ing.', titleAfter: 'st.' };
+
+test('B18-1: the research updated from 1.12.1 to 1.13 never got the titles: a load keeps them, "What will be sent" lists them, the next send carries them in NPFX / NSFX; "Restore the state before loading" keeps them; a title taken off there afterwards goes here too', async ({ page }) => {
+    const { openResearch, poll, editJan } = await import('./research-bridge.js');
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openResearch(page);
+    const r = await upgradingResearch(page);
+    await poll(page);
+    // Titles typed here while the research is 1.12.1: they stay here only (B-1), a send goes without them.
+    await page.evaluate(() => {
+        const dm = window.Strom.DataManager;
+        const josef = (Object.values(dm.getData().persons) as any[]).find(p => p.refn === 'P0001');
+        dm.updatePerson(josef.id, { titleBefore: 'Ing.', titleAfter: 'st.' });
+    });
+    await editJan(page, 'Praha');
+    await page.evaluate(() => window.Strom.UI.researchSendNow({ previewed: true }));
+    await expect.poll(() => r.written.length).toBe(1);
+    expect(r.bridge.posts[0]).not.toMatch(/Ing\.|NPFX|NSFX/);
+    expect(await willSend(page)).toEqual([]);
+    expect(await josefNow(page)).toEqual(josefTitled);
+
+    // `strom update` to 1.13: the same data, without the titles.
+    r.upgrade();
+    await poll(page);
+    // They never went: changes to send now.
+    await expect.poll(() => willSend(page)).toEqual(['Josef Víšek: name']);
+
+    // The research's newer version (Anna's birth added there), loaded without sending: the titles stay.
+    r.research.get('P0002')!.birthPlace = 'Čáslav';
+    const head = r.newVersion();
+    await poll(page);
+    await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+    await page.locator('.confirm-aside-btn', { hasText: 'Load without changes' }).click();
+    const loadedHead = () => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head);
+    await expect.poll(loadedHead).toBe(head);
+    expect(await josefNow(page)).toEqual(josefTitled);
+    await expect.poll(() => willSend(page)).toEqual(['Josef Víšek: name']);
+    await expect(card(page, 'Josef').locator('.name-text')).toHaveAttribute('title', 'Ing. Josef Víšek st.');
+
+    // "Restore the state before loading": the titles are there, still to send (the list per person is not
+    // told exactly after a restore: its base moved, A of rc.34).
+    await page.evaluate(() => window.Strom.UI.researchRestoreBeforeLoad(window.Strom.TreeManager.getActiveTreeId()!));
+    await expect.poll(loadedHead).not.toBe(head);
+    expect(await josefNow(page)).toEqual(josefTitled);
+    await expect.poll(() => page.evaluate(() => {
+        const ui = window.Strom.UI;
+        const ctx = ui.researchSyncLink()!;
+        const fps = ui.researchSyncFingerprints(ctx.treeId, ctx.link);
+        return !fps.matchesBase && fps.current !== ctx.link.sent?.fingerprint;
+    })).toBe(true);
+    expect([null, ['Josef Víšek: name']]).toContainEqual(await willSend(page));
+
+    // The next send carries them, as to any research that keeps titles; the research has them now.
+    await page.evaluate(() => window.Strom.UI.researchSendNow({ previewed: true }));
+    await expect.poll(() => r.written.length).toBe(2);
+    const sent = r.bridge.posts[r.bridge.posts.length - 1];
+    expect(sent).toContain('1 NAME Ing. Josef /Víšek/ st.\n2 NPFX Ing.\n2 GIVN Josef\n2 SURN Víšek\n2 NSFX st.');
+    expect(r.research.get('P0001')).toMatchObject({ given: 'Josef', surname: 'Víšek', before: 'Ing.', after: 'st.' });
+    await expect.poll(() => willSend(page)).toEqual([]);
+
+    // Taken off in the research after it had it: a real removal, shown in the load dialog and taken here.
+    r.research.get('P0001')!.before = '';
+    const head2 = r.newVersion();
+    await poll(page);
+    await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+    const modal = page.locator('#research-load-modal');
+    await expect(modal).toContainText('Ing. Josef Víšek st.');
+    await modal.locator('#research-load-ok').click();
+    await expect.poll(loadedHead).toBe(head2);
+    expect(await josefNow(page)).toEqual({ ...josefTitled, titleBefore: '' });
+});
+
+test('B18-1: a tree handed over to 1.12.1 with titles and reconnected after the update to 1.13: the load says nothing is overwritten and keeps them, the next send carries them', async ({ page }) => {
+    const { openResearch, poll, BRIDGE, researchGed } = await import('./research-bridge.js');
+    await page.setViewportSize({ width: 1440, height: 900 });
+    // The tree here has titles from its first load (a file of the research read before its status was known).
+    await openResearch(page, { ged: researchGed().replace('1 NAME Josef /Víšek/', '1 NAME Ing. Josef /Víšek/ st.\n2 NPFX Ing.\n2 NSFX st.') });
+    // A tie of beta.18 (or older): nothing says whether the research has had the titles.
+    await page.evaluate(() => window.Strom.TreeManager.patchResearchLink(window.Strom.TreeManager.getActiveTreeId()!, { titlesIn: undefined }));
+    const r = await upgradingResearch(page);
+    await poll(page);
+    expect(await willSend(page)).toEqual([]);
+    r.upgrade();
+    r.research.get('P0002')!.birthPlace = 'Čáslav';
+    const head = r.newVersion();
+    // Its new status known before the tree caught up with it (as `strom app` right after the update): the load
+    // itself must not lose the titles.
+    await page.evaluate(() => {
+        const ui = window.Strom.UI as unknown as { researchTitlesCatchUp: () => Promise<void>; __catchUp?: () => Promise<void> };
+        ui.__catchUp = ui.researchTitlesCatchUp;
+        ui.researchTitlesCatchUp = async () => undefined;
+    });
+    await poll(page);
+    expect(await willSend(page)).toEqual([]);
+    // ?import-url= of the bridge's tree.ged.
+    await page.evaluate((url) => { void window.Strom.UI.importResearchFromUrl(url); }, `${BRIDGE}/tree.ged`);
+    const modal = page.locator('#research-load-modal');
+    // Nothing here is lost: the titles stay.
+    await expect(modal).toContainText('Nothing here will be overwritten.');
+    await modal.locator('#research-load-ok').click();
+    await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe(head);
+    expect(await josefNow(page)).toEqual(josefTitled);
+    // The research's version is the tree without them: changes to send.
+    await expect.poll(() => willSend(page)).toEqual(['Josef Víšek: name']);
+    await page.evaluate(() => {
+        const ui = window.Strom.UI as unknown as { researchTitlesCatchUp: () => Promise<void>; __catchUp: () => Promise<void> };
+        ui.researchTitlesCatchUp = ui.__catchUp;
+    });
+    await poll(page);
+    await expect.poll(() => willSend(page)).toEqual(['Josef Víšek: name']);
+    await page.evaluate(() => window.Strom.UI.researchSendNow({ previewed: true }));
+    await expect.poll(() => r.written.length).toBe(1);
+    expect(r.bridge.posts[r.bridge.posts.length - 1]).toContain('2 NPFX Ing.');
+    expect(r.research.get('P0001')).toMatchObject({ given: 'Josef', before: 'Ing.', after: 'st.' });
+    await expect.poll(() => willSend(page)).toEqual([]);
+});

@@ -36,6 +36,7 @@ import {
     LiveStatus, contentFingerprint, fingerprintLike, sanitizeLiveStatus, sanitizeSyncReply, isSafariBrowser,
     parseLiveBridge, researchSchemeUrl, readResearchHeader, stabilizeIds, researchPersonRef, ResearchAccepts,
     researchIdsByContent, holdsResearchIds, ResearchSendRecord, AdoptIds, ExportXrefs, applySyncIds, researchGedcomTitles,
+    researchHasTitles, hasTitles, withoutTitles, TITLES_FEATURE,
 } from '../research-link.js';
 import { loadResearchCopy } from '../research-copy.js';
 import {
@@ -107,6 +108,9 @@ function retryAfterMs(value: string | null): number {
     const n = Number(value);
     return Number.isFinite(n) && n > 0 ? Math.min(30_000, Math.max(1000, n * 1000)) : 5000;
 }
+
+/** A catch-up of titles the research never got is running (researchTitlesCatchUp). */
+let titlesCatchingUp = false;
 
 /** Researches that said nothing of what they take, asked once in this page whether they do now. */
 const olderAsked = new Set<string>();
@@ -735,7 +739,9 @@ export const researchSyncMethods = uiModule({
             ...(fate.state === 'written' && sent.ownBase && status.head && status.head !== sent.head ? { replyHead: status.head } : {}),
         };
         delete closed.writing;
-        TreeManager.patchResearchLink(treeId, { sent: closed });
+        TreeManager.patchResearchLink(treeId, { sent: closed,
+            // Written with the titles: the research has them now (B18-1).
+            ...(fate.state === 'written' && sent.titles ? { titlesIn: sent.intake || sent.at } : {}) });
         const s = strings.sync;
         if (fate.state === 'discarded') {
             if (!sent.noticed) {
@@ -1192,10 +1198,13 @@ export const researchSyncMethods = uiModule({
         // of the research loaded here since makes it wrong — that version (_STROM_HEAD) is the base then.
         const lastCopy = researchAutoState(treeId).lastCopy;
         const since = lastCopy && lastCopy.base === (link.head ?? '') ? lastCopy.intake : undefined;
+        // The titles as the research takes them (B-1); a send that carries them, once written, leaves them there (B18-1).
+        const titles = researchGedcomTitles(this.researchStatusOf(link.id));
+        const carriesTitles = again ? !!again.titles : titles === 'line';
         const exported = again ? null : researchGedcomExport(data, meta?.name ?? '', {
             id: link.id, head: link.head, appTree: treeId, transcripts: this.researchTranscriptsLink(link).transcripts, sent: fps.current,
             ...(since ? { since } : {}),
-        }, researchGedcomTitles(this.researchStatusOf(link.id)));
+        }, titles);
         const gedcom = exported?.content ?? '';
         // What this send carries, person by person (what was written, once it is).
         if (!again) this.researchNoteSending(treeId, data, fps.current);
@@ -1320,6 +1329,7 @@ export const researchSyncMethods = uiModule({
             ...(opts.auto ? {} : { manual: true }),
             ...(written && reply.head ? { replyHead: reply.head } : {}),
             ...(ownBase ? { ownBase: true } : {}),
+            ...(carriesTitles ? { titles: true as const } : {}),
         };
         // The copy still carries sends the research took back since its base (`undoneSince`, 1.12): what
         // it wrote stands, but the app and the research differ by those — never shown as in step, nor
@@ -1328,7 +1338,10 @@ export const researchSyncMethods = uiModule({
         // The latest of them, never simply the last mark (finding B).
         const undoneIntake = again ? '' : latestUndone(reply.undoneSince, runtime.get(link.id)?.status?.sends, researchAutoState(treeId).resent);
         const undone = !!undoneIntake;
-        TreeManager.patchResearchLink(treeId, { refused: undefined, sentSources: sourceReadings(data),
+        // Written with the titles: the research has them now. Gone without them (a research that does not keep them,
+        // or one not asked: in NPFX / NSFX only, which 1.12 drops): it may lack them.
+        const titlesIn = written && carriesTitles ? reply.intake || now : !again && titles !== 'line' ? undefined : link.titlesIn;
+        TreeManager.patchResearchLink(treeId, { refused: undefined, sentSources: sourceReadings(data), titlesIn,
             sent: undone ? { ...sent, at: this.researchSendTime(treeId, link, undoneIntake) || now, state: 'undone', intake: undoneIntake,
                 closedAt: now, noticed: true, ...(reply.takenBack ? { takenBack: reply.takenBack } : {}) } : sent });
         // Written again: never offered again (the research may still list it as taken back); a send taken
@@ -1862,10 +1875,55 @@ export const researchSyncMethods = uiModule({
 
     /** Redraw everything that shows the state (menu block, ⋯ dot, toolbar). */
     refreshResearchSyncUi(): void {
+        void this.researchTitlesCatchUp();
         this.refreshActionMenuBadges();
         this.renderResearchSyncPill();
         // "Only in browser" depends on what the research holds.
         this.refreshUnsavedForResearch();
+    },
+
+    /**
+     * A research that keeps titles now (updated from 1.12) and never got this
+     * tree's: they stayed here while it did not know them, or the tree went
+     * before it said so (B18-1). The open tree in step with it holds titles
+     * its version lacks, so that version — the one loaded, or the send it
+     * wrote — is the tree without them: its fingerprint and the kept copy say
+     * so, and the titles are changes to send ("What will be sent", the next
+     * send). A send still in its inbox is waited for; one discarded or taken
+     * back there waits for the user's next step as it does.
+     */
+    async researchTitlesCatchUp(): Promise<void> {
+        if (titlesCatchingUp) return;
+        const ctx = this.researchSyncLink();
+        if (!ctx || DataManager.isReadOnly() || DataManager.isTreeLocked()) return;
+        const features = this.researchStatusOf(ctx.link.id)?.features;
+        if (researchHasTitles(ctx.link, features) || !features?.includes(TITLES_FEATURE) || ctx.link.sent?.state === 'pending') return;
+        if (!hasTitles(DataManager.getData())) return;
+        titlesCatchingUp = true;
+        try {
+            // The copy read first (the changes per person count from it).
+            await this.researchChangesReady();
+            const now = this.researchSyncLink();
+            if (!now || now.treeId !== ctx.treeId || researchHasTitles(now.link, features) || now.link.sent?.state === 'pending') return;
+            const { treeId, link } = now;
+            const data = DataManager.getData();
+            if (!hasTitles(data)) return;
+            const fps = this.researchSyncFingerprints(treeId, link);
+            const sentHere = link.sent?.state === 'written' && fps.current === link.sent.fingerprint;
+            if (!fps.matchesBase && !sentHere) return;
+            const bare = contentFingerprint(withoutTitles(data));
+            if (bare === fps.current) return;
+            await this.researchRetagCopy(treeId, [link.fingerprint, ...(sentHere ? [link.sent!.fingerprint] : [])], bare, withoutTitles);
+            TreeManager.patchResearchLink(treeId, {
+                ...(fps.matchesBase ? { fingerprint: bare } : {}),
+                ...(sentHere ? { sent: { ...link.sent!, fingerprint: bare } } : {}),
+            });
+            fpCache = null;
+        } finally {
+            titlesCatchingUp = false;
+        }
+        this.refreshResearchSyncUi();
+        this.researchAutoArm();
     },
 
     /**

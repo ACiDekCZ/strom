@@ -1467,6 +1467,7 @@ class TreeManagerClass {
             // A new tie sends by hand until the user chooses otherwise (a tie from before 3.9 keeps "by itself").
             if (!prev && link.sendMode === undefined) kept.sendMode = 'manual';
             if (prev?.sendMedia === false && link.sendMedia === undefined) kept.sendMedia = false;
+            if (prev?.titlesIn && link.titlesIn === undefined) kept.titlesIn = prev.titlesIn;
             tree.research = { ...kept, ...link, id };
         } else delete tree.research;
         this.saveIndex();

@@ -1320,6 +1320,17 @@ export interface ResearchLink {
      * any load of the research's version.
      */
     awaitingIds?: true;
+    /**
+     * The research has had this tree's titles (Person.titleBefore /
+     * titleAfter): the `intake` of the send that wrote them there with a
+     * research that keeps titles (its time when it had no mark), 'adopt' for a
+     * hand-over that carried them, 'load' for a version of such a research
+     * that had every title of the tree. Missing: they never went (a research
+     * that did not know titles, 1.12, or one not asked yet) — a title its
+     * version lacks is then kept here and goes with the next send (B18-1).
+     * Survives updates from the research.
+     */
+    titlesIn?: string;
 }
 
 /** How changes go to the research (see ResearchLink.sendMode). */
@@ -1374,6 +1385,8 @@ export interface ResearchSend {
      * window's state, so the research's version is not loaded quietly.
      */
     inherited?: boolean;
+    /** It carried the titles (a NAME line with NPFX / NSFX to a research that keeps them): written, the research has them (ResearchLink.titlesIn). */
+    titles?: true;
 }
 
 /**
