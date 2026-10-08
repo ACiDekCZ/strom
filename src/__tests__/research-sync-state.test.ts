@@ -47,6 +47,20 @@ describe('the state of a research tree', () => {
         expect(researchSyncState(input({ remoteHead: 'bbbbbbb', bridgeUp: false })).kind).toBe('bridgeDown');
     });
 
+    it('a send written with nothing taken while the tree still differs from the research\'s version: never "in sync" (N38)', () => {
+        const none = link({ sent: sent({ state: 'written', changes: 0 }) });
+        const st = researchSyncState(input({ link: none, matchesBase: false, current: 'fp-sent' }));
+        expect(st.kind).toBe('notTaken');
+        expect(st.sent?.changes).toBe(0);
+        // The research's version again (loaded, or the edit undone): in step.
+        expect(researchSyncState(input({ link: none, matchesBase: true, current: 'fp-sent' })).kind).toBe('inSync');
+        // Edited since: a new send waits as any.
+        expect(researchSyncState(input({ link: none, matchesBase: false, current: 'fp-later' })).kind).toBe('unsent');
+        // Written with changes: in step as before; "only load": nothing to send.
+        expect(researchSyncState(input({ link: link({ sent: sent({ state: 'written', changes: 2 }) }), matchesBase: false, current: 'fp-sent' })).kind).toBe('inSync');
+        expect(researchSyncState(input({ link: none, matchesBase: false, current: 'fp-sent', sendOff: true })).kind).toBe('off');
+    });
+
     it('the research\'s own write of this tree\'s send is not "newer"; moving past it is (loaded only when asked)', () => {
         const own = link({ sent: sent({ state: 'written', replyHead: 'ccccccc', ownBase: true }) });
         expect(researchSyncState(input({ link: own, matchesBase: false, current: 'fp-sent', remoteHead: 'ccccccc', ownHead: 'ccccccc' })).kind).toBe('inSync');

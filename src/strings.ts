@@ -922,6 +922,7 @@ const stringsEN = {
         nothingToast: 'Nothing to send. The research has the same tree.',
         /** A send the research took nothing from (its tree may be ahead): never "the same tree". */
         nothingTakenToast: 'The research took nothing new from this send.',
+        notTakenSub: 'The research took nothing new from the last send.',
         rejectedToast: (t: string, r = '') => `The send from ${t} was discarded in the research${r ? ` (${r})` : ''}. The changes are still here.`,
         refusedTitle: "The research didn't accept the changes",
         refusedReason: (r: string) => `Reason from the research: ${r}`,
@@ -4537,6 +4538,7 @@ const stringsCZ: StringsType = {
         writtenToast: (n: number) => `Zapsáno ve výzkumu, ${syncChangesCs(n)}.`,
         nothingToast: 'Není co poslat. Výzkum má stejný strom.',
         nothingTakenToast: 'Výzkum z tohoto poslání nic nového nepřevzal.',
+        notTakenSub: 'Výzkum z posledního poslání nic nového nepřevzal.',
         rejectedToast: (t: string, r = '') => `Poslání z ${t} bylo ve výzkumu zahozeno${r ? ` (${r})` : ''}. Úpravy jsou dál tady.`,
         refusedTitle: 'Výzkum úpravy nepřijal',
         refusedReason: (r: string) => `Důvod od výzkumu: ${r}`,
@@ -8140,6 +8142,7 @@ const stringsDE: StringsType = {
         writtenToast: (n: number) => `In die Forschung geschrieben, ${syncChangesDe(n)}.`,
         nothingToast: 'Nichts zu senden. Die Forschung hat denselben Stammbaum.',
         nothingTakenToast: 'Die Forschung hat aus dieser Sendung nichts Neues übernommen.',
+        notTakenSub: 'Die Forschung hat aus der letzten Sendung nichts Neues übernommen.',
         rejectedToast: (t: string, r = '') => `Die Sendung von ${t} wurde in der Forschung verworfen${r ? ` (${r})` : ''}. Die Änderungen sind weiterhin hier.`,
         refusedTitle: 'Die Forschung hat die Änderungen nicht angenommen',
         refusedReason: (r: string) => `Grund der Forschung: ${r}`,

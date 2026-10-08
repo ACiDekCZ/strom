@@ -35,7 +35,9 @@ export type ResearchSyncKind =
     | 'writtenConflicts'
     // Data protection (3.9), over the state of the sends: the last send left changes unwritten; changes piled up
     // out of "only load" (nothing goes before the preview); the research's version loaded lately; only loading.
-    | 'notWritten' | 'piled' | 'loaded' | 'off';
+    | 'notWritten' | 'piled' | 'loaded' | 'off'
+    // The last send was written with nothing taken, and the tree still differs from the research's version (N38).
+    | 'notTaken';
 
 export interface ResearchSyncInput {
     /** The tree's tie to its research (none: not a research tree). */
@@ -161,6 +163,12 @@ function sendsState(input: ResearchSyncInput): ResearchSyncState {
     if (moved && ((sent?.state === 'written' && (sent.conflicts ?? 0) > 0) || input.heldConflicts || input.openConflicts)) return st('writtenConflicts', sent ? { sent } : {});
     // Loading it needs the bridge: not running or stuck, only that is said (N4 of the final round).
     if (newer && input.bridgeUp) return st('newer');
+    // The research took nothing of the last send and the tree is still that state, apart from its version:
+    // what it lacks is still here, never "in sync" (N38). Not sent again by itself — the same copy would
+    // bring the same answer; an edit makes it a new send, Send tries it again.
+    if (!input.sendOff && sent?.state === 'written' && sent.changes === 0 && !input.matchesBase && input.current === sent.fingerprint) {
+        return st('notTaken', { sent });
+    }
     const quiet: ResearchSyncState = !input.bridgeUp
         ? { kind: 'bridgeDown', core: 'bridgeDown' }
         : input.written ? { kind: 'written', core: 'written' } : { kind: 'inSync', core: 'inSync' };
@@ -179,7 +187,7 @@ export function researchSyncWantsAttention(kind: ResearchSyncKind): boolean {
 
 /** A changes-not-sent state (the ⋯ label and the data window say so). */
 export function researchSyncUnsent(kind: ResearchSyncKind): boolean {
-    return kind === 'unsent' || kind === 'unsentBridgeDown' || kind === 'unsentAndNewer' || kind === 'autoBridgeDown';
+    return kind === 'unsent' || kind === 'unsentBridgeDown' || kind === 'unsentAndNewer' || kind === 'autoBridgeDown' || kind === 'notTaken';
 }
 
 /** "Send, then load" waits at most this long. */

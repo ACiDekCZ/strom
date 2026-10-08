@@ -1932,6 +1932,7 @@ export const researchSyncMethods = uiModule({
                     sub: [conn ? `${conn.title}.` : '', conn?.sub ?? '', conflicts > 0 ? at : '', conflicts > 0 ? s.writtenConflictsSub : ''].filter(Boolean).join(' '), actions };
             },
             unsent: () => ({ tone: 'warn', title: s.stateUnsent, sub: changed ? s.changedAt(changed) : undefined, actions: [{ action: 'send', label: s.send }] }),
+            notTaken: () => ({ tone: 'neutral', title: s.stateUnsent, sub: s.notTakenSub, actions: [{ action: 'send', label: s.send }] }),
             sentPending: () => ({ tone: 'neutral', title: s.stateSent(when(state.sent?.at), state.sent?.changes ?? null),
                 sub: s.statePendingSub, actions: this.researchLinkAvailable('open') ? [{ action: 'openResearch', label: s.openResearch, asLink: true }] : [] }),
             newer: () => {
@@ -2028,7 +2029,7 @@ export const researchSyncMethods = uiModule({
             b.actions = [...(b.actions ?? []), { action: 'gotIt', label: s.gotIt, asLink: true }];
         }
         // Changes per person: how many people, and "What will be sent ›" / "What was written ›".
-        if (['unsent', 'autoWaiting', 'unsentBridgeDown', 'unsentAndNewer'].includes(state.kind)) {
+        if (['unsent', 'autoWaiting', 'unsentBridgeDown', 'unsentAndNewer', 'notTaken'].includes(state.kind)) {
             const list = this.researchChangesNow();
             if (list && list.length > 0) {
                 b.sub = [strings.changes.personsChanged(list.length), b.sub].filter(Boolean).join(' · ');
@@ -2258,7 +2259,7 @@ export const researchSyncMethods = uiModule({
         const notWrittenSeen = kind === 'notWritten' && !!ctx && !!researchAutoState(ctx.treeId).notWritten?.seen;
         const attention = (researchSyncWantsAttention(kind) && !notWrittenSeen) || this.originalsQueueWarn() || !!this.researchUndoneLeftBehind();
         // Changes not sent, as the toolbar has them (a block over them, e.g. "piled up", does not hide them).
-        const unsentCore = state.core === 'unsent';
+        const unsentCore = state.core === 'unsent' || state.core === 'notTaken';
         const btn = document.querySelector<HTMLElement>('.actions-menu-btn');
         if (btn) {
             if (btn.dataset.baseLabel === undefined) btn.dataset.baseLabel = btn.getAttribute('aria-label') ?? '';
@@ -2385,7 +2386,7 @@ export const researchSyncMethods = uiModule({
                 return;
             }
             // Nothing to send: the button's place stays (empty), so the toolbar does not move when it comes.
-            if (kind !== 'unsent') {
+            if (kind !== 'unsent' && kind !== 'notTaken') {
                 // In its place the quiet mark (in step, or the research not running), at the end next to the tree switcher.
                 const down = kind === 'bridgeDown' || kind === 'unsentBridgeDown';
                 const lwm = researchAutoState(ctx.treeId).lastWritten;
@@ -2429,6 +2430,9 @@ export const researchSyncMethods = uiModule({
         } else if (kind === 'bridgeDown' || kind === 'autoBridgeDown') {
             look = 'ghost';
             label = lw ? s.markBridgeDown(when(lw.at)) : s.stateBridgeDown;
+        } else if (kind === 'notTaken') {
+            look = 'dot';
+            label = s.stateUnsent;
         } else {
             look = 'dot';
             label = writtenAt;

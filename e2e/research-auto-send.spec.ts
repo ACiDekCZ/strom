@@ -2013,3 +2013,34 @@ test('R1 of the rc.49 round: a conflict the research still lists with later send
     await expect(block(page)).toContainText('Written, 1 conflict to decide');
     await expect(block(page)).not.toContainText('3 conflicts');
 });
+
+test('N38: a send the research took nothing from, the tree still apart from its version: never "In sync with the research" (by itself and by hand), Send goes again', async ({ page }) => {
+    const bridge = await autoTree(page);
+    bridge.syncReply = { status: 200, body: { ok: true, inbox: false, changes: 0, applied: 0, input: 'I0091' } };
+    await editJan(page);
+    await page.clock.fastForward(QUIET + 1000);
+    await expect.poll(() => bridge.posts.length).toBe(1);
+    // By itself: the mark says the research lacks the changes, and it does not send the same copy again.
+    await expect(mark(page)).toHaveAttribute('aria-label', "Changes the research doesn't have");
+    await openResearchMenu(page);
+    await expect(block(page)).not.toContainText('In sync with the research');
+    await expect(block(page)).toContainText("Changes the research doesn't have");
+    await expect(block(page)).toContainText('The research took nothing new from the last send.');
+    await expect(block(page).getByRole('button', { name: 'What will be sent' })).toBeVisible();
+    await page.clock.fastForward(QUIET * 2);
+    expect(bridge.posts).toHaveLength(1);
+    // By hand: the Send button, not the quiet mark.
+    await page.evaluate(() => {
+        const tm = window.Strom.TreeManager;
+        tm.patchResearchLink(tm.getActiveTreeId()!, { sendMode: 'manual' });
+        window.Strom.UI.refreshResearchSyncUi();
+    });
+    await expect(page.locator('#research-sync-send')).toBeVisible();
+    // The research takes it now: in step again, written.
+    writesAtOnce(bridge);
+    await page.evaluate(() => window.Strom.UI.researchSendNow({ previewed: true }));
+    await expect.poll(() => bridge.posts.length).toBe(2);
+    await expect(page.locator('#research-sync-send')).toHaveCount(0);
+    await openResearchMenu(page);
+    await expect(block(page)).not.toContainText("Changes the research doesn't have");
+});
