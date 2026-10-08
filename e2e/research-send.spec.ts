@@ -300,16 +300,16 @@ test.describe('where the tree menu offers it', () => {
         await expect(row.locator('.tree-row-menu.open [data-action="researchSend"]')).toHaveText('Send changes to the research');
     });
 
-    test('a computer: Actions → Research of a tied tree (nothing announced: Send + What is it), not of another tree', async ({ page }) => {
+    test('a computer: the Research menu of a tied tree (nothing announced: Send + What is it), not of another tree', async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 900 });
         await openResearch(page, false);
         await page.locator('.actions-menu-btn').click();
-        // "Research" replaces "Ancestor research" for this tree.
+        // The Research button replaces "Ancestor research" for this tree.
         await expect(page.locator('#research-menu-row')).toBeHidden();
-        await page.locator('#actions-research-row').click();
-        const items = page.locator('#actions-research-submenu .tree-switcher-action');
+        await page.locator('#research-menu-btn').click();
+        const items = page.locator('#research-menu .tree-switcher-action');
         await expect(items).toHaveText(['Send changes', 'What is Strom Research']);
-        await expect(page.locator('#actions-research-submenu .research-submenu-note')).toHaveCount(0);
+        await expect(page.locator('#research-menu .research-submenu-note')).toHaveCount(0);
         await items.first().click();
         // No research links announced here: the way back is explained.
         await expect(dialog(page)).toContainText('Add to the research');
@@ -325,8 +325,8 @@ test.describe('where the tree menu offers it', () => {
             const id = await window.Strom.TreeManager.createTree('Jiny strom');
             await window.Strom.UI.switchToTree(id);
         });
+        await expect(page.locator('#research-menu-btn')).toHaveCount(0);
         await page.locator('.actions-menu-btn').click();
-        await expect(page.locator('#actions-research-row')).toBeHidden();
         await expect(page.locator('#research-menu-row')).toBeVisible();
     });
 

@@ -17,6 +17,8 @@ import { ZoomPan } from '../zoom.js';
 import { isPhoneBar } from '../breakpoints.js';
 import { menuItemBody, menuItemAria, PersonMenuAction } from './context-menu.js';
 import { shownName } from '../person-name.js';
+import type { ResearchSheetGroup } from './research-actions-ui.js';
+import { researchTrialTagHtml } from './research-tree-settings-ui.js';
 
 /** A row / section in a menu-style bottom sheet (the "More" and "Tree" sheets). */
 interface MenuRow {
@@ -29,13 +31,25 @@ interface MenuRow {
     sub?: string;
     /** A quiet value at the row's end ("BETA · 3.9.0"). */
     value?: string;
+    /** The count in the research's colour (Awaiting action). */
+    warnBadge?: boolean;
+    /** Starts an AI agent: the AI label. */
+    ai?: boolean;
+    /** Continues in the research: ↗. */
+    ext?: boolean;
+    /** A quiet line with a link under the row (the "Export all" reminder under Export…). */
+    after?: { id: string; text: string; link: string; run: () => void };
 }
 /** The prominent "Strom: {name}" row that opens the second-level tree sheet
  *  (serif name + chevron + tinted background — mirrors the desktop submenu row). */
 interface TreeRow { prefix: string; name: string; run: () => void; }
 /** The "Only in browser" state row on top of the "More" sheet. */
 interface StorageRow { title: string; sub: string; run: () => void; }
-interface MenuBlock { header?: string; rows: MenuRow[]; pair?: MenuRow[]; treeRow?: TreeRow; divider?: boolean; storageRow?: StorageRow; note?: string; }
+interface MenuBlock {
+    header?: string; rows: MenuRow[]; pair?: MenuRow[]; treeRow?: TreeRow; divider?: boolean; storageRow?: StorageRow; note?: string;
+    /** The research group (a narrow window with a mouse): title, state, frequent actions, "All research actions ›". */
+    research?: ResearchSheetGroup;
+}
 
 /** Coarse pointer = touch device; used to gate touch-only behaviour. */
 export function isCoarsePointer(): boolean {
@@ -243,6 +257,8 @@ export const bottomSheetMethods = uiModule({
         if (this.bottomSheet) {
             this.bottomSheet.remove();
             this.bottomSheet = null;
+            this.exportReminderClosed();
+            this.closeResearchTrialNote();
             // Focus back to what opened the sheet — unless the row's action
             // already put it somewhere (a dialog it opened).
             const trigger = this.bottomSheetTrigger;
@@ -279,7 +295,7 @@ export const bottomSheetMethods = uiModule({
      * button on the bar). Opened from the bottom-bar "More" tab and the top
      * bar's ⋯ button. Edit-only rows drop in read-only view.
      */
-    showMoreMenuSheet(): void {
+    showMoreMenuSheet(opts: { research?: boolean } = {}): void {
         this.noteBottomSheetTrigger();
         this.hideBottomSheet();
         this.closeAllMenusExcept('sheet');
@@ -309,9 +325,14 @@ export const bottomSheetMethods = uiModule({
             blocks.push({ rows: [], note: s.pwa.offline });
         }
 
+        // The research group first (a research tree on a computer whose window has no room for the
+        // Research button): its state, the frequent actions and the way to all of them.
+        const researchGroup = this.researchSheetGroup();
+        if (researchGroup) blocks.push({ rows: [], research: researchGroup });
+
         // 1) Undo / Redo — the mobile home for these beyond the toast.
         if (!isView) {
-            blocks.push({ rows: [], pair: [
+            blocks.push({ divider: !!researchGroup, rows: [], pair: [
                 { label: s.undo.undo, run: () => this.performUndo() },
                 { label: s.undo.redo, run: () => this.performRedo() },
             ] });
@@ -329,10 +350,14 @@ export const bottomSheetMethods = uiModule({
 
         // 3) Outputs: one Export… (whole tree or the current view, chosen in
         //    its dialog; a read-only view exports what it shows), poster, fly-through.
+        //    Under Export…, now and then, "Export all" (not backed up; once a day at most).
+        const lastExport = this.exportReminderLast();
+        const reminder = lastExport === undefined ? undefined
+            : { id: 'sheet-export-reminder', text: this.exportReminderText(lastExport), link: s.snapshots.exportAll, run: () => this.researchActionExportAll() };
         blocks.push({ divider: blocks.length > 0, rows: [
             active
-                ? { label: s.menu.exportAll, sub: s.menu.exportAllSub, run: () => this.showExportDialog() }
-                : { label: s.menu.exportAll, run: () => this.exportFocusedJSON() },
+                ? { label: s.menu.exportAll, sub: s.menu.exportAllSub, run: () => this.showExportDialog(), after: reminder }
+                : { label: s.menu.exportAll, run: () => this.exportFocusedJSON(), after: reminder },
             { label: s.menu.poster, run: () => this.showPosterDialog() },
             { label: s.slideshow.menu, run: () => this.startSlideshow() },
         ] });
@@ -345,7 +370,8 @@ export const bottomSheetMethods = uiModule({
 
         // 5) Strom Research, then the "Strom: {name}" row — every whole-tree
         //    action lives behind it (never in read-only views).
-        const research = this.researchMenuSheetRow();
+        // ("AI ancestor research" only where the research group is not: it is this tree's research.)
+        const research = researchGroup ? null : this.researchMenuSheetRow();
         const managed: MenuBlock = { divider: true, rows: research ? [research] : [] };
         if (active) {
             managed.treeRow = {
@@ -367,7 +393,8 @@ export const bottomSheetMethods = uiModule({
                 value: document.body.classList.contains('beta-build') ? s.about.betaValue(APP_VERSION) : APP_VERSION },
         ] });
 
-        this.presentMenuSheet(s.mobileMenu.more, blocks);
+        this.presentMenuSheet(s.mobileMenu.more, blocks, { research: opts.research });
+        if (reminder) this.exportReminderOpened();
     },
 
     /** More → "Strom: {name}": the open tree's actions sheet (the shared list, tree-actions.ts). */
@@ -382,7 +409,7 @@ export const bottomSheetMethods = uiModule({
      * headers, flat action rows (no emoji), optional side-by-side "pair" row,
      * overlay + swipe-to-dismiss chrome. Shared by the "More" and "Tree" sheets.
      */
-    presentMenuSheet(titleText: string, blocks: MenuBlock[]): void {
+    presentMenuSheet(titleText: string, blocks: MenuBlock[], opts: { research?: boolean } = {}): void {
         const overlay = document.createElement('div');
         overlay.className = 'bottom-sheet-overlay';
         const sheet = document.createElement('div');
@@ -435,12 +462,49 @@ export const bottomSheetMethods = uiModule({
                 badge.textContent = strings.research.newBadge;
                 btn.appendChild(badge);
             }
+            if (row.ai) {
+                const ai = document.createElement('span');
+                ai.className = 'research-ai-badge';
+                ai.setAttribute('aria-hidden', 'true');
+                ai.title = strings.research.aiCostHint;
+                ai.textContent = strings.research.aiBadge;
+                btn.appendChild(ai);
+            }
+            if (row.ext) {
+                const ext = document.createElement('span');
+                ext.className = 'research-item-ext';
+                ext.setAttribute('aria-hidden', 'true');
+                ext.textContent = '↗';
+                btn.appendChild(ext);
+            }
+            if (row.warnBadge) btn.querySelector('.tree-switcher-badge')?.classList.add('research-count-badge');
             if (row.ariaLabel) btn.setAttribute('aria-label', row.ariaLabel);
+            btn.setAttribute('role', 'menuitem');
             btn.addEventListener('click', () => {
                 this.hideBottomSheet();
                 row.run();
             });
             return btn;
+        };
+        /** The quiet line with its link under a row ("Export all"). */
+        const makeAfter = (after: NonNullable<MenuRow['after']>): HTMLElement => {
+            const line = document.createElement('div');
+            line.className = 'export-reminder export-reminder--sheet';
+            line.id = after.id;
+            const text = document.createElement('span');
+            text.className = 'export-reminder-text';
+            text.textContent = after.text;
+            const link = document.createElement('button');
+            link.type = 'button';
+            link.className = 'link-button export-reminder-link';
+            link.setAttribute('role', 'menuitem');
+            link.textContent = after.link;
+            link.addEventListener('click', () => {
+                this.hideBottomSheet();
+                after.run();
+            });
+            line.append(text, link);
+            return line;
         };
 
         const makeTreeButton = (row: TreeRow): HTMLButtonElement => {
@@ -494,6 +558,101 @@ export const bottomSheetMethods = uiModule({
             return btn;
         };
 
+        // The research page: the whole research menu in this same sheet (‹ back to the list).
+        let researchPage: HTMLElement | null = null;
+        let allRow: HTMLButtonElement | null = null;
+        const showResearchPage = (): void => {
+            if (!researchPage) return;
+            title.hidden = true;
+            list.hidden = true;
+            researchPage.hidden = false;
+            this.refreshResearchMenu();
+            this.focusResearchMenuItem('first');
+        };
+        const hideResearchPage = (): void => {
+            if (!researchPage || researchPage.hidden) return;
+            this.closeResearchTrialNote();
+            researchPage.hidden = true;
+            title.hidden = false;
+            list.hidden = false;
+            const body = researchPage.querySelector<HTMLElement>('#research-sheet-menu');
+            if (body) {
+                body.innerHTML = '';
+                body.dataset.html = '';
+            }
+            // Drawn in the toolbar's dropdown again (one place at a time).
+            this.refreshResearchMenu();
+            allRow?.focus({ preventScroll: true });
+        };
+        const appendResearchGroup = (group: ResearchSheetGroup): void => {
+            const r = strings.research;
+            const head = document.createElement('div');
+            head.className = 'bottom-sheet-section research-sheet-heading';
+            head.innerHTML = `<span>${esc(r.menuTitle)}</span>${researchTrialTagHtml(true)}`;
+            list.appendChild(head);
+            if (group.state) {
+                const st = group.state;
+                const line = document.createElement('div');
+                line.className = `research-sheet-state is-${st.tone}`;
+                line.id = 'research-sheet-state';
+                const dot = document.createElement('span');
+                dot.className = 'research-sheet-state-dot';
+                dot.setAttribute('aria-hidden', 'true');
+                const text = document.createElement('span');
+                text.className = 'research-sheet-state-text';
+                text.id = 'research-sheet-state-text';
+                text.textContent = st.title;
+                const act = document.createElement('button');
+                act.type = 'button';
+                act.className = st.action.asLink ? 'research-sync-link' : 'primary btn-sm research-sync-btn';
+                act.setAttribute('role', 'menuitem');
+                act.setAttribute('aria-describedby', 'research-sheet-state-text');
+                act.textContent = st.action.label;
+                act.addEventListener('click', () => {
+                    this.hideBottomSheet();
+                    st.action.run();
+                });
+                line.append(dot, text, act);
+                list.appendChild(line);
+            }
+            for (const row of group.rows) {
+                list.appendChild(makeButton({ label: row.label, run: row.run, badge: row.count, warnBadge: true, ai: row.ai, ext: row.ext, ariaLabel: row.ariaLabel }));
+            }
+            allRow = document.createElement('button');
+            allRow.type = 'button';
+            allRow.className = 'bottom-sheet-item research-sheet-all';
+            allRow.id = 'research-sheet-all';
+            allRow.setAttribute('role', 'menuitem');
+            allRow.setAttribute('aria-haspopup', 'menu');
+            const label = document.createElement('span');
+            label.className = 'bottom-sheet-label';
+            label.textContent = r.allActions;
+            const chevron = document.createElement('span');
+            chevron.className = 'bottom-sheet-tree-chevron';
+            chevron.setAttribute('aria-hidden', 'true');
+            chevron.textContent = '›';
+            allRow.append(label, chevron);
+            allRow.addEventListener('click', showResearchPage);
+            list.appendChild(allRow);
+
+            researchPage = document.createElement('div');
+            researchPage.className = 'sheet-page-research';
+            researchPage.hidden = true;
+            researchPage.innerHTML = '<div id="research-sheet-menu" class="research-menu-body research-sheet-body" role="menu" aria-labelledby="research-menu-title"></div>';
+            researchPage.addEventListener('click', (e) => {
+                const target = e.target as Element | null;
+                if (target?.closest('.research-menu-back')) {
+                    hideResearchPage();
+                    return;
+                }
+                // An item done closes the sheet (unless it put another sheet in its place).
+                const item = target?.closest('[role="menuitem"]');
+                if (!item || item.matches('.research-trial-tag, [data-action="cancelLoad"], [data-action="conflicts"]')) return;
+                if (this.bottomSheet === overlay) this.hideBottomSheet();
+            });
+            sheet.appendChild(researchPage);
+        };
+
         for (const block of blocks) {
             if (block.storageRow) list.appendChild(makeStorageButton(block.storageRow));
             if (block.note) {
@@ -514,7 +673,11 @@ export const bottomSheetMethods = uiModule({
                 header.textContent = block.header;
                 list.appendChild(header);
             }
-            for (const row of block.rows) list.appendChild(makeButton(row));
+            if (block.research) appendResearchGroup(block.research);
+            for (const row of block.rows) {
+                list.appendChild(makeButton(row));
+                if (row.after) list.appendChild(makeAfter(row.after));
+            }
             if (block.treeRow) list.appendChild(makeTreeButton(block.treeRow));
             if (block.pair) {
                 const pairRow = document.createElement('div');
@@ -527,6 +690,14 @@ export const bottomSheetMethods = uiModule({
         overlay.appendChild(sheet);
         overlay.addEventListener('click', (e) => {
             if (e.target === overlay) this.hideBottomSheet();
+        });
+        // Escape on the research page: back to the list, focus on "All research actions" (a second one closes).
+        sheet.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && researchPage && !researchPage.hidden && !document.getElementById('research-trial-note')) {
+                e.preventDefault();
+                e.stopPropagation();
+                hideResearchPage();
+            }
         });
 
         // Swipe-down to dismiss (mirrors the person sheet).
@@ -552,6 +723,8 @@ export const bottomSheetMethods = uiModule({
 
         document.body.appendChild(overlay);
         this.bottomSheet = overlay;
+        // Opened for the research (its state in the toolbar, a narrow window): straight on its page.
+        if (opts.research) showResearchPage();
         requestAnimationFrame(() => overlay.classList.add('active'));
     },
 

@@ -265,7 +265,7 @@ test('waiting for the quiet time: the mark and the block say when the changes go
     await openResearchMenu(page);
     await expect(block(page)).toHaveAttribute('data-state', 'autoWaiting');
     await expect(block(page)).toContainText(/sent at \d{1,2}:\d{2}/);
-    await expect(block(page).getByRole('button', { name: 'Send now' })).toBeVisible();
+    await expect(block(page).getByRole('menuitem', { name: 'Send now' })).toBeVisible();
 });
 
 test('a written send taken back in the research: told once, not sent again by itself, the new version asks before it loads', async ({ page }) => {
@@ -309,7 +309,7 @@ test('finding 35: Send again after a send taken back asks the research to write 
     const bridge = await writtenThenUndone(page);
     const first = bridge.sends.find(r => r.state === 'undone')!.intake;
     await openResearchMenu(page);
-    await block(page).getByRole('button', { name: 'Send again' }).click();
+    await block(page).getByRole('menuitem', { name: 'Send again' }).click();
     await expect.poll(() => bridge.againAsks ?? []).toEqual([first]);
     expect(bridge.posts).toHaveLength(1);
     await expect(pill(page)).not.toContainText('Send taken back');
@@ -323,7 +323,7 @@ test('Send again with an edit made since the send taken back: that send is writt
     const first = bridge.sends.find(r => r.state === 'undone')!.intake;
     await editJan(page, 'Brno');
     await openResearchMenu(page);
-    await block(page).getByRole('button', { name: 'Send again' }).click();
+    await block(page).getByRole('menuitem', { name: 'Send again' }).click();
     await expect.poll(() => bridge.againAsks ?? []).toEqual([first]);
     // By hand the preview may come first: Send there sends.
     const panel = page.locator('#research-changes-panel');
@@ -365,7 +365,7 @@ test('finding 35: a copy that still carries a send taken back (undoneSince): wha
 test('finding 35: keeping the undo: "Load the research\'s version" on the bar asks plainly (no "send first"), then the tree is the research\'s', async ({ page }) => {
     await writtenThenUndone(page);
     await openResearchMenu(page);
-    await block(page).getByRole('button', { name: "Load the research's version" }).click();
+    await block(page).getByRole('menuitem', { name: "Load the research's version" }).click();
     const choice = page.locator('.dialog-confirm', { hasText: 'Changed in the app' });
     await choice.getByRole('button', { name: 'Update' }).click();
     await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe('ee77ff88aa99');
@@ -466,7 +466,7 @@ test('finding 40: a write that left a conflict stays in sight after the note goe
     await openResearchMenu(page);
     await expect(block(page)).toHaveAttribute('data-state', 'writtenConflicts');
     await expect(block(page)).toContainText('The value from the app stays here');
-    await block(page).getByRole('button', { name: "Load the research's version" }).click();
+    await block(page).getByRole('menuitem', { name: "Load the research's version" }).click();
     await expect(page.locator('.dialog-confirm', { hasText: 'Changed in the app' })).toBeVisible();
     await page.keyboard.press('Escape');
     expect(await janFirst(page)).toBe('Jenda');
@@ -500,7 +500,7 @@ test('findings 38/39: a copy carrying a send taken back, the next send written w
     await expect(block(page)).toHaveAttribute('data-state', 'rejected');
     await expect(block(page)).toContainText('Written, 1 conflict');
     await expect(block(page).locator('[data-action="showConflicts"]')).toBeVisible();
-    await expect(block(page).getByRole('button', { name: 'Send again' })).toBeVisible();
+    await expect(block(page).getByRole('menuitem', { name: 'Send again' })).toBeVisible();
 });
 
 test('finding 43: after a send taken back, an unrelated edit does not go by itself (it would write the send taken back again); Send again first, then the edit goes', async ({ page }) => {
@@ -523,7 +523,7 @@ test('finding 43: after a send taken back, an unrelated edit does not go by itse
     expect(bridge.posts).toHaveLength(1);
     expect(bridge.againAsks ?? []).toEqual([]);
     // The user's choice: written again from what the research kept; the rename goes after it.
-    await block(page).getByRole('button', { name: 'Send again' }).click();
+    await block(page).getByRole('menuitem', { name: 'Send again' }).click();
     await expect.poll(() => bridge.againAsks ?? []).toEqual([first]);
     await page.clock.fastForward(QUIET + 1000);
     await expect.poll(() => bridge.posts.length).toBe(2);
@@ -556,7 +556,7 @@ test('finding 43, research 1.12.0-rc.19: it leaves out what a send taken back br
     await renameJan(page, 'Jenda');
     await openResearchMenu(page);
     // Send again: the research writes the send taken back from what it kept.
-    await block(page).getByRole('button', { name: 'Send again' }).click();
+    await block(page).getByRole('menuitem', { name: 'Send again' }).click();
     await expect.poll(() => bridge.againAsks ?? []).toEqual([first]);
     expect(await janFirst(page)).toBe('Jenda');
 });
@@ -600,7 +600,7 @@ test('the bridge stops: "not running" at its next ask (within 20 s), and the tas
     const bridge = await autoTree(page, { waiting: [{ id: 'T0010', what: 'Confirm the baptism', at: new Date().toISOString() }] });
     await poll(page);
     await openResearchMenu(page);
-    const sub = page.locator('#actions-research-submenu');
+    const sub = page.locator('#research-menu');
     await expect(sub.locator('#research-item-waiting')).toBeVisible();
     await page.evaluate(() => window.Strom.UI.closeActionsMenu());
     bridge.down = true;
@@ -677,7 +677,7 @@ test('F4/F5 of the Windows round: the browser blocking the research is said as s
     await expect(block(page)).toContainText('allow “Apps on device” (in older versions “Local network access”)');
     await expect(block(page)).not.toContainText("isn't running");
     // The way to allow it: the dialog with the steps open; allowed, Try again connects.
-    await block(page).getByRole('button', { name: 'How to allow' }).click();
+    await block(page).getByRole('menuitem', { name: 'How to allow' }).click();
     const d = page.locator('#research-connect-failed');
     await expect(d.locator('.connect-reason')).toHaveText('Chromium blocks the connection');
     await expect(d.locator('.connect-how li').nth(1)).toHaveText('Open Site settings and find Apps on device (in older versions Local network access).');
@@ -725,8 +725,8 @@ test('A2: a switch of mode not yet acknowledged is said beside a send taken back
     await openResearchMenu(page);
     await expect(block(page)).toHaveAttribute('data-state', 'rejected');
     await expect(block(page)).toContainText('was taken back in the research');
-    await expect(block(page).getByRole('button', { name: 'Send again' })).toBeVisible();
-    await expect(block(page).getByRole('button', { name: 'Got it' })).toBeVisible();
+    await expect(block(page).getByRole('menuitem', { name: 'Send again' })).toBeVisible();
+    await expect(block(page).getByRole('menuitem', { name: 'Got it' })).toBeVisible();
     await expect(pill(page)).toContainText('Send taken back');
 });
 
@@ -750,7 +750,7 @@ test('R3 of the rc.49 round: after Send again an older send taken back is not of
     await expect.poll(() => bridge.posts.length).toBe(3);
     await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sent?.intake)).toBe(later.intake);
     await openResearchMenu(page);
-    await block(page).getByRole('button', { name: 'Send again' }).click();
+    await block(page).getByRole('menuitem', { name: 'Send again' }).click();
     await expect.poll(() => bridge.againAsks ?? []).toEqual([later.intake]);
     await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sent?.state)).not.toBe('undone');
     await expect(pill(page)).not.toContainText('Send taken back');
@@ -768,7 +768,7 @@ test('R3 of the rc.49 round: after Send again an older send taken back is not of
     await openResearchMenu(page);
     await expect(block(page)).toContainText('are not in the research: they stayed only here');
     await expect(block(page).locator('[data-action="loadNewer"]')).toBeVisible();
-    await expect(page.locator('#actions-research-dot')).toBeVisible();
+    await expect(page.locator('#research-menu-signal[data-signal="attention"]')).toBeVisible();
     await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');
     // Its version loaded after the undo: settled, nothing said any more.
@@ -795,7 +795,7 @@ test('a send taken back before this page knew (not its last write) is shown with
     await poll(page);
     await expect(pill(page)).toContainText('Send taken back');
     await openResearchMenu(page);
-    await block(page).getByRole('button', { name: 'Send again' }).click();
+    await block(page).getByRole('menuitem', { name: 'Send again' }).click();
     await expect.poll(() => bridge.againAsks ?? []).toEqual(['R20261004060000000-new1']);
 });
 
@@ -1076,7 +1076,7 @@ test('V-J: what the research did not write is the state until the next send (a d
     await expect(block(page)).toHaveAttribute('data-state', 'notWritten');
     await expect(block(page)).toContainText('Written 2, not written 1');
     await expect(block(page)).toContainText('What was not written stays here in the app.');
-    await block(page).getByRole('button', { name: 'Show' }).click();
+    await block(page).getByRole('menuitem', { name: 'Show' }).click();
     const panel = page.locator('#research-changes-panel');
     await expect(panel.locator('.research-changes-row.is-not-written')).toContainText('Jan Víšek');
     // Jan is not claimed as written (V-J): his citation went with the change kept there.
@@ -1236,7 +1236,7 @@ test.describe('the toolbar', () => {
         await expect(dot(page)).toBeHidden();
         await openResearchMenu(page);
         await expect(block(page)).toHaveAttribute('data-state', 'autoIntro');
-        await block(page).getByRole('button', { name: 'Got it' }).click();
+        await block(page).getByRole('menuitem', { name: 'Got it' }).click();
         await openResearchMenu(page);
         await expect(block(page)).not.toHaveAttribute('data-state', 'autoIntro');
     });
@@ -1254,10 +1254,14 @@ test.describe('the toolbar', () => {
         await expect(send).toHaveAttribute('title', 'Send the changes to the research');
         await page.setViewportSize({ width: 1440, height: 900 });
         await expect.poll(() => send.innerText()).toBe('Send');
-        await expect(page.locator('#actions-menu-research-dot')).toBeHidden();
+        // Changes not sent: the Research button's one dot (at every width); none on ⋯.
+        const unsentDot = page.locator('#research-menu-signal[data-signal="unsent"]');
+        await expect(unsentDot).toBeVisible();
+        await expect(page.locator('#research-menu-btn')).toHaveAttribute('aria-label', 'Research – changes from the app not yet in the research');
+        await expect(page.locator('.actions-menu-btn')).toHaveAttribute('aria-label', 'Actions');
         await page.setViewportSize({ width: 1100, height: 900 });
         await expect(send).toBeHidden();
-        await expect(page.locator('#actions-menu-research-dot')).toBeVisible();
+        await expect(unsentDot).toBeVisible();
         await page.setViewportSize({ width: 1440, height: 900 });
         bridge.down = true;
         await poll(page);
@@ -1298,7 +1302,7 @@ test.describe('the toolbar', () => {
             await page.setViewportSize({ width, height: 800 });
             await page.goto('/');
             await expect(pill(page)).toBeHidden();
-            await expect(page.locator('#actions-menu-research-dot')).toBeHidden();
+            await expect(page.locator('#research-menu-signal')).toHaveCount(0);
         }
     });
 });
@@ -1314,7 +1318,7 @@ test.describe('the research as an archive', () => {
         await page.evaluate(() => localStorage.setItem('strom-research-auto-intro-seen', '1'));
         await poll(page);
         await openResearchMenu(page);
-        const sub = page.locator('#actions-research-submenu');
+        const sub = page.locator('#research-menu');
         // In step with a running bridge: no "Load new version" row (the block offers one when there is).
         await expect(sub.locator('#research-item-version')).toHaveCount(0);
         await expect(sub.locator('#research-item-open')).toBeVisible();
@@ -1324,7 +1328,9 @@ test.describe('the research as an archive', () => {
         }
         // Taking the last send back stays the user's in an archive.
         await expect(sub.locator('#research-item-undo')).toBeVisible();
-        await expect(block(page).locator('.research-sync-tag')).toHaveText('Archive');
+        // "Archive" beside the menu's title, not again in the state block.
+        await expect(sub.locator('.research-menu-heading #research-menu-archive')).toHaveText('Archive');
+        await expect(block(page).locator('.research-sync-tag')).toHaveCount(0);
         await page.evaluate(() => window.Strom.UI.closeActionsMenu());
         const actions = await page.evaluate(() => {
             const jan = Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.firstName === 'Jan') as any;
@@ -1341,7 +1347,7 @@ test.describe('the research as an archive', () => {
         await page.evaluate(() => localStorage.setItem('strom-research-auto-intro-seen', '1'));
         await poll(page);
         await openResearchMenu(page);
-        const sub = page.locator('#actions-research-submenu');
+        const sub = page.locator('#research-menu');
         await expect(sub.locator('#research-item-chat')).toBeVisible();
         await expect(sub.locator('#research-item-live')).toBeVisible();
         await page.evaluate(() => window.Strom.UI.closeActionsMenu());
@@ -1370,7 +1376,7 @@ test.describe('the research as an archive', () => {
             localStorage.setItem('strom-research-auto-intro-seen', '1');
         }, { uuid: UUID });
         await openResearchMenu(page);
-        const sub = page.locator('#actions-research-submenu');
+        const sub = page.locator('#research-menu');
         await expect(sub.locator('#research-item-open')).toBeVisible();
         for (const id of ['research-item-chat', 'research-item-live', 'research-item-waiting']) await expect(sub.locator(`#${id}`)).toHaveCount(0);
         await page.evaluate(() => window.Strom.UI.closeActionsMenu());
@@ -1399,7 +1405,7 @@ test.describe('the research as an archive', () => {
         await openResearchMenu(page);
         await expect(block(page)).toHaveAttribute('data-state', 'switched');
         await expect(block(page)).toContainText('The research is now an archive.');
-        await block(page).getByRole('button', { name: 'Got it' }).click();
+        await block(page).getByRole('menuitem', { name: 'Got it' }).click();
         await expect(dot(page)).toBeHidden();
         await page.reload();
         await expect(card(page, 'Jan')).toBeVisible();
@@ -1434,7 +1440,7 @@ test.describe('the research as an archive', () => {
         await openResearchMenu(page);
         await expect(block(page)).toHaveAttribute('data-state', 'offerAuto');
         await expect(block(page)).toContainText('Changes are sent regularly. Send them by themselves?');
-        await block(page).getByRole('button', { name: 'No, thanks' }).click();
+        await block(page).getByRole('menuitem', { name: 'No, thanks' }).click();
         await openResearchMenu(page);
         await expect(block(page)).not.toHaveAttribute('data-state', 'offerAuto');
         expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sendMode)).toBe('manual');
@@ -1442,7 +1448,7 @@ test.describe('the research as an archive', () => {
         await page.evaluate(() => localStorage.setItem(`strom-research-auto:${window.Strom.TreeManager.getActiveTreeId()}`, JSON.stringify({ modeAsked: true, manualWrites: 5 })));
         await poll(page);
         await openResearchMenu(page);
-        await block(page).getByRole('button', { name: 'Yes' }).click();
+        await block(page).getByRole('menuitem', { name: 'Yes' }).click();
         expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sendMode)).toBe('auto');
     });
 
@@ -1582,7 +1588,7 @@ test.describe('data protection around the research', () => {
         await openResearchMenu(page);
         await expect(block(page)).toHaveAttribute('data-state', 'loaded');
         await expect(block(page)).toContainText('Research version loaded');
-        await block(page).getByRole('button', { name: 'Restore the state before loading' }).click();
+        await block(page).getByRole('menuitem', { name: 'Restore the state before loading' }).click();
         await expect(page.locator('.toast', { hasText: 'Restored to the state before loading.' }).getByRole('button', { name: 'Undo' })).toBeVisible();
         const occu = await page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.firstName === 'Jan') as any).occupation ?? '');
         expect(occu).not.toBe('tesař');
@@ -1814,11 +1820,12 @@ test.describe('"What will be sent" before sending by hand', () => {
         await expect(panel(page)).toContainText('What will be sent');
         await expect(panel(page)).toContainText('Jan Víšek');
         expect(bridge.posts).toHaveLength(0);
-        // Close leaves it unsent; the menu row says the preview comes ("…").
+        // Close leaves it unsent; the state block offers the send (no "Send changes…" row beside it).
         await panel(page).getByRole('button', { name: 'Close' }).click();
         await expect(panel(page)).toHaveCount(0);
         await openResearchMenu(page);
-        await expect(page.locator('#research-item-send')).toContainText('Send changes…');
+        await expect(block(page).locator('[data-action="send"]')).toBeVisible();
+        await expect(page.locator('#research-item-send')).toHaveCount(0);
         await page.evaluate(() => window.Strom.UI.closeActionsMenu());
         await page.evaluate(() => window.Strom.UI.researchSendNow());
         await expect(panel(page)).toBeVisible();
@@ -1826,14 +1833,16 @@ test.describe('"What will be sent" before sending by hand', () => {
         await expect(panel(page).locator('#research-changes-skip')).toBeChecked();
         await panel(page).locator('[data-act="send"]').click();
         await expect.poll(() => bridge.posts.length).toBe(1);
-        // Next time at once (this tree): the row without dots.
+        // Next time at once (this tree).
         await editJan(page, 'Brno');
-        await openResearchMenu(page);
-        await expect(page.locator('#research-item-send')).not.toContainText('…');
-        await page.evaluate(() => window.Strom.UI.closeActionsMenu());
         await page.evaluate(() => window.Strom.UI.researchSendNow());
         await expect.poll(() => bridge.posts.length).toBe(2);
         await expect(panel(page)).toHaveCount(0);
+        // Nothing left to send (the block offers no send): the row is there, without dots.
+        await openResearchMenu(page);
+        await expect(block(page).locator('[data-action="send"]')).toHaveCount(0);
+        await expect(page.locator('#research-item-send')).toHaveText('Send changes');
+        await page.evaluate(() => window.Strom.UI.closeResearchMenu());
         // Research for this tree says so and brings the preview back.
         await page.evaluate(() => window.Strom.UI.researchActionTreeSettings());
         const dialog = page.locator('#research-tree-settings-modal');
@@ -1960,14 +1969,14 @@ test('R4 of the rc.49 round: the state of a send taken back never sends again �
     // The text and the mark open ⋯ → Research; nothing is asked of the research.
     await pill(page).locator('.research-sync-pill-label').click();
     // N1 of the beta.70 round: the menu stays open (the toolbar's own click closed it again at once)
-    await expect(page.locator('#actions-menu-dropdown')).toHaveClass(/\bactive\b/);
+    await expect(page.locator('#research-menu')).toHaveClass(/\bactive\b/);
     await expect(block(page)).toBeVisible();
     await expect(block(page)).toContainText('was taken back in the research');
     await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');
     await pill(page).locator('.research-sync-pill-mark').click();
     // N1 of the beta.70 round: the menu stays open (the toolbar's own click closed it again at once)
-    await expect(page.locator('#actions-menu-dropdown')).toHaveClass(/\bactive\b/);
+    await expect(page.locator('#research-menu')).toHaveClass(/\bactive\b/);
     await expect(block(page)).toBeVisible();
     await expect(block(page)).toContainText('was taken back in the research');
     await page.keyboard.press('Escape');
@@ -1982,7 +1991,7 @@ test('R4 of the rc.49 round: the state of a send taken back never sends again �
     expect(bridge.againAsks ?? []).toEqual([]);
     await expect(pill(page)).toContainText('Send taken back');
     // N1 of the beta.70 round: the menu stays open (the toolbar's own click closed it again at once)
-    await expect(page.locator('#actions-menu-dropdown')).toHaveClass(/\bactive\b/);
+    await expect(page.locator('#research-menu')).toHaveClass(/\bactive\b/);
     await expect(block(page)).toBeVisible();
     await expect(block(page)).toContainText('was taken back in the research');
     await page.keyboard.press('Escape');
@@ -2026,7 +2035,7 @@ test('N38: a send the research took nothing from, the tree still apart from its 
     await expect(block(page)).not.toContainText('In sync with the research');
     await expect(block(page)).toContainText("Changes the research doesn't have");
     await expect(block(page)).toContainText('The research took nothing new from the last send.');
-    await expect(block(page).getByRole('button', { name: 'What will be sent' })).toBeVisible();
+    await expect(block(page).getByRole('menuitem', { name: 'What will be sent' })).toBeVisible();
     await page.clock.fastForward(QUIET * 2);
     expect(bridge.posts).toHaveLength(1);
     // By hand: the Send button, not the quiet mark.

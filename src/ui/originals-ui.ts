@@ -466,7 +466,7 @@ export const originalsMethods = uiModule({
             : warn ? '<span class="media-warn-dot" aria-hidden="true"></span>' : '<span class="media-ring" aria-hidden="true"></span>';
         return `<div class="research-sync-line2${warn ? ' is-warn' : ''}">${icon}`
             + `<span class="research-sync-line2-text">${esc(text)}</span>`
-            + `<button type="button" class="research-sync-link" data-action="showOriginals" onclick="window.Strom.UI.showOriginalsQueue()">${esc(q.show)}</button></div>`;
+            + `<button type="button" class="research-sync-link" role="menuitem" data-action="showOriginals" onclick="window.Strom.UI.showOriginalsQueue()">${esc(q.show)}</button></div>`;
     },
 
     /** Settings → Data, the waiting originals open (from the block, a toast, "Research for this tree"). */

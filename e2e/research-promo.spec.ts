@@ -628,8 +628,8 @@ test.describe('hidden', () => {
         await expect(whatsNew(page)).toHaveCount(0);
         await expect(newDot(page)).toBeHidden();
         await openActionsMenu(page);
-        // On a computer the research tree gets Actions → Research in its place.
-        await expect(page.locator('#actions-research-row')).toBeVisible();
+        // On a computer the research tree gets the toolbar's Research button in its place.
+        await expect(page.locator('#research-menu-btn')).toBeVisible();
         await expect(menuRow(page)).toBeHidden();
     });
 

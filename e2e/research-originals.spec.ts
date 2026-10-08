@@ -313,7 +313,7 @@ test.describe('originals: the full UI (beta.10)', () => {
         await openResearchMenu(page);
         const line = page.locator('#research-sync-block .research-sync-line2');
         await expect(line).toContainText('1 original waiting');
-        await line.getByRole('button', { name: 'Show…' }).click();
+        await line.getByRole('menuitem', { name: 'Show…' }).click();
 
         const row = page.locator('#media-queue-row');
         await expect(row).toHaveAttribute('open', '');

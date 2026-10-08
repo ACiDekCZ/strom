@@ -924,7 +924,7 @@ export const batchMethods = uiModule({
             `<div class="research-sync-line2 batch-line${warn ? ' is-warn' : ''}">${warn ? '<span class="media-warn-dot" aria-hidden="true"></span>' : '<span class="media-ring" aria-hidden="true"></span>'}`
             + `<span class="research-sync-line2-text">${esc(text)}</span>${links}</div>`;
         const btn = (label: string, call: string): string =>
-            `<button type="button" class="research-sync-link" onclick="window.Strom.UI.${call}">${esc(label)}</button>`;
+            `<button type="button" class="research-sync-link" role="menuitem" onclick="window.Strom.UI.${call}">${esc(label)}</button>`;
         if (run && !run.finished && run.treeId === link.treeId) {
             return line(`${b.sendingTitle(run.name)} · ${b.sendingSub(run.index, run.total)}`, btn(b.show, 'showBatchDialog()'));
         }

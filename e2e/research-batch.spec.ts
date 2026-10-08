@@ -107,7 +107,7 @@ test.describe('Add materials', () => {
         const line = block(page).locator('.batch-line');
         await expect(line).toContainText('Unfinished batch “Krabice”');
         await expect(line).toContainText('80 of 214 sent');
-        await line.getByRole('button', { name: 'Continue…' }).click();
+        await line.getByRole('menuitem', { name: 'Continue…' }).click();
         const dialog = page.locator('#batch-modal');
         await expect(dialog.locator('.batch-banner')).toContainText('80 of 214 files sent');
         await dialog.locator('.batch-banner').getByRole('button', { name: 'Discard' }).click();
@@ -159,7 +159,7 @@ test.describe('Add materials', () => {
         await expect(dialog).toHaveCount(0);
         await openResearchMenu(page);
         await expect(block(page).locator('.batch-line')).toContainText('Sending batch “Krabice”');
-        await block(page).locator('.batch-line').getByRole('button', { name: 'Show' }).click();
+        await block(page).locator('.batch-line').getByRole('menuitem', { name: 'Show' }).click();
         b.down = false;
         await dialog.getByRole('button', { name: 'Continue' }).click();
         await expect(dialog.locator('.batch-confirm-title')).toContainText('is in the research');

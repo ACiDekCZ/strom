@@ -77,10 +77,15 @@ for (const locale of ['en-US', 'cs-CZ', 'de-DE']) {
             const janId = await page.evaluate(() => window.Strom.DataManager.getAllPersons().find(p => p.firstName === 'Jan')!.id);
             expect(await page.evaluate(() => window.Strom.UI.activeResearchArchive())).toBe(true);
 
-            // Actions → Research (with the sync block above it).
+            // The Research menu (with the sync block on top): "archive" beside its title, no agent, no Follow live.
             await openResearchMenu(page);
-            await expect(page.locator('#actions-research-submenu')).toBeVisible();
-            expectNoAgent('Actions → Research', await shownText(page, '#actions-research-submenu'));
+            await expect(page.locator('#research-menu')).toBeVisible();
+            await expect(page.locator('#research-menu-archive')).toBeVisible();
+            await expect(page.locator('#research-item-chat')).toHaveCount(0);
+            await expect(page.locator('#research-item-live')).toHaveCount(0);
+            expectNoAgent('Research menu', await shownText(page, '#research-menu'));
+            await page.evaluate(() => window.Strom.UI.closeResearchMenu());
+            await page.evaluate(() => window.Strom.UI.toggleActionsMenu());
             expectNoAgent('Actions menu', await shownText(page, '#actions-menu-dropdown'));
             await page.evaluate(() => window.Strom.UI.closeActionsMenu());
 
@@ -136,9 +141,9 @@ for (const locale of ['en-US', 'cs-CZ', 'de-DE']) {
             expectNoAgent('Settings', await shownText(page, '#settings-modal'));
             await page.evaluate(() => window.Strom.UI.closeSettingsDialog());
 
-            // Waiting for an answer and the list of changes.
+            // Awaiting action and the list of changes.
             await page.evaluate(() => window.Strom.UI.showResearchWaiting());
-            expectNoAgent('Waiting for an answer', await shownText(page, '.modal-overlay.active'));
+            expectNoAgent('Awaiting action', await shownText(page, '.modal-overlay.active'));
             await page.keyboard.press('Escape');
 
             // Cards: their tooltips and labels.

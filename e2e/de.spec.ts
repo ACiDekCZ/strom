@@ -198,7 +198,7 @@ test('German UI: the research — its menu, the states of the block, Research fo
     const janId = await page.evaluate(() => window.Strom.DataManager.getAllPersons().find(p => p.firstName === 'Jan')!.id);
 
     await openResearchMenu(page);
-    await expectNoEnglish(page.locator('#actions-research-submenu'), 'Actions → Research');
+    await expectNoEnglish(page.locator('#research-menu'), 'the Research menu');
     await page.evaluate(() => window.Strom.UI.closeActionsMenu());
 
     await page.evaluate(() => window.Strom.UI.researchActionTreeSettings());

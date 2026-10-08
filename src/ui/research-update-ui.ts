@@ -46,7 +46,7 @@ export const researchUpdateMethods = uiModule({
         const u = strings.researchOlder;
         const text = where === 'attachments' ? strings.media.olderResearch : u.line(older.version);
         return `<span class="research-older-text">${esc(text)}</span> `
-            + `<button type="button" class="link-button research-older-how" data-research-update="${where}" onclick="window.Strom.UI.showResearchUpdateHelp()">${esc(u.how)}</button>`;
+            + `<button type="button" class="link-button research-older-how"${where === 'menu' ? ' role="menuitem"' : ''} data-research-update="${where}" onclick="window.Strom.UI.showResearchUpdateHelp()">${esc(u.how)}</button>`;
     },
 
     showResearchUpdateHelp(): void {

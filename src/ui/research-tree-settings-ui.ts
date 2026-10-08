@@ -74,8 +74,8 @@ export function researchSendPrinciplesHtml(inDialog = false): string {
 }
 
 /** "trial" beside a title: a button that opens a short note (the research is in trial operation). */
-export function researchTrialTagHtml(): string {
-    return `<button type="button" class="research-trial-tag" aria-expanded="false" aria-haspopup="true"`
+export function researchTrialTagHtml(menuItem = false): string {
+    return `<button type="button" class="research-trial-tag"${menuItem ? ' role="menuitem"' : ''} aria-expanded="false" aria-haspopup="true"`
         + ` onclick="event.stopPropagation(); window.Strom.UI.toggleResearchTrialNote(this)">${esc(strings.treeSettings.trialTag)}</button>`;
 }
 

@@ -60,8 +60,22 @@ import { shownNameOrEmpty } from '../person-name.js';
 /** The "told once" mark of sending held for want of the research's numbers (see tellResearchNoIds). */
 const NO_IDS = 'no-ids';
 
+/** A button of the research state block: the action researchSyncAction runs, its label, a link look. */
+export interface ResearchSyncBlockAction { action: string; label: string; asLink?: boolean }
+/** The research state block's content (the menu draws it in full, the More sheet as one line). */
+export interface ResearchSyncBlock {
+    kind: string;
+    tone: 'warn' | 'neutral' | 'quiet';
+    title: string;
+    sub?: string;
+    actions: ResearchSyncBlockAction[];
+    spinner: boolean;
+    /** A send of this tree is on its way (the send buttons wait). */
+    sendingNow: boolean;
+}
+
 /** What reading the research's numbers came to (researchReadIds). */
-type NoIdsResult = { ok: true } | { ok: false; why: 'unavailable' | 'unreachable' | 'other-tree' | 'unmatched'; research?: StromData; header?: ReturnType<typeof readResearchHeader> };
+type NoIdsResult ={ ok: true } | { ok: false; why: 'unavailable' | 'unreachable' | 'other-tree' | 'unmatched'; research?: StromData; header?: ReturnType<typeof readResearchHeader> };
 /** How often the bridge is asked, the window visible: normally / while a send waits. */
 const POLL_MS = 20_000;
 const POLL_PENDING_MS = 15_000;
@@ -1882,10 +1896,10 @@ export const researchSyncMethods = uiModule({
         return now < until ? { holds: true, until } : { holds: false };
     },
 
-    /** The state block at the top of ⋯ → Research ('' when there is none). */
-    researchSyncBlockHtml(): string {
+    /** The state block at the top of the research menu: its tone, text and actions (null when there is none). */
+    researchSyncBlockData(): ResearchSyncBlock | null {
         const state = this.currentResearchSyncState();
-        if (state.kind === 'none') return '';
+        if (state.kind === 'none') return null;
         const s = strings.sync;
         const ctx = this.researchSyncLink();
         const link = ctx?.link;
@@ -1893,8 +1907,8 @@ export const researchSyncMethods = uiModule({
         const archive = !!link && this.researchModeOf(link.id, link) === 'archive';
         const auto = researchSendMode(link) === 'auto';
         const autoState = treeId ? researchAutoState(treeId) : {};
-        type Action = { action: string; label: string; asLink?: boolean };
-        type Block = { tone: 'warn' | 'neutral' | 'quiet'; title: string; sub?: string; actions?: Action[]; tag?: boolean; spinner?: boolean };
+        type Action = ResearchSyncBlockAction;
+        type Block = { tone: 'warn' | 'neutral' | 'quiet'; title: string; sub?: string; actions?: Action[]; spinner?: boolean };
         const changed = treeId ? when(TreeManager.getTreeMetadata(treeId)?.changedAt) : '';
         const edits = Math.max(1, autoState.edits ?? 1);
         const rt = link ? runtime.get(link.id) : undefined;
@@ -2001,7 +2015,7 @@ export const researchSyncMethods = uiModule({
                 sub: [state.reason ? `${state.reason}.` : '', s.autoStoppedSub].filter(Boolean).join(' '), actions: [{ action: 'sendAgain', label: s.sendAgain }] }),
             switched: () => archive
                 ? { tone: 'neutral', title: s.switchedToArchiveTitle, sub: s.switchedToArchiveSub, actions: [{ action: 'gotIt', label: s.gotIt, asLink: true }] }
-                : { tone: 'neutral', title: s.switchedToAgentTitle, sub: s.switchedToAgentSub, actions: [{ action: 'gotIt', label: s.gotIt, asLink: true }], tag: false },
+                : { tone: 'neutral', title: s.switchedToAgentTitle, sub: s.switchedToAgentSub, actions: [{ action: 'gotIt', label: s.gotIt, asLink: true }] },
             offerAuto: () => ({ tone: 'neutral', title: s.offerAutoTitle,
                 actions: [{ action: 'offerYes', label: s.offerAutoYes }, { action: 'offerNo', label: s.offerAutoNo, asLink: true }] }),
             autoIntro: () => ({ tone: 'neutral', title: s.autoIntroTitle, sub: s.autoWhen,
@@ -2052,19 +2066,34 @@ export const researchSyncMethods = uiModule({
         }
         // ("Only load from the research" is the quiet `off` block; a real state of the research outranks it.
         // "Restore the state before loading" is the `loaded` block for an hour, then a row of the menu.)
-        const sendingNow = !!treeId && sendingTree === treeId;
-        const buttons = (b.actions ?? []).map(a => {
+        return { kind: state.kind, tone: b.tone, title: b.title, sub: b.sub, actions: b.actions ?? [], spinner: !!b.spinner,
+            sendingNow: !!treeId && sendingTree === treeId };
+    },
+
+    /**
+     * The state block as the research menu draws it ('' when there is none).
+     * Only its text is a live region; its buttons are items of the menu (the
+     * first one described by the text), not announced again with every change.
+     */
+    researchSyncBlockHtml(data?: ResearchSyncBlock | null): string {
+        const b = data === undefined ? this.researchSyncBlockData() : data;
+        if (!b) return '';
+        const s = strings.sync;
+        const sendingNow = b.sendingNow;
+        const buttons = b.actions.map((a, i) => {
+            const describe = i === 0 ? ' aria-describedby="research-sync-status"' : '';
             const busy = sendingNow && !a.asLink && ['send', 'sendThenLoad', 'retry', 'sendAgain'].includes(a.action);
             return a.asLink
-                ? `<button type="button" class="research-sync-link" data-action="${a.action}" onclick="${call('researchSyncAction', `'${a.action}'`)}">${esc(a.label)}</button>`
-                : `<button type="button" class="primary btn-sm research-sync-btn" data-action="${a.action}"${busy ? ' disabled aria-busy="true"' : ''}`
+                ? `<button type="button" class="research-sync-link" role="menuitem" data-action="${a.action}"${describe} onclick="${call('researchSyncAction', `'${a.action}'`)}">${esc(a.label)}</button>`
+                : `<button type="button" class="primary btn-sm research-sync-btn" role="menuitem" data-action="${a.action}"${describe}${busy ? ' disabled aria-busy="true"' : ''}`
                     + ` onclick="${call('researchSyncAction', `'${a.action}'`)}">${busy ? `<span class="research-sync-spinner" aria-hidden="true"></span>${esc(s.sending)}` : esc(a.label)}</button>`;
         }).join('');
-        const tag = archive && b.tag !== false ? `<span class="research-sync-tag">${esc(s.archiveTag)}</span>` : '';
-        return `<div class="research-sync-block research-sync-block--${b.tone}" id="research-sync-block" data-state="${state.kind}" role="status" aria-live="polite">`
-            + tag
+        // (An archive says so beside the menu's title, not again in the block.)
+        return `<div class="research-sync-block research-sync-block--${b.tone}" id="research-sync-block" data-state="${b.kind}">`
+            + `<div class="research-sync-status" id="research-sync-status" role="status" aria-live="polite">`
             + `<div class="research-sync-title">${b.spinner ? '<span class="research-sync-spinner" aria-hidden="true"></span>' : ''}${esc(b.title)}</div>`
             + (b.sub ? `<div class="research-sync-sub">${esc(b.sub)}</div>` : '')
+            + '</div>'
             + (buttons ? `<div class="research-sync-actions">${buttons}</div>` : '')
             + this.originalsQueueLineHtml()
             + this.batchLineHtml()
@@ -2254,27 +2283,24 @@ export const researchSyncMethods = uiModule({
             researchAutoState(treeId).resent ?? [], link.syncedAt)[0] ?? null;
     },
 
-    /** The ⋯ dot and label for the sync state (refreshActionMenuBadges calls this). */
+    /** The sync state asks for the user (the Research button's dot, after a waiting count). */
     researchSyncAttention(): boolean {
         const state = this.currentResearchSyncState();
         const kind = state.kind;
         // Not written: a dot until its list was seen.
         const ctx = this.researchSyncLink();
         const notWrittenSeen = kind === 'notWritten' && !!ctx && !!researchAutoState(ctx.treeId).notWritten?.seen;
-        const attention = (researchSyncWantsAttention(kind) && !notWrittenSeen) || this.originalsQueueWarn() || !!this.researchUndoneLeftBehind();
-        // Changes not sent, as the toolbar has them (a block over them, e.g. "piled up", does not hide them).
-        const unsentCore = state.core === 'unsent' || state.core === 'notTaken';
-        const btn = document.querySelector<HTMLElement>('.actions-menu-btn');
-        if (btn) {
-            if (btn.dataset.baseLabel === undefined) btn.dataset.baseLabel = btn.getAttribute('aria-label') ?? '';
-            btn.setAttribute('aria-label', researchSyncUnsent(kind) || researchSyncUnsent(state.core) ? strings.sync.moreHint : btn.dataset.baseLabel || strings.menu.actions);
-        }
-        // Sent by hand: where the toolbar has no Send button, a dot on ⋯ instead (CSS hides it from 1180 px).
-        const narrowDot = document.getElementById('actions-menu-research-dot');
-        if (narrowDot) narrowDot.style.display = unsentCore ? 'block' : 'none';
-        const rowDot = document.getElementById('actions-research-dot');
-        if (rowDot) rowDot.style.display = attention || unsentCore ? 'inline-block' : 'none';
-        return attention;
+        return (researchSyncWantsAttention(kind) && !notWrittenSeen) || this.originalsQueueWarn() || !!this.researchUndoneLeftBehind();
+    },
+
+    /**
+     * Changes not sent: `dot` as the toolbar has them (a block over them, e.g.
+     * "piled up", does not hide them); `label` for the Research button's name.
+     */
+    researchSyncUnsentNow(): { dot: boolean; label: boolean } {
+        const state = this.currentResearchSyncState();
+        return { dot: state.core === 'unsent' || state.core === 'notTaken',
+            label: researchSyncUnsent(state.kind) || researchSyncUnsent(state.core) };
     },
 
     /**
@@ -2451,11 +2477,18 @@ export const researchSyncMethods = uiModule({
         if (!note && toolbarWide() && !researchAutoIntroSeen()) this.showResearchIntroNote();
     },
 
-    /** The pill's text: open ⋯ → Research. */
+    /** The pill (its state, the mark): the research menu, focus back here when it closes. */
     openResearchSyncMenu(): void {
         this.closeResearchSyncNote();
-        this.toggleActionsMenu();
-        if (document.getElementById('actions-menu-dropdown')?.classList.contains('active')) this.openActionsResearchSubmenu();
+        if (this.isResearchMenuOpen()) {
+            this.closeResearchMenu();
+            return;
+        }
+        const pill = document.getElementById('research-sync-pill');
+        const active = document.activeElement;
+        const opener = pill && active instanceof HTMLElement && pill.contains(active)
+            ? active : pill?.querySelector<HTMLElement>('button') ?? null;
+        this.openResearchMenu({ opener });
     },
 
     /** The note under the mark: a send by itself left a new conflict. */

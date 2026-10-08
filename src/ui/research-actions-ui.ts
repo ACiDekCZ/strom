@@ -1,6 +1,7 @@
 /**
  * The research's actions from the app — a Strom Research tree, on a
- * computer: the ⋯ "Research" submenu, the person menu's "Research ›", the
+ * computer: the toolbar's Research menu (and its group in the More sheet), the
+ * "Export all" reminder in Actions / More, the person menu's "Research ›", the
  * "Review again" dialog and "Find a source in the research".
  * Every action is a strom-research:// link the research announced (see
  * research-ui.ts, section F); the work itself happens in the research, which
@@ -56,57 +57,127 @@ function mayBeLiving(personId: PersonId): boolean {
     return born !== null && new Date().getFullYear() - born < 100;
 }
 
-/** One row of the "Research" submenu. */
+/** One item of the research menu. */
 interface SubmenuItem {
     id: string;
     label: string;
-    run: string;
+    /** The UI method it runs, with its string arguments. */
+    method: string;
+    args?: string[];
     /** Continues in the research (↗). */
     ext?: boolean;
     /** Starts an AI agent (costs): the AI label. */
     ai?: boolean;
-    /** A count at the end ("Waiting for you  2"). */
+    /** A count at the end ("Awaiting action  2"). */
     count?: number;
     /** A quiet second line ("sent 11:20"). */
     sub?: string;
 }
 
+/** A group of the research menu; the occasional ones are drawn quieter. */
+interface MenuGroup { items: SubmenuItem[]; quiet?: boolean }
+
+/** The research menu's content: the toolbar dropdown and the More sheet's page draw it alike. */
+interface ResearchMenuModel {
+    /** The tree is tied to a research: the title with "trial" (and "archive"). */
+    heading: boolean;
+    archive: boolean;
+    syncBlock: string;
+    /** Following live: one line in place of the state block (the tree is locked meanwhile). */
+    following: boolean;
+    updateBlock: string;
+    groups: MenuGroup[];
+    note: string;
+    waiting: number;
+}
+
+/** A row of the More sheet's research group. */
+export interface ResearchSheetRow {
+    label: string;
+    run: () => void;
+    count?: number;
+    ai?: boolean;
+    ext?: boolean;
+    ariaLabel: string;
+}
+
+/** The More sheet's research group (a narrow window with a mouse): the state in one line and the frequent actions. */
+export interface ResearchSheetGroup {
+    /** The state, when its block offers something: its title and first action. */
+    state?: { tone: string; title: string; action: { label: string; asLink: boolean; run: () => void } };
+    rows: ResearchSheetRow[];
+}
+
+/** The signal on the Research button: a waiting count, a dot for attention, a dot for changes not sent. */
+export type ResearchMenuSignal = '' | 'count' | 'attention' | 'unsent';
+
 /** An intake older than this can no longer be taken back from the app. */
 const UNDO_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
-function submenuItemHtml(item: SubmenuItem): string {
+/** Actions of the state block that stand for "Send changes" (the row then goes). */
+const BLOCK_SENDS = ['send', 'startAndSend', 'showChangesFirst'];
+
+const call = (method: string, arg = ''): string => `window.Strom.UI.${method}(${arg})`;
+
+function itemCall(item: SubmenuItem): string {
+    return call(item.method, (item.args ?? []).map(a => `'${a}'`).join(', '));
+}
+
+/** An item's accessible name: label (with its count: "Awaiting action: 2"), AI, second line, ↗. */
+function itemAria(item: SubmenuItem): string {
     const r = strings.research;
-    const aria = [item.label];
-    if (item.count) aria.push(r.waitingCountSr(item.count));
+    const aria = [item.count ? r.waitingCountSr(item.count) : item.label];
     if (item.ai) aria.push(r.aiBadge);
     if (item.sub) aria.push(item.sub);
     if (item.ext) aria.push(r.opensInResearchSr);
+    return aria.join(', ');
+}
+
+function submenuItemHtml(item: SubmenuItem): string {
+    const r = strings.research;
     return `<div class="tree-switcher-action" id="${item.id}" role="menuitem" tabindex="0"`
-        + ` aria-label="${esc(aria.join(', '))}" onclick="${item.run}">`
+        + ` aria-label="${esc(itemAria(item))}" onclick="${itemCall(item)}">`
         + (item.sub
             ? `<span class="research-item-label research-item-label--two"><span>${esc(item.label)}</span><span class="research-item-sub">${esc(item.sub)}</span></span>`
             : `<span class="research-item-label">${esc(item.label)}</span>`)
-        + (item.count ? `<span class="tree-switcher-badge actions-research-badge" aria-hidden="true">${item.count}</span>` : '')
+        + (item.count ? `<span class="tree-switcher-badge research-count-badge" aria-hidden="true">${item.count}</span>` : '')
         + (item.ai ? `<span class="research-ai-badge" title="${esc(r.aiCostHint)}" aria-hidden="true">${esc(r.aiBadge)}</span>` : '')
         + (item.ext ? '<span class="research-item-ext" aria-hidden="true">↗</span>' : '')
         + '</div>';
 }
 
-const call = (method: string, arg = ''): string => `window.Strom.UI.${method}(${arg})`;
+const SEPARATOR = '<div class="tree-switcher-divider" role="separator"></div>';
+
+const CHEVRON = '<svg class="research-menu-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+    + ' stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
 
 /**
- * The export reminder counted as shown in this opening of the menu: once per
- * opening, and it stays until the menu closes (the third showing rests it for
- * the next openings, not under the user's eyes when a refresh redraws the menu).
+ * The export reminder counted as shown in this opening of a menu (Actions,
+ * More): it stays until that menu closes, though a refresh redraws it.
  */
 let reminderThisOpening = false;
 
-export const researchActionsMethods = uiModule({
-    // ==================== ⋯ → RESEARCH ====================
+/** Where focus goes back when the research menu closes by Escape: the toolbar pill that opened it, else the button. */
+let menuOpener: HTMLElement | null = null;
 
-    /** The "Research" row replaces "AI ancestor research": a research tree, on a computer. */
+/** The More sheet's research page is showing (the menu is drawn there, not in the dropdown). */
+function sheetResearchBody(): HTMLElement | null {
+    const body = document.getElementById('research-sheet-menu');
+    return body && !body.closest('[hidden]') ? body : null;
+}
+
+/** The first or last item of a research menu, the title's own controls left out of "first". */
+function menuItems(menu: HTMLElement): HTMLElement[] {
+    return Array.from(menu.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+        .filter(el => el.getClientRects().length > 0 && !(el as HTMLButtonElement).disabled);
+}
+
+export const researchActionsMethods = uiModule({
+    // ==================== THE RESEARCH MENU ====================
+
+    /** The Research button and menu: a research tree on a computer, its data not locked. */
     researchMenuShown(): boolean {
-        return onComputer() && this.activeResearchId() !== null;
+        return onComputer() && !DataManager.isLocked() && this.activeResearchId() !== null;
     },
 
     /** The research on this computer announced at least one link (and it is not switched off). */
@@ -114,7 +185,7 @@ export const researchActionsMethods = uiModule({
         return RESEARCH_LINK_ACTIONS.some(a => this.researchLinkAvailable(a));
     },
 
-    /** Tasks waiting for the user, as the menu counts them (0 when the row is hidden). */
+    /** Tasks waiting for the user, as the menu counts them (0 when the menu is not shown). */
     researchWaitingCount(): number {
         if (!this.researchMenuShown() || !this.researchAnyAnnounced()) return 0;
         // Its bridge not known here: what it once said is waiting is not shown as now.
@@ -122,37 +193,17 @@ export const researchActionsMethods = uiModule({
         return this.researchWaiting()?.items.length ?? 0;
     },
 
-    /**
-     * Show or hide the "Research" row and (re)build its submenu. Returns the
-     * waiting count lit on the row (the ⋯ button's dot follows it).
-     */
-    refreshResearchMenu(): number {
-        const wrap = document.getElementById('actions-research-wrap');
-        const shown = this.researchMenuShown();
-        document.body.classList.toggle('research-actions', shown);
-        if (!wrap) return 0;
-        wrap.style.display = shown ? '' : 'none';
-        if (!shown) {
-            this.closeActionsResearchSubmenu();
-            return 0;
-        }
+    /** What the research menu holds now (the conditions of every item). */
+    researchMenuModel(): ResearchMenuModel {
         const r = strings.research;
         const waiting = this.researchWaitingCount();
-        const badge = document.getElementById('actions-research-badge');
-        if (badge) {
-            badge.textContent = waiting > 0 ? String(waiting) : '';
-            badge.style.display = waiting > 0 ? 'inline-flex' : 'none';
-        }
-        document.getElementById('actions-research-row')?.setAttribute('aria-label',
-            waiting > 0 ? `${r.menuTitle}, ${r.waitingCountSr(waiting)}` : r.menuTitle);
-
-        let groups: SubmenuItem[][];
-        let note = false;
-        let updateBlock = '';
+        const block = this.researchSyncBlockData();
         // A research that tells what it has (1.12+): its state on top, sending straight.
-        const syncBlock = this.researchSyncBlockHtml();
+        const syncBlock = block ? this.researchSyncBlockHtml(block) : '';
         // The block itself offers "Load new version" then: not again as a row under it.
-        const blockLoads = !!syncBlock && this.currentResearchSyncState().kind === 'newer';
+        const blockLoads = block?.kind === 'newer';
+        // The block offers the send ("Send", "Start and send", "What will be sent"): no "Send changes" row beside it.
+        const blockSends = !!block && block.actions.some(a => BLOCK_SENDS.includes(a.action));
         const researchId = this.activeResearchId();
         const capable = !!researchId && this.researchSyncCapable(researchId);
         const bridgeUp = capable && !!researchId && this.researchBridgeFresh(researchId);
@@ -167,141 +218,355 @@ export const researchActionsMethods = uiModule({
         const sendOff = capable && !!ctx && researchSendMode(ctx.link) === 'off';
         // "Send changes…" opens "What will be sent" first; without the preview it sends at once (no dots).
         const previewFirst = capable && !!ctx && (!!ctx.link.previewDue || !researchSendPreviewSkipped(ctx.treeId));
-        const sendRow: SubmenuItem[] = autoSend || sendOff ? [] : [
+        const sendRow: SubmenuItem[] = autoSend || sendOff || blockSends ? [] : [
             // Straight to a running bridge (no ↗); else the research starts it in the terminal.
-            { id: 'research-item-send', label: previewFirst ? `${r.sendChanges}…` : r.sendChanges, run: call('researchActionSend'), ext: !bridgeUp && this.researchLinkAvailable('send') },
+            { id: 'research-item-send', label: previewFirst ? `${r.sendChanges}…` : r.sendChanges, method: 'researchActionSend', ext: !bridgeUp && this.researchLinkAvailable('send') },
         ];
+        const treeSettings: SubmenuItem[] = this.researchTranscriptsCapable(researchId ?? undefined)
+            ? [{ id: 'research-item-tree-settings', label: strings.sync.treeSettings, method: 'researchActionTreeSettings' }] : [];
+        const batch: SubmenuItem[] = this.batchAvailable() ? [{ id: 'research-item-batch', label: strings.batch.menu, method: 'showBatchDialog' }] : [];
+        let groups: MenuGroup[];
+        let note = '';
+        let updateBlock = '';
         if (!this.researchAnyAnnounced()) {
             // No strom-research:// links here (an older research, none announced, or
             // switched off): the way back, and what it is. A research that says what
             // it takes still gets its version loaded and its settings for this tree.
-            const look: SubmenuItem[] = [];
-            const tree: SubmenuItem[] = this.researchTranscriptsCapable(researchId ?? undefined)
-                ? [{ id: 'research-item-tree-settings', label: strings.sync.treeSettings, run: call('researchActionTreeSettings') }] : [];
-            const batch: SubmenuItem[] = this.batchAvailable() ? [{ id: 'research-item-batch', label: strings.batch.menu, run: call('showBatchDialog') }] : [];
-            groups = [look, [
-                ...sendRow.map(i => ({ ...i, ext: false })),
-                { id: 'research-item-about', label: r.whatIs, run: call('researchActionWhatIs') },
-            ], batch, tree];
+            groups = [
+                { items: [...sendRow.map(i => ({ ...i, ext: false })), ...batch] },
+                { items: [...treeSettings, { id: 'research-item-about', label: r.whatIs, method: 'researchActionWhatIs' }], quiet: true },
+            ];
         } else {
-            const look: SubmenuItem[] = [];
+            // Frequent: what waits, the agent, the research itself, the send.
+            const frequent: SubmenuItem[] = [];
+            if (waiting > 0) frequent.push({ id: 'research-item-waiting', label: r.waiting, method: 'researchActionWaiting', count: waiting });
+            if (!noAgent && this.researchLinkAvailable('chat')) frequent.push({ id: 'research-item-chat', label: r.continueAgent, method: 'researchActionChat', ext: true, ai: true });
+            if (this.researchLinkAvailable('open')) frequent.push({ id: 'research-item-open', label: r.openResearch, method: 'researchActionOpen', ext: true });
+            frequent.push(...sendRow);
+            // Now and then: a version to load, following live, materials.
+            const middle: SubmenuItem[] = [];
             // The bridge answering: the block above offers a newer version when there is one (never beside "in step").
-            if (this.researchLinkAvailable('app') && !bridgeUp && !blockLoads) look.push({ id: 'research-item-version', label: r.loadNewVersion, run: call('researchActionLoadVersion') });
-            if (waiting > 0) look.push({ id: 'research-item-waiting', label: r.waiting, run: call('researchActionWaiting'), count: waiting });
+            if (this.researchLinkAvailable('app') && !bridgeUp && !blockLoads) middle.push({ id: 'research-item-version', label: r.loadNewVersion, method: 'researchActionLoadVersion' });
             // Follow live: the research starts (or reuses) its bridge and opens ?live= here (an archive has no agent to follow).
             if (!noAgent && this.researchLinkAvailable('live') && !this.isFollowingActiveResearch()) {
-                look.push({ id: 'research-item-live', label: r.followLive, run: call('researchActionLive'), ext: true });
+                middle.push({ id: 'research-item-live', label: r.followLive, method: 'researchActionLive', ext: true });
             }
-            if (this.isFollowingActiveResearch()) look.push({ id: 'research-item-overview', label: strings.live.overviewTitle, run: call('researchActionOverview') });
-            const known = this.researchWaiting();
-            const work: SubmenuItem[] = [...sendRow];
+            if (this.isFollowingActiveResearch()) middle.push({ id: 'research-item-overview', label: strings.live.overviewTitle, method: 'researchActionOverview' });
+            middle.push(...batch);
+            // Occasional: the ways back, the settings.
+            const occasional: SubmenuItem[] = [];
             // "Restore the state before loading" until the next edit (or 7 days); its first hour is the block above.
             const loadBackup = ctx ? this.researchLoadBackup(ctx.treeId) : null;
             if (loadBackup && this.currentResearchSyncState().kind !== 'loaded') {
-                work.push({ id: 'research-item-restore', label: strings.sync.restoreBeforeLoad, run: call('researchSyncAction', "'restoreBeforeLoad'"),
+                occasional.push({ id: 'research-item-restore', label: strings.sync.restoreBeforeLoad, method: 'researchSyncAction', args: ['restoreBeforeLoad'],
                     sub: strings.sync.loadedAt(formatLiveClock(Date.parse(loadBackup.at), Date.now(), getCurrentLanguage())) });
             }
+            const known = this.researchWaiting();
             const intake = known?.lastIntake;
             const sentAt = intake ? Date.parse(intake.at) : NaN;
             // Taking the last send back is the user's (an archive too); not while the research's mode is not known here.
             if ((archive || !noAgent) && intake && this.researchLinkAvailable('sync-undo') && Number.isFinite(sentAt) && Date.now() - sentAt < UNDO_MAX_AGE_MS) {
-                work.push({ id: 'research-item-undo', label: r.undoSend, run: call('researchActionUndoSend'), ext: true,
+                occasional.push({ id: 'research-item-undo', label: r.undoSend, method: 'researchActionUndoSend', ext: true,
                     sub: r.sentAt(formatLiveClock(sentAt, Date.now(), getCurrentLanguage())) });
             }
-            const open: SubmenuItem[] = this.researchLinkAvailable('open')
-                ? [{ id: 'research-item-open', label: r.openResearch, run: call('researchActionOpen'), ext: true }] : [];
-            // An archive: "Open the research" stands on its own (2b).
-            if (!archive) work.push(...open);
-            const agent: SubmenuItem[] = archive ? open : [];
-            if (!noAgent && this.researchLinkAvailable('chat')) agent.push({ id: 'research-item-chat', label: r.continueAgent, run: call('researchActionChat'), ext: true, ai: true });
-            const setup: SubmenuItem[] = [];
-            if (this.researchTranscriptsCapable(researchId ?? undefined)) {
-                setup.push({ id: 'research-item-tree-settings', label: strings.sync.treeSettings, run: call('researchActionTreeSettings') });
-            }
+            occasional.push(...treeSettings);
             if (this.researchLinkAvailable('setup')) {
-                setup.push({ id: 'research-item-setup', label: capable ? r.settingsInResearch : r.settings, run: call('researchActionSetup'), ext: true });
+                occasional.push({ id: 'research-item-setup', label: capable ? r.settingsInResearch : r.settings, method: 'researchActionSetup', ext: true });
             }
-            // "Add materials…": its own group under "Open the research".
-            const batch: SubmenuItem[] = this.batchAvailable() ? [{ id: 'research-item-batch', label: strings.batch.menu, run: call('showBatchDialog') }] : [];
-            groups = archive ? [[...look, ...work], batch, agent, setup] : [look, work, batch, agent, setup];
-            note = true;
-            // A newer research: a block above the rows, its "Update" the only item in it.
+            groups = [{ items: frequent }, { items: middle }, { items: occasional, quiet: true }];
+            note = archive ? r.submenuNoteArchive : r.submenuNote;
+            // A newer research: one framed line under the state, "Update ↗" the item in it.
             if (known?.update) {
                 const canUpdate = this.researchLinkAvailable('update');
                 updateBlock = `<div class="research-update-block" id="research-update-block">`
-                    + `<div class="research-update-title">${esc(r.updateAvailable(known.update.version))}</div>`
+                    + `<span class="research-update-title">${esc(r.updateAvailable(known.update.version))}</span>`
                     + (canUpdate
-                        ? `<div class="tree-switcher-action research-update-action" id="research-item-update" role="menuitem" tabindex="0"`
+                        ? `<button type="button" class="research-update-action" id="research-item-update" role="menuitem"`
                             + ` aria-label="${esc(`${r.updateAvailable(known.update.version)}, ${r.updateResearch.replace(' ↗', '')}, ${r.opensInResearchSr}`)}"`
-                            + ` onclick="${call('researchActionUpdate')}">${esc(r.updateResearch)}</div>`
+                            + ` onclick="${call('researchActionUpdate')}">${esc(r.updateResearch)}</button>`
                         : '')
                     + '</div>';
             }
         }
-        // An older research (it never said what it takes): a quiet line, "How to update…" (the research's own newer-version block goes first).
+        // An older research (it never said what it takes): a quiet line, "How to update…", in the same place.
         const olderLine = updateBlock ? '' : this.researchOlderLineHtml('menu');
         if (olderLine) updateBlock = `<div class="research-update-block research-older-block" id="research-older-block">${olderLine}</div>`;
-        // The group's heading with "trial" (a tree tied to a research).
-        const heading = ctx ? `<div class="research-submenu-heading"><span>${esc(r.menuTitle)}</span>${researchTrialTagHtml()}</div>` : '';
-        // "Export all" now and then (O3): the last row, at most once in three weeks.
-        const lastExport = ctx && (exportReminderDue() || reminderThisOpening) ? lastExportAll() : undefined;
-        const exportRow = lastExport === undefined ? '' : `<div class="tree-switcher-divider"></div><div class="research-export-reminder" id="research-export-reminder">`
-            + `${esc(lastExport ? strings.snapshots.exportLast(exportDate(lastExport)) : strings.snapshots.exportNever)}`
-            + `<button type="button" class="link-button" role="menuitem" onclick="${call('researchActionExportAll')}">${esc(strings.snapshots.exportAll)}</button></div>`;
-        const html = heading + syncBlock + updateBlock + groups.filter(g => g.length > 0)
-            .map(g => g.map(submenuItemHtml).join(''))
-            .join('<div class="tree-switcher-divider"></div>')
-            + (note ? `<div class="tree-switcher-divider"></div><div class="research-submenu-note">${esc(archive ? r.submenuNoteArchive : r.submenuNote)}</div>` : '')
-            + exportRow;
-        const sub = document.getElementById('actions-research-submenu');
-        // Rebuilt only when it changed: a redraw would drop keyboard focus.
-        if (sub && sub.dataset.html !== html) {
-            sub.innerHTML = html;
-            sub.dataset.html = html;
+        return {
+            heading: !!ctx, archive, syncBlock, updateBlock, groups, note, waiting,
+            following: !syncBlock && DataManager.isLiveFollowing(),
+        };
+    },
+
+    /** The research menu's HTML; on the More sheet's page its title carries "‹" back. */
+    researchMenuHtml(model: ResearchMenuModel, opts: { back?: boolean } = {}): string {
+        const r = strings.research;
+        const heading = model.heading || opts.back
+            ? '<div class="research-menu-heading">'
+                + (opts.back ? `<button type="button" class="research-menu-back" role="menuitem" aria-label="${esc(strings.contextMenu.back)}"><span aria-hidden="true">‹</span></button>` : '')
+                + `<span class="research-menu-title" id="research-menu-title">${esc(r.menuTitle)}</span>`
+                + (model.heading ? researchTrialTagHtml(true) : '')
+                + (model.archive ? `<span class="research-sync-tag" id="research-menu-archive">${esc(strings.sync.archiveTag)}</span>` : '')
+                + '</div>'
+            : '';
+        const following = model.following
+            ? `<div class="research-menu-following" id="research-menu-following"><span class="research-menu-live-dot" aria-hidden="true"></span><span>${esc(r.followingLocked)}</span></div>`
+            : '';
+        const groups = model.groups.filter(g => g.items.length > 0)
+            .map(g => `<div class="research-menu-group${g.quiet ? ' is-quiet' : ''}" role="group">${g.items.map(submenuItemHtml).join('')}</div>`)
+            .join(SEPARATOR);
+        const note = model.note ? `${SEPARATOR}<div class="research-submenu-note">${esc(model.note)}</div>` : '';
+        return heading + model.syncBlock + following + model.updateBlock + groups + note;
+    },
+
+    /**
+     * Show or hide the Research button, paint its signal and (re)build the
+     * menu — in the toolbar dropdown, or on the More sheet's page while that
+     * shows (one place only: the items carry ids). Returns the button's signal.
+     */
+    refreshResearchMenu(): ResearchMenuSignal {
+        const shown = this.researchMenuShown();
+        // The "AI ancestor research" entry gives way to the Research button.
+        document.body.classList.toggle('research-actions', shown);
+        this.ensureResearchMenuButton(shown);
+        if (!shown) return '';
+        const model = this.researchMenuModel();
+        const signal = this.paintResearchMenuButton(model.waiting);
+        const sheet = sheetResearchBody();
+        const dropdown = document.getElementById('research-menu');
+        const target = sheet ?? dropdown;
+        const other = sheet ? dropdown : document.getElementById('research-sheet-menu');
+        if (other?.dataset.html) {
+            other.innerHTML = '';
+            other.dataset.html = '';
         }
-        return waiting;
+        const html = this.researchMenuHtml(model, { back: !!sheet });
+        // Rebuilt only when it changed: a redraw would drop keyboard focus.
+        if (target && target.dataset.html !== html) {
+            target.innerHTML = html;
+            target.dataset.html = html;
+            if (target === dropdown && this.isResearchMenuOpen()) this.positionResearchMenu();
+        }
+        return signal;
     },
 
-    toggleActionsResearchSubmenu(): void {
-        const wrap = document.getElementById('actions-research-wrap');
-        if (!wrap) return;
-        if (wrap.classList.contains('submenu-open')) this.closeActionsResearchSubmenu();
-        else this.openActionsResearchSubmenu();
+    /** The Research button left of Actions: built while a research tree is open, gone otherwise. */
+    ensureResearchMenuButton(shown: boolean): void {
+        let wrap = document.getElementById('research-menu-wrap');
+        if (!shown) {
+            if (wrap) {
+                this.closeResearchMenu();
+                wrap.remove();
+            }
+            return;
+        }
+        if (wrap) return;
+        const actions = document.querySelector('.toolbar .actions-menu');
+        if (!actions?.parentElement) return;
+        wrap = document.createElement('div');
+        wrap.id = 'research-menu-wrap';
+        wrap.className = 'research-menu-wrap desktop-only';
+        wrap.innerHTML = '<button type="button" class="secondary research-menu-btn" id="research-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="research-menu">'
+            + '<span class="research-menu-live" aria-hidden="true"></span>'
+            + `<span class="research-menu-label">${esc(strings.research.menuTitle)}</span>`
+            + '<span class="research-menu-signal" id="research-menu-signal" aria-hidden="true" hidden></span>'
+            + CHEVRON + '</button>'
+            + '<div id="research-menu" class="tree-switcher-dropdown research-menu-dropdown research-menu-body" role="menu" aria-labelledby="research-menu-title"></div>';
+        actions.parentElement.insertBefore(wrap, actions);
+        const btn = wrap.querySelector<HTMLButtonElement>('#research-menu-btn')!;
+        const menu = wrap.querySelector<HTMLElement>('#research-menu')!;
+        btn.addEventListener('click', () => this.toggleResearchMenu());
+        // Enter / Space / ↓ open it with focus on the first item (↑: the last).
+        btn.addEventListener('keydown', (e) => {
+            if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+            e.preventDefault();
+            if (!this.isResearchMenuOpen()) this.openResearchMenu();
+            this.focusResearchMenuItem(e.key === 'ArrowUp' ? 'last' : 'first');
+        });
+        // (Space would click again on its release.)
+        btn.addEventListener('keyup', (e) => { if (e.key === ' ') e.preventDefault(); });
+        // An item done closes the menu (its own action may have opened a dialog already).
+        menu.addEventListener('click', (e) => {
+            const item = (e.target as Element | null)?.closest('[role="menuitem"]');
+            if (!item || item.matches('.research-trial-tag, [data-action="cancelLoad"], [data-action="conflicts"]')) return;
+            if (this.isResearchMenuOpen()) this.closeResearchMenu();
+        });
+        // Tab out of it: the menu closes, focus goes on in the toolbar.
+        wrap.addEventListener('focusout', (e) => {
+            const next = e.relatedTarget as Node | null;
+            if (!next || wrap!.contains(next) || document.getElementById('research-trial-note')?.contains(next)) return;
+            if (this.isResearchMenuOpen()) this.closeResearchMenu();
+        });
     },
 
-    openActionsResearchSubmenu(): void {
-        const wrap = document.getElementById('actions-research-wrap');
-        if (!wrap) return;
-        this.closeActionsTreeSubmenu();
-        wrap.classList.add('submenu-open');
-        document.getElementById('actions-research-row')?.setAttribute('aria-expanded', 'true');
-        this.positionActionsSubmenu('actions-research-submenu');
+    /** The button's name and signal: a count, else one dot (attention before changes not sent); a green dot while following live. */
+    paintResearchMenuButton(waiting: number): ResearchMenuSignal {
+        const r = strings.research;
+        const unsent = this.researchSyncUnsentNow();
+        const signal: ResearchMenuSignal = waiting > 0 ? 'count' : this.researchSyncAttention() ? 'attention' : unsent.dot ? 'unsent' : '';
+        const btn = document.getElementById('research-menu-btn');
+        if (!btn) return signal;
+        const sig = document.getElementById('research-menu-signal');
+        if (sig) {
+            sig.hidden = signal === '';
+            sig.dataset.signal = signal;
+            sig.textContent = signal === 'count' ? String(waiting) : '';
+        }
+        const label = btn.querySelector('.research-menu-label');
+        if (label) label.textContent = r.menuTitle;
+        btn.classList.toggle('is-live', DataManager.isLiveFollowing());
+        btn.setAttribute('aria-label', waiting > 0 ? r.menuButtonAriaWaiting(waiting) : unsent.label ? r.menuButtonAriaUnsent : r.menuTitle);
+        return signal;
+    },
+
+    isResearchMenuOpen(): boolean {
+        return !!document.getElementById('research-menu')?.classList.contains('active');
+    },
+
+    toggleResearchMenu(): void {
+        if (this.isResearchMenuOpen()) this.closeResearchMenu();
+        else this.openResearchMenu();
+    },
+
+    /**
+     * Open the research menu under its button. Where the button has no room
+     * (≤ 1024 px), the More sheet opens on its research page instead.
+     * `opener`: where focus goes back on Escape (the toolbar pill).
+     */
+    openResearchMenu(opts: { opener?: HTMLElement | null; focus?: 'first' | 'last' } = {}): void {
+        if (!this.researchMenuShown()) return;
+        const btn = document.getElementById('research-menu-btn');
+        const menu = document.getElementById('research-menu');
+        if (!btn || !menu || btn.getClientRects().length === 0) {
+            this.showMoreMenuSheet({ research: true });
+            return;
+        }
+        this.closeAllMenusExcept('research');
+        this.hideWhatsNewCard();
+        menuOpener = opts.opener ?? null;
+        menu.classList.add('active');
+        btn.setAttribute('aria-expanded', 'true');
+        btn.classList.add('is-open');
+        this.refreshResearchMenu();
+        this.positionResearchMenu();
         // The state shown should be now's, not the last background ask's.
         this.refreshResearchStateSoon();
-        // The export reminder counts as shown (after the third time it rests three weeks).
-        // (Once per opening: the submenu is opened again by refreshes while the menu stays open.)
-        if (document.getElementById('research-export-reminder') && !reminderThisOpening) {
-            reminderThisOpening = true;
-            noteExportReminderShown();
+        if (opts.focus) this.focusResearchMenuItem(opts.focus);
+    },
+
+    /** Close the research menu (and the More sheet on its research page); `restoreFocus`: back to what opened it. */
+    closeResearchMenu(restoreFocus = false): void {
+        const menu = document.getElementById('research-menu');
+        const btn = document.getElementById('research-menu-btn');
+        const wasOpen = !!menu?.classList.contains('active');
+        if (wasOpen) {
+            menu!.classList.remove('active');
+            btn?.setAttribute('aria-expanded', 'false');
+            btn?.classList.remove('is-open');
+            this.closeResearchTrialNote();
+        }
+        // An action on the More sheet's research page closes the sheet too.
+        if (sheetResearchBody()) this.hideBottomSheet();
+        const opener = menuOpener;
+        menuOpener = null;
+        if (restoreFocus && wasOpen) {
+            const to = opener?.isConnected && opener.getClientRects().length > 0 ? opener : btn;
+            to?.focus();
         }
     },
 
-    /** ⋯ → Research → "Export all" (the reminder): it rests three weeks, the Export all dialog opens. */
+    /** Focus the first item (the state block's button, else the first row) or the last one. */
+    focusResearchMenuItem(which: 'first' | 'last'): void {
+        const menu = sheetResearchBody() ?? document.getElementById('research-menu');
+        if (!menu) return;
+        const items = menuItems(menu);
+        const body = items.filter(el => !el.closest('.research-menu-heading'));
+        const to = which === 'first' ? body[0] ?? items[0] : items[items.length - 1];
+        to?.focus();
+    },
+
+    /** Under its button, right edges level; moved into the window when it would leave it; scrolls when too tall. */
+    positionResearchMenu(): void {
+        const menu = document.getElementById('research-menu');
+        if (!menu?.classList.contains('active')) return;
+        menu.style.right = '0px';
+        menu.style.maxHeight = '';
+        const viewportW = document.documentElement.clientWidth || window.innerWidth;
+        const top = menu.getBoundingClientRect().top;
+        menu.style.maxHeight = `${Math.max(160, window.innerHeight - top - 8)}px`;
+        const rect = menu.getBoundingClientRect();
+        if (rect.left < 8) menu.style.right = `${rect.left - 8}px`;
+        else if (rect.right > viewportW - 8) menu.style.right = `${rect.right - (viewportW - 8)}px`;
+    },
+
+    /** The More sheet's research group, or null (not a research tree on a computer). */
+    researchSheetGroup(): ResearchSheetGroup | null {
+        if (!this.researchMenuShown()) return null;
+        const model = this.researchMenuModel();
+        const frequent = new Set(['research-item-waiting', 'research-item-chat', 'research-item-open']);
+        const ui = this as unknown as Record<string, (...args: string[]) => void>;
+        const rows: ResearchSheetRow[] = model.groups.flatMap(g => g.items).filter(i => frequent.has(i.id)).map(i => ({
+            label: i.label, count: i.count, ai: i.ai, ext: i.ext, ariaLabel: itemAria(i),
+            run: () => ui[i.method](...(i.args ?? [])),
+        }));
+        const block = this.researchSyncBlockData();
+        const first = block?.actions[0];
+        return {
+            rows,
+            state: block && first ? { tone: block.tone, title: block.title,
+                action: { label: first.label, asLink: !!first.asLink, run: () => this.researchSyncAction(first.action) } } : undefined,
+        };
+    },
+
+    // ==================== "EXPORT ALL" REMINDER (Actions, More) ====================
+
+    /** The last export of all trees for the reminder (null: never), or undefined when it is not shown now. */
+    exportReminderLast(): string | null | undefined {
+        if (!this.researchSyncLink() || DataManager.isReadOnly()) return undefined;
+        return exportReminderDue() || reminderThisOpening ? lastExportAll() : undefined;
+    },
+
+    /** Its quiet line: when all trees were last exported, or that they never were. */
+    exportReminderText(last: string | null): string {
+        return last ? strings.snapshots.exportLast(exportDate(last)) : strings.snapshots.exportNever;
+    },
+
+    /** A menu opened with the reminder in it: shown for today (once per opening). */
+    exportReminderOpened(): void {
+        if (reminderThisOpening) return;
+        reminderThisOpening = true;
+        noteExportReminderShown();
+    },
+
+    exportReminderClosed(): void {
+        reminderThisOpening = false;
+    },
+
+    /** Actions → under Export…: the reminder line with its "Export all" link. Returns whether it shows. */
+    renderActionsExportReminder(): boolean {
+        const el = document.getElementById('actions-export-reminder');
+        if (!el) return false;
+        const last = this.exportReminderLast();
+        el.hidden = last === undefined;
+        if (last === undefined) {
+            el.replaceChildren();
+            el.dataset.html = '';
+            return false;
+        }
+        const html = `<span class="export-reminder-text">${esc(this.exportReminderText(last))}</span>`
+            + `<button type="button" class="link-button export-reminder-link" id="actions-export-all" role="menuitem" onclick="${call('researchActionExportAll')}">${esc(strings.snapshots.exportAll)}</button>`;
+        if (el.dataset.html !== html) {
+            el.innerHTML = html;
+            el.dataset.html = html;
+        }
+        return true;
+    },
+
+    /** "Export all" (the reminder): it rests three weeks, the Export all dialog opens. */
     researchActionExportAll(): void {
         noteExportReminderShown(true);
         this.closeActionsMenu();
+        this.hideBottomSheet();
         this.showExportAllDialog();
-    },
-
-    closeActionsResearchSubmenu(): void {
-        reminderThisOpening = false;
-        const wrap = document.getElementById('actions-research-wrap');
-        if (!wrap) return;
-        // Closed under the pointer, it must not stay open by hover.
-        if (wrap.classList.contains('submenu-open') && wrap.matches(':hover')) wrap.classList.add('hover-off');
-        wrap.classList.remove('submenu-open');
-        wrap.removeAttribute('data-kbd');
-        document.getElementById('actions-research-row')?.setAttribute('aria-expanded', 'false');
     },
 
     researchActionLoadVersion(): void {

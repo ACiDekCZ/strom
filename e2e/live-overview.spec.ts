@@ -3,7 +3,7 @@ import { card } from './helpers.js';
 
 /**
  * Following a research live: every section of the small panel folds on its
- * own (remembered, folded by itself when short of room, "Waiting for an answer"
+ * own (remembered, folded by itself when short of room, "Awaiting action"
  * never, and a new task unfolds it), the panel lists the last five changes;
  * the Research overview (⤢) beside the tree: the tree narrows, a summary,
  * Waiting cards with the person, Progress with filters, hover and "Show
@@ -113,7 +113,7 @@ test.describe('small live panel', () => {
         await expect(panel.locator('.live-changes li')).toHaveCount(5);
         // Newest first; the people in a change are links.
         await expect(panel.locator('.live-change-text .live-person-link').first()).toHaveText('Karel Víšek');
-        await expect(panel.locator('.live-section__title')).toHaveText(['At work', 'Waiting for an answer · 2', 'Latest changes', 'Up next']);
+        await expect(panel.locator('.live-section__title')).toHaveText(['At work', 'Awaiting action · 2', 'Latest changes', 'Up next']);
         await expect(head(page, '#live-panel', 'At work').locator('.live-section__sum')).toHaveText(/agent-matriky · 1[67] min/);
         await expect(panel.locator('.live-working .live-time')).toHaveText(/^since (?:\S+ )?\d{1,2}:\d{2}.* · 1[67] min$/);   // a date before the time across midnight
         await expect(head(page, '#live-panel', 'Up next').locator('.live-section__sum')).toHaveText('5 tasks');
@@ -137,7 +137,7 @@ test.describe('small live panel', () => {
         expect(await page.evaluate(() => JSON.parse(localStorage.getItem('strom-live-sections') ?? '{}'))).toMatchObject({ working: now === 'false', changes: false });
         await page.reload();
         await expect(head(page, '#live-panel', 'At work')).toHaveAttribute('aria-expanded', now);
-        await expect(head(page, '#live-panel', 'Waiting for an answer · 2')).toHaveAttribute('aria-expanded', 'true');
+        await expect(head(page, '#live-panel', 'Awaiting action · 2')).toHaveAttribute('aria-expanded', 'true');
     });
 
     test('short of room: Up next, then Changes fold by themselves, Waiting never; a new task unfolds Waiting', async ({ page }) => {
@@ -145,14 +145,14 @@ test.describe('small live panel', () => {
         const panel = page.locator('#live-panel');
         await expect(panel.locator('.live-changes li').first()).toBeAttached();
         await expect(head(page, '#live-panel', 'Up next')).toHaveAttribute('aria-expanded', 'false');
-        await expect(head(page, '#live-panel', 'Waiting for an answer · 2')).toHaveAttribute('aria-expanded', 'true');
+        await expect(head(page, '#live-panel', 'Awaiting action · 2')).toHaveAttribute('aria-expanded', 'true');
         // Folding by itself is not remembered.
         expect(await page.evaluate(() => localStorage.getItem('strom-live-sections'))).toBeNull();
 
-        await head(page, '#live-panel', 'Waiting for an answer · 2').click();
-        await expect(head(page, '#live-panel', 'Waiting for an answer · 2')).toHaveAttribute('aria-expanded', 'false');
+        await head(page, '#live-panel', 'Awaiting action · 2').click();
+        await expect(head(page, '#live-panel', 'Awaiting action · 2')).toHaveAttribute('aria-expanded', 'false');
         bridge.waiting = [...bridge.waiting, { id: 'T0009', what: 'Nový úkol', at: new Date().toISOString() }];
-        await expect(head(page, '#live-panel', 'Waiting for an answer · 3')).toHaveAttribute('aria-expanded', 'true', { timeout: 15000 });
+        await expect(head(page, '#live-panel', 'Awaiting action · 3')).toHaveAttribute('aria-expanded', 'true', { timeout: 15000 });
     });
 });
 
@@ -449,7 +449,7 @@ test.describe('Research overview', () => {
         expect(await page.locator('#tree-container').evaluate(el => el.getBoundingClientRect().width)).toBeCloseTo(before, 0);
     });
 
-    test('the overview opens again with the next following; Actions → Research has it', async ({ page }) => {
+    test('the overview opens again with the next following; the Research menu has it', async ({ page }) => {
         await follow(page);
         await page.locator('#live-panel .live-panel-expand').click();
         await expect(page.locator('#research-overview')).toBeVisible();
@@ -457,7 +457,7 @@ test.describe('Research overview', () => {
         await expect(page.locator('#research-overview')).toBeVisible();
         await page.locator('#research-overview .research-overview__close').click();
         await expect(page.locator('#research-overview')).toHaveCount(0);
-        await page.evaluate(() => window.Strom.UI.toggleActionsMenu?.());
+        await page.evaluate(() => window.Strom.UI.openResearchMenu());
         await page.evaluate(() => window.Strom.UI.refreshResearchMenu());
         await page.evaluate(() => window.Strom.UI.researchActionOverview());
         await expect(page.locator('#research-overview')).toBeVisible();
@@ -493,7 +493,7 @@ test.describe('Research overview', () => {
         const panel = page.locator('#live-panel');
         await expect(panel).toHaveClass(/phone-strip/);
         await expect(panel.locator('.live-panel-summary')).toContainText('Working');
-        await expect(panel.locator('.live-panel-summary')).toContainText('Waiting for an answer 2');
+        await expect(panel.locator('.live-panel-summary')).toContainText('Awaiting action 2');
         await expect(panel.locator('.live-panel-expand')).toHaveCount(0);
         await panel.locator('.live-panel-toggle').click();
         const ov = page.locator('#research-overview');

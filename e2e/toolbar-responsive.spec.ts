@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { openApp, createFirstPerson } from './helpers.js';
+import { fakeBridge, openResearch, poll } from './research-bridge.js';
 
 /**
  * Responsive toolbar regimes. The toolbar has exactly two regimes, split at
@@ -267,6 +268,55 @@ test.describe('view switcher — monotonic, in-viewport, ghost ⋯ (cs-CZ, stres
         await expect(page.locator('.actions-menu-btn')).toBeVisible();
     });
 });
+
+/**
+ * A tree tied to a research adds the Research button (with its count) left of
+ * Actions: in the widest labels (cs, de) the toolbar still keeps every child
+ * whole between 1025 and 1280 px, the button and the view tabs clickable.
+ */
+for (const locale of ['cs-CZ', 'de-DE']) {
+    test.describe(`a research tree's toolbar (${locale})`, () => {
+        test.use({ locale });
+
+        test('1025–1280 px: nothing clips, the Research button and the view tabs stay whole and hit-testable', async ({ page }) => {
+            await page.setViewportSize({ width: 1280, height: 850 });
+            await openResearch(page, { edit: true });
+            await fakeBridge(page, { accepts: { mode: 'research', sync: { auto: 'write' }, sources: true, verified: true, media: null },
+                links: ['send', 'open', 'live', 'app', 'setup', 'chat'], waiting: [{ id: 'T0001', what: 'A question' }, { id: 'T0002', what: 'Another' }] });
+            await poll(page);
+            await page.evaluate(() => window.Strom.UI.refreshActionMenuBadges());
+            await expect(page.locator('#research-menu-signal')).toHaveText('2');
+            await expect(page.locator('#research-menu-btn .research-menu-label')).toHaveText(locale === 'cs-CZ' ? 'Výzkum' : 'Forschung');
+            for (let w = 1280; w >= 1025; w -= 15) {
+                await page.setViewportSize({ width: w, height: 850 });
+                await page.waitForTimeout(40);
+                const s = await probe(page);
+                expect(s.clipped, `@${w}px: no clipped toolbar children`).toEqual([]);
+                const hit = await page.evaluate(() => {
+                    const vw = window.innerWidth;
+                    const whole = (el: Element | null): boolean => {
+                        if (!el) return false;
+                        const r = el.getBoundingClientRect();
+                        if (r.width === 0 || r.left < -1 || r.right > vw + 1) return false;
+                        const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+                        return !!top && (top === el || el.contains(top));
+                    };
+                    const btn = document.getElementById('research-menu-btn');
+                    const label = btn?.querySelector('.research-menu-label') as HTMLElement | null;
+                    const tabs = Array.from(document.querySelectorAll('#view-mode-segment button'));
+                    return {
+                        button: whole(btn),
+                        // The word is never cut (no ellipsis, no overflow).
+                        label: !!label && label.scrollWidth <= label.clientWidth + 1,
+                        tabs: tabs.every(whole),
+                        actions: whole(document.querySelector('.actions-menu-btn')),
+                    };
+                });
+                expect(hit, `@${w}px`).toEqual({ button: true, label: true, tabs: true, actions: true });
+            }
+        });
+    });
+}
 
 test.describe('the 1280 fold boundary', () => {
     test('at 1281 the standalone ⚙ and Actions label are out; at 1280 they fold in', async ({ page }) => {

@@ -3,8 +3,8 @@ import { openApp, card, openPersonSubmenu } from './helpers.js';
 
 /**
  * The research's actions from the app (a Strom Research tree, on a computer):
- * Actions → Research, the "In the research" section of the person menu, the
- * "Review again" dialog, "Waiting for an answer" (live panel and last known state)
+ * the toolbar's Research menu, the "In the research" section of the person menu, the
+ * "Review again" dialog, "Awaiting action" (live panel and last known state)
  * and "Find a source in the research". Every action is a strom-research://
  * link the research announced; handing it to the system is recorded instead.
  */
@@ -70,12 +70,11 @@ async function recordLaunches(page: Page): Promise<void> {
 }
 
 const launched = (page: Page) => page.evaluate(() => (window as unknown as { __launched: string[] }).__launched);
-const submenuItems = (page: Page) => page.locator('#actions-research-submenu .tree-switcher-action');
+const submenuItems = (page: Page) => page.locator('#research-menu .tree-switcher-action');
 
 async function openResearchMenu(page: Page): Promise<void> {
-    await page.locator('.actions-menu-btn').click();
-    await page.locator('#actions-research-row').click();
-    await expect(page.locator('#actions-research-submenu')).toBeVisible();
+    await page.locator('#research-menu-btn').click();
+    await expect(page.locator('#research-menu')).toBeVisible();
 }
 
 async function personMenu(page: Page, name: string): Promise<string[]> {
@@ -85,23 +84,29 @@ async function personMenu(page: Page, name: string): Promise<string[]> {
     return menu.locator('[data-action]').evaluateAll(els => els.map(el => (el as HTMLElement).dataset.action || ''));
 }
 
-test.describe('Actions → Research', () => {
-    test('announced: the items in order, the AI label, the note, the waiting count and dot', { tag: '@smoke' }, async ({ page }) => {
+test.describe('the Research menu', () => {
+    test('announced: the items in order, the AI label, the note, the waiting count on the button', { tag: '@smoke' }, async ({ page }) => {
         await setup(page, ALL, [{ id: 'T0001', what: 'Confirm the father of Jan' }, { id: 'T0002', what: 'Which Anna?' }]);
-        await expect(page.locator('#actions-menu-dot')).toBeVisible();
+        // The count is the Research button's; the ⋯ dot is the anniversaries' only.
+        await expect(page.locator('#research-menu-signal')).toHaveText('2');
+        await expect(page.locator('#research-menu-btn')).toHaveAttribute('aria-label', 'Research, awaiting action: 2');
+        await expect(page.locator('#actions-menu-dot')).toBeHidden();
         await page.locator('.actions-menu-btn').click();
+        // Nothing of the research in Actions any more (not even "Ancestor research").
         await expect(page.locator('#research-menu-row')).toBeHidden();
-        const row = page.locator('#actions-research-row');
-        await expect(row.locator('#actions-research-badge')).toHaveText('2');
-        await row.click();
+        await expect(page.locator('#actions-menu-dropdown')).not.toContainText('Research');
+        await page.locator('#research-menu-btn').click();
+        await expect(page.locator('#actions-menu-dropdown')).not.toHaveClass(/active/);
+        // Frequent first (waiting, agent, the research, the send), then now and then (a version to load).
         await expect(submenuItems(page).locator('.research-item-label'))
-            .toHaveText(['Load new version', 'Waiting for an answer', 'Send changes', 'Open research', 'Continue with the agent']);
+            .toHaveText(['Awaiting action', 'Continue with the agent', 'Open research', 'Send changes', 'Load new version']);
+        await expect(page.locator('#research-item-waiting')).toHaveAttribute('aria-label', 'Awaiting action: 2');
         const chat = page.locator('#research-item-chat');
         await expect(chat.locator('.research-ai-badge')).toHaveText('AI');
         await expect(chat).toHaveAttribute('aria-label', 'Continue with the agent, AI, opens in the research');
         await expect(page.locator('#research-item-open .research-item-ext')).toHaveText('↗');
         await expect(page.locator('#research-item-version .research-item-ext')).toHaveCount(0);
-        await expect(page.locator('#actions-research-submenu .research-submenu-note')).toContainText('continues in the research on this computer');
+        await expect(page.locator('#research-menu .research-submenu-note')).toContainText('continues in the research on this computer');
 
         await page.locator('#research-item-open').click();
         await expect(page.locator('.toast')).toContainText('Opening the research…');
@@ -121,8 +126,8 @@ test.describe('Actions → Research', () => {
     test('an action the research did not announce is missing', async ({ page }) => {
         await setup(page, ['send', 'open']);
         await openResearchMenu(page);
-        await expect(submenuItems(page).locator('.research-item-label')).toHaveText(['Send changes', 'Open research']);
-        await expect(page.locator('#actions-research-badge')).toBeHidden();
+        await expect(submenuItems(page).locator('.research-item-label')).toHaveText(['Open research', 'Send changes']);
+        await expect(page.locator('#research-menu-signal')).toBeHidden();
     });
 
     test('"Load new version": a spinner until the version comes, else "did not answer" after 20 s', async ({ page }) => {
@@ -157,14 +162,14 @@ test.describe('Actions → Research', () => {
         await other.close();
     });
 
-    test('"Waiting for an answer" without following: the last known state, no answer buttons, Esc closes', async ({ page }) => {
+    test('"Awaiting action" without following: the last known state, no answer buttons, Esc closes', async ({ page }) => {
         await setup(page, ALL, [{ id: 'T0001', what: 'Confirm the father of Jan', at: new Date().toISOString() }]);
         await openResearchMenu(page);
         await page.locator('#research-item-waiting').click();
         const panel = page.locator('#live-panel');
         await expect(panel).toBeVisible();
         await expect(panel).toHaveClass(/idle/);
-        await expect(panel.locator('.live-panel-heading-waiting')).toHaveText('Waiting for an answer · 1');
+        await expect(panel.locator('.live-panel-heading-waiting')).toHaveText('Awaiting action · 1');
         await expect(panel.locator('.live-waiting')).toContainText('Confirm the father of Jan');
         await expect(panel.locator('.live-waiting-answer')).toHaveCount(0);
         await expect(panel).toContainText('The research is not running.');
@@ -197,7 +202,7 @@ test.describe('Actions → Research', () => {
         await openApp(page);
         await page.locator('.actions-menu-btn').click();
         await expect(page.locator('#research-menu-row')).toBeHidden();
-        await expect(page.locator('#actions-research-row')).toBeHidden();
+        await expect(page.locator('#research-menu-btn')).toHaveCount(0);
         await expect(page.locator('#actions-menu-new-dot')).toBeHidden();
     });
 
@@ -218,7 +223,7 @@ test.describe('Actions → Research', () => {
         await dropFile(page, researchGed());
         await expect(card(page, 'Jan')).toBeVisible();
         expect(await page.evaluate(() => window.Strom.UI.researchMenuShown())).toBe(false);
-        await expect(page.locator('#actions-research-wrap')).toBeHidden();
+        await expect(page.locator('#research-menu-btn')).toHaveCount(0);
         expect(await page.evaluate(() => {
             const id = window.Strom.DataManager.getAllPersons().find((p: { refn?: string }) => p.refn === 'P0012')!.id;
             return window.Strom.UI.getPersonMenuActions(id).map((a: { action: string }) => a.action);
@@ -227,7 +232,7 @@ test.describe('Actions → Research', () => {
     });
 });
 
-test.describe('live research: Waiting for an answer', () => {
+test.describe('live research: Awaiting action', () => {
     test('above the changes, "Answer ↗" opens the task; the menu opens the panel at the section', async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 900 });
         await seed(page, ALL);
@@ -250,7 +255,7 @@ test.describe('live research: Waiting for an answer', () => {
         await recordLaunches(page);
         // Order of the sections: at work → waiting → changes.
         const headings = await panel.locator('.live-section__title').allTextContents();
-        expect(headings).toEqual(['At work', 'Waiting for an answer · 2', 'Latest changes']);
+        expect(headings).toEqual(['At work', 'Awaiting action · 2', 'Latest changes']);
         await expect(panel.locator('.live-waiting .live-time').first()).toHaveText(/just now|min/);
         await expect(panel).toContainText('Answer in the research.');
         const answers = panel.locator('.live-waiting-answer');
@@ -266,9 +271,11 @@ test.describe('live research: Waiting for an answer', () => {
         // Collapsed panel; the menu count and dot; the menu opens it again.
         await panel.locator('.live-panel-toggle').click();
         await expect(panel).toHaveClass(/collapsed/);
-        await expect(page.locator('#actions-menu-dot')).toBeVisible();
+        await expect(page.locator('#research-menu-signal')).toHaveText('2');
+        // Following live: the green dot before the word, the line in place of the state block.
+        await expect(page.locator('#research-menu-btn .research-menu-live')).toBeVisible();
         await openResearchMenu(page);
-        await expect(page.locator('#actions-research-badge')).toHaveText('2');
+        await expect(page.locator('#research-menu-following')).toHaveText('Following live · tree is locked');
         await page.locator('#research-item-waiting').click();
         await expect(panel).not.toHaveClass(/collapsed/);
         await expect(panel.locator('.live-panel-heading-waiting')).toBeVisible();

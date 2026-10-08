@@ -4,7 +4,7 @@ import { openApp, card } from './helpers.js';
 /**
  * A new version of an approved story (Strom Research _STORY > _DRAFT): the
  * banner in the reader, the person dialog and the family book, the comparison
- * dialog and its decision footer, "Waiting for an answer" and the card's badge.
+ * dialog and its decision footer, "Awaiting action" and the card's badge.
  * Handing a strom-research:// link to the system is recorded instead.
  */
 
@@ -172,7 +172,7 @@ test.describe('a story\'s new version', () => {
         await expect(banner).toBeVisible();
     });
 
-    test('"Waiting for an answer": a story item has its label and Compare; a couple names both', async ({ page }) => {
+    test('"Awaiting action": a story item has its label and Compare; a couple names both', async ({ page }) => {
         await setup(page, ALL, [STORY_ITEM, COUPLE_ITEM]);
         await page.evaluate(() => window.Strom.UI.showResearchWaiting());
         const rows = page.locator('.live-waiting-row');
@@ -192,7 +192,7 @@ test.describe('a story\'s new version', () => {
     test('the card: tooltip, aria-label, and the badge opens the comparison', async ({ page }) => {
         await setup(page, ALL, [STORY_ITEM]);
         await expect(card(page, 'Jan').locator('.card-tooltip .tt-story')).toHaveText('Story · new version waiting');
-        await expect(card(page, 'Jan').locator('.card-tooltip .tt-action')).toHaveText(['Waiting for an answer: New version of the story']);
+        await expect(card(page, 'Jan').locator('.card-tooltip .tt-action')).toHaveText(['Awaiting action: New version of the story']);
         await expect(card(page, 'Jan')).toHaveAttribute('aria-label', /has a story, new version waiting, waiting for an answer/);
         await card(page, 'Jan').locator('.card-signal').click();
         await expect(page.locator('#story-compare-modal')).toBeVisible();

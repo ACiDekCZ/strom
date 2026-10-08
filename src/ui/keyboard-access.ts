@@ -5,8 +5,11 @@
  * markup (or where they are rendered); this module adds ONE delegated
  * keydown handler instead of per-element inline code:
  *  - Enter / Space activate the focused control (same as a click);
- *  - Arrow Up / Down move between the items of an open menu, and from the
- *    menu's trigger button into it;
+ *  - Arrow Up / Down move between the items of an open menu (every
+ *    role="menuitem" in it, the research menu's block buttons too), and from
+ *    the menu's trigger button into it; Home / End go to the first / last;
+ *  - Arrow Left / Right switch between the neighbouring toolbar menus
+ *    (Research and Actions), never on the "Strom: {name} ›" row or its flyout;
  *  - after Escape closes a menu, focus goes back to its trigger button.
  */
 
@@ -17,8 +20,9 @@ const ACTIVATABLE = [
 ].join(', ');
 
 /** Menu containers whose items take Arrow Up / Down. */
-const MENU = '.tree-switcher-dropdown.active, .context-menu, .bottom-sheet-person';
-const MENU_ITEM = '.tree-switcher-action, .tree-switcher-item, .context-menu-item, .bottom-sheet-person .bottom-sheet-item';
+const MENU = '.tree-switcher-dropdown.active, .context-menu, .bottom-sheet-person, .bottom-sheet-menu';
+const MENU_ITEM = '.tree-switcher-action, .tree-switcher-item, .context-menu-item, .bottom-sheet-person .bottom-sheet-item, '
+    + '.tree-switcher-dropdown [role="menuitem"], .bottom-sheet-menu .bottom-sheet-item, .bottom-sheet-menu [role="menuitem"]';
 
 /** Trigger button → the dropdown it opens. */
 const TRIGGERS: Array<{ button: string; menu: string }> = [
@@ -47,7 +51,44 @@ export function openCardMenuFromKeyboard(card: HTMLElement): void {
 
 function visibleItems(menu: Element): HTMLElement[] {
     return Array.from(menu.querySelectorAll<HTMLElement>(MENU_ITEM))
-        .filter(el => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden');
+        .filter(el => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden'
+            && !(el as HTMLButtonElement).disabled);
+}
+
+/** A toolbar menu button that is there (the Research button is hidden in a narrow window). */
+function shownButton(selector: string): HTMLElement | null {
+    const btn = document.querySelector<HTMLElement>(selector);
+    return btn && btn.getClientRects().length > 0 ? btn : null;
+}
+
+/** ← / →: from one toolbar menu to its neighbour (Research | Actions), focus on its first item. */
+function switchToolbarMenu(e: KeyboardEvent, target: HTMLElement): boolean {
+    const research = document.getElementById('research-menu');
+    const actions = document.getElementById('actions-menu-dropdown');
+    if (research?.classList.contains('active') && research.contains(target)) {
+        const btn = shownButton('.actions-menu-btn');
+        if (!btn) return false;
+        e.preventDefault();
+        btn.click();
+        if (actions?.classList.contains('active')) moveInMenu(actions, null, 1);
+        return true;
+    }
+    // In Actions, ← goes to Research (on its left) — not from the "Strom:" row or its flyout (→ / ← open and close it).
+    if (e.key === 'ArrowLeft' && actions?.classList.contains('active') && actions.contains(target) && !target.closest('.actions-tree-wrap')) {
+        const btn = shownButton('#research-menu-btn');
+        if (!btn) return false;
+        e.preventDefault();
+        btn.click();
+        const menu = document.getElementById('research-menu');
+        if (menu?.classList.contains('active')) {
+            const first = Array.from(menu.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+                .find(el => el.getClientRects().length > 0 && !el.closest('.research-menu-heading'));
+            if (first) first.focus();
+            else moveInMenu(menu, null, 1);
+        }
+        return true;
+    }
+    return false;
 }
 
 /** Move focus by `step` among the visible items of `menu` (wrapping). */
@@ -71,6 +112,25 @@ function onKeydown(e: KeyboardEvent): void {
     if ((e.key === 'Enter' || e.key === ' ') && target.matches(ACTIVATABLE)) {
         e.preventDefault();
         target.click();
+        return;
+    }
+
+    if (e.key === 'Home' || e.key === 'End') {
+        const menu = target.closest(MENU);
+        if (menu && target.matches(MENU_ITEM)) {
+            const items = visibleItems(menu);
+            const to = e.key === 'Home' ? items[0] : items[items.length - 1];
+            if (to) {
+                e.preventDefault();
+                if (!to.hasAttribute('tabindex')) to.setAttribute('tabindex', '-1');
+                to.focus();
+            }
+        }
+        return;
+    }
+
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        switchToolbarMenu(e, target);
         return;
     }
 

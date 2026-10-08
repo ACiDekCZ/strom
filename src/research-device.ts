@@ -462,10 +462,8 @@ export function noteResearchAutoIntroSeen(): void {
 
 const LAST_EXPORT_ALL_KEY = 'strom-last-export-all';
 const EXPORT_REMINDER_KEY = 'strom-export-reminder';
-/** The reminder in ⋯ → Research comes this long after the last "Export all" (or its last showing). */
+/** Not backed up: the last "Export all" is this old (or there was none). A click on the reminder rests it as long. */
 export const EXPORT_REMINDER_MS = 21 * 24 * 60 * 60 * 1000;
-/** Shown this many times (the menu opened), then it rests for EXPORT_REMINDER_MS. */
-const EXPORT_REMINDER_SHOWS = 3;
 
 /** When every tree was last exported in full ("Export all"), or null. */
 export function lastExportAll(): string | null {
@@ -483,24 +481,34 @@ export function noteExportAll(now = Date.now()): void {
     } catch { /* not remembered: reminded again */ }
 }
 
-function reminderState(): { count: number; restUntil: number } {
-    try {
-        const p = JSON.parse(localStorage.getItem(EXPORT_REMINDER_KEY) ?? '{}') as { count?: unknown; restUntil?: unknown };
-        return { count: typeof p.count === 'number' ? p.count : 0, restUntil: typeof p.restUntil === 'number' ? p.restUntil : 0 };
-    } catch { return { count: 0, restUntil: 0 }; }
+/** The local calendar day of a moment ("2026-10-08"): the reminder comes at most once in one. */
+function localDay(now: number): string {
+    const d = new Date(now);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-/** Is the reminder due in ⋯ → Research: 21 days since the last export (or never), and not resting. */
+function reminderState(): { day: string; restUntil: number } {
+    try {
+        const p = JSON.parse(localStorage.getItem(EXPORT_REMINDER_KEY) ?? '{}') as { day?: unknown; restUntil?: unknown };
+        return { day: typeof p.day === 'string' ? p.day : '', restUntil: typeof p.restUntil === 'number' ? p.restUntil : 0 };
+    } catch { return { day: '', restUntil: 0 }; }
+}
+
+/**
+ * Is the "Export all" reminder due in a menu now: not backed up (21 days
+ * since the last export of all trees, or never), not resting after a click,
+ * and not shown yet today (the first menu opening of a day shows it).
+ */
 export function exportReminderDue(now = Date.now()): boolean {
     const last = lastExportAll();
     if (last && now - Date.parse(last) < EXPORT_REMINDER_MS) return false;
-    return now >= reminderState().restUntil;
+    const st = reminderState();
+    return now >= st.restUntil && st.day !== localDay(now);
 }
 
-/** The menu showed it once more; after the third time (or a click: `rest`) it rests for 21 days. */
+/** A menu showed it: not again today. `rest` (a click on it): quiet for 21 days. */
 export function noteExportReminderShown(rest = false, now = Date.now()): void {
     const st = reminderState();
-    const count = st.count + 1;
-    const next = rest || count >= EXPORT_REMINDER_SHOWS ? { count: 0, restUntil: now + EXPORT_REMINDER_MS } : { count, restUntil: st.restUntil };
+    const next = rest ? { day: localDay(now), restUntil: now + EXPORT_REMINDER_MS } : { day: localDay(now), restUntil: st.restUntil };
     try { localStorage.setItem(EXPORT_REMINDER_KEY, JSON.stringify(next)); } catch { /* shown again */ }
 }

@@ -69,14 +69,13 @@ test.describe('no Strom Research on this computer: nothing of it shows or runs',
         // Past every timer of the research: the minute's status poll and the two quiet minutes.
         await page.clock.fastForward(5 * 60_000);
 
-        // Toolbar: no research mark, Send button or pill; no research dot on ⋯.
+        // Toolbar: no research mark, Send button or pill, no Research button; no dot on ⋯.
         await expect(page.locator('#research-sync-pill')).toBeHidden();
-        await expect(page.locator('#actions-menu-research-dot')).toBeHidden();
+        await expect(page.locator('#research-menu-btn')).toHaveCount(0);
         await expect(page.locator('#actions-menu-dot')).toBeHidden();
 
-        // ⋯ menu: no Research submenu, no state block.
+        // ⋯ menu: no state block (nothing of a research).
         await page.locator('.actions-menu-btn').click();
-        await expect(page.locator('#actions-research-row')).toBeHidden();
         await expect(page.locator('.research-sync-block')).toHaveCount(0);
         await page.keyboard.press('Escape');
 

@@ -483,16 +483,17 @@ export const miscMethods = uiModule({
 
     // ---- MENUS ----
     /**
-     * The three toolbar overlays — the mobile "More" (Více) bottom sheet, the
-     * tree switcher and the desktop ⋯ actions menu — are mutually exclusive:
-     * opening one closes the others. Called at the top of each toggle so a
-     * second one never layers on top of the first (a user once saw the old
-     * hamburger and the switcher dropdown open together on mobile).
+     * The toolbar overlays — the mobile "More" (Více) bottom sheet, the tree
+     * switcher, the desktop ⋯ actions menu and the Research menu — are
+     * mutually exclusive: opening one closes the others. Called at the top of
+     * each toggle so a second one never layers on top of the first (a user
+     * once saw the old hamburger and the switcher dropdown open together on mobile).
      */
-    closeAllMenusExcept(which: 'sheet' | 'switcher' | 'actions'): void {
+    closeAllMenusExcept(which: 'sheet' | 'switcher' | 'actions' | 'research'): void {
         if (which !== 'sheet') this.hideBottomSheet();
         if (which !== 'switcher') document.getElementById('tree-switcher-dropdown')?.classList.remove('active');
-        if (which !== 'actions') document.getElementById('actions-menu-dropdown')?.classList.remove('active');
+        if (which !== 'actions' && document.getElementById('actions-menu-dropdown')?.classList.contains('active')) this.closeActionsMenu();
+        if (which !== 'research') this.closeResearchMenu();
     },
 
     // ---- MOBILE "MORE" MENU ----
@@ -645,19 +646,19 @@ export const miscMethods = uiModule({
                     openRowMenu.classList.remove('open');
                     return;
                 }
+                // The Research menu: focus back on its button (or the toolbar pill that opened it).
+                if (this.isResearchMenuOpen()) {
+                    this.closeResearchMenu(true);
+                    return;
+                }
                 const actionsMenu = document.getElementById('actions-menu-dropdown');
                 if (actionsMenu?.classList.contains('active')) {
-                    // A "Strom:" / "Research" submenu (a flyout) opened from the keyboard closes
+                    // The "Strom:" submenu (a flyout) opened from the keyboard closes
                     // first; the next Escape closes the whole actions menu. Opened by the pointer,
                     // one Escape closes it all (J6 of the language round).
                     const treeWrap = document.getElementById('actions-tree-wrap');
                     if (treeWrap?.classList.contains('submenu-open') && treeWrap.hasAttribute('data-kbd')) {
                         this.closeActionsTreeSubmenu();
-                        return;
-                    }
-                    const researchWrap = document.getElementById('actions-research-wrap');
-                    if (researchWrap?.classList.contains('submenu-open') && researchWrap.hasAttribute('data-kbd')) {
-                        this.closeActionsResearchSubmenu();
                         return;
                     }
                     this.closeActionsMenu();

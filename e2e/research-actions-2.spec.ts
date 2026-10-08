@@ -83,9 +83,8 @@ async function setup(page: Page, links: string[] = ALL, stored: Record<string, u
 }
 
 async function openResearchMenu(page: Page): Promise<void> {
-    await page.locator('.actions-menu-btn').click();
-    await page.locator('#actions-research-row').click();
-    await expect(page.locator('#actions-research-submenu')).toBeVisible();
+    await page.locator('#research-menu-btn').click();
+    await expect(page.locator('#research-menu')).toBeVisible();
 }
 
 const personId = (page: Page, refn: string) => page.evaluate((refn) =>
@@ -98,8 +97,8 @@ async function menuActions(page: Page, name: string): Promise<string[]> {
     return menu.locator('[data-action]').evaluateAll(els => els.map(el => (el as HTMLElement).dataset.action || ''));
 }
 
-test.describe('Research submenu, second wave', () => {
-    test('update block, "Undo last send" with its time, "Research settings"', async ({ page }) => {
+test.describe('Research menu, second wave', () => {
+    test('update line, "Undo last send" with its time, "Research settings"', async ({ page }) => {
         // Earlier today (just after midnight two hours back is yesterday: shown with its date).
         const sentAt = new Date(Math.max(Date.now() - 2 * 3600_000, new Date().setHours(0, 0, 1, 0)));
         await setup(page, ALL, { update: { version: '1.7.0' }, lastIntake: { id: 'I0042', at: sentAt.toISOString() } });
@@ -109,8 +108,11 @@ test.describe('Research submenu, second wave', () => {
         await expect(page.locator('#research-item-update')).toHaveText('Update ↗');
         const hhmm = await page.evaluate((iso) => new Intl.DateTimeFormat('en', { hour: '2-digit', minute: '2-digit' }).format(new Date(iso)), sentAt.toISOString());
         await expect(page.locator('#research-item-undo .research-item-sub')).toHaveText(`sent ${hhmm}`);
-        await expect(page.locator('#actions-research-submenu .research-item-label'))
-            .toContainText(['Load new version', 'Send changes', 'Undo last send', 'Open research', 'Continue with the agent', 'Research settings']);
+        await expect(page.locator('#research-menu .research-item-label'))
+            .toContainText(['Continue with the agent', 'Open research', 'Send changes', 'Load new version', 'Undo last send', 'Research settings']);
+        // The occasional ones are a quieter group of their own, last.
+        await expect(page.locator('#research-menu .research-menu-group.is-quiet .research-item-label'))
+            .toHaveText([/^Undo last send/, 'Research settings']);
 
         await page.locator('#research-item-update').click();
         await openResearchMenu(page);
@@ -523,7 +525,7 @@ test.describe('Start research with this tree (G3)', () => {
         const research = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata());
         expect(research?.research).toMatchObject({ id: UUID, head: 'abc1234' });
         expect(research?.researchAdoptToken).toBeUndefined();
-        await expect(page.locator('#actions-research-wrap')).toBeAttached();
+        await expect(page.locator('#research-menu-btn')).toBeAttached();
         expect(await page.evaluate(() => window.Strom.UI.researchMenuShown())).toBe(true);
         expect(calls.cancel).toEqual([]);
     });

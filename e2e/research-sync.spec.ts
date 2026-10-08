@@ -27,7 +27,7 @@ test.describe('the state of the tree and sending straight', () => {
         await openResearchMenu(page);
         await expect(block(page)).toHaveAttribute('data-state', 'unsent');
         await expect(block(page)).toContainText("Changes the research doesn't have");
-        await block(page).getByRole('button', { name: 'Send changes' }).click();
+        await block(page).getByRole('menuitem', { name: 'Send changes' }).click();
         await expect(page.locator('.toast')).toContainText('Sent to the research, 6 changes. Confirm them in the research.');
         await expect(page.locator('#confirmation-modal')).not.toHaveClass(/active/);
         expect(bridge.posts).toHaveLength(1);
@@ -119,7 +119,7 @@ test.describe('the state of the tree and sending straight', () => {
         await page.waitForTimeout(300);
         await expect(page.locator('.toast', { hasText: 'discarded' })).toHaveCount(0);
         await openResearchMenu(page);
-        await block(page).getByRole('button', { name: 'Send again' }).click();
+        await block(page).getByRole('menuitem', { name: 'Send again' }).click();
         await expect(page.locator('.toast')).toContainText('Sent to the research');
         await poll(page);
         await openResearchMenu(page);
@@ -129,7 +129,7 @@ test.describe('the state of the tree and sending straight', () => {
     test('a tree without a research, and a research that does not say what it takes: nothing new', async ({ page }) => {
         await openApp(page);
         await page.evaluate(() => window.Strom.UI.toggleActionsMenu());
-        await expect(page.locator('#actions-research-wrap')).toBeHidden();
+        await expect(page.locator('#research-menu-btn')).toHaveCount(0);
         await expect(page.locator('#research-sync-pill')).toBeHidden();
         await page.evaluate(() => window.Strom.UI.closeActionsMenu());
 

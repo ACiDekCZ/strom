@@ -38,7 +38,7 @@ test.describe('changes per person', () => {
         // The block in ⋯ → Research: how many people, and the same panel.
         await openResearchMenu(page);
         await expect(block(page)).toContainText('1 person changed');
-        await block(page).getByRole('button', { name: 'What will be sent ›' }).click();
+        await block(page).getByRole('menuitem', { name: 'What will be sent ›' }).click();
         await expect(panel).toBeVisible();
         // A name selects the person and closes the panel.
         await panel.locator('.research-changes-name').click();
@@ -49,7 +49,7 @@ test.describe('changes per person', () => {
         await expect.poll(() => b.posts.length).toBe(1);
         await openResearchMenu(page);
         await expect(block(page)).toHaveAttribute('data-state', 'written');
-        await block(page).getByRole('button', { name: 'What was written ›' }).click();
+        await block(page).getByRole('menuitem', { name: 'What was written ›' }).click();
         await expect(panel.locator('.research-changes-title')).toContainText('Written');
         await expect(panel.locator('.research-changes-name')).toHaveText('Jan Víšek');
         await expect(panel.locator('.research-changes-icon')).toHaveText('✓');
@@ -119,7 +119,7 @@ test.describe('changes per person after a send the research took nothing from', 
             await expect(block(page)).toHaveAttribute('data-state', 'notTaken');
             await expect(block(page)).toContainText('The research took nothing new from the last send.');
             await expect(block(page)).toContainText('1 person changed');
-            await block(page).getByRole('button', { name: 'What will be sent ›' }).click();
+            await block(page).getByRole('menuitem', { name: 'What will be sent ›' }).click();
             await expect(panel.locator('.research-changes-title')).toHaveText('What will be sent');
             await expect(panel.locator('.research-changes-row')).toHaveCount(1);
             await expect(panel.locator('.research-changes-name')).toHaveText('Jan Víšek');

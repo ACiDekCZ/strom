@@ -499,6 +499,14 @@
         /* Primary "＋ Add person" button. */
         .btn-add-person { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
         .btn-add-person .btn-add-glyph { font-size: 16px; line-height: 1; font-weight: 400; }
+        /* A research tree from 1180 px: the research's state beside the logo and the Research
+           button take the room of the label (de is the widest): ＋ alone, named by its hidden text. */
+        @media (min-width: 1180px) and (max-width: 1280px) {
+            body.research-actions .btn-add-person { padding-left: 10px; padding-right: 10px; }
+            body.research-actions .btn-add-person .btn-add-label {
+                position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+            }
+        }
 
         /* Round add person button (tablet/mobile) */
         .add-person-round {
@@ -4303,12 +4311,92 @@
         body.data-locked .research-menu-row { display: none; }
         /* A research tree on a computer: the "Research" submenu replaces the entry. */
         body.research-actions .research-menu-row { display: none; }
-        body.data-locked .actions-research-wrap { display: none !important; }
-        .actions-research-label { flex: 1; min-width: 0; color: var(--text); }
-        .actions-research-badge { background: var(--accent); }
-        .actions-research-badge + .actions-tree-chevron { margin-left: 4px; }
-        .actions-research-submenu { min-width: 240px; max-width: 300px; }
-        .actions-research-submenu .tree-switcher-action { display: flex; align-items: center; gap: 8px; }
+
+        /* ===== The Research button and menu: left of Actions in the toolbar (research-actions-ui.ts) ===== */
+        .research-menu-wrap { position: relative; align-items: center; }
+        .toolbar button.research-menu-btn {
+            position: relative; gap: 6px; height: 34px; padding: 0 10px; border-radius: 8px;
+            color: var(--text); font-weight: 500; white-space: nowrap;
+        }
+        .toolbar button.research-menu-btn.is-open { background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--border); }
+        .toolbar button.research-menu-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .research-menu-chevron { color: var(--text-light); flex-shrink: 0; }
+        /* Up to 1280 px the toolbar is tight (Actions folds to ⋯): the word stays, the chevron goes. */
+        @media (max-width: 1280px) { .toolbar button.research-menu-btn .research-menu-chevron { display: none; } }
+        /* Following live: a static green dot before the word. */
+        .research-menu-live { display: none; width: 8px; height: 8px; border-radius: 50%; background: var(--primary); flex-shrink: 0; }
+        .research-menu-btn.is-live .research-menu-live { display: inline-block; }
+        /* One signal: the waiting count, else one dot (attention, then changes not sent). */
+        .research-menu-signal { flex-shrink: 0; width: 8px; height: 8px; border-radius: 50%; background: var(--signal-warn); }
+        .research-menu-signal[hidden] { display: none; }
+        .research-menu-signal[data-signal="count"], .research-count-badge, .tree-switcher-badge.research-count-badge {
+            display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
+            width: auto; height: 20px; min-width: 20px; padding: 0 6px; border-radius: 999px;
+            background: var(--signal-warn); color: var(--on-signal-warn); font-size: 12px; font-weight: 600; line-height: 1;
+        }
+        .research-menu-dropdown {
+            left: auto; right: 0; width: 340px; max-width: calc(100vw - 16px); box-sizing: border-box;
+            margin-top: 6px; padding: 4px 0 6px; overflow-y: auto;
+        }
+        .research-menu-body .tree-switcher-action { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 14px; }
+        .research-menu-group.is-quiet .tree-switcher-action { color: var(--text-secondary); padding-top: 8px; padding-bottom: 8px; font-size: 13px; }
+        .research-menu-heading { display: flex; align-items: center; gap: 8px; padding: 10px 14px 8px; font-size: 14px; font-weight: 600; color: var(--text); }
+        .research-menu-heading .research-trial-tag { margin-left: 0; }
+        .research-menu-heading .research-sync-tag { align-self: center; }
+        .research-menu-body .research-sync-block { margin: 0 8px 6px; }
+        .research-sync-status { display: flex; flex-direction: column; gap: 4px; }
+        /* Following live (the tree locked meanwhile): one line in place of the state block, not an item. */
+        .research-menu-following {
+            display: flex; align-items: center; gap: 8px; margin: 0 8px 6px; padding: 8px 10px;
+            border-radius: 8px; background: var(--primary-soft); color: var(--text); font-size: 13px;
+        }
+        .research-menu-live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--primary); flex-shrink: 0; }
+        /* The More sheet: the research group on top (a narrow window with a mouse) and its page with the whole menu. */
+        .research-sheet-heading { display: flex; align-items: center; gap: 8px; }
+        .research-sheet-heading .research-trial-tag { margin-left: 0; text-transform: none; letter-spacing: normal; }
+        .research-sheet-state {
+            display: flex; align-items: center; gap: 8px; margin: 4px 12px 6px; padding: 6px 8px 6px 12px;
+            border-radius: 10px; background: var(--surface-2); color: var(--text); font-size: 14px;
+        }
+        .research-sheet-state.is-warn { background: var(--warning-soft); }
+        .research-sheet-state-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-light); flex-shrink: 0; }
+        .research-sheet-state.is-warn .research-sheet-state-dot { background: var(--signal-warn); }
+        .research-sheet-state-text { flex: 1; min-width: 0; font-weight: 600; }
+        .research-sheet-state .research-sync-btn, .research-sheet-state .research-sync-link { min-height: 44px; padding: 0 12px; border-radius: var(--r-sm); }
+        /* Outside the toolbar (the sheet): the block's main button keeps its green fill. */
+        .research-sheet-state .research-sync-btn, .research-sheet-body .research-sync-btn {
+            border: 0; background: var(--primary); color: var(--on-primary); font: inherit; font-size: 14px; cursor: pointer;
+        }
+        @media (hover: hover) { .research-sheet-state .research-sync-btn:hover, .research-sheet-body .research-sync-btn:hover { background: var(--primary-dark); } }
+        .bottom-sheet-menu .research-sheet-all { color: var(--primary); }
+        .bottom-sheet-menu .bottom-sheet-item .research-ai-badge { margin-left: auto; }
+        .bottom-sheet-menu .bottom-sheet-item .research-ai-badge + .research-item-ext { margin-left: 8px; }
+        .sheet-page-research[hidden], .bottom-sheet-items[hidden], .bottom-sheet-menu-title[hidden] { display: none; }
+        .research-sheet-body .research-menu-heading { padding: 0 8px 8px 4px; font-size: 15px; }
+        .research-menu-back, .toolbar .research-menu-back {
+            min-width: 44px; min-height: 44px; padding: 0; border: 0; border-radius: 8px;
+            background: none; color: var(--text); font-size: 24px; line-height: 1; cursor: pointer;
+        }
+        @media (hover: hover) { .research-menu-back:hover { background: var(--hover-bg); } }
+        .research-sheet-body .tree-switcher-action { min-height: 44px; box-sizing: border-box; padding: 10px 16px; font-size: 15px; }
+        .research-sheet-body .research-sync-block { margin: 0 12px 8px; }
+        .research-sheet-body .research-sync-btn, .research-sheet-body .research-sync-link { min-height: 44px; }
+        .research-sheet-body .research-submenu-note { padding: 8px 16px 4px; }
+        /* "Export all" now and then: a quiet line with a link under Export… (Actions, More). */
+        .export-reminder { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 0 14px 8px; }
+        .export-reminder[hidden] { display: none; }
+        .export-reminder-text { font-size: 12px; line-height: 1.4; color: var(--text-light); }
+        /* Scoped under .toolbar too: the ".toolbar button" fill must not turn the link into a green box. */
+        .export-reminder .export-reminder-link, .toolbar .export-reminder .export-reminder-link {
+            padding: 0; border: 0; border-radius: 0; background: none; color: var(--primary);
+            font-size: 13px; font-weight: 500; text-decoration: underline; cursor: pointer;
+        }
+        @media (hover: hover) { .export-reminder .export-reminder-link:hover, .toolbar .export-reminder .export-reminder-link:hover { background: none; color: var(--primary-dark); } }
+        .export-reminder-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .export-reminder--sheet { padding: 0 16px 10px; }
+        @media (pointer: coarse) {
+            .export-reminder .export-reminder-link { display: inline-flex; align-items: center; min-height: 44px; }
+        }
         .research-item-label { flex: 1; min-width: 0; }
         .research-item-ext { flex: none; color: var(--text-faint); }
         .research-ai-badge {
@@ -9827,11 +9915,11 @@
         .research-sync-sub { font-size: 12px; line-height: 1.4; color: var(--text-light); }
         .research-sync-block--warn .research-sync-sub { color: var(--text-secondary); }
         .research-sync-actions { display: flex; margin-top: 4px; }
-        .actions-research-submenu .research-sync-btn {
+        .research-menu-body .research-sync-btn {
             display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px;
             font-size: 13px; border-radius: var(--r-sm);
         }
-        .actions-research-submenu .research-sync-btn[disabled] { opacity: 0.75; cursor: progress; }
+        .research-menu-body .research-sync-btn[disabled] { opacity: 0.75; cursor: progress; }
         .research-sync-link, .toolbar .research-sync-link {
             padding: 2px 0; border: 0; background: none; cursor: pointer; font: inherit;
             font-size: 13px; font-weight: 600; color: var(--primary);
@@ -9844,9 +9932,6 @@
             animation: toast-spin 0.9s linear infinite;
         }
         @media (prefers-reduced-motion: reduce) { .research-sync-spinner { animation: none; } }
-        .actions-research-dot {
-            flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-right: 4px;
-        }
         /* The toolbar pill: changes would be lost / "Send, then load" waits. */
         .toolbar .research-sync-pill { margin-left: 6px; gap: 6px; padding: 0 4px 0 10px; cursor: default; }
         .toolbar .research-sync-pill.is-wait { padding-right: 10px; }
@@ -10046,13 +10131,6 @@
         .snapshots-export { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 10px 0 0; padding: 10px 12px; border-radius: 8px; background: var(--surface-2); font-size: 13px; }
         .snapshots-export[hidden] { display: none; }
         .snapshots-export .link-button { font-size: 13px; font-weight: 600; }
-        .research-export-reminder { padding: 4px 14px 8px; font-size: 12px; color: var(--text-light); }
-        /* The research menu sits inside .toolbar: scoped under it so the link outranks the
-           ".toolbar button" fill (and its hover: 0,3,0 > 0,2,1), which painted a padding-less green box cut to the letters. */
-        .toolbar .research-export-reminder .link-button {
-            display: block; margin-top: 2px; padding: 0; font-size: 13px; font-weight: 600;
-            background: none; color: var(--primary); border-radius: 0;
-        }
         /* "Load the research version?" (research-load-ui.ts): every value here that changes, what it adds, the backup. */
         .research-load-warn { margin: 0 0 10px; padding: 10px 12px; border-radius: 8px; background: var(--warning-soft); color: var(--warning-text); font-size: 13px; line-height: 1.45; }
         .research-load-table-wrap { border: 1px solid var(--divider); border-radius: 8px; overflow: hidden; }
@@ -10126,11 +10204,6 @@
         .research-sync-tag--inline { display: inline-block; vertical-align: middle; margin-left: 6px; }
         .research-sync-actions { gap: 14px; align-items: center; flex-wrap: wrap; }
         .research-sync-title .research-sync-spinner { display: inline-block; margin-right: 6px; vertical-align: -1px; }
-        /* Sent by hand: a dot on ⋯ only where the toolbar has no Send button. */
-        @media (min-width: 1180px) and (pointer: fine) {
-            .actions-menu-research-dot { display: none !important; }
-        }
-        .actions-menu-research-dot { background: var(--accent); }
         /* Research for this tree: sending changes. */
         .research-mode-line { margin-top: 2px; font-size: 12px; color: var(--text-light); }
         .research-transcripts.research-send-mode { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--divider); }
@@ -10185,8 +10258,6 @@
         .research-title-row h2 { margin: 0; }
         .research-title-row .research-trial-tag { margin-left: 0; }
         .research-trial-sentence { margin-top: 4px; font-size: 12px; line-height: 1.45; color: var(--text-secondary); }
-        .research-submenu-heading { display: flex; align-items: center; gap: 8px; padding: 6px 14px 4px; font-size: 12px; font-weight: 600; color: var(--text-light); }
-        .research-submenu-heading .research-trial-tag { margin-left: 0; }
         /* The hand-over and the one-time question: header and footer stay, the body scrolls (Hand over always in view). */
         .modal.research-send-dialog { max-height: calc(100vh - 48px); max-height: calc(100dvh - 48px); }
         .modal .buttons .research-send-dialog-note { margin-right: auto; font-size: 12px; line-height: 1.4; color: var(--text-light); }
@@ -10309,12 +10380,13 @@
         .sources-filter[hidden] { display: none; }
 
         /* ===== Research actions, second wave ===== */
-        /* Research submenu: "New Strom Research 1.7" block, second line of "Undo last send". */
+        /* Research menu: "New Strom Research 1.7 · Update ↗" as one framed line, second line of "Undo last send". */
         .research-update-block {
-            margin: 6px 8px 4px; padding: 8px 10px 6px;
-            background: var(--surface-2); border-radius: 8px;
+            display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 10px;
+            margin: 0 8px 6px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px;
         }
-        .research-update-title { font-size: 13px; font-weight: 600; color: var(--text); }
+        .research-older-block { display: block; }
+        .research-update-title { font-size: 13px; color: var(--text); }
         /* An older research: a quiet line with "How to update…" (menu, Research for this tree, Attachments). */
         .research-older-block, .research-older-line { font-size: 13px; color: var(--text-light); line-height: 1.45; }
         .research-older-line { margin: 0 0 12px; }
@@ -10331,11 +10403,12 @@
         .research-update-dialog { width: 560px; max-width: calc(100vw - 32px); }
         @media (max-width: 640px) { .research-update-dialog { max-width: calc(100vw - 16px); } }
         @media (min-width: 641px) and (max-width: 1024px) { .research-update-dialog { width: 500px; } }
-        .actions-research-submenu .tree-switcher-action.research-update-action {
-            display: inline-flex; margin: 2px -6px 0; padding: 4px 6px; border-radius: var(--r-sm);
-            font-size: 13px; color: var(--primary); background: none;
+        .research-update-action, .toolbar .research-update-action {
+            padding: 0; border: 0; border-radius: 0; background: none; color: var(--primary);
+            font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer;
         }
-        @media (hover: hover) { .actions-research-submenu .tree-switcher-action.research-update-action:hover { background: var(--hover-bg); } }
+        @media (hover: hover) { .research-update-action:hover, .toolbar .research-update-action:hover { background: none; text-decoration: underline; } }
+        .research-update-action:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
         .research-item-label--two { display: flex; flex-direction: column; gap: 1px; }
         .research-item-sub { font-size: 12px; color: var(--text-light); }
 
@@ -11048,8 +11121,8 @@
                 display: none !important;
             }
             /* The ⋯ actions menu is desktop-only; the mobile ⋯ + bottom bar
-               cover it here. */
-            .actions-menu {
+               cover it here. The Research button too: its group is on top of More. */
+            .actions-menu, .research-menu-wrap {
                 display: none !important;
             }
             /* The desktop view-mode segment is duplicated by the bottom bar's
@@ -12988,7 +13061,7 @@
 
         <!-- Actions menu (⋯) — desktop only; the mobile ⋯ + "More" sheet cover smaller screens -->
         <div class="actions-menu desktop-only">
-            <button class="secondary actions-menu-btn" onclick="window.Strom.UI.toggleActionsMenu()" data-i18n-title="menu.actions" data-i18n-aria-label="menu.actions"><span class="actions-menu-label" data-i18n="menu.actions"></span><svg class="actions-menu-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg><span class="actions-menu-dots">⋯</span><span id="actions-menu-dot" class="actions-menu-dot" style="display:none;"></span><span id="actions-menu-research-dot" class="actions-menu-dot actions-menu-research-dot" style="display:none;" aria-hidden="true"></span><span class="actions-menu-dot actions-menu-storage-dot is-storage storage-dot storage-badge" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="tri" d="M10.27 3.2a2 2 0 0 1 3.46 0l8.5 14.8A2 2 0 0 1 20.5 21h-17a2 2 0 0 1-1.73-3z"/><path class="mark" d="M12 9.5v4M12 17h.01"/></svg></span></button>
+            <button class="secondary actions-menu-btn" onclick="window.Strom.UI.toggleActionsMenu()" data-i18n-title="menu.actions" data-i18n-aria-label="menu.actions"><span class="actions-menu-label" data-i18n="menu.actions"></span><svg class="actions-menu-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg><span class="actions-menu-dots">⋯</span><span id="actions-menu-dot" class="actions-menu-dot" style="display:none;"></span><span class="actions-menu-dot actions-menu-storage-dot is-storage storage-dot storage-badge" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="tri" d="M10.27 3.2a2 2 0 0 1 3.46 0l8.5 14.8A2 2 0 0 1 20.5 21h-17a2 2 0 0 1-1.73-3z"/><path class="mark" d="M12 9.5v4M12 17h.01"/></svg></span></button>
             <div id="actions-menu-dropdown" class="tree-switcher-dropdown actions-menu-dropdown" role="menu">
                 <div id="actions-storage-row" class="tree-switcher-action actions-storage-row storage-dot" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.showStorageStatusDialog()" tabindex="0" role="menuitem">
                     <span class="actions-storage-icon" aria-hidden="true"></span>
@@ -13013,6 +13086,8 @@
                 <div class="tree-switcher-action actions-export-row" id="actions-export-row" onclick="window.Strom.UI.treeActionExport()" tabindex="0" role="menuitem">
                     <span class="actions-row-text"><span data-i18n="menu.exportAll"></span><span class="actions-row-sub" data-i18n="menu.exportAllSub"></span></span>
                 </div>
+                <!-- "Export all" now and then (a research tree, not backed up; research-actions-ui.ts). -->
+                <div class="export-reminder" id="actions-export-reminder" hidden></div>
                 <div class="tree-switcher-action" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.showPosterDialog()" tabindex="0" role="menuitem">
                     <span data-i18n="menu.poster"></span>
                 </div>
@@ -13020,20 +13095,10 @@
                     <span data-i18n="slideshow.menu"></span>
                 </div>
                 <div class="tree-switcher-divider"></div>
-                <!-- "Research": a Strom Research tree on a computer — the research's
-                     actions (filled by research-actions-ui.ts); it takes the place
-                     of the "AI ancestor research" entry below. -->
-                <div class="actions-tree-wrap actions-research-wrap" id="actions-research-wrap" style="display:none;">
-                    <div class="tree-switcher-action actions-tree-row actions-research-row" id="actions-research-row" role="menuitem" tabindex="0" aria-haspopup="menu" aria-expanded="false" onclick="window.Strom.UI.toggleActionsResearchSubmenu()">
-                        <span class="actions-research-label" data-i18n="research.menuTitle"></span>
-                        <span id="actions-research-dot" class="actions-research-dot" style="display:none;" aria-hidden="true"></span>
-                        <span id="actions-research-badge" class="tree-switcher-badge actions-research-badge" style="display:none;"></span>
-                        <span class="actions-tree-chevron" aria-hidden="true">&rsaquo;</span>
-                    </div>
-                    <div class="actions-tree-submenu actions-research-submenu" id="actions-research-submenu" role="menu"></div>
-                </div>
                 <!-- Strom Research (3.0): permanent entry; "New" label while it is new.
-                     Shown via body.research-menu (never in exports / view mode / locked). -->
+                     Shown via body.research-menu (never in exports / view mode / locked).
+                     A research tree on a computer has the toolbar's Research button
+                     instead (research-actions-ui.ts builds it left of Actions). -->
                 <div class="tree-switcher-action research-menu-row" id="research-menu-row" role="menuitem" tabindex="0" onclick="window.Strom.UI.showResearchInfoDialog()">
                     <span class="research-menu-label" data-i18n="research.menuItem"></span>
                     <span class="research-new-badge" aria-hidden="true" data-i18n="research.newBadge" hidden></span>
@@ -13100,7 +13165,7 @@
 
         <!-- Add-person (desktop primary) + family wizard, rightmost -->
         <div class="toolbar-buttons desktop-only">
-            <button class="btn-add-person" onclick="window.Strom.UI.showAddPersonModal()"><span class="btn-add-glyph" aria-hidden="true">＋</span> <span data-i18n="toolbar.addPerson"></span></button>
+            <button class="btn-add-person" onclick="window.Strom.UI.showAddPersonModal()" data-i18n-title="toolbar.addPerson"><span class="btn-add-glyph" aria-hidden="true">＋</span> <span class="btn-add-label" data-i18n="toolbar.addPerson"></span></button>
             <button id="toolbar-family-btn" style="display:none;" onclick="window.Strom.UI.startFamilyWizardFromToolbar()" data-i18n="familyWizard.title"></button>
         </div>
 

@@ -291,15 +291,21 @@ export async function editJan(page: Page, place = 'Praha'): Promise<void> {
 export const poll = (page: Page) => page.evaluate(() => window.Strom.UI.pollResearchBridge());
 export const links = (page: Page) => page.evaluate(() => (window.Strom.UI as unknown as { __links: string[] }).__links);
 
+/** The toolbar's Research menu, open (its button left of Actions; a narrow window: the More sheet's research page). */
 export async function openResearchMenu(page: Page): Promise<void> {
     await page.evaluate(() => {
-        if (!document.getElementById('actions-menu-dropdown')?.classList.contains('active')) window.Strom.UI.toggleActionsMenu();
-        window.Strom.UI.openActionsResearchSubmenu();
+        if (!window.Strom.UI.isResearchMenuOpen()) window.Strom.UI.openResearchMenu();
     });
 }
 
 export const block = (page: Page) => page.locator('#research-sync-block');
-export const dot = (page: Page) => page.locator('#actions-menu-dot');
+/** The Research button's signal for something to do: the waiting count or the attention dot (not the quieter "not sent" dot). */
+export const dot = (page: Page) => page.locator('#research-menu-signal:is([data-signal="count"], [data-signal="attention"])');
+/** The Research button's signal, whichever it is ('' when none). */
+export const signal = (page: Page) => page.evaluate(() => {
+    const el = document.getElementById('research-menu-signal');
+    return el && !el.hidden ? el.dataset.signal ?? '' : '';
+});
 
 /** "Load the research version?" (asked at every load the user asks for): Load. */
 export async function acceptLoad(page: Page): Promise<void> {

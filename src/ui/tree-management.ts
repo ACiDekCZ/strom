@@ -81,16 +81,20 @@ export const treeManagementMethods = uiModule({
                 !syncState?.contains(e.target as Node)) {
                 this.closeActionsMenu();
             }
+            // The Research menu likewise (its button, the pill that opens it too).
+            const researchWrap = document.getElementById('research-menu-wrap');
+            if (this.isResearchMenuOpen() &&
+                !researchWrap?.contains(e.target as Node) &&
+                !syncState?.contains(e.target as Node)) {
+                this.closeResearchMenu();
+            }
         });
 
-        // The flyouts ("Tree:", "Research") open on hover too (CSS): fit the
-        // one under the pointer into the window, and close a flyout another
-        // one opened by click / keyboard.
+        // The "Tree:" flyout opens on hover too (CSS): fit it into the window
+        // under the pointer.
         const flyouts: Array<{ wrap: string; row: string; sub: string; open: () => void; close: () => void }> = [
             { wrap: 'actions-tree-wrap', row: 'actions-tree-row', sub: 'actions-tree-submenu',
                 open: () => this.openActionsTreeSubmenu(), close: () => this.closeActionsTreeSubmenu() },
-            { wrap: 'actions-research-wrap', row: 'actions-research-row', sub: 'actions-research-submenu',
-                open: () => this.openActionsResearchSubmenu(), close: () => this.closeActionsResearchSubmenu() },
         ];
         for (const f of flyouts) {
             // A flyout closed under the pointer stays hidden until the pointer leaves (.hover-off).
@@ -229,19 +233,14 @@ export const treeManagementMethods = uiModule({
      */
     refreshActionMenuBadges(): void {
         const count = this.anniversaryBadgeCount();
-        // Small dot on the triggers so the signal survives the menu move — the ⋯
-        // button and the mobile "More" tab.
-        for (const id of ['actions-menu-dot', 'bottom-bar-more-dot']) {
-            const dot = document.getElementById(id);
-            if (dot) dot.style.display = count > 0 ? 'block' : 'none';
-        }
-        // "Research" row + its submenu; waiting tasks light the ⋯ dot as well,
-        // and so does a state of the research tree that asks for the user.
-        const researchWaiting = this.refreshResearchMenu();
-        if (researchWaiting > 0 || this.researchSyncAttention()) {
-            const dot = document.getElementById('actions-menu-dot');
-            if (dot) dot.style.display = 'block';
-        }
+        // The Research button and menu (its own signal); the ⋯ dot is the anniversaries' only.
+        const researchSignal = this.refreshResearchMenu();
+        const dot = document.getElementById('actions-menu-dot');
+        if (dot) dot.style.display = count > 0 ? 'block' : 'none';
+        // The "More" tab carries both: there the research group sits in its sheet (a narrow window with a mouse).
+        const moreDot = document.getElementById('bottom-bar-more-dot');
+        if (moreDot) moreDot.style.display = count > 0 || researchSignal !== '' ? 'block' : 'none';
+        this.renderActionsExportReminder();
         // Count badge on the Anniversaries row.
         const badge = document.getElementById('actions-ann-badge');
         if (badge) {
@@ -287,25 +286,33 @@ export const treeManagementMethods = uiModule({
 
     /** Toggle the desktop ⋯ actions menu (mirrors the tree switcher dropdown). */
     toggleActionsMenu(): void {
+        const dropdown = document.getElementById('actions-menu-dropdown');
+        if (dropdown?.classList.contains('active')) {
+            this.closeActionsMenu();
+            return;
+        }
         this.closeAllMenusExcept('actions');
         this.hideWhatsNewCard();
-        const dropdown = document.getElementById('actions-menu-dropdown');
         if (!dropdown) return;
-        dropdown.classList.toggle('active');
-        if (dropdown.classList.contains('active')) {
-            this.refreshActionMenuBadges();
-            this.updateActionsTreeRow();
-            this.closeActionsTreeSubmenu();
-            this.closeActionsResearchSubmenu();
-        }
+        dropdown.classList.add('active');
+        this.refreshActionMenuBadges();
+        this.updateActionsTreeRow();
+        this.closeActionsTreeSubmenu();
+        // "Export all" under Export…: this opening shows it (at most the first one of a day).
+        if (this.renderActionsExportReminder()) this.exportReminderOpened();
     },
 
-    /** Close the desktop ⋯ actions menu (and its "Tree:" / "Research" submenus). */
+    /**
+     * Close the desktop ⋯ actions menu (and its "Tree:" submenu). The research
+     * menu closes too: its items end by this call like the menu's own.
+     */
     closeActionsMenu(): void {
         this.closeActionsTreeSubmenu();
-        this.closeActionsResearchSubmenu();
         this.closeResearchTrialNote();
-        document.getElementById('actions-menu-dropdown')?.classList.remove('active');
+        const dropdown = document.getElementById('actions-menu-dropdown');
+        if (dropdown?.classList.contains('active')) this.exportReminderClosed();
+        dropdown?.classList.remove('active');
+        this.closeResearchMenu();
     },
 
     /** Fill the "Tree: {name}" row with the active tree's name; hide it when
@@ -332,7 +339,6 @@ export const treeManagementMethods = uiModule({
     openActionsTreeSubmenu(): void {
         const wrap = document.getElementById('actions-tree-wrap');
         if (!wrap) return;
-        this.closeActionsResearchSubmenu();
         wrap.classList.add('submenu-open');
         document.getElementById('actions-tree-row')?.setAttribute('aria-expanded', 'true');
         this.positionActionsTreeSubmenu();
@@ -349,7 +355,7 @@ export const treeManagementMethods = uiModule({
         this.positionActionsSubmenu('actions-tree-submenu');
     },
 
-    /** Keep a ⋯-menu flyout ("Tree:", "Research") inside the window. */
+    /** Keep a ⋯-menu flyout ("Tree:") inside the window. */
     positionActionsSubmenu(id: string): void {
         const sub = document.getElementById(id);
         if (!sub) return;

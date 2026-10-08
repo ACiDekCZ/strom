@@ -141,7 +141,7 @@ test.describe('the bridge of Strom Research 1.11.0', () => {
         await openResearchMenu(page);
         const line = page.locator('#research-older-block');
         await expect(line).toContainText('The research has an older version (1.11.0)');
-        await line.getByRole('button', { name: 'How to update…' }).click();
+        await line.getByRole('menuitem', { name: 'How to update…' }).click();
         const dialog = page.locator('#research-update-modal');
         await expect(dialog.locator('.install-line').nth(0)).toHaveText('strom update');
         await expect(dialog.locator('.install-line').nth(1)).toHaveText('npm install -g strom-research@latest');
@@ -168,7 +168,7 @@ test.describe('the bridge of Strom Research 1.11.0', () => {
             const cs = getComputedStyle(el);
             return { background: cs.backgroundColor, color: cs.color, decoration: cs.textDecorationLine };
         };
-        const link = page.locator('#research-older-block').getByRole('button', { name: 'How to update…' });
+        const link = page.locator('#research-older-block').getByRole('menuitem', { name: 'How to update…' });
         for (const scheme of ['light', 'dark'] as const) {
             await page.emulateMedia({ colorScheme: scheme });
             await expect(page.locator('html')).toHaveAttribute('data-theme', scheme);

@@ -34,11 +34,11 @@ async function openHandOver(page: Page): Promise<void> {
 }
 
 test.describe('the "trial" tag', () => {
-    test('beside the research group of ⋯ and in Research for this tree (with the sentence); its note opens by click and Enter, Esc and a click outside close it', async ({ page }) => {
+    test('beside the title of the Research menu and in Research for this tree (with the sentence); its note opens by click and Enter, Esc and a click outside close it', async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 900 });
         await manualTree(page);
         await openResearchMenu(page);
-        const heading = page.locator('#actions-research-submenu .research-submenu-heading');
+        const heading = page.locator('#research-menu .research-menu-heading');
         await expect(heading).toContainText('Research');
         const menuTag = heading.locator('.research-trial-tag');
         await expect(menuTag).toHaveText('trial');
@@ -48,7 +48,7 @@ test.describe('the "trial" tag', () => {
         await expect(menuTag).toHaveAttribute('aria-expanded', 'true');
         // A click in the note keeps the menu; no "More" link while there is no help page.
         await note(page).click();
-        await expect(page.locator('#actions-research-submenu')).toBeVisible();
+        await expect(page.locator('#research-menu')).toBeVisible();
         await expect(note(page).locator('a, button')).toHaveCount(0);
         // Closing the menu closes the note.
         await page.evaluate(() => window.Strom.UI.closeActionsMenu());
@@ -142,7 +142,7 @@ test.describe('Research for this tree', () => {
         const block = page.locator('#research-sync-block');
         await expect(block).toHaveAttribute('data-state', 'off');
         await expect(block).toContainText('Changes are not sent to the research');
-        await expect(block.getByRole('button', { name: 'Change' })).toBeVisible();
+        await expect(block.getByRole('menuitem', { name: 'Change' })).toBeVisible();
         await page.evaluate(() => window.Strom.UI.closeActionsMenu());
         await editJan(page);
         await page.evaluate((id) => window.Strom.UI.setResearchSendMode(id as never, 'manual'), id);
@@ -150,13 +150,13 @@ test.describe('Research for this tree', () => {
         await expect(block).toHaveAttribute('data-state', 'piled');
         await expect(block).toHaveClass(/research-sync-block--neutral/);
         await expect(block).toContainText('Changed since the last send: 1 person.');
-        await block.getByRole('button', { name: 'What will be sent' }).click();
+        await block.getByRole('menuitem', { name: 'What will be sent' }).click();
         await expect(page.locator('#research-changes-panel')).toBeVisible();
         await expect(page.locator('#research-changes-skip')).toHaveCount(0);
         expect(bridge.posts).toHaveLength(0);
     });
 
-    test('only load: no "Send changes" in ⋯ → Research', async ({ page }) => {
+    test('only load: no "Send changes" in the Research menu', async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 900 });
         await manualTree(page);
         await openResearchMenu(page);
@@ -165,7 +165,7 @@ test.describe('Research for this tree', () => {
         const id = await treeId(page);
         await page.evaluate((id) => window.Strom.UI.setResearchSendMode(id as never, 'off'), id);
         await openResearchMenu(page);
-        await expect(page.locator('#actions-research-submenu')).toBeVisible();
+        await expect(page.locator('#research-menu')).toBeVisible();
         await expect(page.locator('#research-item-send')).toHaveCount(0);
     });
 });
@@ -203,9 +203,14 @@ test.describe('V-I: changes not in the research while it has a newer version', (
 });
 
 test.describe('"Export all" now and then (only with a research)', () => {
-    const reminder = (page: Page) => page.locator('#research-export-reminder');
+    const reminder = (page: Page) => page.locator('#actions-export-reminder');
+    const DAY = 24 * 3600_000;
+    async function openActions(page: Page): Promise<void> {
+        await page.evaluate(() => { if (!document.getElementById('actions-menu-dropdown')?.classList.contains('active')) window.Strom.UI.toggleActionsMenu(); });
+    }
+    const closeActions = (page: Page) => page.evaluate(() => window.Strom.UI.closeActionsMenu());
 
-    test('Backups say when all trees were last exported, with Export all; ⋯ → Research reminds at most three times, then rests three weeks', async ({ page }) => {
+    test('Backups say when all trees were last exported; Actions remind under Export… at most once a day while not backed up (the first opening), a click rests it three weeks', async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 900 });
         await manualTree(page);
         await page.evaluate(() => window.Strom.UI.showSnapshotsDialog());
@@ -213,33 +218,85 @@ test.describe('"Export all" now and then (only with a research)', () => {
         await expect(box).toContainText('Not all trees have been exported yet');
         await expect(box.getByRole('button', { name: 'Export all' })).toBeVisible();
         await page.evaluate(() => window.Strom.UI.closeSnapshotsDialog());
-        // Never exported: the last row of the research menu, shown three times.
-        for (let i = 0; i < 3; i++) {
-            await openResearchMenu(page);
-            await expect(reminder(page)).toContainText('Not all trees have been exported yet');
-            await page.evaluate(() => window.Strom.UI.closeActionsMenu());
-            await page.clock.fastForward(61_000);
+        // Never exported: under Export… in Actions (not in the Research menu any more).
+        await openResearchMenu(page);
+        await expect(page.locator('#research-menu')).toBeVisible();
+        await expect(page.locator('#research-menu')).not.toContainText('Export all');
+        await page.evaluate(() => window.Strom.UI.closeResearchMenu());
+        await openActions(page);
+        await expect(reminder(page)).toContainText('Not all trees have been exported yet');
+        await expect(page.locator('#actions-export-row + #actions-export-reminder')).toBeVisible();
+        // It stays while this opening lasts, a refresh does not take it away.
+        await page.evaluate(() => window.Strom.UI.refreshActionMenuBadges());
+        await expect(reminder(page)).toBeVisible();
+        await closeActions(page);
+        // The same day: not again (later openings do not show it).
+        await page.clock.fastForward(3_600_000);
+        await openActions(page);
+        await expect(reminder(page)).toBeHidden();
+        await closeActions(page);
+        // Every next day while not backed up: once again (no limit of three showings).
+        for (let day = 1; day <= 4; day++) {
+            await page.clock.fastForward(DAY);
+            await openActions(page);
+            await expect(reminder(page)).toBeVisible();
+            await closeActions(page);
+            await openActions(page);
+            await expect(reminder(page)).toBeHidden();
+            await closeActions(page);
         }
-        await openResearchMenu(page);
-        await expect(reminder(page)).toHaveCount(0);
-        await page.evaluate(() => window.Strom.UI.closeActionsMenu());
-        // Three weeks later it is back; Export all from it opens the dialog and it rests again.
-        await page.clock.fastForward(22 * 24 * 3600_000);
-        await openResearchMenu(page);
+        // Export all from it opens the dialog; then it rests three weeks.
+        await page.clock.fastForward(DAY);
+        await openActions(page);
         await reminder(page).getByRole('menuitem', { name: 'Export all' }).click();
         await expect(page.locator('#export-all-modal')).toHaveClass(/active/);
         await page.evaluate(() => window.Strom.UI.closeExportAllDialog());
-        await openResearchMenu(page);
-        await expect(reminder(page)).toHaveCount(0);
-        await page.evaluate(() => window.Strom.UI.closeActionsMenu());
+        await page.clock.fastForward(DAY);
+        await openActions(page);
+        await expect(reminder(page)).toBeHidden();
+        await closeActions(page);
+        await page.clock.fastForward(21 * DAY);
+        await openActions(page);
+        await expect(reminder(page)).toBeVisible();
+        await closeActions(page);
         // A full "Export all": the date in Backups, no reminder for three weeks.
         await page.evaluate(() => window.Strom.UI.downloadAllTreesJson(null, false, 'full', true));
+        await page.clock.fastForward(DAY);
+        await openActions(page);
+        await expect(reminder(page)).toBeHidden();
+        await closeActions(page);
         await page.evaluate(() => window.Strom.UI.showSnapshotsDialog());
         await expect(box).toContainText('Last export of all trees:');
         await page.evaluate(() => window.Strom.UI.closeSnapshotsDialog());
     });
 
-    test('A3: Export all in the research menu is a whole link like the one in Backups, not a toolbar fill cut to its glyphs (light, dark, hover)', async ({ page }) => {
+    test('a touch device: the reminder under Export… in More, once a day, its link 44 px tall; no research group there', async ({ browser }) => {
+        const context = await browser.newContext({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
+        const page = await context.newPage();
+        await manualTree(page);
+        const sheetReminder = page.locator('#sheet-export-reminder');
+        await page.evaluate(() => window.Strom.UI.showMoreMenuSheet());
+        await expect(sheetReminder).toContainText('Not all trees have been exported yet');
+        // Right under Export… (its row, then the reminder).
+        expect(await sheetReminder.evaluate(el => el.previousElementSibling?.textContent ?? '')).toContain('Export…');
+        const link = sheetReminder.getByRole('menuitem', { name: 'Export all' });
+        expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        // The research runs on a computer: no research group on touch.
+        await expect(page.locator('#research-sheet-all')).toHaveCount(0);
+        await page.evaluate(() => window.Strom.UI.hideBottomSheet());
+        await page.evaluate(() => window.Strom.UI.showMoreMenuSheet());
+        await expect(page.locator('.bottom-sheet-menu')).toBeVisible();
+        await expect(sheetReminder).toHaveCount(0);
+        await page.evaluate(() => window.Strom.UI.hideBottomSheet());
+        await page.clock.fastForward(DAY);
+        await page.evaluate(() => window.Strom.UI.showMoreMenuSheet());
+        await link.click();
+        await expect(page.locator('#export-all-modal')).toHaveClass(/active/);
+        await expect(page.locator('.bottom-sheet-menu')).toHaveCount(0);
+        await context.close();
+    });
+
+    test('A3: Export all under Export… is a whole link (no toolbar fill cut to its glyphs), underlined, in light and dark, on hover too', async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 900 });
         await manualTree(page);
         const look = (el: Element) => {
@@ -255,15 +312,17 @@ test.describe('"Export all" now and then (only with a research)', () => {
             await expect(backupsLink).toBeVisible();
             const backupsLook = await backupsLink.evaluate(look);
             await page.evaluate(() => window.Strom.UI.closeSnapshotsDialog());
-            await openResearchMenu(page);
+            // Shown once a day: as if not yet today.
+            await page.evaluate(() => localStorage.removeItem('strom-export-reminder'));
+            await openActions(page);
             await expect(button).toBeVisible();
             // The ".toolbar button" fill (the menu lives in the toolbar) must not reach it: a fill
             // without padding hugs the line box and cuts the tops and tails of its letters.
-            expect(await button.evaluate(look)).toEqual(backupsLook);
+            expect(await button.evaluate(look)).toEqual({ ...backupsLook, decoration: 'underline' });
             await button.hover();
             expect((await button.evaluate(look)).background).toBe('rgba(0, 0, 0, 0)');
             // Whole inside its row and inside the menu's visible box.
-            const [b, row, menu] = await Promise.all([button, reminder(page), page.locator('#actions-research-submenu')].map(l => l.boundingBox()));
+            const [b, row, menu] = await Promise.all([button, reminder(page), page.locator('#actions-menu-dropdown')].map(l => l.boundingBox()));
             for (const outer of [row!, menu!]) {
                 expect(b!.y).toBeGreaterThanOrEqual(outer.y);
                 expect(b!.y + b!.height).toBeLessThanOrEqual(outer.y + outer.height);
@@ -271,7 +330,7 @@ test.describe('"Export all" now and then (only with a research)', () => {
                 expect(b!.x + b!.width).toBeLessThanOrEqual(outer.x + outer.width);
             }
             await page.mouse.move(5, 5);
-            await page.evaluate(() => window.Strom.UI.closeActionsMenu());
+            await closeActions(page);
         }
     });
 
