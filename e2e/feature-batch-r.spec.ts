@@ -44,7 +44,8 @@ test('R1: the descendants view exports a non-empty poster SVG with a card per vi
     // Non-empty, and one card rect (Letopis card fill) per laid-out person.
     expect(svg.length).toBeGreaterThan(200);
     expect(svg).toContain('<svg');
-    const cardCount = (svg.match(/fill="#fffdf8"/g) || []).length;
+    // (rx 8: the card; the marriage-order pills share the fill at rx 8.5.)
+    const cardCount = (svg.match(/rx="8" fill="#fffdf8"/g) || []).length;
     expect(cardCount).toBe(positionCount);
     // Connections are drawn (parent→child stems) — the poster is not just cards.
     expect(svg).toContain('<g class="connections">');

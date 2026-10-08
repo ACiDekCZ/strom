@@ -63,6 +63,9 @@ export function joinAnd(lang: Language, parts: string[]): string {
 const nCs = (n: number, one: string, few: string, other: string): string => `${n} ${plural('cs', n, one, few, other)}`;
 /** English count form shorthand: `${n} ${word}`. */
 const nEn = (n: number, one: string, other: string): string => `${n} ${plural('en', n, one, other)}`;
+/** English ordinal: 1st, 2nd, 3rd, 4th, 11th, 21st. */
+const ordEn = (n: number): string =>
+    `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : (['th', 'st', 'nd', 'rd'][n % 10] ?? 'th')}`;
 /** German count form shorthand: `${n} ${word}`. */
 const nDe = (n: number, one: string, other: string): string => `${n} ${plural('de', n, one, other)}`;
 
@@ -2387,6 +2390,10 @@ const stringsEN = {
         branchTabParents: 'parents',
         branchTabSiblings: 'siblings',
         branchTabChildren: 'family',
+        // Marriage-order pill on a partner's card (T13): "1st ∞ 1866", its hover bubble.
+        unionOrdinal: (n: number) => ordEn(n),
+        unionOrderTip: (n: number, year: string, place: string, married: boolean) =>
+            `${ordEn(n)} ${married ? 'marriage' : 'union'}${year ? ` ${year}` : ''}${place ? `, ${place}` : ''}`,
         personCount: (visible: number, total: number) => `${visible} of ${nEn(total, 'person', 'people')}`
     },
 
@@ -5992,6 +5999,10 @@ const stringsCZ: StringsType = {
         branchTabParents: 'rodiče',
         branchTabSiblings: 'sourozenci',
         branchTabChildren: 'rodina',
+        // Marriage-order pill on a partner's card (T13): "1. ∞ 1866", its hover bubble.
+        unionOrdinal: (n: number) => `${n}.`,
+        unionOrderTip: (n: number, year: string, place: string, married: boolean) =>
+            `${n}. ${married ? 'sňatek' : 'svazek'}${year ? ` ${year}` : ''}${place ? `, ${place}` : ''}`,
         personCount: (visible: number, total: number) => `${visible} z ${total} ${plural('cs', total, 'osoby', 'osob', 'osob')}`
     },
 
@@ -9567,6 +9578,10 @@ const stringsDE: StringsType = {
         branchTabParents: 'Eltern',
         branchTabSiblings: 'Geschwister',
         branchTabChildren: 'Familie',
+        // Marriage-order pill on a partner's card (T13): "1. ∞ 1866", its hover bubble.
+        unionOrdinal: (n: number) => `${n}.`,
+        unionOrderTip: (n: number, year: string, place: string, married: boolean) =>
+            `${n}. ${married ? 'Ehe' : 'Partnerschaft'}${year ? ` ${year}` : ''}${place ? `, ${place}` : ''}`,
         personCount: (visible: number, total: number) => `${visible} von ${nDe(total, 'Person', 'Personen')}`
     },
 

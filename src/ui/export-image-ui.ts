@@ -225,7 +225,8 @@ function buildCurrentPoster(): PosterBuild | null {
     const layout = TreeRenderer.getPosterLayout();
     if (layout.positions.size === 0) return null;
     const { cardConfig, drawing } = treeCardDrawing(data, layout);
-    const options: PosterOptions = { ...meta, ...drawing };
+    // Marriage-order pills numbered as on screen, from the unfiltered data (T13).
+    const options: PosterOptions = { ...meta, ...drawing, orderData: DataManager.getData() };
     const svg = buildTreeSvg(data, layout, options);
 
     // Occupied rectangles in poster-px space (cards + footer strip). Sheets

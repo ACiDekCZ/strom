@@ -107,6 +107,7 @@ the table honest.
 | Pan (drag canvas) | `interaction.spec.ts` | covered | transform changes |
 | Overview minimap (show / navigate / settings toggle) | `minimap.spec.ts` | covered | appears when zoomed in past the viewport; click re-centers; setting hides it |
 | Branch colours (toggle + legend + dark) | `branch-colors.spec.ts` | covered | settings toggle adds stripe classes + legend; dark-mode smoke; off removes both |
+| Marriage-order pill (T13) | `marriage-order.spec.ts` | covered | man with three wives (data order 1908, undated, 1866): "1st ∞ 1866", "2nd ∞ 1908", "3rd ∞" at the corner toward him, none on him or a single marriage; wives on one side in marriage order; mouse bubble with year and place; zoom 50 % number only, 39 % hidden; SVG export whole; descendants view; phone 360 no overflow; dark surface |
 | Expanded mode (multi-marriage inline) | `interaction.spec.ts` | covered | both of Erik's wives laid out; refocus re-lays-out |
 | Hidden-relatives "+N" badge / collapse (−) | — | n-a | focus depth auto-expands to the whole connected tree, so badges do not appear in normal-size trees; expansion is focus-driven, there is no separate collapse control |
 | Runtime language switch (CS ↔ EN) | `settings-lock.spec.ts`, `cs.spec.ts` | covered | settings radios; about labels switch without reload |

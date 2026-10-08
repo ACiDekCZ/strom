@@ -501,6 +501,18 @@ partners on the opposite side. Chains merge transitively when both partners of
 a couple have multiple marriages. The chain lives in one **chain block**
 (`FamilyBlock.chainInfo`) that is atomic for collision resolution.
 
+The primary union (the couple adjacent at the chain's centre) is chosen by the
+union priority of step 2 (focus parents, `isPrimary`, the lineage, children,
+status, newest date). The extra partners on one side of a person stand in the
+order of the marriages, the earliest next to the person: `expandPartnerChains`
+lists each person's unions chronologically (wedding date, then data order, an
+undated union last — `compareMarriages` in `src/marriage-order.ts`) and
+`buildChainBlockPersonOrder` walks them in that order. The renderer and the
+image export mark each partner of a person with two or more unions in view
+with a marriage-order pill ("1. ∞ 1866", numbered by the same order over all
+of the person's unions in the data) at the top-edge corner pointing to that
+person.
+
 ### Who gets expanded
 
 `findAutoExpandPersonIds` (pipeline orchestrator) collects multi-partnership

@@ -62,6 +62,7 @@ import { computeIndirectIds } from './indirect.js';
 import { isMobile as isMobileViewport } from './breakpoints.js';
 import { parentRelKind, parentRelDash, connectionDash } from './parent-rel-style.js';
 import { isDiagramStandIn } from './layout/pipeline/placeholders.js';
+import { unionOrderBadges, UnionOrderBadge } from './marriage-order.js';
 import { openCardMenuFromKeyboard } from './ui/keyboard-access.js';
 import { syncDepthStepper } from './ui/depth-stepper.js';
 
@@ -1151,6 +1152,10 @@ class TreeRendererClass {
         const spinDelay = sharedPhaseDelay(AGENT_SPIN_MS, document.timeline?.currentTime as number ?? performance.now());
         const renderedAt = Date.now();
         this.observeTreeOnScreen();
+        // Marriage-order pills (T13): on each partner of a person with two or
+        // more unions in view, at the corner pointing to that person.
+        const orderBadges = unionOrderBadges(DataManager.getData(),
+            { positions: this.positions, spouseLines: this.spouseLines });
 
         for (const [id, pos] of this.positions) {
             const person = DataManager.getPerson(id);
@@ -1530,11 +1535,20 @@ class TreeRendererClass {
                 }
             }
 
+            // Marriage-order pills (T13) on the top edge, at the corner that
+            // points to the person they count for. The left one takes the
+            // corner (the "+ parent" tab appears beside it on hover); on the
+            // right the branch tabs keep the corner pinned and the pill sits
+            // just inside them.
+            const myOrder = orderBadges.get(id) ?? [];
+            const leftOrderHtml = myOrder.filter(b => b.side === 'left').map(b => this.unionOrderPillHtml(b)).join('');
+            const rightOrderHtml = myOrder.filter(b => b.side === 'right').map(b => this.unionOrderPillHtml(b)).join('');
+
             // Assemble one flex container per card edge. Containers are
             // pointer-events:none (children re-enable auto) so the gaps between
             // pills never steal a click meant for the card.
-            if (parentAddHtml) html += `<div class="card-edge edge-top-left">${parentAddHtml}</div>`;
-            if (chainHtml || branchTabsHtml) html += `<div class="card-edge edge-top-right">${chainHtml}${branchTabsHtml}</div>`;
+            if (leftOrderHtml || parentAddHtml) html += `<div class="card-edge edge-top-left">${leftOrderHtml}${parentAddHtml}</div>`;
+            if (chainHtml || rightOrderHtml || branchTabsHtml) html += `<div class="card-edge edge-top-right">${chainHtml}${rightOrderHtml}${branchTabsHtml}</div>`;
             if (hiddenIndicatorsHtml) html += `<div class="card-edge edge-bottom-left">${hiddenIndicatorsHtml}</div>`;
             if (crossTreeHtml) {
                 html += `<div class="card-edge edge-bottom-right">${crossTreeHtml}</div>`;
@@ -2523,6 +2537,21 @@ class TreeRendererClass {
         });
 
         container.innerHTML = `${omitted}${empty}${svg}`;
+    }
+
+    /**
+     * A marriage-order pill (T13): "1. ∞ 1866" ("1. ∞" without a date), the
+     * look of the other card-edge pills. Not clickable (a click is the
+     * card's); a mouse shows its bubble "1. sňatek 1866, Dolní Lhota".
+     */
+    private unionOrderPillHtml(b: UnionOrderBadge): string {
+        const tip = strings.focus.unionOrderTip(b.number, b.year, b.place, b.married);
+        return `<span class="union-order-pill" role="img" aria-label="${this.escapeHtml(tip)}"`
+            + ` data-union-order="${b.number}" data-toward="${this.escapeHtml(b.towardId)}" data-side="${b.side}">`
+            + `<span class="uo-num">${this.escapeHtml(strings.focus.unionOrdinal(b.number))}</span>`
+            + `<span class="pill-glyph uo-glyph">∞</span>`
+            + (b.year ? `<span class="uo-year">${this.escapeHtml(b.year)}</span>` : '')
+            + `<span class="badge-tooltip uo-tip">${this.escapeHtml(tip)}</span></span>`;
     }
 
     private escapeHtml(text: string): string {

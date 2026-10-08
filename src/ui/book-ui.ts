@@ -75,6 +75,8 @@ export const bookUiMethods = uiModule({
                 treeName: TreeManager.getActiveTreeMetadata()?.name,
                 dateLabel: new Date().toLocaleDateString(),
                 ...treeCardDrawing(svgData, layout).drawing,
+                // Marriage-order pills numbered as on screen (T13).
+                orderData: data,
             });
         }
 
