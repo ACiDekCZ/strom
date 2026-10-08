@@ -7,9 +7,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
     customCardWidth, customCardMetrics, customCardCutLines, MeasureTexts, CustomCardEntry, wrapCardText, wrapCardTexts,
-    customCardRows, customCardHeight, customCardViewHeight, customCardSpouseLineY, WrapRequest,
+    customCardRows, customCardHeight, customCardViewHeight, customCardSpouseLineY, WrapRequest, customCardDateCap,
 } from '../card-width.js';
-import { cardLines, cardLineHtml, cardDateReferences, cardDate, normalizeCardFields, DEFAULT_CARD_FIELDS } from '../card-fields.js';
+import { cardLines, cardLineHtml, cardDateReferences, cardDate, cardDateIsLong, normalizeCardFields, DEFAULT_CARD_FIELDS } from '../card-fields.js';
 import { buildTreeSvg, PosterLayout } from '../export-image.js';
 import { setLanguage } from '../strings.js';
 import { Person, PersonId, PartnershipId, StromData } from '../types.js';
@@ -476,15 +476,33 @@ describe('a long date does not widen the date column (U02)', () => {
     const refs = () => cardDateReferences(true);
     const texts = (r: { rows: { text: string; tail?: string }[] }) => r.rows.map(x => x.text + (x.tail ?? ''));
 
-    it('the ordinary dates of each language and date setting', () => {
-        expect(cardDateReferences(true)).toEqual(['28. 12. 1888', 'kolem 1888', 'před 1888', 'po 1888', '1888–1888']);
-        expect(cardDateReferences(false)).toEqual(['1888', 'kolem 1888', 'před 1888', 'po 1888', '1888–1888']);
+    it('the ordinary dates of each language and date setting: the real days and months, no leading zero (N25)', () => {
+        const kinds = ['kolem 1888', 'před 1888', 'po 1888', '1888–1888', '1888'];
+        expect(cardDateReferences(false)).toEqual(kinds);
+        const cs = cardDateReferences(true);
+        // The 366 days of 1888 + 12 months and years + the 5 kinds; each one a date, no raw text.
+        expect(cs).toHaveLength(366 + 12 + 5);
+        expect(cs.filter(d => /-/.test(d))).toEqual([]);
+        expect(cs).toEqual(expect.arrayContaining(['1. 1. 1888', '28. 12. 1888', '31. 12. 1888', '12/1888', ...kinds]));
+        expect(cs.some(d => /\b0\d/.test(d))).toBe(false);
         setLanguage('en');
-        expect(cardDateReferences(true)).toEqual(['12/28/1888', 'c. 1888', 'before 1888', 'after 1888', '1888–1888']);
-        expect(cardDateReferences(false)).toEqual(['1888', 'c. 1888', 'before 1888', 'after 1888', '1888–1888']);
+        expect(cardDateReferences(false)).toEqual(['c. 1888', 'before 1888', 'after 1888', '1888–1888', '1888']);
+        expect(cardDateReferences(true)).toEqual(expect.arrayContaining(['1/1/1888', '12/28/1888', '12/31/1888', 'c. 1888']));
         setLanguage('de');
-        expect(cardDateReferences(true)).toEqual(['28.12.1888', 'um 1888', 'vor 1888', 'nach 1888', '1888–1888']);
-        expect(cardDateReferences(false)).toEqual(['1888', 'um 1888', 'vor 1888', 'nach 1888', '1888–1888']);
+        expect(cardDateReferences(false)).toEqual(['um 1888', 'vor 1888', 'nach 1888', '1888–1888', '1888']);
+        expect(cardDateReferences(true)).toEqual(expect.arrayContaining(['1.1.1888', '28.12.1888', '31.12.1888', 'um 1888']));
+    });
+
+    it('a date is long by its kind: an estimate or a range with a month, a text; never with years only (N25)', () => {
+        for (const d of ['~1790-03-12', '<1843-07-25', '>1802-11-19', '~1790-03', '1830-11-22..1831-12-28', '1830..1831-12', 'zima 1790']) {
+            expect(cardDateIsLong(d, true), d).toBe(true);
+        }
+        for (const d of ['1800-10-20', '1811-11-11', '1790-03', '~1755', '~1790', '<1909', '>1909', '1830..1831', '1888']) {
+            expect(cardDateIsLong(d, true), d).toBe(false);
+        }
+        for (const d of ['~1790-03-12', '1830-11-22..1831-12-28', '>1802-11-19']) expect(cardDateIsLong(d, false), d).toBe(false);
+        expect(cardDateIsLong('zima 1790', false)).toBe(true);
+        expect(cardDateIsLong(undefined, true)).toBe(false);
     });
 
     it('the column is the widest date under the widest ordinary date: a range of whole dates does not widen it', () => {
@@ -531,6 +549,57 @@ describe('a long date does not widen the date column (U02)', () => {
         const yr = customCardRows(years, ym, uneven, 0).rows;
         for (const l of [k1909, k1790, k1755]) expect(yr.get(l)!.longDate, l.date).toBeUndefined();
         expect(yr.get(text)!.longDate).toBe(true);
+    });
+
+    it('"about / before / after" a whole date stays long however narrow, the cap is the widest real date (N25)', () => {
+        // Digits as in the card font: "0" the widest (7px), "1" 4px, the rest (and every other character) 6px.
+        const uneven: MeasureTexts = (kind, texts) => {
+            const out = new Map<string, number>();
+            for (const t of texts) out.set(t, [...t].reduce((n, c) => n + (kind === 'name' ? 8 : c === '0' ? 7 : c === '1' ? 4 : 6), 0));
+            return out;
+        };
+        const person = (birthDate: string, deathDate: string): Person => ({
+            id: 'p' as PersonId, firstName: 'Jan', lastName: 'Vlk', gender: 'male', isPlaceholder: false,
+            birthDate, birthPlace: 'Brno', deathDate, deathPlace: 'Brno', partnerships: [], parentIds: [], childIds: [],
+        });
+        const fields = normalizeCardFields({ ...DEFAULT_CARD_FIELDS, fullDate: true });
+        const run = (birth: string, death: string) => {
+            const p = person(birth, death);
+            const lines = cardLines(p, { persons: { [p.id]: p }, partnerships: {} as StromData['partnerships'] }, fields);
+            const entries = [{ name: 'Jan Vlk', avatar: true, lines }];
+            const metrics = customCardMetrics(entries, uneven, 400, 0, 'marks', cardDateReferences(true));
+            return { lines, metrics, rows: customCardRows(entries, metrics, uneven, 0).rows };
+        };
+        // The cap: the widest real date with its year in "0000", never "00. 00. 0000" (cs 80, en 68, de 68).
+        // cs "20. 10. 0000" 76; en "before 0000" 70 ("10/30/0000" 64); de "30.10.0000" 64.
+        const expected = { cs: 76, en: 70, de: 64 };
+        for (const lang of ['cs', 'en', 'de'] as const) {
+            setLanguage(lang);
+            expect(customCardDateCap(cardDateReferences(true), uneven), lang).toBe(expected[lang]);
+        }
+        setLanguage('cs');
+        expect(customCardDateCap(cardDateReferences(false), uneven)).toBe(64);   // "kolem 0000"
+        expect(customCardDateCap([], uneven)).toBe(Infinity);
+        // "po 1. 1. 1811" (cs 68px), "c. 1/1/1811" (en 56), "um 1.1.1811" (de 56), "vor …" (de 62): under the cap
+        // and under the view's ordinary date, still long by their kind; the column stays the ordinary date's.
+        for (const [lang, q] of [['cs', '>'], ['cs', '<'], ['cs', '~'], ['en', '~'], ['en', '<'], ['de', '~'], ['de', '<'], ['de', '>']] as const) {
+            setLanguage(lang);
+            const { lines, metrics, rows } = run('1800-10-20', `${q}1811-01-01`);
+            const ordinary = uneven('date', [lines[0].date]).get(lines[0].date)!;
+            expect(lines[1].dateLong, lines[1].date).toBe(true);
+            expect(metrics.dateColumn, lines[1].date).toBe(ordinary);
+            expect(rows.get(lines[1])!.longDate, lines[1].date).toBe(true);
+            expect(rows.get(lines[0])!.longDate).toBeUndefined();
+        }
+        // An estimate of a year and a whole date stay ordinary (N15): no long date, one column.
+        setLanguage('cs');
+        for (const [b, d] of [['1800-10-20', '1811-11-11'], ['~1755', '~1909'], ['~1790', '1888-12-28']]) {
+            const { lines, rows } = run(b, d);
+            for (const l of lines) {
+                expect(l.dateLong, l.date).toBeUndefined();
+                expect(rows.get(l)!.longDate, l.date).toBeUndefined();
+            }
+        }
     });
 
     it('the limit per language and date setting: cs 72 / 60, en 66 / 66, de 60 / 54 (6px a character)', () => {

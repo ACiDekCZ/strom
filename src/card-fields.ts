@@ -18,6 +18,7 @@ import { newestLifeEvent, sortLifeEvents } from './events.js';
 import { strings } from './strings.js';
 import { isLivingPerson } from './privacy.js';
 import type { CardLineRows, CardRow } from './card-width.js';
+import { CARD_REFERENCE_YEAR } from './card-width.js';
 
 export type CardFieldKey = 'birth' | 'baptism' | 'death' | 'burial' | 'occupation' | 'marriage' | 'divorce';
 
@@ -223,6 +224,12 @@ export interface CardLine {
     place?: string;
     /** The cause of death alone: after the place with " · " in `rest`, its own row when a detail is whole. */
     cause?: string;
+    /**
+     * The date is long by its kind (cardDateIsLong): an estimate or a range
+     * with a whole date, a text that is no date. It never goes into the date
+     * column, however narrow it is (src/card-width.ts isLongCardDate).
+     */
+    dateLong?: boolean;
 }
 
 /**
@@ -241,16 +248,46 @@ export function cardDate(value: string | undefined, full: boolean): string {
 }
 
 /**
+ * Whether a date is long by its kind, as the card writes it (`full`: the
+ * whole date, else the year): an estimate in words with a month ("kolem
+ * 12. 3. 1790", "um 12.3.1790"), a range with a month on either side ("22. 11.
+ * 1830–28. 12. 1831") and a text that is no date. An ordinary date is a
+ * whole date, a month and year, a year, an estimate of a year ("kolem 1790")
+ * and a range of years; with years only every parsed date is ordinary.
+ */
+export function cardDateIsLong(value: string | undefined, full: boolean): boolean {
+    const d = parseFlexDate(value);
+    if (!d) return !!value?.trim();
+    if (!full) return false;
+    const withMonth = d.month !== undefined || d.end?.month !== undefined;
+    return withMonth && (!!d.qualifier || !!d.end);
+}
+
+/**
  * The ordinary dates of the current language and date setting (`full`: the
- * whole date, else the year): the longest of them, written with the widest
- * digit of the card font, is as wide as the date column of a card may get
- * (src/card-width.ts customCardMetrics). A whole
- * date with two-digit day and month, an estimate in words, a range of years.
- * A wider date (a range of whole dates, "about" a whole date, a text that is
- * no date) does not widen the column; it goes its own way on its line.
+ * whole date, else the year), each kind with its real values: with the whole
+ * date every day (1–31) of every month (1–12) as the language writes it (no
+ * leading zero) and every month and year, then an estimate of a year in
+ * words, a range of years and the year. The year is CARD_REFERENCE_YEAR;
+ * src/card-width.ts customCardMetrics writes it with the widest digit of the
+ * card font, and the widest of them is as wide as the date column of a card
+ * may get, so every ordinary date fits under it and a date long by its kind
+ * (cardDateIsLong) is not needed to fit.
  */
 export function cardDateReferences(full: boolean): string[] {
-    return ['1888-12-28', '~1888', '<1888', '>1888', '1888..1888'].map(d => cardDate(d, full));
+    const y = CARD_REFERENCE_YEAR;
+    const out: string[] = [];
+    if (full) {
+        const two = (n: number) => String(n).padStart(2, '0');
+        for (let m = 1; m <= 12; m++) {
+            out.push(cardDate(`${y}-${two(m)}`, true));
+            // Every day of the month (1888 is a leap year: 29 February too).
+            const days = new Date(Date.UTC(Number(y), m, 0)).getUTCDate();
+            for (let day = 1; day <= days; day++) out.push(cardDate(`${y}-${two(m)}-${two(day)}`, true));
+        }
+    }
+    out.push(...[`~${y}`, `<${y}`, `>${y}`, `${y}..${y}`, y].map(d => cardDate(d, full)));
+    return [...new Set(out)];
 }
 
 /**
@@ -304,7 +341,8 @@ export function cardLines(person: Person, data: StromData, s: CardFieldSettings)
         const text = [[dateText, placeText].filter(Boolean).join(' '), cause].filter(Boolean).join(' · ');
         if (!text) return;
         out.push({ key, mark, text, date: dateText, rest, spoken: `${label} ${text}`, label,
-            ...(placeText ? { place: placeText } : {}), ...(cause ? { cause } : {}) });
+            ...(placeText ? { place: placeText } : {}), ...(cause ? { cause } : {}),
+            ...(dateText && cardDateIsLong(date, s.fullDate) ? { dateLong: true } : {}) });
     };
     for (const key of s.order) {
         if (!s.on.includes(key)) continue;

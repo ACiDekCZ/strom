@@ -595,22 +595,29 @@ const RANGE_DATE = '11/22/1868–12/28/1869';
 
 /**
  * The widest of the ordinary dates (English, whole dates: src/card-fields.ts
- * cardDateReferences) in the card's date font, each written with every digit
- * 0-9 in all its digit positions (the cap of the date column, N15).
+ * cardDateReferences) in the card's date font: every real day and month (no
+ * leading zero), an estimate of a year, a range of years, the year, the year
+ * written with the widest digit (the cap of the date column, N15/N25).
  */
 async function referenceWidth(page: Page): Promise<number> {
     return page.evaluate(() => {
-        const refs = ['12/28/1888', 'c. 1888', 'before 1888', 'after 1888', '1888–1888']
-            .flatMap(r => [...'0123456789'].map(d => r.replace(/\d/g, d)));
-        return Math.max(...refs.map(t => {
+        const width = (t: string) => {
             const el = document.createElement('span');
             el.style.cssText = 'position:absolute;visibility:hidden;white-space:pre;font: 500 12px var(--font-sans); font-variant-numeric: tabular-nums;';
             el.textContent = t;
             document.body.appendChild(el);
             const w = el.getBoundingClientRect().width;
             el.remove();
-            return Math.ceil(w);
-        }));
+            return w;
+        };
+        const digit = [...'0123456789'].reduce((a, b) => width(b) > width(a) ? b : a);
+        const y = digit.repeat(4);
+        const refs = ['c. Y', 'before Y', 'after Y', 'Y–Y', 'Y'];
+        for (let m = 1; m <= 12; m++) {
+            refs.push(`${m}/Y`);
+            for (let d = 1; d <= new Date(Date.UTC(1888, m, 0)).getUTCDate(); d++) refs.push(`${m}/${d}/Y`);
+        }
+        return Math.max(...refs.map(t => Math.ceil(width(t.split('Y').join(y)))));
     });
 }
 
@@ -796,6 +803,89 @@ test.describe('the date column cap and the digits (N15)', () => {
             }
         });
     }
+});
+
+/**
+ * N15's ordinary dates with "about / before / after" a whole date beside
+ * them (GEDCOM ABT / BEF / AFT with day, month and year), the narrowest such
+ * date too ("AFT 1 JAN 1841").
+ */
+function gedQualifiedWhole(): string {
+    return [
+        '0 HEAD', '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8',
+        '0 @I0@ INDI', '1 NAME Josef /Vlk/', '1 SEX M',
+        '1 BIRT', '2 DATE ABT 1755', '2 PLAC Brno',
+        '1 DEAT', '2 DATE 20 OCT 1800', '2 PLAC Brno', '1 FAMS @F0@',
+        '0 @I1@ INDI', '1 NAME Jan /Vlk/', '1 SEX M',
+        '1 BIRT', '2 DATE ABT 1790', '2 PLAC Brno',
+        '1 DEAT', '2 DATE AFT 19 NOV 1862', '2 PLAC Brno', '1 FAMC @F0@', '1 FAMS @F1@',
+        '0 @I2@ INDI', '1 NAME Marie /Dvořáková/', '1 SEX F',
+        '1 BIRT', '2 DATE 11 NOV 1811', '2 PLAC Brno',
+        '1 DEAT', '2 DATE ABT 1909', '2 PLAC Brno', '1 FAMS @F1@',
+        '0 @I3@ INDI', '1 NAME Anna /Vlková/', '1 SEX F',
+        '1 BIRT', '2 DATE ABT 12 MAR 1830', '2 PLAC Brno',
+        '1 DEAT', '2 DATE BEF 25 JUL 1893', '2 PLAC Brno', '1 FAMC @F1@',
+        '0 @I4@ INDI', '1 NAME Karel /Vlk/', '1 SEX M',
+        '1 BIRT', '2 DATE AFT 1 JAN 1841', '2 PLAC Brno',
+        '1 DEAT', '2 DATE 30 NOV 1900', '2 PLAC Brno', '1 FAMC @F1@',
+        '0 @F0@ FAM', '1 HUSB @I0@', '1 CHIL @I1@',
+        '0 @F1@ FAM', '1 HUSB @I1@', '1 WIFE @I2@', '1 CHIL @I3@', '1 CHIL @I4@',
+        '0 TRLR',
+    ].join('\n');
+}
+
+test.describe('"about / before / after" a whole date is a long date (N25)', () => {
+    test('in cs, en and de it takes its own row and never widens the date column; N15\'s dates stay ordinary; the poster draws the same', async ({ page }) => {
+        await setupGed(page, gedQualifiedWhole(), 'Jan', 1440, { fullDate: true, height: 'content' });
+        const words = { cs: ['kolem', 'před', 'po'], en: ['c.', 'before', 'after'], de: ['um', 'vor', 'nach'] } as const;
+        for (const lang of ['cs', 'en', 'de'] as const) {
+            await page.evaluate(l => window.Strom.UI.setLanguage(l), lang);
+            await expect.poll(() => viewLines(page).then(ls => ls.some(l => l.date?.text.startsWith(words[lang][0] + ' ')))).toBe(true);
+            await expect.poll(() => cardBoxesMatchLayout(page)).toBe(true);
+            const lines = await viewLines(page);
+            const dated = lines.filter(l => l.date);
+            expect(dated).toHaveLength(10);
+            // A qualifier and a whole date (a day, a month, a year): long. An estimate of a year: ordinary.
+            const qualifiedWhole = (t: string) => words[lang].some(w => t.startsWith(w + ' ')) && /\d+\D+\d+\D+\d{4}$/.test(t);
+            const expectedLong = dated.filter(l => qualifiedWhole(l.date!.text)).map(l => l.date!.text);
+            expect(expectedLong, lang).toHaveLength(4);
+            expect(dated.filter(l => l.long).map(l => l.date!.text).sort(), lang).toEqual([...expectedLong].sort());
+            const dateCol = await page.evaluate(() => parseFloat(getComputedStyle(document.body).getPropertyValue('--card-date-col')));
+            // The column is the widest ordinary date of the view (none of the long ones widens it).
+            const ordinary = dated.filter(l => !l.long);
+            const widestOrdinary = Math.max(...ordinary.map(l => l.date!.right - l.date!.left));
+            expect(dateCol, lang).toBeGreaterThanOrEqual(widestOrdinary - 0.01);
+            expect(dateCol, lang).toBeLessThanOrEqual(Math.ceil(widestOrdinary + 0.01));
+            for (const l of ordinary) {
+                expect(l.place!.top, `${lang} ${l.date!.text}`).toBeCloseTo(l.date!.top, 0);
+                expect(Math.round(l.place!.left), `${lang} ${l.date!.text}`).toBe(Math.round(13 + 17 + dateCol + 6));
+            }
+            for (const l of dated.filter(x => x.long)) {
+                // The date's row alone, the place under it in the place column.
+                expect(l.place!.top - l.date!.top, `${lang} ${l.date!.text}`).toBeCloseTo(17, 0);
+                expect(Math.round(l.place!.left), `${lang} ${l.date!.text}`).toBe(Math.round(13 + 17 + dateCol + 6));
+            }
+            // Each card: its two details, one row more for each long date.
+            const heights = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll<HTMLElement>('#tree-canvas .person-card')]
+                .map(c => [c.querySelector('.name-text')?.textContent?.trim() ?? '', c.offsetHeight])));
+            const own = (longs: number) => 56 + 17 * 2 + 3 + 17 * longs;
+            expect(heights, lang).toEqual({
+                'Josef Vlk': own(0), 'Jan Vlk': own(1), 'Marie Dvořáková': own(0), 'Anna Vlková': own(2), 'Karel Vlk': own(1),
+            });
+            // The poster: the same heights, the long dates on their own row, every place at the screen's x.
+            const { cards } = await renderStandalone(page, await posterSvg(page));
+            expect(cards).toHaveLength(5);
+            for (const c of cards) {
+                expect(c.height, `${lang} ${c.name?.text}`).toBe(heights[c.name!.text]);
+                for (const d of c.lines.filter(l => l.kind === 'date')) {
+                    const place = c.lines.filter(l => l.kind === 'place' && l.y >= d.y).sort((a, b) => a.y - b.y)[0];
+                    expect(place.y - d.y, `${lang} ${d.text}`).toBeCloseTo(expectedLong.includes(d.text) ? 17 : 0, 1);
+                    expect(place.left - (c.left + 12 + 17), `${lang} ${d.text}`).toBeCloseTo(dateCol + 6, 0);
+                }
+            }
+            await page.keyboard.press('Escape');
+        }
+    });
 });
 
 test.describe('avatar initials (U02)', () => {

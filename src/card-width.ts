@@ -17,10 +17,11 @@
  * A detail line is a grid: the mark (11px), the date, the place, 6px apart.
  * The date column is as wide as the longest date of the view, so the places
  * of all cards start at one x, but never wider than the longest ordinary date
- * of the language and the date setting (cardDateReferences, measured with the
- * widest digit in every digit position): a date wider than that (a range of
- * whole dates, "about" a whole date, a text that is no date) is a long date,
- * drawn whole and never wrapped. When a detail may take more rows it takes
+ * of the language and the date setting (cardDateReferences: the real days and
+ * months, the year written with the widest digit). A date long by its kind (a
+ * range with a whole date, "about" a whole date, a text that is no date:
+ * cardDateIsLong) or wider than that is a long date, drawn whole and never
+ * wrapped. When a detail may take more rows it takes
  * the line's first row across the date and the place columns and the place
  * starts on the next row in its column; on the one-row
  * card the place follows it, 6px after it, and shortens. In the labels style
@@ -83,7 +84,7 @@ export type CardTextKind = 'name' | 'date' | 'place' | 'label' | 'years' | 'more
 export type MeasureTexts = (kind: CardTextKind, texts: Iterable<string>) => Map<string, number>;
 
 /** What the width and the rows read of a line (src/card-fields.ts CardLine). */
-export type CardLineText = Pick<CardLine, 'date' | 'rest' | 'more' | 'wide' | 'place' | 'cause' | 'label'>;
+export type CardLineText = Pick<CardLine, 'date' | 'rest' | 'more' | 'wide' | 'place' | 'cause' | 'label' | 'dateLong'>;
 
 /** One card of the view: its name, whether it has an avatar, its lines, the years under the name (src/card-fields.ts cardYears). */
 export interface CustomCardEntry<L extends CardLineText = CardLine> {
@@ -127,13 +128,36 @@ function cardLineParts(l: CardLineText, valueLines: CardValueLines): CardLinePar
 
 const DIGITS = '0123456789';
 
+/** The year the ordinary dates of src/card-fields.ts cardDateReferences are written with (the cap writes it with the widest digit). */
+export const CARD_REFERENCE_YEAR = '1888';
+
 /**
- * Whether a line's date is a long date (wider than the view's date column):
- * it does not go into the column (see the top of this file). `dateWidth` is
+ * Whether a line's date is a long date: long by its kind (CardLine.dateLong,
+ * src/card-fields.ts cardDateIsLong) or wider than the view's date column.
+ * It does not go into the column (see the top of this file). `dateWidth` is
  * the date's measured width.
  */
 export function isLongCardDate(l: CardLineText, dateWidth: number, dateColumn: number): boolean {
-    return !l.wide && !!l.date && Math.ceil(dateWidth) > dateColumn;
+    return !l.wide && !!l.date && (!!l.dateLong || Math.ceil(dateWidth) > dateColumn);
+}
+
+/**
+ * How wide the date column may get: the widest of `dateReferences` (src/card-fields.ts
+ * cardDateReferences, the real days and months, no leading zero) with their year
+ * (CARD_REFERENCE_YEAR) written in the widest digit of the card font ("1888" →
+ * "0000"): the card font's digits are not all equally wide, and an ordinary date of
+ * any year fits under it. No references: no such limit (Infinity).
+ */
+export function customCardDateCap(dateReferences: Iterable<string>, measure: MeasureTexts): number {
+    const refList = [...dateReferences];
+    if (!refList.length) return Infinity;
+    const digitW = measure('date', DIGITS);
+    const widest = [...DIGITS].reduce((a, b) => (digitW.get(b) ?? 0) > (digitW.get(a) ?? 0) ? b : a);
+    const refs = new Set(refList.map(r => r.split(CARD_REFERENCE_YEAR).join(widest.repeat(CARD_REFERENCE_YEAR.length))));
+    const refW = measure('date', refs);
+    let cap = 0;
+    for (const r of refs) cap = Math.max(cap, Math.ceil(refW.get(r) ?? 0));
+    return cap;
 }
 
 /**
@@ -141,8 +165,8 @@ export function isLongCardDate(l: CardLineText, dateWidth: number, dateColumn: n
  * column (labels) from its cards' texts. The labels counted are the ones the
  * lines show: a stand-in says its own event ("Baptism" on the birth line).
  * `dateReferences` (src/card-fields.ts cardDateReferences): the date column
- * is at most as wide as the widest of them written with the widest digit in
- * every digit position; none, no such limit.
+ * is at most as wide as the widest of them (customCardDateCap); none, no such
+ * limit. A date long by its kind (CardLine.dateLong) never sets the column.
  */
 export function customCardMetrics<L extends CardLineText>(entries: Iterable<CustomCardEntry<L>>, measure: MeasureTexts,
     cap: number = CUSTOM_CARD_MAX_WIDTH, valueLines: CardValueLines = 1, style: CardLineStyle = 'marks',
@@ -152,6 +176,8 @@ export function customCardMetrics<L extends CardLineText>(entries: Iterable<Cust
     const names = new Set<string>();
     const years = new Set<string>();
     const dates = new Set<string>();
+    /** The dates that may go into the date column (not long by their kind). */
+    const ordinaryDates = new Set<string>();
     const places = new Set<string>();
     const tails = new Set<string>();
     const labelTexts = new Set<string>();
@@ -160,6 +186,7 @@ export function customCardMetrics<L extends CardLineText>(entries: Iterable<Cust
         if (e.years) years.add(e.years);
         for (const l of e.lines) {
             if (l.date) dates.add(l.date);
+            if (l.date && !l.dateLong && !l.wide) ordinaryDates.add(l.date);
             if (labels && l.label) labelTexts.add(l.label);
             for (const p of cardLineParts(l, valueLines)) {
                 places.add(p.text);
@@ -179,16 +206,10 @@ export function customCardMetrics<L extends CardLineText>(entries: Iterable<Cust
     let labelColumn = 0;
     if (labels) for (const t of labelTexts) labelColumn = Math.max(labelColumn, w(labelW, t));
     else {
-        // The widest date that fits under the widest ordinary date; a longer one goes its own way.
-        // The card font's digits are not all equally wide: every reference is measured with
-        // each digit 0-9 in all its digit positions ("28. 12. 1888" → "00. 00. 0000" …
-        // "99. 99. 9999"), so an ordinary date of any digits fits under the cap.
-        const refs = new Set<string>();
-        for (const r of dateReferences) for (const d of DIGITS) refs.add(r.replace(/\d/g, d));
-        const refW = refs.size ? measure('date', refs) : new Map<string, number>();
-        let dateCap = refs.size ? 0 : Infinity;
-        for (const r of refs) dateCap = Math.max(dateCap, w(refW, r));
-        for (const d of dates) if (w(dateW, d) <= dateCap) dateColumn = Math.max(dateColumn, w(dateW, d));
+        // The widest ordinary date of the view that fits under the widest ordinary date of the
+        // language; a date long by its kind or wider than that goes its own way.
+        const dateCap = customCardDateCap(dateReferences, measure);
+        for (const d of ordinaryDates) if (w(dateW, d) <= dateCap) dateColumn = Math.max(dateColumn, w(dateW, d));
     }
 
     let content = 0;

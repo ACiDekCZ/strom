@@ -230,7 +230,7 @@ export interface PosterOptions {
 }
 
 /** What the poster needs of a custom card line. */
-export type PosterCardLine = Pick<CardLine, 'mark' | 'date' | 'rest' | 'more' | 'wide' | 'place' | 'cause' | 'label'>;
+export type PosterCardLine = Pick<CardLine, 'mark' | 'date' | 'rest' | 'more' | 'wide' | 'place' | 'cause' | 'label' | 'dateLong'>;
 
 /** The font of the custom card's lines (the screen's --font-sans), digits of one width. */
 const LINE_FONT = `font-family="'Instrument Sans', -apple-system, 'Segoe UI', sans-serif" style="font-variant-numeric: tabular-nums"`;
