@@ -251,6 +251,44 @@ test('phone held sideways: one segment of five names, no small cards, a thumb hi
     expect(fill).toBe(primary);
 });
 
+/** The sentence under the row for each preset type, per language (src/strings.ts cardTypes.*Desc). */
+const TYPE_SENTENCES: Record<'cs' | 'de', [string, string][]> = {
+    cs: [
+        ['Kompaktní', 'Jméno.'],
+        ['Normální', 'Jméno, roky a místo narození.'],
+        ['Podrobná', 'Narození a úmrtí s místem, věk, povolání.'],
+        ['Matriční', 'Narození, křest, sňatek, úmrtí s příčinou a pohřeb, u každého místo a celé datum.'],
+    ],
+    de: [
+        ['Kompakt', 'Nur der Name.'],
+        ['Normal', 'Name, Jahre und Geburtsort.'],
+        ['Detailliert', 'Geburt und Tod mit Ort, Alter, Beruf.'],
+        ['Matrikel', 'Geburt, Taufe, Heirat, Tod mit Ursache und Beerdigung, jeweils mit Ort und vollem Datum.'],
+    ],
+};
+
+for (const lang of ['cs', 'de'] as const) {
+    test(`${lang}: the sentence under the row follows the chosen type, in the language of the app`, async ({ page }) => {
+        await sampleTree(page);
+        await page.evaluate((l) => window.Strom.UI.setLanguage(l as never), lang);
+        await openSettings(page);
+        const sentence = host(page).locator('.card-type-desc');
+        for (const [name, text] of TYPE_SENTENCES[lang]) {
+            await tile(page, name).click();
+            await expect(tile(page, name)).toHaveAttribute('aria-checked', 'true');
+            await expect(sentence).toHaveText(text);
+            // The row is described by the sentence of the chosen type.
+            await expect(row(page)).toHaveAccessibleDescription(text);
+        }
+        // Custom has no sentence; back on a preset type its own returns.
+        await row(page).locator('[role="radio"]').last().click();
+        await expect(sentence).toHaveCount(0);
+        const [firstName, firstText] = TYPE_SENTENCES[lang][0];
+        await tile(page, firstName).click();
+        await expect(sentence).toHaveText(firstText);
+    });
+}
+
 test('Czech and German texts of the row, the notice and the note', async ({ page }) => {
     await sampleTree(page, 'register', MINE);
     await page.evaluate(() => window.Strom.UI.setLanguage('cs' as never));
