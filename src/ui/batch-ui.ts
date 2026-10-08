@@ -839,6 +839,10 @@ export const batchMethods = uiModule({
 
     resumeBatchRun(): void {
         if (!run) return;
+        // The bridge's address now: the research may have started again since the pause (a new token,
+        // N20) — the rest goes there, without choosing the files again (those it has are skipped).
+        const bridge = parseLiveBridge(storedResearchBridge(run.researchId)?.base);
+        if (bridge) run.base = bridge.base;
         run.paused = false;
         run.lost = false;
         run.resume?.();

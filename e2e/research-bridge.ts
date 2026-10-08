@@ -1,4 +1,4 @@
-import { expect, Page } from '@playwright/test';
+import { expect, Page, Route } from '@playwright/test';
 import { openApp, card } from './helpers.js';
 
 /**
@@ -11,6 +11,8 @@ export const UUID = '3f2c9a10-7b1e-4c55-9d2a-0e8f6b4a1c77';
 export const HEAD = '3f2a9c1e5b7d';
 export const NEW_HEAD = '9b8c7d6e5f40';
 export const BRIDGE = 'http://127.0.0.1:5998/0123456789abcdef0123456789abcdef';
+/** The same bridge after the research started again with a new token (N20, `rotated`). */
+export const BRIDGE2 = 'http://127.0.0.1:5998/fedcba9876543210fedcba9876543210';
 const cors = { 'access-control-allow-origin': '*' };
 
 export function researchGed(head = HEAD, extra: string[] = []): string {
@@ -92,6 +94,13 @@ export interface FakeBridge {
     syncAbort?: boolean;
     /** More of a written send's answer, made from what was posted (e.g. `ids` by its xrefs). */
     replyExtra?: (posted: string) => Record<string, unknown>;
+    /**
+     * The research started again with a new token (N20): the old address
+     * (BRIDGE) answers 403, the new one (BRIDGE2) answers. Before, BRIDGE2 answers 403.
+     */
+    rotated?: boolean;
+    /** The token rotates right before this request: the next `POST /sync`, or a `PUT /media` after this many PUTs. */
+    rotateAt?: 'sync' | number;
 }
 
 export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Promise<FakeBridge> {
@@ -107,7 +116,7 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
         mediaKnown: new Map(), mediaPuts: [], mediaAsks: [], mediaPutStatus: 200, mediaFiles: new Map(),
         ...init,
     };
-    await page.route(`${BRIDGE}/**`, async (route) => {
+    const serve = async (route: Route) => {
         if (b.down) return route.abort('connectionrefused');
         const url = new URL(route.request().url());
         (b.seen ??= []).push(`${route.request().method()} ${url.pathname.replace(/^\/[^/]+/, '')}`);
@@ -118,6 +127,14 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
         if (route.request().method() === 'OPTIONS') {
             return route.fulfill({ status: 204, headers: { ...cors, 'access-control-allow-methods': 'GET, PUT, POST', 'access-control-allow-headers': '*' } });
         }
+        // A new token: the old address turns everything down (as the research does an unknown token).
+        const method = route.request().method();
+        if ((b.rotateAt === 'sync' && method === 'POST' && url.pathname.endsWith('/sync'))
+            || (typeof b.rotateAt === 'number' && method === 'PUT' && /\/media\//.test(url.pathname) && b.mediaPuts.length >= b.rotateAt)) {
+            b.rotated = true;
+            b.rotateAt = undefined;
+        }
+        if (`${url.origin}/${url.pathname.split('/')[1]}` !== (b.rotated ? BRIDGE2 : BRIDGE)) return json(403, { error: 'unknown token' });
         const media = /\/media\/([0-9a-f]{64})$/.exec(url.pathname);
         if (media) {
             const sha = media[1];
@@ -215,7 +232,9 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
             return json(200, { batch: done[1], name: body.name, inputs: files, known: 0, refused: 0, nested: [], tasks: files ? ['T0101'] : [], head: b.head });
         }
         return route.fulfill({ status: 404, headers: cors, body: '' });
-    });
+    };
+    await page.route(`${BRIDGE}/**`, serve);
+    await page.route(`${BRIDGE2}/**`, serve);
     return b;
 }
 

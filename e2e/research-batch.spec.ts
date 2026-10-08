@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { fakeBridge, openResearch, openResearchMenu, poll, block } from './research-bridge.js';
+import { fakeBridge, openResearch, openResearchMenu, poll, block, BRIDGE2 } from './research-bridge.js';
 
 /**
  * "Add materials…" (C2): a folder of files for the research as one batch —
@@ -165,6 +165,34 @@ test.describe('Add materials', () => {
         await expect(dialog.locator('.batch-confirm-title')).toContainText('is in the research');
         expect(b.mediaPuts).toHaveLength(2);
         expect(b.batchDone).toHaveLength(1);
+    });
+
+    test('the research started again with a new token in the middle of a batch (403): after the new connection Continue finishes it, no files chosen again (N20)', async ({ page }) => {
+        const b = await fakeBridge(page, { accepts: BATCH_ACCEPTS });
+        await openResearch(page, { media: true });
+        await poll(page);
+        await page.evaluate(() => (window.Strom.UI as any).showBatchDialog());
+        await addFiles(page, ['Krabice/a.jpg', 'Krabice/b.jpg', 'Krabice/c.jpg']);
+        const dialog = page.locator('#batch-modal');
+        await dialog.locator('[data-act="next"]').click();
+        // The first file goes; the token changes right before the second one's PUT.
+        b.rotateAt = 1;
+        await dialog.getByRole('button', { name: 'Send 3 files' }).click();
+        await expect(dialog.locator('.batch-progress-title')).toHaveText('Paused');
+        await expect(dialog.locator('.batch-paused-note')).toContainText('The research stopped responding');
+        // Only the first file taken (the second one's PUT turned down at the old address).
+        expect(b.mediaPuts.map(p => p.headers['x-strom-path'])).toEqual(['Krabice/a.jpg']);
+        // The research hands over its new address (as a ?live= does).
+        await page.evaluate((base) => { void window.Strom.UI.startLiveFollow(base); }, BRIDGE2);
+        await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem(Object.keys(localStorage).find(k => k.startsWith('strom-research-bridge:'))!)!).base)).toBe(BRIDGE2);
+        await dialog.getByRole('button', { name: 'Continue' }).click();
+        await expect(dialog.locator('.batch-confirm-title')).toContainText('is in the research');
+        // The second and third file to the new address, the batch closed there.
+        const taken = b.mediaPuts.slice(1);
+        expect(taken).toHaveLength(2);
+        expect(taken.map(p => p.headers['x-strom-path']).sort()).toEqual(['Krabice/b.jpg', 'Krabice/c.jpg']);
+        expect(b.batchDone).toHaveLength(1);
+        expect(b.seen!.filter(x => x.startsWith('POST /batch/'))).toHaveLength(1);
     });
 
     test('a research that takes no batches: no "Add materials…"', async ({ page }) => {

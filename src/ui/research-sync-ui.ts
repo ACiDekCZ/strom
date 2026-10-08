@@ -41,7 +41,7 @@ import { loadResearchCopy } from '../research-copy.js';
 import {
     noteResearchLinks, noteResearchWaiting, noteResearchBridgeStatus, storedResearchBridge, researchLinksEnabled,
     researchAutoState, patchResearchAutoState, researchAutoIntroSeen, noteResearchAutoIntroSeen, forgetResearchWaitingItems, anyResearchBridgeKnown,
-    researchSendPreviewSkipped, announcedResearchScheme,
+    researchSendPreviewSkipped, announcedResearchScheme, RESEARCH_BRIDGE_MOVED_EVENT,
     ResearchHeldConflicts,
 } from '../research-device.js';
 import {
@@ -284,6 +284,11 @@ export const researchSyncMethods = uiModule({
         window.addEventListener('strom:user-change', (e) => {
             const treeId = (e as CustomEvent<{ treeId?: TreeId }>).detail?.treeId;
             if (treeId) this.researchNoteUserChange(treeId);
+        });
+        // The research's bridge at a new address (started again: a new token): a refusal of the old one is over.
+        window.addEventListener(RESEARCH_BRIDGE_MOVED_EVENT, (e) => {
+            const researchId = (e as CustomEvent<{ researchId?: string }>).detail?.researchId;
+            if (researchId) this.researchBridgeMoved(researchId);
         });
         window.addEventListener('strom:tree-switched', () => {
             fpCache = null;
@@ -610,6 +615,30 @@ export const researchSyncMethods = uiModule({
         // Originals waiting for it go while it answers.
         if (status) void this.researchOriginalsKick();
         return !!status;
+    },
+
+    /**
+     * A research's bridge answers at a new address (a ?live= / ?send= / ?adopt= /
+     * tree.ged after it started again with a new token, N20): what the old
+     * address said is forgotten, a refusal of a send is over for every tree
+     * of that research, and changes waiting go by themselves again — asked
+     * at once, so the open tree's changes go without the user.
+     */
+    researchBridgeMoved(researchId: string): void {
+        runtime.delete(researchId);
+        olderAsked.delete(researchId);
+        for (const tree of TreeManager.getTrees()) {
+            const link = tree.research;
+            if (link?.id !== researchId || !link.refused) continue;
+            TreeManager.patchResearchLink(tree.id, { refused: undefined });
+            patchResearchAutoState(tree.id, { toldRefused: undefined });
+            if (this.researchAutoOn(link)) autoDue.add(tree.id);
+        }
+        this.refreshResearchSyncUi();
+        // After the caller has taken in the new address's status (fetchStatus goes on after this).
+        if (this.researchSyncLink()?.link.id === researchId) {
+            void Promise.resolve().then(() => this.pollResearchBridge({ timeout: POLL_TIMEOUT_MS }));
+        }
     },
 
     /** Ask now unless the last answer is only seconds old (menu opened, window back). */

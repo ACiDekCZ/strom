@@ -208,12 +208,24 @@ export function researchIdAtBridge(base: string): string | null {
     return onPort.length === 1 ? onPort[0] : null;
 }
 
-/** The research reached this page at `base` (?live= / ?send= / a status from it): remember where. */
+/** Said on window when a research's bridge address changes (its port or token, N20): `detail.researchId`. */
+export const RESEARCH_BRIDGE_MOVED_EVENT = 'strom:research-bridge-moved';
+
+/**
+ * The research reached this page at `base` (?live= / ?send= / ?adopt= / a
+ * status from it): remember where. Another address than the one known (the
+ * research started again: a new port, a new token) is said on window
+ * (RESEARCH_BRIDGE_MOVED_EVENT): what the old address turned down may go to
+ * the new one.
+ */
 export function noteResearchBridge(researchId: string, base: string): void {
     const bridge = parseLiveBridge(base);
     if (!bridge) return;
     const prev = storedResearchBridge(researchId);
     writeBridge(researchId, { base: bridge.base, accepts: prev?.accepts ?? null, head: prev?.head ?? '' });
+    if (prev?.base && prev.base !== bridge.base && typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent(RESEARCH_BRIDGE_MOVED_EVENT, { detail: { researchId } }));
+    }
 }
 
 /** What the bridge's status said: its `accepts` (only when it says) and head. */

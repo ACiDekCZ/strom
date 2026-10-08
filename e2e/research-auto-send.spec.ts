@@ -1,7 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
 import { card } from './helpers.js';
 import {
-    BRIDGE, UUID, HEAD, NEW_HEAD, block, dot, editJan, fakeBridge, links, openResearch, openResearchMenu, poll, researchGed, FakeBridge, acceptLoad,
+    BRIDGE, BRIDGE2, UUID, HEAD, NEW_HEAD, block, dot, editJan, fakeBridge, links, openResearch, openResearchMenu, poll, researchGed, FakeBridge, acceptLoad,
 } from './research-bridge.js';
 
 /**
@@ -135,6 +135,28 @@ test.describe('sending by itself', () => {
         await editJan(page, 'Kolín');
         await page.clock.fastForward(QUIET + 1000);
         await expect.poll(() => bridge.posts.length).toBe(3);
+    });
+
+    test('the research started again with a new token right before the send (403): after its new ?live= the changes go by themselves (N20)', async ({ page }) => {
+        const bridge = await autoTree(page);
+        writesAtOnce(bridge);
+        bridge.rotateAt = 'sync';
+        await editJan(page);
+        await page.clock.fastForward(QUIET + 1000);
+        await expect(pill(page)).toContainText("Research didn't accept the changes");
+        expect(bridge.posts).toHaveLength(0);
+        expect(await page.evaluate(() => !!window.Strom.TreeManager.getTreeMetadata(window.Strom.TreeManager.getActiveTreeId()!)?.research?.refused)).toBe(true);
+        // The research hands over its new address: the refusal of the old one is over, the changes go — no click.
+        await page.evaluate((b) => { void window.Strom.UI.startLiveFollow(b); }, BRIDGE2);
+        await expect.poll(() => bridge.posts.length).toBe(1);
+        expect(bridge.posts[0]).toContain('2 PLAC Praha');
+        await expect(pill(page)).not.toHaveClass(/is-warn/);
+        expect(await page.evaluate(() => !!window.Strom.TreeManager.getTreeMetadata(window.Strom.TreeManager.getActiveTreeId()!)?.research?.refused)).toBe(false);
+        // Going by itself again, to the new address.
+        await editJan(page, 'Kolín');
+        await page.clock.fastForward(QUIET + 1000);
+        await expect.poll(() => bridge.posts.length).toBe(2);
+        expect(bridge.seen!.filter(x => x === 'POST /sync')).toHaveLength(3);
     });
 
     test('discarded in the research: the same state is not sent again; after an edit it is', async ({ page }) => {
