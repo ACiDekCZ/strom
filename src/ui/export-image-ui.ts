@@ -105,10 +105,11 @@ interface PosterBuild {
 /**
  * How the tree's cards are drawn in an image, as on screen: the branch
  * colours (when the setting is on), the presumed-deceased markers, the dimmed
- * context-only people, and for the custom card the size the view was laid out
- * with (its width follows the view's longest text; with the height "by
- * content" each card's own height), its date and label columns, its lines and
- * its fonts. Shared by the poster and the family book's tree page, so both
+ * context-only people, every density at the card size the view was laid out
+ * with and in its look (compact: the name only; detailed: the age, the trade
+ * and the place), and for the custom card (its width follows the view's
+ * longest text; with the height "by content" each card's own height) its date
+ * and label columns, its lines and its fonts. Shared by the poster and the family book's tree page, so both
  * draw the cards the layout was made for. `data` is the (privacy-filtered)
  * data the cards are drawn from.
  */
@@ -126,8 +127,13 @@ export function treeCardDrawing(data: StromData, layout: ReturnType<typeof TreeR
     const dimmedIds = (focusId && (mode === 'descendants' || mode === 'family'))
         ? computeIndirectIds(data, focusId, mode, [...layout.positions.keys()] as unknown as string[]) as unknown as Set<string>
         : undefined;
-    const custom = SettingsManager.getCardDensity() === 'custom';
-    const cardConfig: LayoutConfig = custom ? { ...DEFAULT_LAYOUT_CONFIG, ...TreeRenderer.getCardBox() } : DEFAULT_LAYOUT_CONFIG;
+    const density = SettingsManager.getCardDensity();
+    const custom = density === 'custom';
+    // Every density at the card box the view was laid out with (compact
+    // 150x44, detailed 200x100, the custom card's measured size): drawing the
+    // default 188x64 card on a layout made for another size overlaps the cards
+    // and runs the lines through them (N16).
+    const cardConfig: LayoutConfig = { ...DEFAULT_LAYOUT_CONFIG, ...TreeRenderer.getCardBox() };
     const fields = SettingsManager.getCardFields();
     const cardLinesMap = custom
         ? new Map([...layout.positions.keys()].map(id => {
@@ -144,13 +150,15 @@ export function treeCardDrawing(data: StromData, layout: ReturnType<typeof TreeR
         }))
         : undefined;
     const drawing: PosterOptions = {
+        config: cardConfig,
+        ...(custom ? {} : { cardDensity: density }),
         branchMap,
         deceasedSet,
         ...(dimmedIds ? { dimmedIds } : {}),
         // The faces the cards are drawn in: the serif always, the lines' sans for the custom card.
         fontFaceCss: appFontFaceCss(custom ? [...POSTER_SERIF_FACES, ...POSTER_LINE_FACES] : POSTER_SERIF_FACES),
         ...(custom ? {
-            config: cardConfig, cardLines: cardLinesMap,
+            cardLines: cardLinesMap,
             cardDateColumn: TreeRenderer.getCustomCardMetrics()?.dateColumn ?? 0,
             // The rows a detail takes, wrapped as on screen (same function, same measure).
             cardValueLines: fields.lines,

@@ -69,8 +69,9 @@ export const bookUiMethods = uiModule({
             let svgData = applyLivingPrivacy(data, privacyMode);
             if (dropMedia) svgData = stripMedia(svgData);
             // The cards drawn as the layout was made for them (the poster's
-            // drawing): a custom card's width, heights, columns and lines, not
-            // the default 188x64 card under lines laid out for a wider one.
+            // drawing): every density's card size and look (compact 150x44,
+            // detailed 200x100, a custom card's width, heights, columns and
+            // lines), not the default 188x64 card on lines laid out for another.
             treeSvg = buildTreeSvg(svgData, layout, {
                 treeName: TreeManager.getActiveTreeMetadata()?.name,
                 dateLabel: new Date().toLocaleDateString(),

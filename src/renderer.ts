@@ -21,7 +21,7 @@ import { TreeManager } from './tree-manager.js';
 import { chainLinkSvg, iconSvg } from './icons.js';
 import * as CrossTree from './cross-tree.js';
 import { ViewMode, STANDALONE_VIEWS, ResearchEdgeMode } from './types.js';
-import { cardLines, CardLine, cardLineHtml, cardYears, CardLineStyle, cardDateReferences } from './card-fields.js';
+import { cardLines, CardLine, cardLineHtml, cardYears, CardLineStyle, cardDateReferences, cardAge, cardOccupation } from './card-fields.js';
 import {
     CustomCardMetrics, CardLineRows, CardHead, customCardMetrics, customCardRows, customCardViewHeight, customCardSpouseLineY,
     measureCardTexts, cardFontsPending, CARD_HEAD_HEIGHT,
@@ -46,12 +46,12 @@ import {
 } from './layout/index.js';
 import { renderDebugOverlay, clearDebugOverlay } from './debug-overlay.js';
 import { debugPanel } from './debug-panel.js';
-import { yearOf, displayYear, formatFlexDate, ageBetween } from './dates.js';
+import { yearOf, displayYear, formatFlexDate } from './dates.js';
 import { computeTimelineModel } from './timeline.js';
 import { buildTimelineSvg } from './timeline-chart.js';
-import { newestLifeEvent, sortLifeEvents } from './events.js';
+import { sortLifeEvents } from './events.js';
 import { classifyBranches, Branch } from './branch-colors.js';
-import { presumedDeceasedSet, isLivingPerson } from './privacy.js';
+import { presumedDeceasedSet } from './privacy.js';
 import { placeList } from './places.js';
 import { SettingsManager } from './settings.js';
 import { personInitials } from './initials.js';
@@ -1739,9 +1739,7 @@ class TreeRendererClass {
      * occupation field in the person dialog.
      */
     private occupationOf(person: Person): string | null {
-        const jobs = (person.events ?? []).filter(e => e.type === 'occupation' && e.note?.trim());
-        if (jobs.length === 0) return null;
-        return newestLifeEvent(jobs)?.note?.trim() ?? null;
+        return cardOccupation(person);
     }
 
     /**
@@ -2429,11 +2427,7 @@ class TreeRendererClass {
      * that produced ages like 230. When we can't know, we say nothing.
      */
     private calculateAge(person: Person): number | null {
-        if (!person.birthDate) return null;
-        if (!person.deathDate && !isLivingPerson(person, new Date().getFullYear())) return null;
-        // Shared age rule (handles qualified / partial / range dates).
-        const age = ageBetween(person.birthDate, person.deathDate || undefined);
-        return age ? age.years : null;
+        return cardAge(person);
     }
 
     // ==================== TIMELINE VIEW ====================

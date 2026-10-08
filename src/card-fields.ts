@@ -13,9 +13,10 @@
  */
 
 import { Person, StromData, LifeEvent, Partnership } from './types.js';
-import { parseFlexDate, formatFlexDate, toCanonical } from './dates.js';
+import { parseFlexDate, formatFlexDate, toCanonical, ageBetween } from './dates.js';
 import { newestLifeEvent, sortLifeEvents } from './events.js';
 import { strings } from './strings.js';
+import { isLivingPerson } from './privacy.js';
 import type { CardLineRows, CardRow } from './card-width.js';
 
 export type CardFieldKey = 'birth' | 'baptism' | 'death' | 'burial' | 'occupation' | 'marriage' | 'divorce';
@@ -440,4 +441,30 @@ function cardLabelLineHtml(l: CardLine, esc: (text: string) => string, cut: bool
     const title = cut ? ` title="${esc(whole)}"` : '';
     const rest = l.rest ? `<span class="card-line-rest"${title}>${esc(l.rest)}</span>` : '';
     return `<div class="card-line card-line--label card-line--${l.key}">${label}<span class="card-line-value">${date}${rest}${more}</span></div>`;
+}
+
+/**
+ * What this person did (the detailed card's trade row). Occupation is an
+ * event (it changes over a life: apprentice, journeyman, master), so for a
+ * one-line summary take the newest dated one — the trade they ended up with;
+ * same rule as the occupation field in the person dialog.
+ */
+export function cardOccupation(person: Person): string | null {
+    const jobs = (person.events ?? []).filter(e => e.type === 'occupation' && e.note?.trim());
+    if (jobs.length === 0) return null;
+    return newestLifeEvent(jobs)?.note?.trim() ?? null;
+}
+
+/**
+ * Age at death, or today's age for someone plausibly still alive (the
+ * detailed card's "age 67"). Without a death date it must NOT count to today
+ * for a historical person — that produced ages like 230. When it cannot be
+ * known, it is null.
+ */
+export function cardAge(person: Person): number | null {
+    if (!person.birthDate) return null;
+    if (!person.deathDate && !isLivingPerson(person, new Date().getFullYear())) return null;
+    // Shared age rule (handles qualified / partial / range dates).
+    const age = ageBetween(person.birthDate, person.deathDate || undefined);
+    return age ? age.years : null;
 }

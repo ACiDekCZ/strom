@@ -12,6 +12,7 @@ import { displayYear } from './dates.js';
 import { personInitials } from './initials.js';
 import { parentRelKind, parentRelDash, connectionDash } from './parent-rel-style.js';
 import type { CardLine, CardLineStyle, CardValueLines } from './card-fields.js';
+import { cardAge, cardOccupation } from './card-fields.js';
 import {
     CARD_MARK_WIDTH, CARD_COLUMN_GAP, CUSTOM_CARD_PAD_X, CARD_ROW_HEIGHT, CARD_DETAIL_GAP, CARD_LABEL_GAP,
     CARD_VALUE_DATE_GAP, CARD_NAME_ROW_HEIGHT, CARD_YEARS_ROW_HEIGHT, CARD_AVATAR_WIDTH, CARD_HEAD_GAP,
@@ -118,6 +119,22 @@ function fittedText(
     return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="${anchor}" font-size="${fs}"${weight} fill="${fill}"${clamp}>${escapeXml(text)}</text>`;
 }
 
+/**
+ * The detailed card's birth place on at most two rows (the screen's
+ * line-clamp 2): words fill the first row, the rest goes on the second, which
+ * fittedText shrinks or clamps.
+ */
+function placeRows(place: string, maxW: number, fontSize: number): string[] {
+    if (!place) return [];
+    if (estWidth(place, fontSize, false) <= maxW) return [place];
+    const words = place.split(/\s+/);
+    let first = words[0];
+    let i = 1;
+    while (i < words.length && estWidth(`${first} ${words[i]}`, fontSize, false) <= maxW) first += ` ${words[i++]}`;
+    const rest = words.slice(i).join(' ');
+    return rest ? [first, rest] : [first];
+}
+
 /** Width of a 10px semibold pill text in the card's sans (digits of one width). */
 function pillTextWidth(text: string): number {
     let w = 0;
@@ -171,6 +188,14 @@ export interface PosterOptions {
     /** Footer view label (e.g. "Family — from Jan Novák (depth 3/3)"). */
     viewLabel?: string;
     config?: LayoutConfig;
+    /**
+     * The card density the layout was made for (the size is `config`'s):
+     * compact = the name only, centred in the whole card; normal (default) =
+     * the avatar, the name and the years; detailed = a larger avatar at the
+     * top, the years with the age, the trade and the birth place on its own
+     * rows. The custom card is drawn from `cardLines`.
+     */
+    cardDensity?: 'compact' | 'normal' | 'detailed';
     /** Branch classification (person id -> paternal|maternal|descendant). */
     branchMap?: Map<string, string> | null;
     /** Persons drawn with the † marker. */
@@ -575,25 +600,35 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
                     valueLines: options.cardValueLines ?? 1, style: options.cardStyle ?? 'marks',
                     measure: options.measureCardTexts ?? estimateCardTexts, exact: !!options.measureCardTexts,
                 }));
+        } else if (person && !isPlaceholder && options.cardDensity === 'compact') {
+            // Compact: the name only (no avatar, no meta), centred in the whole
+            // box at 13px — the screen's 10px side padding inside the border.
+            out.push(fittedText(shownName(person, '?'), pos.x + cw / 2, pos.y + ch / 2 + 4.5, cw - 22,
+                [13, 12.5], true, COLORS.text));
         } else if (person && !isPlaceholder) {
+            const detailed = options.cardDensity === 'detailed';
             // Avatar: gender-ring circle with a photo or initials (like on
-            // screen). 34px avatar (r=17), 10px left padding — matches the CSS.
-            const cxAv = pos.x + 10 + 17;
-            const cyAv = pos.y + ch / 2;
+            // screen). 34px avatar (r=17) centred on the card's height; the
+            // detailed card's 44px one (r=22) at its top (8px padding + 1px).
+            // 10px left padding (border + padding) — matches the CSS.
+            const r = detailed ? 22 : 17;
+            const cxAv = pos.x + 10 + r;
+            const cyAv = detailed ? pos.y + 10 + r : pos.y + ch / 2;
             const hasPhoto = !!person.photo;
             if (hasPhoto) {
                 const clipId = `av${clipCounter++}`;
-                out.push(`<clipPath id="${clipId}"><circle cx="${cxAv.toFixed(1)}" cy="${cyAv.toFixed(1)}" r="17"/></clipPath>`);
-                out.push(`<image href="${escapeXml(person.photo!)}" x="${(cxAv - 17).toFixed(1)}" y="${(cyAv - 17).toFixed(1)}" width="34" height="34" preserveAspectRatio="xMidYMid slice" clip-path="url(#${clipId})"/>`);
-                out.push(`<circle cx="${cxAv.toFixed(1)}" cy="${cyAv.toFixed(1)}" r="17" fill="none" stroke="${ring}" stroke-width="2"/>`);
+                out.push(`<clipPath id="${clipId}"><circle cx="${cxAv.toFixed(1)}" cy="${cyAv.toFixed(1)}" r="${r}"/></clipPath>`);
+                out.push(`<image href="${escapeXml(person.photo!)}" x="${(cxAv - r).toFixed(1)}" y="${(cyAv - r).toFixed(1)}" width="${2 * r}" height="${2 * r}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${clipId})"/>`);
+                out.push(`<circle cx="${cxAv.toFixed(1)}" cy="${cyAv.toFixed(1)}" r="${r}" fill="none" stroke="${ring}" stroke-width="2"/>`);
             } else {
                 const initials = personInitials(person.firstName, person.lastName) || '?';
-                out.push(`<circle cx="${cxAv.toFixed(1)}" cy="${cyAv.toFixed(1)}" r="17" fill="${COLORS.avatarBg}" stroke="${ring}" stroke-width="2"/>`);
-                out.push(`<text x="${cxAv.toFixed(1)}" y="${(cyAv + 4).toFixed(1)}" text-anchor="middle" font-size="12" font-weight="600" fill="${COLORS.initials}">${escapeXml(initials)}</text>`);
+                const initialsSize = detailed ? 16 : 12;
+                out.push(`<circle cx="${cxAv.toFixed(1)}" cy="${cyAv.toFixed(1)}" r="${r}" fill="${COLORS.avatarBg}" stroke="${ring}" stroke-width="2"/>`);
+                out.push(`<text x="${cxAv.toFixed(1)}" y="${(cyAv + initialsSize / 3).toFixed(1)}" text-anchor="middle" font-size="${initialsSize}" font-weight="600" fill="${COLORS.initials}">${escapeXml(initials)}</text>`);
             }
 
-            // Text column right of the avatar (10px padding + 34px avatar + 9px gap).
-            const contentX = pos.x + 10 + 34 + 9;
+            // Text column right of the avatar (10px padding + avatar + gap).
+            const contentX = pos.x + 10 + 2 * r + (detailed ? 8 : 9);
             const contentW = cw - (contentX - pos.x) - 10;
             const cx = contentX + contentW / 2;
 
@@ -607,11 +642,34 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
             else if (birthY) metaYears = isDeceasedP ? `${birthY} †` : `* ${birthY}`;
             else if (isDeceasedP) metaYears = '†';
             const metaPlace = person.birthPlace?.trim() || '';
-            const meta = [metaYears, metaPlace].filter(Boolean).join(' · ');
-
-            out.push(fittedText(fullName, cx, pos.y + 28, contentW, [15, 13, 11], true, COLORS.text));
-            if (meta) {
-                out.push(fittedText(meta, cx, pos.y + 45, contentW, [11, 10, 9], false, COLORS.textLight));
+            if (detailed) {
+                // Detailed: rows from the top as on screen — the name, the
+                // years with the age ("1907 – 1975 · age 67"), the trade, then
+                // the birth place on up to two rows of its own.
+                const age = cardAge(person);
+                const meta = [metaYears, age !== null ? `${strings.card.ageWord} ${age}` : ''].filter(Boolean).join(' · ');
+                const trade = cardOccupation(person) ?? '';
+                let y = pos.y + 22;
+                out.push(fittedText(fullName, cx, y, contentW, [15, 13, 11], true, COLORS.text));
+                if (meta) {
+                    y += 15;
+                    out.push(fittedText(meta, cx, y, contentW, [11, 10, 9], false, COLORS.textLight));
+                }
+                if (trade) {
+                    y += 14;
+                    out.push(fittedText(trade, cx, y, contentW, [10, 9], false, COLORS.textLight)
+                        .replace(' font-size=', ' font-style="italic" font-size='));
+                }
+                for (const row of placeRows(metaPlace, contentW, 11)) {
+                    y += 14;
+                    out.push(fittedText(row, cx, y, contentW, [11, 10, 9], false, COLORS.textFaint));
+                }
+            } else {
+                const meta = [metaYears, metaPlace].filter(Boolean).join(' · ');
+                out.push(fittedText(fullName, cx, pos.y + 28, contentW, [15, 13, 11], true, COLORS.text));
+                if (meta) {
+                    out.push(fittedText(meta, cx, pos.y + 45, contentW, [11, 10, 9], false, COLORS.textLight));
+                }
             }
         }
 
