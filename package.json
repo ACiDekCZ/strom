@@ -23,6 +23,9 @@
     "genealogy"
   ],
   "author": "Milan Víšek",
+  "contributors": [
+    "Claude (Anthropic)"
+  ],
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "devDependencies": {

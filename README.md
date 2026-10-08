@@ -148,9 +148,11 @@ embedded in the app's HTML (a comment in `<head>`):
   contributors, https://www.openstreetmap.org/copyright); the map shows this
   attribution.
 
-## Author
+## Authors
 
-**Milan Víšek** - [stromapp.info](https://stromapp.info)
+Authors: Milan Víšek and Claude (Anthropic)
+
+[stromapp.info](https://stromapp.info)
 
 ---
 
