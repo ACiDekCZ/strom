@@ -5,7 +5,7 @@
 
 import type { PrivacyMode, ContentOptions } from '../privacy.js';
 import { noteExportAll } from '../research-device.js';
-import { DataManager, auditPersonName } from '../data.js';
+import { DataManager, auditPersonName, storedTreeForExport } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { sanitizeResearchField } from '../research-link.js';
 import { TreeRenderer } from '../renderer.js';
@@ -218,7 +218,7 @@ export const importExportMethods = uiModule({
         this.showExportPasswordDialog(async () => {
             const { exportToGedcom } = await import('../ged-exporter.js');
             const { applyLivingPrivacy } = await import('../privacy.js');
-            const data = await TreeManager.getTreeData(treeId);
+            const data = await storedTreeForExport(treeId);
             const metadata = TreeManager.getTreeMetadata(treeId);
             if (!data) return;
 
@@ -259,7 +259,7 @@ export const importExportMethods = uiModule({
         this.showExportPasswordDialog(async () => {
             const { buildPersonsCsv } = await import('../csv-export.js');
             const { applyLivingPrivacy } = await import('../privacy.js');
-            const data = await TreeManager.getTreeData(treeId);
+            const data = await storedTreeForExport(treeId);
             const metadata = TreeManager.getTreeMetadata(treeId);
             if (!data) return;
 
@@ -1390,7 +1390,7 @@ export const importExportMethods = uiModule({
         const allData: Record<string, { name: string; data: StromData; auditLog?: AuditLog }> = {};
 
         for (const tree of trees) {
-            const data = await TreeManager.getTreeData(tree.id);
+            const data = await storedTreeForExport(tree.id);
             if (data) {
                 let treeExport = applyLivingPrivacy(data, privacyMode);
                 treeExport = applyContentOptions(treeExport, content);

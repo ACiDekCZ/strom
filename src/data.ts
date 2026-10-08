@@ -222,6 +222,18 @@ export function migrateData(data: unknown): StromData {
 }
 
 /**
+ * A stored tree as an export carries it: in the current shape (migrateData)
+ * and stamped with the current data version. The stored record of a tree
+ * keeps the shape of the version that last saved it (a person without a
+ * valid sex, say) until the tree is saved again, and a file stamped with the
+ * current version must be one this app reads back (N32).
+ */
+export async function storedTreeForExport(treeId: TreeId): Promise<StromData | null> {
+    const stored = await TreeManager.getTreeData(treeId);
+    return stored ? { version: STROM_DATA_VERSION, ...migrateData(stored) } : null;
+}
+
+/**
  * Thrown by a mutation attempted while the local data is locked (see
  * DataManager.isLocked). The UI never offers one; this only guarantees that
  * an overlooked path cannot change the unsaved stand-in tree.
@@ -3345,9 +3357,8 @@ class DataManagerClass {
      * the same as a full JSON download.
      */
     async buildAttachedFileJson(treeId: TreeId): Promise<string> {
-        const data = await TreeManager.getTreeData(treeId);
+        const data = await storedTreeForExport(treeId);
         if (!data) throw new Error('no tree data');
-        data.version = STROM_DATA_VERSION;
         const json = JSON.stringify(data, null, 2);
 
         const { SettingsManager } = await import('./settings.js');
@@ -3362,7 +3373,7 @@ class DataManagerClass {
 
     /** Download a tree as JSON; returns the file name (null when there is no tree). */
     async exportTreeJSON(treeId: TreeId, password?: string | null, privacyMode: PrivacyMode = 'full', content: boolean | ContentOptions = false): Promise<string | null> {
-        const rawTreeData = await TreeManager.getTreeData(treeId);
+        const rawTreeData = await storedTreeForExport(treeId);
         if (!rawTreeData) return null;
 
         const treeData = applyContentOptions(applyLivingPrivacy(rawTreeData, privacyMode), content);

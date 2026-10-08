@@ -11,6 +11,7 @@ import { encrypt, EncryptedData } from './crypto.js';
 import { AuditLogManager } from './audit-log.js';
 import { applyLivingPrivacy, applyContentOptions, ContentOptions, PrivacyMode } from './privacy.js';
 import { safeFileName } from './filenames.js';
+import { storedTreeForExport } from './data.js';
 
 /**
  * Clean dynamic UI state from HTML before export: drop 'active' from specific
@@ -224,7 +225,7 @@ class AppExporterClass {
             const html = this.getExportHtml();
 
             // Get data for the specified tree (privacy filter applied to a copy)
-            const rawData = await TreeManager.getTreeData(targetTreeId);
+            const rawData = await storedTreeForExport(targetTreeId);
             if (!rawData) {
                 UI.showAlert(strings.export.failed, 'error');
                 return;
@@ -302,7 +303,7 @@ class AppExporterClass {
             const allTreesData: Record<string, { name: string; data: StromData; isHidden?: boolean }> = {};
 
             for (const tree of trees) {
-                const data = await TreeManager.getTreeData(tree.id);
+                const data = await storedTreeForExport(tree.id);
                 if (data) {
                     let treeExport = applyLivingPrivacy(data, privacyMode);
                     treeExport = applyContentOptions(treeExport, content);
@@ -317,7 +318,7 @@ class AppExporterClass {
 
             // Use active tree as the primary embedded data
             const activeTreeId = TreeManager.getActiveTreeId();
-            const rawActiveData = activeTreeId ? await TreeManager.getTreeData(activeTreeId) : null;
+            const rawActiveData = activeTreeId ? await storedTreeForExport(activeTreeId) : null;
             let activeData = rawActiveData ? applyLivingPrivacy(rawActiveData, privacyMode) : null;
             if (activeData) activeData = applyContentOptions(activeData, content);
             const activeTreeMeta = activeTreeId ? TreeManager.getTreeMetadata(activeTreeId) : null;
