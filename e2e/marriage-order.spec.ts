@@ -49,8 +49,13 @@ const pill = (page: Page, name: string) => card(page, name).locator('.union-orde
 
 /** The pill's visible text: its number, glyph and year (the bubble left out). */
 async function pillText(page: Page, name: string): Promise<string> {
-    return pill(page, name).evaluate(el => [...el.querySelectorAll('.uo-num, .uo-glyph, .uo-year')]
-        .filter(s => getComputedStyle(s).display !== 'none').map(s => s.textContent).join(' '));
+    // the visible text only: a hidden ordinal suffix ("st") or year drops out
+    return pill(page, name).evaluate(el => {
+        const shown = (n: Node): string => n.nodeType === Node.TEXT_NODE ? n.textContent ?? ''
+            : getComputedStyle(n as Element).display === 'none' ? '' : [...n.childNodes].map(shown).join('');
+        return [...el.querySelectorAll('.uo-num, .uo-glyph, .uo-year')]
+            .filter(s => getComputedStyle(s).display !== 'none').map(shown).join(' ');
+    });
 }
 
 async function zoomTo(page: Page, scale: number): Promise<void> {
@@ -108,11 +113,13 @@ test.describe('marriage-order pill (T13)', () => {
         await zoomTo(page, 0.6);
         expect(await pillText(page, 'Anna')).toBe('1st ∞ 1866');
         await zoomTo(page, 0.5);
-        expect(await pillText(page, 'Anna')).toBe('1st');
-        expect(await pillText(page, 'Marie')).toBe('2nd');
-        const w = await pill(page, 'Eva').evaluate(el => el.offsetWidth);
-        expect(w).toBeLessThanOrEqual(24);
-        expect(await pill(page, 'Eva').evaluate(el => el.offsetHeight)).toBe(18);
+        // the number alone, its "st"/"nd" dropped, in a round 18px badge whatever the font
+        expect(await pillText(page, 'Anna')).toBe('1');
+        expect(await pillText(page, 'Marie')).toBe('2');
+        for (const name of ['Anna', 'Marie', 'Eva']) {
+            expect(await pill(page, name).evaluate(el => el.offsetWidth)).toBe(18);
+            expect(await pill(page, name).evaluate(el => el.offsetHeight)).toBe(18);
+        }
         await zoomTo(page, 0.39);
         await expect(pill(page, 'Anna')).toBeHidden();
         await expect(pill(page, 'Marie')).toBeHidden();

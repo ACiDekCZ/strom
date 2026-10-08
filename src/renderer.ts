@@ -2548,10 +2548,23 @@ class TreeRendererClass {
         const tip = strings.focus.unionOrderTip(b.number, b.year, b.place, b.married);
         return `<span class="union-order-pill" role="img" aria-label="${this.escapeHtml(tip)}"`
             + ` data-union-order="${b.number}" data-toward="${this.escapeHtml(b.towardId)}" data-side="${b.side}">`
-            + `<span class="uo-num">${this.escapeHtml(strings.focus.unionOrdinal(b.number))}</span>`
+            + `<span class="uo-num">${this.unionOrdinalHtml(b.number)}</span>`
             + `<span class="pill-glyph uo-glyph">∞</span>`
             + (b.year ? `<span class="uo-year">${this.escapeHtml(b.year)}</span>` : '')
             + `<span class="badge-tooltip uo-tip">${this.escapeHtml(tip)}</span></span>`;
+    }
+
+    /**
+     * The ordinal of a marriage-order pill: the number, then its letter suffix
+     * ("st", "nd" in English) in its own span, which the zoomed-out pill drops
+     * so it stays a round 18px badge; a dot ("1.") stays.
+     */
+    private unionOrdinalHtml(n: number): string {
+        const text = strings.focus.unionOrdinal(n);
+        const m = /^(\d+)(\p{L}+)$/u.exec(text);
+        return m
+            ? `${this.escapeHtml(m[1])}<span class="uo-suffix">${this.escapeHtml(m[2])}</span>`
+            : this.escapeHtml(text);
     }
 
     private escapeHtml(text: string): string {
