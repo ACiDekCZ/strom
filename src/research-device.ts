@@ -284,9 +284,10 @@ export interface ResearchAutoState {
      * the tree stood on when it went: while the tree still stands there (the
      * research's version not loaded since), the next copy is that one plus the
      * edits since (`_STROM_SINCE`) — written, nothing new, or beside a send
-     * taken back alike.
+     * taken back alike. `version`: the research's version that took it in
+     * (none: not known, kept before 3.10.0-beta.19).
      */
-    lastCopy?: { intake: string; base: string };
+    lastCopy?: { intake: string; base: string; version?: string };
     /**
      * The backup taken before the research's version was last loaded, and the
      * tree's fingerprint right after that load: "Restore the state before
@@ -401,7 +402,10 @@ export function researchAutoState(treeId: string): ResearchAutoState {
         const held = heldConflictsFrom(p.held);
         if (held) out.held = held;
         const lc = p.lastCopy as Record<string, unknown> | undefined;
-        if (lc && typeof lc.intake === 'string' && lc.intake.length <= 80 && typeof lc.base === 'string') out.lastCopy = { intake: lc.intake, base: lc.base };
+        if (lc && typeof lc.intake === 'string' && lc.intake.length <= 80 && typeof lc.base === 'string') {
+            out.lastCopy = { intake: lc.intake, base: lc.base,
+                ...(typeof lc.version === 'string' && lc.version && lc.version.length <= 40 ? { version: lc.version } : {}) };
+        }
         if (Array.isArray(p.resent)) out.resent = p.resent.filter((r): r is string => typeof r === 'string' && r.length <= 80).slice(-30);
         const lb = p.loadBackup as Record<string, unknown> | undefined;
         if (lb && typeof lb.id === 'string' && lb.id.length <= 80 && typeof lb.at === 'string' && Number.isFinite(Date.parse(lb.at))

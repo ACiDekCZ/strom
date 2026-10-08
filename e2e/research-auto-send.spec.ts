@@ -906,6 +906,38 @@ test('rc.23 / N1: a copy built on a written send whose version was not loaded sa
     expect(bridge.posts[3]).toContain(`1 _STROM_HEAD ${loaded}`);
 });
 
+test('B18-2: after `strom update` (1.12.1 → 1.13) the next copy names no _STROM_SINCE of a copy the older version took in (what it left out, a known sex set unknown, would read as given); the copies after it do again', async ({ page }) => {
+    const bridge = await autoTree(page, { strom: '1.12.1', features: ['sync.again', 'sync.undoneSince', 'sync.takenBack', 'sync.since'] });
+    bridge.syncReply = { status: 200, body: { ...WRITE.body, conflicts: [{ id: 'X0001', person: 'P0003', fact: 'NAME' }] } };
+    bridge.onWrite = () => ({ head: 'c1c1c1c1c1c1', ged: nameConflictGed('c1c1c1c1c1c1') });
+    await renameJan(page, 'Jenda');
+    await page.clock.fastForward(QUIET + 1000);
+    await expect.poll(() => bridge.posts.length).toBe(1);
+    const first = bridge.sends[0].intake;
+    // Not loaded (a conflict over the user's value): the next copy builds on the first one — the same research.
+    bridge.syncReply = WRITE;
+    bridge.onWrite = () => ({ head: 'c2c2c2c2c2c2', ged: nameConflictGed('c2c2c2c2c2c2', ['1 BIRT', '2 PLAC Praha']) });
+    await janBirthPlace(page, 'Praha');
+    await page.clock.fastForward(QUIET + 1000);
+    await expect.poll(() => bridge.posts.length).toBe(2);
+    expect(bridge.posts[1]).toContain(`1 _STROM_SINCE ${first}`);
+    // Updated: the copy 1.12.1 took in is no base for 1.13 — _STROM_HEAD only, the research finds its base itself.
+    bridge.strom = '1.13.0-beta.9';
+    bridge.features = [...bridge.features!, 'person.titles'];
+    await poll(page);
+    await janBirthPlace(page, 'Brno');
+    await page.clock.fastForward(QUIET + 1000);
+    await expect.poll(() => bridge.posts.length).toBe(3);
+    expect(bridge.posts[2]).not.toContain('_STROM_SINCE');
+    expect(bridge.posts[2]).toContain('1 _STROM_HEAD');
+    const third = bridge.sends[0].intake;
+    // The next one builds on the copy 1.13 took in.
+    await janBirthPlace(page, 'Kolín');
+    await page.clock.fastForward(QUIET + 1000);
+    await expect.poll(() => bridge.posts.length).toBe(4);
+    expect(bridge.posts[3]).toContain(`1 _STROM_SINCE ${third}`);
+});
+
 test('a restored backup sends the base it kept: _STROM_HEAD and _STROM_SINCE of when it was taken (N61-3)', async ({ page }) => {
     const bridge = await autoTree(page, { features: ['sync.again', 'sync.undoneSince', 'sync.takenBack', 'sync.since'] });
     const base = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head);

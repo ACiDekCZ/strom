@@ -109,6 +109,14 @@ function retryAfterMs(value: string | null): number {
     return Number.isFinite(n) && n > 0 ? Math.min(30_000, Math.max(1000, n * 1000)) : 5000;
 }
 
+/**
+ * The research that took a copy in (`was`) is the one that answers now (`now`):
+ * either not known counts as the same (a copy kept before the version was kept).
+ */
+export function researchSameVersion(was: string | undefined, now: string): boolean {
+    return !was || !now || was === now;
+}
+
 /** A catch-up of titles the research never got is running (researchTitlesCatchUp). */
 let titlesCatchingUp = false;
 
@@ -1196,8 +1204,12 @@ export const researchSyncMethods = uiModule({
         // Always when known, whatever the bridge said it takes (its status may not be read yet; an older
         // research passes the line by): without it the research guesses the base (finding N1). Only a version
         // of the research loaded here since makes it wrong — that version (_STROM_HEAD) is the base then.
+        // A copy another version of the research took in is no such base (B18-2): `strom update` from 1.12.1 to 1.13
+        // — what 1.12 left out of it (a known sex set unknown, N33) would read in it as given already, and never be
+        // taken; without the line the newer one finds the base in its own history.
         const lastCopy = researchAutoState(treeId).lastCopy;
-        const since = lastCopy && lastCopy.base === (link.head ?? '') ? lastCopy.intake : undefined;
+        const version = this.researchBridgeVersion(link.id);
+        const since = lastCopy && lastCopy.base === (link.head ?? '') && researchSameVersion(lastCopy.version, version) ? lastCopy.intake : undefined;
         // The titles as the research takes them (B-1); a send that carries them, once written, leaves them there (B18-1).
         const titles = researchGedcomTitles(this.researchStatusOf(link.id));
         const carriesTitles = again ? !!again.titles : titles === 'line';
@@ -1244,7 +1256,9 @@ export const researchSyncMethods = uiModule({
         try { reply = sanitizeSyncReply(await res.json()); } catch { /* a refusal without a reason */ }
         sendingTree = null;
         // The research has this copy now (any answer with its mark; a send written again is the old copy, not this one).
-        if (res.ok && reply.ok && reply.intake && !again) patchResearchAutoState(treeId, { lastCopy: { intake: reply.intake, base: link.head ?? '' } });
+        if (res.ok && reply.ok && reply.intake && !again) {
+            patchResearchAutoState(treeId, { lastCopy: { intake: reply.intake, base: link.head ?? '', ...(version ? { version } : {}) } });
+        }
         // The first send out of "only load" went (through the preview): sending by itself may go on.
         if (res.ok && reply.ok && link.previewDue) TreeManager.patchResearchLink(treeId, { previewDue: undefined });
         // Busy (503): not a refusal — it goes again at the next look.
