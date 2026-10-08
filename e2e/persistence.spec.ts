@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, fillPerson, exportTreeJson, createFirstPerson, cardAction, personModal, card } from './helpers.js';
+import { openApp, fillPerson, exportTreeJson, createFirstPerson, cardAction, personModal, card, waitForPersist } from './helpers.js';
 
 /** Import the 53-person fixture as a new tree (it has no version: no warning, straight to the dialog). */
 async function importBigTree(page: Page, name: string): Promise<void> {
@@ -83,15 +83,19 @@ test('edits no file holds: an information-only notice, the indicator until the n
     await expect(notice).toHaveCount(0);
 
     // A day after closing: the next edit brings the reminder back.
-    await page.evaluate(() => {
+    const closedAt = await page.evaluate(() => {
         const id = window.Strom.DataManager.getCurrentTreeId()!;
         const meta = window.Strom.TreeManager.getTreeMetadata(id)!;
         meta.fileCopyNoticeClosedAt = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+        return meta.fileCopyNoticeClosedAt;
     });
     await addPerson(page, 'Fifth');
     await expect(notice).toBeVisible();
 
-    // Not closed: it is there after a reload too.
+    // Not closed: it is there after a reload too. The tree index is written in
+    // the background: reloaded before it landed, the close of the same day was
+    // still the stored one.
+    await waitForPersist(page, closedAt);
     await page.reload();
     await expect(page.locator('.toolbar')).toBeVisible();
     await expect(notice).toBeVisible();
