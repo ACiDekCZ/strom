@@ -30,6 +30,7 @@ import { createSnapshot, SnapshotResearchBase } from './snapshots.js';
 import { researchAutoState, patchResearchAutoState } from './research-device.js';
 import { researchBaseKey } from './storage-keys.js';
 import { unknownSexFromTie, fingerprintLike } from './research-link.js';
+import { unknownSexInResearchCopies } from './research-copy.js';
 import { requestPersistentStorage } from './persistence.js';
 import { asciiSlug } from './filenames.js';
 import { announceTreeSaved, clearTreeStale, isTreeStale } from './tab-sync.js';
@@ -566,7 +567,7 @@ class TreeManagerClass {
         // A count kept by an older version (the "?" stand-ins counted too) is put right when the tree is read.
         if (result.status === 'ok') {
             const tree = this.index.trees.find(t => t.id === id);
-            if (tree?.research && 'sexU' in tree.research) result.data = this.dropLegacySexU(id, tree, result.data);
+            if (tree?.research && 'sexU' in tree.research) result.data = await this.dropLegacySexU(id, tree, result.data);
             const count = realPersonCount(result.data);
             if (tree && tree.personCount !== count) {
                 tree.personCount = count;
@@ -580,9 +581,10 @@ class TreeManagerClass {
      * Data version 12: the research's unknown sex a tie of an older app named
      * (ResearchLink.sexU, sent as SEX U while the app's stand-in sex stayed)
      * becomes the person's sex 'unknown', and the map goes. A tree in step
-     * with the research before stays in step (its fingerprint follows).
+     * with the research before stays in step (its fingerprint follows). The
+     * kept copies of the research's version change the same way (N30).
      */
-    private dropLegacySexU(id: TreeId, tree: TreeMetadata, data: StromData): StromData {
+    private async dropLegacySexU(id: TreeId, tree: TreeMetadata, data: StromData): Promise<StromData> {
         const { sexU, ...link } = tree.research as ResearchLink & { sexU?: unknown };
         const next = unknownSexFromTie(data, sexU);
         if (next && link.fingerprint && link.fingerprint === fingerprintLike(data, link.fingerprint)) {
@@ -590,9 +592,10 @@ class TreeManagerClass {
         }
         tree.research = link;
         this.saveIndex();
-        if (!next) return data;
-        this.saveTreeData(id, next);
-        return next;
+        if (next) this.saveTreeData(id, next);
+        // Before the tree is shown: its changes per person are read against the copy.
+        await unknownSexInResearchCopies(id, sexU);
+        return next ?? data;
     }
 
     private async readTreeRecord(id: TreeId): Promise<TreeReadResult> {

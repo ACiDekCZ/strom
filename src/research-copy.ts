@@ -10,6 +10,7 @@ import { StromData } from './types.js';
 import { normalizeSingleParents } from './single-parent.js';
 import { saveBaseline, loadBaseline, deleteBaselinesForTree } from './share-baselines.js';
 import { baseCopy } from './research-changes.js';
+import { unknownSexFromTie } from './research-link.js';
 
 const key = (treeId: string): string => `research-base:${treeId}`;
 /** The copy before the last written send replaced it (a send taken back puts the research there again). */
@@ -69,6 +70,24 @@ export async function loadResearchPrevCopy(treeId: string, fp: string): Promise<
         return base;
     } catch {
         return null;
+    }
+}
+
+/**
+ * Data version 12 for the kept copies (N30): the research's unknown sex that
+ * a tie of an older app named (`sexU`) becomes 'unknown' in them as in the
+ * tree (unknownSexFromTie), so the changes per person do not show the guessed
+ * sexes as the user's. Each copy keeps the fingerprint it stands for.
+ */
+export async function unknownSexInResearchCopies(treeId: string, sexU: unknown): Promise<void> {
+    for (const k of [key(treeId), prevKey(treeId)]) {
+        try {
+            const kept = await loadBaseline(k) as KeptCopy | null;
+            const next = kept ? unknownSexFromTie(kept, sexU) as KeptCopy | null : null;
+            if (next) await saveBaseline(k, k, next, Date.now());
+        } catch (err) {
+            console.warn('Converting the kept research version failed', err);
+        }
     }
 }
 

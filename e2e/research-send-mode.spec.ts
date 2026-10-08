@@ -556,6 +556,31 @@ test('a tie of an older app (research.sexU, the guessed sexes): who still has th
     await expect.poll(() => sexOf('Jan')).toBe('unknown');
 });
 
+test('a tie of an older app with changes not sent yet: the kept research version turns Unknown too, so What will be sent lists only the real edit (N30)', async ({ page }) => {
+    const { openResearch, fakeBridge, poll, editJan } = await import('./research-bridge.js');
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openResearch(page);
+    await fakeBridge(page, { accepts: { mode: 'research', sync: { auto: 'off' }, sources: true, verified: true, media: null } });
+    await poll(page);
+    // In step: the research's version is kept as the copy the changes are read against.
+    expect(await page.evaluate(async () => (await window.Strom.UI.researchChangesReady())?.length ?? null)).toBe(0);
+    // As an older app kept it: Josef's and Jan's sexes the stand-ins for the research's U; Jan edited, not sent.
+    await page.evaluate(() => {
+        const tm = window.Strom.TreeManager;
+        tm.patchResearchLink(tm.getActiveTreeId()!, { sexU: { P0001: 'male', P0003: 'male' } } as never);
+    });
+    await editJan(page, 'Brno');
+    await page.waitForTimeout(300);
+    await page.reload();
+    await expect(page.locator('html')).not.toHaveClass(/app-loading/);
+    const sexOf = (name: string) => page.evaluate((n) => (Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.firstName === n) as any).gender, name);
+    await expect.poll(() => sexOf('Josef')).toBe('unknown');
+    expect(await sexOf('Jan')).toBe('unknown');
+    // Only Jan's birth place: no sex change the user never made.
+    const changes = await page.evaluate(async () => (await window.Strom.UI.researchChangesReady())?.map(c => `${c.name}: ${c.kinds.join(',')}`) ?? null);
+    expect(changes).toEqual(['Jan Víšek: birth']);
+});
+
 test('"Send, then load" where the research takes nothing new: said so (never "the same tree"), its newer version loads, asked first (N60-4)', async ({ page }) => {
     const { openResearch, fakeBridge, poll, editJan, researchGed, NEW_HEAD } = await import('./research-bridge.js');
     await page.setViewportSize({ width: 1440, height: 900 });
