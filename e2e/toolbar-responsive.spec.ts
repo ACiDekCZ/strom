@@ -273,20 +273,78 @@ test.describe('view switcher — monotonic, in-viewport, ghost ⋯ (cs-CZ, stres
  * A tree tied to a research adds the Research button (with its count) left of
  * Actions: in the widest labels (cs, de) the toolbar still keeps every child
  * whole between 1025 and 1280 px, the button and the view tabs clickable.
+ * Above 1280 px (B15-1) the Actions label and the standalone ⚙ come back and
+ * in de the full "＋ Person hinzufügen" no longer fits up to ~1360 px: the add
+ * button folds to ＋ by measurement, so it is never cut at the window edge and
+ * the tree switcher never slides under the search field.
  */
-for (const locale of ['cs-CZ', 'de-DE']) {
+const RESEARCH_LABEL: Record<string, string> = { 'cs-CZ': 'Výzkum', 'de-DE': 'Forschung', 'en-US': 'Research' };
+
+async function openConnectedResearch(page: Page, locale: string): Promise<void> {
+    await openResearch(page, { edit: true });
+    await fakeBridge(page, { accepts: { mode: 'research', sync: { auto: 'write' }, sources: true, verified: true, media: null },
+        links: ['send', 'open', 'live', 'app', 'setup', 'chat'], waiting: [{ id: 'T0001', what: 'A question' }, { id: 'T0002', what: 'Another' }] });
+    await poll(page);
+    await page.evaluate(() => window.Strom.UI.refreshActionMenuBadges());
+    await expect(page.locator('#research-menu-signal')).toHaveText('2');
+    await expect(page.locator('#research-menu-btn .research-menu-label')).toHaveText(RESEARCH_LABEL[locale]);
+}
+
+/** The add button and the tree switcher against the toolbar and the search field. */
+async function probeFit(page: Page) {
+    return page.evaluate(() => {
+        const tb = document.querySelector('.toolbar') as HTMLElement;
+        const tr = tb.getBoundingClientRect();
+        const add = document.querySelector('.toolbar .btn-add-person') as HTMLElement;
+        const ar = add.getBoundingClientRect();
+        const hit = document.elementFromPoint(ar.left + ar.width / 2, ar.top + ar.height / 2);
+        const label = add.querySelector('.btn-add-label') as HTMLElement;
+        const lr = label.getBoundingClientRect();
+        const pill = document.querySelector('.toolbar .tree-switcher-btn') as HTMLElement;
+        const pr = pill.getBoundingClientRect();
+        const sw = (document.querySelector('.toolbar .tree-switcher') as HTMLElement).getBoundingClientRect();
+        const search = (document.querySelector('.toolbar .search-container') as HTMLElement).getBoundingClientRect();
+        return {
+            // The toolbar holds its content: nothing scrolls past its edge.
+            overflow: tb.scrollWidth - tb.clientWidth,
+            // The add button lies wholly inside the toolbar and is clickable.
+            addInside: ar.left >= tr.left - 1 && ar.right <= tr.right + 1,
+            addHit: !!hit && (hit === add || add.contains(hit)),
+            // Its label is either shown whole or folded away (＋ alone), never cut.
+            labelWhole: lr.width <= 1 || (lr.right <= ar.right + 1 && label.scrollWidth <= label.clientWidth + 1),
+            addName: add.getAttribute('title') ?? '',
+            // The switcher pill stays inside its slot and clear of the search field.
+            pillInSlot: pr.right <= sw.right + 1,
+            pillClearOfSearch: pr.right <= search.left + 1,
+        };
+    });
+}
+
+for (const locale of ['cs-CZ', 'de-DE', 'en-US']) {
     test.describe(`a research tree's toolbar (${locale})`, () => {
         test.use({ locale });
 
+        test('1281–1400 px: the add button is never cut, the tree switcher stays clear of the search field', async ({ page }) => {
+            await page.setViewportSize({ width: 1400, height: 850 });
+            await openConnectedResearch(page, locale);
+            const widths = [1281, 1290, 1300, 1310, 1320, 1330, 1340, 1344, 1350, 1360, 1370, 1380, 1390, 1400];
+            // Shrinking and growing again: the result depends on the width alone.
+            for (const w of [...widths].reverse().concat(widths)) {
+                await page.setViewportSize({ width: w, height: 850 });
+                await page.waitForTimeout(60);
+                const s = await probe(page);
+                expect(s.clipped, `@${w}px: no clipped toolbar children`).toEqual([]);
+                const f = await probeFit(page);
+                expect(f.overflow, `@${w}px: the toolbar does not overflow`).toBeLessThanOrEqual(0);
+                expect({ addInside: f.addInside, addHit: f.addHit, labelWhole: f.labelWhole, pillInSlot: f.pillInSlot, pillClearOfSearch: f.pillClearOfSearch },
+                    `@${w}px`).toEqual({ addInside: true, addHit: true, labelWhole: true, pillInSlot: true, pillClearOfSearch: true });
+                expect(f.addName, `@${w}px: the add button keeps its name`).not.toBe('');
+            }
+        });
+
         test('1025–1280 px: nothing clips, the Research button and the view tabs stay whole and hit-testable', async ({ page }) => {
             await page.setViewportSize({ width: 1280, height: 850 });
-            await openResearch(page, { edit: true });
-            await fakeBridge(page, { accepts: { mode: 'research', sync: { auto: 'write' }, sources: true, verified: true, media: null },
-                links: ['send', 'open', 'live', 'app', 'setup', 'chat'], waiting: [{ id: 'T0001', what: 'A question' }, { id: 'T0002', what: 'Another' }] });
-            await poll(page);
-            await page.evaluate(() => window.Strom.UI.refreshActionMenuBadges());
-            await expect(page.locator('#research-menu-signal')).toHaveText('2');
-            await expect(page.locator('#research-menu-btn .research-menu-label')).toHaveText(locale === 'cs-CZ' ? 'Výzkum' : 'Forschung');
+            await openConnectedResearch(page, locale);
             for (let w = 1280; w >= 1025; w -= 15) {
                 await page.setViewportSize({ width: w, height: 850 });
                 await page.waitForTimeout(40);

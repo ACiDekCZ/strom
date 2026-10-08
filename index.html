@@ -190,6 +190,8 @@
            content-driven exceptions inside a band:
              ≤ 1120px   squeeze band: fold the toolbar Undo/Redo pair.
              ≤ 1280px   fold the "Actions" label and standalone ⚙ into ⋯.
+             measured   "＋ Add person" folds to ＋ wherever the toolbar does not
+                        hold its full labels (src/ui/toolbar-fit.ts).
              641–768px  lower tablet band: squeeze the inline focus/search.
              641–900px  inline depth steppers use ↑ / ↓ glyphs.
              ≤ 360px    the narrowest phones: smaller labels.
@@ -504,6 +506,14 @@
         @media (min-width: 1180px) and (max-width: 1280px) {
             body.research-actions .btn-add-person { padding-left: 10px; padding-right: 10px; }
             body.research-actions .btn-add-person .btn-add-label {
+                position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+            }
+        }
+        /* Any desktop width where the toolbar, measured with the full label, does not
+           hold its controls (src/ui/toolbar-fit.ts sets the class): ＋ alone as well. */
+        @media (min-width: 1025px) {
+            .toolbar.toolbar-add-compact .btn-add-person { padding-left: 10px; padding-right: 10px; }
+            .toolbar.toolbar-add-compact .btn-add-person .btn-add-label {
                 position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
             }
         }

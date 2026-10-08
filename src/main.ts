@@ -14,6 +14,7 @@ import { SettingsManager } from './settings.js';
 import { AuditLogManager } from './audit-log.js';
 import { TreePreview, TreeCompare } from './tree-preview.js';
 import { initModalSkeleton } from './ui/modal-skeleton.js';
+import { initToolbarFit } from './ui/toolbar-fit.js';
 import { DebugOptions, DebugStep, DebugPhase } from './layout/pipeline/debug-types.js';
 import { CryptoSession } from './crypto.js';
 import { AppMode, APP_VERSION, TreeId } from './types.js';
@@ -357,6 +358,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Initialize tree switcher
     UI.initTreeSwitcher();
+
+    // The add button folds to ＋ where the desktop toolbar does not fit its labels
+    initToolbarFit();
 
     // Set debug options before rendering
     if (debugOptions.enabled) {
