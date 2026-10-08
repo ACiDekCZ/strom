@@ -15,6 +15,8 @@ import {
     PartnershipId,
     PartnershipStatus,
     Gender,
+    GENDERS,
+    isGender,
     LifeEvent,
     Story,
     RelationType,
@@ -127,7 +129,8 @@ export const personModalMethods = uiModule({
         if (lifelineAdd) lifelineAdd.style.display = 'none';
         firstNameInput.value = '';
         lastNameInput.value = '';
-        genderSelect.value = 'male';
+        // A new person on their own (the first one, Add person): the sex is not known until it is set.
+        genderSelect.value = 'unknown';
         if (birthDateInput) birthDateInput.value = '';
         if (birthPlaceInput) birthPlaceInput.value = '';
         if (deathDateInput) deathDateInput.value = '';
@@ -159,7 +162,7 @@ export const personModalMethods = uiModule({
 
         // Snapshot original values (all empty for add)
         this.personModalSnapshot = {
-            firstName: '', lastName: '', gender: 'male',
+            firstName: '', lastName: '', gender: 'unknown',
             birthDate: '', birthPlace: '', deathDate: '', deathPlace: '', notes: '',
             nameVariants: '', refn: '', question: '',
             occupation: '', residence: '',
@@ -283,7 +286,7 @@ export const personModalMethods = uiModule({
     },
 
     /**
-     * Gender is edited through a Male/Female segment, but the underlying
+     * Gender is edited through a Male/Female/Unknown segment, but the underlying
      * <select id="input-gender"> stays in the DOM (visually hidden, still
      * focusable/selectable) so every script and e2e test that reads or sets it
      * keeps working. Clicking a segment button drives the select and fires a
@@ -362,9 +365,9 @@ export const personModalMethods = uiModule({
     updateHeaderAvatar(): void {
         const avatar = document.getElementById('pm-avatar');
         if (!avatar) return;
-        const gender = (document.getElementById('input-gender') as HTMLSelectElement | null)?.value || 'male';
-        avatar.classList.toggle('female', gender === 'female');
-        avatar.classList.toggle('male', gender !== 'female');
+        const value = (document.getElementById('input-gender') as HTMLSelectElement | null)?.value;
+        const gender = isGender(value) ? value : 'unknown';
+        for (const g of GENDERS) avatar.classList.toggle(g, g === gender);
         const first = (document.getElementById('input-firstname') as HTMLInputElement | null)?.value.trim() || '';
         const last = (document.getElementById('input-lastname') as HTMLInputElement | null)?.value.trim() || '';
         const photo = (document.querySelector('#photo-preview img') as HTMLImageElement | null)?.getAttribute('src');
@@ -1253,7 +1256,7 @@ export const personModalMethods = uiModule({
 
         const firstName = firstNameInput?.value.trim() || '';
         const lastName = lastNameInput?.value.trim() || '';
-        const gender = (genderSelect?.value || 'male') as Gender;
+        const gender: Gender = isGender(genderSelect?.value) ? genderSelect.value as Gender : 'unknown';
         const birthDate = normalizeDateInput(birthDateInput?.value || '');
         const birthPlace = birthPlaceInput?.value.trim() || '';
         const deathDate = normalizeDateInput(deathDateInput?.value || '');
@@ -1453,7 +1456,7 @@ export const personModalMethods = uiModule({
         const s = this.personModalSnapshot;
         const firstName = (document.getElementById('input-firstname') as HTMLInputElement)?.value || '';
         const lastName = (document.getElementById('input-lastname') as HTMLInputElement)?.value || '';
-        const gender = (document.getElementById('input-gender') as HTMLSelectElement)?.value || 'male';
+        const gender = (document.getElementById('input-gender') as HTMLSelectElement)?.value || 'unknown';
         const birthDate = (document.getElementById('input-birthdate') as HTMLInputElement)?.value || '';
         const birthPlace = (document.getElementById('input-birthplace') as HTMLInputElement)?.value || '';
         const deathDate = (document.getElementById('input-deathdate') as HTMLInputElement)?.value || '';

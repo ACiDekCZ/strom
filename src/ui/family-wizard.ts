@@ -11,7 +11,7 @@ import { DataManager } from '../data.js';
 import { isPurePlaceholder } from '../single-parent.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings } from '../strings.js';
-import { PersonId, Gender, FamilyWizardMember, FamilyWizardSpec } from '../types.js';
+import { PersonId, Gender, FamilyWizardMember, FamilyWizardSpec, isGender, oppositeGender } from '../types.js';
 import { findSimilarPersons } from '../merge/matching.js';
 import { normalizeDateInput } from '../dates.js';
 import { uiModule } from './module.js';
@@ -48,9 +48,10 @@ export const familyWizardMethods = uiModule({
         document.getElementById('family-wizard-anchor')!.textContent = fw.aroundName(shownNameOrEmpty(anchor));
         document.getElementById('wiz-parents')!.innerHTML =
             this.wizardRowHtml('father', 'male', surname) + this.wizardRowHtml('mother', 'female', surname);
-        document.getElementById('wiz-partner')!.innerHTML = this.wizardRowHtml('partner', 'female', '');
-        document.getElementById('wiz-siblings')!.innerHTML = this.wizardRowHtml('sibling', 'male', surname);
-        document.getElementById('wiz-children')!.innerHTML = this.wizardRowHtml('child', 'male', surname);
+        // A partner the opposite of a person of known sex; siblings and children unknown until set (U01).
+        document.getElementById('wiz-partner')!.innerHTML = this.wizardRowHtml('partner', oppositeGender(anchor.gender), '');
+        document.getElementById('wiz-siblings')!.innerHTML = this.wizardRowHtml('sibling', 'unknown', surname);
+        document.getElementById('wiz-children')!.innerHTML = this.wizardRowHtml('child', 'unknown', surname);
 
         document.getElementById('family-wizard-modal')!.classList.add('active');
         this.wireFamilyWizardOnce();
@@ -158,6 +159,7 @@ export const familyWizardMethods = uiModule({
             <select class="wiz-gender">
                 <option value="male"${gender === 'male' ? ' selected' : ''}>${strings.gender.male}</option>
                 <option value="female"${gender === 'female' ? ' selected' : ''}>${strings.gender.female}</option>
+                <option value="unknown"${gender === 'unknown' ? ' selected' : ''}>${strings.gender.unknown}</option>
             </select>
             <input class="wiz-birth" type="text" placeholder="${fw.year}">
             ${kind === 'partner' ? `<input class="wiz-wedding" type="text" placeholder="${fw.weddingYear}">` : ''}
@@ -171,7 +173,7 @@ export const familyWizardMethods = uiModule({
         const anchor = this.wizardAnchorId ? DataManager.getPerson(this.wizardAnchorId) : null;
         const surname = anchor?.lastName ?? '';
         const container = document.getElementById(kind === 'sibling' ? 'wiz-siblings' : 'wiz-children');
-        container?.insertAdjacentHTML('beforeend', this.wizardRowHtml(kind, 'male', surname));
+        container?.insertAdjacentHTML('beforeend', this.wizardRowHtml(kind, 'unknown', surname));
     },
 
     /** Read one row into a member (empty rows collapse to a blank member). */
@@ -188,13 +190,14 @@ export const familyWizardMethods = uiModule({
         // relative).
         if (!existingId && !val('.wiz-first') && !birth && !wedding
             && val('.wiz-last') === (row.dataset.defaultLast ?? '').trim()) {
-            return { firstName: '', lastName: '', gender: 'male' };
+            return { firstName: '', lastName: '', gender: 'unknown' };
         }
         return {
             ...(existingId ? { existingId } : {}),
             firstName: val('.wiz-first'),
             lastName: val('.wiz-last'),
-            gender: ((row.querySelector('.wiz-gender') as HTMLSelectElement | null)?.value as Gender) ?? 'male',
+            gender: isGender((row.querySelector('.wiz-gender') as HTMLSelectElement | null)?.value)
+                ? (row.querySelector('.wiz-gender') as HTMLSelectElement).value as Gender : 'unknown',
             ...(birth ? { birthDate: birth } : {}),
             ...(wedding ? { weddingDate: wedding } : {}),
         };

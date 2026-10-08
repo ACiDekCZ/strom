@@ -140,11 +140,11 @@ export const anniversariesUiMethods = uiModule({
     onThisDayText(ev: OnThisDayEvent, persons: (Person | undefined)[]): string {
         const a = strings.anniversaries;
         const ago = a.yearsAgo(ev.years);
-        const female = persons[0]?.gender === 'female';
+        const sex = persons[0]?.gender;
         const n1 = personName(persons[0]);
         switch (ev.type) {
-            case 'birth': return a.otdBirth(n1, ago, female);
-            case 'death': return a.otdDeath(n1, ago, female);
+            case 'birth': return a.otdBirth(n1, ago, sex);
+            case 'death': return a.otdDeath(n1, ago, sex);
             case 'wedding': return a.otdWedding(n1, personName(persons[1]), ago);
         }
     },

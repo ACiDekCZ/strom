@@ -72,20 +72,21 @@ export function personModal(page: Page): Locator {
     return page.locator('#person-modal');
 }
 
-/** Fill and save the add-person form (modal must already be open). */
+/**
+ * Fill and save the add-person form (modal must already be open). The sex is
+ * male unless `gender` says otherwise (a new person starts as unknown, U01).
+ */
 export async function fillPerson(
     page: Page,
     firstName: string,
     lastName: string,
-    opts: { gender?: 'male' | 'female'; birthDate?: string; birthPlace?: string } = {}
+    opts: { gender?: 'male' | 'female' | 'unknown'; birthDate?: string; birthPlace?: string } = {}
 ): Promise<void> {
     const modal = personModal(page);
     await expect(modal).toBeVisible();
     await modal.locator('#input-firstname').fill(firstName);
     await modal.locator('#input-lastname').fill(lastName);
-    if (opts.gender === 'female') {
-        await modal.locator('#input-gender').selectOption('female');
-    }
+    await modal.locator('#input-gender').selectOption(opts.gender ?? 'male');
     if (opts.birthDate !== undefined) {
         await modal.locator('#input-birthdate').fill(opts.birthDate);
     }
@@ -100,7 +101,7 @@ export async function createFirstPerson(
     page: Page,
     firstName: string,
     lastName: string,
-    opts: { gender?: 'male' | 'female'; birthDate?: string; birthPlace?: string } = {}
+    opts: { gender?: 'male' | 'female' | 'unknown'; birthDate?: string; birthPlace?: string } = {}
 ): Promise<void> {
     const addFirst = page.locator('#empty-state .empty-state-actions button').first();
     if (await addFirst.isVisible().catch(() => false)) {
@@ -195,23 +196,27 @@ export async function focusViaSearch(page: Page, firstName: string): Promise<voi
     await expect(card(page, firstName)).toHaveClass(/focused/);
 }
 
-/** Add a related person (parent/partner/child/sibling) via the relation modal. */
+/**
+ * Add a related person (parent/partner/child/sibling) via the relation modal.
+ * Without `gender`: a parent or partner keeps the dialog's choice (the other
+ * parent's / partner's opposite), a child or sibling is male (the dialog
+ * starts them as unknown, U01).
+ */
 export async function addRelation(
     page: Page,
     fromName: string,
     action: 'parent' | 'partner' | 'child' | 'sibling',
     firstName: string,
     lastName: string,
-    gender?: 'male' | 'female'
+    gender?: 'male' | 'female' | 'unknown'
 ): Promise<void> {
     await cardAction(page, fromName, action);
     const modal = page.locator('#relation-modal');
     await expect(modal).toBeVisible();
     await modal.locator('#rel-firstname').fill(firstName);
     await modal.locator('#rel-lastname').fill(lastName);
-    if (gender === 'female') {
-        await modal.locator('#rel-gender').selectOption('female');
-    }
+    const sex = gender ?? (action === 'child' || action === 'sibling' ? 'male' : undefined);
+    if (sex) await modal.locator('#rel-gender').selectOption(sex);
     await modal.locator('#rel-submit-btn').click();
     await expect(modal).toBeHidden();
 }

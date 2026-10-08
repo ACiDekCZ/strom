@@ -201,6 +201,7 @@ function buildCurrentPoster(): PosterBuild | null {
             focusId: TreeRenderer.getFocusPersonId(),
             maleColor: rootStyle.getPropertyValue('--male').trim() || '#5b7f9e',
             femaleColor: rootStyle.getPropertyValue('--female').trim() || '#a1706e',
+            unknownColor: rootStyle.getPropertyValue('--unknown').trim() || '#857d6c',
         }, meta);
         const geom = timelinePosterGeometry(model, true);
         return { svg, widthPx: geom.width, heightPx: geom.height, hasContent: geom.hasContent };

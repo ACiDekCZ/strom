@@ -39,7 +39,7 @@ function v10Tree(version = 10): Record<string, unknown> {
     };
 }
 
-test('a 3.8.1 (v10) JSON tree imports with everything kept and is stored as v11', async ({ page }) => {
+test('a 3.8.1 (v10) JSON tree imports with everything kept and is stored as the current version (v12 since 3.10)', async ({ page }) => {
     await openApp(page);
     await page.locator('#file-input').setInputFiles({ name: 'strom-381.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(v10Tree())) });
 
@@ -65,7 +65,7 @@ test('a 3.8.1 (v10) JSON tree imports with everything kept and is stored as v11'
         };
     });
     expect(stored).toEqual({
-        version: 11, persons: 3, partnerships: 1, photo: true, events: 1, attachments: 1, birthSources: ['s1'],
+        version: 12, persons: 3, partnerships: 1, photo: true, events: 1, attachments: 1, birthSources: ['s1'],
         coupleEvents: 1, coupleSources: ['s1'], excerpts: 1, transcript: 'Jan a Marie oddani',
     });
     await expect(page.locator('.person-card').first()).toBeVisible();
@@ -80,7 +80,7 @@ test('newer data embedded in an HTML file opens read-only, its import disabled',
 
     const modal = page.locator('#newer-version-viewmode-modal');
     await expect(modal).toBeVisible();
-    await expect(modal.locator('#viewmode-your-version')).toHaveText('11');
+    await expect(modal.locator('#viewmode-your-version')).toHaveText('12');
     await expect(modal.locator('#viewmode-data-version')).toHaveText('99');
     await modal.getByRole('button', { name: 'View only (read-only)' }).click();
 

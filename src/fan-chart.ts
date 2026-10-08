@@ -122,10 +122,12 @@ const FAN_LIGHT_STYLE =
     '.fan-sector path{stroke:#888;stroke-width:1}'
     + '.fan-sector.male path{fill:#e3f2fd}'
     + '.fan-sector.female path{fill:#fce4ec}'
+    + '.fan-sector.unknown path{fill:#efece6}'
     + '.fan-sector.fan-nonbio path{stroke-dasharray:5 3}'
     + '.fan-focus circle{stroke:#5a9a5a;stroke-width:2}'
     + '.fan-focus.male circle{fill:#e3f2fd}'
     + '.fan-focus.female circle{fill:#fce4ec}'
+    + '.fan-focus.unknown circle{fill:#efece6}'
     + '.fan-name{fill:#333;font-weight:600}'
     + '.fan-years{fill:#666;font-weight:400}'
     + '.fan-name.g0{font-size:14px}.fan-years.g0{font-size:11px}'
@@ -246,7 +248,8 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
         if (!s.person) {
             if (!opts.editable) continue;
             const [px, py] = pt(cx, cy, (r1 + r2) / 2, mid);
-            parts.push(`<g class="fan-sector fan-empty" data-fan-add="${esc(s.childId)}">`
+            // The father's sector (even Kekulé number) adds a man, the mother's a woman.
+            parts.push(`<g class="fan-sector fan-empty" data-fan-add="${esc(s.childId)}" data-fan-add-gender="${s.ahnentafel % 2 === 0 ? 'male' : 'female'}">`
                 + `<path d="${path}"/>`
                 + `<text x="${fmt(px)}" y="${fmt(py)}" class="fan-plus">+</text>`
                 + `<title>${esc(opts.addParentLabel)}</title></g>`);
@@ -256,7 +259,7 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
         const p = s.person;
         const name = shownName(p);
         const years = yearsOf(p);
-        const gcls = p.gender === 'female' ? 'female' : 'male';
+        const gcls = p.gender;
         let textSvg = '';
 
         if (s.generation <= 2) {
@@ -351,7 +354,7 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
     // Focus disc at the fan's center bottom.
     const fname = shownName(model.focus);
     const fyears = yearsOf(model.focus);
-    const fcls = model.focus.gender === 'female' ? 'female' : 'male';
+    const fcls = model.focus.gender;
     parts.push(`<g class="fan-focus ${fcls}" data-fan-person="${esc(model.focus.id)}">`
         + `<circle cx="${fmt(cx)}" cy="${fmt(cy)}" r="${FOCUS_R}"/>`
         + `<text x="${fmt(cx)}" y="${fmt(cy - 6)}" text-anchor="middle" class="fan-name g0">${esc(truncate(fname, 18))}</text>`

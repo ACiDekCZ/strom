@@ -14,7 +14,7 @@ import {
     PersonId,
     PartnershipId,
     PartnershipStatus,
-    Gender,
+    Gender, isGender, oppositeGender,
     RelationType,
     RelationContext,
     StromData,
@@ -48,11 +48,11 @@ import { chainLinkSvg } from '../icons.js';
 import { shownNameOrEmpty } from '../person-name.js';
 export const relationModalMethods = uiModule({
     // ---- RELATION MODAL ----
-    addRelation(personId: PersonId, relationType: RelationType): void {
+    addRelation(personId: PersonId, relationType: RelationType, gender?: Gender): void {
         const person = DataManager.getPerson(personId);
         if (!person || DataManager.isReadOnly()) return;
 
-        this.relationContext = { personId, relationType };
+        this.relationContext = { personId, relationType, ...(gender ? { gender } : {}) };
 
         // For child with single partner: pre-select (combo in modal allows changing)
         if (relationType === 'child') {
@@ -64,6 +64,26 @@ export const relationModalMethods = uiModule({
         }
 
         this.showRelationModal();
+    },
+
+    /**
+     * The sex a new relative starts with (U01): the slot's when the caller
+     * names one (the fan's father / mother sector); a parent the opposite of
+     * the other parent's (the father first when there is none); a partner the
+     * opposite of a person of known sex; anyone else (a child, a sibling, the
+     * partner of a person of unknown sex) unknown until it is set.
+     */
+    newRelativeGender(context: RelationContext): Gender {
+        if (context.gender) return context.gender;
+        const person = DataManager.getPerson(context.personId);
+        if (context.relationType === 'partner') return oppositeGender(person?.gender);
+        if (context.relationType === 'parent') {
+            // The "?" stand-in of the missing parent is no parent to be opposite to.
+            const parents = (person?.parentIds ?? []).map(pid => DataManager.getPerson(pid)).filter((p): p is Person => !!p && !p.isPlaceholder);
+            if (parents.length === 0) return 'male';
+            return parents.length === 1 ? oppositeGender(parents[0].gender) : 'unknown';
+        }
+        return 'unknown';
     },
 
     showRelationModal(): void {
@@ -172,23 +192,7 @@ export const relationModalMethods = uiModule({
         (document.getElementById('rel-firstname') as HTMLInputElement).value = '';
         (document.getElementById('rel-lastname') as HTMLInputElement).value = '';
 
-        // Smart gender pre-fill based on relation context
-        if (this.relationContext.relationType === 'partner') {
-            // Partner: opposite gender
-            const sourcePerson = DataManager.getPerson(this.relationContext.personId);
-            genderSelect.value = sourcePerson?.gender === 'male' ? 'female' : 'male';
-        } else if (this.relationContext.relationType === 'parent') {
-            // Parent: if one parent exists, pre-fill opposite gender
-            const child = DataManager.getPerson(this.relationContext.personId);
-            const existingParents = child ? child.parentIds.map(pid => DataManager.getPerson(pid)).filter(Boolean) : [];
-            if (existingParents.length === 1 && existingParents[0]) {
-                genderSelect.value = existingParents[0].gender === 'male' ? 'female' : 'male';
-            } else {
-                genderSelect.value = 'male';
-            }
-        } else {
-            genderSelect.value = 'male';
-        }
+        genderSelect.value = this.newRelativeGender(this.relationContext);
 
         // Reset date and place fields
         (document.getElementById('rel-birthdate') as HTMLInputElement).value = '';
@@ -379,7 +383,8 @@ export const relationModalMethods = uiModule({
             // Create new person
             const firstName = (document.getElementById('rel-firstname') as HTMLInputElement)?.value.trim() || '';
             const lastName = (document.getElementById('rel-lastname') as HTMLInputElement)?.value.trim() || '';
-            const gender = ((document.getElementById('rel-gender') as HTMLSelectElement)?.value || 'male') as Gender;
+            const genderValue = (document.getElementById('rel-gender') as HTMLSelectElement)?.value;
+            const gender: Gender = isGender(genderValue) ? genderValue : 'unknown';
             // Flex-date normalization mirrors the person modal: null means the
             // text did not parse — block the save and point the user back.
             const birthDateRaw = normalizeDateInput((document.getElementById('rel-birthdate') as HTMLInputElement)?.value || '');
@@ -510,7 +515,7 @@ export const relationModalMethods = uiModule({
                         }
                     }
                 } else if (freeSlot) {
-                    const placeholderGender: Gender = person.gender === 'male' ? 'female' : 'male';
+                    const placeholderGender: Gender = oppositeGender(person.gender);
                     const placeholder = DataManager.createPerson({
                         firstName: '?',
                         lastName: '',

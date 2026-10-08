@@ -93,9 +93,10 @@
             --pending: #d0a23c;       /* unfinished merge state (dashed) */
             --chart-soft: #c9d8cc;    /* lighter shade for single-hue charts */
 
-            /* gender (avatar ring only) */
+            /* gender (avatar ring only); unknown: a sex the records do not give */
             --male: #5b7f9e;
             --female: #a1706e;
+            --unknown: #857d6c;
             --avatar-bg: #f0e9da;
 
             /* branches (logic unchanged) */
@@ -141,6 +142,7 @@
             --placeholder-border: var(--border);
             --male-border: color-mix(in srgb, var(--male) 65%, #000);
             --female-border: color-mix(in srgb, var(--female) 65%, #000);
+            --unknown-border: color-mix(in srgb, var(--unknown) 65%, #000);
 
             /* research edge (above the cards where the tree ends) */
             --edge-held: #d6cdb9;
@@ -206,6 +208,7 @@
 
             --male: #7da3c4;
             --female: #c49290;
+            --unknown: #a39a88;
             --avatar-bg: #3a362c;
 
             --border: #3e3a30;
@@ -1070,6 +1073,7 @@
         }
         .legend-ring-male { border: 2px solid var(--male); }
         .legend-ring-female { border: 2px solid var(--female); }
+        .legend-ring-unknown { border: 2px solid var(--unknown); }
         /* Branch swatches: an inline sub-group, shown only with branch colours. */
         .branch-legend-group { display: none; align-items: center; gap: 14px; }
         .branch-legend-item { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
@@ -1186,6 +1190,7 @@
         }
         .person-card.male .card-avatar { border-color: var(--male); }
         .person-card.female .card-avatar { border-color: var(--female); }
+        .person-card.unknown .card-avatar { border-color: var(--unknown); }
         .card-avatar img {
             width: 100%;
             height: 100%;
@@ -3156,6 +3161,7 @@
         }
         .tree-thumb-card.male { stroke: var(--male); stroke-width: 1.4; }
         .tree-thumb-card.female { stroke: var(--female); stroke-width: 1.4; }
+        .tree-thumb-card.unknown { stroke: var(--unknown); stroke-width: 1.4; }
         .tree-thumb-card.placeholder { fill: var(--surface-2); stroke-dasharray: 3 2; }
         .tree-thumb-card.focused { stroke: var(--primary); stroke-width: 2; }
 
@@ -3485,6 +3491,7 @@
             box-shadow: 0 0 0 2px var(--male);
         }
         .pm-avatar.female { box-shadow: 0 0 0 2px var(--female); }
+        .pm-avatar.unknown { box-shadow: 0 0 0 2px var(--unknown); }
         [data-theme="dark"] .pm-avatar { background: var(--surface-2); }
         .pm-avatar img { width: 100%; height: 100%; object-fit: cover; }
         .pm-avatar-initials {
@@ -3783,6 +3790,14 @@
         .segment .segment-btn { border-radius: 0; }
         .segment-btn.active { background: var(--primary); color: var(--on-primary); }
         .segment-btn:disabled { cursor: default; opacity: 0.6; }
+        /* Male | Female | Unknown: across the dialog on a phone, a thumb high on touch. */
+        @media (max-width: 640px) {
+            .gender-segment { display: flex; width: 100%; }
+            .gender-segment .segment-btn { flex: 1; min-width: 0; min-height: 44px; padding: 6px 8px; }
+        }
+        @media (pointer: coarse) {
+            .gender-segment .segment-btn { min-height: 44px; }
+        }
 
         /* Register details under an event's date and place (cause, age as
            recorded, house): filled fields show, empty ones wait behind one
@@ -5805,6 +5820,7 @@
         }
         .fan-sector.male path { fill: var(--male); }
         .fan-sector.female path { fill: var(--female); }
+        .fan-sector.unknown path { fill: var(--unknown); }
         /* Adoptive/step/foster parent: dashed like non-biological tree lines. */
         .fan-sector.fan-nonbio path { stroke-dasharray: 5 3; }
         @media (hover: hover) { .fan-sector:hover path { filter: brightness(0.94); } }
@@ -5815,6 +5831,7 @@
         }
         .fan-focus.male circle { fill: var(--male); }
         .fan-focus.female circle { fill: var(--female); }
+        .fan-focus.unknown circle { fill: var(--unknown); }
         .fan-name { fill: var(--text, #222); font-weight: 600; }
         .fan-years { fill: var(--text-light, #777); font-weight: 400; }
         .fan-name.g0 { font-size: 14px; }
@@ -8389,6 +8406,7 @@
             font-size: 12px; color: var(--text-secondary, #666); margin-bottom: 4px;
         }
         .stats-split-labels b { color: var(--text); }
+        .stats-split-note { font-size: 12px; color: var(--text-secondary, #666); margin: -2px 0 4px; }
         .stats-split-bar {
             display: flex; height: 14px; border-radius: 999px; overflow: hidden;
             background: rgba(128,128,128,0.18);
@@ -9094,6 +9112,10 @@
         .tree-preview-card.female {
             border-color: var(--female);
             box-shadow: inset 0 0 0 1px var(--female), var(--shadow-sm);
+        }
+        .tree-preview-card.unknown {
+            border-color: var(--unknown);
+            box-shadow: inset 0 0 0 1px var(--unknown), var(--shadow-sm);
         }
         .tree-preview-card.placeholder {
             background: var(--surface-2);
@@ -12547,6 +12569,10 @@
                 border-color: #e06088 !important;
                 color: #333 !important;
             }
+            .person-card.unknown {
+                border-color: #8c8c8c !important;
+                color: #333 !important;
+            }
             .person-card.placeholder {
                 border: 2px dashed #999 !important;
             }
@@ -12621,6 +12647,7 @@
                         <option value="" data-i18n="searchFilters.anyGender"></option>
                         <option value="male" data-i18n="gender.male"></option>
                         <option value="female" data-i18n="gender.female"></option>
+                        <option value="unknown" data-i18n="gender.unknown"></option>
                     </select>
                     <select id="filter-living" onchange="window.Strom.UI.scheduleSearchFilter()">
                         <option value="" data-i18n="searchFilters.anyStatus"></option>
@@ -12998,6 +13025,7 @@
     <div id="tree-legend" class="tree-legend" style="display:none;">
         <span class="legend-item"><span class="legend-ring legend-ring-male"></span><span data-i18n="gender.male"></span></span>
         <span class="legend-item"><span class="legend-ring legend-ring-female"></span><span data-i18n="gender.female"></span></span>
+        <span class="legend-item" id="legend-unknown" style="display:none;"><span class="legend-ring legend-ring-unknown"></span><span data-i18n="gender.unknown"></span></span>
         <span id="branch-legend" class="branch-legend-group" style="display:none;">
             <span class="branch-legend-item"><span class="branch-swatch swatch-paternal"></span><span data-i18n="branchColors.legendPaternal"></span></span>
             <span class="branch-legend-item"><span class="branch-swatch swatch-maternal"></span><span data-i18n="branchColors.legendMaternal"></span></span>
@@ -13096,10 +13124,12 @@
                     <div class="segment gender-segment" id="gender-segment" role="group">
                         <button type="button" class="segment-btn" data-gender="male" onclick="window.Strom.UI.setGenderFromSegment('male')" data-i18n="gender.male"></button>
                         <button type="button" class="segment-btn" data-gender="female" onclick="window.Strom.UI.setGenderFromSegment('female')" data-i18n="gender.female"></button>
+                        <button type="button" class="segment-btn" data-gender="unknown" onclick="window.Strom.UI.setGenderFromSegment('unknown')" data-i18n="gender.unknown"></button>
                     </div>
                     <select id="input-gender" class="pm-hidden-select" tabindex="-1" aria-hidden="true">
                         <option value="male" data-i18n="gender.male"></option>
                         <option value="female" data-i18n="gender.female"></option>
+                        <option value="unknown" data-i18n="gender.unknown"></option>
                     </select>
                 </div>
             </div>
@@ -13622,6 +13652,7 @@
                     <select id="rel-gender">
                         <option value="male" data-i18n="gender.male"></option>
                         <option value="female" data-i18n="gender.female"></option>
+                        <option value="unknown" data-i18n="gender.unknown"></option>
                     </select>
                 </div>
                 <div id="duplicate-suggest-relation" class="duplicate-suggest" style="display:none;"></div>

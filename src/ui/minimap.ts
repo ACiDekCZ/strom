@@ -186,13 +186,14 @@ export const minimapMethods = uiModule({
         const rootStyle = getComputedStyle(document.documentElement);
         const maleColor = rootStyle.getPropertyValue('--male').trim() || '#5b7f9e';
         const femaleColor = rootStyle.getPropertyValue('--female').trim() || '#a1706e';
+        const unknownColor = rootStyle.getPropertyValue('--unknown').trim() || '#857d6c';
         const frameColor = rootStyle.getPropertyValue('--accent').trim() || '#b0703c';
 
         for (const [id, pos] of positions) {
             const person = data.persons[id];
             const w = Math.max(1, cardWidth * t.scale);
             const h = Math.max(1, (personHeights?.get(id) ?? cardHeight) * t.scale);
-            ctx.fillStyle = person?.gender === 'female' ? femaleColor : maleColor;
+            ctx.fillStyle = person?.gender === 'female' ? femaleColor : person?.gender === 'unknown' ? unknownColor : maleColor;
             ctx.fillRect(pos.x * t.scale + t.offsetX, pos.y * t.scale + t.offsetY, w, h);
         }
 

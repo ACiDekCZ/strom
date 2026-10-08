@@ -307,7 +307,8 @@ test('segment switches in dialogs: square inner buttons, the rounded container c
             clips: getComputedStyle(seg).overflow === 'hidden',
         };
     });
-    expect(m).toEqual({ buttons: ['0px 0px 0px 0px', '0px 0px 0px 0px'], container: true, clips: true });
+    // Male | Female | Unknown (U01)
+    expect(m).toEqual({ buttons: ['0px 0px 0px 0px', '0px 0px 0px 0px', '0px 0px 0px 0px'], container: true, clips: true });
 });
 
 /** Where the person card's footer buttons are (edit mode of a saved person). */

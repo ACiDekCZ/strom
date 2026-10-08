@@ -74,6 +74,7 @@ export const miscMethods = uiModule({
         const realPersons = persons.filter(p => !p.isPlaceholder);
         const men = realPersons.filter(p => p.gender === 'male').length;
         const women = realPersons.filter(p => p.gender === 'female').length;
+        const unknownSex = realPersons.filter(p => p.gender === 'unknown').length;
 
         // Count families (partnerships)
         const families = partnerships.length;
@@ -98,6 +99,7 @@ export const miscMethods = uiModule({
             const parts = [
                 strings.about.stats.persons(realPersons.length),
                 `${men}♂ ${women}♀`,
+                ...(unknownSex > 0 ? [strings.about.stats.unknownSex(unknownSex)] : []),
                 strings.about.stats.families(families),
                 strings.about.stats.generations(generations)
             ];
@@ -129,6 +131,7 @@ export const miscMethods = uiModule({
         let totalPersons = 0;
         let totalMen = 0;
         let totalWomen = 0;
+        let totalUnknown = 0;
         let totalFamilies = 0;
 
         for (const tree of trees) {
@@ -139,6 +142,7 @@ export const miscMethods = uiModule({
             totalPersons += persons.length;
             totalMen += persons.filter(p => p.gender === 'male').length;
             totalWomen += persons.filter(p => p.gender === 'female').length;
+            totalUnknown += persons.filter(p => p.gender === 'unknown').length;
             totalFamilies += Object.keys(treeData.partnerships).length;
         }
 
@@ -146,6 +150,7 @@ export const miscMethods = uiModule({
             strings.about.stats.trees(trees.length),
             strings.about.stats.persons(totalPersons),
             `${totalMen}♂ ${totalWomen}♀`,
+            ...(totalUnknown > 0 ? [strings.about.stats.unknownSex(totalUnknown)] : []),
             strings.about.stats.families(totalFamilies)
         ];
 
@@ -438,6 +443,11 @@ export const miscMethods = uiModule({
             const hasPersons = DataManager.getAllPersons().length > 0;
             treeLegend.style.display = (cardsShown && hasPersons
                 && SettingsManager.isBranchLegendEnabled()) ? 'flex' : 'none';
+        }
+        // The ring of an unknown sex is explained only when such a person is in view.
+        const unknownItem = document.getElementById('legend-unknown');
+        if (unknownItem) {
+            unknownItem.style.display = document.querySelector('#tree-canvas .person-card.unknown') ? '' : 'none';
         }
         const legend = document.getElementById('branch-legend');
         if (legend) {

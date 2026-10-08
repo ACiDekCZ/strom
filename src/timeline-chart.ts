@@ -30,6 +30,7 @@ const PAD_R = 16;
  */
 const FALLBACK_MALE = '#5b7f9e';
 const FALLBACK_FEMALE = '#a1706e';
+const FALLBACK_UNKNOWN = '#857d6c';
 
 /**
  * Light-theme timeline colours as concrete values, mirroring the `.tl-*` rules
@@ -66,6 +67,8 @@ export interface TimelineSvgOptions {
     maleColor?: string;
     /** Female life-bar fill. Screen: 'var(--female)'. Poster: resolved hex. */
     femaleColor?: string;
+    /** Life-bar fill for a sex the records do not give. Screen: 'var(--unknown)'. Poster: resolved hex. */
+    unknownColor?: string;
 }
 
 /** Localized label for an event dot's tooltip (mirror of the renderer). */
@@ -96,6 +99,7 @@ function rowSvg(
     const w = Math.max(2, x2 - x1);
     const color = r.gender === 'female'
         ? (opts.femaleColor ?? FALLBACK_FEMALE)
+        : r.gender === 'unknown' ? (opts.unknownColor ?? FALLBACK_UNKNOWN)
         : (opts.maleColor ?? FALLBACK_MALE);
     const focused = r.personId === opts.focusId ? ' focused' : '';
     const highlight = opts.highlightIds
@@ -119,7 +123,7 @@ function rowSvg(
     const fadeW = Math.max(0, Math.min(26, rowWidth - x2 - 2));
     const fade = !r.endKnown && fadeW > 4
         ? `<rect x="${x2.toFixed(1)}" y="${barY}" width="${fadeW.toFixed(1)}" height="14"`
-          + ` fill="url(#tl-fade-${r.gender === 'female' ? 'female' : 'male'})"/>`
+          + ` fill="url(#tl-fade-${r.gender === 'female' || r.gender === 'unknown' ? r.gender : 'male'})"/>`
         : '';
 
     // Name label: HTML in <foreignObject> on screen (ellipsis, flex); a plain
@@ -178,12 +182,14 @@ export function buildTimelineSvg(model: TimelineModel, opts: TimelineSvgOptions)
     // Fade-out gradients for bars with an unknown end (deceased, no death date).
     const maleColor = opts.maleColor ?? FALLBACK_MALE;
     const femaleColor = opts.femaleColor ?? FALLBACK_FEMALE;
+    const unknownColor = opts.unknownColor ?? FALLBACK_UNKNOWN;
     const fadeStops = (color: string) =>
         `<stop offset="0" stop-color="${color}" stop-opacity="0.85"/>`
         + `<stop offset="1" stop-color="${color}" stop-opacity="0"/>`;
     const defs = `<defs>`
         + `<linearGradient id="tl-fade-male" x1="0" y1="0" x2="1" y2="0">${fadeStops(maleColor)}</linearGradient>`
         + `<linearGradient id="tl-fade-female" x1="0" y1="0" x2="1" y2="0">${fadeStops(femaleColor)}</linearGradient>`
+        + `<linearGradient id="tl-fade-unknown" x1="0" y1="0" x2="1" y2="0">${fadeStops(unknownColor)}</linearGradient>`
         + `</defs>`;
 
     const style = mode === 'poster' ? `<style>${TIMELINE_LIGHT_STYLE}</style>` : '';
@@ -247,7 +253,7 @@ export function timelinePosterGeometry(model: TimelineModel, hasFooter: boolean)
  */
 export function buildTimelinePosterSvg(
     model: TimelineModel,
-    opts: Pick<TimelineSvgOptions, 'esc' | 'focusId' | 'maleColor' | 'femaleColor'>,
+    opts: Pick<TimelineSvgOptions, 'esc' | 'focusId' | 'maleColor' | 'femaleColor' | 'unknownColor'>,
     meta: PosterFooterMeta
 ): string {
     const hasFooter = !!(meta.treeName || meta.viewLabel || meta.dateLabel);
@@ -266,6 +272,7 @@ export function buildTimelinePosterSvg(
         mode: 'poster',
         maleColor: opts.maleColor,
         femaleColor: opts.femaleColor,
+        unknownColor: opts.unknownColor,
     });
     // Embed the timeline as a nested SVG offset by the padding. buildTimelineSvg
     // already emits width="innerW" height="innerH" (== g.innerW/g.innerH), so we

@@ -77,7 +77,7 @@ export const duplicateSuggestMethods = uiModule({
         const c = config[context];
         const first = (document.getElementById(c.first) as HTMLInputElement | null)?.value.trim() ?? '';
         const last = (document.getElementById(c.last) as HTMLInputElement | null)?.value.trim() ?? '';
-        const gender = ((document.getElementById(c.gender) as HTMLSelectElement | null)?.value || 'male') as Gender;
+        const gender = ((document.getElementById(c.gender) as HTMLSelectElement | null)?.value || 'unknown') as Gender;
         const birthRaw = (document.getElementById(c.birth) as HTMLInputElement | null)?.value || '';
         const birthDate = normalizeDateInput(birthRaw) || undefined;
 

@@ -1589,7 +1589,7 @@ class TreeRendererClass {
                 const baptism = sortLifeEvents((person.events ?? []).filter(e => e.type === 'baptism' && (e.date || e.place)))[0];
                 if (baptism) {
                     const bits = [baptism.date ? this.formatDateFull(baptism.date) : '', baptism.place?.trim() ?? ''];
-                    ttBirthLine = `≈ ${strings.card.ttBaptized(bits.filter(Boolean).join(', '), person.gender === 'female')}`;
+                    ttBirthLine = `≈ ${strings.card.ttBaptized(bits.filter(Boolean).join(', '), person.gender)}`;
                 }
             }
 
@@ -2463,7 +2463,8 @@ class TreeRendererClass {
                 if (el.dataset.fanPerson) {
                     this.setFocus(el.dataset.fanPerson as PersonId);
                 } else if (el.dataset.fanAdd && !DataManager.isReadOnly()) {
-                    UI.addRelation(el.dataset.fanAdd as PersonId, 'parent');
+                    const slot = el.dataset.fanAddGender;
+                    UI.addRelation(el.dataset.fanAdd as PersonId, 'parent', slot === 'male' || slot === 'female' ? slot : undefined);
                 }
             });
             const select = container.querySelector('#fan-gen-select') as HTMLSelectElement | null;
@@ -2534,6 +2535,7 @@ class TreeRendererClass {
             // themselves and follow the active theme.
             maleColor: 'var(--male)',
             femaleColor: 'var(--female)',
+            unknownColor: 'var(--unknown)',
         });
 
         container.innerHTML = `${omitted}${empty}${svg}`;

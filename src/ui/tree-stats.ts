@@ -618,6 +618,7 @@ export const treeStatsMethods = uiModule({
         const totalPersons = persons.length;
         const males = persons.filter(p => p.gender === 'male').length;
         const females = persons.filter(p => p.gender === 'female').length;
+        const unknownSex = persons.filter(p => p.gender === 'unknown').length;
         const deceased = persons.filter(p => !isLivingPerson(p, currentYear, bounds)).length;
         const living = totalPersons - deceased;
 
@@ -733,6 +734,7 @@ export const treeStatsMethods = uiModule({
 
             <div class="tree-stats-section">
                 ${splitBar(s.statsMales, males, 'stats-split-male', s.statsFemales, females, 'stats-split-female')}
+                ${unknownSex > 0 ? `<div class="stats-split-note">${s.statsUnknownSex(unknownSex)}</div>` : ''}
                 ${splitBar(s.statsLiving, living, 'stats-split-living', s.statsDeceased, deceased, 'stats-split-deceased')}
             </div>
 

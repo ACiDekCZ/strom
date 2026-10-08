@@ -799,8 +799,8 @@ const stringsEN = {
         birthMilestone: (name: string, years: number) => `${name} — ${nEn(years, 'year', 'years')} since birth`,
         deathMilestone: (name: string, years: number) => `${name} — ${nEn(years, 'year', 'years')} since death`,
         deathAnniversary: (name: string, years: number) => `${name} — ${nEn(years, 'year', 'years')} since death`,
-        otdBirth: (name: string, ago: string, _female: boolean) => `${ago}, ${name} was born`,
-        otdDeath: (name: string, ago: string, _female: boolean) => `${ago}, ${name} died`,
+        otdBirth: (name: string, ago: string, _sex: string | undefined) => `${ago}, ${name} was born`,
+        otdDeath: (name: string, ago: string, _sex: string | undefined) => `${ago}, ${name} died`,
         otdWedding: (a: string, b: string, ago: string) => `${ago}, ${a} & ${b} were married`,
         settingLabel: 'On this day',
         settingHint: 'Show a daily "on this day" reminder when opening a tree',
@@ -2269,7 +2269,7 @@ const stringsEN = {
         dateAfter: 'after',
         dateBefore: 'before',
         moreMarriages: (n: number) => `+${n}`,
-        ttBaptized: (d: string, _female: boolean) => `baptized ${d}`,
+        ttBaptized: (d: string, _sex: string | undefined) => `baptized ${d}`,
         // At-a-glance signals (tooltip, aria): evidence, story, what waits.
         ttSources: (n: number) => nEn(n, 'source', 'sources'),
         ttBirthCited: 'birth documented',
@@ -2515,6 +2515,7 @@ const stringsEN = {
             trees: (n: number) => nEn(n, 'tree', 'trees'),
             persons: (n: number) => nEn(n, 'person', 'people'),
             families: (n: number) => nEn(n, 'family', 'families'),
+            unknownSex: (n: number) => `${n} of unknown sex`,
             generations: (n: number) => nEn(n, 'generation', 'generations'),
             since: (year: string) => `since ${year}`
         }
@@ -2926,6 +2927,7 @@ const stringsEN = {
         statsPeople: 'People',
         statsMales: 'Males',
         statsFemales: 'Females',
+        statsUnknownSex: (n: number) => `Unknown sex: ${n}`,
         statsLiving: 'Living',
         statsDeceased: 'Deceased',
         statsFamilies: 'Families',
@@ -4410,8 +4412,9 @@ const stringsCZ: StringsType = {
         birthMilestone: (name: string, years: number) => `${name} — ${nCs(years, 'rok', 'roky', 'let')} od narození`,
         deathMilestone: (name: string, years: number) => `${name} — ${nCs(years, 'rok', 'roky', 'let')} od úmrtí`,
         deathAnniversary: (name: string, years: number) => `${name} — výročí úmrtí (${nCs(years, 'rok', 'roky', 'let')})`,
-        otdBirth: (name: string, ago: string, female: boolean) => `${ago} se narodil${female ? 'a' : ''} ${name}`,
-        otdDeath: (name: string, ago: string, female: boolean) => `${ago} zemřel${female ? 'a' : ''} ${name}`,
+        // A man / a woman / a sex the records do not give ("narodil/a").
+        otdBirth: (name: string, ago: string, sex: string | undefined) => `${ago} se narodil${sex === 'female' ? 'a' : sex === 'male' ? '' : '/a'} ${name}`,
+        otdDeath: (name: string, ago: string, sex: string | undefined) => `${ago} zemřel${sex === 'female' ? 'a' : sex === 'male' ? '' : '/a'} ${name}`,
         otdWedding: (a: string, b: string, ago: string) => `${ago} se vzali ${a} a ${b}`,
         settingLabel: 'V tento den',
         settingHint: 'Při otevření stromu ukázat denní připomínku „v tento den“',
@@ -5877,7 +5880,7 @@ const stringsCZ: StringsType = {
         dateAfter: 'po',
         dateBefore: 'před',
         moreMarriages: (n: number) => `+${n}`,
-        ttBaptized: (d: string, female: boolean) => `${female ? 'pokřtěna' : 'pokřtěn'} ${d}`,
+        ttBaptized: (d: string, sex: string | undefined) => `${sex === 'female' ? 'pokřtěna' : sex === 'male' ? 'pokřtěn' : 'pokřtěn/a'} ${d}`,
         // At-a-glance signals (tooltip, aria): evidence, story, what waits.
         ttSources: (n: number) => nCs(n, 'pramen', 'prameny', 'pramenů'),
         ttBirthCited: 'narození doloženo',
@@ -6122,6 +6125,7 @@ const stringsCZ: StringsType = {
             trees: (n: number) => nCs(n, 'strom', 'stromy', 'stromů'),
             persons: (n: number) => nCs(n, 'osoba', 'osoby', 'osob'),
             families: (n: number) => nCs(n, 'rodina', 'rodiny', 'rodin'),
+            unknownSex: (n: number) => `${n} s neznámým pohlavím`,
             generations: (n: number) => nCs(n, 'generace', 'generace', 'generací'),
             since: (year: string) => `od ${year}`
         }
@@ -6541,6 +6545,7 @@ const stringsCZ: StringsType = {
         statsPeople: 'Osoby',
         statsMales: 'Muži',
         statsFemales: 'Ženy',
+        statsUnknownSex: (n: number) => `Neznámé pohlaví: ${n}`,
         statsLiving: 'Žijící',
         statsDeceased: 'Zesnulí',
         statsFamilies: 'Rodiny',
@@ -8008,8 +8013,8 @@ const stringsDE: StringsType = {
         birthMilestone: (name: string, years: number) => `${name} — ${nDe(years, 'Jahr', 'Jahre')} seit der Geburt`,
         deathMilestone: (name: string, years: number) => `${name} — ${nDe(years, 'Jahr', 'Jahre')} seit dem Tod`,
         deathAnniversary: (name: string, years: number) => `${name} — ${nDe(years, 'Jahr', 'Jahre')} seit dem Tod`,
-        otdBirth: (name: string, ago: string, _female: boolean) => `${ago} wurde ${name} geboren`,
-        otdDeath: (name: string, ago: string, _female: boolean) => `${ago} starb ${name}`,
+        otdBirth: (name: string, ago: string, _sex: string | undefined) => `${ago} wurde ${name} geboren`,
+        otdDeath: (name: string, ago: string, _sex: string | undefined) => `${ago} starb ${name}`,
         otdWedding: (a: string, b: string, ago: string) => `${ago} heirateten ${a} & ${b}`,
         settingLabel: 'An diesem Tag',
         settingHint: 'Beim Öffnen eines Stammbaums eine tägliche „An diesem Tag“-Erinnerung anzeigen',
@@ -9458,7 +9463,7 @@ const stringsDE: StringsType = {
         dateAfter: 'nach',
         dateBefore: 'vor',
         moreMarriages: (n: number) => `+${n}`,
-        ttBaptized: (d: string, _female: boolean) => `getauft ${d}`,
+        ttBaptized: (d: string, _sex: string | undefined) => `getauft ${d}`,
         // At-a-glance signals (tooltip, aria): evidence, story, what waits.
         ttSources: (n: number) => nDe(n, 'Quelle', 'Quellen'),
         ttBirthCited: 'Geburt belegt',
@@ -9699,6 +9704,7 @@ const stringsDE: StringsType = {
             trees: (n: number) => nDe(n, 'Stammbaum', 'Stammbäume'),
             persons: (n: number) => nDe(n, 'Person', 'Personen'),
             families: (n: number) => nDe(n, 'Familie', 'Familien'),
+            unknownSex: (n: number) => `${n} mit unbekanntem Geschlecht`,
             generations: (n: number) => nDe(n, 'Generation', 'Generationen'),
             since: (year: string) => `seit ${year}`
         }
@@ -10093,6 +10099,7 @@ const stringsDE: StringsType = {
         statsPeople: 'Personen',
         statsMales: 'Männer',
         statsFemales: 'Frauen',
+        statsUnknownSex: (n: number) => `Unbekanntes Geschlecht: ${n}`,
         statsLiving: 'Lebend',
         statsDeceased: 'Verstorben',
         statsFamilies: 'Familien',

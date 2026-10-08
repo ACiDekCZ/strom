@@ -897,6 +897,8 @@ export type RelationType = 'parent' | 'child' | 'partner' | 'sibling';
 export interface RelationContext {
     personId: PersonId;
     relationType: RelationType;
+    /** The new relative's sex when the slot says it (the fan's father / mother sector). */
+    gender?: Gender;
 }
 
 export type PersonCreationType = 'new' | 'existing' | 'placeholder';

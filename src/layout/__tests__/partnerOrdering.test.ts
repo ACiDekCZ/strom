@@ -162,6 +162,7 @@ describe('Couple order with an unknown sex (U01)', () => {
         const result = runLayoutPipeline({
             data, focusPersonId: 'kid' as PersonId, config: DEFAULT_LAYOUT_CONFIG,
             ancestorDepth: 2, descendantDepth: 2,
+            includeSpouseAncestors: true, includeParentSiblings: true, includeParentSiblingDescendants: true,
             displayPolicy: { mode: 'standard', autoExpand: false },
         });
         const ids = Object.keys(data.persons).filter(id => id !== 'kid');
