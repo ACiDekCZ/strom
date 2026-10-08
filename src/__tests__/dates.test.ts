@@ -136,6 +136,13 @@ describe('displayYear / yearOf / dateSortKey', () => {
         expect(displayYear(undefined)).toBe('');
     });
 
+    it('B-2: a range of years says both years, never its start alone (BET 1872 AND 1875)', () => {
+        expect(displayYear('1872..1875')).toBe('1872–1875');
+        expect(displayYear('1872-03..1875-11-02')).toBe('1872–1875');
+        // A range inside one year is that year.
+        expect(displayYear('1872-03..1872-05')).toBe('1872');
+    });
+
     it('yearOf strips qualifier and returns number', () => {
         expect(yearOf('~1880')).toBe(1880);
         expect(yearOf('1880-05-15')).toBe(1880);

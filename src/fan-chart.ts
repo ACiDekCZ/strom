@@ -199,7 +199,8 @@ function yearsOf(p: Person): string {
     const b = displayYear(p.birthDate);
     const d = displayYear(p.deathDate);
     if (!b && !d) return '';
-    return `${b || '?'}–${d || ''}`;
+    // A range of years ("1872–1875") keeps its dash: the life span then gets spaces around its own.
+    return b.includes('–') || d.includes('–') ? `${b || '?'} – ${d}`.trimEnd() : `${b || '?'}–${d || ''}`;
 }
 
 /** Intrinsic geometry of the fan drawing (viewBox size + focus centre). */

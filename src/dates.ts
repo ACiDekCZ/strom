@@ -206,12 +206,15 @@ export function isValidDateInput(input: string): boolean {
 }
 
 /**
- * Year for display, keeping the qualifier symbol ('~1880', '<1905').
- * Returns '' when the value is missing/invalid.
+ * Year for display, keeping the qualifier symbol ('~1880', '<1905'). A range
+ * of years says both ('1872..1875' → '1872–1875', as the cards' cardDate):
+ * its start alone would read as an exact year. Returns '' when the value is
+ * missing/invalid.
  */
 export function displayYear(value?: string): string {
     const d = parseFlexDate(value);
     if (!d) return value ? value.split('-')[0] : '';
+    if (d.end && d.end.year !== d.year) return `${d.year}–${d.end.year}`;
     return `${d.qualifier}${d.year}`;
 }
 

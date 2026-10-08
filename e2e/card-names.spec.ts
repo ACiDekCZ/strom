@@ -153,3 +153,18 @@ test('a sub-pixel overflow shrinks the name instead of clipping it (Adéla Posp�
     expect(await nameFontPx(page, 'Adéla')).toBeLessThan(15);
     await expect(c.locator('.name-text')).toHaveAttribute('title', 'Adéla Pospíšilová');
 });
+
+test('B-2: a birth given as a range of years shows the range on the card, not its first year', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openApp(page);
+    // Born between 1872 and 1875: more than 120 years ago, so presumed dead (the dagger), the range whole.
+    await createFirstPerson(page, 'Anna', 'Svobodová', { gender: 'female', birthDate: '1872..1875' });
+    await expect(card(page, 'Anna').locator('.birth-date')).toHaveAttribute('data-years', '1872–1875 †');
+    // A death year after it: the life span keeps its spaced dash, the range its own.
+    await page.evaluate(() => {
+        const dm = window.Strom.DataManager;
+        dm.updatePerson(dm.getAllPersons()[0].id, { deathDate: '1940' });
+        window.Strom.TreeRenderer.render();
+    });
+    await expect(card(page, 'Anna').locator('.birth-date')).toHaveAttribute('data-years', '1872–1875 – 1940');
+});
