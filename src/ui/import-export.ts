@@ -30,7 +30,7 @@ import { extractSubtree } from '../subtree.js';
 import { findComponents } from '../components.js';
 import { compressPhoto, dataUrlByteSize } from '../photo.js';
 import { compressImageAttachment, readFileAsDataUrl, MAX_PDF_BYTES, countImages, stripMedia } from '../attachments.js';
-import { getDemoTree, DEMO_FOCUS, DEMO_CARD_FIELDS } from '../demo-tree.js';
+import { getDemoTree, DEMO_FOCUS } from '../demo-tree.js';
 import { demoImageMaker } from '../demo-images.js';
 import { parseGedcom, convertToStrom, decodeGedcomFile, GedcomConversionResult } from '../ged-parser.js';
 import {
@@ -1327,11 +1327,9 @@ export const importExportMethods = uiModule({
         this.closeNewTreeMenu();
         const data = getDemoTree(demoImageMaker());
         const focusId = DEMO_FOCUS;
-        // The fullest card shows what the sample holds — unless the user already chose a density.
-        if (!SettingsManager.hasCardDensity()) {
-            SettingsManager.setCardFields(DEMO_CARD_FIELDS);
-            SettingsManager.setCardDensity('custom');
-        }
+        // The Register card shows what the sample holds (each event with its date and
+        // place) — unless the user already chose a card type; the Custom fields stay as they are.
+        if (!SettingsManager.hasCardDensity()) SettingsManager.setCardDensity('register');
 
         const newTreeId = await DataManager.importAsNewTree(data, strings.demo.treeName);
 

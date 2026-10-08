@@ -21,10 +21,10 @@ import { TreeManager } from './tree-manager.js';
 import { chainLinkSvg, iconSvg } from './icons.js';
 import * as CrossTree from './cross-tree.js';
 import { ViewMode, STANDALONE_VIEWS, ResearchEdgeMode } from './types.js';
-import { cardLines, CardLine, cardLineHtml, cardYears, CardLineStyle, cardDateReferences, cardAge, cardOccupation } from './card-fields.js';
+import { cardLines, CardLine, cardLineHtml, cardYears, CardLineStyle, cardDateReferences, cardAge, isFieldCardDensity } from './card-fields.js';
 import {
     CustomCardMetrics, CardLineRows, CardHead, customCardMetrics, customCardRows, customCardViewHeight, customCardSpouseLineY,
-    measureCardTexts, cardFontsPending, CARD_HEAD_HEIGHT,
+    measureCardTexts, cardFontsPending, CARD_HEAD_HEIGHT, CARD_EDGE_PILL_ROOM,
 } from './card-width.js';
 import { checkRecordedAge, ageBirthDate } from './recorded-age.js';
 import { ACTION_GLYPH, AGENT_DONE_MS, AGENT_DONE_FADE_MS, AGENT_SPIN_MS, CardSignalContext, CardSignalInfo, cardSignalInfo, researchCardInfoNow, sharedPhaseDelay, stateStripesHtml } from './card-signals.js';
@@ -116,6 +116,18 @@ class TreeRendererClass {
     private customStyle: CardLineStyle = 'marks';
     /** The custom card's header per drawn person: the name's rows, the years under it. */
     private customHeads = new Map<PersonId, CardHead>();
+    /**
+     * The cards measured with room for pills on their bottom edge (a card of
+     * details as tall as its content grows by CARD_EDGE_PILL_ROOM, so the
+     * pills cover no text); the image export draws no pills and leaves it out.
+     */
+    private edgeRoomIds = new Set<PersonId>();
+    /** The other trees the last cards were matched against (the ⇄ pill); the next measure reads them. */
+    private lastCrossTrees: Map<TreeId, { name: string; data: StromData }> | null = null;
+    /** The last render was the one more render asked for by pills measured otherwise (never twice in a row). */
+    private edgeRoomRetried = false;
+    /** The render that asks for that one more render once it is done. */
+    private edgeRoomRerenderSeq = -1;
     private positions = new Map<PersonId, Position>();
 
     /** Generation bands for the sticky label overlay (rebuilt each render). */
@@ -258,13 +270,15 @@ class TreeRendererClass {
         // with the density (and the CSS box) or cards overlap / drift apart.
         const density = SettingsManager.getCardDensity();
         const size = SettingsManager.getCardSize();
-        const custom = density === 'custom' && !STANDALONE_VIEWS.includes(this.viewMode);
+        // Detailed, Register and Custom draw lines of details (their fields: effectiveCardFields).
+        const fieldCards = SettingsManager.getEffectiveCardFields(density);
+        const custom = !!fieldCards && !STANDALONE_VIEWS.includes(this.viewMode);
         // The custom card is as wide as the view's longest text and (details
         // that wrap) as tall as its tallest card: start from the size the last
         // view had (usually the same), measure once laid out.
         // With the height "by content" every card is its own height (the last
         // view's, the view's tallest for one not measured yet), cards top-aligned in their band.
-        const { lines: valueLines, years, height: heightMode } = SettingsManager.getCardFields();
+        const { lines: valueLines, years, height: heightMode } = fieldCards ?? SettingsManager.getCardFields();
         const ownHeights = custom && heightMode === 'content';
         const spouseLineY = custom ? customCardSpouseLineY(valueLines, years, heightMode) : undefined;
         this.config = {
@@ -273,6 +287,9 @@ class TreeRendererClass {
             ...(ownHeights && this.customMetrics?.personHeights ? { personHeights: this.customMetrics.personHeights } : {}),
         };
         document.body.dataset.cardDensity = density;
+        // The cards of details share one look (index.html body[data-card-fields]).
+        if (fieldCards) document.body.dataset.cardFields = '';
+        else delete document.body.dataset.cardFields;
         // The partner line (and the "+ partner" pill) at the header of a card that grows.
         if (spouseLineY !== undefined) {
             document.body.dataset.cardSpouseLine = 'head';
@@ -302,10 +319,11 @@ class TreeRendererClass {
             } else this.config = measured;
             // Measured before the card fonts were in: measure again once they are.
             cardFontsPending()?.then(() => {
-                if (seq === this.renderSeq && SettingsManager.getCardDensity() === 'custom') this.render();
+                if (seq === this.renderSeq && isFieldCardDensity(SettingsManager.getCardDensity())) this.render();
             });
         } else {
             this.customMetrics = null;
+            this.edgeRoomIds.clear();
             this.customLines.clear();
             this.customRows.clear();
             this.customHeads.clear();
@@ -364,6 +382,8 @@ class TreeRendererClass {
         UI.updateMinimap?.();
         // Rebuild the sticky generation-label overlay for the new layout.
         UI.updateGenLabels?.();
+        // Pills on a bottom edge came out otherwise than measured: once more at their size.
+        if (this.edgeRoomRerenderSeq === seq && seq === this.renderSeq) this.render();
     }
 
     /** Lay out the current view at the current card size (this.config). */
@@ -428,7 +448,7 @@ class TreeRendererClass {
      */
     private measureCustomCards(positions: Map<PersonId, Position>): CustomCardViewMetrics {
         const data = DataManager.getData();
-        const fields = SettingsManager.getCardFields();
+        const fields = SettingsManager.getEffectiveCardFields() ?? SettingsManager.getCardFields();
         // The years under the name say "1841 †" for one presumed dead, as the detailed card.
         const presumed = fields.years ? this.computePresumedDeceased() : null;
         this.customLines.clear();
@@ -454,9 +474,19 @@ class TreeRendererClass {
         this.customWrapped = fields.lines !== 1;
         this.customStyle = fields.style;
         this.customHeads = new Map(ids.map((id, i) => [id, heads[i]]));
+        this.edgeRoomIds.clear();
         if (fields.height === 'content') {
             // Each card as tall as its own content; the view's height is its tallest
-            // (a band with no card, the CSS default).
+            // (a band with no card, the CSS default). A card with pills on its
+            // bottom edge grows by their room, so they cover no text.
+            const visible = (pid: PersonId) => positions.has(pid);
+            ids.forEach((id, i) => {
+                const pills = this.bottomEdgePills(id, visible, this.lastCrossTrees);
+                if (pills.left || pills.right) {
+                    this.edgeRoomIds.add(id);
+                    heights[i] += CARD_EDGE_PILL_ROOM;
+                }
+            });
             let tallest = CARD_HEAD_HEIGHT;
             for (const h of heights) tallest = Math.max(tallest, h);
             return { ...metrics, cardHeight: tallest, personHeights: new Map(ids.map((id, i) => [id, heights[i]])) };
@@ -479,9 +509,63 @@ class TreeRendererClass {
         return { cardWidth, cardHeight, ...(personHeights ? { personHeights } : {}), ...(spouseLineY !== undefined ? { spouseLineY } : {}) };
     }
 
+    /**
+     * The card box the image export and the book draw: the screen's, except
+     * that a card measured with room for the pills on its bottom edge is drawn
+     * without it (the pills are not drawn there).
+     */
+    getPosterCardBox(): ReturnType<TreeRendererClass['getCardBox']> {
+        const box = this.getCardBox();
+        if (!box.personHeights || this.edgeRoomIds.size === 0) return box;
+        const personHeights = new Map(box.personHeights);
+        for (const id of this.edgeRoomIds) {
+            const h = personHeights.get(id);
+            if (h !== undefined) personHeights.set(id, h - CARD_EDGE_PILL_ROOM);
+        }
+        return { ...box, personHeights };
+    }
+
     /** A drawn person's card height: its own ("by content"), else the view's. */
     private cardHeightOf(id: PersonId): number {
         return personCardHeight(this.config, id);
+    }
+
+    /**
+     * A person's partners not drawn in the view (the ∞ pill) and the
+     * partnerships with children whose partner is not drawn (the ⌂ pill: a
+     * step family the view leaves out). An empty "?" stand-in is never drawn
+     * (T11), so it counts as neither.
+     */
+    private hiddenPartnersAndFamilies(id: PersonId, visible: (pid: PersonId) => boolean): {
+        partners: Person[]; families: import('./types.js').Partnership[];
+    } {
+        const data = DataManager.getData();
+        const partners = DataManager.getAllPartners(id).filter(p => !isDiagramStandIn(data, p.id) && !visible(p.id));
+        const families = DataManager.getPartnerships(id).filter(p => {
+            const partnerId = p.person1Id === id ? p.person2Id : p.person1Id;
+            return !visible(partnerId) && p.childIds.length > 0 && !isDiagramStandIn(data, partnerId);
+        });
+        return { partners, families };
+    }
+
+    /**
+     * Whether a card carries pills on its bottom edge: on the left ∞ hidden
+     * partners or ⌂ hidden families (not in the descendants chart, which hides
+     * relatives by design), on the right ⇄ the person in other trees.
+     */
+    private bottomEdgePills(id: PersonId, visible: (pid: PersonId) => boolean,
+        crossTrees: Map<TreeId, { name: string; data: StromData }> | null): { left: boolean; right: boolean } {
+        const person = DataManager.getPerson(id);
+        if (!person) return { left: false, right: false };
+        let left = false;
+        if (this.viewMode !== 'descendants') {
+            const hidden = this.hiddenPartnersAndFamilies(id, visible);
+            left = hidden.partners.length > 0 || hidden.families.length > 0;
+        }
+        const treeId = DataManager.getCurrentTreeId();
+        const right = !!crossTrees && !!treeId && !person.isPlaceholder
+            && CrossTree.findCrossTreeMatches(treeId, person, crossTrees).length > 0;
+        return { left, right };
     }
 
     // ============= Focus Mode Methods =============
@@ -1020,9 +1104,12 @@ class TreeRendererClass {
      * poster export. Empty when nothing is rendered.
      */
     getPosterLayout(): { positions: Map<PersonId, Position>; connections: Connection[]; spouseLines: SpouseLine[] } {
+        // A line that starts at the bottom of a card drawn without its pills' room starts that much higher.
+        const connections = this.edgeRoomIds.size === 0 ? this.connections : this.connections.map(c =>
+            c.stemPersonId && this.edgeRoomIds.has(c.stemPersonId) ? { ...c, stemTopY: c.stemTopY - CARD_EDGE_PILL_ROOM } : c);
         return {
             positions: this.positions,
-            connections: this.connections,
+            connections,
             spouseLines: this.spouseLines,
         };
     }
@@ -1156,6 +1243,15 @@ class TreeRendererClass {
         const spinDelay = sharedPhaseDelay(AGENT_SPIN_MS, document.timeline?.currentTime as number ?? performance.now());
         const renderedAt = Date.now();
         this.observeTreeOnScreen();
+        // The lines of details the card type draws (Detailed, Register, Custom), null for Compact and Normal.
+        const cardFields = SettingsManager.getEffectiveCardFields();
+        // The next measure reads the other trees the cards are matched against now (the ⇄ pill).
+        this.lastCrossTrees = allTrees;
+        // Cards of details as tall as their content were measured with room for
+        // the pills on their bottom edge; a card whose pills came out otherwise
+        // (the other trees were not read yet) asks for one more render.
+        const measuresEdgeRoom = !!this.customMetrics?.personHeights;
+        let edgeRoomStale = false;
         // Marriage-order pills (T13): one per union, at most one per card, at
         // the corner pointing to the person whose marriages it counts; laid
         // out with the card's top-edge tabs (placeUnionOrderPill).
@@ -1258,28 +1354,13 @@ class TreeRendererClass {
             // Birth year for the card meta row (the year range replaces the dagger).
             const birthYear = person.birthDate ? displayYear(person.birthDate) : '';
 
-            // Check for hidden partners (partners not in the visible/rendered set).
-            // An empty "?" stand-in is never drawn (T11) — not a hidden partner.
-            let hiddenPartnersCount = 0;
-            const allPartners = DataManager.getAllPartners(id).filter(p => !isDiagramStandIn(DataManager.getData(), p.id));
-            for (const partner of allPartners) {
-                if (!this.positions.has(partner.id)) {
-                    hiddenPartnersCount++;
-                }
-            }
-
-            // Check for hidden families (partnerships with children where partner is not visible)
-            // This indicates step-family situations that aren't shown in current view
-            let hiddenFamiliesCount = 0;
+            // Hidden partners (not in the visible/rendered set) and hidden
+            // families (a partnership with children whose partner is not
+            // visible: a step family the view leaves out).
             const partnerships = DataManager.getPartnerships(id);
-            for (const partnership of partnerships) {
-                const partnerId = partnership.person1Id === id ? partnership.person2Id : partnership.person1Id;
-                // Count if: partner not visible AND partnership has children
-                if (!this.positions.has(partnerId) && partnership.childIds.length > 0
-                    && !isDiagramStandIn(DataManager.getData(), partnerId)) {
-                    hiddenFamiliesCount++;
-                }
-            }
+            const hidden = this.hiddenPartnersAndFamilies(id, pid => this.positions.has(pid));
+            const hiddenPartnersCount = hidden.partners.length;
+            const hiddenFamiliesCount = hidden.families.length;
 
             // Hidden parents, siblings (children of a union, as the layout
             // counts them) or children: a branch tab each (one rule with the
@@ -1342,8 +1423,7 @@ class TreeRendererClass {
             if (showHiddenBadges && (hiddenPartnersCount > 0 || hiddenFamiliesCount > 0)) {
                 if (hiddenPartnersCount > 0) {
                     // Build rich tooltip with list of hidden partners
-                    const hiddenPartners = allPartners.filter(p => !this.positions.has(p.id));
-                    const partnerItems = hiddenPartners.map(p => {
+                    const partnerItems = hidden.partners.map(p => {
                         const name = shownName(p, '?');
                         const year = displayYear(p.birthDate);
                         return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(name)}</span>${year ? `<span class="badge-tooltip-detail"> *${this.escapeHtml(year)}</span>` : ''}</div>`;
@@ -1352,11 +1432,7 @@ class TreeRendererClass {
                 }
                 if (hiddenFamiliesCount > 0) {
                     // Build rich tooltip with hidden families (partner + children)
-                    const hiddenFamilyItems = partnerships
-                        .filter(p => {
-                            const pid = p.person1Id === id ? p.person2Id : p.person1Id;
-                            return !this.positions.has(pid) && p.childIds.length > 0;
-                        })
+                    const hiddenFamilyItems = hidden.families
                         .map(p => {
                             const pid = p.person1Id === id ? p.person2Id : p.person1Id;
                             const partner = DataManager.getPerson(pid);
@@ -1379,11 +1455,12 @@ class TreeRendererClass {
             const isLocked = DataManager.isPersonLocked(id);
 
             // Density decides what fits: compact = names only (no avatar/meta),
-            // normal = avatar + name + life-year meta, detailed = + occupation & age.
+            // normal = avatar + name + life-year meta; detailed, register and
+            // custom = the avatar, the name and a line per detail (their fields).
             const density = SettingsManager.getCardDensity();
-            const customLines = density === 'custom'
+            const customLines = cardFields
                 ? (this.customLines.get(id)
-                    ?? (person.isPlaceholder ? [] : cardLines(person, DataManager.getData(), SettingsManager.getCardFields())))
+                    ?? (person.isPlaceholder ? [] : cardLines(person, DataManager.getData(), cardFields)))
                 : null;
             if (customLines?.length) {
                 card.setAttribute('aria-label',
@@ -1392,8 +1469,6 @@ class TreeRendererClass {
             // Placeholders are a dashed frame with no avatar (nothing to depict).
             const showAvatar = density !== 'compact' && !person.isPlaceholder;
             const showPhoto = showAvatar && !!person.photo;
-            const cardAge = density === 'detailed' ? this.calculateAge(person) : null;
-            const trade = density === 'detailed' ? (this.occupationOf(person) ?? '') : '';
 
             // Full name on one row (never shrunk — overflow ellipsizes).
             const fullName = `${displayName} ${displaySurname}`.trim();
@@ -1411,12 +1486,7 @@ class TreeRendererClass {
             else if (presumedDead) metaYears = '†';
             const metaPlace = person.birthPlace?.trim() ?? '';
             // Normal cards pack "years · place" onto one ellipsized meta row.
-            // Detailed cards give the place its own two-line row below and put
-            // the age next to the years instead ("1907 – 1975 · věk 67").
-            const metaText = density === 'detailed'
-                ? [metaYears, cardAge !== null ? `${strings.card.ageWord} ${cardAge}` : '']
-                    .filter(Boolean).join(' · ')
-                : [metaYears, metaPlace].filter(Boolean).join(' · ');
+            const metaText = [metaYears, metaPlace].filter(Boolean).join(' · ');
 
             // Person status: quiet stripes in the card's bottom-right corner, in
             // every density (decoration; the tooltip and aria-label say it).
@@ -1472,8 +1542,6 @@ class TreeRendererClass {
                 <div class="card-body">
                     ${nameHtml}
                     ${density !== 'compact' && metaText ? `<div class="birth-date" data-years="${this.escapeHtml(metaYears)}"><span class="meta-text">${this.escapeHtml(metaText)}</span></div>` : ''}
-                    ${trade ? `<div class="card-trade">${this.escapeHtml(trade)}</div>` : ''}
-                    ${density === 'detailed' && metaPlace ? `<div class="card-place">${this.escapeHtml(metaPlace)}</div>` : ''}
                 </div>
             `;
             // The lock, the status stripes and the corner dot: on every card type, the custom one too (N34).
@@ -1545,12 +1613,19 @@ class TreeRendererClass {
             if (chainHtml || rightOrderHtml || branchTabsHtml) html += `<div class="card-edge edge-top-right">${chainHtml}${rightOrderHtml}${branchTabsHtml}</div>`;
             // Above the tabs: placed from the card's padding edge (the border inside the box).
             if (orderSlot?.row === 'above') html += `<div class="card-edge edge-top-above" style="left:${(orderSlot.x - orderSlot.border).toFixed(2)}px">${orderHtml}</div>`;
-            if (hiddenIndicatorsHtml) html += `<div class="card-edge edge-bottom-left">${hiddenIndicatorsHtml}</div>`;
+            if (hiddenIndicatorsHtml) {
+                html += `<div class="card-edge edge-bottom-left">${hiddenIndicatorsHtml}</div>`;
+                // The pills reach 9 px into the card: a card of details is measured taller for them.
+                card.classList.add('has-edge-bl');
+            }
             if (crossTreeHtml) {
                 html += `<div class="card-edge edge-bottom-right">${crossTreeHtml}</div>`;
                 // The pill reaches 9 px into the card: the status stripes rise above it.
                 card.classList.add('has-edge-br');
             }
+            // A card of details measured with the pills' room keeps its text above them (index.html .has-edge-room).
+            if (this.edgeRoomIds.has(id)) card.classList.add('has-edge-room');
+            if (measuresEdgeRoom && this.edgeRoomIds.has(id) !== !!(hiddenIndicatorsHtml || crossTreeHtml)) edgeRoomStale = true;
             // The research edge above the card (a stub, or a label by the dashed line to the parents).
             const edge = this.edgeViews.get(id);
             if (edge) {
@@ -1725,17 +1800,12 @@ class TreeRendererClass {
 
             canvas.appendChild(card);
         }
+        // Measure again with the pills as drawn (once: the second render knows them).
+        if (edgeRoomStale && !this.edgeRoomRetried) {
+            this.edgeRoomRetried = true;
+            this.edgeRoomRerenderSeq = seq;
+        } else this.edgeRoomRetried = false;
         return true;
-    }
-
-    /**
-     * What this person did. Occupation is an event (it changes over a life:
-     * apprentice, journeyman, master), so for a one-line summary take the
-     * newest dated one — the trade they ended up with; same rule as the
-     * occupation field in the person dialog.
-     */
-    private occupationOf(person: Person): string | null {
-        return cardOccupation(person);
     }
 
     /**
@@ -1821,7 +1891,7 @@ class TreeRendererClass {
         // that floor at matching specificity).
         // The custom card has one name row above its lines: no two-line step either.
         const density = SettingsManager.getCardDensity();
-        if (density === 'compact' || density === 'custom') return;
+        if (density === 'compact' || isFieldCardDensity(density)) return;
 
         // Step 2: two lines (break between given name and surname) + years-only meta.
         for (const { nameEl, textEl, given, surname, meta, metaText } of left) {

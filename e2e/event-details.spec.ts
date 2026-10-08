@@ -190,29 +190,31 @@ async function openCardSettings(page: Page): Promise<void> {
 const lines = (page: Page, first: string) => card(page, first).locator('.card-line');
 
 test.describe('the custom card', () => {
-    test('first time: the Brief preset; each card as tall as its content; the baptism stands in', async ({ page }) => {
+    test('first time: the Detailed fields with the age; each card as tall as its content; the baptism stands in', async ({ page }) => {
         await setup(page);
         await openCardSettings(page);
         await page.locator('#card-density-select').selectOption('custom');
         await expect(page.locator('#card-fields-settings')).toBeVisible();
-        await expect(page.locator('#card-fields-settings input[type="checkbox"]:checked')).toHaveCount(3);
+        await expect(page.locator('#card-fields-settings input[type="checkbox"]:checked')).toHaveCount(4);
         // The default shows every detail whole (U02, the author's choice): 3px between
-        // details, so three one-row details make 56 + 3 × 17 + 2 × 3.
-        await expect(page.locator('.card-preview-size')).toHaveText('card 200 × 113 px');
-        await expect(page.locator('.card-fields-status')).toHaveText('3 of 7 details on. A missing detail is left out.');
+        // details, so the sample's four one-row details make 56 + 4 × 17 + 3 × 3.
+        await expect(page.locator('.card-preview-size')).toHaveText('card 200 × 133 px');
+        await expect(page.locator('.card-fields-status')).toHaveText('4 of 8 details on. A missing detail is left out.');
         await page.keyboard.press('Escape');
 
-        await expect(lines(page, 'Jan')).toHaveText(['*1862 Horní Lhota', '†1919 Horní Lhota', 'mlynář']);
+        // The age after the death, without a mark; none without a birth date (Marie).
+        await expect(lines(page, 'Jan')).toHaveText(['*1862 Horní Lhota', '†1919 Horní Lhota', 'age 56', 'mlynář']);
         await expect(lines(page, 'Marie')).toHaveText(['≈1869 Dolní Lhota', '†after 1919']);
+        await expect(lines(page, 'Anna')).toHaveText(['*1890', '†1912 Horní Lhota', 'age 22']);
         // The box itself, not as zoomed on screen: one width, each card as tall as its own
-        // details (U02 V3, the default): Jan's three 113, the two of Marie and Anna 56 + 2 × 17 + 3.
-        for (const [name, height] of [['Jan', 113], ['Marie', 93], ['Anna', 93]] as const) {
+        // details (U02 V3, the default): Jan's four 133, Anna's three 113, Marie's two 56 + 2 × 17 + 3.
+        for (const [name, height] of [['Jan', 133], ['Marie', 93], ['Anna', 113]] as const) {
             const size = await card(page, name).evaluate(el => [(el as HTMLElement).offsetWidth, (el as HTMLElement).offsetHeight]);
             expect(size, name).toEqual([200, height]);
         }
     });
 
-    test('ticks, chips, order, full dates, and all seven details can be on', async ({ page }) => {
+    test('ticks, chips, order, full dates, and all eight details can be on', async ({ page }) => {
         await setup(page);
         await openCardSettings(page);
         await page.locator('#card-density-select').selectOption('custom');
@@ -227,22 +229,22 @@ test.describe('the custom card', () => {
         await row('death').locator('[data-opt="cause"]').click();
         await host.locator('.card-fields-date [data-full="1"]').click();
         await row('marriage').locator('input').check();
-        await expect(host.locator('.card-fields-status')).toHaveText('5 of 7 details on. A missing detail is left out.');
-        // No limit (U02): nothing waits greyed, the sixth and the seventh go on too and the card grows for them.
+        await expect(host.locator('.card-fields-status')).toHaveText('6 of 8 details on. A missing detail is left out.');
+        // No limit (U02): nothing waits greyed, the seventh and the eighth go on too and the card grows for them.
         await expect(host.locator('.card-field-row.is-disabled, input[type="checkbox"]:disabled')).toHaveCount(0);
         await row('divorce').locator('input').check();
         await row('burial').locator('input').check();
-        await expect(host.locator('input[type="checkbox"]:checked')).toHaveCount(7);
-        await expect(host.locator('.card-fields-status')).toHaveText('7 of 7 details on. A missing detail is left out.');
+        await expect(host.locator('input[type="checkbox"]:checked')).toHaveCount(8);
+        await expect(host.locator('.card-fields-status')).toHaveText('8 of 8 details on. A missing detail is left out.');
         await expect(page.locator('#card-fields-settings').getByText(/at most/)).toHaveCount(0);
-        await expect.poll(() => card(page, 'Marie').evaluate(el => (el as HTMLElement).offsetHeight)).toBe(175);
+        await expect.poll(() => card(page, 'Marie').evaluate(el => (el as HTMLElement).offsetHeight)).toBe(56 + 8 * 17);
         await row('divorce').locator('input').uncheck();
         await row('burial').locator('input').uncheck();
-        await expect(host.locator('.card-fields-status')).toHaveText('5 of 7 details on. A missing detail is left out.');
+        await expect(host.locator('.card-fields-status')).toHaveText('6 of 8 details on. A missing detail is left out.');
         // The width follows the view's longest line (full dates, the cause): the size says the drawn one.
         await expect.poll(async () => {
             const w = await card(page, 'Marie').evaluate(el => (el as HTMLElement).offsetWidth);
-            return (await page.locator('.card-preview-size').textContent()) === `card ${w} × 141 px` && w > 200;
+            return (await page.locator('.card-preview-size').textContent()) === `card ${w} × ${56 + 6 * 17} px` && w > 200;
         }).toBe(true);
         // Death to the top.
         await row('death').locator('.card-field-up').click();
@@ -250,10 +252,10 @@ test.describe('the custom card', () => {
         await expect(row('death').locator('.card-field-up')).toBeDisabled();
         await page.keyboard.press('Escape');
 
-        await expect(lines(page, 'Jan')).toHaveText(['†3/12/1919 Horní Lhota', '*1862 Horní Lhota', 'mlynář', '⚭2/14/1888 Dolní Lhota']);
+        await expect(lines(page, 'Jan')).toHaveText(['†3/12/1919 Horní Lhota', '*1862 Horní Lhota', 'age 56', 'mlynář', '⚭2/14/1888 Dolní Lhota']);
         await expect(lines(page, 'Anna').first()).toHaveText('†1912 Horní Lhota · cholera');
         await expect(lines(page, 'Marie')).toHaveText(['†after 1919', '≈2/2/1869 Dolní Lhota', '⚭2/14/1888 Dolní Lhota']);
-        expect(await card(page, 'Marie').evaluate(el => (el as HTMLElement).offsetHeight)).toBe(141);
+        expect(await card(page, 'Marie').evaluate(el => (el as HTMLElement).offsetHeight)).toBe(56 + 6 * 17);
     });
 
     test('the poster draws the same lines as the screen', async ({ page }) => {
@@ -269,12 +271,12 @@ test.describe('the custom card', () => {
         const { readFileSync } = await import('fs');
         const svg = readFileSync(await download.path(), 'utf-8');
         // The date and the place of a line are two texts (the place at the view's date column).
-        for (const text of ['>1862<', '>1919<', '>Horní Lhota<', '>mlynář<', '>after 1919<', '>1869<', '>Dolní Lhota<']) {
+        for (const text of ['>1862<', '>1919<', '>Horní Lhota<', '>mlynář<', '>after 1919<', '>1869<', '>Dolní Lhota<', '>age 56<']) {
             expect(svg).toContain(text);
         }
-        // The card's height as on screen (the default: the tallest card of the view).
+        // The card's height as on screen (each card by its content: Jan's four details).
         const height = await card(page, 'Jan').evaluate(el => (el as HTMLElement).offsetHeight);
-        expect(height).toBe(113);
+        expect(height).toBe(133);
         expect(svg).toContain(`height="${height}"`);
     });
 

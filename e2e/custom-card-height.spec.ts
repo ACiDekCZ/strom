@@ -47,10 +47,17 @@ async function dropFile(page: Page, content: string): Promise<void> {
     for (const type of ['dragenter', 'dragover', 'drop']) await page.dispatchEvent('#tree-container', type, { dataTransfer });
 }
 
-/** The custom card in its default (no saved choices), the tree imported, Anna in focus, the cards measured. */
+/**
+ * The details these checks were written for: the custom card's default before
+ * the age line (U03a) — birth, death, occupation.
+ */
+const PRE_AGE_ON = ['birth', 'death', 'occupation'];
+
+/** The custom card in its default appearance (birth, death, occupation), the tree imported, Anna in focus, the cards measured. */
 async function setup(page: Page, width = 1440): Promise<void> {
     await page.setViewportSize({ width, height: 900 });
     await seedSetting(page, 'cardDensity', 'custom');
+    await seedSetting(page, 'cardFields', { on: PRE_AGE_ON });
     await openApp(page);
     await dropFile(page, ged());
     await page.locator('.modal-overlay.active').getByText('Import as a new tree', { exact: true }).first().click();
@@ -213,12 +220,9 @@ test.describe('card height by content (U02 V3)', () => {
         const g = await geometry(page);
         for (const sl of g.spouseLines) expect(sl.y - equal.find(c => c.id === sl.person1Id)!.y).toBe(25);
         expect(g.bands.every(b => b.height === tallest)).toBe(true);
-        // Brief no longer matches (its height is by content).
-        await expect(page.locator('#card-fields-settings .card-preset-segment [aria-pressed="true"]')).toHaveCount(0);
 
         await segment.getByRole('button', { name: 'By content', exact: true }).click();
         await expect.poll(async () => new Set((await drawn(page)).map(c => c.height)).size).toBeGreaterThan(2);
-        await expect(page.locator('#card-fields-settings .card-preset-segment [aria-pressed="true"]')).toHaveText('Brief');
     });
 
     test('one row a detail by content: each card 56 + 17 a detail, the partner line at the header', async ({ page }) => {
@@ -372,7 +376,7 @@ test.describe('the compact custom card (1 line, Equal) is drawn as in 3.10.0-bet
     test('the name, the avatar and the rows sit where they were', async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 900 });
         await seedSetting(page, 'cardDensity', 'custom');
-        await seedSetting(page, 'cardFields', { lines: 1, height: 'view' });
+        await seedSetting(page, 'cardFields', { lines: 1, height: 'view', on: PRE_AGE_ON });
         await openApp(page);
         await page.getByRole('button', { name: 'Try a sample tree' }).click();
         await expect(card(page, 'Johan')).toBeVisible();
@@ -414,5 +418,171 @@ test.describe('the compact custom card (1 line, Equal) is drawn as in 3.10.0-bet
         await expect(johan.locator('.card-years')).toHaveCount(1);
         expect(await johan.locator('.name-text').evaluate(el => getComputedStyle(el).lineHeight)).toBe('19px');
         expect(await johan.locator('.card-head').evaluate(el => (el as HTMLElement).offsetHeight)).toBe(33);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// U03a: pills on the bottom edge (∞ hidden partners, ⌂ hidden families on the
+// left, ⇄ other trees on the right) on all five card types.
+// ---------------------------------------------------------------------------
+
+test.describe('pills on the bottom edge (U03a)', () => {
+    /**
+     * Václav married twice: Anna (drawn) and Rozálie with a son (not drawn: ∞ 1, ⌂ 1).
+     * Their son Jan + Marie → Josef (the focus) → Ota, Josef's son alone (a
+     * single parent's line from the bottom of Josef's card). The tree is
+     * imported twice, so every card carries ⇄ 1 too.
+     */
+    async function pillTree(page: Page): Promise<void> {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await openApp(page);
+        await page.evaluate(async () => {
+            const P = (id: string, o: Record<string, unknown>) => ({ id, gender: 'male', isPlaceholder: false, partnerships: [], parentIds: [], childIds: [], ...o });
+            const persons = {
+                g1: P('g1', { firstName: 'Václav', lastName: 'Vlk', birthDate: '1800', birthPlace: 'Horní Lhota', deathDate: '1870', deathPlace: 'Horní Lhota',
+                    partnerships: ['u1', 'u2'], childIds: ['p1', 'x1'], birthSourceIds: ['s1'] }),
+                g2: P('g2', { firstName: 'Anna', lastName: 'Vlková', gender: 'female', birthDate: '1805', partnerships: ['u1'], childIds: ['p1'],
+                    story: { text: 'Hospodařila.', status: 'final' } }),
+                gx: P('gx', { firstName: 'Rozálie', lastName: 'Dvořáková', gender: 'female', birthDate: '1810', partnerships: ['u2'], childIds: ['x1'] }),
+                x1: P('x1', { firstName: 'Matěj', lastName: 'Vlk', birthDate: '1835', parentIds: ['g1', 'gx'] }),
+                p1: P('p1', { firstName: 'Jan', lastName: 'Vlk', birthDate: '1830', birthPlace: 'Horní Lhota', deathDate: '1890', deathPlace: 'Dolní Lhota',
+                    parentIds: ['g1', 'g2'], partnerships: ['u3'], childIds: ['f'], question: 'Kdy zemřel?',
+                    events: [{ id: 'e1', type: 'occupation', note: 'mlynář' }, { id: 'e2', type: 'baptism', date: '1830-03-02', place: 'Horní Lhota' }] }),
+                p2: P('p2', { firstName: 'Marie', lastName: 'Nová', gender: 'female', birthDate: '1835', partnerships: ['u3'], childIds: ['f'] }),
+                f: P('f', { firstName: 'Josef', lastName: 'Vlk', birthDate: '1860', deathDate: '1931', deathPlace: 'Brno',
+                    parentIds: ['p1', 'p2'], childIds: ['o'] }),
+                o: P('o', { firstName: 'Ota', lastName: 'Vlk', birthDate: '1890', parentIds: ['f'] }),
+            };
+            const partnerships = {
+                u1: { id: 'u1', person1Id: 'g1', person2Id: 'g2', childIds: ['p1'], status: 'married', isPrimary: true },
+                u2: { id: 'u2', person1Id: 'g1', person2Id: 'gx', childIds: ['x1'], status: 'married' },
+                u3: { id: 'u3', person1Id: 'p1', person2Id: 'p2', childIds: ['f'], status: 'married', startDate: '1858' },
+            };
+            const sources = { s1: { id: 's1', title: 'Matrika' } };
+            const dm = window.Strom.DataManager;
+            await dm.importAsNewTree({ persons, partnerships, sources } as never, 'Vlkovi A');
+            await dm.importAsNewTree({ persons, partnerships, sources } as never, 'Vlkovi B');
+            window.Strom.TreeRenderer.setFocus('f' as never);
+        });
+        await expect(card(page, 'Václav')).toBeVisible();
+        await page.evaluate(() => document.fonts.ready);
+    }
+
+    type Rect = { l: number; t: number; r: number; b: number };
+    const hit = (a: Rect, b: Rect) => a.l < b.r - 0.5 && b.l < a.r - 0.5 && a.t < b.b - 0.5 && b.t < a.b - 0.5;
+
+    /** Per card: its pills, its text (each text run), its stripes; all in screen pixels. */
+    async function cardParts(page: Page) {
+        return page.evaluate(() => {
+            const box = (r: DOMRect) => ({ l: r.left, t: r.top, r: r.right, b: r.bottom });
+            return [...document.querySelectorAll<HTMLElement>('#tree-canvas .person-card')].map(el => {
+                const texts: { text: string; rect: ReturnType<typeof box> }[] = [];
+                const walker = document.createTreeWalker(el.querySelector('.card-body')!, NodeFilter.SHOW_TEXT);
+                for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+                    if (!n.textContent?.trim()) continue;
+                    const range = document.createRange();
+                    range.selectNodeContents(n);
+                    for (const r of range.getClientRects()) texts.push({ text: n.textContent.trim(), rect: box(r) });
+                }
+                const pills = [...el.querySelectorAll<HTMLElement>('.hidden-partners-btn, .hidden-families-btn, .cross-tree-badge')]
+                    .map(p => ({ kind: p.className, rect: box(p.getBoundingClientRect()) }));
+                const state = el.querySelector(':scope > .card-state');
+                return {
+                    id: el.dataset.id!, name: el.querySelector('.name-text')?.textContent ?? '', card: box(el.getBoundingClientRect()),
+                    height: el.offsetHeight, classes: el.className, texts, pills, state: state ? box(state.getBoundingClientRect()) : null,
+                };
+            });
+        });
+    }
+
+    for (const density of ['compact', 'normal', 'detailed', 'register', 'custom'] as const) {
+        test(`${density}: ⌂ ∞ ⇄ at once cover no text, no stripes and no other pill; cards of details grow 12px and keep clear of each other and the lines`, async ({ page }) => {
+            await pillTree(page);
+            await page.evaluate((d) => window.Strom.UI.setCardDensity(d), density);
+            await expect(page.locator('body')).toHaveAttribute('data-card-density', density);
+            await expect.poll(() => cardBoxesMatchLayout(page)).toBe(true);
+            const vaclav = card(page, 'Václav');
+            await expect(vaclav.locator('.hidden-partners-btn')).toBeVisible();
+            await expect(vaclav.locator('.hidden-families-btn')).toBeVisible();
+            await expect(vaclav.locator('.cross-tree-badge')).toBeVisible();
+            await expect(vaclav).toHaveClass(/has-edge-bl/);
+            await expect(vaclav).toHaveClass(/has-edge-br/);
+            const fields = density === 'detailed' || density === 'register' || density === 'custom';
+
+            const parts = await cardParts(page);
+            for (const c of parts) {
+                expect(c.pills.length, c.name).toBeGreaterThan(0);
+                for (const p of c.pills) {
+                    for (const t of c.texts) expect(hit(p.rect, t.rect), `${c.name}: ${p.kind} over "${t.text}"`).toBe(false);
+                    if (c.state) expect(hit(p.rect, c.state), `${c.name}: ${p.kind} over the stripes`).toBe(false);
+                    for (const q of c.pills) if (q !== p) expect(hit(p.rect, q.rect), `${c.name}: ${p.kind} over ${q.kind}`).toBe(false);
+                }
+                // A card of details as tall as its content keeps the pills' room; the fixed cards do not change.
+                expect(c.classes.includes('has-edge-room'), c.name).toBe(fields);
+            }
+            // No two cards overlap; no line runs through a card (in the layout's own
+            // coordinates: the focused card is drawn a little larger on purpose).
+            const geo = await page.evaluate(() => {
+                const r = window.Strom.TreeRenderer as unknown as {
+                    positions: Map<string, { x: number; y: number }>;
+                    config: { cardWidth: number; cardHeight: number; personHeights?: Map<string, number> };
+                };
+                const n = (l: SVGLineElement, k: 'x1' | 'x2' | 'y1' | 'y2') => l[k].baseVal.value;
+                return {
+                    cards: [...r.positions.entries()].map(([id, p]) => ({ id, l: p.x, t: p.y, r: p.x + r.config.cardWidth,
+                        b: p.y + (r.config.personHeights?.get(id) ?? r.config.cardHeight) })),
+                    lines: [...document.querySelectorAll<SVGLineElement>('#tree-lines line')].map(l => ({
+                        l: Math.min(n(l, 'x1'), n(l, 'x2')), r: Math.max(n(l, 'x1'), n(l, 'x2')),
+                        t: Math.min(n(l, 'y1'), n(l, 'y2')), b: Math.max(n(l, 'y1'), n(l, 'y2')) })),
+                };
+            });
+            expect(geo.cards).toHaveLength(parts.length);
+            for (let i = 0; i < geo.cards.length; i++) {
+                for (let j = i + 1; j < geo.cards.length; j++) expect(hit(geo.cards[i], geo.cards[j]), `${geo.cards[i].id} / ${geo.cards[j].id}`).toBe(false);
+            }
+            expect(geo.lines.length).toBeGreaterThan(3);
+            for (const l of geo.lines) for (const c of geo.cards) expect(hit(l, c), `a line through ${c.id}`).toBe(false);
+
+            if (!fields) return;
+            // 12px taller with the pills (padding 10 → 22): the ⇄ pill off, Josef (⇄ only) loses them, Václav keeps ⌂ ∞.
+            const before = Object.fromEntries(parts.map(c => [c.name, c.height]));
+            await page.evaluate(() => window.Strom.UI.toggleCrossTreeBadges(false));
+            await expect(card(page, 'Josef').locator('.cross-tree-badge')).toHaveCount(0);
+            await expect(card(page, 'Josef')).not.toHaveClass(/has-edge-room/);
+            await expect.poll(() => cardBoxesMatchLayout(page)).toBe(true);
+            const after = Object.fromEntries((await cardParts(page)).map(c => [c.name, c.height]));
+            expect(before['Josef Vlk'] - after['Josef Vlk']).toBe(12);
+            expect(before['Václav Vlk'] - after['Václav Vlk']).toBe(0);
+            await expect(vaclav).toHaveClass(/has-edge-room/);
+            await expect(vaclav).toHaveCSS('padding-bottom', '22px');
+            await expect(card(page, 'Josef')).toHaveCSS('padding-bottom', '10px');
+        });
+    }
+
+    test('the image export draws no pills and leaves their room out; a single parent\'s line starts at the card it draws', async ({ page }) => {
+        await pillTree(page);
+        await page.evaluate(() => window.Strom.UI.setCardDensity('detailed'));
+        await expect.poll(() => cardBoxesMatchLayout(page)).toBe(true);
+        const cards = await drawn(page);
+        const josef = byName(cards, 'Josef');
+        const roomy = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('#tree-canvas .person-card.has-edge-room')].map(el => el.dataset.id));
+        expect(roomy).toContain(josef.id);
+        const svg = await posterSvg(page);
+        expect(svg).not.toContain('cross-tree');
+        const rects = [...svg.matchAll(/<rect x="(-?[\d.]+)" y="(-?[\d.]+)" width="(\d+)" height="(\d+)" rx="8"/g)]
+            .map(m => ({ x: Number(m[1]), y: Number(m[2]), height: Number(m[4]) }));
+        expect(rects).toHaveLength(cards.length);
+        for (const c of cards) {
+            const r = rects.find(x => Math.abs(x.x - c.x) < 0.05 && Math.abs(x.y - c.y) < 0.05)!;
+            expect(r.height, c.name).toBe(c.height - (roomy.includes(c.id) ? 12 : 0));
+        }
+        // Josef alone → Ota: the stem starts at the bottom of Josef's card as the poster draws it.
+        const stemX = josef.x + josef.width / 2;
+        const bottom = josef.y + josef.height - 12;
+        const stems = [...svg.matchAll(/<line x1="(-?[\d.]+)" y1="(-?[\d.]+)" x2="(-?[\d.]+)" y2="(-?[\d.]+)"/g)]
+            .map(m => m.slice(1, 5).map(Number)).filter(([x1, , x2]) => Math.abs(x1 - stemX) < 0.1 && Math.abs(x2 - stemX) < 0.1);
+        expect(stems.some(([, y1, , y2]) => Math.abs(Math.min(y1, y2) - bottom) < 0.1), JSON.stringify(stems)).toBe(true);
+        // The age line is drawn as on screen.
+        expect(svg).toMatch(/>age \d+</);
     });
 });

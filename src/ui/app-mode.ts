@@ -41,7 +41,8 @@ function formatDateTime(iso: string): string {
 }
 import { AppExporter } from '../export.js';
 import { SettingsManager } from '../settings.js';
-import { ThemeMode, LanguageSetting, AppMode, AuditLog, CardDensity } from '../types.js';
+import { ThemeMode, LanguageSetting, AppMode, AuditLog } from '../types.js';
+import { normalizeCardDensity } from '../card-fields.js';
 import { CryptoSession, isEncrypted, encrypt, decrypt, EncryptedData } from '../crypto.js';
 import { validateTreeData, ValidationResult as TreeValidationResult, ValidationIssue } from '../validation.js';
 import * as CrossTree from '../cross-tree.js';
@@ -756,7 +757,7 @@ export const appModeMethods = uiModule({
     },
 
     setCardDensity(density: string): void {
-        SettingsManager.setCardDensity(density as CardDensity);
+        SettingsManager.setCardDensity(normalizeCardDensity(density));
         TreeRenderer.render();
         this.renderCardSignalSettings();
     },

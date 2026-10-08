@@ -47,6 +47,12 @@ async function dropFile(page: Page, content: string): Promise<void> {
 /** The one-row card: a detail shortened to one row, one height for the view (U02 decision A). */
 const ONE_ROW = { lines: 1, height: 'view' };
 
+/**
+ * The details these checks were written for unless a test picks its own: the
+ * custom card's default before the age line (U03a) — birth, death, occupation.
+ */
+const PRE_AGE_ON = ['birth', 'death', 'occupation'];
+
 async function setup(page: Page, childPlace: string, width = 1440, childName?: string,
     fields: Record<string, unknown> = ONE_ROW, janCause = ''): Promise<void> {
     await setupGed(page, ged(childPlace, childName, janCause), (childName ?? 'Anna').split(' ')[0], width, fields);
@@ -57,7 +63,7 @@ async function setupGed(page: Page, content: string, shown: string, width = 1440
     fields: Record<string, unknown> = ONE_ROW): Promise<void> {
     await page.setViewportSize({ width, height: 900 });
     await seedSetting(page, 'cardDensity', 'custom');
-    await seedSetting(page, 'cardFields', fields);
+    await seedSetting(page, 'cardFields', { on: PRE_AGE_ON, ...fields });
     await openApp(page);
     await dropFile(page, content);
     await page.locator('.modal-overlay.active').getByText('Import as a new tree', { exact: true }).first().click();

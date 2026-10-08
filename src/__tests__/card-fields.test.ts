@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
     cardLines, cardDate, normalizeCardFields, customCardSize, DEFAULT_CARD_FIELDS, CardFieldSettings,
-    CARD_FIELD_KEYS, cardPreset, matchCardPreset,
+    CARD_FIELD_KEYS, cardPreset, matchCardPreset, effectiveCardFields, normalizeCardDensity, isFieldCardDensity, CARD_PRESET_KEYS,
 } from '../card-fields.js';
 import { setLanguage } from '../strings.js';
 import { Person, PersonId, Partnership, PartnershipId, StromData } from '../types.js';
@@ -45,13 +45,13 @@ const texts = (p: PersonId, s: CardFieldSettings) => cardLines(tree().persons[p]
 describe('the custom card', () => {
     beforeEach(() => setLanguage('cs'));
 
-    it('starts as the detailed card: birth and death with places, the occupation, years', () => {
-        expect(texts(JAN, fields({}))).toEqual(['* 1862 Horní Lhota', '† 1919 Horní Lhota', 'mlynář']);
+    it('starts as the detailed card: birth and death with places, the age, the occupation, years', () => {
+        expect(texts(JAN, fields({}))).toEqual(['* 1862 Horní Lhota', '† 1919 Horní Lhota', 'věk 56', 'mlynář']);
     });
 
     it('adds the cause, full dates, and keeps the chosen order', () => {
-        const s = fields({ cause: true, fullDate: true, order: ['death', 'birth', 'baptism', 'burial', 'occupation', 'marriage', 'divorce'] });
-        expect(texts(JAN, s)).toEqual(['† 12. 3. 1919 Horní Lhota · souchotiny', '* 1862 Horní Lhota', 'mlynář']);
+        const s = fields({ cause: true, fullDate: true, order: ['death', 'birth', 'baptism', 'age', 'burial', 'occupation', 'marriage', 'divorce'] });
+        expect(texts(JAN, s)).toEqual(['† 12. 3. 1919 Horní Lhota · souchotiny', '* 1862 Horní Lhota', 'věk 56', 'mlynář']);
     });
 
     it('lets the baptism stand in for a missing birth, unless it has a line of its own', () => {
@@ -71,7 +71,7 @@ describe('the custom card', () => {
     });
 
     it('leaves the place out where it is not wanted', () => {
-        expect(texts(JAN, fields({ place: [] }))).toEqual(['* 1862', '† 1919', 'mlynář']);
+        expect(texts(JAN, fields({ place: [] }))).toEqual(['* 1862', '† 1919', 'věk 56', 'mlynář']);
     });
 
     it('says estimates in words and ranges with a dash', () => {
@@ -82,13 +82,13 @@ describe('the custom card', () => {
         expect(cardDate('~1855', false)).toBe('c. 1855');
     });
 
-    it('repairs stored settings and sizes the card by its lines, all seven of them', () => {
+    it('repairs stored settings and sizes the card by its lines, all eight of them', () => {
         const s = normalizeCardFields({ order: ['death', 'nope' as never], on: ['birth', 'baptism', 'death', 'burial', 'occupation', 'marriage'] });
-        expect(s.order).toHaveLength(7);
+        expect(s.order).toHaveLength(8);
         expect(s.order[0]).toBe('death');
         // No limit: every detail can be on.
         expect(s.on).toEqual(['birth', 'baptism', 'death', 'burial', 'occupation', 'marriage']);
-        expect(normalizeCardFields({ on: [...CARD_FIELD_KEYS] }).on).toHaveLength(7);
+        expect(normalizeCardFields({ on: [...CARD_FIELD_KEYS] }).on).toHaveLength(8);
         expect(customCardSize(3)).toEqual({ cardWidth: 200, cardHeight: 107 });
         expect(customCardSize(5).cardHeight).toBe(141);
         expect(customCardSize(7).cardHeight).toBe(175);
@@ -123,12 +123,14 @@ describe('the custom card appearance (U02)', () => {
 describe('card presets (U02)', () => {
     const shown = (s: CardFieldSettings) => s.order.filter(k => s.on.includes(k));
 
-    it('brief is the default card', () => {
-        const s = cardPreset('brief');
-        expect(shown(s)).toEqual(['birth', 'death', 'occupation']);
+    it('detailed is the default card: birth, death, age, occupation', () => {
+        const s = cardPreset('detailed');
+        expect(shown(s)).toEqual(['birth', 'death', 'age', 'occupation']);
         expect({ ...s, order: [] }).toEqual({ ...DEFAULT_CARD_FIELDS, order: [] });
-        expect(matchCardPreset(DEFAULT_CARD_FIELDS)).toBe('brief');
-        expect(matchCardPreset(normalizeCardFields(undefined))).toBe('brief');
+        expect(matchCardPreset(DEFAULT_CARD_FIELDS)).toBe('detailed');
+        expect(matchCardPreset(normalizeCardFields(undefined))).toBe('detailed');
+        expect(s).toMatchObject({ cause: false, fullDate: false, style: 'marks', lines: 0, height: 'content', widthCap: 320, years: false,
+            baptismFallback: true, burialFallback: true });
     });
 
     it('register: the register events with places and the cause, full dates, labels, whole, by content, medium', () => {
@@ -138,34 +140,33 @@ describe('card presets (U02)', () => {
             baptismFallback: true, burialFallback: true });
         for (const k of ['birth', 'baptism', 'marriage', 'death', 'burial'] as const) expect(s.place).toContain(k);
         // The unticked follow, in the order they had.
-        expect(s.order.slice(5)).toEqual(['occupation', 'divorce']);
+        expect(s.order.slice(5)).toEqual(['age', 'occupation', 'divorce']);
         expect(matchCardPreset(s)).toBe('register');
     });
 
-    it('all: every detail, wide', () => {
-        const s = cardPreset('all');
-        expect(shown(s)).toEqual(['birth', 'baptism', 'marriage', 'divorce', 'death', 'burial', 'occupation']);
-        expect(s).toMatchObject({ cause: true, fullDate: true, style: 'labels', lines: 0, height: 'content', widthCap: 400, years: false });
-        expect(matchCardPreset(s)).toBe('all');
+    it('there is no "all" preset any more', () => {
+        expect(CARD_PRESET_KEYS).toEqual(['detailed', 'register']);
+        const every = normalizeCardFields({ ...cardPreset('register'), on: [...CARD_FIELD_KEYS], widthCap: 400 });
+        expect(matchCardPreset(every)).toBeNull();
     });
 
     it('the unticked details keep their order after the preset\'s', () => {
-        const from = normalizeCardFields({ order: ['divorce', 'occupation', 'burial', 'death', 'marriage', 'baptism', 'birth'] });
-        expect(cardPreset('register', from).order).toEqual(['birth', 'baptism', 'marriage', 'death', 'burial', 'divorce', 'occupation']);
+        const from = normalizeCardFields({ order: ['divorce', 'occupation', 'age', 'burial', 'death', 'marriage', 'baptism', 'birth'] });
+        expect(cardPreset('register', from).order).toEqual(['birth', 'baptism', 'marriage', 'death', 'burial', 'divorce', 'occupation', 'age']);
     });
 
     it('matches on the ticked details in order, their place and cause, the date and the appearance only', () => {
         const reg = cardPreset('register');
         // Ignored: the order of the unticked, places of unticked details, the stand-ins.
-        expect(matchCardPreset({ ...reg, order: [...reg.order.slice(0, 5), 'divorce', 'occupation'] })).toBe('register');
+        expect(matchCardPreset({ ...reg, order: [...reg.order.slice(0, 5), 'divorce', 'occupation', 'age'] })).toBe('register');
         expect(matchCardPreset({ ...reg, place: reg.place.filter(k => k !== 'divorce') })).toBe('register');
         expect(matchCardPreset({ ...reg, baptismFallback: false, burialFallback: false })).toBe('register');
-        const brief = cardPreset('brief');
-        expect(matchCardPreset({ ...brief, place: [...brief.place, 'occupation'] })).toBe('brief');
-        expect(matchCardPreset({ ...brief, place: brief.place.filter(k => k !== 'marriage') })).toBe('brief');
+        const brief = cardPreset('detailed');
+        expect(matchCardPreset({ ...brief, place: [...brief.place, 'occupation'] })).toBe('detailed');
+        expect(matchCardPreset({ ...brief, place: brief.place.filter(k => k !== 'marriage') })).toBe('detailed');
         // Any of these makes it no preset.
         const off: Partial<CardFieldSettings>[] = [
-            { order: ['baptism', 'birth', 'marriage', 'death', 'burial', 'occupation', 'divorce'] },
+            { order: ['baptism', 'birth', 'marriage', 'death', 'burial', 'age', 'occupation', 'divorce'] },
             { on: ['birth', 'baptism', 'marriage', 'death'] },
             { on: [...reg.on, 'occupation'] },
             { place: reg.place.filter(k => k !== 'burial') },
@@ -175,5 +176,66 @@ describe('card presets (U02)', () => {
         for (const o of off) expect(matchCardPreset({ ...reg, ...o }), JSON.stringify(o)).toBeNull();
         expect(matchCardPreset({ ...brief, widthCap: 240 })).toBeNull();
         expect(matchCardPreset({ ...brief, lines: 1, height: 'view' })).toBeNull();
+    });
+});
+
+describe('the age line (U03a)', () => {
+    beforeEach(() => setLanguage('cs'));
+    const ageOnly = (over: Partial<CardFieldSettings> = {}) => fields({ on: ['age'], ...over });
+
+    it('comes right after the death in the default order, with no mark and no place', () => {
+        expect(CARD_FIELD_KEYS).toEqual(['birth', 'baptism', 'death', 'age', 'burial', 'occupation', 'marriage', 'divorce']);
+        const [line] = cardLines(tree().persons[JAN], tree(), ageOnly({ place: [...CARD_FIELD_KEYS] }));
+        expect(line).toMatchObject({ key: 'age', mark: '', date: '', text: 'věk 56', rest: 'věk 56', wide: true, spoken: 'věk 56', label: 'Věk' });
+        expect(line.place).toBeUndefined();
+    });
+
+    it('in the labels style is the number under the word "Age"', () => {
+        const [line] = cardLines(tree().persons[JAN], tree(), ageOnly({ style: 'labels' }));
+        expect(line).toMatchObject({ label: 'Věk', rest: '56', text: '56', spoken: 'věk 56' });
+        setLanguage('en');
+        expect(cardLines(tree().persons[JAN], tree(), ageOnly({ style: 'labels' }))[0].label).toBe('Age');
+        setLanguage('de');
+        expect(cardLines(tree().persons[JAN], tree(), ageOnly())[0].text).toBe('Alter 56');
+    });
+
+    it('is not drawn without a birth date', () => {
+        // Marie has a baptism and "after 1919" only.
+        expect(cardLines(tree().persons[MARIE], tree(), ageOnly())).toEqual([]);
+        const noBirth = { ...tree().persons[JAN], birthDate: undefined };
+        expect(cardLines(noBirth, tree(), ageOnly())).toEqual([]);
+    });
+
+    it('old saved Custom settings get the age into the order after the death, but off', () => {
+        const old = normalizeCardFields({ order: ['birth', 'baptism', 'death', 'burial', 'occupation', 'marriage', 'divorce'] as never,
+            on: ['birth', 'death', 'occupation'] });
+        expect(old.order).toEqual(['birth', 'baptism', 'death', 'age', 'burial', 'occupation', 'marriage', 'divorce']);
+        expect(old.on).toEqual(['birth', 'death', 'occupation']);
+        expect(texts(JAN, old)).toEqual(['* 1862 Horní Lhota', '† 1919 Horní Lhota', 'mlynář']);
+        // An order without the death: the age goes to its end.
+        expect(normalizeCardFields({ order: ['occupation', 'birth'] as never, on: [] }).order.slice(0, 3)).toEqual(['occupation', 'birth', 'age']);
+    });
+});
+
+describe('card types (U03a)', () => {
+    const stored = normalizeCardFields({ on: ['marriage'], style: 'labels', widthCap: 400 });
+
+    it('an unknown stored type is the Normal card; every known one stays', () => {
+        for (const v of [undefined, null, 'all', 'brief', 'DETAILED', 3]) expect(normalizeCardDensity(v)).toBe('normal');
+        for (const v of ['compact', 'normal', 'detailed', 'register', 'custom'] as const) expect(normalizeCardDensity(v)).toBe(v);
+    });
+
+    it('Detailed and Register draw their preset fields, never the stored Custom ones', () => {
+        expect(effectiveCardFields('detailed', stored)).toEqual(cardPreset('detailed'));
+        expect(effectiveCardFields('register', stored)).toEqual(cardPreset('register'));
+        expect(effectiveCardFields('custom', stored)).toEqual(stored);
+        expect(effectiveCardFields('custom', undefined)).toEqual(DEFAULT_CARD_FIELDS);
+        expect(effectiveCardFields('compact', stored)).toBeNull();
+        expect(effectiveCardFields('normal', stored)).toBeNull();
+    });
+
+    it('cards of details are Detailed, Register and Custom', () => {
+        expect((['compact', 'normal', 'detailed', 'register', 'custom'] as const).filter(isFieldCardDensity))
+            .toEqual(['detailed', 'register', 'custom']);
     });
 });

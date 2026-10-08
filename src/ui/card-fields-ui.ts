@@ -1,13 +1,12 @@
 /**
  * Settings → Person card: the preview card (one for the density and the
  * signals) and, for the "Custom" density, the list of details its lines show
- * (src/card-fields.ts). A row per event: a checkbox, the mark and the name,
+ * (src/card-fields.ts). A row per detail: a checkbox, the mark and the name,
  * small toggles for what the line adds (place, cause, the baptism or burial
- * standing in) and arrows to reorder — no dragging, seven rows is few enough.
- * Any number of them can be on. Above the list a preset sets all of it at
- * once (the one these settings are exactly is pressed, none after a change of
- * one's own); under it, "Card appearance": how the card is drawn (the line
- * style, the detail length, the width, the years under the name).
+ * standing in) and arrows to reorder — no dragging, eight rows is few enough.
+ * Any number of them can be on ("Turn all on" ticks every one). Under it,
+ * "Card appearance": how the card is drawn (the line style, the detail
+ * length, the width, the years under the name).
  */
 
 import { TreeRenderer } from '../renderer.js';
@@ -16,9 +15,9 @@ import { strings } from '../strings.js';
 import { Person, PersonId, Partnership, PartnershipId, StromData } from '../types.js';
 import { ActionSignal, ACTION_GLYPH, stateStripesHtml } from '../card-signals.js';
 import {
-    CardFieldKey, CardFieldSettings, CardHeightMode, CardLineStyle, CardPresetKey, CardValueLines, CardWidthCap, CARD_FIELD_KEYS,
-    CARD_HEIGHT_MODES, CARD_LINE_STYLES, CARD_MARKS, CARD_PRESET_KEYS, CARD_VALUE_LINES, CARD_WIDTH_CAPS, PLACE_KEYS, cardLines,
-    cardLineHtml, cardPreset, cardYears, matchCardPreset, cardDateReferences,
+    CardFieldKey, CardFieldSettings, CardHeightMode, CardLineStyle, CardValueLines, CardWidthCap, CARD_FIELD_KEYS,
+    CARD_HEIGHT_MODES, CARD_LINE_STYLES, CARD_MARKS, CARD_VALUE_LINES, CARD_WIDTH_CAPS, PLACE_KEYS, cardLines,
+    cardLineHtml, cardYears, cardDateReferences, isFieldCardDensity,
 } from '../card-fields.js';
 import { CardHead, customCardMetrics, customCardRows, measureCardTexts } from '../card-width.js';
 import { uiModule } from './module.js';
@@ -26,10 +25,11 @@ import { uiModule } from './module.js';
 const esc = (text: string): string => text.replace(/[&<>"']/g, c =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
-/** The name of a row: the event types, the couple's two from the relationships panel. */
+/** The name of a row: the event types, the couple's two from the relationships panel, the age. */
 function fieldLabel(key: CardFieldKey): string {
     if (key === 'marriage') return strings.fields.marriageRow;
     if (key === 'divorce') return strings.fields.divorceRow;
+    if (key === 'age') return strings.fields.ageRow;
     return strings.events.types[key];
 }
 
@@ -76,13 +76,6 @@ const STYLE_LABEL: Record<CardLineStyle, () => string> = {
     labels: () => strings.cardDensity.styleLabels,
 };
 
-/** The presets' words. */
-const PRESET_LABEL: Record<CardPresetKey, () => string> = {
-    brief: () => strings.cardDensity.presetBrief,
-    register: () => strings.cardDensity.presetRegister,
-    all: () => strings.cardDensity.presetAll,
-};
-
 /** The detail length choice's words. */
 const LINES_LABEL: Record<CardValueLines, () => string> = {
     1: () => strings.cardDensity.lines1,
@@ -99,7 +92,8 @@ const LINES_LABEL: Record<CardValueLines, () => string> = {
 function samplePreview(viewWidth: number | undefined): {
     html: string; head: CardHead; wrapped: boolean; width: number; height: number; dateColumn: number; labelColumn: number;
 } {
-    const fields = SettingsManager.getCardFields();
+    // The card type's own lines (Detailed, Register), Custom's stored ones.
+    const fields = SettingsManager.getEffectiveCardFields() ?? SettingsManager.getCardFields();
     const { person, data } = samplePerson();
     const lines = cardLines(person, data, fields);
     const years = fields.years ? cardYears(person, true) : '';
@@ -170,7 +164,7 @@ export const cardFieldsUiMethods = uiModule({
         const size = SettingsManager.getCardSize();
         // The custom card is as wide as the drawn view needs (src/card-width.ts);
         // as tall as the sample's details when they wrap.
-        const sample = SettingsManager.getCardDensity() === 'custom'
+        const sample = isFieldCardDensity(SettingsManager.getCardDensity())
             ? samplePreview(TreeRenderer.getCustomCardMetrics()?.cardWidth) : null;
         const width = sample?.width ?? size.cardWidth;
         const height = sample?.height ?? size.cardHeight;
@@ -193,7 +187,7 @@ export const cardFieldsUiMethods = uiModule({
         const dot = action ? `<span class="card-signal-dot signal-${action}"></span>` : '';
         const avatar = (initials: string) =>
             `<div class="card-avatar-wrap"><div class="card-avatar"><span class="avatar-initials">${initials}</span></div>${badge}</div>`;
-        if (density === 'custom') {
+        if (isFieldCardDensity(density)) {
             const sample = samplePreview(TreeRenderer.getCustomCardMetrics()?.cardWidth);
             // The width it was wrapped for (the view's; before any view, the sample's own) and its height.
             const box = `--card-date-col: ${sample.dateColumn}px; --card-label-col: ${sample.labelColumn}px; `
@@ -204,7 +198,7 @@ export const cardFieldsUiMethods = uiModule({
                 : '<div class="name"><span class="name-text">Jan Vlk</span></div>';
             const years = head.years ? `<div class="card-years">${esc(head.years)}</div>` : '';
             return `
-                <div class="person-card male preview-card${action ? ' has-signal' : ''}" data-density="custom" style="${box}">
+                <div class="person-card male preview-card${action ? ' has-signal' : ''}" data-density="${density}" data-fields style="${box}">
                     <div class="card-body card-body--custom">
                         <div class="card-head">${avatar('JV')}<div class="card-head-text">${name}${years}</div></div>
                         ${sample.html}
@@ -260,14 +254,8 @@ export const cardFieldsUiMethods = uiModule({
                     </div>
                 </div>`;
         }).join('');
-        const preset = matchCardPreset(s);
+        const allOn = s.on.length === CARD_FIELD_KEYS.length;
         host.innerHTML = `
-            <div class="card-preset">
-                <span class="settings-name card-preset-title" id="card-preset-label">${esc(d.preset)}</span>
-                <div class="segment card-look-segment card-preset-segment" role="group" aria-labelledby="card-preset-label">${
-                    CARD_PRESET_KEYS.map(key => `<button type="button" class="segment-btn${preset === key ? ' active' : ''}" data-value="${key}" aria-pressed="${preset === key}">${esc(PRESET_LABEL[key]())}</button>`).join('')
-                }</div>
-            </div>
             <div class="card-fields-head">
                 <span class="settings-name">${esc(d.fieldsTitle)}</span>
                 <div class="segment card-fields-date" role="group" aria-label="${esc(d.fieldsTitle)}">
@@ -276,7 +264,10 @@ export const cardFieldsUiMethods = uiModule({
                 </div>
             </div>
             <div class="card-fields-list">${rows}</div>
-            <div class="card-fields-status" role="status">${esc(d.count(s.on.length, CARD_FIELD_KEYS.length))}</div>
+            <div class="card-fields-foot">
+                <div class="card-fields-status" role="status">${esc(d.count(s.on.length, CARD_FIELD_KEYS.length))}</div>
+                ${allOn ? '' : `<button type="button" class="secondary card-fields-all">${esc(d.allOn)}</button>`}
+            </div>
             <div class="card-look">
                 <span class="settings-name card-look-title">${esc(d.lookTitle)}</span>
                 <div class="card-look-grid">
@@ -360,12 +351,9 @@ export const cardFieldsUiMethods = uiModule({
                 apply({ ...s, height }, `.card-look-height [data-value="${height}"]`);
             };
         });
-        host.querySelectorAll<HTMLButtonElement>('.card-preset-segment .segment-btn').forEach(btn => {
-            btn.onclick = () => {
-                const key = btn.dataset.value as CardPresetKey;
-                apply(cardPreset(key, s), `.card-preset-segment [data-value="${key}"]`);
-            };
-        });
+        // Every detail on; the places, the cause and the look stay as they are.
+        const allBtn = host.querySelector<HTMLButtonElement>('.card-fields-all');
+        if (allBtn) allBtn.onclick = () => apply({ ...s, on: [...s.order] }, '.card-fields-list input[type="checkbox"]');
         host.querySelectorAll<HTMLButtonElement>('.card-look-style .segment-btn').forEach(btn => {
             btn.onclick = () => {
                 const style = btn.dataset.value as CardLineStyle;

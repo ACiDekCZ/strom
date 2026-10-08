@@ -983,25 +983,26 @@ export function personCardHeight(config: Pick<LayoutConfig, 'cardHeight' | 'pers
 }
 
 /**
- * How much a person card shows. The card SIZE differs per density, so the
- * layout engine must be told (CARD_SIZE) — spacing is computed from it.
+ * How much a person card shows (src/card-fields.ts CARD_DENSITIES). Compact
+ * and Normal are cards of a fixed size (CARD_SIZE: the layout engine must be
+ * told, spacing is computed from it); Detailed and Register draw the lines of
+ * their preset fields and Custom the user's own, as wide and as tall as the
+ * view's texts (src/card-width.ts).
  */
-export type CardDensity = 'compact' | 'normal' | 'detailed' | 'custom';
+export type CardDensity = 'compact' | 'normal' | 'detailed' | 'register' | 'custom';
 
 /**
- * Card box per density. Keys match LayoutConfig on purpose so the values can be
+ * Card box per fixed density. Keys match LayoutConfig on purpose so the values can be
  * spread straight into it — with `width`/`height` names the spread silently did
  * nothing and the engine kept spacing for the default card.
  * MUST match the CSS for .person-card at each density.
  */
-export const CARD_SIZE: Record<Exclude<CardDensity, 'custom'>, Pick<LayoutConfig, 'cardWidth' | 'cardHeight'>> = {
-    // "Letopis" card: a 38px avatar + a two-row text column (name + meta).
+export const CARD_SIZE: Record<'compact' | 'normal', Pick<LayoutConfig, 'cardWidth' | 'cardHeight'>> = {
+    // "Letopis" card: a 34px avatar + a two-row text column (name + meta).
     // compact drops the avatar and meta (names only), so it is shorter and
-    // narrower; detailed keeps the extra occupation/age lines, so it is taller.
-    // MUST match the CSS for .person-card at each density.
+    // narrower. MUST match the CSS for .person-card at each density.
     compact: { cardWidth: 150, cardHeight: 44 },
     normal: { cardWidth: 188, cardHeight: 64 },
-    detailed: { cardWidth: 200, cardHeight: 100 },
 };
 
 export const DEFAULT_LAYOUT_CONFIG: LayoutConfig = {

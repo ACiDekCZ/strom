@@ -40,7 +40,7 @@ test('the detailed card shows the trade someone ended up with', async ({ page })
     });
 
     // A trade changes over a life; the summary shows the last one, not the first.
-    await expect(card(page, 'Jan').locator('.card-trade')).toHaveText('kovář');
+    await expect(card(page, 'Jan').locator('.card-line--occupation')).toHaveText('kovář');
     await expect(card(page, 'Jan')).toContainText('kovář');
     await expect(card(page, 'Jan')).not.toContainText('učeň');
 });
@@ -49,7 +49,8 @@ test('a person with no trade recorded gets no empty line', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1880' });
     await page.evaluate(() => window.Strom.UI.setCardDensity('detailed'));
-    await expect(card(page, 'Jan').locator('.card-trade')).toHaveCount(0);
+    await expect(card(page, 'Jan').locator('.card-line--birth')).toHaveCount(1);
+    await expect(card(page, 'Jan').locator('.card-line--occupation')).toHaveCount(0);
 });
 
 test('event actions on a phone are big enough to hit', async ({ page }) => {

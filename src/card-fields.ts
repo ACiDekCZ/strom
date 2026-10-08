@@ -12,7 +12,7 @@
  * aria-label all read the same lines.
  */
 
-import { Person, StromData, LifeEvent, Partnership } from './types.js';
+import { Person, StromData, LifeEvent, Partnership, CardDensity } from './types.js';
 import { parseFlexDate, formatFlexDate, toCanonical, ageBetween } from './dates.js';
 import { newestLifeEvent, sortLifeEvents } from './events.js';
 import { strings } from './strings.js';
@@ -20,10 +20,11 @@ import { isLivingPerson } from './privacy.js';
 import type { CardLineRows, CardRow } from './card-width.js';
 import { CARD_REFERENCE_YEAR } from './card-width.js';
 
-export type CardFieldKey = 'birth' | 'baptism' | 'death' | 'burial' | 'occupation' | 'marriage' | 'divorce';
+export type CardFieldKey = 'birth' | 'baptism' | 'death' | 'age' | 'burial' | 'occupation' | 'marriage' | 'divorce';
 
+/** Every detail a card can carry, in the order a card starts with (the age right after the death). */
 export const CARD_FIELD_KEYS: readonly CardFieldKey[] =
-    ['birth', 'baptism', 'death', 'burial', 'occupation', 'marriage', 'divorce'];
+    ['birth', 'baptism', 'death', 'age', 'burial', 'occupation', 'marriage', 'divorce'];
 
 /** How a line names its event: a mark ("* 1862") or a word ("Birth 1862"). */
 export type CardLineStyle = 'marks' | 'labels';
@@ -41,9 +42,9 @@ export const CARD_HEIGHT_MODES: readonly CardHeightMode[] = ['view', 'content'];
 export const CARD_WIDTH_CAPS: readonly CardWidthCap[] = [240, 320, 400];
 
 export interface CardFieldSettings {
-    /** All seven keys, in the order the lines appear. */
+    /** All keys (CARD_FIELD_KEYS), in the order the lines appear. */
     order: CardFieldKey[];
-    /** The ticked ones (any number of the seven). */
+    /** The ticked ones (any number of them). */
     on: CardFieldKey[];
     /** Keys whose line carries the place. */
     place: CardFieldKey[];
@@ -73,14 +74,14 @@ export interface CardFieldSettings {
 }
 
 /**
- * What "Custom" starts with the first time: what the detailed card shows
- * (birth and death with their places, the occupation), years only, marks,
- * every detail whole, each card as tall as its content, medium width. This is
- * also the "Brief" preset.
+ * What "Custom" starts with the first time: what the Detailed card shows
+ * (birth and death with their places, the age, the occupation), years only,
+ * marks, every detail whole, each card as tall as its content, medium width.
+ * This is the 'detailed' preset.
  */
 export const DEFAULT_CARD_FIELDS: CardFieldSettings = {
     order: [...CARD_FIELD_KEYS],
-    on: ['birth', 'death', 'occupation'],
+    on: ['birth', 'death', 'age', 'occupation'],
     place: ['birth', 'baptism', 'death', 'burial', 'marriage', 'divorce'],
     cause: false,
     baptismFallback: true,
@@ -93,18 +94,20 @@ export const DEFAULT_CARD_FIELDS: CardFieldSettings = {
     years: false,
 };
 
-/** Keys whose line can carry a place (an occupation has none). */
+/** Keys whose line can carry a place (an age and an occupation have none). */
 export const PLACE_KEYS: readonly CardFieldKey[] = ['birth', 'baptism', 'death', 'burial', 'marriage', 'divorce'];
 
 /** The mark in front of each line. ⚰ gets a text-style selector so no emoji font takes it. */
 export const CARD_MARKS: Record<CardFieldKey, string> = {
-    birth: '*', baptism: '≈', death: '†', burial: '⚰︎', occupation: '', marriage: '⚭', divorce: '⚮',
+    birth: '*', baptism: '≈', death: '†', age: '', burial: '⚰︎', occupation: '', marriage: '⚭', divorce: '⚮',
 };
 
 /**
  * Repair whatever was stored: unknown keys out, all keys in the order, every
  * appearance option valid. Settings saved before an option existed (or with a
- * value it does not know) get its default.
+ * value it does not know) get its default. A detail added since (the age)
+ * goes into the order where a card starts with it (the age right after the
+ * death) but stays off: what was saved shows what it showed.
  */
 export function normalizeCardFields(raw: Partial<CardFieldSettings> | undefined): CardFieldSettings {
     const d = DEFAULT_CARD_FIELDS;
@@ -114,6 +117,7 @@ export function normalizeCardFields(raw: Partial<CardFieldSettings> | undefined)
     const oneOf = <T>(value: unknown, allowed: readonly T[], fallback: T): T =>
         allowed.includes(value as T) ? value as T : fallback;
     const order = known(raw?.order);
+    if (order.length && !order.includes('age')) order.splice(order.includes('death') ? order.indexOf('death') + 1 : order.length, 0, 'age');
     for (const k of CARD_FIELD_KEYS) if (!order.includes(k)) order.push(k);
     const on = raw?.on ? known(raw.on) : [...d.on];
     return {
@@ -134,13 +138,14 @@ export function normalizeCardFields(raw: Partial<CardFieldSettings> | undefined)
 
 // ============= Presets =============
 
-export type CardPresetKey = 'brief' | 'register' | 'all';
-export const CARD_PRESET_KEYS: readonly CardPresetKey[] = ['brief', 'register', 'all'];
+/** The card types drawn from fields of their own (the Detailed and the Register card). */
+export type CardPresetKey = 'detailed' | 'register';
+export const CARD_PRESET_KEYS: readonly CardPresetKey[] = ['detailed', 'register'];
 
 /** What each preset sets; the details it leaves unticked follow in the order they had. */
 const PRESETS: Record<CardPresetKey, Omit<CardFieldSettings, 'order'>> = {
-    // The default card.
-    brief: { ...DEFAULT_CARD_FIELDS, on: [...DEFAULT_CARD_FIELDS.on], place: [...DEFAULT_CARD_FIELDS.place] },
+    // Birth and death with their places, the age, the occupation (the default of Custom too).
+    detailed: { ...DEFAULT_CARD_FIELDS, on: [...DEFAULT_CARD_FIELDS.on], place: [...DEFAULT_CARD_FIELDS.place] },
     // What a parish register records, each with its place, the cause of death, full dates, words.
     register: {
         ...DEFAULT_CARD_FIELDS,
@@ -148,14 +153,32 @@ const PRESETS: Record<CardPresetKey, Omit<CardFieldSettings, 'order'>> = {
         place: [...PLACE_KEYS], cause: true, fullDate: true,
         style: 'labels', lines: 0, height: 'content', widthCap: 320, years: false,
     },
-    // Everything a card can carry, on the wide card.
-    all: {
-        ...DEFAULT_CARD_FIELDS,
-        on: ['birth', 'baptism', 'marriage', 'divorce', 'death', 'burial', 'occupation'],
-        place: [...PLACE_KEYS], cause: true, fullDate: true,
-        style: 'labels', lines: 0, height: 'content', widthCap: 400, years: false,
-    },
 };
+
+/** The card types: two of a fixed size, two drawn from preset fields, and the user's own. */
+export const CARD_DENSITIES: readonly CardDensity[] = ['compact', 'normal', 'detailed', 'register', 'custom'];
+
+/** A stored card type, repaired: anything unknown is the Normal card. */
+export function normalizeCardDensity(value: unknown): CardDensity {
+    return CARD_DENSITIES.includes(value as CardDensity) ? value as CardDensity : 'normal';
+}
+
+/** Whether a card type draws lines of details (the Custom card's way): Detailed, Register and Custom. */
+export function isFieldCardDensity(density: CardDensity): density is CardPresetKey | 'custom' {
+    return density === 'detailed' || density === 'register' || density === 'custom';
+}
+
+/**
+ * The details a card type draws: the preset's own for Detailed and Register
+ * (never the stored Custom fields), the stored ones for Custom, null for the
+ * fixed Compact and Normal cards. The one source for the screen, the image
+ * export, the book, the minimap and the previews.
+ */
+export function effectiveCardFields(density: CardDensity, stored: Partial<CardFieldSettings> | undefined): CardFieldSettings | null {
+    if (density === 'custom') return normalizeCardFields(stored);
+    if (density === 'detailed' || density === 'register') return cardPreset(density);
+    return null;
+}
 
 /**
  * The settings a preset makes: its details ticked in its order, the rest after
@@ -375,6 +398,17 @@ export function cardLines(person: Person, data: StromData, s: CardFieldSettings)
             case 'burial': {
                 const b = firstOf(person, ['burial', 'cremation']);
                 if (b) add('burial', CARD_MARKS.burial, types[b.type], b.date, b.place);
+                break;
+            }
+            case 'age': {
+                // The age reached (today's for the living); none without a birth date.
+                const age = cardAge(person);
+                if (age === null) break;
+                // Marks: a line without a mark from the date column ("age 57"); labels: "Age | 57".
+                const said = `${strings.card.ageWord} ${age}`;
+                const value = s.style === 'labels' ? String(age) : said;
+                out.push({ key, mark: '', text: value, date: '', rest: value, wide: true, spoken: said,
+                    label: strings.fields.ageRow });
                 break;
             }
             case 'occupation': {

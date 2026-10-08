@@ -4,7 +4,7 @@
  */
 
 import { AppSettings, ThemeMode, LanguageSetting, CardDensity, SETTINGS_KEY, StromData, personSourceIds, CARD_SIZE } from './types.js';
-import { CardFieldSettings, normalizeCardFields, customCardSize } from './card-fields.js';
+import { CardFieldSettings, normalizeCardFields, customCardSize, normalizeCardDensity, effectiveCardFields } from './card-fields.js';
 import { initLanguage, Language } from './strings.js';
 
 /** How many recently cited sources the picker remembers per tree. */
@@ -341,9 +341,13 @@ class SettingsManagerClass {
         this.save();
     }
 
-    /** Card detail level: compact (names only) / normal / detailed (+places, age). */
+    /**
+     * The card type: compact (names only), normal (default), detailed and
+     * register (preset lines), custom (the user's lines). A stored value this
+     * version does not know is the Normal card.
+     */
     getCardDensity(): CardDensity {
-        return this.settings.cardDensity ?? 'normal';
+        return normalizeCardDensity(this.settings.cardDensity);
     }
 
     setCardDensity(density: CardDensity): void {
@@ -366,9 +370,18 @@ class SettingsManagerClass {
         return this.settings.cardDensity !== undefined;
     }
 
-    /** The custom card's lines (src/card-fields.ts), repaired to a valid set. */
+    /** The Custom card's stored lines (src/card-fields.ts), repaired to a valid set. */
     getCardFields(): CardFieldSettings {
         return normalizeCardFields(this.settings.cardFields);
+    }
+
+    /**
+     * The lines the card type draws (src/card-fields.ts effectiveCardFields):
+     * the preset's for Detailed and Register, the stored Custom ones for
+     * Custom, null for Compact and Normal.
+     */
+    getEffectiveCardFields(density: CardDensity = this.getCardDensity()): CardFieldSettings | null {
+        return effectiveCardFields(density, this.settings.cardFields);
     }
 
     setCardFields(fields: CardFieldSettings): void {
@@ -379,8 +392,8 @@ class SettingsManagerClass {
     /** The card box for the current density (the layout spaces cards by it). */
     getCardSize(): { cardWidth: number; cardHeight: number } {
         const density = this.getCardDensity();
-        if (density !== 'custom') return CARD_SIZE[density];
-        const fields = this.getCardFields();
+        const fields = this.getEffectiveCardFields(density);
+        if (!fields) return CARD_SIZE[density as 'compact' | 'normal'];
         return customCardSize(fields.on.length, fields.years);
     }
 

@@ -12,7 +12,6 @@ import { displayYear } from './dates.js';
 import { personInitials } from './initials.js';
 import { parentRelKind, parentRelDash, connectionDash } from './parent-rel-style.js';
 import type { CardLine, CardLineStyle, CardValueLines } from './card-fields.js';
-import { cardAge, cardOccupation } from './card-fields.js';
 import {
     CARD_MARK_WIDTH, CARD_COLUMN_GAP, CUSTOM_CARD_PAD_X, CARD_ROW_HEIGHT, CARD_DETAIL_GAP, CARD_LABEL_GAP,
     CARD_VALUE_DATE_GAP, CARD_NAME_ROW_HEIGHT, CARD_YEARS_ROW_HEIGHT, CARD_AVATAR_WIDTH, CARD_HEAD_GAP,
@@ -123,22 +122,6 @@ function fittedText(
 }
 
 /**
- * The detailed card's birth place on at most two rows (the screen's
- * line-clamp 2): words fill the first row, the rest goes on the second, which
- * fittedText shrinks or clamps.
- */
-function placeRows(place: string, maxW: number, fontSize: number): string[] {
-    if (!place) return [];
-    if (estWidth(place, fontSize, false) <= maxW) return [place];
-    const words = place.split(/\s+/);
-    let first = words[0];
-    let i = 1;
-    while (i < words.length && estWidth(`${first} ${words[i]}`, fontSize, false) <= maxW) first += ` ${words[i++]}`;
-    const rest = words.slice(i).join(' ');
-    return rest ? [first, rest] : [first];
-}
-
-/**
  * A marriage-order pill (T13) with its left edge at `x`, its top at `y`:
  * "1. ∞ 1866" in an 18px pill — the screen's .union-order-pill (its parts
  * where the screen's measure puts them, a 1px hairline), without its shadow;
@@ -180,11 +163,10 @@ export interface PosterOptions {
     /**
      * The card density the layout was made for (the size is `config`'s):
      * compact = the name only, centred in the whole card; normal (default) =
-     * the avatar, the name and the years; detailed = a larger avatar at the
-     * top, the years with the age, the trade and the birth place on its own
-     * rows. The custom card is drawn from `cardLines`.
+     * the avatar, the name and the years. The cards of details (Detailed,
+     * Register, Custom) are drawn from `cardLines`.
      */
-    cardDensity?: 'compact' | 'normal' | 'detailed';
+    cardDensity?: 'compact' | 'normal';
     /** Branch classification (person id -> paternal|maternal|descendant). */
     branchMap?: Map<string, string> | null;
     /** Persons drawn with the † marker. */
@@ -602,14 +584,12 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
             out.push(fittedText(shownName(person, '?'), pos.x + cw / 2, pos.y + ch / 2 + 4.5, cw - 22,
                 [13, 12.5], true, COLORS.text));
         } else if (person && !isPlaceholder) {
-            const detailed = options.cardDensity === 'detailed';
             // Avatar: gender-ring circle with a photo or initials (like on
-            // screen). 34px avatar (r=17) centred on the card's height; the
-            // detailed card's 44px one (r=22) at its top (8px padding + 1px).
-            // 10px left padding (border + padding) — matches the CSS.
-            const r = detailed ? 22 : 17;
+            // screen), 34px (r=17) centred on the card's height; 10px left
+            // padding (border + padding) — matches the CSS.
+            const r = 17;
             const cxAv = pos.x + 10 + r;
-            const cyAv = detailed ? pos.y + 10 + r : pos.y + ch / 2;
+            const cyAv = pos.y + ch / 2;
             const hasPhoto = !!person.photo;
             if (hasPhoto) {
                 const clipId = `av${clipCounter++}`;
@@ -618,13 +598,13 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
                 out.push(`<circle cx="${cxAv.toFixed(1)}" cy="${cyAv.toFixed(1)}" r="${r}" fill="none" stroke="${ring}" stroke-width="2"/>`);
             } else {
                 const initials = personInitials(person.firstName, person.lastName) || '?';
-                const initialsSize = detailed ? 16 : 12;
+                const initialsSize = 12;
                 out.push(`<circle cx="${cxAv.toFixed(1)}" cy="${cyAv.toFixed(1)}" r="${r}" fill="${COLORS.avatarBg}" stroke="${ring}" stroke-width="2"/>`);
                 out.push(`<text x="${cxAv.toFixed(1)}" y="${(cyAv + initialsSize / 3).toFixed(1)}" text-anchor="middle" font-size="${initialsSize}" font-weight="600" fill="${COLORS.initials}">${escapeXml(initials)}</text>`);
             }
 
             // Text column right of the avatar (10px padding + avatar + gap).
-            const contentX = pos.x + 10 + 2 * r + (detailed ? 8 : 9);
+            const contentX = pos.x + 10 + 2 * r + 9;
             const contentW = cw - (contentX - pos.x) - 10;
             const cx = contentX + contentW / 2;
 
@@ -638,34 +618,10 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
             else if (birthY) metaYears = isDeceasedP ? `${birthY} †` : `* ${birthY}`;
             else if (isDeceasedP) metaYears = '†';
             const metaPlace = person.birthPlace?.trim() || '';
-            if (detailed) {
-                // Detailed: rows from the top as on screen — the name, the
-                // years with the age ("1907 – 1975 · age 67"), the trade, then
-                // the birth place on up to two rows of its own.
-                const age = cardAge(person);
-                const meta = [metaYears, age !== null ? `${strings.card.ageWord} ${age}` : ''].filter(Boolean).join(' · ');
-                const trade = cardOccupation(person) ?? '';
-                let y = pos.y + 22;
-                out.push(fittedText(fullName, cx, y, contentW, [15, 13, 11], true, COLORS.text));
-                if (meta) {
-                    y += 15;
-                    out.push(fittedText(meta, cx, y, contentW, [11, 10, 9], false, COLORS.textLight));
-                }
-                if (trade) {
-                    y += 14;
-                    out.push(fittedText(trade, cx, y, contentW, [10, 9], false, COLORS.textLight)
-                        .replace(' font-size=', ' font-style="italic" font-size='));
-                }
-                for (const row of placeRows(metaPlace, contentW, 11)) {
-                    y += 14;
-                    out.push(fittedText(row, cx, y, contentW, [11, 10, 9], false, COLORS.textFaint));
-                }
-            } else {
-                const meta = [metaYears, metaPlace].filter(Boolean).join(' · ');
-                out.push(fittedText(fullName, cx, pos.y + 28, contentW, [15, 13, 11], true, COLORS.text));
-                if (meta) {
-                    out.push(fittedText(meta, cx, pos.y + 45, contentW, [11, 10, 9], false, COLORS.textLight));
-                }
+            const meta = [metaYears, metaPlace].filter(Boolean).join(' · ');
+            out.push(fittedText(fullName, cx, pos.y + 28, contentW, [15, 13, 11], true, COLORS.text));
+            if (meta) {
+                out.push(fittedText(meta, cx, pos.y + 45, contentW, [11, 10, 9], false, COLORS.textLight));
             }
         }
 

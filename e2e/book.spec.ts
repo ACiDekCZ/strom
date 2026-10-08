@@ -75,8 +75,9 @@ test('family book: the initials privacy default also hides living names in the t
 
 // N16: the tree page used to draw every card at the default 188x64 on a layout
 // made for the density's own card (compact 150x44: overlapping cards, lines
-// through them). Every density is drawn at the size the layout was made for.
-for (const density of ['compact', 'normal', 'detailed'] as const) {
+// through them). Every density is drawn at the size the layout was made for;
+// the cards of details (Detailed, Register, Custom) each at its own height.
+for (const density of ['compact', 'normal', 'detailed', 'register'] as const) {
     test(`family book, ${density} cards: the tree page draws them at the layout's size, apart, no line through a card`, async ({ page, context }) => {
         await openApp(page);
         await page.getByRole('button', { name: 'Try a sample tree' }).click();
@@ -96,22 +97,28 @@ for (const density of ['compact', 'normal', 'detailed'] as const) {
             .map(m => ({ x: Number(m[1]), y: Number(m[2]), w: Number(m[3]), h: Number(m[4]) }));
         // The layout the book was made from.
         const view = await page.evaluate(() => {
-            const r = window.Strom.TreeRenderer as unknown as { config: { cardWidth: number; cardHeight: number } };
+            const box = window.Strom.TreeRenderer.getPosterCardBox();
             const layout = window.Strom.TreeRenderer.getPosterLayout();
             return {
-                width: r.config.cardWidth, height: r.config.cardHeight,
-                cards: [...layout.positions.values()].map(p => ({ x: p.x, y: p.y })),
+                width: box.cardWidth, height: box.cardHeight,
+                cards: [...layout.positions.entries()].map(([id, p]) => ({
+                    x: p.x, y: p.y, h: box.personHeights?.get(id) ?? box.cardHeight,
+                })),
             };
         });
-        const expected = { compact: [150, 44], normal: [188, 64], detailed: [200, 100] }[density];
-        expect([view.width, view.height]).toEqual(expected);
+        const fixed = ({ compact: [150, 44], normal: [188, 64] } as Record<string, number[]>)[density];
+        if (fixed) expect([view.width, view.height]).toEqual(fixed);
+        else {
+            expect(view.width).toBeGreaterThanOrEqual(200);
+            expect(view.width).toBeLessThanOrEqual(320);
+        }
 
         // One card per laid-out person, each where the layout put it and as large as the layout's card.
         expect(rects).toHaveLength(view.cards.length);
         for (const c of view.cards) {
             const r = rects.find(x => Math.abs(x.x - c.x) < 0.06 && Math.abs(x.y - c.y) < 0.06);
             expect(r, `card at ${c.x},${c.y}`).toBeTruthy();
-            expect([r!.w, r!.h]).toEqual(expected);
+            expect([r!.w, r!.h]).toEqual([view.width, c.h]);
         }
         // No two cards overlap.
         for (let i = 0; i < rects.length; i++) {
@@ -133,9 +140,9 @@ for (const density of ['compact', 'normal', 'detailed'] as const) {
             }
         }
         // The density's look: compact is the name only (no avatar), normal a
-        // 34px avatar, detailed a 44px one.
+        // 34px avatar, the cards of details a 30px one beside the name.
         const avatars = [...svg.matchAll(/<circle [^>]*r="(\d+)"/g)].map(m => Number(m[1]));
         if (density === 'compact') expect(avatars).toEqual([]);
-        else expect(new Set(avatars)).toEqual(new Set([density === 'detailed' ? 22 : 17]));
+        else expect(new Set(avatars)).toEqual(new Set([density === 'normal' ? 17 : 15]));
     });
 }

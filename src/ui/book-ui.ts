@@ -70,7 +70,7 @@ export const bookUiMethods = uiModule({
             if (dropMedia) svgData = stripMedia(svgData);
             // The cards drawn as the layout was made for them (the poster's
             // drawing): every density's card size and look (compact 150x44,
-            // detailed 200x100, a custom card's width, heights, columns and
+            // a card of details' width, heights, columns and
             // lines), not the default 188x64 card on lines laid out for another.
             treeSvg = buildTreeSvg(svgData, layout, {
                 treeName: TreeManager.getActiveTreeMetadata()?.name,

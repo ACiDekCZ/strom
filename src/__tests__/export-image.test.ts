@@ -289,30 +289,6 @@ describe('card densities (N16): each drawn at the layout\'s card size, in its ow
         expect(texts(svg)).toEqual([{ x: 175, y: 76.5, size: 13, text: 'Jan Novák' }]);
     });
 
-    it('detailed: a 200x100 card, a 44px avatar at the top, the years with the age, the trade and the place inside it', () => {
-        const data = makeData(person('a', {
-            birthDate: '1880', deathDate: '1950', birthPlace: 'Nové Město na Moravě, okres Žďár nad Sázavou',
-            events: [{ id: 'e1', type: 'occupation', note: 'mlynář' }],
-        } as Partial<Person>));
-        const svg = buildTreeSvg(data, layout({ a: { x: 0, y: 0 } }), {
-            config: { ...DEFAULT_LAYOUT_CONFIG, cardWidth: 200, cardHeight: 100 }, cardDensity: 'detailed',
-        });
-        expect(svg).toContain('width="200" height="100" rx="8"');
-        expect(svg).toMatch(/<circle cx="32.0" cy="32.0" r="22"/);
-        const t = texts(svg).filter(x => x.text !== 'JN');
-        expect(t.slice(0, 3).map(x => x.text)).toEqual(['Jan Novák', '1880 – 1950 · age 70', 'mlynář']);
-        expect(svg).toContain('font-style="italic" font-size="10"');
-        // The long place on two rows of its own (the screen's line clamp).
-        expect(t).toHaveLength(5);
-        expect(`${t[3].text} ${t[4].text}`).toBe('Nové Město na Moravě, okres Žďár nad Sázavou');
-        // Every row inside the card, below the one before it, right of the avatar.
-        for (let i = 0; i < t.length; i++) {
-            expect(t[i].y).toBeLessThan(100 - 4);
-            if (i > 0) expect(t[i].y).toBeGreaterThan(t[i - 1].y);
-            expect(t[i].x).toBeGreaterThan(54);
-        }
-    });
-
     it('normal stays the 188x64 card with the 34px avatar', () => {
         const svg = buildTreeSvg(makeData(person('a')), layout({ a: { x: 0, y: 0 } }), { cardDensity: 'normal' });
         expect(svg).toContain('width="188" height="64" rx="8"');

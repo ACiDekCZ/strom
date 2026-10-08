@@ -454,7 +454,7 @@ async function widenPillFont(page: Page, spacing = 2): Promise<void> {
     }, spacing);
 }
 
-for (const density of ['compact', 'normal', 'detailed', 'custom', 'compact-wide'] as const) {
+for (const density of ['compact', 'normal', 'detailed', 'register', 'custom', 'compact-wide'] as const) {
     test(`N18 harness (${density}): no pill covers a tab, a neighbouring card, the middle of the top edge or a line`, async ({ page }) => {
         test.setTimeout(120_000);
         let views = 0, pills = 0, above = 0, besideTabs = 0, shortened = 0;
@@ -540,7 +540,7 @@ test('N35: on a hovered card the relations icon never covers the marriage-order 
     const errors: string[] = [];
     let hovered = 0;
     await loadTree(page, twoWives(), 'Josef');
-    for (const density of ['compact', 'normal', 'detailed', 'custom'] as const) {
+    for (const density of ['compact', 'normal', 'detailed', 'register', 'custom'] as const) {
         await page.evaluate((d) => window.Strom.UI.setCardDensity(d as never), density);
         // The custom card is as wide as the view's longest name: a longer one, a narrow letter at a time,
         // walks the pill and the tabs past each other (the medium width's cap, 320px, ends it).

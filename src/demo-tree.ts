@@ -34,7 +34,6 @@ import {
 import { strings } from './strings.js';
 import { localAge } from './recorded-age.js';
 import { placeKey } from './places.js';
-import { CardFieldSettings, DEFAULT_CARD_FIELDS } from './card-fields.js';
 
 /** A drawn register entry: the page it sits on and the crop of the entry. */
 export interface DemoEntryImage {
@@ -162,18 +161,6 @@ class DemoFamily {
         };
     }
 }
-
-/**
- * The card the sample opens with when the user has not chosen one: a custom
- * card of five lines with the cause of death, in the default appearance — the
- * tree has the details to fill it, and it shows at first sight what a card can
- * carry.
- */
-export const DEMO_CARD_FIELDS: CardFieldSettings = {
-    ...DEFAULT_CARD_FIELDS,
-    on: ['birth', 'baptism', 'death', 'occupation', 'marriage'],
-    cause: true,
-};
 
 /** The person the sample opens on: Johan, the emigrant, with three generations around him. */
 export const DEMO_FOCUS = toPersonId('demo_johan');

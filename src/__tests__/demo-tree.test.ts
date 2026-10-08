@@ -5,8 +5,8 @@
  */
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { getDemoTree, DEMO_FOCUS, DEMO_CARD_FIELDS, DemoImageMaker } from '../demo-tree.js';
-import { customCardSize, DEFAULT_CARD_FIELDS, normalizeCardFields } from '../card-fields.js';
+import { getDemoTree, DEMO_FOCUS, DemoImageMaker } from '../demo-tree.js';
+import { customCardSize, cardPreset, cardLines } from '../card-fields.js';
 import { validateTreeData, stripUnsafeMediaDataUrls } from '../validation.js';
 import { collectPlaces } from '../places.js';
 import { checkRecordedAge } from '../recorded-age.js';
@@ -17,10 +17,10 @@ import { assertNoNodeOverlap, assertValidPositions } from '../layout/__tests__/h
 import { auditGeometry } from '../layout/__tests__/helpers/geometryAudit.js';
 import { PersonId, DEFAULT_LAYOUT_CONFIG } from '../types.js';
 
-// The default card, and the five-line custom card the sample opens with.
+// The default card, and the Register card the sample opens with (five lines).
 const CONFIGS = [
     { name: 'normal card', config: DEFAULT_LAYOUT_CONFIG },
-    { name: 'sample card', config: { ...DEFAULT_LAYOUT_CONFIG, ...customCardSize(DEMO_CARD_FIELDS.on.length) } },
+    { name: 'sample card', config: { ...DEFAULT_LAYOUT_CONFIG, ...customCardSize(cardPreset('register').on.length) } },
 ];
 const MODES = [
     { name: 'standard', displayPolicy: { mode: 'standard' as const, autoExpand: false } },
@@ -34,10 +34,11 @@ describe('sample tree', () => {
     const data = getDemoTree();
     const personIds = Object.keys(data.persons) as PersonId[];
 
-    it('opens on its own details with the default card appearance', () => {
-        const { style, lines, height, widthCap, years } = DEFAULT_CARD_FIELDS;
-        expect(DEMO_CARD_FIELDS).toMatchObject({ style, lines, height, widthCap, years });
-        expect(normalizeCardFields(DEMO_CARD_FIELDS)).toEqual(DEMO_CARD_FIELDS);
+    it('has the details the Register card it opens with shows (each event with its date and place)', () => {
+        const register = cardPreset('register');
+        const lines = cardLines(data.persons[DEMO_FOCUS], data, register);
+        expect(lines.length).toBeGreaterThanOrEqual(3);
+        expect(lines.every(l => !!l.date && !!l.place)).toBe(true);
     });
 
     it('passes validateTreeData with no errors', () => {

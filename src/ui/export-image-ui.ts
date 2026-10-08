@@ -133,13 +133,16 @@ export function treeCardDrawing(data: StromData, layout: ReturnType<typeof TreeR
         ? computeIndirectIds(data, focusId, mode, [...layout.positions.keys()] as unknown as string[]) as unknown as Set<string>
         : undefined;
     const density = SettingsManager.getCardDensity();
-    const custom = density === 'custom';
+    // The lines of details of the Detailed, Register and Custom cards (null: Compact, Normal).
+    const fieldCards = SettingsManager.getEffectiveCardFields(density);
+    const custom = !!fieldCards;
     // Every density at the card box the view was laid out with (compact
-    // 150x44, detailed 200x100, the custom card's measured size): drawing the
-    // default 188x64 card on a layout made for another size overlaps the cards
-    // and runs the lines through them (N16).
-    const cardConfig: LayoutConfig = { ...DEFAULT_LAYOUT_CONFIG, ...TreeRenderer.getCardBox() };
-    const fields = SettingsManager.getCardFields();
+    // 150x44, the measured size of a card of details): drawing the default
+    // 188x64 card on a layout made for another size overlaps the cards and
+    // runs the lines through them (N16). Without the room the screen keeps
+    // for pills on a card's bottom edge (no pills are drawn here).
+    const cardConfig: LayoutConfig = { ...DEFAULT_LAYOUT_CONFIG, ...TreeRenderer.getPosterCardBox() };
+    const fields = fieldCards ?? SettingsManager.getCardFields();
     const cardLinesMap = custom
         ? new Map([...layout.positions.keys()].map(id => {
             const p = data.persons[id];
@@ -156,7 +159,7 @@ export function treeCardDrawing(data: StromData, layout: ReturnType<typeof TreeR
         : undefined;
     const drawing: PosterOptions = {
         config: cardConfig,
-        ...(custom ? {} : { cardDensity: density }),
+        ...(custom ? {} : { cardDensity: density as 'compact' | 'normal' }),
         branchMap,
         deceasedSet,
         ...(dimmedIds ? { dimmedIds } : {}),

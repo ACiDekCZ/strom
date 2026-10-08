@@ -521,6 +521,13 @@ export const CARD_LINES_TOP = 10 + 30 + CARD_LINES_GAP;
 export const CARD_ROW_HEIGHT = 17;
 /** Between two details when a detail may take more than one row (the rows of one stay apart from the next). */
 export const CARD_DETAIL_GAP = 3;
+/**
+ * The room a card of details as tall as its content (the height "by
+ * content") takes at its bottom for the pills on its bottom edge (∞ ⌂ on the
+ * left, ⇄ on the right): 18px tall, they reach 9px into the card, so the card
+ * grows by 12px (padding 10 → 22) and the pills cover no text.
+ */
+export const CARD_EDGE_PILL_ROOM = 12;
 /** The partner line on a card taller than one row a detail: the middle of its header. */
 export const CARD_HEAD_LINE_Y = 25;
 /** The same with the years under the name: the middle of the taller header (10 + 33 / 2). */

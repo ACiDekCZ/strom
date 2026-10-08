@@ -2781,9 +2781,6 @@
         .union-order-pill .uo-tip { min-width: 0; white-space: nowrap; font-variant-numeric: normal; }
         @media (hover: hover) { .union-order-pill:hover .badge-tooltip { display: block; } }
         #tree-canvas.zoom-order-hidden .union-order-pill { display: none; }
-        /* The detailed card's name starts 4px lower under a pill on the edge,
-           so the pill does not sit on it. */
-        body[data-card-density="detailed"] .person-card.has-order-edge { padding-top: 12px; }
         /* The action badge on the avatar's corner stays whole above a left pill. */
         .person-card:has(.edge-top-left .union-order-pill) .card-avatar-wrap { z-index: 7; }
 
@@ -6729,18 +6726,8 @@
             font-size: 12.5px;
         }
 
-        /* Detailed padding is 8px 9px: the 9px sides give a 128px text column
-           (200 − 2 border − 18 padding − 44 avatar − 8 gap), one px wider than the
-           normal card so "Kateřina Výšková" fits at the full 15px. */
-        body[data-card-density="detailed"] .person-card {
-            width: 200px; height: 100px; padding: 8px 9px;
-            align-items: flex-start;
-        }
-        body[data-card-density="detailed"] .card-avatar {
-            width: 44px; height: 44px; margin-top: 1px;
-        }
-        body[data-card-density="detailed"] .avatar-initials { font-size: 16px; }
-        /* Custom density (src/card-fields.ts): the avatar and the name on one
+        /* Cards of details — Detailed, Register (preset lines) and Custom
+           (body[data-card-fields], src/card-fields.ts): the avatar and the name on one
            row, then a 17px line per chosen event. One row a detail: height =
            56 + 17 × lines; details that wrap: the view's tallest card (rows
            computed in src/card-width.ts, 3px between details). The renderer
@@ -6750,13 +6737,17 @@
            view's longest text, 200 up to the chosen cap, one for every card
            (src/card-width.ts → --card-custom-w). Lines pack upwards; who lacks
            a detail has free space at the bottom. */
-        body[data-card-density="custom"] .person-card {
+        body[data-card-fields] .person-card {
             width: var(--card-custom-w, 200px); height: var(--card-custom-h, 107px); padding: 10px 12px;
             flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 0;
         }
+        /* Pills on the bottom edge (∞ ⌂ left, ⇄ right) reach 9px into the card:
+           a card as tall as its content was measured 12px taller for them
+           (src/card-width.ts CARD_EDGE_PILL_ROOM), so they cover no text. */
+        body[data-card-fields] .person-card.has-edge-room { padding-bottom: 22px; }
         /* The 2px focus border sits inside the box: 1px less padding keeps the
            text room the width was measured for. */
-        body[data-card-density="custom"] .person-card.focused { padding-left: 11px; padding-right: 11px; }
+        body[data-card-fields] .person-card.focused { padding-left: 11px; padding-right: 11px; }
         .card-body--custom { flex: 0 0 auto; justify-content: flex-start; gap: 6px; }
         /* The header: the avatar and, beside it, the name (one 19px row, two
            when details may wrap and it is long: src/card-width.ts computes
@@ -6774,7 +6765,7 @@
             font-size: 11px; line-height: 14px; font-weight: 400; color: var(--text-light);
             font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
-        body[data-card-density="custom"] .card-avatar { width: 30px; height: 30px; border-width: 1.5px; }
+        body[data-card-fields] .card-avatar { width: 30px; height: 30px; border-width: 1.5px; }
         .card-lines { display: flex; flex-direction: column; min-width: 0; }
         /* A line is a grid: mark | date | place. The date column is the view's
            longest ordinary date (--card-date-col), so places of all cards
@@ -6823,21 +6814,8 @@
            its top, 26.5px with the years under the name: --card-head-line,
            LayoutConfig.spouseLineY); the "+ partner" pill goes with it
            (inside the 1px border, the focused card's 2px). */
-        body[data-card-density="custom"][data-card-spouse-line="head"] .person-card .edge-right-center { top: calc(var(--card-head-line, 25px) - 1px); }
-        body[data-card-density="custom"][data-card-spouse-line="head"] .person-card.focused .edge-right-center { top: calc(var(--card-head-line, 25px) - 2px); }
-        .card-trade {
-            font-size: 10px; line-height: 1.3; font-style: italic;
-            color: var(--text-light);
-            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-        }
-        /* Row 3 (detailed only): birth place on its own line, faint, wrapping to
-           at most two lines before ellipsis. The age moved up onto the year row
-           ("1907 – 1975 · věk 67"), so there is no separate age line anymore. */
-        .card-place {
-            font-size: 11px; line-height: 1.25; color: var(--text-faint);
-            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
-            overflow: hidden;
-        }
+        body[data-card-fields][data-card-spouse-line="head"] .person-card .edge-right-center { top: calc(var(--card-head-line, 25px) - 1px); }
+        body[data-card-fields][data-card-spouse-line="head"] .person-card.focused .edge-right-center { top: calc(var(--card-head-line, 25px) - 2px); }
         /* ==================== CARD SIGNALS ====================
            At a glance (src/card-signals.ts): the person's status as quiet
            evidence stripes in the card's bottom-right corner and the story as
@@ -6858,7 +6836,11 @@
            the card: the stripes sit above it, the last text line keeps clear
            (a margin, not padding: a line's overflow clips at its padding edge). */
         .person-card.has-edge-br .card-state { bottom: 14px; }
-        .person-card.has-edge-br .card-body > :last-child { margin-right: 34px; }
+        .person-card.has-edge-br .card-body:not(.card-body--custom) > :last-child { margin-right: 34px; }
+        /* A card of details is never narrowed (its rows were measured for its
+           width): with room for the pills its text ends above the stripes; a
+           card of one height for the view keeps its last line clear of them. */
+        .person-card.has-edge-br:not(.has-edge-room) .card-body--custom .card-lines > :last-child { padding-right: 34px; }
 
         /* ==================== RESEARCH EDGE ==================== */
         /* Above a card where the tree ends: a stub whose SHAPE says what the
@@ -7229,7 +7211,6 @@
         .card-signals-preview .person-card { position: relative; left: auto; top: auto; cursor: default; }
         .card-signals-preview .person-card[data-density="compact"] { width: 150px; height: 44px; justify-content: center; }
         .card-signals-preview .person-card[data-density="compact"] .card-signal-dot { display: block; }
-        .card-signals-preview .person-card[data-density="detailed"] { width: 200px; }
         @media (max-width: 640px) {
             .card-signals-settings { flex-direction: column; gap: 12px; }
         }
@@ -7240,7 +7221,7 @@
         .card-preview-fit > .person-card { transform-origin: 0 0; }
         .card-preview-head { display: flex; gap: 12px; align-items: baseline; justify-content: space-between; width: 100%; max-width: 280px; }
         .card-preview-size { font-size: 12px; color: var(--text-faint); }
-        .card-signals-preview .person-card[data-density="custom"] { width: var(--card-custom-w, 200px); height: var(--card-custom-h, 107px); }
+        .card-signals-preview .person-card[data-fields] { width: var(--card-custom-w, 200px); height: var(--card-custom-h, 107px); }
 
         /* "Details on the card" (custom density): a row per event — checkbox,
            mark, name, the toggles for what the line adds, arrows to reorder. */
@@ -7273,6 +7254,11 @@
         @media (hover: hover) { .card-field-move button:hover:not(:disabled) { background: var(--hover-bg); } }
         .card-field-move button:disabled { opacity: 0.3; cursor: default; }
         .card-fields-status { font-size: 12px; color: var(--text-faint); }
+        /* The count and "Turn all on" beside it (wraps under it when narrow). */
+        .card-fields-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; }
+        .card-fields-foot .card-fields-all { flex: none; padding: 5px 12px; font-size: 13px; }
+        @media (pointer: coarse) { .card-fields-foot .card-fields-all { min-height: 44px; } }
+        @media (max-width: 640px) { .card-fields-foot .card-fields-all { width: 100%; min-height: 44px; } }
         /* "Card appearance": a label and a segment a row (the label above it on a phone). */
         .card-look { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--divider); padding-top: 12px; margin-top: 4px; }
         .card-look-grid { display: grid; grid-template-columns: minmax(96px, max-content) minmax(0, 1fr); align-items: center; gap: 10px 12px; }
@@ -7283,10 +7269,7 @@
         /* "Years under the name": a checkbox under the segments. */
         .modal label.card-look-check { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 14px; font-weight: 400; color: var(--text); cursor: pointer; }
         .card-look-check input { margin: 0; }
-        /* The preset above the details: its title and a segment (Brief / Register / All). */
-        .card-preset { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; }
         @media (max-width: 640px) {
-            .card-preset { flex-direction: column; align-items: stretch; gap: 6px; }
             .card-look-check { min-height: 44px; }
             /* The toggles go under the name, the arrows grow to a thumb. */
             .card-field-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
@@ -14049,6 +14032,7 @@
                             <option value="compact" data-i18n="cardDensity.compact"></option>
                             <option value="normal" data-i18n="cardDensity.normal"></option>
                             <option value="detailed" data-i18n="cardDensity.detailed"></option>
+                            <option value="register" data-i18n="cardDensity.register"></option>
                             <option value="custom" data-i18n="cardDensity.custom"></option>
                         </select>
                     </div>

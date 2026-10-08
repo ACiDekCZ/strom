@@ -296,67 +296,57 @@ test.describe('the header of the custom card (U02)', () => {
 test.describe('card presets (U02)', () => {
     const fieldsOf = (page: Page) => page.evaluate(() => window.Strom.SettingsManager.getCardFields());
 
-    test('a new user starts on Brief; Register sets every value of its row and shows pressed; a change of one\'s own presses none', async ({ page }) => {
+    test('a new user starts on the Detailed fields with the age; the age row has no mark or chips; "Turn all on" ticks all eight (U03a)', async ({ page }) => {
         await setup(page, null);
         await page.evaluate(() => window.Strom.UI.showSettingsDialog());
-        const presets = page.locator('#card-fields-settings .card-preset-segment');
-        await expect(presets).toHaveAttribute('role', 'group');
-        await expect(presets.locator('.segment-btn')).toHaveText(['Brief', 'Register', 'All']);
-        await expect(presets.locator('[aria-pressed="true"]')).toHaveText('Brief');
-        // The preset comes first, then the details, then the appearance.
-        const order = await page.evaluate(() => ['.card-preset', '.card-fields-list', '.card-look'].map(sel =>
+        const host = page.locator('#card-fields-settings');
+        // No preset segment any more: the details, then the appearance.
+        await expect(host.locator('.card-preset-segment')).toHaveCount(0);
+        const order = await page.evaluate(() => ['.card-fields-list', '.card-look'].map(sel =>
             document.querySelector(`#card-fields-settings ${sel}`)!.getBoundingClientRect().top));
         expect(order[0]).toBeLessThan(order[1]);
-        expect(order[1]).toBeLessThan(order[2]);
+        const first = await fieldsOf(page);
+        expect(first.on).toEqual(['birth', 'death', 'age', 'occupation']);
+        expect(first).toMatchObject({ style: 'marks', lines: 0, height: 'content', widthCap: 320, fullDate: false, cause: false, years: false });
+        // Eight rows; the age right after the death, ticked, without a mark and without chips.
+        await expect(host.locator('.card-field-row .card-field-name')).toHaveText(
+            ['Birth', 'Baptism', 'Death', 'Age', 'Burial', 'Occupation', 'Marriage', 'Divorce']);
+        const age = host.locator('.card-field-row[data-key="age"]');
+        await expect(age.locator('input[type="checkbox"]')).toBeChecked();
+        await expect(age.locator('.card-field-mark')).toHaveText('');
+        await expect(age.locator('.card-field-chip')).toHaveCount(0);
+        await expect(age.locator('.card-field-up, .card-field-down')).toHaveCount(2);
+        await expect(host.locator('.card-fields-status')).toHaveText('4 of 8 details on. A missing detail is left out.');
+        // The age off: the line goes from the diagram; on again: back.
+        await expect(page.locator('#tree-canvas .card-line--age').first()).toBeVisible();
+        await age.locator('input[type="checkbox"]').uncheck();
+        await expect(page.locator('#tree-canvas .card-line--age')).toHaveCount(0);
+        await expect(host.locator('.card-fields-status')).toHaveText('3 of 8 details on. A missing detail is left out.');
 
-        await presets.getByRole('button', { name: 'Register', exact: true }).click();
-        await expect(presets.locator('[aria-pressed="true"]')).toHaveText('Register');
-        const reg = await fieldsOf(page);
-        expect(reg.order.slice(0, 5)).toEqual(['birth', 'baptism', 'marriage', 'death', 'burial']);
-        expect(reg.on).toEqual(['birth', 'baptism', 'marriage', 'death', 'burial']);
-        expect([...reg.place].sort()).toEqual(['baptism', 'birth', 'burial', 'death', 'divorce', 'marriage']);
-        expect(reg).toMatchObject({ cause: true, fullDate: true, style: 'labels', lines: 0, height: 'content', widthCap: 320, years: false });
-        // The segments say it too, and the diagram draws labels.
-        await expect(page.locator('#card-fields-settings .card-look-style [aria-pressed="true"]')).toHaveText('Labels');
-        await expect(page.locator('#card-fields-settings .card-look-lines [aria-pressed="true"]')).toHaveText('Full');
-        await expect(page.locator('#card-fields-settings .card-look-height [aria-pressed="true"]')).toHaveText('By content');
-        await expect(page.locator('#card-fields-settings .card-fields-date [aria-pressed="true"]')).toHaveText('Full date');
-        await expect(page.locator('#card-fields-settings .card-look-years')).not.toBeChecked();
-        await expect(page.locator('#tree-canvas .card-line--label').first()).toBeVisible();
-        await expect(page.locator('#tree-canvas .card-line-label', { hasText: 'Marriage' }).first()).toBeVisible();
-
-        // A change of one's own: no preset is pressed.
-        await page.locator('#card-fields-settings .card-look-style').getByRole('button', { name: 'Symbols', exact: true }).click();
-        await expect(presets.locator('[aria-pressed="true"]')).toHaveCount(0);
-        await expect(page.locator('#tree-canvas .card-line--label')).toHaveCount(0);
-        await page.locator('#card-fields-settings .card-look-years').check();
-        await expect(presets.locator('[aria-pressed="true"]')).toHaveCount(0);
-        expect((await fieldsOf(page)).years).toBe(true);
-
-        // All: the wide card with every detail; Brief brings the default back.
-        await presets.getByRole('button', { name: 'All', exact: true }).click();
-        await expect(presets.locator('[aria-pressed="true"]')).toHaveText('All');
-        expect(await fieldsOf(page)).toMatchObject({ widthCap: 400, style: 'labels', years: false });
-        expect((await fieldsOf(page)).on).toHaveLength(7);
-        await presets.getByRole('button', { name: 'Brief', exact: true }).click();
-        await expect(presets.locator('[aria-pressed="true"]')).toHaveText('Brief');
-        expect(await fieldsOf(page)).toMatchObject({ on: ['birth', 'death', 'occupation'], style: 'marks', lines: 0, widthCap: 320, fullDate: false, cause: false });
+        // "Turn all on": every detail on, nothing else changes; at eight of eight the button goes.
+        const width = (await fieldsOf(page)).widthCap;
+        await host.getByRole('button', { name: 'Turn all on', exact: true }).click();
+        await expect(host.locator('.card-fields-status')).toHaveText('8 of 8 details on. A missing detail is left out.');
+        await expect(host.locator('.card-fields-all')).toHaveCount(0);
+        const all = await fieldsOf(page);
+        expect(all.on).toEqual(all.order);
+        expect(all).toMatchObject({ widthCap: width, style: 'marks', cause: false, place: first.place });
     });
 
     for (const theme of ['light', 'dark'] as const) {
-        test(`phone 360, ${theme}: the preset and style segments span the panel at 44px, German words fit, no page scroll`, async ({ page }) => {
+        test(`phone 360, ${theme}: the style segments span the panel at 44px, German words fit, no page scroll`, async ({ page }) => {
             await setup(page, null, 360);
             await page.evaluate(t => document.documentElement.setAttribute('data-theme', t), theme);
             await page.evaluate(() => window.Strom.UI.setLanguage('de'));
             await page.evaluate(() => window.Strom.UI.showSettingsDialog());
             const host = page.locator('#card-fields-settings');
-            await expect(host.locator('.card-preset-segment .segment-btn')).toHaveText(['Kurz', 'Matrikel', 'Alles']);
+            await expect(host.locator('.card-fields-all')).toHaveText('Alle einschalten');
             await expect(host.locator('.card-look-style .segment-btn')).toHaveText(['Symbole', 'Beschriftung']);
             await expect(host.locator('.card-look-check')).toContainText('Jahre unter dem Namen');
             // The panel's content width: the details list spans it.
             const panel = (await host.locator('.card-fields-list').boundingBox())!;
             await expect(host.locator('.card-fields-date .segment-btn')).toHaveText(['Nur Jahr', 'Ganzes Datum']);
-            for (const sel of ['.card-preset-segment', '.card-fields-date', '.card-look-style', '.card-look-lines', '.card-look-height', '.card-look-width']) {
+            for (const sel of ['.card-fields-date', '.card-look-style', '.card-look-lines', '.card-look-height', '.card-look-width']) {
                 const seg = host.locator(sel);
                 await seg.scrollIntoViewIfNeeded();
                 expect(Math.abs((await seg.boundingBox())!.width - panel.width), sel).toBeLessThan(1);
@@ -375,12 +365,16 @@ test.describe('card presets (U02)', () => {
             }
             // The checkbox and the name on the arrows' centre line (N17).
             await expectFieldRowsAligned(page);
-            // The preset's title above its segment.
-            const title = (await host.locator('.card-preset-title').boundingBox())!;
-            expect(title.y + title.height).toBeLessThanOrEqual((await host.locator('.card-preset-segment').boundingBox())!.y + 0.5);
             expect(Math.round((await host.locator('.card-look-check').boundingBox())!.height)).toBeGreaterThanOrEqual(44);
-            // The pressed preset stands out from the others in either theme.
-            const bg = await host.locator('.card-preset-segment .segment-btn').evaluateAll(bs => bs.map(b => getComputedStyle(b).backgroundColor));
+            // "Turn all on" across the panel, a thumb high, its German words whole.
+            const allBtn = host.locator('.card-fields-all');
+            await allBtn.scrollIntoViewIfNeeded();
+            const allBox = (await allBtn.boundingBox())!;
+            expect(Math.abs(allBox.width - panel.width)).toBeLessThan(1);
+            expect(Math.round(allBox.height)).toBeGreaterThanOrEqual(44);
+            expect(await allBtn.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+            // The pressed style stands out from the other in either theme.
+            const bg = await host.locator('.card-look-style .segment-btn').evaluateAll(bs => bs.map(b => getComputedStyle(b).backgroundColor));
             expect(bg[0]).not.toBe(bg[1]);
             expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
             expect(await page.locator('#settings-modal .modal').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
@@ -457,11 +451,12 @@ test.describe('touch on a tablet (pointer: coarse) (U02)', () => {
         expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
         await page.evaluate(() => window.Strom.UI.showSettingsDialog());
         const host = page.locator('#card-fields-settings');
-        for (const sel of ['.card-preset-segment', '.card-fields-date', '.card-look-style', '.card-look-lines', '.card-look-height', '.card-look-width']) {
+        for (const sel of ['.card-fields-date', '.card-look-style', '.card-look-lines', '.card-look-height', '.card-look-width']) {
             for (const b of await host.locator(`${sel} .segment-btn`).all()) {
                 expect(Math.round((await b.boundingBox())!.height), sel).toBeGreaterThanOrEqual(44);
             }
         }
+        expect(Math.round((await host.locator('.card-fields-all').boundingBox())!.height)).toBeGreaterThanOrEqual(44);
         for (const row of (await host.locator('.card-field-row').all()).slice(0, 3)) {
             expect(Math.round((await row.locator('.card-field-main').boundingBox())!.height)).toBeGreaterThanOrEqual(44);
             for (const b of await row.locator('.card-field-move button').all()) {

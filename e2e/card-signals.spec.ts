@@ -118,7 +118,7 @@ test.describe('card signals', () => {
 
     test('the stripes sit in the bottom-right corner in every density, over no text', async ({ page }) => {
         await setup(page);
-        for (const density of ['custom', 'compact', 'normal', 'detailed']) {
+        for (const density of ['custom', 'compact', 'normal', 'detailed', 'register']) {
             await page.evaluate((d) => window.Strom.UI.setCardDensity(d as never), density);
             const jan = card(page, 'Jan');
             await expect(jan.locator(':scope > .card-state')).toBeVisible();
@@ -127,13 +127,14 @@ test.describe('card signals', () => {
             expect(box.x + box.width - (stripes.x + stripes.width)).toBeGreaterThan(4);
             expect(box.y + box.height - (stripes.y + stripes.height)).toBeGreaterThan(3);
             // No text line of the card runs under them.
-            for (const sel of ['.name-text', '.birth-date', '.card-place', '.card-years']) {
-                const t = jan.locator(sel);
-                if (await t.count() === 0 || !(await t.isVisible())) continue;
-                const r = (await t.boundingBox())!;
-                const overlaps = r.x < stripes.x + stripes.width && stripes.x < r.x + r.width
-                    && r.y < stripes.y + stripes.height && stripes.y < r.y + r.height;
-                expect(overlaps, `${density}: ${sel} under the stripes`).toBe(false);
+            for (const sel of ['.name-text', '.birth-date', '.card-years']) {
+                for (const t of await jan.locator(sel).all()) {
+                    if (!(await t.isVisible())) continue;
+                    const r = (await t.boundingBox())!;
+                    const overlaps = r.x < stripes.x + stripes.width && stripes.x < r.x + r.width
+                        && r.y < stripes.y + stripes.height && stripes.y < r.y + r.height;
+                    expect(overlaps, `${density}: ${sel} under the stripes`).toBe(false);
+                }
             }
         }
         // Decoration only: a click there is a click on the card.
@@ -150,7 +151,7 @@ test.describe('card signals', () => {
             dm.updatePerson(id, { isLocked: true });
             window.Strom.TreeRenderer.render();
         });
-        for (const density of ['custom', 'compact', 'normal', 'detailed']) {
+        for (const density of ['custom', 'compact', 'normal', 'detailed', 'register']) {
             await page.evaluate((d) => window.Strom.UI.setCardDensity(d as never), density);
             await expect(page.locator('body')).toHaveAttribute('data-card-density', density);
             await expect(jan.locator(':scope > .lock-icon'), `${density}: lock`).toBeVisible();
@@ -203,7 +204,7 @@ test.describe('card signals', () => {
         const jan = card(page, 'Jan');
         const overlap = (a: { x: number; y: number; width: number; height: number }, b: typeof a) =>
             a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
-        for (const density of ['custom', 'normal', 'compact', 'detailed']) {
+        for (const density of ['custom', 'normal', 'compact', 'detailed', 'register']) {
             await page.evaluate((d) => window.Strom.UI.setCardDensity(d as never), density);
             await expect(jan.locator('.cross-tree-badge')).toBeVisible();
             await expect(jan).toHaveClass(/has-edge-br/);
@@ -212,14 +213,25 @@ test.describe('card signals', () => {
             const sBox = (await stripes.boundingBox())!;
             const pill = (await jan.locator('.cross-tree-badge').boundingBox())!;
             expect(overlap(sBox, pill), `${density}: stripes under the pill`).toBe(false);
-            // The last text line (the name in compact) ends before the stripes.
-            const last = jan.locator('.card-body > :last-child');
-            await expect(last).toHaveCSS('margin-right', '34px');
+            const fields = density === 'custom' || density === 'detailed' || density === 'register';
+            if (fields) {
+                // A card of details is not narrowed: it was measured 12px taller (padding 10 → 22),
+                // its text ends above the stripes and is never shortened for them.
+                await expect(jan).toHaveClass(/has-edge-room/);
+                await expect(jan).toHaveCSS('padding-bottom', '22px');
+                await expect(jan.locator('.card-body > :last-child')).toHaveCSS('margin-right', '0px');
+                await expect(jan.locator('.card-lines > :last-child')).toHaveCSS('padding-right', '0px');
+                await expect(jan.locator('.card-line [title]')).toHaveCount(0);
+            } else {
+                // The last text line (the name in compact) ends before the stripes.
+                await expect(jan.locator('.card-body > :last-child')).toHaveCSS('margin-right', '34px');
+            }
             // Text lines clip at their own box: no box reaches under the stripes.
-            for (const sel of ['.name', '.birth-date', '.card-place']) {
-                const t = jan.locator(sel);
-                if (await t.count() === 0 || !(await t.isVisible())) continue;
-                expect(overlap((await t.boundingBox())!, sBox), `${density}: ${sel} under the stripes`).toBe(false);
+            for (const sel of ['.name', '.birth-date', '.card-line']) {
+                for (const t of await jan.locator(sel).all()) {
+                    if (!(await t.isVisible())) continue;
+                    expect(overlap((await t.boundingBox())!, sBox), `${density}: ${sel} under the stripes`).toBe(false);
+                }
             }
         }
         // Without the pill: no class, the stripes back at the bottom.
@@ -227,6 +239,79 @@ test.describe('card signals', () => {
         await expect(jan.locator('.cross-tree-badge')).toHaveCount(0);
         await expect(jan).not.toHaveClass(/has-edge-br/);
         await expect(jan.locator(':scope > .card-state')).toHaveCSS('bottom', '6px');
+        // The Register card no longer keeps the pills' room.
+        await expect(jan).not.toHaveClass(/has-edge-room/);
+        await expect(jan).toHaveCSS('padding-bottom', '10px');
+    });
+
+    test('all five card types: stripes full 2 / partial 1, the fold, the badges ! ≠ ?, the dot far out, and Settings switches them off (U03a)', async ({ page }) => {
+        test.setTimeout(90_000);
+        await setup(page);
+        // Anna: birth cited, a death not cited (partial: one stripe) and an open question (?).
+        await page.evaluate(() => {
+            const dm = window.Strom.DataManager;
+            const data = dm.getData();
+            const src = Object.keys(data.sources ?? {})[0];
+            const anna = Object.values(data.persons).find((p: any) => p.firstName === 'Anna')!;
+            dm.updatePerson(anna.id, { birthDate: '1842', deathDate: '1910', question: 'Kde zemřela?' } as never);
+            dm.citePerson(anna.id, src, 'birth');
+            window.Strom.TreeRenderer.render();
+        });
+        const [jan, eva, anna, josef] = ['Jan', 'Eva', 'Anna', 'Josef'].map(n => card(page, n));
+        for (const density of ['compact', 'normal', 'detailed', 'register', 'custom']) {
+            await page.evaluate((d) => window.Strom.UI.setCardDensity(d as never), density);
+            await expect(page.locator('body')).toHaveAttribute('data-card-density', density);
+            const why = (what: string) => `${density}: ${what}`;
+            await expect(jan.locator(':scope > .card-state .st-ev i'), why('full')).toHaveCount(2);
+            await expect(anna.locator(':scope > .card-state .st-ev i'), why('partial')).toHaveCount(1);
+            await expect(josef.locator(':scope > .card-state'), why('none')).toHaveCount(0);
+            await expect(josef.locator(':scope > .card-story'), why('final fold')).not.toHaveClass(/draft/);
+            await expect(jan.locator(':scope > .card-story'), why('draft fold')).toHaveClass(/draft/);
+            if (density === 'compact') {
+                // No avatar: the dot on the card's corner stands for the badge.
+                for (const c of [jan, eva, anna]) await expect(c.locator(':scope > .card-signal-dot'), why('dot')).toBeVisible();
+            } else {
+                await expect(eva.locator('.card-avatar-wrap .card-signal'), why('!')).toHaveText('!');
+                await expect(jan.locator('.card-avatar-wrap .card-signal'), why('≠')).toHaveText('≠');
+                await expect(anna.locator('.card-avatar-wrap .card-signal'), why('?')).toHaveText('?');
+            }
+            // The tooltip and the aria-label say the state as on every card.
+            await expect(jan.locator('.card-tooltip .tt-ev'), why('tooltip')).toHaveCount(1);
+            expect(await jan.getAttribute('aria-label'), why('aria-label')).toContain('documented by sources, story in draft, conflicting sources');
+            expect(await anna.getAttribute('aria-label'), why('aria-label')).toContain('open question');
+        }
+        // Zoomed far out (below 0.55): the badges give way to dots on every type.
+        await expect.poll(async () => {
+            await page.evaluate(() => window.Strom.ZoomPan.zoomOut());
+            await page.waitForTimeout(260);
+            return page.evaluate(() => window.Strom.ZoomPan.getScale());
+        }, { timeout: 10000 }).toBeLessThan(0.55);
+        for (const density of ['compact', 'normal', 'detailed', 'register', 'custom']) {
+            await page.evaluate((d) => window.Strom.UI.setCardDensity(d as never), density);
+            await expect(page.locator('body')).toHaveAttribute('data-card-density', density);
+            await expect(jan.locator('.card-signal'), `${density}: no badge far out`).toBeHidden();
+            for (const c of [jan, eva, anna]) await expect(c.locator(':scope > .card-signal-dot'), `${density}: dot far out`).toBeVisible();
+            await expect(jan.locator(':scope > .card-state'), `${density}: no stripes far out`).toBeHidden();
+        }
+        await page.evaluate(() => window.Strom.ZoomPan.zoomIn());
+
+        // Settings → Show on card: switched off, gone from every type; the setting is kept apart from the type.
+        await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+        const settings = page.locator('#card-signals-settings');
+        await settings.locator('input[data-signal="evidence"]').uncheck();
+        await settings.locator('input[data-signal="story"]').uncheck();
+        await settings.locator('input[data-signal="question"]').uncheck();
+        await page.keyboard.press('Escape');
+        const kept = await page.evaluate(() => localStorage.getItem('strom-card-signals'));
+        for (const density of ['compact', 'normal', 'detailed', 'register', 'custom']) {
+            await page.evaluate((d) => window.Strom.UI.setCardDensity(d as never), density);
+            await expect(page.locator('body')).toHaveAttribute('data-card-density', density);
+            await expect(jan.locator(':scope > .card-state'), `${density}: stripes off`).toHaveCount(0);
+            await expect(josef.locator(':scope > .card-story'), `${density}: fold off`).toHaveCount(0);
+            await expect(anna.locator('.card-signal'), `${density}: ? off`).toHaveCount(0);
+            if (density !== 'compact') await expect(eva.locator('.card-signal'), `${density}: ! stays`).toHaveText('!');
+            expect(await page.evaluate(() => localStorage.getItem('strom-card-signals'))).toBe(kept);
+        }
     });
 
     test('the desktop person menu leads with the signal', async ({ page }) => {

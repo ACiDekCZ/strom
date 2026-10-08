@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, createFirstPerson, addRelation, card } from './helpers';
+import { openApp, createFirstPerson, addRelation, card, cardBoxesMatchLayout } from './helpers';
 
 /**
  * Round 4 card geometry (§1) + staged long-name fitting (§2).
@@ -89,44 +89,23 @@ async function nameLineCount(page: Page, firstName: string): Promise<number> {
     return card(page, firstName).locator('.name-text .name-line').count();
 }
 
-test('detailed card is 200x100 and its 128px column holds Kateřina Výšková at the top step', async ({ page }) => {
+test('the Detailed card widens for Kateřina Výšková and a long birth place, never clipping either (U03a)', async ({ page }) => {
     await openApp(page);
-    await createFirstPerson(page, 'Kateřina', 'Výšková', { gender: 'female', birthDate: '1874' });
+    await createFirstPerson(page, 'Kateřina', 'Výšková', { gender: 'female', birthDate: '1874', birthPlace: 'Landsberg an der Warthe' });
     await page.evaluate(() => window.Strom.UI.setCardDensity('detailed'));
 
     const c = card(page, 'Kateřina');
     await expect(c).toBeVisible();
-    await settleFitting(page);
-
-    // Round-5 detailed box: 200x100, padding 8px 9px → 128px text column.
-    const size = await c.evaluate((n) => ({ w: (n as HTMLElement).offsetWidth, h: (n as HTMLElement).offsetHeight }));
-    expect(size).toEqual({ w: 200, h: 100 });
-
-    // The wider column holds the acceptance name at the top step (15px on the
-    // reference platform; 14px where the serif renders a hair wider), never
-    // clipped. Assert the portable invariant, not an exact pixel — see the
-    // normal-card test above for why an exact 15 is CI-font-metric flaky.
-    await expect.poll(() => nameFontPx(page, 'Kateřina')).toBeGreaterThanOrEqual(14);
+    await page.evaluate(() => document.fonts.ready);
+    await expect.poll(() => cardBoxesMatchLayout(page)).toBe(true);
+    // A card of details: 200 up to the medium cap, the name whole at its size.
+    const size = await c.evaluate((n) => (n as HTMLElement).offsetWidth);
+    expect(size).toBeGreaterThanOrEqual(200);
+    expect(size).toBeLessThanOrEqual(320);
     expect(await nameEllipsized(page, 'Kateřina')).toBe(false);
-});
-
-test('detailed card shows a long birth place on two lines, card height stays 100px', async ({ page }) => {
-    await openApp(page);
-    await createFirstPerson(page, 'Otto', 'Meyer', { birthDate: '1850', birthPlace: 'Landsberg an der Warthe' });
-    await page.evaluate(() => window.Strom.UI.setCardDensity('detailed'));
-
-    const c = card(page, 'Otto');
-    await expect(c).toBeVisible();
-    await settleFitting(page);
-
-    // The card box does not grow to fit the place.
-    expect(await c.evaluate((n) => (n as HTMLElement).offsetHeight)).toBe(100);
-
-    // The place has its own line and reads in full (wraps to two lines, no clip).
-    const place = c.locator('.card-place');
-    await expect(place).toHaveText('Landsberg an der Warthe');
-    const clipped = await place.evaluate((n) => n.scrollHeight > n.clientHeight + 1);
-    expect(clipped).toBe(false);
+    // The place on the birth line reads in full (the whole detail, wrapped if it must).
+    await expect(c.locator('.card-line--birth .card-line-place')).toHaveText('Landsberg an der Warthe');
+    await expect(c.locator('.card-line--birth .card-line-place [title]')).toHaveCount(0);
 });
 
 test('compact shrinks a long name to the 12.5px floor as one line before ellipsis', async ({ page }) => {
@@ -145,18 +124,19 @@ test('compact shrinks a long name to the 12.5px floor as one line before ellipsi
     expect(await nameEllipsized(page, 'Maximiliana')).toBe(true);
 });
 
-test('a sub-pixel overflow shrinks the name instead of clipping it (Maria Paroulková)', async ({ page }) => {
-    // "Maria Paroulková" measures 128.34px at 15px serif — a third of a pixel
-    // over the detailed card's 128px column. The browser ellipsizes on ANY
-    // layout overflow, but the integer scrollWidth rounds it away (and never
-    // reports below the box width), so the old fitting pass left the name at
-    // 15px reading "Maria Paroulko…". The fix measures fractional Range rects.
+test('a sub-pixel overflow shrinks the name instead of clipping it (Adéla Pospíšilová)', async ({ page }) => {
+    // "Adéla Pospíšilová" measures about 126.6px at 15px in the card serif —
+    // half a pixel over the normal card's 126px column (it was "Maria
+    // Paroulková" on the old detailed card's 128px column). The browser ellipsizes on
+    // ANY layout overflow, but the integer scrollWidth rounds it away (and
+    // never reports below the box width), so the old fitting pass left the
+    // name at 15px, cut. The fix measures fractional Range rects.
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Výšek', { birthDate: '1871' });
-    await addRelation(page, 'Jan', 'partner', 'Maria', 'Paroulková', 'female');
-    await page.evaluate(() => window.Strom.UI.setCardDensity('detailed'));
+    await addRelation(page, 'Jan', 'partner', 'Adéla', 'Pospíšilová', 'female');
+    await page.evaluate(() => window.Strom.UI.setCardDensity('normal'));
 
-    const c = card(page, 'Maria');
+    const c = card(page, 'Adéla');
     await expect(c).toBeVisible();
     await settleFitting(page);
 
@@ -170,6 +150,6 @@ test('a sub-pixel overflow shrinks the name instead of clipping it (Maria Paroul
         return contentW <= n.getBoundingClientRect().width + 0.05;
     })).toBe(true);
     // And she got there by shrinking, not by losing letters.
-    expect(await nameFontPx(page, 'Maria')).toBeLessThan(15);
-    await expect(c.locator('.name-text')).toHaveAttribute('title', 'Maria Paroulková');
+    expect(await nameFontPx(page, 'Adéla')).toBeLessThan(15);
+    await expect(c.locator('.name-text')).toHaveAttribute('title', 'Adéla Pospíšilová');
 });
