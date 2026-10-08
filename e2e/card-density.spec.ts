@@ -132,6 +132,38 @@ test('Detailed never shows a nonsense age, and none without a birth date', async
     expect(ages.filter(n => n > 120)).toEqual([]);
 });
 
+test('B16-1: Detailed says an age from imprecise dates as such, never as if exact', async ({ page }) => {
+    await sampleTree(page);
+    await page.evaluate(() => window.Strom.UI.setCardDensity('detailed'));
+    const set = (name: string, birthDate: string, deathDate: string) => page.evaluate(([n, b, d]) => {
+        const dm = window.Strom.DataManager;
+        const p = dm.getAllPersons().find((x: { firstName: string }) => x.firstName === n);
+        if (p) dm.updatePerson(p.id, { birthDate: b, deathDate: d });
+        window.Strom.TreeRenderer.render();
+    }, [name, birthDate, deathDate]);
+    const age = (name: string) => card(page, name).locator('.card-line--age');
+
+    // Died "after 1950": a lower bound, in the line and in the aria-label.
+    await set('Johan', '1888-11-11', '>1950');
+    await expect(age('Johan')).toHaveText('age at least 61');
+    expect(await card(page, 'Johan').getAttribute('aria-label')).toContain(', age at least 61');
+    // Died "before 1850": an upper bound.
+    await set('Johan', '1800-03-01', '<1850');
+    await expect(age('Johan')).toHaveText('age at most 50');
+    // Born "about 1880": an estimate.
+    await set('Johan', '~1880', '1950-05-15');
+    await expect(age('Johan')).toHaveText('age about 69');
+    // Born within a range: the span of possible ages.
+    await set('Johan', '1802..1804', '1860-05-01');
+    await expect(age('Johan')).toHaveText('age 55–58');
+    // An estimate with a bound says too little: no line.
+    await set('Johan', '~1798', '>1850');
+    await expect(age('Johan')).toHaveCount(0);
+    // Plain dates stay exact, a year-only date too.
+    await set('Johan', '1862', '1919-03-12');
+    await expect(age('Johan')).toHaveText('age 56');
+});
+
 test('the labels style: the age under the word "Age", the number as its value', async ({ page }) => {
     await seedSetting(page, 'cardFields', { on: ['birth', 'age'], style: 'labels' });
     await sampleTree(page);

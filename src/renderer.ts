@@ -21,7 +21,7 @@ import { TreeManager } from './tree-manager.js';
 import { chainLinkSvg, iconSvg } from './icons.js';
 import * as CrossTree from './cross-tree.js';
 import { ViewMode, STANDALONE_VIEWS, ResearchEdgeMode } from './types.js';
-import { cardLines, CardLine, cardLineHtml, cardYears, CardLineStyle, cardDateReferences, cardAge, isFieldCardDensity } from './card-fields.js';
+import { cardLines, CardLine, cardLineHtml, cardYears, CardLineStyle, cardDateReferences, cardAge, formatAge, isFieldCardDensity } from './card-fields.js';
 import {
     CustomCardMetrics, CardLineRows, CardHead, customCardMetrics, customCardRows, customCardViewHeight, customCardSpouseLineY,
     measureCardTexts, cardFontsPending, CARD_HEAD_HEIGHT, CARD_EDGE_PILL_ROOM,
@@ -1668,8 +1668,10 @@ class TreeRendererClass {
             const ttDeathPlace = person.deathPlace?.trim() ?? '';
             let ttDeathLine = '';
             if (ttDeathDate || ttDeathPlace) {
-                const ttAge = this.calculateAge(person);
-                const agePart = ttAge !== null ? ` ${strings.tooltip.yearsOld(ttAge)}` : '';
+                const ttAge = cardAge(person);
+                // The plural follows the number said last ("55–58 years").
+                const agePart = ttAge !== null
+                    ? ` ${strings.tooltip.yearsOld(ttAge.max ?? ttAge.years, formatAge(ttAge))}` : '';
                 ttDeathLine = `† ${[ttDeathDate, ttDeathPlace].filter(Boolean).join(', ')}${agePart}`;
             }
             // The cause after a dot; the age the register gave only when it
@@ -2485,15 +2487,6 @@ class TreeRendererClass {
     private formatDateFull(dateStr: string): string {
         // Shared formatter: qualifiers ('about 1880') and ranges read as text.
         return formatFlexDate(dateStr);
-    }
-
-    /**
-     * Age at death, or today's age for someone plausibly still alive.
-     * Without a death date we must NOT count to today for a historical person —
-     * that produced ages like 230. When we can't know, we say nothing.
-     */
-    private calculateAge(person: Person): number | null {
-        return cardAge(person);
     }
 
     // ==================== TIMELINE VIEW ====================

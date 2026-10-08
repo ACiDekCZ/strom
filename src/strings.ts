@@ -1884,7 +1884,8 @@ const stringsEN = {
         died: 'Died',
         notes: 'Notes',
         // Age in parentheses on the death line of the hover card.
-        yearsOld: (age: number) => `(${age} ${age === 1 ? 'year' : 'years'})`,
+        // `shown` is the age as said ("about 61", "55–58"); `age` picks the plural.
+        yearsOld: (age: number, shown?: string) => `(${shown ?? age} ${age === 1 ? 'year' : 'years'})`,
         // Child count on the relationship line of the hover card.
         childrenCount: (n: number) => `${n} ${n === 1 ? 'child' : 'children'}`,
         // Footer of the hover card: the real desktop gesture (click opens the menu).
@@ -2334,6 +2335,12 @@ const stringsEN = {
         relTab: 'relations',
         // Lowercase inline word for the detailed card's "years · age" meta row.
         ageWord: 'age',
+        // An age from imprecise dates: "about" for estimates, a bound for
+        // "before"/"after" dates, a span for a date range.
+        ageAbout: (n: number) => `about ${n}`,
+        ageAtLeast: (n: number) => `at least ${n}`,
+        ageAtMost: (n: number) => `at most ${n}`,
+        ageSpan: (min: number, max: number) => `${min}–${max}`,
     },
     buttons: {
         save: 'Save',
@@ -5532,7 +5539,7 @@ const stringsCZ: StringsType = {
         died: 'Zemřel/a',
         notes: 'Poznámky',
         // Age in parentheses on the death line of the hover card.
-        yearsOld: (age: number) => `(${age} ${age === 1 ? 'rok' : age >= 2 && age <= 4 ? 'roky' : 'let'})`,
+        yearsOld: (age: number, shown?: string) => `(${shown ?? age} ${age === 1 ? 'rok' : age >= 2 && age <= 4 ? 'roky' : 'let'})`,
         // Child count on the relationship line of the hover card.
         childrenCount: (n: number) => `${n} ${n === 1 ? 'dítě' : n >= 2 && n <= 4 ? 'děti' : 'dětí'}`,
         // Footer of the hover card: the real desktop gesture (click opens the menu).
@@ -5986,6 +5993,10 @@ const stringsCZ: StringsType = {
         relTab: 'vztahy',
         // Lowercase inline word for the detailed card's "years · age" meta row.
         ageWord: 'věk',
+        ageAbout: (n: number) => `asi ${n}`,
+        ageAtLeast: (n: number) => `nejméně ${n}`,
+        ageAtMost: (n: number) => `nejvýše ${n}`,
+        ageSpan: (min: number, max: number) => `${min}–${max}`,
     },
     buttons: {
         save: 'Uložit',
@@ -9173,7 +9184,7 @@ const stringsDE: StringsType = {
         born: 'Geboren',
         died: 'Gestorben',
         notes: 'Notizen',
-        yearsOld: (age: number) => `(${age} ${age === 1 ? 'Jahr' : 'Jahre'})`,
+        yearsOld: (age: number, shown?: string) => `(${shown ?? age} ${age === 1 ? 'Jahr' : 'Jahre'})`,
         childrenCount: (n: number) => `${n} ${n === 1 ? 'Kind' : 'Kinder'}`,
         gestureHint: 'Klicken, um das Menü zu öffnen',
     },
@@ -9609,6 +9620,10 @@ const stringsDE: StringsType = {
         addTabChild: 'Kind',
         relTab: 'Beziehungen',
         ageWord: 'Alter',
+        ageAbout: (n: number) => `etwa ${n}`,
+        ageAtLeast: (n: number) => `mindestens ${n}`,
+        ageAtMost: (n: number) => `höchstens ${n}`,
+        ageSpan: (min: number, max: number) => `${min}–${max}`,
     },
     buttons: {
         save: 'Speichern',

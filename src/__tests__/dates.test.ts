@@ -15,6 +15,7 @@ import {
     dateSortKey,
     formatFlexDate,
     ageBetween,
+    ageReached,
 } from '../dates.js';
 
 describe('parseFlexDate', () => {
@@ -197,6 +198,51 @@ describe('ageBetween', () => {
     it('returns null for missing/invalid birth or negative age', () => {
         expect(ageBetween(undefined, '1950')).toBeNull();
         expect(ageBetween('1950', '1880')).toBeNull();
+    });
+});
+
+describe('ageReached (B16-1)', () => {
+    it('is exact for plain dates, a year-only date estimated as before', () => {
+        expect(ageReached('1880-05-15', '1950-05-14')).toEqual({ kind: 'exact', years: 69 });
+        expect(ageReached('1862', '1919-03-12')).toEqual({ kind: 'exact', years: 56 });
+        expect(ageReached('1880', '1950')).toEqual({ kind: 'exact', years: 70 });
+    });
+
+    it('is "about" when either date is an estimate', () => {
+        expect(ageReached('~1880', '1950-05-15')).toEqual({ kind: 'about', years: 69 });
+        expect(ageReached('1880-05-15', '~1950')).toEqual({ kind: 'about', years: 70 });
+    });
+
+    it('gives a lower bound for a death after a date or a birth before one', () => {
+        // Born 11 Nov 1888, died after 1950: at least 61, never "61" as if exact.
+        expect(ageReached('1888-11-11', '>1950')).toEqual({ kind: 'atLeast', years: 61 });
+        expect(ageReached('<1850', '1920-06-01')).toEqual({ kind: 'atLeast', years: 69 });
+        expect(ageReached('<1850', '>1920')).toEqual({ kind: 'atLeast', years: 69 });
+    });
+
+    it('gives an upper bound for a death before a date or a birth after one', () => {
+        expect(ageReached('1800-03-01', '<1850')).toEqual({ kind: 'atMost', years: 50 });
+        expect(ageReached('>1850', '1920-06-01')).toEqual({ kind: 'atMost', years: 70 });
+    });
+
+    it('says nothing when the bounds pull opposite ways or mix with an estimate', () => {
+        expect(ageReached('<1850', '<1920')).toBeNull();
+        expect(ageReached('>1850', '>1920')).toBeNull();
+        expect(ageReached('~1798', '>1850')).toBeNull();
+    });
+
+    it('gives the span of a range, exact when it narrows to one year', () => {
+        expect(ageReached('1802..1804', '1860-05-01')).toEqual({ kind: 'span', years: 55, max: 58 });
+        expect(ageReached('1880-05-01', '1950-01-01..1950-02-01')).toEqual({ kind: 'exact', years: 69 });
+        expect(ageReached('1802..1804', '<1850')).toBeNull();
+    });
+
+    it('counts to today without an end, and is null without a birth or for a negative age', () => {
+        expect(ageReached('1990-01-01')?.kind).toBe('exact');
+        expect(ageReached('~1990')?.kind).toBe('about');
+        expect(ageReached(undefined, '1950')).toBeNull();
+        expect(ageReached('1950', '1880')).toBeNull();
+        expect(ageReached('1950', '<1950')).toBeNull();
     });
 });
 

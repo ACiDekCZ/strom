@@ -13,7 +13,7 @@
  */
 
 import { Person, StromData, LifeEvent, Partnership, CardDensity } from './types.js';
-import { parseFlexDate, formatFlexDate, toCanonical, ageBetween } from './dates.js';
+import { parseFlexDate, formatFlexDate, toCanonical, ageReached, AgeReached } from './dates.js';
 import { newestLifeEvent, sortLifeEvents } from './events.js';
 import { strings } from './strings.js';
 import { isLivingPerson } from './privacy.js';
@@ -432,8 +432,10 @@ export function cardLines(person: Person, data: StromData, s: CardFieldSettings)
                 const age = cardAge(person);
                 if (age === null) break;
                 // Marks: a line without a mark from the date column ("age 57"); labels: "Age | 57".
-                const said = `${strings.card.ageWord} ${age}`;
-                const value = s.style === 'labels' ? String(age) : said;
+                // Imprecise dates say so ("age about 57", "age at least 61").
+                const shown = formatAge(age);
+                const said = `${strings.card.ageWord} ${shown}`;
+                const value = s.style === 'labels' ? shown : said;
                 out.push({ key, mark: '', text: value, date: '', rest: value, wide: true, spoken: said,
                     label: strings.fields.ageRow });
                 break;
@@ -560,10 +562,21 @@ export function cardOccupation(person: Person): string | null {
  * for a historical person — that produced ages like 230. When it cannot be
  * known, it is null.
  */
-export function cardAge(person: Person): number | null {
+export function cardAge(person: Person): AgeReached | null {
     if (!person.birthDate) return null;
     if (!person.deathDate && !isLivingPerson(person, new Date().getFullYear())) return null;
-    // Shared age rule (handles qualified / partial / range dates).
-    const age = ageBetween(person.birthDate, person.deathDate || undefined);
-    return age ? age.years : null;
+    // Shared age rule: an estimate, a before/after bound or a range says so.
+    return ageReached(person.birthDate, person.deathDate || undefined);
+}
+
+/** The age as a card and the hover card say it: "57", "about 57", "at least 61", "55–58". */
+export function formatAge(age: AgeReached): string {
+    const c = strings.card;
+    switch (age.kind) {
+        case 'about': return c.ageAbout(age.years);
+        case 'atLeast': return c.ageAtLeast(age.years);
+        case 'atMost': return c.ageAtMost(age.years);
+        case 'span': return c.ageSpan(age.years, age.max ?? age.years);
+        default: return String(age.years);
+    }
 }

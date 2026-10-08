@@ -75,6 +75,25 @@ describe('the custom card', () => {
         expect(texts(JAN, fields({ place: [] }))).toEqual(['* 1862', '† 1919', 'věk 56', 'mlynář']);
     });
 
+    it('says an age from imprecise dates as such, on mark and label cards alike (B16-1)', () => {
+        const age = (birthDate: string, deathDate: string, style?: 'labels') => {
+            const p: Person = { ...tree().persons[JAN], birthDate, deathDate };
+            return cardLines(p, tree(), fields({ on: ['age'], ...(style ? { style } : {}) })).map(l => l.text);
+        };
+        expect(age('1888-11-11', '>1950')).toEqual(['věk nejméně 61']);
+        expect(age('1800-03-01', '<1850')).toEqual(['věk nejvýše 50']);
+        expect(age('~1880', '1950-05-15')).toEqual(['věk asi 69']);
+        expect(age('1802..1804', '1860-05-01')).toEqual(['věk 55–58']);
+        expect(age('1888-11-11', '>1950', 'labels')).toEqual(['nejméně 61']);
+        expect(age('~1798', '>1850')).toEqual([]);
+        setLanguage('en');
+        expect(age('1888-11-11', '>1950')).toEqual(['age at least 61']);
+        expect(age('~1880', '1950-05-15')).toEqual(['age about 69']);
+        setLanguage('de');
+        expect(age('1888-11-11', '>1950')).toEqual(['Alter mindestens 61']);
+        expect(age('1800-03-01', '<1850')).toEqual(['Alter höchstens 50']);
+    });
+
     it('says estimates in words and ranges with a dash', () => {
         expect(cardDate('~1855', false)).toBe('kolem 1855');
         expect(cardDate('<1919-03-12', true)).toBe('před 12. 3. 1919');

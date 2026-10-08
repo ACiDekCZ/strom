@@ -292,6 +292,20 @@ export function formatDateForInput(value?: string): string {
     return `${q}${d.year}`;
 }
 
+type Ymd = [number, number, number];
+type YmdParts = { year: number; month?: number; day?: number };
+/** The first day a date of this precision can mean ('1880' → 1 Jan 1880). */
+const firstDay = (d: YmdParts): Ymd => [d.year, d.month ?? 1, d.day ?? 1];
+/** The last day a date of this precision can mean ('1880' → 31 Dec 1880). */
+const lastDay = (d: YmdParts): Ymd =>
+    [d.year, d.month ?? 12, d.day ?? (d.month === undefined ? 31 : daysInMonth(d.year, d.month))];
+/** Whole years from one day to another. */
+const yearsFromTo = (from: Ymd, to: Ymd): number => {
+    let n = to[0] - from[0];
+    if (to[1] < from[1] || (to[1] === from[1] && to[2] < from[2])) n--;
+    return n;
+};
+
 /**
  * The ages a person can have been at an event, in whole years, from the
  * precision of both dates: born "1862" and dead "12. 3. 1919" is 56 (born late
@@ -303,18 +317,8 @@ export function ageRangeBetween(birth?: string, end?: string): { min: number; ma
     const b = parseFlexDate(birth);
     const e = parseFlexDate(end);
     if (!b || !e || b.qualifier || e.qualifier) return null;
-    type Ymd = [number, number, number];
-    const first = (d: { year: number; month?: number; day?: number }): Ymd =>
-        [d.year, d.month ?? 1, d.day ?? 1];
-    const last = (d: { year: number; month?: number; day?: number }): Ymd =>
-        [d.year, d.month ?? 12, d.day ?? (d.month === undefined ? 31 : daysInMonth(d.year, d.month))];
-    const years = (from: Ymd, to: Ymd): number => {
-        let n = to[0] - from[0];
-        if (to[1] < from[1] || (to[1] === from[1] && to[2] < from[2])) n--;
-        return n;
-    };
-    const min = years(last(b.end ?? b), first(e));
-    const max = years(first(b), last(e.end ?? e));
+    const min = yearsFromTo(lastDay(b.end ?? b), firstDay(e));
+    const max = yearsFromTo(firstDay(b), lastDay(e.end ?? e));
     if (max < 0) return null;
     return { min: Math.max(0, min), max };
 }
@@ -349,4 +353,69 @@ export function ageBetween(birth?: string, end?: string): { years: number; appro
 
     if (years < 0) return null;
     return { years, approx };
+}
+
+/** An age said as precisely as the dates allow (see ageReached). */
+export interface AgeReached {
+    kind: 'exact' | 'about' | 'atLeast' | 'atMost' | 'span';
+    years: number;
+    /** The upper end of a `span`. */
+    max?: number;
+}
+
+/**
+ * The age a person reached, said as precisely as the dates allow (the card's
+ * age line and the hover card). End omitted = today.
+ *   - plain dates (also year- or month-only, estimated from mid-period as
+ *     ageBetween does): `exact`;
+ *   - an estimate ('~', about) on either side: `about` the estimated value;
+ *   - "before"/"after" ('<', '>') that all push the age the same way: a bound
+ *     that holds whatever the true dates are — born 1888-11-11, died after
+ *     1950 is `atLeast` 61; bounds that push opposite ways say nothing (null);
+ *   - a range ('1802..1804') against a plain date: the `span` of possible ages
+ *     (`exact` when it narrows to one year).
+ * An estimate mixed with a bound, or a range with any qualifier, is too vague
+ * to state: null. Null as well without a birth date or for a negative age.
+ */
+export function ageReached(birth?: string, end?: string): AgeReached | null {
+    const b = parseFlexDate(birth);
+    if (!b) return null;
+    let e: FlexDate | null;
+    if (end === undefined) {
+        const now = new Date();
+        e = { qualifier: '', year: now.getFullYear(), month: now.getMonth() + 1, day: now.getDate() };
+    } else {
+        e = parseFlexDate(end);
+        if (!e) return null;
+    }
+
+    if (b.end || e.end) {
+        if (b.qualifier || e.qualifier) return null;
+        const span = ageRangeBetween(birth, end ?? toCanonical(e));
+        if (!span) return null;
+        return span.min === span.max ? { kind: 'exact', years: span.min } : { kind: 'span', years: span.min, max: span.max };
+    }
+
+    const estimated = b.qualifier === '~' || e.qualifier === '~';
+    // Born earlier or died later than stated: the age can only be larger.
+    const older = b.qualifier === '<' || e.qualifier === '>';
+    // Born later or died earlier than stated: the age can only be smaller.
+    const younger = b.qualifier === '>' || e.qualifier === '<';
+
+    if (!estimated && !older && !younger) {
+        const age = ageBetween(birth, end ?? toCanonical(e));
+        return age ? { kind: 'exact', years: age.years } : null;
+    }
+    if (estimated) {
+        if (older || younger) return null;
+        const age = ageBetween(birth, end ?? toCanonical(e));
+        return age ? { kind: 'about', years: age.years } : null;
+    }
+    if (older && younger) return null;
+    if (older) {
+        const min = yearsFromTo(lastDay(b), firstDay(e));
+        return min > 0 ? { kind: 'atLeast', years: min } : null;
+    }
+    const max = yearsFromTo(firstDay(b), lastDay(e));
+    return max > 0 ? { kind: 'atMost', years: max } : null;
 }
