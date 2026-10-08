@@ -41,8 +41,12 @@ let prevCopy: { treeId: string; base: StromData | null; fp: string } | null = nu
 let loading: string | null = null;
 let loadingDone: Promise<void> | null = null;
 let memo: { treeId: string; key: string; list: PersonChange[] } | null = null;
-/** A send still pending in the research: its data and list, kept until it is written. */
-const pendingSent = new Map<string, { fingerprint: string; data: StromData; list: PersonChange[] | null }>();
+/**
+ * A send still pending in the research: its data and list, kept until it is
+ * written; `stands`: the fingerprints the kept copy could stand for when it
+ * went (the tie's base, the last written send's).
+ */
+const pendingSent = new Map<string, { fingerprint: string; data: StromData; list: PersonChange[] | null; stands: string[] }>();
 
 function esc(text: string): string {
     return text
@@ -182,7 +186,42 @@ export const researchChangesMethods = uiModule({
     /** A send is about to go: what it carries (for "What was written" once written). */
     researchNoteSending(treeId: TreeId, data: StromData, fingerprint: string): void {
         const list = DataManager.getCurrentTreeId() === treeId ? this.researchChangesNow() : null;
-        pendingSent.set(treeId, { fingerprint, data: baseCopy(data), list });
+        const link = TreeManager.getTreeMetadata(treeId)?.research;
+        const stands = [link?.fingerprint ?? '', link?.sent?.state === 'written' ? link.sent.fingerprint : ''].filter(Boolean);
+        pendingSent.set(treeId, { fingerprint, data: baseCopy(data), list, stands });
+    },
+
+    /**
+     * The research wrote the send with this fingerprint and took nothing new
+     * from it (N40): its version is still the kept copy, which now stands for
+     * this send as well (`fp`: the send's fingerprint now, when it changed
+     * since), so the changes per person stay listed against it. Taken back,
+     * the research stands where it stood: the same copy again.
+     */
+    researchNoteTookNothing(treeId: TreeId, fingerprint: string, fp = fingerprint): void {
+        const p = pendingSent.get(treeId);
+        if (!p || p.fingerprint !== fingerprint) return;
+        pendingSent.delete(treeId);
+        const retag = (): void => {
+            // Only a copy that stood for the research's version when the send went.
+            if (copy?.treeId !== treeId || !copy.base || !copy.fp || copy.fp === fp || !p.stands.includes(copy.fp)) return;
+            prevCopy = { treeId, base: copy.base, fp: copy.fp };
+            copy = { treeId, base: copy.base, fp };
+            memo = null;
+            try {
+                localStorage.setItem(FP_PREV_KEY + treeId, prevCopy.fp);
+                localStorage.setItem(FP_KEY + treeId, fp);
+            } catch { /* not trusted next time */ }
+            void saveResearchPrevCopy(treeId, prevCopy.base!, prevCopy.fp);
+            void saveResearchCopy(treeId, copy.base!, fp);
+        };
+        // The copy not read yet: read now, retagged once it is.
+        if (copy?.treeId !== treeId && DataManager.getCurrentTreeId() === treeId) this.researchChangesNow();
+        if (loading === treeId && loadingDone) {
+            void loadingDone.then(() => { retag(); this.refreshResearchSyncUi(); });
+        } else {
+            retag();
+        }
     },
 
     /**

@@ -737,6 +737,8 @@ export const researchSyncMethods = uiModule({
             patchResearchAutoState(treeId, { lastWritten: { at: closed.closedAt!, changes: closed.changes, conflicts: 0,
                 ...(closed.intake ? { intake: closed.intake } : {}), fingerprint: closed.fingerprint } });
             this.researchNoteWritten(treeId, sent.fingerprint, closed.closedAt!);
+        } else if (!fate.inherited) {
+            this.researchNoteTookNothing(treeId, sent.fingerprint);
         }
         // Written: "Send, then load" loads the version that has the changes now — not one that left
         // conflicts (it holds the research's values in place of the user's): told, it waits for the user.
@@ -1331,6 +1333,8 @@ export const researchSyncMethods = uiModule({
         const retagged = written && reply.ids && exported && active ? this.researchTakeSyncIds(treeId, exported.xrefs, reply.ids, sentFp) : null;
         // The research's version is the state sent with its numbers: the copy goes under the fingerprint the send now has.
         if (written && reply.changes !== 0) this.researchNoteWritten(treeId, sentFp, now, retagged ?? undefined);
+        // Nothing new taken: the copy stays the research's version, now for this send too (N40).
+        else if (written && reply.changes === 0 && !undone) this.researchNoteTookNothing(treeId, sentFp, retagged?.fingerprint);
         // Edits since the send taken back were not in it: they still wait.
         if (sentFp === fps.current) patchResearchAutoState(treeId, { edits: undefined, unsentSince: undefined, toldRefused: undefined });
         else patchResearchAutoState(treeId, { toldRefused: undefined });

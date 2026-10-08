@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { card } from './helpers.js';
 import { fakeBridge, openResearch, openResearchMenu, poll, block, editJan, researchGed, NEW_HEAD } from './research-bridge.js';
 
 /**
@@ -90,5 +91,59 @@ test.describe('changes per person', () => {
         await poll(page);
         await expect(page.locator('#research-sync-send-more')).toHaveCount(0);
         expect(await page.evaluate(() => window.Strom.UI.researchChangesNow())).toEqual([]);
+    });
+});
+
+test.describe('changes per person after a send the research took nothing from', () => {
+    test.use({ viewport: DESKTOP });
+
+    test('N40: a written send, then one the research took nothing from: the block counts the people, What will be sent lists them, after a reload and another edit too', async ({ page }) => {
+        await openResearch(page);
+        const b = await fakeBridge(page, { syncReply: { status: 200, body: { ok: true, inbox: false, changes: 1, applied: 1, input: 'I0042' } } });
+        await poll(page);
+        // First a send the research wrote.
+        await editJan(page, 'Kolín');
+        await page.evaluate(() => window.Strom.UI.researchSyncAction('send'));
+        await expect.poll(() => b.posts.length).toBe(1);
+        await openResearchMenu(page);
+        await expect(block(page)).toHaveAttribute('data-state', 'written');
+        // Then one it took nothing from.
+        b.syncReply = { status: 200, body: { ok: true, inbox: false, changes: 0, applied: 0, input: 'I0043' } };
+        await editJan(page, 'Brno');
+        await page.evaluate(() => window.Strom.UI.researchSyncAction('send'));
+        await expect.poll(() => b.posts.length).toBe(2);
+
+        const panel = page.locator('#research-changes-panel');
+        const listed = async () => {
+            await openResearchMenu(page);
+            await expect(block(page)).toHaveAttribute('data-state', 'notTaken');
+            await expect(block(page)).toContainText('The research took nothing new from the last send.');
+            await expect(block(page)).toContainText('1 person changed');
+            await block(page).getByRole('button', { name: 'What will be sent ›' }).click();
+            await expect(panel.locator('.research-changes-title')).toHaveText('What will be sent');
+            await expect(panel.locator('.research-changes-row')).toHaveCount(1);
+            await expect(panel.locator('.research-changes-name')).toHaveText('Jan Víšek');
+            await expect(panel.locator('.research-changes-kinds')).toHaveText('birth');
+            await page.keyboard.press('Escape');
+            await expect(panel).toHaveCount(0);
+            // The toolbar's Send carries the count.
+            await expect(page.locator('#research-sync-send-more')).toHaveText(/1/);
+        };
+        await listed();
+
+        // After a reload: the same.
+        await page.reload();
+        await expect(card(page, 'Jan')).toBeVisible();
+        await poll(page);
+        await listed();
+
+        // Another edit: still listed against the research's version.
+        await editJan(page, 'Plzeň');
+        await page.evaluate(() => window.Strom.UI.refreshResearchSyncUi());
+        await expect(page.locator('#research-sync-send-more')).toHaveText(/1/);
+        await page.locator('#research-sync-send-more').click();
+        await expect(panel.locator('.research-changes-row')).toHaveCount(1);
+        await expect(panel.locator('.research-changes-name')).toHaveText('Jan Víšek');
+        await expect(panel.locator('.research-changes-kinds')).toHaveText('birth');
     });
 });
