@@ -209,6 +209,29 @@ test.describe('marriage-order pill (T13)', () => {
         }
     });
 
+    test('a pill whose half holds only its number shows the ordinal alone; the bubble and the accessible label keep it all', async ({ page }) => {
+        // Wider still: not even "2nd ∞" fits in the half of the compact card, "2nd" does.
+        await widenPillFont(page, SPACING_ORDINAL);
+        await setup(page);
+        await page.evaluate(() => window.Strom.UI.setCardDensity('compact' as never));
+        await zoomTo(page, 1);
+        for (const [name, text, tip] of [['Anna', '1st', "Josef Víšek's 1st marriage, 1866, Dolní Lhota"], ['Marie', '2nd', "Josef Víšek's 2nd marriage, 1908, Praha"]] as const) {
+            await expect(pill(page, name)).toHaveAttribute('data-label', 'ordinal');
+            expect(await pillText(page, name)).toBe(text);
+            await expect(pill(page, name).locator('.uo-glyph, .uo-year')).toHaveCount(0);
+            const c = (await card(page, name).boundingBox())!;
+            const b = (await pill(page, name).boundingBox())!;
+            const mid = c.x + c.width / 2;
+            expect(b.x + b.width <= mid - 2 || b.x >= mid + 2, `${name}: the middle of the top edge stays free`).toBe(true);
+            // The bubble and the accessible label: the number, the year and the place.
+            await expect(pill(page, name)).toHaveAttribute('aria-label', tip);
+            await pill(page, name).hover();
+            await expect(pill(page, name).locator('.uo-tip')).toBeVisible();
+            await expect(pill(page, name).locator('.uo-tip')).toHaveText(tip);
+            await page.mouse.move(0, 0);
+        }
+    });
+
     test('the descendants view shows the pills too', async ({ page }) => {
         await setup(page);
         await page.locator('#view-mode-descendants').click();
@@ -416,16 +439,19 @@ const HARNESS: Array<[string, () => Tree, string[]]> = [
  * the 71px half of the 150px compact card): every character of the pill's
  * parts 2px wider, on screen and in the screen's own measure alike.
  */
-async function widenPillFont(page: Page): Promise<void> {
-    await page.addInitScript(() => {
+/** Letter spacing of the pill's parts at which only the ordinal fits in the half of the compact card. */
+const SPACING_ORDINAL = 8;
+
+async function widenPillFont(page: Page, spacing = 2): Promise<void> {
+    await page.addInitScript((spacing) => {
         const add = () => {
             const s = document.createElement('style');
-            s.textContent = '.union-order-pill .uo-num, .union-order-pill .uo-glyph, .union-order-pill .uo-year { letter-spacing: 2px; }';
+            s.textContent = `.union-order-pill .uo-num, .union-order-pill .uo-glyph, .union-order-pill .uo-year { letter-spacing: ${spacing}px; }`;
             document.documentElement.appendChild(s);
         };
         if (document.documentElement) add();
         else new MutationObserver((_, o) => { if (document.documentElement) { o.disconnect(); add(); } }).observe(document, { childList: true });
-    });
+    }, spacing);
 }
 
 for (const density of ['compact', 'normal', 'detailed', 'custom', 'compact-wide'] as const) {
