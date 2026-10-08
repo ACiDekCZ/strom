@@ -48,6 +48,7 @@ import { yearOf } from '../dates.js';
 import { twoFiguresSvg } from '../icons.js';
 import { shownNameOrEmpty } from '../person-name.js';
 import { forgetCardTypeCopy } from './card-fields-ui.js';
+import { syncControlBlock } from './minimap.js';
 
 export const miscMethods = uiModule({
     // ---- ABOUT DIALOG ----
@@ -430,6 +431,8 @@ export const miscMethods = uiModule({
             const hidden = STANDALONE_VIEWS.includes(mode) || !SettingsManager.isZoomControlsEnabled();
             zoomControls.style.display = hidden ? 'none' : '';
         }
+        // No empty card left behind when nothing in the block shows.
+        syncControlBlock();
 
         // Toolbar "Add family" shortcut (opt-in setting).
         const familyBtn = document.getElementById('toolbar-family-btn');

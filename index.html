@@ -5098,6 +5098,9 @@
             box-shadow: var(--shadow-sm);
             padding: 8px;
         }
+        /* Nothing in it shows (zoom buttons off, no minimap): no empty card.
+           Two classes, so it also beats the phone's `display: contents`. */
+        .control-block.control-block--empty { display: none; }
         .zoom-controls {
             display: flex;
             flex-direction: row;

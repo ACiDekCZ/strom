@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, createFirstPerson, addRelation } from './helpers.js';
+import { openApp, createFirstPerson, addRelation, card } from './helpers.js';
 
 function activeTreeId(page: Page): Promise<string> {
     return page.evaluate(() => window.Strom.TreeManager.getActiveTreeId());
@@ -77,6 +77,55 @@ test('audit log records a mutation when enabled', async ({ page }) => {
     await expect(modal).toBeVisible();
     // At least one entry was recorded.
     await expect(modal.locator('#audit-log-list .audit-log-entry, #audit-log-list li').first()).toBeVisible();
+});
+
+// B16-2: the control block is a card around the minimap and the zoom buttons;
+// with the buttons off and no minimap it must not stay as an empty circle.
+for (const vp of [
+    { name: 'desktop', width: 1280, height: 800 },
+    { name: 'tablet', width: 800, height: 1000 },
+    { name: 'phone', width: 390, height: 844 },
+    { name: 'phone sideways', width: 844, height: 390 },
+]) {
+    test(`B16-2: with the zoom buttons off and no minimap no empty control card stays (${vp.name})`, async ({ page }) => {
+        await page.setViewportSize({ width: vp.width, height: vp.height });
+        await openApp(page);
+        await createFirstPerson(page, 'Jan', 'Novak');
+        const block = page.locator('.control-block');
+        await expect(page.locator('.zoom-controls')).toBeVisible();
+        await expect(page.locator('#minimap-panel')).toBeHidden();
+
+        await page.evaluate(() => window.Strom.UI.toggleZoomControls(false));
+        await expect(page.locator('.zoom-controls')).toBeHidden();
+        // No box at all: not a 16 px card with a background and a shadow.
+        await expect(block).toBeHidden();
+        expect(await block.evaluate(el => { const r = el.getBoundingClientRect(); return r.width * r.height; })).toBe(0);
+
+        await page.evaluate(() => window.Strom.UI.toggleZoomControls(true));
+        await expect(page.locator('.zoom-controls')).toBeVisible();
+    });
+}
+
+test('B16-2: with the zoom buttons off the control card follows the minimap', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(card(page, 'Johan')).toBeVisible();
+    // Zoomed in until the tree overflows: the minimap shows.
+    for (let i = 0; i < 4; i++) await page.evaluate(() => window.Strom.ZoomPan.zoomIn());
+    await expect(page.locator('#minimap-panel')).toBeVisible();
+    // The zoom buttons off: the card stays for the minimap.
+    await page.evaluate(() => window.Strom.UI.toggleZoomControls(false));
+    await expect(page.locator('.zoom-controls')).toBeHidden();
+    await expect(page.locator('.control-block')).toBeVisible();
+    // The minimap off too: nothing left, no card.
+    await page.evaluate(() => window.Strom.UI.toggleMinimap(false));
+    await expect(page.locator('#minimap-panel')).toBeHidden();
+    await expect(page.locator('.control-block')).toBeHidden();
+    // The minimap back on: the card returns with it.
+    await page.evaluate(() => window.Strom.UI.toggleMinimap(true));
+    await expect(page.locator('#minimap-panel')).toBeVisible();
+    await expect(page.locator('.control-block')).toBeVisible();
 });
 
 test('floating zoom buttons can be turned off in settings', async ({ page }) => {
