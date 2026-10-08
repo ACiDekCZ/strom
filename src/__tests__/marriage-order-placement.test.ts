@@ -17,7 +17,7 @@ import { existsSync } from 'fs';
 import { join } from 'path';
 import {
     unionOrderBadges, placeUnionOrderPill, hiddenRelativesTabs, unionChildIdSet, viewLineSegments, segmentsNearCard,
-    PillSegment, EDGE_INSET, EDGE_ROW_Y, ABOVE_ROW_Y, PILL_HEIGHT, CENTRE_CLEAR, pillLabelForms, pillLabelWidths, estimatePillMetrics,
+    PillSegment, EDGE_INSET, EDGE_ROW_Y, ABOVE_ROW_Y, PILL_HEIGHT, CENTRE_CLEAR, REL_LINK_ICON_WIDTH, pillLabelForms, pillLabelWidths, estimatePillMetrics,
 } from '../marriage-order.js';
 import { measureUnionOrderPill, measureTabRows, rowKey } from '../union-order-measure.js';
 import { StromLayoutEngine, computeLayout } from '../layout/index.js';
@@ -211,6 +211,19 @@ describe('where the pill sits (N18)', () => {
         // The left pill when the right tabs reach past the middle.
         const l = placeUnionOrderPill({ ...base, cardWidth: 188, side: 'left', pillWidth: 58, rightTabs: 135 });
         expect(l).toMatchObject({ x: 13, row: 'above' });
+    });
+
+    it('a left pill keeps clear of the relations icon that joins the right tabs on hover (N35)', () => {
+        // 240px card, "1st ∞ 1784" 70px wide, two tabs 130px: at rest 13..83 + 4 ≤ 97 fits beside them,
+        // but the 18px icon (4px gap) starts the right group at 75 on hover.
+        const input = { ...base, cardWidth: 240, side: 'left' as const, pillWidth: 70, rightTabs: 130 };
+        expect(placeUnionOrderPill(input)).toMatchObject({ x: 13, row: 'edge' });
+        const hovered = placeUnionOrderPill({ ...input, rightHover: REL_LINK_ICON_WIDTH })!;
+        expect(hovered.row).toBe('above');
+        // Room for both: it stays on the edge.
+        expect(placeUnionOrderPill({ ...input, cardWidth: 270, rightHover: REL_LINK_ICON_WIDTH })).toMatchObject({ x: 13, row: 'edge' });
+        // No tabs: the icon alone stands at the right corner.
+        expect(placeUnionOrderPill({ ...input, rightTabs: 0, rightHover: REL_LINK_ICON_WIDTH })).toMatchObject({ x: 13, row: 'edge' });
     });
 
     it('on the compact card a pill wider than its half moves above, toward the corner, off the middle', () => {

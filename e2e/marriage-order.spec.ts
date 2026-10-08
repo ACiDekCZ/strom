@@ -467,3 +467,71 @@ for (const density of ['compact', 'normal', 'detailed', 'custom', 'compact-wide'
     });
 }
 
+
+/**
+ * A hovered card: the relations icon joins the right group left of its tabs.
+ * Every pill on the edge keeps clear of it (N35): each card with a pill on its
+ * top edge and tabs in its right corner hovered in turn.
+ */
+async function hoverCollisions(page: Page): Promise<{ hovered: number; errors: string[] }> {
+    const ids = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('#tree-canvas .person-card')]
+        .filter(c => c.querySelector(':scope > .card-edge:not(.edge-top-above) .union-order-pill') && c.querySelector('.edge-top-right .branch-tab')
+            && c.querySelector('.rel-link-icon'))
+        .map(c => c.dataset.id!));
+    const errors: string[] = [];
+    for (const id of ids) {
+        const c = byId(page, id);
+        await zoomTo(page, 1, id);
+        const box = (await c.boundingBox())!;
+        // Over the card's lower half: the icon shows, the pill and the tabs are not under the pointer.
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height * 0.75);
+        await expect(c.locator('.rel-link-icon')).toBeVisible();
+        const clash = await c.evaluate((el) => {
+            const p = el.querySelector('.union-order-pill')!.getBoundingClientRect();
+            const i = el.querySelector('.rel-link-icon')!.getBoundingClientRect();
+            return Math.min(p.right, i.right) - Math.max(p.left, i.left);
+        });
+        if (clash > 0.5) errors.push(`pill of ${id} (card ${box.width.toFixed(0)}px): the relations icon covers ${clash.toFixed(1)}px of it`);
+        await page.mouse.move(0, 0);
+    }
+    return { hovered: ids.length, errors };
+}
+
+/** Josef married Anna and then Marie; both wives' parents and siblings are out of view (two tabs each). */
+function twoWives(): Tree {
+    const t = builder();
+    t.person('Josef', 'Josef', 'Víšek', 'male', '1841');
+    t.person('Anna', 'Anna', 'Králová', 'female', '1845'); t.person('Marie', 'Marie', 'Nováková', 'female', '1850');
+    t.kin('Anna'); t.kin('Marie');
+    t.person('k1', 'Karel', 'Víšek', 'male', '1867'); t.person('k2', 'Hana', 'Víšková', 'female', '1879');
+    t.union('u1', 'Josef', 'Anna', '1866', ['k1']);
+    t.union('u2', 'Josef', 'Marie', '1878', ['k2']);
+    return t.tree();
+}
+
+test('N35: on a hovered card the relations icon never covers the marriage-order pill, at every density and custom card width', async ({ page }) => {
+    test.setTimeout(180_000);
+    const errors: string[] = [];
+    let hovered = 0;
+    await loadTree(page, twoWives(), 'Josef');
+    for (const density of ['compact', 'normal', 'detailed', 'custom'] as const) {
+        await page.evaluate((d) => window.Strom.UI.setCardDensity(d as never), density);
+        // The custom card is as wide as the view's longest name: a longer one, a narrow letter at a time,
+        // walks the pill and the tabs past each other (the medium width's cap, 320px, ends it).
+        const steps = density === 'custom' ? 45 : 1;
+        for (let n = 0; n < steps; n++) {
+            await page.evaluate((n) => {
+                const dm = window.Strom.DataManager;
+                dm.updatePerson('k1' as never, { lastName: 'Víšek' + 'i'.repeat(n) });
+                window.Strom.TreeRenderer.setFocus('Josef' as never);
+            }, n);
+            await page.evaluate(() => document.fonts.ready);
+            const r = await hoverCollisions(page);
+            hovered += r.hovered;
+            errors.push(...r.errors.map(e => `${density}/${n}: ${e}`));
+        }
+    }
+    console.log(`N35: ${hovered} hovered cards with a pill on the edge and tabs, ${errors.length} collisions`);
+    expect(errors).toEqual([]);
+    expect(hovered).toBeGreaterThan(0);
+});

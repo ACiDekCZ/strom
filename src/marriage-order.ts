@@ -235,6 +235,8 @@ export const ABOVE_ROW_Y = EDGE_ROW_Y - 2 - PILL_HEIGHT;
 export const CENTRE_CLEAR = 4;
 /** The corner groups stand 12px inside the card's border. */
 export const EDGE_INSET = 12;
+/** The relations icon (.rel-link-icon): an 18px circle left of the branch tabs while the card is hovered. */
+export const REL_LINK_ICON_WIDTH = 18;
 /** How close the pill may come to a line (half a stroke and a hair). */
 const LINE_CLEARANCE = 1.5;
 
@@ -293,6 +295,12 @@ export interface PillPlacementInput {
     /** Distance of each corner group from the card's left / right outer edge. */
     leftInset: number;
     rightInset: number;
+    /**
+     * Width of what joins the right corner group, left of its tabs, while the
+     * card is hovered (the relations icon, REL_LINK_ICON_WIDTH; 0: nothing).
+     * A pill in the left half keeps clear of it too (N35).
+     */
+    rightHover?: number;
     /** The view's lines near the card, card-relative. */
     segments?: ReadonlyArray<PillSegment>;
 }
@@ -367,11 +375,14 @@ function placeWidth(input: PillPlacementInput, w: number, clearOnly: boolean):
     const mid = W / 2;
     const leftEnd = leftTabs > 0 ? leftInset + leftTabs : -Infinity;
     const rightStart = rightTabs > 0 ? W - rightInset - rightTabs : Infinity;
+    // Where the right group starts while the card is hovered (the relations icon left of its tabs).
+    const hover = input.rightHover ?? 0;
+    const rightHoverStart = hover > 0 ? (rightTabs > 0 ? rightStart - EDGE_GAP : W - rightInset) - hover : Infinity;
 
     // On the edge, beside the corner's tabs.
     if (side === 'left') {
         const x = leftTabs > 0 ? leftEnd + EDGE_GAP : leftInset;
-        if (x + w <= mid - CENTRE_CLEAR && x + w + EDGE_GAP <= rightStart && !hitsLine(x, EDGE_ROW_Y, w, segments)) {
+        if (x + w <= mid - CENTRE_CLEAR && x + w + EDGE_GAP <= Math.min(rightStart, rightHoverStart) && !hitsLine(x, EDGE_ROW_Y, w, segments)) {
             return { x, y: EDGE_ROW_Y, row: 'edge', clear: true };
         }
     } else {

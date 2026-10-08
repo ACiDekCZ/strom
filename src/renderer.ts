@@ -63,7 +63,7 @@ import { isMobile as isMobileViewport } from './breakpoints.js';
 import { parentRelKind, parentRelDash, connectionDash } from './parent-rel-style.js';
 import { isDiagramStandIn } from './layout/pipeline/placeholders.js';
 import {
-    unionOrderBadges, UnionOrderBadge, hiddenRelativesTabs, HiddenRelativesTab, placeUnionOrderPill, PillPlacement,
+    unionOrderBadges, UnionOrderBadge, hiddenRelativesTabs, HiddenRelativesTab, placeUnionOrderPill, PillPlacement, REL_LINK_ICON_WIDTH,
     viewLineSegments, segmentsNearCard, EDGE_INSET, PillLabel, pillLabelForms, pillLabelWidths,
 } from './marriage-order.js';
 import { measureUnionOrderPills, measureTabRows, rowKey, unionOrderPillKey, unionOrderPillPartsHtml, pillFontsPending } from './union-order-measure.js';
@@ -2574,6 +2574,9 @@ class TreeRendererClass {
         const segments = viewLineSegments({ connections: this.connections, spouseLines: this.spouseLines });
         const compact = SettingsManager.getCardDensity() === 'compact';
         const W = this.config.cardWidth;
+        // The relations icon joins the right group on hover (a pointer that hovers; never in view mode) (N35).
+        const hoverIcon = !DataManager.isViewMode() && typeof matchMedia === 'function' && matchMedia('(hover: hover)').matches
+            ? REL_LINK_ICON_WIDTH : 0;
         for (const [id, b] of badges) {
             const pos = this.positions.get(id);
             const person = DataManager.getPerson(id);
@@ -2590,6 +2593,7 @@ class TreeRendererClass {
                 rightTabs: tabRows.get(rowKey(tabsOf.get(id)!)) ?? 0,
                 leftInset: border + EDGE_INSET,
                 rightInset: border + EDGE_INSET + (signal ? 8 : 0),
+                rightHover: DataManager.isPersonLocked(id) ? 0 : hoverIcon,
                 segments: segmentsNearCard(segments, pos.x, pos.y, W),
             });
             if (slot) out.set(id, { ...slot, border });
