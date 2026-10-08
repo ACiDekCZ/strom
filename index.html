@@ -7093,7 +7093,8 @@
             .card-field-chips { grid-column: 1 / -1; grid-row: 2; padding-left: 52px; }
             .card-fields-settings .card-field-chip { font-size: 13px; padding: 6px 12px; }
             .card-fields-settings .card-field-move button { width: 44px; height: 44px; }
-            .card-field-main { min-height: 44px; }
+            /* The checkbox and the name on the arrows' centre line (`.modal label` made it a block, its content at the top). */
+            .modal label.card-field-main { display: flex; align-items: center; margin: 0; min-height: 44px; }
             .card-look-grid { grid-template-columns: minmax(0, 1fr); gap: 6px; }
             .card-look-grid .card-look-label:not(:first-child) { margin-top: 6px; }
             .card-look-segment { display: flex; width: 100%; }
@@ -7107,8 +7108,8 @@
             .card-look-segment .segment-btn, .card-fields-date .segment-btn { min-height: 44px; }
             .card-look-check { min-height: 44px; }
             .card-fields-settings .card-field-move button { width: 44px; height: 44px; }
-            /* A detail's checkbox and name take the tap across the row's height. */
-            .card-field-main { min-height: 44px; }
+            /* A detail's checkbox and name take the tap across the row's height, on the arrows' centre line. */
+            .modal label.card-field-main { display: flex; align-items: center; margin: 0; min-height: 44px; }
         }
         @media (hover: hover) { .person-card.indirect:hover { opacity: 1; } }
 

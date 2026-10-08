@@ -55,6 +55,34 @@ async function setup(page: Page, fields: Record<string, unknown> | null, width =
     await settled(page);
 }
 
+/**
+ * Per detail row of the settings: the vertical centres of its checkbox, its
+ * name and its arrows (N17: one line across the row on touch).
+ */
+async function fieldRowCentres(page: Page): Promise<{ key: string; check: number; name: number; arrows: number[] }[]> {
+    return page.locator('#card-fields-settings .card-field-row').evaluateAll(rows => rows.map(row => {
+        const mid = (el: Element) => { const b = el.getBoundingClientRect(); return (b.top + b.bottom) / 2; };
+        return {
+            key: (row as HTMLElement).dataset.key ?? '',
+            check: mid(row.querySelector('.card-field-main input')!),
+            name: mid(row.querySelector('.card-field-name')!),
+            arrows: [...row.querySelectorAll('.card-field-move button')].map(mid),
+        };
+    }));
+}
+
+/** The checkbox, the name and the arrows of every detail row on one centre line (within 1px). */
+async function expectFieldRowsAligned(page: Page): Promise<void> {
+    const rows = await fieldRowCentres(page);
+    expect(rows.length).toBeGreaterThan(3);
+    for (const r of rows) {
+        for (const a of r.arrows) {
+            expect(Math.abs(r.check - a), `${r.key}: checkbox ${r.check} arrows ${a}`).toBeLessThanOrEqual(1);
+            expect(Math.abs(r.name - a), `${r.key}: name ${r.name} arrows ${a}`).toBeLessThanOrEqual(1);
+        }
+    }
+}
+
 /** Every card's box is the layout's size (measured in the card fonts, laid out again). */
 async function settled(page: Page): Promise<void> {
     await expect.poll(() => cardBoxesMatchLayout(page)).toBe(true);
@@ -345,6 +373,8 @@ test.describe('card presets (U02)', () => {
                     expect([Math.round(box.width), Math.round(box.height)]).toEqual([44, 44]);
                 }
             }
+            // The checkbox and the name on the arrows' centre line (N17).
+            await expectFieldRowsAligned(page);
             // The preset's title above its segment.
             const title = (await host.locator('.card-preset-title').boundingBox())!;
             expect(title.y + title.height).toBeLessThanOrEqual((await host.locator('.card-preset-segment').boundingBox())!.y + 0.5);
@@ -439,7 +469,24 @@ test.describe('touch on a tablet (pointer: coarse) (U02)', () => {
                 expect([Math.round(box.width), Math.round(box.height)]).toEqual([44, 44]);
             }
         }
+        // The checkbox and the name on the arrows' centre line (N17).
+        await expectFieldRowsAligned(page);
         expect(Math.round((await host.locator('.card-look-check').boundingBox())!.height)).toBeGreaterThanOrEqual(44);
         expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(800);
+    });
+});
+
+test.describe('touch on a phone (N17)', () => {
+    test.use({ viewport: { width: 360, height: 800 }, hasTouch: true, isMobile: true });
+    test('a detail\'s checkbox and name sit on the centre line of its arrows', async ({ page }) => {
+        await setup(page, null, 360);
+        expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
+        await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+        const host = page.locator('#card-fields-settings');
+        await host.locator('.card-fields-list').scrollIntoViewIfNeeded();
+        for (const row of (await host.locator('.card-field-row').all()).slice(0, 3)) {
+            expect(Math.round((await row.locator('.card-field-main').boundingBox())!.height)).toBeGreaterThanOrEqual(44);
+        }
+        await expectFieldRowsAligned(page);
     });
 });
