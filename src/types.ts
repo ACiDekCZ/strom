@@ -1216,6 +1216,13 @@ export interface TreeMetadata {
      */
     researchAdoptToken?: { token: string; at: string; install?: true };
     /**
+     * The guessed sexes of a research tie from before data version 12
+     * (ResearchLink.sexU: reference number → the app's stand-in sex) and when
+     * they turned Unknown (ms epoch): a backup taken before that time turns
+     * them Unknown the same way when it is restored (N31).
+     */
+    legacySexU?: { map: Record<string, string>; at: number };
+    /**
      * The tree was downloaded to move to another browser for the research
      * (research-transfer.ts), or from a phone to a computer (`mobile`). The
      * copy left here says so (banner, then a question at every opening) until

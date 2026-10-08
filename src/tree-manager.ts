@@ -591,11 +591,25 @@ class TreeManagerClass {
             link.fingerprint = fingerprintLike(next, link.fingerprint);
         }
         tree.research = link;
+        // Kept: a backup from before turns Unknown the same way when it is restored (N31).
+        if (sexU && typeof sexU === 'object') tree.legacySexU = { map: { ...tree.legacySexU?.map, ...sexU as Record<string, string> }, at: Date.now() };
         this.saveIndex();
         if (next) this.saveTreeData(id, next);
         // Before the tree is shown: its changes per person are read against the copy.
         await unknownSexInResearchCopies(id, sexU);
         return next ?? data;
+    }
+
+    /**
+     * A backup taken at `createdAt` (ms) restored into tree `id`: its data
+     * with the guessed sexes of the tie it was taken under (before data
+     * version 12) turned Unknown as the tree's were (N31), or null when no
+     * person changes.
+     */
+    unknownSexOfOlderBackup(id: TreeId, data: StromData, createdAt: number | undefined): StromData | null {
+        const kept = this.index.trees.find(t => t.id === id)?.legacySexU;
+        if (!kept || createdAt === undefined || !(createdAt < kept.at)) return null;
+        return unknownSexFromTie(data, kept.map);
     }
 
     private async readTreeRecord(id: TreeId): Promise<TreeReadResult> {

@@ -370,13 +370,17 @@ async function readSnapshotText(s: StoredSnapshot): Promise<string | null> {
  * Decode a snapshot back to the tree's JSON (decrypt / gunzip / plain, images
  * put back). `missingImages` counts images the pool no longer had.
  */
-export async function getSnapshotPayload(id: string): Promise<{ json: string; missingImages: number; research?: SnapshotResearchBase } | null> {
+export async function getSnapshotPayload(id: string): Promise<{ json: string; missingImages: number; research?: SnapshotResearchBase; createdAt?: number } | null> {
     const s = await StorageManager.get<StoredSnapshot>('snapshots', id);
     if (!s) return null;
     const text = await readSnapshotText(s);
     if (text === null) return null;
     const { json, missing } = await unpoolJson(text);
-    return { json, missingImages: missing, ...(s.meta?.research ? { research: s.meta.research } : {}) };
+    return {
+        json, missingImages: missing,
+        ...(s.meta?.research ? { research: s.meta.research } : {}),
+        ...(typeof s.meta?.createdAt === 'number' ? { createdAt: s.meta.createdAt } : {}),
+    };
 }
 
 /** Decode a snapshot back to a raw JSON string (see getSnapshotPayload). */

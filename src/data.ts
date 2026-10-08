@@ -56,6 +56,7 @@ import { UndoManager } from './undo.js';
 import { applyLivingPrivacy, applyContentOptions, resolveContentOptions, ContentOptions, PrivacyMode } from './privacy.js';
 import { safeFileName } from './filenames.js';
 import { shownName } from './person-name.js';
+import { fingerprintLike } from './research-link.js';
 
 /** Extended updates for Partnership */
 
@@ -1338,13 +1339,24 @@ class DataManagerClass {
         if (this.isReadOnly() || !this.currentTreeId) return null;
         const payload = await getSnapshotPayload(snapshotId);
         if (!payload) return null;
-        const migrated = migrateData(JSON.parse(payload.json));
+        let migrated = migrateData(JSON.parse(payload.json));
+        // A backup from before data version 12 of a research tree: the sexes the
+        // tie named as the research's unknown turn Unknown, as the tree's did (N31).
+        const unknownSex = TreeManager.unknownSexOfOlderBackup(this.currentTreeId, migrated, payload.createdAt);
 
         this.beginMutation();
         // The research base the data build on: the caller's (the backup taken
         // before loading the research's version, V-B), else the one the backup
         // kept (N61-3). A backup without one: no head, no fingerprint.
-        if (this.currentTreeId) TreeManager.restoreResearchBase(this.currentTreeId, base ?? TreeManager.restoredBackupBase(this.currentTreeId, payload.research));
+        let restoredBase = base ?? TreeManager.restoredBackupBase(this.currentTreeId, payload.research);
+        if (unknownSex) {
+            // Data in step with that base stay in step (the fingerprint follows, as at the migration).
+            if (restoredBase?.fingerprint && restoredBase.fingerprint === fingerprintLike(migrated, restoredBase.fingerprint)) {
+                restoredBase = { ...restoredBase, fingerprint: fingerprintLike(unknownSex, restoredBase.fingerprint) };
+            }
+            migrated = unknownSex;
+        }
+        TreeManager.restoreResearchBase(this.currentTreeId, restoredBase);
         this.data = migrated;
         this.commitMutation(strings.undo.restoreBackup, true);
         AuditLogManager.log(this.currentTreeId, 'data.load', strings.auditLog.restoredBackup);

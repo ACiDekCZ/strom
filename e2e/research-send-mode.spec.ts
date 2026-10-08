@@ -581,6 +581,47 @@ test('a tie of an older app with changes not sent yet: the kept research version
     expect(changes).toEqual(['Jan Víšek: birth']);
 });
 
+test('a backup taken before data version 12 of a research tree restored: the guessed sexes turn Unknown as the tree\'s did, the next send carries no M/F for them (N31)', async ({ page }) => {
+    const { openResearch, fakeBridge, poll, researchGed } = await import('./research-bridge.js');
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openResearch(page);
+    const bridge = await fakeBridge(page, { accepts: { mode: 'research', sync: { auto: 'off' }, sources: true, verified: true, media: null } });
+    await poll(page);
+    expect(await page.evaluate(async () => (await window.Strom.UI.researchChangesReady())?.length ?? null)).toBe(0);
+    // As an older app kept it: Josef's and Jan's sexes the stand-ins for the research's U, and a backup of that state.
+    await page.evaluate(() => {
+        const tm = window.Strom.TreeManager;
+        tm.patchResearchLink(tm.getActiveTreeId()!, { sexU: { P0001: 'male', P0003: 'male' } } as never);
+    });
+    const snap = await page.evaluate(() => window.Strom.DataManager.snapshotNow('manual'));
+    expect(snap).toBeTruthy();
+    await page.waitForTimeout(300);
+    await page.reload();
+    await expect(page.locator('html')).not.toHaveClass(/app-loading/);
+    const sexOf = (name: string) => page.evaluate((n) => (Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.firstName === n) as any).gender, name);
+    await expect.poll(() => sexOf('Josef')).toBe('unknown');
+    // The backup restored: the same as the migration made the tree, still in step with the research.
+    expect(await page.evaluate(async (id) => !!(await window.Strom.DataManager.restoreSnapshot(id!)), snap)).toBe(true);
+    expect(await sexOf('Josef')).toBe('unknown');
+    expect(await sexOf('Jan')).toBe('unknown');
+    expect(await sexOf('Anna')).toBe('female');
+    await expect.poll(() => page.evaluate(async () => (await window.Strom.UI.researchChangesReady())?.length ?? null)).toBe(0);
+    // An edit of someone else, sent: Josef and Jan go as the research's U, never as a guessed M.
+    bridge.syncReply = { status: 200, body: { ok: true, inbox: false, changes: 1, applied: 1, input: 'I0083' } };
+    bridge.onWrite = () => ({ head: 'b3b3b3b3b3b3', ged: researchGed('b3b3b3b3b3b3') });
+    await page.evaluate(() => {
+        const dm = window.Strom.DataManager;
+        const anna = Object.values(dm.getData().persons).find((p: any) => p.firstName === 'Anna') as any;
+        dm.updatePerson(anna.id, { birthPlace: 'Kolín' });
+    });
+    await page.evaluate(() => window.Strom.UI.researchSendNow({ previewed: true }));
+    await expect.poll(() => bridge.posts.length).toBe(1);
+    const sexIn = (ged: string, name: string) => new RegExp(`1 NAME ${name}[\\s\\S]*?1 SEX (\\w)`).exec(ged)?.[1];
+    expect(sexIn(bridge.posts[0], 'Josef /Víšek/')).toBe('U');
+    expect(sexIn(bridge.posts[0], 'Jan /Víšek/')).toBe('U');
+    expect(sexIn(bridge.posts[0], 'Anna /Svobodová/')).toBe('F');
+});
+
 test('"Send, then load" where the research takes nothing new: said so (never "the same tree"), its newer version loads, asked first (N60-4)', async ({ page }) => {
     const { openResearch, fakeBridge, poll, editJan, researchGed, NEW_HEAD } = await import('./research-bridge.js');
     await page.setViewportSize({ width: 1440, height: 900 });
