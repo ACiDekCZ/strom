@@ -499,6 +499,40 @@ describe('a long date does not widen the date column (U02)', () => {
         expect(customCardMetrics(about, measure, 320, 0, 'marks', refs()).dateColumn).toBe(66);
     });
 
+    it('the limit is measured with the widest digit: an ordinary date of wider digits than 1888 stays ordinary (N15)', () => {
+        // Digits of different widths, as in the card font: "1" 4px, "8" 5px, "0" and "9" 7px, the rest 6px.
+        const digitW: Record<string, number> = { '1': 4, '8': 5, '0': 7, '9': 7 };
+        const uneven: MeasureTexts = (kind, texts) => {
+            const out = new Map<string, number>();
+            for (const t of texts) out.set(t, [...t].reduce((n, c) => n + (kind === 'name' ? 8 : digitW[c] ?? 6), 0));
+            return out;
+        };
+        // "28. 12. 1888" is 64px, "20. 10. 1800" 71px: wider than the reference, still an ordinary date.
+        const wide = line('20. 10. 1800', 'Brno');
+        const eleven = line('11. 11. 1811', 'Brno');
+        const about = line('kolem 22. 11. 1797', 'Brno');
+        const text = line('zima roku 1790 (nejisté)', 'Brno');
+        const whole: CustomCardEntry[] = [{ name: 'A', avatar: true, lines: [wide, eleven, range, about, text] }];
+        const metrics = customCardMetrics(whole, uneven, 400, 0, 'marks', cardDateReferences(true));
+        // The cap is "00. 00. 0000" (80px): the column is the widest ordinary date of the view.
+        expect(metrics.dateColumn).toBe(71);
+        const { rows } = customCardRows(whole, metrics, uneven, 0);
+        expect(rows.get(wide)!.longDate).toBeUndefined();
+        expect(rows.get(eleven)!.longDate).toBeUndefined();
+        // A range of whole dates, "about" a whole date and a text stay long.
+        for (const l of [range, about, text]) expect(rows.get(l)!.longDate, l.date).toBe(true);
+        // Years only: "kolem 1909" (61px) and "kolem 1790" (60px) are wider than "kolem 1888" (55px).
+        const k1909 = line('kolem 1909', 'Brno');
+        const k1790 = line('kolem 1790', 'Brno');
+        const k1755 = line('kolem 1755', 'Brno');
+        const years: CustomCardEntry[] = [{ name: 'A', avatar: true, lines: [k1909, k1790, k1755, text] }];
+        const ym = customCardMetrics(years, uneven, 400, 0, 'marks', cardDateReferences(false));
+        expect(ym.dateColumn).toBe(61);
+        const yr = customCardRows(years, ym, uneven, 0).rows;
+        for (const l of [k1909, k1790, k1755]) expect(yr.get(l)!.longDate, l.date).toBeUndefined();
+        expect(yr.get(text)!.longDate).toBe(true);
+    });
+
     it('the limit per language and date setting: cs 72 / 60, en 66 / 66, de 60 / 54 (6px a character)', () => {
         const all = (full: boolean) => [{ name: 'A', avatar: true, lines: [
             ...cardDateReferences(full).map(d => line(d, 'Brno')), line('x'.repeat(30), 'Brno'),

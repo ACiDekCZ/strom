@@ -17,11 +17,12 @@
  * A detail line is a grid: the mark (11px), the date, the place, 6px apart.
  * The date column is as wide as the longest date of the view, so the places
  * of all cards start at one x, but never wider than the longest ordinary date
- * of the language and the date setting (cardDateReferences): a date wider
- * than that (a range of whole dates, "about" a whole date, a text that is no
- * date) is a long date, drawn whole and never wrapped. When a detail may take
- * more rows it takes the line's first row across the date and the place
- * columns and the place starts on the next row in its column; on the one-row
+ * of the language and the date setting (cardDateReferences, measured with the
+ * widest digit in every digit position): a date wider than that (a range of
+ * whole dates, "about" a whole date, a text that is no date) is a long date,
+ * drawn whole and never wrapped. When a detail may take more rows it takes
+ * the line's first row across the date and the place columns and the place
+ * starts on the next row in its column; on the one-row
  * card the place follows it, 6px after it, and shortens. In the labels style
  * a line is the event's word (the label column, as wide as the longest label
  * of the view, 8px) and its value: the date, 5px, the place, wrapping under
@@ -124,6 +125,8 @@ function cardLineParts(l: CardLineText, valueLines: CardValueLines): CardLinePar
     return [{ text: l.rest, ...(l.more ? { tail: ` ${l.more}` } : {}) }];
 }
 
+const DIGITS = '0123456789';
+
 /**
  * Whether a line's date is a long date (wider than the view's date column):
  * it does not go into the column (see the top of this file). `dateWidth` is
@@ -138,7 +141,8 @@ export function isLongCardDate(l: CardLineText, dateWidth: number, dateColumn: n
  * column (labels) from its cards' texts. The labels counted are the ones the
  * lines show: a stand-in says its own event ("Baptism" on the birth line).
  * `dateReferences` (src/card-fields.ts cardDateReferences): the date column
- * is at most as wide as the widest of them; none, no such limit.
+ * is at most as wide as the widest of them written with the widest digit in
+ * every digit position; none, no such limit.
  */
 export function customCardMetrics<L extends CardLineText>(entries: Iterable<CustomCardEntry<L>>, measure: MeasureTexts,
     cap: number = CUSTOM_CARD_MAX_WIDTH, valueLines: CardValueLines = 1, style: CardLineStyle = 'marks',
@@ -176,7 +180,11 @@ export function customCardMetrics<L extends CardLineText>(entries: Iterable<Cust
     if (labels) for (const t of labelTexts) labelColumn = Math.max(labelColumn, w(labelW, t));
     else {
         // The widest date that fits under the widest ordinary date; a longer one goes its own way.
-        const refs = new Set(dateReferences);
+        // The card font's digits are not all equally wide: every reference is measured with
+        // each digit 0-9 in all its digit positions ("28. 12. 1888" → "00. 00. 0000" …
+        // "99. 99. 9999"), so an ordinary date of any digits fits under the cap.
+        const refs = new Set<string>();
+        for (const r of dateReferences) for (const d of DIGITS) refs.add(r.replace(/\d/g, d));
         const refW = refs.size ? measure('date', refs) : new Map<string, number>();
         let dateCap = refs.size ? 0 : Infinity;
         for (const r of refs) dateCap = Math.max(dateCap, w(refW, r));

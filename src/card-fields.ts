@@ -241,8 +241,9 @@ export function cardDate(value: string | undefined, full: boolean): string {
 
 /**
  * The ordinary dates of the current language and date setting (`full`: the
- * whole date, else the year): the longest of them is as wide as the date
- * column of a card may get (src/card-width.ts customCardMetrics). A whole
+ * whole date, else the year): the longest of them, written with the widest
+ * digit of the card font, is as wide as the date column of a card may get
+ * (src/card-width.ts customCardMetrics). A whole
  * date with two-digit day and month, an estimate in words, a range of years.
  * A wider date (a range of whole dates, "about" a whole date, a text that is
  * no date) does not widen the column; it goes its own way on its line.
