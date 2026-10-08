@@ -137,7 +137,7 @@ test.describe('sending by itself', () => {
         await expect.poll(() => bridge.posts.length).toBe(3);
     });
 
-    test('the research started again with a new token right before the send (403): after its new ?live= the changes go by themselves (N20)', async ({ page }) => {
+    test('the research started again with a new token right before the send (404 at the old address, as Strom Research answers an old token): after its new ?live= the changes go by themselves (N20)', async ({ page }) => {
         const bridge = await autoTree(page);
         writesAtOnce(bridge);
         bridge.rotateAt = 'sync';

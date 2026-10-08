@@ -167,32 +167,83 @@ test.describe('Add materials', () => {
         expect(b.batchDone).toHaveLength(1);
     });
 
-    test('the research started again with a new token in the middle of a batch (403): after the new connection Continue finishes it, no files chosen again (N20)', async ({ page }) => {
-        const b = await fakeBridge(page, { accepts: BATCH_ACCEPTS });
-        await openResearch(page, { media: true });
-        await poll(page);
+    /** Three files chosen, reviewed, sent; `before` runs right before Send. */
+    async function sendThree(page: Page, before: () => void = () => {}): Promise<void> {
         await page.evaluate(() => (window.Strom.UI as any).showBatchDialog());
         await addFiles(page, ['Krabice/a.jpg', 'Krabice/b.jpg', 'Krabice/c.jpg']);
         const dialog = page.locator('#batch-modal');
         await dialog.locator('[data-act="next"]').click();
-        // The first file goes; the token changes right before the second one's PUT.
-        b.rotateAt = 1;
+        before();
         await dialog.getByRole('button', { name: 'Send 3 files' }).click();
-        await expect(dialog.locator('.batch-progress-title')).toHaveText('Paused');
-        await expect(dialog.locator('.batch-paused-note')).toContainText('The research stopped responding');
-        // Only the first file taken (the second one's PUT turned down at the old address).
-        expect(b.mediaPuts.map(p => p.headers['x-strom-path'])).toEqual(['Krabice/a.jpg']);
-        // The research hands over its new address (as a ?live= does).
+    }
+
+    /** The research hands over its new address (as a ?live= does), remembered for its tree. */
+    async function newAddress(page: Page): Promise<void> {
         await page.evaluate((base) => { void window.Strom.UI.startLiveFollow(base); }, BRIDGE2);
         await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem(Object.keys(localStorage).find(k => k.startsWith('strom-research-bridge:'))!)!).base)).toBe(BRIDGE2);
+    }
+
+    for (const refusal of [404, 403]) {
+        const how = refusal === 404 ? '404 without a body, as Strom Research answers an old token' : '403';
+        test(`the research started again with a new token in the middle of a batch (${how}): paused, after the new connection Continue finishes it, no files chosen again, nothing refused (N20, N37)`, async ({ page }) => {
+            const b = await fakeBridge(page, { accepts: BATCH_ACCEPTS, tokenRefusal: refusal });
+            await openResearch(page, { media: true });
+            await poll(page);
+            const dialog = page.locator('#batch-modal');
+            // The first file goes; the token changes right before the second one's PUT.
+            await sendThree(page, () => { b.rotateAt = 1; });
+            await expect(dialog.locator('.batch-progress-title')).toHaveText('Paused');
+            await expect(dialog.locator('.batch-paused-note')).toContainText('The research stopped responding');
+            await expect(dialog.locator('.batch-refused')).toHaveCount(0);
+            // Only the first file taken (the second one's PUT turned down at the old address); not closed there.
+            expect(b.mediaPuts.map(p => p.headers['x-strom-path'])).toEqual(['Krabice/a.jpg']);
+            expect(b.batchDone ?? []).toHaveLength(0);
+            await newAddress(page);
+            await dialog.getByRole('button', { name: 'Continue' }).click();
+            await expect(dialog.locator('.batch-confirm-title')).toContainText('is in the research');
+            // The second and third file to the new address, the batch closed there; nothing said refused.
+            const taken = b.mediaPuts.slice(1);
+            expect(taken).toHaveLength(2);
+            expect(taken.map(p => p.headers['x-strom-path']).sort()).toEqual(['Krabice/b.jpg', 'Krabice/c.jpg']);
+            expect(b.batchDone).toHaveLength(1);
+            expect(b.seen!.filter(x => x.startsWith('POST /batch/'))).toHaveLength(1);
+            await expect(dialog.locator('.batch-done-row.is-warn')).toHaveCount(0);
+            await expect(dialog.locator('.batch-refused')).toHaveCount(0);
+            await expect(dialog.locator('.batch-done-row', { hasText: 'Received' })).toContainText('3');
+        });
+    }
+
+    test('the research started again with a new token before the batch is closed: paused, Continue closes it at the new address (N37)', async ({ page }) => {
+        const b = await fakeBridge(page, { accepts: BATCH_ACCEPTS });
+        await openResearch(page, { media: true });
+        await poll(page);
+        const dialog = page.locator('#batch-modal');
+        await sendThree(page, () => { b.rotateAt = 'done'; });
+        await expect(dialog.locator('.batch-progress-title')).toHaveText('Paused');
+        await expect(dialog.locator('.batch-paused-note')).toContainText('The research stopped responding');
+        expect(b.mediaPuts).toHaveLength(3);
+        expect(b.batchDone ?? []).toHaveLength(0);
+        await newAddress(page);
         await dialog.getByRole('button', { name: 'Continue' }).click();
         await expect(dialog.locator('.batch-confirm-title')).toContainText('is in the research');
-        // The second and third file to the new address, the batch closed there.
-        const taken = b.mediaPuts.slice(1);
-        expect(taken).toHaveLength(2);
-        expect(taken.map(p => p.headers['x-strom-path']).sort()).toEqual(['Krabice/b.jpg', 'Krabice/c.jpg']);
+        // Closed once, at the new address; no file sent again.
         expect(b.batchDone).toHaveLength(1);
-        expect(b.seen!.filter(x => x.startsWith('POST /batch/'))).toHaveLength(1);
+        expect(b.mediaPuts).toHaveLength(3);
+        await expect(dialog.locator('.batch-done-row', { hasText: 'Received' })).toContainText('3');
+        await expect(dialog.locator('.batch-done-row', { hasText: 'Tasks' })).toContainText('1');
+    });
+
+    test('a 404 with the research still answering at its address (a person it does not have): the file is refused, the batch is not paused (N37)', async ({ page }) => {
+        const b = await fakeBridge(page, { accepts: BATCH_ACCEPTS, mediaPutStatus: 404 });
+        await openResearch(page, { media: true });
+        await poll(page);
+        const dialog = page.locator('#batch-modal');
+        await sendThree(page);
+        await expect(dialog.locator('.batch-confirm-title')).toContainText('is in the research');
+        expect(b.mediaPuts).toHaveLength(3);
+        expect(b.batchDone).toHaveLength(1);
+        await expect(dialog.locator('.batch-refused summary')).toContainText('3');
+        await expect(dialog.locator('.batch-refused li')).toHaveText(['Krabice/a.jpg: no', 'Krabice/b.jpg: no', 'Krabice/c.jpg: no']);
     });
 
     test('a research that takes no batches: no "Add materials…"', async ({ page }) => {

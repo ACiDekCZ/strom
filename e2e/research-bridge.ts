@@ -96,11 +96,19 @@ export interface FakeBridge {
     replyExtra?: (posted: string) => Record<string, unknown>;
     /**
      * The research started again with a new token (N20): the old address
-     * (BRIDGE) answers 403, the new one (BRIDGE2) answers. Before, BRIDGE2 answers 403.
+     * (BRIDGE) is turned down, the new one (BRIDGE2) answers. Before, BRIDGE2 is turned down.
      */
     rotated?: boolean;
-    /** The token rotates right before this request: the next `POST /sync`, or a `PUT /media` after this many PUTs. */
-    rotateAt?: 'sync' | number;
+    /**
+     * The token rotates right before this request: the next `POST /sync`, a `PUT /media`
+     * after this many PUTs, or the next `POST /batch/<id>/done`.
+     */
+    rotateAt?: 'sync' | 'done' | number;
+    /**
+     * How an unknown token is turned down: 404 without a body (default — as Strom Research
+     * does, so as not to tell the address is a bridge), or this status with a JSON error.
+     */
+    tokenRefusal?: number;
 }
 
 export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Promise<FakeBridge> {
@@ -127,14 +135,19 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
         if (route.request().method() === 'OPTIONS') {
             return route.fulfill({ status: 204, headers: { ...cors, 'access-control-allow-methods': 'GET, PUT, POST', 'access-control-allow-headers': '*' } });
         }
-        // A new token: the old address turns everything down (as the research does an unknown token).
+        // A new token: the old address turns everything down (as the research does an unknown token:
+        // 404 without a body, core/live.ts).
         const method = route.request().method();
         if ((b.rotateAt === 'sync' && method === 'POST' && url.pathname.endsWith('/sync'))
+            || (b.rotateAt === 'done' && method === 'POST' && /\/batch\/[^/]+\/done$/.test(url.pathname))
             || (typeof b.rotateAt === 'number' && method === 'PUT' && /\/media\//.test(url.pathname) && b.mediaPuts.length >= b.rotateAt)) {
             b.rotated = true;
             b.rotateAt = undefined;
         }
-        if (`${url.origin}/${url.pathname.split('/')[1]}` !== (b.rotated ? BRIDGE2 : BRIDGE)) return json(403, { error: 'unknown token' });
+        if (`${url.origin}/${url.pathname.split('/')[1]}` !== (b.rotated ? BRIDGE2 : BRIDGE)) {
+            const code = b.tokenRefusal ?? 404;
+            return code === 404 ? route.fulfill({ status: 404, headers: cors, body: '' }) : json(code, { error: 'unknown token' });
+        }
         const media = /\/media\/([0-9a-f]{64})$/.exec(url.pathname);
         if (media) {
             const sha = media[1];

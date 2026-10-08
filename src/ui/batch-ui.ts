@@ -13,7 +13,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { PersonId } from '../types.js';
 import { sha256OfBlob } from '../sha256.js';
 import { originalTargets, mediaReplyId } from '../originals.js';
-import { parseLiveBridge, withAppVersion, researchSchemeUrl } from '../research-link.js';
+import { parseLiveBridge, withAppVersion, researchSchemeUrl, sanitizeLiveStatus } from '../research-link.js';
 import { storedResearchBridge, announcedResearchScheme } from '../research-device.js';
 import {
     BatchSkip, BatchFolder, batchSkip, batchLimitsOf, batchOverLimit, batchEstimate, batchDefaultName, batchTree,
@@ -730,8 +730,17 @@ export const batchMethods = uiModule({
             r.index++;
             if (r.index % 5 === 0 || r.index === r.queue.length) this.batchRemember();
         }
-        // Closed with what came (cancelled too: what was sent stays and is sorted).
-        r.result = await this.batchClose(r);
+        // Closed with what came (cancelled too: what was sent stays and is sorted). Its address turned
+        // down meanwhile (a new token, N37): paused like a file, Continue closes it at the new one.
+        for (;;) {
+            const closed = await this.batchClose(r);
+            if (closed !== 'down' || r.cancelled) { r.result = closed === 'down' ? null : closed; break; }
+            r.paused = true;
+            r.lost = true;
+            draw(true);
+            await new Promise<void>(resolve => { r.resume = resolve; });
+            r.resume = null;
+        }
         r.finished = true;
         window.removeEventListener('beforeunload', onLeave);
         writeUnfinished(r.treeId, null);
@@ -805,7 +814,10 @@ export const batchMethods = uiModule({
                 this.batchRemember();
                 return 'again';
             }
-            if (res.status === 403) return 'down';
+            // Turned down at this address: the research started again with a new token (it answers an
+            // unknown token 404, N37) — paused until its new address comes. A 404 of its own (a person it
+            // does not have) while it answers at this address: that file refused, the batch goes on.
+            if (await this.batchAddressGone(r, res.status)) return 'down';
             r.refused.push({ path: item.path, why: typeof body?.error === 'string' ? body.error.slice(0, 200) : `HTTP ${res.status}` });
             return 'ok';
         } catch {
@@ -815,8 +827,24 @@ export const batchMethods = uiModule({
         }
     },
 
-    /** `POST /batch/<id>/done`: the research closes the batch and makes its tasks. */
-    async batchClose(r: Run): Promise<DoneReply | null> {
+    /**
+     * A 401 / 403 / 404 from the bridge: is it the address (its token) that is turned down?
+     * Asked at the same address's `/status`: answering there for this research, the refusal
+     * was the research's own matter about this request, never a reason to pause (no loop).
+     */
+    async batchAddressGone(r: Run, status: number): Promise<boolean> {
+        if (status !== 401 && status !== 403 && status !== 404) return false;
+        try {
+            const res = await fetchWithTimeout(`${r.base}/status?poll=1`, ASK_TIMEOUT_MS);
+            if (!res.ok) return true;
+            return sanitizeLiveStatus(await res.json().catch(() => null))?.treeId !== r.researchId;
+        } catch {
+            return true;
+        }
+    },
+
+    /** `POST /batch/<id>/done`: the research closes the batch and makes its tasks ('down': its address turned down). */
+    async batchClose(r: Run): Promise<DoneReply | null | 'down'> {
         const body = JSON.stringify({ name: r.name, files: r.received + r.skipped + r.skippedAsked + r.refused.length,
             ...(r.person ? { person: r.person } : {}), ...(r.note ? { note: r.note } : {}) });
         for (let attempt = 0; attempt < 4; attempt++) {
@@ -826,7 +854,7 @@ export const batchMethods = uiModule({
                     headers: { 'Content-Type': 'text/plain;charset=UTF-8' }, body,
                 });
                 if (res.status === 503) { await sleep(retryAfterMs(res.headers.get('Retry-After'))); continue; }
-                if (!res.ok) return null;
+                if (!res.ok) return await this.batchAddressGone(r, res.status) ? 'down' : null;
                 const j = await res.json().catch(() => null) as Record<string, unknown> | null;
                 const n = (v: unknown): number => (typeof v === 'number' && v >= 0 ? Math.floor(v) : 0);
                 return j ? { inputs: n(j.inputs), known: n(j.known), refused: n(j.refused), tasks: Array.isArray(j.tasks) ? j.tasks.length : 0 } : null;
