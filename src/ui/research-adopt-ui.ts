@@ -22,7 +22,7 @@ import { countImages, stripMedia } from '../attachments.js';
 import { exportToGedcom, countFamilies } from '../ged-exporter.js';
 import {
     parseLiveBridge, sanitizeAdoptOffer, sanitizeAdoptReply, newAdoptToken, researchNewUrl, contentFingerprint, researchSchemeUrl,
-    readResearchHeader, applyAdoptIds, AdoptOffer, AdoptIds,
+    readResearchHeader, applyAdoptIds, AdoptOffer, AdoptIds, researchGedcomTitles, TitlesInGedcom,
 } from '../research-link.js';
 import { uiModule } from './module.js';
 import { onComputer, fetchWithTimeout, fetchStatus, fetchGedcomText, postSync, postCancel, readTree, CONNECT_TIMEOUT_MS } from './research-ui.js';
@@ -65,6 +65,23 @@ async function researchMovesTrees(base: string): Promise<boolean> {
         return !res.ok || bridgeMovesTrees(await res.json());
     } catch {
         return true;
+    }
+}
+
+/**
+ * How the titles of the names go to the research behind this bridge (its
+ * /status, researchGedcomTitles): not reached, in NPFX / NSFX only, which
+ * any research reads right.
+ */
+async function researchTitlesAt(base: string): Promise<TitlesInGedcom> {
+    try {
+        const res = await fetchWithTimeout(`${base}/status`, 4000);
+        if (!res.ok) return 'tags';
+        const body = await res.json() as { features?: unknown } | null;
+        const features = Array.isArray(body?.features) ? body.features.filter((f): f is string => typeof f === 'string') : null;
+        return researchGedcomTitles({ features });
+    } catch {
+        return 'tags';
     }
 }
 
@@ -257,7 +274,8 @@ export const researchAdoptMethods = uiModule({
             patchResearchAutoState(tree.id, { firstSendBackup: true });
         }
         // The research does not take photos over yet: they stay here only.
-        const exported = exportToGedcom(choice.images ? data : stripMedia(data), tree.name);
+        // A research that knows no titles gets the names without them (B-1): they stay here.
+        const exported = exportToGedcom(choice.images ? data : stripMedia(data), tree.name, { titles: await researchTitlesAt(bridge.base) });
         let reply: { tree: string; head: string | null; ids: AdoptIds | null } | null = null;
         let refusedEmpty = false;
         try {

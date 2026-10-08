@@ -1,6 +1,6 @@
 /**
  * An older Strom Research (1.11 and before: its bridge says nothing of what it
- * takes): a quiet line "The research has an older version… How to update…"
+ * takes; or 1.12, which knows no titles, for a tree that has some): a quiet line "The research has an older version… How to update…"
  * in ⋯ → Research, Research for this tree and by the Attachments heading, and
  * the dialog with the one command for every install (`strom update`), the npm
  * one, and the install line as the way when that fails. "Check again" asks
@@ -9,6 +9,9 @@
 
 import { strings } from '../strings.js';
 import { storedResearchBridge } from '../research-device.js';
+import { TITLES_FEATURE } from '../research-link.js';
+import { DataManager } from '../data.js';
+import { StromData } from '../types.js';
 import { onComputer } from './research-ui.js';
 import { installChannel, npmUpdateCommand } from '../research-install.js';
 import { isBetaBuildHere } from '../pwa.js';
@@ -25,26 +28,41 @@ function esc(text: string): string {
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+/** Someone in the tree has a title before or after the name. */
+function treeHasTitles(data: StromData | null | undefined): boolean {
+    return Object.values(data?.persons ?? {}).some(p => !!(p?.titleBefore?.trim() || p?.titleAfter?.trim()));
+}
+
 export const researchUpdateMethods = uiModule({
     /**
      * The open tree's research is an older version: its bridge is known on
      * this computer and it never said what it takes. Its version when it
      * answered in this page ('' = not known). Null: not older (or not known).
      */
-    researchOlderVersion(): { version: string } | null {
+    researchOlderVersion(): { version: string; titles?: true } | null {
         const ctx = this.researchSyncLink();
         if (!ctx || !onComputer()) return null;
         const id = ctx.link.id;
-        if (!storedResearchBridge(id)?.base || this.researchSyncCapable(id)) return null;
-        return { version: this.researchBridgeVersion(id) };
+        if (!storedResearchBridge(id)?.base) return null;
+        if (!this.researchSyncCapable(id)) return { version: this.researchBridgeVersion(id) };
+        // One that sends, but knows no titles (1.12) while this tree has some: they stay here only (B-1).
+        if (this.researchLacksTitles(id) && treeHasTitles(DataManager.getData())) return { version: this.researchBridgeVersion(id), titles: true };
+        return null;
+    },
+
+    /** The research answered in this page without `person.titles` (1.12 and before). Not asked yet: not known, false. */
+    researchLacksTitles(researchId: string): boolean {
+        const status = this.researchStatusOf(researchId);
+        return !!status && !status.features?.includes(TITLES_FEATURE);
     },
 
     /** The quiet line with its "How to update…" link (HTML; '' when the research is not older). */
     researchOlderLineHtml(where: 'menu' | 'settings' | 'attachments'): string {
         const older = this.researchOlderVersion();
-        if (!older) return '';
+        // The titles are no matter of the attachments.
+        if (!older || (older.titles && where === 'attachments')) return '';
         const u = strings.researchOlder;
-        const text = where === 'attachments' ? strings.media.olderResearch : u.line(older.version);
+        const text = where === 'attachments' ? strings.media.olderResearch : older.titles ? u.titlesLine(older.version) : u.line(older.version);
         return `<span class="research-older-text">${esc(text)}</span> `
             + `<button type="button" class="link-button research-older-how"${where === 'menu' ? ' role="menuitem"' : ''} data-research-update="${where}" onclick="window.Strom.UI.showResearchUpdateHelp()">${esc(u.how)}</button>`;
     },
@@ -65,7 +83,8 @@ export const researchUpdateMethods = uiModule({
         const overlay = document.getElementById(DIALOG_ID);
         if (!overlay) return;
         const u = strings.researchOlder;
-        const version = this.researchOlderVersion()?.version ?? '';
+        const older = this.researchOlderVersion();
+        const version = older?.version ?? '';
         const row = (cmd: string): string => `
             <div class="install-line-row">
                 <code class="install-line" tabindex="0" data-line="${esc(cmd)}">${esc(cmd)}</code>
@@ -78,7 +97,7 @@ export const researchUpdateMethods = uiModule({
                     <button type="button" class="close-btn" aria-label="${esc(strings.buttons.close)}">&times;</button>
                 </div>
                 <div class="modal-content">
-                    <p class="research-update-intro">${esc(u.intro(version))}</p>
+                    <p class="research-update-intro">${esc(older?.titles ? u.titlesIntro(version) : u.intro(version))}</p>
                     <p class="research-update-label">${esc(u.runInTerminal)}</p>
                     ${row(UPDATE_COMMAND)}
                     <p class="research-update-label">${esc(u.npm)}</p>
@@ -114,7 +133,7 @@ export const researchUpdateMethods = uiModule({
         const btn = document.querySelector<HTMLButtonElement>(`#${DIALOG_ID} [data-act="check"]`);
         if (btn) { btn.disabled = true; btn.textContent = u.checking; }
         const status = await this.askResearchBridge(ctx.link.id, CHECK_TIMEOUT_MS);
-        if (status && this.researchSyncCapable(ctx.link.id)) {
+        if (status && this.researchSyncCapable(ctx.link.id) && !this.researchOlderVersion()?.titles) {
             this.closeResearchUpdateHelp();
             this.showToast(u.updated(status.version), 5000);
             this.researchAutoArm();

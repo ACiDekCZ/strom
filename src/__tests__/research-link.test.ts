@@ -13,7 +13,7 @@ import { changeKind, changeAdds, sanitizeLiveLog, textKind, textPersonRefs, text
     isGedcomFileName, normalizeResearchId, parseEventData, isSafariBrowser,
     sanitizeResearchLinks, researchSchemeUrl, researchSourceRef, researchClip, researchPersonRef, researchTaskRef,
     researchNewUrl, researchAdoptToken, researchConflictRef, researchIntakeRef,
-    researchLinkScheme, DEFAULT_RESEARCH_SCHEME, RESEARCH_LINK_ACTIONS,
+    researchLinkScheme, DEFAULT_RESEARCH_SCHEME, RESEARCH_LINK_ACTIONS, researchGedcomTitles,
 } from '../research-link.js';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import {
@@ -337,6 +337,48 @@ describe('keepTitles — an older research drops titles (T07)', () => {
         expect(byRefn(out, 'P0001').titleBefore).toBe('Doc.');
         expect(byRefn(out, 'P0001').titleAfter).toBeUndefined();
         expect(byRefn(out, 'P0003').titleBefore).toBeUndefined();
+    });
+
+    it('B-1: a title the research read into the name is never added again; the doubled form comes off', () => {
+        // 1.12 read "Ing. Josef /Víšek/ st." as the given name "Ing. Josef st."; each later round doubled it.
+        for (const line of ['Ing. Josef st. /Víšek/', 'Ing. Ing. Josef st. st. /Víšek/', 'Ing. Ing. Ing. Josef st. st. st. /Víšek/', 'Ing. Josef /Víšek st./']) {
+            const next = importData(researchGed().replace('1 NAME Josef /Víšek/', `1 NAME ${line}`));
+            const once = keepTitles(next, here(), ['sync.ids']);
+            expect(byRefn(once, 'P0001'), line).toMatchObject({ titleBefore: 'Ing.', titleAfter: 'st.', firstName: 'Josef', lastName: 'Víšek' });
+            // Idempotent: run again over its own result, nothing grows.
+            const twice = keepTitles(once, once, ['sync.ids']);
+            expect(byRefn(twice, 'P0001')).toMatchObject({ titleBefore: 'Ing.', titleAfter: 'st.', firstName: 'Josef', lastName: 'Víšek' });
+        }
+    });
+
+    it('B-1: a title of several words or with commas comes off word by word, never down to no name', () => {
+        const prev = here();
+        Object.assign(byRefn(prev, 'P0001'), { titleBefore: 'Prof., Dr.', titleAfter: 'Ph.D.' });
+        const next = importData(researchGed().replace('1 NAME Josef /Víšek/', '1 NAME Prof., Dr. Prof., Dr. Josef, Ph.D. /Víšek/'));
+        expect(byRefn(keepTitles(next, prev, null), 'P0001')).toMatchObject({ firstName: 'Josef', titleBefore: 'Prof., Dr.', titleAfter: 'Ph.D.' });
+        // A name that is the title alone stays a name.
+        const bare = importData(researchGed().replace('1 NAME Josef /Víšek/', '1 NAME Ing. /Víšek/'));
+        expect(byRefn(keepTitles(bare, here(), null), 'P0001').firstName).toBe('Ing.');
+        // A word in the middle of the name is not a title at its edge.
+        const inside = importData(researchGed().replace('1 NAME Josef /Víšek/', '1 NAME Josef Ing. Karel /Víšek/'));
+        expect(byRefn(keepTitles(inside, here(), null), 'P0001').firstName).toBe('Josef Ing. Karel');
+    });
+
+    it('B-1: three rounds with a research that knows no titles leave the names and titles as they were', () => {
+        // What Strom Research 1.12 does with the file it gets: the NAME line only (no NPFX / NSFX / GIVN / SURN),
+        // the text after the surname joined to the given name.
+        const oldResearch = (ged: string): string => ged
+            .split('\n').filter(l => !/^2 (NPFX|NSFX|GIVN|SURN) /.test(l))
+            .map(l => l.replace(/^1 NAME (.*?)\/(.*?)\/\s*(.*)$/, (_m, g: string, sn: string, rest: string) => `1 NAME ${[g.trim(), rest.trim()].filter(Boolean).join(' ')} /${sn}/`))
+            .join('\n');
+        const status = { features: ['sync.ids', 'family.alone'] };
+        let data = here();
+        for (let round = 0; round < 3; round++) {
+            const ged = exportToGedcom(data, 'T', { titles: researchGedcomTitles(status) }).content;
+            data = stabilizeIds(keepTitles(importData(oldResearch(ged)), data, status.features), data);
+        }
+        expect(byRefn(data, 'P0001')).toMatchObject({ firstName: 'Josef', lastName: 'Víšek', titleBefore: 'Ing.', titleAfter: 'st.' });
+        expect(byRefn(data, 'P0003')).toMatchObject({ firstName: 'Jan', titleBefore: 'Mgr.' });
     });
 
     it('people with no unique REFN, or no titles before, are left as they are', () => {
@@ -1123,5 +1165,47 @@ describe('kinds of text lines (/log)', () => {
         const base = { head: 'a', at: '2026-09-30T06:00:00Z', what: ['+P0001 Jan'], task: '', text: ['Nová osoba: Jan'] };
         expect(sanitizeLiveLog({ entries: [{ ...base, kinds: ['person', 'source'] }] })![0].kinds).toBeUndefined();
         expect(sanitizeLiveLog({ entries: [{ ...base, kinds: ['people'] }] })![0].kinds).toBeUndefined();
+    });
+});
+
+describe('B-1: titles in the GEDCOM for a research, by what it says of itself', () => {
+    const titled = (): StromData => {
+        const d = importData(researchGed());
+        Object.assign(Object.values(d.persons).find(p => p.refn === 'P0001')!, { titleBefore: 'Ing.', titleAfter: 'st.' });
+        return d;
+    };
+    const nameBlock = (ged: string): string[] => {
+        const lines = ged.split('\n');
+        const at = lines.findIndex(l => l.startsWith('1 NAME') && l.includes('Josef'));
+        const out = [lines[at]];
+        for (let i = at + 1; lines[i]?.startsWith('2 '); i++) out.push(lines[i]);
+        return out.filter(l => !l.startsWith('2 SOUR'));
+    };
+
+    it('a research that says person.titles gets them as any program does', () => {
+        expect(researchGedcomTitles({ features: ['sync.ids', 'person.titles'] })).toBe('line');
+        expect(nameBlock(exportToGedcom(titled(), 'T', { titles: 'line' }).content))
+            .toEqual(['1 NAME Ing. Josef /Víšek/ st.', '2 NPFX Ing.', '2 GIVN Josef', '2 SURN Víšek', '2 NSFX st.']);
+        // The default (a file export) is the same.
+        expect(nameBlock(exportToGedcom(titled(), 'T').content)[0]).toBe('1 NAME Ing. Josef /Víšek/ st.');
+    });
+
+    it('a research that answered without person.titles gets none: the name as 3.9 wrote it', () => {
+        for (const features of [[], ['sync.ids', 'media.codes'], null]) {
+            expect(researchGedcomTitles({ features })).toBe('none');
+        }
+        const ged = exportToGedcom(titled(), 'T', { titles: 'none' }).content;
+        expect(nameBlock(ged)).toEqual(['1 NAME Josef /Víšek/']);
+        expect(ged).not.toMatch(/Ing\.|NPFX|NSFX/);
+    });
+
+    it('a research not asked yet gets them in NPFX / NSFX only, the NAME line without them', () => {
+        expect(researchGedcomTitles(null)).toBe('tags');
+        expect(researchGedcomTitles(undefined)).toBe('tags');
+        const block = nameBlock(exportToGedcom(titled(), 'T', { titles: 'tags' }).content);
+        expect(block).toEqual(['1 NAME Josef /Víšek/', '2 NPFX Ing.', '2 GIVN Josef', '2 SURN Víšek', '2 NSFX st.']);
+        // The app reads it back whole.
+        const back = Object.values(importData(exportToGedcom(titled(), 'T', { titles: 'tags' }).content).persons).find(p => p.refn === 'P0001')!;
+        expect(back).toMatchObject({ firstName: 'Josef', lastName: 'Víšek', titleBefore: 'Ing.', titleAfter: 'st.' });
     });
 });

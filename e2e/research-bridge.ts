@@ -253,8 +253,8 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
     return b;
 }
 
-/** The research opened in the app; its bridge remembered (as after a ?live= / ?send=); optionally changed. */
-export async function openResearch(page: Page, opts: { edit?: boolean; bridge?: boolean; capable?: boolean; auto?: boolean; media?: boolean } = {}): Promise<void> {
+/** The research opened in the app (`ged`: its file, default researchGed()); its bridge remembered (as after a ?live= / ?send=); optionally changed. */
+export async function openResearch(page: Page, opts: { edit?: boolean; bridge?: boolean; capable?: boolean; auto?: boolean; media?: boolean; ged?: string } = {}): Promise<void> {
     await openApp(page);
     await page.evaluate(() => {
         // Opening links in the system is not testable: record them instead.
@@ -262,7 +262,7 @@ export async function openResearch(page: Page, opts: { edit?: boolean; bridge?: 
         ui.__links = [];
         ui.handOverResearchLink = (u: string) => { ui.__links.push(u); };
     });
-    await dropFile(page, 'tree-strom.ged', researchGed());
+    await dropFile(page, 'tree-strom.ged', opts.ged ?? researchGed());
     await expect(card(page, 'Jan')).toBeVisible();
     if (opts.bridge !== false) {
         // As after a ?live= / ?send= from a research that says what it takes.

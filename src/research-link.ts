@@ -538,19 +538,45 @@ export function unknownSexFromTie(data: StromData, sexU: unknown): StromData | n
     return persons ? { ...data, persons } : null;
 }
 
+/** The bridge feature of a research that keeps titles apart from the name (NPFX / NSFX; Strom Research 1.13). */
+export const TITLES_FEATURE = 'person.titles';
+
+/** How a GEDCOM writes the titles of a name (see GedcomExportOptions.titles in ged-exporter.ts). */
+export type TitlesInGedcom = 'line' | 'tags' | 'none';
+
+/**
+ * How the titles go into a GEDCOM for a research, by its `/status`: one that
+ * says `person.titles` gets them as any program does ('line'); one that
+ * answered without it (1.12 and before) none (its reader takes a title in the
+ * NAME line for a part of the given name, and the next load would add the
+ * title again: B-1) — they stay in the app (keepTitles); one not asked yet
+ * gets them in NPFX / NSFX only ('tags'), which both kinds read right.
+ */
+export function researchGedcomTitles(status: { features: readonly string[] | null } | null | undefined): TitlesInGedcom {
+    if (!status) return 'tags';
+    return status.features?.includes(TITLES_FEATURE) ? 'line' : 'none';
+}
+
 /**
  * Titles before and after the name (Person.titleBefore / titleAfter) that a
  * research version lacks: a research that does not know titles (no
- * `person.titles` in its features; 1.12 drops NPFX/NSFX) leaves them out of
- * every version, so each person keeps the titles of the previous state,
+ * `person.titles` in its features; 1.12 reads no NPFX / NSFX) leaves them out
+ * of every version, so each person keeps the titles of the previous state,
  * matched by REFN (as stabilizeIds matches them). A title the research's
  * version has stays. `features`: the research's (`/status.features`; not
  * known = an older research). With `person.titles` the research decides
- * them, a removed title included: `next` comes back as it is. Returns a new
- * object when any person changed; neither input is changed.
+ * them, a removed title included: `next` comes back as it is.
+ *
+ * Idempotent: a kept title never doubles in the name. Such a research may
+ * hold it as a part of the name (a NAME line with the title, read by 1.12 as
+ * "Ing. Josef st."; an app before the fix sent it so, and each load and send
+ * added one more: B-1) — every copy of the title at the start of the given
+ * name (the title before) or at the end of the given name or the surname
+ * (the title after), word by word, comes off, as long as some name is left.
+ * Returns a new object when any person changed; neither input is changed.
  */
 export function keepTitles(next: StromData, previous: StromData, features: readonly string[] | null | undefined): StromData {
-    if (features?.includes('person.titles')) return next;
+    if (features?.includes(TITLES_FEATURE)) return next;
     const prevByRefn = uniqueRefns(previous);
     if (prevByRefn.size === 0) return next;
     let persons: StromData['persons'] | null = null;
@@ -558,15 +584,44 @@ export function keepTitles(next: StromData, previous: StromData, features: reado
         const prevId = prevByRefn.get(refn);
         const was = prevId ? previous.persons[prevId] : undefined;
         if (!was) continue;
-        let p = (persons ?? next.persons)[id];
-        for (const key of ['titleBefore', 'titleAfter'] as const) {
-            const title = was[key]?.trim();
-            if (!title || p[key]?.trim()) continue;
-            persons ??= { ...next.persons };
-            p = persons[id] = { ...p, [key]: was[key] };
-        }
+        const p = (persons ?? next.persons)[id];
+        const before = was.titleBefore?.trim() ?? '';
+        const after = was.titleAfter?.trim() ?? '';
+        if (!before && !after) continue;
+        const firstName = withoutTitleWords(withoutTitleWords(p.firstName ?? '', before, 'start'), after, 'end');
+        const lastName = withoutTitleWords(p.lastName ?? '', after, 'end');
+        const changed: Partial<typeof p> = {};
+        if (firstName !== (p.firstName ?? '')) changed.firstName = firstName;
+        if (lastName !== (p.lastName ?? '')) changed.lastName = lastName;
+        if (before && !p.titleBefore?.trim()) changed.titleBefore = was.titleBefore;
+        if (after && !p.titleAfter?.trim()) changed.titleAfter = was.titleAfter;
+        if (Object.keys(changed).length === 0) continue;
+        persons ??= { ...next.persons };
+        persons[id] = { ...p, ...changed };
     }
     return persons ? { ...next, persons } : next;
+}
+
+/**
+ * `name` without every copy of `title` at its start (or end), compared word
+ * by word (a comma after a word aside: GEDCOM lists titles with commas,
+ * "Prof., Dr."); never down to no word. `name` as it was when none is there.
+ */
+function withoutTitleWords(name: string, title: string, end: 'start' | 'end'): string {
+    const key = (w: string): string => w.replace(/,+$/, '').normalize('NFC');
+    const t = title.split(/\s+/).map(key).filter(Boolean);
+    if (t.length === 0) return name;
+    let words = name.trim().split(/\s+/).filter(Boolean);
+    let cut = false;
+    while (words.length > t.length) {
+        const at = end === 'start' ? 0 : words.length - t.length;
+        if (!t.every((w, i) => key(words[at + i]) === w)) break;
+        words = end === 'start' ? words.slice(t.length) : words.slice(0, at);
+        cut = true;
+    }
+    if (!cut) return name;
+    // "Novák, Ph.D.": the comma before a title after the name goes with it.
+    return end === 'end' ? words.join(' ').replace(/,+$/, '') : words.join(' ');
 }
 
 /** Reference numbers that occur exactly once, mapped to their person id. */

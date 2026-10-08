@@ -22,7 +22,7 @@
  * the 255-byte line limit, and the importer joins it back.
  */
 
-import { researchHeaderLines, ResearchHeaderInfo } from './research-link.js';
+import { researchHeaderLines, ResearchHeaderInfo, TitlesInGedcom } from './research-link.js';
 import { isPurePlaceholder } from './single-parent.js';
 import { APP_VERSION, StromData, Person, Partnership, PersonId, PartnershipId, LifeEventType, ParticipantRole, PlaceGeo, Story, ParentChildRelType, MediaOriginal, Attachment, FactStatus, coupleSides } from './types.js';
 import { normalizeSha256 } from './sha256.js';
@@ -44,6 +44,17 @@ export interface GedcomExportOptions {
      * can tell which of its versions the edits start from.
      */
     research?: ResearchHeaderInfo;
+    /**
+     * How the titles (Person.titleBefore / titleAfter) are written:
+     * - 'line' (default): in the NAME line and as NPFX / NSFX below it;
+     * - 'tags': as NPFX / NSFX only, the NAME line without them — a research
+     *   whose titles support is not known reads them either way (one that
+     *   knows titles from the tags, an older one only the line);
+     * - 'none': not at all, the NAME line as the app wrote it before titles
+     *   (3.9) — for a research that does not know titles, which would read
+     *   them from the line into the name (B-1); they stay in the app.
+     */
+    titles?: TitlesInGedcom;
 }
 
 /** Partnership statuses MARR/DIV cannot express, written as 1 _STAT. */
@@ -192,11 +203,13 @@ function pushPlace(lines: string[], level: number, place: string, places?: Recor
  * without a title stays one plain line, as ever. A part holding a comma gets
  * no GIVN / SURN (GEDCOM reads commas there as a list); the line has it.
  * One more name gets its GIVN and SURN: a person of no name ("?") with the
- * surname Unknown, so no reader takes it for no surname.
+ * surname Unknown, so no reader takes it for no surname. `titles` (see
+ * GedcomExportOptions.titles): 'tags' keeps the titles out of the line,
+ * 'none' writes the name as if it had none.
  */
-function pushName(lines: string[], person: Person): void {
-    const before = person.titleBefore?.trim() ?? '';
-    const after = person.titleAfter?.trim() ?? '';
+function pushName(lines: string[], person: Person, titles: TitlesInGedcom = 'line'): void {
+    const before = titles === 'none' ? '' : person.titleBefore?.trim() ?? '';
+    const after = titles === 'none' ? '' : person.titleAfter?.trim() ?? '';
     const name = formatGedcomName(person.firstName, person.lastName);
     const first = (person.firstName ?? '').trim();
     const last = (person.lastName ?? '').trim();
@@ -211,7 +224,7 @@ function pushName(lines: string[], person: Person): void {
         }
         return;
     }
-    pushWrapped(lines, 1, 'NAME', [before, name.trim(), after].filter(Boolean).join(' '));
+    pushWrapped(lines, 1, 'NAME', titles === 'tags' ? name : [before, name.trim(), after].filter(Boolean).join(' '));
     if (before) pushWrapped(lines, 2, 'NPFX', before);
     if (first && !first.includes(',')) pushWrapped(lines, 2, 'GIVN', first);
     if (last && !last.includes(',')) pushWrapped(lines, 2, 'SURN', last);
@@ -558,7 +571,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         if (person.isPlaceholder && (person.firstName === '?' || !person.firstName) && !person.lastName) {
             lines.push('1 NAME //');
         } else {
-            pushName(lines, person);
+            pushName(lines, person, options.titles);
         }
         // Other spellings as further NAME lines — the first one above stays the
         // primary, which is what every reader expects.

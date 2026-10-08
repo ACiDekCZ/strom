@@ -40,7 +40,7 @@ import {
     LiveQueueItem, LiveSpend, LiveIntake, LiveDirection, ResearchHeaderInfo, ExportXrefs,
 } from '../research-link.js';
 import { uiModule } from './module.js';
-import { withAppVersion, changeKind, changeAdds, sanitizeLiveLog, textKind, textPersonRefs, textWithoutRefs, LiveChangeKind, LiveLogEntry } from '../research-link.js';
+import { withAppVersion, researchGedcomTitles, TitlesInGedcom, changeKind, changeAdds, sanitizeLiveLog, textKind, textPersonRefs, textWithoutRefs, LiveChangeKind, LiveLogEntry } from '../research-link.js';
 import { AGENT_DONE_MS, AGENT_DONE_FADE_MS, ResearchCardInfo, setResearchCardInfoProvider } from '../card-signals.js';
 import { activeDirections, directionsMulti, queueDirectionFilter, setQueueDirectionFilter, taskDirectionName } from './research-directions-ui.js';
 import { iconSvg } from '../icons.js';
@@ -545,14 +545,18 @@ export function postCancel(url: string, reason: SendCancelReason): void {
     }).catch(() => { /* the research gives up on its own */ });
 }
 
-/** The GEDCOM the research gets back: the whole tree, as is, naming its research and version. */
-export function researchGedcom(data: StromData, treeName: string, link: ResearchHeaderInfo): string {
-    return exportToGedcom(data, treeName, { research: link }).content;
+/**
+ * The GEDCOM the research gets back: the whole tree, as is, naming its
+ * research and version. `titles`: how the names carry their titles, by what
+ * the research said of itself (researchGedcomTitles).
+ */
+export function researchGedcom(data: StromData, treeName: string, link: ResearchHeaderInfo, titles: TitlesInGedcom): string {
+    return exportToGedcom(data, treeName, { research: link, titles }).content;
 }
 
 /** researchGedcom with the xrefs it gave the records (a send's `ids` answer by them). */
-export function researchGedcomExport(data: StromData, treeName: string, link: ResearchHeaderInfo): { content: string; xrefs: ExportXrefs } {
-    const r = exportToGedcom(data, treeName, { research: link });
+export function researchGedcomExport(data: StromData, treeName: string, link: ResearchHeaderInfo, titles: TitlesInGedcom): { content: string; xrefs: ExportXrefs } {
+    const r = exportToGedcom(data, treeName, { research: link, titles });
     return { content: r.content, xrefs: r.xrefs };
 }
 
@@ -1558,7 +1562,7 @@ export const researchUiMethods = uiModule({
         this.showToast(r.sending, 60000);
         let res: Response;
         try {
-            res = await postSync(bridge.sync, researchGedcom(data, tree.name, { id: link.id, head: link.head, appTree: tree.id, transcripts: this.researchTranscriptsLink(link).transcripts }), 120000);
+            res = await postSync(bridge.sync, researchGedcom(data, tree.name, { id: link.id, head: link.head, appTree: tree.id, transcripts: this.researchTranscriptsLink(link).transcripts }, researchGedcomTitles(status)), 120000);
         } catch (err) {
             console.warn('Sending to the research failed', err);
             document.querySelector('.toast')?.remove();
@@ -1773,7 +1777,7 @@ export const researchUiMethods = uiModule({
             return;
         }
         const research = { id: meta.research.id, head: meta.research.head, appTree: treeId, transcripts: this.researchTranscriptsLink(meta.research).transcripts };
-        const blob = new Blob([researchGedcom(data, meta.name, research)], { type: 'text/plain;charset=utf-8' });
+        const blob = new Blob([researchGedcom(data, meta.name, research, researchGedcomTitles(this.researchStatusOf(meta.research.id)))], { type: 'text/plain;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;

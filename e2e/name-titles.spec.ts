@@ -220,3 +220,101 @@ test.describe('titles and the research\'s version (T07)', () => {
         });
     }
 });
+
+test('B-1: a research that knows no titles (1.12.1): three sends and loads never double a title, each send writes the one edit, the menu says how to update', async ({ page }) => {
+    const { openResearch, fakeBridge, poll, editJan, researchGed, openResearchMenu, HEAD } = await import('./research-bridge.js');
+    await page.setViewportSize({ width: 1440, height: 900 });
+    // The tree here has titles (a GEDCOM with NPFX / NSFX, or typed in 3.10).
+    await openResearch(page, { ged: researchGed().replace('1 NAME Josef /Víšek/', '1 NAME Ing. Josef /Víšek/ st.\n2 NPFX Ing.\n2 NSFX st.') });
+    // Strom Research 1.12.1: what its bridge says it can do (no person.titles), and how it reads a file:
+    // the NAME line only (no NPFX / NSFX / GIVN / SURN), the text after the surname joined to the given name.
+    type Rec = { given: string; surname: string; birthPlace: string };
+    const research = new Map<string, Rec>([
+        ['P0001', { given: 'Josef', surname: 'Víšek', birthPlace: '' }],
+        ['P0002', { given: 'Anna', surname: 'Svobodová', birthPlace: '' }],
+        ['P0003', { given: 'Jan', surname: 'Víšek', birthPlace: '' }],
+    ]);
+    const readAsOld = (ged: string): Map<string, Rec> => {
+        const out = new Map<string, Rec>();
+        for (const rec of ged.split(/\n(?=0 )/)) {
+            if (!/^0 @[^@]+@ INDI/.test(rec)) continue;
+            const refn = /\n1 REFN (\S+)/.exec(rec)?.[1];
+            const name = /\n1 NAME (.*?)\/(.*?)\/(.*)/.exec(rec);
+            if (!refn || !name) continue;
+            out.set(refn, {
+                given: [name[1].trim(), name[3].trim()].filter(Boolean).join(' '), surname: name[2].trim(),
+                birthPlace: /\n1 BIRT(?:\n[2-9] .*)*?\n2 PLAC (.*)/.exec(rec)?.[1].trim() ?? '',
+            });
+        }
+        return out;
+    };
+    const gedOf = (head: string): string => {
+        let ged = researchGed(head);
+        for (const [refn, r] of research) {
+            ged = ged.replace(new RegExp(`(0 @${refn}@ INDI)\n1 NAME [^\n]*`), `$1\n1 NAME ${r.given} /${r.surname}/${r.birthPlace ? `\n1 BIRT\n2 PLAC ${r.birthPlace}` : ''}`);
+        }
+        return ged;
+    };
+    const bridge = await fakeBridge(page, {
+        accepts: { mode: 'research', sync: { auto: 'off' }, sources: true, verified: true, media: null }, strom: '1.12.1',
+        features: ['sync.again', 'sync.undoneSince', 'sync.takenBack', 'sync.conflictEdit', 'sync.since', 'sync.ids', 'family.noCouple', 'family.alone', 'adopt.transfer', 'adopt.empty'],
+        head: HEAD, treeGed: gedOf(HEAD),
+    });
+    const written: number[] = [];
+    let heads = 0;
+    const nextHead = () => `${(++heads).toString(16).padStart(2, '0')}cd34ef56ab`;
+    bridge.syncReply = { status: 200, body: { ok: true, inbox: false, changes: 1, applied: 1, input: 'I0050' } };
+    bridge.onWrite = (posted) => {
+        let changes = 0;
+        for (const [refn, got] of readAsOld(posted)) {
+            const had = research.get(refn);
+            if (!had) continue;
+            for (const key of ['given', 'surname', 'birthPlace'] as const) {
+                if (got[key] && got[key] !== had[key]) { had[key] = got[key]; changes++; }
+            }
+        }
+        written.push(changes);
+        const head = nextHead();
+        return { head, ged: gedOf(head) };
+    };
+    bridge.replyExtra = () => ({ changes: written[written.length - 1], applied: written[written.length - 1] });
+    await poll(page);
+    const josef = () => page.evaluate(() => {
+        const p = (Object.values(window.Strom.DataManager.getData().persons) as any[]).find(x => x.refn === 'P0001');
+        return { firstName: p.firstName, lastName: p.lastName, titleBefore: p.titleBefore ?? '', titleAfter: p.titleAfter ?? '' };
+    });
+    const asBefore = { firstName: 'Josef', lastName: 'Víšek', titleBefore: 'Ing.', titleAfter: 'st.' };
+    expect(await josef()).toEqual(asBefore);
+    const places = ['Praha', 'Brno', 'Kolín'];
+    for (let round = 0; round < 3; round++) {
+        // One edit here, sent.
+        await editJan(page, places[round]);
+        await page.evaluate(() => window.Strom.UI.researchSendNow({ previewed: true }));
+        await expect.poll(() => written.length).toBe(round + 1);
+        // Something new there (Anna's birth, added in the research), loaded.
+        research.get('P0002')!.birthPlace = `Čáslav ${round}`;
+        const head = nextHead();
+        bridge.head = head;
+        bridge.treeGed = gedOf(head);
+        await poll(page);
+        await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+        const load = page.locator('#research-load-modal #research-load-ok');
+        const loaded = () => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head);
+        await expect.poll(async () => (await loaded()) === head || await load.isVisible()).toBe(true);
+        if (await load.isVisible()) await load.click();
+        await expect.poll(loaded).toBe(head);
+        expect(await josef(), `round ${round + 1}`).toEqual(asBefore);
+    }
+    // Each send wrote exactly the one edit; the research holds the name without the titles, never "Ing. Josef st.".
+    expect(written).toEqual([1, 1, 1]);
+    expect(research.get('P0001')).toMatchObject({ given: 'Josef', surname: 'Víšek' });
+    for (const posted of bridge.posts) expect(posted).not.toMatch(/Ing\.|NPFX|NSFX/);
+    await expect(card(page, 'Josef').locator('.name-text')).toHaveAttribute('title', 'Ing. Josef Víšek st.');
+    // The research menu says the research keeps no titles, with "How to update…".
+    await openResearchMenu(page);
+    const older = page.locator('#research-older-block');
+    await expect(older).toContainText("The research has an older version (1.12.1) that doesn't keep titles.");
+    await older.getByRole('menuitem', { name: 'How to update…' }).click();
+    await expect(page.locator('#research-update-modal .research-update-intro')).toContainText("doesn't keep the titles before and after names");
+});
+

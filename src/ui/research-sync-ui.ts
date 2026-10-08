@@ -35,7 +35,7 @@ import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import {
     LiveStatus, contentFingerprint, fingerprintLike, sanitizeLiveStatus, sanitizeSyncReply, isSafariBrowser,
     parseLiveBridge, researchSchemeUrl, readResearchHeader, stabilizeIds, researchPersonRef, ResearchAccepts,
-    researchIdsByContent, holdsResearchIds, ResearchSendRecord, AdoptIds, ExportXrefs, applySyncIds,
+    researchIdsByContent, holdsResearchIds, ResearchSendRecord, AdoptIds, ExportXrefs, applySyncIds, researchGedcomTitles,
 } from '../research-link.js';
 import { loadResearchCopy } from '../research-copy.js';
 import {
@@ -1195,7 +1195,7 @@ export const researchSyncMethods = uiModule({
         const exported = again ? null : researchGedcomExport(data, meta?.name ?? '', {
             id: link.id, head: link.head, appTree: treeId, transcripts: this.researchTranscriptsLink(link).transcripts, sent: fps.current,
             ...(since ? { since } : {}),
-        });
+        }, researchGedcomTitles(this.researchStatusOf(link.id)));
         const gedcom = exported?.content ?? '';
         // What this send carries, person by person (what was written, once it is).
         if (!again) this.researchNoteSending(treeId, data, fps.current);
