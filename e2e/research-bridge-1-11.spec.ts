@@ -159,6 +159,40 @@ test.describe('the bridge of Strom Research 1.11.0', () => {
         await expect(page.locator('#research-older-block')).toHaveCount(0);
     });
 
+    test('A3: How to update… in the research menu is a link like any other, not a toolbar fill cut to its glyphs (light, dark, hover)', async ({ page }) => {
+        await page.setViewportSize(DESKTOP);
+        await bridge111(page);
+        await openResearch(page, { capable: false });
+        await poll(page);
+        const look = (el: Element) => {
+            const cs = getComputedStyle(el);
+            return { background: cs.backgroundColor, color: cs.color, decoration: cs.textDecorationLine };
+        };
+        const link = page.locator('#research-older-block').getByRole('button', { name: 'How to update…' });
+        for (const scheme of ['light', 'dark'] as const) {
+            await page.emulateMedia({ colorScheme: scheme });
+            await expect(page.locator('html')).toHaveAttribute('data-theme', scheme);
+            await openResearchMenu(page);
+            await expect(link).toBeVisible();
+            // A link button outside the toolbar: what it should look like.
+            const reference = await page.evaluate(() => {
+                const b = document.createElement('button');
+                b.className = 'link-button';
+                document.body.appendChild(b);
+                const cs = getComputedStyle(b);
+                const r = { background: cs.backgroundColor, color: cs.color, decoration: cs.textDecorationLine };
+                b.remove();
+                return r;
+            });
+            // The ".toolbar button" fill (the menu lives in the toolbar) must not reach it.
+            expect(await link.evaluate(look)).toEqual(reference);
+            await link.hover();
+            expect((await link.evaluate(look)).background).toBe('rgba(0, 0, 0, 0)');
+            await page.mouse.move(5, 5);
+            await page.evaluate(() => window.Strom.UI.closeActionsMenu());
+        }
+    });
+
     test('?send= with its reply {ok, changes, file}: sent, said so', async ({ page }) => {
         const b = await bridge111(page);
         await openResearch(page, { capable: false, edit: true });

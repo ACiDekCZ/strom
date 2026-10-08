@@ -249,6 +249,7 @@ test.describe('"Export all" now and then (only with a research)', () => {
         const button = reminder(page).getByRole('menuitem', { name: 'Export all' });
         for (const scheme of ['light', 'dark'] as const) {
             await page.emulateMedia({ colorScheme: scheme });
+            await expect(page.locator('html')).toHaveAttribute('data-theme', scheme);
             await page.evaluate(() => window.Strom.UI.showSnapshotsDialog());
             const backupsLink = page.locator('#snapshots-export').getByRole('button', { name: 'Export all' });
             await expect(backupsLink).toBeVisible();

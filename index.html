@@ -10318,7 +10318,12 @@
         /* An older research: a quiet line with "How to update…" (menu, Research for this tree, Attachments). */
         .research-older-block, .research-older-line { font-size: 13px; color: var(--text-light); line-height: 1.45; }
         .research-older-line { margin: 0 0 12px; }
-        .research-older-how { padding: 0; font-size: inherit; }
+        /* Also in the research menu, inside .toolbar: scoped under it too, or the ".toolbar button"
+           fill and padding win and the link turns into a solid green button. */
+        .research-older-how, .toolbar .research-older-how {
+            padding: 0; font-size: inherit; background: none; color: var(--primary); border-radius: 0;
+        }
+        @media (hover: hover) { .toolbar .research-older-how:hover { background: none; } }
         .research-update-dialog .research-update-intro { margin: 0 0 14px; }
         .research-update-dialog .research-update-label { margin: 0 0 6px; font-size: 13px; font-weight: 600; color: var(--text); }
         .research-update-dialog .research-update-hint { margin: 4px 0 8px; font-size: 13px; color: var(--text-light); }
