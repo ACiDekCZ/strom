@@ -357,10 +357,11 @@ export const researchChangesMethods = uiModule({
             this.researchSyncAction('decideInResearch');
         });
         document.getElementById('research-sync-send-more')?.setAttribute('aria-expanded', 'true');
-        // Esc and a click outside close it (the opening click is over by now).
+        // Esc closes it from the start: a key pressed before a timer ran (input goes first on a busy
+        // page) was lost and the panel stayed. A click outside closes it once the opening click is over.
+        document.addEventListener('keydown', closeOnEsc, true);
         setTimeout(() => {
-            document.addEventListener('pointerdown', closeOnOutside, true);
-            document.addEventListener('keydown', closeOnEsc, true);
+            if (document.getElementById(PANEL_ID) === panel) document.addEventListener('pointerdown', closeOnOutside, true);
         }, 0);
         (panel.querySelector<HTMLElement>('button') ?? panel).focus?.();
     },

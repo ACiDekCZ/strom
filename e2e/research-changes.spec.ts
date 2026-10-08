@@ -57,6 +57,23 @@ test.describe('changes per person', () => {
         await expect(more).toHaveCount(0);
     });
 
+    test('Esc closes What will be sent even when pressed the moment it opens (before any timer of the page ran)', async ({ page }) => {
+        await openResearch(page, { edit: true });
+        await fakeBridge(page);
+        await poll(page);
+        await page.evaluate(() => window.Strom.UI.refreshResearchSyncUi());
+        await expect(page.locator('#research-sync-send-more')).toHaveText(/1/);
+        // Opened and Esc in one go: a busy page takes the key before a timer set when it opened.
+        const open = await page.evaluate(() => {
+            window.Strom.UI.toggleResearchChanges();
+            const shown = !!document.getElementById('research-changes-panel');
+            document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+            return shown;
+        });
+        expect(open).toBe(true);
+        await expect(page.locator('#research-changes-panel')).toHaveCount(0);
+    });
+
     test('a new version over unsent changes names the people it would overwrite', async ({ page }) => {
         await openResearch(page, { edit: true });
         await fakeBridge(page, { head: NEW_HEAD, treeGed: researchGed(NEW_HEAD) });
