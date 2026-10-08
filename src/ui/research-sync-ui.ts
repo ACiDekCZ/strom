@@ -156,8 +156,13 @@ let justWritten: { treeId: TreeId; until: number } | null = null;
 let lastActiveTree: TreeId | null = null;
 /** The research's numbers are going onto the tree: that is not the user's edit. */
 let quietLoading = false;
-/** The fingerprints of the active tree, worked out lazily (cleared by every edit). */
-let fpCache: { treeId: TreeId; current: string; matchesBase: boolean; base: string } | null = null;
+/**
+ * The fingerprints of the active tree, worked out lazily (cleared by every
+ * edit), for the data they were worked out from: data read in since (the
+ * tree loaded at startup, a switch, a restore) are worked out again — asked
+ * before the startup tree was in, the empty stand-in's stayed until an edit.
+ */
+let fpCache: { treeId: TreeId; current: string; matchesBase: boolean; base: string; data: StromData } | null = null;
 /** The note under the mark (a new conflict, the first start of sending by itself). */
 let note: { kind: 'conflict' | 'intro'; html: string; timer: ReturnType<typeof setTimeout> | null } | null = null;
 
@@ -476,9 +481,10 @@ export const researchSyncMethods = uiModule({
     /** The fingerprints of the active tree now (cached until the next edit). */
     researchSyncFingerprints(treeId: TreeId, link: ResearchLink): { current: string; matchesBase: boolean } {
         const key = `${link.fingerprint}|${link.syncedAt}|${link.sent?.at ?? ''}|${link.sent?.state ?? ''}`;
-        if (fpCache && fpCache.treeId === treeId && fpCache.base === key) return fpCache;
-        const fps = fingerprintsOf(DataManager.getData(), link);
-        fpCache = { treeId, ...fps, base: key };
+        const data = DataManager.getData();
+        if (fpCache && fpCache.treeId === treeId && fpCache.base === key && fpCache.data === data) return fpCache;
+        const fps = fingerprintsOf(data, link);
+        fpCache = { treeId, ...fps, base: key, data };
         return fpCache;
     },
 
