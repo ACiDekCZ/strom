@@ -25,8 +25,8 @@ export interface FontFaceRuleInfo {
 
 /** The serif faces every tree poster draws with (names, initials, footer). */
 export const POSTER_SERIF_FACES: FontFaceWant[] = [
-    { family: 'Source Serif 4', weight: 400 },
-    { family: 'Source Serif 4', weight: 600 },
+    { family: 'Strom Serif', weight: 400 },
+    { family: 'Strom Serif', weight: 600 },
 ];
 /** The sans faces of the custom card's lines (places and years 400, dates 500, labels 600). */
 export const POSTER_LINE_FACES: FontFaceWant[] = [

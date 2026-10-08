@@ -64,3 +64,41 @@ for (const vp of [
     });
 }
 
+/**
+ * The embedded serif is a subset of Source Serif 4, whose OFL reserves the
+ * name "Source": a modified copy must not carry it, so the app ships it as
+ * "Strom Serif". The original name stays only in the license notice at the top
+ * of <head>. Every face is a data: URI inside the one HTML file.
+ */
+test('the serif is embedded as "Strom Serif" and no face is declared under the reserved name "Source"', async ({ page }) => {
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(page.locator('#empty-state')).toBeHidden();
+    await page.evaluate(() => document.fonts.ready);
+
+    const faces = await page.evaluate(() => [...document.fonts]
+        .map(f => ({ family: f.family.replace(/["']/g, ''), weight: f.weight, status: f.status })));
+    expect(faces.filter(f => /Source/i.test(f.family))).toEqual([]);
+    expect(faces.filter(f => f.family === 'Strom Serif').map(f => f.weight).sort()).toEqual(['400', '600']);
+    expect(faces.find(f => f.family === 'Strom Serif' && f.weight === '600')?.status).toBe('loaded');
+
+    // A card name is set in it.
+    const nameFont = await page.locator('#tree-canvas .person-card .name-text').first()
+        .evaluate(el => getComputedStyle(el).fontFamily);
+    expect(nameFont).toMatch(/^["']?Strom Serif["']?,/);
+
+    // Every @font-face of the app is a data: URI (nothing is loaded beside the file).
+    const srcs = await page.evaluate(() => [...document.styleSheets].flatMap(sheet => {
+        try { return [...sheet.cssRules]; } catch { return []; }
+    }).filter((r): r is CSSFontFaceRule => r instanceof CSSFontFaceRule)
+        .map(r => r.style.getPropertyValue('src')));
+    expect(srcs.length).toBeGreaterThanOrEqual(5);
+    for (const src of srcs) expect(src).toMatch(/^url\("data:font\/woff2;base64,/);
+
+    // Outside the license comment at the top of <head> the reserved name does not appear.
+    const html = await (await page.request.get('/strom.html')).text();
+    const notice = html.indexOf('-->');
+    expect(html.slice(0, notice)).toContain('Source Serif 4');
+    expect(html.slice(notice)).not.toMatch(/Source Serif/);
+});
+

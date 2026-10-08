@@ -11,7 +11,7 @@ const rule = (family: string, weight: string) => ({
 
 describe('pickFontFaceCss', () => {
     const rules = [
-        rule('"Source Serif 4"', '400'), rule('"Source Serif 4"', '600'),
+        rule('"Strom Serif"', '400'), rule('"Strom Serif"', '600'),
         rule("'Instrument Sans'", 'normal'), rule('"Instrument Sans"', '500'), rule('"Instrument Sans"', '600'),
         rule('"Instrument Sans"', '700'),
     ];

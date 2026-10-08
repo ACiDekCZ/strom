@@ -137,8 +137,10 @@ please give a modified version a name of its own.
 These keep their own licenses; their notices and license texts are also
 embedded in the app's HTML (a comment in `<head>`):
 
-- **Source Serif 4** font: Copyright 2014 - 2021 Adobe Systems Incorporated,
-  with Reserved Font Name "Source"; SIL Open Font License 1.1.
+- **Strom Serif** font: a modified (subsetted) version of **Source Serif 4**,
+  renamed as its Reserved Font Name requires. Source Serif 4: Copyright
+  2014 - 2021 Adobe Systems Incorporated, with Reserved Font Name "Source";
+  SIL Open Font License 1.1.
 - **Instrument Sans** font: Copyright 2022 The Instrument Sans Project
   Authors; SIL Open Font License 1.1.
 - Some interface icons come from or are based on **Lucide** (ISC License,

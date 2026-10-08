@@ -172,7 +172,7 @@ export const STORY_COMPARE_CSS = `
       --sc-del-bg: var(--diff-del-bg, #f4e1dc); --sc-del-text: var(--diff-del-text, #8a3f33);
       --sc-label: var(--accent-text, #8a5528); --sc-muted: var(--text-light, #5c5546); --sc-faint: var(--text-faint, #746c5c);
       --sc-rule: var(--divider, #ece5d6); --sc-border: var(--border, #ddd4c2); --sc-surface: var(--surface, #fffdf8); --sc-surface-2: var(--surface-2, #f6f2ea);
-      --sc-serif: var(--font-serif, 'Source Serif 4', Georgia, serif); --sc-sans: var(--font-sans, system-ui, sans-serif);
+      --sc-serif: var(--font-serif, 'Strom Serif', Georgia, serif); --sc-sans: var(--font-sans, system-ui, sans-serif);
       font-family: var(--sc-sans); color: var(--text, #2b2822); }
 .sc ins, .sc del { border-radius: 3px; padding: 0 1px; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
 .sc ins { background: var(--sc-add-bg); color: var(--sc-add-text); text-decoration: underline; text-decoration-color: var(--sc-add-line); text-underline-offset: 3px; }

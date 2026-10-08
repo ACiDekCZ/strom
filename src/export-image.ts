@@ -52,7 +52,7 @@ const COLORS = {
     background: '#ffffff',
 };
 
-const FONT = "'Source Serif 4', Georgia, 'Times New Roman', serif";
+const FONT = "'Strom Serif', Georgia, 'Times New Roman', serif";
 const PADDING = 40;
 export const FOOTER_HEIGHT = 44;
 

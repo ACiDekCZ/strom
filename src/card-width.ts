@@ -742,7 +742,7 @@ const KIND_STYLE: Record<CardTextKind, string> = {
     years: 'font: 400 11px var(--font-sans); font-variant-numeric: tabular-nums;',
 };
 /** The faces those styles use, to know whether they are loaded yet. */
-const KIND_FACES = ['600 15px "Source Serif 4"', '500 12px "Instrument Sans"', '400 12px "Instrument Sans"', '600 12px "Instrument Sans"'];
+const KIND_FACES = ['600 15px "Strom Serif"', '500 12px "Instrument Sans"', '400 12px "Instrument Sans"', '600 12px "Instrument Sans"'];
 
 const measured = new Map<string, number>();
 let fontsPending: Promise<void> | null = null;
