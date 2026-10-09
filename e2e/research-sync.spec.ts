@@ -97,6 +97,48 @@ test.describe('the state of the tree and sending straight', () => {
         expect(await links(page)).toContain(`strom-research://send?tree=${UUID}`);
     });
 
+    test('the bridge said "no links" once, then went down: "Start the research" stays (no install line, it ran here)', async ({ page }) => {
+        await openResearch(page);
+        const bridge = await fakeBridge(page);
+        await poll(page);
+        // A bridge restarted or updated, or one that could not ask the system for a moment, says none.
+        bridge.links = [];
+        await poll(page);
+        bridge.down = true;
+        await poll(page);
+        await openResearchMenu(page);
+        await expect(block(page)).toHaveAttribute('data-state', 'bridgeDown');
+        await expect(block(page).locator('[data-action="installResearch"]')).toHaveCount(0);
+        await block(page).locator('[data-action="startResearch"]').click();
+        expect(await links(page)).toEqual([`strom-research://open?tree=${UUID}`]);
+    });
+
+    test('the links already forgotten (an older app): the research not running still offers "Start the research"', async ({ page }) => {
+        await openResearch(page);
+        const bridge = await fakeBridge(page);
+        await poll(page);
+        bridge.down = true;
+        await poll(page);
+        await page.evaluate(() => localStorage.removeItem('strom-research-links'));
+        await openResearchMenu(page);
+        await expect(block(page)).toHaveAttribute('data-state', 'bridgeDown');
+        await expect(page.locator('#research-item-start')).toHaveCount(0);   // the block offers it, not again as a row
+        await block(page).locator('[data-action="startResearch"]').click();
+        expect(await links(page)).toEqual([`strom-research://open?tree=${UUID}`]);
+    });
+
+    test('changes waiting, the research not running and no links known: start it, never neither', async ({ page }) => {
+        await openResearch(page, { edit: true });
+        const bridge = await fakeBridge(page);
+        await poll(page);
+        bridge.down = true;
+        await poll(page);
+        await page.evaluate(() => localStorage.removeItem('strom-research-links'));
+        await openResearchMenu(page);
+        await expect(block(page)).toHaveAttribute('data-state', 'unsentBridgeDown');
+        await expect(block(page).locator('[data-action="startResearch"]')).toBeVisible();
+    });
+
     test('discarded in the research: its own state and one notice (not again after a reload); Send again', async ({ page }) => {
         await openResearch(page, { edit: true });
         const bridge = await fakeBridge(page, { lastIntake: { id: 'I0041', at: '2026-09-30T09:00:00Z' } });

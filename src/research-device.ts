@@ -2,8 +2,9 @@
  * Strom Research on THIS computer: which strom-research:// links it handles.
  * A web page cannot tell whether a program registered a link scheme, so the
  * research announces it whenever it talks to the app from this computer (the
- * bridge status, a file it serves on 127.0.0.1). Remembered per browser; a
- * later contact without the announcement forgets it again. The user can also
+ * bridge status, a file it serves on 127.0.0.1). Remembered per browser
+ * until a later announcement replaces it (an empty one never does, see
+ * noteResearchLinks). The user can also
  * switch the features off (Settings → Data).
  */
 
@@ -21,15 +22,21 @@ const BRIDGE_KEY = 'strom-research-bridge:';
 const WAITING_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
- * Remember what the research on this computer announced (an empty list forgets
- * it), and the link scheme it named (a second install's own, e.g.
- * strom-research-beta; not named: the main one, strom-research).
+ * Remember what the research on this computer announced, and the link scheme
+ * it named (a second install's own, e.g. strom-research-beta; not named: the
+ * main one, strom-research). An empty list is "not now", never "forget": a
+ * bridge that has just started or was updated, one that could not ask the
+ * system for a moment, or another bridge on this computer without links of
+ * its own (an isolated copy of a research) says none, and a GEDCOM file
+ * without the announcement says nothing at all — none of them may take the
+ * research's links (and "Start the research") away. What was announced last
+ * stays until another list replaces it; the user can switch them off.
  */
 export function noteResearchLinks(links: readonly ResearchLinkAction[], scheme?: string): void {
+    if (links.length === 0) return;
     try {
         const own = researchLinkScheme(scheme);
-        if (links.length === 0) localStorage.removeItem(LINKS_KEY);
-        else localStorage.setItem(LINKS_KEY, JSON.stringify({
+        localStorage.setItem(LINKS_KEY, JSON.stringify({
             actions: links, at: new Date().toISOString(), ...(own !== DEFAULT_RESEARCH_SCHEME ? { scheme: own } : {}),
         }));
     } catch { /* no storage: the features just stay hidden */ }

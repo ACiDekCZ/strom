@@ -1799,10 +1799,11 @@ export const researchSyncMethods = uiModule({
             case 'reload': window.location.reload(); break;
             case 'cancelLoad': this.researchCancelThenLoad(); break;
             case 'startResearch': {
-                const url = this.activeResearchLink('open') ?? this.activeResearchLink('live');
+                const url = this.researchStartUrl();
                 if (url) this.launchResearchLink(url);
                 break;
             }
+            case 'installResearch': this.showResearchInstall(); break;
             case 'startAndSend': void this.sendTreeToResearch(ctx.treeId); break;
             // Blocked by the browser: the way to allow it, then asked again.
             case 'allowHow':
@@ -1984,8 +1985,12 @@ export const researchSyncMethods = uiModule({
         const changed = treeId ? when(TreeManager.getTreeMetadata(treeId)?.changedAt) : '';
         const edits = Math.max(1, autoState.edits ?? 1);
         const rt = link ? runtime.get(link.id) : undefined;
-        const start: Action[] = this.researchLinkAvailable('open') || this.researchLinkAvailable('live')
-            ? [{ action: 'startResearch', label: s.startResearch }] : [];
+        // A research tree on a computer can always be started (announced or not); while the research is not known
+        // to be on this computer, the way to install it goes beside.
+        const start: Action[] = this.researchStartUrl()
+            ? [{ action: 'startResearch', label: s.startResearch },
+                ...(this.researchKnownHere() ? [] : [{ action: 'installResearch', label: strings.research.awaitingNotInstalled, asLink: true }])]
+            : [];
         const blocks: Record<Exclude<ResearchSyncKind, 'none'>, () => Block> = {
             inSync: () => ({ tone: 'quiet', title: s.stateInSync,
                 sub: s.sinceTime(when(link?.sent?.state === 'written' ? link.sent.closedAt : link?.syncedAt)) }),
@@ -2061,7 +2066,7 @@ export const researchSyncMethods = uiModule({
                     ? { tone: 'warn', title: s.stateAddressRefused, sub: s.addressRefusedSub, actions: start }
                     : { tone: 'quiet', title: s.stateBridgeDown, sub: s.bridgeDownSub, actions: start.map(a => ({ ...a, asLink: true })) },
             unsentBridgeDown: () => ({ tone: 'warn', title: s.stateUnsent, sub: s.unsentBridgeDownSub,
-                actions: this.researchLinkAvailable('send') ? [{ action: 'startAndSend', label: s.startAndSend }] : [] }),
+                actions: this.researchLinkAvailable('send') ? [{ action: 'startAndSend', label: s.startAndSend }] : start }),
             refused: () => ({ tone: 'warn', title: s.stateRefused,
                 sub: [state.reason, s.staysHere].filter(Boolean).join(' '), actions: [{ action: 'retry', label: s.retry }] }),
             rejected: () => state.sent?.state === 'undone'
@@ -2441,7 +2446,7 @@ export const researchSyncMethods = uiModule({
             : base && conn?.warn && kind !== 'writtenConflicts' ? { ...base, text: `${base.text} · ${conn.title}` } : base;
         // A new conflict's note (with the person) first; the pill once it goes.
         const noteFirst = kind === 'writtenConflicts' && note?.kind === 'conflict';
-        if (w && !noteFirst && (w.action !== 'startResearch' || this.researchLinkAvailable('open') || this.researchLinkAvailable('live'))) {
+        if (w && !noteFirst && (w.action !== 'startResearch' || !!this.researchStartUrl())) {
             this.closeResearchSyncNote();
             // The research's reason, when it gave one, on hover too (not only in the block).
             const tip = kind === 'rejected' && !state.sent?.failed && state.sent?.reason ? `${w.text}: ${state.sent.reason}` : w.text;

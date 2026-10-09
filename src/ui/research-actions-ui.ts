@@ -232,9 +232,21 @@ export const researchActionsMethods = uiModule({
             // No strom-research:// links here (an older research, none announced, or
             // switched off): the way back, and what it is. A research that says what
             // it takes still gets its version loaded and its settings for this tree.
+            // Not running and not started from the state block above: started from here
+            // (the tree came from a research), with the way to install it while the
+            // research is not known on this computer — never neither.
+            const blockStarts = !!block?.actions.some(a => a.action === 'startResearch' || a.action === 'startAndSend');
+            const startHere = !bridgeUp && !blockStarts && !!this.researchStartUrl();
+            const blockInstalls = !!block?.actions.some(a => a.action === 'installResearch');
+            const install = !this.researchKnownHere() && (startHere || blockInstalls);
+            const startRow: SubmenuItem[] = startHere
+                ? [{ id: 'research-item-start', label: strings.sync.startResearch.replace(' ↗', ''), method: 'researchSyncAction', args: ['startResearch'], ext: true }] : [];
+            const aboutRow: SubmenuItem[] = install && !blockInstalls
+                ? [{ id: 'research-item-install', label: r.awaitingNotInstalled, method: 'researchSyncAction', args: ['installResearch'] }]
+                : install ? [] : [{ id: 'research-item-about', label: r.whatIs, method: 'researchActionWhatIs' }];
             groups = [
-                { items: [...sendRow.map(i => ({ ...i, ext: false })), ...batch] },
-                { items: [...treeSettings, { id: 'research-item-about', label: r.whatIs, method: 'researchActionWhatIs' }], quiet: true },
+                { items: [...startRow, ...sendRow.map(i => ({ ...i, ext: false })), ...batch] },
+                { items: [...treeSettings, ...aboutRow], quiet: true },
             ];
         } else {
             // Frequent: what waits, the agent, the research itself, the send.

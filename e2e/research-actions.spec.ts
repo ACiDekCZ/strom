@@ -188,12 +188,29 @@ test.describe('the Research menu', () => {
         await expect(page.locator('#research-item-waiting')).toHaveCount(0);
     });
 
-    test('nothing announced: only Send changes and What is Strom Research', async ({ page }) => {
+    test('nothing announced, the research not known here: Start the research, Send changes, and the way to install it', async ({ page }) => {
         await setup(page, []);
         await openResearchMenu(page);
-        await expect(submenuItems(page)).toHaveText(['Send changes', 'What is Strom Research']);
-        await page.locator('#research-item-about').click();
+        await expect(submenuItems(page)).toHaveText(['Start the research↗', 'Send changes', 'Not installed? Install…']);
+        await page.locator('#research-item-start').click();
+        expect(await launched(page)).toEqual([`strom-research://open?tree=${UUID}`]);
+        await openResearchMenu(page);
+        await page.locator('#research-item-install').click();
         await expect(page.locator('#research-info-modal')).toBeVisible();
+    });
+
+    test('nothing announced, its bridge known here: Start the research and What is Strom Research, no install line', async ({ page }) => {
+        await setup(page, []);
+        await page.evaluate(([uuid, base]) => localStorage.setItem(`strom-research-bridge:${uuid}`, JSON.stringify({ base })), [UUID, BRIDGE]);
+        await openResearchMenu(page);
+        await expect(submenuItems(page)).toHaveText(['Start the research↗', 'Send changes', 'What is Strom Research']);
+    });
+
+    test('links switched off in Settings: neither start nor install is offered', async ({ page }) => {
+        await setup(page, []);
+        await page.evaluate(() => localStorage.setItem('strom-research-links-off', '1'));
+        await openResearchMenu(page);
+        await expect(submenuItems(page)).toHaveText(['Send changes', 'What is Strom Research']);
     });
 
     test('research known here: another tree has no "Ancestor research" (no way to its website)', async ({ page }) => {

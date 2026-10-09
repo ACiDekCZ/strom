@@ -52,6 +52,7 @@ import { safeFileName } from '../filenames.js';
 import {
     noteResearchLinks, announcedResearchLinks, announcedResearchScheme, researchLinksEnabled, noteResearchWaiting, storedResearchWaiting,
     noteResearchBridge, noteResearchBridgeStatus, patchResearchAutoState, researchAutoState, researchIdAtBridge, ResearchLinkBefore,
+    storedResearchBridge,
 } from '../research-device.js';
 import { rememberBridgeStatus, researchSendMode } from './research-sync-ui.js';
 import { sourceReadings, researchSendVouches, conflictTakeovers, heldConflicts } from '../research-sync.js';
@@ -1696,6 +1697,28 @@ export const researchUiMethods = uiModule({
         if (!this.researchLinkAvailable(action)) return null;
         const tree = this.activeResearchId();
         return tree ? researchSchemeUrl(action, { tree, ...params }, announcedResearchScheme()) : null;
+    },
+
+    /**
+     * The link that starts the active research tree's research: the announced
+     * one, else — on a computer, the links not switched off — the open link by
+     * the last known scheme. The tree came from a research, so it is offered
+     * even when no announcement holds now (a bridge that said "none" while
+     * starting, updating or ending); the system says so when nothing takes it.
+     */
+    researchStartUrl(): string | null {
+        const announced = this.activeResearchLink('open') ?? this.activeResearchLink('live');
+        if (announced) return announced;
+        const tree = this.activeResearchId();
+        if (!tree || !onComputer() || !researchLinksEnabled()) return null;
+        return researchSchemeUrl('open', { tree }, announcedResearchScheme());
+    },
+
+    /** The active tree's research is known to be on this computer: it announced its links, or its bridge answered here. */
+    researchKnownHere(): boolean {
+        if (this.researchAnyAnnounced()) return true;
+        const tree = this.activeResearchId();
+        return !!tree && !!storedResearchBridge(tree)?.base;
     },
 
     /** What waits for the user in the active tree's research (null: nothing known, or older than a week). */

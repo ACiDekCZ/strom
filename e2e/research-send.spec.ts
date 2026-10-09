@@ -300,7 +300,7 @@ test.describe('where the tree menu offers it', () => {
         await expect(row.locator('.tree-row-menu.open [data-action="researchSend"]')).toHaveText('Send changes to the research');
     });
 
-    test('a computer: the Research menu of a tied tree (nothing announced: Send + What is it), not of another tree', async ({ page }) => {
+    test('a computer: the Research menu of a tied tree (nothing announced: Start, Send and the way to install it), not of another tree', async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 900 });
         await openResearch(page, false);
         await page.locator('.actions-menu-btn').click();
@@ -308,9 +308,10 @@ test.describe('where the tree menu offers it', () => {
         await expect(page.locator('#research-menu-row')).toBeHidden();
         await page.locator('#research-menu-btn').click();
         const items = page.locator('#research-menu .tree-switcher-action');
-        await expect(items).toHaveText(['Send changes', 'What is Strom Research']);
+        // The tree came from a research: it can be started (the research not known here: the way to install it too).
+        await expect(items).toHaveText(['Start the research↗', 'Send changes', 'Not installed? Install…']);
         await expect(page.locator('#research-menu .research-submenu-note')).toHaveCount(0);
-        await items.first().click();
+        await page.locator('#research-item-send').click();
         // No research links announced here: the way back is explained.
         await expect(dialog(page)).toContainText('Add to the research');
         await dialog(page).getByRole('button', { name: 'Close' }).click();

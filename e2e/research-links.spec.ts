@@ -99,7 +99,7 @@ test('announced links: Send is one click and the excerpt opens at full quality',
     ]);
 });
 
-test('a later contact without links, or the Settings switch, hides the features', async ({ page }) => {
+test('the Settings switch hides the features; a later contact without links does not', async ({ page }) => {
     await setup(page);
     await contact(page, ['send', 'excerpt']);
 
@@ -116,19 +116,15 @@ test('a later contact without links, or the Settings switch, hides the features'
     await page.keyboard.press('Escape');
     await page.evaluate(() => window.Strom.UI.toggleResearchLinks(true));
 
-    // The research talks again without links (older / scheme removed): gone.
+    // A bridge without links (just started or updated, an isolated copy of the research on the
+    // same port, one that could not ask the system): "not now", the links stay.
     await contact(page, null);
+    await contact(page, []);
     await openSource(page);
-    await expect(page.locator('.viewer-full-quality')).toHaveCount(0);
+    await expect(page.locator('.viewer-full-quality')).toHaveCount(1);
     await page.keyboard.press('Escape');
-    const treeId = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeId());
-    const help = page.evaluate((id) => window.Strom.UI.sendTreeToResearch(id), treeId);
-    await expect(page.locator('#confirmation-modal')).toContainText('Add to the research');
-    await page.locator('#confirmation-modal').getByRole('button', { name: 'Close' }).click();
-    await help;
-    expect(await launched(page)).toEqual([]);
     await page.evaluate(() => window.Strom.UI.showSettingsDialog());
-    await expect(page.locator('#research-links-row')).toBeHidden();
+    await expect(page.locator('#research-links-row')).toBeVisible();
 });
 
 test('a phone (touch) never offers them', async ({ browser }) => {
