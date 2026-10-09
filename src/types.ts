@@ -568,6 +568,10 @@ export interface ResearchConflictValue {
     /** As the research wrote it (a GEDCOM date, a place, a name). */
     value: string;
     sourceIds?: string[];
+    /** Whose value it is in a conflict made by an edit in the app (GEDCOM 3 _STROM_SIDE): the user's, or the research's. */
+    side?: 'user' | 'research';
+    /** The sex as a machine value (GEDCOM 3 _STROM_RAW), SEX conflicts only: the value itself is in the research's words. */
+    raw?: 'M' | 'F' | 'U';
 }
 
 /** Sources that disagree about one fact. */
@@ -583,6 +587,12 @@ export interface ResearchConflict {
     values: ResearchConflictValue[];
     /** The decision in words ("1865 (S0001)"), decided only. */
     decision?: ResearchConflictValue;
+    /**
+     * Made by an edit in the app and decidable by a side — keep the app's
+     * value or take the research's (GEDCOM 2 _STROM_TAKE Y; `take: true` in
+     * the bridge's JSON). Missing: decided in the research only.
+     */
+    take?: true;
 }
 
 /** A question the research works with ("Father: Václav, or Jan?"). */

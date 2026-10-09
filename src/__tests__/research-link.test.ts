@@ -805,7 +805,7 @@ describe('send bridge', () => {
     });
 
     it('the reply and the JSON field are checked', () => {
-        const none = { head: '', applied: null, pending: false, conflicts: null, conflictPersons: [], conflictIds: [], kept: null, reason: '', skipped: [], code: '', undoneSince: [], takenBack: null, notWritten: [], ids: null };
+        const none = { head: '', applied: null, pending: false, conflicts: null, conflictPersons: [], conflictIds: [], conflictTakeIds: [], kept: null, reason: '', skipped: [], code: '', undoneSince: [], takenBack: null, notWritten: [], ids: null };
         expect(sanitizeSyncReply({ ok: true, input: 'I1', changes: 12 })).toEqual({ ok: true, changes: 12, error: '', inbox: null, intake: '', ...none });
         // Written at once: the commit it made and what of the changes was written.
         expect(sanitizeSyncReply({ ok: true, inbox: false, changes: 8, applied: 7, head: 'ABCDEF1234', input: 'I0042', intake: 'R1' }))

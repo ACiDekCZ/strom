@@ -5,9 +5,10 @@
  * must be read safely: nothing thrown, every conflict read as from the file's
  * older shape (count, ids, titles, values, sources, state), no person, couple
  * or value changed, and nothing of it going back out in a GEDCOM. First run
- * against the app before it read these lines (3.10.x beta); since then only
- * what the new lines themselves say is set apart before comparing. Invented
- * data only (e2e/fixtures/research-conflict-decide.ged).
+ * against the app before it read these lines (the beta after 3.10.1); since
+ * then only what the new lines themselves say is set apart before comparing
+ * (read in research-conflict-decide.test.ts). Invented data only
+ * (e2e/fixtures/research-conflict-decide.ged).
  */
 
 import { describe, it, expect } from 'vitest';

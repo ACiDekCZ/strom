@@ -170,7 +170,7 @@ function toStory(raw: RawStory | undefined): Story | undefined {
  * only): conflicting sources, hypotheses, what was searched.
  */
 interface RawResearch {
-    conflicts: { id: string; fact: string; title: string; stat: string; values: RawResearchValue[]; decision?: RawResearchValue }[];
+    conflicts: { id: string; fact: string; title: string; stat: string; take: string; values: RawResearchValue[]; decision?: RawResearchValue }[];
     hypotheses: { id: string; title: string; note: string; stat: string; chosen: string; variants: RawResearchVariant[] }[];
     searched: { title: string; date: string; resn: string; at: string }[];
     /** The _STROM_EDGE / _STROM_ISLAND block: its value and the lines under it (level, tag, value). */
@@ -186,6 +186,9 @@ interface RawResearchBlock {
 interface RawResearchValue {
     value: string;
     sourceRefs: string[];
+    /** 3 _STROM_SIDE / 3 _STROM_RAW under a conflict's value, as written. */
+    side?: string;
+    raw?: string;
 }
 
 /** 2 _VAR under a hypothesis: its letter, claim, links (pointers as written) and sources. */
@@ -236,18 +239,30 @@ function toPersonResearch(raw: RawResearch | undefined, mapRefs: (refs: string[]
         const ids = mapRefs(v.sourceRefs);
         return { value: v.value, ...(ids.length > 0 ? { sourceIds: ids } : {}) };
     };
+    // A conflict's value with whose it is and, for the sex, its machine value (anything else said there goes).
+    const claim = (v: RawResearchValue, fact: string): ResearchConflictValue => {
+        const side = v.side?.trim().toLowerCase();
+        const raw = fact === 'SEX' ? v.raw?.trim().toUpperCase() : undefined;
+        return {
+            ...value(v),
+            ...(side === 'user' || side === 'research' ? { side } : {}),
+            ...(raw === 'M' || raw === 'F' || raw === 'U' ? { raw } : {}),
+        };
+    };
     const out: PersonResearch = {};
     const conflicts = raw.conflicts
         .filter(c => /^X\d{1,7}$/.test(c.id) && (c.fact || c.title.trim()) && c.values.length > 0)
         .map(c => {
             const decided = c.stat.trim().toLowerCase() === 'decided';
+            const fact = (c.fact || 'EVEN').toUpperCase();
             return {
                 id: c.id,
-                fact: (c.fact || 'EVEN').toUpperCase(),
+                fact,
                 ...(c.title.trim() ? { title: c.title.trim() } : {}),
                 status: decided ? 'decided' as const : 'open' as const,
-                values: c.values.filter(v => v.value).map(value),
+                values: c.values.filter(v => v.value).map(v => claim(v, fact)),
                 ...(decided && c.decision?.value ? { decision: value(c.decision) } : {}),
+                ...(c.take.trim().toUpperCase() === 'Y' ? { take: true as const } : {}),
             };
         })
         .filter(c => c.values.length > 0);
@@ -2077,7 +2092,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                             if (!stromResearch) { drop(tag); break; }
                             const research = indi.research ??= newResearch();
                             if (tag === '_STROM_CONFLICT') {
-                                research.conflicts.push({ id: value.trim(), fact: '', title: '', stat: '', values: [] });
+                                research.conflicts.push({ id: value.trim(), fact: '', title: '', stat: '', take: '', values: [] });
                                 currentResearch = { kind: 'conflict', sub: null };
                             } else if (tag === '_STROM_HYPO') {
                                 research.hypotheses.push({ id: value.trim(), title: '', note: '', stat: '', chosen: '', variants: [] });
@@ -2257,12 +2272,15 @@ export function parseGedcom(content: string): ParsedGedcom {
                         if (tag === 'TYPE') c.fact = value.trim();
                         else if (tag === 'TITL') c.title = value;
                         else if (tag === 'STAT') c.stat = value;
+                        else if (tag === '_STROM_TAKE') c.take = value;
                         else if (tag === 'VAL') c.values.push({ value: value.trim(), sourceRefs: [] });
                         else if (tag === 'DECI') c.decision = { value: value.trim(), sourceRefs: [] };
                     } else if (level === 3) {
                         const v = lastValue();
                         if (open.sub === 'TITL' && (tag === 'CONC' || tag === 'CONT')) c.title += tag === 'CONT' ? ' ' + value : value;
                         else if (v && tag === 'SOUR' && GED_POINTER.test(value)) v.sourceRefs.push(value);
+                        else if (v && open.sub === 'VAL' && tag === '_STROM_SIDE') v.side = value;
+                        else if (v && open.sub === 'VAL' && tag === '_STROM_RAW') v.raw = value;
                         else if (v && tag === 'CONC') v.value += value;
                         else if (v && tag === 'CONT') v.value += ' ' + value;
                     }

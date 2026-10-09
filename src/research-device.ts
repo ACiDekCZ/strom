@@ -368,10 +368,33 @@ function heldConflictsFrom(v: unknown): ResearchHeldConflicts | undefined {
         if (!Array.isArray(list)) continue;
         persons[id] = list.filter((c): c is ResearchConflict => !!c && typeof c === 'object'
             && typeof (c as ResearchConflict).id === 'string' && Array.isArray((c as ResearchConflict).values)
-            && ((c as ResearchConflict).status === 'open' || (c as ResearchConflict).status === 'decided'));
+            && ((c as ResearchConflict).status === 'open' || (c as ResearchConflict).status === 'decided'))
+            .map(heldConflictSides);
     }
     const takeovers = Array.isArray(h.takeovers) ? h.takeovers.filter((x): x is string => typeof x === 'string').slice(0, HELD_MAX_PERSONS) : [];
     return { base: h.base, head: h.head, persons, takeovers };
+}
+
+/**
+ * A kept conflict's decision by a side as the parser reads it (take only
+ * `true`, a value's side only user / research, its raw sex only M / F / U):
+ * anything else stored goes, so a conflict is never offered on a guess.
+ */
+function heldConflictSides(c: ResearchConflict): ResearchConflict {
+    const { take, ...rest } = c;
+    return {
+        ...rest,
+        values: c.values.map(v => {
+            if (!v || typeof v !== 'object') return v;
+            const { side, raw, ...plain } = v;
+            return {
+                ...plain,
+                ...(side === 'user' || side === 'research' ? { side } : {}),
+                ...(c.fact === 'SEX' && (raw === 'M' || raw === 'F' || raw === 'U') ? { raw } : {}),
+            };
+        }),
+        ...(take === true ? { take } : {}),
+    };
 }
 
 /** Keep at most HELD_MAX_PERSONS people of a reading (the takeovers first). */

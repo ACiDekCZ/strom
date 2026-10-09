@@ -112,6 +112,8 @@ export interface ResearchLinkParams {
     /** A conflict ("X0007") and what to do with it. */
     conflict?: string;
     conflictDo?: ResearchConflictDo;
+    /** Decide it by a side (with `conflictDo: 'decide'`): the research then only asks to confirm. */
+    take?: ResearchConflictTake;
     /** The send to take back ("I0042"). */
     intake?: string;
     /** A research direction ("G0002"): chat on it, or pause / end / restart it. */
@@ -146,6 +148,9 @@ const TASK_DOS: readonly string[] = ['park', 'drop', 'wake'];
 /** A conflict: decide it there, or leave it to the agent. */
 export type ResearchConflictDo = 'decide' | 'agent';
 const CONFLICT_DOS: readonly string[] = ['decide', 'agent'];
+/** A conflict made by an edit in the app, decided by a side: keep the user's value, or take the research's. */
+export type ResearchConflictTake = 'user' | 'research';
+const CONFLICT_TAKES: readonly string[] = ['user', 'research'];
 
 /** "Start research with this tree": the one link without a tree (the research makes one). */
 export function researchNewUrl(token: string, browser?: string, file?: string, scheme: string = DEFAULT_RESEARCH_SCHEME): string | null {
@@ -211,7 +216,10 @@ export function researchSchemeUrl(action: ResearchLinkAction, p: ResearchLinkPar
         case 'conflict': {
             const id = researchConflictRef(p.conflict);
             const what = p.conflictDo ?? 'decide';
-            return id && CONFLICT_DOS.includes(what) ? `${base}&id=${id}&do=${what}` : null;
+            if (!id || !CONFLICT_DOS.includes(what)) return null;
+            if (p.take === undefined) return `${base}&id=${id}&do=${what}`;
+            // A side only to decide it there (never for the agent).
+            return what === 'decide' && CONFLICT_TAKES.includes(p.take) ? `${base}&id=${id}&do=decide&take=${p.take}` : null;
         }
         case 'story': {
             const person = researchPersonRef(p.person);
@@ -1187,6 +1195,18 @@ function conflictIds(value: unknown): string[] {
     return out.slice(0, 20);
 }
 
+/** The conflicts of a list decidable from the app by a side (`take: true`, research ids), at most 20. */
+function conflictTakeIds(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    const out: string[] = [];
+    for (const item of value.slice(0, MAX_ITEMS)) {
+        const r = asRecord(item);
+        const id = r?.take === true ? researchConflictRef(r.id ?? r.conflict) : null;
+        if (id && !out.includes(id)) out.push(id);
+    }
+    return out.slice(0, 20);
+}
+
 /** What the research takes from the app (`/status.accepts`): the gate the other way round. */
 export interface ResearchAccepts {
     /**
@@ -1853,6 +1873,8 @@ export interface SyncReply {
     conflictPersons: string[];
     /** The conflicts themselves (research ids "X0002"), when it says. */
     conflictIds: string[];
+    /** Those of them decidable from the app by a side (`take: true`). */
+    conflictTakeIds: string[];
     /** Things the send lacked that the research kept (an archive takes away only what this app tree had). */
     kept: number | null;
     /** The technical reason of a send not written (`reason`, English; '' = not said): shown as details. */
@@ -1885,7 +1907,7 @@ export interface SyncNotWritten {
 
 export function sanitizeSyncReply(value: unknown): SyncReply {
     const r = asRecord(value);
-    if (!r) return { ok: false, changes: null, error: '', inbox: null, intake: '', head: '', applied: null, pending: false, conflicts: null, conflictPersons: [], conflictIds: [], kept: null, reason: '', skipped: [], code: '', undoneSince: [], takenBack: null, notWritten: [], ids: null };
+    if (!r) return { ok: false, changes: null, error: '', inbox: null, intake: '', head: '', applied: null, pending: false, conflicts: null, conflictPersons: [], conflictIds: [], conflictTakeIds: [], kept: null, reason: '', skipped: [], code: '', undoneSince: [], takenBack: null, notWritten: [], ids: null };
     const idsRec = asRecord(r.ids);
     const idPersons = adoptIdMap(idsRec?.persons, /^P\d{1,9}$/);
     const idSources = adoptIdMap(idsRec?.sources, /^S\d{1,9}$/);
@@ -1901,6 +1923,7 @@ export function sanitizeSyncReply(value: unknown): SyncReply {
         conflicts: conflictCount(r.conflicts),
         conflictPersons: conflictPersons(r.conflicts),
         conflictIds: conflictIds(r.conflicts),
+        conflictTakeIds: conflictTakeIds(r.conflicts),
         kept: asCount(r.kept),
         reason: cleanText(r.reason, 400),
         skipped: (Array.isArray(r.skipped) ? r.skipped.slice(0, 50) : [])

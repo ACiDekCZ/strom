@@ -51,6 +51,7 @@ import {
     researchKeepsTakenBack, latestUndone, nextUndone, openUndone, undoneLeftBehind,
 } from '../research-sync.js';
 import { setResearchConflictsProvider } from '../card-signals.js';
+import { ConflictDecideMode, conflictDecideMode, DecideKind, DecideBody, DecideResult, postBridgeDecide } from '../research-decide.js';
 import { uiModule } from './module.js';
 import { researchWrittenList } from './research-changes-ui.js';
 import {
@@ -402,6 +403,32 @@ export const researchSyncMethods = uiModule({
     /** The research keeps a family of one spouse and no children (its `family.alone`); not known: no. */
     researchKeepsLoneFamilies(researchId: string): boolean {
         return !!runtime.get(researchId)?.status?.features?.includes('family.alone');
+    },
+
+    /**
+     * How a conflict of the active research tree is decided here (src/research-decide.ts):
+     * its bridge answering in this page with `conflict.decide`, else a link into the research, else not on this device.
+     */
+    researchConflictDecideMode(): ConflictDecideMode {
+        const id = this.activeResearchId();
+        const status = id ? this.researchStatusOf(id) : null;
+        return conflictDecideMode({ bridge: status ? { features: status.features } : null, linkAvailable: this.researchLinkAvailable('conflict') });
+    },
+
+    /**
+     * Decide a conflict (later a hypothesis) of the active research tree through its bridge: one
+     * request, as the only window doing a research step for the tree (a send of another window
+     * goes first). The answer typed; never throws. Changes nothing here.
+     */
+    async postDecide<K extends DecideKind>(kind: K, id: string, body: DecideBody<K>): Promise<DecideResult> {
+        const ctx = this.researchSyncLink();
+        const bridge = ctx ? parseLiveBridge(storedResearchBridge(ctx.link.id)?.base) : null;
+        let result: DecideResult = { ok: false, code: 'network', status: 0, reason: '' };
+        if (!ctx || !bridge) return result;
+        await this.researchWindowLock(ctx.treeId, false, async () => {
+            result = await postBridgeDecide(bridge.base, kind, id, body);
+        });
+        return result;
     },
 
     /** The research said what it takes (now or before): sending straight and the states are on. */
