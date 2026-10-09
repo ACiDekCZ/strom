@@ -263,6 +263,14 @@ export function viewLinkIsland(data: StromData, link: Pick<ViewLink, 'islandIds'
     return (Object.keys(data.persons ?? {}) as PersonId[]).filter(id => groups.has(ctx.group.get(id)!));
 }
 
+/**
+ * How many people a view link brings in: its family without the "?" stand-ins
+ * of single parents (no person, never drawn, counted nowhere else either).
+ */
+export function viewLinkPeopleCount(data: StromData, link: Pick<ViewLink, 'islandIds'>, ctx: ViewLinkContext = viewLinkContext(data)): number {
+    return viewLinkIsland(data, link, ctx).filter(id => !data.persons[id]?.isPlaceholder).length;
+}
+
 /** The person lies off the tree as the research sees it (a family nothing links to it yet). */
 const offTree = (p: Person | undefined): boolean => !!p?.research?.island;
 
@@ -570,7 +578,7 @@ export interface ViewLinkOffer {
     choice: ViewLinkChoice | null;
     /** What showing it would be now (null without a choice); only `draw` can be shown. */
     state: ViewLinkState | null;
-    /** The people of the family it shows (0 without a choice). */
+    /** The people of the family it shows, "?" stand-ins left out (0 without a choice). */
     people: number;
     /** It names people, but only as text (same, siblings). */
     textOnly: boolean;
@@ -593,7 +601,7 @@ export function viewLinkOffers(data: StromData, links: readonly ViewLink[], mast
         return {
             hypo, variant: v.id, ...(v.title ? { title: v.title } : {}),
             choice, state,
-            people: choice ? viewLinkIsland(data, choice, ctx).length : 0,
+            people: choice ? viewLinkPeopleCount(data, choice, ctx) : 0,
             textOnly: !choice && v.links.length > 0 && v.links.every(l => l.kind === 'same' || l.kind === 'siblings'),
             shown: master && !!record?.on && record.variant === v.id,
         };

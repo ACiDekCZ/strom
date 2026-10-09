@@ -19,7 +19,7 @@ import { shownName } from '../person-name.js';
 import {
     ResolvedViewLink, ViewLink, isViewLinksMaster, loadViewLinks, newlyInvalidViewLinks, orderViewLinkRows, removeViewLinks,
     resolveViewLinks, saveViewLinks, setViewLinkOn, setViewLinksMaster, unlinkViewLink, viewLinkContext, viewLinkCounts,
-    viewLinkDependents, viewLinkIsland, viewLinksTreeOfKey,
+    viewLinkDependents, viewLinkPeopleCount, viewLinksTreeOfKey,
 } from '../view-links.js';
 import { MQ_MOBILE, MQ_PHONE_LANDSCAPE } from '../breakpoints.js';
 import { uiModule } from './module.js';
@@ -472,7 +472,7 @@ export const viewLinksListMethods = uiModule({
         const claim = el('span', 'view-links-row__claim', v.rowVariant(link.hypo, link.variant, title));
         claim.title = claim.textContent ?? '';
         text.append(name, claim);
-        if (r.state === 'draw') text.appendChild(el('span', 'view-links-row__people', v.people(viewLinkIsland(data, link, ctx).length)));
+        if (r.state === 'draw') text.appendChild(el('span', 'view-links-row__people', v.people(viewLinkPeopleCount(data, link, ctx))));
         else if (r.state === 'real') text.appendChild(el('span', 'view-links-row__status view-links-row__status--real', v.real));
         else text.appendChild(el('span', 'view-links-row__status view-links-row__status--invalid', v.invalid(v.reason[r.reason])));
 

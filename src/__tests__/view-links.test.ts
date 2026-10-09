@@ -14,7 +14,7 @@ import {
     researchHypotheses, isOpenHypothesis, viewLinkContext, viewLinkIsland, resolveViewLink, resolveViewLinks,
     activeViewLinks, viewLinkDependents, showViewLink, unlinkViewLink, setViewLinkOn, removeViewLinks,
     viewLinkCandidates, hasViewLinkData, viewLinksAvailable, HYPOTHESIS_LINKS_FEATURE,
-    viewLinksTreeOfKey, viewLinkCounts, orderViewLinkRows, newlyInvalidViewLinks,
+    viewLinksTreeOfKey, viewLinkCounts, orderViewLinkRows, newlyInvalidViewLinks, viewLinkPeopleCount, viewLinkOffers,
 } from '../view-links.js';
 import { strings, setLanguage } from '../strings.js';
 import { buildTransferJson, readTransferJson, TransferMark } from '../research-transfer.js';
@@ -183,6 +183,24 @@ describe('the research in the data', () => {
         expect(viewLinkIsland(TREE, B).sort()).toEqual([JAKUB, MARIE, JOSEF, TOMAS, ANNA].sort());
         expect(viewLinkIsland(TREE, C)).toEqual([JAN]);
         expect(viewLinkIsland(TREE, TOMAS_A)).toEqual([VOJTECH]);
+        expect(viewLinkPeopleCount(TREE, B)).toBe(5);
+    });
+
+    it('the people a link brings in leave out the "?" stand-in of a single parent (the count shown everywhere)', () => {
+        // Marie's father is named, her mother is not: the file's family has a husband only.
+        const ged = HYPOTHESIS_LINKS_GED
+            .replace('0 @P0127@ INDI\n', '0 @P0901@ INDI\n1 NAME Ondřej /Pokorný/\n1 SEX M\n1 REFN P0901\n1 FAMS @F0044@\n0 @P0127@ INDI\n')
+            .replace('1 FAMS @F0042@\n1 _STROM_HYPO H0028', '1 FAMC @F0044@\n1 FAMS @F0042@\n1 _STROM_HYPO H0028')
+            .replace('0 TRLR', '0 @F0044@ FAM\n1 HUSB @P0901@\n1 CHIL @P0126@\n0 TRLR');
+        const { data, id: idIn } = loadHypothesisLinksTree(ged);
+        const b: ViewLinkChoice = { ...B, anchorId: idIn('P0010'), islandIds: [idIn('P0125'), idIn('P0126')] };
+        const island = viewLinkIsland(data, b);
+        const standIns = island.filter(x => data.persons[x].isPlaceholder);
+        expect(standIns).toHaveLength(1);
+        expect(island).toContain(idIn('P0901'));
+        expect(viewLinkPeopleCount(data, b)).toBe(6);
+        const offer = viewLinkOffers(data, [], true, 'H0022').find(o => o.variant === 'B')!;
+        expect(offer.people).toBe(6);
     });
 
     it('what can be shown: open hypotheses, child and partners links, each with its state now', () => {

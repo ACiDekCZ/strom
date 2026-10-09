@@ -18,7 +18,7 @@ import { PersonId } from '../types.js';
 import { shownName } from '../person-name.js';
 import {
     VIEW_LINK_VIEWS, ViewLink, ViewLinkCandidate, ViewLinkChoice, ViewLinkOffer, isViewLinksMaster, loadViewLinks, saveViewLinks,
-    setViewLinksMaster, showViewLink, unlinkViewLink, viewLinkCandidates, viewLinkContext, viewLinkDependents, viewLinkIsland,
+    setViewLinksMaster, showViewLink, unlinkViewLink, viewLinkCandidates, viewLinkContext, viewLinkDependents, viewLinkIsland, viewLinkPeopleCount,
     viewLinkOffers,
 } from '../view-links.js';
 import { uiModule } from './module.js';
@@ -283,7 +283,7 @@ export const viewLinksUiMethods = uiModule({
             const submenu = offers.map((c, i): PersonMenuAction => {
                 const h = ctx.hypotheses.get(c.hypo);
                 const title = h?.variants?.find(x => x.id === c.variant)?.title ?? '';
-                const people = `+ ${viewLinkIsland(data, c, ctx).length}`;
+                const people = `+ ${viewLinkPeopleCount(data, c, ctx)}`;
                 const first = i === 0 || offers[i - 1].hypo !== c.hypo;
                 return {
                     action: `view-link-show:${c.hypo}:${c.variant}`, label: v.version(c.variant),
@@ -592,7 +592,7 @@ export const viewLinksUiMethods = uiModule({
             const title = ctx.hypotheses.get(c.hypo)?.variants?.find(x => x.id === c.variant)?.title ?? '';
             return {
                 label: `${c.hypo} ${c.variant} · ${personName(c.anchorId)}`, action: 'show',
-                hint: [title ? clip(title, 60) : '', v.people(viewLinkIsland(data, c, ctx).length)].filter(Boolean).join(' · '),
+                hint: [title ? clip(title, 60) : '', v.people(viewLinkPeopleCount(data, c, ctx))].filter(Boolean).join(' · '),
                 run: () => pick(c),
             };
         });
