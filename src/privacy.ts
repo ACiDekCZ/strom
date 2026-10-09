@@ -148,7 +148,7 @@ export function stripResearchWork(data: StromData): StromData {
                 tasks: [],
                 tried: [],
                 conflicts: e.conflicts,
-                hypos: e.hypos.map(h => ({ id: h.id, ...(h.join ? { join: h.join } : {}), ...(h.island !== undefined ? { island: h.island } : {}), tests: [] })),
+                hypos: e.hypos.map(h => ({ id: h.id, ...(h.join ? { join: h.join } : {}), ...(h.island !== undefined ? { island: h.island } : {}), tests: [], ...(h.variants ? { variants: h.variants } : {}) })),
             };
         }
         if (r.island) r.island = { size: r.island.size, hypos: r.island.hypos };

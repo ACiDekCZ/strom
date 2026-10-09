@@ -3,11 +3,13 @@
  * connect (under 1 _STROM_HYPO: 2 STAT, 2 _CHOSEN, 2 _VAR > 3 TITL / 3 _LINK >
  * 4 _PERS / _FAM / _PAR, 3 SOUR) and where the tree ends (2 _END named, the
  * joins at the edge and on the islands naming their variant: 3 _VAR) must be
- * read safely by an app that does not know these lines yet: nothing thrown,
- * no person, couple or relation lost or invented, the hypotheses, the edge and
- * the islands read as from today's shape of the file, an unknown end drawn as
- * the neutral open stub, and nothing of it going back out in a GEDCOM or a
- * JSON copy. Invented data only (e2e/fixtures/research-hypothesis-links.ged).
+ * read safely: nothing thrown, no person, couple or relation lost or invented,
+ * everything else read as from the file's older shape, the named end drawn
+ * as an open stub, and nothing of it going back out in a GEDCOM. First run
+ * against the app before it read these lines (3.10.1); since then only what
+ * the new lines themselves say is set apart before comparing (read in
+ * research-hypothesis-links.test.ts). Invented data only
+ * (e2e/fixtures/research-hypothesis-links.ged).
  */
 
 import { describe, it, expect, afterEach } from 'vitest';
@@ -61,6 +63,20 @@ const load = (text: string) => {
 const byRefn = (data: StromData, refn: string): Person => Object.values(data.persons).find(p => p.refn === refn)!;
 const refnsOf = (data: StromData, ids: readonly string[]): string[] => ids.map(id => data.persons[id as Person['id']]?.refn ?? `?${id}`).sort();
 
+/** What only the new lines say: the hypotheses' status, choice and variants, the variants of the joins, the edge end. */
+function withoutNewLines(data: StromData): StromData {
+    const copy = structuredClone(data);
+    for (const p of Object.values(copy.persons)) {
+        const r = p.research;
+        if (!r) continue;
+        for (const h of r.hypotheses ?? []) { delete h.status; delete h.chosen; delete h.variants; }
+        for (const h of r.edge?.hypos ?? []) delete h.variants;
+        for (const h of r.island?.hypos ?? []) delete h.variants;
+        if (r.edge?.end === 'named') delete r.edge.end;
+    }
+    return copy;
+}
+
 /** The data with every generated id replaced by what names the record in the file (REFN, the couple's REFNs). */
 function normalize(data: StromData): unknown {
     const names = new Map<string, string>();
@@ -82,7 +98,7 @@ function normalize(data: StromData): unknown {
 
 afterEach(() => setLanguage('en'));
 
-describe('a research file with hypothesis variants, links and the named edge end (today\'s app)', () => {
+describe('a research file with hypothesis variants, links and the named edge end is read safely', () => {
     it('the fixture really carries the new lines, and the stripped copy none of them', () => {
         expect(FIXTURE).toMatch(/\n2 STAT decided\n2 _CHOSEN B\n/);
         expect(FIXTURE).toMatch(/\n2 STAT abandoned\n/);
@@ -111,17 +127,16 @@ describe('a research file with hypothesis variants, links and the named edge end
         const now = load(FIXTURE);
         const before = load(todayShape(FIXTURE));
         expect(now.parsed.droppedTags).toEqual(before.parsed.droppedTags);
-        const a = normalize(now.data) as { persons: Record<string, Person> };
-        const b = normalize(before.data) as { persons: Record<string, Person> };
-        expect(a.persons['person:P0010'].research?.edge?.end).toBe('named');
-        expect(b.persons['person:P0010'].research?.edge?.end).toBeUndefined();
-        delete a.persons['person:P0010'].research!.edge!.end;
-        expect(a).toEqual(b);
+        expect(byRefn(now.data, 'P0010').research?.edge?.end).toBe('named');
+        expect(byRefn(before.data, 'P0010').research?.edge?.end).toBeUndefined();
+        expect(normalize(withoutNewLines(now.data))).toEqual(normalize(before.data));
+        // the older shape gives the same with or without the new reading
+        expect(normalize(withoutNewLines(before.data))).toEqual(normalize(before.data));
     });
 
     it('invents no relation: the parents a variant names stay apart from the tree', () => {
         const { data } = load(FIXTURE);
-        expect(Object.keys(data.persons)).toHaveLength(13);
+        expect(Object.keys(data.persons)).toHaveLength(14);
         expect(Object.keys(data.partnerships)).toHaveLength(4);
         expect(Object.keys(data.sources ?? {})).toHaveLength(3);
         const vaclav = byRefn(data, 'P0010');
@@ -134,7 +149,7 @@ describe('a research file with hypothesis variants, links and the named edge end
         expect(refnsOf(data, byRefn(data, 'P0125').childIds)).toEqual(['P0127']);
         expect(refnsOf(data, byRefn(data, 'P0125').parentIds)).toEqual(['P0128', 'P0129']);
         // the partner, the same person, the siblings and the absent parent of a variant: nothing
-        for (const refn of ['P0130', 'P0140', 'P0141']) {
+        for (const refn of ['P0130', 'P0140', 'P0141', 'P0150']) {
             const p = byRefn(data, refn);
             expect(p.parentIds).toEqual([]);
             expect(p.childIds).toEqual([]);
@@ -148,17 +163,18 @@ describe('a research file with hypothesis variants, links and the named edge end
 
     it('reads every hypothesis as before: id, question and note, untouched by the variants', () => {
         const { data } = load(FIXTURE);
-        expect(byRefn(data, 'P0010').research?.hypotheses).toEqual([{
+        expect(withoutNewLines(data).persons[byRefn(data, 'P0010').id].research?.hypotheses).toEqual([{
             id: 'H0022',
             title: 'Odkud pocházel Václav Horák, ženich z roku 1857?',
             note: 'A: narozen 1818 v Habrech čp. 68, syn Šebestiána(?)\nB: syn Jakuba Horáka a Marie Pokorné (sňatek S0001)\nC: z Nové Vsi, syn Jana Horáka',
         }]);
-        expect(byRefn(data, 'P0011').research?.hypotheses).toEqual([
+        expect(withoutNewLines(data).persons[byRefn(data, 'P0011').id].research?.hypotheses).toEqual([
             { id: 'H0024', title: 'Byla Rozálie před sňatkem s Václavem vdaná?', note: 'A: vdova po Martinu Novotném\nB: svobodná' },
             { id: 'H0026', title: 'Kdo byli rodiče Rozálie?', note: 'A: dcera Františka Dvořáčka z Habrů\nB: dcera Antonína Dvořáčka a Ludmily' },
         ]);
         expect(byRefn(data, 'P0001').research?.hypotheses?.map(h => h.id)).toEqual(['H0025', 'H0027']);
-        expect(byRefn(data, 'P0125').research?.hypotheses?.map(h => h.id)).toEqual(['H0022']);
+        expect(byRefn(data, 'P0125').research?.hypotheses?.map(h => h.id)).toEqual(['H0022', 'H0028']);
+        expect(byRefn(data, 'P0012').research?.hypotheses?.map(h => h.id)).toEqual(['H0026', 'H0028']);
         expect(byRefn(data, 'P0013').research).toBeUndefined();
     });
 
@@ -167,8 +183,8 @@ describe('a research file with hypothesis variants, links and the named edge end
         const edge = byRefn(data, 'P0010').research!.edge!;
         expect(edge).toMatchObject({ missing: 'parents', scope: 'in', research: 'G0001', gen: 2, end: 'named', next: 'decide', window: { from: 1815, to: 1821 } });
         expect(edge.est).toEqual({ year: 1818, place: 'Lhota' });
-        // _VAR lines under the join are skipped; the joins read as before (the last one kept)
-        expect(edge.hypos).toEqual([{ id: 'H0022', join: 'P0130', island: 5, held: 0, tests: [] }]);
+        // the joins read as before (the last one kept)
+        expect(edge.hypos).toMatchObject([{ id: 'H0022', join: 'P0130', island: 5, held: 0, tests: [] }]);
         expect(edgeShape(edge.end)).toBe('open');
         const view = edgeView(edge, 'all')!;
         expect(view).toMatchObject({ kind: 'stub', side: 'center', shape: 'open', tone: 'yours', label: '' });
@@ -180,11 +196,14 @@ describe('a research file with hypothesis variants, links and the named edge end
 
     it('reads the islands as before', () => {
         const { data } = load(FIXTURE);
+        const plain = withoutNewLines(data);
+        const island = (refn: string) => plain.persons[byRefn(data, refn).id].research?.island;
         for (const refn of ['P0125', 'P0126', 'P0127', 'P0128', 'P0129']) {
-            expect(byRefn(data, refn).research?.island).toEqual({ size: 5, hypos: [{ id: 'H0022', join: 'P0010' }], held: 0 });
+            expect(island(refn)).toEqual({ size: 5, hypos: [{ id: 'H0022', join: 'P0010' }, { id: 'H0028', join: 'P0012' }], held: 0 });
         }
-        expect(byRefn(data, 'P0130').research?.island).toEqual({ size: 1, hypos: [{ id: 'H0022', join: 'P0010' }], held: 0 });
-        expect(byRefn(data, 'P0141').research?.island).toEqual({ size: 1, hypos: [{ id: 'H0025', join: 'P0001' }] });
+        expect(island('P0130')).toEqual({ size: 1, hypos: [{ id: 'H0022', join: 'P0010' }], held: 0 });
+        expect(island('P0141')).toEqual({ size: 1, hypos: [{ id: 'H0025', join: 'P0001' }] });
+        expect(island('P0150')).toEqual({ size: 1, hypos: [], held: 0 });
     });
 
     it('nothing of it goes back out in a GEDCOM: the export is the one of today\'s shape', () => {

@@ -53,6 +53,9 @@ import {
     ResearchEdgeBook,
     ResearchEdgeHypo,
     ResearchEdgeTask,
+    ResearchHypothesis,
+    ResearchHypothesisVariant,
+    ResearchVariantLink,
     ResearchIsland,
     YearSpan,
     uniqueIdSuffix,
@@ -168,7 +171,7 @@ function toStory(raw: RawStory | undefined): Story | undefined {
  */
 interface RawResearch {
     conflicts: { id: string; fact: string; title: string; stat: string; values: RawResearchValue[]; decision?: RawResearchValue }[];
-    hypotheses: { id: string; title: string; note: string }[];
+    hypotheses: { id: string; title: string; note: string; stat: string; chosen: string; variants: RawResearchVariant[] }[];
     searched: { title: string; date: string; resn: string; at: string }[];
     /** The _STROM_EDGE / _STROM_ISLAND block: its value and the lines under it (level, tag, value). */
     edge?: RawResearchBlock;
@@ -185,10 +188,25 @@ interface RawResearchValue {
     sourceRefs: string[];
 }
 
-/** The research block being read, and the level-2 line inside it. */
+/** 2 _VAR under a hypothesis: its letter, claim, links (pointers as written) and sources. */
+interface RawResearchVariant {
+    label: string;
+    title: string;
+    links: { kind: string; persons: string[]; family: string[]; parents: string[] }[];
+    sourceRefs: string[];
+}
+
+/** What the research's pointers name: a person's REFN, a family's partners (pointers). */
+interface ResearchRefs {
+    person: (xref: string) => string | undefined;
+    familyPartners: (xref: string) => string[] | undefined;
+}
+
+/** The research block being read, the level-2 line inside it and the level-3 line under that. */
 interface OpenResearch {
     kind: 'conflict' | 'hypo' | 'searched' | 'edge' | 'island';
     sub: string | null;
+    sub3?: string | null;
 }
 
 const newResearch = (): RawResearch => ({ conflicts: [], hypotheses: [], searched: [] });
@@ -212,7 +230,7 @@ function researchIsoDate(value: string): string {
 }
 
 /** Raw research lines → the person's `research`, citations resolved (undefined: nothing kept). */
-function toPersonResearch(raw: RawResearch | undefined, mapRefs: (refs: string[]) => string[]): PersonResearch | undefined {
+function toPersonResearch(raw: RawResearch | undefined, mapRefs: (refs: string[]) => string[], refs?: ResearchRefs): PersonResearch | undefined {
     if (!raw) return undefined;
     const value = (v: RawResearchValue): ResearchConflictValue => {
         const ids = mapRefs(v.sourceRefs);
@@ -235,11 +253,19 @@ function toPersonResearch(raw: RawResearch | undefined, mapRefs: (refs: string[]
         .filter(c => c.values.length > 0);
     if (conflicts.length > 0) out.conflicts = conflicts;
     const hypotheses = raw.hypotheses.filter(h => h.title.trim())
-        .map(h => ({
-            ...(RESEARCH_ID.H.test(h.id.trim()) ? { id: h.id.trim() } : {}),
-            title: h.title.trim(),
-            ...(h.note.trim() ? { note: h.note.trim() } : {}),
-        }));
+        .map((h): ResearchHypothesis => {
+            const status = researchWord(h.stat);
+            const chosen = researchVariantLabel(h.chosen);
+            const variants = researchVariants(h.variants, mapRefs, refs);
+            return {
+                ...(RESEARCH_ID.H.test(h.id.trim()) ? { id: h.id.trim() } : {}),
+                title: h.title.trim(),
+                ...(h.note.trim() ? { note: h.note.trim() } : {}),
+                ...(status ? { status } : {}),
+                ...(chosen && status === 'decided' ? { chosen } : {}),
+                ...(variants.length > 0 ? { variants } : {}),
+            };
+        });
     if (hypotheses.length > 0) out.hypotheses = hypotheses;
     const searched = raw.searched.filter(x => x.title.trim()).map(x => {
         const resn = x.resn.trim().toLowerCase();
@@ -263,6 +289,64 @@ function toPersonResearch(raw: RawResearch | undefined, mapRefs: (refs: string[]
 const RESEARCH_ID = {
     P: /^P\d{1,7}$/, T: /^T\d{1,7}$/, G: /^G\d{1,7}$/, H: /^H\d{1,7}$/, X: /^X\d{1,7}$/, B: /^B\d{1,7}$/,
 };
+
+/** A variant's letter ("B", "AA"): upper-case letters, as written; undefined otherwise. */
+function researchVariantLabel(value: string): string | undefined {
+    const v = value.trim();
+    return /^[A-Z]{1,3}$/.test(v) ? v : undefined;
+}
+
+/**
+ * The variants of a hypothesis, read: a variant without a letter goes, so do
+ * a repeated letter (the first stays), a link of an unknown kind, a link to a
+ * record not in the file or without the research's person number, and a link
+ * that names too few people (a child without parents, a couple of one).
+ */
+function researchVariants(raw: RawResearchVariant[], mapRefs: (refs: string[]) => string[], refs?: ResearchRefs): ResearchHypothesisVariant[] {
+    const out: ResearchHypothesisVariant[] = [];
+    const seen = new Set<string>();
+    const person = (xref: string): string | undefined => {
+        const refn = refs?.person(xref)?.trim();
+        return refn && RESEARCH_ID.P.test(refn) ? refn : undefined;
+    };
+    const people = (xrefs: string[]): string[] | null => {
+        const ids = xrefs.map(person);
+        return ids.every((id): id is string => !!id) ? [...new Set(ids)] : null;
+    };
+    for (const v of raw) {
+        const id = researchVariantLabel(v.label);
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        const links: ResearchVariantLink[] = [];
+        for (const l of v.links) {
+            if (l.kind === 'child') {
+                if (l.persons.length !== 1) continue;
+                const child = person(l.persons[0]);
+                if (!child) continue;
+                let parents: string[] | null;
+                let family = false;
+                if (l.family.length > 0) {
+                    const partners = l.family.length === 1 ? refs?.familyPartners(l.family[0]) : undefined;
+                    if (!partners) continue;
+                    parents = people(partners);
+                    family = true;
+                } else {
+                    parents = people(l.parents);
+                }
+                if (!parents || parents.length < 1 || parents.length > 2 || parents.includes(child)) continue;
+                links.push({ kind: 'child', child, parents, ...(family ? { family: true as const } : {}) });
+            } else if (l.kind === 'same' || l.kind === 'partners' || l.kind === 'siblings') {
+                const persons = people(l.persons);
+                if (!persons || persons.length < 2 || (l.kind !== 'siblings' && persons.length > 2)) continue;
+                links.push({ kind: l.kind, persons });
+            }
+        }
+        const title = v.title.trim();
+        const sourceIds = mapRefs(v.sourceRefs);
+        out.push({ id, ...(title ? { title } : {}), links, ...(sourceIds.length > 0 ? { sourceIds } : {}) });
+    }
+    return out;
+}
 
 /** A whole number within a range, or undefined. */
 function researchInt(value: string, min: number, max: number): number | undefined {
@@ -373,6 +457,7 @@ export function researchEdgeFromLines(block: RawResearchBlock): ResearchEdge | n
         } else if (item.tag === '_HYPO' && level === 3) {
             const hypo = target as ResearchEdgeHypo;
             if (tag === '_JOIN' && RESEARCH_ID.P.test(v)) hypo.join = v;
+            else if (tag === '_VAR') { const label = researchVariantLabel(v); if (label && !hypo.variants?.includes(label)) (hypo.variants ??= []).push(label); }
             else if (tag === '_ISLAND') { const n = researchInt(v, 1, 1e6); if (n !== undefined) hypo.island = n; }
             else if (tag === '_HELD') { const n = researchInt(v, 0, 1e6); if (n !== undefined) hypo.held = n; }
             else if (tag === '_TEST' && RESEARCH_ID.T.test(v)) hypo.tests.push(v);
@@ -397,6 +482,9 @@ export function researchIslandFromLines(block: RawResearchBlock): ResearchIsland
             else if (tag === '_HELD') { const n = researchInt(v, 0, 1e6); if (n !== undefined) island.held = n; }
         } else if (level === 3 && hypo && tag === '_JOIN' && RESEARCH_ID.P.test(v)) {
             hypo.join = v;
+        } else if (level === 3 && hypo && tag === '_VAR') {
+            const label = researchVariantLabel(v);
+            if (label && !hypo.variants?.includes(label)) (hypo.variants ??= []).push(label);
         }
     }
     return island;
@@ -1992,7 +2080,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                                 research.conflicts.push({ id: value.trim(), fact: '', title: '', stat: '', values: [] });
                                 currentResearch = { kind: 'conflict', sub: null };
                             } else if (tag === '_STROM_HYPO') {
-                                research.hypotheses.push({ id: value.trim(), title: '', note: '' });
+                                research.hypotheses.push({ id: value.trim(), title: '', note: '', stat: '', chosen: '', variants: [] });
                                 currentResearch = { kind: 'hypo', sub: null };
                             } else if (tag === '_STROM_EDGE' || tag === '_STROM_ISLAND') {
                                 // A snapshot: one per person (a second replaces the first).
@@ -2180,14 +2268,33 @@ export function parseGedcom(content: string): ParsedGedcom {
                     }
                 } else if (open.kind === 'hypo') {
                     const h = research.hypotheses[research.hypotheses.length - 1];
+                    // 2 _VAR > 3 TITL (4 CONC/CONT) / 3 _LINK > 4 _PERS, _FAM, _PAR / 3 SOUR
+                    const variant = open.sub === '_VAR' ? h.variants[h.variants.length - 1] : undefined;
                     if (level === 2) {
                         open.sub = tag;
+                        open.sub3 = null;
                         if (tag === 'TITL') h.title = value;
                         else if (tag === 'NOTE') h.note = h.note ? `${h.note}\n${value}` : value;
+                        else if (tag === 'STAT') h.stat = value;
+                        else if (tag === '_CHOSEN') h.chosen = value;
+                        else if (tag === '_VAR') h.variants.push({ label: value, title: '', links: [], sourceRefs: [] });
+                    } else if (level === 3 && variant) {
+                        open.sub3 = tag;
+                        if (tag === 'TITL') variant.title = value;
+                        else if (tag === '_LINK') variant.links.push({ kind: value.trim().toLowerCase(), persons: [], family: [], parents: [] });
+                        else if (tag === 'SOUR' && GED_POINTER.test(value)) variant.sourceRefs.push(value);
                     } else if (level === 3 && (tag === 'CONC' || tag === 'CONT')) {
                         const glue = tag === 'CONT' ? '\n' + value : value;
                         if (open.sub === 'TITL') h.title += tag === 'CONT' ? ' ' + value : value;
                         else if (open.sub === 'NOTE') h.note += glue;
+                    } else if (level === 4 && variant) {
+                        const link = open.sub3 === '_LINK' ? variant.links[variant.links.length - 1] : undefined;
+                        if (open.sub3 === 'TITL' && (tag === 'CONC' || tag === 'CONT')) variant.title += tag === 'CONT' ? ' ' + value : value;
+                        else if (link && GED_POINTER.test(value)) {
+                            if (tag === '_PERS') link.persons.push(value);
+                            else if (tag === '_FAM') link.family.push(value);
+                            else if (tag === '_PAR') link.parents.push(value);
+                        }
                     }
                 } else {
                     const x = research.searched[research.searched.length - 1];
@@ -2744,6 +2851,14 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
      */
     const mapRefs = (refs?: string[]): string[] =>
         [...new Set((refs ?? []).map(r => sourceIdMap.get(r)).filter((id): id is string => !!id))];
+    /** The research's pointers in what its hypotheses say: a person's number, a family's partners. */
+    const researchRefs: ResearchRefs = {
+        person: xref => individuals.get(xref)?.refn || undefined,
+        familyPartners: xref => {
+            const fam = families.get(xref);
+            return fam ? [fam.husb, fam.wife].filter((x): x is string => !!x) : undefined;
+        },
+    };
 
     // Keep ALL individuals. Nameless ones (unknown ancestors) become
     // placeholders instead of being dropped, so relationships stay intact.
@@ -2933,7 +3048,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         const story = toStory(indi.story);
         if (story) person.story = story;
 
-        const research = gedcom.stromResearch ? toPersonResearch(indi.research, mapRefs) : undefined;
+        const research = gedcom.stromResearch ? toPersonResearch(indi.research, mapRefs, researchRefs) : undefined;
         if (research) person.research = research;
 
         const personRefs = mapRefs(indi.sourceRefs);

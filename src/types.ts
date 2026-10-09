@@ -551,12 +551,15 @@ export interface ResearchEdgeHypo {
     held?: number;
     /** Tasks testing it. */
     tests: string[];
+    /** The variants of the hypothesis that would make the join (3 _VAR): their letters. */
+    variants?: string[];
 }
 
 /** A person of a family nothing links to the tree yet. */
 export interface ResearchIsland {
     size: number;
-    hypos: { id: string; join?: string }[];
+    /** The hypotheses that would join it: the person of the tree they name, the variants that would (3 _VAR). */
+    hypos: { id: string; join?: string; variants?: string[] }[];
     held?: number;
 }
 
@@ -588,7 +591,35 @@ export interface ResearchHypothesis {
     id?: string;
     title: string;
     note?: string;
+    /**
+     * open | decided | abandoned, or a newer word kept as written (GEDCOM
+     * 2 STAT). Missing: the research did not say (an older file: open).
+     */
+    status?: string;
+    /** The variant it was decided for (2 _CHOSEN, decided only): its letter. */
+    chosen?: string;
+    /** Its variants and what each would connect (2 _VAR), in the file's order. */
+    variants?: ResearchHypothesisVariant[];
 }
+
+/** One answer to a hypothesis ("B: son of Jakub and Marie"). */
+export interface ResearchHypothesisVariant {
+    /** Its letter ("B"): the same claim in every version of the research. */
+    id: string;
+    /** The claim (3 TITL). */
+    title?: string;
+    /** What it would connect (3 _LINK): none when it names nobody in the file. */
+    links: ResearchVariantLink[];
+    /** The sources it names (3 SOUR), catalog ids. */
+    sourceIds?: string[];
+}
+
+/** What a variant would connect (3 _LINK); people as the research's person numbers (REFN). */
+export type ResearchVariantLink =
+    /** `child` is the child of `parents` (one or two), a couple of the tree (4 _FAM, `family`) or not (4 _PAR). */
+    | { kind: 'child'; child: string; parents: string[]; family?: true }
+    /** `same`: one person in two records; `partners`: a couple; `siblings`: brothers and sisters (parents unknown). */
+    | { kind: 'same' | 'partners' | 'siblings'; persons: string[] };
 
 /** A place the research searched for this person. */
 export interface ResearchSearch {

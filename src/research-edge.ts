@@ -20,6 +20,12 @@ export type EdgeSide = 'center' | 'father' | 'mother';
 
 /** Here the tree ends, and why. */
 const CLOSED_ENDS: readonly string[] = ['unnamed', 'lost', 'before-records', 'gap', 'not-found'];
+/**
+ * The parents are named by a variant of an open hypothesis, nobody linked
+ * them (Strom Research: `_END named`, `_NEXT decide` while no task tests it):
+ * an open stub — it can go on, the user decides.
+ */
+export const NAMED_END = 'named';
 /** The research stays away on purpose. */
 const MUTING_SCOPES: readonly string[] = ['limit', 'paused', 'done', 'living'];
 const SEARCHING: readonly string[] = ['queued', 'proposed', 'working'];
@@ -48,6 +54,11 @@ export interface EdgeView {
     nextText: string;
     /** "Parents: not searched yet. The agent is working on it right now". */
     aria: string;
+}
+
+/** The edge's parents are named, not linked (see NAMED_END); never for a proof edge. */
+export function edgeNamed(edge: ResearchEdge): boolean {
+    return edge.end === NAMED_END && edge.missing !== 'proof';
 }
 
 export function edgeShape(end: string | undefined): EdgeShape {
@@ -90,6 +101,9 @@ function endKey(end: string | undefined): Exclude<EndKey, 'unknown' | 'proof'> |
         case 'no-books': return 'noBooks';
         case 'no-place': return 'noPlace';
         case 'no-clue': return 'noClue';
+        // Known, but its words ("parents named, not linked", the number of
+        // options) come with the view links; until then the neutral sentence.
+        case NAMED_END: return null;
         default: return null;
     }
 }
