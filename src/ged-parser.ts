@@ -239,13 +239,17 @@ function toPersonResearch(raw: RawResearch | undefined, mapRefs: (refs: string[]
         const ids = mapRefs(v.sourceRefs);
         return { value: v.value, ...(ids.length > 0 ? { sourceIds: ids } : {}) };
     };
+    const sideOf = (v: RawResearchValue): 'user' | 'research' | undefined => {
+        const side = v.side?.trim().toLowerCase();
+        return side === 'user' || side === 'research' ? side : undefined;
+    };
     // A conflict's value with whose it is and, for the sex, its machine value (anything else said there goes).
     const claim = (v: RawResearchValue, fact: string): ResearchConflictValue => {
-        const side = v.side?.trim().toLowerCase();
+        const side = sideOf(v);
         const raw = fact === 'SEX' ? v.raw?.trim().toUpperCase() : undefined;
         return {
             ...value(v),
-            ...(side === 'user' || side === 'research' ? { side } : {}),
+            ...(side ? { side } : {}),
             ...(raw === 'M' || raw === 'F' || raw === 'U' ? { raw } : {}),
         };
     };
@@ -260,12 +264,14 @@ function toPersonResearch(raw: RawResearch | undefined, mapRefs: (refs: string[]
                 fact,
                 ...(c.title.trim() ? { title: c.title.trim() } : {}),
                 status: decided ? 'decided' as const : 'open' as const,
-                values: c.values.filter(v => v.value).map(v => claim(v, fact)),
+                // An empty value goes, unless a side says whose it is: a value deleted on that side
+                // (2 VAL with no text, 3 _STROM_SIDE user) — still one of the two sides to decide between.
+                values: c.values.filter(v => v.value || sideOf(v)).map(v => claim(v, fact)),
                 ...(decided && c.decision?.value ? { decision: value(c.decision) } : {}),
                 ...(c.take.trim().toUpperCase() === 'Y' ? { take: true as const } : {}),
             };
         })
-        .filter(c => c.values.length > 0);
+        .filter(c => c.values.some(v => v.value));
     if (conflicts.length > 0) out.conflicts = conflicts;
     const hypotheses = raw.hypotheses.filter(h => h.title.trim())
         .map((h): ResearchHypothesis => {

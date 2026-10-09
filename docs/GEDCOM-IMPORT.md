@@ -723,6 +723,16 @@ research's (`take research`). The research marks such a conflict in its file
 - `2 _STROM_TAKE Y` — the conflict can be decided by a side.
 - `3 _STROM_SIDE user|research` under each `VAL` — whose value it is. The
   order of the values is no contract; without both sides no choice is offered.
+- A side's value may be empty — a value deleted in the app (a title, a place,
+  a date), or one the research does not have: a bare `2 VAL` with no text,
+  still followed by its `3 _STROM_SIDE`. It is kept as an empty value with
+  its side (in `held` conflicts as `"value": ""` with its `side`) and the
+  conflict stays decidable; the card, the panel and the sheet show a muted
+  "(empty)". An empty `VAL` without a side is ignored, as any empty value; a
+  conflict whose values are all empty is not read at all. *Keep* leaves the
+  field empty here, *Take* brings the research's value with its version;
+  "Send first" compares the field with the last send as stored, so a field
+  empty here and empty when sent has not moved.
 - `3 _STROM_RAW M|F|U` under the values of a `SEX` conflict — the machine
   value, so the app never parses the research's words.
 - The app offers the choice only for an **open** conflict with exactly these

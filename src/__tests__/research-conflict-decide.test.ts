@@ -115,6 +115,36 @@ describe('the research file: what makes a conflict decidable by a side', () => {
         expect(raws('NAME', 'M', 'F')).toEqual([undefined, undefined]);
     });
 
+    it('an empty VAL with a side is kept (a value deleted on that side); without a side it goes as before', () => {
+        const npfx = (user: string, research = '2 VAL MUDr.\n3 SOUR @S0001@\n3 _STROM_SIDE research\n') =>
+            conflictsOf(`1 _STROM_CONFLICT X0013\n2 TYPE NPFX\n2 STAT open\n2 _STROM_TAKE Y\n${research}${user}`)[0];
+        const deleted = npfx('2 VAL\n3 _STROM_SIDE user\n');
+        expect(deleted.values.map(v => [v.value, v.side])).toEqual([['MUDr.', 'research'], ['', 'user']]);
+        expect(canDecideInApp(deleted, { refn: 'P0001' })).toBe(true);
+        expect(conflictSides(deleted)?.user).toEqual({ value: '', side: 'user' });
+        // Trailing spaces after the tag, or the side in capitals: the same.
+        expect(npfx('2 VAL \n3 _STROM_SIDE User\n').values[1]).toEqual({ value: '', side: 'user' });
+        // The research's side empty (a title the app added), the user's said.
+        const added = npfx('2 VAL Ing.\n3 _STROM_SIDE user\n', '2 VAL\n3 _STROM_SIDE research\n');
+        expect(added.values).toEqual([{ value: '', side: 'research' }, { value: 'Ing.', side: 'user' }]);
+        expect(canDecideInApp(added, { refn: 'P0001' })).toBe(true);
+        // Without a side (or an unknown one): ignored as before — one value left, nothing to decide here.
+        for (const plain of ['2 VAL\n', '2 VAL\n3 SOUR @S0001@\n', '2 VAL\n3 _STROM_SIDE both\n']) {
+            const c = npfx(plain);
+            expect(c.values.map(v => v.value)).toEqual(['MUDr.']);
+            expect(canDecideInApp(c, { refn: 'P0001' })).toBe(false);
+        }
+        // Only empty values: no conflict at all.
+        expect(conflictsOf('1 _STROM_CONFLICT X0013\n2 TYPE NPFX\n2 STAT open\n2 _STROM_TAKE Y\n2 VAL\n3 _STROM_SIDE research\n2 VAL\n3 _STROM_SIDE user\n')).toEqual([]);
+        // The sex keeps its machine value beside an empty side's.
+        const sex = conflictsOf('1 _STROM_CONFLICT X0008\n2 TYPE SEX\n2 STAT open\n2 _STROM_TAKE Y\n2 VAL muž\n3 _STROM_SIDE research\n3 _STROM_RAW M\n2 VAL\n3 _STROM_SIDE user\n')[0];
+        expect(sex.values).toEqual([{ value: 'muž', side: 'research', raw: 'M' }, { value: '', side: 'user' }]);
+        // A GEDCOM export writes none of it, the empty value neither.
+        const data = convertToStrom(parseGedcom(`${HEAD}1 _STROM_CONFLICT X0013\n2 TYPE NPFX\n2 STAT open\n2 _STROM_TAKE Y\n2 VAL MUDr.\n3 _STROM_SIDE research\n2 VAL\n3 _STROM_SIDE user\n0 TRLR\n`)).data;
+        expect(Object.values(data.persons)[0].research?.conflicts?.[0].values).toHaveLength(2);
+        expect(exportToGedcom(data, 'Málkovi').content).not.toMatch(/_STROM_(CONFLICT|TAKE|SIDE|RAW)|\bVAL\b|MUDr/);
+    });
+
     it('the standard GEDCOM writes none of it', () => {
         const data = convertToStrom(parseGedcom(FIXTURE)).data;
         expect(exportToGedcom(data, 'Dvořákovi').content).not.toMatch(/_STROM_TAKE|_STROM_SIDE|_STROM_RAW|_STROM_CONFLICT/);
@@ -162,6 +192,20 @@ describe('the bridge\'s JSON and what the app keeps', () => {
         expect(canDecideInApp(back.persons[anna][0], { refn: 'P0001' })).toBe(true);
     });
 
+    it('held: an empty value with its side goes through storage as it is, still decidable', () => {
+        const body = (user: string) => `${HEAD}1 _STROM_CONFLICT X0013\n2 TYPE NPFX\n2 STAT open\n2 _STROM_TAKE Y\n2 VAL MUDr.\n3 _STROM_SIDE research\n${user}0 TRLR\n`;
+        const here = convertToStrom(parseGedcom(body('2 VAL Ing.\n3 _STROM_SIDE user\n'))).data;
+        const there = convertToStrom(parseGedcom(body('2 VAL\n3 _STROM_SIDE user\n'))).data;
+        const id = Object.keys(here.persons)[0];
+        const theirs: StromData = { ...there, persons: { [id]: { ...Object.values(there.persons)[0], id } } as StromData['persons'] };
+        const held = heldConflicts(here, theirs, 'base', 'head');
+        expect(held.persons[id][0].values).toEqual([{ value: 'MUDr.', side: 'research' }, { value: '', side: 'user' }]);
+        patchResearchAutoState('t1', { held });
+        const back = researchAutoState('t1').held!;
+        expect(back.persons[id][0].values).toEqual([{ value: 'MUDr.', side: 'research' }, { value: '', side: 'user' }]);
+        expect(canDecideInApp(back.persons[id][0], { refn: 'P0001' })).toBe(true);
+    });
+
     it('held: a stored take, side or raw sex that is not what the parser reads goes', () => {
         const conflict = {
             id: 'X0007', fact: 'BIRT', status: 'open', take: 'Y',
@@ -202,6 +246,16 @@ describe('canDecideInApp: when the app offers to keep or take a value', () => {
 
     it('decided already: no', () => {
         expect(canDecideInApp({ ...base, status: 'decided' }, person)).toBe(false);
+    });
+
+    it('one side empty (a value deleted there): yes; both empty: no', () => {
+        const c = (user: string, research: string): ResearchConflict => ({
+            id: 'X0013', fact: 'NPFX', status: 'open', take: true, values: [{ value: research, side: 'research' }, { value: user, side: 'user' }],
+        });
+        expect(canDecideInApp(c('', 'MUDr.'), { refn: 'P0001' })).toBe(true);
+        expect(canDecideInApp(c('Ing.', ''), { refn: 'P0001' })).toBe(true);
+        expect(canDecideInApp(c('', ''), { refn: 'P0001' })).toBe(false);
+        expect(canDecideInApp(c(' ', ''), { refn: 'P0001' })).toBe(false);
     });
 
     it('a side missing, the same side twice, one value, three values: no', () => {

@@ -11296,6 +11296,8 @@
         .prc-value { font-size: 16px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
         .prc-side-meta { display: flex; flex-direction: column; gap: 1px; font-size: 12.5px; line-height: 1.4; }
         .prc-meta { color: var(--text-faint); }
+        /* A side's value deleted there ("(empty)"): muted, never a blank box. */
+        .prc-empty { font-weight: 400; font-style: italic; color: var(--text-faint); }
         .prc-knows { color: var(--warning-text); }
         .prc-side .link-button.prc-source { padding: 0; font-size: 12.5px; text-align: left; position: relative; }
         .modal button.prc-choice {

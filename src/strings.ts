@@ -1843,6 +1843,7 @@ const stringsEN = {
     conflict: {
         sideApp: 'From the app',
         sideResearch: 'In the research',
+        empty: '(empty)',
         appSource: (d: string) => d ? `edit in the app · ${d}` : 'edit in the app',
         appUnsent: (d: string) => `edited ${d}, not sent`,
         researchKnows: (v: string) => `the research has ${v}`,
@@ -5645,6 +5646,7 @@ const stringsCZ: StringsType = {
     conflict: {
         sideApp: 'Z aplikace',
         sideResearch: 'Ve výzkumu',
+        empty: '(prázdné)',
         appSource: (d: string) => d ? `úprava v aplikaci · ${d}` : 'úprava v aplikaci',
         appUnsent: (d: string) => `upraveno ${d}, neodesláno`,
         researchKnows: (v: string) => `výzkum zná ${v}`,
@@ -9438,6 +9440,7 @@ const stringsDE: StringsType = {
     conflict: {
         sideApp: 'Aus der App',
         sideResearch: 'In der Forschung',
+        empty: '(leer)',
         appSource: (d: string) => d ? `Änderung in der App · ${d}` : 'Änderung in der App',
         appUnsent: (d: string) => `geändert ${d}, nicht gesendet`,
         researchKnows: (v: string) => `die Forschung kennt ${v}`,

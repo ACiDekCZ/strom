@@ -73,9 +73,23 @@ export function researchValueText(fact: string, value: string): string {
     return date ? formatFlexDate(date) : value;
 }
 
-/** A conflict about a date (not a place or a name): the values read as dates. */
+/**
+ * A value of a side said in words: an empty one (deleted on its side, 2 VAL
+ * with no text) as "(empty)", never as nothing.
+ */
+export function conflictValueSaid(text: string): string {
+    return text || strings.conflict.empty;
+}
+
+/** A value of a side as a card or a panel shows it (escaped): an empty one muted, never a blank box. */
+export function conflictValueHtml(text: string): string {
+    return text ? esc(text) : `<span class="prc-empty">${esc(strings.conflict.empty)}</span>`;
+}
+
+/** A conflict about a date (not a place or a name): the values read as dates (an empty side says nothing). */
 export function isDateConflict(c: ResearchConflict): boolean {
-    return c.values.every(v => researchValueText(c.fact, v.value) !== v.value || /^\s*\d{3,4}\s*\??\s*$/.test(v.value));
+    const said = c.values.filter(v => typeof v.value === 'string' && v.value.trim());
+    return said.length > 0 && said.every(v => researchValueText(c.fact, v.value) !== v.value || /^\s*\d{3,4}\s*\??\s*$/.test(v.value));
 }
 
 /** Title of the first source of a value that is in the tree ('' when none). */
@@ -154,7 +168,7 @@ export const personResearchMethods = uiModule({
                     </div>
                     <table class="person-research-values">
                         <thead><tr><th scope="col">${esc(r.conflictValue)}</th><th scope="col">${esc(r.conflictSource)}</th></tr></thead>
-                        <tbody>${c.values.map(v => `<tr><td>${esc(researchValueText(c.fact, v.value))}</td><td>${sourceCell(v)}</td></tr>`).join('')}</tbody>
+                        <tbody>${c.values.map(v => `<tr><td>${conflictValueHtml(researchValueText(c.fact, v.value))}</td><td>${sourceCell(v)}</td></tr>`).join('')}</tbody>
                     </table>
                     <p class="person-research-sources-only">${esc(strings.conflict.sourcesOnly)}</p>
                     ${canDecide && id ? `
@@ -417,7 +431,7 @@ export const personResearchMethods = uiModule({
     /** Today's row of a decided conflict: its question, the values, the decision with its source. */
     researchConflictDecidedRowHtml(c: ResearchConflict): string {
         const r = strings.research;
-        const values = c.values.map(v => researchValueText(c.fact, v.value)).join(' vs. ');
+        const values = c.values.map(v => conflictValueSaid(researchValueText(c.fact, v.value))).join(' vs. ');
         // The decision is words ("1865 (S0001)"); a source only when the research names one.
         const decision = c.decision ? r.decided(c.decision.value, sourceTitle(c.decision)) : '';
         const id = researchConflictRef(c.id);

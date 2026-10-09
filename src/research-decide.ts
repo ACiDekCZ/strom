@@ -44,8 +44,9 @@ export function conflictFactDecidable(fact: string): boolean {
 /**
  * The app offers to decide this conflict by a side: it is open, the research
  * marked it decidable so (`take`, a conflict made by an edit in the app), it
- * has exactly two values — the user's and the research's, each said
- * (the order of the values is no contract) —, its fact is one of phase 1, and
+ * has exactly two values — the user's and the research's, each said (the
+ * order of the values is no contract; one of them may be empty: a value
+ * deleted on that side) —, its fact is one of phase 1, and
  * the person it is shown at is one of the research (its number). The device
  * does not matter here: off a computer the sides still show, without the
  * choices (conflictDecideMode `none`).
@@ -57,6 +58,8 @@ export function canDecideInApp(conflict: ResearchConflict | null | undefined, pe
     const values = conflict.values;
     if (values.length !== 2) return false;
     if (!values.some(v => v.side === 'user') || !values.some(v => v.side === 'research')) return false;
+    // Both empty is no conflict of values.
+    if (!values.some(v => typeof v.value === 'string' && v.value.trim())) return false;
     return researchPersonRef(person?.refn) !== null;
 }
 

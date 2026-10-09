@@ -17,7 +17,7 @@ import { PersonId, ResearchConflict, ResearchConflictValue } from '../types.js';
 import { researchConflictRef, ResearchConflictTake } from '../research-link.js';
 import { canDecideInApp, conflictSides } from '../research-decide.js';
 import { isPhoneBar } from '../breakpoints.js';
-import { researchConflictTitle, researchValueText } from './person-research-ui.js';
+import { conflictValueHtml, researchConflictTitle, researchValueText } from './person-research-ui.js';
 import { uiModule } from './module.js';
 
 const PANEL_ID = 'prc-panel';
@@ -240,7 +240,7 @@ export const conflictPanelMethods = uiModule({
                 <div class="prc-panel-row" data-side="${which}">
                     <div class="prc-panel-main">
                         <span class="prc-side-label">${esc(which === 'user' ? k.sideApp : k.sideResearch)}</span>
-                        <span class="prc-panel-value">${esc(value)}</span>
+                        <span class="prc-panel-value">${conflictValueHtml(value)}</span>
                         ${which === 'research' ? sourceLink(v) : ''}
                     </div>
                     ${choice}${note}

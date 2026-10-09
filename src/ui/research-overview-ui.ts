@@ -28,7 +28,7 @@ import {
     liveState, pausedText,
 } from './research-ui.js';
 import { taskDirectionName } from './research-directions-ui.js';
-import { researchValueText } from './person-research-ui.js';
+import { conflictValueSaid, researchValueText } from './person-research-ui.js';
 import { shownName } from '../person-name.js';
 import { isOpenHypothesis } from '../view-links.js';
 
@@ -578,7 +578,7 @@ export const researchOverviewMethods = uiModule({
             for (const c of this.researchConflictsOf(p.id)) {
                 if (c.status === 'decided') continue;
                 const what = c.title || facts[c.fact] || c.fact;
-                rows.push({ person: p, text: `${fullName(p)} · ${what}: ${c.values.map(v => researchValueText(c.fact, v.value)).join(' × ')}`, conflict: true,
+                rows.push({ person: p, text: `${fullName(p)} · ${what}: ${c.values.map(v => conflictValueSaid(researchValueText(c.fact, v.value))).join(' × ')}`, conflict: true,
                     conflictId: researchConflictRef(c.id) ?? undefined });
             }
             for (const h of p.research?.hypotheses ?? []) {

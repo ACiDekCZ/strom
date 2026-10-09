@@ -47,13 +47,14 @@ export interface Version {
 
 /**
  * A conflict of Jan's edit decidable by a side: the research's value (from its register) and the app's,
- * each with its side; `raw`: the sex's machine values.
+ * each with its side; `raw`: the sex's machine values. An empty value (deleted on that side) is a bare `2 VAL`.
  */
 export function conflictOf(id: string, fact: string, research: string, user: string, raw?: { research: string; user: string }, state: 'open' | 'decided' = 'open'): string[] {
+    const val = (v: string) => v ? `2 VAL ${v}` : '2 VAL';
     return [
         `1 _STROM_CONFLICT ${id}`, `2 TYPE ${fact}`, `2 STAT ${state}`, '2 _STROM_TAKE Y',
-        `2 VAL ${research}`, '3 SOUR @S0001@', '3 _STROM_SIDE research', ...(raw ? [`3 _STROM_RAW ${raw.research}`] : []),
-        `2 VAL ${user}`, '3 _STROM_SIDE user', ...(raw ? [`3 _STROM_RAW ${raw.user}`] : []),
+        val(research), '3 SOUR @S0001@', '3 _STROM_SIDE research', ...(raw ? [`3 _STROM_RAW ${raw.research}`] : []),
+        val(user), '3 _STROM_SIDE user', ...(raw ? [`3 _STROM_RAW ${raw.user}`] : []),
     ];
 }
 

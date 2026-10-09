@@ -176,6 +176,18 @@ describe('sending comes first: the field against the last sending', () => {
         expect(conflictSentChanged('SEX', false, ANNA, tree({ gender: 'male' }), tree())).toBe(true);
     });
 
+    it('an empty field (a value deleted here) compares as empty, not as missing', () => {
+        // Deleted and sent: the same emptiness, stored as '' or not at all.
+        expect(conflictSentChanged('NPFX', false, ANNA, tree({ titleBefore: '' }), tree())).toBe(false);
+        expect(conflictSentChanged('NPFX', false, ANNA, tree(), tree({ titleBefore: '' }))).toBe(false);
+        expect(conflictSentChanged('NPFX', false, ANNA, tree({ titleBefore: ' ' }), tree())).toBe(false);
+        expect(conflictFactParts('NPFX', false, ANNA, tree())).toEqual(['']);
+        // Typed again after the send: sending comes first; deleted after a send that had it: too.
+        expect(conflictSentChanged('NPFX', false, ANNA, tree({ titleBefore: 'Ing.' }), tree({ titleBefore: '' }))).toBe(true);
+        expect(conflictSentChanged('NPFX', false, ANNA, tree({ titleBefore: '' }), tree({ titleBefore: 'Ing.' }))).toBe(true);
+        expect(conflictSentChanged('BIRT', true, ANNA, tree({ birthDate: '' }), tree({ birthDate: undefined }))).toBe(false);
+    });
+
     it('a couple\'s wedding: the union\'s start; a divorce: its end', () => {
         expect(conflictSentChanged('MARR', true, ANNA, tree({}, { startDate: '1875' }), tree())).toBe(true);
         expect(conflictSentChanged('MARR', true, TOMAS, tree({}, { startDate: '1875' }), tree())).toBe(true);

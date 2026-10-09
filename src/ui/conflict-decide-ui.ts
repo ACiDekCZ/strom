@@ -25,7 +25,7 @@ import {
     ConflictCardState, ConflictCardView, ConflictDecidedValues, DecidedFact, DECIDED_CARD_MS, conflictCardView, conflictFactParts, conflictSentChanged,
     isDecidedRow, otherLoadChanges,
 } from '../research-conflict-card.js';
-import { isDateConflict, researchConflictTitle, researchValueText } from './person-research-ui.js';
+import { conflictValueHtml, conflictValueSaid as said, isDateConflict, researchConflictTitle, researchValueText } from './person-research-ui.js';
 import { fetchGedcomText, researchDateLabel } from './research-ui.js';
 import { researchSendMode } from './research-sync-ui.js';
 import { uiModule } from './module.js';
@@ -57,7 +57,7 @@ function stateKey(conflictId: string): string {
     return `${DataManager.getCurrentTreeId() ?? ''}|${conflictId}`;
 }
 
-/** A value of a side as people read it (the sex by its machine value when the research said it). */
+/** A value of a side as people read it (the sex by its machine value when the research said it; '' = empty). */
 function sideText(c: ResearchConflict, v: ResearchConflictValue): string {
     return researchValueText(c.fact, v.raw ?? v.value);
 }
@@ -132,7 +132,7 @@ export const conflictDecideMethods = uiModule({
         };
     },
 
-    /** The field's value here now, as people read it ("–" when empty). */
+    /** The field's value here now, as people read it ('' when empty). */
     researchConflictValueNow(personId: PersonId, c: ResearchConflict): string {
         const date = isDateConflict(c);
         const parts = conflictFactParts(c.fact, date, personId, DataManager.getData()) ?? [];
@@ -141,7 +141,7 @@ export const conflictDecideMethods = uiModule({
         if (fact === 'SEX') text = parts[0] ? researchValueText('SEX', parts[0] === 'male' ? 'M' : parts[0] === 'female' ? 'F' : 'U') : '';
         else if (fact === 'NAME') text = parts.filter(Boolean).join(' ');
         else text = parts.map(p => date ? formatFlexDate(p) : p.split('\u0000').filter(Boolean).join(', ')).filter(Boolean).join('; ');
-        return text || '–';
+        return text;
     },
 
     /**
@@ -174,8 +174,8 @@ export const conflictDecideMethods = uiModule({
             const text = n.text === 'sendFirst' ? k.sendFirst
                 : n.text === 'remote' ? k.remote
                 : n.text === 'alreadyDecided' ? k.alreadyDecided(state?.kind === 'elsewhere' && state.resolution ? state.resolution
-                    : state?.kind === 'elsewhere' && state.take ? (state.take === 'user' ? decidedValues.user : decidedValues.research) : '')
-                : n.text === 'takenPending' ? k.takenPending(decidedValues.research)
+                    : state?.kind === 'elsewhere' && state.take ? said(state.take === 'user' ? decidedValues.user : decidedValues.research) : '')
+                : n.text === 'takenPending' ? k.takenPending(said(decidedValues.research))
                 : n.text === 'errBusy' ? k.errBusy
                 : n.text === 'errLocked' ? k.errLocked
                 : n.text === 'noEdit' ? k.noEdit
@@ -208,7 +208,7 @@ export const conflictDecideMethods = uiModule({
                     ? sourceLink(v, 'source')
                     : view.unsent
                         ? `<span class="prc-meta">${esc(k.appUnsent(dayOf(ctx ? TreeManager.getTreeMetadata(ctx.treeId)?.changedAt : undefined) || dayOf(new Date().toISOString())))}</span>
-                           <span class="prc-knows">${esc(k.researchKnows(sideText(c, v)))}</span>`
+                           <span class="prc-knows">${esc(k.researchKnows(said(sideText(c, v))))}</span>`
                         : `<span class="prc-meta">${esc(k.appSource(dayOf(ctx?.link.sent?.at)))}</span>`;
                 let choice = '';
                 if (view.choices === 'buttons') {
@@ -223,7 +223,7 @@ export const conflictDecideMethods = uiModule({
                 return `
                     <div class="prc-side" data-side="${which}">
                         <span class="prc-side-label">${esc(which === 'user' ? k.sideApp : k.sideResearch)}</span>
-                        <span class="prc-side-main"><span class="prc-value">${esc(value)}</span>
+                        <span class="prc-side-main"><span class="prc-value">${conflictValueHtml(value)}</span>
                         <span class="prc-side-meta">${meta}</span></span>
                         ${choice}${note}
                     </div>`;
@@ -238,13 +238,14 @@ export const conflictDecideMethods = uiModule({
                 : state.kind === 'elsewhere' ? state.resolution : '';
             const sideWords = take === 'user' ? k.fromApp : take === 'research' ? k.fromResearch(decidedValues.source) : '';
             const loaded = (state.kind === 'taken' || state.kind === 'elsewhere') ? state.loaded : undefined;
-            const line = state.kind === 'kept' ? k.keptLine(dayAndTime(state.at), decidedValues.research)
-                : loaded ? k.takenLine(loaded.from) : '';
-            body = value ? `
+            const line = state.kind === 'kept' ? k.keptLine(dayAndTime(state.at), said(decidedValues.research))
+                : loaded ? k.takenLine(said(loaded.from)) : '';
+            // A side's value even when empty ("(empty)"); the research's own words only when said.
+            body = take || value ? `
                 <div class="prc-decided">
                     <div class="prc-decided-row">
                         <span class="prc-valid">${esc(k.valid)}</span>
-                        <span class="prc-value">${esc(value)}</span>
+                        <span class="prc-value">${take ? conflictValueHtml(value) : esc(value)}</span>
                         ${sideWords ? `<span class="prc-decided-side">${esc(sideWords)}</span>` : ''}
                     </div>
                     ${line ? `<p class="prc-decided-line">${esc(line)}</p>` : ''}
@@ -400,7 +401,7 @@ export const conflictDecideMethods = uiModule({
                 ? st.notWritten.items.length + st.notWritten.unexplained : 0;
             const answer = await this.askResearchLoad(TreeManager.getTreeMetadata(treeId)?.name ?? '', researchDateLabel(version.header.date), here, there, {
                 off: researchSendMode(link) === 'off', notWritten: nw,
-                decided: { intro: strings.conflict.loadIntro(values.research), later: strings.conflict.loadLater(from), rows: r => isDecidedRow(r, decided) },
+                decided: { intro: strings.conflict.loadIntro(said(values.research)), later: strings.conflict.loadLater(said(from)), rows: r => isDecidedRow(r, decided) },
             });
             if (!answer || DataManager.getCurrentTreeId() !== treeId) return later();
         }
@@ -450,12 +451,12 @@ export const conflictDecideMethods = uiModule({
         const values = state && 'values' in state ? state.values : this.researchConflictDecidedValues(c);
         if (state?.kind === 'kept') {
             await this.researchConflictKeptLoad(result.ok ? result.head : '');
-            this.showToast(k.decidedToast(values.user), 6000);
+            this.showToast(k.decidedToast(said(values.user)), 6000);
         } else if (state?.kind === 'taken') {
-            if (await this.researchConflictTaken(personId, c, values) === 'quiet') this.showToast(k.decidedToast(values.research), 6000);
+            if (await this.researchConflictTaken(personId, c, values) === 'quiet') this.showToast(k.decidedToast(said(values.research)), 6000);
         } else if (state?.kind === 'elsewhere') {
-            const said = state.resolution || (state.take === 'user' ? values.user : state.take === 'research' ? values.research : '');
-            this.showToast(k.alreadyDecided(said), 6000);
+            const decision = state.resolution || (state.take ? said(state.take === 'user' ? values.user : values.research) : '');
+            this.showToast(k.alreadyDecided(decision), 6000);
             if (state.take === 'research') await this.researchConflictTaken(personId, c, values);
         } else if (state?.kind === 'error' && !this.researchConflictCardInSight(id)) {
             this.showToast(state.error === 'noEdit' ? k.noEdit : k.errToast, 6000,
@@ -616,7 +617,7 @@ export const conflictDecideMethods = uiModule({
             }
             // Left for later: the same load as right after the decision (quietly, or the Load dialog).
             void this.researchConflictTaken(personId, c, state.values).then(how => {
-                if (how === 'quiet') this.showToast(strings.conflict.decidedToast(state.values.research), 6000);
+                if (how === 'quiet') this.showToast(strings.conflict.decidedToast(said(state.values.research)), 6000);
                 this.researchConflictFoldLater(conflictId);
             });
         }
