@@ -1454,6 +1454,7 @@ export const personModalMethods = uiModule({
     },
 
     forceCloseModal(): void {
+        this.closeResearchConflictPanel({ focus: false });
         document.getElementById('person-modal')?.classList.remove('active');
         this.currentId = null;
         this.personModalSnapshot = null;
@@ -1500,6 +1501,47 @@ export const personModalMethods = uiModule({
             || nameVariants !== s.nameVariants || deceased !== s.deceased || photo !== s.photo
             || story.storyTitle !== s.storyTitle || story.storyText !== s.storyText
             || this.personDetailsSnapshot() !== s.details;
+    },
+
+    /**
+     * The open edit form after the person's data changed under it (the
+     * research's version loaded after a conflict was decided): each field not
+     * edited in the form since it opened takes the value now; one edited
+     * keeps what was typed (still unsaved, against the new value). The
+     * conflicts' tags follow.
+     */
+    syncPersonFormWithData(): void {
+        const modal = document.getElementById('person-modal');
+        const id = this.currentId;
+        const snap = this.personModalSnapshot;
+        const person = id ? DataManager.getPerson(id) : null;
+        if (!modal?.classList.contains('active') || !id || !snap || !person) return;
+        const fields: [string, 'firstName' | 'lastName' | 'gender' | 'birthDate' | 'birthPlace' | 'deathDate' | 'deathPlace', string][] = [
+            ['input-firstname', 'firstName', person.isPlaceholder ? '' : person.firstName],
+            ['input-lastname', 'lastName', person.lastName],
+            ['input-gender', 'gender', person.gender],
+            ['input-birthdate', 'birthDate', formatDateForInput(person.birthDate)],
+            ['input-birthplace', 'birthPlace', person.birthPlace || ''],
+            ['input-deathdate', 'deathDate', formatDateForInput(person.deathDate)],
+            ['input-deathplace', 'deathPlace', person.deathPlace || ''],
+        ];
+        for (const [inputId, key, value] of fields) {
+            const input = document.getElementById(inputId) as HTMLInputElement | HTMLSelectElement | null;
+            if (input && input.value === snap[key]) input.value = value;
+            snap[key] = value;
+        }
+        const before = snap.details.split('\u0000');
+        PERSON_DETAIL_FIELDS.forEach(([inputId, key], i) => {
+            const input = document.getElementById(inputId) as HTMLInputElement | null;
+            if (input && input.value === (before[i] ?? '')) input.value = person[key] ?? '';
+        });
+        snap.details = PERSON_DETAIL_FIELDS.map(([, key]) => person[key] ?? '').join('\u0000');
+        this.syncGenderSegment();
+        this.updateBirthEstimate(person);
+        this.updateDeathAgeCheck();
+        this.updatePersonModalHeader(person, person.isPlaceholder ? strings.personModal.completeTitle : strings.personModal.editTitle);
+        this.renderEventsList();
+        this.markResearchConflicts(id);
     },
 
     /**

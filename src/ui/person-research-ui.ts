@@ -23,6 +23,8 @@ import { PersonMenuAction } from './context-menu.js';
 import { personSubtitle } from './person-sources-ui.js';
 
 const DIALOG_ID = 'person-research-modal';
+/** How long a conflict's card opened at stays lit up (DEV §6.2). */
+export const CONFLICT_HIGHLIGHT_MS = 1500;
 /** What had the keyboard when the dialog opened (a line's label, a stub): it gets it back on close. */
 let dialogOpener: HTMLElement | null = null;
 
@@ -248,6 +250,10 @@ export const personResearchMethods = uiModule({
         if (conflictCard) {
             conflictCard.scrollIntoView({ block: 'center' });
             (conflictCard.querySelector<HTMLElement>('.prc-choice:not(:disabled)') ?? conflictCard).focus({ preventScroll: true });
+            // Lit up a moment, so it is clear where the way led (without motion when asked so: CSS).
+            conflictCard.classList.add('prc--highlight');
+            // (A card drawn again meanwhile carries the light over: conflict-decide-ui.ts.)
+            setTimeout(() => overlay.querySelector(`[data-conflict-card="${CSS.escape(opts.conflict!)}"]`)?.classList.remove('prc--highlight'), CONFLICT_HIGHLIGHT_MS);
         } else if (opts.hypo && this.openResearchHypothesis(overlay, opts.hypo.id, opts.hypo.variant)) {
             // Opened from a line's label (or the edge's bubble): at the hypothesis, open, its version unfolded.
         } else if (edgeHead) {
@@ -438,17 +444,21 @@ export const personResearchMethods = uiModule({
 
     /**
      * The edit form: "conflict ›" at the label of each field the research has
-     * an open conflict about (birth date or place, death, sex, name). Clicking
-     * it opens the dialog above the form. Cards in the tree stay as they are.
-     * A title's conflict marks its field, or the given name while the titles
-     * are folded away behind "+ title".
+     * an open conflict about (birth date or place, death, sex, name). A field
+     * with one conflict the app can decide by a side: the tag opens the panel
+     * by the field (conflict-panel-ui.ts); any other opens the dialog above
+     * the form. Cards in the tree stay as they are. A title's conflict marks
+     * its field, or the given name while the titles are folded away behind
+     * "+ title". Drawn again as conflicts settle: the keyboard stays on a
+     * field's tag while it is there.
      */
     markResearchConflicts(personId: PersonId): void {
+        const focused = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>('#person-modal .pm-conflict-tag')?.dataset.field ?? '';
         document.querySelectorAll('#person-modal .pm-conflict-tag').forEach(n => n.remove());
         const r = strings.research;
-        const marked = new Set<string>();
         const titleInput = (id: string): string =>
             document.getElementById(id)?.closest('[hidden]') ? 'input-firstname' : id;
+        const byInput = new Map<string, ResearchConflict[]>();
         for (const c of this.personOpenConflicts(personId)) {
             const fact = c.fact.toUpperCase();
             const date = isDateConflict(c);
@@ -459,23 +469,52 @@ export const personResearchMethods = uiModule({
                 : fact === 'NPFX' ? titleInput('input-title-before')
                 : fact === 'NSFX' ? titleInput('input-title-after')
                 : null;
-            if (!input || marked.has(input)) continue;
+            if (input) byInput.set(input, [...(byInput.get(input) ?? []), c]);
+        }
+        const person = DataManager.getPerson(personId);
+        for (const [input, conflicts] of byInput) {
             const label = input === 'gender-segment'
                 ? document.querySelector<HTMLElement>('#gender-segment')?.closest('.form-group')?.querySelector('label')
                 : document.querySelector<HTMLElement>(`#person-modal label[for="${input}"]`);
             if (!label) continue;
-            marked.add(input);
+            const fact = conflicts[0].fact.toUpperCase();
+            // One conflict there, decidable here: the panel by the field.
+            const panelId = conflicts.length === 1 && canDecideInApp(conflicts[0], person) ? researchConflictRef(conflicts[0].id) : null;
             const tag = document.createElement('button');
             tag.type = 'button';
             tag.className = 'pm-conflict-tag';
+            tag.dataset.field = input;
             tag.textContent = r.conflictTag;
-            tag.setAttribute('aria-label', r.conflictTagSr(researchFactLabel(fact)));
+            if (panelId) {
+                tag.dataset.conflict = panelId;
+                tag.setAttribute('aria-haspopup', 'dialog');
+                tag.setAttribute('aria-expanded', String(this.isResearchConflictPanelOpen(panelId)));
+                tag.setAttribute('aria-label', strings.conflict.panelTitle(researchConflictTitle(conflicts[0])));
+            } else {
+                tag.setAttribute('aria-label', r.conflictTagSr(researchFactLabel(fact)));
+            }
             tag.onclick = (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                this.showPersonResearchDialog(personId);
+                if (!panelId) {
+                    this.showPersonResearchDialog(personId);
+                } else if (this.isResearchConflictPanelOpen(panelId)) {
+                    this.closeResearchConflictPanel();
+                } else {
+                    const field = input === 'gender-segment'
+                        ? document.querySelector<HTMLElement>('#gender-segment .segment-btn.active') ?? document.querySelector<HTMLElement>('#gender-segment .segment-btn')
+                        : document.getElementById(input);
+                    this.openResearchConflictPanel(personId, panelId, tag, field);
+                }
             };
             label.appendChild(tag);
+            if (focused === input) tag.focus({ preventScroll: true });
         }
+    },
+
+    /** The edit form open for a person: its tags drawn again from the conflicts now (after one settled). */
+    refreshPersonFormConflicts(): void {
+        const modal = document.getElementById('person-modal');
+        if (modal?.classList.contains('active') && this.currentId && DataManager.getPerson(this.currentId)) this.markResearchConflicts(this.currentId);
     },
 });

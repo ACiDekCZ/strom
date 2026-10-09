@@ -1877,6 +1877,11 @@ const stringsEN = {
         loadIntro: (v: string) => `Conflict decided: ${v}. The research's version has other changes too. A backup is saved first.`,
         loadLater: (v: string) => `Later: ${v} stays here for now.`,
         later: 'Later',
+        keepShort: 'Keep',
+        takeShort: 'Take',
+        saveFirst: "The person's edit is saved first, then the decision.",
+        panelTitle: (f: string) => `Conflict · ${f}`,
+        moreInKnows: 'More in What the research knows ›',
     },
 
     // CSV export (spreadsheet person table)
@@ -5673,6 +5678,11 @@ const stringsCZ: StringsType = {
         loadIntro: (v: string) => `Rozpor rozhodnut: ${v}. Verze výzkumu má i další změny. Předtím se uloží záloha.`,
         loadLater: (v: string) => `Později: tady zatím zůstává ${v}.`,
         later: 'Později',
+        keepShort: 'Ponechat',
+        takeShort: 'Převzít',
+        saveFirst: 'Nejdřív uložit úpravu osoby, pak rozhodnout.',
+        panelTitle: (f: string) => `Rozpor · ${f}`,
+        moreInKnows: 'Víc v Co ví výzkum ›',
     },
 
     // CSV export (spreadsheet person table)
@@ -9460,6 +9470,11 @@ const stringsDE: StringsType = {
         loadIntro: (v: string) => `Widerspruch entschieden: ${v}. Die Forschungsversion hat weitere Änderungen. Vorher wird eine Sicherung angelegt.`,
         loadLater: (v: string) => `Später: hier bleibt vorerst ${v}.`,
         later: 'Später',
+        keepShort: 'Behalten',
+        takeShort: 'Übernehmen',
+        saveFirst: 'Zuerst die Änderung der Person speichern, dann entscheiden.',
+        panelTitle: (f: string) => `Widerspruch · ${f}`,
+        moreInKnows: 'Mehr unter Was die Forschung weiß ›',
     },
 
     // CSV export (spreadsheet person table)

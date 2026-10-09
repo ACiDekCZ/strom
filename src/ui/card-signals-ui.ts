@@ -12,6 +12,7 @@ import { PersonId } from '../types.js';
 import { ActionSignal, CardSignalInfo, ACTION_GLYPH, stateStripesHtml } from '../card-signals.js';
 import { TreeManager } from '../tree-manager.js';
 import { announcedResearchLinks } from '../research-device.js';
+import { researchConflictRef } from '../research-link.js';
 import { uiModule } from './module.js';
 import { DataManager } from '../data.js';
 import { storyWaitingTarget, storyWithDraft } from './story-compare-ui.js';
@@ -33,7 +34,11 @@ export const cardSignalsUiMethods = uiModule({
         this.hideContextMenu();
         if (signal === 'waiting' && this.openWaitingStoryCompare(personId)) return;
         if (signal === 'waiting') this.showResearchWaiting();
-        else if (signal === 'conflict') this.showPersonResearchDialog(personId);
+        else if (signal === 'conflict') {
+            // At the first open conflict's card.
+            const first = researchConflictRef(this.personOpenConflicts(personId)[0]?.id);
+            this.showPersonResearchDialog(personId, first ? { conflict: first } : {});
+        }
         else if (signal === 'agent') this.showLiveResearchNow();
         else {
             // The question: the person menu, which leads with it.

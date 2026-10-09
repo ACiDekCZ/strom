@@ -274,6 +274,8 @@ export const conflictDecideMethods = uiModule({
      * control, else on the card.
      */
     refreshResearchConflictCards(conflictId?: string): void {
+        // The panel by the edit form's field shows the same state.
+        this.refreshResearchConflictPanel();
         const dialog = document.getElementById(DIALOG_ID);
         if (!dialog) return;
         const personId = dialog.dataset.person as PersonId | undefined;
@@ -294,6 +296,7 @@ export const conflictDecideMethods = uiModule({
             const next = tmp.firstElementChild as HTMLElement | null;
             if (next) {
                 drawn.set(next, html);
+                if (card.classList.contains('prc--highlight')) next.classList.add('prc--highlight');
                 card.replaceWith(next);
             } else {
                 card.remove();
@@ -397,6 +400,8 @@ export const conflictDecideMethods = uiModule({
         const state = this.researchConflictCardState(id);
         if (state?.kind === 'taken' || state?.kind === 'elsewhere') this.setResearchConflictCardState(id, { ...state, loaded: { from } });
         else this.setResearchConflictCardState(id, { kind: 'taken', at: Date.now(), values, loaded: { from } });
+        // An edit form open meanwhile shows the value loaded.
+        this.syncPersonFormWithData();
         return quiet ? 'quiet' : 'asked';
     },
 
@@ -446,9 +451,10 @@ export const conflictDecideMethods = uiModule({
         this.researchConflictFoldLater(id);
     },
 
-    /** The card of a conflict is in the open dialog. */
+    /** The card of a conflict is in the open dialog, or its panel by the edit form's field is open. */
     researchConflictCardInSight(conflictId: string): boolean {
-        return !!document.getElementById(DIALOG_ID)?.querySelector(`[data-conflict-card="${CSS.escape(conflictId)}"]`);
+        return this.isResearchConflictPanelOpen(conflictId)
+            || !!document.getElementById(DIALOG_ID)?.querySelector(`[data-conflict-card="${CSS.escape(conflictId)}"]`);
     },
 
     /** A decided card whose value is here (or never comes by a load) folds into the decided row after a while. */

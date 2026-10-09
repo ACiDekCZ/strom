@@ -10432,6 +10432,8 @@
         .research-sync-sub { font-size: 12px; line-height: 1.4; color: var(--text-light); }
         .research-sync-block--warn .research-sync-sub { color: var(--text-secondary); }
         .research-sync-actions { display: flex; margin-top: 4px; }
+        /* Whom and what "Show" leads to (the one conflict decidable here). */
+        .research-sync-lead { margin-top: 6px; font-size: 12.5px; line-height: 1.4; color: var(--text); overflow-wrap: anywhere; }
         .research-menu-body .research-sync-btn {
             display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px;
             font-size: 13px; border-radius: var(--r-sm);
@@ -11357,6 +11359,88 @@
         /* A phone held sideways: the source beside the value, the card fits without scrolling. */
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             .prc-side-main { flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
+        }
+        /* The card opened at (the menu's "Show", the overview, the ≠): lit up for 1.5 s; no fade without motion. */
+        .person-research-conflict.prc { transition: outline-color 0.4s ease; outline: 2px solid transparent; outline-offset: 2px; }
+        .person-research-conflict.prc.prc--highlight { outline-color: var(--primary); transition: none; }
+        @media (prefers-reduced-motion: reduce) { .person-research-conflict.prc { transition: none; } }
+
+        /* The panel by an edit form's field ("conflict ›"): the card's content in small. A popover
+           under the field with its arrow at the tag; a phone (either way up) takes it as a bottom sheet. */
+        .prc-panel {
+            position: fixed; z-index: 2600; box-sizing: border-box; width: 400px; max-width: calc(100vw - 16px);
+            background: var(--surface); color: var(--text); border: 1px solid var(--border);
+            border-radius: var(--r-lg); box-shadow: var(--shadow-lg);
+        }
+        .prc-panel-body {
+            display: flex; flex-direction: column; gap: 10px; padding: 12px 14px;
+            overflow-y: auto; overscroll-behavior: contain; border-radius: inherit;
+        }
+        .prc-panel-arrow {
+            position: absolute; top: -7px; left: var(--arrow-x, 24px); width: 12px; height: 12px; margin-left: -6px;
+            background: var(--surface); border-left: 1px solid var(--border); border-top: 1px solid var(--border);
+            transform: rotate(45deg); pointer-events: none;
+        }
+        .prc-panel--up .prc-panel-arrow { top: auto; bottom: -7px; transform: rotate(225deg); }
+        .prc-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .prc-panel-title { margin: 0; font-family: var(--font-sans); font-size: 14px; font-weight: 600; line-height: 1.35; color: var(--text); }
+        .prc-panel-close {
+            flex: none; width: 28px; height: 28px; margin: -4px -6px -4px 0; padding: 0; position: relative;
+            border: 0; border-radius: var(--r-md); background: transparent; color: var(--text-light);
+            font-size: 20px; line-height: 1; cursor: pointer;
+        }
+        .prc-panel-close::after { content: ''; position: absolute; inset: -8px; }
+        @media (hover: hover) { .prc-panel-close:hover { background: var(--hover-bg); color: var(--text); } }
+        .prc-panel-close:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        .prc-panel-box { border: 1px solid var(--divider); border-radius: var(--r-md); }
+        .prc-panel-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px 12px; padding: 10px 12px; }
+        .prc-panel-row + .prc-panel-row { border-top: 1px solid var(--divider); }
+        .prc-panel-main { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+        .prc-panel-value { font-size: 15px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+        .prc-panel .link-button.prc-panel-source { align-self: flex-start; padding: 0; font-size: 12.5px; text-align: left; position: relative; }
+        .prc-panel-choice {
+            min-height: 34px; padding: 5px 14px; margin: 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+            border: 1px solid var(--primary); border-radius: var(--r-md); background: var(--surface); color: var(--primary);
+            font: 500 13px/1.3 var(--font-sans); white-space: nowrap; cursor: pointer;
+        }
+        @media (hover: hover) { .prc-panel-choice:not(:disabled):not([aria-busy="true"]):hover { background: var(--primary-soft); } }
+        .prc-panel-choice:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .prc-panel-choice[aria-busy="true"] { background: var(--primary-soft); cursor: default; }
+        .prc-panel-choice:disabled { border-color: var(--border); color: var(--text-ghost); cursor: default; }
+        .prc-panel-note { grid-column: 1 / -1; margin: 0; font-size: 11.5px; line-height: 1.45; color: var(--text-light); }
+        .prc-panel .prc-notice-action {
+            flex: none; min-height: 30px; padding: 4px 12px; margin: 0 0 0 auto; border-radius: var(--r-md); cursor: pointer;
+            font: 600 13px/1.2 var(--font-sans); background: var(--primary); color: var(--on-primary); border: 1px solid var(--primary);
+        }
+        .prc-panel .prc-notice--error .prc-notice-action { background: transparent; color: var(--diff-del-text); border-color: var(--danger); }
+        .prc-panel .link-button.prc-panel-more { align-self: flex-start; padding: 2px 0; font-size: 13px; text-decoration: none; }
+        @media (hover: hover) { .prc-panel .link-button.prc-panel-more:hover { text-decoration: underline; } }
+        /* The bottom sheet: the rows one under the other, the choices 44 px across the width. */
+        .prc-panel.prc-panel--sheet {
+            position: static; width: 100%; max-width: 560px; padding: 0; overflow: hidden;
+            border: 0; border-radius: 14px 14px 0 0;
+        }
+        .prc-panel--sheet .prc-panel-body { max-height: 80dvh; gap: 12px; padding: 14px 16px calc(14px + env(safe-area-inset-bottom, 0px)); }
+        .prc-panel--sheet .prc-panel-arrow { display: none; }
+        .prc-panel--sheet .prc-panel-close { width: 44px; height: 44px; margin: -10px -12px -10px 0; }
+        .prc-panel--sheet .prc-panel-close::after { inset: 0; }
+        .prc-panel--sheet .prc-panel-row { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
+        .prc-panel--sheet .prc-panel-choice { width: 100%; min-height: 44px; font-size: 15px; white-space: normal; }
+        .prc-panel--sheet .prc-panel-value { font-size: 17px; }
+        .prc-panel--sheet .prc-notice-action, .prc-panel--sheet .link-button.prc-panel-more { min-height: 44px; }
+        .prc-panel--sheet .link-button.prc-panel-source::after { content: ''; position: absolute; inset: -12px 0; }
+        @media (pointer: coarse) {
+            .prc-panel-close { width: 44px; height: 44px; margin: -10px -12px -10px 0; }
+            .prc-panel-close::after { inset: 0; }
+            .prc-panel-choice, .prc-panel .prc-notice-action, .prc-panel .link-button.prc-panel-more { min-height: 44px; }
+            .prc-panel .link-button.prc-panel-source::after { content: ''; position: absolute; inset: -12px 0; }
+        }
+        /* A phone held sideways: the sheet is low — value and choice side by side again, the choice 44 px. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .prc-panel.prc-panel--sheet { max-width: 640px; max-height: calc(100dvh - 8px); }
+            .prc-panel--sheet .prc-panel-body { max-height: calc(100dvh - 8px); gap: 8px; padding-top: 10px; }
+            .prc-panel--sheet .prc-panel-row { grid-template-columns: minmax(0, 1fr) auto; align-items: center; padding: 8px 12px; }
+            .prc-panel--sheet .prc-panel-choice { width: auto; min-width: 120px; }
         }
         /* Hypotheses: the question, "H0022 · open · 3 versions · …", the versions in a box. */
         .person-research-hypos { display: flex; flex-direction: column; }

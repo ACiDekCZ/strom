@@ -19,7 +19,7 @@ import { ZoomPan } from '../zoom.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { Person, PersonId } from '../types.js';
 import { computeEvidenceGaps } from '../stats.js';
-import { LiveChangeKind } from '../research-link.js';
+import { LiveChangeKind, researchConflictRef } from '../research-link.js';
 import { formatLiveClock } from '../live-time.js';
 import { uiModule } from './module.js';
 import {
@@ -572,12 +572,14 @@ export const researchOverviewMethods = uiModule({
     appendOverviewKnows(body: HTMLElement, fold: { id: string; collapsed: boolean; onToggle: () => void }, mode: Mode): void {
         const L = strings.live;
         const facts = strings.research.changeWords.facts as Record<string, string>;
-        const rows: { person: Person; text: string; conflict: boolean }[] = [];
+        const rows: { person: Person; text: string; conflict: boolean; conflictId?: string }[] = [];
         for (const p of Object.values(DataManager.getData().persons)) {
-            for (const c of p.research?.conflicts ?? []) {
+            // As the research has them now: one decided from here (or read decided from its version not loaded) goes at once.
+            for (const c of this.researchConflictsOf(p.id)) {
                 if (c.status === 'decided') continue;
                 const what = c.title || facts[c.fact] || c.fact;
-                rows.push({ person: p, text: `${fullName(p)} · ${what}: ${c.values.map(v => researchValueText(c.fact, v.value)).join(' × ')}`, conflict: true });
+                rows.push({ person: p, text: `${fullName(p)} · ${what}: ${c.values.map(v => researchValueText(c.fact, v.value)).join(' × ')}`, conflict: true,
+                    conflictId: researchConflictRef(c.id) ?? undefined });
             }
             for (const h of p.research?.hypotheses ?? []) {
                 if (!isOpenHypothesis(h)) continue;
@@ -595,7 +597,8 @@ export const researchOverviewMethods = uiModule({
             btn.type = 'button';
             btn.onclick = () => {
                 if (mode === 'sheet') this.closeResearchOverview();
-                this.showPersonResearchDialog(row.person.id);
+                // A conflict's row: the dialog at its card (decided there).
+                this.showPersonResearchDialog(row.person.id, row.conflictId ? { conflict: row.conflictId } : {});
             };
             li.appendChild(btn);
             list.appendChild(li);

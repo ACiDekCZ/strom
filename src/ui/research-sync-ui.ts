@@ -51,7 +51,8 @@ import {
     researchKeepsTakenBack, latestUndone, nextUndone, openUndone, undoneLeftBehind,
 } from '../research-sync.js';
 import { setResearchConflictsProvider } from '../card-signals.js';
-import { ConflictDecideMode, conflictDecideMode, DecideKind, DecideBody, DecideResult, postBridgeDecide } from '../research-decide.js';
+import { ConflictDecideMode, conflictDecideMode, DecideKind, DecideBody, DecideResult, postBridgeDecide, canDecideInApp } from '../research-decide.js';
+import { researchConflictTitle } from './person-research-ui.js';
 import { uiModule } from './module.js';
 import { researchWrittenList } from './research-changes-ui.js';
 import {
@@ -76,6 +77,8 @@ export interface ResearchSyncBlock {
     title: string;
     sub?: string;
     actions: ResearchSyncBlockAction[];
+    /** A line above the buttons: whom and what "Show" leads to ("Anna Víšková · Birth"). */
+    lead?: string;
     spinner: boolean;
     /** A send of this tree is on its way (the send buttons wait). */
     sendingNow: boolean;
@@ -1860,6 +1863,7 @@ export const researchSyncMethods = uiModule({
             case 'restoreBeforeLoad': void this.researchRestoreBeforeLoad(ctx.treeId); break;
             case 'changeSendMode': this.closeActionsMenu(); void this.showResearchTreeSettings(ctx.treeId); break;
             case 'showConflicts': this.researchShowConflicts(this.researchWrittenConflictPersons(ctx.treeId)); break;
+            case 'showConflict': this.researchShowOneConflict(ctx.treeId); break;
             case 'conflicts': this.openResearchSyncMenu(); break;
             case 'decideInResearch': {
                 const url = this.researchDecideUrl(ctx.treeId);
@@ -1914,6 +1918,47 @@ export const researchSyncMethods = uiModule({
         if (persons.length !== 1) return null;
         const open = this.personOpenConflicts(persons[0]);
         return open.length === 1 && open[0].id ? this.activeResearchLink('conflict', { conflict: open[0].id, conflictDo: 'decide' }) : null;
+    },
+
+    /**
+     * The one conflict the last write left, when the app can decide it by a
+     * side (DEV §6.2): its person (the first of a couple's two), its id and
+     * the line saying whom and what the menu's "Show" leads to. Null: more
+     * than one, none known here, or one decided in the research only.
+     */
+    researchShowConflictTarget(treeId: TreeId): { personId: PersonId; conflictId: string; lead: string } | null {
+        const named = researchAutoState(treeId).lastWritten?.conflictIds ?? [];
+        if (named.length > 1) return null;
+        // Named by the write: wherever it is shown here; unnamed: one person with one open conflict (as "Decide in the research ↗").
+        const persons = named.length === 1 ? Object.keys(DataManager.getData().persons) as PersonId[] : this.researchWrittenConflictPersons(treeId);
+        if (named.length === 0 && persons.length !== 1) return null;
+        const found = new Map<string, { personId: PersonId; conflict: ResearchConflict }>();
+        for (const personId of persons) {
+            for (const c of this.researchConflictsOf(personId)) {
+                const id = researchConflictRef(c.id);
+                if (c.status !== 'open' || !id || (named.length === 1 && id !== named[0]) || found.has(id)) continue;
+                found.set(id, { personId, conflict: c });
+            }
+        }
+        if (found.size !== 1) return null;
+        const [[conflictId, { personId, conflict }]] = [...found];
+        const person = DataManager.getPerson(personId);
+        if (!person || !canDecideInApp(conflict, person)) return null;
+        return { personId, conflictId, lead: [shownNameOrEmpty(person), researchConflictTitle(conflict)].filter(Boolean).join(' · ') };
+    },
+
+    /** "Show" (DEV §6.2): the person's "What the research knows" at the conflict's card; else the conflicts as before. */
+    researchShowOneConflict(treeId: TreeId): void {
+        const target = this.researchShowConflictTarget(treeId);
+        if (!target) {
+            this.researchShowConflicts(this.researchWrittenConflictPersons(treeId));
+            return;
+        }
+        this.closeResearchSyncNote();
+        this.closeActionsMenu();
+        TreeRenderer.setFocus(target.personId);
+        ZoomPan.centerOnPerson(target.personId);
+        this.showPersonResearchDialog(target.personId, { conflict: target.conflictId });
     },
 
     /** What a delete adds in an archive the research already wrote to: it is set aside there, not lost. */
@@ -2025,7 +2070,7 @@ export const researchSyncMethods = uiModule({
         const auto = researchSendMode(link) === 'auto';
         const autoState = treeId ? researchAutoState(treeId) : {};
         type Action = ResearchSyncBlockAction;
-        type Block = { tone: 'warn' | 'neutral' | 'quiet'; title: string; sub?: string; actions?: Action[]; spinner?: boolean };
+        type Block = { tone: 'warn' | 'neutral' | 'quiet'; title: string; sub?: string; actions?: Action[]; lead?: string; spinner?: boolean };
         const changed = treeId ? when(TreeManager.getTreeMetadata(treeId)?.changedAt) : '';
         const edits = Math.max(1, autoState.edits ?? 1);
         const rt = link ? runtime.get(link.id) : undefined;
@@ -2045,13 +2090,17 @@ export const researchSyncMethods = uiModule({
                 const conflicts = persons.length > 0 || !lw?.persons?.length ? lw?.conflicts ?? 0 : 0;
                 const parts = [archive ? '' : lw?.changes ? s.changesN(lw.changes) : '', conflicts > 0 ? s.conflictsN(conflicts) : ''].filter(Boolean);
                 const actions: Action[] = [];
-                if (conflicts > 0) {
+                // The one conflict decidable here: "Show" at its card, whom and what said above it (DEV §6.2).
+                const show = conflicts > 0 && treeId ? this.researchShowConflictTarget(treeId) : null;
+                if (show) {
+                    actions.push({ action: 'showConflict', label: strings.conflict.show });
+                } else if (conflicts > 0) {
                     const one = persons.length === 1 ? DataManager.getPerson(persons[0]) : null;
                     const name = one ? shownNameOrEmpty(one) : '';
                     actions.push({ action: 'showConflicts', label: name ? `${name} ›` : `${s.showConflicts} ›`, asLink: true });
                     if (treeId && this.researchDecideUrl(treeId)) actions.push({ action: 'decideInResearch', label: s.decideInResearch, asLink: true });
                 }
-                return { tone: 'quiet', title: s.writtenAt(when(lw?.at)), sub: parts.join(' · ') || undefined, actions };
+                return { tone: 'quiet', title: s.writtenAt(when(lw?.at)), sub: parts.join(' · ') || undefined, actions, lead: show?.lead };
             },
             writtenConflicts: () => {
                 const lw = autoState.lastWritten;
@@ -2060,15 +2109,21 @@ export const researchSyncMethods = uiModule({
                 const one = persons.length === 1 ? DataManager.getPerson(persons[0]) : null;
                 const name = one ? shownNameOrEmpty(one) : '';
                 const actions: Action[] = [];
-                if (treeId && this.researchDecideUrl(treeId)) actions.push({ action: 'decideInResearch', label: s.decideInResearch, asLink: true });
-                if (persons.length) actions.push({ action: 'showConflicts', label: name ? `${name} ›` : `${s.showConflicts} ›`, asLink: true });
+                // The one conflict decidable here: "Show" at its card, whom and what said above it (DEV §6.2).
+                const show = conflicts > 0 && treeId ? this.researchShowConflictTarget(treeId) : null;
+                if (show) {
+                    actions.push({ action: 'showConflict', label: strings.conflict.show });
+                } else {
+                    if (treeId && this.researchDecideUrl(treeId)) actions.push({ action: 'decideInResearch', label: s.decideInResearch, asLink: true });
+                    if (persons.length) actions.push({ action: 'showConflicts', label: name ? `${name} ›` : `${s.showConflicts} ›`, asLink: true });
+                }
                 actions.push({ action: 'loadNewer', label: s.loadVersion, asLink: true });
                 // How the research is reached, said beside the conflict (it outranks the connection as the state).
                 const conn = link ? this.researchConnectionNote(link.id) : null;
                 // The research's value stands there only while a conflict really is open.
                 const at = s.writtenAt(when(lw?.at ?? state.sent?.closedAt));
                 return { tone: conn && conn.warn ? 'warn' : 'neutral', title: conflicts > 0 ? s.flyConflict(conflicts) : at,
-                    sub: [conn ? `${conn.title}.` : '', conn?.sub ?? '', conflicts > 0 ? at : '', conflicts > 0 ? s.writtenConflictsSub : ''].filter(Boolean).join(' '), actions };
+                    sub: [conn ? `${conn.title}.` : '', conn?.sub ?? '', conflicts > 0 ? at : '', conflicts > 0 ? s.writtenConflictsSub : ''].filter(Boolean).join(' '), actions, lead: show?.lead };
             },
             unsent: () => ({ tone: 'warn', title: s.stateUnsent, sub: changed ? s.changedAt(changed) : undefined, actions: [{ action: 'send', label: s.send }] }),
             notTaken: () => ({ tone: 'neutral', title: s.stateUnsent, sub: s.notTakenSub, actions: [{ action: 'send', label: s.send }] }),
@@ -2188,7 +2243,7 @@ export const researchSyncMethods = uiModule({
         }
         // ("Only load from the research" is the quiet `off` block; a real state of the research outranks it.
         // "Restore the state before loading" is the `loaded` block for an hour, then a row of the menu.)
-        return { kind: state.kind, tone: b.tone, title: b.title, sub: b.sub, actions: b.actions ?? [], spinner: !!b.spinner,
+        return { kind: state.kind, tone: b.tone, title: b.title, sub: b.sub, actions: b.actions ?? [], ...(b.lead ? { lead: b.lead } : {}), spinner: !!b.spinner,
             sendingNow: !!treeId && sendingTree === treeId };
     },
 
@@ -2216,6 +2271,7 @@ export const researchSyncMethods = uiModule({
             + `<div class="research-sync-title">${b.spinner ? '<span class="research-sync-spinner" aria-hidden="true"></span>' : ''}${esc(b.title)}</div>`
             + (b.sub ? `<div class="research-sync-sub">${esc(b.sub)}</div>` : '')
             + '</div>'
+            + (b.lead ? `<div class="research-sync-lead">${esc(b.lead)}</div>` : '')
             + (buttons ? `<div class="research-sync-actions">${buttons}</div>` : '')
             + this.originalsQueueLineHtml()
             + this.batchLineHtml()
@@ -2321,6 +2377,9 @@ export const researchSyncMethods = uiModule({
         fpCache = null;
         TreeRenderer.render();
         this.refreshResearchSyncUi();
+        // Everything else that counts the open conflicts: the edit form's tags, the overview's list.
+        this.refreshPersonFormConflicts();
+        if (this.isResearchOverviewOpen()) this.renderResearchOverview();
         if (this.researchHeld(treeId)) await this.researchReadHeld(treeId);
     },
 
