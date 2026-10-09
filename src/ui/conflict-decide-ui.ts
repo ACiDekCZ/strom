@@ -25,7 +25,7 @@ import {
     ConflictCardState, ConflictCardView, ConflictDecidedValues, DecidedFact, DECIDED_CARD_MS, conflictCardView, conflictFactParts, conflictSentChanged,
     isDecidedRow, otherLoadChanges,
 } from '../research-conflict-card.js';
-import { conflictValueHtml, conflictValueSaid as said, isDateConflict, researchConflictTitle, researchValueText } from './person-research-ui.js';
+import { conflictScope, conflictValueHtml, conflictValueSaid as said, researchConflictTitle, researchValueText } from './person-research-ui.js';
 import { fetchGedcomText, researchDateLabel } from './research-ui.js';
 import { researchSendMode } from './research-sync-ui.js';
 import { uiModule } from './module.js';
@@ -95,15 +95,16 @@ export const conflictDecideMethods = uiModule({
     },
 
     /**
-     * The field's value here moved since it was last sent (the copy the
-     * research last had, research-changes-ui.ts): sending comes first. Not
-     * known yet (the copy still loading): no — the cards are drawn again once
-     * it is (refreshResearchSyncUi).
+     * The fact's value here moved since it was last sent (the copy the
+     * research last had, research-changes-ui.ts): sending comes first — an
+     * event's whole fact (its date, place or value), whatever part the
+     * conflict names. Not known yet (the copy still loading): no — the cards
+     * are drawn again once it is (refreshResearchSyncUi).
      */
     researchConflictSendFirst(personId: PersonId, c: ResearchConflict): boolean {
         const base = this.researchChangesBase();
         if (!base || base === 'same') return false;
-        return conflictSentChanged(c.fact, isDateConflict(c), personId, DataManager.getData(), base.base);
+        return conflictSentChanged(c.fact, personId, DataManager.getData(), base.base);
     },
 
     /** What the card shows, for this conflict at this person now. */
@@ -132,15 +133,25 @@ export const conflictDecideMethods = uiModule({
         };
     },
 
-    /** The field's value here now, as people read it ('' when empty). */
+    /**
+     * The field's value here now, as people read it ('' when empty); a
+     * conflict of the whole fact the fact as the research says it (its
+     * value, date and place).
+     */
     researchConflictValueNow(personId: PersonId, c: ResearchConflict): string {
-        const date = isDateConflict(c);
-        const parts = conflictFactParts(c.fact, date, personId, DataManager.getData()) ?? [];
+        const scope = conflictScope(c);
+        const parts = conflictFactParts(c.fact, scope, personId, DataManager.getData()) ?? [];
         const fact = c.fact.toUpperCase();
         let text: string;
         if (fact === 'SEX') text = parts[0] ? researchValueText('SEX', parts[0] === 'male' ? 'M' : parts[0] === 'female' ? 'F' : 'U') : '';
         else if (fact === 'NAME') text = parts.filter(Boolean).join(' ');
-        else text = parts.map(p => date ? formatFlexDate(p) : p.split('\u0000').filter(Boolean).join(', ')).filter(Boolean).join('; ');
+        else if (scope === 'date') text = parts.map(p => formatFlexDate(p)).filter(Boolean).join('; ');
+        else if (scope === 'fact') {
+            text = parts.map(p => {
+                const [value = '', date = '', place = ''] = p.split('\u0000');
+                return [value, date ? formatFlexDate(date) : '', place].filter(Boolean).join(', ');
+            }).filter(Boolean).join('; ');
+        } else text = parts.map(p => p.split('\u0000').filter(Boolean).join(', ')).filter(Boolean).join('; ');
         return text;
     },
 
@@ -520,7 +531,7 @@ export const conflictDecideMethods = uiModule({
             }
         }
         if (!found.has(conflictId)) found.set(conflictId, { conflict: c, persons: [] });
-        return [...found.values()].map(e => ({ persons: e.persons, fact: e.conflict.fact, date: isDateConflict(e.conflict) }));
+        return [...found.values()].map(e => ({ persons: e.persons, fact: e.conflict.fact, scope: conflictScope(e.conflict) }));
     },
 
     /**

@@ -226,6 +226,12 @@ export interface ValueDiff {
     addedPersons: number;
     /** Facts it adds where there are none here (on people here and on the added ones). */
     addedFacts: number;
+    /**
+     * Of those, the values it puts into a field of a person here that is
+     * empty here (a deleted date coming back), one each as a row would say
+     * it (`here` empty) — counted in addedFacts, never listed as rows.
+     */
+    filled: ValueChange[];
 }
 
 const str = (v: unknown): string => typeof v === 'string' ? v.trim() : '';
@@ -298,6 +304,7 @@ export function pairEvents(here: readonly LifeEvent[], there: readonly LifeEvent
  */
 export function diffValues(here: StromData, there: StromData): ValueDiff {
     const rows: ValueChange[] = [];
+    const filled: ValueChange[] = [];
     let addedFacts = 0;
     const hp = here.persons as Record<string, Person>;
     const tp = there.persons as Record<string, Person>;
@@ -306,8 +313,13 @@ export function diffValues(here: StromData, there: StromData): ValueDiff {
     const people = Object.values(hp).filter(p => !p.isPlaceholder).sort((a, b) => fullName(a).localeCompare(fullName(b)));
     const field = (p: Person, f: ValueField, a: string, b: string, extra: Partial<ValueChange> = {}): void => {
         if (a === b) return;
-        if (!a) { if (b) addedFacts++; return; }
-        rows.push({ personId: p.id, name: fullName(p), field: f, here: a, there: b, ...extra });
+        const row: ValueChange = { personId: p.id, name: fullName(p), field: f, here: a, there: b, ...extra };
+        if (!a) {
+            addedFacts++;
+            filled.push(row);
+            return;
+        }
+        rows.push(row);
     };
     for (const h of people) {
         const t = tp[h.id];
@@ -370,5 +382,5 @@ export function diffValues(here: StromData, there: StromData): ValueDiff {
     }
     const added = Object.values(tp).filter(p => !p.isPlaceholder && !hp[p.id]);
     addedFacts += added.reduce((n, p) => n + factsOf(p), 0);
-    return { rows, addedPersons: added.length, addedFacts };
+    return { rows, addedPersons: added.length, addedFacts, filled };
 }

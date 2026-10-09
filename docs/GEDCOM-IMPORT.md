@@ -733,6 +733,23 @@ research's (`take research`). The research marks such a conflict in its file
   field empty here, *Take* brings the research's value with its version;
   "Send first" compares the field with the last send as stored, so a field
   empty here and empty when sent has not moved.
+- A part of a documented fact deleted in the app (its date, place or value),
+  the fact itself kept: the research's side is the whole fact in words, the
+  app's side what is left of it (`2 VAL Lipnice` against
+  `2 VAL 23. 10. 1865, Lipnice`; an occupation `1865` against
+  `weaver, 1865`); empty only when nothing of the fact is left. The same for
+  a couple's fact (the wedding's date, shown at both partners). The app reads
+  such a conflict as one of the whole fact (its values mix a date with
+  words): the edit form's tag marks the part deleted (the date unless the
+  app's side still says one), *Take* brings the deleted part back with the
+  research's version — quietly when nothing else changes, the part filling an
+  empty field being the decided value — and the app's value now reads as the
+  whole fact.
+- "Send first" for an event's conflict (a person's or a couple's) looks at
+  the whole fact: any of its date, place or value moved since the last send
+  asks to send first, whatever part the conflict's words are about (a deleted
+  date typed again counts as much as the part it names). `NAME`, `NPFX`,
+  `NSFX` and `SEX` compare their own field.
 - `3 _STROM_RAW M|F|U` under the values of a `SEX` conflict — the machine
   value, so the app never parses the research's words.
 - The app offers the choice only for an **open** conflict with exactly these

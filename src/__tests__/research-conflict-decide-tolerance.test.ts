@@ -159,7 +159,7 @@ describe('a research file with conflicts decidable by a side is read safely', ()
         const there = stabilizeIds(load(FIXTURE).data, here);
         expect(Object.keys(there.persons).sort()).toEqual(Object.keys(here.persons).sort());
         expect(diffByPerson(here, there)).toEqual([]);
-        expect(diffValues(here, there)).toEqual({ rows: [], addedPersons: 0, addedFacts: 0 });
+        expect(diffValues(here, there)).toEqual({ rows: [], addedPersons: 0, addedFacts: 0, filled: [] });
         // its conflicts, read without loading the version, are the same ones
         const held = heldConflicts(here, there, 'a', 'b');
         expect(held.takeovers).toEqual([]);

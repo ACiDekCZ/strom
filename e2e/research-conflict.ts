@@ -20,8 +20,11 @@ export interface Version {
     janBirth?: string;
     janState?: 'open' | 'decided';
     janDecision?: string;
-    /** Jan's death date (another value of that version). */
+    /** Jan's death date (another value of that version; '' none) and place. */
     janDeath?: string;
+    janDeathPlace?: string;
+    /** More facts of Jan (e.g. ['1 OCCU weaver', '2 DATE 1865']). */
+    janFacts?: string[];
     /** Jan's name in that version (GEDCOM), his titles and his sex. */
     janName?: string;
     janTitles?: { npfx?: string; nsfx?: string };
@@ -36,9 +39,12 @@ export interface Version {
     sourcesDeath?: boolean;
     /** More conflict records of Jan (e.g. conflictOf('NAME', …)). */
     janConflicts?: string[];
-    /** The couple's wedding date, and its conflict (shown at both partners) — none without it. */
+    /** The couple's wedding date and place, and its conflict (shown at both partners) — no wedding without either. */
     wedding?: string;
+    weddingPlace?: string;
     familyConflict?: 'open' | 'decided';
+    /** The couple's conflict records instead (e.g. conflictOf('X0009', 'MARR', …)). */
+    familyConflicts?: string[];
     /** The links the research announces (default: with `conflict`). */
     links?: string[];
     /** The research is an archive (its file says so). */
@@ -66,10 +72,10 @@ export function conflictGed(v: Version = {}): string {
         : v.takeNoSides ? ['1 _STROM_CONFLICT X0007', '2 TYPE BIRT', `2 STAT ${state}`, '2 _STROM_TAKE Y', '2 VAL 3 FEB 1865', '3 SOUR @S0001@', '2 VAL 1865']
         : [...conflictOf('X0007', 'BIRT', '3 FEB 1865', '1865', undefined, state),
             ...(state === 'decided' ? [`2 DECI ${v.janDecision ?? '1865'}`] : [])];
-    const family = v.familyConflict ? [
+    const family = v.familyConflicts ?? (v.familyConflict ? [
         ...conflictOf('X0009', 'MARR', '3 FEB 1875', '1876', undefined, v.familyConflict),
         ...(v.familyConflict === 'decided' ? ['2 DECI 1876'] : []),
-    ] : [];
+    ] : []);
     const titles = v.janTitles ? [...(v.janTitles.npfx ? [`2 NPFX ${v.janTitles.npfx}`] : []), ...(v.janTitles.nsfx ? [`2 NSFX ${v.janTitles.nsfx}`] : [])] : [];
     return [
         '0 HEAD', '1 SOUR STROM_RESEARCH', '2 NAME Strom Research', '1 DATE 9 OCT 2026',
@@ -79,12 +85,13 @@ export function conflictGed(v: Version = {}): string {
         '0 @P0002@ INDI', '1 NAME Anna /Svobodová/', '1 SEX F', '1 REFN P0002', '2 TYPE strom-research', '1 FAMS @F0001@', ...family,
         '0 @P0003@ INDI', `1 NAME ${v.janName ?? 'Jan /Víšek/'}`, ...titles, `1 SEX ${v.janSex ?? 'M'}`, '1 REFN P0003', '2 TYPE strom-research', '1 FAMC @F0001@',
         '1 BIRT', `2 DATE ${v.janBirth ?? '1865'}`, '2 PLAC Chlumy',
-        '1 DEAT', `2 DATE ${v.janDeath ?? '1932'}`,
+        '1 DEAT', ...(v.janDeath === '' ? [] : [`2 DATE ${v.janDeath ?? '1932'}`]), ...(v.janDeathPlace ? [`2 PLAC ${v.janDeathPlace}`] : []),
+        ...(v.janFacts ?? []),
         ...birth,
         ...(v.sourcesDeath ? ['1 _STROM_CONFLICT X0010', '2 TYPE DEAT', '2 STAT open', '2 VAL 1931', '3 SOUR @S0001@', '2 VAL 1932'] : []),
         ...(v.janConflicts ?? []),
         '0 @F0001@ FAM', '1 HUSB @P0001@', '1 WIFE @P0002@', '1 CHIL @P0003@',
-        ...(v.wedding ? ['1 MARR', `2 DATE ${v.wedding}`] : []),
+        ...(v.wedding || v.weddingPlace ? ['1 MARR', ...(v.wedding ? [`2 DATE ${v.wedding}`] : []), ...(v.weddingPlace ? [`2 PLAC ${v.weddingPlace}`] : [])] : []),
         '0 @S0001@ SOUR', '1 TITL Oddací matrika Čáslav', '1 PAGE fol. 41', '1 REFN S0001', '1 TEXT Josef Víšek a Anna', '1 _STROM_READ research',
         '0 TRLR',
     ].join('\n');

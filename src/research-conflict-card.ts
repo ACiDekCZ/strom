@@ -149,49 +149,61 @@ const COUPLE_END = new Set(['DIV', 'ANUL', 'DIVF']);
 const COUPLE_OTHER = new Set(['MARB', 'MARC', 'MARL', 'MARS', 'ENGA']);
 
 /**
+ * What of its fact a conflict is about: the date (its values read as dates),
+ * the place or the value in words, or the whole fact — a fact part of which
+ * was deleted in the app (the research's side "23. 10. 1865, Žďár nad
+ * Sázavou", the app's what is left of it: "Žďár nad Sázavou").
+ */
+export type ConflictScope = 'date' | 'place' | 'fact';
+
+/**
  * The value(s) here that a conflict about `fact` is about, at one person —
  * the parts as stored (dates as flex dates), in a stable order; null: not one
- * the app keeps (or no such person). `date`: the conflict is about the date
- * (else the place, or the value in words).
+ * the app keeps (or no such person). `scope` `fact`: each event's value, date
+ * and place (in the research's order) joined by U+0000.
  */
-export function conflictFactParts(fact: string, date: boolean, personId: PersonId, data: Pick<StromData, 'persons' | 'partnerships'>): string[] | null {
+export function conflictFactParts(fact: string, scope: ConflictScope, personId: PersonId, data: Pick<StromData, 'persons' | 'partnerships'>): string[] | null {
     const p = (data.persons as Record<string, Person | undefined>)[personId];
     if (!p) return null;
     const tag = fact.trim().toUpperCase();
+    const of = (value: unknown, date: unknown, place: unknown): string =>
+        scope === 'date' ? str(date) : scope === 'place' ? (value === null ? str(place) : [str(place), str(value)].join('\u0000'))
+        : [value === null ? '' : str(value), str(date), str(place)].join('\u0000');
     switch (tag) {
         case 'SEX': return [p.gender ?? ''];
         case 'NAME': return [str(p.firstName), str(p.lastName)];
         case 'NPFX': return [str(p.titleBefore)];
         case 'NSFX': return [str(p.titleAfter)];
-        case 'BIRT': return [date ? str(p.birthDate) : str(p.birthPlace)];
-        case 'DEAT': return [date ? str(p.deathDate) : str(p.deathPlace)];
+        case 'BIRT': return [of(null, p.birthDate, p.birthPlace)];
+        case 'DEAT': return [of(null, p.deathDate, p.deathPlace)];
     }
     if (COUPLE_START.has(tag) || COUPLE_END.has(tag) || COUPLE_OTHER.has(tag)) {
         const unions = Object.values(data.partnerships as Record<string, Partnership>)
             .filter(u => u.person1Id === personId || u.person2Id === personId)
             .sort((a, b) => a.id.localeCompare(b.id));
-        return unions.map(u => COUPLE_START.has(tag) ? (date ? str(u.startDate) : str(u.startPlace))
-            : COUPLE_END.has(tag) ? (date ? str(u.endDate) : str(u.endPlace))
+        return unions.map(u => COUPLE_START.has(tag) ? of(null, u.startDate, u.startPlace)
+            : COUPLE_END.has(tag) ? of(null, u.endDate, u.endPlace)
             : stable(u.events ?? []));
     }
     const type = gedcomTagEventType(tag);
     if (!type) return null;
-    return (p.events ?? []).filter(e => e.type === type)
-        .map(e => date ? str(e.date) : [str(e.place), str(e.note)].join('\u0000'))
-        .sort();
+    return (p.events ?? []).filter(e => e.type === type).map(e => of(e.note, e.date, e.place)).sort();
 }
 
 /**
- * The field a conflict is about has a value here other than what was last
+ * The fact a conflict is about has a value here other than what was last
  * sent (`sent`: the tree as the research last had it — the copy kept since
  * the last send or load, src/research-copy.ts), compared as stored, never
- * with the conflict's words. Not known (no such person there, a fact the app
- * does not keep): no.
+ * with the conflict's words. An event's (a person's or a couple's) compares
+ * the whole fact — its date, place and value — whatever part the conflict's
+ * words are about: a part typed again after the send (a deleted date) is a
+ * move as much as the part the conflict names. Not known (no such person
+ * there, a fact the app does not keep): no.
  */
-export function conflictSentChanged(fact: string, date: boolean, personId: PersonId,
+export function conflictSentChanged(fact: string, personId: PersonId,
     here: Pick<StromData, 'persons' | 'partnerships'>, sent: Pick<StromData, 'persons' | 'partnerships'>): boolean {
-    const now = conflictFactParts(fact, date, personId, here);
-    const then = conflictFactParts(fact, date, personId, sent);
+    const now = conflictFactParts(fact, 'fact', personId, here);
+    const then = conflictFactParts(fact, 'fact', personId, sent);
     if (!now || !then) return false;
     return stable(now) !== stable(then);
 }
@@ -207,29 +219,31 @@ export interface DecidedFact {
     persons: readonly string[];
     /** Its fact (GEDCOM tag). */
     fact: string;
-    /** About the date (else the place, or the value in words). */
-    date: boolean;
+    /** What of the fact it is about: the date, the place or the value, or the whole fact. */
+    scope: ConflictScope;
 }
 
 /** The rows of "Load the research version?" a conflict about `fact` is about. */
-function factFields(fact: string, date: boolean): { fields: ValueField[]; of?: string } | null {
+function factFields(fact: string, scope: ConflictScope): { fields: ValueField[]; of?: string } | null {
     const tag = fact.trim().toUpperCase();
+    const pick = (date: ValueField, ...place: ValueField[]): ValueField[] =>
+        scope === 'date' ? [date] : scope === 'place' ? place : [date, ...place];
     switch (tag) {
         case 'NAME': case 'NPFX': case 'NSFX': return { fields: ['name'] };
         case 'SEX': return { fields: ['gender'] };
-        case 'BIRT': return { fields: [date ? 'birthDate' : 'birthPlace'] };
-        case 'DEAT': return { fields: [date ? 'deathDate' : 'deathPlace'] };
-        case 'MARR': return { fields: [date ? 'marriageDate' : 'marriagePlace'] };
+        case 'BIRT': return { fields: pick('birthDate', 'birthPlace') };
+        case 'DEAT': return { fields: pick('deathDate', 'deathPlace') };
+        case 'MARR': return { fields: pick('marriageDate', 'marriagePlace') };
     }
     const type = gedcomTagEventType(tag);
-    return type ? { fields: date ? ['eventDate'] : ['eventPlace', 'eventValue'], of: type } : null;
+    return type ? { fields: pick('eventDate', 'eventPlace', 'eventValue'), of: type } : null;
 }
 
 /** A row of the load is one a decided conflict is about (its person, its fact). */
 export function isDecidedRow(row: ValueChange, decided: readonly DecidedFact[]): boolean {
     return decided.some(d => {
         if (!d.persons.includes(row.personId)) return false;
-        const f = factFields(d.fact, d.date);
+        const f = factFields(d.fact, d.scope);
         return !!f && f.fields.includes(row.field) && (f.of === undefined || row.of === f.of);
     });
 }
@@ -237,8 +251,11 @@ export function isDecidedRow(row: ValueChange, decided: readonly DecidedFact[]):
 /**
  * What loading the research's version changes here besides the decided
  * conflicts' values: the other rows it overwrites or removes, the people and
- * facts it adds. 0: the load brings only the decided values (it goes quietly).
+ * facts it adds — a decided value coming into a field empty here (a date
+ * deleted in the app) is the decided value, not an added fact. 0: the load
+ * brings only the decided values (it goes quietly).
  */
 export function otherLoadChanges(diff: ValueDiff, decided: readonly DecidedFact[]): number {
-    return diff.rows.filter(r => !isDecidedRow(r, decided)).length + diff.addedPersons + diff.addedFacts;
+    const decidedFills = diff.filled.filter(r => isDecidedRow(r, decided)).length;
+    return diff.rows.filter(r => !isDecidedRow(r, decided)).length + diff.addedPersons + diff.addedFacts - decidedFills;
 }

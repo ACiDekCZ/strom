@@ -17,6 +17,7 @@ import { formatFlexDate } from '../dates.js';
 import { parseGedcomDate, gedcomTagEventType } from '../ged-parser.js';
 import { researchConflictRef } from '../research-link.js';
 import { canDecideInApp } from '../research-decide.js';
+import { ConflictScope } from '../research-conflict-card.js';
 import { uiModule } from './module.js';
 import { normalizeModal } from './modal-skeleton.js';
 import { PersonMenuAction } from './context-menu.js';
@@ -90,6 +91,34 @@ export function conflictValueHtml(text: string): string {
 export function isDateConflict(c: ResearchConflict): boolean {
     const said = c.values.filter(v => typeof v.value === 'string' && v.value.trim());
     return said.length > 0 && said.every(v => researchValueText(c.fact, v.value) !== v.value || /^\s*\d{3,4}\s*\??\s*$/.test(v.value));
+}
+
+/** A year in a value said in words ("23. 10. 1865, Žďár nad Sázavou", "tkadlec, 1865"). */
+const YEAR_IN_WORDS = /(^|\D)\d{3,4}(\D|$)/;
+
+/**
+ * What of its fact a conflict is about (ConflictScope): the date when its
+ * values read as dates; the whole fact when an event's values mix a date
+ * with words — a part of a documented fact deleted in the app, the app's
+ * side what is left of it ("Žďár nad Sázavou" against "23. 10. 1865, Žďár
+ * nad Sázavou", "1865" against "tkadlec, 1865"); else the place or the value.
+ */
+export function conflictScope(c: ResearchConflict): ConflictScope {
+    if (isDateConflict(c)) return 'date';
+    if (['NAME', 'NPFX', 'NSFX', 'SEX'].includes(c.fact.trim().toUpperCase())) return 'place';
+    return c.values.some(v => typeof v.value === 'string' && YEAR_IN_WORDS.test(v.value)) ? 'fact' : 'place';
+}
+
+/**
+ * The edit form's field a conflict about a birth or a death marks: the date
+ * or the place it is about; a conflict of the whole fact the part deleted —
+ * the date unless the app's side still says one.
+ */
+function conflictDateField(c: ResearchConflict): boolean {
+    const scope = conflictScope(c);
+    if (scope !== 'fact') return scope === 'date';
+    const user = c.values.find(v => v.side === 'user')?.value ?? '';
+    return !YEAR_IN_WORDS.test(user);
 }
 
 /** Title of the first source of a value that is in the tree ('' when none). */
@@ -475,7 +504,7 @@ export const personResearchMethods = uiModule({
         const byInput = new Map<string, ResearchConflict[]>();
         for (const c of this.personOpenConflicts(personId)) {
             const fact = c.fact.toUpperCase();
-            const date = isDateConflict(c);
+            const date = conflictDateField(c);
             const input = fact === 'BIRT' ? (date ? 'input-birthdate' : 'input-birthplace')
                 : fact === 'DEAT' ? (date ? 'input-deathdate' : 'input-deathplace')
                 : fact === 'NAME' ? 'input-firstname'

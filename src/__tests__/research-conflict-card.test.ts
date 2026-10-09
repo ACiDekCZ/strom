@@ -143,72 +143,90 @@ function tree(anna: Partial<Person> = {}, union: Partial<Partnership> = {}): Pic
 describe('sending comes first: the field against the last sending', () => {
     it('the birth date as sent: no; edited after the send: yes', () => {
         const sent = tree({ birthDate: '1852' });
-        expect(conflictSentChanged('BIRT', true, ANNA, tree({ birthDate: '1852' }), sent)).toBe(false);
-        expect(conflictSentChanged('BIRT', true, ANNA, tree({ birthDate: '1853-06-03' }), sent)).toBe(true);
+        expect(conflictSentChanged('BIRT', ANNA, tree({ birthDate: '1852' }), sent)).toBe(false);
+        expect(conflictSentChanged('BIRT', ANNA, tree({ birthDate: '1853-06-03' }), sent)).toBe(true);
     });
 
     it('compares with what was sent, never with the conflict\'s words', () => {
         // The conflict's user value reads "1852" in the research's words; the last sending had 1853 and so has the tree:
         // nothing moved since the send, whatever the words say.
         const sent = tree({ birthDate: '1853' });
-        expect(conflictSentChanged('BIRT', true, ANNA, tree({ birthDate: '1853' }), sent)).toBe(false);
+        expect(conflictSentChanged('BIRT', ANNA, tree({ birthDate: '1853' }), sent)).toBe(false);
         // The tree back at the words' value, but not what was sent: sending comes first.
-        expect(conflictSentChanged('BIRT', true, ANNA, tree({ birthDate: '1852' }), sent)).toBe(true);
+        expect(conflictSentChanged('BIRT', ANNA, tree({ birthDate: '1852' }), sent)).toBe(true);
     });
 
-    it('a date conflict looks at the date only, a place conflict at the place only', () => {
+    it('an event\'s conflict looks at the whole fact: its date or its place moved since the send', () => {
         const sent = tree();
-        expect(conflictSentChanged('BIRT', true, ANNA, tree({ birthPlace: 'Praha' }), sent)).toBe(false);
-        expect(conflictSentChanged('BIRT', false, ANNA, tree({ birthPlace: 'Praha' }), sent)).toBe(true);
-        expect(conflictSentChanged('BIRT', false, ANNA, tree({ birthDate: '1860' }), sent)).toBe(false);
+        expect(conflictSentChanged('BIRT', ANNA, tree(), sent)).toBe(false);
+        expect(conflictSentChanged('BIRT', ANNA, tree({ birthPlace: 'Praha' }), sent)).toBe(true);
+        expect(conflictSentChanged('BIRT', ANNA, tree({ birthDate: '1860' }), sent)).toBe(true);
+    });
+
+    it('a part of a documented fact deleted and sent (the death date, the place kept), then typed again: sending comes first', () => {
+        const sent = tree({ deathDate: '', deathPlace: 'Žďár' });
+        expect(conflictSentChanged('DEAT', ANNA, tree({ deathPlace: 'Žďár' }), sent)).toBe(false);
+        expect(conflictSentChanged('DEAT', ANNA, tree({ deathDate: '1865-10-23', deathPlace: 'Žďár' }), sent)).toBe(true);
+        // The fact as the research says it: the value, the date, the place.
+        expect(conflictFactParts('DEAT', 'fact', ANNA, tree({ deathDate: '1865-10-23', deathPlace: 'Žďár' }))).toEqual(['\u00001865-10-23\u0000Žďár']);
+        expect(conflictFactParts('DEAT', 'date', ANNA, tree({ deathDate: '1865-10-23', deathPlace: 'Žďár' }))).toEqual(['1865-10-23']);
+        expect(conflictFactParts('DEAT', 'place', ANNA, tree({ deathDate: '1865-10-23', deathPlace: 'Žďár' }))).toEqual(['Žďár']);
     });
 
     it('stored values compare trimmed (as the changes per person do)', () => {
-        expect(conflictSentChanged('BIRT', false, ANNA, tree({ birthPlace: ' Lipno ' }), tree())).toBe(false);
+        expect(conflictSentChanged('BIRT', ANNA, tree({ birthPlace: ' Lipno ' }), tree())).toBe(false);
     });
 
     it('the death, the name, its titles and the sex', () => {
-        expect(conflictSentChanged('DEAT', true, ANNA, tree({ deathDate: '1911' }), tree({ deathDate: '1912' }))).toBe(true);
-        expect(conflictSentChanged('NAME', false, ANNA, tree({ firstName: 'Anička' }), tree())).toBe(true);
-        expect(conflictSentChanged('NAME', false, ANNA, tree({ birthDate: '1900' }), tree())).toBe(false);
-        expect(conflictSentChanged('NPFX', false, ANNA, tree({ titleBefore: 'Ing.' }), tree())).toBe(true);
-        expect(conflictSentChanged('NSFX', false, ANNA, tree({ titleAfter: 'st.' }), tree({ titleAfter: 'st.' }))).toBe(false);
-        expect(conflictSentChanged('SEX', false, ANNA, tree({ gender: 'male' }), tree())).toBe(true);
+        expect(conflictSentChanged('DEAT', ANNA, tree({ deathDate: '1911' }), tree({ deathDate: '1912' }))).toBe(true);
+        expect(conflictSentChanged('NAME', ANNA, tree({ firstName: 'Anička' }), tree())).toBe(true);
+        expect(conflictSentChanged('NAME', ANNA, tree({ birthDate: '1900' }), tree())).toBe(false);
+        expect(conflictSentChanged('NPFX', ANNA, tree({ titleBefore: 'Ing.' }), tree())).toBe(true);
+        expect(conflictSentChanged('NSFX', ANNA, tree({ titleAfter: 'st.' }), tree({ titleAfter: 'st.' }))).toBe(false);
+        expect(conflictSentChanged('SEX', ANNA, tree({ gender: 'male' }), tree())).toBe(true);
     });
 
     it('an empty field (a value deleted here) compares as empty, not as missing', () => {
         // Deleted and sent: the same emptiness, stored as '' or not at all.
-        expect(conflictSentChanged('NPFX', false, ANNA, tree({ titleBefore: '' }), tree())).toBe(false);
-        expect(conflictSentChanged('NPFX', false, ANNA, tree(), tree({ titleBefore: '' }))).toBe(false);
-        expect(conflictSentChanged('NPFX', false, ANNA, tree({ titleBefore: ' ' }), tree())).toBe(false);
-        expect(conflictFactParts('NPFX', false, ANNA, tree())).toEqual(['']);
+        expect(conflictSentChanged('NPFX', ANNA, tree({ titleBefore: '' }), tree())).toBe(false);
+        expect(conflictSentChanged('NPFX', ANNA, tree(), tree({ titleBefore: '' }))).toBe(false);
+        expect(conflictSentChanged('NPFX', ANNA, tree({ titleBefore: ' ' }), tree())).toBe(false);
+        expect(conflictFactParts('NPFX', 'place', ANNA, tree())).toEqual(['']);
         // Typed again after the send: sending comes first; deleted after a send that had it: too.
-        expect(conflictSentChanged('NPFX', false, ANNA, tree({ titleBefore: 'Ing.' }), tree({ titleBefore: '' }))).toBe(true);
-        expect(conflictSentChanged('NPFX', false, ANNA, tree({ titleBefore: '' }), tree({ titleBefore: 'Ing.' }))).toBe(true);
-        expect(conflictSentChanged('BIRT', true, ANNA, tree({ birthDate: '' }), tree({ birthDate: undefined }))).toBe(false);
+        expect(conflictSentChanged('NPFX', ANNA, tree({ titleBefore: 'Ing.' }), tree({ titleBefore: '' }))).toBe(true);
+        expect(conflictSentChanged('NPFX', ANNA, tree({ titleBefore: '' }), tree({ titleBefore: 'Ing.' }))).toBe(true);
+        expect(conflictSentChanged('BIRT', ANNA, tree({ birthDate: '' }), tree({ birthDate: undefined }))).toBe(false);
     });
 
     it('a couple\'s wedding: the union\'s start; a divorce: its end', () => {
-        expect(conflictSentChanged('MARR', true, ANNA, tree({}, { startDate: '1875' }), tree())).toBe(true);
-        expect(conflictSentChanged('MARR', true, TOMAS, tree({}, { startDate: '1875' }), tree())).toBe(true);
-        expect(conflictSentChanged('MARR', true, ANNA, tree({}, { startPlace: 'Praha' }), tree())).toBe(false);
-        expect(conflictSentChanged('DIV', true, ANNA, tree({}, { endDate: '1890' }), tree())).toBe(true);
+        expect(conflictSentChanged('MARR', ANNA, tree({}, { startDate: '1875' }), tree())).toBe(true);
+        expect(conflictSentChanged('MARR', TOMAS, tree({}, { startDate: '1875' }), tree())).toBe(true);
+        // The wedding's place moved, or its deleted date typed again: the whole fact.
+        expect(conflictSentChanged('MARR', ANNA, tree({}, { startPlace: 'Praha' }), tree())).toBe(true);
+        expect(conflictSentChanged('MARR', TOMAS, tree({}, { startDate: '1876' }), tree({}, { startDate: '' }))).toBe(true);
+        expect(conflictSentChanged('MARR', TOMAS, tree({}, { startDate: '' }), tree({}, { startDate: undefined }))).toBe(false);
+        expect(conflictSentChanged('DIV', ANNA, tree({ birthPlace: 'Praha' }), tree())).toBe(false);
+        expect(conflictSentChanged('DIV', ANNA, tree({}, { endDate: '1890' }), tree())).toBe(true);
     });
 
     it('another event of the person: its events of that type', () => {
         const chr = (date: string, place = 'Lipno') => ({ events: [{ id: 'e1', type: 'baptism', date, place }] } as unknown as Partial<Person>);
-        expect(conflictSentChanged('BAPM', true, ANNA, tree(chr('1852')), tree(chr('1852')))).toBe(false);
-        expect(conflictSentChanged('BAPM', true, ANNA, tree(chr('1853')), tree(chr('1852')))).toBe(true);
-        expect(conflictSentChanged('BAPM', true, ANNA, tree(chr('1852', 'Praha')), tree(chr('1852')))).toBe(false);
-        expect(conflictSentChanged('BAPM', false, ANNA, tree(chr('1852', 'Praha')), tree(chr('1852')))).toBe(true);
+        expect(conflictSentChanged('BAPM', ANNA, tree(chr('1852')), tree(chr('1852')))).toBe(false);
+        expect(conflictSentChanged('BAPM', ANNA, tree(chr('1853')), tree(chr('1852')))).toBe(true);
+        expect(conflictSentChanged('BAPM', ANNA, tree(chr('1852', 'Praha')), tree(chr('1852')))).toBe(true);
+        // An occupation's value deleted and sent, then typed again: the value is a part of the fact too.
+        const occu = (note: string) => ({ events: [{ id: 'e2', type: 'occupation', date: '1865', note }] } as unknown as Partial<Person>);
+        expect(conflictSentChanged('OCCU', ANNA, tree(occu('')), tree(occu('')))).toBe(false);
+        expect(conflictSentChanged('OCCU', ANNA, tree(occu('tkadlec')), tree(occu('')))).toBe(true);
+        expect(conflictSentChanged('BURI', ANNA, tree(occu('tkadlec')), tree(occu('')))).toBe(false);
     });
 
     it('not known: the person not in what was sent, a fact the app does not keep', () => {
         const sent = tree();
         delete (sent.persons as Record<string, Person>)[ANNA];
-        expect(conflictSentChanged('BIRT', true, ANNA, tree({ birthDate: '1900' }), sent)).toBe(false);
-        expect(conflictFactParts('FAMC', false, ANNA, tree())).toBeNull();
-        expect(conflictSentChanged('FAMC', false, ANNA, tree(), tree())).toBe(false);
+        expect(conflictSentChanged('BIRT', ANNA, tree({ birthDate: '1900' }), sent)).toBe(false);
+        expect(conflictFactParts('FAMC', 'place', ANNA, tree())).toBeNull();
+        expect(conflictSentChanged('FAMC', ANNA, tree(), tree())).toBe(false);
     });
 });
 
@@ -216,7 +234,7 @@ describe('sending comes first: the field against the last sending', () => {
 
 describe('a decision for the research\'s value: what else its version changes here', () => {
     const full = (anna: Partial<Person> = {}, union: Partial<Partnership> = {}) => ({ ...tree(anna, union), sources: {} }) as StromData;
-    const birth: DecidedFact = { persons: [ANNA], fact: 'BIRT', date: true };
+    const birth: DecidedFact = { persons: [ANNA], fact: 'BIRT', scope: 'date' };
 
     it('only the decided value: nothing else (the load goes quietly)', () => {
         const diff = diffValues(full({ birthDate: '1852' }), full({ birthDate: '1851-03-12' }));
@@ -235,29 +253,47 @@ describe('a decision for the research\'s value: what else its version changes he
     it('the date decided, the place of the same event changed: the place counts', () => {
         const diff = diffValues(full({ birthDate: '1852', birthPlace: 'Lipno' }), full({ birthDate: '1851', birthPlace: 'Praha' }));
         expect(otherLoadChanges(diff, [birth])).toBe(1);
-        expect(otherLoadChanges(diff, [birth, { persons: [ANNA], fact: 'BIRT', date: false }])).toBe(0);
+        expect(otherLoadChanges(diff, [birth, { persons: [ANNA], fact: 'BIRT', scope: 'place' }])).toBe(0);
     });
 
     it('only at the people the conflict is shown at', () => {
         const diff = diffValues(full({ birthDate: '1852' }), full({ birthDate: '1851' }));
-        expect(otherLoadChanges(diff, [{ persons: [TOMAS], fact: 'BIRT', date: true }])).toBe(1);
+        expect(otherLoadChanges(diff, [{ persons: [TOMAS], fact: 'BIRT', scope: 'date' }])).toBe(1);
     });
 
     it('a couple\'s wedding (its row at the first partner), the name with its titles, the sex', () => {
         const wedding = diffValues(full({}, { startDate: '1876' }), full({}, { startDate: '1877' }));
-        expect(otherLoadChanges(wedding, [{ persons: [TOMAS, ANNA], fact: 'MARR', date: true }])).toBe(0);
-        expect(otherLoadChanges(wedding, [{ persons: [TOMAS, ANNA], fact: 'MARR', date: false }])).toBe(1);
+        expect(otherLoadChanges(wedding, [{ persons: [TOMAS, ANNA], fact: 'MARR', scope: 'date' }])).toBe(0);
+        expect(otherLoadChanges(wedding, [{ persons: [TOMAS, ANNA], fact: 'MARR', scope: 'place' }])).toBe(1);
         const name = diffValues(full({ titleBefore: 'Ing.' }), full({ titleBefore: 'Mgr.' }));
-        expect(otherLoadChanges(name, [{ persons: [ANNA], fact: 'NPFX', date: false }])).toBe(0);
+        expect(otherLoadChanges(name, [{ persons: [ANNA], fact: 'NPFX', scope: 'place' }])).toBe(0);
         const sex = diffValues(full({ gender: 'female' }), full({ gender: 'male' }));
-        expect(otherLoadChanges(sex, [{ persons: [ANNA], fact: 'SEX', date: false }])).toBe(0);
-        expect(otherLoadChanges(sex, [{ persons: [ANNA], fact: 'NAME', date: false }])).toBe(1);
+        expect(otherLoadChanges(sex, [{ persons: [ANNA], fact: 'SEX', scope: 'place' }])).toBe(0);
+        expect(otherLoadChanges(sex, [{ persons: [ANNA], fact: 'NAME', scope: 'place' }])).toBe(1);
+    });
+
+    it('a part deleted here coming back with the version (the death date, the place kept): the decided value when the conflict is the whole fact', () => {
+        const diff = diffValues(full({ deathPlace: 'Žďár' }), full({ deathDate: '1865-10-23', deathPlace: 'Žďár' }));
+        expect(diff.rows).toEqual([]);
+        expect(diff.filled.map(r => [r.field, r.here, r.there])).toEqual([['deathDate', '', '1865-10-23']]);
+        expect(otherLoadChanges(diff, [{ persons: [ANNA], fact: 'DEAT', scope: 'fact' }])).toBe(0);
+        expect(otherLoadChanges(diff, [{ persons: [ANNA], fact: 'DEAT', scope: 'date' }])).toBe(0);
+        // Only the place decided: the date coming back is another change.
+        expect(otherLoadChanges(diff, [{ persons: [ANNA], fact: 'DEAT', scope: 'place' }])).toBe(1);
+        expect(otherLoadChanges(diff, [])).toBe(1);
+        // A couple's wedding date (its row at the first partner), an occupation's value.
+        const wedding = diffValues(full({}, { startDate: '' }), full({}, { startDate: '1840-02-12' }));
+        expect(otherLoadChanges(wedding, [{ persons: [TOMAS, ANNA], fact: 'MARR', scope: 'fact' }])).toBe(0);
+        const occu = (note: string) => ({ events: [{ id: 'e2', type: 'occupation', date: '1865', note }] } as unknown as Partial<Person>);
+        const value = diffValues(full(occu('')), full(occu('tkadlec')));
+        expect(otherLoadChanges(value, [{ persons: [ANNA], fact: 'OCCU', scope: 'fact' }])).toBe(0);
+        expect(otherLoadChanges(value, [{ persons: [ANNA], fact: 'OCCU', scope: 'date' }])).toBe(1);
     });
 
     it('another event: its type only', () => {
         const ev = (type: string, date: string) => ({ events: [{ id: 'e1', type, date, place: 'Lipno' }] } as unknown as Partial<Person>);
         const diff = diffValues(full(ev('baptism', '1852')), full(ev('baptism', '1851')));
-        expect(otherLoadChanges(diff, [{ persons: [ANNA], fact: 'BAPM', date: true }])).toBe(0);
-        expect(otherLoadChanges(diff, [{ persons: [ANNA], fact: 'BURI', date: true }])).toBe(1);
+        expect(otherLoadChanges(diff, [{ persons: [ANNA], fact: 'BAPM', scope: 'date' }])).toBe(0);
+        expect(otherLoadChanges(diff, [{ persons: [ANNA], fact: 'BURI', scope: 'date' }])).toBe(1);
     });
 });

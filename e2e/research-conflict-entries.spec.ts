@@ -108,7 +108,8 @@ test.describe('the panel by the edit form\'s field', () => {
     test('the form with unsaved edits: the choices wait, "The person\'s edit is saved first, then the decision."; saved, they are on', async ({ page }) => {
         const { decide } = await setup(page);
         await editJan(page);
-        await page.locator('#input-birthplace').fill('Kolín');
+        // An edit outside the birth (a part of the birth itself, once saved, would ask to send first).
+        await page.locator('#input-deathplace').fill('Kolín');
         await tag(page).click();
         await expect(panel(page).locator('.prc-notice--warn .prc-notice-text')).toHaveText("The person's edit is saved first, then the decision.");
         await expect(choice(page, 'user')).toBeDisabled();

@@ -236,6 +236,6 @@ describe('a research file with hypothesis variants, links and the named edge end
         const there = stabilizeIds(load(FIXTURE).data, here);
         expect(Object.keys(there.persons).sort()).toEqual(Object.keys(here.persons).sort());
         expect(diffByPerson(here, there)).toEqual([]);
-        expect(diffValues(here, there)).toEqual({ rows: [], addedPersons: 0, addedFacts: 0 });
+        expect(diffValues(here, there)).toEqual({ rows: [], addedPersons: 0, addedFacts: 0, filled: [] });
     });
 });
