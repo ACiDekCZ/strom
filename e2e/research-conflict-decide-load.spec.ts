@@ -263,6 +263,32 @@ test.describe('after deciding a conflict in the app', () => {
     });
 });
 
+test.describe('not decidable from the app with the dialog closed', () => {
+    test.use({ locale: 'en-US' });
+    test.beforeEach(async ({ page }) => { await page.setViewportSize({ width: 1280, height: 900 }); });
+
+    test('422 conflict.no-edit: the notice says so with "Show" (not "could not be decided"); "Show" opens the card in its own state', async ({ page }) => {
+        const { decide } = await setup(page);
+        await openKnows(page);
+        let release!: () => void;
+        decide.hold = new Promise<void>(r => { release = r; });
+        decide.replies.push({ status: 422, body: { code: 'conflict.no-edit' } });
+        await side(page, 'user').locator('.prc-choice').click();
+        await expect(cardOf(page)).toHaveAttribute('data-state', 'busy');
+        await page.locator('#person-research-close').click();
+        await expect(page.locator('#person-research-modal')).toHaveCount(0);
+        release();
+        await expect(toast(page)).toContainText('The research cannot decide this conflict from the app.');
+        await expect(toast(page)).not.toContainText('could not be decided');
+        await expect(toast(page).locator('.toast-action')).toHaveText('Show');
+        await toast(page).locator('.toast-action').click();
+        await expect(cardOf(page)).toHaveAttribute('data-state', 'noEdit');
+        await expect(cardOf(page).locator('.prc-notice-action')).toHaveText('Decide in the research ↗');
+        await expect(cardOf(page).getByRole('button', { name: 'Try again' })).toHaveCount(0);
+        expect(decide.asks).toHaveLength(1);
+    });
+});
+
 test.describe('the Load dialog after a decision: narrow and dark', () => {
     test.use({ locale: 'en-US' });
 

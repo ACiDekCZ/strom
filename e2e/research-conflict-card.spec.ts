@@ -132,6 +132,64 @@ test.describe('a conflict decided by a side in the app', () => {
         ]);
     });
 
+    test('not decidable from the app (422 conflict.no-edit): its own sentence, no "Try again", the choices off; "Decide in the research ↗" opens it at the conflict without a side', async ({ page }) => {
+        await page.setViewportSize({ width: 1280, height: 900 });
+        const { decide } = await setup(page);
+        await openKnows(page);
+        const c = cardOf(page);
+        decide.replies.push({ status: 422, body: { error: 'no edit', code: 'conflict.no-edit', text: 'X0007 is not a conflict of an edit' } });
+        await side(page, 'research').locator('.prc-choice').click();
+        await expect(c).toHaveAttribute('data-state', 'noEdit');
+        await expect(c.locator('.prc-notice .prc-notice-text')).toHaveText('The research cannot decide this conflict from the app.');
+        await expect(c.locator('.prc-notice--error')).toHaveCount(0);
+        await expect(c.getByRole('button', { name: 'Try again' })).toHaveCount(0);
+        await expect(side(page, 'user').locator('.prc-choice')).toBeDisabled();
+        await expect(side(page, 'research').locator('.prc-choice')).toBeDisabled();
+        await expect(c.locator('.prc-note')).toHaveCount(0);
+        // The link once, in the notice; the agent stays under the line. The keyboard on the way left.
+        const decideLink = c.locator('.prc-notice-action');
+        await expect(decideLink).toHaveText('Decide in the research ↗');
+        await expect(decideLink).toBeFocused();
+        await expect(c.getByText('Decide in the research ↗')).toHaveCount(1);
+        await expect(c.locator('.prc-links .person-research-agent')).toBeVisible();
+        // No notice with the card in sight.
+        await expect(page.locator('.toast').filter({ hasText: 'cannot decide' })).toHaveCount(0);
+        await decideLink.click();
+        expect(await links(page)).toEqual([`strom-research://conflict?tree=${UUID}&id=X0007&do=decide`]);
+        expect(decide.asks).toHaveLength(1);
+    });
+
+    test('not decidable from the app, no links here: the sentence alone', async ({ page }) => {
+        await page.setViewportSize({ width: 1280, height: 900 });
+        const { decide } = await setup(page, { linkList: ['send', 'open', 'live', 'app', 'setup'] });
+        await openKnows(page);
+        const c = cardOf(page);
+        await expect(c).toHaveAttribute('data-state', 'open');
+        decide.replies.push({ status: 422, body: { code: 'conflict.no-edit' } });
+        await side(page, 'user').locator('.prc-choice').click();
+        await expect(c).toHaveAttribute('data-state', 'noEdit');
+        await expect(c.locator('.prc-notice')).toHaveText('The research cannot decide this conflict from the app.');
+        await expect(c.locator('.prc-notice-action, .prc-links')).toHaveCount(0);
+        await expect(side(page, 'user').locator('.prc-choice')).toBeDisabled();
+    });
+
+    test('any other answer (a 500, a 422 without the code, an older bridge): the research did not answer, "Try again"', async ({ page }) => {
+        await page.setViewportSize({ width: 1280, height: 900 });
+        const { decide } = await setup(page);
+        await openKnows(page);
+        const c = cardOf(page);
+        const replies = [{ status: 500, body: { error: 'boom' } }, { status: 422, body: { code: 'invalid' } }, { status: 404, body: {} }];
+        for (const [i, reply] of replies.entries()) {
+            decide.replies.push(reply);
+            // The first from the choice, then "Try again".
+            await (i === 0 ? side(page, 'user').locator('.prc-choice') : c.locator('.prc-notice-action')).click();
+            await expect.poll(() => decide.asks.length).toBe(i + 1);
+            await expect(c).toHaveAttribute('data-state', 'error');
+            await expect(c.locator('.prc-notice--error .prc-notice-text')).toHaveText('The research did not answer; the decision did not go through.');
+            await expect(c.locator('.prc-notice-action')).toHaveText('Try again');
+        }
+    });
+
     test('decided elsewhere meanwhile (409 conflict.decided): said, with the decision', async ({ page }) => {
         await page.setViewportSize({ width: 1280, height: 900 });
         const { decide } = await setup(page);

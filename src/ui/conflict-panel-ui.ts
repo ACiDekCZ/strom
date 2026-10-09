@@ -171,7 +171,9 @@ export const conflictPanelMethods = uiModule({
         panel.innerHTML = `<span class="prc-panel-arrow" aria-hidden="true"></span><div class="prc-panel-body">${html}</div>`;
         if (focusKey !== null) {
             const target = focusKey ? panel.querySelector<HTMLElement>(`[data-focus="${focusKey}"]:not(:disabled)`) : null;
-            (target ?? panel.querySelector<HTMLElement>('.prc-panel-close'))?.focus({ preventScroll: true });
+            // Not decidable from the app: the choice asked is off, the keyboard on the way that is left.
+            const left = panel.querySelector('[data-row="noEdit"]') ? panel.querySelector<HTMLElement>('[data-focus="notice"]') : null;
+            (target ?? left ?? panel.querySelector<HTMLElement>('.prc-panel-close'))?.focus({ preventScroll: true });
         }
         panel.dataset.state = panel.querySelector<HTMLElement>('[data-row]')?.dataset.row ?? '';
         this.placeResearchConflictPanel();
@@ -189,8 +191,9 @@ export const conflictPanelMethods = uiModule({
         if (!sides) return '';
         const k = strings.conflict;
         const view = this.researchConflictCardView(personId, c);
-        // The form has unsaved edits: loading the research's version would go over them — saved first.
-        const saveFirst = view.row !== 'busy' && view.choices !== 'none' && this.hasPersonModalChanges();
+        // The form has unsaved edits: loading the research's version would go over them — saved first
+        // (not when nothing is decided here at all).
+        const saveFirst = view.row !== 'busy' && view.row !== 'noEdit' && view.choices !== 'none' && this.hasPersonModalChanges();
         const sources = DataManager.getData().sources ?? {};
 
         let notice = '';
@@ -202,8 +205,9 @@ export const conflictPanelMethods = uiModule({
                 : n.text === 'remote' ? k.remote
                 : n.text === 'errBusy' ? k.errBusy
                 : n.text === 'errLocked' ? k.errLocked
+                : n.text === 'noEdit' ? k.noEdit
                 : k.errNet;
-            const label = n.action === 'send' ? strings.sync.barSend : n.action === 'retry' ? k.retry : '';
+            const label = n.action === 'send' ? strings.sync.barSend : n.action === 'retry' ? k.retry : n.action === 'decide' ? strings.research.decide : '';
             notice = `<div class="prc-notice prc-notice--${n.tone}" role="status">
                     <span class="prc-notice-text">${esc(text)}</span>${label ? `
                     <button type="button" class="prc-notice-action" data-notice-action="${n.action}" data-focus="notice">${esc(label)}</button>` : ''}

@@ -755,7 +755,7 @@ send, 30 s at most. The answers:
 | 409, 503 | any other | busy (a send is being written): "Try again" |
 | 423 | — | the tree is locked by another session: "Try again" |
 | none | — | no answer: "Try again" |
-| 422 | `conflict.no-edit` | not decidable by a side; shown like no answer |
+| 422 | `conflict.no-edit` | not decidable by a side: its own state, no "Try again" |
 
 An answer naming another id, or any other status (an older bridge without the
 route, a 500), is shown like no answer too; the bridge's own sentence is never
@@ -780,6 +780,13 @@ version not loaded are read again.
 - *Busy, locked, no answer*: the card (or the panel) shows the error with
   "Try again" for the same side; with neither in sight a notice "The conflict
   could not be decided" offers "Show".
+- *Not decidable from the app* (422 `conflict.no-edit`): asking again never
+  helps, so the card, the panel and the phone's sheet say "The research cannot
+  decide this conflict from the app." without "Try again", both choices off,
+  and offer "Decide in the research ↗" (the `conflict` link with `do=decide`
+  and no side) when the research's links are available here; without them
+  the sentence alone. With neither in sight the notice says the same sentence
+  with "Show".
 
 A decided card folds into the decided row after 6 s or when the dialog
 closes. A decision is no change of the tree: Undo never reverts it.

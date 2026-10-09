@@ -178,8 +178,10 @@ export const conflictDecideMethods = uiModule({
                 : n.text === 'takenPending' ? k.takenPending(decidedValues.research)
                 : n.text === 'errBusy' ? k.errBusy
                 : n.text === 'errLocked' ? k.errLocked
+                : n.text === 'noEdit' ? k.noEdit
                 : k.errNet;
-            const label = n.action === 'send' ? strings.sync.barSend : n.action === 'retry' ? k.retry : n.action === 'load' ? strings.sync.load : '';
+            const label = n.action === 'send' ? strings.sync.barSend : n.action === 'retry' ? k.retry : n.action === 'load' ? strings.sync.load
+                : n.action === 'decide' ? r.decide : '';
             notice = `
                 <div class="prc-notice prc-notice--${n.tone}" role="status">
                     <span class="prc-notice-text">${esc(text)}</span>${n.action ? `
@@ -250,9 +252,9 @@ export const conflictDecideMethods = uiModule({
         }
 
         const toAgent = view.agent;
-        const links = view.researchLinks ? `
-            <div class="person-research-conflict-actions prc-links">
-                <button type="button" class="link-button" data-conflict="${esc(id)}" data-do="decide" data-focus="link-decide">${esc(r.decide)}</button>${toAgent ? `
+        const links = view.researchLinks || toAgent ? `
+            <div class="person-research-conflict-actions prc-links">${view.researchLinks ? `
+                <button type="button" class="link-button" data-conflict="${esc(id)}" data-do="decide" data-focus="link-decide">${esc(r.decide)}</button>` : ''}${toAgent ? `
                 <button type="button" class="link-button person-research-agent" data-conflict="${esc(id)}" data-do="agent" data-focus="link-agent"
                     aria-label="${esc(`${r.leaveToAgent}, ${r.aiBadge}, ${r.opensInResearchSr}`)}">${esc(r.leaveToAgent)}
                     <span class="research-ai-badge" title="${esc(r.aiCostHint)}" aria-hidden="true">${esc(r.aiBadge)}</span> ↗</button>` : ''}
@@ -309,7 +311,9 @@ export const conflictDecideMethods = uiModule({
             }
             if (!focused) return;
             const target = next && focusKey ? next.querySelector<HTMLElement>(`[data-focus="${focusKey}"]:not(:disabled)`) : null;
-            (target ?? next ?? dialog.querySelector<HTMLElement>('#person-research-close'))?.focus({ preventScroll: true });
+            // Not decidable from the app: the choice asked is off, the keyboard on the way that is left.
+            const left = next?.dataset.state === 'noEdit' ? next.querySelector<HTMLElement>('[data-focus="notice"]') : null;
+            (target ?? left ?? next ?? dialog.querySelector<HTMLElement>('#person-research-close'))?.focus({ preventScroll: true });
         });
     },
 
@@ -352,7 +356,9 @@ export const conflictDecideMethods = uiModule({
         } else if (result.code === 'conflict.none') {
             state = { kind: 'gone' };
         } else {
-            state = { kind: 'error', take, error: result.code === 'busy' ? 'busy' : result.code === 'locked' ? 'locked' : 'network' };
+            // Not decidable by a side (422 conflict.no-edit) has its own state; any other answer reads as none.
+            state = { kind: 'error', take, error: result.code === 'busy' ? 'busy' : result.code === 'locked' ? 'locked'
+                : result.code === 'conflict.no-edit' ? 'noEdit' : 'network' };
         }
         this.setResearchConflictCardState(id, state);
         const treeId = DataManager.getCurrentTreeId();
@@ -452,7 +458,8 @@ export const conflictDecideMethods = uiModule({
             this.showToast(k.alreadyDecided(said), 6000);
             if (state.take === 'research') await this.researchConflictTaken(personId, c, values);
         } else if (state?.kind === 'error' && !this.researchConflictCardInSight(id)) {
-            this.showToast(k.errToast, 6000, { action: { label: k.show, run: () => this.showPersonResearchDialog(personId, { conflict: id }) } });
+            this.showToast(state.error === 'noEdit' ? k.noEdit : k.errToast, 6000,
+                { action: { label: k.show, run: () => this.showPersonResearchDialog(personId, { conflict: id }) } });
         }
         this.researchConflictFoldLater(id);
     },
@@ -589,11 +596,15 @@ export const conflictDecideMethods = uiModule({
         return stabilizeIds(keepTitles(data, here, features, researchHasTitles(link, features)), here);
     },
 
-    /** A card's notice action: try the same side again, send the tree, load the research's version. */
+    /** A card's notice action: try the same side again, send the tree, load the research's version, decide in the research. */
     researchConflictNoticeAction(personId: PersonId, conflictId: string, action: string): void {
         const state = this.researchConflictCardState(conflictId);
-        if (action === 'retry' && state?.kind === 'error') {
+        if (action === 'retry' && state?.kind === 'error' && state.error !== 'noEdit') {
             void this.decideResearchConflict(personId, conflictId, state.take);
+        } else if (action === 'decide') {
+            // Not decidable from the app: into the research at the conflict, without a side.
+            const url = this.activeResearchLink('conflict', { conflict: conflictId, conflictDo: 'decide' });
+            if (url) this.launchResearchLink(url, 'terminal');
         } else if (action === 'send') {
             // Today's send; the cards follow when the research has it (refreshResearchSyncUi).
             void this.researchSendNow().then(() => this.refreshResearchConflictCards(conflictId));

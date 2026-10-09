@@ -97,6 +97,24 @@ describe('the card of a decidable conflict: its states (DEV §3)', () => {
         expect(view({ mode: 'link', state: { kind: 'error', take: 'user', error: 'network' } })).toMatchObject({ row: 'link', notice: null });
     });
 
+    it('not decidable from the app (422 conflict.no-edit): its own row, no "Try again", the choices off; "Decide in the research ↗" in the notice when links are here', () => {
+        const noEdit = { kind: 'error', take: 'research', error: 'noEdit' } as const;
+        expect(view({ state: noEdit })).toMatchObject({
+            row: 'noEdit', tag: 'open', body: 'sides', choices: 'buttons', disabled: true, notes: false, linkNote: false,
+            notice: { tone: 'info', text: 'noEdit', action: 'decide' },
+            // The link is in the notice, not twice under the line; the agent stays there.
+            researchLinks: false, agent: true,
+        });
+        expect(view({ state: noEdit, noAgent: true })).toMatchObject({ row: 'noEdit', researchLinks: false, agent: false });
+        // No links here: the sentence alone.
+        expect(view({ state: noEdit, links: false })).toMatchObject({ row: 'noEdit', notice: { text: 'noEdit', action: null }, agent: false });
+        // By a link as well (the research said so), and over sending first: neither helps.
+        expect(view({ mode: 'link', state: noEdit })).toMatchObject({ row: 'noEdit', choices: 'links', disabled: true, linkNote: false });
+        expect(view({ state: noEdit, sendFirst: true })).toMatchObject({ row: 'noEdit', notice: { text: 'noEdit' } });
+        // Not on this device: still said, no links.
+        expect(view({ mode: 'none', state: noEdit })).toMatchObject({ row: 'noEdit', choices: 'none', notice: { text: 'noEdit', action: null } });
+    });
+
     it('gone (404 conflict.none): nothing drawn', () => {
         expect(view({ state: { kind: 'gone' } })).toMatchObject({ row: 'gone', body: 'none' });
     });

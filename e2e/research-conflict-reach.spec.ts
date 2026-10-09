@@ -22,12 +22,13 @@ const STATES: [string, unknown][] = [
     ['open', null],
     ['busy', { kind: 'busy', take: 'research' }],
     ['error', { kind: 'error', take: 'user', error: 'locked' }],
+    ['noEdit', { kind: 'error', take: 'user', error: 'noEdit' }],
     ['kept', { kind: 'kept', at: Date.UTC(2026, 9, 9, 12, 30), values: VALUES }],
     ['elsewhere', { kind: 'elsewhere', resolution: '3 FEB 1865 (S0001)', take: 'research', values: VALUES }],
     ['takenPending', { kind: 'takenPending', values: VALUES }],
 ];
 /** The panel shows only the undecided ones (decided, it closes). */
-const PANEL_STATES = STATES.filter(([name]) => ['open', 'busy', 'error'].includes(name));
+const PANEL_STATES = STATES.filter(([name]) => ['open', 'busy', 'error', 'noEdit'].includes(name));
 
 async function setState(page: Page, state: unknown): Promise<void> {
     await page.evaluate(s => window.Strom.UI.setResearchConflictCardState('X0007', s as never), state);

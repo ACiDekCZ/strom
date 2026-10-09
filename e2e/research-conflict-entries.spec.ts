@@ -1,6 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { card } from './helpers.js';
-import { BRIDGE, FakeBridge, poll, openResearchMenu, block } from './research-bridge.js';
+import { BRIDGE, UUID, FakeBridge, poll, openResearchMenu, block } from './research-bridge.js';
 import {
     Version, DecideRoute, setupConflict, openEdit, editJosef, cardOf, panel, choice, activeId, token, pageBoxes, partBoxes, KEEP_200, TAKE_200,
     tag as fieldTag, writtenWithConflict,
@@ -185,6 +185,47 @@ test.describe('the panel by the edit form\'s field', () => {
         expect(decide.asks.map(a => a.body)).toEqual([{ do: 'decide', take: 'user' }, { do: 'decide', take: 'user' }]);
     });
 
+    test('not decidable from the app (422 conflict.no-edit) with the panel open: its own sentence in the panel, no "Try again", the choices off, "Decide in the research ↗"', async ({ page }) => {
+        const { decide } = await setup(page);
+        await editJan(page);
+        await tag(page).click();
+        decide.replies.push({ status: 422, body: { code: 'conflict.no-edit' } });
+        await choice(page, 'research').click();
+        const p = panel(page);
+        await expect(p).toHaveAttribute('data-state', 'noEdit');
+        await expect(p.locator('.prc-notice .prc-notice-text')).toHaveText('The research cannot decide this conflict from the app.');
+        await expect(p.getByRole('button', { name: 'Try again' })).toHaveCount(0);
+        await expect(choice(page, 'user')).toBeDisabled();
+        await expect(choice(page, 'research')).toBeDisabled();
+        await expect(p.locator('.prc-panel-note')).toHaveCount(0);
+        await expect(page.locator('.toast').filter({ hasText: 'cannot decide' })).toHaveCount(0);
+        const decideLink = p.locator('.prc-notice-action');
+        await expect(decideLink).toHaveText('Decide in the research ↗');
+        await expect(decideLink).toBeFocused();
+        await decideLink.click();
+        expect(await page.evaluate(() => (window.Strom.UI as unknown as { __links: string[] }).__links)).toEqual([
+            `strom-research://conflict?tree=${UUID}&id=X0007&do=decide`,
+        ]);
+        expect(decide.asks).toHaveLength(1);
+        // Unsaved edits in the form change nothing here: nothing is decided in the app anyway.
+        await page.keyboard.press('Escape');
+        await page.locator('#input-birthplace').fill('Kolín');
+        await tag(page).click();
+        await expect(p).toHaveAttribute('data-state', 'noEdit');
+    });
+
+    test('not decidable from the app, no links here: the panel says it alone', async ({ page }) => {
+        const { decide } = await setup(page, { links: ['send', 'open', 'live', 'app', 'setup'] });
+        await editJan(page);
+        await tag(page).click();
+        decide.replies.push({ status: 422, body: { code: 'conflict.no-edit' } });
+        await choice(page, 'user').click();
+        await expect(panel(page)).toHaveAttribute('data-state', 'noEdit');
+        await expect(panel(page).locator('.prc-notice')).toHaveText('The research cannot decide this conflict from the app.');
+        await expect(panel(page).locator('.prc-notice-action')).toHaveCount(0);
+        await expect(panel(page).locator('.prc-panel-close')).toBeFocused();
+    });
+
     test('without the bridge\'s decision: the choices are links into the research (↗), taking a side', async ({ page }) => {
         const { decide } = await setup(page, {}, undefined, { features: [] });
         await editJan(page);
@@ -246,6 +287,26 @@ test.describe('the panel on a phone: a bottom sheet', () => {
         await choice(page, 'user').click();
         await expect(page.locator('.prc-panel-overlay')).toHaveCount(0);
         await expect(tag(page)).toHaveCount(0);
+    });
+
+    test('phone (360 px): not decidable from the app (422) — the sheet says so with "Decide in the research ↗" 44 px, the choices off', async ({ page }) => {
+        await page.setViewportSize({ width: 360, height: 740 });
+        const { decide } = await setup(page);
+        await editJan(page);
+        await tag(page).click();
+        await expect(panel(page)).toHaveClass(/prc-panel--sheet/);
+        decide.replies.push({ status: 422, body: { code: 'conflict.no-edit' } });
+        await choice(page, 'user').click();
+        const p = panel(page);
+        await expect(p).toHaveAttribute('data-state', 'noEdit');
+        await expect(p.locator('.prc-notice-text')).toHaveText('The research cannot decide this conflict from the app.');
+        await expect(choice(page, 'user')).toBeDisabled();
+        await expect(choice(page, 'research')).toBeDisabled();
+        const [action, sheet] = await partBoxes(p, ['.prc-notice-action', ':scope']);
+        expect(action.height).toBeGreaterThanOrEqual(44);
+        expect(action.x + action.width).toBeLessThanOrEqual(sheet.x + sheet.width);
+        await expect(p.locator('.prc-notice-action')).toHaveText('Decide in the research ↗');
+        await expect(p.getByRole('button', { name: 'Try again' })).toHaveCount(0);
     });
 
     test('phone (360 px): a tap on the backdrop closes the sheet, the form stays', async ({ page }) => {

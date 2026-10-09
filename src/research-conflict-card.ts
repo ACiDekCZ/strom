@@ -22,8 +22,12 @@ export interface ConflictDecidedValues {
     source: string;
 }
 
-/** Why a decision did not go through, as the card says it. */
-export type ConflictCardError = 'busy' | 'locked' | 'network';
+/**
+ * Why a decision did not go through, as the card says it: busy, locked, no
+ * answer (try again), or `noEdit` — the research cannot decide it by a side
+ * (422 conflict.no-edit; asking again never helps, it is decided there).
+ */
+export type ConflictCardError = 'busy' | 'locked' | 'network' | 'noEdit';
 
 /**
  * The card's state in this page (none: as the data say — open):
@@ -34,7 +38,8 @@ export type ConflictCardError = 'busy' | 'locked' | 'network';
  * - `takenPending`: decided for the research's value, its version not loaded ("Later") — while the tree
  *   still builds on `base` (the research's head then; a load since makes it the data's again);
  * - `elsewhere`: decided meanwhile in the research (409 conflict.decided) — its decision and side when said;
- * - `error`: not decided (busy, locked, no answer) — the side asked, to try again;
+ * - `error`: not decided (busy, locked, no answer) — the side asked, to try again; or not decidable from
+ *   the app at all (`noEdit`);
  * - `gone`: the research has no such conflict (404): the card goes.
  */
 export type ConflictCardState =
@@ -48,9 +53,9 @@ export type ConflictCardState =
 
 /** The row of the card's states (DEV §3) a card shows. */
 export type ConflictCardRow =
-    | 'open' | 'busy' | 'kept' | 'taken' | 'takenPending' | 'sendFirst' | 'elsewhere' | 'link' | 'none' | 'error' | 'gone';
+    | 'open' | 'busy' | 'kept' | 'taken' | 'takenPending' | 'sendFirst' | 'elsewhere' | 'link' | 'none' | 'error' | 'noEdit' | 'gone';
 
-export type ConflictNoticeText = 'sendFirst' | 'remote' | 'alreadyDecided' | 'takenPending' | 'errBusy' | 'errLocked' | 'errNet';
+export type ConflictNoticeText = 'sendFirst' | 'remote' | 'alreadyDecided' | 'takenPending' | 'errBusy' | 'errLocked' | 'errNet' | 'noEdit';
 
 export interface ConflictCardView {
     row: ConflictCardRow;
@@ -58,7 +63,8 @@ export interface ConflictCardView {
     tag: 'open' | 'busy' | 'done';
     /** The sides (with or without choices), the decided block, the notice alone, or nothing (gone). */
     body: 'sides' | 'decided' | 'notice' | 'none';
-    notice: { tone: 'warn' | 'info' | 'error'; text: ConflictNoticeText; action: 'send' | 'retry' | 'load' | null } | null;
+    /** `decide`: "Decide in the research ↗" (a link into it, without a side). */
+    notice: { tone: 'warn' | 'info' | 'error'; text: ConflictNoticeText; action: 'send' | 'retry' | 'load' | 'decide' | null } | null;
     /** The choices: buttons deciding through the bridge, links into the research (↗), or none. */
     choices: 'buttons' | 'links' | 'none';
     /** Both choices off (sending comes first); a busy card has the asked one busy, the other off. */
@@ -71,7 +77,7 @@ export interface ConflictCardView {
     linkNote: boolean;
     /** The links into the research under the line ("Decide in the research ↗"). */
     researchLinks: boolean;
-    /** "Leave it to the agent" among them. */
+    /** "Leave it to the agent" under the line (with them, or alone when the notice has the other). */
     agent: boolean;
     /** The app's side shows its value now, "edited …, not sent" and what the research has. */
     unsent: boolean;
@@ -111,6 +117,14 @@ export function conflictCardView(input: ConflictCardInput): ConflictCardView {
     if (state?.kind === 'busy') {
         // The request runs on whatever the mode became meanwhile: its answer decides.
         return { ...base, row: 'busy', tag: 'busy', choices: 'buttons', notes: true, linkNote: false, busyTake: state.take, researchLinks: false, agent: false };
+    }
+    if (state?.kind === 'error' && state.error === 'noEdit') {
+        // The research cannot decide it by a side (422 conflict.no-edit): no "Try again", the choices off;
+        // decided in the research — its link in the notice (not twice under the line), when there is one.
+        return {
+            ...base, row: 'noEdit', notice: { tone: 'info', text: 'noEdit', action: links ? 'decide' : null },
+            disabled: true, notes: false, linkNote: false, researchLinks: false,
+        };
     }
     if (mode === 'none') {
         return { ...base, row: 'none', notice: { tone: 'info', text: 'remote', action: null }, researchLinks: false, agent: false };
