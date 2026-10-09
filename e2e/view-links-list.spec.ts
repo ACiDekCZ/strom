@@ -1,6 +1,6 @@
 import { test, expect, Page, Locator } from '@playwright/test';
 import { readFileSync } from 'fs';
-import { openApp, card } from './helpers.js';
+import { openApp, card, importJsonAsNewTree } from './helpers.js';
 
 /**
  * Linked in the view only, keeping track: the indicator over the view (× turns
@@ -107,6 +107,49 @@ test.describe('the indicator', () => {
         await page.evaluate(() => window.Strom.UI.openViewLinksPanel());
         await expect(panel(page)).toHaveCount(0);
     });
+
+    for (const [mode, viewport] of [['desktop', { width: 1440, height: 900 }], ['phone', { width: 360, height: 740 }]] as const) {
+        test(`a tree without any research: nothing of the feature, though records stand stored (${mode})`, async ({ browser }) => {
+            const phone = mode === 'phone';
+            const context = await browser.newContext({ viewport, hasTouch: phone, isMobile: phone, locale: 'en-US', reducedMotion: 'reduce' });
+            const page = await context.newPage();
+            await openApp(page);
+            await importJsonAsNewTree(page, 'e2e/fixtures/family-basic.json', 'Plain');
+            await expect(card(page, 'Petr').first()).toBeVisible();
+            // Records left under this tree's key (another tree's file once held research): never drawn.
+            await page.evaluate(() => {
+                const S = window.Strom;
+                const treeId = S.DataManager.getCurrentTreeId()!;
+                localStorage.setItem(`strom-view-links:${treeId}`, JSON.stringify([{
+                    hypo: 'H0001', variant: 'A', kind: 'partners', anchorId: 'p_petr', islandIds: ['p_jan'], on: true, addedAt: 1,
+                }]));
+                S.TreeRenderer.setFocus('p_petr' as never);
+            });
+            expect(await page.evaluate(() => window.Strom.TreeRenderer.viewLinksOffered())).toBe(false);
+            await expect(ghosts(page)).toHaveCount(0);
+            await expect(page.locator('.view-link-label, .view-link-island, .research-edge')).toHaveCount(0);
+            await expect(pill(page)).toHaveCount(0);
+            // The card's menu (the sheet on a phone): no row of the view links.
+            await card(page, 'Petr').first().click();
+            const menu = page.locator(phone ? '.bottom-sheet-person' : '.context-menu.person-menu');
+            await expect(menu).toBeVisible();
+            await expect(menu.locator('[data-action^="view-link"], [data-menu^="view-link"], .menu-caption, .bottom-sheet-caption')).toHaveCount(0);
+            await page.keyboard.press('Escape');
+            await expect(menu).toHaveCount(0);
+            // The Research menu (where there is one), Settings, the list.
+            if (await page.locator('#research-menu-btn').isVisible()) {
+                await page.locator('#research-menu-btn').click();
+                await expect(page.locator('#research-item-view-links')).toHaveCount(0);
+                await page.keyboard.press('Escape');
+            }
+            await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+            await expect(page.locator('#view-links-settings')).toBeHidden();
+            await page.evaluate(() => window.Strom.UI.closeSettingsDialog());
+            await page.evaluate(() => window.Strom.UI.openViewLinksPanel());
+            await expect(panel(page)).toHaveCount(0);
+            await context.close();
+        });
+    }
 
     test('"Linked in the view only · n" while the view draws them; × turns them all off, the notice turns them on — no change of the tree', async ({ page }) => {
         await setup(page);

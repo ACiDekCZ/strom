@@ -299,6 +299,49 @@ test.describe('linked in the view only: the outputs', () => {
         expect(fits).toBe(true);
     });
 
+    for (const [name, viewport] of [['a tablet', { width: 820, height: 1180 }], ['a phone held sideways', { width: 740, height: 360 }]] as const) {
+        test(`the row on ${name} (touch): in the poster, the book, the view's export, a tree from the view and sharing, whole and inside the window`, async ({ browser }) => {
+            const context = await browser.newContext({ viewport, hasTouch: true, isMobile: true, locale: 'en-US', reducedMotion: 'reduce' });
+            const page = await context.newPage();
+            await openApp(page);
+            await page.evaluate((t) => window.Strom.UI.openGedcomText(t), GED);
+            await expect(card(page, 'Karel').first()).toBeVisible();
+            await show(page, [B, PARTNER]);
+            await expect(ghosts(page)).toHaveCount(6);
+            const check = async (dialog: string): Promise<void> => {
+                const row = note(page, dialog);
+                await expect(row).toHaveText('View-only links (2) are not included');
+                await row.scrollIntoViewIfNeeded();
+                const fits = await row.evaluate(n => {
+                    const r = n.getBoundingClientRect();
+                    const text = n.querySelector('.view-links-note__text') as HTMLElement;
+                    const box = n.closest('.modal-content, .modal')!.getBoundingClientRect();
+                    return {
+                        window: r.left >= 0 && r.right <= window.innerWidth && r.top >= 0 && r.bottom <= window.innerHeight,
+                        dialog: r.left >= box.left - 0.5 && r.right <= box.right + 0.5,
+                        text: text.scrollWidth <= text.clientWidth + 1 && text.scrollHeight <= text.clientHeight + 1,
+                    };
+                });
+                expect(fits, dialog).toEqual({ window: true, dialog: true, text: true });
+            };
+            await page.evaluate(() => window.Strom.UI.showPosterDialog());
+            await check('poster-modal');
+            await page.evaluate(() => window.Strom.UI.closePosterDialog());
+            await page.evaluate(() => window.Strom.UI.showBookDialog());
+            await check('book-modal');
+            await page.evaluate(() => window.Strom.UI.closeBookDialog());
+            await page.evaluate(() => { window.Strom.UI.showExportDialog(); window.Strom.UI.setExportScope('view'); });
+            await check('export-modal');
+            await page.evaluate(() => window.Strom.UI.closeExportDialog());
+            await page.evaluate(() => window.Strom.UI.makeTreeFromCurrentView());
+            await check('import-tree-modal');
+            await page.evaluate(() => window.Strom.UI.closeImportTreeDialog());
+            await page.evaluate(() => window.Strom.UI.showShareDialog());
+            await check('share-modal');
+            await context.close();
+        });
+    }
+
     test('GEDCOM, JSON, CSV and the app file are the same with links shown', async ({ page }) => {
         await setup(page);
         const files = async (): Promise<Record<string, string>> => {
@@ -335,6 +378,24 @@ test.describe('linked in the view only: the outputs', () => {
         const embedded = (html: string) => html.match(/window\.STROM_EMBEDDED_DATA = (\{.*?\});<\/script>/s)?.[1] ?? '';
         expect(embedded(on.html)).not.toBe('');
         expect(embedded(on.html)).not.toMatch(/view-links|addedAt/);
+
+        // Sharing (the whole tree or the branch in view): the shared file carries no record either.
+        for (const scope of ['whole', 'branch']) {
+            await page.evaluate(() => window.Strom.UI.showShareDialog());
+            const share = page.locator('#share-modal');
+            await share.locator('#share-sender-name').fill('Test');
+            await share.locator('#share-privacy-mode').selectOption('full');
+            if (await share.locator(`#share-scope option[value="${scope}"]`).count()) await share.locator('#share-scope').selectOption(scope);
+            const [download] = await Promise.all([
+                page.waitForEvent('download'),
+                share.getByRole('button', { name: 'Create file to send' }).click(),
+            ]);
+            const file = readFileSync(await download.path(), 'utf-8');
+            expect(embedded(file), scope).not.toBe('');
+            expect(embedded(file), scope).not.toMatch(/view-links|addedAt/);
+            // Nowhere in the file (the app's own code names the keys, never a record).
+            expect(file, scope).not.toMatch(/"hypo":\s*"H00(22|24)",\s*"variant"|"islandIds"/);
+        }
     });
 
     test('loading a research version and what will be sent know nothing of the shown links', async ({ page }) => {
