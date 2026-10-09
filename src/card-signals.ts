@@ -14,6 +14,7 @@
 import { Partnership, Person, PersonId, ResearchConflict, StromData } from './types.js';
 import { EvidenceLevel, PersonEvidence, personEvidence } from './evidence-level.js';
 import type { CardSignals } from './settings.js';
+import { isOpenHypothesis } from './view-links.js';
 
 export type ActionSignal = 'waiting' | 'conflict' | 'question';
 
@@ -83,6 +84,7 @@ export interface CardSignalInfo {
     /** The waiting item is a story's new version: the badge opens the comparison. */
     waitingStory: boolean;
     conflicts: number;
+    /** Open hypotheses (decided and abandoned ones do not count). */
     hypotheses: number;
     question: string | null;
     agent: string | null;
@@ -112,7 +114,8 @@ export function cardSignalInfo(p: Person, ctx: CardSignalContext): CardSignalInf
         waiting: research?.waiting ?? null,
         waitingStory: !!research?.waitingStory,
         conflicts,
-        hypotheses: p.research?.hypotheses?.length ?? 0,
+        // Open ones only: a decided or abandoned hypothesis no longer waits on anyone.
+        hypotheses: (p.research?.hypotheses ?? []).filter(isOpenHypothesis).length,
         question: p.question?.trim() || null,
         agent: research?.agent ?? null,
         queued: research?.queued ?? null,

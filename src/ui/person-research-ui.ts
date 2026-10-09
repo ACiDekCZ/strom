@@ -8,8 +8,11 @@
  */
 
 import { DataManager } from '../data.js';
+import { TreeRenderer } from '../renderer.js';
 import { strings } from '../strings.js';
-import { PersonId, ResearchConflict, ResearchConflictValue } from '../types.js';
+import { PersonId, ResearchConflict, ResearchConflictValue, ResearchHypothesis } from '../types.js';
+import { isOpenHypothesis, loadViewLinks } from '../view-links.js';
+import { researchHypothesisNote, researchHypothesisState } from '../research-hypotheses.js';
 import { formatFlexDate } from '../dates.js';
 import { parseGedcomDate, gedcomTagEventType } from '../ged-parser.js';
 import { researchConflictRef } from '../research-link.js';
@@ -181,11 +184,7 @@ export const personResearchMethods = uiModule({
                 <div class="person-research-body">
                     ${this.researchEdgeSectionHtml(personId)}
                     ${section(r.conflicts, openHtml + decidedHtml)}
-                    ${section(r.hypotheses, hypotheses.map(h => `
-                        <div class="person-research-hypo"${h.id ? ` data-hypo="${esc(h.id)}"` : ''}>
-                            <div class="person-research-hypo-title">${esc(h.title)}</div>
-                            ${h.note ? `<p class="person-research-hypo-note">${esc(h.note)}</p>` : ''}
-                        </div>`).join(''))}
+                    ${section(r.hypotheses, hypotheses.length > 0 ? `<div class="person-research-hypos">${this.researchHypothesesHtml(personId, hypotheses)}</div>` : '')}
                     ${section(r.searched, searched.length > 0 ? `
                         <table class="person-research-searched">
                             <thead><tr><th scope="col">${esc(r.searchedBook)}</th><th scope="col">${esc(r.searchedYears)}</th><th scope="col">${esc(r.searchedResult)}</th></tr></thead>
@@ -217,14 +216,167 @@ export const personResearchMethods = uiModule({
             };
         });
         this.bindResearchEdgeSection(overlay, personId);
+        this.bindResearchHypotheses(overlay, personId);
         normalizeModal(overlay.querySelector('.modal') as HTMLElement);
         const edgeHead = opts.edge ? overlay.querySelector<HTMLElement>('#research-edge-section summary') : null;
-        if (edgeHead) {
+        if (opts.hypo && this.openResearchHypothesis(overlay, opts.hypo.id, opts.hypo.variant)) {
+            // Opened from a line's label (or the edge's bubble): at the hypothesis, open, its version unfolded.
+        } else if (edgeHead) {
             edgeHead.focus({ preventScroll: true });
             edgeHead.scrollIntoView({ block: 'start' });
         } else {
             (overlay.querySelector('#person-research-close') as HTMLButtonElement).focus({ preventScroll: true });
         }
+    },
+
+    /**
+     * The hypotheses of "What the research knows": each its question, under
+     * it "H0022 · open · 3 versions · what the note adds", folded open while
+     * the hypothesis is open. Its versions in a box — letter, claim, what it
+     * would bring — and where the tree can show it "linked in the view only",
+     * "Show" with a switch: the versions of one hypothesis act as a radio
+     * group that can have none (switching one on switches the shown one
+     * off; off unlinks it). The shown version: a ghost's tint, "shown · +
+     * 5 people · Find". No switch for a version without a link, one only in
+     * words (same, siblings: "Text only, cannot be shown.") or a decided or
+     * abandoned hypothesis. Under the box a row for its actions, empty in
+     * phase 1 (phase 2: "Link for real" at the shown version).
+     */
+    researchHypothesesHtml(personId: PersonId, hypotheses: readonly ResearchHypothesis[]): string {
+        const r = strings.research;
+        const v = strings.viewLinks;
+        const offered = TreeRenderer.viewLinksOffered();
+        return hypotheses.map(h => {
+            const open = isOpenHypothesis(h);
+            const variants = h.variants ?? [];
+            const note = researchHypothesisNote(h);
+            const meta = [h.id ?? '', researchHypothesisState(h), variants.length > 0 ? r.hypoVersions(variants.length) : '',
+                variants.length > 0 ? note : ''].filter(Boolean).join(' · ');
+            const offers = h.id && offered ? this.viewLinkOffersFor(h.id) : [];
+            const rows = variants.map(variant => {
+                const o = offers.find(x => x.variant === variant.id);
+                const chosen = h.status === 'decided' && h.chosen === variant.id;
+                const canSwitch = open && !!o?.choice && (o.shown || o.state?.state === 'draw');
+                let metaHtml: string;
+                if (o?.shown && o.choice) {
+                    metaHtml = `<span class="view-link-icon" aria-hidden="true"></span><span>${esc(`${v.shownWord} · ${v.people(o.people)}`)} · </span>`
+                        + `<button type="button" class="link-button prv-find" data-variant="${esc(variant.id)}" aria-label="${esc(v.findAria(this.viewLinkWho(o.choice)))}">${esc(v.find)}</button>`;
+                } else {
+                    const what = o?.choice ? v.people(o.people)
+                        : o?.textOnly || variant.links.some(l => l.kind === 'same' || l.kind === 'siblings') ? v.textOnly
+                        : v.notInResearch;
+                    const state = !open || !o?.state ? ''
+                        : o.state.state === 'real' ? v.real
+                        : o.state.state === 'invalid' ? v.reason[o.state.reason] : '';
+                    metaHtml = esc([chosen ? r.hypoChosen : '', what, state].filter(Boolean).join(' · '));
+                }
+                const title = variant.title ?? '';
+                const long = title.length > 90;
+                const titleHtml = long
+                    ? `<button type="button" class="prv-title prv-title--more" aria-expanded="false">${esc(title)}</button>`
+                    : `<span class="prv-title">${esc(title)}</span>`;
+                const sw = canSwitch ? `
+                    <button type="button" class="view-link-switch" role="switch" aria-checked="${o!.shown ? 'true' : 'false'}"
+                        data-variant="${esc(variant.id)}" aria-label="${esc(v.switchAria(variant.id))}">
+                        <span class="view-link-switch__label" aria-hidden="true">${esc(v.switchLabel)}</span>
+                        <span class="view-link-switch__track" aria-hidden="true"></span>
+                    </button>` : '';
+                return `<div class="person-research-variant${o?.shown ? ' is-shown' : ''}${chosen ? ' is-chosen' : ''}" role="listitem" data-variant="${esc(variant.id)}">
+                    <span class="prv-id" aria-hidden="true">${esc(variant.id)}</span>
+                    <span class="prv-text">${titleHtml}<span class="prv-meta">${metaHtml}</span></span>${sw}
+                </div>`;
+            }).join('');
+            return `
+                <details class="person-research-hypo${open ? '' : ' is-closed'}"${h.id ? ` data-hypo="${esc(h.id)}"` : ''}${open ? ' open' : ''}>
+                    <summary class="person-research-hypo-head">
+                        <span class="person-research-hypo-title">${esc(h.title)}</span>
+                        ${meta ? `<span class="person-research-hypo-meta">${esc(meta)}</span>` : ''}
+                    </summary>
+                    ${rows ? `<div class="person-research-variants" role="list" aria-label="${esc(h.title)}">${rows}</div>` : ''}
+                    ${!rows && h.note ? `<p class="person-research-hypo-note">${esc(h.note)}</p>` : ''}
+                    <div class="person-research-hypo-actions"></div>
+                </details>`;
+        }).join('');
+    },
+
+    /** Wire the hypotheses' switches, "Find" and the long claims (inside the dialog `root`). */
+    bindResearchHypotheses(root: HTMLElement, personId: PersonId): void {
+        const host = root.querySelector<HTMLElement>('.person-research-hypos');
+        if (!host) return;
+        const redraw = (focus?: { hypo: string; variant: string }): void => {
+            const open = new Set([...host.querySelectorAll<HTMLDetailsElement>('.person-research-hypo')].filter(d => d.open).map(d => d.dataset.hypo ?? ''));
+            const expanded = new Set([...host.querySelectorAll<HTMLElement>('.person-research-variant.is-expanded')]
+                .map(row => `${row.closest<HTMLElement>('[data-hypo]')?.dataset.hypo}:${row.dataset.variant}`));
+            host.innerHTML = this.researchHypothesesHtml(personId, DataManager.getPerson(personId)?.research?.hypotheses ?? []);
+            host.querySelectorAll<HTMLDetailsElement>('.person-research-hypo[data-hypo]').forEach(d => { d.open = open.has(d.dataset.hypo!); });
+            for (const key of expanded) {
+                const [hypo, variant] = key.split(':');
+                this.expandResearchVariant(host, hypo, variant);
+            }
+            if (focus) {
+                host.querySelector<HTMLElement>(`[data-hypo="${CSS.escape(focus.hypo)}"] .view-link-switch[data-variant="${CSS.escape(focus.variant)}"]`)?.focus({ preventScroll: true });
+            }
+        };
+        host.addEventListener('click', (e) => {
+            const target = e.target as HTMLElement;
+            const hypo = target.closest<HTMLElement>('[data-hypo]')?.dataset.hypo;
+            const more = target.closest<HTMLButtonElement>('.prv-title--more');
+            if (more) {
+                const row = more.closest<HTMLElement>('.person-research-variant')!;
+                const on = !row.classList.contains('is-expanded');
+                row.classList.toggle('is-expanded', on);
+                more.setAttribute('aria-expanded', String(on));
+                return;
+            }
+            if (!hypo) return;
+            const find = target.closest<HTMLButtonElement>('.prv-find');
+            if (find) {
+                const treeId = DataManager.getCurrentTreeId();
+                const link = treeId ? loadViewLinks(treeId).find(l => l.hypo === hypo) : null;
+                if (!link) return;
+                this.closePersonResearchDialog();
+                void this.viewLinkFind(link);
+                return;
+            }
+            const sw = target.closest<HTMLButtonElement>('.view-link-switch');
+            if (!sw || sw.disabled) return;
+            const variant = sw.dataset.variant!;
+            sw.disabled = true;
+            void (async () => {
+                if (sw.getAttribute('aria-checked') === 'true') {
+                    await this.viewLinkUnlink(hypo, { near: sw });
+                } else {
+                    const choice = this.viewLinkOffersFor(hypo).find(o => o.variant === variant)?.choice;
+                    if (choice) await this.viewLinkShow(choice);
+                }
+                // The dialog may have gone meanwhile (Esc).
+                if (host.isConnected) redraw({ hypo, variant });
+            })();
+        });
+    },
+
+    /** Unfold a version's whole claim (a long one shows two lines). */
+    expandResearchVariant(root: HTMLElement, hypo: string, variant: string): void {
+        const row = root.querySelector<HTMLElement>(`.person-research-hypo[data-hypo="${CSS.escape(hypo)}"] .person-research-variant[data-variant="${CSS.escape(variant)}"]`);
+        if (!row) return;
+        row.classList.add('is-expanded');
+        row.querySelector('.prv-title--more')?.setAttribute('aria-expanded', 'true');
+    },
+
+    /**
+     * Bring a hypothesis of the open dialog into view, folded open, with the
+     * keyboard on its heading (and the version's claim unfolded). False when
+     * the dialog has no such hypothesis.
+     */
+    openResearchHypothesis(root: HTMLElement, hypo: string, variant?: string): boolean {
+        const details = root.querySelector<HTMLDetailsElement>(`.person-research-hypo[data-hypo="${CSS.escape(hypo)}"]`);
+        if (!details) return false;
+        details.open = true;
+        if (variant) this.expandResearchVariant(root, hypo, variant);
+        const head = details.querySelector<HTMLElement>('summary');
+        head?.focus({ preventScroll: true });
+        details.scrollIntoView({ block: 'start' });
+        return true;
     },
 
     closePersonResearchDialog(): void {

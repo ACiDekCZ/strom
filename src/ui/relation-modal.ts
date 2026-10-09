@@ -107,6 +107,7 @@ export const relationModalMethods = uiModule({
         };
 
         title.textContent = titles[this.relationContext.relationType];
+        this.renderRelationViewLinkNote();
 
         // Setup "other parent" combo for child relation type
         const otherParentGroup = document.getElementById('rel-other-parent');
@@ -265,6 +266,45 @@ export const relationModalMethods = uiModule({
 
         // Setup Enter as Tab for form fields (only when creating new person)
         this.setupEnterAsTab('relation-modal', ['rel-firstname', 'rel-lastname', 'rel-gender'], () => this.saveRelation());
+    },
+
+    /**
+     * Linked in the view only, at the top of the dialog: adding a parent to a
+     * person whose parents the view shows ("The shown parents are in the
+     * view only." and "Link the shown: Jakub Horák and Marie Pokorná" — the
+     * link made for real, by hand), adding a sibling ("The sibling is not
+     * attached to the shown parents."; it joins the real parents only).
+     */
+    renderRelationViewLinkNote(): void {
+        const note = document.getElementById('rel-view-link-note');
+        if (!note || !this.relationContext) return;
+        const { personId, relationType } = this.relationContext;
+        const shown = relationType === 'parent' || relationType === 'sibling' ? this.viewLinkShownParents(personId) : null;
+        note.replaceChildren();
+        note.hidden = !shown;
+        if (!shown) return;
+        const v = strings.viewLinks;
+        const text = document.createElement('p');
+        text.className = 'rel-view-link-note__text';
+        const icon = document.createElement('span');
+        icon.className = 'view-link-icon';
+        icon.setAttribute('aria-hidden', 'true');
+        text.append(icon, document.createTextNode(relationType === 'parent' ? v.viewParentsNote : v.siblingNote));
+        note.appendChild(text);
+        if (relationType !== 'parent') return;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'secondary rel-view-link-note__link';
+        btn.innerHTML = chainLinkSvg({ size: 13 });
+        btn.append(` ${v.linkShown(v.names(shown.islandIds.map(id => shownNameOrEmpty(DataManager.getPerson(id)!))))}`);
+        btn.onclick = () => {
+            if (!this.linkShownParents(personId)) return;
+            this.closeRelationModal();
+            TreeRenderer.render();
+            this.refreshSearch();
+            if (this.relationshipsPanelPersonId) this.refreshRelationshipsPanel();
+        };
+        note.appendChild(btn);
     },
 
     /**

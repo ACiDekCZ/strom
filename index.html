@@ -7363,6 +7363,67 @@
             .research-edge-bubble.research-edge-bubble--named { max-height: calc(100vh - 16px); }
         }
 
+        /* The card's menu: a ghost's state on top (not an action), its "Unlink" stronger. */
+        .context-menu .menu-caption {
+            display: flex; align-items: center; gap: 8px;
+            padding: 8px 16px 4px; font-size: 13px; color: var(--ghost-text); cursor: default; user-select: none;
+        }
+        .context-menu-item.is-strong, .bottom-sheet-item.is-strong { font-weight: 500; }
+        .bottom-sheet-caption {
+            display: flex; align-items: center; gap: 8px;
+            padding: 6px 16px 2px; font-size: 14px; color: var(--ghost-text);
+        }
+        .sheet-view-link-head { display: flex; flex-direction: column; }
+        /* The heading of a hypothesis's versions in "Show as linked…": "H0022 · its question", as written. */
+        .context-menu .menu-section-header:has(+ [data-action^="view-link-show:"]),
+        .bottom-sheet-section:has(+ [data-action^="view-link-show:"]) {
+            text-transform: none; letter-spacing: normal; font-weight: 400; font-size: 13px; color: var(--text-light);
+            max-width: 340px; white-space: normal;
+        }
+
+        /* A switch of the view links ("Show" in What the research knows; the list later). */
+        .view-link-switch {
+            flex: none; display: inline-flex; align-items: center; gap: 8px;
+            min-height: 32px; padding: 0 2px; border: 0; background: none; cursor: pointer;
+            font: 400 14px/1 var(--font-sans); color: var(--text-light);
+        }
+        .view-link-switch__track {
+            position: relative; flex: none; width: 40px; height: 24px; border-radius: 999px;
+            background: var(--border); transition: background 0.15s;
+        }
+        .view-link-switch__track::after {
+            content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px;
+            border-radius: 50%; background: var(--surface); box-shadow: var(--shadow-sm); transition: transform 0.15s;
+        }
+        .view-link-switch[aria-checked="true"] .view-link-switch__track { background: var(--primary); }
+        .view-link-switch[aria-checked="true"] .view-link-switch__track::after { transform: translateX(16px); }
+        .view-link-switch:focus-visible { outline: none; }
+        .view-link-switch:focus-visible .view-link-switch__track { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .view-link-switch:disabled { cursor: progress; }
+        @media (hover: hover) { .view-link-switch:hover .view-link-switch__track { box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 15%, transparent); } }
+        @media (pointer: coarse) {
+            .view-link-switch { min-height: 44px; }
+            .view-link-switch__track { width: 44px; height: 26px; }
+            .view-link-switch__track::after { width: 20px; height: 20px; }
+            .view-link-switch[aria-checked="true"] .view-link-switch__track::after { transform: translateX(18px); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .view-link-switch__track, .view-link-switch__track::after { transition: none; }
+        }
+
+        /* "Link the shown" in the Add dialog; the quiet rows under Family in the person's detail. */
+        .rel-view-link-note { margin: 0 0 14px; padding: 9px 12px; border-radius: 8px; background: var(--info-soft); }
+        .rel-view-link-note__text { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 13px; color: var(--text); }
+        .rel-view-link-note__link { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; max-width: 100%; text-align: left; }
+        @media (pointer: coarse) { .rel-view-link-note__link { min-height: 44px; } }
+        .pm-view-links { margin: -14px 0 22px; display: flex; flex-direction: column; gap: 2px; }
+        .pm-view-link-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: 13px; line-height: 1.4; color: var(--text-faint); }
+        .pm-view-link-state { color: var(--ghost-name); font-weight: 500; }
+        .pm-view-link-row .link-button { padding: 0; font-size: 13px; }
+        @media (pointer: coarse) { .pm-view-link-row .link-button { min-height: 44px; } }
+        .kinship-result .kinship-no-real { margin: 0 0 6px; }
+        .kinship-result .kinship-view-only { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--ghost-name); font-weight: 500; }
+
         /* "Above the person" in What the research knows. */
         .research-edge-section details > summary { cursor: pointer; list-style: none; display: flex; align-items: baseline; gap: 8px; }
         .research-edge-section details > summary::-webkit-details-marker { display: none; }
@@ -11016,9 +11077,45 @@
         }
         .person-research-decided:last-child { border-bottom: 0; }
         .person-research-decision { color: var(--text-light); font-size: 13px; }
-        .person-research-hypo { padding: 4px 0 8px; }
-        .person-research-hypo-title { font-size: 14px; font-weight: 600; color: var(--text); }
-        .person-research-hypo-note { margin: 2px 0 0; font-size: 13px; line-height: 1.45; color: var(--text-light); white-space: pre-line; }
+        /* Hypotheses: the question, "H0022 · open · 3 versions · …", the versions in a box. */
+        .person-research-hypos { display: flex; flex-direction: column; }
+        .person-research-hypo { padding: 6px 0 12px; }
+        .person-research-hypo + .person-research-hypo { border-top: 1px solid var(--divider); padding-top: 14px; }
+        .person-research-hypo-head {
+            display: flex; flex-direction: column; gap: 2px; cursor: pointer; list-style: none; border-radius: 6px;
+        }
+        .person-research-hypo-head::-webkit-details-marker { display: none; }
+        .person-research-hypo-head:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .person-research-hypo-title { font-size: 15px; font-weight: 600; color: var(--text); }
+        .person-research-hypo-title::after { content: ' ▾'; font-size: 10px; font-weight: 400; color: var(--text-faint); }
+        .person-research-hypo:not([open]) .person-research-hypo-title::after { content: ' ▸'; }
+        .person-research-hypo-meta { font-size: 13px; line-height: 1.4; color: var(--text-light); }
+        .person-research-hypo-note { margin: 4px 0 0; font-size: 13px; line-height: 1.45; color: var(--text-light); white-space: pre-line; }
+        .person-research-variants { margin-top: 10px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+        .person-research-variant { display: flex; align-items: center; gap: 12px; padding: 10px 14px; }
+        .person-research-variant + .person-research-variant { border-top: 1px solid var(--divider); }
+        .person-research-variant.is-shown { background: color-mix(in srgb, var(--ghost-bg) 70%, var(--surface)); }
+        .prv-id { flex: none; width: 14px; font-weight: 600; color: var(--text-light); }
+        .prv-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+        .prv-title {
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere;
+            font-size: 15px; line-height: 1.35; color: var(--text);
+        }
+        button.prv-title { padding: 0; border: 0; background: none; font-family: inherit; text-align: left; cursor: pointer; }
+        button.prv-title:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 4px; }
+        .person-research-variant.is-expanded .prv-title { display: block; -webkit-line-clamp: none; overflow: visible; }
+        .person-research-variant.is-chosen .prv-title { font-weight: 600; }
+        .prv-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0 6px; font-size: 13px; color: var(--text-faint); }
+        .prv-meta .link-button.prv-find { padding: 0; font-size: 13px; font-weight: 600; color: var(--primary-dark, var(--primary)); }
+        @media (pointer: coarse) { .prv-meta .link-button.prv-find { min-height: 44px; } }
+        /* Phase 2 puts "Link for real" here, at the shown version; empty in phase 1. */
+        .person-research-hypo-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+        .person-research-hypo-actions:empty { display: none; }
+        .rep-hypo-go { padding: 0; font-weight: 600; text-align: left; }
+        @media (max-width: 640px) {
+            .person-research-variant { padding: 10px 12px; gap: 10px; }
+            .view-link-switch__label { display: none; }
+        }
         .person-research-years { white-space: nowrap; font-variant-numeric: tabular-nums; }
         .person-research-result--found { color: var(--primary); font-weight: 600; }
         .person-research-result--none { color: var(--text-faint); }
@@ -13791,6 +13888,8 @@
                         <span data-i18n="buttons.manageRelationships">Manage relationships</span>
                     </button>
                 </div>
+                <!-- Linked in the view only: what the view shows of the person beside the real links (ui/view-links-ui.ts). -->
+                <div class="pm-view-links" id="pm-view-links" hidden></div>
 
                 <!-- Life timeline (R2) — read-only, collapsible; hidden when the
                      person has fewer than two dated points. -->
@@ -14220,6 +14319,7 @@
                 <h2 id="relation-title"></h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeRelationModal()">&times;</button>
             </div>
+            <div id="rel-view-link-note" class="rel-view-link-note" hidden></div>
             <div id="rel-other-parent" class="form-group" style="display:none;">
                 <label for="rel-other-parent-select" id="rel-other-parent-label"></label>
                 <select id="rel-other-parent-select"></select>

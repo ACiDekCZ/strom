@@ -334,7 +334,8 @@ export const dialogsMethods = uiModule({
 
     /**
      * Ask before deleting a person: title names them, the message lists the
-     * links that vanish with them, and says Undo brings it all back.
+     * links that vanish with them (and a shown link "linked in the view
+     * only" that stands on them), and says Undo brings it all back.
      * @param lead optional sentence put before the links (e.g. "has no
      *   relationships left" when offered after removing the last one).
      */
@@ -353,7 +354,10 @@ export const dialogsMethods = uiModule({
             if (other) partners.add(other);
         }
         const links = d.personLinks(person.gender, person.parentIds.length, partners.size, person.childIds.length);
-        const message = [lead, links, d.undoHint].filter(Boolean).join(' ');
+        // A link "linked in the view only" that stands on the person: it no longer holds afterwards.
+        const shown = (TreeRenderer.getViewLayer()?.links ?? []).filter(l => l.anchorId === personId || l.islandIds.includes(personId));
+        const viewLinks = shown.map(l => strings.viewLinks.deleteNote(l.hypo, l.variant)).join(' ');
+        const message = [lead, links, viewLinks, d.undoHint].filter(Boolean).join(' ');
         return this.showConfirm(message, d.deletePersonTitle(label), {
             confirmLabel: d.deletePerson,
             cancel: cancelLabel,

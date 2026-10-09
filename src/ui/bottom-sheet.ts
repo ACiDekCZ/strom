@@ -91,18 +91,24 @@ export const bottomSheetMethods = uiModule({
         const add = actions.find(a => a.chips);
         // Under the tiles: "Add" first, then the rows — those about the person
         // as one group, the last group ("Research ›", "More ›") on its own.
-        const rest = actions.map((a, index) => ({ a, index })).filter(({ a }) => !TILE_ACTIONS.includes(a.action) && !a.chips);
+        // A ghost's own block above the tiles; "Show as linked" and its kin right under them (by "Focus").
+        const lead = actions.map((a, index) => ({ a, index })).filter(({ a }) => a.lead);
+        const top = actions.map((a, index) => ({ a, index })).filter(({ a }) => a.sheetTop);
+        const rest = actions.map((a, index) => ({ a, index })).filter(({ a }) => !TILE_ACTIONS.includes(a.action) && !a.chips && !a.lead && !a.sheetTop);
         const lastGroup = rest.map(r => !!r.a.divider).lastIndexOf(true);
         rest.forEach((r, i) => { if (i < lastGroup || lastGroup === -1) r.a = { ...r.a, divider: i === 0 && !!add }; });
 
         const itemHtml = (a: PersonMenuAction, index: number): string => {
             const divider = a.divider ? '<div class="bottom-sheet-divider" role="separator"></div>' : '';
             const header = a.header ? `<div class="bottom-sheet-section" role="presentation">${esc(a.header)}</div>` : '';
+            if (a.caption) {
+                return `${divider}${header}<div class="bottom-sheet-caption" role="menuitem" aria-disabled="true"><span class="view-link-icon" aria-hidden="true"></span><span>${esc(a.label)}</span></div>`;
+            }
             if (a.submenu) {
                 return `${divider}${header}<button type="button" class="bottom-sheet-item sheet-submenu-row" role="menuitem" aria-haspopup="menu" data-submenu="${index}" data-menu="${esc(a.action)}"${menuItemAria(a)}>${menuItemBody(a)}</button>`;
             }
             // Keep the class out of the attribute (see context-menu.ts note).
-            const cls = a.danger ? 'bottom-sheet-item danger' : 'bottom-sheet-item';
+            const cls = a.danger ? 'bottom-sheet-item danger' : a.strong ? 'bottom-sheet-item is-strong' : 'bottom-sheet-item';
             return `${divider}${header}<button type="button" class="${cls}" role="menuitem" data-action="${esc(a.action)}"${menuItemAria(a)}>${menuItemBody(a)}</button>`;
         };
         const tilesHtml = tiles.length === 0 ? '' : `<div class="sheet-tiles" style="--tiles: ${tiles.length}">`
@@ -124,8 +130,10 @@ export const bottomSheetMethods = uiModule({
                 <div class="sheet-page sheet-page-root">
                     ${personName ? `<div class="bottom-sheet-menu-title">${esc(personName)}</div>` : ''}
                     <div class="bottom-sheet-items">
+                        ${lead.length > 0 ? `<div class="sheet-view-link-head">${lead.map(r => itemHtml(r.a, r.index)).join('')}</div><div class="bottom-sheet-divider" role="separator"></div>` : ''}
                         ${this.personSignalsMenuHtml(personId, true, 'bottom-sheet-item')}
                         ${tilesHtml}
+                        ${top.map(r => itemHtml({ ...r.a, divider: false }, r.index)).join('')}
                         ${addHtml}
                         ${rest.map(r => itemHtml(r.a, r.index)).join('')}
                     </div>

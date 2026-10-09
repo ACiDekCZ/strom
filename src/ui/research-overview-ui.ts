@@ -30,6 +30,7 @@ import {
 import { taskDirectionName } from './research-directions-ui.js';
 import { researchValueText } from './person-research-ui.js';
 import { shownName } from '../person-name.js';
+import { isOpenHypothesis } from '../view-links.js';
 
 /** The overview stays open over a reload / the next following (per device). */
 const OPEN_KEY = 'strom-live-overview-open';
@@ -579,6 +580,7 @@ export const researchOverviewMethods = uiModule({
                 rows.push({ person: p, text: `${fullName(p)} · ${what}: ${c.values.map(v => researchValueText(c.fact, v.value)).join(' × ')}`, conflict: true });
             }
             for (const h of p.research?.hypotheses ?? []) {
+                if (!isOpenHypothesis(h)) continue;
                 rows.push({ person: p, text: `${fullName(p)} · ${L.hypothesisRow(h.title)}`, conflict: false });
             }
         }

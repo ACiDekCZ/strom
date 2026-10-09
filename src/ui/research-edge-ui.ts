@@ -422,7 +422,10 @@ export const researchEdgeUiMethods = uiModule({
                         h.tests.length > 0 ? `${esc(re.hypoTests)} ${esc(h.tests.join(', '))}` : '',
                     ].filter(Boolean);
                     return `<div class="rep-hypo">
-                        <div class="rep-hypo-title">${esc(titles.get(h.id) ?? h.id)}</div>
+                        ${titles.has(h.id)
+                            // Its versions are in the hypotheses below: a link there.
+                            ? `<button type="button" class="link-button rep-hypo-title rep-hypo-go" data-hypo="${esc(h.id)}">${esc(titles.get(h.id)!)}</button>`
+                            : `<div class="rep-hypo-title">${esc(h.id)}</div>`}
                         ${bits.length > 0 ? `<div class="rep-hypo-meta">${bits.join(' · ')}</div>` : ''}
                     </div>`;
                 }).join('')}
@@ -473,6 +476,9 @@ export const researchEdgeUiMethods = uiModule({
                 this.closePersonResearchDialog();
                 TreeRenderer.setFocus(btn.dataset.person as PersonId);
             };
+        });
+        root.querySelectorAll<HTMLButtonElement>('.rep-hypo-go').forEach(btn => {
+            btn.onclick = () => { this.openResearchHypothesis(root, btn.dataset.hypo ?? ''); };
         });
         root.querySelector<HTMLButtonElement>('.rep-conflicts')?.addEventListener('click', () => {
             root.querySelector('.person-research-conflict, .person-research-decided')?.scrollIntoView({ block: 'start', behavior: 'smooth' });

@@ -9,17 +9,20 @@
  * step, nothing to send, no new version.
  */
 
-import { DataManager } from '../data.js';
+import { DataManager, auditPersonName } from '../data.js';
+import { AuditLogManager } from '../audit-log.js';
 import { TreeRenderer } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
 import { strings } from '../strings.js';
 import { PersonId } from '../types.js';
 import { shownName } from '../person-name.js';
 import {
-    ViewLink, ViewLinkCandidate, ViewLinkChoice, ViewLinkOffer, isViewLinksMaster, loadViewLinks, saveViewLinks,
-    setViewLinksMaster, showViewLink, unlinkViewLink, viewLinkContext, viewLinkDependents, viewLinkIsland, viewLinkOffers,
+    VIEW_LINK_VIEWS, ViewLink, ViewLinkCandidate, ViewLinkChoice, ViewLinkOffer, isViewLinksMaster, loadViewLinks, saveViewLinks,
+    setViewLinksMaster, showViewLink, unlinkViewLink, viewLinkCandidates, viewLinkContext, viewLinkDependents, viewLinkIsland,
+    viewLinkOffers,
 } from '../view-links.js';
 import { uiModule } from './module.js';
+import type { PersonMenuAction } from './context-menu.js';
 
 const MENU_ID = 'view-link-menu';
 const CHAIN_ID = 'view-link-chain';
@@ -225,6 +228,189 @@ export const viewLinksUiMethods = uiModule({
             cancel.onclick = () => done(false);
             ok.onclick = () => done(true);
         });
+    },
+
+    // ==================== THE CARD'S MENU AND DETAIL ====================
+
+    /** The record a person's card stands for as a ghost in the current view (one of a shown family), or null. */
+    viewLinkGhostOf(personId: PersonId): ViewLink | null {
+        return TreeRenderer.getViewLayer()?.ghostOf.get(personId) ?? null;
+    },
+
+    /**
+     * What the person menu (context menu and bottom sheet) offers of the view
+     * links. `head`: a ghost's own block on top — its state (not an action),
+     * "Unlink", "What research knows about the link" (phase 2 adds "Link for
+     * real" under it; nothing is drawn for it now). `afterFocus`: right after
+     * "Focus" — "Unlink the shown parents / partner" for a person whose
+     * family is shown, "Show as linked" for a version that can be shown here
+     * (one version: at once; more: a second level, a heading per hypothesis).
+     * Nothing where the feature does not show; `afterFocus` only in the views
+     * that draw the links.
+     */
+    personViewLinkMenu(personId: PersonId): { head: PersonMenuAction[]; afterFocus: PersonMenuAction[] } {
+        const out: { head: PersonMenuAction[]; afterFocus: PersonMenuAction[] } = { head: [], afterFocus: [] };
+        if (!TreeRenderer.viewLinksOffered() || !DataManager.getCurrentTreeId()) return out;
+        const v = strings.viewLinks;
+        const ghost = this.viewLinkGhostOf(personId);
+        if (ghost) {
+            out.head.push(
+                { action: 'view-link-caption', label: v.caption(ghost.hypo, ghost.variant), caption: true, lead: true },
+                { action: `view-link-unlink:${ghost.hypo}`, label: v.unlink, strong: true, lead: true },
+                { action: `view-link-about:${ghost.hypo}`, label: v.aboutLink, lead: true },
+                // Phase 2: "Link for real" (hypothesis.decide) comes here.
+            );
+        }
+        if (!VIEW_LINK_VIEWS.includes(TreeRenderer.getViewMode())) return out;
+        const shown = TreeRenderer.getViewLayer()?.links ?? [];
+        for (const link of shown) {
+            if (link.anchorId !== personId) continue;
+            out.afterFocus.push({
+                action: `view-link-unlink:${link.hypo}`, sheetTop: true,
+                label: link.kind === 'partners' ? v.unlinkPartner : link.islandIds.length === 1 ? v.unlinkParent : v.unlinkParents,
+            });
+        }
+        // A person of a family off the tree offers its links only while that family stands in the view (chained).
+        if (DataManager.getPerson(personId)?.research?.island && !ghost) return out;
+        const data = DataManager.getData();
+        const ctx = viewLinkContext(data);
+        const offers = viewLinkCandidates(data, ctx)
+            .filter(c => c.anchorId === personId && c.state === 'draw' && !shown.some(l => l.hypo === c.hypo));
+        if (offers.length === 1) {
+            const c = offers[0];
+            out.afterFocus.push({ action: `view-link-show:${c.hypo}:${c.variant}`, label: v.show, sheetTop: true });
+        } else if (offers.length > 1) {
+            const submenu = offers.map((c, i): PersonMenuAction => {
+                const h = ctx.hypotheses.get(c.hypo);
+                const title = h?.variants?.find(x => x.id === c.variant)?.title ?? '';
+                const people = `+ ${viewLinkIsland(data, c, ctx).length}`;
+                const first = i === 0 || offers[i - 1].hypo !== c.hypo;
+                return {
+                    action: `view-link-show:${c.hypo}:${c.variant}`, label: v.version(c.variant),
+                    note: title ? `${clip(title, 40)} · ${people}` : people,
+                    ...(first ? { header: h?.title ? `${c.hypo} · ${h.title}` : c.hypo, divider: i > 0 } : {}),
+                };
+            });
+            out.afterFocus.push({ action: 'view-link-show-menu', label: v.showMenu, submenu, sheetTop: true });
+        }
+        return out;
+    },
+
+    /** Run a view link row of the person menu ("view-link-show:H0022:B", "view-link-unlink:H0022", "view-link-about:H0022"). */
+    runViewLinkMenuAction(personId: PersonId, action: string): void {
+        const [, what, hypo, variant] = /^view-link-(show|unlink|about):(H\d+)(?::([A-Z]+))?$/.exec(action) ?? [];
+        if (!what || !hypo) return;
+        if (what === 'unlink') {
+            void this.viewLinkUnlink(hypo, { restoreFocus: true });
+            return;
+        }
+        if (what === 'about') {
+            const treeId = DataManager.getCurrentTreeId();
+            const link = treeId ? loadViewLinks(treeId).find(l => l.hypo === hypo) : null;
+            this.clearDialogStack();
+            this.showPersonResearchDialog(link?.anchorId ?? personId, { hypo: { id: hypo, ...(link ? { variant: link.variant } : {}) } });
+            return;
+        }
+        const c = viewLinkCandidates(DataManager.getData()).find(x => x.hypo === hypo && x.variant === variant && x.state === 'draw');
+        if (!c) return;
+        const { kind, anchorId, islandIds } = c;
+        void this.viewLinkShow({ hypo, variant: c.variant, kind, anchorId, islandIds }, { focusLabel: true });
+    },
+
+    /**
+     * "Find": the place of a view link in the tree — the person it links to
+     * and the family as far as the view shows it (only the person while the
+     * main switch is off). From a view that never draws the links, the
+     * Family view at the person.
+     */
+    async viewLinkFind(link: Pick<ViewLink, 'anchorId' | 'islandIds'>): Promise<void> {
+        if (!VIEW_LINK_VIEWS.includes(TreeRenderer.getViewMode())) {
+            TreeRenderer.presetViewMode('family');
+            await TreeRenderer.setFocus(link.anchorId);
+        } else {
+            // The person out of the view, or the family shown but not reached from the focus: at the person.
+            const shown = !!TreeRenderer.getViewLayer()?.ghostOf.has(link.islandIds[0]);
+            if (!TreeRenderer.isVisible(link.anchorId) || (shown && !link.islandIds.some(id => TreeRenderer.isVisible(id)))) {
+                await TreeRenderer.setFocus(link.anchorId);
+            }
+        }
+        const data = DataManager.getData();
+        ZoomPan.fitPersons([link.anchorId, ...viewLinkIsland(data, link)].filter(id => TreeRenderer.isVisible(id)));
+    },
+
+    /**
+     * The person's detail: under the Family section (real links only), a
+     * quiet row per link of the view that touches the person — "View only:
+     * father Jakub Horák · H0022 B · Unlink" — and for a ghost its state
+     * (the card's tooltip row, which a touch screen never shows). Empty when
+     * nothing of the view touches the person.
+     */
+    personViewLinkRowsHtml(personId: PersonId): string {
+        const layer = TreeRenderer.getViewLayer();
+        if (!layer) return '';
+        const v = strings.viewLinks;
+        const e = (t: string): string => this.escapeHtml(t);
+        const rows: string[] = [];
+        const ghost = layer.ghostOf.get(personId);
+        if (ghost) {
+            rows.push(`<div class="pm-view-link-row pm-view-link-state"><span class="view-link-icon" aria-hidden="true"></span>${e(v.tooltip(ghost.hypo, ghost.variant))}</div>`);
+        }
+        const role = (id: PersonId, as: 'parent' | 'child' | 'partner'): string => {
+            const g = DataManager.getPerson(id)?.gender;
+            if (as === 'partner') return v.role.partner;
+            if (as === 'parent') return g === 'male' ? v.role.father : g === 'female' ? v.role.mother : v.role.parent;
+            return g === 'male' ? v.role.son : g === 'female' ? v.role.daughter : v.role.child;
+        };
+        for (const link of layer.links) {
+            let text = '';
+            if (link.anchorId === personId) {
+                if (link.kind === 'partners') text = v.viewOnlyRow(v.role.partner, personName(link.islandIds[0]), link.hypo, link.variant);
+                else if (link.islandIds.length === 1) text = v.viewOnlyRow(role(link.islandIds[0], 'parent'), personName(link.islandIds[0]), link.hypo, link.variant);
+                else text = v.viewOnlyRow(v.role.parents, v.names(link.islandIds.map(personName)), link.hypo, link.variant);
+            } else if (link.islandIds.includes(personId)) {
+                text = v.viewOnlyRow(role(link.anchorId, link.kind === 'partners' ? 'partner' : 'child'), personName(link.anchorId), link.hypo, link.variant);
+            }
+            if (!text) continue;
+            rows.push(`<div class="pm-view-link-row" data-view-hypo="${e(link.hypo)}"><span class="pm-view-link-text">${e(text)}</span>`
+                + ` · <button type="button" class="link-button pm-view-link-unlink" data-view-hypo="${e(link.hypo)}">${e(v.unlink)}</button></div>`);
+        }
+        return rows.join('');
+    },
+
+    /** The note of the "Add" dialog for a person whose parents are shown in the view only (null: none). */
+    viewLinkShownParents(personId: PersonId): ViewLink | null {
+        return TreeRenderer.getViewLayer()?.links.find(l => l.kind === 'child' && l.anchorId === personId) ?? null;
+    },
+
+    /**
+     * "Link the shown: Jakub Horák and Marie Pokorná" in the "Add parent"
+     * dialog: the shown parents become the person's real parents — a change
+     * of the tree like any link made by hand (one undo step, sent to the
+     * research), after which the record is real.
+     */
+    linkShownParents(personId: PersonId): boolean {
+        const link = this.viewLinkShownParents(personId);
+        if (!link || DataManager.isReadOnly()) return false;
+        const parents = link.islandIds.filter(id => this.canLinkRelation(personId, id, 'parent'));
+        if (parents.length !== link.islandIds.length) {
+            this.showLinkRefused();
+            return false;
+        }
+        const person = DataManager.getPerson(personId);
+        // Both parents first, then their family (a "?" for a missing one only after both are in).
+        AuditLogManager.beginBatch();
+        DataManager.runBatch(null, () => {
+            for (const parentId of parents) DataManager.addParentChild(parentId, personId);
+            if (parents.length === 2) {
+                const union = DataManager.getPartnerships(parents[0]).find(u => u.person1Id === parents[1] || u.person2Id === parents[1])
+                    ?? DataManager.createPartnership(parents[0], parents[1]);
+                if (union) DataManager.addParentChild(parents[0], personId, union.id);
+            }
+            DataManager.ensureSingleParentFamilies();
+        });
+        AuditLogManager.endBatch(DataManager.getCurrentTreeId(), 'person.create',
+            strings.auditLog.addedParent(strings.viewLinks.names(parents.map(id => auditPersonName(DataManager.getPerson(id)))), auditPersonName(person)));
+        return true;
     },
 
     // ==================== MENUS ====================

@@ -42,6 +42,25 @@ export interface PersonMenuAction {
     submenu?: PersonMenuAction[];
     /** A grid of buttons instead of a row (the "Add" group). */
     chips?: PersonMenuAction[];
+    /** A state line, not an action (a ghost's "Linked in the view only · H0022 B", with its mark). */
+    caption?: boolean;
+    /** The row's label in a stronger weight (a ghost's "Unlink"). */
+    strong?: boolean;
+    /** Above everything else, also above the bottom sheet's tiles (a ghost's own block). */
+    lead?: boolean;
+    /** In the bottom sheet right under the tiles (where "Focus" is), not with the rows below "Add". */
+    sheetTop?: boolean;
+}
+
+/** The person menu with the rows of the view links: a ghost's block on top, the rest right after "Focus". */
+function withViewLinkRows(items: PersonMenuAction[], vl: { head: PersonMenuAction[]; afterFocus: PersonMenuAction[] }): PersonMenuAction[] {
+    let out = items;
+    if (vl.afterFocus.length > 0) {
+        const at = out.findIndex(a => a.action === 'focus') + 1;
+        out = [...out.slice(0, at), ...vl.afterFocus, ...out.slice(at)];
+    }
+    if (vl.head.length > 0) out = [...vl.head, ...out.map((a, i) => (i === 0 ? { ...a, divider: true } : a))];
+    return out;
 }
 
 /**
@@ -130,8 +149,10 @@ export const contextMenuMethods = uiModule({
             ...researchActions.map((a, i) => (i === 0 && head.length ? { ...a, divider: true } : a)),
         ]);
 
+        // Linked in the view only: never a change of the data, so offered in every variant.
+        const vl = this.personViewLinkMenu(personId);
         if (isViewMode) {
-            return [
+            return withViewLinkRows([
                 { action: 'focus', label: c.focus },
                 ...readItems(false),
                 ...group([
@@ -139,10 +160,10 @@ export const contextMenuMethods = uiModule({
                     { action: 'archives', label: c.archives },
                 ]),
                 ...group(research),
-            ];
+            ], vl);
         }
         if (isPersonLocked) {
-            return [
+            return withViewLinkRows([
                 { action: 'focus', label: c.focus },
                 // Read-only look at the record (the edit form in its locked mode).
                 { action: 'view', label: c.view },
@@ -151,10 +172,10 @@ export const contextMenuMethods = uiModule({
                     ...research,
                     ...(isTreeLocked ? [] : [{ action: 'toggle-lock', label: strings.lock.unlockPerson }]),
                 ]),
-            ];
+            ], vl);
         }
         const chip = (action: string, label: string, ariaLabel: string): PersonMenuAction => ({ action, label, ariaLabel });
-        return [
+        return withViewLinkRows([
             { action: 'focus', label: c.focus },
             { action: 'edit', label: c.edit },
             ...readItems(true),
@@ -180,11 +201,15 @@ export const contextMenuMethods = uiModule({
                     { action: 'delete', label: c.delete, danger: true, divider: true },
                 ]),
             ]),
-        ];
+        ], vl);
     },
 
     /** Run a person menu action (shared by context menu + bottom sheet). */
     runPersonMenuAction(personId: PersonId, action: string): void {
+        if (action.startsWith('view-link-')) {
+            this.runViewLinkMenuAction(personId, action);
+            return;
+        }
         switch (action) {
             case 'edit':
             case 'view':
@@ -281,6 +306,10 @@ export const contextMenuMethods = uiModule({
         return items.map((a, i) => {
             const divider = a.divider ? '<div class="context-menu-divider"></div>' : '';
             const header = a.header ? `<div class="menu-section-header" role="presentation">${this.escapeHtml(a.header)}</div>` : '';
+            // A state, not an action: read out, never reached by the arrows, nothing to run.
+            if (a.caption) {
+                return `${divider}${header}<div class="menu-caption" role="menuitem" aria-disabled="true"><span class="view-link-icon" aria-hidden="true"></span><span>${this.escapeHtml(a.label)}</span></div>`;
+            }
             if (a.chips) {
                 return `${divider}${header}<div class="menu-chip-grid" role="group" aria-label="${this.escapeHtml(a.label)}">`
                     + a.chips.map(ch => `<button type="button" class="context-menu-item menu-chip" role="menuitem" tabindex="-1" data-action="${ch.action}"${menuItemAria(ch)}>${this.escapeHtml(ch.label)}</button>`).join('')
@@ -292,7 +321,7 @@ export const contextMenuMethods = uiModule({
             // NB: keep the class value out of the attribute as a whole variable —
             // interpolating a `${... ? ... : ...}` directly inside class="context-menu…"
             // confuses the self-export HTML cleaner's regex once minified.
-            const cls = a.danger ? 'context-menu-item danger' : 'context-menu-item';
+            const cls = a.danger ? 'context-menu-item danger' : a.strong ? 'context-menu-item is-strong' : 'context-menu-item';
             return `${divider}${header}<div class="${cls}" role="menuitem" tabindex="-1" data-action="${a.action}"${menuItemAria(a)}>${menuItemBody(a)}</div>`;
         }).join('');
     },

@@ -124,6 +124,8 @@ export const personModalMethods = uiModule({
         // Relationships need a saved person; hide the whole section while adding.
         const relSectionAdd = document.getElementById('pm-relations-section');
         if (relSectionAdd) relSectionAdd.style.display = 'none';
+        const viewLinksAdd = document.getElementById('pm-view-links');
+        if (viewLinksAdd) viewLinksAdd.hidden = true;
         // Life timeline is built from a saved person's data — nothing to show yet.
         const lifelineAdd = document.getElementById('pm-lifeline-section');
         if (lifelineAdd) lifelineAdd.style.display = 'none';
@@ -757,6 +759,7 @@ export const personModalMethods = uiModule({
             if (relSectionLocked) relSectionLocked.style.display = 'none';
         }
         this.syncGenderSegment();
+        this.renderPersonViewLinkRows(id);
 
         // Life events section: visible for existing persons, list rendered fresh.
         const eventsSection = document.getElementById('events-section');
@@ -1382,6 +1385,23 @@ export const personModalMethods = uiModule({
         // After the very first person, offer to add the rest of the family — as
         // a non-blocking action toast, so it never interrupts other flows.
         if (createdFirstId) this.showFamilyOffer(createdFirstId);
+    },
+
+    /**
+     * Under the Family section (real links only): what the view shows of the
+     * person "linked in the view only", each with "Unlink" (the row goes, the
+     * tree is drawn again; the form stays as it is).
+     */
+    renderPersonViewLinkRows(personId: PersonId): void {
+        const host = document.getElementById('pm-view-links');
+        if (!host) return;
+        host.innerHTML = this.personViewLinkRowsHtml(personId);
+        host.hidden = !host.innerHTML;
+        host.querySelectorAll<HTMLButtonElement>('.pm-view-link-unlink').forEach(btn => {
+            btn.onclick = async () => {
+                if (await this.viewLinkUnlink(btn.dataset.viewHypo ?? '', { near: btn })) this.renderPersonViewLinkRows(personId);
+            };
+        });
     },
 
     async confirmDelete(personId: PersonId, parentDialogId?: string): Promise<void> {

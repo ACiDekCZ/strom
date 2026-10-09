@@ -1,6 +1,8 @@
 /**
  * Relationship calculator UI: pick a second person, show the kinship term
- * (Czech/English) and highlight the connecting path in the tree.
+ * (Czech/English) and highlight the connecting path in the tree. Only the
+ * tree's real links count; a path that only the links "linked in the view
+ * only" make is said apart (src/view-link-kinship.ts).
  */
 
 import { DataManager } from '../data.js';
@@ -9,6 +11,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { PersonId } from '../types.js';
 import { PersonPicker } from '../person-picker.js';
 import { findRelationship } from '../kinship.js';
+import { viewOnlyRelationship } from '../view-link-kinship.js';
 import { uiModule } from './module.js';
 import { shownName } from '../person-name.js';
 
@@ -75,15 +78,25 @@ export const kinshipUiMethods = uiModule({
                 const relation = findRelationship(treeData!, fromId, toId);
                 resultEl.style.display = 'block';
 
+                const cur = getCurrentLanguage();
+                const lang = cur === 'cs' ? 'cs' : cur === 'de' ? 'de' : 'en';
                 if (!relation) {
-                    resultEl.innerHTML = `<p>${strings.kinship.noRelation}</p>`;
+                    const viewOnly = viewOnlyRelationship(treeData!, TreeRenderer.getViewLayer()?.links ?? [], fromId, toId);
+                    if (viewOnly) {
+                        const v = strings.viewLinks;
+                        const ref = viewOnly.via.map(l => `${l.hypo} ${l.variant}`).join(', ');
+                        resultEl.innerHTML = `
+                            <p class="kinship-no-real">${this.escapeHtml(v.noReal)}</p>
+                            <p class="kinship-view-only"><span class="view-link-icon" aria-hidden="true"></span>${this.escapeHtml(v.viewOnlyRelation(viewOnly.relation.term[lang], ref))}</p>
+                        `;
+                    } else {
+                        resultEl.innerHTML = `<p>${strings.kinship.noRelation}</p>`;
+                    }
                     highlightBtn.hidden = true;
                     currentPath = [];
                     return;
                 }
 
-                const cur = getCurrentLanguage();
-                const lang = cur === 'cs' ? 'cs' : cur === 'de' ? 'de' : 'en';
                 const pathNames = relation.path.map(id => this.escapeHtml(personName(id))).join(' → ');
                 resultEl.innerHTML = `
                     <p class="kinship-sentence"><strong>${this.escapeHtml(personName(toId))}</strong>
