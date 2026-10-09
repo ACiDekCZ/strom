@@ -91,6 +91,8 @@ export const conflictPanelMethods = uiModule({
                 if (list.length === 0) return;
                 const at = list.indexOf(document.activeElement as HTMLElement);
                 e.preventDefault();
+                // The edit form's own trap (dialog-focus.ts) would pull the keyboard back into the form.
+                e.stopPropagation();
                 const next = e.shiftKey ? (at <= 0 ? list.length - 1 : at - 1) : (at < 0 || at === list.length - 1 ? 0 : at + 1);
                 list[next].focus();
             }
@@ -102,14 +104,15 @@ export const conflictPanelMethods = uiModule({
             this.closeResearchConflictPanel({ focus: false });
         };
         const place = (): void => { if (!sheet) this.placeResearchConflictPanel(); };
-        document.addEventListener('keydown', onKey, true);
+        // On the window, ahead of the form's own keys on the document (its Esc, its Tab trap).
+        window.addEventListener('keydown', onKey, true);
         document.addEventListener('pointerdown', onDown, true);
         window.addEventListener('resize', place);
         window.addEventListener('scroll', place, true);
         open = {
             personId, conflictId, tag, field, sheet,
             cleanup: () => {
-                document.removeEventListener('keydown', onKey, true);
+                window.removeEventListener('keydown', onKey, true);
                 document.removeEventListener('pointerdown', onDown, true);
                 window.removeEventListener('resize', place);
                 window.removeEventListener('scroll', place, true);

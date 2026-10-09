@@ -11306,7 +11306,8 @@
         }
         @media (hover: hover) { .modal button.prc-choice:not(:disabled):not([aria-busy="true"]):hover { background: var(--primary-soft); } }
         .modal button.prc-choice:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-        .modal button.prc-choice[aria-busy="true"] { background: var(--primary-soft); cursor: default; }
+        /* On --primary-soft the darker green reads in both themes (--primary falls under 4.5:1 in the dark). */
+        .modal button.prc-choice[aria-busy="true"] { background: var(--primary-soft); color: var(--primary-dark); cursor: default; }
         .modal button.prc-choice:disabled { border-color: var(--border); color: var(--text-ghost); cursor: default; }
         .prc-note { margin: 0; font-size: 12px; line-height: 1.45; color: var(--text-light); }
         .prc-link-note { margin: -2px 0 0; font-size: 12px; line-height: 1.45; color: var(--text-faint); }
@@ -11324,7 +11325,7 @@
             background: var(--primary); color: var(--on-primary); border: 1px solid var(--primary);
         }
         .prc-notice--error button.prc-notice-action { background: transparent; color: var(--diff-del-text); border-color: var(--danger); }
-        .prc-notice--info button.prc-notice-action { background: transparent; color: var(--primary); border-color: var(--primary); }
+        .prc-notice--info button.prc-notice-action { background: transparent; color: var(--primary-dark); border-color: var(--primary); }
         @media (hover: hover) {
             .modal .prc-notice--warn button.prc-notice-action:hover { background: var(--primary-dark); }
             .modal .prc-notice--error button.prc-notice-action:hover, .modal .prc-notice--info button.prc-notice-action:hover { background: var(--surface); }
@@ -11405,7 +11406,7 @@
         }
         @media (hover: hover) { .prc-panel-choice:not(:disabled):not([aria-busy="true"]):hover { background: var(--primary-soft); } }
         .prc-panel-choice:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-        .prc-panel-choice[aria-busy="true"] { background: var(--primary-soft); cursor: default; }
+        .prc-panel-choice[aria-busy="true"] { background: var(--primary-soft); color: var(--primary-dark); cursor: default; }
         .prc-panel-choice:disabled { border-color: var(--border); color: var(--text-ghost); cursor: default; }
         .prc-panel-note { grid-column: 1 / -1; margin: 0; font-size: 11.5px; line-height: 1.45; color: var(--text-light); }
         .prc-panel .prc-notice-action {
