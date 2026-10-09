@@ -1924,6 +1924,8 @@ export const researchSyncMethods = uiModule({
         this.refreshUnsavedForResearch();
         // A bridge that says whether it knows what variants connect: the view links show or go.
         this.viewLinksBridgeChanged();
+        // The conflicts' cards: how they are decided here, and whether sending comes first.
+        this.refreshResearchConflictCards();
     },
 
     /**

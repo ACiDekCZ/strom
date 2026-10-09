@@ -135,6 +135,24 @@ export const researchChangesMethods = uiModule({
      * copy no longer stands for the tie's base). Cached until the next edit.
      */
     researchChangesNow(): PersonChange[] | null {
+        const b = this.researchChangesBase();
+        if (!b) return null;
+        if (b === 'same') return [];
+        const { treeId, base, key } = b;
+        if (memo && memo.treeId === treeId && memo.key === key) return memo.list;
+        const list = diffByPerson(base, DataManager.getData());
+        memo = { treeId, key, list };
+        return list;
+    },
+
+    /**
+     * The tree as the research last had it — the copy kept since the last
+     * load or written send, the base of the changes per person (and of a
+     * conflict's "sending comes first"): 'same' while the open tree is in step
+     * with it; null when not known (no copy kept, still loading — the sync UI
+     * is refreshed once it is —, or the copy no longer stands for the tie's base).
+     */
+    researchChangesBase(): 'same' | { treeId: TreeId; base: StromData; key: string } | null {
         const ctx = this.researchSyncLink();
         if (!ctx) return null;
         const { treeId, link } = ctx;
@@ -160,7 +178,7 @@ export const researchChangesMethods = uiModule({
         // In step with the research: nothing to tell; a tree without a copy gets one now.
         if (fps.matchesBase) {
             if (!copy.base || copy.fp !== link.fingerprint) this.researchKeepCopy(treeId, DataManager.getData(), link.fingerprint);
-            return [];
+            return 'same';
         }
         const written = link.sent?.state === 'written' ? link.sent.fingerprint : '';
         // The send that made the copy was taken back: the research stands where it was before it (R6 of the N1 round).
@@ -168,11 +186,7 @@ export const researchChangesMethods = uiModule({
         const base = undone ? prevCopy!.base : copy.base;
         if (!undone && (!copy.base || !copy.fp || (copy.fp !== link.fingerprint && copy.fp !== written))) return null;
         if (!base) return null;
-        const key = `${undone ? 'u' : 'c'}:${fps.current}`;
-        if (memo && memo.treeId === treeId && memo.key === key) return memo.list;
-        const list = diffByPerson(base, DataManager.getData());
-        memo = { treeId, key, list };
-        return list;
+        return { treeId, base, key: `${undone ? 'u' : 'c'}:${fps.current}` };
     },
 
     /** As researchChangesNow, waiting for the copy to load when it is not yet. */

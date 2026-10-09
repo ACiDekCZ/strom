@@ -16,6 +16,7 @@ import { researchHypothesisNote, researchHypothesisState } from '../research-hyp
 import { formatFlexDate } from '../dates.js';
 import { parseGedcomDate, gedcomTagEventType } from '../ged-parser.js';
 import { researchConflictRef } from '../research-link.js';
+import { canDecideInApp } from '../research-decide.js';
 import { uiModule } from './module.js';
 import { normalizeModal } from './modal-skeleton.js';
 import { PersonMenuAction } from './context-menu.js';
@@ -135,8 +136,11 @@ export const personResearchMethods = uiModule({
             if (!id) return '<span class="person-research-nosource">–</span>';
             return `<button type="button" class="link-button person-research-source" data-source="${esc(id)}">${esc(sources[id].title)}</button>`;
         };
-        const openHtml = conflicts.filter(c => c.status === 'open').map(c => {
+        const openHtml = conflicts.filter(c => c.status === 'open' || this.researchConflictCardState(researchConflictRef(c.id) ?? '')).map(c => {
             const id = researchConflictRef(c.id);
+            // Made by an edit here, both sides said: the two sides with their choices (conflict-decide-ui.ts).
+            if (canDecideInApp(c, person) || (id && this.researchConflictCardState(id))) return this.researchConflictCardHtml(personId, c);
+            if (c.status !== 'open') return '';
             return `
                 <div class="person-research-conflict">
                     <div class="person-research-conflict-head">
@@ -147,6 +151,7 @@ export const personResearchMethods = uiModule({
                         <thead><tr><th scope="col">${esc(r.conflictValue)}</th><th scope="col">${esc(r.conflictSource)}</th></tr></thead>
                         <tbody>${c.values.map(v => `<tr><td>${esc(researchValueText(c.fact, v.value))}</td><td>${sourceCell(v)}</td></tr>`).join('')}</tbody>
                     </table>
+                    <p class="person-research-sources-only">${esc(strings.conflict.sourcesOnly)}</p>
                     ${canDecide && id ? `
                     <div class="person-research-conflict-actions">
                         <button type="button" class="link-button" data-conflict="${esc(id)}" data-do="decide">${esc(r.decide)}</button>${toAgent ? `
@@ -156,7 +161,7 @@ export const personResearchMethods = uiModule({
                     </div>` : ''}
                 </div>`;
         }).join('');
-        const decidedHtml = conflicts.filter(c => c.status === 'decided').map(c => {
+        const decidedHtml = conflicts.filter(c => c.status === 'decided' && !this.researchConflictCardState(researchConflictRef(c.id) ?? '')).map(c => {
             const values = c.values.map(v => researchValueText(c.fact, v.value)).join(' vs. ');
             // The decision is words ("1865 (S0001)"); a source only when the research names one.
             const decision = c.decision ? r.decided(c.decision.value, sourceTitle(c.decision)) : '';
@@ -177,8 +182,9 @@ export const personResearchMethods = uiModule({
         const overlay = document.createElement('div');
         overlay.className = 'modal-overlay active';
         overlay.id = DIALOG_ID;
+        overlay.dataset.person = personId;
         overlay.innerHTML = `
-            <div class="modal modal--md person-research-modal" role="dialog" data-dialog-kind="info" aria-modal="true" aria-labelledby="person-research-title"${opts.hypo ? ` data-open-hypo="${esc(opts.hypo.id)}"${opts.hypo.variant ? ` data-open-variant="${esc(opts.hypo.variant)}"` : ''}` : ''}>
+            <div class="modal modal--md person-research-modal${openHtml.includes('data-conflict-card=') ? ' person-research-modal--sides' : ''}" role="dialog" data-dialog-kind="info" aria-modal="true" aria-labelledby="person-research-title"${opts.hypo ? ` data-open-hypo="${esc(opts.hypo.id)}"${opts.hypo.variant ? ` data-open-variant="${esc(opts.hypo.variant)}"` : ''}` : ''}>
                 <div class="modal-header">
                     <div class="audit-log-heading">
                         <h2 id="person-research-title">${esc(r.knows)}</h2>
@@ -210,15 +216,34 @@ export const personResearchMethods = uiModule({
         overlay.onclick = (e) => { if (e.target === overlay) close(); };
         (overlay.querySelector('#person-research-close-x') as HTMLButtonElement).onclick = close;
         (overlay.querySelector('#person-research-close') as HTMLButtonElement).onclick = close;
-        overlay.querySelectorAll<HTMLButtonElement>('.person-research-source').forEach(btn => {
-            btn.onclick = () => this.showSourceViewer(btn.dataset.source ?? '', { personId });
-        });
-        overlay.querySelectorAll<HTMLButtonElement>('[data-conflict]').forEach(btn => {
-            btn.onclick = () => {
-                const agent = btn.dataset.do === 'agent';
-                const url = this.activeResearchLink('conflict', { conflict: btn.dataset.conflict, conflictDo: agent ? 'agent' : 'decide' });
+        // The conflicts' controls by delegation: a card is drawn again as its state moves (conflict-decide-ui.ts).
+        overlay.querySelector('.person-research-body')?.addEventListener('click', (e) => {
+            const target = e.target as HTMLElement;
+            if (!target.closest('.person-research-conflict')) return;
+            const source = target.closest<HTMLButtonElement>('.person-research-source');
+            if (source) {
+                this.showSourceViewer(source.dataset.source ?? '', { personId });
+                return;
+            }
+            const card = target.closest<HTMLElement>('[data-conflict-card]');
+            const decide = target.closest<HTMLButtonElement>('[data-decide]');
+            if (decide && card) {
+                if (decide.disabled || decide.getAttribute('aria-disabled') === 'true') return;
+                void this.decideResearchConflict(personId, card.dataset.conflictCard!, decide.dataset.decide === 'research' ? 'research' : 'user');
+                return;
+            }
+            const action = target.closest<HTMLButtonElement>('[data-notice-action]');
+            if (action && card) {
+                this.researchConflictNoticeAction(personId, card.dataset.conflictCard!, action.dataset.noticeAction ?? '');
+                return;
+            }
+            const link = target.closest<HTMLButtonElement>('[data-conflict]');
+            if (link && !link.disabled) {
+                const agent = link.dataset.do === 'agent';
+                const take = link.dataset.take === 'user' || link.dataset.take === 'research' ? link.dataset.take : undefined;
+                const url = this.activeResearchLink('conflict', { conflict: link.dataset.conflict, conflictDo: agent ? 'agent' : 'decide', ...(take ? { take } : {}) });
                 if (url) this.launchResearchLink(url, agent ? 'agent' : 'terminal');
-            };
+            }
         });
         this.bindResearchEdgeSection(overlay, personId);
         this.bindResearchHypotheses(overlay, personId);
