@@ -159,6 +159,31 @@ export const viewLinksListMethods = uiModule({
         return viewLinkCounts(this.viewLinksResolved()).on;
     },
 
+    /**
+     * The row an output's dialog carries while links are shown (the poster,
+     * the book, the view's export, a tree from the view, sharing): "View-only
+     * links (n) are not included", no action. Stands right after `after` (the
+     * preview, or what the output prints), and goes when none is shown or
+     * `show` is false.
+     */
+    renderViewLinksNote(after: Element | null, show = true): void {
+        const parent = after?.parentElement;
+        if (!after || !parent) return;
+        const n = show ? this.viewLinksShownCount() : 0;
+        let note = parent.querySelector<HTMLElement>(':scope > .view-links-note');
+        if (n === 0) {
+            note?.remove();
+            return;
+        }
+        if (!note) {
+            note = el('p', 'view-links-note');
+            note.append(el('span', 'view-link-icon view-link-icon--12'), el('span', 'view-links-note__text'));
+            note.firstElementChild!.setAttribute('aria-hidden', 'true');
+        }
+        if (after.nextElementSibling !== note) after.after(note);
+        note.querySelector('.view-links-note__text')!.textContent = strings.export.viewLinksNote(n);
+    },
+
     /** Where the list is offered: a tree whose research says what a variant would connect (src/view-links.ts viewLinksAvailable). */
     viewLinksListOffered(): boolean {
         return !!DataManager.getCurrentTreeId() && TreeRenderer.viewLinksOffered();

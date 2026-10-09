@@ -312,6 +312,8 @@ export const exportImageMethods = uiModule({
         const info = posterViewInfo();
         const labelEl = document.getElementById('poster-view-label');
         if (labelEl) labelEl.textContent = info.line;
+        // The poster lays out without the links shown only in the view: said under what it prints.
+        this.renderViewLinksNote(labelEl);
         document.querySelectorAll<HTMLButtonElement>('#poster-modal .menu-option').forEach(btn => {
             btn.disabled = info.blocked;
             btn.classList.toggle('disabled', info.blocked);

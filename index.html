@@ -7576,6 +7576,12 @@
         .view-links-settings-open { flex: none; font-size: 14px; font-weight: 600; }
         @media (pointer: coarse) { .view-links-settings-open { min-height: 44px; } }
 
+        /* An output's dialog while links are shown: "View-only links (n) are not included" (no action). */
+        .view-links-note {
+            display: flex; align-items: center; gap: 10px; margin: 0 0 14px; padding: 9px 12px;
+            border-radius: 8px; background: var(--info-soft); color: var(--text); font-size: 13px; line-height: 1.4;
+        }
+        .view-links-note__text { flex: 1; min-width: 0; }
         /* "Link the shown" in the Add dialog; the quiet rows under Family in the person's detail. */
         .rel-view-link-note { margin: 0 0 14px; padding: 9px 12px; border-radius: 8px; background: var(--info-soft); }
         .rel-view-link-note__text { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 13px; color: var(--text); }

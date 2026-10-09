@@ -37,6 +37,8 @@ export const bookUiMethods = uiModule({
         // the book, and no parent dialog can reopen on top of it.
         this.clearDialogStack();
         this.pushDialog('book-modal');
+        // The book's tree lays out without the links shown only in the view: said above the options.
+        this.renderViewLinksNote(document.querySelector('#book-modal .modal-header'));
         document.getElementById('book-modal')?.classList.add('active');
     },
 

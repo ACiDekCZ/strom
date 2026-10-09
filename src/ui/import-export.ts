@@ -127,6 +127,8 @@ export const importExportMethods = uiModule({
             if (note) note.textContent = strings.exportMenu.scopeWholeOnly;
             option.disabled = scope === 'view';
         });
+        // The view's people without anyone seen only through a link shown in the view.
+        this.renderViewLinksNote(document.getElementById('export-scope'), isActive && scope === 'view');
     },
 
     setExportScope(scope: 'tree' | 'view'): void {
@@ -340,7 +342,7 @@ export const importExportMethods = uiModule({
         this.closeExportDialog();
         this.importFromTreeManager = false;
         this.importToCurrentTree = false;
-        this.showImportTreeDialog(subtree, suggested);
+        this.showImportTreeDialog(subtree, suggested, false, true);
     },
 
     showImportDialog(): void {
@@ -1181,9 +1183,11 @@ export const importExportMethods = uiModule({
 
     // ---- IMPORT AS NEW TREE ----
     /**
-     * Show import tree dialog (for creating new tree from import)
+     * Show import tree dialog (for creating new tree from import). `fromView`:
+     * the people of the view (a tree from the view) — the dialog says when
+     * links shown only in the view are left out.
      */
-    showImportTreeDialog(data: StromData, suggestedName: string, fromTreeManager: boolean = false): void {
+    showImportTreeDialog(data: StromData, suggestedName: string, fromTreeManager: boolean = false, fromView = false): void {
         const modal = document.getElementById('import-tree-modal');
         const nameInput = document.getElementById('import-tree-name') as HTMLInputElement;
         const personsEl = document.getElementById('import-tree-persons');
@@ -1203,6 +1207,8 @@ export const importExportMethods = uiModule({
         // People, not the "?" stand-ins (as the tree's own count).
         personsEl.textContent = String(Object.values(data.persons).filter(p => p && !p.isPlaceholder).length);
         partnershipsEl.textContent = String(Object.keys(data.partnerships).length);
+        // A tree from the view: nobody seen only through a link shown in the view.
+        this.renderViewLinksNote(modal.querySelector('.import-tree-stats'), fromView);
 
         modal.classList.add('active');
         nameInput.focus();

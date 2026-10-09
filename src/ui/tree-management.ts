@@ -957,7 +957,7 @@ export const treeManagementMethods = uiModule({
         // Close new-tree-menu visually, keep tree-manager in stack for proper ESC navigation
         this.closeDialogById('new-tree-menu-modal');
         this.dialogStack.pop(); // Remove new-tree-menu-modal, keep tree-manager
-        this.showImportTreeDialog(focusedData, strings.treeManager.defaultTreeName, true);
+        this.showImportTreeDialog(focusedData, strings.treeManager.defaultTreeName, true, true);
     },
 
     // ---- NEW TREE DIALOG ----

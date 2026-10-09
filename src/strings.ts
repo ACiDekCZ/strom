@@ -2412,7 +2412,9 @@ const stringsEN = {
     // Export
     export: {
         failed: 'Export failed. Please try again.',
-        devModeNotSupported: 'Export app is only available from the built version (strom.html). Run "npm run build" first.'
+        devModeNotSupported: 'Export app is only available from the built version (strom.html). Run "npm run build" first.',
+        /** Under an output's options while links "linked in the view only" are shown. */
+        viewLinksNote: (n: number) => `View-only links (${n}) are not included`,
     },
 
     // Focus mode
@@ -6165,7 +6167,8 @@ const stringsCZ: StringsType = {
     // Export
     export: {
         failed: 'Export selhal. Pomůže to zkusit znovu.',
-        devModeNotSupported: 'Export aplikace je dostupný pouze ze sestaveného souboru (strom.html). Nejprve je potřeba spustit „npm run build“.'
+        devModeNotSupported: 'Export aplikace je dostupný pouze ze sestaveného souboru (strom.html). Nejprve je potřeba spustit „npm run build“.',
+        viewLinksNote: (n: number) => `Připojení jen v zobrazení (${n}) se do výstupu nepřenášejí`,
     },
 
     // Focus mode
@@ -9890,7 +9893,8 @@ const stringsDE: StringsType = {
     // Export
     export: {
         failed: 'Export fehlgeschlagen. Bitte erneut versuchen.',
-        devModeNotSupported: 'App exportieren ist nur aus der gebauten Version (strom.html) verfügbar. Zuerst „npm run build“ ausführen.'
+        devModeNotSupported: 'App exportieren ist nur aus der gebauten Version (strom.html) verfügbar. Zuerst „npm run build“ ausführen.',
+        viewLinksNote: (n: number) => `Nur angezeigte Verbindungen (${n}) werden nicht übernommen`,
     },
 
     // Focus mode

@@ -60,6 +60,8 @@ export const shareUiMethods = uiModule({
         // Reveal "send only changes" only when a baseline exists for this tree.
         void this.refreshShareScopeOption();
         this.onShareScopeChange();
+        // Neither the whole tree nor a branch carries the links shown only in the view.
+        this.renderViewLinksNote(modal.querySelector('.modal-description'));
 
         modal.classList.add('active');
         autoGrowAll(modal, '#share-message');

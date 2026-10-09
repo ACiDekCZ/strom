@@ -673,6 +673,28 @@ notice. Another window of the tree follows a change of the records (a
 (`TreeRenderer.setViewLinksBridge`) must name `hypothesis.links` once it
 answered in the page, else the data alone decide.
 
+Outputs (`TreeRenderer.outputLayout`): the poster (SVG, PNG, the tiled
+print), the book's tree page and "the people of the view" (export of the
+view, a tree from the view, sharing a branch, the presentation's stops, the
+counts) take the current view laid out again without the links, once per
+render. A card of details (Detailed, Register, Custom) is measured again for
+the people that layout holds (`customCardsOf`: the screen's card is as wide
+as a shown family's longest text too), exactly as the screen would measure it
+without the links; `getPosterCardBox` / `getPosterCardMetrics` give that box
+and its columns, `getOutputFocusDepth` the depth the poster names (a shown
+family's generations count on screen only). The browser's own print
+(beforeprint / afterprint, wired in `initViewLinks`) lays the view out
+without the links while it prints (`TreeRenderer.setPrinting`: the render
+finishes within the event, the cross-tree data being cached by then) and
+draws it as before afterwards, the focus depth given back; a print
+stylesheet hides ghosts, virtual lines, labels, the indicator and the list
+whatever happens. The poster's own sheet print is left alone. The output
+dialogs (poster, book, the export dialog in the view's scope, a tree from the
+view, sharing) carry one row "View-only links (n) are not included"
+(`renderViewLinksNote`, n = `viewLinksShownCount`) while any is shown.
+GEDCOM, JSON, CSV, the app file, the book's text, the fan, the timeline,
+loading a research version and what will be sent never read the records.
+
 ---
 
 ## 9. Testing
