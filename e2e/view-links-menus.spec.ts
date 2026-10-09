@@ -92,6 +92,18 @@ async function openResearchDialog(page: Page, refn: string): Promise<Locator> {
     return dialog;
 }
 
+/**
+ * The person's sheet once it stands in place: it slides up in the frame after
+ * it is added (`.active`), and rects taken before then are off screen — or one
+ * before and one after, which made the order checks below fail at random.
+ */
+async function settledSheet(page: Page): Promise<Locator> {
+    const sheet = page.locator('.bottom-sheet-overlay.active .bottom-sheet-person');
+    await expect(sheet).toBeVisible();
+    await sheet.evaluate(el => Promise.all(el.getAnimations().map(a => a.finished)));
+    return sheet;
+}
+
 const hypo = (dialog: Locator, id: string) => dialog.locator(`.person-research-hypo[data-hypo="${id}"]`);
 const variant = (dialog: Locator, h: string, v: string) => hypo(dialog, h).locator(`.person-research-variant[data-variant="${v}"]`);
 
@@ -513,8 +525,7 @@ test.describe('linked in the view only: a phone (touch)', () => {
         await setup(page);
         await store(page, [B]);
         await card(page, 'Jakub').tap();
-        const sheet = page.locator('.bottom-sheet-person');
-        await expect(sheet).toBeVisible();
+        const sheet = await settledSheet(page);
         const head = sheet.locator('.sheet-view-link-head');
         await expect(head.locator('.bottom-sheet-caption')).toHaveText('Linked in the view only · H0022 B');
         await expect(head.locator('.bottom-sheet-item')).toHaveText(['Unlink', 'What research knows about the link']);
@@ -534,7 +545,7 @@ test.describe('linked in the view only: a phone (touch)', () => {
         await setup(page);
         await focusOn(page, 'P0010');
         await card(page, 'Václav').tap();
-        const sheet = page.locator('.bottom-sheet-person');
+        const sheet = await settledSheet(page);
         const row = sheet.locator('.sheet-page-root [data-menu="view-link-show-menu"]');
         await expect(row).toBeVisible();
         // Right under the tiles (where Focus is), before "Add".
@@ -569,6 +580,54 @@ test.describe('linked in the view only: a phone (touch)', () => {
         await expect(ghosts(page)).toHaveCount(5);
     });
 });
+
+for (const [name, viewport] of [
+    ['a phone', { width: 360, height: 740 }],
+    ['a phone held sideways', { width: 740, height: 360 }],
+    ['a tablet', { width: 820, height: 1000 }],
+] as const) {
+    test.describe(`the card's sheet over a notice: ${name} (touch)`, () => {
+        test.use({ viewport, hasTouch: true, isMobile: true });
+
+        test('the notice of the opened research never shows through the sheet, sliding or not', async ({ page }) => {
+            await setup(page);
+            const toast = page.locator('.toast.show');
+            await expect(toast).toContainText('Opened the research');
+            // With motion: only the backdrop fades, the sheet is opaque in every frame.
+            await page.emulateMedia({ reducedMotion: 'no-preference' });
+            const frames = page.evaluate(() => new Promise<string[]>(resolve => {
+                const seen: string[] = [];
+                const t0 = performance.now();
+                const tick = (): void => {
+                    const sheet = document.querySelector<HTMLElement>('.bottom-sheet-person');
+                    if (sheet) {
+                        for (let el: HTMLElement | null = sheet; el; el = el.parentElement) {
+                            const o = getComputedStyle(el).opacity;
+                            if (o !== '1') seen.push(`${el.className}: ${o}`);
+                        }
+                    }
+                    if (performance.now() - t0 < 600) requestAnimationFrame(tick); else resolve(seen);
+                };
+                requestAnimationFrame(tick);
+            }));
+            await card(page, 'Karel').first().tap();
+            expect(await frames).toEqual([]);
+            await page.locator('.bottom-sheet-overlay').evaluate(el => Promise.all(el.getAnimations({ subtree: true }).map(a => a.finished)));
+            // Settled: the sheet is on top where the notice is.
+            const box = (await toast.boundingBox())!;
+            const top = await page.evaluate(({ x, y }) => !!document.elementFromPoint(x, y)?.closest('.bottom-sheet-overlay'), { x: box.x + box.width / 2, y: box.y + box.height / 2 });
+            expect(top).toBe(true);
+            await page.locator('.bottom-sheet-overlay').click({ position: { x: 5, y: 5 } });
+            await expect(page.locator('.bottom-sheet-overlay')).toHaveCount(0);
+            // Reduced motion: the sheet stands in place in the frame it opens, no slide.
+            await page.emulateMedia({ reducedMotion: 'reduce' });
+            await card(page, 'Karel').first().tap();
+            const sheet = page.locator('.bottom-sheet-overlay.active .bottom-sheet-person');
+            await expect(sheet).toBeVisible();
+            expect(await sheet.evaluate(el => [getComputedStyle(el).transitionDuration, getComputedStyle(el.parentElement!).transitionDuration])).toEqual(['0s', '0s']);
+        });
+    });
+}
 
 test.describe('linked in the view only: a phone held sideways and a tablet', () => {
     test('sideways: the sheet’s second page reaches the versions', async ({ browser }) => {

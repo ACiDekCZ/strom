@@ -2128,12 +2128,15 @@
         /* Context menu is fully tokenized — no dark override needed. */
 
         /* Mobile bottom sheet (touch context menu) */
+        /* Only the backdrop fades in: the sheet itself is opaque from its
+           first frame, so a notice or the bottom bar under it never shows
+           through its rows while it slides up. */
         .bottom-sheet-overlay {
             position: fixed; inset: 0; z-index: 2500;
-            background: rgba(0,0,0,0.35); display: flex; align-items: flex-end;
-            opacity: 0; transition: opacity 0.18s ease;
+            background: transparent; display: flex; align-items: flex-end;
+            transition: background-color 0.18s ease;
         }
-        .bottom-sheet-overlay.active { opacity: 1; }
+        .bottom-sheet-overlay.active { background: rgba(0,0,0,0.35); }
         .bottom-sheet {
             /* Never wider than 560px: on a tablet the sheet would span the
                whole window (the numbers far from their labels). */
@@ -2226,6 +2229,10 @@
         }
         .bottom-sheet.bottom-sheet-tree-actions.expanded {
             max-height: calc(100dvh - 8px - env(safe-area-inset-top, 0px));
+        }
+        /* Reduced motion: every sheet stands in place at once, no slide, no fade. */
+        @media (prefers-reduced-motion: reduce) {
+            .bottom-sheet-overlay, .bottom-sheet-overlay .bottom-sheet { transition: none; }
         }
         .tree-actions-head {
             flex: none; padding: 0 4px 10px 16px;
