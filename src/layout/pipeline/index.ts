@@ -30,6 +30,7 @@ export { emitLayoutResult } from './8-emit-result.js';
 export { validateLayout } from './validation.js';
 export { computeDebugValidation } from './debug-validation.js';
 export { computeDebugGeometry } from './debug-geometry.js';
+export { buildViewLayer, flagViewLayer, type ViewLayer } from './view-layer.js';
 
 import { PersonId, PartnershipId, StromData } from '../../types.js';
 import {
@@ -62,6 +63,7 @@ import { validateLayout } from './validation.js';
 import { computeDebugValidation } from './debug-validation.js';
 import { computeDebugGeometry } from './debug-geometry.js';
 import { foldPlaceholderFamilies, hidePlaceholders } from './placeholders.js';
+import { buildViewLayer, flagViewLayer } from './view-layer.js';
 
 /**
  * Find persons with multiple partnerships for auto-expansion.
@@ -385,8 +387,11 @@ export function runLayoutPipeline(input: PipelineInput): LayoutResult {
         displayPolicy = DEFAULT_DISPLAY_POLICY
     } = input;
 
+    // Links "linked in the view only" stand in a derived copy as if real (never in the data)
+    const viewLayer = input.includeView === false ? null : buildViewLayer(inputData, input.viewLinks);
+
     // Several "?" families of one parent are drawn as one (T11)
-    const data = foldPlaceholderFamilies(inputData, focusPersonId);
+    const data = foldPlaceholderFamilies(viewLayer?.data ?? inputData, focusPersonId);
 
     // Step 1: Select subgraph
     const selection = selectSubgraph({
@@ -495,6 +500,8 @@ export function runLayoutPipeline(input: PipelineInput): LayoutResult {
     result.diagnostics.validationPassed = validation.passed;
     result.diagnostics.errors = validation.errors;
 
+    if (viewLayer) flagViewLayer(result, model, viewLayer);
+
     return result;
 }
 
@@ -551,8 +558,11 @@ export function runLayoutPipelineWithDebug(
         displayPolicy = DEFAULT_DISPLAY_POLICY
     } = input;
 
+    // Links "linked in the view only" stand in a derived copy as if real (never in the data)
+    const viewLayer = input.includeView === false ? null : buildViewLayer(inputData, input.viewLinks);
+
     // Several "?" families of one parent are drawn as one (T11)
-    const data = foldPlaceholderFamilies(inputData, focusPersonId);
+    const data = foldPlaceholderFamilies(viewLayer?.data ?? inputData, focusPersonId);
 
     // Helper to create a snapshot
     const createSnapshot = (step: DebugStep, state: Partial<DebugSnapshot>): DebugSnapshot => {
@@ -732,6 +742,7 @@ export function runLayoutPipelineWithDebug(
     const validation = validateLayout(result, config);
     result.diagnostics.validationPassed = validation.passed;
     result.diagnostics.errors = validation.errors;
+    if (viewLayer) flagViewLayer(result, model, viewLayer);
 
     snapshots.push(createSnapshot(8, { selection, model, genModel, measured, placed: constrained.placed, constrained, routed, result }));
 
@@ -753,7 +764,9 @@ export class StromLayoutEngine implements LayoutEngine {
             includeSpouseAncestors: false,  // Only show focus person's ancestors
             includeParentSiblings: request.policy.includeAuntsUncles,
             includeParentSiblingDescendants: request.policy.includeCousins,
-            displayPolicy: request.displayPolicy
+            displayPolicy: request.displayPolicy,
+            viewLinks: request.viewLinks,
+            includeView: request.includeView
         });
     }
 }

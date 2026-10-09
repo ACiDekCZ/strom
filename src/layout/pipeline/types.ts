@@ -4,6 +4,7 @@
  */
 
 import { PersonId, PartnershipId, StromData, LayoutConfig, Position, Gender } from '../../types.js';
+import type { ViewLink } from '../../view-links.js';
 
 // ==================== DISPLAY POLICY ====================
 
@@ -384,6 +385,8 @@ export interface ChildDrop {
     x: number;
     topY: number;       // = busY
     bottomY: number;    // Top of child card
+    /** View layer (see LayoutViewLayer): the drop exists only in the view, or is inside a shown family. */
+    view?: ViewLineFlag;
 }
 
 /**
@@ -413,6 +416,12 @@ export interface Connection {
     connectorToX: number;    // = nearest bus edge, or stemX if within range
     connectorY: number;      // Y of connector (may differ from branchY for lane allocation)
     drops: ChildDrop[];      // Vertical drops to children
+    /**
+     * View layer: `virtual` = every drop is a link's line (the whole line
+     * exists only in the view); `ghost` = the line of a shown family's own
+     * parents (its drops are `ghost`, a drop to a link's anchor `virtual`).
+     */
+    view?: ViewLineFlag;
 }
 
 /**
@@ -426,6 +435,8 @@ export interface SpouseLine {
     y: number;               // Center Y of cards
     xMin: number;            // Right edge of left card
     xMax: number;            // Left edge of right card
+    /** View layer: `virtual` = the two are a couple only in the view; `ghost` = a couple of a shown family. */
+    view?: ViewLineFlag;
 }
 
 /**
@@ -478,6 +489,26 @@ export interface LayoutResult {
      * its tallest card (LayoutConfig.personHeights), verticalGap between bands.
      */
     bands?: GenerationBand[];
+    /** The view links laid out (PipelineInput.viewLinks); absent when none was applied. */
+    viewLayer?: LayoutViewLayer;
+}
+
+/**
+ * A line's part in the view layer: `virtual` exists only because of a link
+ * "linked in the view only", `ghost` belongs to a family it shows.
+ */
+export type ViewLineFlag = 'ghost' | 'virtual';
+
+/** What the view layer added to a layout (src/layout/pipeline/view-layer.ts). */
+export interface LayoutViewLayer {
+    /** The links laid out, in order. */
+    links: ViewLink[];
+    /** The laid out people of the shown families. */
+    ghostIds: Set<PersonId>;
+    /** Every person of a shown family (laid out or not) → the link that shows it. */
+    ghostOf: Map<PersonId, ViewLink>;
+    /** The data the layout saw (the tree's data with the links applied; never stored). */
+    data: StromData;
 }
 
 /**
@@ -510,6 +541,14 @@ export interface PipelineInput {
     tolerance?: number;
     // Display policy:
     displayPolicy?: DisplayPolicy;
+    /**
+     * Links "linked in the view only" to lay out as if real (the drawn ones:
+     * activeViewLinks). Only the Family and Descendants views pass them; the
+     * outputs (poster, book, print) never do.
+     */
+    viewLinks?: readonly ViewLink[];
+    /** false: lay out without the view links even when given (the outputs' switch). Default true. */
+    includeView?: boolean;
 }
 
 // ==================== ANCESTOR CLUSTER ====================
@@ -571,4 +610,8 @@ export interface LayoutRequest {
     policy: SelectionPolicy;
     config: LayoutConfig;
     displayPolicy?: DisplayPolicy;
+    /** See PipelineInput.viewLinks. */
+    viewLinks?: readonly ViewLink[];
+    /** See PipelineInput.includeView. */
+    includeView?: boolean;
 }

@@ -58,6 +58,7 @@ import { safeFileName } from './filenames.js';
 import { shownName } from './person-name.js';
 import { fingerprintLike } from './research-link.js';
 import { restoreViewLinks } from './view-links.js';
+import { maxGenerations, maxGenerationsWithSiblings } from './focus-depth.js';
 
 /** Extended updates for Partnership */
 
@@ -3004,19 +3005,7 @@ class DataManagerClass {
      * Returns { up: number, down: number } where each is at least 1.
      */
     getMaxGenerations(personId: PersonId): { up: number; down: number } {
-        const person = this.data.persons[personId];
-        if (!person) return { up: 1, down: 1 };
-
-        // Calculate max depth up (ancestors)
-        const maxUp = this.getMaxAncestorDepth(personId, new Set());
-
-        // Calculate max depth down (descendants)
-        const maxDown = this.getMaxDescendantDepth(personId, new Set());
-
-        return {
-            up: Math.max(1, maxUp),
-            down: Math.max(1, maxDown)
-        };
+        return maxGenerations(this.data, personId);
     }
 
     /**
@@ -3025,96 +3014,7 @@ class DataManagerClass {
      * count toward the "down" depth (nieces, nephews, and their children).
      */
     getMaxGenerationsWithSiblings(personId: PersonId): { up: number; down: number } {
-        const person = this.data.persons[personId];
-        if (!person) return { up: 1, down: 1 };
-
-        // Calculate max depth up (ancestors) - unchanged
-        const maxUp = this.getMaxAncestorDepth(personId, new Set());
-
-        // Calculate max depth down INCLUDING siblings' descendants
-        let maxDown = this.getMaxDescendantDepth(personId, new Set());
-
-        // Also check siblings' descendants
-        const siblings = this.getSiblings(personId);
-        for (const sibling of siblings) {
-            const siblingDown = this.getMaxDescendantDepth(sibling.id, new Set());
-            maxDown = Math.max(maxDown, siblingDown);
-        }
-
-        return {
-            up: Math.max(1, maxUp),
-            down: Math.max(1, maxDown)
-        };
-    }
-
-    /**
-     * Recursively find the maximum ancestor depth from a person.
-     */
-    private getMaxAncestorDepth(personId: PersonId, visited: Set<PersonId>): number {
-        if (visited.has(personId)) return 0;
-        visited.add(personId);
-
-        const person = this.data.persons[personId];
-        if (!person) return 0;
-
-        let maxDepth = 0;
-
-        // Check direct parents
-        for (const parentId of person.parentIds) {
-            const parentDepth = 1 + this.getMaxAncestorDepth(parentId, visited);
-            maxDepth = Math.max(maxDepth, parentDepth);
-        }
-
-        return maxDepth;
-    }
-
-    /**
-     * Recursively find the maximum descendant depth from a person.
-     */
-    private getMaxDescendantDepth(personId: PersonId, visited: Set<PersonId>): number {
-        if (visited.has(personId)) return 0;
-        visited.add(personId);
-
-        const person = this.data.persons[personId];
-        if (!person) return 0;
-
-        let maxDepth = 0;
-
-        // Check children from all partnerships
-        for (const partnershipId of person.partnerships) {
-            const partnership = this.data.partnerships[partnershipId];
-            if (!partnership) continue;
-
-            for (const childId of partnership.childIds) {
-                const childDepth = 1 + this.getMaxDescendantDepth(childId, visited);
-                maxDepth = Math.max(maxDepth, childDepth);
-            }
-        }
-
-        // Also check direct childIds (for older data format)
-        for (const childId of person.childIds) {
-            if (!visited.has(childId)) {
-                const childDepth = 1 + this.getMaxDescendantDepth(childId, visited);
-                maxDepth = Math.max(maxDepth, childDepth);
-            }
-        }
-
-        // A partner's children from the partner's other unions are shown one
-        // generation down too, within the depth (T19): the depth must reach them.
-        // Only them: the view never shows their own descendants, so they add
-        // exactly one generation and are not followed further.
-        if (maxDepth < 1) {
-            for (const partnershipId of person.partnerships) {
-                const partnership = this.data.partnerships[partnershipId];
-                if (!partnership) continue;
-                const partnerId = partnership.person1Id === personId ? partnership.person2Id : partnership.person1Id;
-                const hasStepChild = (this.data.persons[partnerId]?.partnerships ?? []).some(otherId =>
-                    otherId !== partnershipId && (this.data.partnerships[otherId]?.childIds.length ?? 0) > 0);
-                if (hasStepChild) { maxDepth = 1; break; }
-            }
-        }
-
-        return maxDepth;
+        return maxGenerationsWithSiblings(this.data, personId);
     }
 
     // ==================== DATA MANAGEMENT ====================

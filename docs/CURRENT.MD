@@ -582,11 +582,49 @@ with two adaptations: `computeAncestorTreeWidth` uses the chain block's real
 
 ### Known limitations (documented follow-ups)
 
+- An in-law column (a spouse's parents and theirs) beside a sibling family
+  standing on that spouse's side — a parent's other family (expanded mode)
+  or, for the focus, the maternal aunts' families while the focus's spouse
+  has parents with their own parents — gets a crossing. Same class as
+  `KNOWN_LINE_KNOTS` (needs couple re-orientation planning); found with view
+  links in `viewLinksFull.test.ts`, it is the same with the links made real.
 - Sibling couples can stand between a chain person's far wives when the
   siblings and the wives share the parents' bus row (Tudor/Henry VIII
   constellation) — spouse lines then run across foreign cards' row space.
 - Long single-child dynasty lines drift diagonally ("staircase") because each
   couple centers over its one child.
+
+---
+
+## 8a. View layer: links "linked in the view only"
+
+`PipelineInput.viewLinks` (src/layout/pipeline/view-layer.ts) lays out
+links a research hypothesis would make as if they were real, without
+touching the tree's data. Before folding the "?" families,
+`buildViewLayer` makes a derived copy where each link stands the way a real
+link stands in the data:
+
+- `child` with two shown parents: the anchor joins their couple's family
+  (or a new family of the two);
+- `child` with one shown parent beside a real one: the shown parent takes the
+  "?" stand-in's place (alone in the "?" family: in place; with siblings:
+  the anchor moves into a family of the two — as `fillPlaceholder`);
+- `child` with one shown parent and no real one: a family of that parent and
+  a new "?" stand-in (hidden like every pure stand-in, T11);
+- `partners`: a partnership of the anchor and the shown partner.
+
+One family is shown in one place (a later link showing it again is skipped).
+After step 8 `flagViewLayer` marks the result: `LayoutResult.viewLayer`
+(links, `ghostIds` = the laid out people of the shown families, `ghostOf`,
+the derived data), `ChildDrop.view` / `Connection.view` / `SpouseLine.view`
+= `'virtual'` for lines that exist only because of a link (a drop to an
+anchor from a family of its shown parents; a whole family line when every
+drop is virtual; a partner line between two people who are no couple in the
+data) and `'ghost'` for the lines inside a shown family. `includeView: false`
+ignores the links (the outputs' switch). The renderer passes the links only in
+the Family and Descendants views; `viewLinksFull.test.ts` runs the full
+invariant audit with links and checks the layout equals that of the same
+links made real.
 
 ---
 

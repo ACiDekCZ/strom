@@ -69,6 +69,10 @@ import {
 import { measureUnionOrderPills, measureTabRows, rowKey, unionOrderPillKey, unionOrderPillPartsHtml, pillFontsPending } from './union-order-measure.js';
 import { openCardMenuFromKeyboard } from './ui/keyboard-access.js';
 import { syncDepthStepper } from './ui/depth-stepper.js';
+import { ViewLink, loadViewLinks, isViewLinksMaster, viewLinksToDraw } from './view-links.js';
+import { maxGenerationsWithSiblings } from './focus-depth.js';
+import type { LayoutViewLayer, ViewLineFlag } from './layout/index.js';
+import { buildViewLayer } from './layout/index.js';
 
 /**
  * One generation band's world-space geometry, consumed by the sticky HTML
@@ -88,6 +92,16 @@ export interface GenerationBand {
 
 /** The custom card's measures for a view: one width, the view's height, each card's own height ("by content"). */
 type CustomCardViewMetrics = CustomCardMetrics & { cardHeight: number; personHeights?: Map<PersonId, number> };
+
+/** How a tree line is drawn; `view` marks a line of the view layer (links "linked in the view only"). */
+interface LineStyle {
+    dashArray?: string;
+    color?: string;
+    className?: string;
+    title?: string;
+    view?: ViewLineFlag;
+    viewLink?: ViewLink | null;
+}
 
 /** Whether two layouts give each of `ids` the same card box (no new layout needed). */
 function sameCardSizes(a: LayoutConfig, b: LayoutConfig, ids: Iterable<PersonId>): boolean {
@@ -137,6 +151,15 @@ class TreeRendererClass {
 
     // Connections for line rendering from layout engine
     private connections: Connection[] = [];
+    /**
+     * Links "linked in the view only" the current render laid out (null:
+     * none — another view, the feature not available, the main switch off).
+     */
+    private viewLayer: LayoutViewLayer | null = null;
+    /** The live bridge the tree follows, for whether the view links are available (null: from the data alone). */
+    private viewLinksBridge: (() => { features: readonly string[] | null } | null) | null = null;
+    /** The current render's layout without the view links (outputs, the people of the view), made when first asked. */
+    private outputLayoutCache: { seq: number; result: ReturnType<typeof computeLayout> } | null = null;
     /** The research edge above each drawn person that has one (per render). */
     private edgeViews = new Map<PersonId, EdgeView>();
 
@@ -243,6 +266,8 @@ class TreeRendererClass {
         this.connections = [];
         this.generationBands = [];
         this.layoutBands = [];
+        this.viewLayer = null;
+        this.outputLayoutCache = null;
 
         const persons = DataManager.getAllPersons();
         // The first render knows whether the tree is empty: the welcome may show now.
@@ -298,7 +323,9 @@ class TreeRendererClass {
         // The custom card's height follows how many lines it shows.
         document.body.style.setProperty('--card-custom-h', `${this.config.cardHeight}px`);
         this.updatePlacesDatalist();
-        let result = this.computeTreeLayout(descendantsOnly);
+        // Links "linked in the view only": the Family and Descendants views lay them out as if real.
+        const viewLinks = this.currentViewLinks();
+        let result = this.computeTreeLayout(descendantsOnly, viewLinks);
         if (custom) {
             const metrics = this.measureCustomCards(result.positions);
             this.customMetrics = metrics;
@@ -315,7 +342,7 @@ class TreeRendererClass {
             if (!sameCardSizes(this.config, measured, result.positions.keys())) {
                 // The person set does not depend on the card size: lay out again at the measured size.
                 this.config = measured;
-                result = this.computeTreeLayout(descendantsOnly);
+                result = this.computeTreeLayout(descendantsOnly, viewLinks);
             } else this.config = measured;
             // Measured before the card fonts were in: measure again once they are.
             cardFontsPending()?.then(() => {
@@ -335,6 +362,7 @@ class TreeRendererClass {
         this.connections = result.connections;
         this.spouseLines = result.spouseLines;
         this.layoutBands = result.bands ?? [];
+        this.viewLayer = result.viewLayer ?? null;
 
         // Timeline, fan and map show the same person selection drawn their own
         // way, in their own container (the pipeline above only served to pick
@@ -386,8 +414,13 @@ class TreeRendererClass {
         if (this.edgeRoomRerenderSeq === seq && seq === this.renderSeq) this.render();
     }
 
-    /** Lay out the current view at the current card size (this.config). */
-    private computeTreeLayout(descendantsOnly: boolean): ReturnType<typeof computeLayout> {
+    /**
+     * Lay out the current view at the current card size (this.config), with
+     * the given links "linked in the view only" laid out as if real (none:
+     * the tree as it is — the outputs). `debug`: the pipeline's debug mode
+     * may take it (the screen's layout only).
+     */
+    private computeTreeLayout(descendantsOnly: boolean, viewLinks: readonly ViewLink[] = [], debug = true): ReturnType<typeof computeLayout> {
         const request: LayoutRequest = {
             data: DataManager.getData(),
             focusPersonId: this.focusPersonId!,
@@ -402,11 +435,12 @@ class TreeRendererClass {
                 mode: this.showAllPartnerships ? 'expanded' : 'standard',
                 autoExpand: this.showAllPartnerships,
                 expandLineageOnly: descendantsOnly && !this.isDescendantsFullFamilies()
-            }
+            },
+            ...(viewLinks.length > 0 ? { viewLinks } : {}),
         };
 
         // Use debug pipeline if debug mode is enabled
-        if (this.debugOptions?.enabled) {
+        if (debug && this.debugOptions?.enabled) {
             const debugResult = runLayoutPipelineWithDebug(
                 {
                     data: request.data,
@@ -416,7 +450,8 @@ class TreeRendererClass {
                     descendantDepth: request.policy.descendantDepth,
                     includeSpouseAncestors: false,
                     includeParentSiblings: request.policy.includeAuntsUncles,
-                    includeParentSiblingDescendants: request.policy.includeCousins
+                    includeParentSiblingDescendants: request.policy.includeCousins,
+                    viewLinks: request.viewLinks
                 },
                 this.debugOptions
             );
@@ -437,8 +472,85 @@ class TreeRendererClass {
             return debugResult.result;
         }
         const engine = new StromLayoutEngine();
-        this.currentDebugSnapshot = null;
+        if (debug) this.currentDebugSnapshot = null;
         return computeLayout(engine, request);
+    }
+
+    // ==================== LINKED IN THE VIEW ONLY ====================
+
+    /**
+     * The links "linked in the view only" the current view draws: only the
+     * Family and Descendants views, the feature available for the tree, the
+     * main switch on, each record drawn and switched on (src/view-links.ts).
+     */
+    private currentViewLinks(): ViewLink[] {
+        const treeId = DataManager.getCurrentTreeId();
+        if (!treeId) return [];
+        return viewLinksToDraw(DataManager.getData(), {
+            viewMode: this.viewMode,
+            links: loadViewLinks(treeId),
+            master: isViewLinksMaster(treeId),
+            bridge: this.viewLinksBridge?.() ?? null,
+        });
+    }
+
+    /** The live bridge the tree follows (its /status features), for whether the view links show at all. */
+    setViewLinksBridge(provider: (() => { features: readonly string[] | null } | null) | null): void {
+        this.viewLinksBridge = provider;
+    }
+
+    /**
+     * What the current render laid out of the links "linked in the view
+     * only": the links, the ghosts (people of the shown families), the data
+     * the layout saw. Null: nothing shown. The drawn lines carry their own
+     * flag (Connection.view, ChildDrop.view, SpouseLine.view).
+     */
+    getViewLayer(): LayoutViewLayer | null {
+        return this.viewLayer;
+    }
+
+    /** The data the view is laid out from: with the drawn view links applied, else the tree's. */
+    private viewData(links: readonly ViewLink[] = this.currentViewLinks()): StromData {
+        return buildViewLayer(DataManager.getData(), links)?.data ?? DataManager.getData();
+    }
+
+    /** How far the focus depth reaches from a person in the current view (the view links count in). */
+    private maxGenerations(personId: PersonId): { up: number; down: number } {
+        return maxGenerationsWithSiblings(this.viewData(), personId);
+    }
+
+    /**
+     * The current render laid out without the view links: what the outputs
+     * draw and what "the people in the view" are (export of the view, a tree
+     * from the view, sharing, the presentation). The screen's own layout when
+     * no link is shown.
+     */
+    private outputLayout(): Pick<ReturnType<typeof computeLayout>, 'positions' | 'connections' | 'spouseLines'> {
+        if (!this.viewLayer || !this.focusPersonId) {
+            return { positions: this.positions, connections: this.connections, spouseLines: this.spouseLines };
+        }
+        if (this.outputLayoutCache?.seq !== this.renderSeq) {
+            this.outputLayoutCache = { seq: this.renderSeq, result: this.computeTreeLayout(this.viewMode === 'descendants', [], false) };
+        }
+        return this.outputLayoutCache.result;
+    }
+
+    /** The link a ghost card, or a line between these people, belongs to (null: none). */
+    private viewLinkOf(...ids: PersonId[]): ViewLink | null {
+        const layer = this.viewLayer;
+        if (!layer) return null;
+        for (const link of layer.links) {
+            if (ids.includes(link.anchorId) && ids.some(id => link.islandIds.includes(id))) return link;
+        }
+        // A line down to a link's anchor (the shown parents' drop).
+        for (const link of layer.links) {
+            if (link.kind === 'child' && ids.includes(link.anchorId)) return link;
+        }
+        for (const id of ids) {
+            const link = layer.ghostOf.get(id);
+            if (link) return link;
+        }
+        return null;
     }
 
     /**
@@ -616,20 +728,20 @@ class TreeRendererClass {
             if (startupFocus.depthUp !== undefined) {
                 this.focusDepthUp = startupFocus.depthUp;
             } else {
-                const maxGen = DataManager.getMaxGenerationsWithSiblings(this.focusPersonId);
+                const maxGen = this.maxGenerations(this.focusPersonId);
                 this.focusDepthUp = maxGen.up;
             }
             if (startupFocus.depthDown !== undefined) {
                 this.focusDepthDown = startupFocus.depthDown;
             } else {
-                const maxGen = DataManager.getMaxGenerationsWithSiblings(this.focusPersonId);
+                const maxGen = this.maxGenerations(this.focusPersonId);
                 this.focusDepthDown = maxGen.down;
             }
         } else {
             // Fall back to first person
             this.focusPersonId = this.findDefaultFocusPerson();
             if (this.focusPersonId) {
-                const maxGen = DataManager.getMaxGenerationsWithSiblings(this.focusPersonId);
+                const maxGen = this.maxGenerations(this.focusPersonId);
                 this.focusDepthUp = maxGen.up;
                 this.focusDepthDown = maxGen.down;
             }
@@ -662,7 +774,7 @@ class TreeRendererClass {
 
         // Set default depth to max available when focusing on a new person
         if (personId) {
-            const maxGen = DataManager.getMaxGenerationsWithSiblings(personId);
+            const maxGen = this.maxGenerations(personId);
             this.focusDepthUp = maxGen.up;
             this.focusDepthDown = maxGen.down;
 
@@ -862,10 +974,10 @@ class TreeRendererClass {
             .join('');
     }
 
-    /** Number of visible (non-placeholder) persons — used by the descendants badge. */
+    /** Number of visible (non-placeholder) persons — used by the descendants badge. Nobody seen only through a view link counts. */
     getVisiblePersonCount(): number {
         let count = 0;
-        for (const id of this.positions.keys()) {
+        for (const id of this.outputLayout().positions.keys()) {
             if (!DataManager.getPerson(id)?.isPlaceholder) count++;
         }
         return count;
@@ -878,7 +990,7 @@ class TreeRendererClass {
     getDescendantCount(): number {
         if (!this.bloodDescendantIds) return this.getVisiblePersonCount();
         let count = 0;
-        for (const id of this.positions.keys()) {
+        for (const id of this.outputLayout().positions.keys()) {
             if (id === this.focusPersonId) continue;
             if (this.bloodDescendantIds.has(id) && !DataManager.getPerson(id)?.isPlaceholder) count++;
         }
@@ -1021,8 +1133,9 @@ class TreeRendererClass {
             }
 
             // Update person count (visible / total) — people, not the "?" stand-ins for unknown parents.
+            // Nobody seen only through a link "linked in the view only": the counts are the tree's.
             const isPerson = (id: PersonId): boolean => !DataManager.getPerson(id)?.isPlaceholder;
-            const visibleCount = [...this.positions.keys()].filter(isPerson).length;
+            const visibleCount = [...this.outputLayout().positions.keys()].filter(isPerson).length;
             const countText = strings.focus.personCount(visibleCount, DataManager.getAllPersons().filter(p => !p.isPlaceholder).length);
 
             if (focusCount) {
@@ -1033,7 +1146,7 @@ class TreeRendererClass {
             }
 
             // Update generation select options based on available data
-            const maxGen = DataManager.getMaxGenerationsWithSiblings(this.focusPersonId);
+            const maxGen = this.maxGenerations(this.focusPersonId);
             this.updateGenerationSelect(depthUpSelect, maxGen.up, this.focusDepthUp);
             this.updateGenerationSelect(depthDownSelect, maxGen.down, this.focusDepthDown);
             // Also update toolbar selects
@@ -1092,25 +1205,32 @@ class TreeRendererClass {
     exportFocusedData(): void {
         if (!this.focusPersonId) return;
 
-        // Use positions map which reflects what's actually rendered
-        // (layout algorithm determines visibility via selectFocusSubgraph)
-        const visibleIds = new Set(this.positions.keys());
+        // The people of the view as laid out (layout algorithm determines
+        // visibility via selectFocusSubgraph), nobody seen only through a
+        // link "linked in the view only"
+        const visibleIds = this.getVisiblePersonIds();
 
         DataManager.exportFocusedJSON(visibleIds);
     }
 
     /**
      * Current layout geometry (positions/connections/spouse lines) for the
-     * poster export. Empty when nothing is rendered.
+     * poster export, the book and the minimap. Empty when nothing is rendered.
+     * The outputs lay out WITHOUT the links "linked in the view only" (their
+     * own layout of the view; `includeView: true` — the minimap — takes the
+     * screen's, ghosts and all).
      */
-    getPosterLayout(): { positions: Map<PersonId, Position>; connections: Connection[]; spouseLines: SpouseLine[] } {
+    getPosterLayout(opts: { includeView?: boolean } = {}): { positions: Map<PersonId, Position>; connections: Connection[]; spouseLines: SpouseLine[] } {
+        const layout = opts.includeView
+            ? { positions: this.positions, connections: this.connections, spouseLines: this.spouseLines }
+            : this.outputLayout();
         // A line that starts at the bottom of a card drawn without its pills' room starts that much higher.
-        const connections = this.edgeRoomIds.size === 0 ? this.connections : this.connections.map(c =>
+        const connections = this.edgeRoomIds.size === 0 ? layout.connections : layout.connections.map(c =>
             c.stemPersonId && this.edgeRoomIds.has(c.stemPersonId) ? { ...c, stemTopY: c.stemTopY - CARD_EDGE_PILL_ROOM } : c);
         return {
-            positions: this.positions,
+            positions: layout.positions,
             connections,
-            spouseLines: this.spouseLines,
+            spouseLines: layout.spouseLines,
         };
     }
 
@@ -1121,7 +1241,8 @@ class TreeRendererClass {
         if (!this.focusPersonId || this.positions.size === 0) return null;
         // Shared, self-consistent slice logic (glue + cleaned relations +
         // pruned sources) — same as "make a tree from this view".
-        return extractSubtree(DataManager.getData(), new Set(this.positions.keys()));
+        // Nobody seen only through a link "linked in the view only".
+        return extractSubtree(DataManager.getData(), this.getVisiblePersonIds());
     }
 
     /**
@@ -1205,9 +1326,11 @@ class TreeRendererClass {
         const currentTreeId = DataManager.getCurrentTreeId();
 
         // Optional branch colouring: classify once per render (never in timeline).
+        // A link "linked in the view only" stands as if real: the family it shows takes its branch.
+        const layoutData = this.viewLayer?.data ?? DataManager.getData();
         const branchMap: Map<PersonId, Branch> | null =
             (SettingsManager.isBranchColorsEnabled() && this.viewMode !== 'timeline' && this.focusPersonId)
-                ? classifyBranches(DataManager.getData(), this.focusPersonId)
+                ? classifyBranches(layoutData, this.focusPersonId)
                 : null;
 
         // Descendants / family views de-emphasize context-only people (step-
@@ -1222,7 +1345,8 @@ class TreeRendererClass {
             if (this.viewMode === 'descendants') {
                 this.bloodDescendantIds = collectBloodDescendants(data, this.focusPersonId);
             }
-            indirectIds = computeIndirectIds(data, this.focusPersonId, this.viewMode, this.positions.keys());
+            // The family a view link shows is no context-only relative: read as laid out.
+            indirectIds = computeIndirectIds(layoutData, this.focusPersonId, this.viewMode, this.positions.keys());
         }
 
         // Persons that are a child of some partnership (the layout engine only
@@ -1289,6 +1413,9 @@ class TreeRendererClass {
                 classes += this.highlightIds.has(id) ? ' search-hit' : ' search-dim';
             }
             if (this.changedIds?.has(id)) classes += ' live-changed';
+            // A person of a family shown "linked in the view only" (the hook of its look: package C).
+            const ghostOf = this.viewLayer?.ghostIds.has(id) ? this.viewLayer.ghostOf.get(id) : undefined;
+            if (ghostOf) classes += ' view-ghost';
             if (this.evidenceIds) classes += this.evidenceIds.has(id) ? ' evidence-hit' : ' evidence-dim';
             const evl = this.evidenceLevelMap?.get(id);
             if (evl) classes += ` evl-${evl}`;
@@ -1313,6 +1440,11 @@ class TreeRendererClass {
             // The height "by content": the card's own height (top-aligned in its band).
             if (this.config.personHeights) card.style.setProperty('--card-custom-h', `${this.cardHeightOf(id)}px`);
             card.dataset.id = id;
+            if (ghostOf) {
+                card.dataset.viewGhost = '';
+                card.dataset.viewHypo = ghostOf.hypo;
+                card.dataset.viewVariant = ghostOf.variant;
+            }
 
             card.onclick = (e) => {
                 // A long-press just opened the bottom sheet — swallow this click.
@@ -2243,9 +2375,13 @@ class TreeRendererClass {
                 const partnership = spouseLine.partnershipId
                     ? DataManager.getPartnership(spouseLine.partnershipId)
                     : null;
-                const lineStyle = partnership
+                const lineStyle: LineStyle = partnership
                     ? this.getLineStyleForStatus(partnership.status)
                     : {};
+                if (spouseLine.view) {
+                    lineStyle.view = spouseLine.view;
+                    lineStyle.viewLink = this.viewLinkOf(spouseLine.person1Id, spouseLine.person2Id);
+                }
 
                 // Find intermediate cards that this line passes through
                 const gaps: { left: number; right: number }[] = [];
@@ -2306,7 +2442,12 @@ class TreeRendererClass {
             // dashed, not just the drops; with a biological sibling the shared
             // part stays solid.
             const sharedDash = connectionDash(conn.drops.map(d => parentRelKind(DataManager.getPerson(d.personId) ?? undefined)));
-            const shared = { dashArray: sharedDash, className: 'child-link' };
+            const shared: LineStyle = { dashArray: sharedDash, className: 'child-link' };
+            // Links "linked in the view only": the stem and bus of a line that exists only in the view, or of a shown family.
+            if (conn.view) {
+                shared.view = conn.view;
+                shared.viewLink = this.viewLinkOf(...conn.drops.map(d => d.personId));
+            }
 
             // Vertical stem from parent down to connectorY (= stemBottomY)
             this.drawLine(svg, conn.stemX, conn.stemTopY, conn.stemX, conn.connectorY, shared);
@@ -2334,9 +2475,13 @@ class TreeRendererClass {
             // foster); geometry is unchanged.
             for (const drop of conn.drops) {
                 // Parents no record documents: the drop is dashed (research edge "proof").
-                const style = this.edgeViews.get(drop.personId)?.kind === 'proof'
+                const style: LineStyle = this.edgeViews.get(drop.personId)?.kind === 'proof'
                     ? { dashArray: '3,4', className: 'child-drop edge-proof-drop' }
                     : this.getParentRelDropStyle(drop.personId);
+                if (drop.view) {
+                    style.view = drop.view;
+                    style.viewLink = this.viewLinkOf(drop.personId);
+                }
                 this.drawLine(svg, drop.x, conn.branchY, drop.x, drop.bottomY, style);
             }
         }
@@ -2420,7 +2565,7 @@ class TreeRendererClass {
         svg.appendChild(circle);
     }
 
-    private getLineStyleForStatus(status: import('./types.js').PartnershipStatus): { dashArray?: string; color?: string } {
+    private getLineStyleForStatus(status: import('./types.js').PartnershipStatus): LineStyle {
         switch (status) {
             case 'divorced':
                 return { dashArray: '8,4', color: '#999' };
@@ -2434,7 +2579,7 @@ class TreeRendererClass {
         }
     }
 
-    private drawLine(svg: SVGSVGElement, x1: number, y1: number, x2: number, y2: number, style?: { dashArray?: string; color?: string; className?: string; title?: string }): SVGLineElement {
+    private drawLine(svg: SVGSVGElement, x1: number, y1: number, x2: number, y2: number, style?: LineStyle): SVGLineElement {
         const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
         line.setAttribute('x1', String(x1));
         line.setAttribute('y1', String(y1));
@@ -2446,8 +2591,17 @@ class TreeRendererClass {
         if (style?.color) {
             line.setAttribute('stroke', style.color);
         }
-        if (style?.className) {
-            line.setAttribute('class', style.className);
+        // A line of the view layer: `view-virtual` (only in the view) or `view-ghost` (inside a shown family), with its link.
+        const className = [style?.className, style?.view ? `view-${style.view}` : ''].filter(Boolean).join(' ');
+        if (className) {
+            line.setAttribute('class', className);
+        }
+        if (style?.view) {
+            line.dataset.view = style.view;
+            if (style.viewLink) {
+                line.dataset.viewHypo = style.viewLink.hypo;
+                line.dataset.viewVariant = style.viewLink.variant;
+            }
         }
         if (style?.title) {
             const t = document.createElementNS('http://www.w3.org/2000/svg', 'title');
@@ -2463,7 +2617,7 @@ class TreeRendererClass {
      * parent→child relationship type. Adoptive = dashed, step/foster = dotted;
      * colour unchanged. Only the drop's stroke changes — never its geometry.
      */
-    private getParentRelDropStyle(childId: PersonId): { dashArray?: string; className: string; title?: string } {
+    private getParentRelDropStyle(childId: PersonId): LineStyle {
         const kind = parentRelKind(DataManager.getPerson(childId) ?? undefined);
         if (!kind) return { className: 'child-drop' };
         const title = kind === 'adoptive' ? strings.parentRelType.adoptive
@@ -2679,9 +2833,13 @@ class TreeRendererClass {
         return this.positions;
     }
 
-    // Public getter for visible person IDs
-    getVisiblePersonIds(): Set<PersonId> {
-        return new Set(this.positions.keys());
+    /**
+     * The people of the view (export of the view, a tree from it, sharing,
+     * the presentation, the map of the view): without anyone seen only
+     * through a link "linked in the view only" (`includeView: true`: as drawn).
+     */
+    getVisiblePersonIds(opts: { includeView?: boolean } = {}): Set<PersonId> {
+        return new Set((opts.includeView ? this.positions : this.outputLayout().positions).keys());
     }
 
     /** Generation bands for the sticky label overlay (empty outside family/descendants). */

@@ -150,7 +150,7 @@ export const minimapMethods = uiModule({
         const canvas = document.getElementById('minimap-canvas') as HTMLCanvasElement | null;
         if (!panel || !canvas) return;
 
-        const positions = TreeRenderer.getPosterLayout().positions;
+        const positions = TreeRenderer.getPosterLayout({ includeView: true }).positions;
         // On mobile the control block dissolves (CSS `display: contents`), so
         // the minimap has no docked home and CSS hides it — mirror that here so
         // the JS never re-shows a detached panel.
@@ -200,7 +200,7 @@ export const minimapMethods = uiModule({
 
         ctx.clearRect(0, 0, MINIMAP_W, MINIMAP_H);
         const { cardWidth, cardHeight, personHeights } = TreeRenderer.getCardBox();
-        const positions = TreeRenderer.getPosterLayout().positions;
+        const positions = TreeRenderer.getPosterLayout({ includeView: true }).positions;
         const data = DataManager.getData();
 
         // Resolve the gender + accent tokens once per render (canvas cannot use CSS vars).

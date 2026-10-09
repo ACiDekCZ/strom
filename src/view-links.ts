@@ -528,3 +528,26 @@ export function viewLinksAvailable(data: StromData | null | undefined, bridge?: 
     if (!hasViewLinkData(data)) return false;
     return !bridge || !!bridge.features?.includes(HYPOTHESIS_LINKS_FEATURE);
 }
+
+// ==================== WHAT A VIEW DRAWS ====================
+
+/** The views that draw the links "linked in the view only"; the others (fan, timeline, map) never see them. */
+export const VIEW_LINK_VIEWS: readonly string[] = ['family', 'descendants'];
+
+/**
+ * The links a view lays out as if real (src/layout/pipeline/view-layer.ts):
+ * none outside the Family and Descendants views, none when the feature is
+ * not available for the tree or the main switch is off; else the drawn,
+ * switched on records the view reaches (activeViewLinks).
+ */
+export function viewLinksToDraw(data: StromData, opts: {
+    viewMode: string;
+    links: readonly ViewLink[];
+    master: boolean;
+    bridge?: { features: readonly string[] | null } | null;
+}): ViewLink[] {
+    if (!VIEW_LINK_VIEWS.includes(opts.viewMode) || !opts.master || opts.links.length === 0) return [];
+    if (!viewLinksAvailable(data, opts.bridge)) return [];
+    const ctx = viewLinkContext(data);
+    return activeViewLinks(data, resolveViewLinks(data, opts.links, ctx), opts.master, ctx);
+}
