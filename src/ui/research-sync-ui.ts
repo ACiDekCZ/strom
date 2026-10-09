@@ -2058,10 +2058,11 @@ export const researchSyncMethods = uiModule({
             unsentAndNewer: () => ({ tone: 'warn', title: s.stateUnsent, sub: s.unsentNewerSub, actions: [{ action: 'send', label: s.send }] }),
             waitThenLoad: () => ({ tone: 'neutral', title: s.stateSent(when(state.sent?.at), state.sent?.changes ?? null),
                 sub: s.waitThenLoadSub, actions: [{ action: 'cancelLoad', label: s.cancelLoad, asLink: true }] }),
+            // Stuck or blocked by the browser: the way out first, starting the research always beside it (never neither).
             bridgeDown: () => rt?.why === 'hung'
-                ? { tone: 'warn', title: s.stateNotResponding, sub: s.notRespondingSub }
+                ? { tone: 'warn', title: s.stateNotResponding, sub: s.notRespondingSub, actions: start.map(a => ({ ...a, asLink: true })) }
                 : rt?.why === 'denied'
-                    ? { tone: 'warn', title: s.stateBlocked, sub: blockedSub(), actions: [{ action: 'allowHow', label: s.allowHow }] }
+                    ? { tone: 'warn', title: s.stateBlocked, sub: blockedSub(), actions: [{ action: 'allowHow', label: s.allowHow }, ...start.map(a => ({ ...a, asLink: true }))] }
                 : rt?.why === 'refused'
                     ? { tone: 'warn', title: s.stateAddressRefused, sub: s.addressRefusedSub, actions: start }
                     : { tone: 'quiet', title: s.stateBridgeDown, sub: s.bridgeDownSub, actions: start.map(a => ({ ...a, asLink: true })) },
@@ -2109,10 +2110,10 @@ export const researchSyncMethods = uiModule({
         if (rt && !rt.up && (rt.why === 'hung' || rt.why === 'refused' || rt.why === 'denied') && ['unsentBridgeDown', 'autoBridgeDown'].includes(state.kind)) {
             b.tone = 'warn';
             if (rt.why === 'denied') {
-                // The changes wait; what keeps them is the browser, not a research to start.
+                // The changes wait; what keeps them is the browser (starting the research only beside, never neither).
                 b.title = s.stateBlocked;
                 b.sub = [s.staysHere, blockedSub()].join(' ');
-                b.actions = [{ action: 'allowHow', label: s.allowHow }];
+                b.actions = [{ action: 'allowHow', label: s.allowHow }, ...start.map(a => ({ ...a, asLink: true }))];
             } else {
                 b.title = rt.why === 'hung' ? s.stateNotResponding : s.stateAddressRefused;
                 b.sub = [b.sub, rt.why === 'hung' ? s.notRespondingSub : s.addressRefusedSub].filter(Boolean).join(' ');

@@ -139,6 +139,47 @@ test.describe('the state of the tree and sending straight', () => {
         await expect(block(page).locator('[data-action="startResearch"]')).toBeVisible();
     });
 
+    test('a stuck bridge (no answer in time): the way out, and "Start the research" beside it', async ({ page }) => {
+        await openResearch(page);
+        const bridge = await fakeBridge(page);
+        await poll(page);
+        bridge.statusHang = true;
+        await poll(page);
+        await openResearchMenu(page);
+        await expect(block(page)).toHaveAttribute('data-state', 'bridgeDown');
+        await expect(block(page)).toContainText('strom live stop');
+        await block(page).locator('[data-action="startResearch"]').click();
+        expect(await links(page)).toEqual([`strom-research://open?tree=${UUID}`]);
+    });
+
+    test('the browser blocks the research: How to allow first, "Start the research" beside it (also with changes waiting)', async ({ page }) => {
+        await page.addInitScript(() => {
+            const status = { state: 'granted', onchange: null };
+            (window as unknown as { __lna: typeof status }).__lna = status;
+            Object.defineProperty(navigator, 'permissions', { configurable: true, value: {
+                query: () => Promise.resolve(status),
+            } });
+        });
+        await openResearch(page);
+        const bridge = await fakeBridge(page);
+        await poll(page);
+        await page.evaluate(() => { (window as unknown as { __lna: { state: string } }).__lna.state = 'denied'; });
+        bridge.down = true;
+        await poll(page);
+        await openResearchMenu(page);
+        await expect(block(page)).toHaveAttribute('data-state', 'bridgeDown');
+        expect(await block(page).locator('[data-action]').evaluateAll(els => els.map(e => e.getAttribute('data-action'))))
+            .toEqual(['allowHow', 'startResearch']);
+        await page.evaluate(() => window.Strom.UI.closeActionsMenu());
+        await editJan(page);
+        await poll(page);
+        await openResearchMenu(page);
+        await expect(block(page)).toHaveAttribute('data-state', 'unsentBridgeDown');
+        await expect(block(page).locator('[data-action="allowHow"]')).toBeVisible();
+        await block(page).locator('[data-action="startResearch"]').click();
+        expect(await links(page)).toEqual([`strom-research://open?tree=${UUID}`]);
+    });
+
     test('discarded in the research: its own state and one notice (not again after a reload); Send again', async ({ page }) => {
         await openResearch(page, { edit: true });
         const bridge = await fakeBridge(page, { lastIntake: { id: 'I0041', at: '2026-09-30T09:00:00Z' } });
