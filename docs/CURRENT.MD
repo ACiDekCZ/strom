@@ -695,6 +695,18 @@ view, sharing) carry one row "View-only links (n) are not included"
 GEDCOM, JSON, CSV, the app file, the book's text, the fan, the timeline,
 loading a research version and what will be sent never read the records.
 
+Accessibility: a ghost's `aria-label` ends "Linked in the view only,
+unproven."; the line's label is a button named "Unproven, hypothesis H0022,
+version B. Open in the research." "What research knows" gives the keyboard
+back to what opened it when it closes (the label; the stub, quietly — no
+bubble; the ghost's card after its menu). The pinned bubble, the menus and
+the confirmation keep the keyboard inside and give it back on Esc; the
+switches (the list's rows, its main switch, the hypotheses' versions) are
+`role="switch"` buttons. On touch every target is 44px (the label and the
+family's button by an invisible extension that scales with the tree's zoom).
+The specs: e2e/view-links-*.spec.ts, `view-links-modes.spec.ts` running the
+touch UI on a phone, a phone held sideways and a tablet.
+
 ---
 
 ## 9. Testing
