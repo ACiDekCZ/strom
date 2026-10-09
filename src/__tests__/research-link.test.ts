@@ -1053,6 +1053,34 @@ describe('bridge status: queue, update, spend, last intake', () => {
     });
 });
 
+describe('bridge status: the scan readers in the spend (spend.readers)', () => {
+    const spend = { month: '2026-10', sessions: 14, amount: 63.4, readers: 41.2, currency: 'USD' };
+    const status = (extra: Record<string, unknown>) => sanitizeLiveStatus({ tree: UUID, head: 'abc', ...extra })!;
+
+    it('keeps the readers from a bridge that counts them', () => {
+        expect(status({ features: ['spend.readers'], spend }).spend).toEqual(spend);
+    });
+
+    it('an older bridge (no feature): the amount alone, readers never read', () => {
+        expect(status({ spend }).spend).toEqual({ month: '2026-10', sessions: 14, amount: 63.4, currency: 'USD' });
+        expect(status({ features: ['status.recent'], spend }).spend).not.toHaveProperty('readers');
+    });
+
+    it('readers missing or wrong leave the spend without them', () => {
+        const features = ['spend.readers'];
+        for (const readers of [undefined, 0, -1, 'lots', NaN, Infinity, 63.41, null, [41.2]]) {
+            const s = status({ features, spend: { ...spend, readers } }).spend;
+            expect(s).toEqual({ month: '2026-10', sessions: 14, amount: 63.4, currency: 'USD' });
+        }
+        // The whole amount may be the readers'.
+        expect(status({ features, spend: { ...spend, readers: 63.4 } }).spend?.readers).toBe(63.4);
+    });
+
+    it('a wrong spend stays null with the feature too', () => {
+        expect(status({ features: ['spend.readers'], spend: { ...spend, amount: 'lots' } }).spend).toBeNull();
+    });
+});
+
 describe('research crop ids (_STROM_CLIP)', () => {
     it('are read from a source OBJE, kept, and written back', () => {
         const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';

@@ -46,7 +46,7 @@ const CHANGE = [
     'F0001 +child P0006',
 ];
 
-interface Bridge { waiting: Record<string, unknown>[]; gedCalls: number; log: Record<string, unknown> | null; events: boolean; paused: Record<string, unknown> | null; workPerson: string; workDone: boolean; changeEntries: Record<string, unknown>[] | null; features?: string[]; recent?: Record<string, unknown> }
+interface Bridge { waiting: Record<string, unknown>[]; gedCalls: number; log: Record<string, unknown> | null; events: boolean; paused: Record<string, unknown> | null; workPerson: string; workDone: boolean; changeEntries: Record<string, unknown>[] | null; features?: string[]; recent?: Record<string, unknown>; spend?: Record<string, unknown> }
 
 /** A bridge that sends one change of six lines, then keeps quiet. */
 async function follow(page: Page, size: { width: number; height: number } = { width: 1440, height: 900 },
@@ -77,7 +77,7 @@ async function follow(page: Page, size: { width: number; height: number } = { wi
         waiting: bridge.waiting, links: ALL,
         queue: [{ id: 'T0101', text: 'Matriky Chlumy', state: 'next', person: 'P0001' }, { id: 'T0102', text: 'Pozemková kniha', state: 'next' }],
         queueMore: 3,
-        spend: { month: '2026-09', sessions: 4, amount: 3.2, currency: 'USD' },
+        spend: bridge.spend ?? { month: '2026-09', sessions: 4, amount: 3.2, currency: 'USD' },
         ...(bridge.features ? { features: bridge.features } : {}),
         ...(bridge.recent ? { recent: bridge.recent } : {}),
     });
@@ -240,6 +240,32 @@ test.describe('the research history (/log)', () => {
         await expect(ov.locator('.research-overview__cell-label').nth(1)).toHaveText('Last 24 h');
         await expect(ov.locator('.research-overview__cell-value').nth(1)).toHaveText('+3 people');
         await expect(ov.locator('.research-overview__cell-sub').nth(1)).toHaveText('+1 source');
+    });
+
+    const READERS_SPEND = { month: '2026-10', sessions: 14, amount: 63.4, readers: 41.2, currency: 'USD' };
+
+    test('this month: the scan readers part of the cost, from a bridge that counts them', async ({ page }) => {
+        await follow(page, { width: 1440, height: 900 }, (b) => {
+            b.events = false;
+            b.features = ['spend.readers'];
+            b.spend = READERS_SPEND;
+        });
+        await page.locator('#live-panel .live-panel-expand').click();
+        const month = page.locator('#research-overview .research-overview__cell').filter({ hasText: 'This month' });
+        await expect(month.locator('.research-overview__cell-value')).toHaveText('$63.40');
+        await expect(month.locator('.research-overview__readers')).toHaveText('of it scan readers $41.20');
+    });
+
+    test('this month from an older bridge: the cost alone, no readers line', async ({ page }) => {
+        await follow(page, { width: 1440, height: 900 }, (b) => {
+            b.events = false;
+            b.spend = READERS_SPEND;
+        });
+        await page.locator('#live-panel .live-panel-expand').click();
+        const month = page.locator('#research-overview .research-overview__cell').filter({ hasText: 'This month' });
+        await expect(month.locator('.research-overview__cell-value')).toHaveText('$63.40');
+        await expect(month.locator('.research-overview__cell-sub')).toHaveCount(1);
+        await expect(month.locator('.research-overview__readers')).toHaveCount(0);
     });
 
     test('the overview previews at most 20 steps, the rest is in the research', async ({ page }) => {

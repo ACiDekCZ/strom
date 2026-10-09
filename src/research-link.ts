@@ -1353,6 +1353,8 @@ export interface LiveSpend {
     amount: number;
     /** ISO 4217 ("USD"). */
     currency: string;
+    /** How much of `amount` the scan readers cost (`spend.readers` in `features`); absent: not said, or nothing. */
+    readers?: number;
 }
 
 /** The last send the research took in (it can be taken back). */
@@ -1495,15 +1497,26 @@ export function sanitizeUpdate(value: unknown): { version: string } | null {
     return /^\d{1,4}(\.\d{1,4}){1,3}([-.][0-9A-Za-z.]{1,20})?$/.test(version) ? { version } : null;
 }
 
-/** `spend: { month, sessions, amount, currency }`, or null when any part is wrong. */
-export function sanitizeSpend(value: unknown): LiveSpend | null {
+/** The bridge feature whose `spend.amount` includes the scan readers and `spend.readers` says their part. */
+export const SPEND_READERS_FEATURE = 'spend.readers';
+
+/**
+ * `spend: { month, sessions, amount, currency, readers? }`, or null when any
+ * required part is wrong. `readers` is read only from a bridge that counts
+ * them (`withReaders`) and kept only when it is above zero and within
+ * `amount`; otherwise the spend stands without it.
+ */
+export function sanitizeSpend(value: unknown, withReaders = false): LiveSpend | null {
     const r = asRecord(value);
     if (!r) return null;
     const month = typeof r.month === 'string' && /^\d{4}-\d{2}$/.test(r.month) ? r.month : null;
     const sessions = asCount(r.sessions);
     const amount = typeof r.amount === 'number' && Number.isFinite(r.amount) && r.amount >= 0 ? r.amount : null;
     const currency = typeof r.currency === 'string' && /^[A-Z]{3}$/.test(r.currency) ? r.currency : null;
-    return month && sessions !== null && amount !== null && currency ? { month, sessions, amount, currency } : null;
+    if (!month || sessions === null || amount === null || !currency) return null;
+    const readers = withReaders && typeof r.readers === 'number' && Number.isFinite(r.readers)
+        && r.readers > 0 && r.readers <= amount ? r.readers : undefined;
+    return { month, sessions, amount, currency, ...(readers !== undefined ? { readers } : {}) };
 }
 
 /** `lastIntake: { id, at }`, or null. */
@@ -1618,7 +1631,7 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         queue: sanitizeQueue(r.queue),
         queueMore: asCount(r.queueMore) ?? 0,
         update: sanitizeUpdate(r.update),
-        spend: sanitizeSpend(r.spend),
+        spend: sanitizeSpend(r.spend, !!features?.includes(SPEND_READERS_FEATURE)),
         lastIntake: sanitizeIntake(r.lastIntake),
         researches: sanitizeDirections(r.researches),
         accepts: sanitizeAccepts(r.accepts),

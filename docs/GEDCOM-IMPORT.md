@@ -701,6 +701,10 @@ Supported from app version 3.0.0. The app uses these read-only endpoints:
   `persons` / `sources` {`added`, `ids` (≤ 50)}), plus the additions of the
   commits after `recent.head`; an invalid or missing `recent` falls back to
   the history.
+- "This month" shows `spend.amount` and the session count. When `features`
+  lists `spend.readers`, the amount includes the scan readers and a second
+  line names their part (`spend.readers`, shown only when above zero and not
+  more than `amount`); an older bridge shows the amount alone.
 - When the event stream drops, the app asks `status`; if the bridge answers it
   reconnects, if it does not (twice in a row) it shows "Following ended",
   keeps the last state and makes the tree editable again. Without

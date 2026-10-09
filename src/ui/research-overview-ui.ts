@@ -324,12 +324,15 @@ export const researchOverviewMethods = uiModule({
                 L.plusSources(Math.max(0, sources - s.startSources), hhmm(s.startedAt)));
         }
         if (s.spend && mode !== 'sheet') {
-            let amount: string;
-            try {
-                amount = new Intl.NumberFormat(getCurrentLanguage(), { style: 'currency', currency: s.spend.currency }).format(s.spend.amount);
-            } catch {
-                amount = `${s.spend.amount.toFixed(2)} ${s.spend.currency}`;
-            }
+            const currency = s.spend.currency;
+            const money = (n: number): string => {
+                try {
+                    return new Intl.NumberFormat(getCurrentLanguage(), { style: 'currency', currency }).format(n);
+                } catch {
+                    return `${n.toFixed(2)} ${currency}`;
+                }
+            };
+            const amount = money(s.spend.amount);
             const url = this.activeResearchLink('sessions');
             let sub: HTMLElement;
             if (url) {
@@ -340,6 +343,12 @@ export const researchOverviewMethods = uiModule({
                 sub = el('div', 'research-overview__cell-sub', L.sessions(s.spend.sessions).replace(' ↗', ''));
             }
             cell(L.thisMonth, amount, sub);
+            // Of it the scan readers (a bridge that counts them, when they cost anything).
+            if (s.spend.readers) {
+                const readers = el('div', 'research-overview__cell-sub research-overview__readers', L.scanReaders(money(s.spend.readers)));
+                readers.title = readers.textContent ?? '';
+                strip.lastElementChild?.appendChild(readers);
+            }
         }
         strip.classList.toggle('research-overview__summary--two', strip.childElementCount === 2);
         body.appendChild(strip);
