@@ -1,6 +1,7 @@
-import { test, expect, Page, Route } from '@playwright/test';
-import { openApp, card } from './helpers.js';
-import { BRIDGE, UUID, HEAD, NEW_HEAD, FakeBridge, fakeBridge, dropFile, poll } from './research-bridge.js';
+import { test, expect, Page } from '@playwright/test';
+import { card } from './helpers.js';
+import { HEAD, NEW_HEAD, FakeBridge, poll } from './research-bridge.js';
+import { Version, DecideRoute, conflictGed, setupConflict, openKnows, cardOf, side, janBirth, editJosef, token } from './research-conflict.js';
 
 /**
  * What follows a decision of a conflict made in the app (DEV §4, §5, §7):
@@ -16,109 +17,16 @@ import { BRIDGE, UUID, HEAD, NEW_HEAD, FakeBridge, fakeBridge, dropFile, poll } 
  * the decided row after 6 s. Invented data only.
  */
 
-const cors = { 'access-control-allow-origin': '*' };
-const LINKS = ['send', 'open', 'live', 'app', 'setup', 'conflict'];
-
-interface Version {
-    head?: string;
-    /** Jan's birth date in that version, and how his conflict about it stands. */
-    janBirth?: string;
-    janState?: 'open' | 'decided';
-    janDecision?: string;
-    /** Jan's death date (another value of that version). */
-    janDeath?: string;
-    /** The couple's wedding date, and its conflict (shown at both partners) — none without it. */
-    wedding?: string;
-    familyConflict?: 'open' | 'decided';
-}
-
-/** A research file: Josef and Anna, their son Jan with a conflict of his edit about his birth date. */
-function ged(v: Version = {}): string {
-    const janState = v.janState ?? 'open';
-    const family = v.familyConflict ? [
-        '1 _STROM_CONFLICT X0009', '2 TYPE MARR', '2 STAT ' + v.familyConflict, '2 _STROM_TAKE Y',
-        '2 VAL 3 FEB 1875', '3 SOUR @S0001@', '3 _STROM_SIDE research',
-        '2 VAL 1876', '3 _STROM_SIDE user',
-        ...(v.familyConflict === 'decided' ? ['2 DECI 1876'] : []),
-    ] : [];
-    return [
-        '0 HEAD', '1 SOUR STROM_RESEARCH', '2 NAME Strom Research', '1 DATE 9 OCT 2026',
-        `1 _STROM_TREE ${UUID}`, `1 _STROM_HEAD ${v.head ?? HEAD}`, `1 _STROM_LINKS ${LINKS.join(' ')}`, '1 CHAR UTF-8', '1 NOTE Víškovi',
-        '0 @P0001@ INDI', '1 NAME Josef /Víšek/', '1 SEX M', '1 REFN P0001', '2 TYPE strom-research', '1 FAMS @F0001@', ...family,
-        '0 @P0002@ INDI', '1 NAME Anna /Svobodová/', '1 SEX F', '1 REFN P0002', '2 TYPE strom-research', '1 FAMS @F0001@', ...family,
-        '0 @P0003@ INDI', '1 NAME Jan /Víšek/', '1 SEX M', '1 REFN P0003', '2 TYPE strom-research', '1 FAMC @F0001@',
-        '1 BIRT', `2 DATE ${v.janBirth ?? '1865'}`, '2 PLAC Chlumy',
-        '1 DEAT', `2 DATE ${v.janDeath ?? '1932'}`,
-        '1 _STROM_CONFLICT X0007', '2 TYPE BIRT', `2 STAT ${janState}`, '2 _STROM_TAKE Y',
-        '2 VAL 3 FEB 1865', '3 SOUR @S0001@', '3 _STROM_SIDE research',
-        '2 VAL 1865', '3 _STROM_SIDE user',
-        ...(janState === 'decided' ? [`2 DECI ${v.janDecision ?? '1865'}`] : []),
-        '0 @F0001@ FAM', '1 HUSB @P0001@', '1 WIFE @P0002@', '1 CHIL @P0003@',
-        ...(v.wedding ? ['1 MARR', `2 DATE ${v.wedding}`] : []),
-        '0 @S0001@ SOUR', '1 TITL Oddací matrika Čáslav', '1 PAGE fol. 41', '1 REFN S0001', '1 TEXT Josef Víšek a Anna', '1 _STROM_READ research',
-        '0 TRLR',
-    ].join('\n');
-}
-
-/** The bridge's answers to POST /conflict/<X…>: queued per test; `then` makes the research's new version as it answers. */
-interface Reply { status: number; body?: unknown; then?: Version }
-interface DecideRoute { asks: { id: string; body: unknown }[]; replies: Reply[]; hold: Promise<void> | null }
-
-async function decideRoute(page: Page, bridge: FakeBridge): Promise<DecideRoute> {
-    const d: DecideRoute = { asks: [], replies: [], hold: null };
-    await page.route(`${BRIDGE}/conflict/**`, async (route: Route) => {
-        const req = route.request();
-        if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { ...cors, 'access-control-allow-methods': 'POST', 'access-control-allow-headers': '*' } });
-        d.asks.push({ id: decodeURIComponent(new URL(req.url()).pathname.split('/').pop() ?? ''), body: JSON.parse(req.postData() ?? 'null') });
-        if (d.hold) await d.hold;
-        const reply = d.replies.shift() ?? { status: 500, body: { error: 'no reply queued' } };
-        if (reply.then) {
-            bridge.head = reply.then.head ?? NEW_HEAD;
-            bridge.treeGed = ged(reply.then);
-        }
-        return route.fulfill({ status: reply.status, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(reply.body ?? {}) });
-    });
-    return d;
-}
-
 /** The research opened from its file (`opened`), its bridge serving `serving` (default: the same version). */
 async function setup(page: Page, opened: Version = {}, serving?: Version): Promise<{ bridge: FakeBridge; decide: DecideRoute; treeId: string }> {
-    await page.clock.install();
-    await openApp(page);
-    await dropFile(page, 'tree-strom.ged', ged(opened));
-    await expect(card(page, 'Jan')).toBeVisible();
-    const treeId = await page.evaluate(({ uuid, base }) => {
-        localStorage.setItem(`strom-research-bridge:${uuid}`, JSON.stringify({ base, accepts: { sync: { auto: 'off' }, sources: true, verified: true } }));
-        const tm = window.Strom.TreeManager;
-        const id = tm.getActiveTreeId()!;
-        tm.patchResearchLink(id, { sendMode: 'manual' });
-        localStorage.setItem(`strom-research-auto:${id}`, JSON.stringify({ ...JSON.parse(localStorage.getItem(`strom-research-auto:${id}`) ?? '{}'), modeAsked: true, skipPreview: true }));
-        return id;
-    }, { uuid: UUID, base: BRIDGE });
-    const bridge = await fakeBridge(page, { treeGed: ged(serving ?? opened), head: serving?.head ?? opened.head ?? HEAD, links: LINKS, features: ['conflict.decide'] });
-    await poll(page);
-    const decide = await decideRoute(page, bridge);
-    return { bridge, decide, treeId };
+    return setupConflict(page, { opened, ...(serving ? { serving } : {}), clock: true });
 }
 
-async function openKnows(page: Page, firstName = 'Jan'): Promise<void> {
-    await page.evaluate((name) => {
-        const p = window.Strom.DataManager.getAllPersons().find(x => x.firstName === name)!;
-        window.Strom.UI.runPersonMenuAction(p.id, 'research-knows');
-    }, firstName);
-    await expect(page.locator('#person-research-modal')).toBeVisible();
-}
+/** The research's file in that version (for a bridge moving on). */
+const ged = conflictGed;
 
-const cardOf = (page: Page, id = 'X0007') => page.locator(`#person-research-modal [data-conflict-card="${id}"]`);
-const side = (page: Page, which: 'user' | 'research', id = 'X0007') => cardOf(page, id).locator(`.prc-side[data-side="${which}"]`);
-const janBirth = (page: Page) => page.evaluate(() => window.Strom.DataManager.getAllPersons().find(p => p.firstName === 'Jan')!.birthDate);
 const linkHead = (page: Page, treeId: string) => page.evaluate(id => window.Strom.TreeManager.getTreeMetadata(id)?.research?.head, treeId);
 const toast = (page: Page) => page.locator('.toast');
-/** An edit of another person: the tree is no longer what the research had. */
-const editJosef = (page: Page) => page.evaluate(() => {
-    const dm = window.Strom.DataManager;
-    dm.updatePerson(dm.getAllPersons().find(p => p.firstName === 'Josef')!.id, { birthPlace: 'Praha' });
-});
 
 test.describe('after deciding a conflict in the app', () => {
     test.use({ locale: 'en-US' });
@@ -389,22 +297,7 @@ test.describe('the Load dialog after a decision: narrow and dark', () => {
         await side(page, 'research').locator('.prc-choice').click();
         const tag = page.locator('#research-load-modal .research-load-decided');
         await expect(tag).toBeVisible();
-        const token = (name: string) => page.evaluate(n => {
-            const probe = document.createElement('span');
-            probe.style.color = `var(${n})`;
-            document.body.appendChild(probe);
-            const v = getComputedStyle(probe).color;
-            probe.remove();
-            return v;
-        }, name);
-        expect(await tag.evaluate(el => getComputedStyle(el).color)).toBe(await token('--primary-dark'));
-        expect(await tag.evaluate(el => getComputedStyle(el).backgroundColor)).toBe(await page.evaluate(() => {
-            const probe = document.createElement('span');
-            probe.style.background = 'var(--primary-soft)';
-            document.body.appendChild(probe);
-            const v = getComputedStyle(probe).backgroundColor;
-            probe.remove();
-            return v;
-        }));
+        expect(await tag.evaluate(el => getComputedStyle(el).color)).toBe(await token(page, '--primary-dark', 'color'));
+        expect(await tag.evaluate(el => getComputedStyle(el).backgroundColor)).toBe(await token(page, '--primary-soft'));
     });
 });

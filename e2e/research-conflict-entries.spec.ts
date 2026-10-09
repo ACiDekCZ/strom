@@ -1,6 +1,10 @@
-import { test, expect, Page, Route } from '@playwright/test';
-import { openApp, card } from './helpers.js';
-import { BRIDGE, UUID, HEAD, NEW_HEAD, FakeBridge, fakeBridge, dropFile, poll, openResearchMenu, block } from './research-bridge.js';
+import { test, expect, Page } from '@playwright/test';
+import { card } from './helpers.js';
+import { BRIDGE, FakeBridge, poll, openResearchMenu, block } from './research-bridge.js';
+import {
+    Version, DecideRoute, setupConflict, openEdit, editJosef, cardOf, panel, choice, activeId, token, pageBoxes, partBoxes, KEEP_200, TAKE_200,
+    tag as fieldTag, writtenWithConflict,
+} from './research-conflict.js';
 
 /**
  * The ways to a conflict decidable in the app (DEV §6): the panel by the edit
@@ -13,115 +17,17 @@ import { BRIDGE, UUID, HEAD, NEW_HEAD, FakeBridge, fakeBridge, dropFile, poll, o
  * conflict). Against a bridge answered by page.route. Invented data only.
  */
 
-const cors = { 'access-control-allow-origin': '*' };
-const LINKS = ['send', 'open', 'live', 'app', 'setup', 'conflict'];
-
-interface Version {
-    head?: string;
-    janBirth?: string;
-    janState?: 'open' | 'decided';
-    janDeath?: string;
-    /** Jan's conflict as one of the sources (no side said): never decided here. */
-    sources?: boolean;
-    /** The links the research announces (default: with `conflict`). */
-    links?: string[];
-}
-
-/** A research file: Josef and Anna, their son Jan with a conflict of his edit about his birth date. */
-function ged(v: Version = {}): string {
-    const state = v.janState ?? 'open';
-    const conflict = v.sources
-        ? ['1 _STROM_CONFLICT X0007', '2 TYPE BIRT', `2 STAT ${state}`, '2 VAL 3 FEB 1865', '3 SOUR @S0001@', '2 VAL 1865']
-        : ['1 _STROM_CONFLICT X0007', '2 TYPE BIRT', `2 STAT ${state}`, '2 _STROM_TAKE Y',
-            '2 VAL 3 FEB 1865', '3 SOUR @S0001@', '3 _STROM_SIDE research', '2 VAL 1865', '3 _STROM_SIDE user',
-            ...(state === 'decided' ? ['2 DECI 1865'] : [])];
-    return [
-        '0 HEAD', '1 SOUR STROM_RESEARCH', '2 NAME Strom Research', '1 DATE 9 OCT 2026',
-        `1 _STROM_TREE ${UUID}`, `1 _STROM_HEAD ${v.head ?? HEAD}`, `1 _STROM_LINKS ${(v.links ?? LINKS).join(' ')}`, '1 CHAR UTF-8', '1 NOTE Víškovi',
-        '0 @P0001@ INDI', '1 NAME Josef /Víšek/', '1 SEX M', '1 REFN P0001', '2 TYPE strom-research', '1 FAMS @F0001@',
-        '0 @P0002@ INDI', '1 NAME Anna /Svobodová/', '1 SEX F', '1 REFN P0002', '2 TYPE strom-research', '1 FAMS @F0001@',
-        '0 @P0003@ INDI', '1 NAME Jan /Víšek/', '1 SEX M', '1 REFN P0003', '2 TYPE strom-research', '1 FAMC @F0001@',
-        '1 BIRT', `2 DATE ${v.janBirth ?? '1865'}`, '2 PLAC Chlumy',
-        '1 DEAT', `2 DATE ${v.janDeath ?? '1932'}`,
-        ...conflict,
-        '0 @F0001@ FAM', '1 HUSB @P0001@', '1 WIFE @P0002@', '1 CHIL @P0003@',
-        '0 @S0001@ SOUR', '1 TITL Oddací matrika Čáslav', '1 PAGE fol. 41', '1 REFN S0001', '1 TEXT Josef Víšek a Anna', '1 _STROM_READ research',
-        '0 TRLR',
-    ].join('\n');
-}
-
-interface Reply { status: number; body?: unknown; then?: Version }
-interface DecideRoute { asks: { id: string; body: unknown }[]; replies: Reply[] }
-
-async function decideRoute(page: Page, bridge: FakeBridge | null): Promise<DecideRoute> {
-    const d: DecideRoute = { asks: [], replies: [] };
-    await page.route(`${BRIDGE}/conflict/**`, async (route: Route) => {
-        const req = route.request();
-        if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { ...cors, 'access-control-allow-methods': 'POST', 'access-control-allow-headers': '*' } });
-        d.asks.push({ id: decodeURIComponent(new URL(req.url()).pathname.split('/').pop() ?? ''), body: JSON.parse(req.postData() ?? 'null') });
-        const reply = d.replies.shift() ?? { status: 500, body: { error: 'no reply queued' } };
-        if (reply.then && bridge) {
-            bridge.head = reply.then.head ?? NEW_HEAD;
-            bridge.treeGed = ged(reply.then);
-        }
-        return route.fulfill({ status: reply.status, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(reply.body ?? {}) });
-    });
-    return d;
-}
-
 /**
  * The research opened from its file (`opened`), its bridge serving `serving` (default: the same version);
  * `features`: what its bridge says it can do (none: decided by a link into the research); `bridge: false`: it does
  * not answer here (no link announced either: not on this device).
  */
 async function setup(page: Page, opened: Version = {}, serving?: Version, opts: { bridge?: boolean; features?: string[] } = {}): Promise<{ bridge: FakeBridge; decide: DecideRoute; treeId: string }> {
-    await page.clock.install();
-    await openApp(page);
-    await page.evaluate(() => {
-        // Opening links in the system is not testable: recorded instead.
-        const ui = window.Strom.UI as unknown as { handOverResearchLink: (u: string) => void; __links: string[] };
-        ui.__links = [];
-        ui.handOverResearchLink = (u: string) => { ui.__links.push(u); };
-    });
-    await dropFile(page, 'tree-strom.ged', ged(opened));
-    await expect(card(page, 'Jan')).toBeVisible();
-    const treeId = await page.evaluate(({ uuid, base }) => {
-        localStorage.setItem(`strom-research-bridge:${uuid}`, JSON.stringify({ base, accepts: { sync: { auto: 'off' }, sources: true, verified: true } }));
-        const tm = window.Strom.TreeManager;
-        const id = tm.getActiveTreeId()!;
-        tm.patchResearchLink(id, { sendMode: 'manual' });
-        localStorage.setItem(`strom-research-auto:${id}`, JSON.stringify({ ...JSON.parse(localStorage.getItem(`strom-research-auto:${id}`) ?? '{}'), modeAsked: true, skipPreview: true }));
-        return id;
-    }, { uuid: UUID, base: BRIDGE });
-    if (opts.bridge === false) return { bridge: null as unknown as FakeBridge, decide: await decideRoute(page, null), treeId };
-    const bridge = await fakeBridge(page, { treeGed: ged(serving ?? opened), head: serving?.head ?? opened.head ?? HEAD, links: opened.links ?? LINKS, features: opts.features ?? ['conflict.decide'] });
-    await poll(page);
-    const decide = await decideRoute(page, bridge);
-    return { bridge, decide, treeId };
+    return setupConflict(page, { opened, ...(serving ? { serving } : {}), ...opts, clock: true });
 }
 
-const KEEP_200: Reply = { status: 200, body: { decided: 'X0007', take: 'user', head: NEW_HEAD }, then: { head: NEW_HEAD, janState: 'decided' } };
-const TAKE_200 = (then: Version): Reply => ({ status: 200, body: { decided: 'X0007', take: 'research', head: NEW_HEAD }, then: { head: NEW_HEAD, janState: 'decided', ...then } });
-
-async function editJan(page: Page): Promise<void> {
-    await page.evaluate(() => {
-        const p = window.Strom.DataManager.getAllPersons().find(x => x.firstName === 'Jan')!;
-        window.Strom.UI.runPersonMenuAction(p.id, 'edit');
-    });
-    await expect(page.locator('#person-modal')).toBeVisible();
-}
-
-/** An edit of another person: the tree is no longer what the research had (nothing loads quietly after Keep). */
-const editJosef = (page: Page) => page.evaluate(() => {
-    const dm = window.Strom.DataManager;
-    dm.updatePerson(dm.getAllPersons().find(p => p.firstName === 'Josef')!.id, { birthPlace: 'Praha' });
-});
-
-const tag = (page: Page) => page.locator('#person-modal label[for="input-birthdate"] .pm-conflict-tag');
-const panel = (page: Page) => page.locator('#prc-panel');
-const choice = (page: Page, which: 'user' | 'research') => panel(page).locator(`.prc-panel-row[data-side="${which}"] .prc-panel-choice`);
-const activeId = (page: Page) => page.evaluate(() => document.activeElement?.id ?? '');
-const cardOf = (page: Page) => page.locator('#person-research-modal [data-conflict-card="X0007"]');
+const editJan = (page: Page) => openEdit(page, 'Jan');
+const tag = (page: Page) => fieldTag(page, 'input-birthdate');
 
 test.describe('the panel by the edit form\'s field', () => {
     test.use({ locale: 'en-US' });
@@ -154,15 +60,12 @@ test.describe('the panel by the edit form\'s field', () => {
         expect(await page.evaluate(() => !!document.activeElement?.closest('#prc-panel'))).toBe(true);
 
         // Inside the window, under the field, its arrow at the tag.
-        const box = (await p.boundingBox())!;
-        const field = (await page.locator('#input-birthdate').boundingBox())!;
-        const t = (await tag(page).boundingBox())!;
+        const [box, field, t, arrow] = await pageBoxes(page, ['#prc-panel', '#input-birthdate', '#person-modal .pm-conflict-tag[data-field="input-birthdate"]', '#prc-panel .prc-panel-arrow']);
         expect(box.y).toBeGreaterThan(field.y + field.height);
         expect(box.x).toBeGreaterThanOrEqual(0);
         expect(box.x + box.width).toBeLessThanOrEqual(1280);
         expect(box.y + box.height).toBeLessThanOrEqual(900);
         expect(box.width).toBeLessThanOrEqual(400);
-        const arrow = (await p.locator('.prc-panel-arrow').boundingBox())!;
         expect(Math.abs(arrow.x + arrow.width / 2 - (t.x + t.width / 2))).toBeLessThan(4);
 
         // Esc: the panel goes, the form stays, the keyboard on the tag.
@@ -330,16 +233,14 @@ test.describe('the panel on a phone: a bottom sheet', () => {
         const p = panel(page);
         await expect(p).toHaveClass(/prc-panel--sheet/);
         await expect(page.locator('.prc-panel-overlay')).toHaveClass(/active/);
-        const row = (await p.locator('.prc-panel-row[data-side="user"]').boundingBox())!;
-        const keep = (await choice(page, 'user').boundingBox())!;
+        const [row, keep, value, sheet, close] = await partBoxes(p, ['.prc-panel-row[data-side="user"]', '.prc-panel-row[data-side="user"] .prc-panel-choice',
+            '.prc-panel-row[data-side="user"] .prc-panel-value', ':scope', '.prc-panel-close']);
         expect(keep.height).toBeGreaterThanOrEqual(44);
         expect(keep.width).toBeGreaterThan(row.width - 30);
         // Under the value, not beside it.
-        const value = (await p.locator('.prc-panel-row[data-side="user"] .prc-panel-value').boundingBox())!;
         expect(keep.y).toBeGreaterThan(value.y + value.height - 1);
-        const sheet = (await p.boundingBox())!;
         expect(sheet.y + sheet.height).toBeLessThanOrEqual(740 + 1);
-        expect((await p.locator('.prc-panel-close').boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        expect(close.height).toBeGreaterThanOrEqual(44);
         await expect(choice(page, 'user')).toBeFocused();
         decide.replies.push(KEEP_200);
         await choice(page, 'user').click();
@@ -366,11 +267,9 @@ test.describe('the panel on a phone: a bottom sheet', () => {
         const p = panel(page);
         await expect(p).toHaveClass(/prc-panel--sheet/);
         await expect(page.locator('.prc-panel-overlay')).toHaveClass(/active/);
-        const keep = (await choice(page, 'user').boundingBox())!;
-        const value = (await p.locator('.prc-panel-row[data-side="user"] .prc-panel-value').boundingBox())!;
+        const [keep, value, sheet] = await partBoxes(p, ['.prc-panel-row[data-side="user"] .prc-panel-choice', '.prc-panel-row[data-side="user"] .prc-panel-value', ':scope']);
         expect(keep.height).toBeGreaterThanOrEqual(44);
         expect(keep.x).toBeGreaterThan(value.x + value.width);
-        const sheet = (await p.boundingBox())!;
         expect(sheet.y).toBeGreaterThanOrEqual(0);
         expect(sheet.y + sheet.height).toBeLessThanOrEqual(390 + 1);
         await page.keyboard.press('Escape');
@@ -384,40 +283,13 @@ test.describe('the panel on a phone: a bottom sheet', () => {
         await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
         await editJan(page);
         await tag(page).click();
-        const surface = await page.evaluate(() => {
-            const probe = document.createElement('span');
-            probe.style.background = 'var(--surface)';
-            document.body.appendChild(probe);
-            const v = getComputedStyle(probe).backgroundColor;
-            probe.remove();
-            return v;
-        });
-        expect(await panel(page).evaluate(el => getComputedStyle(el).backgroundColor)).toBe(surface);
+        expect(await panel(page).evaluate(el => getComputedStyle(el).backgroundColor)).toBe(await token(page, '--surface'));
     });
 });
 
 test.describe('the Research menu, the ≠ and the dialog at the card', () => {
     test.use({ locale: 'en-US' });
     test.beforeEach(async ({ page }) => { await page.setViewportSize({ width: 1280, height: 900 }); });
-
-    /** The tree as sent and written, its write left this conflict; the research moved on since. */
-    async function writtenWithConflict(page: Page, bridge: FakeBridge, treeId: string, v: Version = {}): Promise<void> {
-        await editJosef(page);
-        await page.evaluate(id => {
-            const tm = window.Strom.TreeManager;
-            const link = tm.getTreeMetadata(id)!.research!;
-            const fp = window.Strom.UI.researchSyncFingerprints(id, link).current;
-            const at = new Date().toISOString();
-            tm.patchResearchLink(id, { sent: { fingerprint: fp, at, closedAt: at, changes: 1, head: link.head ?? '', state: 'written', conflicts: 1, intake: 'R1' } });
-            const st = JSON.parse(localStorage.getItem(`strom-research-auto:${id}`) ?? '{}');
-            st.lastWritten = { at, changes: 1, conflicts: 1, conflictIds: ['X0007'], fingerprint: fp, intake: 'R1' };
-            localStorage.setItem(`strom-research-auto:${id}`, JSON.stringify(st));
-        }, treeId);
-        bridge.head = 'cccc2222dddd';
-        bridge.treeGed = ged({ ...v, head: 'cccc2222dddd', janDeath: '1933' });
-        await poll(page);
-        expect(await page.evaluate(() => window.Strom.UI.currentResearchSyncState().kind)).toBe('writtenConflicts');
-    }
 
     test('one conflict decidable here: "Show" with whom and what above it — the dialog at the card, the keyboard on Keep, lit up 1.5 s', async ({ page }) => {
         const { bridge, treeId } = await setup(page);
@@ -434,14 +306,7 @@ test.describe('the Research menu, the ≠ and the dialog at the card', () => {
         await expect(c).toBeVisible();
         await expect(c).toHaveClass(/prc--highlight/);
         await expect(c.locator('.prc-side[data-side="user"] .prc-choice')).toBeFocused();
-        expect(await c.evaluate(el => getComputedStyle(el).outlineColor)).toBe(await page.evaluate(() => {
-            const probe = document.createElement('span');
-            probe.style.color = 'var(--primary)';
-            document.body.appendChild(probe);
-            const v = getComputedStyle(probe).color;
-            probe.remove();
-            return v;
-        }));
+        expect(await c.evaluate(el => getComputedStyle(el).outlineColor)).toBe(await token(page, '--primary', 'color'));
         await page.clock.fastForward(1600);
         await expect(c).not.toHaveClass(/prc--highlight/);
     });

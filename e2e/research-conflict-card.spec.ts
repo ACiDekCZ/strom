@@ -1,6 +1,6 @@
-import { test, expect, Page, Route } from '@playwright/test';
-import { openApp, card } from './helpers.js';
-import { BRIDGE, UUID, FakeBridge, fakeBridge, researchGed, dropFile, poll, links } from './research-bridge.js';
+import { test, expect, Page } from '@playwright/test';
+import { UUID, FakeBridge, links } from './research-bridge.js';
+import { DecideRoute, setupConflict, openKnows, cardOf, side, boxes, partBoxes, token } from './research-conflict.js';
 
 /**
  * A conflict made by an edit in the app, decided by a side in "What the
@@ -12,77 +12,15 @@ import { BRIDGE, UUID, FakeBridge, fakeBridge, researchGed, dropFile, poll, link
  * Invented data only.
  */
 
-const cors = { 'access-control-allow-origin': '*' };
-const LINKS = ['send', 'open', 'live', 'app', 'setup', 'conflict'];
-
 /** Jan: born 1865 here; the research has 3 FEB 1865 from its register — a conflict of his edit — and a conflict of two sources about his death. */
-const JAN = [
-    '1 BIRT', '2 DATE 1865', '2 PLAC Chlumy',
-    '1 DEAT', '2 DATE 1932',
-    '1 _STROM_CONFLICT X0007', '2 TYPE BIRT', '2 STAT open', '2 _STROM_TAKE Y',
-    '2 VAL 3 FEB 1865', '3 SOUR @S0001@', '3 _STROM_SIDE research',
-    '2 VAL 1865', '3 _STROM_SIDE user',
-    '1 _STROM_CONFLICT X0010', '2 TYPE DEAT', '2 STAT open', '2 VAL 1931', '3 SOUR @S0001@', '2 VAL 1932',
-];
-
-function ged(linkList = LINKS): string {
-    return researchGed(undefined, JAN).replace('1 _STROM_LINKS send open live app setup', `1 _STROM_LINKS ${linkList.join(' ')}`);
-}
-
-/** The bridge's answers to POST /conflict/<X…>: each test queues them; `hold` keeps the next one until released. */
-interface DecideRoute { asks: { id: string; body: unknown }[]; replies: { status: number; body?: unknown; abort?: boolean }[]; hold: Promise<void> | null }
-
-async function decideRoute(page: Page): Promise<DecideRoute> {
-    const d: DecideRoute = { asks: [], replies: [], hold: null };
-    await page.route(`${BRIDGE}/conflict/**`, async (route: Route) => {
-        const req = route.request();
-        if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { ...cors, 'access-control-allow-methods': 'POST', 'access-control-allow-headers': '*' } });
-        const id = decodeURIComponent(new URL(req.url()).pathname.split('/').pop() ?? '');
-        d.asks.push({ id, body: JSON.parse(req.postData() ?? 'null') });
-        if (d.hold) await d.hold;
-        const reply = d.replies.shift() ?? { status: 500, body: { error: 'no reply queued' } };
-        if (reply.abort) return route.abort('connectionrefused');
-        return route.fulfill({ status: reply.status, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(reply.body ?? {}) });
-    });
-    return d;
-}
-
-/** The research opened from its file, its bridge remembered; `features`: what the bridge says it can do (null: it does not answer). */
 async function setup(page: Page, opts: { features?: string[] | null; linkList?: string[] } = {}): Promise<{ bridge: FakeBridge | null; decide: DecideRoute }> {
-    await openApp(page);
-    await page.evaluate(() => {
-        const ui = window.Strom.UI as unknown as { handOverResearchLink: (u: string) => void; __links: string[] };
-        ui.__links = [];
-        ui.handOverResearchLink = (u: string) => { ui.__links.push(u); };
+    const { bridge, decide } = await setupConflict(page, {
+        opened: { sourcesDeath: true, ...(opts.linkList ? { links: opts.linkList } : {}) },
+        ...(opts.features ? { features: opts.features } : {}),
+        bridge: opts.features !== null,
     });
-    await dropFile(page, 'tree-strom.ged', ged(opts.linkList));
-    await expect(card(page, 'Jan')).toBeVisible();
-    await page.evaluate(({ uuid, base }) => {
-        localStorage.setItem(`strom-research-bridge:${uuid}`, JSON.stringify({ base, accepts: { sync: { auto: 'off' }, sources: true, verified: true } }));
-        const tm = window.Strom.TreeManager;
-        const id = tm.getActiveTreeId()!;
-        tm.patchResearchLink(id, { sendMode: 'manual' });
-        localStorage.setItem(`strom-research-auto:${id}`, JSON.stringify({ ...JSON.parse(localStorage.getItem(`strom-research-auto:${id}`) ?? '{}'), modeAsked: true, skipPreview: true }));
-    }, { uuid: UUID, base: BRIDGE });
-    let bridge: FakeBridge | null = null;
-    if (opts.features !== null) {
-        bridge = await fakeBridge(page, { treeGed: ged(opts.linkList), links: opts.linkList ?? LINKS, features: opts.features ?? ['conflict.decide'] });
-        await poll(page);
-    }
-    const decide = await decideRoute(page);
-    return { bridge, decide };
+    return { bridge: opts.features === null ? null : bridge, decide };
 }
-
-async function openKnows(page: Page): Promise<void> {
-    await page.evaluate(() => {
-        const jan = window.Strom.DataManager.getAllPersons().find(p => p.firstName === 'Jan')!;
-        window.Strom.UI.runPersonMenuAction(jan.id, 'research-knows');
-    });
-    await expect(page.locator('#person-research-modal')).toBeVisible();
-}
-
-const cardOf = (page: Page) => page.locator('#person-research-modal [data-conflict-card="X0007"]');
-const side = (page: Page, which: 'user' | 'research') => cardOf(page).locator(`.prc-side[data-side="${which}"]`);
 
 test.describe('a conflict decided by a side in the app', () => {
     test.use({ locale: 'en-US' });
@@ -110,8 +48,7 @@ test.describe('a conflict decided by a side in the app', () => {
         await expect(page.locator('#prc-note-X0007-user')).toHaveText("The research writes the value from the app; the record's value stays in its history with the reason.");
         await expect(page.locator('#prc-note-X0007-research')).toHaveText("The value here changes to the research's. A backup is saved first.");
         // Side by side on a computer.
-        const a = (await side(page, 'user').boundingBox())!;
-        const b = (await side(page, 'research').boundingBox())!;
+        const [a, b] = await boxes(c.locator('.prc-side'));
         expect(Math.abs(a.y - b.y)).toBeLessThan(1);
         expect(b.x).toBeGreaterThan(a.x + a.width);
         await expect(c.locator('.prc-links [data-do="decide"]')).toHaveText('Decide in the research ↗');
@@ -293,37 +230,57 @@ test.describe('a conflict decided by a side in the app', () => {
         const { decide } = await setup(page);
         await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
         await openKnows(page);
-        const token = (name: string) => page.evaluate(n => {
-            const probe = document.createElement('span');
-            probe.style.background = `var(${n})`;
-            document.body.appendChild(probe);
-            const v = getComputedStyle(probe).backgroundColor;
-            probe.remove();
-            return v;
-        }, name);
         decide.replies.push({ status: 423, body: { code: 'locked' } });
         await side(page, 'user').locator('.prc-choice').click();
         await expect(cardOf(page).locator('.prc-notice--error')).toBeVisible();
-        expect(await cardOf(page).locator('.prc-notice--error').evaluate(el => getComputedStyle(el).backgroundColor)).toBe(await token('--danger-soft'));
+        expect(await cardOf(page).locator('.prc-notice--error').evaluate(el => getComputedStyle(el).backgroundColor)).toBe(await token(page, '--danger-soft'));
         decide.replies.push({ status: 200, body: { decided: 'X0007', take: 'user', head: '' } });
         await cardOf(page).locator('.prc-notice-action').click();
         await expect(cardOf(page).locator('.prc-tag--done')).toBeVisible();
-        expect(await cardOf(page).locator('.prc-tag--done').evaluate(el => getComputedStyle(el).backgroundColor)).toBe(await token('--primary-soft'));
+        expect(await cardOf(page).locator('.prc-tag--done').evaluate(el => getComputedStyle(el).backgroundColor)).toBe(await token(page, '--primary-soft'));
+    });
+});
+
+test.describe('the card drawn once', () => {
+    test.use({ locale: 'en-US', viewport: { width: 1280, height: 900 } });
+
+    test('drawn again with nothing changed, the card stays the same node: the keyboard and a reader stay where they were', async ({ page }) => {
+        await setup(page);
+        // The dialog drawn and, before anything else happens, its cards drawn again from the data now (what the
+        // research's version read for the sentence under Take does a moment after opening, as the status poll does).
+        const same = await page.evaluate(() => {
+            const ui = window.Strom.UI;
+            ui.runPersonMenuAction(window.Strom.DataManager.getAllPersons().find(p => p.firstName === 'Jan')!.id, 'research-knows');
+            const first = document.querySelector('[data-conflict-card="X0007"]');
+            first?.querySelector<HTMLElement>('.prc-side[data-side="research"] .prc-choice')?.focus();
+            ui.refreshResearchConflictCards();
+            ui.refreshResearchConflictCards('X0007');
+            return !!first && document.querySelector('[data-conflict-card="X0007"]') === first;
+        });
+        expect(same).toBe(true);
+        const c = cardOf(page);
+        await expect(c).toHaveAttribute('data-state', 'open');
+        await expect(c.locator('.prc-side[data-side="research"] .prc-choice')).toBeFocused();
+        // A change of its state draws it anew.
+        await c.evaluate(el => { (el as HTMLElement & { __mark?: boolean }).__mark = true; });
+        await page.evaluate(() => window.Strom.UI.setResearchConflictCardState('X0007', { kind: 'error', take: 'user', error: 'locked' }));
+        await expect(c).toHaveAttribute('data-state', 'error');
+        expect(await c.evaluate(el => !!(el as HTMLElement & { __mark?: boolean }).__mark)).toBe(false);
     });
 });
 
 test.describe('a conflict decided by a side: phones and tablets', () => {
     test.use({ locale: 'en-US' });
 
+    // The sides and their parts are read in one go (boxes): the card is drawn again once the
+    // research's version is read for the sentence under Take, and two separate reads could straddle it.
     test('phone (360 px) with the bridge: the sides one under the other, 44 px choices', async ({ page }) => {
         await page.setViewportSize({ width: 360, height: 740 });
         await setup(page);
         await openKnows(page);
-        const a = (await side(page, 'user').boundingBox())!;
-        const b = (await side(page, 'research').boundingBox())!;
+        const [a, b] = await boxes(cardOf(page).locator('.prc-side'));
         expect(b.y).toBeGreaterThan(a.y + a.height - 1);
-        for (const which of ['user', 'research'] as const) {
-            const box = (await side(page, which).locator('.prc-choice').boundingBox())!;
+        for (const box of await boxes(cardOf(page).locator('.prc-choice'))) {
             expect(box.height).toBeGreaterThanOrEqual(44);
             expect(box.x + box.width).toBeLessThanOrEqual(360);
         }
@@ -333,44 +290,42 @@ test.describe('a conflict decided by a side: phones and tablets', () => {
         await page.setViewportSize({ width: 844, height: 390 });
         await setup(page);
         await openKnows(page);
-        const a = (await side(page, 'user').boundingBox())!;
-        const b = (await side(page, 'research').boundingBox())!;
+        const [a, b] = await boxes(cardOf(page).locator('.prc-side'));
         expect(Math.abs(a.y - b.y)).toBeLessThan(1);
         expect(b.x).toBeGreaterThan(a.x + a.width);
     });
 
-    test('a touch phone (no research here): the sides as a compact table, the notice under them, no links', async ({ browser }) => {
-        const context = await browser.newContext({ viewport: { width: 360, height: 740 }, hasTouch: true, isMobile: true, locale: 'en-US' });
-        const page = await context.newPage();
-        await setup(page, { features: null });
-        await openKnows(page);
-        const c = cardOf(page);
-        await expect(c).toHaveAttribute('data-state', 'none');
-        await expect(c.locator('.prc-choice, .prc-links, [data-conflict]')).toHaveCount(0);
-        const sides = (await c.locator('.prc-sides').boundingBox())!;
-        const notice = (await c.locator('.prc-notice').boundingBox())!;
-        expect(notice.y).toBeGreaterThanOrEqual(sides.y + sides.height - 1);
-        // Label and value on one row.
-        const label = (await side(page, 'user').locator('.prc-side-label').boundingBox())!;
-        const value = (await side(page, 'user').locator('.prc-value').boundingBox())!;
-        expect(value.x).toBeGreaterThan(label.x + label.width);
-        await context.close();
+    test.describe('a touch phone', () => {
+        test.use({ viewport: { width: 360, height: 740 }, hasTouch: true, isMobile: true });
+
+        test('no research here: the sides as a compact table, the notice under them, no links', async ({ page }) => {
+            await setup(page, { features: null });
+            await openKnows(page);
+            const c = cardOf(page);
+            await expect(c).toHaveAttribute('data-state', 'none');
+            await expect(c.locator('.prc-choice, .prc-links, [data-conflict]')).toHaveCount(0);
+            const [sides, notice, label, value] = await partBoxes(c, ['.prc-sides', '.prc-notice', '.prc-side[data-side="user"] .prc-side-label', '.prc-side[data-side="user"] .prc-value']);
+            expect(notice.y).toBeGreaterThanOrEqual(sides.y + sides.height - 1);
+            // Label and value on one row.
+            expect(value.x).toBeGreaterThan(label.x + label.width);
+        });
     });
 
-    test('a touch tablet (820 px): not the research\'s computer — the sides still side by side, without choices or links', async ({ browser }) => {
-        const context = await browser.newContext({ viewport: { width: 820, height: 1180 }, hasTouch: true, locale: 'en-US' });
-        const page = await context.newPage();
-        await setup(page);
-        await openKnows(page);
-        const c = cardOf(page);
-        await expect(c).toHaveAttribute('data-state', 'none');
-        await expect(c.locator('.prc-notice--info')).toHaveText('Decided on the computer with the research.');
-        const a = (await side(page, 'user').boundingBox())!;
-        const b = (await side(page, 'research').boundingBox())!;
-        expect(Math.abs(a.y - b.y)).toBeLessThan(1);
-        // Over 640 px the notice stays above the sides.
-        expect((await c.locator('.prc-notice').boundingBox())!.y).toBeLessThan(a.y);
-        await expect(c.locator('.prc-choice, .prc-links')).toHaveCount(0);
-        await context.close();
+    test.describe('a touch tablet', () => {
+        test.use({ viewport: { width: 820, height: 1180 }, hasTouch: true });
+
+        test('not the research\'s computer: the sides still side by side, without choices or links', async ({ page }) => {
+            await setup(page);
+            await openKnows(page);
+            const c = cardOf(page);
+            await expect(c).toHaveAttribute('data-state', 'none');
+            await expect(c.locator('.prc-notice--info')).toHaveText('Decided on the computer with the research.');
+            const [a, b] = await boxes(c.locator('.prc-side'));
+            expect(Math.abs(a.y - b.y)).toBeLessThan(1);
+            // Over 640 px the notice stays above the sides.
+            const [notice] = await boxes(c.locator('.prc-notice'));
+            expect(notice.y).toBeLessThan(a.y);
+            await expect(c.locator('.prc-choice, .prc-links')).toHaveCount(0);
+        });
     });
 });

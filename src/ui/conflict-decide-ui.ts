@@ -294,9 +294,15 @@ export const conflictDecideMethods = uiModule({
             const tmp = document.createElement('div');
             tmp.innerHTML = html;
             const next = tmp.firstElementChild as HTMLElement | null;
+            if (next && card.classList.contains('prc--highlight')) next.classList.add('prc--highlight');
+            // The same card as drawn with the dialog: kept (a reader's place, the keyboard and the
+            // layout stay; a redraw for nothing would only swap the node under them).
+            if (next?.isEqualNode(card)) {
+                drawn.set(card, html);
+                return;
+            }
             if (next) {
                 drawn.set(next, html);
-                if (card.classList.contains('prc--highlight')) next.classList.add('prc--highlight');
                 card.replaceWith(next);
             } else {
                 card.remove();
