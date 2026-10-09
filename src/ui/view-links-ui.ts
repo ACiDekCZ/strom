@@ -308,6 +308,10 @@ export const viewLinksUiMethods = uiModule({
             const treeId = DataManager.getCurrentTreeId();
             const link = treeId ? loadViewLinks(treeId).find(l => l.hypo === hypo) : null;
             this.clearDialogStack();
+            // The menu is gone: the card it was opened on gets the keyboard back when the dialog closes.
+            if (!document.activeElement || document.activeElement === document.body) {
+                document.querySelector<HTMLElement>(`.person-card[data-id="${CSS.escape(personId)}"]`)?.focus({ preventScroll: true });
+            }
             this.showPersonResearchDialog(link?.anchorId ?? personId, { hypo: { id: hypo, ...(link ? { variant: link.variant } : {}) } });
             return;
         }

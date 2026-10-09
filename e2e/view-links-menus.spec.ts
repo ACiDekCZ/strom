@@ -155,6 +155,17 @@ test.describe('linked in the view only: the card’s menu (desktop)', () => {
         await expect(variant(dialog, 'H0022', 'B')).toHaveClass(/is-expanded/);
         await expect(variant(dialog, 'H0022', 'B').locator('.prv-title')).toHaveAttribute('aria-expanded', 'true');
         await expect(h).toBeInViewport();
+        await page.locator('#person-research-close').click();
+
+        // From the keyboard: the card's menu, the row, Enter; Esc closes the dialog and the card has the keyboard again.
+        await card(page, 'Marie').focus();
+        await page.keyboard.press('Enter');
+        await menu(page).locator('[data-action="view-link-about:H0022"]').focus();
+        await page.keyboard.press('Enter');
+        await expect(dialog.locator('.person-research-modal')).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(dialog.locator('.person-research-modal')).toHaveCount(0);
+        await expect(card(page, 'Marie')).toBeFocused();
     });
 
     test('a person with versions to show: "Show as linked…" after Focus, a second level with a heading and the versions', async ({ page }) => {

@@ -164,6 +164,8 @@ export const researchEdgeUiMethods = uiModule({
         bubble.addEventListener('mouseleave', () => this.hideResearchEdgeBubbleSoon());
         const more = bubble.querySelector<HTMLButtonElement>('.reb-more')!;
         more.onclick = () => {
+            // The bubble goes: the stub gets the keyboard, and back from the dialog once it closes.
+            if (bubble.contains(document.activeElement)) this.focusResearchEdgeQuietly(anchor);
             if (!namedHypo) { this.openResearchEdgeSection(personId); return; }
             const shown = this.viewLinkOffersFor(namedHypo.id!).find(o => o.shown);
             this.hideResearchEdgeBubble();
@@ -258,11 +260,7 @@ export const researchEdgeUiMethods = uiModule({
         });
         const close = (): void => {
             this.hideResearchEdgeBubble();
-            if (anchor.isConnected) {
-                quietFocus = true;
-                anchor.focus({ preventScroll: true });
-                quietFocus = false;
-            }
+            this.focusResearchEdgeQuietly(anchor);
         };
         bubble.querySelector<HTMLButtonElement>('.reb-close')!.onclick = close;
         const focusables = (): HTMLElement[] => [...bubble.querySelectorAll<HTMLElement>('button:not([disabled])')];
@@ -295,6 +293,14 @@ export const researchEdgeUiMethods = uiModule({
         };
         // The first action (a version to show), else the first button.
         (bubble.querySelector<HTMLElement>('.reb-variant-btn') ?? focusables()[0])?.focus({ preventScroll: true });
+    },
+
+    /** The keyboard back on a stub without its bubble coming up (a bubble or a dialog it opened has closed). */
+    focusResearchEdgeQuietly(stub: HTMLElement): void {
+        if (!stub.isConnected) return;
+        quietFocus = true;
+        stub.focus({ preventScroll: true });
+        quietFocus = false;
     },
 
     hideResearchEdgeBubble(): void {

@@ -22,6 +22,8 @@ import { PersonMenuAction } from './context-menu.js';
 import { personSubtitle } from './person-sources-ui.js';
 
 const DIALOG_ID = 'person-research-modal';
+/** What had the keyboard when the dialog opened (a line's label, a stub): it gets it back on close. */
+let dialogOpener: HTMLElement | null = null;
 
 /** HTML-escape a string for innerHTML (text and attribute values). */
 function esc(text: string): string {
@@ -111,6 +113,9 @@ export const personResearchMethods = uiModule({
      * hypotheses' own section.
      */
     showPersonResearchDialog(personId: PersonId, opts: { edge?: boolean; hypo?: { id: string; variant?: string } } = {}): void {
+        // Drawn again from inside itself: the one that opened it first keeps it.
+        const active = document.activeElement as HTMLElement | null;
+        if (active && active !== document.body && !active.closest(`#${DIALOG_ID}`)) dialogOpener = active;
         document.getElementById(DIALOG_ID)?.remove();
         const person = DataManager.getPerson(personId);
         // The conflicts as the research has them now (its version not loaded may say more, finding 40).
@@ -380,8 +385,15 @@ export const personResearchMethods = uiModule({
     },
 
     closePersonResearchDialog(): void {
-        document.getElementById(DIALOG_ID)?.remove();
+        const dialog = document.getElementById(DIALOG_ID);
+        const hadFocus = !!dialog?.contains(document.activeElement);
+        dialog?.remove();
         this.dialogStack = this.dialogStack.filter(d => d !== DIALOG_ID);
+        const opener = dialogOpener;
+        dialogOpener = null;
+        if (!hadFocus || !opener?.isConnected) return;
+        if (opener.matches('.research-edge')) this.focusResearchEdgeQuietly(opener);
+        else opener.focus({ preventScroll: true });
     },
 
     /**

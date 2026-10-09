@@ -80,6 +80,14 @@ const treeState = (page: Page) => page.evaluate(() => ({
     undo: window.Strom.DataManager.canUndo(),
 }));
 
+/** The tree's version as the tree list keeps it, and what the research link says (unsent changes or not). */
+const treeVersion = (page: Page) => page.evaluate(() => {
+    const S = window.Strom;
+    const meta = S.TreeManager.getTreeMetadata(S.TreeManager.getActiveTreeId()!)!;
+    const sync = S.UI.currentResearchSyncState();
+    return { modified: meta.lastModifiedAt, persons: meta.personCount, sync: sync.kind, core: sync.core };
+});
+
 /** Every one of these cards lies inside the tree's window. */
 async function allInView(page: Page, cards: Locator): Promise<boolean> {
     const box = (await page.locator('#tree-container').boundingBox())!;
@@ -218,11 +226,26 @@ test.describe('linked in the view only: the named stub and its bubble', () => {
         await expect(dialog).toBeVisible();
         await expect(dialog).toHaveAttribute('data-open-hypo', 'H0022');
         await expect(bubble(page)).toHaveCount(0);
+        await page.locator('#person-research-close').click();
+
+        // The keyboard's way: Enter on the stub, Tab to "More", Enter; Esc closes the dialog and the stub has the keyboard again.
+        await stubOf(page).focus();
+        await page.keyboard.press('Enter');
+        await bubble(page).locator('.reb-more').focus();
+        await page.keyboard.press('Enter');
+        await expect(dialog).toBeVisible();
+        await expect(bubble(page)).toHaveCount(0);
+        await page.keyboard.press('Escape');
+        await expect(dialog).toHaveCount(0);
+        await expect(stubOf(page)).toBeFocused();
+        await expect(bubble(page)).toHaveCount(0);
     });
 
     test('"Show as linked" at B: five ghosts, the hollow line and its label, the stub gone, a notice, both in view — and no change of the tree', async ({ page }) => {
         await setup(page);
         const before = await treeState(page);
+        const version = await treeVersion(page);
+        expect(version.core).not.toMatch(/unsent/i);
         await stubOf(page).click();
         await bubble(page).locator('.reb-variant[data-variant="B"] .reb-show').click();
 
@@ -247,6 +270,7 @@ test.describe('linked in the view only: the named stub and its bubble', () => {
         expect(after.data).toBe(before.data);
         expect(after.undo).toBe(before.undo);
         expect(after.undo).toBe(false);
+        expect(await treeVersion(page)).toEqual(version);
 
         // The notice's "Unlink": the family goes, the stub is back, "Unlinked" offers to undo.
         await toast.locator('.toast-action').click();
