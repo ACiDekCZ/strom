@@ -27,6 +27,7 @@ import {
 } from '../research-install.js';
 import { onComputer } from './research-ui.js';
 import { AppBrowser, appBrowserName, currentAppBrowser, needsTransfer, transferFileName, buildTransferJson } from '../research-transfer.js';
+import { viewLinksPayload } from '../view-links.js';
 import { isIosDevice } from '../file-copy.js';
 import { isStandaloneDisplay, isBetaBuildHere } from '../pwa.js';
 import { SettingsManager } from '../settings.js';
@@ -396,7 +397,7 @@ export const researchInstallMethods = uiModule({
             persons: Object.values(data.persons).filter(p => p && !p.isPlaceholder).length,
             at: new Date().toISOString(),
             ...(appCopy ? { app: appCopy } : {}),
-        }, { ...data, version: STROM_DATA_VERSION });
+        }, { ...data, version: STROM_DATA_VERSION }, treeId ? viewLinksPayload(treeId) : null);
         const a = document.createElement('a');
         a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
         a.download = file;

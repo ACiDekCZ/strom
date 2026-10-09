@@ -57,6 +57,7 @@ import { applyLivingPrivacy, applyContentOptions, resolveContentOptions, Content
 import { safeFileName } from './filenames.js';
 import { shownName } from './person-name.js';
 import { fingerprintLike } from './research-link.js';
+import { restoreViewLinks } from './view-links.js';
 
 /** Extended updates for Partnership */
 
@@ -736,7 +737,7 @@ class DataManagerClass {
      * to the last imported tree. Returns the new tree ids.
      */
     async importTreesAsNew(
-        entries: Array<{ name: string; data: StromData; isHidden?: boolean; auditLog?: import('./types.js').AuditLog }>
+        entries: Array<{ name: string; data: StromData; isHidden?: boolean; auditLog?: import('./types.js').AuditLog; viewLinks?: unknown }>
     ): Promise<TreeId[]> {
         if (this.viewMode) return [];
         const existingNames = new Set(TreeManager.getTrees().map(t => t.name.toLowerCase()));
@@ -746,6 +747,8 @@ class DataManagerClass {
             const id = TreeManager.createTreeFromImport(migrateData(entry.data), name);
             if (entry.isHidden) TreeManager.setTreeVisibility(id, true);
             if (entry.auditLog) await AuditLogManager.importForTree(id, entry.auditLog);
+            // The view links a backup carried (a device setting of the tree).
+            if (entry.viewLinks) restoreViewLinks(id, entry.viewLinks);
             existingNames.add(name.toLowerCase());
             ids.push(id);
         }

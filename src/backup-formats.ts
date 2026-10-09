@@ -19,6 +19,8 @@ export interface BackupTreeEntry {
     data: StromData;
     isHidden?: boolean;
     auditLog?: AuditLog;
+    /** What the tree showed linked in the view only (a device setting; untrusted: see restoreViewLinks). */
+    viewLinks?: unknown;
 }
 
 export type BackupTrees = Record<string, BackupTreeEntry>;

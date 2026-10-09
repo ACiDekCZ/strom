@@ -438,3 +438,46 @@ describe('import name suffix follows the UI language', () => {
         expect(name).not.toContain('import ze dne');
     });
 });
+
+// ---------- view links (a device setting of the tree) ----------
+describe('the view links of a tree', () => {
+    function memoryStorage(): Storage {
+        const store = new Map<string, string>();
+        return {
+            get length() { return store.size; },
+            clear: () => store.clear(),
+            getItem: (k: string) => store.get(k) ?? null,
+            key: (i: number) => [...store.keys()][i] ?? null,
+            removeItem: (k: string) => { store.delete(k); },
+            setItem: (k: string, v: string) => { store.set(k, String(v)); },
+        };
+    }
+    const record = { hypo: 'H0022', variant: 'B', kind: 'child', anchorId: 'p0', islandIds: ['p1'], on: true, addedAt: 1 };
+
+    it('go when the tree is deleted, the other tree\'s stay', async () => {
+        vi.stubGlobal('localStorage', memoryStorage());
+        resetTreeManager([meta('t1', 'One'), meta('t2', 'Two')]);
+        localStorage.setItem('strom-view-links:t1', JSON.stringify([record]));
+        localStorage.setItem('strom-view-links-master:t1', 'false');
+        localStorage.setItem('strom-view-links:t2', JSON.stringify([record]));
+        await TreeManager.deleteTree('t1' as TreeId);
+        expect(localStorage.getItem('strom-view-links:t1')).toBeNull();
+        expect(localStorage.getItem('strom-view-links-master:t1')).toBeNull();
+        expect(localStorage.getItem('strom-view-links:t2')).not.toBeNull();
+    });
+
+    it('a restored backup gives each new tree the view links its entry carried', async () => {
+        vi.stubGlobal('localStorage', memoryStorage());
+        resetTreeManager([meta('t0', 'Mine', { personCount: 3 })]);
+        const dm = DataManager as unknown as { viewMode: boolean };
+        dm.viewMode = false;
+        const ids = await DataManager.importTreesAsNew([
+            { name: 'One', data: tree(['A', 'B']), viewLinks: { links: [record], master: false } },
+            { name: 'Two', data: tree(['C']) },
+        ]);
+        expect(ids).toHaveLength(2);
+        expect(JSON.parse(localStorage.getItem(`strom-view-links:${ids[0]}`)!)).toEqual([record]);
+        expect(localStorage.getItem(`strom-view-links-master:${ids[0]}`)).toBe('false');
+        expect(localStorage.getItem(`strom-view-links:${ids[1]}`)).toBeNull();
+    });
+});

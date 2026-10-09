@@ -29,6 +29,7 @@ import { StorageManager } from './storage.js';
 import { createSnapshot, SnapshotResearchBase } from './snapshots.js';
 import { researchAutoState, patchResearchAutoState } from './research-device.js';
 import { researchBaseKey } from './storage-keys.js';
+import { VIEW_LINK_KEY_PREFIXES, forgetViewLinks } from './view-links.js';
 import { unknownSexFromTie, fingerprintLike } from './research-link.js';
 import { unknownSexInResearchCopies } from './research-copy.js';
 import { requestPersistentStorage } from './persistence.js';
@@ -117,8 +118,8 @@ const TREE_INDEX_VERSION = 1;
 /** IDB key for the tree index inside 'trees' store */
 const INDEX_KEY = '_index';
 
-/** Per-tree research keys in localStorage (the tree's id follows the prefix). */
-const RESEARCH_TREE_KEYS = ['strom-research-auto:', 'strom-research-base-fp:', 'strom-research-written:'];
+/** Per-tree research keys in localStorage (the tree's id follows the prefix); the view links too. */
+const RESEARCH_TREE_KEYS = ['strom-research-auto:', 'strom-research-base-fp:', 'strom-research-written:', ...VIEW_LINK_KEY_PREFIXES];
 
 /** Drop the research keys of trees no longer in the index (deleted before a delete removed them too). */
 function forgetResearchKeysOfGoneTrees(ids: ReadonlySet<string>): void {
@@ -486,6 +487,8 @@ class TreeManagerClass {
             localStorage.removeItem(`strom-research-written:${id}`);
             localStorage.removeItem(`strom-research-auto:${id}`);
         } catch { /* nothing kept */ }
+        // What the tree showed linked in the view only (a device setting of the tree).
+        forgetViewLinks(id);
         SettingsManager.forgetRecentSources(id);
 
         // If this was the active tree, switch to another VISIBLE one (never

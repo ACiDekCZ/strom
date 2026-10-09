@@ -52,7 +52,8 @@ import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
 import { safeFileName } from '../filenames.js';
-import { isMultiTreeBackup, readEmbeddedHtml, readWindowAssignment, BackupTrees } from '../backup-formats.js';
+import { isMultiTreeBackup, readEmbeddedHtml, readWindowAssignment, BackupTrees, BackupTreeEntry } from '../backup-formats.js';
+import { viewLinksPayload } from '../view-links.js';
 
 export const importExportMethods = uiModule({
     // ---- EXPORT/IMPORT DIALOGS ----
@@ -1140,12 +1141,12 @@ export const importExportMethods = uiModule({
      * confirm, then import all of them as NEW trees (review V5).
      */
     async importMultiTreeBackup(trees: BackupTrees): Promise<void> {
-        const valid: Array<{ name: string; data: StromData; isHidden?: boolean; auditLog?: AuditLog }> = [];
+        const valid: Array<{ name: string; data: StromData; isHidden?: boolean; auditLog?: AuditLog; viewLinks?: unknown }> = [];
         let skipped = 0;
         for (const entry of Object.values(trees)) {
             const result = validateJsonImport(JSON.stringify(entry.data));
             if (result.valid && result.data) {
-                valid.push({ name: entry.name, data: result.data, isHidden: entry.isHidden, auditLog: entry.auditLog });
+                valid.push({ name: entry.name, data: result.data, isHidden: entry.isHidden, auditLog: entry.auditLog, viewLinks: entry.viewLinks });
             } else {
                 skipped++;
             }
@@ -1385,14 +1386,14 @@ export const importExportMethods = uiModule({
     async downloadAllTreesJson(password: string | null, includeAuditLog: boolean, privacyMode: PrivacyMode, content: ContentOptions): Promise<string> {
         const { applyLivingPrivacy, applyContentOptions } = await import('../privacy.js');
         const trees = TreeManager.getTrees();
-        const allData: Record<string, { name: string; data: StromData; auditLog?: AuditLog }> = {};
+        const allData: Record<string, BackupTreeEntry> = {};
 
         for (const tree of trees) {
             const data = await storedTreeForExport(tree.id);
             if (data) {
                 let treeExport = applyLivingPrivacy(data, privacyMode);
                 treeExport = applyContentOptions(treeExport, content);
-                const entry: { name: string; data: StromData; auditLog?: AuditLog } = {
+                const entry: BackupTreeEntry = {
                     name: tree.name,
                     data: treeExport
                 };
@@ -1400,6 +1401,9 @@ export const importExportMethods = uiModule({
                     const log = await AuditLogManager.exportForTree(tree.id);
                     if (log) entry.auditLog = log;
                 }
+                // The backup carries the tree's view links (a device setting), no copy of the tree does.
+                const viewLinks = viewLinksPayload(tree.id);
+                if (viewLinks) entry.viewLinks = viewLinks;
                 allData[tree.id] = entry;
             }
         }

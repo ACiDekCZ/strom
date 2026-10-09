@@ -77,6 +77,12 @@ export function appBrowserName(browser: AppBrowser): string {
 
 /** The file's first key: the mark of a transfer. */
 export const TRANSFER_KEY = 'stromTransfer';
+/**
+ * The file's last key: what the tree showed linked in the view only (a device
+ * setting of the tree, which moves with it). After the tree, so the head the
+ * research reads stays the mark alone.
+ */
+export const TRANSFER_VIEW_LINKS_KEY = 'stromViewLinks';
 
 export interface TransferMark {
     v: 1;
@@ -105,22 +111,26 @@ export function isTransferFileName(name: unknown): name is string {
     return typeof name === 'string' && /^strom-prenos-[A-Za-z0-9_-]{8}\.json$/.test(name);
 }
 
-/** The file's text: the mark first (the research reads only the head), then the tree as a full JSON export. */
-export function buildTransferJson(mark: TransferMark, data: StromData): string {
-    const { [TRANSFER_KEY]: _old, ...tree } = data as StromData & { [TRANSFER_KEY]?: unknown };
-    return JSON.stringify({ [TRANSFER_KEY]: mark, ...tree });
+/**
+ * The file's text: the mark first (the research reads only the head), then
+ * the tree as a full JSON export, then the tree's view links when it has any.
+ */
+export function buildTransferJson(mark: TransferMark, data: StromData, viewLinks?: unknown): string {
+    const { [TRANSFER_KEY]: _old, [TRANSFER_VIEW_LINKS_KEY]: _oldLinks, ...tree } = data as StromData & { [TRANSFER_KEY]?: unknown; [TRANSFER_VIEW_LINKS_KEY]?: unknown };
+    return JSON.stringify({ [TRANSFER_KEY]: mark, ...tree, ...(viewLinks ? { [TRANSFER_VIEW_LINKS_KEY]: viewLinks } : {}) });
 }
 
 /**
- * The mark of a transfer file and the tree's JSON without it, or null when it
- * is not one or not for `token`. Untrusted: the tree itself goes through the
- * usual JSON import checks afterwards.
+ * The mark of a transfer file, the tree's JSON without it and the view links
+ * it carried (raw: see restoreViewLinks), or null when it is not one or not
+ * for `token`. Untrusted: the tree itself goes through the usual JSON import
+ * checks afterwards.
  */
-export function readTransferJson(text: string, token: string): { mark: TransferMark; json: string } | null {
+export function readTransferJson(text: string, token: string): { mark: TransferMark; json: string; viewLinks?: unknown } | null {
     let parsed: unknown;
     try { parsed = JSON.parse(text); } catch { return null; }
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
-    const { [TRANSFER_KEY]: rawMark, ...tree } = parsed as Record<string, unknown>;
+    const { [TRANSFER_KEY]: rawMark, [TRANSFER_VIEW_LINKS_KEY]: viewLinks, ...tree } = parsed as Record<string, unknown>;
     const m = rawMark && typeof rawMark === 'object' ? rawMark as Record<string, unknown> : null;
     if (!m || m.v !== 1 || researchAdoptToken(m.token) !== token) return null;
     const from = APP_BROWSERS.includes(m.from as AppBrowser) ? m.from as AppBrowser : 'other';
@@ -130,7 +140,7 @@ export function readTransferJson(text: string, token: string): { mark: TransferM
         persons: typeof m.persons === 'number' && Number.isFinite(m.persons) ? Math.max(0, Math.floor(m.persons)) : 0,
         at: typeof m.at === 'string' ? m.at : '',
     };
-    return { mark, json: JSON.stringify(tree) };
+    return { mark, json: JSON.stringify(tree), ...(viewLinks !== undefined ? { viewLinks } : {}) };
 }
 
 /** The bridge feature of a research that hands a moved tree over (GET <bridge>/transfer, Strom Research 1.12.1). */

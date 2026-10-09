@@ -13,6 +13,7 @@ import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { AppBrowser, appBrowserName, bridgeMovesTrees, bridgeTakesEmpty, currentAppBrowser, needsTransfer, readTransferJson } from '../research-transfer.js';
+import { restoreViewLinks } from '../view-links.js';
 import { validateJsonImport } from '../merge/validation.js';
 import { TreeId, TreeMetadata, StromData, STROM_DATA_VERSION, ResearchSendMode } from '../types.js';
 import { readInstallRecord, clearInstallRecord, installPhase, INSTALL_TTL_MS } from '../research-install.js';
@@ -510,6 +511,8 @@ export const researchAdoptMethods = uiModule({
         if (!moved || !result?.valid || !result.data) return 'failed';
         const name = moved.mark.tree || offer.name || strings.install.newTreeName;
         const id = await DataManager.importAsNewTree(result.data, name);
+        // What the tree showed linked in the view only moves with it (a device setting of the tree).
+        if (moved.viewLinks) restoreViewLinks(id, moved.viewLinks);
         TreeManager.setResearchAdoptToken(id, { token: offer.token, at: new Date().toISOString() });
         this.updateTreeSwitcher();
         TreeRenderer.render();
