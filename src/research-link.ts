@@ -1070,6 +1070,8 @@ export interface LiveStatus {
     version: string;
     /** What its bridge can do (`features`, "sync.takenBack" …; Strom Research 1.12.0-rc.20); null: not said (older). */
     features: string[] | null;
+    /** The bridge's own count of the last 24 hours (`status.recent` in `features`); null: not sent, not valid, or an older research. */
+    recent: LiveRecent | null;
     /** Batches of "Add materials" of the last days and any not yet sorted; null: an older research. */
     batches: LiveBatch[] | null;
     /** `linkScheme`: the research's own link scheme (a second install, "strom-research-beta"); absent: the default. */
@@ -1512,6 +1514,88 @@ export function sanitizeIntake(value: unknown): LiveIntake | null {
     return id && at ? { id, at } : null;
 }
 
+/** The bridge feature that sends `/status.recent`. */
+export const RECENT_FEATURE = 'status.recent';
+/** Most ids a `/status.recent` list carries. */
+const MAX_RECENT_IDS = 50;
+
+/**
+ * What the research added in its last hours, counted by the bridge itself
+ * (`/status.recent`): the persons and sources added in the window that still
+ * live at its end. It holds at its own `head`, which may trail `/status.head`.
+ */
+export interface LiveRecent {
+    hours: number;
+    /** The window's start (ISO). */
+    since: string;
+    /** The last commit before the window; null: the research is younger than the window. */
+    from: string | null;
+    /** The commit the summary was counted at. */
+    head: string;
+    /** When it was counted (ISO). */
+    at: string;
+    commits: number;
+    persons: { added: number; ids: string[] };
+    sources: { added: number; ids: string[] };
+}
+
+/** `/status.recent`, or null when any part of it is wrong (as if absent). Untrusted. */
+export function sanitizeLiveRecent(value: unknown): LiveRecent | null {
+    const r = asRecord(value);
+    if (!r) return null;
+    const int = (v: unknown): number | null => (typeof v === 'number' && Number.isInteger(v) && v >= 0 ? v : null);
+    const time = (v: unknown): string | null => (typeof v === 'string' && v.length <= 40 && Number.isFinite(Date.parse(v)) ? v : null);
+    const added = (v: unknown, prefix: 'P' | 'S'): { added: number; ids: string[] } | null => {
+        const g = asRecord(v);
+        const n = int(g?.added);
+        const ids = g?.ids;
+        const re = prefix === 'P' ? /^P\d{1,7}$/ : /^S\d{1,7}$/;
+        if (n === null || !Array.isArray(ids) || ids.length > MAX_RECENT_IDS) return null;
+        if (!ids.every((id): id is string => typeof id === 'string' && re.test(id))) return null;
+        return { added: n, ids: [...ids] };
+    };
+    const hours = int(r.hours);
+    const commits = int(r.commits);
+    const since = time(r.since);
+    const at = time(r.at);
+    const from = r.from === null ? null : isResearchHead(r.from);
+    const head = isResearchHead(r.head);
+    const persons = added(r.persons, 'P');
+    const sources = added(r.sources, 'S');
+    if (hours === null || commits === null || !since || !at || !head || persons === null || sources === null) return null;
+    if (r.from !== null && from === null) return null;
+    return { hours, since, from, head, at, commits, persons, sources };
+}
+
+/** What one commit added (`+P…` / `+S…` lines), as the app keeps it, newest first. */
+export interface LiveCommitAdds {
+    head: string;
+    at: string;
+    persons: number;
+    sources: number;
+}
+
+/**
+ * "Last 24 h": persons and sources the research added. With the bridge's own
+ * summary (`recent`): its counts, plus the commits that came after its `head`
+ * (the entries of `adds`, newest first, before the one at `recent.head`; none
+ * when that commit is not among them — the next status catches up). Without
+ * it: the commits of `adds` younger than `windowMs` (the history holds at most
+ * the bridge's last /log, so it may say less).
+ */
+export function recentAddsCount(recent: LiveRecent | null, adds: readonly LiveCommitAdds[], now: number, windowMs: number): { persons: number; sources: number } {
+    const sum = (list: readonly LiveCommitAdds[]) => ({
+        persons: list.reduce((n, a) => n + a.persons, 0),
+        sources: list.reduce((n, a) => n + a.sources, 0),
+    });
+    if (recent) {
+        const at = adds.findIndex(a => a.head.toLowerCase() === recent.head);
+        const extra = sum(at > 0 ? adds.slice(0, at) : []);
+        return { persons: recent.persons.added + extra.persons, sources: recent.sources.added + extra.sources };
+    }
+    return sum(adds.filter(a => now - (Date.parse(a.at) || 0) < windowMs));
+}
+
 /** The bridge status. Untrusted input: every field is checked. */
 export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
     const r = asRecord(value);
@@ -1519,6 +1603,8 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
     // `tree` is `{ id, name }` (the live bridge) or the id itself with the
     // name beside it (the send bridge).
     const tree = asRecord(r.tree);
+    const features = Array.isArray(r.features)
+        ? r.features.slice(0, 50).filter((f): f is string => typeof f === 'string' && /^[a-z][a-zA-Z0-9.-]{0,40}$/.test(f)) : null;
     return {
         treeId: normalizeResearchId(tree ? tree.id : r.tree),
         name: cleanText(tree?.name ?? r.name, MAX_NAME),
@@ -1539,8 +1625,9 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         inbox: sanitizeInbox(r.inbox),
         sends: sanitizeSends(r.sends),
         version: researchVersion(r.strom),
-        features: Array.isArray(r.features)
-            ? r.features.slice(0, 50).filter((f): f is string => typeof f === 'string' && /^[a-z][a-zA-Z0-9.-]{0,40}$/.test(f)) : null,
+        features,
+        // The bridge's own count of the last 24 hours, read only when it says it sends one.
+        recent: features?.includes(RECENT_FEATURE) ? sanitizeLiveRecent(r.recent) : null,
         batches: sanitizeBatches(r.batches),
         ...(researchLinkScheme(r.linkScheme) !== DEFAULT_RESEARCH_SCHEME ? { linkScheme: researchLinkScheme(r.linkScheme) } : {}),
         ...(r.channel === 'beta' ? { channel: 'beta' as const } : {}),

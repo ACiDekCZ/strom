@@ -40,7 +40,7 @@ import {
     LiveQueueItem, LiveSpend, LiveIntake, LiveDirection, ResearchHeaderInfo, ExportXrefs,
 } from '../research-link.js';
 import { uiModule } from './module.js';
-import { withAppVersion, researchGedcomTitles, TitlesInGedcom, changeKind, changeAdds, sanitizeLiveLog, textKind, textPersonRefs, textWithoutRefs, LiveChangeKind, LiveLogEntry } from '../research-link.js';
+import { withAppVersion, researchGedcomTitles, TitlesInGedcom, changeKind, changeAdds, sanitizeLiveLog, textKind, textPersonRefs, textWithoutRefs, LiveChangeKind, LiveLogEntry, LiveCommitAdds, LiveRecent } from '../research-link.js';
 import { AGENT_DONE_MS, AGENT_DONE_FADE_MS, ResearchCardInfo, setResearchCardInfoProvider } from '../card-signals.js';
 import { activeDirections, directionsMulti, queueDirectionFilter, setQueueDirectionFilter, taskDirectionName } from './research-directions-ui.js';
 import { iconSvg } from '../icons.js';
@@ -87,12 +87,7 @@ export interface LiveChangeItem {
 }
 
 /** What one research commit added (the "+N people, +N sources" of the last 24 hours). */
-export interface LiveAdds {
-    head: string;
-    at: string;
-    persons: number;
-    sources: number;
-}
+export type LiveAdds = LiveCommitAdds;
 
 /** The panel's sections (each folds on its own). */
 export type LiveSectionKey = 'working' | 'waiting' | 'changes' | 'queue';
@@ -133,6 +128,8 @@ export interface LiveSession {
     changes: LiveChangeItem[];
     /** Every commit seen (also those with nothing to show), newest first. */
     adds: LiveAdds[];
+    /** The bridge's own count of the last 24 hours, from the latest status (null: that status had none; count from `adds`). */
+    recent: LiveRecent | null;
     ended: boolean;
     collapsed: boolean;
     /** Changes already seen when the panel was collapsed (for "N new"). */
@@ -1998,6 +1995,7 @@ export const researchUiMethods = uiModule({
                 logged: false,
                 changes: [],
                 adds: [],
+                recent: status.recent,
                 ended: false,
                 collapsed: isMobile(),
                 seenChanges: 0,
@@ -2145,6 +2143,8 @@ export const researchUiMethods = uiModule({
         s.update = status.update;
         s.spend = status.spend;
         s.lastIntake = status.lastIntake;
+        // The latest status decides: without its count (an older research, a bridge just started) the history counts.
+        s.recent = status.recent;
         if (status.treeId) noteResearchWaiting(status.treeId, status.waiting, status);
         this.refreshActionMenuBadges();
         if (status.head && status.head !== s.head) {

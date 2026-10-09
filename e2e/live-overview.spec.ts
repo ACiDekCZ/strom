@@ -46,7 +46,7 @@ const CHANGE = [
     'F0001 +child P0006',
 ];
 
-interface Bridge { waiting: Record<string, unknown>[]; gedCalls: number; log: Record<string, unknown> | null; events: boolean; paused: Record<string, unknown> | null; workPerson: string; workDone: boolean; changeEntries: Record<string, unknown>[] | null }
+interface Bridge { waiting: Record<string, unknown>[]; gedCalls: number; log: Record<string, unknown> | null; events: boolean; paused: Record<string, unknown> | null; workPerson: string; workDone: boolean; changeEntries: Record<string, unknown>[] | null; features?: string[]; recent?: Record<string, unknown> }
 
 /** A bridge that sends one change of six lines, then keeps quiet. */
 async function follow(page: Page, size: { width: number; height: number } = { width: 1440, height: 900 },
@@ -78,6 +78,8 @@ async function follow(page: Page, size: { width: number; height: number } = { wi
         queue: [{ id: 'T0101', text: 'Matriky Chlumy', state: 'next', person: 'P0001' }, { id: 'T0102', text: 'Pozemková kniha', state: 'next' }],
         queueMore: 3,
         spend: { month: '2026-09', sessions: 4, amount: 3.2, currency: 'USD' },
+        ...(bridge.features ? { features: bridge.features } : {}),
+        ...(bridge.recent ? { recent: bridge.recent } : {}),
     });
     await page.route(`${BRIDGE}/**`, async (route) => {
         const path = new URL(route.request().url()).pathname;
@@ -198,6 +200,46 @@ test.describe('the research history (/log)', () => {
         // From the research's history the highlight says its window, not "while watching".
         await ov.locator('.research-overview__show-changed').click();
         await expect(page.locator('#evidence-pill')).toContainText('Changed people in the progress · 1');
+    });
+
+    // A busy research makes more commits in 24 hours than /log gives (500): the bridge counts them itself.
+    const RECENT = {
+        hours: 24, since: new Date(Date.now() - 24 * 3600_000).toISOString(), from: 'a0a0a0a0a0a0a0a0', head: 'b2b2b2b2b2b2b2b2',
+        at: new Date(Date.now() - 2 * 60_000).toISOString(), commits: 978,
+        persons: { added: 17, ids: ['P0102', 'P0103'] }, sources: { added: 4, ids: ['S0031'] },
+    };
+    const recentLog = () => ({ entries: [
+        { head: 'c3c3c3c3c3c3c3c3', at: new Date(Date.now() - 60_000).toISOString(), what: ['+P0006 Karel /Víšek/'], task: '' },
+        { head: 'b2b2b2b2b2b2b2b2', at: new Date(Date.now() - 3 * 60_000).toISOString(), what: ['+S0031 Sčítání lidu 1880', '+P0005 Marie /Víšková/'], task: '' },
+        { head: 'a1a1a1a1a1a1a1a1', at: new Date(Date.now() - 5 * 60_000).toISOString(), what: ['+P0004 Ludmila /Víšková/'], task: '' },
+    ] });
+
+    test('last 24 hours: the bridge count, plus what came after it', async ({ page }) => {
+        await follow(page, { width: 1440, height: 900 }, (b) => {
+            b.events = false;
+            b.features = ['status.recent'];
+            b.recent = RECENT;
+            b.log = recentLog();
+        });
+        await page.locator('#live-panel .live-panel-expand').click();
+        const ov = page.locator('#research-overview');
+        await expect(ov.locator('.research-overview__cell-label').nth(1)).toHaveText('Last 24 h');
+        // 17 counted at b2…, and Karel came after it; the source of b2… is in the 4.
+        await expect(ov.locator('.research-overview__cell-value').nth(1)).toHaveText('+18 people');
+        await expect(ov.locator('.research-overview__cell-sub').nth(1)).toHaveText('+4 sources');
+    });
+
+    test('last 24 hours without the status.recent feature: counted from the history', async ({ page }) => {
+        await follow(page, { width: 1440, height: 900 }, (b) => {
+            b.events = false;
+            b.recent = RECENT;
+            b.log = recentLog();
+        });
+        await page.locator('#live-panel .live-panel-expand').click();
+        const ov = page.locator('#research-overview');
+        await expect(ov.locator('.research-overview__cell-label').nth(1)).toHaveText('Last 24 h');
+        await expect(ov.locator('.research-overview__cell-value').nth(1)).toHaveText('+3 people');
+        await expect(ov.locator('.research-overview__cell-sub').nth(1)).toHaveText('+1 source');
     });
 
     test('the overview previews at most 20 steps, the rest is in the research', async ({ page }) => {

@@ -19,7 +19,7 @@ import { ZoomPan } from '../zoom.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { Person, PersonId } from '../types.js';
 import { computeEvidenceGaps } from '../stats.js';
-import { LiveChangeKind, researchConflictRef } from '../research-link.js';
+import { LiveChangeKind, researchConflictRef, recentAddsCount } from '../research-link.js';
 import { formatLiveClock } from '../live-time.js';
 import { uiModule } from './module.js';
 import {
@@ -315,10 +315,10 @@ export const researchOverviewMethods = uiModule({
             cell(L.state, state, lastEl ?? '', stateCls, [paused ? pausedText(paused) : '', lastEl?.textContent ?? '', hover].filter(Boolean).join(' · '));
         }
         if (s.logged) {
-            // The research's own history: what it added in the last 24 hours.
-            const recent = s.adds.filter(a => Date.now() - (Date.parse(a.at) || 0) < RECENT_MS);
-            cell(L.last24h, L.plusPersons(recent.reduce((n, a) => n + a.persons, 0)),
-                L.plusSourcesToday(recent.reduce((n, a) => n + a.sources, 0)));
+            // What the research added in the last 24 hours: the bridge's own count
+            // (and what came after it), else from its history.
+            const added = recentAddsCount(s.recent, s.adds, Date.now(), RECENT_MS);
+            cell(L.last24h, L.plusPersons(added.persons), L.plusSourcesToday(added.sources));
         } else {
             cell(L.sinceWatching, L.plusPersons(Math.max(0, persons - s.startPersons)),
                 L.plusSources(Math.max(0, sources - s.startSources), hhmm(s.startedAt)));

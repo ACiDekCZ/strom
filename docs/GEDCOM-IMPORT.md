@@ -694,6 +694,13 @@ Supported from app version 3.0.0. The app uses these read-only endpoints:
 - People whose `REFN` appears in a `change` line (tokens like `P0101`) are
   highlighted, and the lines are listed ("Latest changes"). `working` and
   `waiting` are shown in a small "Research now" panel.
+- The Research overview's "Last 24 h" counts the `+P…` / `+S…` lines of the
+  research's history (`<bridge>/log`, at most 500 commits). When `features`
+  lists `status.recent`, it shows the bridge's own count instead
+  (`status.recent`: `hours`, `since`, `from`, `head`, `at`, `commits`,
+  `persons` / `sources` {`added`, `ids` (≤ 50)}), plus the additions of the
+  commits after `recent.head`; an invalid or missing `recent` falls back to
+  the history.
 - When the event stream drops, the app asks `status`; if the bridge answers it
   reconnects, if it does not (twice in a row) it shows "Following ended",
   keeps the last state and makes the tree editable again. Without
