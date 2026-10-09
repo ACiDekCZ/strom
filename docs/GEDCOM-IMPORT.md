@@ -701,6 +701,102 @@ Supported from app version 3.0.0. The app uses these read-only endpoints:
 - All text from the bridge is shown as plain text; long values and lists are
   cut.
 
+### E. Deciding a conflict from the app (`conflict.decide`)
+
+A conflict the research made from an edit in the app can be decided in the
+app by a side: keep the value from the app (`take user`) or take the
+research's (`take research`). The research marks such a conflict in its file
+(and in `held` conflicts of a version not loaded, read the same way):
+
+```
+1 _STROM_CONFLICT X0007
+2 TYPE BIRT
+2 STAT open
+2 _STROM_TAKE Y
+2 VAL 3 FEB 1865
+3 SOUR @S0001@
+3 _STROM_SIDE research
+2 VAL 1865
+3 _STROM_SIDE user
+```
+
+- `2 _STROM_TAKE Y` — the conflict can be decided by a side.
+- `3 _STROM_SIDE user|research` under each `VAL` — whose value it is. The
+  order of the values is no contract; without both sides no choice is offered.
+- `3 _STROM_RAW M|F|U` under the values of a `SEX` conflict — the machine
+  value, so the app never parses the research's words.
+- The app offers the choice only for an **open** conflict with exactly these
+  two values, at a person of the research (`REFN`), about an event's value (a
+  person's or a couple's), `NAME`, `NPFX`, `NSFX` or `SEX` — never `FAMC`.
+  Anything else (a conflict of the sources, a side missing) shows as before
+  and is decided in the research. None of these tags is written to a GEDCOM
+  export.
+
+**How it is decided here.** Through the bridge when its `/status` lists
+`conflict.decide` in `features`; else by a link
+`strom-research://conflict?tree=<uuid>&id=X0007&do=decide&take=user|research`
+when the research announces `conflict` links and the device is a computer;
+else not on this device (a phone, a tablet, a browser away from the research):
+the two sides show without choices and "Decided on the computer with the
+research." An archive decides the same way, only "Leave it to the agent" is
+never offered.
+
+**The route.** `POST <bridge>/conflict/<X…>` with a text/plain JSON body
+`{"do":"decide","take":"user"|"research"}` (an optional `note`, at most 200
+characters, is not sent yet). One request per conflict at a time (a second
+click while it runs asks nothing), taken under the same per-tree lock as a
+send, 30 s at most. The answers:
+
+| Status | `code` | The app |
+|---|---|---|
+| 200 | — | `{decided, take, head, written, person \| family}`; decided |
+| 404 | `conflict.none` | the research has no such conflict: the card goes |
+| 409 | `conflict.decided` | decided meanwhile elsewhere; `resolution` (and `take`) is that decision |
+| 409, 503 | any other | busy (a send is being written): "Try again" |
+| 423 | — | the tree is locked by another session: "Try again" |
+| none | — | no answer: "Try again" |
+| 422 | `conflict.no-edit` | not decidable by a side; shown like no answer |
+
+An answer naming another id, or any other status (an older bridge without the
+route, a 500), is shown like no answer too; the bridge's own sentence is never
+shown.
+
+**After the answer.** A conflict decided (here, elsewhere, or gone) stops
+counting at once: the card's ≠, a couple's conflict at both partners, the edit
+form's tag, the Research menu's "conflicts to decide"; conflicts held from a
+version not loaded are read again.
+
+- *Kept* (the app's value): nothing changes here. When the tree is what the
+  research had and its new version overwrites nothing, that version is taken
+  in quietly; otherwise it waits like any newer version.
+- *Taken* (the research's value): the value comes only by loading the
+  research's version. Quietly, with a backup first ("Restore the state before
+  loading"), when it changes nothing but the decided values; otherwise the
+  Load dialog says the decision first, its row tagged "decided". "Later"
+  leaves the card waiting with its own "Load". The sentence under the choice
+  says beforehand how many more changes the research's version brings.
+- *Decided elsewhere* for the research's value loads like *Taken*; for the
+  app's value nothing loads. Both say "Already decided in the research: …".
+- *Busy, locked, no answer*: the card (or the panel) shows the error with
+  "Try again" for the same side; with neither in sight a notice "The conflict
+  could not be decided" offers "Show".
+
+A decided card folds into the decided row after 6 s or when the dialog
+closes. A decision is no change of the tree: Undo never reverts it.
+
+**Where it is offered.** The card in "What the research knows" (both sides
+with their sources, each choice with the sentence saying what follows); the
+panel by the edit form's field ("conflict ›", a popover with its arrow at the
+tag, a bottom sheet on a phone); the Research menu's "Show" when a send left
+exactly one such conflict; the research overview's row and the card's ≠, both
+opening the dialog at the card, lit up for 1.5 s. Two rules hold the choices
+back: a value edited here after the last send must be sent first ("Send"
+beside the notice — compared with the tree as the research last had it, never
+with the conflict's words), and an edit form with unsaved changes is saved
+first. The specs: e2e/research-conflict-*.spec.ts (`-modes` runs every way of
+deciding across the card, the panel and the sheet; `-reach` the languages,
+both themes, the keyboard and a screen reader's order).
+
 ## Checking your output
 
 1. Import the file and read the summary. Unsupported tags mean a record or fact
