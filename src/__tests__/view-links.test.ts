@@ -14,7 +14,9 @@ import {
     researchHypotheses, isOpenHypothesis, viewLinkContext, viewLinkIsland, resolveViewLink, resolveViewLinks,
     activeViewLinks, viewLinkDependents, showViewLink, unlinkViewLink, setViewLinkOn, removeViewLinks,
     viewLinkCandidates, hasViewLinkData, viewLinksAvailable, HYPOTHESIS_LINKS_FEATURE,
+    viewLinksTreeOfKey, viewLinkCounts, orderViewLinkRows, newlyInvalidViewLinks,
 } from '../view-links.js';
+import { strings, setLanguage } from '../strings.js';
 import { buildTransferJson, readTransferJson, TransferMark } from '../research-transfer.js';
 import { exportToGedcom } from '../ged-exporter.js';
 import { buildPersonsCsv } from '../csv-export.js';
@@ -275,6 +277,80 @@ describe('resolving a record against the data (every row of the table)', () => {
         expect(resolveViewLinks(gone, links)).toEqual([{ link: links[0], state: 'invalid', reason: 'gone' }]);
         expect(links).toEqual([link(B)]);
         expect(resolveViewLinks(TREE, links)).toEqual([{ link: links[0], state: 'draw' }]);
+    });
+});
+
+describe('the list and keeping in step', () => {
+    it('another window\'s storage change: the tree whose view links it is (any other key: null; storage cleared: every tree)', () => {
+        expect(viewLinksTreeOfKey(viewLinksKey('t1'))).toBe('t1');
+        expect(viewLinksTreeOfKey(viewLinksMasterKey('t-2'))).toBe('t-2');
+        expect(viewLinksTreeOfKey('strom-settings')).toBeNull();
+        expect(viewLinksTreeOfKey('strom-view-linksX')).toBeNull();
+        expect(viewLinksTreeOfKey(null)).toBe('');
+    });
+
+    it('counts: drawable rows switched on (n) of the drawable ones (m), and the invalid ones', () => {
+        const resolved = resolveViewLinks(TREE, [
+            link(B), link(PARTNER, { on: false, addedAt: 2 }),
+            link({ hypo: 'H0026', variant: 'B', kind: 'child', anchorId: ROZALIE, islandIds: [ANTONIN, LUDMILA] }, { addedAt: 3 }),
+            link({ hypo: 'H0027', variant: 'A', kind: 'child', anchorId: KAREL, islandIds: [JAN] }, { addedAt: 4 }),
+        ]);
+        expect(viewLinkCounts(resolved)).toEqual({ on: 1, drawable: 2, invalid: 1 });
+        expect(viewLinkCounts([])).toEqual({ on: 0, drawable: 0, invalid: 0 });
+    });
+
+    it('order: drawable by place in the view (top down, left to right; not drawn after, by time), then real, then invalid', () => {
+        const real = link({ hypo: 'H0026', variant: 'B', kind: 'child', anchorId: ROZALIE, islandIds: [ANTONIN, LUDMILA] }, { addedAt: 1 });
+        const bad = link({ hypo: 'H0027', variant: 'A', kind: 'child', anchorId: KAREL, islandIds: [JAN] }, { addedAt: 2 });
+        const tomas = link(TOMAS_A, { addedAt: 3 });
+        const partner = link(PARTNER, { addedAt: 4 });
+        const b = link(B, { addedAt: 5 });
+        const resolved = resolveViewLinks(TREE, [real, bad, tomas, partner, b]);
+        const places = new Map<PersonId, { x: number; y: number }>([[VACLAV, { x: 300, y: 200 }], [ROZALIE, { x: 100, y: 200 }]]);
+        expect(orderViewLinkRows(resolved, id => places.get(id)).map(r => r.link.hypo)).toEqual(['H0024', 'H0022', 'H0030', 'H0026', 'H0027']);
+        places.set(VACLAV, { x: 300, y: 100 });
+        expect(orderViewLinkRows(resolved, id => places.get(id)).map(r => r.link.hypo)).toEqual(['H0022', 'H0024', 'H0030', 'H0026', 'H0027']);
+        // Nothing drawn: by the time chosen.
+        expect(orderViewLinkRows(resolved, () => undefined).map(r => r.link.hypo)).toEqual(['H0030', 'H0024', 'H0022', 'H0026', 'H0027']);
+        expect(resolved.map(r => r.link.hypo)).toEqual(['H0026', 'H0027', 'H0030', 'H0024', 'H0022']);
+    });
+
+    it('after a load: the records invalid now that held before (drawn or real), each with its reason', () => {
+        const decidedForA = changed(d => {
+            for (const p of Object.values(d.persons)) for (const h of p.research?.hypotheses ?? []) {
+                if (h.id === 'H0022') { h.status = 'decided'; h.chosen = 'A'; }
+            }
+        });
+        const bad = link({ hypo: 'H0027', variant: 'A', kind: 'child', anchorId: KAREL, islandIds: [JAN] }, { addedAt: 3 });
+        const links = [link(B), link(PARTNER, { addedAt: 2 }), bad];
+        const fresh = newlyInvalidViewLinks(TREE, decidedForA, links);
+        expect(fresh.map(r => [r.link.hypo, r.reason])).toEqual([['H0022', 'decidedOther']]);
+        // Back to the state before: nothing newly invalid; the same load again: nothing new either.
+        expect(newlyInvalidViewLinks(decidedForA, TREE, links)).toEqual([]);
+        expect(newlyInvalidViewLinks(decidedForA, decidedForA, links)).toEqual([]);
+        expect(newlyInvalidViewLinks(TREE, decidedForA, [])).toEqual([]);
+    });
+
+    it('the list\'s count line in Czech: "1 zapnuté z 5", "2 zapnutá ze 3", "5 zapnutých ze 7", "z 10", "ze 12"', () => {
+        setLanguage('cs');
+        try {
+            const c = strings.viewLinks.masterCount;
+            expect(c(1, 5)).toBe('1 zapnuté z 5');
+            expect(c(2, 3)).toBe('2 zapnutá ze 3');
+            expect(c(5, 7)).toBe('5 zapnutých ze 7');
+            expect(c(0, 1)).toBe('0 zapnutých z 1');
+            expect(c(4, 10)).toBe('4 zapnutá z 10');
+            expect(c(3, 12)).toBe('3 zapnutá ze 12');
+            expect(c(3, 25)).toBe('3 zapnutá ze 25');
+            expect(c(3, 58)).toBe('3 zapnutá z 58');
+            expect(c(3, 100)).toBe('3 zapnutá ze 100');
+            expect(strings.viewLinks.invalidAfterLoad(2)).toBe('2 připojení jen v zobrazení už neplatí');
+        } finally {
+            setLanguage('en');
+        }
+        expect(strings.viewLinks.masterCount(2, 3)).toBe('2 of 3 on');
+        expect(strings.viewLinks.invalidAfterLoad(1)).toBe('1 view-only link is no longer valid');
+        expect(strings.viewLinks.invalidAfterLoad(2)).toBe('2 view-only links are no longer valid');
     });
 });
 

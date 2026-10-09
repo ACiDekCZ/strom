@@ -225,6 +225,9 @@ export const researchActionsMethods = uiModule({
         const treeSettings: SubmenuItem[] = this.researchTranscriptsCapable(researchId ?? undefined)
             ? [{ id: 'research-item-tree-settings', label: strings.sync.treeSettings, method: 'researchActionTreeSettings' }] : [];
         const batch: SubmenuItem[] = this.batchAvailable() ? [{ id: 'research-item-batch', label: strings.batch.menu, method: 'showBatchDialog' }] : [];
+        // Linked in the view only: the list, with how many are shown (a tree whose research says what a variant connects).
+        const viewLinks: SubmenuItem[] = this.viewLinksListOffered()
+            ? [{ id: 'research-item-view-links', label: strings.viewLinks.menuItem(this.viewLinksShownCount()), method: 'researchActionViewLinks' }] : [];
         let groups: MenuGroup[];
         let note = '';
         let updateBlock = '';
@@ -245,7 +248,7 @@ export const researchActionsMethods = uiModule({
                 ? [{ id: 'research-item-install', label: r.awaitingNotInstalled, method: 'researchSyncAction', args: ['installResearch'] }]
                 : install ? [] : [{ id: 'research-item-about', label: r.whatIs, method: 'researchActionWhatIs' }];
             groups = [
-                { items: [...startRow, ...sendRow.map(i => ({ ...i, ext: false })), ...batch] },
+                { items: [...startRow, ...sendRow.map(i => ({ ...i, ext: false })), ...viewLinks, ...batch] },
                 { items: [...treeSettings, ...aboutRow], quiet: true },
             ];
         } else {
@@ -264,7 +267,7 @@ export const researchActionsMethods = uiModule({
                 middle.push({ id: 'research-item-live', label: r.followLive, method: 'researchActionLive', ext: true });
             }
             if (this.isFollowingActiveResearch()) middle.push({ id: 'research-item-overview', label: strings.live.overviewTitle, method: 'researchActionOverview' });
-            middle.push(...batch);
+            middle.push(...viewLinks, ...batch);
             // Occasional: the ways back, the settings.
             const occasional: SubmenuItem[] = [];
             // "Restore the state before loading" until the next edit (or 7 days); its first hour is the block above.
@@ -606,6 +609,12 @@ export const researchActionsMethods = uiModule({
     researchActionOverview(): void {
         this.closeActionsMenu();
         this.openResearchOverview();
+    },
+
+    /** "Linked in the view only (n)": the list; focus comes back to the Research button. */
+    researchActionViewLinks(): void {
+        this.closeActionsMenu();
+        this.openViewLinksPanel(document.getElementById('research-menu-btn'));
     },
 
     /** "Send changes": straight to a running research that tells what it has, else the way there. */

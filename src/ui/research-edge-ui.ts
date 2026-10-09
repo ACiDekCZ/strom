@@ -508,6 +508,8 @@ export const researchEdgeUiMethods = uiModule({
 
     /** "Research edge" and "Motion while the agent works": research trees only. */
     renderResearchEdgeSettings(): void {
+        // "Linked in the view only" right under it (its own conditions).
+        this.renderViewLinksSettings();
         const host = document.getElementById('research-edge-settings');
         if (!host) return;
         const treeId = DataManager.getCurrentTreeId();

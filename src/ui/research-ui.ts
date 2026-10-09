@@ -1453,6 +1453,8 @@ export const researchUiMethods = uiModule({
             else this.showToast(strings.research.updated(name, persons, families, dateLabel), 6000);
         }
         this.refreshResearchSyncUi();
+        // Shown links the new version no longer holds: said once (after the load's own notice).
+        if (!created && previous) this.noteViewLinksAfterLoad(treeId, previous);
         return treeId;
     },
 

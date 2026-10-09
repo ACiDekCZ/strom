@@ -654,6 +654,25 @@ tree" (`renderViewLinkIslands`), which shows the link and goes back to the
 tree. After showing, the view fits the anchor and the family
 (`ZoomPan.fitPersons`).
 
+Keeping track (src/ui/view-links-list-ui.ts): while the view draws shown
+links, an indicator "Linked in the view only · n" stands at the top of the
+view (`#view-links-pill`, 8px under whatever top chrome is above it — the
+evidence pill, the descendants badge, the phone's person row; a phone held
+sideways: only the icon and the number at the top right); × switches the
+tree's main switch off, the notice switches it on. The list
+(`#view-links-panel`: a 420px panel on the right, a full-height sheet on a
+phone) holds every record with its state — drawable (its switch), real now,
+or no longer valid with the reason — ordered by the anchor's place in the
+view, then real, then invalid (`orderViewLinkRows`); the main switch; ×,
+"Remove invalid" and "Remove all" remove at once with Undo in the panel. It
+opens from the indicator, the Research menu and Settings → Tree view (under
+"Research edge"). After a load of the research, records it made invalid
+(`newlyInvalidViewLinks`) are told once per page, after the load's own
+notice. Another window of the tree follows a change of the records (a
+`storage` event, `viewLinksTreeOfKey`); a live bridge's `/status` features
+(`TreeRenderer.setViewLinksBridge`) must name `hypothesis.links` once it
+answered in the page, else the data alone decide.
+
 ---
 
 ## 9. Testing

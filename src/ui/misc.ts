@@ -671,6 +671,15 @@ export const miscMethods = uiModule({
                     return;
                 }
 
+                // The list "Linked in the view only" (a panel beside the tree,
+                // a sheet on a phone): Escape closes it, focus back where it came from.
+                if (this.viewLinksPanelOpen()
+                    && this.dialogStack.length === 0
+                    && document.querySelectorAll('.modal-overlay.active').length === 0) {
+                    this.closeViewLinksPanel();
+                    return;
+                }
+
                 // "Show in tree" from tree health: Escape ends the highlight
                 // when no dialog is open above the tree.
                 if (this.isEvidenceHighlightOn()

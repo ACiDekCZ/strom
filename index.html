@@ -7411,6 +7411,171 @@
             .view-link-switch__track, .view-link-switch__track::after { transition: none; }
         }
 
+        /* "Linked in the view only · n ×" over the view (the evidence pill's place, below it when both; JS sets --view-links-top). */
+        .view-links-pill {
+            position: fixed; top: var(--view-links-top, 64px); left: 50%; transform: translateX(-50%); z-index: 95;
+            display: flex; align-items: center; gap: 2px; height: 32px; box-sizing: border-box; max-width: calc(100vw - 32px);
+            padding: 0 2px 0 2px; border-radius: 999px; background: var(--surface); color: var(--text);
+            border: 1px solid var(--border); box-shadow: var(--shadow-sm); font-size: 13px;
+        }
+        body.overview-docked .view-links-pill { left: calc((100vw - var(--overview-w)) / 2); }
+        .view-links-pill__open, .view-links-pill__close {
+            position: relative; flex: none; border: 0; background: none; color: inherit; font: inherit; cursor: pointer;
+            display: inline-flex; align-items: center; justify-content: center; border-radius: 999px;
+        }
+        .view-links-pill__open { flex: 0 1 auto; min-width: 0; gap: 8px; height: 28px; padding: 0 6px 0 10px; white-space: nowrap; }
+        .view-links-pill__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+        .view-links-pill__label--short { display: none; }
+        .view-links-pill__count { flex: none; font-weight: 600; font-variant-numeric: tabular-nums; }
+        .view-links-pill__close { width: 28px; height: 28px; padding: 0; color: var(--text-light); font-size: 16px; line-height: 1; }
+        @media (hover: hover) { .view-links-pill__open:hover, .view-links-pill__close:hover { background: var(--hover-bg); } }
+        .view-links-pill__open:focus-visible, .view-links-pill__close:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        /* A 44px target beyond the 32px pill on a touch screen. */
+        @media (pointer: coarse) {
+            .view-links-pill__open::before, .view-links-pill__close::before {
+                content: ''; position: absolute; top: 50%; left: 0; right: 0; height: 44px; transform: translateY(-50%);
+            }
+            .view-links-pill__close::before { left: -8px; right: -8px; }
+        }
+        body[data-view-mode="timeline"] .view-links-pill, body[data-view-mode="map"] .view-links-pill, body[data-view-mode="fan"] .view-links-pill { display: none; }
+        /* Phone: "View only · n", 36px, under the top bar (and the person row). */
+        @media (max-width: 640px) {
+            .view-links-pill { height: 36px; max-width: calc(100vw - 24px); }
+            .view-links-pill__open { height: 34px; }
+            .view-links-pill__label--long { display: none; }
+            .view-links-pill__label--short { display: inline; }
+            .view-links-pill__close { width: 36px; height: 34px; }
+        }
+        /* Phone sideways: only the icon and the number, top right clear of the map controls, no ×. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .view-links-pill {
+                top: calc(var(--toolbar-h) + 8px); left: auto; right: calc(12px + env(safe-area-inset-right, 0px));
+                transform: none; height: 36px; padding: 0 2px;
+            }
+            .view-links-pill__open { height: 34px; min-width: 44px; padding: 0 12px; }
+            .view-links-pill__label, .view-links-pill__close { display: none; }
+        }
+
+        /* The list "Linked in the view only": a 420px panel on the right, a full-height sheet on a phone. */
+        .view-links-panel {
+            position: fixed; z-index: 101; top: 64px; right: 12px; bottom: 12px; width: 420px; max-width: calc(100vw - 24px);
+            box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden;
+            background: var(--surface); color: var(--text); font-size: 13px;
+            border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-lg);
+        }
+        @media (max-width: 1024px) { .view-links-panel { bottom: calc(var(--bottom-bar-h, 64px) + 12px); } }
+        .view-links-panel__handle { flex: none; width: 36px; height: 4px; margin: 10px auto 2px; border-radius: 2px; background: var(--border); }
+        .view-links-panel__head { flex: none; display: flex; align-items: center; gap: 10px; padding: 14px 12px 12px 18px; border-bottom: 1px solid var(--divider); }
+        .view-links-panel__title { flex: 1; min-width: 0; margin: 0; font-size: 16px; font-weight: 600; font-family: var(--font-sans); }
+        .view-links-panel__close {
+            flex: none; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 8px; background: none;
+            color: var(--text-light); font-size: 18px; line-height: 1; cursor: pointer;
+        }
+        .view-links-panel__master { flex: none; display: flex; align-items: center; gap: 10px; padding: 10px 18px; border-bottom: 1px solid var(--divider); }
+        .view-links-panel__master-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+        .view-links-panel__master-name { font-size: 14px; font-weight: 500; }
+        .view-links-panel__master-sub { font-size: 12px; color: var(--text-faint); }
+        .view-links-panel__list { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; }
+        .view-links-panel__list.is-master-off .view-links-row { opacity: 0.5; }
+        .view-links-row {
+            display: grid; grid-template-columns: 36px minmax(0, 1fr) auto 28px; gap: 4px 12px; align-items: start;
+            padding: 12px 18px; border-bottom: 1px solid var(--divider);
+        }
+        .view-links-row__lead { display: flex; align-items: center; min-height: 22px; }
+        .view-links-switch { min-height: 22px; padding: 0; }
+        .view-links-switch .view-link-switch__track { width: 36px; height: 20px; }
+        .view-links-switch .view-link-switch__track::after { top: 2px; left: 2px; width: 16px; height: 16px; }
+        .view-links-switch[aria-checked="true"] .view-link-switch__track::after { transform: translateX(16px); }
+        .view-links-row__outline { display: block; width: 36px; height: 20px; box-sizing: border-box; border: 1.5px dashed var(--border); border-radius: 999px; }
+        .view-links-row__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .view-links-row__who { font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
+        .view-links-row--invalid .view-links-row__who { color: var(--text-faint); }
+        .view-links-row__claim, .view-links-row__people { font-size: 12px; line-height: 1.4; color: var(--text-faint); overflow-wrap: anywhere; }
+        /* A long claim in two lines (whole in its tooltip and for a screen reader). */
+        .view-links-row__claim { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+        .view-links-row__status { font-size: 12px; font-weight: 500; }
+        .view-links-row__status--real { color: var(--primary-dark); }
+        .view-links-row__status--invalid { color: var(--warning-text); }
+        .view-links-row__find, .view-links-row__remove, .view-links-panel__foot button, .view-links-panel__toast-undo, .view-links-panel__howto {
+            border: 0; background: none; font: inherit; cursor: pointer;
+        }
+        .view-links-row__find { padding: 1px 2px; min-height: 22px; border-radius: 6px; font-size: 13px; font-weight: 500; color: var(--primary); white-space: nowrap; }
+        .view-links-row__remove {
+            width: 28px; height: 22px; padding: 0; border-radius: 6px; color: var(--text-light); font-size: 16px; line-height: 1;
+            display: inline-flex; align-items: center; justify-content: center;
+        }
+        .view-links-panel__foot { flex: none; display: flex; align-items: center; gap: 16px; padding: 12px 18px; border-top: 1px solid var(--divider); }
+        .view-links-panel__foot[hidden] { display: none; }
+        .view-links-panel__foot button { padding: 2px 0; font-size: 13px; font-weight: 500; }
+        .view-links-panel__remove-invalid { color: var(--primary); }
+        .view-links-panel__remove-all { margin-left: auto; color: var(--danger); }
+        .view-links-panel__empty { padding: 28px 22px; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; font-size: 13px; line-height: 1.5; color: var(--text-light); }
+        .view-links-panel__empty-text, .view-links-panel__howto-text { margin: 0; }
+        .view-links-panel__howto { padding: 0; font-weight: 500; color: var(--primary); }
+        .view-links-panel__howto-text[hidden] { display: none; }
+        .view-links-panel__toast {
+            position: absolute; left: 16px; right: 16px; bottom: 64px; z-index: 1;
+            display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 14px;
+            background: var(--text); color: var(--surface); border-radius: 10px; font-size: 13px; box-shadow: var(--shadow-lg);
+        }
+        .view-links-panel__toast-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+        .view-links-panel__toast-undo { flex: none; padding: 2px 4px; font-weight: 600; color: inherit; text-decoration: underline; }
+        @media (hover: hover) {
+            .view-links-panel__close:hover, .view-links-row__remove:hover { background: var(--hover-bg); color: var(--text); }
+            .view-links-row__find:hover, .view-links-panel__foot button:hover, .view-links-panel__howto:hover { text-decoration: underline; }
+        }
+        .view-links-panel__close:focus-visible, .view-links-row__find:focus-visible, .view-links-row__remove:focus-visible,
+        .view-links-panel__foot button:focus-visible, .view-links-panel__toast-undo:focus-visible, .view-links-panel__howto:focus-visible {
+            outline: 2px solid var(--primary); outline-offset: 1px;
+        }
+        /* Touch: 44px targets, the switches 44 × 26. */
+        @media (pointer: coarse) {
+            .view-links-row { grid-template-columns: 44px minmax(0, 1fr) auto 44px; }
+            /* The 44px controls centred on the first line of text. */
+            .view-links-row__lead, .view-links-row__find, .view-links-row__remove { margin: -11px 0; }
+            .view-links-switch { min-height: 44px; }
+            .view-links-switch .view-link-switch__track { width: 44px; height: 26px; }
+            .view-links-switch .view-link-switch__track::after { top: 3px; left: 3px; width: 20px; height: 20px; }
+            .view-links-switch[aria-checked="true"] .view-link-switch__track::after { transform: translateX(18px); }
+            .view-links-row__outline { width: 44px; height: 26px; }
+            .view-links-row__find { min-height: 44px; padding: 0 8px; }
+            .view-links-row__remove, .view-links-panel__close { width: 44px; height: 44px; }
+            .view-links-panel__foot button, .view-links-panel__howto { min-height: 44px; }
+        }
+        /* Phone either way up: a sheet over the whole height (sideways at most 560px, centred); "Find" on its own line. */
+        .view-links-panel--sheet {
+            top: calc(8px + env(safe-area-inset-top, 0px)); left: 0; right: 0; bottom: 0; width: auto; max-width: none;
+            z-index: 1000; border-radius: 16px 16px 0 0; border-bottom: 0; font-size: 14px;
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .view-links-panel--sheet { left: var(--side-bar-w, 0px); width: min(560px, calc(100vw - var(--side-bar-w, 0px) - 16px)); margin: 0 auto; }
+        }
+        .view-links-panel--sheet .view-links-panel__head { padding: 8px 8px 8px 18px; border-bottom: 0; }
+        .view-links-panel--sheet .view-links-panel__title { font-size: 17px; }
+        .view-links-panel--sheet .view-links-panel__close { width: 44px; height: 44px; font-size: 20px; }
+        .view-links-panel--sheet .view-links-panel__master { min-height: 56px; box-sizing: border-box; }
+        .view-links-panel--sheet .view-links-panel__master-name { font-size: 15px; }
+        .view-links-panel--sheet .view-links-row { grid-template-columns: 44px minmax(0, 1fr) 44px; gap: 6px 10px; padding: 12px 6px 12px 18px; align-items: start; }
+        .view-links-panel--sheet .view-links-row__who { font-size: 15px; }
+        .view-links-panel--sheet .view-links-row__claim, .view-links-panel--sheet .view-links-row__people, .view-links-panel--sheet .view-links-row__status { font-size: 13px; }
+        .view-links-panel--sheet .view-links-row__lead { min-height: 26px; }
+        .view-links-panel--sheet .view-links-row__lead { margin: -9px 0 0; min-height: 44px; }
+        .view-links-panel--sheet .view-links-row__find { grid-column: 2; grid-row: 2; justify-self: start; min-height: 44px; margin: 0; padding: 0; font-size: 14px; }
+        .view-links-panel--sheet .view-links-row__remove { grid-column: 3; grid-row: 1; width: 44px; height: 44px; margin: -11px 0 0; }
+        .view-links-panel--sheet .view-links-row__find-gap { display: none; }
+        .view-links-panel--sheet .view-links-panel__foot { gap: 10px; padding: 8px 18px calc(16px + env(safe-area-inset-bottom, 0px)); }
+        .view-links-panel--sheet .view-links-panel__foot button {
+            flex: 1; min-height: 44px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; margin: 0;
+        }
+        .view-links-panel--sheet .view-links-panel__toast { bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
+        /* The notices at the bottom stay clear of the list beside the tree. */
+        body:has(#view-links-panel:not(.view-links-panel--sheet)) .toast { left: calc((100vw - 432px) / 2); max-width: calc(100vw - 456px); box-sizing: border-box; }
+        /* Settings → Tree: "Linked in the view only · n · Open". */
+        .view-links-settings[hidden] { display: none; }
+        .view-links-settings-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+        .view-links-settings-open { flex: none; font-size: 14px; font-weight: 600; }
+        @media (pointer: coarse) { .view-links-settings-open { min-height: 44px; } }
+
         /* "Link the shown" in the Add dialog; the quiet rows under Family in the person's detail. */
         .rel-view-link-note { margin: 0 0 14px; padding: 9px 12px; border-radius: 8px; background: var(--info-soft); }
         .rel-view-link-note__text { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 13px; color: var(--text); }
@@ -14512,6 +14677,7 @@
                         </span>
                     </label>
                     <div class="research-edge-settings" id="research-edge-settings" hidden></div>
+                    <div class="view-links-settings" id="view-links-settings" hidden></div>
                 </div>
             </section>
             <section class="settings-group" aria-labelledby="settings-group-notifications">

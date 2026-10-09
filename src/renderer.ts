@@ -288,6 +288,7 @@ class TreeRendererClass {
             if (empty) empty.style.display = 'block';
             this.focusPersonId = null;
             this.updateFocusUI();
+            UI.updateViewLinksIndicator?.();
             return;
         }
         if (empty) empty.style.display = 'none';
@@ -400,6 +401,7 @@ class TreeRendererClass {
                 UI.updateViewModeUI?.();
                 UI.updateMinimap?.();  // hidden outside the tree canvas
                 UI.updateGenLabels?.();  // clears labels for standalone views
+                UI.updateViewLinksIndicator?.();  // none outside the Family and Descendants views
                 return;
             }
         }
@@ -424,6 +426,8 @@ class TreeRendererClass {
         UI.updateMinimap?.();
         // Rebuild the sticky generation-label overlay for the new layout.
         UI.updateGenLabels?.();
+        // "Linked in the view only · n" over the view, the open list in step.
+        UI.updateViewLinksIndicator?.();
         // Pills on a bottom edge came out otherwise than measured: once more at their size.
         if (this.edgeRoomRerenderSeq === seq && seq === this.renderSeq) this.render();
     }
@@ -517,11 +521,13 @@ class TreeRendererClass {
      * Draw again after a change of the stored view links (never a change of
      * the data: no undo step, nothing to send). The focus depth that reached
      * as far as it could keeps doing so (a shown family adds generations);
-     * it is not written into the tree.
+     * it is not written into the tree. Measured against what the last
+     * drawing laid out, so a change already stored (another window, a
+     * bridge's answer) counts the same.
      */
     async refreshViewLinks(change: () => void): Promise<void> {
         const focus = this.focusPersonId;
-        const before = focus ? this.maxGenerations(focus) : null;
+        const before = focus ? maxGenerationsWithSiblings(this.viewData(this.viewLayer?.links ?? []), focus) : null;
         change();
         if (focus && before) {
             const after = this.maxGenerations(focus);

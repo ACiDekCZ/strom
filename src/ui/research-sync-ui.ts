@@ -1895,6 +1895,8 @@ export const researchSyncMethods = uiModule({
         this.renderResearchSyncPill();
         // "Only in browser" depends on what the research holds.
         this.refreshUnsavedForResearch();
+        // A bridge that says whether it knows what variants connect: the view links show or go.
+        this.viewLinksBridgeChanged();
     },
 
     /**

@@ -321,9 +321,10 @@ export const viewLinksUiMethods = uiModule({
      * "Find": the place of a view link in the tree — the person it links to
      * and the family as far as the view shows it (only the person while the
      * main switch is off). From a view that never draws the links, the
-     * Family view at the person.
+     * Family view at the person. `exact`: only the person and the people
+     * the link names (a link real now: its family is the whole tree).
      */
-    async viewLinkFind(link: Pick<ViewLink, 'anchorId' | 'islandIds'>): Promise<void> {
+    async viewLinkFind(link: Pick<ViewLink, 'anchorId' | 'islandIds'>, opts: { exact?: boolean } = {}): Promise<void> {
         if (!VIEW_LINK_VIEWS.includes(TreeRenderer.getViewMode())) {
             TreeRenderer.presetViewMode('family');
             await TreeRenderer.setFocus(link.anchorId);
@@ -334,8 +335,8 @@ export const viewLinksUiMethods = uiModule({
                 await TreeRenderer.setFocus(link.anchorId);
             }
         }
-        const data = DataManager.getData();
-        ZoomPan.fitPersons([link.anchorId, ...viewLinkIsland(data, link)].filter(id => TreeRenderer.isVisible(id)));
+        const people = opts.exact ? link.islandIds : viewLinkIsland(DataManager.getData(), link);
+        ZoomPan.fitPersons([link.anchorId, ...people].filter(id => TreeRenderer.isVisible(id)));
     },
 
     /**

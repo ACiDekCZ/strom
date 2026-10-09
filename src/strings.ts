@@ -66,6 +66,19 @@ const nEn = (n: number, one: string, other: string): string => `${n} ${plural('e
 /** English ordinal: 1st, 2nd, 3rd, 4th, 11th, 21st. */
 const ordEn = (n: number): string =>
     `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : (['th', 'st', 'nd', 'rd'][n % 10] ?? 'th')}`;
+/**
+ * Czech "z" / "ze" before a number as it is read ("z 5", "ze 3", "ze 12"):
+ * "ze" before the words that start with s, š, z or a cluster (dvou, tří,
+ * čtyř, šesti, sedmi, sta…).
+ */
+function zeCs(m: number): string {
+    const n = Math.abs(Math.trunc(m));
+    if (n < 10) return [2, 3, 4, 6, 7].includes(n) ? 'ze' : 'z';
+    if (n < 20) return [12, 13, 14, 16, 17].includes(n) ? 'ze' : 'z';
+    if (n < 100) return [2, 3, 4, 6, 7].includes(Math.floor(n / 10)) ? 'ze' : 'z';
+    if (n < 1000) return [1, 2, 3, 4, 6, 7].includes(Math.floor(n / 100)) ? 'ze' : 'z';
+    return 'z';
+}
 /** German count form shorthand: `${n} ${word}`. */
 const nDe = (n: number, one: string, other: string): string => `${n} ${plural('de', n, one, other)}`;
 
@@ -3379,6 +3392,30 @@ const stringsEN = {
         noReal: 'No real connection found.',
         viewOnlyRelation: (r: string, ref: string) => `View only: ${r} (${ref})`,
         deleteNote: (h: string, v: string) => `The shown link ${h} ${v} will then no longer be valid.`,
+        indicatorShort: 'View only',
+        openList: 'Open the list',
+        turnOffAria: 'Turn the shown links off',
+        offToast: 'Shown links turned off',
+        turnOn: 'Turn on',
+        master: 'Show in the tree',
+        masterCount: (n: number, m: number) => `${n} of ${m} on`,
+        masterOff: 'All off · each row keeps its setting',
+        rowVariant: (h: string, v: string, title: string) => `${h} · version ${v}${title ? `: ${title}` : ''}`,
+        rowSwitchAria: (who: string) => `Show in the tree: ${who}`,
+        remove: 'Remove',
+        removeAria: (who: string) => `Remove: ${who}`,
+        removeAll: 'Remove all',
+        removeInvalid: 'Remove invalid',
+        removedToast: (who: string) => `Removed: ${who}`,
+        removedToastN: (n: number) => `Removed: ${nEn(n, 'link', 'links')}`,
+        invalidAfterLoad: (n: number) => n === 1 ? '1 view-only link is no longer valid' : `${n} view-only links are no longer valid`,
+        list: 'List',
+        empty: 'Nothing yet. A family outside the tree that a research hypothesis would link can be shown in its place.',
+        howTo: 'How it works',
+        howToText: 'A family outside the tree is one the research knows but nothing links to the tree yet. Where a hypothesis would link it, it can be shown in its place: from the open stub above a card, from the card\'s menu (Show as linked), or in What the research knows about the person.',
+        menuItem: (n: number) => `Linked in the view only (${n})`,
+        settingsRow: (n: number) => `Linked in the view only · ${n}`,
+        open: 'Open',
     },
     researchEdge: {
         settingLabel: 'Research edge',
@@ -7117,6 +7154,30 @@ const stringsCZ: StringsType = {
         noReal: 'Skutečné spojení nenalezeno.',
         viewOnlyRelation: (r: string, ref: string) => `Jen v zobrazení: ${r} (${ref})`,
         deleteNote: (h: string, v: string) => `Ukázané připojení ${h} ${v} pak přestane platit.`,
+        indicatorShort: 'Jen v zobrazení',
+        openList: 'Otevřít seznam',
+        turnOffAria: 'Vypnout ukázaná připojení',
+        offToast: 'Ukázaná připojení vypnuta',
+        turnOn: 'Zapnout',
+        master: 'Ukazovat ve stromu',
+        masterCount: (n: number, m: number) => `${n} ${plural('cs', n, 'zapnuté', 'zapnutá', 'zapnutých')} ${zeCs(m)} ${m}`,
+        masterOff: 'Vypnuto vše · řádky si pamatují stav',
+        rowVariant: (h: string, v: string, title: string) => `${h} · verze ${v}${title ? `: ${title}` : ''}`,
+        rowSwitchAria: (who: string) => `Ukazovat ve stromu: ${who}`,
+        remove: 'Odebrat',
+        removeAria: (who: string) => `Odebrat: ${who}`,
+        removeAll: 'Odebrat vše',
+        removeInvalid: 'Odebrat neplatná',
+        removedToast: (who: string) => `Odebráno: ${who}`,
+        removedToastN: (n: number) => `Odebráno: ${n} připojení`,
+        invalidAfterLoad: (n: number) => `${n} připojení jen v zobrazení už neplatí`,
+        list: 'Seznam',
+        empty: 'Zatím nic. Rodina mimo strom, kterou by hypotéza výzkumu připojila, jde ukázat na svém místě.',
+        howTo: 'Jak na to',
+        howToText: 'Rodina mimo strom je ta, kterou výzkum zná, ale ke stromu ji zatím nic nepřipojuje. Kde by ji hypotéza připojila, jde ukázat na svém místě: z pahýlu nad kartičkou, z menu kartičky (Ukázat jako připojené) nebo v Co ví výzkum u osoby.',
+        menuItem: (n: number) => `Připojeno jen v zobrazení (${n})`,
+        settingsRow: (n: number) => `Připojeno jen v zobrazení · ${n}`,
+        open: 'Otevřít',
     },
     researchEdge: {
         settingLabel: 'Kraj výzkumu',
@@ -10780,6 +10841,30 @@ const stringsDE: StringsType = {
         noReal: 'Keine echte Verbindung gefunden.',
         viewOnlyRelation: (r: string, ref: string) => `Nur in der Ansicht: ${r} (${ref})`,
         deleteNote: (h: string, v: string) => `Die gezeigte Verbindung ${h} ${v} gilt dann nicht mehr.`,
+        indicatorShort: 'Nur Ansicht',
+        openList: 'Liste öffnen',
+        turnOffAria: 'Gezeigte Verbindungen ausschalten',
+        offToast: 'Gezeigte Verbindungen ausgeschaltet',
+        turnOn: 'Einschalten',
+        master: 'Im Stammbaum zeigen',
+        masterCount: (n: number, m: number) => `${n} von ${m} an`,
+        masterOff: 'Alle aus · jede Zeile behält ihren Zustand',
+        rowVariant: (h: string, v: string, title: string) => `${h} · Version ${v}${title ? `: ${title}` : ''}`,
+        rowSwitchAria: (who: string) => `Im Stammbaum zeigen: ${who}`,
+        remove: 'Entfernen',
+        removeAria: (who: string) => `Entfernen: ${who}`,
+        removeAll: 'Alle entfernen',
+        removeInvalid: 'Ungültige entfernen',
+        removedToast: (who: string) => `Entfernt: ${who}`,
+        removedToastN: (n: number) => `Entfernt: ${nDe(n, 'Verbindung', 'Verbindungen')}`,
+        invalidAfterLoad: (n: number) => n === 1 ? '1 nur angezeigte Verbindung gilt nicht mehr' : `${n} nur angezeigte Verbindungen gelten nicht mehr`,
+        list: 'Liste',
+        empty: 'Noch nichts. Eine Familie außerhalb des Stammbaums, die eine Hypothese der Forschung verbinden würde, lässt sich an ihrem Platz zeigen.',
+        howTo: 'So geht\'s',
+        howToText: 'Eine Familie außerhalb des Stammbaums kennt die Forschung, aber noch nichts verbindet sie mit dem Stammbaum. Wo eine Hypothese sie verbinden würde, lässt sie sich an ihrem Platz zeigen: über den offenen Ansatz über einer Karte, im Menü der Karte (Als verbunden zeigen) oder unter „Was die Forschung weiß“ bei der Person.',
+        menuItem: (n: number) => `Nur in der Ansicht verbunden (${n})`,
+        settingsRow: (n: number) => `Nur in der Ansicht verbunden · ${n}`,
+        open: 'Öffnen',
     },
     researchEdge: {
         settingLabel: 'Forschungsrand',

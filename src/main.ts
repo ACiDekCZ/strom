@@ -410,6 +410,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Strom Research in the app: welcome-screen offer + menu item gating.
     UI.initResearchPromo();
 
+    // Linked in the view only: the live bridge's say, other windows' changes of the shown links.
+    UI.initViewLinks();
+
 
     // ---- Data: runs once the data is readable ----
 

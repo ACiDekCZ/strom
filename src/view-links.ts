@@ -142,6 +142,17 @@ export function setViewLinksMaster(treeId: string, on: boolean): void {
     } catch { /* blocked */ }
 }
 
+/**
+ * The tree whose view links a storage key holds (another window wrote it: a
+ * `storage` event), or null for any other key. A cleared storage (key null)
+ * concerns every tree: ''.
+ */
+export function viewLinksTreeOfKey(key: string | null): string | null {
+    if (key === null) return '';
+    for (const prefix of VIEW_LINK_KEY_PREFIXES) if (key.startsWith(prefix)) return key.slice(prefix.length);
+    return null;
+}
+
 /** A deleted tree: its view links go with it. */
 export function forgetViewLinks(treeId: string): void {
     const s = storage();
@@ -375,6 +386,53 @@ export function activeViewLinks(data: StromData, resolved: readonly ResolvedView
         }
     }
     return candidates.filter(l => active.includes(l));
+}
+
+// ==================== THE LIST ====================
+
+/** The rows of the list "Linked in the view only": drawable rows switched on (n) of the drawable ones (m). */
+export function viewLinkCounts(resolved: readonly ResolvedViewLink[]): { on: number; drawable: number; invalid: number } {
+    let on = 0, drawable = 0, invalid = 0;
+    for (const r of resolved) {
+        if (r.state === 'draw') {
+            drawable++;
+            if (r.link.on) on++;
+        } else if (r.state === 'invalid') invalid++;
+    }
+    return { on, drawable, invalid };
+}
+
+/**
+ * The list's order: drawable rows by where their person stands in the view
+ * (top down, then left to right; not drawn: after those, in the order
+ * chosen), then the rows linked for real, then those no longer valid (each
+ * in the order chosen).
+ */
+export function orderViewLinkRows(resolved: readonly ResolvedViewLink[], place: (id: PersonId) => { x: number; y: number } | undefined): ResolvedViewLink[] {
+    const rank = (r: ResolvedViewLink): number => r.state === 'draw' ? 0 : r.state === 'real' ? 1 : 2;
+    return [...resolved].sort((a, b) => {
+        const ra = rank(a), rb = rank(b);
+        if (ra !== rb) return ra - rb;
+        if (ra === 0) {
+            const pa = place(a.link.anchorId), pb = place(b.link.anchorId);
+            if (pa && pb && (pa.y !== pb.y || pa.x !== pb.x)) return pa.y !== pb.y ? pa.y - pb.y : pa.x - pb.x;
+            if (pa && !pb) return -1;
+            if (pb && !pa) return 1;
+        }
+        return a.link.addedAt - b.link.addedAt;
+    });
+}
+
+/**
+ * The records a load of the research made invalid: invalid against the data
+ * after it and valid (drawn or real) before.
+ */
+export function newlyInvalidViewLinks(before: StromData, after: StromData, links: readonly ViewLink[]): Array<ResolvedViewLink & { state: 'invalid' }> {
+    if (links.length === 0) return [];
+    const was = resolveViewLinks(before, links);
+    return resolveViewLinks(after, links).filter((r, i): r is ResolvedViewLink & { state: 'invalid' } => {
+        return r.state === 'invalid' && was[i].state !== 'invalid';
+    });
 }
 
 // ==================== CHOOSING ====================
