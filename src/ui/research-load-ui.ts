@@ -5,6 +5,9 @@
  * Only loading from the research: said in amber that these values go, the
  * button "Load and overwrite". The last send left changes unwritten: said
  * the same way (they would go too). Resolves 'load', 'copy' or null.
+ * After a conflict was decided for the research's value (`decided`): what
+ * was decided first, its rows tagged "decided", the rest under it, and
+ * "Later" (the value here stays for now) beside "Load".
  */
 
 import { strings } from '../strings.js';
@@ -68,32 +71,41 @@ export const researchLoadMethods = uiModule({
      * Ask before the research's version (`there`, stabilized to this tree's
      * ids) replaces `here`. `off`: the tree only loads from the research;
      * `notWritten`: changes of the last send the research did not write.
+     * `decided`: a decision brings this version — its sentence first, its
+     * rows (`rows`) first and tagged, "Later" with what stays here (`later`).
      */
     askResearchLoad(treeName: string, versionDate: string, here: StromData, there: StromData,
-        opts: { off?: boolean; notWritten?: number; images?: { label: string; detail: string; checked: boolean }} = {}): Promise<{ choice: 'load' | 'copy'; images: boolean } | null> {
+        opts: { off?: boolean; notWritten?: number; images?: { label: string; detail: string; checked: boolean };
+            decided?: { intro: string; later: string; rows: (row: ValueChange) => boolean } } = {}): Promise<{ choice: 'load' | 'copy'; images: boolean } | null> {
         document.querySelectorAll(`#${LOAD_ID}`).forEach(el => el.remove());
         const s = strings.sync;
         const diff = diffValues(here, there);
+        const decided = opts.decided;
+        // The decided values first, the rest in their order.
+        if (decided) diff.rows = [...diff.rows.filter(r => decided.rows(r)), ...diff.rows.filter(r => !decided.rows(r))];
         const people = new Set(diff.rows.map(r => r.personId)).size;
         const row = (r: ValueChange, first: boolean): string => {
             const here = valueText(r, r.here);
             const there = r.field === 'person' ? s.fieldPersonGone : valueText(r, r.there);
             return `<tr${first ? ' class="is-first"' : ''}>`
                 + `<td class="research-load-who">${first ? esc(r.name) : ''}</td>`
-                + `<td class="research-load-field">${esc(fieldLabel(r))}${r.conflict ? ` <span class="research-load-conflict">${esc(s.conflictTag)}</span>` : ''}</td>`
+                + `<td class="research-load-field">${esc(fieldLabel(r))}${decided?.rows(r)
+                    ? ` <span class="research-load-conflict research-load-decided">${esc(s.conflictDecidedTag)}</span>`
+                    : r.conflict ? ` <span class="research-load-conflict">${esc(s.conflictTag)}</span>` : ''}</td>`
                 + `<td class="research-load-change"><span class="research-load-here">${esc(here)}</span> <span aria-hidden="true">→</span> <span class="research-load-there">${esc(there)}</span></td>`
                 + '</tr>';
         };
         const rows = diff.rows.map((r, i) => row(r, i === 0 || diff.rows[i - 1].personId !== r.personId || diff.rows[i - 1].name !== r.name));
         const more = Math.max(0, rows.length - ROWS_SHOWN);
-        const overwrite = !!opts.off || (opts.notWritten ?? 0) > 0;
+        // After a decision: Later or Load, never a copy.
+        const overwrite = !decided && (!!opts.off || (opts.notWritten ?? 0) > 0);
         const warn = [opts.off ? s.offOverwrite : '', (opts.notWritten ?? 0) > 0 ? s.loadOverNotWritten(opts.notWritten!) : ''].filter(Boolean);
         const added = diff.addedPersons + diff.addedFacts > 0 ? s.loadAdded(diff.addedPersons, diff.addedFacts) : '';
         const overlay = document.createElement('div');
         overlay.className = 'modal-overlay active';
         overlay.id = LOAD_ID;
         overlay.innerHTML = `
-            <div class="modal modal--lg research-load" role="dialog" data-dialog-kind="decision" aria-modal="true" aria-labelledby="research-load-title">
+            <div class="modal modal--lg research-load${decided ? ' research-load--decided' : ''}" role="dialog" data-dialog-kind="decision" aria-modal="true" aria-labelledby="research-load-title">
                 <div class="modal-header">
                     <div class="audit-log-heading">
                         <h2 id="research-load-title">${esc(s.loadTitle)}</h2>
@@ -101,6 +113,7 @@ export const researchLoadMethods = uiModule({
                     </div>
                 </div>
                 <div class="research-load-body">
+                    ${decided ? `<p class="research-load-intro">${esc(decided.intro)}</p>` : ''}
                     ${warn.map(w => `<p class="research-load-warn">${esc(w)}</p>`).join('')}
                     ${rows.length ? `
                     <div class="research-load-table-wrap" id="research-load-table-wrap">
@@ -115,11 +128,11 @@ export const researchLoadMethods = uiModule({
                     ${opts.images ? `
                     <label class="research-load-images"><input type="checkbox" id="research-load-images"${opts.images.checked ? ' checked' : ''}>
                         <span>${esc(opts.images.label)} <span class="research-adopt-size">${esc(opts.images.detail)}</span></span></label>` : ''}
-                    <p class="research-load-backup-narrow">${esc(s.loadBackupNote)}</p>
+                    <p class="research-load-backup-narrow">${esc(decided ? decided.later : s.loadBackupNote)}</p>
                 </div>
                 <div class="buttons research-load-foot">
-                    <span class="research-send-dialog-note research-load-backup">${esc(s.loadBackupNote)}</span>
-                    <button type="button" class="secondary" id="research-load-cancel" data-dismiss>${esc(strings.buttons.cancel)}</button>
+                    <span class="research-send-dialog-note research-load-backup">${esc(decided ? decided.later : s.loadBackupNote)}</span>
+                    <button type="button" class="secondary" id="research-load-cancel" data-dismiss>${esc(decided ? strings.conflict.later : strings.buttons.cancel)}</button>
                     ${overwrite ? `<button type="button" class="secondary" id="research-load-copy">${esc(strings.research.openCopy)}</button>` : ''}
                     <button type="button" class="primary" id="research-load-ok">${esc(overwrite ? s.loadOverwrite : s.load)}</button>
                 </div>

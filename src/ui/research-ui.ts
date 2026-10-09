@@ -662,7 +662,7 @@ function todayIso(): string {
 }
 
 /** "23. 9. 2026" / "23 Sep 2026": the file's header date, else today. */
-function researchDateLabel(gedDate: string | null): string {
+export function researchDateLabel(gedDate: string | null): string {
     let iso = '';
     try {
         iso = gedDate ? parseGedcomDate(gedDate) : '';
@@ -1214,8 +1214,11 @@ export const researchUiMethods = uiModule({
      * Put a research into the right tree: create it the first time, update it
      * afterwards (asking when the user changed it in the app), switch to it.
      * Returns the tree, or null when the user cancelled.
+     * `force`: the caller showed what the load changes, or it changes only
+     * what a decision of a conflict brings (conflict-decide-ui.ts): loaded
+     * over the tree (a backup first), nothing asked.
      */
-    async applyResearch(data: StromData, source: ResearchSource, opts: { head?: string; quiet?: boolean; afterSend?: TreeId; plainAsk?: boolean; noAsk?: boolean; live?: string }): Promise<TreeId | null> {
+    async applyResearch(data: StromData, source: ResearchSource, opts: { head?: string; quiet?: boolean; afterSend?: TreeId; plainAsk?: boolean; noAsk?: boolean; live?: string; force?: boolean }): Promise<TreeId | null> {
         const name = source.name || strings.research.defaultName;
         const dateLabel = researchDateLabel(source.date);
         const existing = source.treeId ? TreeManager.findTreeByResearchId(source.treeId) : null;
@@ -1255,7 +1258,7 @@ export const researchUiMethods = uiModule({
             const takesOver = takeovers.length > 0;
             // Just written ("Send, then load"), and its version holds the research's values over open conflicts:
             // not loaded and nothing asked (finding 37) — the conflict stays in sight, read from that version.
-            if (opts.afterSend === existing.id && takesOver && previous) {
+            if (opts.afterSend === existing.id && takesOver && previous && !opts.force) {
                 patchResearchAutoState(existing.id, { held: heldConflicts(previous, stabilizeIds(data, previous), existing.research?.head ?? '', opts.head || source.head || '') });
                 this.refreshResearchSyncUi();
                 TreeRenderer.render();
@@ -1268,7 +1271,7 @@ export const researchUiMethods = uiModule({
             const plainAsk = !!opts.plainAsk || (sentIsTree && sent?.state === 'written' && (!researchSendVouches(sent) || takesOver));
             // The question is about that tree: show it behind the dialog, never
             // whichever tree was open (the user must see what they decide on).
-            if (action === 'ask' && previous && !unreadable && !holdsChanges && DataManager.getCurrentTreeId() !== existing.id) {
+            if (action === 'ask' && previous && !unreadable && !holdsChanges && !opts.force && DataManager.getCurrentTreeId() !== existing.id) {
                 if (existing.isHidden) TreeManager.setTreeVisibility(existing.id, false);
                 await this.switchToTree(existing.id);
                 if (DataManager.getCurrentTreeId() !== existing.id) return null;
@@ -1277,6 +1280,8 @@ export const researchUiMethods = uiModule({
             if (unreadable || !previous) {
                 // Cannot be read with this session's key: never overwrite it.
                 asCopy = true;
+            } else if (opts.force) {
+                // Asked already, or nothing to ask (a decision's load): over the tree.
             } else if (holdsChanges) {
                 // Nothing here the research lacks (a backup is still kept below): what it overwrites shown first.
                 holdsSent = true;

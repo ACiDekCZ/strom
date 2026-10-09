@@ -12,14 +12,22 @@
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { strings, getCurrentLanguage } from '../strings.js';
-import { PersonId, ResearchConflict, ResearchConflictValue } from '../types.js';
+import { PersonId, ResearchConflict, ResearchConflictValue, StromData } from '../types.js';
 import { formatFlexDate } from '../dates.js';
-import { researchConflictRef, ResearchConflictTake } from '../research-link.js';
+import { parseGedcom, convertToStrom } from '../ged-parser.js';
+import {
+    researchConflictRef, ResearchConflictTake, ResearchHeader, parseLiveBridge, readResearchHeader, stabilizeIds, keepTitles, researchHasTitles,
+} from '../research-link.js';
+import { storedResearchBridge, researchAutoState } from '../research-device.js';
+import { diffValues } from '../research-changes.js';
 import { canDecideInApp, conflictSides, DecideResult } from '../research-decide.js';
 import {
-    ConflictCardState, ConflictCardView, ConflictDecidedValues, conflictCardView, conflictFactParts, conflictSentChanged,
+    ConflictCardState, ConflictCardView, ConflictDecidedValues, DecidedFact, DECIDED_CARD_MS, conflictCardView, conflictFactParts, conflictSentChanged,
+    isDecidedRow, otherLoadChanges,
 } from '../research-conflict-card.js';
 import { isDateConflict, researchConflictTitle, researchValueText } from './person-research-ui.js';
+import { fetchGedcomText, researchDateLabel } from './research-ui.js';
+import { researchSendMode } from './research-sync-ui.js';
 import { uiModule } from './module.js';
 
 const DIALOG_ID = 'person-research-modal';
@@ -28,6 +36,16 @@ const DIALOG_ID = 'person-research-modal';
 const cardStates = new Map<string, ConflictCardState>();
 /** What each card in the dialog was last drawn from: drawn again only when that changes. */
 const drawn = new WeakMap<Element, string>();
+
+/** The research's version as read from its bridge (for "The research has N more changes"), by research and head. */
+interface ResearchVersion { key: string; data: StromData; header: ResearchHeader }
+let versionRead: ResearchVersion | null = null;
+/** A read on its way (one at a time, by the same key). */
+let versionAsk: { key: string; job: Promise<ResearchVersion | null> } | null = null;
+/** A key read and found unreadable: not asked again for the note (a decision reads afresh). */
+let versionFailed = '';
+/** "N more changes" per conflict, with what it was counted from. */
+const takeCounts = new Map<string, { key: string; n: number }>();
 
 function esc(text: string): string {
     return text
@@ -60,7 +78,13 @@ function dayAndTime(ts: number): string {
 export const conflictDecideMethods = uiModule({
     /** The card's state in this page (undefined: as the data say). */
     researchConflictCardState(conflictId: string): ConflictCardState | undefined {
-        return cardStates.get(stateKey(conflictId));
+        const state = cardStates.get(stateKey(conflictId));
+        // Left for later, and a version loaded since (by any way): the data say how it stands now.
+        if (state?.kind === 'takenPending' && state.base !== undefined && state.base !== (this.researchSyncLink()?.link.head ?? '')) {
+            cardStates.delete(stateKey(conflictId));
+            return undefined;
+        }
+        return state;
     },
 
     /** Set (null: clear) a card's state and draw its cards in the open dialog again. */
@@ -193,7 +217,7 @@ export const conflictDecideMethods = uiModule({
                     choice = `<button type="button" class="prc-choice" data-conflict="${esc(id)}" data-do="decide" data-take="${which}" data-focus="choice-${which}"${off ? ' disabled' : ''}${view.notes ? ` aria-describedby="${noteId}"` : ''}>${esc(which === 'user' ? k.keepLink : k.takeLink)}</button>`;
                 }
                 const note = view.notes && view.choices !== 'none'
-                    ? `<p class="prc-note" id="${noteId}">${esc(which === 'user' ? k.keepNote : k.takeNote)}</p>` : '';
+                    ? `<p class="prc-note" id="${noteId}">${esc(which === 'user' ? k.keepNote : this.researchConflictTakeNote(c))}</p>` : '';
                 return `
                     <div class="prc-side" data-side="${which}">
                         <span class="prc-side-label">${esc(which === 'user' ? k.sideApp : k.sideResearch)}</span>
@@ -257,11 +281,13 @@ export const conflictDecideMethods = uiModule({
         const sel = conflictId ? `[data-conflict-card="${CSS.escape(conflictId)}"]` : '[data-conflict-card]';
         dialog.querySelectorAll<HTMLElement>(sel).forEach(card => {
             const id = card.dataset.conflictCard!;
-            const c = this.researchConflictsOf(personId).find(x => researchConflictRef(x.id) === id);
+            const c = this.researchConflictsShown(personId).find(x => researchConflictRef(x.id) === id);
             const focused = card.contains(document.activeElement) ? document.activeElement as HTMLElement : null;
             const focusKey = focused?.dataset.focus ?? '';
             const html = c && (canDecideInApp(c, DataManager.getPerson(personId)) || this.researchConflictCardState(id))
-                ? this.researchConflictCardHtml(personId, c).trim() : '';
+                ? this.researchConflictCardHtml(personId, c).trim()
+                // Folded: today's decided row, as the data say it now.
+                : c?.status === 'decided' ? this.researchConflictDecidedRowHtml(c).trim() : '';
             if (html && drawn.get(card) === html) return;
             const tmp = document.createElement('div');
             tmp.innerHTML = html;
@@ -284,7 +310,7 @@ export const conflictDecideMethods = uiModule({
      */
     async decideResearchConflict(personId: PersonId, conflictId: string, take: ResearchConflictTake): Promise<void> {
         if (this.researchConflictCardState(conflictId)?.kind === 'busy') return;
-        const c = this.researchConflictsOf(personId).find(x => researchConflictRef(x.id) === conflictId);
+        const c = this.researchConflictsShown(personId).find(x => researchConflictRef(x.id) === conflictId);
         if (!c) return;
         const values = this.researchConflictDecidedValues(c);
         const treeId = DataManager.getCurrentTreeId();
@@ -299,9 +325,11 @@ export const conflictDecideMethods = uiModule({
     },
 
     /**
-     * The bridge answered a decision: the card's state from its answer. A
-     * decision for the research's value, or one made elsewhere for it, brings
-     * that value only with the research's version (researchConflictTaken).
+     * The bridge answered a decision: the card's state from its answer; a
+     * conflict decided (here, elsewhere, or gone there) stops counting at
+     * once (researchConflictSettle) — before any version loads, so the
+     * loaded one's decided conflict shows as such — then what follows
+     * (researchConflictAfterAnswer).
      */
     async researchConflictDecideAnswered(personId: PersonId, c: ResearchConflict, take: ResearchConflictTake,
         values: ConflictDecidedValues, result: DecideResult): Promise<void> {
@@ -318,32 +346,235 @@ export const conflictDecideMethods = uiModule({
             state = { kind: 'error', take, error: result.code === 'busy' ? 'busy' : result.code === 'locked' ? 'locked' : 'network' };
         }
         this.setResearchConflictCardState(id, state);
-        if ((result.ok && state.kind === 'taken') || (state.kind === 'elsewhere' && state.take === 'research')) {
-            await this.researchConflictTaken(personId, c, values);
+        const treeId = DataManager.getCurrentTreeId();
+        if (treeId && (result.ok || result.code === 'conflict.decided' || result.code === 'conflict.none')) {
+            await this.researchConflictSettle(treeId, id);
         }
-        this.researchConflictAfterAnswer(personId, c, take, result);
+        await this.researchConflictAfterAnswer(personId, c, take, result);
     },
 
     /**
      * Decided for the research's value (here or elsewhere): the value comes
-     * only by loading the research's version — quietly when nothing else
-     * changes, else through the Load dialog. That load belongs here; once
-     * done the card's state carries `loaded: { from }` (the value it had
-     * here), or becomes `takenPending` when the load is left for later.
-     * Until then the card says the decision alone.
+     * only by loading the research's version — quietly when it changes
+     * nothing here but the decided values (a backup first), else through the
+     * Load dialog with what was decided first. Loaded: the card says the
+     * value it had here (`loaded`); "Later", or the version not readable:
+     * `takenPending`, its "Load" asks again. Resolves how it went.
      */
-    async researchConflictTaken(_personId: PersonId, _c: ResearchConflict, _values: ConflictDecidedValues): Promise<void> {
-        // Loading the research's version after the decision is not part of the card.
+    async researchConflictTaken(personId: PersonId, c: ResearchConflict, values: ConflictDecidedValues): Promise<'quiet' | 'asked' | 'later'> {
+        const id = researchConflictRef(c.id) ?? '';
+        const ctx = this.researchSyncLink();
+        if (!ctx) return 'later';
+        const { treeId, link } = ctx;
+        const from = this.researchConflictValueNow(personId, c);
+        const later = (): 'later' => {
+            if (DataManager.getCurrentTreeId() === treeId) {
+                this.setResearchConflictCardState(id, { kind: 'takenPending', values, base: TreeManager.getTreeMetadata(treeId)?.research?.head ?? '' });
+            }
+            return 'later';
+        };
+        const version = await this.researchVersionRead(true);
+        if (!version || DataManager.getCurrentTreeId() !== treeId) return later();
+        const here = DataManager.getData();
+        const there = this.researchVersionAsLoaded(version.data);
+        const decided = this.researchConflictsTakenFacts(id, c);
+        const quiet = otherLoadChanges(diffValues(here, there), decided) === 0;
+        if (!quiet) {
+            const st = researchAutoState(treeId);
+            const nw = st.notWritten && link.sent?.state === 'written' && st.notWritten.fingerprint === link.sent.fingerprint
+                ? st.notWritten.items.length + st.notWritten.unexplained : 0;
+            const answer = await this.askResearchLoad(TreeManager.getTreeMetadata(treeId)?.name ?? '', researchDateLabel(version.header.date), here, there, {
+                off: researchSendMode(link) === 'off', notWritten: nw,
+                decided: { intro: strings.conflict.loadIntro(values.research), later: strings.conflict.loadLater(from), rows: r => isDecidedRow(r, decided) },
+            });
+            if (!answer || DataManager.getCurrentTreeId() !== treeId) return later();
+        }
+        if (!await this.ensureLocalUnlocked()) return later();
+        // Loading now: no longer left for later (the load's own redraw keeps the card).
+        if (this.researchConflictCardState(id)?.kind === 'takenPending') cardStates.set(stateKey(id), { kind: 'taken', at: Date.now(), values });
+        const done = await this.applyResearch(version.data, version.header, { force: true, quiet, ...(version.header.head ? { head: version.header.head } : {}) });
+        if (done !== treeId) return later();
+        const state = this.researchConflictCardState(id);
+        if (state?.kind === 'taken' || state?.kind === 'elsewhere') this.setResearchConflictCardState(id, { ...state, loaded: { from } });
+        else this.setResearchConflictCardState(id, { kind: 'taken', at: Date.now(), values, loaded: { from } });
+        return quiet ? 'quiet' : 'asked';
     },
 
     /**
-     * After every answer of the bridge (the card's state already set): the
-     * bookkeeping of the research's conflicts (decided ones out of the counts,
-     * a held version read again) and the notice when the dialog is closed
-     * belong here.
+     * Decided for the app's value: the research wrote it and moved on. The
+     * tree as it was sent (or as loaded) and the new version overwriting
+     * nothing here: that version is taken quietly, as after a written send
+     * (a backup first). Else nothing loads — it waits as any newer version.
      */
-    researchConflictAfterAnswer(_personId: PersonId, _c: ResearchConflict, _take: ResearchConflictTake, _result: DecideResult): void {
-        // Nothing beyond the card yet.
+    async researchConflictKeptLoad(head: string): Promise<void> {
+        const ctx = this.researchSyncLink();
+        if (!ctx || !head || head === (ctx.link.head ?? '')) return;
+        const { treeId, link } = ctx;
+        const fps = this.researchSyncFingerprints(treeId, link);
+        if (!fps.matchesBase && fps.current !== link.sent?.fingerprint) return;
+        const version = await this.researchVersionRead(true);
+        if (!version || DataManager.getCurrentTreeId() !== treeId) return;
+        if (diffValues(DataManager.getData(), this.researchVersionAsLoaded(version.data)).rows.length > 0) return;
+        if (!await this.ensureLocalUnlocked()) return;
+        await this.applyResearch(version.data, version.header, { force: true, quiet: true, head: version.header.head || head });
+    },
+
+    /**
+     * After every answer of the bridge (the card's state set, the conflict
+     * settled): the research's version where the decision brings it, the
+     * notice (DEV §7: decided, already decided — with the value that holds —,
+     * or, when the card is not in sight, that it could not be decided with
+     * "Show"), and the decided card folding into the decided row later.
+     */
+    async researchConflictAfterAnswer(personId: PersonId, c: ResearchConflict, _take: ResearchConflictTake, result: DecideResult): Promise<void> {
+        const id = researchConflictRef(c.id) ?? '';
+        const k = strings.conflict;
+        const state = this.researchConflictCardState(id);
+        const values = state && 'values' in state ? state.values : this.researchConflictDecidedValues(c);
+        if (state?.kind === 'kept') {
+            await this.researchConflictKeptLoad(result.ok ? result.head : '');
+            this.showToast(k.decidedToast(values.user), 6000);
+        } else if (state?.kind === 'taken') {
+            if (await this.researchConflictTaken(personId, c, values) === 'quiet') this.showToast(k.decidedToast(values.research), 6000);
+        } else if (state?.kind === 'elsewhere') {
+            const said = state.resolution || (state.take === 'user' ? values.user : state.take === 'research' ? values.research : '');
+            this.showToast(k.alreadyDecided(said), 6000);
+            if (state.take === 'research') await this.researchConflictTaken(personId, c, values);
+        } else if (state?.kind === 'error' && !this.researchConflictCardInSight(id)) {
+            this.showToast(k.errToast, 6000, { action: { label: k.show, run: () => this.showPersonResearchDialog(personId, { conflict: id }) } });
+        }
+        this.researchConflictFoldLater(id);
+    },
+
+    /** The card of a conflict is in the open dialog. */
+    researchConflictCardInSight(conflictId: string): boolean {
+        return !!document.getElementById(DIALOG_ID)?.querySelector(`[data-conflict-card="${CSS.escape(conflictId)}"]`);
+    },
+
+    /** A decided card whose value is here (or never comes by a load) folds into the decided row after a while. */
+    researchConflictFoldLater(conflictId: string): void {
+        const state = this.researchConflictCardState(conflictId);
+        if (!state || !this.researchConflictCardFolds(state)) return;
+        const key = stateKey(conflictId);
+        setTimeout(() => {
+            if (cardStates.get(key) !== state) return;
+            cardStates.delete(key);
+            this.refreshResearchConflictCards(conflictId);
+        }, DECIDED_CARD_MS);
+    },
+
+    /** A decided card done (nothing more to load for it): it folds, and the dialog closing ends it. */
+    researchConflictCardFolds(state: ConflictCardState): boolean {
+        return state.kind === 'kept' || (state.kind === 'taken' && !!state.loaded)
+            || (state.kind === 'elsewhere' && (state.take !== 'research' || !!state.loaded));
+    },
+
+    /** The dialog closed: the decided cards of this tree are done (opened again, the data say it). */
+    researchConflictCardsClosed(): void {
+        const prefix = `${DataManager.getCurrentTreeId() ?? ''}|`;
+        for (const [key, state] of [...cardStates]) {
+            if (key.startsWith(prefix) && this.researchConflictCardFolds(state)) cardStates.delete(key);
+        }
+    },
+
+    /**
+     * The conflicts whose values a load brings as decided: this one and those
+     * decided for the research's value in this page and not loaded yet — at
+     * the people they are shown at (a couple's conflict at both partners).
+     */
+    researchConflictsTakenFacts(conflictId: string, c: ResearchConflict): DecidedFact[] {
+        const persons = Object.keys(DataManager.getData().persons) as PersonId[];
+        const treeId = DataManager.getCurrentTreeId();
+        const held = treeId ? this.researchHeld(treeId) : null;
+        const found = new Map<string, { conflict: ResearchConflict; persons: string[] }>();
+        for (const pid of persons) {
+            const own = DataManager.getPerson(pid)?.research?.conflicts ?? [];
+            for (const x of [...own, ...(held?.persons[pid] ?? [])]) {
+                const ref = researchConflictRef(x.id);
+                if (!ref) continue;
+                const st = ref === conflictId ? null : this.researchConflictCardState(ref);
+                if (ref !== conflictId && st?.kind !== 'takenPending' && !(st?.kind === 'taken' && !st.loaded)) continue;
+                const entry = found.get(ref) ?? { conflict: ref === conflictId ? c : x, persons: [] };
+                if (!entry.persons.includes(pid)) entry.persons.push(pid);
+                found.set(ref, entry);
+            }
+        }
+        if (!found.has(conflictId)) found.set(conflictId, { conflict: c, persons: [] });
+        return [...found.values()].map(e => ({ persons: e.persons, fact: e.conflict.fact, date: isDateConflict(e.conflict) }));
+    },
+
+    /**
+     * The sentence under "Take the research's value": what loading its
+     * version brings besides this value, when read (the version read once
+     * per head, quietly — the cards follow); not known: the plain sentence.
+     */
+    researchConflictTakeNote(c: ResearchConflict): string {
+        const k = strings.conflict;
+        const ctx = this.researchSyncLink();
+        if (!ctx || this.researchConflictDecideMode() !== 'bridge') return k.takeNote;
+        const key = this.researchVersionKey();
+        if (versionRead?.key !== key) {
+            if (key !== versionFailed && versionAsk?.key !== key) {
+                void this.researchVersionRead(false).then(v => { if (v) this.refreshResearchConflictCards(); });
+            }
+            return k.takeNote;
+        }
+        const id = researchConflictRef(c.id) ?? '';
+        const facts = this.researchConflictsTakenFacts(id, c);
+        // Counted once per version, state of the tree and decided facts (the cards are drawn often).
+        const memoKey = `${versionRead.key}|${this.researchSyncFingerprints(ctx.treeId, ctx.link).current}|${JSON.stringify(facts)}`;
+        let n = takeCounts.get(id)?.key === memoKey ? takeCounts.get(id)!.n : -1;
+        if (n < 0) {
+            n = otherLoadChanges(diffValues(DataManager.getData(), this.researchVersionAsLoaded(versionRead.data)), facts);
+            takeCounts.set(id, { key: memoKey, n });
+        }
+        return n > 0 ? k.takeNoteMore(n) : k.takeNote;
+    },
+
+    /** The active research and the head its bridge says it has ('' = not said). */
+    researchVersionKey(): string {
+        const ctx = this.researchSyncLink();
+        if (!ctx) return '';
+        return `${ctx.link.id}|${this.researchStatusOf(ctx.link.id)?.head || storedResearchBridge(ctx.link.id)?.head || ''}`;
+    },
+
+    /**
+     * The research's version from its bridge (tree.ged), not loaded; `fresh`:
+     * asked now (after a decision), else the one read for this head. Null:
+     * no bridge, no answer, or not this tree's research.
+     */
+    async researchVersionRead(fresh: boolean): Promise<ResearchVersion | null> {
+        const ctx = this.researchSyncLink();
+        const bridge = ctx ? parseLiveBridge(storedResearchBridge(ctx.link.id)?.base) : null;
+        if (!ctx || !bridge) return null;
+        const key = this.researchVersionKey();
+        if (!fresh && versionRead?.key === key) return versionRead;
+        if (!fresh && versionAsk?.key === key) return versionAsk.job;
+        const researchId = ctx.link.id;
+        const job = (async (): Promise<ResearchVersion | null> => {
+            try {
+                const text = await fetchGedcomText(bridge.ged);
+                const header = readResearchHeader(text);
+                if (!header.isStromResearch || header.treeId !== researchId) return null;
+                return { key: header.head ? `${researchId}|${header.head}` : key, data: convertToStrom(parseGedcom(text)).data, header };
+            } catch {
+                return null;
+            }
+        })();
+        versionAsk = { key, job };
+        const got = await job;
+        if (versionAsk?.job === job) versionAsk = null;
+        if (got) versionRead = got;
+        else if (!fresh) versionFailed = key;
+        return got;
+    },
+
+    /** The research's version as a load puts it over this tree: titles it never got kept, this tree's ids. */
+    researchVersionAsLoaded(data: StromData): StromData {
+        const link = this.researchSyncLink()?.link;
+        const here = DataManager.getData();
+        const features = link ? this.researchStatusOf(link.id)?.features : null;
+        return stabilizeIds(keepTitles(data, here, features, researchHasTitles(link, features)), here);
     },
 
     /** A card's notice action: try the same side again, send the tree, load the research's version. */
@@ -355,7 +586,16 @@ export const conflictDecideMethods = uiModule({
             // Today's send; the cards follow when the research has it (refreshResearchSyncUi).
             void this.researchSendNow().then(() => this.refreshResearchConflictCards(conflictId));
         } else if (action === 'load') {
-            void this.researchLoadNewer();
+            const c = this.researchConflictsShown(personId).find(x => researchConflictRef(x.id) === conflictId);
+            if (state?.kind !== 'takenPending' || !c) {
+                void this.researchLoadNewer();
+                return;
+            }
+            // Left for later: the same load as right after the decision (quietly, or the Load dialog).
+            void this.researchConflictTaken(personId, c, state.values).then(how => {
+                if (how === 'quiet') this.showToast(strings.conflict.decidedToast(state.values.research), 6000);
+                this.researchConflictFoldLater(conflictId);
+            });
         }
     },
 });

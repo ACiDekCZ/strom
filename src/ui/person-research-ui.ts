@@ -112,15 +112,18 @@ export const personResearchMethods = uiModule({
      * (data-open-hypo / data-open-variant) and marks each hypothesis with its
      * id (data-hypo): bringing that one into view, open, belongs to the
      * hypotheses' own section.
+     * `conflict`: a conflict's card (by its id, "X0007") comes into view and
+     * its first choice takes the keyboard (the card when none is on).
      */
-    showPersonResearchDialog(personId: PersonId, opts: { edge?: boolean; hypo?: { id: string; variant?: string } } = {}): void {
+    showPersonResearchDialog(personId: PersonId, opts: { edge?: boolean; hypo?: { id: string; variant?: string }; conflict?: string } = {}): void {
         // Drawn again from inside itself: the one that opened it first keeps it.
         const active = document.activeElement as HTMLElement | null;
         if (active && active !== document.body && !active.closest(`#${DIALOG_ID}`)) dialogOpener = active;
         document.getElementById(DIALOG_ID)?.remove();
         const person = DataManager.getPerson(personId);
-        // The conflicts as the research has them now (its version not loaded may say more, finding 40).
-        const conflicts = this.researchConflictsOf(personId);
+        // The conflicts as the research has them now (its version not loaded may say more, finding 40),
+        // and one decided from here whose card still says so.
+        const conflicts = this.researchConflictsShown(personId);
         const research = person?.research ?? (conflicts.length ? {} : undefined);
         if (!person || !research) return;
         const r = strings.research;
@@ -161,16 +164,8 @@ export const personResearchMethods = uiModule({
                     </div>` : ''}
                 </div>`;
         }).join('');
-        const decidedHtml = conflicts.filter(c => c.status === 'decided' && !this.researchConflictCardState(researchConflictRef(c.id) ?? '')).map(c => {
-            const values = c.values.map(v => researchValueText(c.fact, v.value)).join(' vs. ');
-            // The decision is words ("1865 (S0001)"); a source only when the research names one.
-            const decision = c.decision ? r.decided(c.decision.value, sourceTitle(c.decision)) : '';
-            return `
-                <div class="person-research-decided">
-                    <span>${esc(researchConflictTitle(c))}: ${esc(values)}</span>
-                    ${decision ? `<span class="person-research-decision">${esc(decision)}</span>` : ''}
-                </div>`;
-        }).join('');
+        const decidedHtml = conflicts.filter(c => c.status === 'decided' && !this.researchConflictCardState(researchConflictRef(c.id) ?? ''))
+            .map(c => this.researchConflictDecidedRowHtml(c)).join('');
         const hypotheses = research.hypotheses ?? [];
         const searched = [...(research.searched ?? [])].sort((a, b) => (a.from ?? a.to ?? 99999) - (b.from ?? b.to ?? 99999));
         const years = (from?: number, to?: number): string =>
@@ -249,7 +244,11 @@ export const personResearchMethods = uiModule({
         this.bindResearchHypotheses(overlay, personId);
         normalizeModal(overlay.querySelector('.modal') as HTMLElement);
         const edgeHead = opts.edge ? overlay.querySelector<HTMLElement>('#research-edge-section summary') : null;
-        if (opts.hypo && this.openResearchHypothesis(overlay, opts.hypo.id, opts.hypo.variant)) {
+        const conflictCard = opts.conflict ? overlay.querySelector<HTMLElement>(`[data-conflict-card="${CSS.escape(opts.conflict)}"]`) : null;
+        if (conflictCard) {
+            conflictCard.scrollIntoView({ block: 'center' });
+            (conflictCard.querySelector<HTMLElement>('.prc-choice:not(:disabled)') ?? conflictCard).focus({ preventScroll: true });
+        } else if (opts.hypo && this.openResearchHypothesis(overlay, opts.hypo.id, opts.hypo.variant)) {
             // Opened from a line's label (or the edge's bubble): at the hypothesis, open, its version unfolded.
         } else if (edgeHead) {
             edgeHead.focus({ preventScroll: true });
@@ -409,7 +408,23 @@ export const personResearchMethods = uiModule({
         return true;
     },
 
+    /** Today's row of a decided conflict: its question, the values, the decision with its source. */
+    researchConflictDecidedRowHtml(c: ResearchConflict): string {
+        const r = strings.research;
+        const values = c.values.map(v => researchValueText(c.fact, v.value)).join(' vs. ');
+        // The decision is words ("1865 (S0001)"); a source only when the research names one.
+        const decision = c.decision ? r.decided(c.decision.value, sourceTitle(c.decision)) : '';
+        const id = researchConflictRef(c.id);
+        return `
+                <div class="person-research-decided"${id ? ` data-decided="${esc(id)}"` : ''} tabindex="-1">
+                    <span>${esc(researchConflictTitle(c))}: ${esc(values)}</span>
+                    ${decision ? `<span class="person-research-decision">${esc(decision)}</span>` : ''}
+                </div>`;
+    },
+
     closePersonResearchDialog(): void {
+        // The decided cards are done: opened again, the data say it.
+        this.researchConflictCardsClosed();
         const dialog = document.getElementById(DIALOG_ID);
         const hadFocus = !!dialog?.contains(document.activeElement);
         dialog?.remove();

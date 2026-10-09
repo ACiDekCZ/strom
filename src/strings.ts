@@ -1042,6 +1042,7 @@ const stringsEN = {
         loadBackupNote: 'A backup is saved before loading; it can be restored.',
         offOverwrite: 'Changes from this tree are not sent to the research. These values here will be overwritten by the research version.',
         conflictTag: 'conflict',
+        conflictDecidedTag: 'decided',
         fieldName: 'Name',
         fieldGender: 'Gender',
         fieldCause: 'Cause of death',
@@ -1870,6 +1871,12 @@ const stringsEN = {
         errLocked: 'The tree in the research is locked by another session; the decision did not go through.',
         errNet: 'The research did not answer; the decision did not go through.',
         retry: 'Try again',
+        decidedToast: (v: string) => `Conflict decided: ${v}`,
+        errToast: 'The conflict could not be decided',
+        show: 'Show',
+        loadIntro: (v: string) => `Conflict decided: ${v}. The research's version has other changes too. A backup is saved first.`,
+        loadLater: (v: string) => `Later: ${v} stays here for now.`,
+        later: 'Later',
     },
 
     // CSV export (spreadsheet person table)
@@ -4836,6 +4843,7 @@ const stringsCZ: StringsType = {
         loadBackupNote: 'Před načtením se uloží záloha, půjde vrátit.',
         offOverwrite: 'Úpravy se z tohoto stromu do výzkumu neposílají. Tyto hodnoty tady se přepíšou verzí výzkumu.',
         conflictTag: 'rozpor',
+        conflictDecidedTag: 'rozhodnuto',
         fieldName: 'Jméno',
         fieldGender: 'Pohlaví',
         fieldCause: 'Příčina úmrtí',
@@ -5659,6 +5667,12 @@ const stringsCZ: StringsType = {
         errLocked: 'Strom ve výzkumu je zamčený jiným sezením, rozhodnutí neproběhlo.',
         errNet: 'Výzkum neodpověděl, rozhodnutí neproběhlo.',
         retry: 'Zkusit znovu',
+        decidedToast: (v: string) => `Rozpor rozhodnut: ${v}`,
+        errToast: 'Rozpor se nepodařilo rozhodnout',
+        show: 'Ukázat',
+        loadIntro: (v: string) => `Rozpor rozhodnut: ${v}. Verze výzkumu má i další změny. Předtím se uloží záloha.`,
+        loadLater: (v: string) => `Později: tady zatím zůstává ${v}.`,
+        later: 'Později',
     },
 
     // CSV export (spreadsheet person table)
@@ -8616,6 +8630,7 @@ const stringsDE: StringsType = {
         loadBackupNote: 'Vor dem Laden wird gesichert; ein Zurück ist möglich.',
         offOverwrite: 'Änderungen aus diesem Stammbaum werden nicht an die Forschung gesendet. Diese Werte hier werden durch die Version der Forschung überschrieben.',
         conflictTag: 'Widerspruch',
+        conflictDecidedTag: 'entschieden',
         fieldName: 'Name',
         fieldGender: 'Geschlecht',
         fieldCause: 'Todesursache',
@@ -9439,6 +9454,12 @@ const stringsDE: StringsType = {
         errLocked: 'Der Stammbaum in der Forschung ist von einer anderen Sitzung gesperrt; die Entscheidung ist nicht erfolgt.',
         errNet: 'Die Forschung hat nicht geantwortet; die Entscheidung ist nicht erfolgt.',
         retry: 'Erneut versuchen',
+        decidedToast: (v: string) => `Widerspruch entschieden: ${v}`,
+        errToast: 'Der Widerspruch konnte nicht entschieden werden',
+        show: 'Zeigen',
+        loadIntro: (v: string) => `Widerspruch entschieden: ${v}. Die Forschungsversion hat weitere Änderungen. Vorher wird eine Sicherung angelegt.`,
+        loadLater: (v: string) => `Später: hier bleibt vorerst ${v}.`,
+        later: 'Später',
     },
 
     // CSV export (spreadsheet person table)

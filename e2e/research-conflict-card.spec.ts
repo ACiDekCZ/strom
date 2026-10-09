@@ -157,7 +157,7 @@ test.describe('a conflict decided by a side in the app', () => {
         expect(await page.evaluate(() => document.activeElement?.closest('[data-conflict-card]')?.getAttribute('data-conflict-card'))).toBe('X0007');
     });
 
-    test('take: decided for the research\'s value — the decision alone until its version is loaded', async ({ page }) => {
+    test('take: decided for the research\'s value — the decided block with its source (its version loads: research-conflict-decide-load.spec.ts)', async ({ page }) => {
         await page.setViewportSize({ width: 1280, height: 900 });
         const { decide } = await setup(page);
         await openKnows(page);
@@ -166,7 +166,6 @@ test.describe('a conflict decided by a side in the app', () => {
         const c = cardOf(page);
         await expect(c).toHaveAttribute('data-state', 'taken');
         await expect(c.locator('.prc-decided-row')).toHaveText(/Valid\s*.*1865\s*in the research · Oddací matrika Čáslav/);
-        await expect(c.locator('.prc-decided-line')).toHaveCount(0);
         expect(decide.asks).toEqual([{ id: 'X0007', body: { do: 'decide', take: 'research' } }]);
     });
 
@@ -196,7 +195,7 @@ test.describe('a conflict decided by a side in the app', () => {
         ]);
     });
 
-    test('decided elsewhere meanwhile (409 conflict.decided): said, with the decision; gone (404): the card goes', async ({ page }) => {
+    test('decided elsewhere meanwhile (409 conflict.decided): said, with the decision', async ({ page }) => {
         await page.setViewportSize({ width: 1280, height: 900 });
         const { decide } = await setup(page);
         await openKnows(page);
@@ -208,10 +207,13 @@ test.describe('a conflict decided by a side in the app', () => {
         await expect(c.locator('.prc-tag--done')).toHaveText('Decided');
         await expect(c.locator('.prc-decided-row')).toHaveText(/Valid\s*.*1865\s*in the research · Oddací matrika Čáslav/);
         await expect(c.locator('.prc-choice')).toHaveCount(0);
+    });
 
-        // Another tree state: the card cleared, the research has no such conflict any more.
-        await page.evaluate(() => window.Strom.UI.setResearchConflictCardState('X0007', null));
-        await expect(c).toHaveAttribute('data-state', 'open');
+    test('gone (404 conflict.none): the card goes, the rest of the dialog stays', async ({ page }) => {
+        await page.setViewportSize({ width: 1280, height: 900 });
+        const { decide } = await setup(page);
+        await openKnows(page);
+        const c = cardOf(page);
         decide.replies.push({ status: 404, body: { error: 'none', code: 'conflict.none' } });
         await side(page, 'user').locator('.prc-choice').click();
         await expect(c).toHaveCount(0);

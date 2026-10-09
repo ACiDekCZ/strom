@@ -10,7 +10,7 @@ import { Partnership, Person, PersonId, StromData } from './types.js';
 import { ResearchConflictTake } from './research-link.js';
 import { ConflictDecideMode } from './research-decide.js';
 import { gedcomTagEventType } from './ged-parser.js';
-import { stable } from './research-changes.js';
+import { stable, ValueChange, ValueDiff, ValueField } from './research-changes.js';
 
 /** What the card shows of a decided conflict, as it read when it was decided (the data may move on). */
 export interface ConflictDecidedValues {
@@ -31,7 +31,8 @@ export type ConflictCardError = 'busy' | 'locked' | 'network';
  * - `kept`: the research wrote the app's value (200, take user);
  * - `taken`: decided for the research's value (200, take research); `loaded`: its version was loaded since
  *   (the value it had here before), until then the decision alone;
- * - `takenPending`: decided for the research's value, its version not loaded ("Later");
+ * - `takenPending`: decided for the research's value, its version not loaded ("Later") — while the tree
+ *   still builds on `base` (the research's head then; a load since makes it the data's again);
  * - `elsewhere`: decided meanwhile in the research (409 conflict.decided) — its decision and side when said;
  * - `error`: not decided (busy, locked, no answer) — the side asked, to try again;
  * - `gone`: the research has no such conflict (404): the card goes.
@@ -40,7 +41,7 @@ export type ConflictCardState =
     | { kind: 'busy'; take: ResearchConflictTake }
     | { kind: 'kept'; at: number; values: ConflictDecidedValues }
     | { kind: 'taken'; at: number; values: ConflictDecidedValues; loaded?: { from: string } }
-    | { kind: 'takenPending'; values: ConflictDecidedValues }
+    | { kind: 'takenPending'; values: ConflictDecidedValues; base?: string }
     | { kind: 'elsewhere'; resolution: string; take?: ResearchConflictTake; values: ConflictDecidedValues; loaded?: { from: string } }
     | { kind: 'error'; take: ResearchConflictTake; error: ConflictCardError }
     | { kind: 'gone' };
@@ -179,4 +180,51 @@ export function conflictSentChanged(fact: string, date: boolean, personId: Perso
     const then = conflictFactParts(fact, date, personId, sent);
     if (!now || !then) return false;
     return stable(now) !== stable(then);
+}
+
+// ==================== LOADING THE RESEARCH'S VERSION AFTER A DECISION ====================
+
+/** How long a decided card stays before it folds into the decided row (DEV §3). */
+export const DECIDED_CARD_MS = 6000;
+
+/** A conflict decided for the research's value, as the load's rows see it. */
+export interface DecidedFact {
+    /** The people it is shown at (a couple's conflict: both partners). */
+    persons: readonly string[];
+    /** Its fact (GEDCOM tag). */
+    fact: string;
+    /** About the date (else the place, or the value in words). */
+    date: boolean;
+}
+
+/** The rows of "Load the research version?" a conflict about `fact` is about. */
+function factFields(fact: string, date: boolean): { fields: ValueField[]; of?: string } | null {
+    const tag = fact.trim().toUpperCase();
+    switch (tag) {
+        case 'NAME': case 'NPFX': case 'NSFX': return { fields: ['name'] };
+        case 'SEX': return { fields: ['gender'] };
+        case 'BIRT': return { fields: [date ? 'birthDate' : 'birthPlace'] };
+        case 'DEAT': return { fields: [date ? 'deathDate' : 'deathPlace'] };
+        case 'MARR': return { fields: [date ? 'marriageDate' : 'marriagePlace'] };
+    }
+    const type = gedcomTagEventType(tag);
+    return type ? { fields: date ? ['eventDate'] : ['eventPlace', 'eventValue'], of: type } : null;
+}
+
+/** A row of the load is one a decided conflict is about (its person, its fact). */
+export function isDecidedRow(row: ValueChange, decided: readonly DecidedFact[]): boolean {
+    return decided.some(d => {
+        if (!d.persons.includes(row.personId)) return false;
+        const f = factFields(d.fact, d.date);
+        return !!f && f.fields.includes(row.field) && (f.of === undefined || row.of === f.of);
+    });
+}
+
+/**
+ * What loading the research's version changes here besides the decided
+ * conflicts' values: the other rows it overwrites or removes, the people and
+ * facts it adds. 0: the load brings only the decided values (it goes quietly).
+ */
+export function otherLoadChanges(diff: ValueDiff, decided: readonly DecidedFact[]): number {
+    return diff.rows.filter(r => !isDecidedRow(r, decided)).length + diff.addedPersons + diff.addedFacts;
 }

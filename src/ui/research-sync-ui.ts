@@ -36,7 +36,7 @@ import {
     LiveStatus, contentFingerprint, fingerprintLike, sanitizeLiveStatus, sanitizeSyncReply, isSafariBrowser,
     parseLiveBridge, researchSchemeUrl, readResearchHeader, stabilizeIds, researchPersonRef, ResearchAccepts,
     researchIdsByContent, holdsResearchIds, ResearchSendRecord, AdoptIds, ExportXrefs, applySyncIds, researchGedcomTitles,
-    researchHasTitles, hasTitles, withoutTitles, TITLES_FEATURE,
+    researchHasTitles, hasTitles, withoutTitles, TITLES_FEATURE, researchConflictRef,
 } from '../research-link.js';
 import { loadResearchCopy } from '../research-copy.js';
 import {
@@ -58,6 +58,11 @@ import {
     fetchWithTimeout, fetchGedcomText, postSync, onComputer, readTree, researchGedcom, researchGedcomExport,
 } from './research-ui.js';
 import { shownNameOrEmpty } from '../person-name.js';
+
+/** A person's conflicts less those still open that were decided since (`settled`, by id); the same list when none goes. */
+function withoutSettled(list: ResearchConflict[], settled: Set<string> | null): ResearchConflict[] {
+    return settled && list.some(c => c.status === 'open' && settled.has(c.id)) ? list.filter(c => !(c.status === 'open' && settled.has(c.id))) : list;
+}
 
 /** The "told once" mark of sending held for want of the research's numbers (see tellResearchNoIds). */
 const NO_IDS = 'no-ids';
@@ -297,11 +302,11 @@ export const researchSyncMethods = uiModule({
         setResearchConflictsProvider(id => {
             const treeId = DataManager.getCurrentTreeId();
             const held = treeId ? this.researchHeld(treeId) : null;
-            if (held && id in held.persons) return held.persons[id];
-            // Decided in the research since this version was loaded (V-E): not open here either.
+            // Decided in the research since this version was loaded (V-E, or here: conflict-decide-ui.ts): not open here either.
             const settled = treeId ? this.researchSettledConflicts(treeId) : null;
-            const own = DataManager.getPerson(id)?.research?.conflicts;
-            return settled && own?.some(c => settled.has(c.id)) ? own.filter(c => !settled.has(c.id)) : null;
+            const list = held && id in held.persons ? held.persons[id] : DataManager.getPerson(id)?.research?.conflicts;
+            const left = list ? withoutSettled(list, settled) : list;
+            return left !== list || (held && id in held.persons) ? left ?? null : null;
         });
         started = true;
         lastActiveTree = DataManager.getCurrentTreeId();
@@ -418,7 +423,8 @@ export const researchSyncMethods = uiModule({
     /**
      * Decide a conflict (later a hypothesis) of the active research tree through its bridge: one
      * request, as the only window doing a research step for the tree (a send of another window
-     * goes first). The answer typed; never throws. Changes nothing here.
+     * goes first). The answer typed; never throws. Changes nothing of the tree (the research's new
+     * head is noted).
      */
     async postDecide<K extends DecideKind>(kind: K, id: string, body: DecideBody<K>): Promise<DecideResult> {
         const ctx = this.researchSyncLink();
@@ -428,7 +434,14 @@ export const researchSyncMethods = uiModule({
         await this.researchWindowLock(ctx.treeId, false, async () => {
             result = await postBridgeDecide(bridge.base, kind, id, body);
         });
-        return result;
+        // The research's version after the write: known at once (not only at the next ask).
+        const answer = result as DecideResult;
+        if (answer.ok && answer.head) {
+            const rt = runtime.get(ctx.link.id);
+            if (rt?.status) runtime.set(ctx.link.id, { ...rt, status: { ...rt.status, head: answer.head } });
+            noteResearchBridgeStatus(ctx.link.id, null, answer.head);
+        }
+        return answer;
     },
 
     /** The research said what it takes (now or before): sending straight and the states are on. */
@@ -2251,14 +2264,64 @@ export const researchSyncMethods = uiModule({
         return held && link && held.base === (link.head ?? '') ? held : null;
     },
 
-    /** A person's conflicts as the research has them now: its unloaded version's when read (finding 40), else the tree's (less those decided there since, V-E). */
+    /**
+     * A person's conflicts as the research has them now: its unloaded version's when read (finding 40), else the
+     * tree's — less those still open there that were decided since (V-E, or here: conflict-decide-ui.ts).
+     */
     researchConflictsOf(personId: PersonId): ResearchConflict[] {
         const treeId = DataManager.getCurrentTreeId();
         const held = treeId ? this.researchHeld(treeId) : null;
-        if (held && personId in held.persons) return held.persons[personId];
-        const own = DataManager.getPerson(personId)?.research?.conflicts ?? [];
+        const list = held && personId in held.persons ? held.persons[personId] : DataManager.getPerson(personId)?.research?.conflicts ?? [];
+        return withoutSettled(list, treeId ? this.researchSettledConflicts(treeId) : null);
+    },
+
+    /**
+     * The conflicts "What the research knows" shows: researchConflictsOf, and
+     * those decided from this page whose card still says so (they fold into
+     * the decided row later, conflict-decide-ui.ts).
+     */
+    researchConflictsShown(personId: PersonId): ResearchConflict[] {
+        const treeId = DataManager.getCurrentTreeId();
+        const held = treeId ? this.researchHeld(treeId) : null;
+        const list = held && personId in held.persons ? held.persons[personId] : DataManager.getPerson(personId)?.research?.conflicts ?? [];
         const settled = treeId ? this.researchSettledConflicts(treeId) : null;
-        return settled ? own.filter(c => !settled.has(c.id)) : own;
+        if (!settled) return list;
+        return list.filter(c => !(c.status === 'open' && settled.has(c.id)) || !!this.researchConflictCardState(researchConflictRef(c.id) ?? ''));
+    },
+
+    /**
+     * A conflict decided from this page (or found gone there): no badge, no
+     * count for it from now on — the cards' ≠, the Research menu — until the
+     * research's version is loaded; the conflicts read
+     * from a version not loaded are read again (the research moved on).
+     */
+    async researchConflictSettle(treeId: TreeId, conflictId: string): Promise<void> {
+        const link = TreeManager.getTreeMetadata(treeId)?.research;
+        if (!link || DataManager.getCurrentTreeId() !== treeId) return;
+        const st = researchAutoState(treeId);
+        const base = link.head ?? '';
+        const ids = [...new Set([...(st.settledConflicts?.base === base ? st.settledConflicts.ids : []), conflictId])];
+        // The last write's own count: this one off it (its record there follows at the next ask).
+        const lw = st.lastWritten;
+        const named = !!lw?.conflictIds?.includes(conflictId);
+        patchResearchAutoState(treeId, {
+            settledConflicts: { base, ids },
+            ...(lw && named ? { lastWritten: { ...lw, conflicts: Math.max(0, (lw.conflicts ?? 0) - 1), conflictIds: lw.conflictIds!.filter(x => x !== conflictId) } } : {}),
+        });
+        if (named && link.sent?.state === 'written' && (link.sent.conflicts ?? 0) > 0) {
+            TreeManager.patchResearchLink(treeId, { sent: { ...link.sent, conflicts: link.sent.conflicts! - 1 || undefined } });
+        }
+        // None open known here any more: nothing left of the write's count either.
+        if (this.researchOpenConflictTotal(treeId) === 0) {
+            const now = researchAutoState(treeId).lastWritten;
+            if (now?.conflicts) patchResearchAutoState(treeId, { lastWritten: { ...now, conflicts: 0, persons: undefined, conflictIds: undefined } });
+            const sent = TreeManager.getTreeMetadata(treeId)?.research?.sent;
+            if (sent?.state === 'written' && sent.conflicts) TreeManager.patchResearchLink(treeId, { sent: { ...sent, conflicts: undefined } });
+        }
+        fpCache = null;
+        TreeRenderer.render();
+        this.refreshResearchSyncUi();
+        if (this.researchHeld(treeId)) await this.researchReadHeld(treeId);
     },
 
     /** Conflicts decided in the research since the tree's version was loaded (null: none known). */

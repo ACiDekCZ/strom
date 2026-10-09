@@ -7,7 +7,10 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { conflictCardView, conflictFactParts, conflictSentChanged, ConflictCardInput, ConflictDecidedValues } from '../research-conflict-card.js';
+import {
+    conflictCardView, conflictFactParts, conflictSentChanged, ConflictCardInput, ConflictDecidedValues, isDecidedRow, otherLoadChanges, DecidedFact,
+} from '../research-conflict-card.js';
+import { diffValues } from '../research-changes.js';
 import { Partnership, Person, PersonId, StromData } from '../types.js';
 
 const values: ConflictDecidedValues = { user: '1852', research: '12. 3. 1851', source: 'Křestní matrika Lipno' };
@@ -176,5 +179,55 @@ describe('sending comes first: the field against the last sending', () => {
         expect(conflictSentChanged('BIRT', true, ANNA, tree({ birthDate: '1900' }), sent)).toBe(false);
         expect(conflictFactParts('FAMC', false, ANNA, tree())).toBeNull();
         expect(conflictSentChanged('FAMC', false, ANNA, tree(), tree())).toBe(false);
+    });
+});
+
+// ==================== LOADING THE RESEARCH'S VERSION AFTER A DECISION ====================
+
+describe('a decision for the research\'s value: what else its version changes here', () => {
+    const full = (anna: Partial<Person> = {}, union: Partial<Partnership> = {}) => ({ ...tree(anna, union), sources: {} }) as StromData;
+    const birth: DecidedFact = { persons: [ANNA], fact: 'BIRT', date: true };
+
+    it('only the decided value: nothing else (the load goes quietly)', () => {
+        const diff = diffValues(full({ birthDate: '1852' }), full({ birthDate: '1851-03-12' }));
+        expect(diff.rows).toHaveLength(1);
+        expect(isDecidedRow(diff.rows[0], [birth])).toBe(true);
+        expect(otherLoadChanges(diff, [birth])).toBe(0);
+    });
+
+    it('another value overwritten, a fact added: counted, the decided one not', () => {
+        const diff = diffValues(full({ birthDate: '1852', deathDate: '1930' }), full({ birthDate: '1851-03-12', deathDate: '1931', deathPlace: 'Lipno' }));
+        expect(otherLoadChanges(diff, [birth])).toBe(2);
+        // Without a decision every change counts.
+        expect(otherLoadChanges(diff, [])).toBe(3);
+    });
+
+    it('the date decided, the place of the same event changed: the place counts', () => {
+        const diff = diffValues(full({ birthDate: '1852', birthPlace: 'Lipno' }), full({ birthDate: '1851', birthPlace: 'Praha' }));
+        expect(otherLoadChanges(diff, [birth])).toBe(1);
+        expect(otherLoadChanges(diff, [birth, { persons: [ANNA], fact: 'BIRT', date: false }])).toBe(0);
+    });
+
+    it('only at the people the conflict is shown at', () => {
+        const diff = diffValues(full({ birthDate: '1852' }), full({ birthDate: '1851' }));
+        expect(otherLoadChanges(diff, [{ persons: [TOMAS], fact: 'BIRT', date: true }])).toBe(1);
+    });
+
+    it('a couple\'s wedding (its row at the first partner), the name with its titles, the sex', () => {
+        const wedding = diffValues(full({}, { startDate: '1876' }), full({}, { startDate: '1877' }));
+        expect(otherLoadChanges(wedding, [{ persons: [TOMAS, ANNA], fact: 'MARR', date: true }])).toBe(0);
+        expect(otherLoadChanges(wedding, [{ persons: [TOMAS, ANNA], fact: 'MARR', date: false }])).toBe(1);
+        const name = diffValues(full({ titleBefore: 'Ing.' }), full({ titleBefore: 'Mgr.' }));
+        expect(otherLoadChanges(name, [{ persons: [ANNA], fact: 'NPFX', date: false }])).toBe(0);
+        const sex = diffValues(full({ gender: 'female' }), full({ gender: 'male' }));
+        expect(otherLoadChanges(sex, [{ persons: [ANNA], fact: 'SEX', date: false }])).toBe(0);
+        expect(otherLoadChanges(sex, [{ persons: [ANNA], fact: 'NAME', date: false }])).toBe(1);
+    });
+
+    it('another event: its type only', () => {
+        const ev = (type: string, date: string) => ({ events: [{ id: 'e1', type, date, place: 'Lipno' }] } as unknown as Partial<Person>);
+        const diff = diffValues(full(ev('baptism', '1852')), full(ev('baptism', '1851')));
+        expect(otherLoadChanges(diff, [{ persons: [ANNA], fact: 'BAPM', date: true }])).toBe(0);
+        expect(otherLoadChanges(diff, [{ persons: [ANNA], fact: 'BURI', date: true }])).toBe(1);
     });
 });
