@@ -626,6 +626,19 @@ the Family and Descendants views; `viewLinksFull.test.ts` runs the full
 invariant audit with links and checks the layout equals that of the same
 links made real.
 
+Drawing (renderer + src/view-link-lines.ts, geometry unchanged): ghost
+cards (`.view-ghost`) and `'ghost'` lines take the ghost tokens
+(`--ghost-*` in index.html). A `'ghost'` family line with a `'virtual'` drop
+splits its bus (`splitBus`): the stretch over the family's own drops and its
+stem junction stays ghost, the stretch out to the anchor is virtual. Virtual
+segments are collected per link, chained into polylines (`chainSegments`) and
+drawn hollow after all other lines: every 5px stroke first, then every 2px
+stroke in `--bg`. Each link gets one label button (`.view-link-label`):
+a `child` link's on the longest horizontal virtual stretch at least as long
+as the label, else mid of its longest vertical run (`labelSpot`); a
+`partners` link's under the couple. The anchor's research-edge stub and any
+"+ family" pill or curve to a shown family are not drawn while it is shown.
+
 ---
 
 ## 9. Testing

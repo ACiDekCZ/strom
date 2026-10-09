@@ -70,6 +70,7 @@ import { measureUnionOrderPills, measureTabRows, rowKey, unionOrderPillKey, unio
 import { openCardMenuFromKeyboard } from './ui/keyboard-access.js';
 import { syncDepthStepper } from './ui/depth-stepper.js';
 import { ViewLink, loadViewLinks, isViewLinksMaster, viewLinksToDraw } from './view-links.js';
+import { LineSegment, chainSegments, labelSpot, polylinePath, splitBus } from './view-link-lines.js';
 import { maxGenerationsWithSiblings } from './focus-depth.js';
 import type { LayoutViewLayer, ViewLineFlag } from './layout/index.js';
 import { buildViewLayer } from './layout/index.js';
@@ -102,6 +103,11 @@ interface LineStyle {
     view?: ViewLineFlag;
     viewLink?: ViewLink | null;
 }
+
+/** How far under a couple's cards (px, to its middle) the label of a partner shown "linked in the view only" sits. */
+const VIEW_LABEL_BELOW = 18;
+/** The line a child's label leaves showing at both ends of the horizontal stretch it sits on (px, together). */
+const VIEW_LABEL_LINE_ENDS = 24;
 
 /** Whether two layouts give each of `ids` the same card box (no new layout needed). */
 function sameCardSizes(a: LayoutConfig, b: LayoutConfig, ids: Iterable<PersonId>): boolean {
@@ -162,6 +168,10 @@ class TreeRendererClass {
     private outputLayoutCache: { seq: number; result: ReturnType<typeof computeLayout> } | null = null;
     /** The research edge above each drawn person that has one (per render). */
     private edgeViews = new Map<PersonId, EdgeView>();
+    /** The lines that exist only in the view, per link, gathered while the lines are drawn (drawn hollow after them). */
+    private virtualSegments = new Map<ViewLink | null, LineSegment[]>();
+    /** Where each link's label goes when not on its line's segments (a `partners` link: under the couple). */
+    private viewLabelSpots = new Map<ViewLink, { x: number; y: number }>();
 
     // Spouse lines from layout engine (only adjacent partners)
     private spouseLines: SpouseLine[] = [];
@@ -398,6 +408,7 @@ class TreeRendererClass {
         if (!current) return;
         this.renderLines(svg);
         this.renderEdgeLinks(svg, canvas);
+        this.renderViewLinkLabels(canvas);
         this.updateSVGSize(svg);
         // Fit long names once, after the cards are in the DOM and measurable.
         requestAnimationFrame(() => this.fitCardNames(canvas));
@@ -1362,7 +1373,7 @@ class TreeRendererClass {
         this.edgeViews = this.computeEdgeViews(signalCtx);
         const edgeAll = this.researchEdgeMode() === 'all';
         const edgeMotion = this.researchEdgeMotion();
-        canvas.querySelectorAll('.edge-link-pill').forEach(el => el.remove());
+        canvas.querySelectorAll('.edge-link-pill, .view-link-label').forEach(el => el.remove());
         // The agent's arcs turn in step (one phase for every card, kept across redraws).
         const spinDelay = sharedPhaseDelay(AGENT_SPIN_MS, document.timeline?.currentTime as number ?? performance.now());
         const renderedAt = Date.now();
@@ -1598,6 +1609,8 @@ class TreeRendererClass {
                 card.setAttribute('aria-label',
                     [this.cardAriaLabel(person, signals), ...customLines.map(l => l.spoken)].join(', '));
             }
+            // A ghost says last that it stands here only in the view.
+            if (ghostOf) card.setAttribute('aria-label', `${card.getAttribute('aria-label') ?? ''}. ${strings.viewLinks.aria}`);
             // Placeholders are a dashed frame with no avatar (nothing to depict).
             const showAvatar = density !== 'compact' && !person.isPlaceholder;
             const showPhoto = showAvatar && !!person.photo;
@@ -1767,7 +1780,8 @@ class TreeRendererClass {
             const island = edgeAll && !person.isPlaceholder ? person.research?.island : undefined;
             if (island) {
                 card.classList.add('research-island');
-                html += `<div class="island-caption">${this.escapeHtml(strings.researchEdge.islandCaption(island.size, island.held ?? 0))}</div>`;
+                // A ghost stands in the tree: no "outside the tree" under it.
+                if (!ghostOf) html += `<div class="island-caption">${this.escapeHtml(strings.researchEdge.islandCaption(island.size, island.held ?? 0))}</div>`;
             }
             if (partnerAddHtml) html += `<div class="card-edge edge-right-center">${partnerAddHtml}</div>`;
             if (childAddHtml) html += `<div class="card-edge edge-bottom-center">${childAddHtml}</div>`;
@@ -1833,7 +1847,11 @@ class TreeRendererClass {
             }
 
             const ttSignals = this.tooltipSignalRows(signals);
-            if (ttBirthLine || ttDeathLine || ttRelLine || ttSignals) {
+            // A ghost's last row: linked in the view only, by which hypothesis and version.
+            const ttViewLink = ghostOf
+                ? `<div class="tt-line tt-view-link"><span class="view-link-icon" aria-hidden="true"></span>${this.escapeHtml(strings.viewLinks.tooltip(ghostOf.hypo, ghostOf.variant))}</div>`
+                : '';
+            if (ttBirthLine || ttDeathLine || ttRelLine || ttSignals || ttViewLink) {
                 const rows = [
                     `<div class="tt-name">${this.escapeHtml(fullName)}</div>`,
                     ttBirthLine ? `<div class="tt-line">${this.escapeHtml(ttBirthLine)}</div>` : '',
@@ -1841,6 +1859,7 @@ class TreeRendererClass {
                     ttRecorded ? `<div class="tt-line tt-warn">${this.escapeHtml(ttRecorded)}</div>` : '',
                     ttRelLine ? `<div class="tt-line tt-rel">${ttRelLine}</div>` : '',
                     ttSignals ? `<div class="tt-signals">${ttSignals}</div>` : '',
+                    ttViewLink,
                     `<div class="tt-foot">${strings.tooltip.gestureHint}</div>`,
                 ].filter(Boolean).join('');
                 // A photo (round 9): reuse the SAME thumbnail the card avatar shows
@@ -2076,10 +2095,12 @@ class TreeRendererClass {
         const out = new Map<PersonId, EdgeView>();
         const mode = this.researchEdgeMode();
         if (mode === 'off') return out;
+        // Parents shown "linked in the view only" stand where the stub would: it comes back when they are unlinked.
+        const shownParents = new Set(this.viewLayer?.links.filter(l => l.kind === 'child').map(l => l.anchorId) ?? []);
         for (const id of this.positions.keys()) {
             const p = DataManager.getPerson(id);
             const edge = p?.research?.edge;
-            if (!p || !edge || p.isPlaceholder) continue;
+            if (!p || !edge || p.isPlaceholder || shownParents.has(id)) continue;
             const parents = p.parentIds.length;
             if (edge.missing === 'parents' ? parents > 0 : edge.missing !== 'proof' && parents >= 2) continue;
             const live = p.refn ? ctx.research.get(p.refn) : undefined;
@@ -2129,6 +2150,8 @@ class TreeRendererClass {
             const tip = this.edgeStubTip(id);
             if (!hypo || !tip) continue;
             const joinId = byRefn.get(hypo.join!)!;
+            // The family shown "linked in the view only" stands linked: no pill, no curve to it.
+            if (this.viewLayer?.ghostOf.has(joinId)) continue;
             const target = this.positions.get(joinId);
             const pill = document.createElement(target ? 'div' : 'button');
             if (target) {
@@ -2363,6 +2386,8 @@ class TreeRendererClass {
     private renderLines(svg: SVGSVGElement): void {
         // In debug mode with step < 7, don't render lines (only boxes)
         const skipLines = this.debugOptions?.enabled && this.debugOptions.step < 7;
+        this.virtualSegments = new Map();
+        this.viewLabelSpots = new Map();
 
         if (!skipLines) {
             // Generation guides sit behind everything (appended first).
@@ -2381,6 +2406,14 @@ class TreeRendererClass {
                 if (spouseLine.view) {
                     lineStyle.view = spouseLine.view;
                     lineStyle.viewLink = this.viewLinkOf(spouseLine.person1Id, spouseLine.person2Id);
+                    // A partner shown "linked in the view only": the label under the couple (the line between
+                    // the cards is too short for it, and on it the label would cover both cards).
+                    const link = lineStyle.viewLink;
+                    if (spouseLine.view === 'virtual' && link?.kind === 'partners' && !this.viewLabelSpots.has(link)) {
+                        const bottom = Math.max(...[spouseLine.person1Id, spouseLine.person2Id].map(pid =>
+                            (this.positions.get(pid)?.y ?? spouseLine.y) + this.cardHeightOf(pid)));
+                        this.viewLabelSpots.set(link, { x: (spouseLine.xMin + spouseLine.xMax) / 2, y: bottom + VIEW_LABEL_BELOW });
+                    }
                 }
 
                 // Find intermediate cards that this line passes through
@@ -2399,19 +2432,19 @@ class TreeRendererClass {
                 }
 
                 if (gaps.length === 0) {
-                    this.drawLine(svg, spouseLine.xMin, spouseLine.y, spouseLine.xMax, spouseLine.y, lineStyle);
+                    this.drawTreeLine(svg, spouseLine.xMin, spouseLine.y, spouseLine.xMax, spouseLine.y, lineStyle);
                 } else {
                     // Sort gaps by left edge and draw segments between them
                     gaps.sort((a, b) => a.left - b.left);
                     let currentX = spouseLine.xMin;
                     for (const gap of gaps) {
                         if (gap.left > currentX) {
-                            this.drawLine(svg, currentX, spouseLine.y, gap.left, spouseLine.y, lineStyle);
+                            this.drawTreeLine(svg, currentX, spouseLine.y, gap.left, spouseLine.y, lineStyle);
                         }
                         currentX = Math.max(currentX, gap.right);
                     }
                     if (currentX < spouseLine.xMax) {
-                        this.drawLine(svg, currentX, spouseLine.y, spouseLine.xMax, spouseLine.y, lineStyle);
+                        this.drawTreeLine(svg, currentX, spouseLine.y, spouseLine.xMax, spouseLine.y, lineStyle);
                     }
                 }
 
@@ -2420,6 +2453,9 @@ class TreeRendererClass {
             // PHASE 2: Render cluster connections (simple lines, no jump detection)
             // Note: Single-parent children are handled by the layout engine via buildDescendantBlocksFallback
             this.renderClusterConnections(svg);
+
+            // PHASE 3: the lines that exist only in the view, hollow, over the rest.
+            this.renderVirtualLines(svg);
         }
 
         // Render debug overlay if enabled (after clearing lines)
@@ -2450,25 +2486,40 @@ class TreeRendererClass {
             }
 
             // Vertical stem from parent down to connectorY (= stemBottomY)
-            this.drawLine(svg, conn.stemX, conn.stemTopY, conn.stemX, conn.connectorY, shared);
+            this.drawTreeLine(svg, conn.stemX, conn.stemTopY, conn.stemX, conn.connectorY, shared);
 
             // Horizontal connector from stem to bus junction point (if stem outside bus range)
             if (conn.connectorFromX !== conn.connectorToX) {
-                this.drawLine(svg, conn.connectorFromX, conn.connectorY, conn.connectorToX, conn.connectorY, shared);
+                this.drawTreeLine(svg, conn.connectorFromX, conn.connectorY, conn.connectorToX, conn.connectorY, shared);
 
                 // Vertical junction from connectorY to branchY (if connector on different lane)
                 if (Math.abs(conn.connectorY - conn.branchY) > 0.5) {
-                    this.drawLine(svg, conn.connectorToX, conn.connectorY, conn.connectorToX, conn.branchY, shared);
+                    this.drawTreeLine(svg, conn.connectorToX, conn.connectorY, conn.connectorToX, conn.branchY, shared);
                 }
             } else {
                 // Stem is within bus range - extend stem to branchY if needed
                 if (Math.abs(conn.connectorY - conn.branchY) > 0.5) {
-                    this.drawLine(svg, conn.stemX, conn.connectorY, conn.stemX, conn.branchY, shared);
+                    this.drawTreeLine(svg, conn.stemX, conn.connectorY, conn.stemX, conn.branchY, shared);
                 }
             }
 
-            // Horizontal bus (branch) - only over children
-            this.drawLine(svg, conn.branchLeftX, conn.branchY, conn.branchRightX, conn.branchY, shared);
+            // Horizontal bus (branch) - only over children. A shown family's
+            // bus that also reaches a link's anchor: the stretch out to the
+            // anchor exists only in the view.
+            const anchorDrops = conn.view === 'ghost' ? conn.drops.filter(d => d.view === 'virtual') : [];
+            if (anchorDrops.length > 0) {
+                const junctionX = conn.connectorFromX !== conn.connectorToX ? conn.connectorToX : conn.stemX;
+                const own = conn.drops.filter(d => d.view !== 'virtual').map(d => d.x);
+                const bus = splitBus(conn.branchLeftX, conn.branchRightX, [junctionX, ...own], anchorDrops.map(d => d.x));
+                if (bus.ghost) this.drawTreeLine(svg, bus.ghost[0], conn.branchY, bus.ghost[1], conn.branchY, shared);
+                for (const [from, to] of bus.virtual) {
+                    const anchor = anchorDrops.find(d => Math.abs(d.x - from) < 0.5 || Math.abs(d.x - to) < 0.5) ?? anchorDrops[0];
+                    this.drawTreeLine(svg, from, conn.branchY, to, conn.branchY,
+                        { className: 'child-link', view: 'virtual', viewLink: this.viewLinkOf(anchor.personId) });
+                }
+            } else {
+                this.drawTreeLine(svg, conn.branchLeftX, conn.branchY, conn.branchRightX, conn.branchY, shared);
+            }
 
             // Drops to each child - simple vertical lines from bus. The stroke
             // style reflects the parent→child relationship type (adoptive/step/
@@ -2482,7 +2533,7 @@ class TreeRendererClass {
                     style.view = drop.view;
                     style.viewLink = this.viewLinkOf(drop.personId);
                 }
-                this.drawLine(svg, drop.x, conn.branchY, drop.x, drop.bottomY, style);
+                this.drawTreeLine(svg, drop.x, conn.branchY, drop.x, drop.bottomY, style);
             }
         }
     }
@@ -2576,6 +2627,89 @@ class TreeRendererClass {
             case 'married':
             default:
                 return {};
+        }
+    }
+
+    /**
+     * A line of the tree: drawn now, or — when it exists only in the view
+     * (a link "linked in the view only") — kept for renderVirtualLines,
+     * which draws such lines hollow once they are all known.
+     */
+    private drawTreeLine(svg: SVGSVGElement, x1: number, y1: number, x2: number, y2: number, style?: LineStyle): void {
+        if (style?.view !== 'virtual') {
+            this.drawLine(svg, x1, y1, x2, y2, style);
+            return;
+        }
+        const key = style.viewLink ?? null;
+        const list = this.virtualSegments.get(key);
+        if (list) list.push({ x1, y1, x2, y2 });
+        else this.virtualSegments.set(key, [{ x1, y1, x2, y2 }]);
+    }
+
+    /**
+     * The lines that exist only in the view: hollow — each link's segments
+     * chained into polylines, every wide stroke first, then every narrow one
+     * in the canvas colour over them (so no wide stroke covers another
+     * line's hollow). No dash, whatever the relation's own line has.
+     */
+    private renderVirtualLines(svg: SVGSVGElement): void {
+        const outer: SVGPathElement[] = [];
+        const inner: SVGPathElement[] = [];
+        for (const [link, segments] of this.virtualSegments) {
+            for (const points of chainSegments(segments)) {
+                for (const [part, list] of [['outer', outer], ['inner', inner]] as const) {
+                    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                    path.setAttribute('d', polylinePath(points));
+                    path.setAttribute('class', `view-virtual view-virtual-${part}`);
+                    path.dataset.view = 'virtual';
+                    path.dataset.viewPart = part;
+                    if (link) {
+                        path.dataset.viewHypo = link.hypo;
+                        path.dataset.viewVariant = link.variant;
+                    }
+                    list.push(path);
+                }
+            }
+        }
+        for (const path of [...outer, ...inner]) svg.appendChild(path);
+    }
+
+    /**
+     * "unproven · H0022 B" on each link's line: a button that opens the
+     * anchor's "What research knows" at the hypothesis (the dialog takes the
+     * hypothesis and version: showPersonResearchDialog `hypo`). Not drawn
+     * far out (CSS: .zoom-far), where the hatch and the hollow line still say it.
+     */
+    private renderViewLinkLabels(canvas: HTMLElement): void {
+        canvas.querySelectorAll('.view-link-label').forEach(el => el.remove());
+        const v = strings.viewLinks;
+        const links = new Set<ViewLink>([...this.viewLabelSpots.keys()]);
+        for (const link of this.virtualSegments.keys()) if (link) links.add(link);
+        for (const link of links) {
+            const label = document.createElement('button');
+            label.type = 'button';
+            label.className = 'view-link-label';
+            label.setAttribute('role', 'button');
+            label.textContent = v.lineLabel(link.hypo, link.variant);
+            label.setAttribute('aria-label', v.lineAria(link.hypo, link.variant));
+            label.dataset.viewHypo = link.hypo;
+            label.dataset.viewVariant = link.variant;
+            label.dataset.viewAnchor = link.anchorId;
+            canvas.appendChild(label);
+            // A partner's label was placed with the couple's line; a child's sits on a horizontal stretch
+            // of its line as long as the label (with some line showing at both ends), else on the vertical.
+            const spot = this.viewLabelSpots.get(link)
+                ?? labelSpot(this.virtualSegments.get(link) ?? [], label.offsetWidth + VIEW_LABEL_LINE_ENDS);
+            if (!spot) {
+                label.remove();
+                continue;
+            }
+            label.style.left = `${spot.x}px`;
+            label.style.top = `${spot.y}px`;
+            label.onclick = (e) => {
+                e.stopPropagation();
+                UI.showPersonResearchDialog(link.anchorId, { hypo: { id: link.hypo, variant: link.variant } });
+            };
         }
     }
 

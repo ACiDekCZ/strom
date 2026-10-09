@@ -69,8 +69,8 @@ test.describe('linked in the view only: layout', () => {
         for (const name of ['Karel', 'Václav', 'Rozálie', 'Antonín', 'Ludmila']) {
             await expect(card(page, name)).not.toHaveClass(/view-ghost/);
         }
-        await expect(page.locator('#tree-lines line[data-view="virtual"][data-view-hypo="H0022"]')).not.toHaveCount(0);
-        await expect(page.locator('#tree-lines line.view-virtual[data-view-hypo="H0024"]')).not.toHaveCount(0);
+        await expect(page.locator('#tree-lines [data-view="virtual"][data-view-hypo="H0022"]')).not.toHaveCount(0);
+        await expect(page.locator('#tree-lines .view-virtual[data-view-hypo="H0024"]')).not.toHaveCount(0);
         await expect(page.locator('#tree-lines line.view-ghost[data-view="ghost"]')).not.toHaveCount(0);
 
         const after = await page.evaluate(() => ({
@@ -124,7 +124,7 @@ test.describe('linked in the view only: layout', () => {
         // Jakub's descendants reach Václav and Karel through the shown link.
         await expect(card(page, 'Karel')).toBeVisible();
         await expect(card(page, 'Jakub')).toHaveClass(/view-ghost/);
-        await expect(page.locator('#tree-lines line[data-view="virtual"]')).not.toHaveCount(0);
+        await expect(page.locator('#tree-lines [data-view="virtual"]')).not.toHaveCount(0);
 
         await page.evaluate(() => window.Strom.TreeRenderer.setViewMode('family'));
         await show(page, [B], false);

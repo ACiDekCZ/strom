@@ -316,6 +316,14 @@
             --edge-rest: #ece5d6;
             --edge-hatch-bg: #f6f2ea;
             --island-bg: #fbf8f1;
+            /* linked in the view only: a family shown as if linked (a ghost) */
+            --ghost-line: #7a8b9d;
+            --ghost-hatch: #e1e4e3;
+            --ghost-bg: #f2f1ec;
+            --ghost-text: #475666;
+            --ghost-name: #36434f;
+            --ghost-pill-bg: #eef0ef;
+            --ghost-mini: #b9c3cc;
 
             /* story versions compared (added underlined, removed struck through) */
             --diff-add-bg: #e3eee5;
@@ -394,6 +402,13 @@
             --edge-rest: #35322a;
             --edge-hatch-bg: #2c2a24;
             --island-bg: #29271f;
+            --ghost-line: #7d90a3;
+            --ghost-hatch: #30353b;
+            --ghost-bg: #24262a;
+            --ghost-text: #b4c1ce;
+            --ghost-name: #c9d3dd;
+            --ghost-pill-bg: #2a2e33;
+            --ghost-mini: #4d5866;
 
             --diff-add-bg: rgba(127,174,142,0.2);
             --diff-add-text: #cfe3d5;
@@ -7075,6 +7090,80 @@
         }
         @media (hover: hover) { .edge-link-pill--family:hover { border-color: var(--primary); } }
         .edge-link-pill--family:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+        /* Linked in the view only (src/view-links.ts): a family outside the
+           tree shown as if linked. Its people are ghosts — hatched, a solid
+           1.5px border in a cool tone, no shadow (wins over .research-island);
+           the line that links it exists only in the view and is hollow. */
+        #tree-canvas .person-card.view-ghost {
+            background: repeating-linear-gradient(135deg, var(--ghost-hatch) 0 1.5px, var(--ghost-bg) 1.5px 6px);
+            /* 1.5px solid: the card's own 1px border and a half pixel ring
+               inside it (a border width is snapped to whole device pixels,
+               and a wider border would take room from the text). The box and
+               the text room stay those of any card, on every card type. */
+            border: 1px solid var(--ghost-line);
+            box-shadow: inset 0 0 0 0.5px var(--ghost-line);
+        }
+        /* Focused: today's green 2px border over the ghost's, the hatch stays. */
+        #tree-canvas .person-card.view-ghost.focused { border: 2px solid var(--primary); box-shadow: none; }
+        #tree-canvas .person-card.view-ghost:not(.focused) .name .name-text { color: var(--ghost-name); }
+        #tree-canvas .person-card.view-ghost :is(.birth-date, .card-years, .card-line, .card-line-mark, .card-line-date, .card-line-place),
+        #tree-canvas .person-card.view-ghost .avatar-initials { color: var(--ghost-text); }
+        #tree-canvas .person-card.view-ghost .card-avatar { background: color-mix(in srgb, var(--ghost-bg) 60%, var(--avatar-bg)); }
+        #tree-canvas .person-card.view-ghost .island-caption { display: none; }
+        /* Lines: inside a shown family the tree's own shape (an adoptive or
+           step dash stays) in the ghost's tone; the linking line hollow — a
+           5px stroke under a 2px one in the canvas colour, round joins, no dash. */
+        #tree-lines line.view-ghost { stroke: var(--ghost-line); stroke-width: 1.5; }
+        #tree-lines path.view-virtual { fill: none; stroke-linejoin: round; stroke-dasharray: none; }
+        #tree-lines path.view-virtual-outer { stroke: var(--ghost-line); stroke-width: 5; }
+        #tree-lines path.view-virtual-inner { stroke: var(--bg); stroke-width: 2; }
+        /* "unproven · H0022 B" on the linking line: opens the hypothesis in
+           the person's research. A 44px target beyond its visible height. */
+        .view-link-label {
+            position: absolute;
+            transform: translate(-50%, -50%);
+            display: inline-flex;
+            align-items: center;
+            height: 24px;
+            padding: 0 10px;
+            box-sizing: border-box;
+            border: 1.5px solid var(--ghost-line);
+            border-radius: 999px;
+            background: var(--ghost-pill-bg);
+            color: var(--ghost-name);
+            font: 600 11.5px/1 var(--font-sans);
+            white-space: nowrap;
+            cursor: pointer;
+            z-index: 4;
+        }
+        .view-link-label::before {
+            content: '';
+            position: absolute;
+            left: -1.5px;
+            right: -1.5px;
+            top: 50%;
+            height: 44px;
+            transform: translateY(-50%);
+        }
+        @media (hover: hover) { .view-link-label:hover { border-color: var(--primary); } }
+        .view-link-label:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        @media (pointer: coarse) { .view-link-label { height: 28px; padding: 0 12px; font-size: 12px; } }
+        /* Far out (under 55 %, as the card badges) the words go; the hatch and the hollow line stay. */
+        #tree-canvas.zoom-far .view-link-label { display: none; }
+        /* The ghost's mark (tooltip, menus, lists): a hatched square. */
+        .view-link-icon {
+            display: inline-block;
+            flex: none;
+            width: 10px;
+            height: 10px;
+            box-sizing: border-box;
+            border: 1.5px solid var(--ghost-line);
+            border-radius: 2.5px;
+            background: repeating-linear-gradient(135deg, var(--ghost-mini) 0 1.5px, var(--ghost-bg) 1.5px 4px);
+        }
+        .view-link-icon--12 { width: 12px; height: 12px; border-radius: 3px; }
+        .card-tooltip .tt-line.tt-view-link { display: flex; align-items: center; gap: 6px; margin-top: 2px; color: var(--ghost-name); font-weight: 500; }
 
         /* The bubble over a stub. */
         .research-edge-bubble {

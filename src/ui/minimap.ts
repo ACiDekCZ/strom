@@ -91,6 +91,26 @@ export function clampToBox(wx: number, wy: number, box: WorldBox | null): [numbe
     return [Math.min(Math.max(wx, box.minX), box.maxX), Math.min(Math.max(wy, box.minY), box.maxY)];
 }
 
+/** The ghost's hatch for the minimap: thin diagonal lines (`line`) over `bg`, a 4px tile. */
+function minimapHatch(ctx: CanvasRenderingContext2D, line: string, bg: string): CanvasPattern | string {
+    const tile = document.createElement('canvas');
+    tile.width = 4;
+    tile.height = 4;
+    const t = tile.getContext('2d');
+    if (!t) return bg;
+    t.fillStyle = bg;
+    t.fillRect(0, 0, 4, 4);
+    t.strokeStyle = line;
+    t.lineWidth = 1;
+    // 135°: from the top right down to the bottom left, continued across the tile's corners.
+    t.beginPath();
+    t.moveTo(4, 0); t.lineTo(0, 4);
+    t.moveTo(5, 3); t.lineTo(3, 5);
+    t.moveTo(1, -1); t.lineTo(-1, 1);
+    t.stroke();
+    return ctx.createPattern(tile, 'repeat') ?? bg;
+}
+
 export const minimapMethods = uiModule({
     /** Wire the minimap once at startup (canvas handlers + ZoomPan sync). */
     initMinimap(): void {
@@ -211,13 +231,30 @@ export const minimapMethods = uiModule({
         const femaleColor = rootStyle.getPropertyValue('--female').trim() || '#a1706e';
         const unknownColor = rootStyle.getPropertyValue('--unknown').trim() || '#857d6c';
         const frameColor = rootStyle.getPropertyValue('--accent').trim() || '#b0703c';
+        // The people of a family shown "linked in the view only": hatched, framed, never filled like the real ones.
+        const ghosts = TreeRenderer.getViewLayer()?.ghostIds;
+        const ghostLine = rootStyle.getPropertyValue('--ghost-line').trim() || '#7a8b9d';
+        const ghostHatch = ghosts?.size ? minimapHatch(ctx,
+            rootStyle.getPropertyValue('--ghost-mini').trim() || '#b9c3cc',
+            rootStyle.getPropertyValue('--ghost-bg').trim() || '#f2f1ec') : null;
 
         for (const [id, pos] of positions) {
             const person = data.persons[id];
             const w = Math.max(1, cardWidth * t.scale);
             const h = Math.max(1, (personHeights?.get(id) ?? cardHeight) * t.scale);
+            const x = pos.x * t.scale + t.offsetX, y = pos.y * t.scale + t.offsetY;
+            if (ghostHatch && ghosts?.has(id)) {
+                // Whole pixels: the 1px frame stays one crisp pixel.
+                const gx = Math.round(x), gy = Math.round(y), gw = Math.max(2, Math.round(w)), gh = Math.max(2, Math.round(h));
+                ctx.fillStyle = ghostHatch;
+                ctx.fillRect(gx, gy, gw, gh);
+                ctx.strokeStyle = ghostLine;
+                ctx.lineWidth = 1;
+                ctx.strokeRect(gx + 0.5, gy + 0.5, gw - 1, gh - 1);
+                continue;
+            }
             ctx.fillStyle = person?.gender === 'female' ? femaleColor : person?.gender === 'unknown' ? unknownColor : maleColor;
-            ctx.fillRect(pos.x * t.scale + t.offsetX, pos.y * t.scale + t.offsetY, w, h);
+            ctx.fillRect(x, y, w, h);
         }
 
         // Viewport frame: world-visible rectangle mapped into minimap space.

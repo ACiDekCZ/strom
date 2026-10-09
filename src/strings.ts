@@ -3310,6 +3310,13 @@ const stringsEN = {
         hoursMinutes: (h: number, m: number) => `${h} h ${m} min`,
         missingLink: (n: number) => `Missing evidence: ${nEn(n, 'person', 'people')} ›`,
     },
+    viewLinks: {
+        state: 'Linked in the view only',
+        lineLabel: (h: string, v: string) => `unproven · ${h} ${v}`,
+        lineAria: (h: string, v: string) => `Unproven, hypothesis ${h}, version ${v}. Open in the research.`,
+        tooltip: (h: string, v: string) => `Linked in the view only (${h}, version ${v})`,
+        aria: 'Linked in the view only, unproven.',
+    },
     researchEdge: {
         settingLabel: 'Research edge',
         settingHint: 'Above the cards where the tree ends, shows what the research knows about it.',
@@ -6976,6 +6983,13 @@ const stringsCZ: StringsType = {
         hoursMinutes: (h: number, m: number) => `${h} h ${m} min`,
         missingLink: (n: number) => `Kde chybí doklady: ${nCs(n, 'osoba', 'osoby', 'osob')} ›`,
     },
+    viewLinks: {
+        state: 'Připojeno jen v zobrazení',
+        lineLabel: (h: string, v: string) => `nedoloženo · ${h} ${v}`,
+        lineAria: (h: string, v: string) => `Nedoloženo, hypotéza ${h}, verze ${v}. Otevřít ve výzkumu.`,
+        tooltip: (h: string, v: string) => `Připojeno jen v zobrazení (${h}, verze ${v})`,
+        aria: 'Připojeno jen v zobrazení, nedoloženo.',
+    },
     researchEdge: {
         settingLabel: 'Kraj výzkumu',
         settingHint: 'Nad kartičkami, kde strom končí, ukáže, co o tom ví výzkum.',
@@ -10566,6 +10580,13 @@ const stringsDE: StringsType = {
         minutes: (n: number) => `${n} Min.`,
         hoursMinutes: (h: number, m: number) => `${h} Std. ${m} Min.`,
         missingLink: (n: number) => `Fehlende Belege: ${nDe(n, 'Person', 'Personen')} ›`,
+    },
+    viewLinks: {
+        state: 'Nur in der Ansicht verbunden',
+        lineLabel: (h: string, v: string) => `nicht belegt · ${h} ${v}`,
+        lineAria: (h: string, v: string) => `Nicht belegt, Hypothese ${h}, Version ${v}. In der Forschung öffnen.`,
+        tooltip: (h: string, v: string) => `Nur in der Ansicht verbunden (${h}, Version ${v})`,
+        aria: 'Nur in der Ansicht verbunden, nicht belegt.',
     },
     researchEdge: {
         settingLabel: 'Forschungsrand',

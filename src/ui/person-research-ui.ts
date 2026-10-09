@@ -101,8 +101,13 @@ export const personResearchMethods = uiModule({
      * the dialog stack underneath); from the menu it is the only dialog.
      * `edge`: opened from the research edge above the card — its "Above the
      * person" section comes into view and takes the focus.
+     * `hypo`: opened from the label of a line "linked in the view only" — the
+     * hypothesis and the version it shows. The dialog carries it
+     * (data-open-hypo / data-open-variant) and marks each hypothesis with its
+     * id (data-hypo): bringing that one into view, open, belongs to the
+     * hypotheses' own section.
      */
-    showPersonResearchDialog(personId: PersonId, opts: { edge?: boolean } = {}): void {
+    showPersonResearchDialog(personId: PersonId, opts: { edge?: boolean; hypo?: { id: string; variant: string } } = {}): void {
         document.getElementById(DIALOG_ID)?.remove();
         const person = DataManager.getPerson(personId);
         // The conflicts as the research has them now (its version not loaded may say more, finding 40).
@@ -165,7 +170,7 @@ export const personResearchMethods = uiModule({
         overlay.className = 'modal-overlay active';
         overlay.id = DIALOG_ID;
         overlay.innerHTML = `
-            <div class="modal modal--md person-research-modal" role="dialog" data-dialog-kind="info" aria-modal="true" aria-labelledby="person-research-title">
+            <div class="modal modal--md person-research-modal" role="dialog" data-dialog-kind="info" aria-modal="true" aria-labelledby="person-research-title"${opts.hypo ? ` data-open-hypo="${esc(opts.hypo.id)}" data-open-variant="${esc(opts.hypo.variant)}"` : ''}>
                 <div class="modal-header">
                     <div class="audit-log-heading">
                         <h2 id="person-research-title">${esc(r.knows)}</h2>
@@ -177,7 +182,7 @@ export const personResearchMethods = uiModule({
                     ${this.researchEdgeSectionHtml(personId)}
                     ${section(r.conflicts, openHtml + decidedHtml)}
                     ${section(r.hypotheses, hypotheses.map(h => `
-                        <div class="person-research-hypo">
+                        <div class="person-research-hypo"${h.id ? ` data-hypo="${esc(h.id)}"` : ''}>
                             <div class="person-research-hypo-title">${esc(h.title)}</div>
                             ${h.note ? `<p class="person-research-hypo-note">${esc(h.note)}</p>` : ''}
                         </div>`).join(''))}
