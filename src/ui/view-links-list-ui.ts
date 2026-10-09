@@ -98,7 +98,7 @@ function watchPill(on: boolean): void {
 }
 
 export const viewLinksListMethods = uiModule({
-    /** Once at start: the live bridge's say, other windows' changes of the records. */
+    /** Once at start: the live bridge's say, other windows' changes of the records, the browser's print. */
     initViewLinks(): void {
         TreeRenderer.setViewLinksBridge(() => this.viewLinksBridgeState());
         if (storageWatched || typeof window === 'undefined') return;
@@ -110,6 +110,12 @@ export const viewLinksListMethods = uiModule({
             if (!current || (tree !== '' && tree !== current)) return;
             void this.viewLinksChangedElsewhere();
         });
+        // The browser prints the tree laid out without the shown links (the
+        // poster's own print hides the tree and prints its sheets instead).
+        window.addEventListener('beforeprint', () => {
+            if (!document.body.classList.contains('poster-printing')) void TreeRenderer.setPrinting(true);
+        });
+        window.addEventListener('afterprint', () => { void TreeRenderer.setPrinting(false); });
     },
 
     /**

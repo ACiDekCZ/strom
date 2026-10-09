@@ -79,8 +79,11 @@ function viewLabelFor(mode: ViewMode, name: string): string {
             return strings.poster.viewTimeline(name);
         case 'descendants':
             return strings.poster.viewDescendants(name);
-        default:
-            return strings.poster.viewFamily(name, TreeRenderer.getFocusDepthUp(), TreeRenderer.getFocusDepthDown());
+        default: {
+            // The depth the poster lays out with (a shown family's generations count on screen only).
+            const depth = TreeRenderer.getOutputFocusDepth();
+            return strings.poster.viewFamily(name, depth.up, depth.down);
+        }
     }
 }
 
@@ -173,11 +176,11 @@ export function treeCardDrawing(data: StromData, layout: ReturnType<typeof TreeR
             : unionOrderBadges(data, layout).size > 0 ? [...POSTER_SERIF_FACES, PILL_FACE] : POSTER_SERIF_FACES),
         ...(custom ? {
             cardLines: cardLinesMap,
-            cardDateColumn: TreeRenderer.getCustomCardMetrics()?.dateColumn ?? 0,
+            cardDateColumn: TreeRenderer.getPosterCardMetrics()?.dateColumn ?? 0,
             // The rows a detail takes, wrapped as on screen (same function, same measure).
             cardValueLines: fields.lines,
             cardStyle: fields.style,
-            cardLabelColumn: TreeRenderer.getCustomCardMetrics()?.labelColumn ?? 0,
+            cardLabelColumn: TreeRenderer.getPosterCardMetrics()?.labelColumn ?? 0,
             ...(cardYearsMap ? { cardYears: cardYearsMap } : {}),
             measureCardTexts,
         } : {}),

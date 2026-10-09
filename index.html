@@ -13440,6 +13440,11 @@
                 border: 2px dashed #999 !important;
             }
             svg line { stroke: #333 !important; }
+            /* Linked in the view only: never printed. The tree is laid out
+               without the links while it prints (TreeRenderer.setPrinting);
+               this hides whatever a print started otherwise would catch. */
+            .person-card.view-ghost, #tree-lines .view-virtual, #tree-lines .view-ghost,
+            .view-link-label, .view-link-island, #view-links-pill, #view-links-panel { display: none !important; }
             @page { size: landscape; margin: 1cm; }
         }
 

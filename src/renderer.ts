@@ -95,6 +95,33 @@ export interface GenerationBand {
 
 /** The custom card's measures for a view: one width, the view's height, each card's own height ("by content"). */
 type CustomCardViewMetrics = CustomCardMetrics & { cardHeight: number; personHeights?: Map<PersonId, number> };
+/** The card box a layout is made for (the image export and the book draw it). */
+type CardBox = Pick<LayoutConfig, 'cardWidth' | 'cardHeight' | 'personHeights' | 'spouseLineY'>;
+/** The custom card measured for a set of people (src/card-width.ts): what the cards draw. */
+interface CustomCardsMeasure {
+    metrics: CustomCardViewMetrics;
+    lines: Map<PersonId, CardLine[]>;
+    rows: Map<CardLine, CardLineRows>;
+    heads: Map<PersonId, CardHead>;
+    wrapped: boolean;
+    style: CardLineStyle;
+    /** The cards measured with room for the pills on their bottom edge. */
+    edgeRoomIds: Set<PersonId>;
+}
+/**
+ * What the outputs draw (the poster, the book's tree, the people of the
+ * view): the layout without the links "linked in the view only", with the
+ * card box measured for the people it holds (a custom card as wide as the
+ * longest text of those people, not of a shown family's), without the room
+ * the screen keeps for the pills on a card's bottom edge.
+ */
+interface OutputLayout {
+    positions: Map<PersonId, Position>;
+    connections: Connection[];
+    spouseLines: SpouseLine[];
+    box: CardBox;
+    custom: CustomCardMetrics | null;
+}
 
 /** How a tree line is drawn; `view` marks a line of the view layer (links "linked in the view only"). */
 interface LineStyle {
@@ -167,7 +194,11 @@ class TreeRendererClass {
     /** The live bridge the tree follows, for whether the view links are available (null: from the data alone). */
     private viewLinksBridge: (() => { features: readonly string[] | null } | null) | null = null;
     /** The current render's layout without the view links (outputs, the people of the view), made when first asked. */
-    private outputLayoutCache: { seq: number; result: ReturnType<typeof computeLayout> } | null = null;
+    private outputLayoutCache: { seq: number; output: OutputLayout } | null = null;
+    /** The browser prints the tree: laid out without the view links until it is done (setPrinting). */
+    private printing = false;
+    /** The focus depth before the print, given back after it. */
+    private printDepth: { up: number; down: number } | null = null;
     /** The research edge above each drawn person that has one (per render). */
     private edgeViews = new Map<PersonId, EdgeView>();
     /** The lines that exist only in the view, per link, gathered while the lines are drawn (drawn hollow after them). */
@@ -416,7 +447,9 @@ class TreeRendererClass {
         this.renderViewLinkIslands(canvas);
         this.updateSVGSize(svg);
         // Fit long names once, after the cards are in the DOM and measurable.
-        requestAnimationFrame(() => this.fitCardNames(canvas));
+        // Printing: now, the page is printed before the next frame.
+        if (this.printing) this.fitCardNames(canvas);
+        else requestAnimationFrame(() => this.fitCardNames(canvas));
 
         // Update focus UI (shows panel with focused person name, generation controls)
         this.updateFocusUI();
@@ -436,9 +469,11 @@ class TreeRendererClass {
      * Lay out the current view at the current card size (this.config), with
      * the given links "linked in the view only" laid out as if real (none:
      * the tree as it is — the outputs). `debug`: the pipeline's debug mode
-     * may take it (the screen's layout only).
+     * may take it (the screen's layout only). `config`: another card size
+     * (the outputs' custom card, measured for their own people).
      */
-    private computeTreeLayout(descendantsOnly: boolean, viewLinks: readonly ViewLink[] = [], debug = true): ReturnType<typeof computeLayout> {
+    private computeTreeLayout(descendantsOnly: boolean, viewLinks: readonly ViewLink[] = [], debug = true,
+        config: LayoutConfig = this.config): ReturnType<typeof computeLayout> {
         const request: LayoutRequest = {
             data: DataManager.getData(),
             focusPersonId: this.focusPersonId!,
@@ -448,7 +483,7 @@ class TreeRendererClass {
                 includeAuntsUncles: !descendantsOnly,
                 includeCousins: !descendantsOnly
             },
-            config: this.config,
+            config,
             displayPolicy: {
                 mode: this.showAllPartnerships ? 'expanded' : 'standard',
                 autoExpand: this.showAllPartnerships,
@@ -500,10 +535,11 @@ class TreeRendererClass {
      * The links "linked in the view only" the current view draws: only the
      * Family and Descendants views, the feature available for the tree, the
      * main switch on, each record drawn and switched on (src/view-links.ts).
+     * None while the browser prints.
      */
     private currentViewLinks(): ViewLink[] {
         const treeId = DataManager.getCurrentTreeId();
-        if (!treeId) return [];
+        if (!treeId || this.printing) return [];
         return viewLinksToDraw(DataManager.getData(), {
             viewMode: this.viewMode,
             links: loadViewLinks(treeId),
@@ -566,16 +602,81 @@ class TreeRendererClass {
      * The current render laid out without the view links: what the outputs
      * draw and what "the people in the view" are (export of the view, a tree
      * from the view, sharing, the presentation). The screen's own layout when
-     * no link is shown.
+     * no link is shown. A custom card is measured again for the people laid
+     * out (the screen's is as wide as a shown family's longest text too), as
+     * the screen would measure it without the links.
      */
-    private outputLayout(): Pick<ReturnType<typeof computeLayout>, 'positions' | 'connections' | 'spouseLines'> {
+    private outputLayout(): OutputLayout {
         if (!this.viewLayer || !this.focusPersonId) {
-            return { positions: this.positions, connections: this.connections, spouseLines: this.spouseLines };
+            return {
+                positions: this.positions, connections: this.withoutEdgeRoom(this.connections, this.edgeRoomIds),
+                spouseLines: this.spouseLines, box: this.posterBox(this.config, this.edgeRoomIds), custom: this.customMetrics,
+            };
         }
-        if (this.outputLayoutCache?.seq !== this.renderSeq) {
-            this.outputLayoutCache = { seq: this.renderSeq, result: this.computeTreeLayout(this.viewMode === 'descendants', [], false) };
+        if (this.outputLayoutCache?.seq === this.renderSeq) return this.outputLayoutCache.output;
+        const descendantsOnly = this.viewMode === 'descendants';
+        let config = this.config;
+        let result = this.computeTreeLayout(descendantsOnly, [], false, config);
+        let custom: CustomCardMetrics | null = null;
+        let edgeRoomIds = new Set<PersonId>();
+        if (this.customMetrics) {
+            const measured = this.customCardsOf(result.positions);
+            const next: LayoutConfig = {
+                ...config, cardWidth: measured.metrics.cardWidth, cardHeight: measured.metrics.cardHeight,
+                personHeights: measured.metrics.personHeights,
+            };
+            // The person set does not depend on the card size: once more at the measured size.
+            if (!sameCardSizes(config, next, result.positions.keys())) result = this.computeTreeLayout(descendantsOnly, [], false, next);
+            config = next;
+            custom = measured.metrics;
+            edgeRoomIds = measured.edgeRoomIds;
         }
-        return this.outputLayoutCache.result;
+        const output: OutputLayout = {
+            positions: result.positions, connections: this.withoutEdgeRoom(result.connections, edgeRoomIds),
+            spouseLines: result.spouseLines, box: this.posterBox(config, edgeRoomIds), custom,
+        };
+        this.outputLayoutCache = { seq: this.renderSeq, output };
+        return output;
+    }
+
+    /** A line that starts at the bottom of a card drawn without its pills' room starts that much higher. */
+    private withoutEdgeRoom(connections: Connection[], edgeRoomIds: ReadonlySet<PersonId>): Connection[] {
+        return edgeRoomIds.size === 0 ? connections : connections.map(c =>
+            c.stemPersonId && edgeRoomIds.has(c.stemPersonId) ? { ...c, stemTopY: c.stemTopY - CARD_EDGE_PILL_ROOM } : c);
+    }
+
+    /** The card box of a layout as the image export draws it: without the room kept for the pills on a bottom edge. */
+    private posterBox(config: LayoutConfig, edgeRoomIds: ReadonlySet<PersonId>): CardBox {
+        const { cardWidth, cardHeight, personHeights, spouseLineY } = config;
+        const box: CardBox = { cardWidth, cardHeight, ...(personHeights ? { personHeights } : {}), ...(spouseLineY !== undefined ? { spouseLineY } : {}) };
+        if (!personHeights || edgeRoomIds.size === 0) return box;
+        const heights = new Map(personHeights);
+        for (const id of edgeRoomIds) {
+            const h = heights.get(id);
+            if (h !== undefined) heights.set(id, h - CARD_EDGE_PILL_ROOM);
+        }
+        return { ...box, personHeights: heights };
+    }
+
+    /**
+     * The browser prints the tree (beforeprint / afterprint): while it does,
+     * the view is laid out without the links "linked in the view only" — no
+     * ghosts, no hole where they stood — and drawn as before afterwards.
+     * Done within the event (the render's only wait, the other trees' data
+     * for the ⇄ pill, is cached by then). Nothing when no link is shown.
+     */
+    setPrinting(on: boolean): Promise<void> {
+        if (on === this.printing || (on && !this.viewLayer)) return Promise.resolve();
+        this.printing = on;
+        // The depth reaching the shown generations comes back with them (the
+        // print's render clamps it to the tree's own).
+        if (on) this.printDepth = { up: this.focusDepthUp, down: this.focusDepthDown };
+        else if (this.printDepth) {
+            this.focusDepthUp = this.printDepth.up;
+            this.focusDepthDown = this.printDepth.down;
+            this.printDepth = null;
+        }
+        return this.renderInternal();
     }
 
     /** The link a ghost card, or a line between these people, belongs to (null: none). */
@@ -602,21 +703,33 @@ class TreeRendererClass {
      * view's card height (src/card-width.ts).
      */
     private measureCustomCards(positions: Map<PersonId, Position>): CustomCardViewMetrics {
+        const measured = this.customCardsOf(positions);
+        this.customLines = measured.lines;
+        this.customRows = measured.rows;
+        this.customWrapped = measured.wrapped;
+        this.customStyle = measured.style;
+        this.customHeads = measured.heads;
+        this.edgeRoomIds = measured.edgeRoomIds;
+        return measured.metrics;
+    }
+
+    /** The custom card measured for the people of a layout (the screen's or an output's), nothing kept. */
+    private customCardsOf(positions: Map<PersonId, Position>): CustomCardsMeasure {
         const data = DataManager.getData();
         const fields = SettingsManager.getEffectiveCardFields() ?? SettingsManager.getCardFields();
         // The years under the name say "1841 †" for one presumed dead, as the detailed card.
         const presumed = fields.years ? this.computePresumedDeceased() : null;
-        this.customLines.clear();
+        const lines = new Map<PersonId, CardLine[]>();
         const ids: PersonId[] = [];
         const entries = [];
         for (const id of positions.keys()) {
             const person = DataManager.getPerson(id);
             if (!person) continue;
-            const lines = person.isPlaceholder ? [] : cardLines(person, data, fields);
-            this.customLines.set(id, lines);
+            const personLines = person.isPlaceholder ? [] : cardLines(person, data, fields);
+            lines.set(id, personLines);
             ids.push(id);
             entries.push({
-                name: shownName(person, '?'), avatar: !person.isPlaceholder, lines,
+                name: shownName(person, '?'), avatar: !person.isPlaceholder, lines: personLines,
                 ...(presumed ? { years: cardYears(person, presumed.has(id)) } : {}),
             });
         }
@@ -625,11 +738,10 @@ class TreeRendererClass {
         const metrics = customCardMetrics(entries, measureCardTexts, fields.widthCap, fields.lines, fields.style,
             cardDateReferences(fields.fullDate));
         const { rows, heights, heads } = customCardRows(entries, metrics, measureCardTexts, fields.lines, fields.style);
-        this.customRows = rows;
-        this.customWrapped = fields.lines !== 1;
-        this.customStyle = fields.style;
-        this.customHeads = new Map(ids.map((id, i) => [id, heads[i]]));
-        this.edgeRoomIds.clear();
+        const measured = {
+            lines, rows, wrapped: fields.lines !== 1, style: fields.style,
+            heads: new Map(ids.map((id, i) => [id, heads[i]])), edgeRoomIds: new Set<PersonId>(),
+        };
         if (fields.height === 'content') {
             // Each card as tall as its own content; the view's height is its tallest
             // (a band with no card, the CSS default). A card with pills on its
@@ -638,15 +750,15 @@ class TreeRendererClass {
             ids.forEach((id, i) => {
                 const pills = this.bottomEdgePills(id, visible, this.lastCrossTrees);
                 if (pills.left || pills.right) {
-                    this.edgeRoomIds.add(id);
+                    measured.edgeRoomIds.add(id);
                     heights[i] += CARD_EDGE_PILL_ROOM;
                 }
             });
             let tallest = CARD_HEAD_HEIGHT;
             for (const h of heights) tallest = Math.max(tallest, h);
-            return { ...metrics, cardHeight: tallest, personHeights: new Map(ids.map((id, i) => [id, heights[i]])) };
+            return { ...measured, metrics: { ...metrics, cardHeight: tallest, personHeights: new Map(ids.map((id, i) => [id, heights[i]])) } };
         }
-        return { ...metrics, cardHeight: customCardViewHeight(fields.on.length, fields.lines, heights, fields.years) };
+        return { ...measured, metrics: { ...metrics, cardHeight: customCardViewHeight(fields.on.length, fields.lines, heights, fields.years) } };
     }
 
     /** The custom card's width and date column of the drawn view (null in other densities). */
@@ -659,25 +771,23 @@ class TreeRendererClass {
      * content" each drawn person's own height (personHeights) and the partner
      * line's offset, so the image export draws every card as the screen does.
      */
-    getCardBox(): Pick<LayoutConfig, 'cardWidth' | 'cardHeight' | 'personHeights' | 'spouseLineY'> {
+    getCardBox(): CardBox {
         const { cardWidth, cardHeight, personHeights, spouseLineY } = this.config;
         return { cardWidth, cardHeight, ...(personHeights ? { personHeights } : {}), ...(spouseLineY !== undefined ? { spouseLineY } : {}) };
     }
 
     /**
-     * The card box the image export and the book draw: the screen's, except
-     * that a card measured with room for the pills on its bottom edge is drawn
-     * without it (the pills are not drawn there).
+     * The card box the image export and the book draw: their own layout's
+     * (outputLayout: the screen's when no link is shown), without the room a
+     * card measured with pills on its bottom edge keeps (no pills there).
      */
-    getPosterCardBox(): ReturnType<TreeRendererClass['getCardBox']> {
-        const box = this.getCardBox();
-        if (!box.personHeights || this.edgeRoomIds.size === 0) return box;
-        const personHeights = new Map(box.personHeights);
-        for (const id of this.edgeRoomIds) {
-            const h = personHeights.get(id);
-            if (h !== undefined) personHeights.set(id, h - CARD_EDGE_PILL_ROOM);
-        }
-        return { ...box, personHeights };
+    getPosterCardBox(): CardBox {
+        return this.outputLayout().box;
+    }
+
+    /** The custom card's width and columns the image export and the book draw (null in other densities). */
+    getPosterCardMetrics(): CustomCardMetrics | null {
+        return this.outputLayout().custom;
     }
 
     /** A drawn person's card height: its own ("by content"), else the view's. */
@@ -1267,17 +1377,27 @@ class TreeRendererClass {
      * screen's, ghosts and all).
      */
     getPosterLayout(opts: { includeView?: boolean } = {}): { positions: Map<PersonId, Position>; connections: Connection[]; spouseLines: SpouseLine[] } {
-        const layout = opts.includeView
-            ? { positions: this.positions, connections: this.connections, spouseLines: this.spouseLines }
-            : this.outputLayout();
-        // A line that starts at the bottom of a card drawn without its pills' room starts that much higher.
-        const connections = this.edgeRoomIds.size === 0 ? layout.connections : layout.connections.map(c =>
-            c.stemPersonId && this.edgeRoomIds.has(c.stemPersonId) ? { ...c, stemTopY: c.stemTopY - CARD_EDGE_PILL_ROOM } : c);
+        if (!opts.includeView) {
+            const { positions, connections, spouseLines } = this.outputLayout();
+            return { positions, connections, spouseLines };
+        }
         return {
-            positions: layout.positions,
-            connections,
-            spouseLines: layout.spouseLines,
+            positions: this.positions,
+            connections: this.withoutEdgeRoom(this.connections, this.edgeRoomIds),
+            spouseLines: this.spouseLines,
         };
+    }
+
+    /**
+     * The focus depth the outputs name (the poster's footer): the view's, at
+     * most as far as the tree itself reaches — a shown family's generations
+     * count on screen only.
+     */
+    getOutputFocusDepth(): { up: number; down: number } {
+        const focus = this.focusPersonId;
+        if (!this.viewLayer || !focus) return { up: this.focusDepthUp, down: this.focusDepthDown };
+        const max = maxGenerationsWithSiblings(DataManager.getData(), focus);
+        return { up: Math.min(this.focusDepthUp, max.up), down: Math.min(this.focusDepthDown, max.down) };
     }
 
     /**
