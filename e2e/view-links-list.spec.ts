@@ -23,8 +23,6 @@ async function setup(page: Page, ged = GED): Promise<void> {
     await openApp(page);
     await page.evaluate((t) => window.Strom.UI.openGedcomText(t), ged);
     await expect(card(page, 'Karel').first()).toBeVisible();
-    // The "opened" notice out of the way (it would cover the list's footer).
-    await page.evaluate(() => document.querySelector('.toast')?.remove());
 }
 
 type Rec = { hypo: string; variant: string; kind: string; anchor: string; island: string[]; on?: boolean };
@@ -161,6 +159,35 @@ test.describe('the indicator', () => {
 });
 
 test.describe('the list', () => {
+    test('the notice after opening the research steps aside of the list at once, never across its footer', async ({ page }) => {
+        await page.setViewportSize({ width: 1280, height: 720 });
+        await setup(page);
+        await store(page, [B]);
+        await expect(ghosts(page)).toHaveCount(5);
+        const notice = page.locator('.toast', { hasText: 'Opened the research' });
+        await expect(notice).toBeVisible();
+        // Its own coming in done: the notice stands in the middle, where the list will open.
+        await page.waitForTimeout(400);
+        const boxes = await page.evaluate(() => {
+            const box = (node: Element | null) => {
+                const r = node!.getBoundingClientRect();
+                return { x: r.x, y: r.y, width: r.width, height: r.height };
+            };
+            const toast = document.querySelector('.toast');
+            const before = box(toast);
+            window.Strom.UI.researchActionViewLinks();
+            // The first frame with the list open: the notice already beside it.
+            return { before, toast: box(toast), panel: box(document.getElementById('view-links-panel')), foot: box(document.querySelector('.view-links-panel__foot')) };
+        });
+        expect(boxes.before.x + boxes.before.width).toBeGreaterThan(boxes.panel.x);
+        expect(overlaps(boxes.toast, boxes.panel)).toBe(false);
+        expect(overlaps(boxes.toast, boxes.foot)).toBe(false);
+        // The list's footer takes a click while the notice is still up.
+        await expect(notice).toBeVisible();
+        await panel(page).getByRole('button', { name: 'Remove all' }).click();
+        await expect(panel(page).locator('.view-links-panel__toast')).toContainText('Removed: parents of Václav Horák');
+    });
+
     test('opens from the indicator: rows drawn (by place, on and off), then real, then invalid; Esc closes back to the indicator', async ({ page }) => {
         await setup(page);
         await store(page, [CANCELLED, REAL, MARTIN, B]);

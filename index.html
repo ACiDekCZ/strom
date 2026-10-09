@@ -10151,7 +10151,10 @@
                modal's action buttons. */
             z-index: 150;
             opacity: 0;
-            transition: all 0.3s ease;
+            /* Only the coming and going (and a lift over the undo toast) glide:
+               a toast moving aside of a panel opened beside the tree jumps
+               there, or it slides across the panel's footer on the way. */
+            transition: transform 0.3s ease, opacity 0.3s ease, bottom 0.3s ease;
         }
         .toast.show {
             transform: translateX(-50%) translateY(0);
