@@ -98,16 +98,14 @@ async function researchTakesEmpty(base: string): Promise<boolean> {
 export const researchAdoptMethods = uiModule({
     /**
      * "Start research with this tree" can be offered for `tree`: on a
-     * computer whose research announced `new`, a tree with people that is not
-     * a research tree yet.
+     * computer whose research announced `new`, a tree that is not a research
+     * tree yet. An empty one too: the research announced here hides every
+     * other way in, and the hand-over itself settles a tree with nobody in it
+     * (a research that takes it is ready empty, an older one is told and the
+     * app says how it starts — C1).
      */
     researchAdoptAvailable(tree: TreeMetadata | null | undefined): boolean {
-        if (!tree || tree.research || DataManager.isViewMode() || !onComputer() || !this.researchLinkAvailable('new')) return false;
-        // The open tree counts from its data: the metadata catch up only when it is saved.
-        const people = DataManager.getCurrentTreeId() === tree.id
-            ? Object.values(DataManager.getData().persons).some(p => !p.isPlaceholder)
-            : tree.personCount > 0;
-        return people;
+        return !!tree && !tree.research && !DataManager.isViewMode() && onComputer() && this.researchLinkAvailable('new');
     },
 
     /** The active tree can be handed over (the explanation dialog's variant). */
