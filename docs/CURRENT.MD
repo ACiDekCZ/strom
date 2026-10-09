@@ -637,7 +637,22 @@ stroke in `--bg`. Each link gets one label button (`.view-link-label`):
 a `child` link's on the longest horizontal virtual stretch at least as long
 as the label, else mid of its longest vertical run (`labelSpot`); a
 `partners` link's under the couple. The anchor's research-edge stub and any
-"+ family" pill or curve to a shown family are not drawn while it is shown.
+"+ family" pill or curve to a shown family are not drawn while it is shown
+(the stub only where the view draws the shown parents: the Descendants of
+the anchor keep it).
+
+Interaction (src/ui/view-links-ui.ts, the edge bubble in
+src/ui/research-edge-ui.ts): the actions only write the tree's view link
+records (src/view-links.ts) and draw again (`TreeRenderer.refreshViewLinks`:
+a focus depth at its maximum follows the shown generations, nothing is
+written into the tree, no undo step). A `named` edge (`_END named`) draws an
+open stub with two hollow circles and "named · N options"; pointing shows its
+bubble, a click pins it with the hypothesis's versions and "Show as linked".
+"+ family" and the curve's pill open a small menu (show it linked / go to the
+family). In the family's own view the top couple carries "Show linked to the
+tree" (`renderViewLinkIslands`), which shows the link and goes back to the
+tree. After showing, the view fits the anchor and the family
+(`ZoomPan.fitPersons`).
 
 ---
 

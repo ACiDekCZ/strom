@@ -87,6 +87,7 @@ import { researchOverviewMethods } from './research-overview-ui.js';
 import { researchDirectionsMethods } from './research-directions-ui.js';
 import { liveFollowMethods } from './live-follow-ui.js';
 import { researchEdgeUiMethods } from './research-edge-ui.js';
+import { viewLinksUiMethods } from './view-links-ui.js';
 import { exportImageMethods } from './export-image-ui.js';
 import { bookUiMethods } from './book-ui.js';
 import { snapshotsUiMethods } from './snapshots-ui.js';
@@ -579,6 +580,10 @@ Object.assign(UIClass.prototype, liveFollowMethods);
 type ResearchEdgeUiMethods = typeof researchEdgeUiMethods;
 export interface UIClass extends ResearchEdgeUiMethods {}
 Object.assign(UIClass.prototype, researchEdgeUiMethods);
+
+type ViewLinksUiMethods = typeof viewLinksUiMethods;
+export interface UIClass extends ViewLinksUiMethods {}
+Object.assign(UIClass.prototype, viewLinksUiMethods);
 
 type ExportImageMethods = typeof exportImageMethods;
 export interface UIClass extends ExportImageMethods {}

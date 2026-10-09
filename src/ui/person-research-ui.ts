@@ -107,7 +107,7 @@ export const personResearchMethods = uiModule({
      * id (data-hypo): bringing that one into view, open, belongs to the
      * hypotheses' own section.
      */
-    showPersonResearchDialog(personId: PersonId, opts: { edge?: boolean; hypo?: { id: string; variant: string } } = {}): void {
+    showPersonResearchDialog(personId: PersonId, opts: { edge?: boolean; hypo?: { id: string; variant?: string } } = {}): void {
         document.getElementById(DIALOG_ID)?.remove();
         const person = DataManager.getPerson(personId);
         // The conflicts as the research has them now (its version not loaded may say more, finding 40).
@@ -170,7 +170,7 @@ export const personResearchMethods = uiModule({
         overlay.className = 'modal-overlay active';
         overlay.id = DIALOG_ID;
         overlay.innerHTML = `
-            <div class="modal modal--md person-research-modal" role="dialog" data-dialog-kind="info" aria-modal="true" aria-labelledby="person-research-title"${opts.hypo ? ` data-open-hypo="${esc(opts.hypo.id)}" data-open-variant="${esc(opts.hypo.variant)}"` : ''}>
+            <div class="modal modal--md person-research-modal" role="dialog" data-dialog-kind="info" aria-modal="true" aria-labelledby="person-research-title"${opts.hypo ? ` data-open-hypo="${esc(opts.hypo.id)}"${opts.hypo.variant ? ` data-open-variant="${esc(opts.hypo.variant)}"` : ''}` : ''}>
                 <div class="modal-header">
                     <div class="audit-log-heading">
                         <h2 id="person-research-title">${esc(r.knows)}</h2>

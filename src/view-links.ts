@@ -502,6 +502,51 @@ export function viewLinkCandidates(data: StromData, ctx: ViewLinkContext = viewL
     return out;
 }
 
+/** One variant of a hypothesis as the actions offer it (the edge's bubble, the menus, "What research knows"). */
+export interface ViewLinkOffer {
+    hypo: string;
+    variant: string;
+    /** The claim (TITL). */
+    title?: string;
+    /** What it would show (null: nothing to draw — no link, text only, people not in the tree's data). */
+    choice: ViewLinkChoice | null;
+    /** What showing it would be now (null without a choice); only `draw` can be shown. */
+    state: ViewLinkState | null;
+    /** The people of the family it shows (0 without a choice). */
+    people: number;
+    /** It names people, but only as text (same, siblings). */
+    textOnly: boolean;
+    /** Shown now: its record switched on and the main switch on. */
+    shown: boolean;
+}
+
+/** Every variant of `hypo` as an action offers it, in the file's order (none: the hypothesis is not in the data). */
+export function viewLinkOffers(data: StromData, links: readonly ViewLink[], master: boolean, hypo: string, ctx: ViewLinkContext = viewLinkContext(data)): ViewLinkOffer[] {
+    const h = ctx.hypotheses.get(hypo);
+    if (!h) return [];
+    const record = links.find(l => l.hypo === hypo);
+    return (h.variants ?? []).map(v => {
+        let choice: ViewLinkChoice | null = null;
+        for (const l of v.links) {
+            const shape = viewLinkShape(data, hypo, l, ctx);
+            if (shape) { choice = { hypo, variant: v.id, ...shape }; break; }
+        }
+        const state = choice ? resolveViewLink(data, { ...choice, on: true, addedAt: 0 }, ctx) : null;
+        return {
+            hypo, variant: v.id, ...(v.title ? { title: v.title } : {}),
+            choice, state,
+            people: choice ? viewLinkIsland(data, choice, ctx).length : 0,
+            textOnly: !choice && v.links.length > 0 && v.links.every(l => l.kind === 'same' || l.kind === 'siblings'),
+            shown: master && !!record?.on && record.variant === v.id,
+        };
+    });
+}
+
+/** The record of `hypo` that is shown now (switched on, the main switch on), or null. */
+export function shownViewLink(links: readonly ViewLink[], master: boolean, hypo: string): ViewLink | null {
+    return master ? links.find(l => l.hypo === hypo && l.on) ?? null : null;
+}
+
 // ==================== WHEN THE FEATURE SHOWS ====================
 
 /** The bridge's /status feature: its GEDCOM says what each variant would connect. */

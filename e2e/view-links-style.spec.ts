@@ -42,10 +42,17 @@ async function show(page: Page, records: Rec[], focus = 'P0001'): Promise<void> 
     }, { records, focus });
 }
 
-async function setup(page: Page, width = 1440, height = 900): Promise<void> {
+/**
+ * Václav's edge an ordinary one (not searched) joining the family of Jakub by
+ * variant B: a stub with "+ family · 5" (a `named` stub has no pill).
+ */
+const GED_PILL = GED.replace(/2 _END named\n/, '2 _END unsearched\n')
+    .replace(/3 _JOIN P0126\n3 _JOIN P0125\n3 _JOIN P0127\n3 _JOIN P0128\n3 _JOIN P0129\n3 _JOIN P0130\n3 _VAR B\n3 _VAR C\n/, '3 _JOIN P0125\n3 _VAR B\n');
+
+async function setup(page: Page, width = 1440, height = 900, ged = GED): Promise<void> {
     await page.setViewportSize({ width, height });
     await openApp(page);
-    await dropFile(page, GED);
+    await dropFile(page, ged);
     await expect(card(page, 'Karel').first()).toBeVisible();
 }
 
@@ -228,7 +235,8 @@ test.describe('linked in the view only: the look', () => {
     });
 
     test('the stub and the "+ family" pill step aside while the family is shown and come back after', async ({ page }) => {
-        await setup(page);
+        expect(GED_PILL).not.toContain('_END named');
+        await setup(page, 1440, 900, GED_PILL);
         const vaclav = await idOf(page, 'P0010');
         const stub = card(page, 'Václav').locator('.research-edge');
         const pill = page.locator(`.edge-link-pill--family[data-edge-person="${vaclav}"]`);

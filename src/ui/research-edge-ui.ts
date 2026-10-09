@@ -10,15 +10,17 @@ import { TreeRenderer } from '../renderer.js';
 import { TreeManager } from '../tree-manager.js';
 import { strings } from '../strings.js';
 import { formatFlexDate } from '../dates.js';
-import { PersonId, ResearchEdge, ResearchEdgeMode } from '../types.js';
+import { PersonId, ResearchEdge, ResearchEdgeMode, ResearchHypothesis } from '../types.js';
 import {
-    edgeEndText, edgeEstimateText, edgeFactsLine, edgeNextText, edgeTimeline, edgeTone, edgeMuted, effectiveNext,
+    edgeEndText, edgeEstimateText, edgeFactsLine, edgeNamedHypothesis, edgeNextText, edgeTimeline, edgeTone, edgeMuted, effectiveNext,
 } from '../research-edge.js';
 import { researchCardInfoNow } from '../card-signals.js';
 import { uiModule } from './module.js';
 import { shownName } from '../person-name.js';
 
 const BUBBLE_ID = 'research-edge-bubble';
+/** The view links' chain confirmation (src/ui/view-links-ui.ts): a pinned bubble lets it have the keyboard. */
+const CHAIN_POPOVER_ID = 'view-link-chain';
 const SHOW_DELAY_MS = 150;
 const HIDE_DELAY_MS = 200;
 
@@ -34,6 +36,12 @@ let showTimer: number | undefined;
 let hideTimer: number | undefined;
 /** The person whose bubble is open (touch: the next tap on the stub opens the section). */
 let bubbleFor: PersonId | null = null;
+/** The open bubble is pinned (a `named` stub clicked): it has its actions and × and stays until closed. */
+let pinned = false;
+/** Listeners of a pinned bubble (keyboard, a click outside). */
+let pinnedCleanup: (() => void) | null = null;
+/** The keyboard comes back to the stub from a closed pinned bubble: no hover bubble for it. */
+let quietFocus = false;
 
 function clearTimers(): void {
     window.clearTimeout(showTimer);
@@ -69,22 +77,31 @@ export const researchEdgeUiMethods = uiModule({
     /** Hover, focus, click and tap on a card's stub (the renderer calls it per card). */
     bindResearchEdge(personId: PersonId, el: HTMLElement): void {
         el.addEventListener('mouseenter', () => {
-            if (touch()) return;
+            if (touch() || pinned) return;
             clearTimers();
             showTimer = window.setTimeout(() => this.showResearchEdgeBubble(personId, el), SHOW_DELAY_MS);
         });
         el.addEventListener('mouseleave', () => {
             window.clearTimeout(showTimer);
-            hideTimer = window.setTimeout(() => this.hideResearchEdgeBubble(), HIDE_DELAY_MS);
+            this.hideResearchEdgeBubbleSoon();
         });
         el.addEventListener('focus', () => {
-            if (el.matches(':focus-visible')) this.showResearchEdgeBubble(personId, el);
+            if (quietFocus) { quietFocus = false; return; }
+            if (el.matches(':focus-visible') && !pinned) this.showResearchEdgeBubble(personId, el);
         });
-        el.addEventListener('blur', () => {
-            hideTimer = window.setTimeout(() => this.hideResearchEdgeBubble(), HIDE_DELAY_MS);
-        });
+        el.addEventListener('blur', () => this.hideResearchEdgeBubbleSoon());
         el.addEventListener('click', (e) => {
             e.stopPropagation();
+            // Parents named: a click (the first tap, Enter) pins the bubble with
+            // its actions; again on the same stub closes it.
+            if (el.classList.contains('edge-named')) {
+                if (pinned && bubbleFor === personId) {
+                    this.hideResearchEdgeBubble();
+                    return;
+                }
+                this.showResearchEdgeBubble(personId, el, { pinned: true });
+                return;
+            }
             // Touch: the first tap shows the bubble, the next one opens the section.
             if (touch() && bubbleFor !== personId) {
                 this.showResearchEdgeBubble(personId, el);
@@ -94,8 +111,16 @@ export const researchEdgeUiMethods = uiModule({
         });
     },
 
-    showResearchEdgeBubble(personId: PersonId, anchor: HTMLElement): void {
+    /**
+     * The bubble over a stub (or a pill of its link). `pinned` (a `named`
+     * stub clicked, tapped, Enter): a dialog with its actions and ×; Esc, ×
+     * and a click outside close it, the keyboard stays inside. Else a tooltip
+     * without actions, gone when the pointer leaves; a pinned bubble is never
+     * replaced by one.
+     */
+    showResearchEdgeBubble(personId: PersonId, anchor: HTMLElement, opts: { pinned?: boolean } = {}): void {
         clearTimers();
+        if (pinned && !opts.pinned) return;
         this.hideResearchEdgeBubble();
         const found = edgeOf(personId);
         if (!found) return;
@@ -103,16 +128,21 @@ export const researchEdgeUiMethods = uiModule({
         const re = strings.researchEdge;
         const tone = edgeMuted(edge.scope) ? 'none' : edgeTone(next);
         const nextText = edgeNextText(edge, next);
-        const facts = edgeFactsLine(edge);
-        const hypo = edge.hypos.find(h => h.join) ?? null;
-        const joinId = hypo?.join ? personByRefn(hypo.join) : null;
-        const hypoTitle = hypo ? DataManager.getPerson(personId)?.research?.hypotheses?.find(h => h.id === hypo.id)?.title ?? '' : '';
+        const person = DataManager.getPerson(personId)!;
+        const namedHypo = edgeNamedHypothesis(person);
         const bubble = document.createElement('div');
         bubble.id = BUBBLE_ID;
         bubble.className = 'research-edge-bubble';
-        bubble.setAttribute('role', 'tooltip');
-        bubble.innerHTML = `
-            <div class="reb-end">${esc(edgeEndText(edge))}</div>
+        if (namedHypo) {
+            bubble.classList.add('research-edge-bubble--named');
+            bubble.innerHTML = this.namedEdgeBubbleHtml(personId, namedHypo, nextText, tone, !!opts.pinned);
+        } else {
+            const facts = edgeFactsLine(edge);
+            const hypo = edge.hypos.find(h => h.join) ?? null;
+            const joinId = hypo?.join ? personByRefn(hypo.join) : null;
+            const hypoTitle = hypo ? person.research?.hypotheses?.find(h => h.id === hypo.id)?.title ?? '' : '';
+            bubble.innerHTML = `
+            <div class="reb-end" id="${BUBBLE_ID}-title">${esc(edgeEndText(edge))}</div>
             ${nextText ? `<div class="reb-next tone-${tone}"><span class="reb-dot" aria-hidden="true"></span>${esc(nextText)}</div>` : ''}
             ${facts ? `<div class="reb-facts">${esc(facts)}</div>` : ''}
             ${hypo && joinId ? `
@@ -122,38 +152,166 @@ export const researchEdgeUiMethods = uiModule({
                     ${hypoTitle ? `<div class="reb-hypo-title">${esc(hypoTitle)}</div>` : ''}
                 </div>` : ''}
             <button type="button" class="link-button reb-more">${esc(re.moreInResearch)}</button>`;
+            bubble.querySelector<HTMLButtonElement>('.reb-join')?.addEventListener('click', () => {
+                this.hideResearchEdgeBubble();
+                void TreeRenderer.setFocus(joinId!);
+            });
+        }
         document.body.appendChild(bubble);
         bubbleFor = personId;
+        pinned = !!opts.pinned;
         bubble.addEventListener('mouseenter', () => window.clearTimeout(hideTimer));
-        bubble.addEventListener('mouseleave', () => {
-            hideTimer = window.setTimeout(() => this.hideResearchEdgeBubble(), HIDE_DELAY_MS);
-        });
-        (bubble.querySelector('.reb-more') as HTMLButtonElement).onclick = () => this.openResearchEdgeSection(personId);
-        bubble.querySelector<HTMLButtonElement>('.reb-join')?.addEventListener('click', () => {
+        bubble.addEventListener('mouseleave', () => this.hideResearchEdgeBubbleSoon());
+        const more = bubble.querySelector<HTMLButtonElement>('.reb-more')!;
+        more.onclick = () => {
+            if (!namedHypo) { this.openResearchEdgeSection(personId); return; }
+            const shown = this.viewLinkOffersFor(namedHypo.id!).find(o => o.shown);
             this.hideResearchEdgeBubble();
-            TreeRenderer.setFocus(joinId!);
-        });
+            this.showPersonResearchDialog(personId, { hypo: { id: namedHypo.id!, ...(shown ? { variant: shown.variant } : {}) } });
+        };
         // Above the stub, kept inside the window (below it when there is no room).
         const a = anchor.getBoundingClientRect();
         const b = bubble.getBoundingClientRect();
-        const left = Math.max(8, Math.min(window.innerWidth - b.width - 8, a.left + a.width / 2 - b.width / 2));
-        const top = a.top - b.height - 8 >= 8 ? a.top - b.height - 8 : a.bottom + 8;
+        // As wide as the window allows (a phone: 12px each side): centred in it.
+        const left = b.width >= window.innerWidth - 24 ? (window.innerWidth - b.width) / 2
+            : Math.max(8, Math.min(window.innerWidth - b.width - 8, a.left + a.width / 2 - b.width / 2));
+        const top = a.top - b.height - 8 >= 8 ? a.top - b.height - 8 : Math.max(8, Math.min(a.bottom + 8, window.innerHeight - b.height - 8));
         bubble.style.left = `${left}px`;
         bubble.style.top = `${top}px`;
+        if (pinned && namedHypo) {
+            this.pinEdgeBubble(bubble, anchor, personId, namedHypo.id!);
+            return;
+        }
+        bubble.setAttribute('role', 'tooltip');
         if (touch()) {
             // A tap elsewhere closes it.
             const away = (e: Event): void => {
                 if (bubble.contains(e.target as Node) || anchor.contains(e.target as Node)) return;
                 document.removeEventListener('pointerdown', away, true);
-                this.hideResearchEdgeBubble();
+                if (document.getElementById(BUBBLE_ID) === bubble) this.hideResearchEdgeBubble();
             };
             document.addEventListener('pointerdown', away, true);
         }
     },
 
+    /**
+     * The bubble of a `named` stub: "Parents named, not linked", what comes
+     * next, the hypothesis and its versions — each with what it would bring
+     * ("+ 5 people" / "people not in the research"); pinned, a version with a
+     * link can be shown ("Show as linked"; while another is shown "Show
+     * instead of B"; the shown one "Shown" · "Unlink").
+     */
+    namedEdgeBubbleHtml(personId: PersonId, hypo: ResearchHypothesis, nextText: string, tone: string, withActions: boolean): string {
+        const re = strings.researchEdge;
+        const v = strings.viewLinks;
+        const offers = TreeRenderer.viewLinksOffered() ? this.viewLinkOffersFor(hypo.id!) : [];
+        const shown = offers.find(o => o.shown);
+        const rows = (hypo.variants ?? []).map(variant => {
+            const o = offers.find(x => x.variant === variant.id);
+            const meta = o?.choice ? v.people(o.people) : o?.textOnly ? v.textOnly : v.notInResearch;
+            let action = '';
+            if (withActions && o?.choice) {
+                if (o.shown) {
+                    action = `<span class="reb-variant-shown">${esc(v.shown)}</span>
+                        <button type="button" class="secondary reb-variant-btn reb-unlink">${esc(v.unlink)}</button>`;
+                } else if (o.state?.state === 'draw') {
+                    action = `<button type="button" class="secondary reb-variant-btn reb-show">${esc(shown ? v.showInstead(shown.variant) : v.show)}</button>`;
+                }
+            }
+            const title = variant.title ?? '';
+            return `<div class="reb-variant${o?.shown ? ' is-shown' : ''}" role="listitem" data-variant="${esc(variant.id)}">
+                <span class="reb-variant-id">${esc(variant.id)}</span>
+                <span class="reb-variant-text">
+                    <span class="reb-variant-title"${title.length > 90 ? ` title="${esc(title)}"` : ''}>${esc(title)}</span>
+                    <span class="reb-variant-meta">${esc(meta)}</span>
+                </span>
+                ${action ? `<span class="reb-variant-actions">${action}</span>` : ''}
+            </div>`;
+        }).join('');
+        return `
+            <div class="reb-end" id="${BUBBLE_ID}-title">${esc(re.named)}</div>
+            ${nextText ? `<div class="reb-next tone-${tone}"><span class="reb-dot" aria-hidden="true"></span>${esc(nextText)}</div>` : ''}
+            <div class="reb-question"><span class="reb-question-id">${esc(hypo.id ?? '')}</span> · ${esc(hypo.title)}</div>
+            ${rows ? `<div class="reb-variants" role="list">${rows}</div>` : ''}
+            <button type="button" class="link-button reb-more">${esc(re.moreInResearch)}</button>
+            ${withActions ? `<button type="button" class="reb-close" aria-label="${esc(strings.buttons.close)}">&times;</button>` : ''}`;
+    },
+
+    /** A pinned bubble: a dialog, its actions wired, the keyboard inside, Esc / × / a click outside close it. */
+    pinEdgeBubble(bubble: HTMLElement, anchor: HTMLElement, personId: PersonId, hypo: string): void {
+        bubble.classList.add('is-pinned');
+        bubble.setAttribute('role', 'dialog');
+        bubble.setAttribute('aria-modal', 'false');
+        bubble.setAttribute('aria-labelledby', `${BUBBLE_ID}-title`);
+        anchor.setAttribute('aria-expanded', 'true');
+        const offers = this.viewLinkOffersFor(hypo);
+        bubble.querySelectorAll<HTMLElement>('.reb-variant').forEach(row => {
+            const o = offers.find(x => x.variant === row.dataset.variant);
+            const choice = o?.choice;
+            if (!choice) return;
+            row.querySelector<HTMLButtonElement>('.reb-show')?.addEventListener('click', () => {
+                void this.viewLinkShow(choice, { focusLabel: true });
+            });
+            row.querySelector<HTMLButtonElement>('.reb-unlink')?.addEventListener('click', (e) => {
+                void this.viewLinkUnlink(hypo, { near: e.currentTarget as HTMLElement, restoreFocus: true });
+            });
+        });
+        const close = (): void => {
+            this.hideResearchEdgeBubble();
+            if (anchor.isConnected) {
+                quietFocus = true;
+                anchor.focus({ preventScroll: true });
+                quietFocus = false;
+            }
+        };
+        bubble.querySelector<HTMLButtonElement>('.reb-close')!.onclick = close;
+        const focusables = (): HTMLElement[] => [...bubble.querySelectorAll<HTMLElement>('button:not([disabled])')];
+        const onKey = (e: KeyboardEvent): void => {
+            if (document.getElementById(CHAIN_POPOVER_ID)) return;
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                close();
+            } else if (e.key === 'Tab' && bubble.contains(document.activeElement)) {
+                const list = focusables();
+                const i = list.indexOf(document.activeElement as HTMLElement);
+                const nextI = e.shiftKey ? (i <= 0 ? list.length - 1 : i - 1) : (i + 1) % list.length;
+                e.preventDefault();
+                list[nextI]?.focus();
+            }
+        };
+        const onDown = (e: Event): void => {
+            const t = e.target as Node;
+            if (bubble.contains(t) || anchor.contains(t) || document.getElementById(CHAIN_POPOVER_ID)?.contains(t)) return;
+            this.hideResearchEdgeBubble();
+        };
+        document.addEventListener('keydown', onKey, true);
+        // Opened by a click (or a key): its press is over, a press from now on is outside or in.
+        document.addEventListener('pointerdown', onDown, true);
+        pinnedCleanup = () => {
+            document.removeEventListener('keydown', onKey, true);
+            document.removeEventListener('pointerdown', onDown, true);
+            anchor.setAttribute('aria-expanded', 'false');
+        };
+        // The first action (a version to show), else the first button.
+        (bubble.querySelector<HTMLElement>('.reb-variant-btn') ?? focusables()[0])?.focus({ preventScroll: true });
+    },
+
     hideResearchEdgeBubble(): void {
+        clearTimers();
+        pinnedCleanup?.();
+        pinnedCleanup = null;
         document.getElementById(BUBBLE_ID)?.remove();
         bubbleFor = null;
+        pinned = false;
+    },
+
+    /** The pointer or the keyboard left: a bubble that is not pinned goes after a moment. */
+    hideResearchEdgeBubbleSoon(): void {
+        window.clearTimeout(hideTimer);
+        hideTimer = window.setTimeout(() => {
+            if (!pinned) this.hideResearchEdgeBubble();
+        }, HIDE_DELAY_MS);
     },
 
     /** "What the research knows" at its "Above the person" section. */

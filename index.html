@@ -7030,8 +7030,30 @@
         .research-edge.tone-yours .research-edge-label { color: var(--edge-label-yours); }
         .research-edge.edge-kind-proof .research-edge-label { font-size: 11px; left: calc(50% + 6px); bottom: 11px; }
         .zoom-edge-labels .research-edge-label { display: block; }
+        /* Parents named, not linked (`_END named`): the open stub with two
+           hollow 8px circles on top (the named parents), its words beside them. */
+        .research-edge.edge-named { height: 38px; }
+        .research-edge-dots {
+            position: absolute;
+            bottom: calc(100% + 3px);
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 6px;
+        }
+        .research-edge-dots::before, .research-edge-dots::after {
+            content: '';
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--bg);
+            /* A 1.5px ring (a border would snap to whole device pixels). */
+            box-shadow: inset 0 0 0 1.5px currentColor;
+        }
+        .research-edge.edge-named .research-edge-label { bottom: 27px; left: calc(50% + 17px); color: var(--edge-label-yours); }
+        .zoom-edge-bar .research-edge-dots { display: none; }
         /* Far out: a stretch of the card's top edge instead of the stub. */
-        .zoom-edge-bar .research-edge { width: 76px; height: 10px; }
+        .zoom-edge-bar .research-edge, .zoom-edge-bar .research-edge.edge-named { width: 76px; height: 10px; }
         .zoom-edge-bar .research-edge-line { width: 76px; height: 2px; margin-bottom: -1px; background: repeating-linear-gradient(to right, currentColor 0 4px, transparent 4px 7px); }
         .zoom-edge-bar .research-edge.edge-closed .research-edge-line { height: 2px; background: currentColor; }
         .zoom-edge-bar .research-edge.edge-closed .research-edge-line::after { display: none; }
@@ -7043,7 +7065,7 @@
         @media (hover: hover) { .person-card:has(.research-edge:hover) .card-tooltip { display: none; } }
         @media (pointer: coarse) {
             .research-edge { width: 44px; height: 44px; }
-            .research-edge.edge-kind-muted, .research-edge.edge-kind-proof { height: 44px; }
+            .research-edge.edge-kind-muted, .research-edge.edge-kind-proof, .research-edge.edge-named { height: 44px; }
         }
 
         /* A person of a family nothing links to the tree yet. */
@@ -7090,6 +7112,22 @@
         }
         @media (hover: hover) { .edge-link-pill--family:hover { border-color: var(--primary); } }
         .edge-link-pill--family:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        /* The curve's pill opens the family's menu where the view links are offered; elsewhere only a label. */
+        .edge-link-pill--link { pointer-events: auto; cursor: pointer; }
+        .edge-link-pill--link.is-inert { pointer-events: none; cursor: default; }
+        @media (hover: hover) { .edge-link-pill--link:not(.is-inert):hover { border-color: var(--primary); } }
+        .edge-link-pill--link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        @media (pointer: coarse) {
+            .edge-link-pill--family::before, .edge-link-pill--link:not(.is-inert)::before {
+                content: '';
+                position: absolute;
+                left: 50%;
+                top: 50%;
+                width: max(100%, 44px);
+                height: 44px;
+                transform: translate(-50%, -50%);
+            }
+        }
 
         /* Linked in the view only (src/view-links.ts): a family outside the
            tree shown as if linked. Its people are ghosts — hatched, a solid
@@ -7191,6 +7229,139 @@
         .reb-hypo-label { font-weight: 600; color: var(--text); margin-right: 4px; }
         .reb-hypo-title { margin-top: 2px; }
         .reb-more { margin-top: 8px; font-size: 12px; }
+        /* A `named` stub's bubble: the hypothesis and its versions; pinned
+           (clicked, tapped, Enter) with "Show as linked" per version and ×. */
+        .research-edge-bubble.research-edge-bubble--named { width: 420px; max-height: calc(100vh - 16px); overflow-y: auto; }
+        .research-edge-bubble.is-pinned .reb-end { padding-right: 28px; }
+        .reb-close {
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            border: 0;
+            border-radius: 6px;
+            background: none;
+            color: var(--text-light);
+            font: 20px/1 var(--font-sans);
+            cursor: pointer;
+        }
+        @media (hover: hover) { .reb-close:hover { background: var(--hover-bg); color: var(--text); } }
+        .reb-close:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        .reb-question { margin-top: 8px; }
+        .reb-question-id { color: var(--text-faint); }
+        .reb-variants { margin-top: 8px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+        .reb-variant { display: flex; align-items: center; gap: 10px; padding: 8px 12px; }
+        .reb-variant + .reb-variant { border-top: 1px solid var(--divider); }
+        .reb-variant.is-shown { background: color-mix(in srgb, var(--ghost-bg) 70%, var(--surface)); }
+        .reb-variant-id { flex: none; width: 14px; font-weight: 600; color: var(--text-light); }
+        .reb-variant-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+        .reb-variant-title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+        .reb-variant-meta { font-size: 12px; color: var(--text-faint); }
+        .reb-variant-actions { flex: none; display: flex; align-items: center; gap: 8px; }
+        .reb-variant-shown { font-size: 12px; font-weight: 600; color: var(--ghost-name); }
+        .reb-variant-btn {
+            height: 32px;
+            padding: 0 12px;
+            box-sizing: border-box;
+            border: 1.5px solid var(--primary);
+            border-radius: 8px;
+            background: transparent;
+            color: var(--primary);
+            font: 500 12.5px/1 var(--font-sans);
+            white-space: nowrap;
+            cursor: pointer;
+        }
+        @media (hover: hover) { .reb-variant-btn:hover { background: color-mix(in srgb, var(--primary) 10%, transparent); } }
+        .reb-variant-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        @media (pointer: coarse) {
+            .reb-variant-btn { height: 44px; padding: 0 14px; }
+            .reb-close { top: 0; right: 0; width: 44px; height: 44px; }
+            .reb-more { min-height: 44px; }
+        }
+        /* Phone: the screen's width less 12px each side, the buttons under the text. */
+        @media (max-width: 640px) {
+            .research-edge-bubble.research-edge-bubble--named { width: calc(100vw - 24px); max-width: none; }
+            .reb-variant { flex-wrap: wrap; }
+            .reb-variant-actions { flex-basis: 100%; padding-left: 24px; }
+        }
+
+        /* Linked in the view only: the small menu of "+ family" (show it linked,
+           or go to it) and of the family's own button (its versions). */
+        .view-link-menu { min-width: 220px; max-width: min(340px, calc(100vw - 16px)); max-height: calc(100vh - 16px); z-index: 3000; }
+        .view-link-menu__item { flex-direction: column; align-items: flex-start; gap: 1px; outline: none; }
+        .view-link-menu__item:focus { background: var(--hover-bg); }
+        .view-link-menu__hint { font-size: 12px; color: var(--text-light); white-space: normal; }
+        @media (pointer: coarse) { .view-link-menu__item { min-height: 44px; justify-content: center; box-sizing: border-box; } }
+        /* The family's own button, under the caption of its top couple. */
+        .view-link-island {
+            position: absolute;
+            transform: translateX(-50%);
+            padding-top: 26px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            z-index: 4;
+            pointer-events: none;
+        }
+        .view-link-island-btn {
+            position: relative;
+            pointer-events: auto;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            height: 32px;
+            padding: 0 14px;
+            box-sizing: border-box;
+            border: 1.5px solid var(--primary);
+            border-radius: 10px;
+            background: var(--surface);
+            color: var(--primary);
+            font: 500 13px/1 var(--font-sans);
+            white-space: nowrap;
+            cursor: pointer;
+        }
+        @media (hover: hover) { .view-link-island-btn:hover { background: color-mix(in srgb, var(--primary) 8%, var(--surface)); } }
+        .view-link-island-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        /* A 44px target beyond its 32px (the next generation stands 80px below). */
+        @media (pointer: coarse) {
+            .view-link-island-btn::before { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 44px; transform: translateY(-50%); }
+        }
+        .view-link-island-sub { font-size: 11.5px; line-height: 1.3; color: var(--text-faint); white-space: nowrap; }
+        #tree-canvas.zoom-far .view-link-island { display: none; }
+        /* Unlinking what others hang on: Cancel · Unlink. */
+        .view-link-chain {
+            position: fixed;
+            z-index: 3100;
+            width: 360px;
+            max-width: calc(100vw - 24px);
+            box-sizing: border-box;
+            padding: 16px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            box-shadow: var(--shadow-lg);
+            color: var(--text);
+        }
+        .view-link-chain--docked { left: 12px; right: 12px; bottom: 88px; width: auto; max-width: 420px; margin: 0 auto; }
+        .view-link-chain__title { font-size: 15px; font-weight: 600; }
+        .view-link-chain__body { margin-top: 6px; font-size: 13px; line-height: 1.4; color: var(--text-light); }
+        .view-link-chain__actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
+        .view-link-chain__actions button { height: 36px; padding: 0 16px; border-radius: 8px; font: 500 14px/1 var(--font-sans); cursor: pointer; }
+        .view-link-chain__actions .secondary { background: transparent; border: 1px solid var(--border); color: var(--text); }
+        .view-link-chain__actions .primary { background: var(--primary); border: 1px solid var(--primary); color: var(--on-primary); }
+        @media (hover: hover) {
+            .view-link-chain__actions .secondary:hover { background: var(--hover-bg); }
+            .view-link-chain__actions .primary:hover { background: var(--primary-dark); }
+        }
+        .view-link-chain__actions button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        @media (pointer: coarse) { .view-link-chain__actions button { height: 44px; } }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .view-link-chain--docked { bottom: 12px; }
+            .research-edge-bubble.research-edge-bubble--named { max-height: calc(100vh - 16px); }
+        }
 
         /* "Above the person" in What the research knows. */
         .research-edge-section details > summary { cursor: pointer; list-style: none; display: flex; align-items: baseline; gap: 8px; }

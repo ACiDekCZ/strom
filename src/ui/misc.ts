@@ -1452,12 +1452,18 @@ export const miscMethods = uiModule({
             toast.classList.add('show');
         });
 
-        // Auto-hide
+        // Auto-hide; a toast with an action stays while the keyboard is on it
+        // (reached with Tab) and goes once focus leaves.
         if (!Number.isFinite(duration)) return;
-        setTimeout(() => {
+        const hide = (): void => {
+            if (opts.action && toast.isConnected && toast.contains(document.activeElement)) {
+                toast.addEventListener('focusout', () => setTimeout(hide, 0), { once: true });
+                return;
+            }
             toast.classList.remove('show');
             setTimeout(() => toast.remove(), 300);
-        }, duration);
+        };
+        setTimeout(hide, duration);
     },
 
     // ---- UNDO TOAST ----

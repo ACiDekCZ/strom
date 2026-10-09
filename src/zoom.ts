@@ -777,6 +777,45 @@ class ZoomPanClass {
     }
 
     /**
+     * Bring these people's cards into the view together: nothing moves when
+     * they are all on screen already; else centred on them, zoomed out as far
+     * as they need (never zoomed in). Cards not drawn are left out.
+     */
+    fitPersons(personIds: readonly PersonId[]): void {
+        if (this.isStandaloneViewActive()) return;
+        const container = document.getElementById('tree-container');
+        if (!container) return;
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const id of personIds) {
+            const card = document.querySelector<HTMLElement>(`#tree-canvas .person-card[data-id="${CSS.escape(id)}"]`);
+            if (!card) continue;
+            const left = parseFloat(card.style.left) || 0;
+            const top = parseFloat(card.style.top) || 0;
+            minX = Math.min(minX, left);
+            minY = Math.min(minY, top);
+            maxX = Math.max(maxX, left + card.offsetWidth);
+            maxY = Math.max(maxY, top + card.offsetHeight);
+        }
+        if (!Number.isFinite(minX)) return;
+        const pad = FIT_PADDING / 2;
+        const cw = container.clientWidth, ch = container.clientHeight;
+        const inView = minX * this.scale + this.tx >= pad && maxX * this.scale + this.tx <= cw - pad
+            && minY * this.scale + this.ty >= pad && maxY * this.scale + this.ty <= ch - pad;
+        if (inView) return;
+        if (this.animationFrame) {
+            cancelAnimationFrame(this.animationFrame);
+            this.animationFrame = null;
+            this.zoomTarget = null;
+            this.endMotion();
+        }
+        const fit = Math.min(cw / (maxX - minX + 2 * FIT_PADDING), ch / (maxY - minY + 2 * FIT_PADDING));
+        if (Number.isFinite(fit) && fit > 0) this.scale = Math.max(FIT_MIN_SCALE, Math.min(this.scale, fit));
+        this.tx = cw / 2 - ((minX + maxX) / 2) * this.scale;
+        this.ty = ch / 2 - ((minY + maxY) / 2) * this.scale;
+        this.apply();
+    }
+
+    /**
      * Temporarily highlight a person card
      */
     highlightPerson(personId: PersonId, duration: number = 2000): void {

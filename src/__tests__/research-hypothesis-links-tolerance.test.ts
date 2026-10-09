@@ -178,7 +178,7 @@ describe('a research file with hypothesis variants, links and the named edge end
         expect(byRefn(data, 'P0013').research).toBeUndefined();
     });
 
-    it('the named end falls back to the neutral open stub ("the research knows something here")', () => {
+    it('the named end draws an open stub with its own words ("parents named, not linked")', () => {
         const { data } = load(FIXTURE);
         const edge = byRefn(data, 'P0010').research!.edge!;
         expect(edge).toMatchObject({ missing: 'parents', scope: 'in', research: 'G0001', gen: 2, end: 'named', next: 'decide', window: { from: 1815, to: 1821 } });
@@ -187,11 +187,15 @@ describe('a research file with hypothesis variants, links and the named edge end
         expect(edge.hypos).toMatchObject([{ id: 'H0022', join: 'P0130', island: 5, held: 0, tests: [] }]);
         expect(edgeShape(edge.end)).toBe('open');
         const view = edgeView(edge, 'all')!;
-        expect(view).toMatchObject({ kind: 'stub', side: 'center', shape: 'open', tone: 'yours', label: '' });
-        expect(view.endText).toBe(strings.researchEdge.end.unknown);
+        // Without the number of its options no short word; with it, "named · 3 options".
+        expect(view).toMatchObject({ kind: 'stub', side: 'center', shape: 'open', tone: 'yours', named: true, label: '' });
+        expect(view.endText).toBe('Parents named, not linked');
+        expect(edgeView(edge, 'all', {}, 3)!.label).toBe('named · 3 options');
         expect(edgeView(edge, 'mine')).not.toBeNull();
         setLanguage('cs');
-        expect(edgeView(edge, 'all')!.endText).toBe(strings.researchEdge.end.unknown);
+        expect(edgeView(edge, 'all')!.endText).toBe('Rodiče jmenováni, nepřipojeno');
+        expect(edgeView(edge, 'all', {}, 3)!.label).toBe('jmenováni · 3 možnosti');
+        expect(edgeView(edge, 'all', {}, 5)!.label).toBe('jmenováni · 5 možností');
     });
 
     it('reads the islands as before', () => {

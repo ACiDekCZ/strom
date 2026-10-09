@@ -10,7 +10,7 @@
  * something here"). Pure.
  */
 
-import { ResearchEdge, ResearchEdgeMode } from './types.js';
+import { Person, ResearchEdge, ResearchEdgeMode, ResearchHypothesis } from './types.js';
 import { strings } from './strings.js';
 import { formatFlexDate } from './dates.js';
 
@@ -47,6 +47,8 @@ export interface EdgeView {
     /** `next` after the live status. */
     next: string | undefined;
     working: boolean;
+    /** The parents are named by a hypothesis, not linked (`_END named`): two hollow circles on the stub. */
+    named: boolean;
     /** The short word beside the stub ('' none). */
     label: string;
     /** The bubble's first two sentences. */
@@ -59,6 +61,28 @@ export interface EdgeView {
 /** The edge's parents are named, not linked (see NAMED_END); never for a proof edge. */
 export function edgeNamed(edge: ResearchEdge): boolean {
     return edge.end === NAMED_END && edge.missing !== 'proof';
+}
+
+/**
+ * The hypothesis a `named` edge stands on: the first of the edge's hypotheses
+ * the person's research holds with its variants (null: none).
+ */
+export function edgeNamedHypothesis(person: Pick<Person, 'research'>): ResearchHypothesis | null {
+    const edge = person.research?.edge;
+    if (!edge || !edgeNamed(edge)) return null;
+    const own = person.research?.hypotheses ?? [];
+    for (const h of edge.hypos) {
+        const found = own.find(x => x.id === h.id && (x.variants?.length ?? 0) > 0);
+        if (found) return found;
+    }
+    return null;
+}
+
+/** How many answers a `named` edge has: every variant of its hypothesis (else the variants the edge names). */
+export function edgeNamedOptions(person: Pick<Person, 'research'>): number {
+    const h = edgeNamedHypothesis(person);
+    if (h) return h.variants!.length;
+    return person.research?.edge?.hypos.find(x => (x.variants?.length ?? 0) > 0)?.variants?.length ?? 0;
 }
 
 export function edgeShape(end: string | undefined): EdgeShape {
@@ -101,9 +125,6 @@ function endKey(end: string | undefined): Exclude<EndKey, 'unknown' | 'proof'> |
         case 'no-books': return 'noBooks';
         case 'no-place': return 'noPlace';
         case 'no-clue': return 'noClue';
-        // Known, but its words ("parents named, not linked", the number of
-        // options) come with the view links; until then the neutral sentence.
-        case NAMED_END: return null;
         default: return null;
     }
 }
@@ -112,16 +133,18 @@ function endKey(end: string | undefined): Exclude<EndKey, 'unknown' | 'proof'> |
 export function edgeEndText(edge: ResearchEdge): string {
     const e = strings.researchEdge.end;
     if (edge.missing === 'proof') return e.proof;
+    if (edgeNamed(edge)) return strings.researchEdge.named;
     const key = endKey(edge.end);
     if (!key) return e.unknown;
     if (key === 'beforeRecords') return e.beforeRecords(edge.records ?? null);
     return e[key];
 }
 
-/** The short word beside the stub ('' for an unknown end). */
-export function edgeShortLabel(edge: ResearchEdge): string {
+/** The short word beside the stub ('' for an unknown end); `named`: with the number of its options. */
+export function edgeShortLabel(edge: ResearchEdge, namedOptions = 0): string {
     const s = strings.researchEdge.short;
     if (edge.missing === 'proof') return s.proof;
+    if (edgeNamed(edge)) return namedOptions > 0 ? strings.researchEdge.namedShort(namedOptions) : '';
     const key = endKey(edge.end);
     if (!key) return '';
     if (key === 'beforeRecords') return s.beforeRecords(edge.records ?? null);
@@ -170,8 +193,9 @@ function whoMissing(edge: ResearchEdge): string {
 /**
  * How the edge above a person is drawn in `mode`, or null when nothing is
  * (off; "for you" and the edge does not wait for the user, or is muted).
+ * `namedOptions`: the number of answers of a `named` edge (edgeNamedOptions).
  */
-export function edgeView(edge: ResearchEdge, mode: ResearchEdgeMode, live: EdgeLive = {}): EdgeView | null {
+export function edgeView(edge: ResearchEdge, mode: ResearchEdgeMode, live: EdgeLive = {}, namedOptions = 0): EdgeView | null {
     if (mode === 'off') return null;
     const next = effectiveNext(edge, live);
     const tone = edgeTone(next);
@@ -186,7 +210,8 @@ export function edgeView(edge: ResearchEdge, mode: ResearchEdgeMode, live: EdgeL
         tone: muted ? 'none' : tone,
         next,
         working: next === 'working' && !muted,
-        label: muted ? '' : edgeShortLabel(edge),
+        named: !muted && edgeNamed(edge),
+        label: muted ? '' : edgeShortLabel(edge, namedOptions),
         endText,
         nextText,
         aria: `${whoMissing(edge)}: ${[endText, nextText].filter(Boolean).join('. ')}`,

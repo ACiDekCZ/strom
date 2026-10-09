@@ -29,7 +29,7 @@ import {
 import { checkRecordedAge, ageBirthDate } from './recorded-age.js';
 import { ACTION_GLYPH, AGENT_DONE_MS, AGENT_DONE_FADE_MS, AGENT_SPIN_MS, CardSignalContext, CardSignalInfo, cardSignalInfo, researchCardInfoNow, sharedPhaseDelay, stateStripesHtml } from './card-signals.js';
 import { EvidenceLevel, treeHasAnySource, unionsByPerson } from './evidence-level.js';
-import { EdgeView, edgeMoves, edgeView } from './research-edge.js';
+import { EdgeView, edgeMoves, edgeNamedOptions, edgeView } from './research-edge.js';
 import {
     computeLayout,
     StromLayoutEngine,
@@ -69,7 +69,9 @@ import {
 import { measureUnionOrderPills, measureTabRows, rowKey, unionOrderPillKey, unionOrderPillPartsHtml, pillFontsPending } from './union-order-measure.js';
 import { openCardMenuFromKeyboard } from './ui/keyboard-access.js';
 import { syncDepthStepper } from './ui/depth-stepper.js';
-import { ViewLink, loadViewLinks, isViewLinksMaster, viewLinksToDraw } from './view-links.js';
+import {
+    ViewLink, ViewLinkCandidate, loadViewLinks, isViewLinksMaster, viewLinksToDraw, viewLinksAvailable, viewLinkContext, viewLinkCandidates,
+} from './view-links.js';
 import { LineSegment, chainSegments, labelSpot, polylinePath, splitBus } from './view-link-lines.js';
 import { maxGenerationsWithSiblings } from './focus-depth.js';
 import type { LayoutViewLayer, ViewLineFlag } from './layout/index.js';
@@ -409,6 +411,7 @@ class TreeRendererClass {
         this.renderLines(svg);
         this.renderEdgeLinks(svg, canvas);
         this.renderViewLinkLabels(canvas);
+        this.renderViewLinkIslands(canvas);
         this.updateSVGSize(svg);
         // Fit long names once, after the cards are in the DOM and measurable.
         requestAnimationFrame(() => this.fitCardNames(canvas));
@@ -503,6 +506,29 @@ class TreeRendererClass {
             master: isViewLinksMaster(treeId),
             bridge: this.viewLinksBridge?.() ?? null,
         });
+    }
+
+    /** Whether "linked in the view only" shows for the tree at all (its data, the live bridge's features). */
+    viewLinksOffered(): boolean {
+        return viewLinksAvailable(DataManager.getData(), this.viewLinksBridge?.() ?? null);
+    }
+
+    /**
+     * Draw again after a change of the stored view links (never a change of
+     * the data: no undo step, nothing to send). The focus depth that reached
+     * as far as it could keeps doing so (a shown family adds generations);
+     * it is not written into the tree.
+     */
+    async refreshViewLinks(change: () => void): Promise<void> {
+        const focus = this.focusPersonId;
+        const before = focus ? this.maxGenerations(focus) : null;
+        change();
+        if (focus && before) {
+            const after = this.maxGenerations(focus);
+            this.focusDepthUp = this.focusDepthUp >= before.up ? after.up : Math.min(this.focusDepthUp, after.up);
+            this.focusDepthDown = this.focusDepthDown >= before.down ? after.down : Math.min(this.focusDepthDown, after.down);
+        }
+        await this.renderInternal();
     }
 
     /** The live bridge the tree follows (its /status features), for whether the view links show at all. */
@@ -760,8 +786,11 @@ class TreeRendererClass {
     }
 
     // Public Focus Mode API
-    /** `reveal`: instead of centring the focused card after the render, call this (it moves the view itself). */
-    setFocus(personId: PersonId | null, saveToData = true, reveal?: (id: PersonId) => void): void {
+    /**
+     * `reveal`: instead of centring the focused card after the render, call
+     * this (it moves the view itself). Resolves once drawn and placed.
+     */
+    setFocus(personId: PersonId | null, saveToData = true, reveal?: (id: PersonId) => void): Promise<void> {
         // Always have a focus person
         // If null is passed, find a default person
         if (!personId) {
@@ -798,7 +827,7 @@ class TreeRendererClass {
         // Render async, then center once cards are in DOM. The descendants
         // chart fits the whole chart instead (focus sits at its top edge).
         const focusId = personId;
-        void this.renderInternal().then(() => {
+        return this.renderInternal().then(() => {
             this.updateFocusUI();
             if (this.viewMode === 'descendants') {
                 this.centerForViewMode();
@@ -926,26 +955,26 @@ class TreeRendererClass {
      * target off; `to` is the stack the current focus is pushed onto, so the
      * opposite direction can retrace it. Skips persons deleted meanwhile.
      */
-    private navigateHistory(from: PersonId[], to: PersonId[]): void {
+    private navigateHistory(from: PersonId[], to: PersonId[]): Promise<void> {
         while (from.length > 0) {
             const target = from.pop()!;
             if (DataManager.getPerson(target)) {
                 if (this.focusPersonId) to.push(this.focusPersonId);
                 this.suppressHistoryPush = true;
                 try {
-                    this.setFocus(target);
+                    return this.setFocus(target);
                 } finally {
                     this.suppressHistoryPush = false;
                 }
-                return;
             }
         }
         this.updateNavButtons();
+        return Promise.resolve();
     }
 
-    /** Navigate to the previous focus (browser back). */
-    goBack(): void {
-        this.navigateHistory(this.focusHistory, this.focusForward);
+    /** Navigate to the previous focus (browser back); resolves once the view is drawn and placed. */
+    goBack(): Promise<void> {
+        return this.navigateHistory(this.focusHistory, this.focusForward);
     }
 
     /** Navigate to the next focus after going back (browser forward). */
@@ -2095,8 +2124,10 @@ class TreeRendererClass {
         const out = new Map<PersonId, EdgeView>();
         const mode = this.researchEdgeMode();
         if (mode === 'off') return out;
-        // Parents shown "linked in the view only" stand where the stub would: it comes back when they are unlinked.
-        const shownParents = new Set(this.viewLayer?.links.filter(l => l.kind === 'child').map(l => l.anchorId) ?? []);
+        // Parents shown "linked in the view only" stand where the stub would: it comes back when they are
+        // unlinked, or in a view that does not draw them (the Descendants of the person).
+        const shownParents = new Set(this.viewLayer?.links
+            .filter(l => l.kind === 'child' && l.islandIds.some(pid => this.positions.has(pid))).map(l => l.anchorId) ?? []);
         for (const id of this.positions.keys()) {
             const p = DataManager.getPerson(id);
             const edge = p?.research?.edge;
@@ -2104,7 +2135,7 @@ class TreeRendererClass {
             const parents = p.parentIds.length;
             if (edge.missing === 'parents' ? parents > 0 : edge.missing !== 'proof' && parents >= 2) continue;
             const live = p.refn ? ctx.research.get(p.refn) : undefined;
-            const view = edgeView(edge, mode, { working: !!live?.agent, waiting: !!live?.waiting, queued: !!live?.queued });
+            const view = edgeView(edge, mode, { working: !!live?.agent, waiting: !!live?.waiting, queued: !!live?.queued }, edgeNamedOptions(p));
             if (view) out.set(id, view);
         }
         return out;
@@ -2114,9 +2145,13 @@ class TreeRendererClass {
     private researchEdgeHtml(id: PersonId, v: EdgeView, all: boolean, motion: ReturnType<TreeRendererClass['researchEdgeMotion']>): string {
         const cls = ['research-edge', `edge-kind-${v.kind}`, `edge-${v.shape}`, `tone-${v.tone}`, `side-${v.side}`];
         if (edgeMoves(v, motion)) cls.push('is-moving');
+        // Parents named, not linked: two hollow circles on top of the open stub; a click pins its bubble.
+        if (v.named) cls.push('edge-named');
+        const dots = v.named ? '<span class="research-edge-dots"></span>' : '';
         const label = v.label && (all || v.kind !== 'proof') ? `<span class="research-edge-label">${this.escapeHtml(v.label)}</span>` : '';
-        return `<button type="button" class="${cls.join(' ')}" data-edge-person="${this.escapeHtml(id)}" aria-label="${this.escapeHtml(v.aria)}">`
-            + `<i class="research-edge-line" aria-hidden="true"></i>${label}</button>`;
+        const popup = v.named ? ' aria-haspopup="dialog"' : '';
+        return `<button type="button" class="${cls.join(' ')}" data-edge-person="${this.escapeHtml(id)}" aria-label="${this.escapeHtml(v.aria)}"${popup}>`
+            + `<i class="research-edge-line" aria-hidden="true">${dots}</i>${label}</button>`;
     }
 
     /** Where a person's stub ends, in canvas coordinates (null: not drawn). */
@@ -2126,7 +2161,7 @@ class TreeRendererClass {
         if (!v || !pos || v.kind === 'proof') return null;
         const w = this.config.cardWidth;
         const x = pos.x + (v.side === 'father' ? w * 40 / 188 : v.side === 'mother' ? w * 148 / 188 : w / 2);
-        const h = v.kind === 'muted' ? 14 : v.shape === 'closed' ? 18 : 26;
+        const h = v.kind === 'muted' ? 14 : v.shape === 'closed' ? 18 : v.named ? 37 : 26;
         return { x, y: pos.y - h };
     }
 
@@ -2134,7 +2169,11 @@ class TreeRendererClass {
      * Possible links of the edge to a family outside the tree (hypotheses
      * with a person to join; "all" only). The family drawn: a dashed curve
      * from the stub to its card, "possible link · H0001" in the middle. Not
-     * drawn: "+ family · 29" at the stub's end, which goes to that person.
+     * drawn: "+ family · 29" at the stub's end. Either pill opens a small
+     * menu — show the family linked in the view only, or go to it — where
+     * the view links are offered (src/ui/view-links-ui.ts), else the pill goes
+     * to that person. A person whose stub names the parents (`named`) has
+     * neither: the versions are in its bubble.
      */
     private renderEdgeLinks(svg: SVGSVGElement, canvas: HTMLElement): void {
         canvas.querySelectorAll('.edge-link-pill').forEach(el => el.remove());
@@ -2145,7 +2184,7 @@ class TreeRendererClass {
         for (const [id, v] of this.edgeViews) {
             const person = DataManager.getPerson(id);
             // The island's own edges point back to the tree: the tree's side draws the link.
-            if (!person || person.research?.island || v.kind === 'proof') continue;
+            if (!person || person.research?.island || v.kind === 'proof' || v.named) continue;
             const hypo = person.research?.edge?.hypos.find(h => h.join && byRefn.has(h.join));
             const tip = this.edgeStubTip(id);
             if (!hypo || !tip) continue;
@@ -2153,7 +2192,8 @@ class TreeRendererClass {
             // The family shown "linked in the view only" stands linked: no pill, no curve to it.
             if (this.viewLayer?.ghostOf.has(joinId)) continue;
             const target = this.positions.get(joinId);
-            const pill = document.createElement(target ? 'div' : 'button');
+            const pill = document.createElement('button');
+            pill.type = 'button';
             if (target) {
                 const w = this.config.cardWidth, h = this.cardHeightOf(joinId);
                 // Into the island card's nearest side (its top when it is above).
@@ -2174,16 +2214,89 @@ class TreeRendererClass {
             } else {
                 if (!hypo.island) continue;
                 pill.className = 'edge-link-pill edge-link-pill--family';
-                (pill as HTMLButtonElement).type = 'button';
                 pill.textContent = re.familyPill(hypo.island);
                 pill.setAttribute('aria-label', re.familyPillSr(hypo.island));
                 pill.style.left = `${tip.x}px`;
                 pill.style.top = `${tip.y - 4}px`;
-                pill.onclick = (e) => { e.stopPropagation(); this.setFocus(joinId); };
             }
             pill.dataset.edgePerson = id;
+            pill.dataset.edgeHypo = hypo.id;
             canvas.appendChild(pill);
+            UI.bindEdgeLinkPill(id, pill, joinId, hypo.id);
         }
+    }
+
+    /**
+     * The family's own way back (a family outside the tree in view, the
+     * research edge "all"): under the caption of its top couple, once per
+     * family, "Show linked to the tree" with the version it would be linked
+     * by (several: a menu of them, src/ui/view-links-ui.ts). Not drawn while
+     * the family is shown linked (it stands in the tree then).
+     */
+    private renderViewLinkIslands(canvas: HTMLElement): void {
+        canvas.querySelectorAll('.view-link-island').forEach(el => el.remove());
+        if (this.researchEdgeMode() !== 'all') return;
+        const data = DataManager.getData();
+        const islandIds = [...this.positions.keys()].filter(id => {
+            const p = data.persons[id];
+            return !!p?.research?.island && !p.isPlaceholder && !this.viewLayer?.ghostIds.has(id);
+        });
+        if (islandIds.length === 0 || !this.viewLinksOffered()) return;
+        const ctx = viewLinkContext(data);
+        const candidates = viewLinkCandidates(data, ctx).filter(c => c.state === 'draw');
+        if (candidates.length === 0) return;
+        const shownGroups = new Set((this.viewLayer?.links ?? []).flatMap(l => l.islandIds.map(id => ctx.group.get(id))));
+        const byGroup = new Map<number, PersonId[]>();
+        for (const id of islandIds) {
+            const g = ctx.group.get(id);
+            if (g === undefined || shownGroups.has(g)) continue;
+            const list = byGroup.get(g) ?? [];
+            list.push(id);
+            byGroup.set(g, list);
+        }
+        const w = this.config.cardWidth;
+        const v = strings.viewLinks;
+        for (const [g, ids] of byGroup) {
+            const offers = candidates.filter(c => c.islandIds.some(id => ctx.group.get(id) === g));
+            if (offers.length === 0) continue;
+            // The top row of the family, its leftmost card and that card's partner beside it.
+            const top = Math.min(...ids.map(id => this.positions.get(id)!.y));
+            const row = ids.filter(id => this.positions.get(id)!.y === top).sort((a, b) => this.positions.get(a)!.x - this.positions.get(b)!.x);
+            const first = row[0];
+            const partner = row.find(id => id !== first && Object.values(data.partnerships ?? {}).some(u => !!u
+                && ((u.person1Id === first && u.person2Id === id) || (u.person2Id === first && u.person1Id === id))));
+            const couple = partner ? [first, partner] : [first];
+            const xs = couple.map(id => this.positions.get(id)!.x);
+            const left = Math.min(...xs), right = Math.max(...xs) + w;
+            const bottom = Math.max(...couple.map(id => this.positions.get(id)!.y + this.cardHeightOf(id)));
+            const wrap = document.createElement('div');
+            wrap.className = 'view-link-island';
+            wrap.dataset.islandOf = first;
+            wrap.style.left = `${(left + right) / 2}px`;
+            wrap.style.top = `${bottom}px`;
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'view-link-island-btn';
+            btn.innerHTML = `<span class="view-link-icon view-link-icon--12" aria-hidden="true"></span><span>${this.escapeHtml(v.showFromIsland)}</span>`;
+            const sub = document.createElement('div');
+            sub.className = 'view-link-island-sub';
+            sub.textContent = offers.length === 1 ? this.viewLinkIslandTo(offers[0]) : offers.map(o => `${o.hypo} ${o.variant}`).join(' · ');
+            sub.id = `view-link-island-sub-${g}`;
+            btn.setAttribute('aria-describedby', sub.id);
+            if (offers.length > 1) btn.setAttribute('aria-haspopup', 'menu');
+            wrap.append(btn, sub);
+            canvas.appendChild(wrap);
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                UI.showViewLinkFromIsland(btn, offers);
+            };
+        }
+    }
+
+    /** "H0022 B · to Václav Horák (1818)": what the family's button would link it to. */
+    private viewLinkIslandTo(c: ViewLinkCandidate): string {
+        const anchor = DataManager.getPerson(c.anchorId);
+        return strings.viewLinks.islandTo(c.hypo, c.variant, anchor ? shownName(anchor) : '?', yearOf(anchor?.birthDate));
     }
 
     /** What every card's signals are evaluated against (once per render). */
