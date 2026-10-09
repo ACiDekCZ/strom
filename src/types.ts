@@ -620,6 +620,12 @@ export interface ResearchHypothesisVariant {
     title?: string;
     /** What it would connect (3 _LINK): none when it names nobody in the file. */
     links: ResearchVariantLink[];
+    /**
+     * What it claims that the tree records already (3 _INTREE, open
+     * hypotheses only): `child` of the family it is a child of, `partners`,
+     * `siblings`. Nothing to draw; a link is never both here and in `links`.
+     */
+    inTree?: ResearchVariantLink[];
     /** The sources it names (3 SOUR), catalog ids. */
     sourceIds?: string[];
 }

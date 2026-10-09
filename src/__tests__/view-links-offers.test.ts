@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { loadHypothesisLinksTree } from './helpers/hypothesis-links-fixture.js';
+import { loadHypothesisLinksTree, HYPOTHESIS_INTREE_GED } from './helpers/hypothesis-links-fixture.js';
 import { ViewLink, shownViewLink, showViewLink, viewLinkOffers, unlinkViewLink } from '../view-links.js';
 import { edgeNamedHypothesis, edgeNamedOptions, edgeView } from '../research-edge.js';
 import { setLanguage } from '../strings.js';
@@ -25,6 +25,19 @@ describe('viewLinkOffers', () => {
         expect(b).toMatchObject({ state: { state: 'draw' }, people: 5, textOnly: false, shown: false });
         expect(c.choice).toEqual({ hypo: 'H0022', variant: 'C', kind: 'child', anchorId: id('P0010'), islandIds: [id('P0130')] });
         expect(c).toMatchObject({ state: { state: 'draw' }, people: 1 });
+    });
+
+    it('a variant the tree records already (_INTREE) has nothing to draw; beside a drawable link it offers the link', () => {
+        const { data, id } = loadHypothesisLinksTree(HYPOTHESIS_INTREE_GED);
+        const [a, b, c] = viewLinkOffers(data, [], true, 'H0022');
+        expect(a).toMatchObject({ variant: 'A', choice: null, state: null, people: 0, textOnly: false, inTree: true });
+        expect(b.choice).toEqual({ hypo: 'H0022', variant: 'B', kind: 'child', anchorId: id('P0010'), islandIds: [id('P0125'), id('P0126')] });
+        expect(b).toMatchObject({ state: { state: 'draw' }, people: 5, inTree: false });
+        expect(c).toMatchObject({ inTree: false });
+        // only text beside it (siblings): what the tree records says more
+        expect(viewLinkOffers(data, [], true, 'H0025').map(o => [o.variant, o.textOnly, o.inTree])).toEqual([['A', true, false], ['B', true, true]]);
+        // without the lines nothing is in the tree
+        expect(viewLinkOffers(loadHypothesisLinksTree().data, [], true, 'H0022').some(o => o.inTree)).toBe(false);
     });
 
     it('a variant naming people only as text (same, siblings) is text only', () => {

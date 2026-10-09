@@ -191,11 +191,15 @@ interface RawResearchValue {
     raw?: string;
 }
 
-/** 2 _VAR under a hypothesis: its letter, claim, links (pointers as written) and sources. */
+/** 3 _LINK / 3 _INTREE under a variant: its kind and pointers, as written. */
+interface RawResearchVariantLink { kind: string; persons: string[]; family: string[]; parents: string[] }
+
+/** 2 _VAR under a hypothesis: its letter, claim, links and what the tree records already (pointers as written), sources. */
 interface RawResearchVariant {
     label: string;
     title: string;
-    links: { kind: string; persons: string[]; family: string[]; parents: string[] }[];
+    links: RawResearchVariantLink[];
+    inTree: RawResearchVariantLink[];
     sourceRefs: string[];
 }
 
@@ -322,6 +326,9 @@ function researchVariantLabel(value: string): string | undefined {
  * a repeated letter (the first stays), a link of an unknown kind, a link to a
  * record not in the file or without the research's person number, and a link
  * that names too few people (a child without parents, a couple of one).
+ * What the tree records already (3 _INTREE) the same way, and stricter: a
+ * child only with its family (4 _FAM), a couple's family (when named) of
+ * just these two, siblings' family (when named) in the file.
  */
 function researchVariants(raw: RawResearchVariant[], mapRefs: (refs: string[]) => string[], refs?: ResearchRefs): ResearchHypothesisVariant[] {
     const out: ResearchHypothesisVariant[] = [];
@@ -362,9 +369,34 @@ function researchVariants(raw: RawResearchVariant[], mapRefs: (refs: string[]) =
                 links.push({ kind: l.kind, persons });
             }
         }
+        const inTree: ResearchVariantLink[] = [];
+        for (const l of v.inTree) {
+            if (l.family.length > 1) continue;
+            const partners = l.family.length === 1 ? refs?.familyPartners(l.family[0]) : undefined;
+            if (l.family.length === 1 && !partners) continue;
+            if (l.kind === 'child') {
+                if (l.persons.length !== 1 || !partners) continue;
+                const child = person(l.persons[0]);
+                const parents = people(partners);
+                if (!child || !parents || parents.length < 1 || parents.length > 2 || parents.includes(child)) continue;
+                inTree.push({ kind: 'child', child, parents, family: true });
+            } else if (l.kind === 'partners' || l.kind === 'siblings') {
+                const persons = people(l.persons);
+                if (!persons || persons.length < 2 || (l.kind === 'partners' && persons.length > 2)) continue;
+                if (l.kind === 'partners' && partners) {
+                    const couple = people(partners);
+                    if (!couple || couple.length !== 2 || !couple.every(x => persons.includes(x))) continue;
+                }
+                inTree.push({ kind: l.kind, persons });
+            }
+        }
         const title = v.title.trim();
         const sourceIds = mapRefs(v.sourceRefs);
-        out.push({ id, ...(title ? { title } : {}), links, ...(sourceIds.length > 0 ? { sourceIds } : {}) });
+        out.push({
+            id, ...(title ? { title } : {}), links,
+            ...(inTree.length > 0 ? { inTree } : {}),
+            ...(sourceIds.length > 0 ? { sourceIds } : {}),
+        });
     }
     return out;
 }
@@ -2292,7 +2324,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                     }
                 } else if (open.kind === 'hypo') {
                     const h = research.hypotheses[research.hypotheses.length - 1];
-                    // 2 _VAR > 3 TITL (4 CONC/CONT) / 3 _LINK > 4 _PERS, _FAM, _PAR / 3 SOUR
+                    // 2 _VAR > 3 TITL (4 CONC/CONT) / 3 _LINK, _INTREE > 4 _PERS, _FAM, _PAR / 3 SOUR
                     const variant = open.sub === '_VAR' ? h.variants[h.variants.length - 1] : undefined;
                     if (level === 2) {
                         open.sub = tag;
@@ -2301,18 +2333,20 @@ export function parseGedcom(content: string): ParsedGedcom {
                         else if (tag === 'NOTE') h.note = h.note ? `${h.note}\n${value}` : value;
                         else if (tag === 'STAT') h.stat = value;
                         else if (tag === '_CHOSEN') h.chosen = value;
-                        else if (tag === '_VAR') h.variants.push({ label: value, title: '', links: [], sourceRefs: [] });
+                        else if (tag === '_VAR') h.variants.push({ label: value, title: '', links: [], inTree: [], sourceRefs: [] });
                     } else if (level === 3 && variant) {
                         open.sub3 = tag;
                         if (tag === 'TITL') variant.title = value;
                         else if (tag === '_LINK') variant.links.push({ kind: value.trim().toLowerCase(), persons: [], family: [], parents: [] });
+                        else if (tag === '_INTREE') variant.inTree.push({ kind: value.trim().toLowerCase(), persons: [], family: [], parents: [] });
                         else if (tag === 'SOUR' && GED_POINTER.test(value)) variant.sourceRefs.push(value);
                     } else if (level === 3 && (tag === 'CONC' || tag === 'CONT')) {
                         const glue = tag === 'CONT' ? '\n' + value : value;
                         if (open.sub === 'TITL') h.title += tag === 'CONT' ? ' ' + value : value;
                         else if (open.sub === 'NOTE') h.note += glue;
                     } else if (level === 4 && variant) {
-                        const link = open.sub3 === '_LINK' ? variant.links[variant.links.length - 1] : undefined;
+                        const link = open.sub3 === '_LINK' ? variant.links[variant.links.length - 1]
+                            : open.sub3 === '_INTREE' ? variant.inTree[variant.inTree.length - 1] : undefined;
                         if (open.sub3 === 'TITL' && (tag === 'CONC' || tag === 'CONT')) variant.title += tag === 'CONT' ? ' ' + value : value;
                         else if (link && GED_POINTER.test(value)) {
                             if (tag === '_PERS') link.persons.push(value);

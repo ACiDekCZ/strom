@@ -1,0 +1,435 @@
+0 HEAD
+1 SOUR STROM_RESEARCH
+2 VERS 1.14.0
+1 GEDC
+2 VERS 5.5.1
+1 CHAR UTF-8
+1 DATE 9 OCT 2026
+1 _STROM_TREE 7d3f2a10-4b6c-4e8a-9f21-5c0d8e3b1a77
+1 _STROM_HEAD 4be1c0a9d2f3e4b5a6c7d8e9f0a1b2c3d4e5f6a7
+1 _STROM_ASOF 2026-10-09
+1 NOTE Výzkum Horákových
+0 @S0001@ SOUR
+1 TITL Oddací matrika Lhota 1850–1870
+1 REFN S0001
+0 @S0002@ SOUR
+1 TITL Křestní matrika Habry 1810–1830
+1 REFN S0002
+0 @S0003@ SOUR
+1 TITL Křestní matrika Lhota 1810–1830
+1 REFN S0003
+0 @P0001@ INDI
+1 NAME Karel /Horák/
+1 SEX M
+1 REFN P0001
+2 TYPE strom-research
+1 BIRT
+2 DATE 1860
+2 PLAC Lhota
+1 FAMC @F0001@
+1 _STROM_HYPO H0025
+2 TITL Je Karel z Lhoty tentýž jako Karel ze sčítání?
+2 STAT open
+2 NOTE A: tentýž člověk
+3 CONT B: bratr Karla ze sčítání
+2 _VAR A
+3 TITL tentýž člověk
+3 _LINK same
+4 _PERS @P0001@
+4 _PERS @P0141@
+2 _VAR B
+3 TITL bratr Karla ze sčítání
+3 _LINK siblings
+4 _PERS @P0001@
+4 _PERS @P0141@
+3 _INTREE child
+4 _PERS @P0001@
+4 _FAM @F0001@
+1 _STROM_HYPO H0027
+2 TITL Byl Karel synem Jana z Podhradí?
+2 STAT abandoned
+2 NOTE A: syn Jana z Podhradí
+2 _VAR A
+3 TITL syn Jana z Podhradí
+3 _LINK child
+4 _PERS @P0001@
+4 _PAR @P0999@
+0 @P0010@ INDI
+1 NAME Václav /Horák/
+1 SEX M
+1 REFN P0010
+2 TYPE strom-research
+1 BIRT
+2 DATE 28 NOV 1818
+2 PLAC Lhota
+1 FAMS @F0001@
+1 _STROM_HYPO H0022
+2 TITL Odkud pocházel Václav Horák, ženich z roku 1857?
+2 STAT open
+2 NOTE A: narozen 1818 v Habrech čp. 68, syn Šebestiána(?)
+3 CONT B: syn Jakuba Horáka a Marie Pokorné (sňatek S0001)
+3 CONT C: z Nové Vsi, syn Jana Horáka
+2 _VAR A
+3 TITL narozen 1818 v Habrech čp. 68, syn Šebestiána(?)
+3 _INTREE partners
+4 _PERS @P0010@
+4 _PERS @P0011@
+4 _FAM @F0001@
+3 SOUR @S0002@
+2 _VAR B
+3 TITL syn Jakuba Horáka a Marie Pokorné (sňatek S0001), jak je jmenuje oddací zápis ženicha z roku 1857 v Lhotě; křest v Lho
+4 CONC tě 1818 chybí, rodiče žili v Lhotě čp. 12 od roku 1815 podle sčítání a pozemkové knihy, otec byl podle zápis
+4 CONC u domkář
+3 _LINK child
+4 _PERS @P0010@
+4 _FAM @F0042@
+3 _INTREE partners
+4 _PERS @P0010@
+4 _PERS @P0011@
+4 _FAM @F0001@
+3 SOUR @S0001@
+3 SOUR @S0003@
+2 _VAR C
+3 TITL z Nové Vsi, syn Jana Horáka
+3 _LINK child
+4 _PERS @P0010@
+4 _PAR @P0130@
+1 _STROM_EDGE parents
+2 _SCOPE in
+2 _RESEARCH G0001
+2 _GEN 2
+2 _END named
+2 _NEXT decide
+2 _EST 1818
+3 PLAC Lhota
+2 DATE FROM 1815 TO 1821
+2 _HYPO H0022
+3 _JOIN P0126
+3 _JOIN P0125
+3 _JOIN P0127
+3 _JOIN P0128
+3 _JOIN P0129
+3 _JOIN P0130
+3 _VAR B
+3 _VAR C
+3 _ISLAND 5
+3 _HELD 0
+0 @P0011@ INDI
+1 NAME Rozálie /Dvořáčková/
+1 SEX F
+1 REFN P0011
+2 TYPE strom-research
+1 BIRT
+2 DATE 1832
+1 FAMS @F0001@
+1 FAMC @F0002@
+1 _STROM_HYPO H0024
+2 TITL Byla Rozálie před sňatkem s Václavem vdaná?
+2 STAT open
+2 NOTE A: vdova po Martinu Novotném
+3 CONT B: svobodná
+2 _VAR A
+3 TITL vdova po Martinu Novotném
+3 _LINK partners
+4 _PERS @P0011@
+4 _PERS @P0140@
+2 _VAR B
+3 TITL svobodná
+1 _STROM_HYPO H0026
+2 TITL Kdo byli rodiče Rozálie?
+2 STAT decided
+2 _CHOSEN B
+2 NOTE A: dcera Františka Dvořáčka z Habrů
+3 CONT B: dcera Antonína Dvořáčka a Ludmily
+2 _VAR A
+3 TITL dcera Františka Dvořáčka z Habrů
+2 _VAR B
+3 TITL dcera Antonína Dvořáčka a Ludmily
+3 _LINK child
+4 _PERS @P0011@
+4 _FAM @F0002@
+3 SOUR @S0001@
+0 @P0012@ INDI
+1 NAME Antonín /Dvořáček/
+1 SEX M
+1 REFN P0012
+2 TYPE strom-research
+1 FAMS @F0002@
+1 _STROM_HYPO H0026
+2 TITL Kdo byli rodiče Rozálie?
+2 STAT decided
+2 _CHOSEN B
+2 NOTE A: dcera Františka Dvořáčka z Habrů
+3 CONT B: dcera Antonína Dvořáčka a Ludmily
+2 _VAR A
+3 TITL dcera Františka Dvořáčka z Habrů
+2 _VAR B
+3 TITL dcera Antonína Dvořáčka a Ludmily
+3 _LINK child
+4 _PERS @P0011@
+4 _FAM @F0002@
+3 SOUR @S0001@
+1 _STROM_HYPO H0028
+2 TITL Byl Antonín Dvořáček synem Jakuba Horáka?
+2 STAT open
+2 NOTE A: syn Jakuba Horáka a Marie Pokorné
+3 CONT B: z Habrů
+2 _VAR A
+3 TITL syn Jakuba Horáka a Marie Pokorné
+3 _LINK child
+4 _PERS @P0012@
+4 _FAM @F0042@
+2 _VAR B
+3 TITL z Habrů
+0 @P0013@ INDI
+1 NAME Ludmila /Dvořáčková/
+1 SEX F
+1 REFN P0013
+2 TYPE strom-research
+1 FAMS @F0002@
+0 @P0125@ INDI
+1 NAME Jakub /Horák/
+1 SEX M
+1 REFN P0125
+2 TYPE strom-research
+1 BIRT
+2 DATE 1790
+1 FAMS @F0042@
+1 FAMC @F0043@
+1 _STROM_HYPO H0022
+2 TITL Odkud pocházel Václav Horák, ženich z roku 1857?
+2 STAT open
+2 NOTE A: narozen 1818 v Habrech čp. 68, syn Šebestiána(?)
+3 CONT B: syn Jakuba Horáka a Marie Pokorné (sňatek S0001)
+3 CONT C: z Nové Vsi, syn Jana Horáka
+2 _VAR A
+3 TITL narozen 1818 v Habrech čp. 68, syn Šebestiána(?)
+3 _INTREE partners
+4 _PERS @P0010@
+4 _PERS @P0011@
+4 _FAM @F0001@
+3 SOUR @S0002@
+2 _VAR B
+3 TITL syn Jakuba Horáka a Marie Pokorné (sňatek S0001), jak je jmenuje oddací zápis ženicha z roku 1857 v Lhotě; křest v Lho
+4 CONC tě 1818 chybí, rodiče žili v Lhotě čp. 12 od roku 1815 podle sčítání a pozemkové knihy, otec byl podle zápis
+4 CONC u domkář
+3 _LINK child
+4 _PERS @P0010@
+4 _FAM @F0042@
+3 _INTREE partners
+4 _PERS @P0010@
+4 _PERS @P0011@
+4 _FAM @F0001@
+3 SOUR @S0001@
+3 SOUR @S0003@
+2 _VAR C
+3 TITL z Nové Vsi, syn Jana Horáka
+3 _LINK child
+4 _PERS @P0010@
+4 _PAR @P0130@
+1 _STROM_HYPO H0028
+2 TITL Byl Antonín Dvořáček synem Jakuba Horáka?
+2 STAT open
+2 NOTE A: syn Jakuba Horáka a Marie Pokorné
+3 CONT B: z Habrů
+2 _VAR A
+3 TITL syn Jakuba Horáka a Marie Pokorné
+3 _LINK child
+4 _PERS @P0012@
+4 _FAM @F0042@
+2 _VAR B
+3 TITL z Habrů
+1 _STROM_ISLAND 5
+2 _HYPO H0022
+3 _JOIN P0010
+3 _VAR B
+2 _HYPO H0028
+3 _JOIN P0012
+3 _VAR A
+2 _HELD 0
+0 @P0126@ INDI
+1 NAME Marie /Pokorná/
+1 SEX F
+1 REFN P0126
+2 TYPE strom-research
+1 BIRT
+2 DATE 1794
+1 FAMS @F0042@
+1 _STROM_HYPO H0028
+2 TITL Byl Antonín Dvořáček synem Jakuba Horáka?
+2 STAT open
+2 NOTE A: syn Jakuba Horáka a Marie Pokorné
+3 CONT B: z Habrů
+2 _VAR A
+3 TITL syn Jakuba Horáka a Marie Pokorné
+3 _LINK child
+4 _PERS @P0012@
+4 _FAM @F0042@
+2 _VAR B
+3 TITL z Habrů
+1 _STROM_ISLAND 5
+2 _HYPO H0022
+3 _JOIN P0010
+3 _VAR B
+2 _HYPO H0028
+3 _JOIN P0012
+3 _VAR A
+2 _HELD 0
+0 @P0127@ INDI
+1 NAME Josef /Horák/
+1 SEX M
+1 REFN P0127
+2 TYPE strom-research
+1 BIRT
+2 DATE 1816
+1 FAMC @F0042@
+1 _STROM_ISLAND 5
+2 _HYPO H0022
+3 _JOIN P0010
+3 _VAR B
+2 _HYPO H0028
+3 _JOIN P0012
+3 _VAR A
+2 _HELD 0
+0 @P0128@ INDI
+1 NAME Tomáš /Horák/
+1 SEX M
+1 REFN P0128
+2 TYPE strom-research
+1 FAMS @F0043@
+1 _STROM_HYPO H0030
+2 TITL Kdo byl otec Tomáše Horáka?
+2 STAT open
+2 NOTE A: syn Vojtěcha Horáka z Nové Vsi
+2 _VAR A
+3 TITL syn Vojtěcha Horáka z Nové Vsi
+3 _LINK child
+4 _PERS @P0128@
+4 _PAR @P0150@
+1 _STROM_ISLAND 5
+2 _HYPO H0022
+3 _JOIN P0010
+3 _VAR B
+2 _HYPO H0028
+3 _JOIN P0012
+3 _VAR A
+2 _HELD 0
+0 @P0129@ INDI
+1 NAME Anna /Horáková/
+1 SEX F
+1 REFN P0129
+2 TYPE strom-research
+1 FAMS @F0043@
+1 _STROM_ISLAND 5
+2 _HYPO H0022
+3 _JOIN P0010
+3 _VAR B
+2 _HYPO H0028
+3 _JOIN P0012
+3 _VAR A
+2 _HELD 0
+0 @P0130@ INDI
+1 NAME Jan /Horák/
+1 SEX M
+1 REFN P0130
+2 TYPE strom-research
+1 BIRT
+2 DATE 1785
+2 PLAC Nová Ves
+1 _STROM_HYPO H0022
+2 TITL Odkud pocházel Václav Horák, ženich z roku 1857?
+2 STAT open
+2 NOTE A: narozen 1818 v Habrech čp. 68, syn Šebestiána(?)
+3 CONT B: syn Jakuba Horáka a Marie Pokorné (sňatek S0001)
+3 CONT C: z Nové Vsi, syn Jana Horáka
+2 _VAR A
+3 TITL narozen 1818 v Habrech čp. 68, syn Šebestiána(?)
+3 _INTREE partners
+4 _PERS @P0010@
+4 _PERS @P0011@
+4 _FAM @F0001@
+3 SOUR @S0002@
+2 _VAR B
+3 TITL syn Jakuba Horáka a Marie Pokorné (sňatek S0001), jak je jmenuje oddací zápis ženicha z roku 1857 v Lhotě; křest v Lho
+4 CONC tě 1818 chybí, rodiče žili v Lhotě čp. 12 od roku 1815 podle sčítání a pozemkové knihy, otec byl podle zápis
+4 CONC u domkář
+3 _LINK child
+4 _PERS @P0010@
+4 _FAM @F0042@
+3 _INTREE partners
+4 _PERS @P0010@
+4 _PERS @P0011@
+4 _FAM @F0001@
+3 SOUR @S0001@
+3 SOUR @S0003@
+2 _VAR C
+3 TITL z Nové Vsi, syn Jana Horáka
+3 _LINK child
+4 _PERS @P0010@
+4 _PAR @P0130@
+1 _STROM_ISLAND 1
+2 _HYPO H0022
+3 _JOIN P0010
+3 _VAR C
+2 _HELD 0
+0 @P0140@ INDI
+1 NAME Martin /Novotný/
+1 SEX M
+1 REFN P0140
+2 TYPE strom-research
+1 _STROM_ISLAND 1
+2 _HYPO H0024
+3 _JOIN P0011
+3 _VAR A
+0 @P0141@ INDI
+1 NAME Karel /Horák/
+1 SEX M
+1 REFN P0141
+2 TYPE strom-research
+1 BIRT
+2 DATE 1861
+1 _STROM_ISLAND 1
+2 _HYPO H0025
+3 _JOIN P0001
+3 _VAR A
+3 _VAR B
+0 @P0150@ INDI
+1 NAME Vojtěch /Horák/
+1 SEX M
+1 REFN P0150
+2 TYPE strom-research
+1 BIRT
+2 DATE 1735
+2 PLAC Nová Ves
+1 _STROM_HYPO H0030
+2 TITL Kdo byl otec Tomáše Horáka?
+2 STAT open
+2 NOTE A: syn Vojtěcha Horáka z Nové Vsi
+2 _VAR A
+3 TITL syn Vojtěcha Horáka z Nové Vsi
+3 _LINK child
+4 _PERS @P0128@
+4 _PAR @P0150@
+1 _STROM_ISLAND 1
+2 _HELD 0
+0 @F0001@ FAM
+1 HUSB @P0010@
+1 WIFE @P0011@
+1 CHIL @P0001@
+1 MARR
+2 DATE 12 FEB 1857
+2 PLAC Lhota
+2 SOUR @S0001@
+0 @F0002@ FAM
+1 HUSB @P0012@
+1 WIFE @P0013@
+1 CHIL @P0011@
+0 @F0042@ FAM
+1 HUSB @P0125@
+1 WIFE @P0126@
+1 CHIL @P0127@
+0 @F0043@ FAM
+1 HUSB @P0128@
+1 WIFE @P0129@
+1 CHIL @P0125@
+0 TRLR

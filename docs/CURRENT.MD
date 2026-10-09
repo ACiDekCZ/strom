@@ -648,6 +648,14 @@ a focus depth at its maximum follows the shown generations, nothing is
 written into the tree, no undo step). A `named` edge (`_END named`) draws an
 open stub with two hollow circles and "named · N options"; pointing shows its
 bubble, a click pins it with the hypothesis's versions and "Show as linked".
+Each version (there and in "What research knows") says what it would bring:
+"+ n people" for a drawable `_LINK`; "The tree records this already" for a
+version with `3 _INTREE` (child / partners / siblings the tree has, open
+hypotheses only) and no drawable link — nothing to draw, no switch; "Text
+only, cannot be shown." for `same` / `siblings`; else "link not recorded
+yet". A version with both a drawable link and `_INTREE` offers the link. A
+shown record whose version now carries its link as `_INTREE` instead of
+`_LINK` resolves `real`.
 "+ family" and the curve's pill open a small menu (show it linked / go to the
 family). In the family's own view the top couple carries "Show linked to the
 tree" (`renderViewLinkIslands`), which shows the link and goes back to the

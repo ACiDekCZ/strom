@@ -22,6 +22,14 @@ import type { PersonId, StromData } from '../../types.js';
 
 export const HYPOTHESIS_LINKS_GED = readFileSync(new URL('../../../e2e/fixtures/research-hypothesis-links.ged', import.meta.url), 'utf8');
 
+/**
+ * The same file with what variants claim that the tree records already
+ * (e2e/fixtures/research-hypothesis-intree.ged): H0022 A and B say Václav and
+ * Rozálie are a couple (F0001, 3 _INTREE partners; B beside its link), H0025
+ * B says Karel is their son (3 _INTREE child, beside its siblings link).
+ */
+export const HYPOTHESIS_INTREE_GED = readFileSync(new URL('../../../e2e/fixtures/research-hypothesis-intree.ged', import.meta.url), 'utf8');
+
 /** The tree read from the fixture (or from `text`, a changed copy of it) and its people by the research's numbers. */
 export function loadHypothesisLinksTree(text: string = HYPOTHESIS_LINKS_GED): { data: StromData; id: (refn: string) => PersonId } {
     const data = convertToStrom(parseGedcom(text)).data;

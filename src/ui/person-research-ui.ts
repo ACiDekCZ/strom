@@ -315,7 +315,8 @@ export const personResearchMethods = uiModule({
      * "Show" with a switch: the versions of one hypothesis act as a radio
      * group that can have none (switching one on switches the shown one
      * off; off unlinks it). The shown version: a ghost's tint, "shown · +
-     * 5 people · Find". No switch for a version without a link, one only in
+     * 5 people · Find". No switch for a version without a link, one the
+     * tree records already ("The tree records this already"), one only in
      * words (same, siblings: "Text only, cannot be shown.") or a decided or
      * abandoned hypothesis. Under the box a row for its actions, empty in
      * phase 1 (phase 2: "Link for real" at the shown version).
@@ -341,6 +342,7 @@ export const personResearchMethods = uiModule({
                         + `<button type="button" class="link-button prv-find" data-variant="${esc(variant.id)}" aria-label="${esc(v.findAria(this.viewLinkWho(o.choice)))}">${esc(v.find)}</button>`;
                 } else {
                     const what = o?.choice ? v.people(o.people)
+                        : (o ? o.inTree : !!variant.inTree?.length) ? v.inTree
                         : o?.textOnly || variant.links.some(l => l.kind === 'same' || l.kind === 'siblings') ? v.textOnly
                         : v.notInResearch;
                     const state = !open || !o?.state ? ''

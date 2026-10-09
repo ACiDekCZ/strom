@@ -17,6 +17,9 @@ import { openApp, card } from './helpers.js';
 
 const GED = readFileSync('e2e/fixtures/research-hypothesis-links.ged', 'utf-8');
 
+/** The same file with what variants claim that the tree records already (3 _INTREE: H0022 A and B, H0025 B). */
+const GED_INTREE = readFileSync('e2e/fixtures/research-hypothesis-intree.ged', 'utf-8');
+
 /** The same tree without anything a variant would connect: the feature does not show. */
 const GED_PLAIN = GED.split('\n').filter(l => !/^3 _LINK\b|^4 _(PERS|FAM|PAR) |^3 _VAR |^2 _VAR /.test(l)).join('\n');
 
@@ -519,6 +522,25 @@ test.describe('linked in the view only: What research knows → Hypotheses', () 
         await expect(decided.locator('.view-link-switch')).toHaveCount(0);
         // The open one beside it (H0024: partners) has its switch.
         await expect(variant(dialog, 'H0024', 'A').locator('.view-link-switch')).toHaveCount(1);
+    });
+
+    test('a version the tree records already (_INTREE): "The tree records this already", no switch; beside a link it keeps its switch', async ({ page }) => {
+        await setup(page, GED_INTREE);
+        let dialog = await openResearchDialog(page, 'P0010');
+        await expect(hypo(dialog, 'H0022').locator('.person-research-hypo-meta')).toHaveText('H0022 · open · 3 versions');
+        await expect(variant(dialog, 'H0022', 'A').locator('.prv-meta')).toHaveText('The tree records this already');
+        await expect(variant(dialog, 'H0022', 'A').locator('.view-link-switch')).toHaveCount(0);
+        await expect(variant(dialog, 'H0022', 'B').locator('.prv-meta')).toHaveText('+ 5 people');
+        await expect(variant(dialog, 'H0022', 'B').locator('.view-link-switch')).toHaveCount(1);
+        await page.keyboard.press('Escape');
+        // Beside a link only in words (siblings) what the tree records says more.
+        dialog = await openResearchDialog(page, 'P0001');
+        await expect(hypo(dialog, 'H0025').locator('.prv-meta')).toHaveText(['Text only, cannot be shown.', 'The tree records this already']);
+        await expect(hypo(dialog, 'H0025').locator('.view-link-switch')).toHaveCount(0);
+        await page.keyboard.press('Escape');
+        await page.evaluate(() => window.Strom.UI.setLanguage('cs' as never));
+        dialog = await openResearchDialog(page, 'P0010');
+        await expect(variant(dialog, 'H0022', 'A').locator('.prv-meta')).toHaveText('Tak to strom už vede');
     });
 
     test('the card’s signal counts open hypotheses only (decided and abandoned no longer)', async ({ page }) => {

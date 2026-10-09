@@ -237,6 +237,26 @@ describe('resolving a record against the data (every row of the table)', () => {
         expect(state(TREE, link(decided))).toEqual({ state: 'real' });
     });
 
+    it('real: the variant now says the tree records this very link (_INTREE instead of _LINK, still open)', () => {
+        const recorded = loadHypothesisLinksTree(HYPOTHESIS_LINKS_GED
+            .split('3 _LINK child\n4 _PERS @P0010@\n4 _FAM @F0042@').join('3 _INTREE child\n4 _PERS @P0010@\n4 _FAM @F0042@')
+            .split('3 _LINK partners\n4 _PERS @P0011@\n4 _PERS @P0140@').join('3 _INTREE partners\n4 _PERS @P0011@\n4 _PERS @P0140@'));
+        const r = recorded.id;
+        const b = link({ ...B, anchorId: r('P0010'), islandIds: [r('P0125'), r('P0126')] });
+        expect(state(recorded.data, b)).toEqual({ state: 'real' });
+        // a couple whichever side was shown as the partner
+        expect(state(recorded.data, link({ ...PARTNER, anchorId: r('P0011'), islandIds: [r('P0140')] }))).toEqual({ state: 'real' });
+        expect(state(recorded.data, link({ ...PARTNER, anchorId: r('P0140'), islandIds: [r('P0011')] }))).toEqual({ state: 'real' });
+        // another link recorded, or these people as another kind: still no link
+        expect(state(recorded.data, link({ ...b, islandIds: [r('P0130')], variant: 'B' }))).toEqual({ state: 'invalid', reason: 'noLink' });
+        expect(state(recorded.data, link({ ...PARTNER, kind: 'child', anchorId: r('P0011'), islandIds: [r('P0140')] })))
+            .toEqual({ state: 'invalid', reason: 'noLink' });
+        // the stored record not changed by it; abandoned meanwhile: cancelled as before
+        const abandoned = structuredClone(recorded.data);
+        for (const p of Object.values(abandoned.persons)) for (const h of p.research?.hypotheses ?? []) if (h.id === 'H0022') h.status = 'abandoned';
+        expect(state(abandoned, b)).toEqual({ state: 'invalid', reason: 'cancelled' });
+    });
+
     it('decidedOther, cancelled, gone', () => {
         expect(state(TREE, link({ hypo: 'H0026', variant: 'A', kind: 'child', anchorId: ROZALIE, islandIds: [JAN] })))
             .toEqual({ state: 'invalid', reason: 'decidedOther' });

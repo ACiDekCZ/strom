@@ -22,6 +22,13 @@ const GED = readFileSync('e2e/fixtures/research-hypothesis-links.ged', 'utf-8');
 const GED_PILL = GED.replace(/2 _END named\n/, '2 _END unsearched\n')
     .replace(/3 _JOIN P0126\n3 _JOIN P0125\n3 _JOIN P0127\n3 _JOIN P0128\n3 _JOIN P0129\n3 _JOIN P0130\n3 _VAR B\n3 _VAR C\n/, '3 _JOIN P0125\n3 _VAR B\n');
 
+/**
+ * The same file with what variants claim that the tree records already
+ * (3 _INTREE): H0022 A and B say Václav and Rozálie are a couple (B beside
+ * its link to Jakub's family), H0025 B says Karel is their son.
+ */
+const GED_INTREE = readFileSync('e2e/fixtures/research-hypothesis-intree.ged', 'utf-8');
+
 /** Ludmila's edge points at Václav (in the view): the curve "possible link · H0099" with its pill. */
 const GED_CURVE = GED.replace('1 SEX F\n1 REFN P0013\n2 TYPE strom-research\n1 FAMS @F0002@\n',
     '1 SEX F\n1 REFN P0013\n2 TYPE strom-research\n1 FAMS @F0002@\n1 _STROM_EDGE parents\n2 _SCOPE in\n2 _END unsearched\n2 _NEXT none\n2 _HYPO H0099\n3 _JOIN P0010\n');
@@ -172,6 +179,35 @@ test.describe('linked in the view only: the named stub and its bubble', () => {
         // Away: gone.
         await page.mouse.move(5, 450);
         await expect(b).toHaveCount(0);
+    });
+
+    test('a version the tree records already (_INTREE): "The tree records this already", no button; still one of the 3 options', async ({ page }) => {
+        await setup(page, GED_INTREE);
+        await expect(stubOf(page).locator('.research-edge-label')).toHaveText('named · 3 options');
+        await stubOf(page).hover();
+        const rows = bubble(page).locator('.reb-variant');
+        await expect(rows).toHaveCount(3);
+        await expect(rows.nth(0).locator('.reb-variant-meta')).toHaveText('The tree records this already');
+        // B links Václav to Jakub's family beside what the tree records: it stays a version to show
+        await expect(rows.nth(1).locator('.reb-variant-meta')).toHaveText('+ 5 people');
+        await expect(rows.nth(2).locator('.reb-variant-meta')).toHaveText('+ 1 person');
+        await page.mouse.move(5, 450);
+        await expect(bubble(page)).toHaveCount(0);
+        await stubOf(page).click();
+        const b = bubble(page);
+        await expect(b).toHaveClass(/is-pinned/);
+        await expect(b.locator('.reb-variant[data-variant="A"] .reb-variant-btn')).toHaveCount(0);
+        await expect(b.locator('.reb-variant[data-variant="B"] .reb-show')).toHaveText('Show as linked');
+        await expect(b.locator('.reb-variant[data-variant="C"] .reb-show')).toHaveText('Show as linked');
+        await page.keyboard.press('Escape');
+        // Czech and German
+        for (const [lang, text] of [['cs', 'Tak to strom už vede'], ['de', 'So steht es schon im Stammbaum']] as const) {
+            await page.evaluate((l) => window.Strom.UI.setLanguage(l as never), lang);
+            await stubOf(page).hover();
+            await expect(bubble(page).locator('.reb-variant[data-variant="A"] .reb-variant-meta')).toHaveText(text);
+            await page.mouse.move(5, 450);
+            await expect(bubble(page)).toHaveCount(0);
+        }
     });
 
     test('a click pins it: ×, the keyboard on the first action and kept inside, Esc closes and gives it back', async ({ page }) => {

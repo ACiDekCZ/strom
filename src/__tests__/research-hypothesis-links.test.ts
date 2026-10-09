@@ -10,7 +10,7 @@ import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { edgeNamed, edgeShape, edgeView } from '../research-edge.js';
 import { stripResearchWork } from '../privacy.js';
 import { StromData } from '../types.js';
-import { HYPOTHESIS_LINKS_GED, loadHypothesisLinksTree } from './helpers/hypothesis-links-fixture.js';
+import { HYPOTHESIS_LINKS_GED, HYPOTHESIS_INTREE_GED, loadHypothesisLinksTree } from './helpers/hypothesis-links-fixture.js';
 
 const hypo = (data: StromData, personId: string, id: string) =>
     data.persons[personId as never].research?.hypotheses?.find(h => h.id === id);
@@ -184,6 +184,143 @@ describe('hypothesis variants from a research file', () => {
         // siblings take any number of people; a parent without the research's number goes with its link
         expect(b.links).toEqual([{ kind: 'siblings', persons: ['P0001', 'P0002', 'P0003'] }]);
         expect(jan.research!.edge!.hypos[0].variants).toEqual(['B']);
+    });
+
+    it('reads what a variant claims that the tree records already (_INTREE), beside its links', () => {
+        const { data, id } = loadHypothesisLinksTree(HYPOTHESIS_INTREE_GED);
+        const h = hypo(data, id('P0010'), 'H0022')!;
+        const couple = [{ kind: 'partners', persons: ['P0010', 'P0011'] }];
+        expect(h.variants!.map(v => [v.id, v.links.map(l => l.kind), v.inTree])).toEqual([
+            ['A', [], couple],
+            ['B', ['child'], couple],
+            ['C', ['child'], undefined],
+        ]);
+        // a child with the family it is a child of: its partners, as the research's person numbers
+        expect(hypo(data, id('P0001'), 'H0025')!.variants![1]).toMatchObject({
+            links: [{ kind: 'siblings', persons: ['P0001', 'P0141'] }],
+            inTree: [{ kind: 'child', child: 'P0001', parents: ['P0010', 'P0011'], family: true }],
+        });
+        // the same hypothesis on every person it concerns
+        expect(hypo(data, id('P0130'), 'H0022')).toEqual(h);
+        // a file without them: no inTree at all
+        const plain = loadHypothesisLinksTree();
+        expect(hypo(plain.data, plain.id('P0010'), 'H0022')!.variants!.some(v => 'inTree' in v)).toBe(false);
+    });
+
+    it('keeps of _INTREE only what it can trust: known kinds, pointers into the file, a child with its family, a couple\'s own family', () => {
+        const ged = `0 HEAD
+1 SOUR STROM_RESEARCH
+1 CHAR UTF-8
+0 @P1@ INDI
+1 NAME Jan /Malý/
+1 SEX M
+1 REFN P0001
+1 FAMC @F1@
+1 _STROM_HYPO H0001
+2 TITL Čí syn byl Jan?
+2 STAT open
+2 _VAR A
+3 TITL syn Petra a Evy, jak vede strom
+3 _INTREE child
+4 _PERS @P1@
+4 _FAM @F1@
+3 _INTREE child
+4 _PERS @P1@
+3 _INTREE child
+4 _PERS @P1@
+4 _PAR @P2@
+3 _INTREE child
+4 _PERS @P1@
+4 _FAM @F9@
+3 _INTREE child
+4 _PERS @P1@
+4 _FAM @F1@
+4 _FAM @F2@
+3 _INTREE child
+4 _PERS @P2@
+4 _FAM @F1@
+3 _INTREE child
+4 _PERS @P5@
+4 _FAM @F1@
+3 _INTREE cousins
+4 _PERS @P1@
+4 _PERS @P4@
+3 _INTREE same
+4 _PERS @P1@
+4 _PERS @P4@
+3 _INTREE
+4 _PERS @P1@
+3 _INTREE partners
+4 _PERS @P2@
+4 _PERS @P3@
+4 _FAM @F1@
+3 _INTREE partners
+4 _PERS @P2@
+4 _PERS @P4@
+4 _FAM @F1@
+3 _INTREE partners
+4 _PERS @P2@
+3 _INTREE partners
+4 _PERS @P2@
+4 _PERS @P3@
+4 _PERS @P4@
+3 _INTREE siblings
+4 _PERS @P1@
+4 _PERS @P4@
+4 _FAM @F1@
+3 _INTREE siblings
+4 _PERS @P1@
+4 _PERS @P4@
+4 _FAM @F9@
+3 _INTREE siblings
+4 _PERS @P1@
+4 _PERS @P9@
+2 _VAR B
+3 TITL nic
+3 _INTREE child
+4 _PERS @P9@
+4 _FAM @F1@
+0 @P2@ INDI
+1 NAME Petr /Malý/
+1 SEX M
+1 REFN P0002
+1 FAMS @F1@
+0 @P3@ INDI
+1 NAME Eva /Malá/
+1 SEX F
+1 REFN P0003
+1 FAMS @F1@
+0 @P4@ INDI
+1 NAME Iva /Malá/
+1 SEX F
+1 REFN P0004
+1 FAMC @F1@
+0 @P5@ INDI
+1 NAME Bez /Čísla/
+0 @F1@ FAM
+1 HUSB @P2@
+1 WIFE @P3@
+1 CHIL @P1@
+1 CHIL @P4@
+0 @F2@ FAM
+1 HUSB @P4@
+0 TRLR
+`;
+        let data!: StromData;
+        expect(() => { data = convertToStrom(parseGedcom(ged)).data; }).not.toThrow();
+        const jan = Object.values(data.persons).find(p => p.refn === 'P0001')!;
+        const [a, b] = jan.research!.hypotheses![0].variants!;
+        expect(a.links).toEqual([]);
+        expect(a.inTree).toEqual([
+            { kind: 'child', child: 'P0001', parents: ['P0002', 'P0003'], family: true },
+            { kind: 'partners', persons: ['P0002', 'P0003'] },
+            { kind: 'siblings', persons: ['P0001', 'P0004'] },
+        ]);
+        // nothing kept: no inTree, the variant stays
+        expect(b).toEqual({ id: 'B', title: 'nic', links: [] });
+        // the tree's own relations are what the file says, untouched by the claims
+        expect(jan.parentIds.map(x => data.persons[x].refn).sort()).toEqual(['P0002', 'P0003']);
+        expect(Object.keys(data.partnerships)).toHaveLength(1);
     });
 
     it('a GEDCOM that is not the research\'s keeps none of it', () => {

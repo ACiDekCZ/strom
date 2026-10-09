@@ -317,7 +317,9 @@ function role(p: Person | undefined): 'father' | 'mother' | 'either' {
  * What one view link is against the data now. Checked in this order: someone
  * gone; the link real (decided for it, or made by hand — whatever the
  * hypothesis says); the hypothesis gone, abandoned or decided for another
- * variant; the variant no longer linking these people; the family already in
+ * variant; the variant no longer linking these people (real when it now says
+ * the tree records this very link, 3 _INTREE: the tree linked them meanwhile,
+ * the hypothesis still open); the family already in
  * the tree another way; the child already with a real parent in a role a
  * shown parent takes ("?" stand-ins do not count). Else drawn.
  */
@@ -340,11 +342,18 @@ export function resolveViewLink(data: StromData, link: ViewLink, ctx: ViewLinkCo
     if (h.status === DECIDED && h.chosen !== link.variant) return { state: 'invalid', reason: 'decidedOther' };
 
     const variant = h.variants?.find(v => v.id === link.variant);
-    const matches = (variant?.links ?? []).some(l => {
+    const same = (l: ResearchVariantLink): boolean => {
         const shape = viewLinkShape(data, link.hypo, l, ctx);
         return !!shape && shape.kind === link.kind && shape.anchorId === link.anchorId && sameSet(shape.islandIds, link.islandIds);
-    });
-    if (!matches) return { state: 'invalid', reason: 'noLink' };
+    };
+    if (!(variant?.links ?? []).some(same)) {
+        // The couple as a pair: which side was off the tree may have changed once linked.
+        const pair = [link.anchorId, ...link.islandIds];
+        const recorded = (variant?.inTree ?? []).some(l => link.kind === 'partners' && l.kind === 'partners'
+            ? sameSet(l.persons.map(refn => ctx.byRefn.get(refn) ?? ''), pair)
+            : same(l));
+        return recorded ? { state: 'real' } : { state: 'invalid', reason: 'noLink' };
+    }
 
     const anchorGroup = ctx.group.get(link.anchorId);
     if (link.islandIds.some(id => ctx.group.get(id) === anchorGroup)) return { state: 'invalid', reason: 'joined' };
@@ -582,6 +591,8 @@ export interface ViewLinkOffer {
     people: number;
     /** It names people, but only as text (same, siblings). */
     textOnly: boolean;
+    /** Nothing to draw, but it claims what the tree records already (3 _INTREE). */
+    inTree: boolean;
     /** Shown now: its record switched on and the main switch on. */
     shown: boolean;
 }
@@ -603,6 +614,7 @@ export function viewLinkOffers(data: StromData, links: readonly ViewLink[], mast
             choice, state,
             people: choice ? viewLinkPeopleCount(data, choice, ctx) : 0,
             textOnly: !choice && v.links.length > 0 && v.links.every(l => l.kind === 'same' || l.kind === 'siblings'),
+            inTree: !choice && (v.inTree?.length ?? 0) > 0,
             shown: master && !!record?.on && record.variant === v.id,
         };
     });
