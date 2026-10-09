@@ -410,7 +410,7 @@ test.describe('linked in the view only: What research knows → Hypotheses', () 
         await expect(h.locator('.person-research-hypo-title')).toHaveCSS('font-weight', '600');
         // The note only listed the versions: it adds nothing to the line.
         await expect(h.locator('.person-research-hypo-meta')).toHaveText('H0022 · open · 3 versions');
-        await expect(variant(dialog, 'H0022', 'A').locator('.prv-meta')).toHaveText('people not in the research');
+        await expect(variant(dialog, 'H0022', 'A').locator('.prv-meta')).toHaveText('link not recorded yet');
         await expect(variant(dialog, 'H0022', 'A').locator('.view-link-switch')).toHaveCount(0);
         await expect(variant(dialog, 'H0022', 'B').locator('.prv-meta')).toHaveText('+ 5 people');
         await expect(variant(dialog, 'H0022', 'C').locator('.prv-meta')).toHaveText('+ 1 person');

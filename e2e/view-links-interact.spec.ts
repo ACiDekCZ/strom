@@ -163,7 +163,7 @@ test.describe('linked in the view only: the named stub and its bubble', () => {
         await expect(b.locator('.reb-question')).toHaveText('H0022 · Odkud pocházel Václav Horák, ženich z roku 1857?');
         const rows = b.locator('.reb-variant');
         await expect(rows).toHaveCount(3);
-        await expect(rows.nth(0).locator('.reb-variant-meta')).toHaveText('people not in the research');
+        await expect(rows.nth(0).locator('.reb-variant-meta')).toHaveText('link not recorded yet');
         await expect(rows.nth(1).locator('.reb-variant-meta')).toHaveText('+ 5 people');
         await expect(rows.nth(2).locator('.reb-variant-meta')).toHaveText('+ 1 person');
         await expect(b.locator('.reb-variant-btn')).toHaveCount(0);
