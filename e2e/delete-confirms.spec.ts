@@ -100,13 +100,16 @@ test('deleting a tree says it cannot be undone, in a danger dialog', async ({ pa
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
     await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+    // The confirmation opens right after a person is added, before the save
+    // has landed in storage: it counts the people the tree has now.
     await page.evaluate(() => {
+        window.Strom.DataManager.createPerson({ firstName: 'Eva', lastName: 'Novak', gender: 'female' });
         const id = window.Strom.TreeManager.getActiveTreeId();
         void window.Strom.UI.confirmDeleteTree(id);
     });
     await expect(page.locator('#confirmation-modal')).toHaveClass(/active/);
     await expect(page.locator('#confirm-title')).toContainText('Delete tree');
-    await expect(page.locator('#confirm-message')).toContainText('1 person');
+    await expect(page.locator('#confirm-message')).toContainText('2 people');
     await expect(page.locator('#confirm-message')).toContainText('cannot be undone');
     const style = await okStyle(page);
     expect(style.text).toBe('Delete tree');

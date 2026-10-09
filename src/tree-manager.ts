@@ -929,6 +929,14 @@ class TreeManagerClass {
         // shares strings (photos, scans) with the live data, so it is cheap
         // even for a tree carrying tens of MB of images.
         const snapshot = cloneTreeDataAsJson(data);
+        // The counts follow the data at once: the write lands later, and a
+        // dialog opened meanwhile (deleting the tree) said "0 people".
+        // Stored with the index when the write lands (updateMetadata).
+        const tree = this.index.trees.find(t => t.id === id);
+        if (tree) {
+            tree.personCount = realPersonCount(snapshot);
+            tree.partnershipCount = Object.keys(snapshot.partnerships ?? {}).length;
+        }
         // The research base as this window has it NOW, with this very data.
         this.queueWrite(id, { data: snapshot, base: this.researchBaseOf(id) });
     }
