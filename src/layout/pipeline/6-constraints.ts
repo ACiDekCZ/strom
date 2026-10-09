@@ -4500,6 +4500,14 @@ function recenterSiblingFamilyParents(
                             childBlock.parentBlockId !== block.id) {
                             continue;
                         }
+                        // A child in a partner chain: its own card (the
+                        // chain's middle may stand under another partner).
+                        const chainX = childBlock.chainInfo?.personPositions.get(childId);
+                        if (chainX !== undefined) {
+                            minChildX = Math.min(minChildX, chainX - config.cardWidth / 2);
+                            maxChildX = Math.max(maxChildX, chainX + config.cardWidth / 2);
+                            continue;
+                        }
                         const childUnion = model.unions.get(childUnionId);
                         if (childUnion) {
                             const childWidth = childUnion.partnerB
