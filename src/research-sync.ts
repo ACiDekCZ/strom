@@ -22,6 +22,18 @@ export function researchSendVouches(sent: ResearchSend | undefined): boolean {
     return !!sent && sent.state === 'written' && sent.changes !== 0 && !((sent.conflicts ?? 0) > 0);
 }
 
+/**
+ * Why the research refused a send, in the app's words: by the stable `code`
+ * of its `/sync` reply (`tree.large`, `tree.foreign` …), looked up in `words`
+ * (strings.sync.refusedCodes). Its own sentence (`error`) is in the
+ * research's language and never put into the app's; a code the app does not
+ * know (a newer research) says no reason here: the generic words and the
+ * technical details stand.
+ */
+export function syncRefusalReason(code: string, words: Readonly<Record<string, string>>): string {
+    return code && Object.prototype.hasOwnProperty.call(words, code) ? words[code] : '';
+}
+
 export type ResearchSyncKind =
     | 'none' | 'inSync' | 'written' | 'unsent' | 'sentPending' | 'newer' | 'unsentAndNewer' | 'waitThenLoad'
     | 'bridgeDown' | 'unsentBridgeDown' | 'refused' | 'rejected' | 'safari'

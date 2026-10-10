@@ -109,6 +109,16 @@ test.describe('sending by itself', () => {
         await expect(pill(page)).not.toHaveClass(/is-warn/);
     });
 
+    test('refused with a code: the toast says why in the app\'s words', async ({ page }) => {
+        const bridge = await autoTree(page);
+        bridge.syncReply = { status: 413, body: { error: 'strom je na poslání moc velký', code: 'tree.large', text: 'the tree is too large to send' } };
+        await editJan(page);
+        await page.clock.fastForward(QUIET + 1000);
+        await expect.poll(() => bridge.posts.length).toBe(1);
+        await expect(page.locator('.toast')).toContainText("Automatic sending stopped. The research didn't accept the changes: the tree is too large to send this way; it can be exported as GEDCOM and loaded in the research.");
+        await expect(page.locator('.toast')).not.toContainText('moc velký');
+    });
+
     test('refused: the pill, one toast; nothing goes by itself until Send again', async ({ page }) => {
         const bridge = await autoTree(page);
         bridge.syncReply = { status: 500, body: { error: 'zamčeno jiným sezením' } };

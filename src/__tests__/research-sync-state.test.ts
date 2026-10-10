@@ -8,8 +8,9 @@ import { describe, it, expect } from 'vitest';
 import {
     researchSyncState, researchSyncWantsAttention, pendingSendFate, verifiedOffer, isOlderSource,
     researchReadSource, sourceReadingHash, unverifiedOlderSources, ResearchSyncInput, conflictTakeovers,
-    heldConflicts, researchKeepsTakenBack, latestUndone, undoneLeftBehind,
+    heldConflicts, researchKeepsTakenBack, latestUndone, undoneLeftBehind, syncRefusalReason,
 } from '../research-sync.js';
+import { getStringsForLang } from '../strings.js';
 import { sanitizeAccepts, sanitizeInbox, sanitizeLiveStatus, researchHeaderLines, stabilizeIds, sanitizeSyncReply } from '../research-link.js';
 import { ResearchLink, ResearchSend, Source, StromData, STROM_DATA_VERSION } from '../types.js';
 import { exportToGedcom } from '../ged-exporter.js';
@@ -581,5 +582,33 @@ describe('the numbers a send got (ids, rc.26)', () => {
         expect(out.data.persons['b' as never].refn).toBe('P0003');
         expect(out.data.sources!.s.refn).toBe('S0007');
         expect(applySyncIds(out.data, xrefs, reply.ids!).changed).toBe(0);
+    });
+});
+
+describe('a send refused, by its code', () => {
+    /** The codes a `/sync` refusal carries (Strom Research: said() in core/live.ts). */
+    const CODES = ['tree.large', 'tree.other-research', 'tree.foreign', 'tree.empty', 'adopt.busy', 'send.failed'];
+
+    it('says why in the app\'s language for every code the research sends', () => {
+        for (const lang of ['en', 'cs', 'de'] as const) {
+            const words = getStringsForLang(lang).sync.refusedCodes;
+            for (const code of CODES) {
+                const why = syncRefusalReason(code, words);
+                expect(why, `${lang} ${code}`).not.toBe('');
+                // A clause that goes after "Reason from the research:" (and the toast's colon).
+                expect(why, `${lang} ${code}`).not.toMatch(/\.$/);
+            }
+        }
+        expect(syncRefusalReason('tree.foreign', getStringsForLang('cs').sync.refusedCodes)).toBe(
+            'tohle nevypadá jako rodokmen tohoto výzkumu; lze ho vyexportovat a načíst ve výzkumu jako jiný rodokmen');
+        expect(getStringsForLang('cs').sync.refusedReason('tento strom patří jinému výzkumu')).toBe('Důvod od výzkumu: tento strom patří jinému výzkumu.');
+    });
+
+    it('an unknown or missing code says no reason (a newer research): the generic words stand', () => {
+        const words = getStringsForLang('en').sync.refusedCodes;
+        expect(syncRefusalReason('tree.something-new', words)).toBe('');
+        expect(syncRefusalReason('', words)).toBe('');
+        expect(syncRefusalReason('toString', words)).toBe('');
+        expect(sanitizeSyncReply({ ok: false, error: 'strom je moc velký', code: 'tree.large' }).code).toBe('tree.large');
     });
 });

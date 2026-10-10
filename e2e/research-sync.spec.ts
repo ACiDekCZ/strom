@@ -74,6 +74,21 @@ test.describe('the state of the tree and sending straight', () => {
         expect(bridge.posts).toHaveLength(2);
     });
 
+    test('refused with a code: the reason in the app\'s words, never the research\'s sentence', async ({ page }) => {
+        await openResearch(page, { edit: true });
+        await fakeBridge(page, { syncReply: { status: 400, body: { error: 'tohle nevypadá jako rodokmen tohoto výzkumu', code: 'tree.foreign',
+            text: "this does not look like the research's family tree" } } });
+        await poll(page);
+        void page.evaluate(() => window.Strom.UI.researchSendNow());
+        const dialog = page.locator('#confirmation-modal');
+        await expect(dialog).toContainText("The research didn't accept the changes");
+        await expect(dialog).toContainText("Reason from the research: this doesn't look like the research's family tree; it can be exported and loaded in the research as another family tree.");
+        await expect(dialog).not.toContainText('nevypadá');
+        await expect(dialog).not.toContainText('Details (to pass on)');
+        await dialog.getByRole('button', { name: 'Close' }).click();
+        await expect(dialog).not.toHaveClass(/active/);
+    });
+
     test('written with a change skipped (1.12): said so in the app\'s words', async ({ page }) => {
         await openResearch(page, { edit: true });
         await fakeBridge(page, { syncReply: { status: 200, body: { ok: true, inbox: false, changes: 3, applied: 2,

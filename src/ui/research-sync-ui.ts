@@ -48,7 +48,7 @@ import {
 import {
     ResearchSyncState, ResearchSyncKind, researchSyncState, researchSyncWantsAttention, researchSyncUnsent,
     pendingSendFate, sourceReadings, THEN_LOAD_MAX_AGE_MS, conflictTakeovers, heldConflicts,
-    researchKeepsTakenBack, latestUndone, nextUndone, openUndone, undoneLeftBehind,
+    researchKeepsTakenBack, latestUndone, nextUndone, openUndone, undoneLeftBehind, syncRefusalReason,
 } from '../research-sync.js';
 import { setResearchConflictsProvider } from '../card-signals.js';
 import { ConflictDecideMode, conflictDecideMode, DecideKind, DecideBody, DecideResult, postBridgeDecide, canDecideInApp } from '../research-decide.js';
@@ -1332,12 +1332,14 @@ export const researchSyncMethods = uiModule({
             return;
         }
         if (!res.ok || !reply.ok) {
-            // The bridge's own sentence is in the research's language: not put into this app's sentences
-            // (until it sends a code to say it here). Its technical reason only as the dialog's details, to pass on.
+            // The bridge's own sentence is in the research's language: not put into this app's sentences.
+            // Its code says why in the app's words (a code it does not know: no reason); its technical
+            // reason only as the dialog's details, to pass on.
+            const why = syncRefusalReason(reply.code, s.refusedCodes);
             TreeManager.patchResearchLink(treeId, { refused: { reason: '', at: new Date().toISOString() } });
             this.refreshResearchSyncUi();
-            if (opts.auto) this.tellResearchAutoStopped(treeId, '');
-            else await this.showResearchRefused('', { ...opts, details: reply.reason });
+            if (opts.auto) this.tellResearchAutoStopped(treeId, why);
+            else await this.showResearchRefused(why, { ...opts, details: reply.reason });
             return;
         }
         const now = new Date().toISOString();
