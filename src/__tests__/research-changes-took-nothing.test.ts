@@ -5,7 +5,7 @@
  * again (the copy read back from storage). Invented data.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import type { StromData, ResearchLink, ResearchSend, TreeId, TreeMetadata } from '../types.js';
 
 const TREE = 'took-nothing-tree' as TreeId;
@@ -33,7 +33,7 @@ import { TreeManager } from '../tree-manager.js';
 import { contentFingerprint } from '../research-link.js';
 
 const person = (id: string, firstName: string, birthPlace?: string) => ({
-    id, firstName, lastName: 'Víšek', gender: 'male', isPlaceholder: false, partnerships: [], parentIds: [], childIds: [],
+    id, firstName, lastName: 'Novák', gender: 'male', isPlaceholder: false, partnerships: [], parentIds: [], childIds: [],
     refn: id.toUpperCase(), ...(birthPlace ? { birthPlace } : {}),
 });
 const tree = (janPlace?: string): StromData => ({
@@ -62,6 +62,13 @@ const rows = (list: { name: string; kinds: string[] }[] | null) => list?.map(c =
 describe('N40: changes per person after a send the research took nothing from', () => {
     let data: StromData;
     let link: ResearchLink;
+
+    // The first load of the UI modules transforms their whole import graph; on a busy machine
+    // that alone could pass the test's 5 s. Done once here, a fresh page only evaluates them again.
+    beforeAll(async () => {
+        await import('../ui/research-changes-ui.js');
+        await import('../ui/research-sync-ui.js');
+    });
 
     beforeEach(() => {
         store.copies.clear();
@@ -109,16 +116,16 @@ describe('N40: changes per person after a send the research took nothing from', 
         ui.researchNoteSending(TREE, data, f2);
         ui.researchNoteTookNothing(TREE, f2);
         link = { ...link, sent: { fingerprint: f2, at: '2026-10-08T10:05:00.000Z', changes: 0, state: 'written' } as ResearchSend };
-        expect(rows(await ui.researchChangesReady())).toEqual(['Jan Víšek: birth']);
+        expect(rows(await ui.researchChangesReady())).toEqual(['Jan Novák: birth']);
 
         // Opened again: the copy read back from storage is the same.
         ui = await freshUi();
         await stubs();
-        expect(rows(await ui.researchChangesReady())).toEqual(['Jan Víšek: birth']);
+        expect(rows(await ui.researchChangesReady())).toEqual(['Jan Novák: birth']);
 
         // Another edit: still against the research's version.
         data = tree('Plzeň');
-        expect(rows(await ui.researchChangesReady())).toEqual(['Jan Víšek: birth']);
+        expect(rows(await ui.researchChangesReady())).toEqual(['Jan Novák: birth']);
         // Back to what the research has: nothing listed.
         data = tree('Kolín');
         expect(rows(await ui.researchChangesReady())).toEqual([]);
