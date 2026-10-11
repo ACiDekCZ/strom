@@ -12,7 +12,7 @@ import { LiveWaiting, sanitizeAccepts, sanitizeWaiting } from '../research-link.
 import {
     WAITING_NOTE_FEATURE, WAITING_SENT_FEATURE, WaitingPending, applyWaitingPending, getGroupNote, groupNoteReply, postGroupSent, postGroupUnsent, postWaitingSent,
     putWaitingFile, retryAfterSeconds, settleWaitingPending, waitingFileReply, waitingFileTaken, waitingGroupHasNote, waitingGroupPath,
-    waitingGroupSendable, waitingSendable, waitingSentReply, waitingUnsendable, waitingWrites,
+    waitingGroupSendable, waitingSendable, waitingSentReply, waitingUnsendable, waitingWrites, waitingWrittenPhase, waitingFileWritable,
 } from '../research-waiting-write.js';
 import { waitingPhases } from '../research-waiting.js';
 
@@ -65,6 +65,20 @@ describe('what offers a write', () => {
         expect(waitingSendable(bad)).toBe(false);
     });
 
+    it('a file through the bridge: a task with file in its actions, never a check, a permission, a takeover or a story', () => {
+        const [withFile, noFile, check, permission, takeover, story, bad] = items([
+            letter('T0021', { actions: ['answer', 'file'] }),
+            letter('T0022', { actions: ['answer'] }),
+            { id: 'T0023', what: 'Ověřit web', kind: 'check', section: 'decide', actions: ['answer', 'file'] },
+            { id: 'T0024', what: 'Svolení', kind: 'permission', host: 'archiv.example', actions: ['file'] },
+            { id: 'T0025', what: 'Převzetí', kind: 'takeover', actions: ['file'] },
+            { id: 'T0026', what: 'Příběh', kind: 'story', person: 'P0001', actions: ['file'] },
+            letter('K12', { actions: ['file'] }),
+        ]);
+        expect(waitingFileWritable(withFile)).toBe(true);
+        for (const w of [noFile, check, permission, takeover, story, bad]) expect(waitingFileWritable(w)).toBe(false);
+    });
+
     it('back to do: a sent letter, family or other task; never one to do or a decision', () => {
         const [sentLetter, sentFamily, sentWeb, todo] = items([
             letter('T0011', { phase: 'sent', actions: ['answer', 'file', 'chat'] }),
@@ -102,17 +116,49 @@ describe('the answers, typed', () => {
         expect(waitingSentReply(200, null)).toMatchObject({ ok: false, code: 'unknown' });
     });
 
+    it('an item\'s answer: its task and the phase it is in now; the row follows that phase', () => {
+        // Already sent: nothing changed (`sent: []`), the task is in phase sent.
+        const already = waitingSentReply(200, { sent: [], task: 'T0001', phase: 'sent', head: HEAD });
+        expect(already).toEqual({ ok: true, sent: [], head: HEAD, task: 'T0001', phase: 'sent' });
+        expect(waitingWrittenPhase(already, 'T0001', 'sent')).toBe('sent');
+        // Asked sent, the research has it to do: the row goes to To do; asked back, it is still sent.
+        expect(waitingWrittenPhase(waitingSentReply(200, { sent: [], task: 'T0001', phase: 'todo' }), 'T0001', 'sent')).toBe('todo');
+        expect(waitingWrittenPhase(waitingSentReply(200, { unsent: [], task: 'T0001', phase: 'sent' }, null, 'either'), 'T0001', 'todo')).toBe('sent');
+        // No phase, a phase of another task, or a phase it does not know: the one asked for.
+        expect(waitingWrittenPhase(waitingSentReply(200, { sent: ['T0001'] }), 'T0001', 'sent')).toBe('sent');
+        expect(waitingWrittenPhase(waitingSentReply(200, { sent: [], task: 'T0002', phase: 'todo' }), 'T0001', 'sent')).toBe('sent');
+        expect(waitingSentReply(200, { sent: [], task: 'T0001', phase: 'done' })).toEqual({ ok: true, sent: [], head: '' });
+        expect(waitingSentReply(200, { sent: [], task: 'P0001', phase: 'sent' })).toEqual({ ok: true, sent: [], head: '' });
+        expect(waitingWrittenPhase(waitingSentReply(423, { code: 'locked' }), 'T0001', 'sent')).toBe('sent');
+    });
+
     it('every refusal by its status and code', () => {
         const r = (status: number, body: unknown, retry?: string) => waitingSentReply(status, body, retry);
         expect(r(404, { code: 'waiting.none' })).toMatchObject({ ok: false, code: 'none', status: 404 });
         expect(r(404, null)).toMatchObject({ ok: false, code: 'unknown', status: 404 });
         expect(r(409, { code: 'waiting.not-sendable', text: 'Not a letter.' })).toMatchObject({ ok: false, code: 'not-sendable', status: 409, reason: 'Not a letter.' });
-        expect(r(409, { code: 'other' })).toMatchObject({ ok: false, code: 'busy' });
+        // 409: a task waiting no more (a file for it) goes quietly like a 404; a task that takes no file; anything else unknown, never busy.
+        expect(r(409, { code: 'waiting.none' })).toMatchObject({ ok: false, code: 'none', status: 409 });
+        expect(r(409, { code: 'waiting.no-file' })).toMatchObject({ ok: false, code: 'no-file', status: 409 });
+        expect(r(409, { code: 'other' })).toMatchObject({ ok: false, code: 'unknown', status: 409, retryAfter: null });
+        expect(r(409, null, '5')).toMatchObject({ ok: false, code: 'unknown', retryAfter: null });
+        // 400: any bad request, the body's or a file's headers.
+        expect(r(400, { code: 'waiting.bad-body' })).toMatchObject({ ok: false, code: 'bad-body', status: 400 });
+        expect(r(400, { code: 'media.bad-header' })).toMatchObject({ ok: false, code: 'bad-body', status: 400 });
+        expect(r(400, null)).toMatchObject({ ok: false, code: 'bad-body', status: 400 });
         expect(r(423, { code: 'locked' })).toMatchObject({ ok: false, code: 'locked', status: 423, retryAfter: null });
         expect(r(403, { code: 'app.only' })).toMatchObject({ ok: false, code: 'app-only', status: 403 });
         expect(r(503, { code: 'research.busy' }, '5')).toMatchObject({ ok: false, code: 'busy', status: 503, retryAfter: 5 });
         expect(r(503, { code: 'research.busy' }, 'Wed, 21 Oct 2026 07:28:00 GMT')).toMatchObject({ code: 'busy', retryAfter: null });
-        expect(r(500, null)).toMatchObject({ ok: false, code: 'unknown', status: 500 });
+        // 5xx: busy only for 503, full for 507, else the research could not write it.
+        expect(r(500, { code: 'waiting.failed' })).toMatchObject({ ok: false, code: 'failed', status: 500 });
+        expect(r(500, null)).toMatchObject({ ok: false, code: 'failed', status: 500 });
+        expect(r(502, null)).toMatchObject({ ok: false, code: 'failed', status: 502 });
+        expect(r(507, null)).toMatchObject({ ok: false, code: 'full' });
+        expect(waitingFileReply(409, { code: 'waiting.none' })).toMatchObject({ ok: false, code: 'none' });
+        expect(waitingFileReply(409, { code: 'waiting.no-file' })).toMatchObject({ ok: false, code: 'no-file' });
+        expect(waitingFileReply(400, { code: 'media.bad-header' })).toMatchObject({ ok: false, code: 'bad-body' });
+        expect(waitingFileReply(500, { code: 'waiting.failed' })).toMatchObject({ ok: false, code: 'failed' });
         expect(retryAfterSeconds(' 12 ')).toBe(12);
         expect(retryAfterSeconds('-1')).toBeNull();
     });

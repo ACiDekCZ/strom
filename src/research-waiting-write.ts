@@ -69,6 +69,19 @@ export function waitingGroupHasNote(items: readonly LiveWaiting[]): boolean {
     return items.some(w => !!w.note);
 }
 
+/** Kinds that take no file (409 `waiting.no-file`; a story, a permission, a takeover offer no task actions anyway). */
+const NO_FILE_KINDS: ReadonlySet<string> = new Set(['check', 'permission', 'takeover', 'story']);
+
+/** An item the bridge takes a file for (`file` in its actions, a task of a kind that takes one). */
+export function waitingFileWritable(w: LiveWaiting): boolean {
+    return !!researchTaskRef(w.id) && !NO_FILE_KINDS.has(w.kind ?? '') && !!w.actions?.includes('file');
+}
+
+/** The phase an item's write left it in: the answer's own when it names this task, else the one asked for. */
+export function waitingWrittenPhase(result: WaitingSentResult, task: string, asked: WaitingPhase): WaitingPhase {
+    return result.ok && result.task === task && result.phase ? result.phase : asked;
+}
+
 /** A file for a task: an image or a PDF. */
 export const WAITING_FILE_ACCEPT = 'image/*,application/pdf,.pdf';
 
@@ -80,19 +93,21 @@ export function waitingFileTaken(file: { type: string; name: string }): boolean 
 
 /**
  * Why nothing was written:
- * - `none` (404 `waiting.none`): the task (or place) waits no more — it goes quietly;
+ * - `none` (404, or 409 `waiting.none` for a file): the task (or place) waits no more — it goes quietly;
  * - `not-sendable` (409 `waiting.not-sendable`): not a kind the research marks sent;
+ * - `no-file` (409 `waiting.no-file`): a task that takes no file (a web check, an archive's permission);
  * - `locked` (423): another session holds the tree in the research;
  * - `app-only` (403): the bridge took the request for not the app's;
- * - `bad-body` (400 `waiting.bad-body`): a body it does not take (a place back to do without its tasks);
- * - `busy` (503 `research.busy`, `retryAfter` in seconds when said; another 409);
+ * - `bad-body` (any 400: `waiting.bad-body` a place back to do without its tasks, `media.bad-header`…): a request it does not take;
+ * - `busy` (503 `research.busy`, `retryAfter` in seconds when said);
+ * - `failed` (500 `waiting.failed`, any 5xx but 503 and 507): the research could not write it;
  * - `too-large` (413) / `type` (415) / `full` (507): a file it does not take;
  * - `network`: no answer (not running, unreachable, not in time);
  * - `invalid`: not sent at all (an id or key it does not take);
- * - `unknown`: any other answer.
+ * - `unknown`: any other answer (another 409 too).
  */
 export type WaitingWriteCode =
-    | 'none' | 'not-sendable' | 'locked' | 'app-only' | 'bad-body' | 'busy' | 'too-large' | 'type' | 'full' | 'network' | 'invalid' | 'unknown';
+    | 'none' | 'not-sendable' | 'no-file' | 'locked' | 'app-only' | 'bad-body' | 'busy' | 'failed' | 'too-large' | 'type' | 'full' | 'network' | 'invalid' | 'unknown';
 
 export interface WaitingWriteRefused {
     ok: false;
@@ -114,6 +129,9 @@ export interface WaitingSentDone {
     sent: string[];
     /** The research's version after the write ('' = not said). */
     head: string;
+    /** An item's answer: the task, and the phase it is in now (both or neither). */
+    task?: string;
+    phase?: WaitingPhase;
 }
 
 export type WaitingSentResult = WaitingSentDone | WaitingWriteRefused;
@@ -171,14 +189,17 @@ function refusal(status: number, body: unknown, retryAfter: string | null | unde
         ok: false, code: c, status, retryAfter: c === 'busy' ? retryAfterSeconds(retryAfter) : null, reason,
     });
     if (status === 404) return out(code === 'waiting.none' ? 'none' : 'unknown');
-    if (status === 409) return out(code === 'waiting.not-sendable' ? 'not-sendable' : 'busy');
+    if (status === 409) {
+        return out(code === 'waiting.none' ? 'none' : code === 'waiting.not-sendable' ? 'not-sendable' : code === 'waiting.no-file' ? 'no-file' : 'unknown');
+    }
     if (status === 423) return out('locked');
     if (status === 403) return out('app-only');
-    if (status === 400 && code === 'waiting.bad-body') return out('bad-body');
-    if (status === 503) return out('busy');
+    if (status === 400) return out('bad-body');
     if (status === 413) return out('too-large');
     if (status === 415) return out('type');
+    if (status === 503) return out('busy');
     if (status === 507) return out('full');
+    if (status >= 500 && status < 600) return out('failed');
     return out('unknown');
 }
 
@@ -193,7 +214,9 @@ export function waitingSentReply(status: number, body: unknown, retryAfter?: str
         const r = asRecord(body);
         if (!r) return refusal(0, null, null);
         const moved = list === 'sent' ? r.sent : list === 'unsent' ? r.unsent : Array.isArray(r.unsent) ? r.unsent : r.sent;
-        return { ok: true, sent: taskList(moved), head: isResearchHead(r.head) ?? '' };
+        const task = researchTaskRef(r.task);
+        const phase = r.phase === 'todo' || r.phase === 'sent' ? r.phase : null;
+        return { ok: true, sent: taskList(moved), head: isResearchHead(r.head) ?? '', ...(task && phase ? { task, phase } : {}) };
     }
     return refusal(status, body, retryAfter);
 }

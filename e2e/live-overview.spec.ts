@@ -60,6 +60,8 @@ interface Bridge {
     note?: Record<string, unknown>;
     /** A place's Sent answers without naming the tasks it marked. */
     groupSentSilent?: boolean;
+    /** An item's write answers so (the task's phase as the research has it), changing nothing. */
+    itemReply?: Record<string, unknown>;
 }
 
 /** A bridge that sends one change of six lines, then keeps quiet. */
@@ -134,6 +136,7 @@ async function follow(page: Page, size: { width: number; height: number } = { wi
             if (write[1].startsWith('waiting/')) {
                 const w = bridge.waiting.find(x => x.id === write[1].slice('waiting/'.length));
                 if (!w) return route.fulfill(json(404, { error: 'not waiting', code: 'waiting.none' }));
+                if (bridge.itemReply) return route.fulfill(json(200, { ...bridge.itemReply, task: w.id }));
                 if (what === 'sent') {
                     Object.assign(w, { phase: 'sent', sentAt: at });
                     return route.fulfill(json(200, { sent: [w.id] }));
@@ -1099,6 +1102,53 @@ test.describe('Awaiting action written through the bridge', () => {
         expect(put?.headers['x-strom-name']).toBe('odpoved-uradu.pdf');
         expect(put?.headers['content-type']).toBe('application/pdf');
         expect(await launched(page)).toEqual([]);
+    });
+
+    test('Sent at an item the research already has sent (sent: [], phase sent): it stays in Awaiting a reply, no error', async ({ page }) => {
+        const bridge = await follow(page, { width: 1440, height: 900 }, writable(['waiting.sent']));
+        await openOverview(page);
+        const letter = await openLetter(page);
+        // The research marked it sent meanwhile; its status here is not yet asked again.
+        Object.assign(bridge.waiting.find(w => w.id === 'T0018')!, { phase: 'sent', sentAt: new Date().toISOString() });
+        bridge.itemReply = { sent: [], phase: 'sent' };
+        await letter.locator('.research-overview__waiting-action[data-action="sent"]').click();
+        await expect(todoHead(page)).toHaveText(/To do · 29/);
+        await expect(sentHead(page)).toHaveText(/Awaiting a reply · 6/);
+        await page.waitForTimeout(2500);
+        await expect(sentHead(page)).toHaveText(/Awaiting a reply · 6/);
+        await expect(page.locator('.toast[data-kind="waiting-failed"]')).toHaveCount(0);
+        expect(bridge.writes.map(w => [w.path, w.body])).toEqual([['waiting/T0018', '{"do":"sent"}']]);
+    });
+
+    test('Sent at an item the research keeps to do (sent: [], phase todo): the row follows it back, no error', async ({ page }) => {
+        const bridge = await follow(page, { width: 1440, height: 900 }, writable(['waiting.sent']));
+        await openOverview(page);
+        const letter = await openLetter(page);
+        bridge.itemReply = { sent: [], phase: 'todo' };
+        await letter.locator('.research-overview__waiting-action[data-action="sent"]').click();
+        await expect.poll(() => bridge.writes.length).toBe(1);
+        await expect(todoHead(page)).toHaveText(/To do · 30/, { timeout: 2000 });
+        await expect(sentHead(page)).toHaveText(/Awaiting a reply · 5/);
+        await expect(page.locator('.toast[data-kind="waiting-failed"]')).toHaveCount(0);
+        await expect(page.locator('.toast[data-kind="waiting-sent"]')).toHaveCount(0);
+    });
+
+    test('a check with file in its actions: no Add a file through the bridge, the task link stays', async ({ page }) => {
+        const bridge = await follow(page, { width: 1440, height: 900 }, (b) => {
+            writable([], { media: { task: true } })(b);
+            const check = b.waiting.find(w => w.kind === 'check')!;
+            check.actions = ['answer', 'file'];
+        });
+        const ov = await openOverview(page);
+        await placeHead(page, 'todo', 'rodokmen.example').locator('.research-overview__waiting-group').click();
+        const check = ov.locator('.research-overview__waiting-item', { hasText: 'Ověřit, zda badatelna funguje' });
+        await check.locator('.research-overview__waiting-row').click();
+        await expect(check.locator('.research-overview__waiting-action')).toHaveText(['Answer ↗', 'Add a file ↗']);
+        await expect(check.locator('[data-write="bridge"]')).toHaveCount(0);
+        // A letter still adds its file through the bridge.
+        const letter = await openLetter(page);
+        await expect(letter.locator('.research-overview__waiting-action[data-action="file"]')).toHaveAttribute('data-write', 'bridge');
+        expect(bridge.writes).toHaveLength(0);
     });
 
     test('a refused or unanswered write puts the row back and says so', async ({ page }) => {

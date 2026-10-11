@@ -20,7 +20,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { Person, PersonId } from '../types.js';
 import { computeEvidenceGaps } from '../stats.js';
 import { LiveChangeKind, LiveWaiting, WAITING_SECTIONS, researchConflictRef, researchTaskRef, recentAddsCount } from '../research-link.js';
-import { waitingGroupSendable, waitingGroupHasNote, waitingSendable, waitingUnsendable } from '../research-waiting-write.js';
+import { waitingGroupSendable, waitingGroupHasNote, waitingSendable, waitingUnsendable, waitingFileWritable } from '../research-waiting-write.js';
 import {
     WaitingFilter, WaitingGroupRows, WaitingPhase, effectiveWaitingFilter, waitingActionDo, waitingChatLeads, waitingChips, waitingDaysAgo, waitingGroupChatTask,
     waitingPhase, waitingPhases, waitingSection, waitingTaskActions, waitingTodoCount,
@@ -695,7 +695,7 @@ export const researchOverviewMethods = uiModule({
                     host.appendChild(this.waitingWriteButton(W.sent, 'sent', () => { void this.markWaitingSent(s, w); }));
                     continue;
                 }
-                if (action === 'file' && writes.file) {
+                if (action === 'file' && writes.file && waitingFileWritable(w)) {
                     host.appendChild(this.waitingWriteButton(W.file, 'file', () => this.pickWaitingFile(s, w)));
                     continue;
                 }

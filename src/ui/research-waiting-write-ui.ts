@@ -15,7 +15,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { LiveWaiting, researchTaskRef } from '../research-link.js';
 import {
     WaitingWrites, WaitingPending, WaitingSentResult, WaitingWriteRefused, GroupNoteDone, NO_WAITING_WRITES, WAITING_SETTLE_MS, WAITING_FILE_ACCEPT,
-    waitingWrites, waitingGroupSendable, waitingTaskIds, applyWaitingPending, settleWaitingPending, waitingSentDay, waitingFileTaken,
+    waitingWrites, waitingGroupSendable, waitingTaskIds, waitingFileWritable, waitingWrittenPhase, applyWaitingPending, settleWaitingPending, waitingSentDay, waitingFileTaken,
     postWaitingSent, postGroupSent, postGroupUnsent, getGroupNote, putWaitingFile,
 } from '../research-waiting-write.js';
 import { WaitingPhase, waitingPhase } from '../research-waiting.js';
@@ -59,6 +59,7 @@ function refusedText(r: WaitingWriteRefused): string {
         case 'not-sendable': return W.notSendable;
         case 'app-only': return W.appOnly;
         case 'bad-body': return W.badBody;
+        case 'failed': return W.writeFailed;
         default: return W.failed;
     }
 }
@@ -140,10 +141,13 @@ export const researchWaitingWriteMethods = uiModule({
         st.pending.set(w.id, { phase: 'sent', sentAt: new Date(now).toISOString(), until: Infinity });
         this.reshowLiveWaiting(s);
         const result = await postWaitingSent(s.bridge.base, task, 'sent');
-        const ok = this.settleWaitingWrite(s, [w.id], 'sent', result, back);
+        // The answer says where the task is now (already sent: `sent: []`, phase sent): the row follows it.
+        const phase = waitingWrittenPhase(result, task, 'sent');
+        if (phase !== 'sent') st.pending.set(w.id, { phase, until: Infinity });
+        const ok = this.settleWaitingWrite(s, [w.id], phase, result, back);
         if (!stillFollowing(s)) return;
         const W = strings.live.waitingWrite;
-        if (ok) {
+        if (ok && phase === 'sent') {
             this.showToast(W.sentToast(waitingSentDay(now, getCurrentLanguage())), 6000, {
                 kind: 'waiting-sent',
                 action: { label: W.undo, run: () => { void this.markWaitingUnsent(s, w.id); } },
@@ -163,9 +167,11 @@ export const researchWaitingWriteMethods = uiModule({
         st.pending.set(id, { phase: 'todo', until: Infinity });
         this.reshowLiveWaiting(s);
         const result = await postWaitingSent(s.bridge.base, task, 'unsent');
-        const ok = this.settleWaitingWrite(s, [id], 'todo', result, back);
+        const phase = waitingWrittenPhase(result, task, 'todo');
+        if (phase !== 'todo') st.pending.set(id, { phase, until: Infinity });
+        const ok = this.settleWaitingWrite(s, [id], phase, result, back);
         if (!stillFollowing(s)) return;
-        if (ok) this.showToast(strings.live.waitingWrite.unsentToast, 3000, { kind: 'waiting-unsent' });
+        if (ok && phase === 'todo') this.showToast(strings.live.waitingWrite.unsentToast, 3000, { kind: 'waiting-unsent' });
         else if (!result.ok && result.code !== 'none') this.showToast(refusedText(result), 6000, { kind: 'waiting-failed' });
     },
 
@@ -313,7 +319,7 @@ export const researchWaitingWriteMethods = uiModule({
     /** "Add a file" at a task: an image or PDF picked here goes to the research with the task's id. */
     pickWaitingFile(s: LiveSession, w: LiveWaiting): void {
         const task = researchTaskRef(w.id);
-        if (!task || !this.liveWaitingWrites(s).file) return;
+        if (!task || !this.liveWaitingWrites(s).file || !waitingFileWritable(w)) return;
         document.querySelector('input.waiting-file-input')?.remove();
         const input = document.createElement('input');
         input.type = 'file';
@@ -344,14 +350,11 @@ export const researchWaitingWriteMethods = uiModule({
             if (stillFollowing(s)) this.liveStatusSoon(s);
             return;
         }
-        const text = result.code === 'too-large' ? W.fileTooLarge
-            : result.code === 'type' ? W.fileType
-                : result.code === 'full' ? W.fileFull
-                    : result.code === 'none' ? W.fileGone
-                        : result.code === 'locked' ? W.locked
-                            : result.code === 'busy' ? W.busy
-                                : result.code === 'app-only' ? W.appOnly
-                                    : W.fileFailed;
+        const why: Partial<Record<WaitingWriteRefused['code'], string>> = {
+            'too-large': W.fileTooLarge, type: W.fileType, full: W.fileFull, none: W.fileGone, 'no-file': W.fileNotTaken,
+            failed: W.writeFailed, 'bad-body': W.badBody, locked: W.locked, busy: W.busy, 'app-only': W.appOnly,
+        };
+        const text = why[result.code] ?? W.fileFailed;
         this.showToast(text, 6000, { kind: 'waiting-failed' });
     },
 
