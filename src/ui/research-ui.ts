@@ -44,6 +44,7 @@ import { withAppVersion, researchGedcomTitles, TitlesInGedcom, changeKind, chang
 import { AGENT_DONE_MS, AGENT_DONE_FADE_MS, ResearchCardInfo, setResearchCardInfoProvider } from '../card-signals.js';
 import { activeDirections, directionsMulti, queueDirectionFilter, setQueueDirectionFilter, taskDirectionName } from './research-directions-ui.js';
 import { iconSvg } from '../icons.js';
+import { OTHER_GROUP, panelWaiting, textWithLinks, todoWaiting, waitingSection, waitingTodoCount } from '../research-waiting.js';
 import { SettingsManager } from '../settings.js';
 import { countImages, stripMedia } from '../attachments.js';
 import { exportToGedcom, countFamilies } from '../ged-exporter.js';
@@ -92,6 +93,20 @@ export type LiveAdds = LiveCommitAdds;
 /** The panel's sections (each folds on its own). */
 export type LiveSectionKey = 'working' | 'waiting' | 'changes' | 'queue';
 
+/** The overview's "Awaiting action" while open: what is unfolded, the open detail, what is new. */
+export interface WaitingView {
+    /** Phases ("phase:todo") and groups ("group:sent:<key>") folded or unfolded by hand or by a new item. */
+    open: Map<string, boolean>;
+    /** The one item whose detail is open (by id). */
+    detail: string | null;
+    /** Items to do that came while following, new to the user until the overview closes. */
+    fresh: Set<string>;
+}
+
+export function newWaitingView(): WaitingView {
+    return { open: new Map(), detail: null, fresh: new Set() };
+}
+
 export interface LiveSession {
     bridge: LiveBridgeUrls;
     researchId: string;
@@ -113,6 +128,8 @@ export interface LiveSession {
     autoCollapsed: Set<LiveSectionKey>;
     /** Waiting task ids already shown: a new one unfolds "Waiting for you". */
     seenWaiting: Set<string>;
+    /** How the overview shows "Awaiting action" (kept until it closes). */
+    waitingView: WaitingView;
     /** Changes seen with the Changes section open (for "N new"). */
     seenInSection: number;
     /** A backup of the tree was taken before following first replaced it. */
@@ -358,7 +375,8 @@ function researchCardInfo(): Map<string, ResearchCardInfo> {
         info[what] ??= text;
         out.set(ref, info);
     };
-    for (const w of waiting) {
+    // What was sent and waits for a reply asks nothing of the user now.
+    for (const w of todoWaiting(waiting)) {
         if (w.kind !== 'story') { note(w.person, 'waiting', w.what); continue; }
         // A story's new version: the app's own words, on both partners of a couple.
         for (const ref of [w.person, w.partner]) {
@@ -700,12 +718,30 @@ function liveTimeText(ts: number, kind: 'ago' | 'since' | 'sincefor' | 'lastchan
         : formatLiveTime(ts, Date.now(), lang, strings.research.justNow);
 }
 
+/** The short label of a waiting item's kind (text, not an icon). */
+export function waitingKindLabel(w: LiveWaiting): HTMLElement {
+    const section = waitingSection(w);
+    return el('span', `live-kind live-kind--${section}`, strings.live.waitingKinds[section]);
+}
+
+/** Text with its http(s) addresses as links (each piece set as text, never HTML). */
+export function appendLinkedText(host: HTMLElement, text: string): void {
+    for (const piece of textWithLinks(text)) {
+        if (!piece.url) { host.append(piece.text); continue; }
+        const a = el('a', 'live-text-link', piece.text);
+        a.href = piece.url;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        host.appendChild(a);
+    }
+}
+
 /** The research's state in a word: at work, waiting for the user, paused (its runs wait for their gate), idle. */
 export function liveState(s: LiveSession): { label: string; cls: 'is-working' | 'is-waiting' | 'is-paused' | 'is-idle' | 'is-lost' } {
     const L = strings.live;
     if (s.lostSince !== null && !s.ended) return { label: L.stateLost, cls: 'is-lost' };
     if (s.working.some(w => !w.paused)) return { label: L.stateWorking, cls: 'is-working' };
-    if (s.waiting.length > 0) return { label: L.stateWaiting, cls: 'is-waiting' };
+    if (waitingTodoCount(s.waiting) > 0) return { label: L.stateWaiting, cls: 'is-waiting' };
     if (s.working.length > 0) return { label: L.statePaused, cls: 'is-paused' };
     return { label: L.stateIdle, cls: 'is-idle' };
 }
@@ -1999,6 +2035,7 @@ export const researchUiMethods = uiModule({
                 researches: status.researches,
                 autoCollapsed: new Set(window.innerHeight < 700 ? ['queue'] : []),
                 seenWaiting: new Set(status.waiting.map(w => w.id)),
+                waitingView: newWaitingView(),
                 seenInSection: 0,
                 startedAt: Date.now(),
                 startPersons: Object.values(data.persons).filter(p => !p.isPlaceholder).length,
@@ -2143,11 +2180,21 @@ export const researchUiMethods = uiModule({
         s.working = status.working;
         s.waiting = status.waiting;
         // A task that was not there before unfolds "Waiting for you", even when folded.
+        // What came already sent needs nothing from the user: it unfolds nothing (an item
+        // that moves to sent keeps its id and is not new).
         const fresh = status.waiting.filter(w => !s.seenWaiting.has(w.id));
-        if (fresh.length > 0) {
-            for (const w of fresh) s.seenWaiting.add(w.id);
+        for (const w of fresh) s.seenWaiting.add(w.id);
+        const freshTodo = todoWaiting(fresh);
+        if (freshTodo.length > 0) {
             if (storedLiveSections(SECTIONS_KEY).waiting === true) storeLiveSection(SECTIONS_KEY, 'waiting', false);
             s.autoCollapsed.delete('waiting');
+            // The overview too: its section, the phase and each new item's group.
+            this.unfoldOverviewSection('waiting');
+            s.waitingView.open.set('phase:todo', true);
+            for (const w of freshTodo) {
+                s.waitingView.fresh.add(w.id);
+                s.waitingView.open.set(`group:todo:${w.group?.key ?? OTHER_GROUP}`, true);
+            }
         }
         s.queue = status.queue;
         s.queueMore = status.queueMore;
@@ -2382,25 +2429,32 @@ export const researchUiMethods = uiModule({
     },
 
     /**
-     * The "Waiting for you" section: the tasks, since when, and (while the
-     * research runs) "Answer ↗" into the research. Bridge text is text only.
-     * Returns the section's body. Without `fold` the heading does not fold
-     * (the panel shown without following).
+     * The "Waiting for you" section: the first few tasks to do (in the
+     * research's order, with their kind), since when, and (while the research
+     * runs) "Answer ↗" into the research; the rest in the overview. Bridge
+     * text is text only. Returns the section's body. Without `fold` the
+     * heading does not fold (the panel shown without following).
      */
     appendWaitingSection(body: HTMLElement, items: readonly LiveWaiting[], answerable: boolean,
         fold?: { collapsed: boolean; onToggle: () => void; id: string }): HTMLElement {
         const r = strings.research;
-        const title = `${r.waiting} · ${items.length}`;
+        const L = strings.live;
+        const todo = waitingTodoCount(items);
+        const sent = items.length - todo;
+        const title = `${r.waiting} · ${todo}`;
+        const replies = sent > 0 ? L.waitingReplyCount(sent) : undefined;
         let host: HTMLElement;
         if (fold) {
-            host = liveSection(body, { id: fold.id, title, collapsed: fold.collapsed, onToggle: fold.onToggle, headCls: 'live-panel-heading-waiting' });
+            host = liveSection(body, { id: fold.id, title, summary: replies, collapsed: fold.collapsed, onToggle: fold.onToggle, headCls: 'live-panel-heading-waiting' });
         } else {
-            body.appendChild(el('h4', 'live-panel-heading live-panel-heading-waiting', title));
+            const h = body.appendChild(el('h4', 'live-panel-heading live-panel-heading-waiting', title));
+            if (replies) h.appendChild(el('span', 'live-section__sum', replies));
             host = body;
         }
         const list = el('ul', 'live-panel-list live-waiting');
         host.appendChild(list);
-        for (const w of items) {
+        const { shown, more } = panelWaiting(items);
+        for (const w of shown) {
             const li = el('li', 'live-waiting-row');
             const text = el('div', 'live-waiting-text');
             if (w.kind === 'story') {
@@ -2412,7 +2466,10 @@ export const researchUiMethods = uiModule({
                 list.appendChild(li);
                 continue;
             }
-            text.appendChild(el('span', 'live-waiting-what', w.what));
+            const what = text.appendChild(el('span', 'live-waiting-what'));
+            // A newer research names the kind: a short label before the text.
+            if (w.section) what.appendChild(waitingKindLabel(w));
+            what.append(w.what);
             // "on" is the agent's free text; "user" only repeats the heading.
             if (!waitsOnUser(w.on)) text.appendChild(el('small', 'live-time', r.waitingOn(w.on!)));
             const at = timeEl(w.at, 'ago');
@@ -2425,6 +2482,17 @@ export const researchUiMethods = uiModule({
                 li.appendChild(answer);
             }
             list.appendChild(li);
+        }
+        if (more > 0) {
+            // The rest in the overview (where it can open), else just how many.
+            if (this.canOpenResearchOverview()) {
+                const btn = el('button', 'link-button live-waiting-more', L.waitingMore(more));
+                btn.type = 'button';
+                btn.onclick = () => this.openResearchOverview();
+                host.appendChild(btn);
+            } else {
+                host.appendChild(el('p', 'live-waiting-more', L.waitingMore(more).replace(/\s*⤢$/, '')));
+            }
         }
         return host;
     },
@@ -2553,7 +2621,8 @@ export const researchUiMethods = uiModule({
             const summary = el('div', 'live-panel-summary');
             if (phone && !s.ended) {
                 summary.appendChild(el('span', 'live-panel-chip', liveState(s).label));
-                if (s.waiting.length > 0) summary.appendChild(el('span', 'live-panel-chip live-panel-chip--warn', `${r.waiting} ${s.waiting.length}`));
+                const todo = waitingTodoCount(s.waiting);
+                if (todo > 0) summary.appendChild(el('span', 'live-panel-chip live-panel-chip--warn', `${r.waiting} ${todo}`));
             }
             const fresh = s.changes.length - s.seenChanges;
             if (fresh > 0) summary.appendChild(el('span', 'live-panel-chip live-panel-new', r.newChanges(fresh)));

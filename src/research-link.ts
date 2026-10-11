@@ -151,9 +151,14 @@ export function researchSessionRef(id: unknown): string | null {
     return typeof id === 'string' && /^N\d{1,7}$/.test(id.trim()) ? id.trim() : null;
 }
 
-/** What to do with a task in the research (nothing: answer it). */
-export type ResearchTaskDo = 'park' | 'drop' | 'wake';
-const TASK_DOS: readonly string[] = ['park', 'drop', 'wake'];
+/**
+ * What to do with a task in the research (nothing: answer it): park / drop /
+ * wake, and the actions a waiting item offers (Strom Research 1.13.2-beta.13,
+ * only those its `actions` name): add a file, open the query's text or the
+ * images folder, mark it sent, chat on it.
+ */
+export type ResearchTaskDo = 'park' | 'drop' | 'wake' | 'file' | 'note' | 'folder' | 'sent' | 'chat';
+const TASK_DOS: readonly string[] = ['park', 'drop', 'wake', 'file', 'note', 'folder', 'sent', 'chat'];
 /** A conflict: decide it there, or leave it to the agent. */
 export type ResearchConflictDo = 'decide' | 'agent';
 const CONFLICT_DOS: readonly string[] = ['decide', 'agent'];
@@ -1019,13 +1024,58 @@ export interface LiveWaiting {
     /**
      * 'story': a new version of an approved story (the person's, or with `partner` the couple's), not a task.
      * 'permission': the research asks how it may download from an archive (`host`); `on` carries its terms.
+     * The rest only from a research with `waiting.groups` in its features (see below).
      */
-    kind?: 'story' | 'permission';
+    kind?: 'story' | 'permission' | WaitingTaskKind;
     /** A couple's story: the other partner (REFN). */
     partner?: string;
     /** A permission: the archive's host name. */
     host?: string;
+    // The fields below come only from a research that announces `waiting.groups`
+    // (Strom Research 1.13.2-beta.13); an older one sends none of them.
+    /** The chip it goes under (derived from the kind when not said). */
+    section?: WaitingSection;
+    /** Where it is done: one archive's web, one office written to, the family, another web. */
+    group?: WaitingGroup;
+    /** 'sent': sent out, waiting for a reply from outside (absent: to do). */
+    phase?: 'sent';
+    /** When it was sent (ISO; only with phase 'sent'). */
+    sentAt?: string;
+    /** The research's order (the list comes sorted; kept for after a filter). */
+    order?: number;
+    /** A task's priority, 1–5. */
+    priority?: number;
+    /** A web address (http/https only). */
+    url?: string;
+    /** The query's text in the research (`notes/….md`; opened only by the `note` action). */
+    note?: string;
+    /** Whom a letter goes to. */
+    to?: string;
+    /** Images: the folder for them, how many are saved there and how many the task wants. */
+    inbox?: { dir: string; have: number; want: number };
+    /** The task link's actions the research offers at it (only those are ever offered). */
+    actions?: WaitingAction[];
 }
+
+/** The bridge feature that sends the fields of `waiting` items above. */
+export const WAITING_GROUPS_FEATURE = 'waiting.groups';
+/** A task's kind in the waiting list (`waiting.groups`). */
+export type WaitingTaskKind = 'takeover' | 'check' | 'images' | 'letter' | 'family' | 'web' | 'other';
+/** The chips of "Awaiting action", in their order. */
+export const WAITING_SECTIONS = ['decide', 'images', 'letter', 'family', 'web', 'other'] as const;
+export type WaitingSection = typeof WAITING_SECTIONS[number];
+/** Kinds of places a waiting item is done at. */
+export const WAITING_GROUP_KINDS = ['archive', 'office', 'family', 'web', 'other'] as const;
+export type WaitingGroupKind = typeof WAITING_GROUP_KINDS[number];
+export interface WaitingGroup { key: string; name: string; kind: WaitingGroupKind }
+/** The task link's actions a waiting item may offer (answer: the link without `do`). */
+export const WAITING_ACTIONS = ['answer', 'file', 'note', 'folder', 'sent', 'chat'] as const;
+export type WaitingAction = typeof WAITING_ACTIONS[number];
+/** Each kind's chip. */
+const KIND_SECTION: Record<string, WaitingSection> = {
+    story: 'decide', permission: 'decide', takeover: 'decide', check: 'decide',
+    images: 'images', letter: 'letter', family: 'family', web: 'web', other: 'other',
+};
 
 /** A research direction ("research" in the research, id G…): kinds, state, counts. */
 export type LiveDirectionKind = 'ancestors' | 'descendants' | 'person' | 'question';
@@ -1419,14 +1469,82 @@ export function sanitizeWorking(value: unknown): LiveWorker[] {
     return out;
 }
 
+const TASK_KINDS: readonly WaitingTaskKind[] = ['takeover', 'check', 'images', 'letter', 'family', 'web', 'other'];
+
 /** Longest archive terms kept with a permission question. */
 const MAX_TERMS = 600;
+/** Most waiting items taken (a research may wait on many; other lists keep MAX_ITEMS). */
+export const MAX_WAITING = 200;
 
-/** The `waiting` list of the status. Untrusted input. */
-export function sanitizeWaiting(value: unknown): LiveWaiting[] {
+/** An http(s) address, or null. Untrusted input. */
+export function webUrl(value: unknown): string | null {
+    if (typeof value !== 'string') return null;
+    const v = value.trim();
+    // eslint-disable-next-line no-control-regex
+    if (!v || v.length > 2000 || /[\s\u0000-\u001f\u007f]/.test(v)) return null;
+    try {
+        const u = new URL(v);
+        return u.protocol === 'http:' || u.protocol === 'https:' ? u.href : null;
+    } catch {
+        return null;
+    }
+}
+
+/** A query's text in the research: a relative `notes/….md` path, no `..`. */
+function waitingNote(value: unknown): string | null {
+    if (typeof value !== 'string') return null;
+    const v = value.trim();
+    return v.length <= 200 && /^notes\/[^\s\\]+\.md$/.test(v) && !v.split('/').some(part => part === '..' || part === '.' || part === '')
+        ? v : null;
+}
+
+/** The fields of a `waiting.groups` research. Untrusted input: anything wrong is dropped, the item stays. */
+function waitingGroupFields(r: Record<string, unknown>, kind: LiveWaiting['kind']): Partial<LiveWaiting> {
+    const out: Partial<LiveWaiting> = {};
+    const said = typeof r.section === 'string' && (WAITING_SECTIONS as readonly string[]).includes(r.section) ? r.section as WaitingSection : null;
+    // An unknown kind goes under "Other", whatever section it names.
+    out.section = kind === 'other' ? 'other' : said ?? KIND_SECTION[typeof r.kind === 'string' ? r.kind : ''] ?? 'other';
+    const g = asRecord(r.group);
+    const key = g ? cleanText(g.key, 200) : '';
+    const name = g ? cleanText(g.name, MAX_NAME) : '';
+    if (g && key && name) {
+        const gk = typeof g.kind === 'string' && (WAITING_GROUP_KINDS as readonly string[]).includes(g.kind) ? g.kind as WaitingGroupKind : 'other';
+        out.group = { key, name, kind: gk };
+    }
+    if (r.phase === 'sent') {
+        out.phase = 'sent';
+        const sentAt = cleanText(r.sentAt, 40);
+        if (Number.isFinite(Date.parse(sentAt))) out.sentAt = sentAt;
+    }
+    const order = asCount(r.order);
+    if (order !== null) out.order = order;
+    if (typeof r.priority === 'number' && Number.isInteger(r.priority) && r.priority >= 1 && r.priority <= 5) out.priority = r.priority;
+    const url = webUrl(r.url);
+    if (url) out.url = url;
+    const note = waitingNote(r.note);
+    if (note) out.note = note;
+    const to = cleanText(r.to, 120);
+    if (to) out.to = to;
+    const inbox = asRecord(r.inbox);
+    const have = inbox ? asCount(inbox.have) : null;
+    const want = inbox ? asCount(inbox.want) : null;
+    if (inbox && have !== null && want !== null) out.inbox = { dir: cleanText(inbox.dir, 200), have, want };
+    // Only the known actions, in their own order; an empty list stays (it offers none).
+    if (Array.isArray(r.actions)) {
+        const said = r.actions as unknown[];
+        out.actions = WAITING_ACTIONS.filter(a => said.includes(a));
+    }
+    return out;
+}
+
+/**
+ * The `waiting` list of the status. Untrusted input. `groups`: the research
+ * announces `waiting.groups` (kind, section, group, phase … are read only then).
+ */
+export function sanitizeWaiting(value: unknown, groups = false): LiveWaiting[] {
     if (!Array.isArray(value)) return [];
     const out: LiveWaiting[] = [];
-    for (const item of value.slice(0, MAX_ITEMS)) {
+    for (const item of value.slice(0, MAX_WAITING)) {
         const r = asRecord(item);
         if (!r) continue;
         const what = cleanText(r.what);
@@ -1439,11 +1557,17 @@ export function sanitizeWaiting(value: unknown): LiveWaiting[] {
         // An archive's question names its host; without a valid one it is just a line. Its id is
         // made of the host (a full one fits, two archives never share it) and its terms stay whole.
         const host = !story && r.kind === 'permission' ? researchArchiveHost(r.host) : null;
+        // A newer research names every item's kind; an unknown one is "other".
+        const task: WaitingTaskKind | null = !groups || story || host || r.kind === 'story' || r.kind === 'permission' ? null
+            : TASK_KINDS.includes(r.kind as WaitingTaskKind) ? r.kind as WaitingTaskKind : 'other';
+        const kind: LiveWaiting['kind'] = story ? 'story' : host ? 'permission' : task ?? undefined;
         out.push({
             id: host ? `permission:${host}` : cleanText(r.id, 40), what, on: cleanText(r.on, host ? MAX_TERMS : 120), at: cleanText(r.at ?? r.since, 40),
             ...(person ? { person } : {}), ...(research ? { research } : {}),
             ...(story ? { kind: 'story' as const } : {}), ...(partner && partner !== person ? { partner } : {}),
             ...(host ? { kind: 'permission' as const, host } : {}),
+            ...(task ? { kind: task } : {}),
+            ...(groups ? waitingGroupFields(r, kind) : {}),
         });
     }
     return out;
@@ -1651,7 +1775,7 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         persons: asCount(r.persons),
         families: asCount(r.families),
         working: sanitizeWorking(r.working),
-        waiting: sanitizeWaiting(r.waiting),
+        waiting: sanitizeWaiting(r.waiting, !!features?.includes(WAITING_GROUPS_FEATURE)),
         links: sanitizeResearchLinks(r.links),
         queue: sanitizeQueue(r.queue),
         queueMore: asCount(r.queueMore) ?? 0,

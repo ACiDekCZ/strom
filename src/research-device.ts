@@ -9,7 +9,7 @@
  */
 
 import {
-    ResearchLinkAction, LiveWaiting, LiveIntake, ResearchAccepts, sanitizeResearchLinks, sanitizeWaiting, sanitizeUpdate, sanitizeIntake,
+    ResearchLinkAction, LiveWaiting, LiveIntake, ResearchAccepts, sanitizeResearchLinks, sanitizeWaiting, WAITING_GROUPS_FEATURE, sanitizeUpdate, sanitizeIntake,
     sanitizeAccepts, parseLiveBridge, isResearchHead, researchLinkScheme, DEFAULT_RESEARCH_SCHEME,
 } from './research-link.js';
 import { ResearchConflict, ResearchSend } from './types.js';
@@ -86,22 +86,30 @@ export interface StoredResearchWaiting {
 
 /**
  * Remember the research's "waiting" list (task id, text, time and person ref only; an
- * archive's question also its host and terms), the
+ * archive's question also its host and terms; from a research with `waiting.groups`
+ * also its kind, group, phase, order and actions), the
  * update it announced and its last intake, per research tree.
  */
 export function noteResearchWaiting(
     researchId: string,
     items: readonly LiveWaiting[],
-    extra: { update?: { version: string } | null; lastIntake?: LiveIntake | null } = {}
+    extra: { update?: { version: string } | null; lastIntake?: LiveIntake | null; features?: readonly string[] | null } = {}
 ): void {
     try {
+        const groups = !!extra.features?.includes(WAITING_GROUPS_FEATURE);
         const kept = items.map(w => ({
             id: w.id, what: w.what, at: w.at, ...(w.person ? { person: w.person } : {}),
             // An archive's question keeps what answers it there, and its terms.
             ...(w.kind === 'permission' && w.host ? { kind: w.kind, host: w.host, on: w.on } : {}),
+            ...(groups ? {
+                ...(w.kind && w.kind !== 'permission' ? { kind: w.kind } : {}), ...(w.partner ? { partner: w.partner } : {}),
+                section: w.section, group: w.group, phase: w.phase, sentAt: w.sentAt, order: w.order, priority: w.priority,
+                url: w.url, note: w.note, to: w.to, inbox: w.inbox, actions: w.actions,
+            } : {}),
         }));
         localStorage.setItem(WAITING_KEY + researchId, JSON.stringify({
             items: kept,
+            ...(groups ? { groups: true } : {}),
             at: new Date().toISOString(),
             ...(extra.update ? { update: extra.update } : {}),
             ...(extra.lastIntake ? { lastIntake: extra.lastIntake } : {}),
@@ -125,11 +133,11 @@ export function storedResearchWaiting(researchId: string, now = Date.now()): Sto
     try {
         const raw = localStorage.getItem(WAITING_KEY + researchId);
         if (!raw) return null;
-        const parsed = JSON.parse(raw) as { items?: unknown; at?: unknown; update?: unknown; lastIntake?: unknown };
+        const parsed = JSON.parse(raw) as { items?: unknown; groups?: unknown; at?: unknown; update?: unknown; lastIntake?: unknown };
         const at = typeof parsed.at === 'string' ? Date.parse(parsed.at) : NaN;
         if (!Number.isFinite(at) || now - at > WAITING_MAX_AGE_MS) return null;
         return {
-            items: sanitizeWaiting(parsed.items),
+            items: sanitizeWaiting(parsed.items, parsed.groups === true),
             at,
             update: sanitizeUpdate(parsed.update),
             lastIntake: sanitizeIntake(parsed.lastIntake),

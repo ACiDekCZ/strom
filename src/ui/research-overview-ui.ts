@@ -19,14 +19,19 @@ import { ZoomPan } from '../zoom.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { Person, PersonId } from '../types.js';
 import { computeEvidenceGaps } from '../stats.js';
-import { LiveChangeKind, researchConflictRef, recentAddsCount } from '../research-link.js';
+import { LiveChangeKind, LiveWaiting, WAITING_SECTIONS, researchConflictRef, researchTaskRef, recentAddsCount } from '../research-link.js';
+import {
+    WaitingFilter, WaitingGroupRows, WaitingPhase, effectiveWaitingFilter, waitingActionDo, waitingChatLeads, waitingChips, waitingDaysAgo, waitingGroupChatTask,
+    waitingPhase, waitingPhases, waitingSection, waitingTaskActions, waitingTodoCount,
+} from '../research-waiting.js';
 import { formatLiveClock } from '../live-time.js';
 import { uiModule } from './module.js';
 import {
     LiveChangeItem, LiveSession, appendChangeText, el, ensureLiveTicker, liveDuration, liveSection,
     liveSession, storeLiveSection, storedLiveSections, timeEl,
-    liveState, pausedText, waitsOnUser,
+    liveState, pausedText, waitsOnUser, appendLinkedText, newWaitingView, waitingKindLabel,
 } from './research-ui.js';
+import { storyWaitingPeople } from './story-compare-ui.js';
 import { taskDirectionName } from './research-directions-ui.js';
 import { conflictValueSaid, researchValueText } from './person-research-ui.js';
 import { shownName } from '../person-name.js';
@@ -36,6 +41,8 @@ import { isOpenHypothesis } from '../view-links.js';
 const OPEN_KEY = 'strom-live-overview-open';
 /** The overview's own fold choices. */
 const SECTIONS_KEY = 'strom-live-overview-sections';
+/** The chip chosen in "Awaiting action" (per device). */
+const WAITING_FILTER_KEY = 'strom-live-overview-waiting-filter';
 /** Folded unless the user unfolds them. */
 const FOLDED_BY_DEFAULT = new Set(['queue', 'knows']);
 /** Changes without a task are grouped by this long. */
@@ -61,6 +68,22 @@ let hovered: HTMLElement | null = null;
 function overviewMode(): Mode {
     if (window.matchMedia?.('(max-width: 640px)').matches) return 'sheet';
     return window.innerWidth >= 1280 ? 'docked' : 'overlay';
+}
+
+function storedWaitingFilter(): WaitingFilter {
+    try {
+        const v = localStorage.getItem(WAITING_FILTER_KEY);
+        return v && (WAITING_SECTIONS as readonly string[]).includes(v) ? v as WaitingFilter : 'all';
+    } catch {
+        return 'all';
+    }
+}
+
+function storeWaitingFilter(f: WaitingFilter): void {
+    try {
+        if (f === 'all') localStorage.removeItem(WAITING_FILTER_KEY);
+        else localStorage.setItem(WAITING_FILTER_KEY, f);
+    } catch { /* not kept */ }
 }
 
 function sectionCollapsed(key: string): boolean {
@@ -171,6 +194,8 @@ export const researchOverviewMethods = uiModule({
         const s = liveSession();
         if (!s) return;
         s.overview = false;
+        // What was unfolded, opened and new in "Awaiting action" lasts while the overview is open.
+        s.waitingView = newWaitingView();
         if (overviewMode() !== 'sheet') {
             try { localStorage.setItem(OPEN_KEY, '0'); } catch { /* not kept */ }
         }
@@ -212,7 +237,7 @@ export const researchOverviewMethods = uiModule({
             // under the pointer never gets its mouseleave, and a per-row
             // handler left that card lit up for good.
             root.addEventListener('mouseover', (e) => {
-                const row = (e.target as HTMLElement).closest<HTMLElement>('.research-overview__row.has-person');
+                const row = (e.target as HTMLElement).closest<HTMLElement>('.research-overview__row.has-person, .research-overview__waiting-item.has-person');
                 hoverCard((row?.dataset.person as PersonId | undefined) ?? null);
             });
             root.addEventListener('mouseleave', () => hoverCard(null));
@@ -354,56 +379,299 @@ export const researchOverviewMethods = uiModule({
         body.appendChild(strip);
     },
 
-    /** Waiting for you: cards (two columns), the person when the research names one. */
+    /**
+     * Awaiting action: compact rows, one detail open at a time. From a
+     * research with `waiting.groups`: chips by kind, To do (open) and
+     * Awaiting a reply (folded), each by the place it is done at (folded
+     * groups with counts; a filter unfolds them). An older research: the rows
+     * in its order. The heading counts what is to do.
+     */
     appendOverviewWaiting(body: HTMLElement, s: LiveSession, fold: { id: string; collapsed: boolean; onToggle: () => void }, mode: Mode): void {
         const r = strings.research;
         const L = strings.live;
-        const host = liveSection(body, { ...fold, title: `${r.waiting} · ${s.waiting.length}`, headCls: 'live-panel-heading-waiting' });
-        const grid = el('div', 'research-overview__waiting live-waiting');
-        host.appendChild(grid);
-        for (const w of s.waiting) {
-            const card = el('div', 'research-overview__waiting-card');
-            if (w.kind === 'story') {
-                // A story's new version: the comparison opens here (no ↗).
-                const text = el('div', 'research-overview__waiting-text');
-                const compare = this.appendStoryWaiting(text, w, (id) => this.overviewShowPerson(id, mode));
-                const who = text.querySelector('.live-waiting-who');
-                const meta = el('div', 'research-overview__waiting-meta');
-                if (who) meta.appendChild(who);
-                const at = timeEl(w.at, 'ago');
-                if (at) meta.appendChild(at);
-                card.append(text, meta, compare);
-                grid.appendChild(card);
-                continue;
+        const view = s.waitingView;
+        const todo = waitingTodoCount(s.waiting);
+        const replies = s.waiting.length - todo;
+        const host = liveSection(body, {
+            ...fold, title: `${r.waiting} · ${todo}`, summary: replies > 0 ? L.waitingReplyCount(replies) : undefined, headCls: 'live-panel-heading-waiting',
+        });
+        host.classList.add('research-overview__waiting');
+        if (view.detail && !s.waiting.some(w => w.id === view.detail)) view.detail = null;
+        const rows = (items: readonly LiveWaiting[]): HTMLElement => {
+            const list = el('ul', 'research-overview__waiting-rows');
+            for (const w of items) list.appendChild(this.overviewWaitingRow(s, w, mode));
+            return list;
+        };
+        // An older research: no kinds, places or phases.
+        if (!s.waiting.some(w => w.section)) {
+            host.appendChild(rows(s.waiting));
+            return;
+        }
+
+        const chips = waitingChips(s.waiting);
+        const chosen = storedWaitingFilter();
+        const filter = effectiveWaitingFilter(s.waiting, chosen);
+        // A filter whose last item went falls back to all (and stays there).
+        if (filter !== chosen) storeWaitingFilter(filter);
+        if (chips.length > 0) {
+            const bar = el('div', 'research-overview__filters research-overview__waiting-filters');
+            bar.setAttribute('role', 'radiogroup');
+            bar.setAttribute('aria-label', L.waitingFilterLabel);
+            const all: { f: WaitingFilter; label: string; count: number }[] = [
+                { f: 'all', label: L.filterAll, count: s.waiting.length },
+                ...chips.map(c => ({ f: c.section as WaitingFilter, label: L.waitingChips[c.section], count: c.count })),
+            ];
+            for (const c of all) {
+                const chip = el('button', 'research-overview__filter', `${c.label} ${c.count}`);
+                chip.type = 'button';
+                chip.setAttribute('role', 'radio');
+                chip.setAttribute('aria-checked', String(filter === c.f));
+                chip.dataset.filter = c.f;
+                // A new item the filter hides: a dot on its kind.
+                if (c.f !== 'all' && filter !== 'all' && c.f !== filter
+                    && s.waiting.some(w => view.fresh.has(w.id) && waitingSection(w) === c.f)) {
+                    chip.classList.add('has-new');
+                    chip.setAttribute('aria-label', `${c.label} ${c.count}, ${L.waitingNewSr}`);
+                }
+                chip.onclick = () => {
+                    storeWaitingFilter(c.f);
+                    // A filter unfolds every group: what was folded by hand meant the other default.
+                    for (const key of [...view.open.keys()]) if (key.startsWith('group:')) view.open.delete(key);
+                    this.renderResearchOverview();
+                };
+                bar.appendChild(chip);
             }
-            card.appendChild(el('div', 'research-overview__waiting-text', w.what));
-            // "on" is the agent's free text (an archive's terms); "user" only repeats the heading.
-            if (!waitsOnUser(w.on)) card.appendChild(el('small', 'research-overview__waiting-on', r.waitingOn(w.on)));
-            const meta = el('div', 'research-overview__waiting-meta');
-            const person = personByRefn(w.person);
-            if (person) {
-                const link = el('button', 'live-person-link', fullName(person));
-                link.type = 'button';
-                link.onclick = () => this.overviewShowPerson(person.id, mode);
-                meta.appendChild(link);
-            } else {
-                meta.appendChild(el('span', 'research-overview__muted', L.wholeResearch));
+            host.appendChild(bar);
+        }
+
+        const phases = waitingPhases(s.waiting, filter);
+        for (const phase of ['todo', 'sent'] as WaitingPhase[]) {
+            const groups = phases[phase];
+            if (groups.length === 0) continue;
+            const count = groups.reduce((n, g) => n + g.items.length, 0);
+            const phaseKey = `phase:${phase}`;
+            const open = view.open.get(phaseKey) ?? phase === 'todo';
+            const ph = el('button', 'research-overview__phase-head');
+            ph.type = 'button';
+            ph.dataset.phase = phase;
+            ph.setAttribute('aria-expanded', String(open));
+            const chevron = el('span', 'live-section__chevron', open ? '▾' : '▸');
+            chevron.setAttribute('aria-hidden', 'true');
+            ph.append(chevron, el('span', 'research-overview__phase-title', `${phase === 'todo' ? L.waitingPhaseTodo : L.waitingPhaseSent} · ${count}`));
+            ph.onclick = () => {
+                view.open.set(phaseKey, !open);
+                this.renderResearchOverview();
+            };
+            host.appendChild(ph);
+            if (!open) continue;
+            const wrap = el('div', 'research-overview__phase');
+            wrap.dataset.phase = phase;
+            for (const g of groups) {
+                // One item needs no heading.
+                if (g.items.length === 1) {
+                    wrap.appendChild(rows(g.items));
+                    continue;
+                }
+                const key = `group:${phase}:${g.key}`;
+                const gOpen = view.open.get(key) ?? (filter !== 'all' || g.items.some(w => view.fresh.has(w.id)));
+                wrap.appendChild(this.overviewWaitingGroupHead(g, gOpen, () => {
+                    view.open.set(key, !gOpen);
+                    this.renderResearchOverview();
+                }, mode));
+                if (gOpen) wrap.appendChild(rows(g.items));
             }
-            const dir = taskDirectionName(s, w.research);
-            if (dir) meta.appendChild(el('span', 'research-overview__dir', `· ${dir}`));
+            host.appendChild(wrap);
+        }
+    },
+
+    /**
+     * A group's heading: the place, its kind, how many, and a slot for the
+     * group's own action (overviewWaitingGroupAction).
+     */
+    overviewWaitingGroupHead(g: WaitingGroupRows, open: boolean, toggle: () => void, mode: Mode): HTMLElement {
+        const L = strings.live;
+        const row = el('div', 'research-overview__waiting-grouphead');
+        const gh = el('button', 'research-overview__group-head research-overview__waiting-group');
+        gh.type = 'button';
+        gh.dataset.group = g.key;
+        gh.setAttribute('aria-expanded', String(open));
+        const chevron = el('span', 'live-section__chevron', open ? '▾' : '▸');
+        chevron.setAttribute('aria-hidden', 'true');
+        const name = g.group?.name ?? L.waitingOtherGroup;
+        const title = el('span', 'research-overview__group-title', name);
+        const kind = L.waitingGroupKinds[g.group?.kind ?? 'other'];
+        gh.append(chevron, title);
+        if (kind !== name) gh.appendChild(el('span', 'research-overview__group-kind', kind));
+        gh.appendChild(el('span', 'research-overview__group-span', String(g.items.length)));
+        gh.setAttribute('aria-label', `${name} · ${g.items.length}${kind !== name ? `, ${kind}` : ''}`);
+        gh.onclick = toggle;
+        row.appendChild(gh);
+        const action = this.overviewWaitingGroupAction(g, mode);
+        if (action) row.appendChild(action);
+        return row;
+    },
+
+    /**
+     * A whole group's action beside its heading, outside the fold button:
+     * "Chat ↗" on the place (the task link of its first item offering a chat;
+     * the research's chat takes up the rest of the group). Not on a phone: it
+     * opens the research on the computer. (All queries' text or sent for all
+     * can join it once the bridge takes them.)
+     */
+    overviewWaitingGroupAction(g: WaitingGroupRows, mode: Mode): HTMLElement | null {
+        if (mode === 'sheet') return null;
+        const task = waitingGroupChatTask(g.items);
+        const url = task ? this.activeResearchLink('task', { task, taskDo: 'chat' }) : null;
+        if (!url) return null;
+        const btn = el('button', 'live-waiting-answer research-overview__waiting-groupchat', strings.live.waitingActions.chat);
+        btn.type = 'button';
+        btn.dataset.task = task!;
+        btn.setAttribute('aria-label', `${strings.live.waitingActions.chat} · ${g.group?.name ?? strings.live.waitingOtherGroup}`);
+        btn.onclick = () => this.launchResearchLink(url);
+        return btn;
+    },
+
+    /** One waiting item: a compact row (kind, text in two lines, person, age); a click opens its detail. */
+    overviewWaitingRow(s: LiveSession, w: LiveWaiting, mode: Mode): HTMLElement {
+        const L = strings.live;
+        const view = s.waitingView;
+        const open = view.detail === w.id;
+        const li = el('li', 'research-overview__waiting-item');
+        li.dataset.id = w.id;
+        if (view.fresh.has(w.id)) li.classList.add('is-fresh');
+        if (open) li.classList.add('is-open');
+        const detailId = `ov-wait-${w.id.replace(/[^A-Za-z0-9_-]/g, '_')}`;
+        const row = el('button', 'research-overview__waiting-row');
+        row.type = 'button';
+        row.setAttribute('aria-expanded', String(open));
+        row.setAttribute('aria-controls', detailId);
+        const head = el('span', 'research-overview__waiting-what');
+        if (w.kind === 'story') head.appendChild(el('span', 'live-kind-story', L.kindStory));
+        else if (w.section || w.kind) head.appendChild(waitingKindLabel(w));
+        head.append(w.kind === 'story' ? strings.story.nvWaitingItem : w.what);
+        row.appendChild(head);
+        const meta = el('span', 'research-overview__waiting-meta');
+        const people = w.kind === 'story' ? storyWaitingPeople(w).map(p => p.name) : [personByRefn(w.person)].filter((p): p is Person => !!p).map(fullName);
+        meta.appendChild(el('span', people.length > 0 ? 'research-overview__waiting-who' : 'research-overview__muted', people.length > 0 ? people.join(', ') : L.wholeResearch));
+        if (waitingPhase(w) === 'sent') {
+            const ts = Date.parse(w.sentAt || w.at);
+            if (Number.isFinite(ts)) {
+                meta.appendChild(el('span', 'research-overview__waiting-sent',
+                    L.waitingSentOn(new Date(ts).toLocaleDateString(getCurrentLanguage(), { day: 'numeric', month: 'numeric' }))));
+            }
+            if (Number.isFinite(ts)) meta.appendChild(el('span', 'research-overview__waiting-age', waitingDaysAgo(ts, Date.now(), getCurrentLanguage())));
+        } else {
             const at = timeEl(w.at, 'ago');
             if (at) meta.appendChild(at);
-            card.appendChild(meta);
-            if (mode !== 'sheet' && this.canAnswerResearchWaiting(w)) {
-                const answer = el('button', 'live-waiting-answer', r.answer);
-                answer.type = 'button';
-                answer.onclick = () => this.answerResearchTask(w);
-                card.appendChild(answer);
-            } else if (mode === 'sheet') {
-                card.appendChild(el('div', 'research-overview__muted', L.answerOnComputer));
-            }
-            grid.appendChild(card);
         }
+        row.appendChild(meta);
+        row.onclick = () => {
+            view.detail = open ? null : w.id;
+            this.renderResearchOverview();
+        };
+        li.appendChild(row);
+        const person = personByRefn(w.person);
+        if (person) {
+            li.classList.add('has-person');
+            li.dataset.person = person.id;
+        }
+        if (open) {
+            const detail = this.overviewWaitingDetail(s, w, mode);
+            detail.id = detailId;
+            li.appendChild(detail);
+        }
+        return li;
+    },
+
+    /** An item's detail: the whole text (addresses as links), what it waits on, whom, the person, and its actions. */
+    overviewWaitingDetail(s: LiveSession, w: LiveWaiting, mode: Mode): HTMLElement {
+        const r = strings.research;
+        const L = strings.live;
+        const detail = el('div', 'research-overview__waiting-detail');
+        if (w.kind === 'story') {
+            // A story's new version: the comparison opens here (no ↗).
+            const text = el('div', 'research-overview__waiting-text');
+            const compare = this.appendStoryWaiting(text, w, (id) => this.overviewShowPerson(id, mode));
+            const actions = el('div', 'research-overview__waiting-actions');
+            actions.appendChild(compare);
+            detail.append(text, actions);
+            return detail;
+        }
+        const text = el('div', 'research-overview__waiting-text');
+        appendLinkedText(text, w.what);
+        detail.appendChild(text);
+        // "on" is the agent's free text (an archive's terms); "user" only repeats the heading.
+        if (!waitsOnUser(w.on)) {
+            const on = el('small', 'research-overview__waiting-on');
+            appendLinkedText(on, r.waitingOn(w.on));
+            detail.appendChild(on);
+        }
+        if (w.to) detail.appendChild(el('small', 'research-overview__waiting-on', L.waitingTo(w.to)));
+        const meta = el('div', 'research-overview__waiting-meta');
+        const person = personByRefn(w.person);
+        if (person) {
+            const link = el('button', 'live-person-link', fullName(person));
+            link.type = 'button';
+            link.onclick = () => this.overviewShowPerson(person.id, mode);
+            meta.appendChild(link);
+        } else {
+            meta.appendChild(el('span', 'research-overview__muted', L.wholeResearch));
+        }
+        const dir = taskDirectionName(s, w.research);
+        if (dir) meta.appendChild(el('span', 'research-overview__dir', `· ${dir}`));
+        if (w.inbox) meta.appendChild(el('span', 'research-overview__waiting-inbox', L.waitingInbox(w.inbox.have, w.inbox.want)));
+        detail.appendChild(meta);
+
+        const actions = el('div', 'research-overview__waiting-actions');
+        // The research runs on the computer: a phone gets no ↗ into it.
+        const hint = mode !== 'sheet' && this.appendWaitingActions(actions, w);
+        if (w.url) {
+            const web = el('a', 'live-waiting-answer research-overview__waiting-web', L.waitingOpenWeb);
+            web.href = w.url;
+            web.target = '_blank';
+            web.rel = 'noopener noreferrer';
+            actions.appendChild(web);
+        }
+        if (actions.childElementCount > 0) detail.appendChild(actions);
+        if (hint) detail.appendChild(el('p', 'research-overview__waiting-hint', L.waitingAnswerHint));
+        if (mode === 'sheet') detail.appendChild(el('div', 'research-overview__muted', L.answerOnComputer));
+        return detail;
+    },
+
+    /**
+     * The item's ways into the research: the task link's actions it offers
+     * (`actions`; only when the research takes task links), else "Answer ↗"
+     * as before. True when "Answer ↗" saves the answer with the task (the
+     * hint goes under it).
+     */
+    appendWaitingActions(host: HTMLElement, w: LiveWaiting): boolean {
+        const L = strings.live;
+        const offered = waitingTaskActions(w);
+        const task = researchTaskRef(w.id);
+        if (offered && task && this.researchLinkAvailable('task')) {
+            let answer = false;
+            for (const action of offered) {
+                // Each action is its own task link for now; "sent" and "file" can go through
+                // the bridge instead where it announces them (waiting.sent, accepts.media.task).
+                const url = this.activeResearchLink('task', { task, taskDo: waitingActionDo(action) });
+                if (!url) continue;
+                const btn = el('button', 'live-waiting-answer research-overview__waiting-action', L.waitingActions[action]);
+                btn.type = 'button';
+                btn.dataset.action = action;
+                if (action === 'chat' && waitingChatLeads(w)) btn.classList.add('is-primary');
+                btn.onclick = () => this.launchResearchLink(url);
+                host.appendChild(btn);
+                if (action === 'answer') answer = true;
+            }
+            return answer;
+        }
+        if (!this.canAnswerResearchWaiting(w)) return false;
+        const btn = el('button', 'live-waiting-answer research-overview__waiting-action', strings.research.answer);
+        btn.type = 'button';
+        btn.dataset.action = 'answer';
+        btn.onclick = () => this.answerResearchTask(w);
+        host.appendChild(btn);
+        return false;
     },
 
     /** Now: who works on what, since when; "Show in tree" when the research names the person. */

@@ -23,6 +23,7 @@ import { researchSendMode } from './research-sync-ui.js';
 import { researchTrialTagHtml } from './research-tree-settings-ui.js';
 import { researchSendPreviewSkipped, exportReminderDue, lastExportAll, noteExportReminderShown } from '../research-device.js';
 import { exportDate } from './snapshots-ui.js';
+import { waitingTodoCount } from '../research-waiting.js';
 
 const REVIEW_ID = 'research-review-modal';
 const SCOPE_KEY = 'strom-research-review-scope';
@@ -190,7 +191,8 @@ export const researchActionsMethods = uiModule({
         if (!this.researchMenuShown() || !this.researchAnyAnnounced()) return 0;
         // Its bridge not known here: what it once said is waiting is not shown as now.
         if (!this.activeResearchModeKnown()) return 0;
-        return this.researchWaiting()?.items.length ?? 0;
+        // What was sent and waits for a reply asks nothing of the user now.
+        return waitingTodoCount(this.researchWaiting()?.items ?? []);
     },
 
     /** What the research menu holds now (the conditions of every item). */
