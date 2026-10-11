@@ -37,7 +37,7 @@ import {
     humanizeChange, isGedcomFileName, isSafariBrowser,
     parseSendBridge, pickSendDefault, sanitizeSyncReply, researchSchemeUrl, researchTaskRef,
     ResearchLinkAction, ResearchLinkParams, LiveBridgeUrls, LiveStatus, LiveChange, LiveWorker, LiveWaiting,
-    LiveQueueItem, LiveSpend, LiveIntake, LiveDirection, ResearchHeaderInfo, ExportXrefs,
+    LiveQueueItem, LiveSpend, LiveIntake, LiveDirection, ResearchHeaderInfo, ExportXrefs, ResearchAccepts,
 } from '../research-link.js';
 import { uiModule } from './module.js';
 import { withAppVersion, researchGedcomTitles, TitlesInGedcom, changeKind, changeAdds, sanitizeLiveLog, textKind, textPersonRefs, textWithoutRefs, LiveChangeKind, LiveLogEntry, LiveCommitAdds, LiveRecent } from '../research-link.js';
@@ -116,7 +116,12 @@ export interface LiveSession {
     /** When the research last changed (ISO; '' = unknown). */
     headAt: string;
     working: LiveWorker[];
+    /** The research's waiting list as shown: its last status with the rows moved by a write not yet in it (research-waiting-write-ui.ts). */
     waiting: LiveWaiting[];
+    /** What the bridge can do (its last status's `features`; null: not said). */
+    features: string[] | null;
+    /** What the research takes from the app (its last status's `accepts`). */
+    accepts: ResearchAccepts | null;
     queue: LiveQueueItem[];
     queueMore: number;
     update: { version: string } | null;
@@ -2027,6 +2032,8 @@ export const researchUiMethods = uiModule({
                 headAt: status.headAt,
                 working: status.working,
                 waiting: status.waiting,
+                features: status.features,
+                accepts: status.accepts,
                 queue: status.queue,
                 queueMore: status.queueMore,
                 update: status.update,
@@ -2178,7 +2185,10 @@ export const researchUiMethods = uiModule({
         }
         if (status.headAt) s.headAt = status.headAt;
         s.working = status.working;
-        s.waiting = status.waiting;
+        s.features = status.features;
+        s.accepts = status.accepts;
+        // A row moved by a write the research has not reported yet stays where it was moved.
+        s.waiting = this.liveWaitingShown(s, status.waiting);
         // A task that was not there before unfolds "Waiting for you", even when folded.
         // What came already sent needs nothing from the user: it unfolds nothing (an item
         // that moves to sent keeps its id and is not new).

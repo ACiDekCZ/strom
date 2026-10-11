@@ -20,6 +20,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { Person, PersonId } from '../types.js';
 import { computeEvidenceGaps } from '../stats.js';
 import { LiveChangeKind, LiveWaiting, WAITING_SECTIONS, researchConflictRef, researchTaskRef, recentAddsCount } from '../research-link.js';
+import { waitingGroupSendable, waitingGroupHasNote, waitingSendable, waitingUnsendable } from '../research-waiting-write.js';
 import {
     WaitingFilter, WaitingGroupRows, WaitingPhase, effectiveWaitingFilter, waitingActionDo, waitingChatLeads, waitingChips, waitingDaysAgo, waitingGroupChatTask,
     waitingPhase, waitingPhases, waitingSection, waitingTaskActions, waitingTodoCount,
@@ -474,7 +475,7 @@ export const researchOverviewMethods = uiModule({
                 }
                 const key = `group:${phase}:${g.key}`;
                 const gOpen = view.open.get(key) ?? (filter !== 'all' || g.items.some(w => view.fresh.has(w.id)));
-                wrap.appendChild(this.overviewWaitingGroupHead(g, gOpen, () => {
+                wrap.appendChild(this.overviewWaitingGroupHead(s, g, phase, gOpen, () => {
                     view.open.set(key, !gOpen);
                     this.renderResearchOverview();
                 }, mode));
@@ -486,9 +487,9 @@ export const researchOverviewMethods = uiModule({
 
     /**
      * A group's heading: the place, its kind, how many, and a slot for the
-     * group's own action (overviewWaitingGroupAction).
+     * group's own actions (overviewWaitingGroupAction).
      */
-    overviewWaitingGroupHead(g: WaitingGroupRows, open: boolean, toggle: () => void, mode: Mode): HTMLElement {
+    overviewWaitingGroupHead(s: LiveSession, g: WaitingGroupRows, phase: WaitingPhase, open: boolean, toggle: () => void, mode: Mode): HTMLElement {
         const L = strings.live;
         const row = el('div', 'research-overview__waiting-grouphead');
         const gh = el('button', 'research-overview__group-head research-overview__waiting-group');
@@ -506,29 +507,58 @@ export const researchOverviewMethods = uiModule({
         gh.setAttribute('aria-label', `${name} · ${g.items.length}${kind !== name ? `, ${kind}` : ''}`);
         gh.onclick = toggle;
         row.appendChild(gh);
-        const action = this.overviewWaitingGroupAction(g, mode);
+        const action = this.overviewWaitingGroupAction(s, g, phase, mode);
         if (action) row.appendChild(action);
         return row;
     },
 
     /**
-     * A whole group's action beside its heading, outside the fold button:
-     * "Chat ↗" on the place (the task link of its first item offering a chat;
-     * the research's chat takes up the rest of the group). Not on a phone: it
-     * opens the research on the computer. (All queries' text or sent for all
-     * can join it once the bridge takes them.)
+     * A whole group's actions beside its heading, outside the fold button
+     * (seen folded too; a click never folds): "Chat ↗" on the place (the task
+     * link of its first item offering a chat; the research's chat takes up
+     * the rest of the group) — not on a phone, it opens the research on the
+     * computer; through the bridge, where it takes them (a phone too):
+     * "Sent" for the place's items to do and "All queries' text".
      */
-    overviewWaitingGroupAction(g: WaitingGroupRows, mode: Mode): HTMLElement | null {
-        if (mode === 'sheet') return null;
-        const task = waitingGroupChatTask(g.items);
+    overviewWaitingGroupAction(s: LiveSession, g: WaitingGroupRows, phase: WaitingPhase, mode: Mode): HTMLElement | null {
+        const L = strings.live;
+        const W = L.waitingWrite;
+        const name = g.group?.name ?? L.waitingOtherGroup;
+        const box = el('div', 'research-overview__waiting-groupactions');
+        const task = mode === 'sheet' ? null : waitingGroupChatTask(g.items);
         const url = task ? this.activeResearchLink('task', { task, taskDo: 'chat' }) : null;
-        if (!url) return null;
-        const btn = el('button', 'live-waiting-answer research-overview__waiting-groupchat', strings.live.waitingActions.chat);
-        btn.type = 'button';
-        btn.dataset.task = task!;
-        btn.setAttribute('aria-label', `${strings.live.waitingActions.chat} · ${g.group?.name ?? strings.live.waitingOtherGroup}`);
-        btn.onclick = () => this.launchResearchLink(url);
-        return btn;
+        if (url) {
+            const btn = el('button', 'live-waiting-answer research-overview__waiting-groupchat', L.waitingActions.chat);
+            btn.type = 'button';
+            btn.dataset.task = task!;
+            btn.setAttribute('aria-label', `${L.waitingActions.chat} · ${name}`);
+            btn.onclick = () => this.launchResearchLink(url);
+            box.appendChild(btn);
+        }
+        // A place the research names: the whole place (not only what a filter shows).
+        const key = g.group?.key;
+        const writes = this.liveWaitingWrites(s);
+        if (key && writes.sent && phase === 'todo') {
+            const sendable = waitingGroupSendable(s.waiting.filter(w => w.group?.key === key));
+            if (sendable.length > 0) {
+                const btn = this.waitingWriteButton(W.groupSent, 'group-sent', () => { void this.markWaitingGroupSent(s, key); },
+                    'research-overview__waiting-groupwrite');
+                btn.setAttribute('aria-label', W.groupSentLabel(name, sendable.length));
+                box.appendChild(btn);
+            }
+        }
+        if (key && writes.note && waitingGroupHasNote(s.waiting.filter(w => w.group?.key === key))) {
+            const btn = el('button', 'live-waiting-answer research-overview__waiting-groupwrite research-overview__waiting-groupnote', W.groupNote);
+            btn.type = 'button';
+            btn.dataset.action = 'group-note';
+            btn.setAttribute('aria-label', `${W.groupNote} · ${name}`);
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                void this.showWaitingGroupNote(s, key, name);
+            };
+            box.appendChild(btn);
+        }
+        return box.childElementCount > 0 ? box : null;
     },
 
     /** One waiting item: a compact row (kind, text in two lines, person, age); a click opens its detail. */
@@ -623,8 +653,8 @@ export const researchOverviewMethods = uiModule({
         detail.appendChild(meta);
 
         const actions = el('div', 'research-overview__waiting-actions');
-        // The research runs on the computer: a phone gets no ↗ into it.
-        const hint = mode !== 'sheet' && this.appendWaitingActions(actions, w);
+        // The research runs on the computer: a phone gets no ↗ into it, only the bridge's writes.
+        const hint = this.appendWaitingActions(actions, w, s, mode);
         if (w.url) {
             const web = el('a', 'live-waiting-answer research-overview__waiting-web', L.waitingOpenWeb);
             web.href = w.url;
@@ -639,20 +669,37 @@ export const researchOverviewMethods = uiModule({
     },
 
     /**
-     * The item's ways into the research: the task link's actions it offers
-     * (`actions`; only when the research takes task links), else "Answer ↗"
-     * as before. True when "Answer ↗" saves the answer with the task (the
-     * hint goes under it).
+     * The item's actions: "Sent", "Back to To do" and "Add a file" through
+     * the bridge where it takes them (waiting.sent, accepts.media.task; a
+     * phone too), the other task link's actions it offers (`actions`; only
+     * on a computer whose research takes task links), else "Answer ↗" as
+     * before. True when "Answer ↗" saves the answer with the task (the hint
+     * goes under it).
      */
-    appendWaitingActions(host: HTMLElement, w: LiveWaiting): boolean {
+    appendWaitingActions(host: HTMLElement, w: LiveWaiting, s: LiveSession, mode: Mode): boolean {
         const L = strings.live;
+        const W = L.waitingWrite;
         const offered = waitingTaskActions(w);
         const task = researchTaskRef(w.id);
-        if (offered && task && this.researchLinkAvailable('task')) {
+        const writes = this.liveWaitingWrites(s);
+        const links = mode !== 'sheet' && !!offered && !!task && this.researchLinkAvailable('task');
+        const appendUnsent = (): void => {
+            if (task && writes.sent && waitingUnsendable(w)) {
+                host.appendChild(this.waitingWriteButton(W.unsent, 'unsent', () => { void this.markWaitingUnsent(s, w.id); }));
+            }
+        };
+        if (offered && task && (links || writes.sent || writes.file)) {
             let answer = false;
             for (const action of offered) {
-                // Each action is its own task link for now; "sent" and "file" can go through
-                // the bridge instead where it announces them (waiting.sent, accepts.media.task).
+                if (action === 'sent' && writes.sent && waitingSendable(w)) {
+                    host.appendChild(this.waitingWriteButton(W.sent, 'sent', () => { void this.markWaitingSent(s, w); }));
+                    continue;
+                }
+                if (action === 'file' && writes.file) {
+                    host.appendChild(this.waitingWriteButton(W.file, 'file', () => this.pickWaitingFile(s, w)));
+                    continue;
+                }
+                if (!links) continue;
                 const url = this.activeResearchLink('task', { task, taskDo: waitingActionDo(action) });
                 if (!url) continue;
                 const btn = el('button', 'live-waiting-answer research-overview__waiting-action', L.waitingActions[action]);
@@ -663,9 +710,12 @@ export const researchOverviewMethods = uiModule({
                 host.appendChild(btn);
                 if (action === 'answer') answer = true;
             }
-            return answer;
+            appendUnsent();
+            if (links) return answer;
+        } else {
+            appendUnsent();
         }
-        if (!this.canAnswerResearchWaiting(w)) return false;
+        if (mode === 'sheet' || !this.canAnswerResearchWaiting(w)) return false;
         const btn = el('button', 'live-waiting-answer research-overview__waiting-action', strings.research.answer);
         btn.type = 'button';
         btn.dataset.action = 'answer';

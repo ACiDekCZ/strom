@@ -86,6 +86,7 @@ import { batchMethods } from './batch-ui.js';
 import { evidenceUiMethods } from './evidence-ui.js';
 import { cardSignalsUiMethods } from './card-signals-ui.js';
 import { researchOverviewMethods } from './research-overview-ui.js';
+import { researchWaitingWriteMethods } from './research-waiting-write-ui.js';
 import { researchDirectionsMethods } from './research-directions-ui.js';
 import { liveFollowMethods } from './live-follow-ui.js';
 import { researchEdgeUiMethods } from './research-edge-ui.js';
@@ -579,6 +580,10 @@ Object.assign(UIClass.prototype, cardSignalsUiMethods);
 type ResearchOverviewMethods = typeof researchOverviewMethods;
 export interface UIClass extends ResearchOverviewMethods {}
 Object.assign(UIClass.prototype, researchOverviewMethods);
+
+type ResearchWaitingWriteMethods = typeof researchWaitingWriteMethods;
+export interface UIClass extends ResearchWaitingWriteMethods {}
+Object.assign(UIClass.prototype, researchWaitingWriteMethods);
 
 type ResearchDirectionsMethods = typeof researchDirectionsMethods;
 export interface UIClass extends ResearchDirectionsMethods {}

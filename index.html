@@ -11130,6 +11130,39 @@
             .research-overview__waiting-detail { gap: 4px; padding-bottom: 6px; }
             .research-overview__phase-head { margin-top: 4px; }
         }
+        /* Written through the research's bridge: Sent (an item, a place), Back to To do, Add a file, All queries' text. */
+        .research-overview__waiting-groupactions { display: flex; flex: none; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 6px; margin-top: 8px; }
+        .research-overview__waiting-groupactions .research-overview__waiting-groupchat { margin-top: 0; }
+        .research-overview__waiting-write:disabled { opacity: 0.6; cursor: default; }
+        .waiting-note-overlay { z-index: 1100; }
+        .waiting-note-text {
+            margin: 0 0 4px; padding: 10px 12px; max-height: 60vh; overflow: auto;
+            border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface-2); color: var(--text);
+            font-size: 14px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text;
+        }
+        .waiting-note-text:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        @media (pointer: coarse) {
+            .research-overview__waiting-groupwrite, .research-overview__waiting-write, .waiting-note-copy { display: inline-flex; align-items: center; min-height: 44px; }
+            .waiting-note-modal .close-btn { min-width: 44px; min-height: 44px; }
+        }
+        /* Tablet: the place's actions may take a line of their own under a long name. */
+        @media (min-width: 641px) and (max-width: 1024px) {
+            .research-overview__waiting-grouphead { flex-wrap: wrap; }
+        }
+        /* Phone: the place's actions under its heading, the text as large as the rows. */
+        @media (max-width: 640px) {
+            .research-overview__waiting-grouphead { flex-wrap: wrap; }
+            .research-overview__waiting-grouphead > .research-overview__waiting-group { flex-basis: 100%; }
+            .research-overview__waiting-groupactions { margin-top: 0; padding-bottom: 6px; justify-content: flex-start; }
+            .waiting-note-text { font-size: 15px; max-height: none; }
+            /* A phone is touched: the writes at least 44px, whatever the pointer reports. */
+            .research-overview__waiting-groupwrite, .research-overview__waiting-write, .waiting-note-copy { display: inline-flex; align-items: center; min-height: 44px; }
+        }
+        /* Phone held sideways: the window's text gets what height there is. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .waiting-note-text { max-height: calc(100vh - 150px); }
+            .research-overview__waiting-groupactions { margin-top: 4px; }
+        }
         .research-overview__muted { color: var(--text-faint); font-size: 12px; }
         .research-overview__now-row { display: flex; align-items: center; gap: 8px; }
         .research-overview__now-text { flex: 1; min-width: 0; }

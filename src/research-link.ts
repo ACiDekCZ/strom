@@ -1296,6 +1296,8 @@ export interface ResearchAccepts {
     mediaMaxBytes: number | null;
     /** It takes a crop's region with a file (`accepts.media.region`). */
     mediaRegion: boolean;
+    /** It takes a file for a waiting task (`accepts.media.task`: `X-Strom-Task` with `PUT /media/<sha256>`); absent: no. */
+    mediaTask?: true;
     /** The kinds of file it takes (`accepts.media.types`); null when it does not say. */
     mediaTypes: { mime: string; ext: string[] }[] | null;
     /** It takes batches ("Add materials", `accepts.media.batch`): at most so many files and bytes, ZIP or not; null: no batches. */
@@ -1373,6 +1375,7 @@ export function sanitizeAccepts(value: unknown): ResearchAccepts | null {
         media: !!asRecord(r.media),
         mediaMaxBytes: mediaMaxBytes(asRecord(r.media)?.max ?? asRecord(r.media)?.maxBytes),
         mediaRegion: asRecord(r.media)?.region === true,
+        ...(asRecord(r.media)?.task === true ? { mediaTask: true as const } : {}),
         mediaTypes: mediaTypes(asRecord(r.media)?.types),
         mediaBatch: mediaBatch(asRecord(r.media)?.batch),
         mediaEstimate: mediaEstimate(asRecord(r.media)?.estimate),
@@ -1491,7 +1494,7 @@ export function webUrl(value: unknown): string | null {
 }
 
 /** A query's text in the research: a relative `notes/….md` path, no `..`. */
-function waitingNote(value: unknown): string | null {
+export function waitingNote(value: unknown): string | null {
     if (typeof value !== 'string') return null;
     const v = value.trim();
     return v.length <= 200 && /^notes\/[^\s\\]+\.md$/.test(v) && !v.split('/').some(part => part === '..' || part === '.' || part === '')

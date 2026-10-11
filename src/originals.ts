@@ -232,11 +232,12 @@ export function originalTargets(rec: Pick<QueuedOriginal, 'personId' | 'sourceId
 
 /**
  * The headers of `PUT /media/<sha256>` (values percent-encoded where text).
- * Only the ones the research's CORS allows: Name, Person, Source, Region, Note.
+ * Only the ones the research's CORS allows: Name, Person, Source, Region, Note,
+ * and Task (a file for a waiting task, `accepts.media.task`).
  * `targets.region: false` — the research does not take a region.
  */
 export function uploadHeaders(rec: Pick<QueuedOriginal, 'mimeType' | 'name' | 'region' | 'note'>,
-    targets: Pick<OriginalTargets, 'person' | 'source'> & { region?: boolean }): Record<string, string> {
+    targets: Pick<OriginalTargets, 'person' | 'source'> & { region?: boolean; task?: string }): Record<string, string> {
     const headers: Record<string, string> = {
         'Content-Type': rec.mimeType || 'application/octet-stream',
         'X-Strom-Name': encodeURIComponent(rec.name || 'file'),
@@ -246,6 +247,7 @@ export function uploadHeaders(rec: Pick<QueuedOriginal, 'mimeType' | 'name' | 'r
     // In the file's stored pixels (regionToStored): the research cuts files as stored.
     if (rec.region && targets.region !== false) headers['X-Strom-Region'] = regionHeader(rec.region);
     if (rec.note) headers['X-Strom-Note'] = encodeURIComponent(rec.note.slice(0, 500));
+    if (targets.task) headers['X-Strom-Task'] = targets.task;
     return headers;
 }
 

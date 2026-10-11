@@ -46,7 +46,19 @@ const CHANGE = [
     'F0001 +child P0006',
 ];
 
-interface Bridge { waiting: Record<string, unknown>[]; gedCalls: number; log: Record<string, unknown> | null; events: boolean; paused: Record<string, unknown> | null; workPerson: string; workDone: boolean; changeEntries: Record<string, unknown>[] | null; features?: string[]; recent?: Record<string, unknown>; spend?: Record<string, unknown> }
+/** A write to the bridge from "Awaiting action" (variant B). */
+interface Write { method: string; path: string; body: string; headers: Record<string, string> }
+interface Bridge {
+    waiting: Record<string, unknown>[]; gedCalls: number; log: Record<string, unknown> | null; events: boolean; paused: Record<string, unknown> | null;
+    workPerson: string; workDone: boolean; changeEntries: Record<string, unknown>[] | null; features?: string[]; recent?: Record<string, unknown>;
+    spend?: Record<string, unknown>; accepts?: Record<string, unknown>;
+    /** Every write it got (POST waiting / group, GET group note, PUT media). */
+    writes: Write[];
+    /** Refuse the writes so (a status and its code), or 'abort': no answer. */
+    refuse?: { status: number; code: string } | 'abort';
+    /** The text of a place's queries. */
+    note?: Record<string, unknown>;
+}
 
 /** A bridge that sends one change of six lines, then keeps quiet. */
 async function follow(page: Page, size: { width: number; height: number } = { width: 1440, height: 900 },
@@ -69,6 +81,7 @@ async function follow(page: Page, size: { width: number; height: number } = { wi
         workPerson: 'P0012',
         workDone: false,
         changeEntries: null,
+        writes: [],
     };
     setup(bridge);
     const status = () => ({
@@ -80,7 +93,10 @@ async function follow(page: Page, size: { width: number; height: number } = { wi
         spend: bridge.spend ?? { month: '2026-09', sessions: 4, amount: 3.2, currency: 'USD' },
         ...(bridge.features ? { features: bridge.features } : {}),
         ...(bridge.recent ? { recent: bridge.recent } : {}),
+        ...(bridge.accepts ? { accepts: bridge.accepts } : {}),
     });
+    const json = (status: number, body: unknown) => ({ status, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const sendable = (w: Record<string, unknown>) => w.phase !== 'sent' && ['letter', 'family', 'other'].includes(String(w.kind));
     await page.route(`${BRIDGE}/**`, async (route) => {
         const path = new URL(route.request().url()).pathname;
         if (path.endsWith('/status')) {
@@ -98,6 +114,32 @@ async function follow(page: Page, size: { width: number; height: number } = { wi
             const body = `event: hello\ndata: ${JSON.stringify(status())}\n\n`
                 + `event: change\ndata: ${JSON.stringify({ head: 'h2', what: CHANGE, at: new Date().toISOString(), ...(bridge.changeEntries ? { entries: bridge.changeEntries } : {}) })}\n\n`;
             return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/event-stream' }, body });
+        }
+        // "Awaiting action" written through the bridge (variant B): what came is kept, the list follows.
+        const req = route.request();
+        if (req.method() === 'OPTIONS') {
+            return route.fulfill({ status: 204, headers: { ...cors, 'access-control-allow-methods': 'GET, POST, PUT', 'access-control-allow-headers': '*' } });
+        }
+        const write = /\/(waiting\/T\d+|group\/[^/]+(?:\/note)?|media\/[0-9a-f]{64})$/.exec(path);
+        if (write) {
+            bridge.writes.push({ method: req.method(), path: write[1], body: req.postData() ?? '', headers: req.headers() });
+            if (bridge.refuse === 'abort') return route.abort('connectionrefused');
+            if (bridge.refuse) return route.fulfill(json(bridge.refuse.status, { error: 'refused', code: bridge.refuse.code }));
+            if (write[1].startsWith('media/')) return route.fulfill(json(200, { input: 'I0042' }));
+            if (write[1].endsWith('/note')) return route.fulfill(json(200, bridge.note ?? { text: '' }));
+            const what = (JSON.parse(req.postData() || '{}') as { do?: string }).do;
+            const at = new Date().toISOString();
+            if (write[1].startsWith('waiting/')) {
+                const w = bridge.waiting.find(x => x.id === write[1].slice('waiting/'.length));
+                if (!w) return route.fulfill(json(404, { error: 'not waiting', code: 'waiting.none' }));
+                if (what === 'sent') Object.assign(w, { phase: 'sent', sentAt: at });
+                else { delete w.phase; delete w.sentAt; }
+                return route.fulfill(json(200, { sent: [w.id] }));
+            }
+            const key = decodeURIComponent(write[1].slice('group/'.length));
+            const marked = bridge.waiting.filter(w => (w.group as { key?: string } | undefined)?.key === key && sendable(w));
+            for (const w of marked) Object.assign(w, { phase: 'sent', sentAt: at });
+            return route.fulfill(json(200, { sent: marked.map(w => w.id) }));
         }
         return route.fulfill({ status: 404, headers: cors, body: '' });
     });
@@ -694,6 +736,8 @@ test.describe('Awaiting action from a research with waiting.groups', () => {
         await expect(heads.nth(1).locator('.research-overview__waiting-groupchat')).toHaveAttribute('data-task', 'T0008');
         await expect(heads.nth(2).locator('.research-overview__waiting-groupchat')).toHaveAttribute('data-task', 'T0018');
         await expect(heads.nth(3).locator('.research-overview__waiting-groupchat')).toHaveCount(0);
+        // A bridge without waiting.sent / waiting.note: no place's Sent, no queries' text.
+        await expect(ov.locator('.research-overview__waiting-groupwrite')).toHaveCount(0);
         await heads.nth(0).locator('.research-overview__waiting-groupchat').click();
         await expect(groups.first()).toHaveAttribute('aria-expanded', 'false');
         expect(await launched(page)).toEqual([`strom-research://task?tree=${UUID}&task=T0002&do=chat`]);
@@ -828,5 +872,197 @@ test.describe('Awaiting action from a research with waiting.groups', () => {
         await expect(ov.locator('.research-overview__waiting-groupchat')).toHaveCount(0);
         await expect(detail.locator('a.research-overview__waiting-web')).toHaveText('Open website ↗');
         await expect(detail).toContainText('answered in the research on the computer');
+    });
+});
+
+/**
+ * Written through the bridge (variant B): Sent for an item (Undo, Back to To
+ * do), Sent for a place, the queries' text with Copy, a file for a task; a
+ * refused write puts the row back. Only what the bridge announces.
+ */
+const writable = (features: string[], accepts?: Record<string, unknown>) => (b: Bridge) => {
+    grouped(b);
+    b.features = ['waiting.groups', ...features];
+    if (accepts) b.accepts = accepts;
+    b.note = {
+        text: 'Vážený úřade,\nprosím o výpisy z matriky Vzorov:\n\n1. sňatek 1885\n2. narození 1890',
+        notes: ['notes/T0-dotaz.md', 'notes/T1-dotaz.md'], tasks: ['T0018', 'T0019', 'T0020', 'T0021', 'T0022', 'T0023'],
+    };
+};
+
+async function openOverview(page: Page) {
+    await page.locator('#live-panel .live-panel-expand').click();
+    const ov = page.locator('#research-overview');
+    await expect(ov).toBeVisible();
+    await recordLaunches(page);
+    return ov;
+}
+
+const todoHead = (page: Page) => page.locator('#research-overview .research-overview__phase-head[data-phase="todo"]');
+const sentHead = (page: Page) => page.locator('#research-overview .research-overview__phase-head[data-phase="sent"]');
+const placeHead = (page: Page, phase: string, name: string) => page.locator(`#research-overview .research-overview__phase[data-phase="${phase}"] .research-overview__waiting-grouphead`)
+    .filter({ has: page.locator('.research-overview__group-title', { hasText: name }) });
+
+async function openLetter(page: Page, text = 'Napsat matrice o zápis 1') {
+    const ov = page.locator('#research-overview');
+    await placeHead(page, 'todo', 'MěÚ Vzorov').locator('.research-overview__waiting-group').click();
+    const item = ov.locator('.research-overview__waiting-item', { hasText: text });
+    await item.locator('.research-overview__waiting-row').click();
+    return item;
+}
+
+test.describe('Awaiting action written through the bridge', () => {
+    test('Sent at an item: one write, the row in Awaiting a reply at once, Undo; Back to To do at a sent one', async ({ page }) => {
+        const bridge = await follow(page, { width: 1440, height: 900 }, writable(['waiting.sent']));
+        const ov = await openOverview(page);
+        const letter = await openLetter(page);
+        // Sent goes through the bridge (no ↗); the file still by the link (no accepts.media.task).
+        const actions = letter.locator('.research-overview__waiting-action');
+        await expect(actions).toHaveText(['Answer ↗', 'Chat ↗', 'Add a file ↗', 'Query text ↗', 'Sent']);
+        const sent = letter.locator('.research-overview__waiting-action[data-action="sent"]');
+        await expect(sent).toHaveAttribute('data-write', 'bridge');
+        // A double click writes once.
+        await sent.evaluate((b: HTMLButtonElement) => { b.click(); b.click(); });
+        await expect(todoHead(page)).toHaveText(/To do · 29/);
+        await expect(sentHead(page)).toHaveText(/Awaiting a reply · 6/);
+        await expect(head(page, '#research-overview', 'Awaiting action · 29')).toBeVisible();
+        const toast = page.locator('.toast[data-kind="waiting-sent"]');
+        await expect(toast).toContainText(/^Recorded as sent on \d{1,2}\/\d{1,2}/);
+        expect(bridge.writes.map(w => [w.method, w.path, w.body])).toEqual([['POST', 'waiting/T0018', '{"do":"sent"}']]);
+        expect(bridge.writes[0].headers['content-type']).toMatch(/^text\/plain/);
+        expect(await launched(page)).toEqual([]);
+        // The menu counts what is left to do.
+        await expect(page.locator('#research-menu-signal')).toHaveText('29');
+
+        // Undo: back to do.
+        await toast.locator('.toast-action', { hasText: 'Undo' }).click();
+        await expect(todoHead(page)).toHaveText(/To do · 30/);
+        await expect(page.locator('.toast[data-kind="waiting-unsent"]')).toHaveText('Back in To do');
+        expect(bridge.writes.map(w => [w.path, w.body])).toEqual([['waiting/T0018', '{"do":"sent"}'], ['waiting/T0018', '{"do":"unsent"}']]);
+
+        // A sent item offers Back to To do (and is not marked sent again).
+        await sentHead(page).click();
+        await placeHead(page, 'sent', 'MěÚ Vzorov').locator('.research-overview__waiting-group').click();
+        const sentItem = ov.locator('.research-overview__phase[data-phase="sent"] .research-overview__waiting-item', { hasText: 'Odeslaný dopis 1' });
+        await sentItem.locator('.research-overview__waiting-row').click();
+        await expect(sentItem.locator('.research-overview__waiting-action')).toHaveText(['Answer ↗', 'Chat ↗', 'Add a file ↗', 'Back to To do']);
+        await sentItem.locator('.research-overview__waiting-action[data-action="unsent"]').click();
+        await expect(todoHead(page)).toHaveText(/To do · 31/);
+        expect(bridge.writes.at(-1)).toMatchObject({ path: 'waiting/T0031', body: '{"do":"unsent"}' });
+        // The bridge's next status agrees: the row stays where it went.
+        await page.waitForTimeout(2500);
+        await expect(todoHead(page)).toHaveText(/To do · 31/);
+    });
+
+    test('a place: Sent for its items to do and the text of all its queries with Copy, folded, the fold untouched', async ({ page }) => {
+        const bridge = await follow(page, { width: 1440, height: 900 }, writable(['waiting.sent', 'waiting.note']));
+        const ov = await openOverview(page);
+        const office = placeHead(page, 'todo', 'MěÚ Vzorov');
+        // Only where items offer them: the office (letters with sent and a query text); not the family, web or archive.
+        await expect(office.locator('.research-overview__waiting-groupwrite')).toHaveText(['Sent', 'All queries\' text']);
+        await expect(office.locator('.research-overview__waiting-groupchat')).toHaveText('Chat ↗');
+        for (const name of ['Rodina', 'rodokmen.example', 'Archiv Vzorov']) {
+            await expect(placeHead(page, 'todo', name).locator('.research-overview__waiting-groupwrite')).toHaveCount(0);
+        }
+        await page.evaluate(() => {
+            const copied: string[] = [];
+            (window as unknown as { __copied: string[] }).__copied = copied;
+            Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (t: string) => { copied.push(t); } } });
+        });
+
+        // The queries' text: a small window over the overview, the text as text with its lines.
+        await office.locator('.research-overview__waiting-groupnote').click();
+        const dialog = page.locator('#waiting-note-modal');
+        await expect(dialog).toBeVisible();
+        await expect(dialog.locator('#waiting-note-title')).toHaveText('All queries\' text');
+        await expect(dialog.locator('.audit-log-subtitle')).toHaveText('MěÚ Vzorov · 6 queries');
+        const text = dialog.locator('.waiting-note-text');
+        await expect(text).toHaveCSS('white-space', 'pre-wrap');
+        expect(await text.evaluate(n => n.textContent)).toBe(bridge.note!.text);
+        expect(await text.evaluate(n => n.children.length)).toBe(0);
+        await dialog.locator('.waiting-note-copy').click();
+        expect(await page.evaluate(() => (window as unknown as { __copied: string[] }).__copied)).toEqual([bridge.note!.text]);
+        await expect(page.locator('.toast[data-kind="waiting-copied"]')).toHaveText('Copied');
+        expect(bridge.writes.map(w => [w.method, w.path])).toEqual([['GET', `group/${encodeURIComponent('to:MěÚ Vzorov')}/note`]]);
+        // Escape closes the window alone.
+        await page.keyboard.press('Escape');
+        await expect(dialog).toHaveCount(0);
+        await expect(ov).toBeVisible();
+        await expect(office.locator('.research-overview__waiting-group')).toHaveAttribute('aria-expanded', 'false');
+
+        // Sent for the place: its six letters move at once; the fold never toggled.
+        await office.locator('.research-overview__waiting-groupwrite[data-action="group-sent"]').click();
+        await expect(todoHead(page)).toHaveText(/To do · 24/);
+        await expect(sentHead(page)).toHaveText(/Awaiting a reply · 11/);
+        await expect(page.locator('.toast[data-kind="waiting-sent"]')).toContainText(/^6 items recorded as sent on/);
+        expect(bridge.writes.at(-1)).toMatchObject({ method: 'POST', path: `group/${encodeURIComponent('to:MěÚ Vzorov')}`, body: '{"do":"sent"}' });
+        await expect(placeHead(page, 'todo', 'MěÚ Vzorov')).toHaveCount(0);
+        await expect(ov.locator('.research-overview__phase[data-phase="todo"] .research-overview__waiting-item')).toHaveCount(0);
+        expect(await launched(page)).toEqual([]);
+    });
+
+    test('Add a file at a task: the originals\' path with X-Strom-Task, then "Sent to the research"', async ({ page }) => {
+        const bridge = await follow(page, { width: 1440, height: 900 }, writable([], { media: { task: true } }));
+        await openOverview(page);
+        const letter = await openLetter(page);
+        await expect(letter.locator('.research-overview__waiting-action')).toHaveText(['Answer ↗', 'Chat ↗', 'Add a file', 'Query text ↗', 'Sent ↗']);
+        const chooser = page.waitForEvent('filechooser');
+        await letter.locator('.research-overview__waiting-action[data-action="file"]').click();
+        await (await chooser).setFiles({ name: 'odpoved-uradu.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 vymyšlená odpověď') });
+        await expect(page.locator('.toast[data-kind="waiting-file-sent"]')).toHaveText('Sent to the research');
+        const put = bridge.writes.find(w => w.method === 'PUT');
+        expect(put?.path).toMatch(/^media\/[0-9a-f]{64}$/);
+        expect(put?.headers['x-strom-task']).toBe('T0018');
+        expect(put?.headers['x-strom-name']).toBe('odpoved-uradu.pdf');
+        expect(put?.headers['content-type']).toBe('application/pdf');
+        expect(await launched(page)).toEqual([]);
+    });
+
+    test('a refused or unanswered write puts the row back and says so', async ({ page }) => {
+        const bridge = await follow(page, { width: 1440, height: 900 }, writable(['waiting.sent']));
+        bridge.refuse = { status: 423, code: 'locked' };
+        await openOverview(page);
+        let letter = await openLetter(page);
+        await letter.locator('.research-overview__waiting-action[data-action="sent"]').click();
+        await expect(page.locator('.toast[data-kind="waiting-failed"]')).toHaveText('Not recorded: another session holds the tree in the research.');
+        await expect(todoHead(page)).toHaveText(/To do · 30/);
+        await expect(letter).toBeVisible();
+        bridge.refuse = 'abort';
+        letter = page.locator('#research-overview .research-overview__waiting-item', { hasText: 'Napsat matrice o zápis 1' });
+        await letter.locator('.research-overview__waiting-action[data-action="sent"]').click();
+        await expect(page.locator('.toast[data-kind="waiting-failed"]')).toHaveText('Not recorded: the research did not answer.');
+        await expect(todoHead(page)).toHaveText(/To do · 30/);
+        expect(bridge.writes).toHaveLength(2);
+    });
+
+    test('phone: the sheet writes through the bridge (Sent, a file, the queries\' text), no way into the research', async ({ page }) => {
+        const bridge = await follow(page, { width: 360, height: 780 }, writable(['waiting.sent', 'waiting.note'], { media: { task: true } }));
+        await page.locator('#live-panel .live-panel-toggle').click();
+        const ov = page.locator('#research-overview');
+        await expect(ov).toHaveClass(/research-overview--sheet/);
+        await recordLaunches(page);
+        const office = placeHead(page, 'todo', 'MěÚ Vzorov');
+        await expect(office.locator('.research-overview__waiting-groupwrite')).toHaveText(['Sent', 'All queries\' text']);
+        await expect(ov.locator('.research-overview__waiting-groupchat')).toHaveCount(0);
+        const box = await office.locator('.research-overview__waiting-groupwrite').first().boundingBox();
+        expect(box!.height).toBeGreaterThanOrEqual(44);
+
+        const letter = await openLetter(page);
+        await expect(letter.locator('.research-overview__waiting-action')).toHaveText(['Add a file', 'Sent']);
+        await expect(letter.locator('.research-overview__waiting-detail')).toContainText('answered in the research on the computer');
+        // The queries' text opens over the sheet; × closes it, the sheet stays.
+        await office.locator('.research-overview__waiting-groupnote').click();
+        const dialog = page.locator('#waiting-note-modal');
+        await expect(dialog.locator('.waiting-note-text')).toContainText('prosím o výpisy z matriky Vzorov');
+        await expect(dialog.locator('.waiting-note-copy')).toBeVisible();
+        await dialog.locator('.close-btn').click();
+        await expect(dialog).toHaveCount(0);
+        await expect(ov).toBeVisible();
+        await letter.locator('.research-overview__waiting-action[data-action="sent"]').click();
+        await expect(todoHead(page)).toHaveText(/To do · 29/);
+        expect(bridge.writes.map(w => [w.method, w.path])).toEqual([
+            ['GET', `group/${encodeURIComponent('to:MěÚ Vzorov')}/note`], ['POST', 'waiting/T0018'],
+        ]);
+        expect(await launched(page)).toEqual([]);
     });
 });

@@ -597,6 +597,12 @@ export const miscMethods = uiModule({
                 return;
             }
             if (e.key === 'Escape') {
+                // "All queries' text" sits above the Research overview (also its
+                // phone sheet): Escape closes it alone, the overview stays.
+                if (this.isWaitingNoteDialogOpen()) {
+                    this.closeWaitingNoteDialog();
+                    return;
+                }
                 // The tree preview / comparison overlays sit above every dialog
                 // (z-index 500). Escape closes the preview FIRST, leaving the
                 // dialog that opened it (e.g. "Split into families") untouched;
