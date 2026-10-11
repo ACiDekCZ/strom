@@ -742,7 +742,7 @@ export function ensureLiveTicker(): void {
 }
 
 /** "user" (or nothing) is who the section heading already names. */
-function waitsOnUser(on: string | undefined): boolean {
+export function waitsOnUser(on: string | undefined): boolean {
     return !on || /^\s*user\s*$/i.test(on);
 }
 
@@ -1790,9 +1790,21 @@ export const researchUiMethods = uiModule({
             if (url) this.launchResearchLink(url);
             return;
         }
+        // An archive's question: the research asks it there (an older research only opens).
+        if (w.kind === 'permission' && w.host) {
+            const url = this.activeResearchLink('archive', { host: w.host }) ?? this.activeResearchLink('open');
+            if (url) this.launchResearchLink(url);
+            return;
+        }
         const task = researchTaskRef(w.id);
         const url = (task ? this.activeResearchLink('task', { task }) : null) ?? this.activeResearchLink('open');
         if (url) this.launchResearchLink(url);
+    },
+
+    /** "Answer ↗" can be offered at this waiting item (a link the research takes leads there). */
+    canAnswerResearchWaiting(w: LiveWaiting): boolean {
+        if (this.researchLinkAvailable('open')) return true;
+        return w.kind === 'permission' ? this.researchLinkAvailable('archive') : this.researchLinkAvailable('task');
     },
 
     /** Tree menu "Send changes to the research": one click when the research handles it, else the way there. */
@@ -2388,7 +2400,6 @@ export const researchUiMethods = uiModule({
         }
         const list = el('ul', 'live-panel-list live-waiting');
         host.appendChild(list);
-        const canAnswer = answerable && (this.researchLinkAvailable('task') || this.researchLinkAvailable('open'));
         for (const w of items) {
             const li = el('li', 'live-waiting-row');
             const text = el('div', 'live-waiting-text');
@@ -2407,7 +2418,7 @@ export const researchUiMethods = uiModule({
             const at = timeEl(w.at, 'ago');
             if (at) text.appendChild(at);
             li.appendChild(text);
-            if (canAnswer) {
+            if (answerable && this.canAnswerResearchWaiting(w)) {
                 const answer = el('button', 'live-waiting-answer', r.answer);
                 answer.type = 'button';
                 answer.onclick = () => this.answerResearchTask(w);

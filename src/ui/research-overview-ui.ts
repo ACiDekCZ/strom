@@ -25,7 +25,7 @@ import { uiModule } from './module.js';
 import {
     LiveChangeItem, LiveSession, appendChangeText, el, ensureLiveTicker, liveDuration, liveSection,
     liveSession, storeLiveSection, storedLiveSections, timeEl,
-    liveState, pausedText,
+    liveState, pausedText, waitsOnUser,
 } from './research-ui.js';
 import { taskDirectionName } from './research-directions-ui.js';
 import { conflictValueSaid, researchValueText } from './person-research-ui.js';
@@ -361,7 +361,6 @@ export const researchOverviewMethods = uiModule({
         const host = liveSection(body, { ...fold, title: `${r.waiting} · ${s.waiting.length}`, headCls: 'live-panel-heading-waiting' });
         const grid = el('div', 'research-overview__waiting live-waiting');
         host.appendChild(grid);
-        const canAnswer = mode !== 'sheet' && (this.researchLinkAvailable('task') || this.researchLinkAvailable('open'));
         for (const w of s.waiting) {
             const card = el('div', 'research-overview__waiting-card');
             if (w.kind === 'story') {
@@ -378,6 +377,8 @@ export const researchOverviewMethods = uiModule({
                 continue;
             }
             card.appendChild(el('div', 'research-overview__waiting-text', w.what));
+            // "on" is the agent's free text (an archive's terms); "user" only repeats the heading.
+            if (!waitsOnUser(w.on)) card.appendChild(el('small', 'research-overview__waiting-on', r.waitingOn(w.on)));
             const meta = el('div', 'research-overview__waiting-meta');
             const person = personByRefn(w.person);
             if (person) {
@@ -393,7 +394,7 @@ export const researchOverviewMethods = uiModule({
             const at = timeEl(w.at, 'ago');
             if (at) meta.appendChild(at);
             card.appendChild(meta);
-            if (canAnswer) {
+            if (mode !== 'sheet' && this.canAnswerResearchWaiting(w)) {
                 const answer = el('button', 'live-waiting-answer', r.answer);
                 answer.type = 'button';
                 answer.onclick = () => this.answerResearchTask(w);

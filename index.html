@@ -10369,7 +10369,7 @@
         .live-panel-hint { margin: 6px 0 0; font-size: 12px; color: var(--text-light); }
         /* "Waiting for you": the task, since when, and "Answer ↗" into the research. */
         .live-panel-list li.live-waiting-row { display: flex; align-items: flex-start; gap: 8px; padding: 6px 0; }
-        .live-waiting-text { flex: 1; min-width: 0; }
+        .live-waiting-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
         .live-waiting-what { font-size: 14px; color: var(--text); }
         .live-waiting-text > .live-waiting-who { display: block; margin-top: 2px; font-size: 12px; color: var(--text-light); }
         .live-waiting-answer {
@@ -11060,6 +11060,7 @@
             background: var(--warning-soft); border: 1px solid color-mix(in srgb, var(--warning) 45%, transparent); border-radius: 10px;
         }
         .research-overview__waiting-text { font-size: 14px; overflow-wrap: anywhere; }
+        .research-overview__waiting-on { color: var(--text-faint); font-size: 12px; overflow-wrap: anywhere; }
         .research-overview__waiting-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; font-size: 12px; }
         .research-overview__waiting-meta .live-time { color: var(--text-faint); font-size: 11px; }
         .research-overview__waiting-card .live-waiting-answer { align-self: flex-start; }

@@ -39,7 +39,7 @@ export function researchLinkScheme(value: unknown): string {
 export const RESEARCH_LINK_ACTIONS = [
     'send', 'excerpt', 'app', 'open', 'chat', 'task', 'review', 'research',
     'new', 'update', 'sessions', 'conflict', 'story', 'sync-undo', 'setup', 'live',
-    'direction', 'finish', 'media',
+    'direction', 'finish', 'media', 'archive',
 ] as const;
 export type ResearchLinkAction = typeof RESEARCH_LINK_ACTIONS[number];
 
@@ -69,6 +69,13 @@ export function researchPersonRef(refn: unknown): string | null {
 /** A task's id in the research ("T0003"), or null. */
 export function researchTaskRef(id: unknown): string | null {
     return typeof id === 'string' && /^T\d{1,7}$/.test(id.trim()) ? id.trim() : null;
+}
+
+/** An archive's host name ("archive.example.org", lowercased), or null: labels of a-z, 0-9 and '-', no scheme, path or port. */
+export function researchArchiveHost(value: unknown): string | null {
+    if (typeof value !== 'string') return null;
+    const v = value.trim().toLowerCase();
+    return v.length <= 253 && /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/.test(v) ? v : null;
 }
 
 /** A research direction's id ("G0002"), or null. */
@@ -127,6 +134,8 @@ export interface ResearchLinkParams {
     storyDo?: ResearchStoryDo;
     /** A couple's story: the other partner (with `person`). */
     partner?: string;
+    /** An archive by its host name (`archive`: the research's question about downloading from it). */
+    host?: string;
 }
 
 /** A story: approve (the draft, or the new version in place of the approved one) / keep the approved one. */
@@ -202,6 +211,10 @@ export function researchSchemeUrl(action: ResearchLinkAction, p: ResearchLinkPar
         case 'finish': {
             const session = researchSessionRef(p.session);
             return session ? `${base}&session=${session}` : null;
+        }
+        case 'archive': {
+            const host = researchArchiveHost(p.host);
+            return host ? `${base}&host=${host}` : null;
         }
         case 'media': {
             const sha = typeof p.sha === 'string' && /^[0-9a-f]{64}$/.test(p.sha) ? p.sha : null;
@@ -1003,10 +1016,15 @@ export interface LiveWaiting {
     person?: string;
     /** The research direction of the task ("G0002"; a newer research). */
     research?: string;
-    /** 'story': a new version of an approved story (the person's, or with `partner` the couple's), not a task. */
-    kind?: 'story';
+    /**
+     * 'story': a new version of an approved story (the person's, or with `partner` the couple's), not a task.
+     * 'permission': the research asks how it may download from an archive (`host`); `on` carries its terms.
+     */
+    kind?: 'story' | 'permission';
     /** A couple's story: the other partner (REFN). */
     partner?: string;
+    /** A permission: the archive's host name. */
+    host?: string;
 }
 
 /** A research direction ("research" in the research, id G…): kinds, state, counts. */
@@ -1401,6 +1419,9 @@ export function sanitizeWorking(value: unknown): LiveWorker[] {
     return out;
 }
 
+/** Longest archive terms kept with a permission question. */
+const MAX_TERMS = 600;
+
 /** The `waiting` list of the status. Untrusted input. */
 export function sanitizeWaiting(value: unknown): LiveWaiting[] {
     if (!Array.isArray(value)) return [];
@@ -1415,10 +1436,14 @@ export function sanitizeWaiting(value: unknown): LiveWaiting[] {
         // A story names whose it is; without the person it is just a line.
         const story = r.kind === 'story' && person;
         const partner = story ? researchPersonRef(r.partner) : null;
+        // An archive's question names its host; without a valid one it is just a line. Its id is
+        // made of the host (a full one fits, two archives never share it) and its terms stay whole.
+        const host = !story && r.kind === 'permission' ? researchArchiveHost(r.host) : null;
         out.push({
-            id: cleanText(r.id, 40), what, on: cleanText(r.on, 120), at: cleanText(r.at ?? r.since, 40),
+            id: host ? `permission:${host}` : cleanText(r.id, 40), what, on: cleanText(r.on, host ? MAX_TERMS : 120), at: cleanText(r.at ?? r.since, 40),
             ...(person ? { person } : {}), ...(research ? { research } : {}),
             ...(story ? { kind: 'story' as const } : {}), ...(partner && partner !== person ? { partner } : {}),
+            ...(host ? { kind: 'permission' as const, host } : {}),
         });
     }
     return out;
