@@ -16,9 +16,9 @@ import { LiveWaiting, researchTaskRef } from '../research-link.js';
 import {
     WaitingWrites, WaitingPending, WaitingSentResult, WaitingWriteRefused, GroupNoteDone, NO_WAITING_WRITES, WAITING_SETTLE_MS, WAITING_FILE_ACCEPT,
     waitingWrites, waitingGroupSendable, applyWaitingPending, settleWaitingPending, waitingSentDay, waitingFileTaken,
-    postWaitingSent, postGroupSent, getGroupNote, putWaitingFile,
+    postWaitingSent, postGroupSent, postGroupUnsent, getGroupNote, putWaitingFile,
 } from '../research-waiting-write.js';
-import { WaitingPhase } from '../research-waiting.js';
+import { WaitingPhase, waitingPhase } from '../research-waiting.js';
 import { uiModule } from './module.js';
 import { el, liveSession, LiveSession } from './research-ui.js';
 import { normalizeModal } from './modal-skeleton.js';
@@ -88,10 +88,11 @@ export const researchWaitingWriteMethods = uiModule({
     /**
      * After a write: what it wrote holds a while (until the status says so),
      * what is gone goes, and a failure puts the rows back (`back`: each row's
-     * move before this write, when it had one).
+     * move before this write, when it had one; `group`: a place's write, whose
+     * answer names the tasks it moved).
      */
     settleWaitingWrite(s: LiveSession, ids: readonly string[], phase: WaitingPhase, result: WaitingSentResult,
-        back: ReadonlyMap<string, WaitingPending | undefined> = new Map()): boolean {
+        back: ReadonlyMap<string, WaitingPending | undefined> = new Map(), group = false): boolean {
         const st = writeState(s);
         const until = Date.now() + WAITING_SETTLE_MS;
         const restore = (id: string): void => {
@@ -100,15 +101,15 @@ export const researchWaitingWriteMethods = uiModule({
             else st.pending.delete(id);
         };
         if (result.ok) {
-            // A place's write says which it marked: the rest goes back; one it marked beyond those moved moves too.
-            const said = result.sent.length > 0 && ids.length > 1 ? new Set(result.sent) : null;
+            // A place's write says which it moved: the rest goes back; one it moved beyond those moved here moves too.
+            const said = result.sent.length > 0 && (ids.length > 1 || group) ? new Set(result.sent) : null;
             for (const id of ids) {
                 const p = st.pending.get(id);
                 if (said && !said.has(id)) restore(id);
                 else if (p) st.pending.set(id, { ...p, until });
             }
-            if (said && phase === 'sent') {
-                const at = st.pending.get(ids[0])?.sentAt;
+            if (said) {
+                const at = phase === 'sent' ? st.pending.get(ids[0])?.sentAt : undefined;
                 for (const id of said) {
                     if (!ids.includes(id) && st.raw.some(w => w.id === id)) st.pending.set(id, { phase, ...(at ? { sentAt: at } : {}), until });
                 }
@@ -185,14 +186,46 @@ export const researchWaitingWriteMethods = uiModule({
         } finally {
             st.groups.delete(key);
         }
-        const ok = this.settleWaitingWrite(s, ids, 'sent', result, back);
+        const ok = this.settleWaitingWrite(s, ids, 'sent', result, back, true);
         if (!stillFollowing(s)) return;
+        const W = strings.live.waitingWrite;
         if (ok && result.ok) {
             const n = result.sent.length || ids.length;
-            this.showToast(strings.live.waitingWrite.groupSentToast(n, waitingSentDay(now, getCurrentLanguage())), 6000, { kind: 'waiting-sent' });
+            const moved = result.sent.length > 0 ? result.sent.filter(t => ids.includes(t) || st.raw.some(w => w.id === t)) : ids;
+            this.showToast(W.groupSentToast(n, waitingSentDay(now, getCurrentLanguage())), 6000, {
+                kind: 'waiting-sent',
+                action: { label: W.undo, run: () => { void this.markWaitingGroupUnsent(s, key, moved); } },
+            });
         } else if (!result.ok && result.code !== 'none') {
             this.showToast(refusedText(result), 6000, { kind: 'waiting-failed' });
         }
+    },
+
+    /**
+     * "Undo" after a place's Sent: the place back to do through the bridge;
+     * the rows that Sent moved go back at once, the answer says which it moved.
+     */
+    async markWaitingGroupUnsent(s: LiveSession, key: string, moved: readonly string[]): Promise<void> {
+        if (!this.liveWaitingWrites(s).sent) return;
+        const st = writeState(s);
+        if (st.groups.has(key)) return;
+        const ids = moved.filter(id => st.pending.get(id)?.until !== Infinity
+            && s.waiting.some(w => w.id === id && w.group?.key === key && waitingPhase(w) === 'sent'));
+        if (ids.length === 0) return;
+        const back = new Map(ids.map(id => [id, st.pending.get(id)]));
+        for (const id of ids) st.pending.set(id, { phase: 'todo', until: Infinity });
+        st.groups.add(key);
+        this.reshowLiveWaiting(s);
+        let result: WaitingSentResult;
+        try {
+            result = await postGroupUnsent(s.bridge.base, key);
+        } finally {
+            st.groups.delete(key);
+        }
+        const ok = this.settleWaitingWrite(s, ids, 'todo', result, back, true);
+        if (!stillFollowing(s)) return;
+        if (ok) this.showToast(strings.live.waitingWrite.unsentToast, 3000, { kind: 'waiting-unsent' });
+        else if (!result.ok && result.code !== 'none') this.showToast(refusedText(result), 6000, { kind: 'waiting-failed' });
     },
 
     /** "All queries' text" of a place: read from the bridge, shown in a small window with Copy. */

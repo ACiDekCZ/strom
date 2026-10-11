@@ -10,7 +10,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { LiveWaiting, sanitizeAccepts, sanitizeWaiting } from '../research-link.js';
 import {
-    WAITING_NOTE_FEATURE, WAITING_SENT_FEATURE, WaitingPending, applyWaitingPending, getGroupNote, groupNoteReply, postGroupSent, postWaitingSent,
+    WAITING_NOTE_FEATURE, WAITING_SENT_FEATURE, WaitingPending, applyWaitingPending, getGroupNote, groupNoteReply, postGroupSent, postGroupUnsent, postWaitingSent,
     putWaitingFile, retryAfterSeconds, settleWaitingPending, waitingFileReply, waitingFileTaken, waitingGroupHasNote, waitingGroupPath,
     waitingGroupSendable, waitingSendable, waitingSentReply, waitingUnsendable, waitingWrites,
 } from '../research-waiting-write.js';
@@ -171,6 +171,15 @@ describe('the requests', () => {
         expect(calls[0].url).toMatch(/\/group\/to%3AM%C4%9B%C3%9A%20Vzorov%2F2\?app=/);
         expect(calls[0].init.method).toBe('POST');
         expect(JSON.parse(calls[0].init.body as string)).toEqual({ do: 'sent' });
+        answer(200, { sent: ['T0021'], head: HEAD });
+        expect(await postGroupUnsent(BASE, 'to:MěÚ Vzorov/2')).toEqual({ ok: true, sent: ['T0021'], head: HEAD });
+        expect(calls).toHaveLength(1);
+        expect(calls[0].url).toMatch(/\/group\/to%3AM%C4%9B%C3%9A%20Vzorov%2F2\?app=/);
+        expect(calls[0].init).toMatchObject({ method: 'POST', mode: 'cors', credentials: 'omit' });
+        expect(JSON.parse(calls[0].init.body as string)).toEqual({ do: 'unsent' });
+        answer(200, {});
+        expect(await postGroupUnsent(BASE, '  ')).toMatchObject({ ok: false, code: 'invalid' });
+        expect(calls).toHaveLength(0);
         answer(200, { text: 'Text', notes: [], tasks: ['T0021'] });
         expect(await getGroupNote(BASE, 'to:MěÚ Vzorov/2')).toEqual({ ok: true, text: 'Text', notes: [], tasks: ['T0021'] });
         expect(calls[0].url).toMatch(/\/group\/to%3AM%C4%9B%C3%9A%20Vzorov%2F2\/note\?app=/);

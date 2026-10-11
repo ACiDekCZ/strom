@@ -97,6 +97,7 @@ async function follow(page: Page, size: { width: number; height: number } = { wi
     });
     const json = (status: number, body: unknown) => ({ status, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(body) });
     const sendable = (w: Record<string, unknown>) => w.phase !== 'sent' && ['letter', 'family', 'other'].includes(String(w.kind));
+    const groupMarked = new Map<string, string[]>();
     await page.route(`${BRIDGE}/**`, async (route) => {
         const path = new URL(route.request().url()).pathname;
         if (path.endsWith('/status')) {
@@ -137,8 +138,17 @@ async function follow(page: Page, size: { width: number; height: number } = { wi
                 return route.fulfill(json(200, { sent: [w.id] }));
             }
             const key = decodeURIComponent(write[1].slice('group/'.length));
+            if (what === 'unsent') {
+                // Back to do: what the place's last Sent marked (the answer lists the tasks moved back).
+                const ids = groupMarked.get(key) ?? [];
+                groupMarked.delete(key);
+                const back = bridge.waiting.filter(w => ids.includes(String(w.id)) && w.phase === 'sent');
+                for (const w of back) { delete w.phase; delete w.sentAt; }
+                return route.fulfill(json(200, { sent: back.map(w => w.id) }));
+            }
             const marked = bridge.waiting.filter(w => (w.group as { key?: string } | undefined)?.key === key && sendable(w));
             for (const w of marked) Object.assign(w, { phase: 'sent', sentAt: at });
+            groupMarked.set(key, marked.map(w => String(w.id)));
             return route.fulfill(json(200, { sent: marked.map(w => w.id) }));
         }
         return route.fulfill({ status: 404, headers: cors, body: '' });
@@ -999,6 +1009,42 @@ test.describe('Awaiting action written through the bridge', () => {
         await expect(placeHead(page, 'todo', 'MěÚ Vzorov')).toHaveCount(0);
         await expect(ov.locator('.research-overview__phase[data-phase="todo"] .research-overview__waiting-item')).toHaveCount(0);
         expect(await launched(page)).toEqual([]);
+    });
+
+    test('a place\'s Sent offers Undo: the place back to do, exactly its six letters in To do again', async ({ page }) => {
+        const bridge = await follow(page, { width: 1440, height: 900 }, writable(['waiting.sent']));
+        await openOverview(page);
+        await placeHead(page, 'todo', 'MěÚ Vzorov').locator('.research-overview__waiting-groupwrite[data-action="group-sent"]').click();
+        await expect(todoHead(page)).toHaveText(/To do · 24/);
+        await expect(sentHead(page)).toHaveText(/Awaiting a reply · 11/);
+        const toast = page.locator('.toast[data-kind="waiting-sent"]');
+        // A double click on Undo writes once.
+        await toast.locator('.toast-action', { hasText: 'Undo' }).evaluate((b: HTMLButtonElement) => { b.click(); b.click(); });
+        await expect(todoHead(page)).toHaveText(/To do · 30/);
+        // The letters sent days ago stay where they were.
+        await expect(sentHead(page)).toHaveText(/Awaiting a reply · 5/);
+        await expect(page.locator('.toast[data-kind="waiting-unsent"]')).toHaveText('Back in To do');
+        const key = encodeURIComponent('to:MěÚ Vzorov');
+        expect(bridge.writes.map(w => [w.method, w.path, w.body])).toEqual([['POST', `group/${key}`, '{"do":"sent"}'], ['POST', `group/${key}`, '{"do":"unsent"}']]);
+        await expect(placeHead(page, 'todo', 'MěÚ Vzorov').locator('.research-overview__group-span')).toHaveText('6');
+        // No lasting place-level Undo among the replies awaited.
+        await expect(page.locator('#research-overview .research-overview__phase[data-phase="sent"] .research-overview__waiting-groupwrite')).toHaveCount(0);
+        // The bridge's next status agrees: the rows stay in To do.
+        await page.waitForTimeout(2500);
+        await expect(todoHead(page)).toHaveText(/To do · 30/);
+    });
+
+    test('a refused Undo of a place\'s Sent keeps its letters in Awaiting a reply and says so', async ({ page }) => {
+        const bridge = await follow(page, { width: 1440, height: 900 }, writable(['waiting.sent']));
+        await openOverview(page);
+        await placeHead(page, 'todo', 'MěÚ Vzorov').locator('.research-overview__waiting-groupwrite[data-action="group-sent"]').click();
+        await expect(todoHead(page)).toHaveText(/To do · 24/);
+        bridge.refuse = { status: 423, code: 'locked' };
+        await page.locator('.toast[data-kind="waiting-sent"] .toast-action').click();
+        await expect(page.locator('.toast[data-kind="waiting-failed"]')).toHaveText('Not recorded: another session holds the tree in the research.');
+        await expect(todoHead(page)).toHaveText(/To do · 24/);
+        await expect(sentHead(page)).toHaveText(/Awaiting a reply · 11/);
+        expect(bridge.writes.at(-1)).toMatchObject({ method: 'POST', body: '{"do":"unsent"}' });
     });
 
     test('Add a file at a task: the originals\' path with X-Strom-Task, then "Sent to the research"', async ({ page }) => {

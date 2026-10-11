@@ -1,7 +1,7 @@
 /**
  * "Awaiting action" written through the research's bridge (variant B of
  * Strom Research 1.13.2-beta.13): an item marked sent or back to do
- * (`POST <token>/waiting/<T…>`), a whole place marked sent (`POST
+ * (`POST <token>/waiting/<T…>`), a whole place marked sent or back (`POST
  * <token>/group/<key>`), the text of all a place's queries read (`GET
  * <token>/group/<key>/note`) and a file added to a task (`PUT
  * <token>/media/<sha256>` with `X-Strom-Task`). Only what the bridge
@@ -19,7 +19,7 @@ import { waitingPhase, waitingTaskActions, WaitingPhase } from './research-waiti
 import { uploadHeaders, mediaReplyId, DEFAULT_MEDIA_MAX_BYTES } from './originals.js';
 import { sha256OfBlob } from './sha256.js';
 
-/** The bridge takes "sent" / "unsent" for an item and "sent" for a place. */
+/** The bridge takes "sent" / "unsent" for an item and for a place. */
 export const WAITING_SENT_FEATURE = 'waiting.sent';
 /** The bridge gives the text of all a place's queries. */
 export const WAITING_NOTE_FEATURE = 'waiting.note';
@@ -278,12 +278,22 @@ export function postWaitingSent(base: string, task: string, what: 'sent' | 'unse
         { method: 'POST', headers: JSON_TEXT, body: JSON.stringify({ do: what }) }, waitingSentReply, opts.timeoutMs ?? WAITING_WRITE_TIMEOUT_MS);
 }
 
-/** Mark a whole place sent (`POST <base>/group/<key>`, the key encoded). */
-export function postGroupSent(base: string, key: string, opts: { timeoutMs?: number } = {}): Promise<WaitingSentResult> {
+/** A whole place marked sent, or back to do (`POST <base>/group/<key>`, the key encoded). */
+function postGroupWrite(base: string, key: string, what: 'sent' | 'unsent', opts: { timeoutMs?: number }): Promise<WaitingSentResult> {
     const path = waitingGroupPath(key);
     if (!path) return Promise.resolve(notSent());
-    return bridgeRequest(`${base}|POST|group/${path}|sent`, `${base}/group/${path}`,
-        { method: 'POST', headers: JSON_TEXT, body: JSON.stringify({ do: 'sent' }) }, waitingSentReply, opts.timeoutMs ?? WAITING_WRITE_TIMEOUT_MS);
+    return bridgeRequest(`${base}|POST|group/${path}|${what}`, `${base}/group/${path}`,
+        { method: 'POST', headers: JSON_TEXT, body: JSON.stringify({ do: what }) }, waitingSentReply, opts.timeoutMs ?? WAITING_WRITE_TIMEOUT_MS);
+}
+
+/** Mark a whole place sent (`POST <base>/group/<key>`, the key encoded). */
+export function postGroupSent(base: string, key: string, opts: { timeoutMs?: number } = {}): Promise<WaitingSentResult> {
+    return postGroupWrite(base, key, 'sent', opts);
+}
+
+/** A place's items back to do (`POST <base>/group/<key>` with `{"do":"unsent"}`; the answer lists the tasks moved back). */
+export function postGroupUnsent(base: string, key: string, opts: { timeoutMs?: number } = {}): Promise<WaitingSentResult> {
+    return postGroupWrite(base, key, 'unsent', opts);
 }
 
 /** Read the text of all a place's queries (`GET <base>/group/<key>/note`). */
