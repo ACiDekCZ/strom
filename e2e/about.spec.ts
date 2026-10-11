@@ -21,6 +21,8 @@ test('About shows the version and offers "Buy me a coffee" as a plain link in a 
     await expect(link).toHaveAttribute('href', 'https://www.buymeacoffee.com/acidekcz');
     await expect(link).toHaveAttribute('target', '_blank');
     await expect(link).toHaveAttribute('rel', /noopener/);
+    // The Czech users' group is offered in the Czech UI only.
+    await expect(about.locator('a[href*="facebook.com"], .about-users-group')).toHaveCount(0);
 });
 
 /**

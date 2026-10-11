@@ -24,7 +24,8 @@ import {
     LAST_FOCUSED,
     LastFocusedMarker
 } from '../types.js';
-import { strings } from '../strings.js';
+import { strings, getCurrentLanguage } from '../strings.js';
+import { aboutUsersGroupLink } from '../about-links.js';
 import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-parser.js';
 import {
     validateJsonImport,
@@ -60,6 +61,23 @@ export const miscMethods = uiModule({
         const versionEl = document.getElementById('about-version');
         if (versionEl) {
             versionEl.textContent = APP_VERSION;
+        }
+
+        // The users' group: a row of its own under the source link, only in the
+        // Czech UI; in other languages no element at all.
+        const meta = modal.querySelector('.about-meta');
+        meta?.querySelector('.about-users-group')?.remove();
+        const group = aboutUsersGroupLink(getCurrentLanguage());
+        if (meta && group) {
+            const row = document.createElement('div');
+            row.className = 'about-meta-row about-users-group';
+            const link = document.createElement('a');
+            link.href = group.href;
+            link.target = group.target;
+            link.rel = group.rel;
+            link.textContent = group.label;
+            row.appendChild(link);
+            meta.appendChild(row);
         }
 
         // Calculate and display stats

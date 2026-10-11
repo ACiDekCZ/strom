@@ -37,4 +37,11 @@ test('Czech UI: about dialog shows the version and Czech labels', async ({ page 
     await expect(about.locator('#about-license')).toHaveText('AGPL-3.0-or-later');
     await expect(about.getByRole('link', { name: 'Zdrojový kód' }))
         .toHaveAttribute('href', 'https://github.com/ACiDekCZ/strom');
+    // The Czech users' group: a plain link in a new tab, offered in Czech only.
+    const group = about.getByRole('link', { name: 'Skupina uživatelů na Facebooku ↗' });
+    await expect(group).toBeVisible();
+    await expect(group).toHaveAttribute('href', 'https://www.facebook.com/groups/stromapp');
+    await expect(group).toHaveAttribute('target', '_blank');
+    await expect(group).toHaveAttribute('rel', /noopener/);
+    await expect(about.locator('a[href*="facebook.com"]')).toHaveCount(1);
 });

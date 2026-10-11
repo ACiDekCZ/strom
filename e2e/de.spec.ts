@@ -166,6 +166,8 @@ test('German UI: About names the license and links the source code in German', a
     await expect(about.locator('#about-license')).toHaveText('AGPL-3.0-or-later');
     await expect(about.getByRole('link', { name: 'Quellcode' }))
         .toHaveAttribute('href', 'https://github.com/ACiDekCZ/strom');
+    // The Czech users' group is offered in the Czech UI only.
+    await expect(about.locator('a[href*="facebook.com"], .about-users-group')).toHaveCount(0);
 });
 
 test('German UI: the research — its menu, the states of the block, Research for this tree, the person, materials, installing', async ({ page }) => {

@@ -2630,6 +2630,8 @@ const stringsEN = {
         author: 'Author',
         authorName: 'Milan Víšek',
         sourceCode: 'Source code',
+        // Shown only in the Czech UI (a Czech community; see about-links.ts).
+        usersGroup: 'Users\' group on Facebook ↗',
         close: 'Close',
         currentData: 'Current data',
         stats: {
@@ -6443,6 +6445,7 @@ const stringsCZ: StringsType = {
         author: 'Autor',
         authorName: 'Milan Víšek',
         sourceCode: 'Zdrojový kód',
+        usersGroup: 'Skupina uživatelů na Facebooku ↗',
         close: 'Zavřít',
         currentData: 'Aktuální data',
         stats: {
@@ -10225,6 +10228,7 @@ const stringsDE: StringsType = {
         author: 'Autor',
         authorName: 'Milan Víšek',
         sourceCode: 'Quellcode',
+        usersGroup: 'Nutzergruppe auf Facebook ↗',
         close: 'Schließen',
         currentData: 'Aktuelle Daten',
         stats: {
