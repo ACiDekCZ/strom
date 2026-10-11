@@ -245,8 +245,14 @@ export const researchWaitingWriteMethods = uiModule({
         const result = await getGroupNote(s.bridge.base, key);
         if (!stillFollowing(s)) return;
         const W = strings.live.waitingWrite;
-        if (result.ok) this.showWaitingNoteDialog(name, result);
-        else this.showToast(result.code === 'none' ? W.noteNone : W.noteFailed, 6000, { kind: 'waiting-failed' });
+        if (result.ok) {
+            this.showWaitingNoteDialog(name, result);
+        } else if (result.code === 'none' && result.status !== 200) {
+            // The place (or its tasks) is gone meanwhile: nothing to show; the status says what is left.
+            this.liveStatusSoon(s);
+        } else {
+            this.showToast(result.code === 'none' ? W.noteNone : W.noteFailed, 6000, { kind: 'waiting-failed' });
+        }
     },
 
     /** The queries' text, read-only and selectable, with Copy and ×. */

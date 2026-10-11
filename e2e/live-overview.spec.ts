@@ -1076,6 +1076,28 @@ test.describe('Awaiting action written through the bridge', () => {
         expect(bridge.writes.at(-1)).toMatchObject({ method: 'POST', body: expect.stringContaining('"do":"unsent"') });
     });
 
+    test('a place gone meanwhile (404 group.none): its Sent and its queries\' text go quietly, no error', async ({ page }) => {
+        const bridge = await follow(page, { width: 1440, height: 900 }, writable(['waiting.sent', 'waiting.note']));
+        bridge.refuse = { status: 404, code: 'group.none' };
+        const ov = await openOverview(page);
+        const office = placeHead(page, 'todo', 'MěÚ Vzorov');
+        // The queries' text: no window, no toast.
+        await office.locator('.research-overview__waiting-groupnote').click();
+        await expect.poll(() => bridge.writes.length).toBe(1);
+        await page.waitForTimeout(300);
+        await expect(page.locator('#waiting-note-modal')).toHaveCount(0);
+        await expect(page.locator('.toast[data-kind="waiting-failed"]')).toHaveCount(0);
+        // Sent: the place's rows go (not back to To do, not to Awaiting a reply), no error toast.
+        await office.locator('.research-overview__waiting-groupwrite[data-action="group-sent"]').click();
+        await expect.poll(() => bridge.writes.length).toBe(2);
+        await expect(todoHead(page)).toHaveText(/To do · 24/);
+        await expect(sentHead(page)).toHaveText(/Awaiting a reply · 5/);
+        await expect(placeHead(page, 'todo', 'MěÚ Vzorov')).toHaveCount(0);
+        await page.waitForTimeout(300);
+        await expect(page.locator('.toast[data-kind="waiting-failed"]')).toHaveCount(0);
+        await expect(ov).toBeVisible();
+    });
+
     test('a place\'s Sent whose answer names no task offers no Undo', async ({ page }) => {
         const bridge = await follow(page, { width: 1440, height: 900 }, writable(['waiting.sent']));
         bridge.groupSentSilent = true;

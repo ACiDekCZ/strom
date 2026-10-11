@@ -93,7 +93,7 @@ export function waitingFileTaken(file: { type: string; name: string }): boolean 
 
 /**
  * Why nothing was written:
- * - `none` (404, or 409 `waiting.none` for a file): the task (or place) waits no more — it goes quietly;
+ * - `none` (404 or 409 `waiting.none`, `group.none`): the task waits no more, or the place is gone — it goes quietly;
  * - `not-sendable` (409 `waiting.not-sendable`): not a kind the research marks sent;
  * - `no-file` (409 `waiting.no-file`): a task that takes no file (a web check, an archive's permission);
  * - `locked` (423): another session holds the tree in the research;
@@ -188,9 +188,10 @@ function refusal(status: number, body: unknown, retryAfter: string | null | unde
     const out = (c: WaitingWriteCode): WaitingWriteRefused => ({
         ok: false, code: c, status, retryAfter: c === 'busy' ? retryAfterSeconds(retryAfter) : null, reason,
     });
-    if (status === 404) return out(code === 'waiting.none' ? 'none' : 'unknown');
+    const gone = code === 'waiting.none' || code === 'group.none';
+    if (status === 404) return out(gone ? 'none' : 'unknown');
     if (status === 409) {
-        return out(code === 'waiting.none' ? 'none' : code === 'waiting.not-sendable' ? 'not-sendable' : code === 'waiting.no-file' ? 'no-file' : 'unknown');
+        return out(gone ? 'none' : code === 'waiting.not-sendable' ? 'not-sendable' : code === 'waiting.no-file' ? 'no-file' : 'unknown');
     }
     if (status === 423) return out('locked');
     if (status === 403) return out('app-only');

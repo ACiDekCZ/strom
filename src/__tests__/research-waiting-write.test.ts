@@ -140,6 +140,11 @@ describe('the answers, typed', () => {
         // 409: a task waiting no more (a file for it) goes quietly like a 404; a task that takes no file; anything else unknown, never busy.
         expect(r(409, { code: 'waiting.none' })).toMatchObject({ ok: false, code: 'none', status: 409 });
         expect(r(409, { code: 'waiting.no-file' })).toMatchObject({ ok: false, code: 'no-file', status: 409 });
+        // A place gone meanwhile (its writes and its queries' text): quietly, like a task waiting no more.
+        expect(r(404, { code: 'group.none' })).toMatchObject({ ok: false, code: 'none', status: 404 });
+        expect(r(409, { code: 'group.none' })).toMatchObject({ ok: false, code: 'none', status: 409 });
+        expect(groupNoteReply(404, { code: 'group.none' })).toMatchObject({ ok: false, code: 'none', status: 404 });
+        expect(groupNoteReply(409, { code: 'group.none' })).toMatchObject({ ok: false, code: 'none', status: 409 });
         expect(r(409, { code: 'other' })).toMatchObject({ ok: false, code: 'unknown', status: 409, retryAfter: null });
         expect(r(409, null, '5')).toMatchObject({ ok: false, code: 'unknown', retryAfter: null });
         // 400: any bad request, the body's or a file's headers.
