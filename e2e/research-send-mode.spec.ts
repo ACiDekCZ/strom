@@ -9,8 +9,8 @@ import { editJan, fakeBridge, FakeBridge, openResearch, openResearchMenu, poll, 
 
 const ACCEPTS = { mode: 'research', sync: { auto: 'write' }, sources: true, verified: true, media: null };
 
-async function manualTree(page: Page): Promise<FakeBridge> {
-    await page.clock.install();
+async function manualTree(page: Page, time?: Date): Promise<FakeBridge> {
+    await page.clock.install(time ? { time } : undefined);
     await openResearch(page);
     const bridge = await fakeBridge(page, { accepts: ACCEPTS });
     await poll(page);
@@ -212,7 +212,8 @@ test.describe('"Export all" now and then (only with a research)', () => {
 
     test('Backups say when all trees were last exported; Actions remind under Export… at most once a day while not backed up (the first opening), a click rests it three weeks', async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 900 });
-        await manualTree(page);
+        // A local morning: "the same day" an hour later must not cross midnight (a run after 23:00 did).
+        await manualTree(page, new Date(2026, 9, 8, 9, 0));
         await page.evaluate(() => window.Strom.UI.showSnapshotsDialog());
         const box = page.locator('#snapshots-export');
         await expect(box).toContainText('Not all trees have been exported yet');
