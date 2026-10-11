@@ -163,6 +163,13 @@ describe('the requests', () => {
         answer(200, { sent: [], head: HEAD });
         await postWaitingSent(BASE, 'T0001', 'unsent');
         expect(JSON.parse(calls[0].init.body as string)).toEqual({ do: 'unsent' });
+        // An item back to do: its answer's `unsent` or `sent`, or no list at all, is done.
+        answer(200, { unsent: ['T0001'], head: HEAD });
+        expect(await postWaitingSent(BASE, 'T0001', 'unsent')).toEqual({ ok: true, sent: ['T0001'], head: HEAD });
+        answer(200, { sent: ['T0001'], head: HEAD });
+        expect(await postWaitingSent(BASE, 'T0001', 'unsent')).toEqual({ ok: true, sent: ['T0001'], head: HEAD });
+        answer(200, { head: HEAD });
+        expect(await postWaitingSent(BASE, 'T0001', 'unsent')).toEqual({ ok: true, sent: [], head: HEAD });
     });
 
     it('a place: POST <token>/group/<key> with the key encoded; its queries: GET …/note', async () => {
@@ -171,15 +178,22 @@ describe('the requests', () => {
         expect(calls[0].url).toMatch(/\/group\/to%3AM%C4%9B%C3%9A%20Vzorov%2F2\?app=/);
         expect(calls[0].init.method).toBe('POST');
         expect(JSON.parse(calls[0].init.body as string)).toEqual({ do: 'sent' });
-        answer(200, { sent: ['T0021'], head: HEAD });
-        expect(await postGroupUnsent(BASE, 'to:MěÚ Vzorov/2')).toEqual({ ok: true, sent: ['T0021'], head: HEAD });
+        // Back to do: exactly the tasks named (well-formed, each once); the answer's `unsent` is what went back.
+        answer(200, { unsent: ['T0021'], sent: ['T0099'], head: HEAD });
+        expect(await postGroupUnsent(BASE, 'to:MěÚ Vzorov/2', ['T0021', 'P0001', 'T0024', 'T0021', ' x'])).toEqual({ ok: true, sent: ['T0021'], head: HEAD });
         expect(calls).toHaveLength(1);
         expect(calls[0].url).toMatch(/\/group\/to%3AM%C4%9B%C3%9A%20Vzorov%2F2\?app=/);
         expect(calls[0].init).toMatchObject({ method: 'POST', mode: 'cors', credentials: 'omit' });
-        expect(JSON.parse(calls[0].init.body as string)).toEqual({ do: 'unsent' });
+        expect(JSON.parse(calls[0].init.body as string)).toEqual({ do: 'unsent', tasks: ['T0021', 'T0024'] });
+        answer(200, { sent: ['T0021'], head: HEAD });
+        expect(await postGroupUnsent(BASE, 'family', ['T0021'])).toEqual({ ok: true, sent: [], head: HEAD });
         answer(200, {});
-        expect(await postGroupUnsent(BASE, '  ')).toMatchObject({ ok: false, code: 'invalid' });
+        expect(await postGroupUnsent(BASE, '  ', ['T0021'])).toMatchObject({ ok: false, code: 'invalid' });
+        expect(await postGroupUnsent(BASE, 'family', [])).toMatchObject({ ok: false, code: 'invalid' });
+        expect(await postGroupUnsent(BASE, 'family', ['bad', 'P0001'])).toMatchObject({ ok: false, code: 'invalid' });
         expect(calls).toHaveLength(0);
+        answer(400, { error: 'tasks missing', code: 'waiting.bad-body' });
+        expect(await postGroupUnsent(BASE, 'family', ['T0021'])).toMatchObject({ ok: false, code: 'bad-body', status: 400 });
         answer(200, { text: 'Text', notes: [], tasks: ['T0021'] });
         expect(await getGroupNote(BASE, 'to:MěÚ Vzorov/2')).toEqual({ ok: true, text: 'Text', notes: [], tasks: ['T0021'] });
         expect(calls[0].url).toMatch(/\/group\/to%3AM%C4%9B%C3%9A%20Vzorov%2F2\/note\?app=/);

@@ -84,6 +84,7 @@ export function waitingFileTaken(file: { type: string; name: string }): boolean 
  * - `not-sendable` (409 `waiting.not-sendable`): not a kind the research marks sent;
  * - `locked` (423): another session holds the tree in the research;
  * - `app-only` (403): the bridge took the request for not the app's;
+ * - `bad-body` (400 `waiting.bad-body`): a body it does not take (a place back to do without its tasks);
  * - `busy` (503 `research.busy`, `retryAfter` in seconds when said; another 409);
  * - `too-large` (413) / `type` (415) / `full` (507): a file it does not take;
  * - `network`: no answer (not running, unreachable, not in time);
@@ -91,7 +92,7 @@ export function waitingFileTaken(file: { type: string; name: string }): boolean 
  * - `unknown`: any other answer.
  */
 export type WaitingWriteCode =
-    | 'none' | 'not-sendable' | 'locked' | 'app-only' | 'busy' | 'too-large' | 'type' | 'full' | 'network' | 'invalid' | 'unknown';
+    | 'none' | 'not-sendable' | 'locked' | 'app-only' | 'bad-body' | 'busy' | 'too-large' | 'type' | 'full' | 'network' | 'invalid' | 'unknown';
 
 export interface WaitingWriteRefused {
     ok: false;
@@ -106,7 +107,10 @@ export interface WaitingWriteRefused {
 
 export interface WaitingSentDone {
     ok: true;
-    /** The tasks it wrote ("T0004"; empty: not said). */
+    /**
+     * The tasks it moved ("T0004"): marked sent (`sent` of the answer), or back
+     * to do (`unsent` of a place's answer; an item's: `unsent` or `sent`). Empty: none or not said.
+     */
     sent: string[];
     /** The research's version after the write ('' = not said). */
     head: string;
@@ -170,6 +174,7 @@ function refusal(status: number, body: unknown, retryAfter: string | null | unde
     if (status === 409) return out(code === 'waiting.not-sendable' ? 'not-sendable' : 'busy');
     if (status === 423) return out('locked');
     if (status === 403) return out('app-only');
+    if (status === 400 && code === 'waiting.bad-body') return out('bad-body');
     if (status === 503) return out('busy');
     if (status === 413) return out('too-large');
     if (status === 415) return out('type');
@@ -177,14 +182,25 @@ function refusal(status: number, body: unknown, retryAfter: string | null | unde
     return out('unknown');
 }
 
-/** The bridge's answer to "sent" / "unsent" (an item or a place), typed. */
-export function waitingSentReply(status: number, body: unknown, retryAfter?: string | null): WaitingSentResult {
+/**
+ * The bridge's answer to "sent" / "unsent" (an item or a place), typed. `list`:
+ * where the moved tasks are (`sent`; a place back to do: `unsent`; an item
+ * back to do: `unsent` or `sent`, or none at all).
+ */
+export function waitingSentReply(status: number, body: unknown, retryAfter?: string | null,
+    list: 'sent' | 'unsent' | 'either' = 'sent'): WaitingSentResult {
     if (status >= 200 && status < 300) {
         const r = asRecord(body);
         if (!r) return refusal(0, null, null);
-        return { ok: true, sent: taskList(r.sent), head: isResearchHead(r.head) ?? '' };
+        const moved = list === 'sent' ? r.sent : list === 'unsent' ? r.unsent : Array.isArray(r.unsent) ? r.unsent : r.sent;
+        return { ok: true, sent: taskList(moved), head: isResearchHead(r.head) ?? '' };
     }
     return refusal(status, body, retryAfter);
+}
+
+/** Task ids as they go in a body: well-formed ones only, each once, at most 200. */
+export function waitingTaskIds(tasks: readonly unknown[]): string[] {
+    return taskList(tasks);
 }
 
 /** The queries' text as plain text: lines kept, other control characters out, capped. */
@@ -274,26 +290,33 @@ const JSON_TEXT = { 'Content-Type': 'text/plain; charset=utf-8' };
 export function postWaitingSent(base: string, task: string, what: 'sent' | 'unsent', opts: { timeoutMs?: number } = {}): Promise<WaitingSentResult> {
     const ref = researchTaskRef(task);
     if (!ref || ref !== task || (what !== 'sent' && what !== 'unsent')) return Promise.resolve(notSent());
+    const reply = what === 'sent' ? waitingSentReply
+        : (status: number, body: unknown, retryAfter: string | null) => waitingSentReply(status, body, retryAfter, 'either');
     return bridgeRequest(`${base}|POST|waiting/${ref}|${what}`, `${base}/waiting/${encodeURIComponent(ref)}`,
-        { method: 'POST', headers: JSON_TEXT, body: JSON.stringify({ do: what }) }, waitingSentReply, opts.timeoutMs ?? WAITING_WRITE_TIMEOUT_MS);
+        { method: 'POST', headers: JSON_TEXT, body: JSON.stringify({ do: what }) }, reply, opts.timeoutMs ?? WAITING_WRITE_TIMEOUT_MS);
 }
 
-/** A whole place marked sent, or back to do (`POST <base>/group/<key>`, the key encoded). */
-function postGroupWrite(base: string, key: string, what: 'sent' | 'unsent', opts: { timeoutMs?: number }): Promise<WaitingSentResult> {
+/** Mark a whole place sent (`POST <base>/group/<key>`, the key encoded); the answer's `sent` lists the tasks it marked. */
+export function postGroupSent(base: string, key: string, opts: { timeoutMs?: number } = {}): Promise<WaitingSentResult> {
     const path = waitingGroupPath(key);
     if (!path) return Promise.resolve(notSent());
-    return bridgeRequest(`${base}|POST|group/${path}|${what}`, `${base}/group/${path}`,
-        { method: 'POST', headers: JSON_TEXT, body: JSON.stringify({ do: what }) }, waitingSentReply, opts.timeoutMs ?? WAITING_WRITE_TIMEOUT_MS);
+    return bridgeRequest(`${base}|POST|group/${path}|sent`, `${base}/group/${path}`,
+        { method: 'POST', headers: JSON_TEXT, body: JSON.stringify({ do: 'sent' }) }, waitingSentReply, opts.timeoutMs ?? WAITING_WRITE_TIMEOUT_MS);
 }
 
-/** Mark a whole place sent (`POST <base>/group/<key>`, the key encoded). */
-export function postGroupSent(base: string, key: string, opts: { timeoutMs?: number } = {}): Promise<WaitingSentResult> {
-    return postGroupWrite(base, key, 'sent', opts);
-}
-
-/** A place's items back to do (`POST <base>/group/<key>` with `{"do":"unsent"}`; the answer lists the tasks moved back). */
-export function postGroupUnsent(base: string, key: string, opts: { timeoutMs?: number } = {}): Promise<WaitingSentResult> {
-    return postGroupWrite(base, key, 'unsent', opts);
+/**
+ * Put a place's tasks back to do (`POST <base>/group/<key>` with
+ * `{"do":"unsent","tasks":[…]}`): only the tasks named (those a place's Sent
+ * marked, never taken from the state), of them those in the place and sent;
+ * the answer's `unsent` lists those it moved back. No task: not sent.
+ */
+export function postGroupUnsent(base: string, key: string, tasks: readonly string[], opts: { timeoutMs?: number } = {}): Promise<WaitingSentResult> {
+    const path = waitingGroupPath(key);
+    const ids = waitingTaskIds(tasks);
+    if (!path || ids.length === 0) return Promise.resolve(notSent());
+    return bridgeRequest(`${base}|POST|group/${path}|unsent|${ids.join(',')}`, `${base}/group/${path}`,
+        { method: 'POST', headers: JSON_TEXT, body: JSON.stringify({ do: 'unsent', tasks: ids }) },
+        (status, body, retryAfter) => waitingSentReply(status, body, retryAfter, 'unsent'), opts.timeoutMs ?? WAITING_WRITE_TIMEOUT_MS);
 }
 
 /** Read the text of all a place's queries (`GET <base>/group/<key>/note`). */
