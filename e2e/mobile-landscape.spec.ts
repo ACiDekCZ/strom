@@ -149,3 +149,27 @@ test('back stands beside the side bar, not under it', async ({ page }) => {
     expect(b.x).toBeGreaterThanOrEqual(bar.x + bar.width);
     expect(b.y + b.height).toBeLessThanOrEqual(390);
 });
+
+test('the legend stands beside the side bar and above back, never under the bar or over the button (T29, T32)', async ({ page }) => {
+    await sample(page);
+    await page.evaluate(() => window.Strom.UI.toggleBranchLegend(true));
+    const legend = page.locator('#tree-legend');
+    await expect(legend).toBeVisible();
+    const bar = (await page.locator('#bottom-bar').boundingBox())!;
+    let l = (await legend.boundingBox())!;
+    expect(l.x).toBeGreaterThanOrEqual(bar.x + bar.width);
+    expect(l.y + l.height).toBeLessThanOrEqual(390);
+    await page.evaluate(() => {
+        const S = window.Strom;
+        const ids = Object.keys(S.DataManager.getData().persons);
+        S.TreeRenderer.setFocus(ids[5] as never);
+    });
+    const back = page.locator('#focus-back-btn');
+    await expect(back).toBeVisible();
+    const b = (await back.boundingBox())!;
+    l = (await legend.boundingBox())!;
+    expect(l.x).toBeGreaterThanOrEqual(bar.x + bar.width);
+    // The legend ends above the button: nothing of the button hides behind it.
+    expect(l.y + l.height).toBeLessThanOrEqual(b.y);
+    expect(l.y).toBeGreaterThanOrEqual(44);
+});

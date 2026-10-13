@@ -7985,6 +7985,9 @@
         }
         .focus-back-btn { left: 16px; }
         .focus-forward-btn { left: 68px; }
+        /* The legend pill shares this corner: while back / forward show, it
+           stands 8px above them (24 + 44 + 8) instead of covering them. */
+        body.focus-nav-shown:not(.view-mode-print) .tree-legend { bottom: 76px; }
         @media (hover: hover) { .focus-nav-btn:hover { background: rgba(128,128,128,0.12); } }
         body.view-mode-print .focus-nav-btn { display: none !important; }
         @media print { .focus-nav-btn { display: none !important; } }
@@ -11985,6 +11988,8 @@
             .control-block { bottom: calc(var(--bottom-bar-h) + 16px); }
             /* Floating elements clear the bar too. */
             .tree-legend { bottom: calc(var(--bottom-bar-h) + 12px); }
+            /* Above back / forward (bar + 16 + 44 + 8) while they show. */
+            body.focus-nav-shown:not(.view-mode-print) .tree-legend { bottom: calc(var(--bottom-bar-h) + 68px); }
             .family-offer { bottom: calc(var(--bottom-bar-h) + 16px); }
             /* The tour offer and plain toasts never cover the bar's tabs. */
             .tour-offer { bottom: calc(var(--bottom-bar-h) + 16px); }
@@ -12242,6 +12247,8 @@
             .embedded-mode-banner { top: var(--toolbar-h); left: var(--side-bar-w); }
             .focus-back-btn { left: calc(var(--side-bar-w) + 16px); }
             .focus-forward-btn { left: calc(var(--side-bar-w) + 68px); }
+            /* The legend pill beside the side bar, not under it. */
+            .tree-legend { left: calc(var(--side-bar-w) + 12px); }
             .bottom-bar {
                 top: 0; bottom: 0; right: auto; width: var(--side-bar-w); height: auto;
                 flex-direction: column; justify-content: space-around; align-items: stretch;

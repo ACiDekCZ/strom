@@ -1100,10 +1100,14 @@ class TreeRendererClass {
 
     /** Show/hide the floating back & forward buttons to match history state. */
     updateNavButtons(): void {
+        const canBack = this.canGoBack();
+        const canForward = this.canGoForward();
         const back = document.getElementById('focus-back-btn');
-        if (back) back.style.display = this.canGoBack() ? '' : 'none';
+        if (back) back.style.display = canBack ? '' : 'none';
         const fwd = document.getElementById('focus-forward-btn');
-        if (fwd) fwd.style.display = this.canGoForward() ? '' : 'none';
+        if (fwd) fwd.style.display = canForward ? '' : 'none';
+        // The legend pill shares the bottom-left corner: it moves above the buttons while they show.
+        document.body.classList.toggle('focus-nav-shown', canBack || canForward);
     }
 
     /** @deprecated use updateNavButtons */

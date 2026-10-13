@@ -92,3 +92,38 @@ test('the branch stripe follows the card\'s rounded corners, also on the focused
     expect(shapes.length).toBe(2);
     for (const s of shapes) expect(s, s.focused ? 'focused card' : 'card').toMatchObject({ radius: true, left: true, width: true, height: true });
 });
+
+/** The legend pill and back / forward share the bottom-left corner: the pill stands above the buttons (T32). */
+for (const vp of [{ name: 'desktop', width: 1280, height: 800 }, { name: 'tablet', width: 820, height: 1180 }, { name: 'phone', width: 390, height: 844 }]) {
+    test.describe(`legend and back on ${vp.name}`, () => {
+        test.use({ viewport: { width: vp.width, height: vp.height } });
+        test(`the legend never covers back / forward (${vp.name})`, async ({ page }) => {
+            await openApp(page);
+            await page.getByRole('button', { name: 'Try a sample tree' }).click();
+            await expect(card(page, 'Johan')).toBeVisible();
+            await page.evaluate(() => window.Strom.UI.toggleBranchLegend(true));
+            const legend = page.locator('#tree-legend');
+            await expect(legend).toBeVisible();
+            const before = (await legend.boundingBox())!;
+            await page.evaluate(() => {
+                const S = window.Strom;
+                const ids = Object.keys(S.DataManager.getData().persons);
+                S.TreeRenderer.setFocus(ids[5] as never);
+            });
+            const back = page.locator('#focus-back-btn');
+            await expect(back).toBeVisible();
+            const b = (await back.boundingBox())!;
+            const l = (await legend.boundingBox())!;
+            expect(l.y + l.height).toBeLessThanOrEqual(b.y);
+            // Same left edge as before: only lifted.
+            expect(Math.round(l.x)).toBe(Math.round(before.x));
+            // Back to the first focus: forward alone still keeps the legend up.
+            await page.evaluate(() => window.Strom.TreeRenderer.goBack());
+            const fwd = page.locator('#focus-forward-btn');
+            await expect(fwd).toBeVisible();
+            const f = (await fwd.boundingBox())!;
+            const l2 = (await legend.boundingBox())!;
+            expect(l2.y + l2.height).toBeLessThanOrEqual(f.y);
+        });
+    });
+}
