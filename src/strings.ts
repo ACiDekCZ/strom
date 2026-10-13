@@ -806,6 +806,11 @@ const stringsEN = {
         today: 'today',
         tomorrow: 'tomorrow',
         inDays: (n: number) => `in ${nEn(n, 'day', 'days')}`,
+        // The count on the menu row and its summary atop the panel (T33): the next `days` days only.
+        soonCount: (n: number, days: number) => n === 0
+            ? `No anniversaries in the next ${days} days`
+            : `${nEn(n, 'anniversary', 'anniversaries')} in the next ${days} days`,
+        listScope: (days: number) => `the list covers the next ${days} days`,
         yearsAgo: (n: number) => `${n} ${n === 1 ? 'year' : 'years'} ago`,
         birthday: (name: string, years: number) => `${name} turns ${years}`,
         wedding: (a: string, b: string, years: number) => `${a} & ${b} — ${nEn(years, 'year', 'years')} married`,
@@ -4682,6 +4687,10 @@ const stringsCZ: StringsType = {
         today: 'dnes',
         tomorrow: 'zítra',
         inDays: (n: number) => `za ${nCs(n, 'den', 'dny', 'dní')}`,
+        soonCount: (n: number, days: number) => n === 0
+            ? `Žádná výročí v příštích ${days} dnech`
+            : `${n} výročí v příštích ${days} dnech`,
+        listScope: (days: number) => `seznam sahá ${days} dní dopředu`,
         yearsAgo: (n: number) => n === 1 ? 'před 1 rokem' : `před ${n} lety`,
         birthday: (name: string, years: number) => `${name} slaví ${years}. narozeniny`,
         wedding: (a: string, b: string, years: number) => `${a} a ${b} — ${years}. výročí svatby`,
@@ -8542,6 +8551,10 @@ const stringsDE: StringsType = {
         today: 'heute',
         tomorrow: 'morgen',
         inDays: (n: number) => `in ${nDe(n, 'Tag', 'Tagen')}`,
+        soonCount: (n: number, days: number) => n === 0
+            ? `Keine Jahrestage in den nächsten ${days} Tagen`
+            : `${nDe(n, 'Jahrestag', 'Jahrestage')} in den nächsten ${days} Tagen`,
+        listScope: (days: number) => `die Liste reicht ${days} Tage voraus`,
         yearsAgo: (n: number) => `vor ${n} ${n === 1 ? 'Jahr' : 'Jahren'}`,
         birthday: (name: string, years: number) => `${name} wird ${years}`,
         wedding: (a: string, b: string, years: number) => `${a} & ${b} — ${nDe(years, 'Jahr', 'Jahre')} verheiratet`,

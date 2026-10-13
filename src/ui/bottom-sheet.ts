@@ -23,6 +23,8 @@ import { researchTrialTagHtml } from './research-tree-settings-ui.js';
 /** A row / section in a menu-style bottom sheet (the "More" and "Tree" sheets). */
 interface MenuRow {
     label: string; run: () => void; danger?: boolean; badge?: number; active?: boolean;
+    /** Tooltip of the count badge (what the number counts). */
+    badgeTitle?: string;
     /** Carries the "New" label (Strom Research menu item while it is new). */
     isNew?: boolean;
     /** Accessible name when it differs from the visible label. */
@@ -349,10 +351,14 @@ export const bottomSheetMethods = uiModule({
         // 2) The tree's content (a manageable tree only, like the desktop menu).
         const active = isView ? null : TreeManager.getActiveTreeMetadata();
         if (active) {
+            // The count's meaning (the next days, T33): the badge's tooltip and the row's spoken name.
+            const annCount = this.anniversaryBadgeCount();
+            const annHint = annCount > 0 ? this.anniversaryBadgeHint(annCount) : undefined;
             blocks.push({ divider: blocks.length > 0, rows: [
                 { label: s.book.menu, run: () => this.showBookDialog() },
                 ...(this.isSourcesMenuOffered() ? [{ label: s.sources.menu, run: () => this.showSourcesDialog() }] : []),
-                { label: s.anniversaries.menu, run: () => this.showAnniversariesDialog(), badge: this.anniversaryBadgeCount() },
+                { label: s.anniversaries.menu, run: () => this.showAnniversariesDialog(), badge: annCount,
+                    badgeTitle: annHint, ariaLabel: annHint ? `${s.anniversaries.menu}: ${annHint}` : undefined },
             ] });
         }
 
@@ -461,6 +467,7 @@ export const bottomSheetMethods = uiModule({
                 const badge = document.createElement('span');
                 badge.className = 'tree-switcher-badge';
                 badge.textContent = String(row.badge);
+                if (row.badgeTitle) badge.title = row.badgeTitle;
                 btn.appendChild(badge);
             }
             if (row.isNew) {

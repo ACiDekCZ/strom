@@ -129,3 +129,46 @@ test('phone: the on-this-day card sits above the bottom bar and steps aside for 
     await expect(page.locator('#anniversaries-modal')).toBeVisible();
     await expect(card).toBeHidden();
 });
+
+/** A birth date `days` from today (local calendar), decades ago. */
+function birthInDays(days: number, year: number): string {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    return `${year}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+test('the anniversaries count says it covers the next 7 days, in the menu and atop the panel (T33)', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await openApp(page);
+    // One birthday in 3 days (counted), one in 20 days (listed, not counted).
+    await createFirstPerson(page, 'Soon', 'Novak', { gender: 'female', birthDate: birthInDays(3, 1980) });
+    await waitForPersist(page, 'Soon');
+    await page.evaluate((birthDate) => {
+        window.Strom.DataManager.createPerson({ firstName: 'Later', lastName: 'Novak', gender: 'male', birthDate });
+        window.Strom.UI.refreshActionMenuBadges();
+    }, birthInDays(20, 1970));
+
+    await page.locator('.actions-menu-btn').click();
+    const badge = page.locator('#actions-ann-badge');
+    await expect(badge).toHaveText('1');
+    await expect(badge).toHaveAttribute('title', '1 anniversary in the next 7 days');
+    await expect(page.locator('#actions-ann-row')).toHaveAttribute('aria-label', 'Anniversaries: 1 anniversary in the next 7 days');
+
+    await page.locator('#actions-ann-row').click();
+    const modal = page.locator('#anniversaries-modal');
+    await expect(modal).toBeVisible();
+    await expect(modal.locator('.anniversary-row')).toHaveCount(2);
+    await expect(modal.locator('#anniversaries-summary'))
+        .toHaveText('1 anniversary in the next 7 days · the list covers the next 30 days');
+});
+
+test('phone: the More sheet\'s anniversaries row names what its count covers (T33)', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 800 });
+    await openApp(page);
+    await createFirstPerson(page, 'Soon', 'Novak', { gender: 'female', birthDate: birthInDays(2, 1980) });
+    await waitForPersist(page, 'Soon');
+    await page.locator('#bb-view-more').click();
+    const row = page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: 'Anniversaries' });
+    await expect(row).toHaveAttribute('aria-label', 'Anniversaries: 1 anniversary in the next 7 days');
+    await expect(row.locator('.tree-switcher-badge')).toHaveAttribute('title', '1 anniversary in the next 7 days');
+});

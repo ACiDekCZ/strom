@@ -241,11 +241,19 @@ export const treeManagementMethods = uiModule({
         const moreDot = document.getElementById('bottom-bar-more-dot');
         if (moreDot) moreDot.style.display = count > 0 || researchSignal !== '' ? 'block' : 'none';
         this.renderActionsExportReminder();
-        // Count badge on the Anniversaries row.
+        // Count badge on the Anniversaries row; its tooltip and the row's
+        // spoken name say what the number counts (the next days, T33).
         const badge = document.getElementById('actions-ann-badge');
         if (badge) {
             badge.textContent = count > 0 ? String(count) : '';
             badge.style.display = count > 0 ? 'inline-flex' : 'none';
+            const hint = count > 0 ? this.anniversaryBadgeHint(count) : '';
+            if (hint) badge.title = hint; else badge.removeAttribute('title');
+            const row = document.getElementById('actions-ann-row');
+            if (row) {
+                if (hint) row.setAttribute('aria-label', `${strings.anniversaries.menu}: ${hint}`);
+                else row.removeAttribute('aria-label');
+            }
         }
         // "Change history" row is only offered when the audit log is enabled.
         const auditRow = document.getElementById('actions-tree-audit-row');

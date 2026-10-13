@@ -5210,6 +5210,8 @@
         }
 
         /* Anniversaries panel — "on this day" card with a copper left rim. */
+        .anniversaries-summary { margin-bottom: 10px; }
+        .anniversaries-summary:empty { display: none; }
         .anniversaries-list {
             display: flex;
             flex-direction: column;
@@ -15228,6 +15230,8 @@
                 <h2 data-i18n="anniversaries.title"></h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeAnniversariesDialog()">&times;</button>
             </div>
+            <!-- What the menu count means (the next days) and how far the list reaches (T33). -->
+            <p id="anniversaries-summary" class="modal-description anniversaries-summary"></p>
             <div id="anniversaries-list" class="anniversaries-list"></div>
             <div class="buttons">
                 <button class="secondary" data-dismiss onclick="window.Strom.UI.closeAnniversariesDialog()" data-i18n="buttons.close"></button>

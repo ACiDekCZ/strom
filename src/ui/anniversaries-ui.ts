@@ -21,6 +21,11 @@ import { uiModule } from './module.js';
 import { emptyStateHtml } from './empty-state.js';
 import { shownNameOrEmpty } from '../person-name.js';
 
+/** Days ahead the menu count (and the ⋯ dot) covers (T33: said in its label). */
+export const ANNIVERSARY_SOON_DAYS = 7;
+/** Days ahead the anniversaries panel lists. */
+export const ANNIVERSARY_LIST_DAYS = 30;
+
 function personName(p?: Person): string {
     return p ? shownNameOrEmpty(p) : '';
 }
@@ -35,8 +40,17 @@ export const anniversariesUiMethods = uiModule({
         if (!modal || !list) return;
 
         const data = DataManager.getData();
-        const items = upcomingAnniversaries(data, new Date(), 30, SettingsManager.isDeathAnniversariesEnabled());
+        const items = upcomingAnniversaries(data, new Date(), ANNIVERSARY_LIST_DAYS, SettingsManager.isDeathAnniversariesEnabled());
         const a = strings.anniversaries;
+
+        // The menu counts the next ANNIVERSARY_SOON_DAYS only, the list reaches
+        // further: both said up front, so "3" on the menu matches what is read here.
+        const summary = document.getElementById('anniversaries-summary');
+        if (summary) {
+            const soon = items.filter(i => i.daysUntil <= ANNIVERSARY_SOON_DAYS).length;
+            summary.textContent = items.length === 0 ? ''
+                : `${a.soonCount(soon, ANNIVERSARY_SOON_DAYS)} · ${a.listScope(ANNIVERSARY_LIST_DAYS)}`;
+        }
 
         list.innerHTML = items.length === 0
             ? emptyStateHtml({
@@ -170,9 +184,14 @@ export const anniversariesUiMethods = uiModule({
         document.getElementById('otd-card')?.classList.remove('active');
     },
 
-    /** Count of anniversaries within 7 days, for the menu badge (0 = none). */
+    /** Count of anniversaries within ANNIVERSARY_SOON_DAYS, for the menu badge (0 = none). */
     anniversaryBadgeCount(): number {
         if (DataManager.isViewMode()) return 0;
-        return upcomingAnniversaries(DataManager.getData(), new Date(), 7, SettingsManager.isDeathAnniversariesEnabled()).length;
+        return upcomingAnniversaries(DataManager.getData(), new Date(), ANNIVERSARY_SOON_DAYS, SettingsManager.isDeathAnniversariesEnabled()).length;
+    },
+
+    /** What the menu badge's number means ("3 anniversaries in the next 7 days"): its tooltip and spoken name. */
+    anniversaryBadgeHint(count: number): string {
+        return strings.anniversaries.soonCount(count, ANNIVERSARY_SOON_DAYS);
     },
 });
