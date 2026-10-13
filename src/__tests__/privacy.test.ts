@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { applyLivingPrivacy, isLivingPerson, inferBirthUpperBounds } from '../privacy.js';
+import { applyLivingPrivacy, isLivingPerson, inferBirthUpperBounds, presumedDeceasedSet } from '../privacy.js';
 import { strings } from '../strings.js';
 import { StromData, Person, PersonId, PartnershipId } from '../types.js';
 
@@ -249,5 +249,56 @@ describe('narratives are the most personal text in the file', () => {
         };
         const out = applyLivingPrivacy(data, 'anonymous', NOW);
         expect(Object.values(out.partnerships)[0].story).toBeUndefined();
+    });
+});
+
+/**
+ * T35: the † marker. A person with their own death or the Deceased switch,
+ * or an age beyond 120 is †; a descendant's death alone never marks an
+ * ancestor.
+ */
+describe('presumedDeceasedSet (T35)', () => {
+    const tree = (persons: Person[]): StromData => ({
+        persons: Object.fromEntries(persons.map(p => [p.id, p])) as StromData['persons'],
+        partnerships: {} as StromData['partnerships'],
+    });
+
+    it('a parent born in 1937 of a child who died is not †', () => {
+        const data = tree([
+            person('mother', { birthDate: '1937', childIds: ['child' as PersonId] }),
+            person('gm', { childIds: ['mother' as PersonId] }),
+            person('child', { birthDate: '1960', deathDate: '2001', parentIds: ['mother' as PersonId] }),
+        ]);
+        P(data)['mother'].parentIds = ['gm' as PersonId];
+        const set = presumedDeceasedSet(data, NOW);
+        expect(set.has('child')).toBe(true);
+        expect(set.has('mother')).toBe(false);
+        // Her mother has no dates; born at the latest 1937 − 12 = 1925: not past 120.
+        expect(set.has('gm')).toBe(false);
+    });
+
+    it('own death data, the Deceased switch and an age beyond 120 still mark', () => {
+        const data = tree([
+            person('dated', { birthDate: '1950', deathDate: '2000' }),
+            person('switch', { birthDate: '1950', isDeceased: true }),
+            person('old', { birthDate: '1890' }),
+            person('young', { birthDate: '1990' }),
+        ]);
+        const set = presumedDeceasedSet(data, NOW);
+        expect([...set].sort()).toEqual(['dated', 'old', 'switch']);
+    });
+
+    it('an ancestor without a birth year is † when a descendant’s birth puts them past 120', () => {
+        const data = tree([
+            person('ggp', { childIds: ['gp' as PersonId] }),
+            person('gp', { parentIds: ['ggp' as PersonId], childIds: ['kid' as PersonId] }),
+            person('kid', { birthDate: '1900', deathDate: '1980', parentIds: ['gp' as PersonId] }),
+            person('alive', { isDeceased: false, childIds: ['kid2' as PersonId] }),
+            person('kid2', { birthDate: '1880', parentIds: ['alive' as PersonId] }),
+        ]);
+        const set = presumedDeceasedSet(data, NOW);
+        expect(set.has('gp')).toBe(true);     // born 1888 at the latest
+        expect(set.has('ggp')).toBe(true);    // born 1876 at the latest
+        expect(set.has('alive')).toBe(false); // marked as alive
     });
 });

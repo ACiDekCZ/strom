@@ -408,28 +408,28 @@ export function applyLivingPrivacy(
 
 /**
  * Presumed-deceased set for the † marker (renderer + poster export share this):
- * a recorded death, isDeceased, or age beyond 120 seeds the set, and every
- * ANCESTOR of a presumed-deceased person is presumed deceased too. Looser than
- * the privacy heuristic above on purpose — it only drives a display marker.
+ * a recorded death or isDeceased, or an age beyond 120. A person with a birth
+ * year is judged by it alone; one without by the latest year they can have
+ * been born (inferBirthUpperBounds: their own events, weddings, children's
+ * births), unless marked as alive. A descendant's death alone never marks an
+ * ancestor (T35: a parent born in 1937 of a child who died is not †). Looser
+ * than the privacy heuristic above on purpose — it only drives a display marker.
  */
 export function presumedDeceasedSet(data: StromData, currentYear: number = new Date().getFullYear()): Set<string> {
     const MARKER_MAX_AGE = 120;
     const out = new Set<string>();
+    let bounds: Map<string, number> | null = null;
     for (const p of Object.values(data.persons)) {
         if (p.deathDate || p.isDeceased === true) { out.add(p.id); continue; }
         const birthYear = yearOf(p.birthDate);
-        if (birthYear !== null && currentYear - birthYear > MARKER_MAX_AGE) out.add(p.id);
-    }
-    const markAncestors = (id: string): void => {
-        const p = data.persons[id as keyof typeof data.persons];
-        if (!p) return;
-        for (const parentId of p.parentIds) {
-            if (!out.has(parentId)) {
-                out.add(parentId);
-                markAncestors(parentId);
-            }
+        if (birthYear !== null) {
+            if (currentYear - birthYear > MARKER_MAX_AGE) out.add(p.id);
+            continue;
         }
-    };
-    for (const id of [...out]) markAncestors(id);
+        if (p.isDeceased === false) continue;
+        bounds ??= inferBirthUpperBounds(data);
+        const latestBirth = bounds.get(p.id);
+        if (latestBirth !== undefined && currentYear - latestBirth > MARKER_MAX_AGE) out.add(p.id);
+    }
     return out;
 }
