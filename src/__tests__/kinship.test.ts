@@ -182,3 +182,67 @@ describe('findRelationship — a person of unknown sex (U01)', () => {
         expect(findRelationship(unknownAs('mother'), 'focus' as PersonId, 'father' as PersonId)!.term.cs).toBe('otec');
     });
 });
+
+/**
+ * T27: a tie through two marriages. The husband of the husband's sister is a
+ * brother-in-law; any other partner–blood–partner tie is "related by
+ * marriage", never no relation.
+ */
+describe('findRelationship — through two marriages (T27)', () => {
+    type G = 'male' | 'female' | 'unknown';
+    const build = (): StromData => {
+        const d = { persons: {}, partnerships: {} } as unknown as StromData;
+        const person = (id: string, gender: G, parentIds: string[] = []) => {
+            d.persons[id as PersonId] = {
+                id: id as PersonId, firstName: id, lastName: '', gender, isPlaceholder: false,
+                partnerships: [], parentIds: parentIds as PersonId[], childIds: [],
+            } as unknown as StromData['persons'][PersonId];
+            for (const p of parentIds) d.persons[p as PersonId].childIds.push(id as PersonId);
+        };
+        const marry = (a: string, b: string) => {
+            const id = `u_${a}_${b}` as StromData['partnerships'][never]['id'];
+            d.partnerships[id] = { id, person1Id: a as PersonId, person2Id: b as PersonId, childIds: [], status: 'married' };
+            d.persons[a as PersonId].partnerships.push(id);
+            d.persons[b as PersonId].partnerships.push(id);
+        };
+        person('gf', 'male'); person('gm', 'female'); marry('gf', 'gm');
+        person('father', 'male', ['gf', 'gm']); person('mother', 'female'); marry('father', 'mother');
+        person('uncle', 'male', ['gf', 'gm']); person('uncleWife', 'female'); marry('uncle', 'uncleWife');
+        person('pavel', 'male', ['father', 'mother']);
+        person('jana', 'female', ['father', 'mother']);
+        person('cousin', 'female', ['uncle', 'uncleWife']);
+        person('alena', 'female'); marry('pavel', 'alena');
+        person('vlastimil', 'male'); marry('vlastimil', 'jana');
+        person('cousinHusband', 'unknown'); marry('cousinHusband', 'cousin');
+        person('pavelEx', 'female'); marry('pavel', 'pavelEx');
+        return d;
+    };
+    const d = build();
+    const r = (a: string, b: string) => findRelationship(d, a as PersonId, b as PersonId);
+
+    it("the husband of the husband's sister is a brother-in-law, and back", () => {
+        const fwd = r('alena', 'vlastimil')!;
+        expect(fwd.term).toEqual({ cs: 'švagr', en: 'brother-in-law', de: 'Schwager' });
+        expect(fwd.affinity).toBe(true);
+        expect(fwd.path).toEqual(['alena', 'pavel', 'father', 'jana', 'vlastimil']);
+        expect(r('vlastimil', 'alena')!.term).toEqual({ cs: 'švagrová', en: 'sister-in-law', de: 'Schwägerin' });
+    });
+
+    it('another tie through two marriages is related by marriage', () => {
+        const t = r('alena', 'cousinHusband')!;
+        expect(t.term).toEqual({ cs: 'příbuzný / příbuzná sňatkem', en: 'related by marriage', de: 'verschwägert' });
+        expect(t.path[0]).toBe('alena');
+        expect(t.path[t.path.length - 1]).toBe('cousinHusband');
+        expect(r('cousinHusband', 'alena')!.term.cs).toBe('příbuzná sňatkem');
+        expect(r('vlastimil', 'uncleWife')!.term.cs).toBe('příbuzná sňatkem');
+    });
+
+    it('one marriage hop keeps its own words', () => {
+        expect(r('alena', 'jana')!.term.cs).toBe('švagrová');
+        expect(r('vlastimil', 'pavel')!.term.cs).toBe('švagr');
+    });
+
+    it('two partners of the same person stay without a relation', () => {
+        expect(r('alena', 'pavelEx')).toBeNull();
+    });
+});

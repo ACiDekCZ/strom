@@ -4,8 +4,10 @@
  *
  * Blood relations are derived from the closest common ancestor: person A is
  * `m` generations below it, person B is `n` generations below it. Affinity
- * (in-law) relations are blood relations reached through exactly one
- * partnership hop on either end.
+ * (in-law) relations are blood relations reached through one partnership
+ * hop on either end, or through one on each end (the husband of the
+ * husband's sister is a brother-in-law). Any other tie through marriages is
+ * reported as "related by marriage", never as no relation.
  */
 
 import { StromData, PersonId, Person, Gender } from './types.js';
@@ -167,8 +169,7 @@ function affinityTerm(
         // B is A's partner's blood relative
         if (n === 0 && m === 1) return t({ cs: 'tchán', en: 'father-in-law', de: 'Schwiegervater' }, { cs: 'tchyně', en: 'mother-in-law', de: 'Schwiegermutter' },
             { cs: 'tchán / tchyně', en: 'parent-in-law', de: 'Schwiegerelternteil' });
-        if (m === 1 && n === 1) return t({ cs: 'švagr', en: 'brother-in-law', de: 'Schwager' }, { cs: 'švagrová', en: 'sister-in-law', de: 'Schwägerin' },
-            { cs: 'švagr / švagrová', en: 'sibling-in-law', de: 'Schwager / Schwägerin' });
+        if (m === 1 && n === 1) return siblingInLaw(bGender);
         // B is a child of A's partner but not A's own child.
         if (m === 0 && n === 1) return t({ cs: 'nevlastní syn', en: 'stepson', de: 'Stiefsohn' }, { cs: 'nevlastní dcera', en: 'stepdaughter', de: 'Stieftochter' },
             { cs: 'nevlastní dítě', en: 'stepchild', de: 'Stiefkind' });
@@ -176,8 +177,7 @@ function affinityTerm(
         // B is the partner of A's blood relative
         if (m === 0 && n === 1) return t({ cs: 'zeť', en: 'son-in-law', de: 'Schwiegersohn' }, { cs: 'snacha', en: 'daughter-in-law', de: 'Schwiegertochter' },
             { cs: 'zeť / snacha', en: 'child-in-law', de: 'Schwiegerkind' });
-        if (m === 1 && n === 1) return t({ cs: 'švagr', en: 'brother-in-law', de: 'Schwager' }, { cs: 'švagrová', en: 'sister-in-law', de: 'Schwägerin' },
-            { cs: 'švagr / švagrová', en: 'sibling-in-law', de: 'Schwager / Schwägerin' });
+        if (m === 1 && n === 1) return siblingInLaw(bGender);
         if (m === 2 && n === 1) return t({ cs: 'strýc (přiženěný)', en: 'uncle (by marriage)', de: 'Onkel (angeheiratet)' }, { cs: 'teta (přivdaná)', en: 'aunt (by marriage)', de: 'Tante (angeheiratet)' },
             { cs: 'strýc / teta (sňatkem)', en: 'uncle / aunt (by marriage)', de: 'Onkel / Tante (angeheiratet)' });
         // B is the partner of A's parent, and not A's parent (no blood tie).
@@ -312,9 +312,18 @@ function findRelationshipCore(data: StromData, aId: PersonId, bId: PersonId): Ki
         return { path: blood.path, term, affinity: false };
     }
 
+    // Ties through marriage too distant for a word of their own: the
+    // closest one is named "related by marriage" when nothing closer is.
+    let fallback: { score: number; path: PersonId[] } | null = null;
+    const offerFallback = (rel: BloodRelation, hops: number, path: PersonId[]) => {
+        const score = rel.m + rel.n + hops;
+        if (!fallback || score < fallback.score) fallback = { score, path };
+    };
+
     // 3. Affinity: B is a blood relative of A's partner
     for (const partnerId of partnersOf(data, aId)) {
         const rel = findBloodRelation(data, partnerId, bId);
+        if (rel && rel.m + rel.n > 6) offerFallback(rel, 1, [aId, ...rel.path]);
         if (rel && rel.m + rel.n <= 6) {
             const special = affinityTerm(true, rel.m, rel.n, b.gender);
             const partner = data.persons[partnerId];
@@ -335,6 +344,7 @@ function findRelationshipCore(data: StromData, aId: PersonId, bId: PersonId): Ki
     // 4. Affinity: B is the partner of A's blood relative
     for (const partnerId of partnersOf(data, bId)) {
         const rel = findBloodRelation(data, aId, partnerId);
+        if (rel && rel.m + rel.n > 6) offerFallback(rel, 1, [...rel.path, bId]);
         if (rel && rel.m + rel.n <= 6) {
             const special = affinityTerm(false, rel.m, rel.n, b.gender);
             const relative = data.persons[partnerId];
@@ -347,5 +357,37 @@ function findRelationshipCore(data: StromData, aId: PersonId, bId: PersonId): Ki
         }
     }
 
+    // 5. Affinity through two marriages: B is the partner of a blood relative
+    // of A's partner. Two persons married to the same one are not covered.
+    for (const aPartnerId of partnersOf(data, aId)) {
+        for (const bPartnerId of partnersOf(data, bId)) {
+            if (aPartnerId === bPartnerId) continue;
+            const rel = findBloodRelation(data, aPartnerId, bPartnerId);
+            if (!rel) continue;
+            const path = [aId, ...rel.path, bId];
+            // The partner of the partner's sibling is a sibling-in-law too.
+            if (rel.m === 1 && rel.n === 1) return { path, term: siblingInLaw(b.gender), affinity: true };
+            offerFallback(rel, 2, path);
+        }
+    }
+
+    // (assigned in a closure, so TypeScript narrows it to null here)
+    const best = fallback as { score: number; path: PersonId[] } | null;
+    if (best) return { path: best.path, term: relatedByMarriage(b.gender), affinity: true };
     return null;
+}
+
+function siblingInLaw(gender: Gender | undefined): KinshipTerm {
+    return bySex(gender,
+        { cs: 'švagr', en: 'brother-in-law', de: 'Schwager' },
+        { cs: 'švagrová', en: 'sister-in-law', de: 'Schwägerin' },
+        { cs: 'švagr / švagrová', en: 'sibling-in-law', de: 'Schwager / Schwägerin' });
+}
+
+/** A tie through marriages with no closer word. */
+function relatedByMarriage(gender: Gender | undefined): KinshipTerm {
+    return bySex(gender,
+        { cs: 'příbuzný sňatkem', en: 'related by marriage', de: 'verschwägert' },
+        { cs: 'příbuzná sňatkem', en: 'related by marriage', de: 'verschwägert' },
+        { cs: 'příbuzný / příbuzná sňatkem', en: 'related by marriage', de: 'verschwägert' });
 }
