@@ -13,7 +13,7 @@ import { SettingsManager } from '../settings.js';
 import { TreeRenderer } from '../renderer.js';
 import { TreeManager } from '../tree-manager.js';
 import { DataManager } from '../data.js';
-import { ZoomPan } from '../zoom.js';
+import { ZoomPan, CARD_PAN_THRESHOLD_PX } from '../zoom.js';
 import { isPhoneBar } from '../breakpoints.js';
 import { menuItemBody, menuItemAria, PersonMenuAction } from './context-menu.js';
 import { shownName } from '../person-name.js';
@@ -65,7 +65,8 @@ function esc(text: string): string {
 }
 
 const LONG_PRESS_MS = 500;
-const MOVE_CANCEL_PX = 10;
+/** The long-press gives up where a drag from the card starts to pan the canvas (T38). */
+const MOVE_CANCEL_PX = CARD_PAN_THRESHOLD_PX;
 const SWIPE_CLOSE_PX = 80;
 const SWIPE_BACK_PX = 60;
 /** The person sheet's tiles, in this order (each when the menu offers it). */
@@ -761,6 +762,7 @@ export const bottomSheetMethods = uiModule({
             startX = t.clientX; startY = t.clientY; fired = false;
             timer = setTimeout(() => {
                 fired = true;
+                ZoomPan.releaseTouch();   // the finger moving on now must not pan under the sheet
                 this.showPersonBottomSheet(personId);
             }, LONG_PRESS_MS);
         }, { passive: true });

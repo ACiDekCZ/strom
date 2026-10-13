@@ -16,6 +16,17 @@ export function setTreeRendererGetter(getter: () => { getFocusPersonId: () => Pe
 const TAP_THRESHOLD_MS = 200;  // Max time for a tap
 const TAP_THRESHOLD_PX = 10;   // Max movement for a tap
 /**
+ * A press on a person card stays the card's (click, menu, long-press) until it
+ * moves this far; past it the drag pans the canvas (T38: on a dense tree, on a
+ * phone above all, there is hardly any empty canvas to grab). The long-press
+ * gives up at the same distance (src/ui/bottom-sheet.ts).
+ */
+export const CARD_PAN_THRESHOLD_PX = 8;
+/** After a pan that started on a card, the click its release makes is swallowed within this time. */
+const CARD_PAN_CLICK_SWALLOW_MS = 500;
+/** Class on #tree-container while a drag that started on a card pans it (grabbing cursor). */
+const CARD_PANNING_CLASS = 'is-card-panning';
+/**
  * Manual zoom floor (wheel, pinch, the − button) for a tree that fits the
  * screen at this scale or above. A wider tree lowers the floor to its own fit
  * scale (see minScale), so "fit to screen" shows all of it and zooming out by
@@ -58,6 +69,8 @@ interface TouchState {
     lastY: number;
     isTap: boolean;
     isPanning: boolean;
+    /** Started on a person card: pans only past CARD_PAN_THRESHOLD_PX (T38). */
+    fromCard?: boolean;
 }
 
 class ZoomPanClass {
@@ -69,6 +82,12 @@ class ZoomPanClass {
     private dragging = false;
     private dragStartX = 0;
     private dragStartY = 0;
+    /** A mouse press on a person card that has not moved past CARD_PAN_THRESHOLD_PX yet. */
+    private cardPress: { x: number; y: number } | null = null;
+    /** The running mouse drag started on a card. */
+    private dragFromCard = false;
+    /** Until then (performance.now()) the next click is the end of a pan from a card: swallowed. */
+    private swallowClickUntil = 0;
 
     // Touch handling
     private touchState: TouchState | null = null;
@@ -107,13 +126,54 @@ class ZoomPanClass {
         container.addEventListener('touchmove', (e) => this.onTouchMove(e), { passive: false });
         container.addEventListener('touchend', (e) => this.onTouchEnd(e));
         container.addEventListener('touchcancel', () => this.onTouchCancel());
+
+        // A card's photo must not start a native image drag (it would take the
+        // mouse away from the pan); a pan that started on a card ends without
+        // the click its release makes (no menu, no selection).
+        container.addEventListener('dragstart', (e) => {
+            if ((e.target as Element | null)?.closest?.('.person-card')) e.preventDefault();
+        });
+        window.addEventListener('click', (e) => {
+            if (this.swallowClickUntil === 0) return;
+            const fresh = performance.now() <= this.swallowClickUntil;
+            this.swallowClickUntil = 0;
+            if (!fresh) return;
+            e.preventDefault();
+            e.stopPropagation();
+        }, true);
+    }
+
+    /**
+     * Let the current single-finger touch go: a long-press on a card has opened
+     * its sheet, so the finger moving on must not pan the canvas under it.
+     */
+    releaseTouch(): void {
+        if (this.touchState?.isPanning) return;   // already a pan: it keeps it
+        this.touchState = null;
+    }
+
+    /** A press here may become a pan from a card (T38): a card on the tree canvas, not a view drawn over it. */
+    private isCardPress(target: HTMLElement): boolean {
+        return !!target.closest('.person-card')
+            && !target.closest(STANDALONE_VIEW_SELECTOR)
+            && !target.closest('.context-menu, input, select, textarea');
+    }
+
+    private endCardPan(): void {
+        this.swallowClickUntil = performance.now() + CARD_PAN_CLICK_SWALLOW_MS;
+        document.getElementById('tree-container')?.classList.remove(CARD_PANNING_CLASS);
     }
 
     // ==================== MOUSE EVENTS ====================
 
     private onMouseDown(e: MouseEvent): void {
-        // Don't start drag on person cards, context menu, or interactive elements
         const target = e.target as HTMLElement;
+        // On a card: its click unless the press moves past the threshold (onMouseMove).
+        if (e.button === 0 && this.isCardPress(target)) {
+            this.cardPress = { x: e.clientX, y: e.clientY };
+            return;
+        }
+        // Don't start drag on the context menu or interactive elements
         if (this.isInteractiveElement(target)) return;
 
         this.dragging = true;
@@ -122,6 +182,18 @@ class ZoomPanClass {
     }
 
     private onMouseMove(e: MouseEvent): void {
+        if (this.cardPress && !this.dragging) {
+            if ((e.buttons & 1) === 0) { this.cardPress = null; return; }   // released elsewhere
+            const { x, y } = this.cardPress;
+            if (Math.hypot(e.clientX - x, e.clientY - y) <= CARD_PAN_THRESHOLD_PX) return;
+            // Past the threshold: a pan, anchored where the press began.
+            this.cardPress = null;
+            this.dragging = true;
+            this.dragFromCard = true;
+            this.dragStartX = x - this.tx;
+            this.dragStartY = y - this.ty;
+            document.getElementById('tree-container')?.classList.add(CARD_PANNING_CLASS);
+        }
         if (!this.dragging) return;
         this.beginMotion();
         this.tx = e.clientX - this.dragStartX;
@@ -130,6 +202,11 @@ class ZoomPanClass {
     }
 
     private onMouseUp(): void {
+        this.cardPress = null;
+        if (this.dragFromCard) {
+            this.dragFromCard = false;
+            this.endCardPan();
+        }
         this.dragging = false;
         this.endMotion();
     }
@@ -167,15 +244,14 @@ class ZoomPanClass {
     private onTouchStart(e: TouchEvent): void {
         const target = e.target as HTMLElement;
 
-        // Allow default behavior on person cards (for click/tap to work)
-        // and inside the timeline (native touch scrolling). The card guard
-        // only applies to SINGLE-finger touches — a two-finger pinch that
-        // happens to start on cards must still zoom (on dense trees cards
-        // cover most of the screen and pinch otherwise never engages).
+        // Leave the context menu and the views over the canvas (timeline:
+        // native touch scrolling) alone. A single finger on a person card is
+        // watched but not taken: below CARD_PAN_THRESHOLD_PX it stays the
+        // card's tap / long-press, past it it pans (T38). A two-finger pinch
+        // that starts on cards zooms (on dense trees cards cover most of the
+        // screen and pinch otherwise never engages).
         if (e.touches.length === 1
-            && (target.closest('.person-card') || target.closest('.context-menu')
-                || target.closest(STANDALONE_VIEW_SELECTOR))) {
-            // Don't interfere with person card interactions
+            && (target.closest('.context-menu') || target.closest(STANDALONE_VIEW_SELECTOR))) {
             return;
         }
         if (e.touches.length > 1 && target.closest(STANDALONE_VIEW_SELECTOR)) {
@@ -192,7 +268,8 @@ class ZoomPanClass {
                 lastX: touch.clientX,
                 lastY: touch.clientY,
                 isTap: true,
-                isPanning: false
+                isPanning: false,
+                fromCard: this.isCardPress(target),
             };
             // Don't prevent default yet - wait to see if it's a tap or pan
         } else if (e.touches.length === 2) {
@@ -218,7 +295,7 @@ class ZoomPanClass {
             const distance = Math.sqrt(dx * dx + dy * dy);
 
             // Check if moved enough to be a pan
-            if (distance > TAP_THRESHOLD_PX) {
+            if (distance > (this.touchState.fromCard ? CARD_PAN_THRESHOLD_PX : TAP_THRESHOLD_PX)) {
                 this.touchState.isTap = false;
 
                 if (!this.touchState.isPanning) {
@@ -275,7 +352,11 @@ class ZoomPanClass {
     private onTouchEnd(e: TouchEvent): void {
         // Check for remaining touches (for multi-touch scenarios)
         if (e.touches.length === 0) {
-            // All fingers lifted
+            // All fingers lifted. A pan that started on a card: no tap after it.
+            if (this.touchState?.fromCard && this.touchState.isPanning) {
+                if (e.cancelable) e.preventDefault();
+                this.endCardPan();
+            }
             this.lastPinchDistance = 0;
             this.touchState = null;
             this.endMotion();

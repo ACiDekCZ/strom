@@ -81,6 +81,39 @@ test('pinch changes the zoom level', async ({ page }) => {
     await expect.poll(() => page.evaluate(() => window.Strom.ZoomPan.getScale())).not.toBe(before);
 });
 
+/** A real finger (the browser's own gesture handling: a tap makes a click) dragged from (x, y) by (dx, dy). */
+async function fingerDrag(page: Page, x: number, y: number, dx: number, dy: number, steps = 8): Promise<void> {
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+    for (let i = 1; i <= steps; i++) {
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x + dx * i / steps, y: y + dy * i / steps }] });
+    }
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await cdp.detach();
+}
+
+test('a finger dragged from a card pans the canvas and opens no sheet; a tap still opens it (T38)', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    const transform = () => page.locator('#tree-canvas').evaluate((el) => (el as HTMLElement).style.transform);
+    const sheet = page.locator('.bottom-sheet');
+    const box = (await page.locator('.person-card.focused').boundingBox())!;
+    const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
+
+    const before = await transform();
+    await fingerDrag(page, cx, cy, -80, 60);
+    await expect.poll(transform).not.toBe(before);
+    await page.waitForTimeout(700);   // past the long-press time too
+    await expect(sheet).toHaveCount(0);
+
+    // A tap (a finger that barely moves) is still the card's: the sheet opens, nothing pans.
+    const panned = await transform();
+    const moved = (await page.locator('.person-card.focused').boundingBox())!;
+    await fingerDrag(page, moved.x + moved.width / 2, moved.y + moved.height / 2, 3, 2, 2);
+    await expect(sheet).toBeVisible();
+    expect(await transform()).toBe(panned);
+});
+
 test('a single tap on a card opens the bottom sheet (first tap = person menu)', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');

@@ -1092,6 +1092,8 @@
             touch-action: none;
         }
         #tree-container:active { cursor: grabbing; }
+        /* A drag that started on a card pans the canvas past a few pixels (T38). */
+        #tree-container.is-card-panning, #tree-container.is-card-panning * { cursor: grabbing; }
 
         #tree-canvas {
             position: absolute;

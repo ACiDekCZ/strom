@@ -80,6 +80,40 @@ test('dragging the canvas pans the tree', async ({ page }) => {
     await expect.poll(() => canvasTransform(page)).not.toBe(before);
 });
 
+test('a drag that starts on a card pans the canvas past a few pixels and opens no menu; a short one stays a click (T38)', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    const menu = page.locator('.context-menu');
+    const box = (await card(page, 'Jan').boundingBox())!;
+    const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
+
+    // A drag from the card: the canvas follows, the release opens nothing.
+    const pan = () => page.evaluate(() => window.Strom.ZoomPan.getTransform() as { tx: number; ty: number });
+    const before = await pan();
+    await page.mouse.move(cx, cy);
+    await page.mouse.down();
+    await page.mouse.move(cx - 120, cy + 90, { steps: 10 });
+    await page.mouse.up();
+    // The canvas moved with the pointer from where the press began.
+    const after = await pan();
+    expect(after.tx - before.tx).toBeCloseTo(-120, 0);
+    expect(after.ty - before.ty).toBeCloseTo(90, 0);
+    const panned = await canvasTransform(page);
+    await page.waitForTimeout(150);
+    await expect(menu).toHaveCount(0);
+
+    // Moving less than the threshold: still the card's click, the canvas stays.
+    const moved = (await card(page, 'Jan').boundingBox())!;
+    const mx = moved.x + moved.width / 2, my = moved.y + moved.height / 2;
+    await page.mouse.move(mx, my);
+    await page.mouse.down();
+    await page.mouse.move(mx + 5, my + 3, { steps: 3 });
+    await page.mouse.up();
+    await expect(menu.first()).toBeVisible();
+    expect(await canvasTransform(page)).toBe(panned);
+});
+
 test('the canvas is a compositor layer only while it moves, and pans in whole pixels (sharp cards) (T01)', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
