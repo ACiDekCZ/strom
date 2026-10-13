@@ -64,7 +64,7 @@ import { parentRelKind, parentRelDash, connectionDash } from './parent-rel-style
 import { isDiagramStandIn } from './layout/pipeline/placeholders.js';
 import {
     unionOrderBadges, UnionOrderBadge, hiddenRelativesTabs, HiddenRelativesTab, placeUnionOrderPill, PillPlacement, REL_LINK_ICON_WIDTH,
-    viewLineSegments, segmentsNearCard, EDGE_INSET, PillLabel, pillLabelForms, pillLabelWidths,
+    viewLineSegments, segmentsNearCard, EDGE_INSET, PillLabel, pillLabelForms, pillLabelWidths, unionSummaries,
 } from './marriage-order.js';
 import { measureUnionOrderPills, measureTabRows, rowKey, unionOrderPillKey, unionOrderPillPartsHtml, pillFontsPending } from './union-order-measure.js';
 import { openCardMenuFromKeyboard } from './ui/keyboard-access.js';
@@ -1945,7 +1945,7 @@ class TreeRendererClass {
             //   1. full name (serif)
             //   2. * birth date, place
             //   3. † death date, place (age)   [deceased only]
-            //   4. ∞ primary partner · N children   [when either exists]
+            //   4. ∞ partner · N children, a line per union   [when either exists]
             //   5. footer: the real card gesture
             // Date and place are shown independently: knowing the village but not
             // the date is ordinary in parish work (a damaged register, an entry
@@ -1983,22 +1983,30 @@ class TreeRendererClass {
                 && checkRecordedAge(person.deathAge, ageBirthDate(person), person.deathDate)?.differs
                 ? strings.fields.ageRecorded(person.deathAge.trim()) : '';
 
-            // Relationship summary: the primary (first) partnership's partner and
-            // the person's total children count. Either alone is enough to show.
-            let ttRelLine = '';
-            let ttPartnerName = '';
-            const primaryPartnership = partnerships[0];
-            if (primaryPartnership) {
-                const ppid = primaryPartnership.person1Id === id ? primaryPartnership.person2Id : primaryPartnership.person1Id;
-                const pp = DataManager.getPerson(ppid);
-                if (pp) ttPartnerName = shownName(pp, '?');
+            // Relationship summary (T37): one line per union in the order of
+            // the marriages, numbered as the marriage-order pills count them
+            // when there are two or more ("1. ∞ 1857 Jiří Klaus · 6 dětí"),
+            // each with that union's children; at most three, then "and N
+            // more"; children outside them on a line of their own.
+            const ttRelLines: string[] = [];
+            const ttUnions = unionSummaries(DataManager.getData(), id);
+            const TT_MAX_UNIONS = 3;
+            const ttNumbered = ttUnions.unions.length > 1;
+            for (const u of ttUnions.unions.slice(0, TT_MAX_UNIONS)) {
+                const pp = u.partnerId ? DataManager.getPerson(u.partnerId) : null;
+                const head = ttNumbered
+                    ? `${strings.focus.unionOrdinal(u.number)} ∞${u.year ? ` ${u.year}` : ''}` : '∞';
+                const bits = [this.escapeHtml(`${head} ${pp ? shownName(pp, '?') : '?'}`)];
+                if (u.childCount > 0) bits.push(strings.tooltip.childrenCount(u.childCount));
+                ttRelLines.push(bits.join(' · '));
             }
-            const ttChildCount = person.childIds.length;
-            if (ttPartnerName || ttChildCount > 0) {
-                const bits: string[] = [];
-                if (ttPartnerName) bits.push(`∞ ${this.escapeHtml(ttPartnerName)}`);
-                if (ttChildCount > 0) bits.push(strings.tooltip.childrenCount(ttChildCount));
-                ttRelLine = bits.join(' · ');
+            if (ttUnions.unions.length > TT_MAX_UNIONS) {
+                ttRelLines.push(strings.tooltip.moreUnions(ttUnions.unions.length - TT_MAX_UNIONS));
+            }
+            if (ttUnions.otherChildren > 0) {
+                ttRelLines.push(ttUnions.unions.length > 0
+                    ? strings.tooltip.moreChildrenCount(ttUnions.otherChildren)
+                    : strings.tooltip.childrenCount(ttUnions.otherChildren));
             }
 
             const ttSignals = this.tooltipSignalRows(signals);
@@ -2006,13 +2014,13 @@ class TreeRendererClass {
             const ttViewLink = ghostOf
                 ? `<div class="tt-line tt-view-link"><span class="view-link-icon" aria-hidden="true"></span>${this.escapeHtml(strings.viewLinks.tooltip(ghostOf.hypo, ghostOf.variant))}</div>`
                 : '';
-            if (ttBirthLine || ttDeathLine || ttRelLine || ttSignals || ttViewLink) {
+            if (ttBirthLine || ttDeathLine || ttRelLines.length > 0 || ttSignals || ttViewLink) {
                 const rows = [
                     `<div class="tt-name">${this.escapeHtml(fullName)}</div>`,
                     ttBirthLine ? `<div class="tt-line">${this.escapeHtml(ttBirthLine)}</div>` : '',
                     ttDeathLine ? `<div class="tt-line">${this.escapeHtml(ttDeathLine)}</div>` : '',
                     ttRecorded ? `<div class="tt-line tt-warn">${this.escapeHtml(ttRecorded)}</div>` : '',
-                    ttRelLine ? `<div class="tt-line tt-rel">${ttRelLine}</div>` : '',
+                    ...ttRelLines.map(line => `<div class="tt-line tt-rel">${line}</div>`),
                     ttSignals ? `<div class="tt-signals">${ttSignals}</div>` : '',
                     ttViewLink,
                     `<div class="tt-foot">${strings.tooltip.gestureHint}</div>`,

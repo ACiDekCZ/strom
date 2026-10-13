@@ -143,3 +143,32 @@ test('the photo bubble widens for its text instead of collapsing to a sliver', a
     // regression produced ~76px (four words stacked) per line.
     expect(m.maxLineHeight).toBeLessThanOrEqual(60);
 });
+
+test('every union has its own line, in the order of the marriages, with its own children (T37)', async ({ page }) => {
+    // Data order: the second marriage first. Invented data.
+    await openApp(page);
+    await page.evaluate(async () => {
+        const p = (id: string, extra: Record<string, unknown>) => ({
+            id, gender: 'female', isPlaceholder: false, partnerships: [], parentIds: [], childIds: [], ...extra,
+        });
+        await window.Strom.DataManager.importAsNewTree({
+            persons: {
+                m: p('m', { firstName: 'Marie', lastName: 'Chrpová', birthDate: '1838',
+                    partnerships: ['u2', 'u1'], childIds: ['c1', 'c2', 'c3', 'c4'] }),
+                j: p('j', { firstName: 'Jiří', lastName: 'Klaus', gender: 'male', partnerships: ['u1'], childIds: ['c1', 'c2', 'c3'] }),
+                z: p('z', { firstName: 'Josef', lastName: 'Ježek', gender: 'male', partnerships: ['u2'], childIds: ['c4'] }),
+                c1: p('c1', { firstName: 'Anna', lastName: 'Klausová', parentIds: ['m', 'j'] }),
+                c2: p('c2', { firstName: 'Eva', lastName: 'Klausová', parentIds: ['m', 'j'] }),
+                c3: p('c3', { firstName: 'Ida', lastName: 'Klausová', parentIds: ['m', 'j'] }),
+                c4: p('c4', { firstName: 'Petr', lastName: 'Ježek', gender: 'male', parentIds: ['m', 'z'] }),
+            },
+            partnerships: {
+                u1: { id: 'u1', person1Id: 'j', person2Id: 'm', status: 'married', childIds: ['c1', 'c2', 'c3'], startDate: '1857' },
+                u2: { id: 'u2', person1Id: 'z', person2Id: 'm', status: 'married', childIds: ['c4'], startDate: '1873' },
+            },
+        } as never, 'T37');
+        window.Strom.TreeRenderer.setFocus('m' as never);
+    });
+    const lines = tip(page, 'Marie').locator('.tt-rel');
+    await expect(lines).toHaveText(['1st ∞ 1857 Jiří Klaus · 3 children', '2nd ∞ 1873 Josef Ježek · 1 child']);
+});

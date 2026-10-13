@@ -64,6 +64,47 @@ export function marriagesInOrder(data: StromData, personId: PersonId): Partnersh
         .map(e => e.id);
 }
 
+/** One union of a person as the hover card lists it (T37). */
+export interface UnionSummary {
+    partnershipId: PartnershipId;
+    /** The other partner, null when the union has none. */
+    partnerId: PersonId | null;
+    /** 1-based number among the person's unions (chronological, as the pill counts). */
+    number: number;
+    /** Wedding year as shown ('~1866' keeps the qualifier), '' without a date. */
+    year: string;
+    /** The person's children of this union. */
+    childCount: number;
+}
+
+/**
+ * A person's unions in chronological order (marriagesInOrder), each with its
+ * partner, wedding year and children, and the person's children outside
+ * them (an empty "?" stand-in family, a child with one parent recorded).
+ */
+export function unionSummaries(data: StromData, personId: PersonId): { unions: UnionSummary[]; otherChildren: number } {
+    const person = data.persons[personId];
+    if (!person) return { unions: [], otherChildren: 0 };
+    const own = new Set(person.childIds);
+    const counted = new Set<PersonId>();
+    const unions = marriagesInOrder(data, personId).map((pid, i): UnionSummary => {
+        const union = data.partnerships[pid];
+        const other = union.person1Id === personId ? union.person2Id : union.person1Id;
+        let childCount = 0;
+        for (const c of union.childIds) {
+            if (own.has(c) && !counted.has(c)) { counted.add(c); childCount++; }
+        }
+        return {
+            partnershipId: pid,
+            partnerId: other && other !== personId && data.persons[other] ? other : null,
+            number: i + 1,
+            year: union.startDate ? displayYear(union.startDate) : '',
+            childCount,
+        };
+    });
+    return { unions, otherChildren: person.childIds.filter(c => !counted.has(c)).length };
+}
+
 /** The marriage-order pill of a partner's card. */
 export interface UnionOrderBadge {
     /** The card that carries the pill (a partner). */

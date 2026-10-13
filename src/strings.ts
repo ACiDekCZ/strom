@@ -1965,6 +1965,10 @@ const stringsEN = {
         yearsOld: (age: number, shown?: string) => `(${shown ?? age} ${age === 1 ? 'year' : 'years'})`,
         // Child count on the relationship line of the hover card.
         childrenCount: (n: number) => `${n} ${n === 1 ? 'child' : 'children'}`,
+        // Children of the person outside the unions listed above (T37).
+        moreChildrenCount: (n: number) => `${n} more ${n === 1 ? 'child' : 'children'}`,
+        // After the first three unions on the hover card (T37).
+        moreUnions: (n: number) => `and ${n} more`,
         // Footer of the hover card: the real desktop gesture (click opens the menu).
         gestureHint: 'Click to open the menu',
     },
@@ -5829,6 +5833,10 @@ const stringsCZ: StringsType = {
         yearsOld: (age: number, shown?: string) => `(${shown ?? age} ${age === 1 ? 'rok' : age >= 2 && age <= 4 ? 'roky' : 'let'})`,
         // Child count on the relationship line of the hover card.
         childrenCount: (n: number) => `${n} ${n === 1 ? 'dítě' : n >= 2 && n <= 4 ? 'děti' : 'dětí'}`,
+        // Children of the person outside the unions listed above (T37).
+        moreChildrenCount: (n: number) => `${n} ${n === 1 ? 'další dítě' : n >= 2 && n <= 4 ? 'další děti' : 'dalších dětí'}`,
+        // After the first three unions on the hover card (T37).
+        moreUnions: (n: number) => `a ${n} ${n >= 5 ? 'dalších' : 'další'}`,
         // Footer of the hover card: the real desktop gesture (click opens the menu).
         gestureHint: 'Klik otevře nabídku',
     },
@@ -9681,6 +9689,8 @@ const stringsDE: StringsType = {
         notes: 'Notizen',
         yearsOld: (age: number, shown?: string) => `(${shown ?? age} ${age === 1 ? 'Jahr' : 'Jahre'})`,
         childrenCount: (n: number) => `${n} ${n === 1 ? 'Kind' : 'Kinder'}`,
+        moreChildrenCount: (n: number) => `${n} ${n === 1 ? 'weiteres Kind' : 'weitere Kinder'}`,
+        moreUnions: (n: number) => `und ${n} weitere`,
         gestureHint: 'Klicken, um das Menü zu öffnen',
     },
 

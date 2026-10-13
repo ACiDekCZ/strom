@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { marriagesInOrder, unionOrderBadges, compareMarriages } from '../marriage-order.js';
+import { marriagesInOrder, unionOrderBadges, compareMarriages, unionSummaries } from '../marriage-order.js';
 import { buildTreeSvg } from '../export-image.js';
 import { runLayoutPipeline } from '../layout/pipeline/index.js';
 import { setLanguage, strings } from '../strings.js';
@@ -233,5 +233,27 @@ describe('the image export draws the pills', () => {
         const card = result.positions.get(P('W1'))!;
         const left = x - 0.5, right = left + 44, mid = card.x + 75;
         expect(right <= mid - 4 + 0.01 || left >= mid + 4 - 0.01).toBe(true);
+    });
+});
+
+/** T37: the hover card lists every union in the order of the marriages, each with its own children. */
+describe('unionSummaries (T37)', () => {
+    it('one entry per union, chronological, with that union’s children', () => {
+        const s = unionSummaries(family(), P('H'));
+        expect(s.unions.map(u => [u.partnershipId, u.number, u.partnerId, u.year, u.childCount])).toEqual([
+            ['u1', 1, 'W1', '1866', 1],
+            ['u3', 2, 'W3', '1880', 1],
+            ['u2', 3, 'W2', '1908', 1],
+        ]);
+        expect(s.otherChildren).toBe(0);
+    });
+
+    it('a child with no union of the person counts apart', () => {
+        const data = family();
+        data.persons['solo' as PersonId] = { id: P('solo'), firstName: 'solo', lastName: 'X', gender: 'male',
+            isPlaceholder: false, partnerships: [], parentIds: [P('H')], childIds: [] };
+        data.persons[P('H')].childIds.push(P('solo'));
+        expect(unionSummaries(data, P('H')).otherChildren).toBe(1);
+        expect(unionSummaries(data, P('W2')).unions).toHaveLength(1);
     });
 });
