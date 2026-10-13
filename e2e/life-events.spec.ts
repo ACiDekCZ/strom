@@ -36,3 +36,20 @@ test('life events: add an event, it survives a page reload', { tag: '@smoke' }, 
     await expect(modal.locator('#events-list')).toContainText('Occupation');
     await expect(modal.locator('#events-list')).toContainText('Kladno');
 });
+
+test('life events: the person editor lists the burial after the death and the baptism after the birth (T31)', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1880' });
+    await page.evaluate(() => {
+        const dm = window.Strom.DataManager;
+        const id = dm.getAllPersons()[0].id;
+        dm.updatePerson(id, { deathDate: '1950-03-10', deathPlace: 'Kolín' });
+        dm.addLifeEvent(id, { type: 'burial', date: '1950-03-12', place: 'Kolín' });
+        dm.addLifeEvent(id, { type: 'residence', date: '1951', place: 'Praha' });
+        dm.addLifeEvent(id, { type: 'baptism', date: '1880', place: 'Kolín' });
+        dm.addLifeEvent(id, { type: 'occupation', note: 'kovář', date: '1910' });
+    });
+    await cardAction(page, 'Jan', 'edit');
+    const types = personModal(page).locator('#events-list .event-row .event-type');
+    await expect(types).toHaveText(['Birth', 'Baptism', 'Occupation', 'Death', 'Burial', 'Residence']);
+});

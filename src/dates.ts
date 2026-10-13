@@ -224,6 +224,18 @@ export function yearOf(value?: string): number | null {
     return d ? d.year : null;
 }
 
+/**
+ * Intra-year fraction (0.05..0.95) from a flex date, so dates of one year
+ * order by month and day; a date without a month or day takes its middle.
+ */
+export function yearFraction(date: string | undefined): number {
+    const d = parseFlexDate(date);
+    if (!d) return 0.5;
+    const month = d.month ?? 6;
+    const day = d.day ?? 15;
+    return 0.05 + ((month - 1) / 12) * 0.85 + (day / 31) * (0.85 / 12);
+}
+
 /** Sort key: canonical value without the qualifier (keeps determinism). */
 export function dateSortKey(value?: string): string {
     if (!value) return '';

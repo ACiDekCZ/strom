@@ -16,7 +16,7 @@ import { PersonPicker } from '../person-picker.js';
 import { extraParticipantRole } from '../godparents.js';
 import { strings } from '../strings.js';
 import { SettingsManager } from '../settings.js';
-import { SELECTABLE_EVENT_TYPES, sortLifeEvents, eventTakesParticipants, eventValueIsOnTag } from '../events.js';
+import { SELECTABLE_EVENT_TYPES, orderLifeList, eventTakesParticipants, eventValueIsOnTag } from '../events.js';
 import { formatFlexDate, normalizeDateInput, formatDateForInput } from '../dates.js';
 import { chainLinkSvg, iconSvg } from '../icons.js';
 import { uiModule } from './module.js';
@@ -73,7 +73,8 @@ export const personEventsMethods = uiModule({
     /**
      * Render the events list for the currently edited person into #events-list.
      * Shows read-only birth/death rows (synthesized from the first-class date
-     * fields) followed by the editable events in chronological order.
+     * fields) and the editable events, all in the order of the life
+     * (orderLifeList).
      */
     renderEventsList(): void {
         const container = document.getElementById('events-list');
@@ -87,25 +88,30 @@ export const personEventsMethods = uiModule({
         const locked = DataManager.isPersonLocked(this.currentId);
         const rows: string[] = [];
 
-        // Read-only birth / death rows (never editable as events).
-        if (person.birthDate || person.birthPlace) {
-            rows.push(this.eventRowHtml(strings.events.types.birth,
-                eventMeta(person.birthDate, person.birthPlace), null, '',
-                eventDetailLine({ address: person.birthAddress }), person.birthStatus));
-        }
-
-        const events = sortLifeEvents(person.events ?? []);
-        for (const event of events) {
-            rows.push(this.eventRowHtml(eventTypeLabel(event),
-                eventMeta(event.date, event.place, eventOwnSubject(event)),
-                locked ? null : event.id,
-                this.participantsSummary(event), eventDetailLine(event), event.status));
-        }
-
-        if (person.deathDate || person.deathPlace) {
-            rows.push(this.eventRowHtml(strings.events.types.death,
-                eventMeta(person.deathDate, person.deathPlace), null, '',
-                eventDetailLine({ cause: person.deathCause, age: person.deathAge, address: person.deathAddress }), person.deathStatus));
+        // Birth and death rows are read-only (never editable as events); all
+        // rows stand in the order of the life (T31: a burial after the death).
+        const hasBirth = !!(person.birthDate || person.birthPlace);
+        const hasDeath = !!(person.deathDate || person.deathPlace);
+        const entries = orderLifeList(
+            hasBirth ? { date: person.birthDate } : null,
+            hasDeath ? { date: person.deathDate } : null,
+            person.events ?? []);
+        for (const entry of entries) {
+            if (entry.kind === 'birth') {
+                rows.push(this.eventRowHtml(strings.events.types.birth,
+                    eventMeta(person.birthDate, person.birthPlace), null, '',
+                    eventDetailLine({ address: person.birthAddress }), person.birthStatus));
+            } else if (entry.kind === 'death') {
+                rows.push(this.eventRowHtml(strings.events.types.death,
+                    eventMeta(person.deathDate, person.deathPlace), null, '',
+                    eventDetailLine({ cause: person.deathCause, age: person.deathAge, address: person.deathAddress }), person.deathStatus));
+            } else {
+                const event = entry.event;
+                rows.push(this.eventRowHtml(eventTypeLabel(event),
+                    eventMeta(event.date, event.place, eventOwnSubject(event)),
+                    locked ? null : event.id,
+                    this.participantsSummary(event), eventDetailLine(event), event.status));
+            }
         }
 
         if (rows.length === 0) {

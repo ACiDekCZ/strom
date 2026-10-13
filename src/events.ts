@@ -5,7 +5,7 @@
  */
 
 import { CoupleEvent, CoupleEventType, LifeEvent, LifeEventType } from './types.js';
-import { dateSortKey, yearOf } from './dates.js';
+import { dateSortKey, parseFlexDate, yearFraction, yearOf } from './dates.js';
 import { strings } from './strings.js';
 
 /**
@@ -80,20 +80,85 @@ export function newestLifeEvent(events: LifeEvent[]): LifeEvent | null {
     return dated.length > 0 ? dated[dated.length - 1] : sorted[sorted.length - 1];
 }
 
+/** Year plus the fraction of it the date gives (flex-date aware), or null. */
+function dateKey(date: string | undefined): number | null {
+    const y = yearOf(date);
+    return y === null ? null : y + yearFraction(date);
+}
+
 /**
- * Chronological order by year (flex-date aware). Undated events sort last;
- * ties break by id for a stable order.
+ * Chronological order by date (flex-date aware; a date of one year by its
+ * month and day). Undated events sort last; ties break by id for a stable order.
  */
 export function sortLifeEvents(events: LifeEvent[]): LifeEvent[] {
     return [...events].sort((a, b) => {
-        const ya = yearOf(a.date);
-        const yb = yearOf(b.date);
-        if (ya === null && yb === null) return a.id.localeCompare(b.id);
-        if (ya === null) return 1;
-        if (yb === null) return -1;
-        if (ya !== yb) return ya - yb;
+        const ka = dateKey(a.date);
+        const kb = dateKey(b.date);
+        if (ka === null && kb === null) return a.id.localeCompare(b.id);
+        if (ka === null) return 1;
+        if (kb === null) return -1;
+        if (ka !== kb) return ka - kb;
         return a.id.localeCompare(b.id);
     });
+}
+
+/** Events recorded after a death: what happened to the body and the estate. */
+export function isPosthumousEvent(type: LifeEventType | undefined): boolean {
+    return type === 'burial' || type === 'cremation' || type === 'probate';
+}
+
+/** One row of a person's life list: the birth, an own event, or the death. */
+export type LifeListEntry =
+    | { kind: 'birth' }
+    | { kind: 'death' }
+    | { kind: 'event'; event: LifeEvent };
+
+/**
+ * A person's birth, own events and death in the order of a life, by the rule
+ * of the life timeline (computePersonLifeline): by date, the birth opening its
+ * year and a death known only by the year closing it; a baptism never ahead
+ * of the birth, a burial, cremation or probate never ahead of the death, with
+ * an equal or missing day as much as with a slip in the record. A birth
+ * without a date stays first; undated events come after the dated ones, an
+ * undated death after them and its burial or probate after it.
+ *
+ * `birth` / `death` are null when the person has none to show.
+ */
+export function orderLifeList(
+    birth: { date?: string } | null,
+    death: { date?: string } | null,
+    events: LifeEvent[],
+): LifeListEntry[] {
+    interface Row { entry: LifeListEntry; key: number; rank: number; id: string }
+    const rows: Row[] = [];
+    let birthKey: number | undefined;
+    let deathKey: number | undefined;
+    if (birth) {
+        const y = yearOf(birth.date);
+        birthKey = y === null ? -Infinity : y + 0.001;
+        rows.push({ entry: { kind: 'birth' }, key: birthKey, rank: 0, id: '' });
+    }
+    if (death) {
+        const y = yearOf(death.date);
+        deathKey = y === null ? Infinity
+            : parseFlexDate(death.date)?.month !== undefined ? y + yearFraction(death.date) : y + 0.999;
+        rows.push({ entry: { kind: 'death' }, key: deathKey, rank: 8, id: '' });
+    }
+    for (const event of events) {
+        let key = dateKey(event.date) ?? Infinity;
+        let rank = 5;
+        if (event.type === 'baptism') {
+            rank = 1;
+            if (birthKey !== undefined) key = Math.max(key, birthKey);
+        } else if (isPosthumousEvent(event.type)) {
+            rank = event.type === 'probate' ? 10 : 9;
+            if (deathKey !== undefined) key = Math.max(key, deathKey);
+        }
+        rows.push({ entry: { kind: 'event', event }, key, rank, id: event.id });
+    }
+    rows.sort((a, b) => (a.key === b.key ? 0 : a.key < b.key ? -1 : 1)
+        || a.rank - b.rank || a.id.localeCompare(b.id));
+    return rows.map(r => r.entry);
 }
 
 // ==================== COUPLE EVENTS ====================

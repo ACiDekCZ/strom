@@ -8,8 +8,8 @@
  */
 
 import { StromData, Gender, LifeEventType, CoupleEventType, PartnershipId, Partnership } from './types.js';
-import { yearOf, parseFlexDate } from './dates.js';
-import { eventValueIsOnTag } from './events.js';
+import { yearOf, parseFlexDate, yearFraction } from './dates.js';
+import { eventValueIsOnTag, isPosthumousEvent } from './events.js';
 import { isLivingPerson } from './privacy.js';
 import { shownNameOrEmpty } from './person-name.js';
 
@@ -198,15 +198,6 @@ function detailsOf(d: { cause?: string; age?: string; address?: string }): { det
     return Object.keys(out).length ? { details: out } : {};
 }
 
-/** Intra-year fraction (0.02..0.98) from a flex date, so points order by month/day. */
-function yearFraction(date: string | undefined): number {
-    const d = parseFlexDate(date);
-    if (!d) return 0.5;
-    const month = d.month ?? 6;
-    const day = d.day ?? 15;
-    return 0.05 + ((month - 1) / 12) * 0.85 + (day / 31) * (0.85 / 12);
-}
-
 /** `relatedName` and `relatedId` of a point about another person in the tree. */
 function related(data: StromData, id: string | undefined): { relatedName?: string; relatedId?: string } {
     const name = personName(data, id);
@@ -372,7 +363,7 @@ export function computePersonLifeline(
     for (const pt of points) {
         if (pt.kind !== 'event') continue;
         if (pt.eventType === 'baptism' && birthKey !== undefined) pt.sortKey = Math.max(pt.sortKey, birthKey);
-        if (isPosthumous(pt.eventType) && deathKey !== undefined) pt.sortKey = Math.max(pt.sortKey, deathKey);
+        if (isPosthumousEvent(pt.eventType) && deathKey !== undefined) pt.sortKey = Math.max(pt.sortKey, deathKey);
     }
 
     if (opts.childEvents) points.push(...childLifelinePoints(data, person.childIds));
@@ -429,11 +420,6 @@ function childLifelinePoints(data: StromData, childIds: readonly string[]): Life
     return out;
 }
 
-/** Events recorded after a death: what happened to the body and the estate. */
-function isPosthumous(type: LifeEventType | undefined): boolean {
-    return type === 'burial' || type === 'cremation' || type === 'probate';
-}
-
 /**
  * Order of points that share a sort key: birth, then baptism, then the rest,
  * then death, then the burial or cremation, then the probate.
@@ -443,7 +429,7 @@ function lifelineRank(pt: LifelinePoint): number {
     if (pt.kind === 'death') return 8;
     if (pt.kind === 'event' && pt.eventType === 'baptism') return 1;
     if (pt.kind === 'event' && pt.eventType === 'probate') return 10;
-    if (pt.kind === 'event' && isPosthumous(pt.eventType)) return 9;
+    if (pt.kind === 'event' && isPosthumousEvent(pt.eventType)) return 9;
     if (pt.kind === 'childEvent') return pt.childEvent === 'burial' ? 7 : 6;
     return 5;
 }

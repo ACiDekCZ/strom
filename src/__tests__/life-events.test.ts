@@ -11,7 +11,7 @@ import { TreeManager } from '../tree-manager.js';
 import { AuditLogManager } from '../audit-log.js';
 import { UndoManager } from '../undo.js';
 import { StromData, PersonId, TreeId, NewPersonData, Gender, Person, LifeEvent } from '../types.js';
-import { SELECTABLE_EVENT_TYPES, sortLifeEvents } from '../events.js';
+import { SELECTABLE_EVENT_TYPES, sortLifeEvents, orderLifeList } from '../events.js';
 import { validateTreeData } from '../validation.js';
 import { applyLivingPrivacy } from '../privacy.js';
 
@@ -262,5 +262,62 @@ describe('privacy strips events for living people', () => {
         );
         const filtered = applyLivingPrivacy(data, 'anonymous', 2026);
         expect(filtered.persons['p1' as PersonId].events).toHaveLength(1);
+    });
+});
+
+/**
+ * T31: the person editor lists the birth, the events and the death in the
+ * order of the life, by the rule of the life timeline (T16) — the burial
+ * after the death, the baptism after the birth.
+ */
+describe('orderLifeList (T31)', () => {
+    const order = (birth: { date?: string } | null, death: { date?: string } | null, events: LifeEvent[]) =>
+        orderLifeList(birth, death, events).map(e => (e.kind === 'event' ? e.event.id : e.kind));
+
+    it('a burial after the death, a probate after the burial, later events after the death', () => {
+        const events: LifeEvent[] = [
+            { id: 'bur', type: 'burial', date: '1950-03-12' },
+            { id: 'occ', type: 'occupation', date: '1920' },
+            { id: 'prob', type: 'probate', date: '1950-03-12' },
+            { id: 'res', type: 'residence', date: '1951' },
+        ];
+        expect(order({ date: '1880' }, { date: '1950-03-10' }, events))
+            .toEqual(['birth', 'occ', 'death', 'bur', 'prob', 'res']);
+    });
+
+    it('a burial of the same day or year, or dated before by a slip, still follows the death', () => {
+        expect(order(null, { date: '1950-03-10' }, [{ id: 'bur', type: 'burial', date: '1950-03-10' }]))
+            .toEqual(['death', 'bur']);
+        expect(order(null, { date: '1950' }, [{ id: 'bur', type: 'burial', date: '1950-12-30' }]))
+            .toEqual(['death', 'bur']);
+        expect(order(null, { date: '1950-03-10' }, [{ id: 'cre', type: 'cremation', date: '1949' }]))
+            .toEqual(['death', 'cre']);
+    });
+
+    it('a dated death sorts by its day, not at the end of its year', () => {
+        expect(order(null, { date: '1950-02-01' }, [{ id: 'res', type: 'residence', date: '1950-11' }]))
+            .toEqual(['death', 'res']);
+    });
+
+    it('a baptism follows the birth, also on the same day', () => {
+        expect(order({ date: '1880-05-02' }, null, [{ id: 'bap', type: 'baptism', date: '1880-05-02' }]))
+            .toEqual(['birth', 'bap']);
+    });
+
+    it('undated: the birth first, undated events after dated ones, then the death and the burial', () => {
+        const events: LifeEvent[] = [
+            { id: 'bur', type: 'burial' },
+            { id: 'res', type: 'residence' },
+            { id: 'occ', type: 'occupation', date: '1920' },
+        ];
+        expect(order({}, {}, events)).toEqual(['birth', 'occ', 'res', 'death', 'bur']);
+    });
+
+    it('sortLifeEvents orders one year by month and day', () => {
+        const events: LifeEvent[] = [
+            { id: 'a', type: 'residence', date: '1900-11-02' },
+            { id: 'b', type: 'occupation', date: '1900-02-14' },
+        ];
+        expect(sortLifeEvents(events).map(e => e.id)).toEqual(['b', 'a']);
     });
 });
