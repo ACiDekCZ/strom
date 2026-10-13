@@ -24,7 +24,7 @@ import { ViewMode, STANDALONE_VIEWS, ResearchEdgeMode } from './types.js';
 import { cardLines, CardLine, cardLineHtml, cardYears, CardLineStyle, cardDateReferences, cardAge, formatAge, isFieldCardDensity } from './card-fields.js';
 import {
     CustomCardMetrics, CardLineRows, CardHead, customCardMetrics, customCardRows, customCardViewHeight, customCardSpouseLineY,
-    measureCardTexts, cardFontsPending, CARD_HEAD_HEIGHT, CARD_EDGE_PILL_ROOM,
+    measureCardTexts, cardFontsPending, CARD_HEAD_HEIGHT, CARD_EDGE_PILL_ROOM, CARD_EDGE_PILL_RIGHT,
 } from './card-width.js';
 import { checkRecordedAge, ageBirthDate } from './recorded-age.js';
 import { ACTION_GLYPH, AGENT_DONE_MS, AGENT_DONE_FADE_MS, AGENT_SPIN_MS, CardSignalContext, CardSignalInfo, cardSignalInfo, researchCardInfoNow, sharedPhaseDelay, stateStripesHtml } from './card-signals.js';
@@ -107,6 +107,8 @@ interface CustomCardsMeasure {
     style: CardLineStyle;
     /** The cards measured with room for the pills on their bottom edge. */
     edgeRoomIds: Set<PersonId>;
+    /** The cards of one height whose last line was wrapped clear of the ⇄ pill (CARD_EDGE_PILL_RIGHT). */
+    edgeRightIds: Set<PersonId>;
 }
 /**
  * What the outputs draw (the poster, the book's tree, the people of the
@@ -171,6 +173,8 @@ class TreeRendererClass {
      * pills cover no text); the image export draws no pills and leaves it out.
      */
     private edgeRoomIds = new Set<PersonId>();
+    /** The cards of one height whose last line was wrapped clear of the ⇄ pill (CARD_EDGE_PILL_RIGHT). */
+    private edgeRightIds = new Set<PersonId>();
     /** The other trees the last cards were matched against (the ⇄ pill); the next measure reads them. */
     private lastCrossTrees: Map<TreeId, { name: string; data: StromData }> | null = null;
     /** The last render was the one more render asked for by pills measured otherwise (never twice in a row). */
@@ -395,6 +399,7 @@ class TreeRendererClass {
         } else {
             this.customMetrics = null;
             this.edgeRoomIds.clear();
+            this.edgeRightIds.clear();
             this.customLines.clear();
             this.customRows.clear();
             this.customHeads.clear();
@@ -710,6 +715,7 @@ class TreeRendererClass {
         this.customStyle = measured.style;
         this.customHeads = measured.heads;
         this.edgeRoomIds = measured.edgeRoomIds;
+        this.edgeRightIds = measured.edgeRightIds;
         return measured.metrics;
     }
 
@@ -722,15 +728,21 @@ class TreeRendererClass {
         const lines = new Map<PersonId, CardLine[]>();
         const ids: PersonId[] = [];
         const entries = [];
+        // A card of one height for the view keeps its last line clear of the ⇄ pill
+        // (index.html .has-edge-br): its rows are wrapped that much narrower.
+        const edgeRightIds = new Set<PersonId>();
         for (const id of positions.keys()) {
             const person = DataManager.getPerson(id);
             if (!person) continue;
             const personLines = person.isPlaceholder ? [] : cardLines(person, data, fields);
             lines.set(id, personLines);
             ids.push(id);
+            const reserve = fields.height !== 'content' && personLines.length > 0 && this.hasCrossTreePill(person, this.lastCrossTrees);
+            if (reserve) edgeRightIds.add(id);
             entries.push({
                 name: shownName(person, '?'), avatar: !person.isPlaceholder, lines: personLines,
                 ...(presumed ? { years: cardYears(person, presumed.has(id)) } : {}),
+                ...(reserve ? { lastLineReserve: CARD_EDGE_PILL_RIGHT } : {}),
             });
         }
         // The chosen width's cap (narrow / medium / wide); the poster takes this width too.
@@ -740,7 +752,7 @@ class TreeRendererClass {
         const { rows, heights, heads } = customCardRows(entries, metrics, measureCardTexts, fields.lines, fields.style);
         const measured = {
             lines, rows, wrapped: fields.lines !== 1, style: fields.style,
-            heads: new Map(ids.map((id, i) => [id, heads[i]])), edgeRoomIds: new Set<PersonId>(),
+            heads: new Map(ids.map((id, i) => [id, heads[i]])), edgeRoomIds: new Set<PersonId>(), edgeRightIds,
         };
         if (fields.height === 'content') {
             // Each card as tall as its own content; the view's height is its tallest
@@ -827,10 +839,14 @@ class TreeRendererClass {
             const hidden = this.hiddenPartnersAndFamilies(id, visible);
             left = hidden.partners.length > 0 || hidden.families.length > 0;
         }
+        return { left, right: this.hasCrossTreePill(person, crossTrees) };
+    }
+
+    /** The card carries the ⇄ pill (the person is in other trees too) on its bottom-right edge. */
+    private hasCrossTreePill(person: Person, crossTrees: Map<TreeId, { name: string; data: StromData }> | null): boolean {
         const treeId = DataManager.getCurrentTreeId();
-        const right = !!crossTrees && !!treeId && !person.isPlaceholder
+        return !!crossTrees && !!treeId && !person.isPlaceholder
             && CrossTree.findCrossTreeMatches(treeId, person, crossTrees).length > 0;
-        return { left, right };
     }
 
     // ============= Focus Mode Methods =============
@@ -1930,6 +1946,8 @@ class TreeRendererClass {
             // A card of details measured with the pills' room keeps its text above them (index.html .has-edge-room).
             if (this.edgeRoomIds.has(id)) card.classList.add('has-edge-room');
             if (measuresEdgeRoom && this.edgeRoomIds.has(id) !== !!(hiddenIndicatorsHtml || crossTreeHtml)) edgeRoomStale = true;
+            // A card of one height: its last line wrapped clear of the ⇄ pill exactly when the pill is there.
+            if (customLines?.length && !measuresEdgeRoom && this.edgeRightIds.has(id) !== !!crossTreeHtml) edgeRoomStale = true;
             // The research edge above the card (a stub, or a label by the dashed line to the parents).
             const edge = this.edgeViews.get(id);
             if (edge) {

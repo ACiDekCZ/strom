@@ -6952,7 +6952,9 @@
         .person-card.has-edge-br .card-body:not(.card-body--custom) > :last-child { margin-right: 34px; }
         /* A card of details is never narrowed (its rows were measured for its
            width): with room for the pills its text ends above the stripes; a
-           card of one height for the view keeps its last line clear of them. */
+           card of one height for the view keeps its last line clear of them
+           (its rows were wrapped 34px narrower, CARD_EDGE_PILL_RIGHT, so a
+           place fits or ends in "…", never clipped under the pill). */
         .person-card.has-edge-br:not(.has-edge-room) .card-body--custom .card-lines > :last-child { padding-right: 34px; }
 
         /* ==================== RESEARCH EDGE ==================== */

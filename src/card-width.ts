@@ -93,6 +93,13 @@ export interface CustomCardEntry<L extends CardLineText = CardLine> {
     lines: readonly L[];
     /** The life years under the name ("1841 – 1922"); absent or empty: no such row. */
     years?: string;
+    /**
+     * The room (px) the last line keeps free at its right: the ⇄ pill on the
+     * bottom-right edge of a card of one height for the view
+     * (CARD_EDGE_PILL_RIGHT). Its rows are wrapped that much narrower, so a
+     * text either fits beside the pill or ends in "…".
+     */
+    lastLineReserve?: number;
 }
 
 export interface CustomCardMetrics {
@@ -528,6 +535,12 @@ export const CARD_DETAIL_GAP = 3;
  * grows by 12px (padding 10 → 22) and the pills cover no text.
  */
 export const CARD_EDGE_PILL_ROOM = 12;
+/**
+ * The room the last line of a card of one height for the view keeps at its
+ * right for the ⇄ pill on the bottom-right edge (index.html .has-edge-br,
+ * the same 34px as the line's padding there).
+ */
+export const CARD_EDGE_PILL_RIGHT = 34;
 /** The partner line on a card taller than one row a detail: the middle of its header. */
 export const CARD_HEAD_LINE_Y = 25;
 /** The same with the years under the name: the middle of the taller header (10 + 33 / 2). */
@@ -575,12 +588,16 @@ export function customCardRows<L extends CardLineText>(entries: Iterable<CustomC
     const room = customCardContentWidth(metrics.cardWidth);
     const rows = new Map<L, CardLineRows>();
     for (const e of list) for (const l of e.lines) rows.set(l, { rows: [], cut: false });
+    const reserveOf = new Map<L, number>();
+    for (const e of list) if (e.lastLineReserve && e.lines.length) reserveOf.set(e.lines[e.lines.length - 1], e.lastLineReserve);
 
     if (style === 'labels') {
-        const valueWidth = Math.max(1, room - (metrics.labelColumn ?? 0) - CARD_LABEL_GAP);
+        const fullWidth = Math.max(1, room - (metrics.labelColumn ?? 0) - CARD_LABEL_GAP);
+        // The last line beside the ⇄ pill is that much narrower.
+        const valueWidthOf = (l: L): number => Math.max(1, fullWidth - (reserveOf.get(l) ?? 0));
         // The dates first: what is left of the date's last row is the place's first.
         const dated = list.flatMap(e => e.lines.filter(l => !!l.date));
-        const dates = wrapCardTexts(dated.map(l => ({ text: l.date, width: valueWidth, maxLines: valueLines, kind: 'date' as const })), measure);
+        const dates = wrapCardTexts(dated.map(l => ({ text: l.date, width: valueWidthOf(l), maxLines: valueLines, kind: 'date' as const })), measure);
         const dateRows = new Map<L, WrapResult>();
         dated.forEach((l, i) => dateRows.set(l, dates[i]));
         const lastDates = new Set<string>();
@@ -600,6 +617,7 @@ export function customCardRows<L extends CardLineText>(entries: Iterable<CustomC
                     if (d.cut) continue;
                 }
                 const k = d?.rows.length ?? 0;
+                const valueWidth = valueWidthOf(l);
                 cardLineParts(l, valueLines).forEach((p, i) => {
                     const first = i === 0;
                     const lead = first && k > 0
@@ -638,8 +656,9 @@ export function customCardRows<L extends CardLineText>(entries: Iterable<CustomC
                 const date = l.date ? dateW.get(l.date) ?? 0 : 0;
                 const long = isLongCardDate(l, date, metrics.dateColumn);
                 if (long) rows.get(l)!.longDate = true;
-                // One row with a long date: the place in the room 6px after the date.
-                const width = Math.max(1, room - (l.wide ? CARD_MARK_WIDTH + CARD_COLUMN_GAP
+                // One row with a long date: the place in the room 6px after the date;
+                // the last line beside the ⇄ pill that much narrower.
+                const width = Math.max(1, room - (reserveOf.get(l) ?? 0) - (l.wide ? CARD_MARK_WIDTH + CARD_COLUMN_GAP
                     : long && valueLines === 1 ? CARD_MARK_WIDTH + CARD_COLUMN_GAP + date + CARD_COLUMN_GAP
                         : cardPlaceOffset(metrics.dateColumn)));
                 cardLineParts(l, valueLines).forEach((p, i) => {

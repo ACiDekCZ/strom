@@ -422,6 +422,44 @@ describe('the rows and the height of the custom card (U02)', () => {
     });
 });
 
+describe('the last line keeps clear of the ⇄ pill on a card of one height (T30)', () => {
+    // Width 200, date column 24: the place column is 127 (21 characters); beside the pill 127 − 34 = 93 (15).
+    const metrics = { cardWidth: 200, dateColumn: 24 };
+    const width = (t: string) => t.length * 6;
+
+    it('the last line wraps 34px narrower, the others keep the column; nothing is wider than its room', () => {
+        const birth = line('1862', 'Malá Strana, kostel sv. Mikuláše');
+        const wed = line('1880', 'Malá Strana, kostel sv. Mikuláše', { key: 'marriage', mark: '⚭' });
+        const entry: CustomCardEntry = { name: 'Anna', avatar: true, lines: [birth, wed], lastLineReserve: 34 };
+        const { rows } = customCardRows([entry], metrics, measure, 0);
+        expect(rows.get(birth)!.rows.map(r => r.text)).toEqual(['Malá Strana, kostel', 'sv. Mikuláše']);
+        expect(rows.get(wed)!.rows.map(r => r.text)).toEqual(['Malá Strana,', 'kostel sv.', 'Mikuláše']);
+        for (const r of rows.get(wed)!.rows) expect(width(r.text)).toBeLessThanOrEqual(93);
+        // Two rows a detail: the rest ends in "…" within the narrower room, never cut mid-word without it.
+        const two = customCardRows([entry], metrics, measure, 2).rows.get(wed)!;
+        expect(two.cut).toBe(true);
+        expect(two.rows[1].text.endsWith('…')).toBe(true);
+        for (const r of two.rows) expect(width(r.text)).toBeLessThanOrEqual(93);
+        // Without the pill: the whole column.
+        const plain = customCardRows([{ ...entry, lastLineReserve: undefined }], metrics, measure, 0).rows.get(wed)!;
+        expect(plain.rows.map(r => r.text)).toEqual(['Malá Strana, kostel', 'sv. Mikuláše']);
+    });
+
+    it('the labels style: the date and the place of the last line within the value less the pill', () => {
+        // Label column 35: the value is 174 − 35 − 8 = 131; beside the pill 97.
+        const lm = { cardWidth: 200, dateColumn: 0, labelColumn: 35 };
+        const wed = { key: 'marriage' as const, mark: '⚭', label: 'Marriage', text: '11. 1. 1880 Praha - Malá Strana, kostel sv. Mikuláše',
+            spoken: '', date: '11. 1. 1880', rest: 'Praha - Malá Strana, kostel sv. Mikuláše' };
+        const entry: CustomCardEntry = { name: 'Anna', avatar: true, lines: [wed], lastLineReserve: 34 };
+        const r = customCardRows([entry], lm, measure, 0, 'labels').rows.get(wed)!;
+        for (const row of r.rows) {
+            const used = (row.date ? width(row.date) + (row.text ? 5 : 0) : 0) + width(row.text);
+            expect(used, row.text).toBeLessThanOrEqual(97);
+        }
+        expect(r.rows.map(x => `${x.date ?? ''}|${x.text}`).join(' / ')).toContain('Mikuláše');
+    });
+});
+
 describe('the poster draws the wrapped card like the screen (U02)', () => {
     beforeEach(() => setLanguage('en'));
     const a: Person = { id: 'a' as PersonId, firstName: 'Anna', lastName: 'Vlková', gender: 'female', isPlaceholder: false,

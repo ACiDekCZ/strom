@@ -586,3 +586,51 @@ test.describe('pills on the bottom edge (U03a)', () => {
         expect(svg).toMatch(/>age \d+</);
     });
 });
+
+/**
+ * A card of one height for the view with the ⇄ pill: its last line keeps 34px
+ * clear at the right, and its rows were wrapped that narrow, so a place either
+ * fits or ends in "…" — never clipped mid-word (T30). Both styles, whole and two rows.
+ */
+test.describe('the ⇄ pill on a card of one height (T30)', () => {
+    const PLACE = 'Praha - Malá Strana, kostel sv. Mikuláše';
+    for (const [style, lines] of [['labels', 0], ['labels', 2], ['marks', 0], ['marks', 2]] as const) {
+        test(`${style}, ${lines === 0 ? 'whole' : 'two rows'}: the last line's rows are never clipped under the pill`, async ({ page }) => {
+            await page.setViewportSize({ width: 1440, height: 900 });
+            await seedSetting(page, 'cardDensity', 'custom');
+            await seedSetting(page, 'cardFields', { on: ['birth', 'death', 'marriage'], style, lines, height: 'view', fullDate: true, widthCap: 240 });
+            await openApp(page);
+            await page.evaluate(async (place) => {
+                const P = (id: string, o: Record<string, unknown>) => ({ id, gender: 'male', isPlaceholder: false, partnerships: [], parentIds: [], childIds: [], ...o });
+                const persons = {
+                    a: P('a', { firstName: 'Anna', lastName: 'Chrpová', gender: 'female', birthDate: '1858-03-02', birthPlace: 'Praha',
+                        deathDate: '1895-03-12', deathPlace: 'Praha - Bubny č. 595', partnerships: ['u'] }),
+                    b: P('b', { firstName: 'Václav', lastName: 'Chrpa', birthDate: '1850', partnerships: ['u'] }),
+                };
+                const partnerships = { u: { id: 'u', person1Id: 'b', person2Id: 'a', childIds: [], status: 'married', startDate: '1880-01-11', startPlace: place } };
+                const dm = window.Strom.DataManager;
+                await dm.importAsNewTree({ persons, partnerships } as never, 'Chrpovi A');
+                await dm.importAsNewTree({ persons, partnerships } as never, 'Chrpovi B');
+                window.Strom.TreeRenderer.setFocus('a' as never);
+            }, PLACE);
+            const anna = card(page, 'Anna');
+            await expect(anna.locator('.cross-tree-badge')).toBeVisible();
+            await expect(anna).toHaveClass(/has-edge-br/);
+            await expect(anna).not.toHaveClass(/has-edge-room/);
+            await page.evaluate(() => document.fonts.ready);
+            await expect.poll(() => cardBoxesMatchLayout(page)).toBe(true);
+            const last = anna.locator('.card-lines > :last-child');
+            await expect(last).toHaveCSS('padding-right', '34px');
+            // Every row of the last line shows whole: its text no wider than the row's box.
+            await expect.poll(() => last.locator('.card-line-row').evaluateAll(rows => rows.map(row => {
+                const range = document.createRange();
+                range.selectNodeContents(row);
+                const scale = row.getBoundingClientRect().width / Math.max(1, (row as HTMLElement).offsetWidth);
+                return range.getBoundingClientRect().width <= row.getBoundingClientRect().width + 0.5 * scale ? '' : row.textContent;
+            }).filter(Boolean))).toEqual([]);
+            const text = (await last.locator('.card-line-row').allTextContents()).join(' ');
+            if (lines === 0) expect(text).toContain('Mikuláše');
+            else if (!text.includes('Mikuláše')) expect(text.trimEnd().endsWith('…'), text).toBe(true);
+        });
+    }
+});
