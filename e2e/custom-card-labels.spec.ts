@@ -291,6 +291,38 @@ test.describe('the header of the custom card (U02)', () => {
         const domHeight = await card(page, 'Kateřina').evaluate(el => (el as HTMLElement).offsetHeight);
         expect(kat.height).toBe(domHeight);
     });
+
+    for (const years of [false, true]) {
+        test(`the avatar stays where a one-row name puts it when the name takes two rows${years ? ', with the years' : ''}, in the poster too (T39)`, async ({ page }) => {
+            await setup(page, { widthCap: 240, years }, 1440, 'Kateřina /Výšková-Hlavatá z Lipan/');
+            await expect(card(page, 'Kateřina').locator('.name-row')).toHaveCount(2);
+            await expect(card(page, 'Jan').locator('.name-row')).toHaveCount(1);
+            // The avatar's top from the header's top, unscaled: the top of the header (1.5px down with
+            // the years), the same on the two-row card as on Jan's one-row one (the focused card's
+            // thicker border aside).
+            const tops = await page.evaluate(() => Object.fromEntries([...document.querySelectorAll<HTMLElement>('#tree-canvas .person-card')].map(el => {
+                const c = el.getBoundingClientRect();
+                const scale = c.width / el.offsetWidth;
+                const h = el.querySelector('.card-head')!.getBoundingClientRect();
+                const a = el.querySelector('.card-avatar')!.getBoundingClientRect();
+                return [el.querySelector('.name-text')!.textContent!.split(' ')[0], Math.round((a.top - h.top) / scale * 10) / 10];
+            })));
+            expect(tops['Kateřina'], JSON.stringify(tops)).toBe(tops['Jan']);
+            expect(tops['Kateřina']).toBe(years ? 1.5 : 0);
+            // The poster: every avatar's centre as far from its card's top.
+            const svg = await posterSvg(page);
+            const rects = [...svg.matchAll(/<rect x="(-?[\d.]+)" y="(-?[\d.]+)" width="(\d+)" height="(\d+)" rx="8"/g)]
+                .map(m => ({ x: Number(m[1]), y: Number(m[2]), w: Number(m[3]), h: Number(m[4]) }));
+            const offsets = [...svg.matchAll(/<circle cx="(-?[\d.]+)" cy="(-?[\d.]+)" r="15" fill="(?!none)/g)].map(m => {
+                const cx = Number(m[1]), cy = Number(m[2]);
+                const r = rects.find(b => cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h)!;
+                return Math.round((cy - r.y) * 10) / 10;
+            });
+            // Marie has no years: 25 on her card in any case.
+            expect(offsets).toHaveLength(3);
+            expect(offsets.sort(), JSON.stringify(offsets)).toEqual(years ? [25, 26.5, 26.5] : [25, 25, 25]);
+        });
+    }
 });
 
 test.describe('card presets (U02)', () => {

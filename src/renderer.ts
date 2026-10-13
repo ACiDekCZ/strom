@@ -1848,7 +1848,7 @@ class TreeRendererClass {
             // the card's height (src/card-width.ts), as the image export does.
             html += customLines ? `
                 <div class="card-body card-body--custom">
-                    <div class="card-head">${avatarHtml}<div class="card-head-text">${head && this.customWrapped
+                    <div class="card-head${head?.years ? ' card-head--years' : ''}">${avatarHtml}<div class="card-head-text">${head && this.customWrapped
                         ? `<div class="name name--rows"><span class="name-text" ${nameAttrs}>${head.name.map(r =>
                             `<span class="name-row">${this.escapeHtml(r)}</span>`).join('')}</span></div>`
                         : nameHtml}${head?.years ? `<div class="card-years">${this.escapeHtml(head.years)}</div>` : ''}</div></div>

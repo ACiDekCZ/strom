@@ -221,7 +221,7 @@ function sampleCard(density: CardDensity, on: CardSignals, viewWidth: number | u
             width: sample.width, height: sample.height, html: `
             <div class="person-card male preview-card${action ? ' has-signal' : ''}" data-density="${density}" data-fields style="${box}">
                 <div class="card-body card-body--custom">
-                    <div class="card-head">${avatar('JV')}<div class="card-head-text">${name}${years}</div></div>
+                    <div class="card-head${head.years ? ' card-head--years' : ''}">${avatar('JV')}<div class="card-head-text">${name}${years}</div></div>
                     ${sample.html}
                 </div>
                 ${stripes}

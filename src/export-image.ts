@@ -15,7 +15,7 @@ import type { CardLine, CardLineStyle, CardValueLines } from './card-fields.js';
 import {
     CARD_MARK_WIDTH, CARD_COLUMN_GAP, CUSTOM_CARD_PAD_X, CARD_ROW_HEIGHT, CARD_DETAIL_GAP, CARD_LABEL_GAP,
     CARD_VALUE_DATE_GAP, CARD_NAME_ROW_HEIGHT, CARD_YEARS_ROW_HEIGHT, CARD_AVATAR_WIDTH, CARD_HEAD_GAP,
-    MeasureTexts, CardRow, cardPlaceOffset, cardLinesTop, customCardRows,
+    MeasureTexts, CardRow, cardPlaceOffset, cardLinesTop, customCardRows, cardHeadBlock,
 } from './card-width.js';
 import { shownName } from './person-name.js';
 import { strings } from './strings.js';
@@ -278,8 +278,8 @@ function customCardSvg(
     let textX = left;
     if (!person.isPlaceholder) {
         const cx = left + 15;
-        // The avatar in the middle of the header.
-        const cy = pos.y + 10 + head.block / 2;
+        // The avatar where a one-row name puts it (the middle of that header), however many rows the name takes (T39).
+        const cy = pos.y + 10 + Math.min(head.block, cardHeadBlock(1, !!head.years)) / 2;
         if (person.photo) {
             out.push(`<clipPath id="${clipId}"><circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="15"/></clipPath>`);
             out.push(`<image href="${escapeXml(person.photo)}" x="${(cx - 15).toFixed(1)}" y="${(cy - 15).toFixed(1)}" width="30" height="30" preserveAspectRatio="xMidYMid slice" clip-path="url(#${clipId})"/>`);

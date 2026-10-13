@@ -267,7 +267,7 @@ describe('the poster draws labels, years and the name\'s rows like the screen (U
         expect(svg).not.toContain('class="card-line-mark"');
     });
 
-    it('the name\'s two rows and the years under them, the avatar in the middle of the taller header', () => {
+    it('the name\'s two rows and the years under them, the avatar where a one-row name puts it (T39)', () => {
         const svg = buildTreeSvg(data, layout, {
             config: { cardWidth: 200, cardHeight: 200 } as never,
             cardLines: new Map([['a', []]]), cardDateColumn: 0, measureCardTexts: measure, cardValueLines: 0,
@@ -278,7 +278,15 @@ describe('the poster draws labels, years and the name\'s rows like the screen (U
             { x: 50, y: 24.5, text: 'Kateřina Výšková-' }, { x: 50, y: 43.5, text: 'Hlavatá z Lipan' },
         ]);
         expect(texts(svg, 'card-years')).toEqual([{ x: 50, y: 58.5, text: '1846 – 1919' }]);
-        expect(svg).toMatch(/<circle cx="27.0" cy="36.0" r="15"/);
+        // Not in the middle of the 52px header (36): where a one-row name and its years put it, 10 + 33 / 2.
+        expect(svg).toMatch(/<circle cx="27.0" cy="26.5" r="15"/);
+        // Without the years: the top of the header, 10 + 30 / 2, not the middle of the two rows' 38 (29).
+        const noYears = buildTreeSvg(data, layout, {
+            config: { cardWidth: 200, cardHeight: 200 } as never,
+            cardLines: new Map([['a', []]]), cardDateColumn: 0, measureCardTexts: measure, cardValueLines: 0,
+        });
+        expect(texts(noYears, 'card-name-row')).toHaveLength(2);
+        expect(noYears).toMatch(/<circle cx="27.0" cy="25.0" r="15"/);
     });
 
     it('one row a detail: the name stays one text shrunk into the room, the years under it at 33px', () => {
