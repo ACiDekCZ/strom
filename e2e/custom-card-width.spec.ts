@@ -915,3 +915,37 @@ test.describe('avatar initials (U02)', () => {
         expect(drawn).toEqual(['?', 'F', 'N']);
     });
 });
+
+/** Marks style: a detail without a date starts in the date column, as the age does, no empty column before it (T36). */
+test.describe('a detail without a date (T36)', () => {
+    for (const lines of [1, 0] as const) {
+        test(`the place starts where the dates do (${lines === 1 ? 'one row' : 'whole'})`, async ({ page }) => {
+            await page.setViewportSize({ width: 1440, height: 900 });
+            await seedSetting(page, 'cardDensity', 'custom');
+            await seedSetting(page, 'cardFields', { on: ['age', 'birth', 'marriage'], style: 'marks', lines, fullDate: true });
+            await openApp(page);
+            await page.evaluate(async () => {
+                const P = (id: string, o: Record<string, unknown>) => ({ id, gender: 'male', isPlaceholder: false, partnerships: [], parentIds: [], childIds: [], ...o });
+                const persons = {
+                    j: P('j', { firstName: 'Jan', lastName: 'Junek', birthDate: '1977-05-09', partnerships: ['u'] }),
+                    e: P('e', { firstName: 'Eva', lastName: 'Junková', gender: 'female', birthDate: '1979', partnerships: ['u'] }),
+                };
+                const partnerships = { u: { id: 'u', person1Id: 'j', person2Id: 'e', childIds: [], status: 'married', startPlace: 'Průhonice, Dendrologická zahrada' } };
+                await window.Strom.DataManager.importAsNewTree({ persons, partnerships } as never, 'Junkovi');
+                window.Strom.TreeRenderer.setFocus('j' as never);
+            });
+            const jan = card(page, 'Jan');
+            await expect(jan.locator('.card-line--marriage')).toBeVisible();
+            await page.evaluate(() => document.fonts.ready);
+            await expect.poll(() => cardBoxesMatchLayout(page)).toBe(true);
+            const x = (sel: string) => jan.locator(sel).evaluate(el => Math.round(el.getBoundingClientRect().left));
+            const dateX = await x('.card-line--birth .card-line-date');
+            await expect(jan.locator('.card-line--marriage .card-line-date')).toHaveCount(0);
+            expect(await x('.card-line--marriage .card-line-place')).toBe(dateX);
+            expect(await x('.card-line--age .card-line-place')).toBe(dateX);
+            // The mark stays in its column.
+            expect(await x('.card-line--marriage .card-line-mark')).toBe(await x('.card-line--birth .card-line-mark'));
+            await expect(jan.locator('.card-line--marriage')).toContainText('Průhonice, Dendrologická zahrada');
+        });
+    }
+});

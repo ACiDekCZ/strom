@@ -93,6 +93,30 @@ describe('customCardMetrics', () => {
     });
 });
 
+describe('a detail without a date starts in the date column (T36)', () => {
+    it('marks: the place takes the date column and the place column, as the age does', () => {
+        setLanguage('en');
+        const p: Person = {
+            id: 'p' as PersonId, firstName: 'Jan', lastName: 'Junek', gender: 'male', isPlaceholder: false,
+            birthDate: '1977-05-09', birthPlace: 'Praha', deathPlace: 'Průhonice, Dendrologická zahrada',
+            partnerships: [], parentIds: [], childIds: [],
+        };
+        const data: StromData = { persons: { [p.id]: p }, partnerships: {} as StromData['partnerships'] };
+        const lines = cardLines(p, data, normalizeCardFields({ ...DEFAULT_CARD_FIELDS, on: ['birth', 'death'] }));
+        const [birth, death] = lines;
+        expect(birth.wide).toBeUndefined();
+        expect(death).toEqual(expect.objectContaining({ date: '', rest: 'Průhonice, Dendrologická zahrada', wide: true }));
+        const esc = (t: string) => t;
+        const html = cardLineHtml(death, esc);
+        expect(html).toContain('card-line-place card-line-place--wide');
+        expect(html).not.toContain('card-line-date');
+        // The rows: the room from the date column (174 − 17 = 157, 26 characters), not the place column (127, 21).
+        const metrics = { cardWidth: 200, dateColumn: 24 };
+        const { rows } = customCardRows([{ name: 'Jan Junek', avatar: true, lines }], metrics, measure, 0);
+        expect(rows.get(death)!.rows.map(r => r.text)).toEqual(['Průhonice, Dendrologická', 'zahrada']);
+    });
+});
+
 describe('the width cap (U02)', () => {
     it('caps the view\'s width and the places cut against it', () => {
         // 11 + 6 + 24 + 6 + 50 × 6 = 347 → 373 → 376.

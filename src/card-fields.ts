@@ -261,7 +261,7 @@ export interface CardLine {
     rest: string;
     /** "+1" after the place for further marriages; never cut. */
     more?: string;
-    /** The line has no date column (the occupation): its text starts where the dates do. */
+    /** The line has no date column (the age, the occupation, a detail without a date): its text starts where the dates do. */
     wide?: boolean;
     /** The line in words, for the aria-label: "Death 1919 Horní Lhota · souchotiny". */
     spoken: string;
@@ -390,9 +390,11 @@ export function cardLines(person: Person, data: StromData, s: CardFieldSettings)
         const rest = [placeText, cause].filter(Boolean).join(' · ');
         const text = [[dateText, placeText].filter(Boolean).join(' '), cause].filter(Boolean).join(' · ');
         if (!text) return;
+        // No date: the place starts in the date column, as the age does (T36), no empty column before it.
         out.push({ key, mark, text, date: dateText, rest, spoken: `${label} ${text}`, label,
             ...(placeText ? { place: placeText } : {}), ...(cause ? { cause } : {}),
-            ...(dateText && cardDateIsLong(date, s.fullDate) ? { dateLong: true } : {}) });
+            ...(dateText && cardDateIsLong(date, s.fullDate) ? { dateLong: true } : {}),
+            ...(dateText ? {} : { wide: true }) });
     };
     for (const key of s.order) {
         if (!s.on.includes(key)) continue;
