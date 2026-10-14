@@ -1140,6 +1140,17 @@ function compareEventDates(
 }
 
 /**
+ * Both birth dates give a plain year (exact, to any precision; not "about",
+ * before/after or a range) and the years differ.
+ */
+function birthYearsDiffer(d1: string | undefined, d2: string | undefined): boolean {
+    const a = parseFlexDate(d1);
+    const b = parseFlexDate(d2);
+    if (!a || !b || a.end || b.end || a.qualifier !== '' || b.qualifier !== '') return false;
+    return a.year !== b.year;
+}
+
+/**
  * Quick match for cross-tree comparison ("Also in" on a card): the persons
  * come from different trees, so relatives are compared by name, never by id.
  * Returns a score 0-100 (50+ = match) and what the match was found by.
@@ -1150,7 +1161,9 @@ function compareEventDates(
  *   Precise dates that disagree, or years far apart, rule the match out.
  * - Death: the same day +10, the same year/month +3; a disagreeing date rules
  *   the match out as for birth.
- * - Parents of the same names: one +10, both +18; partners as in full merge.
+ * - Parents of the same names: one +10, both +18, but never when plain birth
+ *   years differ (namesake siblings share parents); partners as in full
+ *   merge, and a partner of the same name may outweigh a year apart.
  */
 export function quickMatch(p1: Person, p2: Person, data1?: StromData, data2?: StromData): QuickMatchResult {
     // Gender must match
@@ -1190,7 +1203,12 @@ export function quickMatch(p1: Person, p2: Person, data1?: StromData, data2?: St
     if (death === 'day' || death === 'month' || death === 'year') reasons.push('death');
 
     if (data1 && data2) {
-        const parents = countMatchingParents(p1, p2, data1, data2, true);
+        // Namesake siblings share their parents (a child named after an
+        // earlier one who died): the same parents never make up for plain
+        // birth years that differ. The same partner still can.
+        const parents = birthYearsDiffer(p1.birthDate, p2.birthDate)
+            ? 0
+            : countMatchingParents(p1, p2, data1, data2, true);
         if (parents > 0) {
             score += parents >= 2 ? 18 : 10;
             reasons.push('parents');

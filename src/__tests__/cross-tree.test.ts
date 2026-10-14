@@ -40,12 +40,23 @@ function tree(prefix: string, subject: Partial<Person>, parents: { father?: stri
     return { persons, partnerships } as StromData;
 }
 
+/** Anežka married to Karel Novák. */
+function withHusband(d: StromData, prefix: string): StromData {
+    const uid = `${prefix}-pu` as PartnershipId;
+    const husband = person(`${prefix}-h`, 'Karel', 'Novák', 'male', { partnerships: [uid] });
+    d.persons[husband.id] = husband;
+    d.persons[`${prefix}-b` as PersonId].partnerships = [uid];
+    d.partnerships[uid] = { id: uid, person1Id: husband.id, person2Id: `${prefix}-b`, childIds: [], status: 'married' } as never;
+    return d;
+}
+
 function matchesOf(a: StromData, b: StromData) {
     const trees = new Map<TreeId, { name: string; data: StromData }>([
         ['ta' as TreeId, { name: 'Tree A', data: a }],
         ['tb' as TreeId, { name: 'Tree B', data: b }],
     ]);
     const subject = Object.values(a.persons).find(p => p.firstName === 'Anežka')!;
+    invalidateCache();   // results are cached per person id, and the fixtures reuse ids
     return findCrossTreeMatches('ta' as TreeId, subject, trees);
 }
 
@@ -101,22 +112,29 @@ describe('cross-tree matching (T22)', () => {
         // Same ids on both sides, but different parents: no parent bonus.
         const other = matchesOf(tree('x', { birthDate: '1885' }, {}), tree('x', { birthDate: '1884' }, { father: 'Václav', mother: 'Anna' }));
         expect(other).toHaveLength(0);
-        // A year apart is rescued by both parents of the same names.
-        const same = matchesOf(tree('a', { birthDate: '1885' }, {}), tree('b', { birthDate: '1884' }, {}));
+    });
+
+    it('namesake sisters a year apart with the same parents are no match (the T22 pair)', () => {
+        const parents = { father: 'Josef', mother: 'Kateřina' };
+        expect(matchesOf(tree('a', { birthDate: '1885' }, parents), tree('b', { birthDate: '1884' }, parents))).toHaveLength(0);
+        expect(matchesOf(tree('a', { birthDate: '1885-03-12' }, parents), tree('b', { birthDate: '1884' }, parents))).toHaveLength(0);
+        // The same year with the same parents stays a match.
+        const same = matchesOf(tree('a', { birthDate: '1885' }, parents), tree('b', { birthDate: '1885' }, parents));
         expect(same).toHaveLength(1);
-        expect(same[0].reasons).toEqual(['name', 'parents']);
+        expect(same[0].reasons).toEqual(['name', 'birth', 'parents']);
+    });
+
+    it('a year apart with the same partner is a match found by name and partner', () => {
+        const a = withHusband(tree('a', { birthDate: '1885' }, null), 'a');
+        const b = withHusband(tree('b', { birthDate: '1884' }, null), 'b');
+        const m = matchesOf(a, b);
+        expect(m).toHaveLength(1);
+        expect(m[0].reasons).toEqual(['name', 'partner']);
     });
 
     it('a matching partner adds to the score and the reasons', () => {
-        const a = tree('a', {}, null);
-        const b = tree('b', {}, null);
-        for (const [d, prefix] of [[a, 'a'], [b, 'b']] as const) {
-            const uid = `${prefix}-pu` as PartnershipId;
-            const husband = person(`${prefix}-h`, 'Karel', 'Novák', 'male', { partnerships: [uid] });
-            d.persons[husband.id] = husband;
-            d.persons[`${prefix}-b` as PersonId].partnerships = [uid];
-            d.partnerships[uid] = { id: uid, person1Id: husband.id, person2Id: `${prefix}-b`, childIds: [], status: 'married' } as never;
-        }
+        const a = withHusband(tree('a', {}, null), 'a');
+        const b = withHusband(tree('b', {}, null), 'b');
         const r = quickMatch(a.persons['a-b' as PersonId], b.persons['b-b' as PersonId], a, b);
         expect(r.reasons).toEqual(['name', 'partner']);
         expect(r.score).toBeGreaterThanOrEqual(50);

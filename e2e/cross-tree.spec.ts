@@ -84,20 +84,29 @@ test('multiple matches: badge opens a chooser that Escape and an outside click c
     await expect(page.locator('#current-tree-name')).toHaveText('Tree B');
 });
 
-test('T22: a namesake sister born a year later in another tree is not offered as the same person', async ({ page }) => {
+test('T22: a namesake sister born a year later, of the same parents, in another tree is not offered as the same person', async ({ page }) => {
     await openApp(page);
     await page.evaluate(async () => {
         const base = { isPlaceholder: false, partnerships: [], parentIds: [], childIds: [] };
-        // Jan is Anežka's son, so both cards stand in one view; a child is never compared.
-        const jan = { ...base, id: 'j', firstName: 'Jan', lastName: 'Novak', gender: 'male', birthDate: '1910', parentIds: ['b'] };
-        const anezkaA = { ...base, id: 'b', firstName: 'Anežka', lastName: 'Lipová', gender: 'female', birthDate: '1885', childIds: ['j'] };
-        const anezkaB = { ...base, id: 'b', firstName: 'Anežka', lastName: 'Lipová', gender: 'female', birthDate: '1884', childIds: ['j'] };
-        await window.Strom.DataManager.importAsNewTree({ persons: { j: jan, b: anezkaA }, partnerships: {} } as never, 'Tree A');
-        await window.Strom.DataManager.importAsNewTree({ persons: { j: jan, b: anezkaB }, partnerships: {} } as never, 'Tree B');
+        // Both Anežkas are daughters of Josef Lipa and Kateřina Horká;
+        // Jan is Anežka's son, so all cards stand in one view.
+        const tree = (anezkaBirth: string) => ({
+            persons: {
+                f: { ...base, id: 'f', firstName: 'Josef', lastName: 'Lipa', gender: 'male', birthDate: '1855', partnerships: ['u'], childIds: ['b'] },
+                m: { ...base, id: 'm', firstName: 'Kateřina', lastName: 'Horká', gender: 'female', birthDate: '1858', partnerships: ['u'], childIds: ['b'] },
+                b: { ...base, id: 'b', firstName: 'Anežka', lastName: 'Lipová', gender: 'female', birthDate: anezkaBirth, parentIds: ['f', 'm'], childIds: ['j'] },
+                j: { ...base, id: 'j', firstName: 'Jan', lastName: 'Novak', gender: 'male', birthDate: '1910', parentIds: ['b'] },
+            },
+            partnerships: { u: { id: 'u', person1Id: 'f', person2Id: 'm', childIds: ['b'], status: 'married' } },
+        });
+        await window.Strom.DataManager.importAsNewTree(tree('1885') as never, 'Tree A');
+        await window.Strom.DataManager.importAsNewTree(tree('1884') as never, 'Tree B');
         window.Strom.TreeRenderer.render();
     });
-    // Jan is the same man in both trees: his pill shows (and proves the badges rendered).
+    // Jan and Anežka's parents are the same people in both trees: their pills show
+    // (and prove the badges rendered).
     await expect(card(page, 'Jan').locator('.cross-tree-badge')).toBeVisible();
+    await expect(card(page, 'Josef').locator('.cross-tree-badge')).toBeVisible();
     await expect(card(page, 'Anežka')).toBeVisible();
     await expect(card(page, 'Anežka').locator('.cross-tree-badge')).toHaveCount(0);
 });
