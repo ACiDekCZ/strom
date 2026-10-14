@@ -283,7 +283,7 @@ describe('words', () => {
         expect(edgeEndText(EDGE({ end: 'before-records', records: 1785 }))).toBe('Známé matriky začínají 1785');
         expect(edgeEndText(EDGE({ missing: 'proof' }))).toBe('Rodiče nejsou doloženi záznamem');
         expect(edgeNextText(EDGE({ tasks: [{ id: 'T1', title: 'x', pos: 2 }] }), 'queued')).toBe('Ve frontě jako 2.');
-        expect(edgeNextText(EDGE({ tasks: [{ id: 'T1', title: 'x', held: 'paused' }] }), 'held')).toBe('Čeká mimo frontu (pozastavený směr)');
+        expect(edgeNextText(EDGE({ tasks: [{ id: 'T1', title: 'x', held: 'paused' }] }), 'held')).toBe('Čeká mimo frontu (pozastavená linie)');
         expect(edgeNextText(EDGE({ tasks: [{ id: 'T1', title: 'x', held: 'parked', until: '2026-11-01' }] }), 'held')).toBe('Čeká mimo frontu (odloženo do 1. 11. 2026)');
         expect(edgeNextText(EDGE({ scope: 'living' }), 'queued')).toBe('Nejspíš žijící, nezkoumá se');
         const v = edgeView(EDGE({ end: 'unsearched', next: 'queued' }), 'all', { working: true })!;
