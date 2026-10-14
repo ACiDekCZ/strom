@@ -6,8 +6,8 @@
  *     the point in the middle of the view stays in the middle;
  *   - tablet: a 400px panel over the tree;
  *   - phone: a full-screen sheet opened from the strip.
- * Summary (state, what came while watching, this month), Waiting for you,
- * Now, Progress (changes grouped by the agent's task, filtered, hover lights
+ * Summary (state, what came while watching, this month), Now, Waiting for
+ * you, Progress (changes grouped by the agent's task, filtered, hover lights
  * the card up, "Show changed in tree"), Queue, What the research knows
  * (open conflicts and hypotheses across the tree), and where evidence is
  * missing. Bridge text is set as text, never HTML. Only while following.
@@ -293,8 +293,8 @@ export const researchOverviewMethods = uiModule({
             },
         });
 
-        if (s.waiting.length > 0) this.appendOverviewWaiting(body, s, fold('waiting'), mode);
         this.appendOverviewNow(body, s, fold('now'), mode);
+        if (s.waiting.length > 0) this.appendOverviewWaiting(body, s, fold('waiting'), mode);
         this.appendOverviewDirections(body, s, fold('directions'), mode);
         this.appendOverviewTimeline(body, s, fold('timeline'), mode);
         if (!s.ended) this.appendQueueSection(body, s, fold('queue'), 20, L.queueTitle, true);

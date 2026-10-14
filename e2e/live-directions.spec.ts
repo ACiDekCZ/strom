@@ -123,9 +123,11 @@ test.describe('research directions', () => {
         await expect(row(page, 'G0001').locator('.research-direction__icon')).toHaveText('↑');
         await expect(row(page, 'G0001').locator('.agent-mark--spin')).toHaveCount(1);
         await expect(row(page, 'G0001').locator('.research-direction__meta')).toHaveText(/Jan Víšek.*2 tasks.*1 awaiting an answer/);
-        // Directions sit right after Now.
+        // Now first, then what awaits action, then Directions.
         const titles = await ov(page).locator('.live-section__title').allTextContents();
-        expect(titles.indexOf('Directions · 3 running')).toBe(titles.indexOf('Now') + 1);
+        expect(titles.indexOf('Now')).toBe(0);
+        expect(titles[1]).toMatch(/^Awaiting action/);
+        expect(titles.indexOf('Directions · 3 running')).toBe(2);
         const inactive = sec.locator('.research-directions__inactive');
         await expect(inactive).toHaveText('▸Paused and ended · 2');
         await inactive.click();

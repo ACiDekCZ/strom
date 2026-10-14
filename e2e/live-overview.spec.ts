@@ -521,6 +521,9 @@ test.describe('Research overview', () => {
         expect(Math.abs(midAfter[1] - midBefore[1])).toBeLessThan(2);
 
         await expect(ov.locator('.research-overview__cell-value')).toHaveText(['Working', '+3 people', '$3.20']);
+        // Who works now comes first, what waits right below it.
+        await expect(ov.locator('.live-section__title').nth(0)).toHaveText(/^Now/);
+        await expect(ov.locator('.live-section__title').nth(1)).toHaveText(/^Awaiting action/);
         // The state says when the research last changed; its version only on hover.
         const stateSub = ov.locator('.research-overview__cell-sub').first();
         await expect(stateSub).toHaveText(/^last change (just now|\d+ min)/);
@@ -635,6 +638,8 @@ test.describe('Research overview', () => {
         const ov = page.locator('#research-overview');
         await expect(ov).toHaveClass(/research-overview--sheet/);
         await expect(ov).toHaveAttribute('aria-modal', 'true');
+        await expect(ov.locator('.live-section__title').nth(0)).toHaveText(/^Now/);
+        await expect(ov.locator('.live-section__title').nth(1)).toHaveText(/^Awaiting action/);
         await ov.locator('.research-overview__waiting-row').first().click();
         await expect(ov.locator('.live-waiting-answer')).toHaveCount(0);
         await expect(ov.locator('.research-overview__waiting-detail')).toContainText('answered in the research on the computer');
