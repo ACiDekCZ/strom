@@ -8,6 +8,7 @@ import { card, openPersonSubmenu } from './helpers.js';
  * (generations for ancestors, Work on it ↗, Show in tree), an older research
  * without the new fields, the direction named beside tasks and the queue
  * filter, Finish and stop ↗, the person menu naming an existing direction,
+ * work outside the directions (its row, its person brought into the tree),
  * and the phone sheet. Invented data only.
  */
 
@@ -22,6 +23,8 @@ const GED = [
     '0 @P0001@ INDI', '1 NAME Josef /Víšek/', '1 SEX M', '1 BIRT', '2 DATE 1840', '1 REFN P0001', '1 FAMS @F0001@',
     '0 @P0002@ INDI', '1 NAME Anna /Svobodová/', '1 SEX F', '1 REFN P0002', '1 FAMS @F0001@',
     '0 @P0012@ INDI', '1 NAME Jan /Víšek/', '1 SEX M', '1 BIRT', '2 DATE 1865', '1 REFN P0012', '1 FAMC @F0001@',
+    // No family link to the others: not in the family view of Josef or Jan.
+    '0 @P0050@ INDI', '1 NAME Marie /Dvořáková/', '1 SEX F', '1 BIRT', '2 DATE 1902', '1 REFN P0050',
     '0 @F0001@ FAM', '1 HUSB @P0001@', '1 WIFE @P0002@', '1 CHIL @P0012@',
     '0 TRLR',
 ].join('\n');
@@ -46,16 +49,18 @@ interface Bridge {
 }
 
 const AGENT = { who: 'agent-matriky', since: ago(16), task: 'T0101 Matriky Chlumy', person: 'P0012', research: 'G0001', session: 'N0132' };
+/** A run on a task no direction holds: the bridge names no research. */
+const OUTSIDE = { who: 'agent-scitani', since: ago(4), task: 'T0201 Sčítání 1921 Dvořáková', person: 'P0050', session: 'N0140' };
 
 async function follow(page: Page, researches: Record<string, unknown>[] = DIRECTIONS,
-    size = { width: 1440, height: 900 }): Promise<Bridge> {
+    size = { width: 1440, height: 900 }, working?: Record<string, unknown>[]): Promise<Bridge> {
     await page.setViewportSize(size);
     await page.addInitScript((links) => {
         if (sessionStorage.getItem('seeded')) return;
         sessionStorage.setItem('seeded', '1');
         localStorage.setItem('strom-research-links', JSON.stringify({ actions: links, at: new Date().toISOString() }));
     }, ALL);
-    const bridge: Bridge = { researches, statusAsks: 0 };
+    const bridge: Bridge = { researches, statusAsks: 0, ...(working ? { working } : {}) };
     const status = () => ({
         tree: { id: UUID, name: 'Víškovi' }, head: 'h1', persons: 3,
         working: bridge.working ?? [AGENT],
@@ -127,6 +132,56 @@ test.describe('research directions', () => {
         await expect(row(page, 'G0004').locator('.research-direction__meta')).toContainText('“matriky ještě nejsou online” · since');
         await row(page, 'G0004').locator('.research-direction__do').click();
         expect(await launched(page)).toEqual([`strom-research://direction?tree=${UUID}&id=G0004&do=resume`]);
+    });
+
+    test('work outside the directions: its row with the task first, the person brought into the tree', async ({ page }) => {
+        // The bridge names no research for the task, and no direction says it is worked on.
+        await follow(page, DIRECTIONS.map(d => ({ ...d, working: false })), undefined, [OUTSIDE]);
+        await expect(card(page, 'Marie')).toHaveCount(0);
+        await openOverview(page);
+        const outside = ov(page).locator('.research-direction--outside');
+        await expect(ov(page).locator('.research-directions .research-direction').first()).toHaveAttribute('data-outside', 'true');
+        await expect(outside.locator('.research-direction__name')).toHaveText('Outside the directions');
+        await expect(outside.locator('.agent-mark--spin')).toHaveCount(1);
+        await expect(outside.locator('.research-direction__task')).toHaveText('T0201 Sčítání 1921 Dvořáková');
+        await outside.locator('.live-person-link').click();
+        await expect(card(page, 'Marie')).toBeVisible();
+        await expect.poll(() => page.evaluate(() => window.Strom.TreeRenderer.getFocusPersonId())).toBe(
+            await page.evaluate(() => Object.values(window.Strom.DataManager.getData().persons).find(p => p.refn === 'P0050')?.id));
+    });
+
+    test('work outside the directions: Now shows its person, a direction being worked on stays first', async ({ page }) => {
+        // A research the list does not have counts as outside too.
+        await follow(page, DIRECTIONS, undefined, [AGENT, { ...OUTSIDE, research: 'G0099' }]);
+        await openOverview(page);
+        await expect(ov(page).locator('.research-directions .research-direction__name').first()).toHaveText('Předci: Jan');
+        await expect(ov(page).locator('.research-direction--outside .research-direction__task')).toHaveText('T0201 Sčítání 1921 Dvořáková');
+        await expect(card(page, 'Marie')).toHaveCount(0);
+        const now = ov(page).locator('.research-overview__now-row', { hasText: 'agent-scitani' });
+        await now.locator('.link-button', { hasText: 'Show in tree' }).click();
+        await expect(card(page, 'Marie')).toBeVisible();
+    });
+
+    test('one direction and work outside it: the section with both rows', async ({ page }) => {
+        await follow(page, [DIRECTIONS[2]], undefined, [OUTSIDE]);
+        await openOverview(page);
+        await expect(ov(page).locator('.research-directions .research-direction')).toHaveCount(2);
+        await expect(ov(page).locator('.research-direction--outside .research-direction__name')).toHaveText('Outside the directions');
+    });
+
+    test('a paused run outside the directions: no row', async ({ page }) => {
+        await follow(page, DIRECTIONS, undefined, [AGENT, { ...OUTSIDE, paused: { until: '', reason: 'limit' } }]);
+        await openOverview(page);
+        await expect(ov(page).locator('.research-direction--outside')).toHaveCount(0);
+    });
+
+    test('the live panel names the person worked on; a click brings them into the tree', async ({ page }) => {
+        await follow(page, DIRECTIONS, undefined, [OUTSIDE]);
+        await expect(card(page, 'Marie')).toHaveCount(0);
+        const person = page.locator('#live-panel .live-working .live-working__person');
+        await expect(person).toHaveText('Marie Dvořáková');
+        await person.click();
+        await expect(card(page, 'Marie')).toBeVisible();
     });
 
     test('an empty direction: the sentence and End ↗ on its row', async ({ page }) => {

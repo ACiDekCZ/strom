@@ -1,6 +1,7 @@
 /**
  * Research directions in the Research overview ("research" in the research,
- * id G…): the Directions section after Now (only with two or more), each
+ * id G…): the Directions section after Now (only with two or more, or one
+ * with running work outside it: the row "Outside the directions"), each
  * direction's detail (generations of ancestors, its last session, Work on it,
  * Show in tree), its ⋯ menu (pause / end / restart in the research), the
  * direction named beside tasks while two or more run, and what the person
@@ -11,7 +12,7 @@
 import { DataManager } from '../data.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { Person, PersonId } from '../types.js';
-import { LiveDirection, LiveDirectionKind, ResearchDirectionDo } from '../research-link.js';
+import { LiveDirection, LiveDirectionKind, LiveWorker, ResearchDirectionDo } from '../research-link.js';
 import { uiModule } from './module.js';
 import { LiveSession, el, liveSection, liveSession } from './research-ui.js';
 import { shownName } from '../person-name.js';
@@ -82,6 +83,14 @@ export function activeDirections(s: LiveSession): LiveDirection[] {
     return orderDirections(s.researches).active;
 }
 
+/**
+ * Running work no direction of the list holds: no research named, or one the
+ * list does not have (the bridge sends it so for a task outside the directions).
+ */
+export function outsideWork(s: LiveSession): LiveWorker[] {
+    return s.working.filter(w => !w.paused && (!w.research || !s.researches.some(d => d.id === w.research)));
+}
+
 /** Running, but nothing to do and nobody on it. */
 function isEmpty(d: LiveDirection): boolean {
     return d.state === 'active' && d.tasks === 0 && (d.waiting ?? 0) === 0 && !d.working;
@@ -122,14 +131,20 @@ function generationLabel(g: number): string {
 export const researchDirectionsMethods = uiModule({
     /** The Directions section of the overview (two or more directions). */
     appendOverviewDirections(body: HTMLElement, s: LiveSession, fold: { id: string; collapsed: boolean; onToggle: () => void }, mode: Mode): void {
-        if (s.researches.length < 2) return;
+        const outside = outsideWork(s);
+        // One direction is the whole research, unless work runs outside it.
+        if (s.researches.length < 2 && (s.researches.length === 0 || outside.length === 0)) return;
         const L = strings.live;
         const { active, inactive } = orderDirections(s.researches);
         const host = liveSection(body, { ...fold, title: L.dirTitle(active.length) });
         host.classList.add('research-directions');
         const list = el('div', 'research-directions__list');
         host.appendChild(list);
+        // Work outside the directions is worked on: first, unless a direction is too.
+        const outsideRow = outside.length > 0 ? this.outsideDirectionRow(outside, mode) : null;
+        if (outsideRow && !active.some(d => d.working)) list.appendChild(outsideRow);
         for (const d of active) list.appendChild(this.directionRow(s, d, mode));
+        if (outsideRow && !outsideRow.isConnected) list.appendChild(outsideRow);
         if (inactive.length > 0) {
             const toggle = el('button', 'research-directions__inactive');
             toggle.type = 'button';
@@ -226,6 +241,38 @@ export const researchDirectionsMethods = uiModule({
             };
             row.appendChild(more);
         }
+        return row;
+    },
+
+    /** "Outside the directions": the arc, each task's title and its person (shown in the tree on a click). */
+    outsideDirectionRow(work: readonly LiveWorker[], mode: Mode): HTMLElement {
+        const L = strings.live;
+        const row = el('div', 'research-direction research-direction--outside');
+        row.dataset.outside = 'true';
+        const icon = el('span', 'research-direction__icon is-blank');
+        icon.setAttribute('aria-hidden', 'true');
+        row.appendChild(icon);
+        const main = el('div', 'research-direction__main');
+        const head = el('div', 'research-direction__head');
+        head.appendChild(el('span', 'research-direction__name', L.dirOutside));
+        const arc = el('span', 'agent-mark agent-mark--spin');
+        arc.setAttribute('aria-hidden', 'true');
+        head.appendChild(arc);
+        main.appendChild(head);
+        for (const w of work) {
+            const meta = el('div', 'research-direction__meta');
+            meta.appendChild(el('span', 'research-direction__task', w.task || w.who));
+            const person = personByRefn(w.person);
+            if (person) {
+                const link = el('button', 'live-person-link', fullName(person));
+                link.type = 'button';
+                link.title = L.showInTree;
+                link.onclick = () => this.overviewShowPerson(person.id, mode);
+                meta.appendChild(link);
+            }
+            main.appendChild(meta);
+        }
+        row.appendChild(main);
         return row;
     },
 

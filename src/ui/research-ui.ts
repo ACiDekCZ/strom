@@ -2535,6 +2535,16 @@ export const researchUiMethods = uiModule({
             const li = el('li');
             li.appendChild(el('strong', undefined, w.who));
             if (w.task) li.appendChild(el('span', 'live-task', ` — ${w.task}`));
+            // Whom it works on, a click shows them (focused when the tree on screen lacks them).
+            const person = w.person ? Object.values(DataManager.getData().persons).find(p => p.refn === w.person) : undefined;
+            if (person) {
+                li.appendChild(document.createTextNode(' · '));
+                const link = el('button', 'live-person-link live-working__person', shownNameOrEmpty(person) || r.showInTree);
+                link.type = 'button';
+                link.title = r.showInTree;
+                link.onclick = () => this.overviewShowPerson(person.id, 'docked');
+                li.appendChild(link);
+            }
             if (w.paused) li.appendChild(el('span', 'live-paused', pausedText(w)));
             const since = timeEl(w.since, 'sincefor');
             if (since) li.appendChild(since);
