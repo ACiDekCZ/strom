@@ -8,7 +8,8 @@ import { card, openPersonSubmenu } from './helpers.js';
  * (generations for ancestors, Work on it ↗, Show in tree), an older research
  * without the new fields, the direction named beside tasks and the queue
  * filter, Finish and stop ↗, the person menu naming an existing direction,
- * work outside the directions (its row, its person brought into the tree),
+ * work outside the directions (its row, its person brought into the tree,
+ * or only named when the tree in the app lacks them),
  * and the phone sheet. Invented data only.
  */
 
@@ -182,6 +183,21 @@ test.describe('research directions', () => {
         await expect(person).toHaveText('Marie Dvořáková');
         await person.click();
         await expect(card(page, 'Marie')).toBeVisible();
+    });
+
+    test('work on a person the tree in the app lacks: the identifier as text with its tooltip, no link', async ({ page }) => {
+        // P0239 exists only in the research (not in tree.ged).
+        await follow(page, DIRECTIONS.map(d => ({ ...d, working: false })), undefined, [{ ...OUTSIDE, person: 'P0239' }]);
+        const tip = 'This person is not in the tree in the app';
+        const inPanel = page.locator('#live-panel .live-working .live-working__person');
+        await expect(inPanel).toHaveText('P0239');
+        await expect(inPanel).toHaveAttribute('title', tip);
+        await expect(page.locator('#live-panel .live-working .live-person-link')).toHaveCount(0);
+        await openOverview(page);
+        const outside = ov(page).locator('.research-direction--outside');
+        await expect(outside.locator('.live-person-unknown')).toHaveText('P0239');
+        await expect(outside.locator('.live-person-unknown')).toHaveAttribute('title', tip);
+        await expect(outside.locator('.live-person-link')).toHaveCount(0);
     });
 
     test('an empty direction: the sentence and End ↗ on its row', async ({ page }) => {

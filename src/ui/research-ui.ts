@@ -2544,6 +2544,12 @@ export const researchUiMethods = uiModule({
                 link.title = r.showInTree;
                 link.onclick = () => this.overviewShowPerson(person.id, 'docked');
                 li.appendChild(link);
+            } else if (w.person) {
+                // A person the app's tree does not have: the research's identifier, no link.
+                li.appendChild(document.createTextNode(' · '));
+                const ref = el('span', 'live-person-unknown live-working__person', w.person);
+                ref.title = strings.live.personNotInApp;
+                li.appendChild(ref);
             }
             if (w.paused) li.appendChild(el('span', 'live-paused', pausedText(w)));
             const since = timeEl(w.since, 'sincefor');

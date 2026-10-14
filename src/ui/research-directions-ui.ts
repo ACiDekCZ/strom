@@ -269,6 +269,11 @@ export const researchDirectionsMethods = uiModule({
                 link.title = L.showInTree;
                 link.onclick = () => this.overviewShowPerson(person.id, mode);
                 meta.appendChild(link);
+            } else if (w.person) {
+                // A person the app's tree does not have: the research's identifier, no link.
+                const ref = el('span', 'live-person-unknown', w.person);
+                ref.title = L.personNotInApp;
+                meta.appendChild(ref);
             }
             main.appendChild(meta);
         }
