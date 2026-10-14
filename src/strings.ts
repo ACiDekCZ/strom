@@ -3717,7 +3717,9 @@ const stringsEN = {
         tooltipHeader: 'Also in:',
         clickToSwitch: 'Click to switch',
         moreMatches: (n: number) => `… ${n} more`,
-        chooserHeader: 'Open in tree…'
+        chooserHeader: 'Open in tree…',
+        matchedBy: (reasons: string) => `Matched by: ${reasons}`,
+        matchReasons: { name: 'name', birth: 'birth', death: 'death', parents: 'parents', partner: 'partner' }
     },
 
     // Embedded Mode (local HTML file)
@@ -7601,7 +7603,9 @@ const stringsCZ: StringsType = {
         tooltipHeader: 'Také v:',
         clickToSwitch: 'Kliknutím přepnout',
         moreMatches: (n: number) => `… a ${n} ${plural('cs', n, 'další', 'další', 'dalších')}`,
-        chooserHeader: 'Otevřít ve stromu…'
+        chooserHeader: 'Otevřít ve stromu…',
+        matchedBy: (reasons: string) => `Shoda: ${reasons}`,
+        matchReasons: { name: 'jméno', birth: 'narození', death: 'úmrtí', parents: 'rodiče', partner: 'partner' }
     },
 
     // Embedded Mode (local HTML file)
@@ -11404,7 +11408,9 @@ const stringsDE: StringsType = {
         tooltipHeader: 'Auch in:',
         clickToSwitch: 'Zum Wechseln klicken',
         moreMatches: (n: number) => `… ${n} weitere`,
-        chooserHeader: 'In Stammbaum öffnen…'
+        chooserHeader: 'In Stammbaum öffnen…',
+        matchedBy: (reasons: string) => `Übereinstimmung: ${reasons}`,
+        matchReasons: { name: 'Name', birth: 'Geburt', death: 'Tod', parents: 'Eltern', partner: 'Partner' }
     },
 
     // Embedded Mode (local HTML file)

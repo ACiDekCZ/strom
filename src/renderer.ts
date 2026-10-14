@@ -1899,6 +1899,7 @@ class TreeRendererClass {
                         `<div class="cross-tree-tooltip-item">
                             <div class="cross-tree-tooltip-tree">${this.escapeHtml(m.treeName)}</div>
                             <div class="cross-tree-tooltip-person">${this.escapeHtml(m.personName)}</div>
+                            <div class="cross-tree-tooltip-reason">${this.escapeHtml(CrossTree.matchReasonsText(m))}</div>
                         </div>`
                     ).join('');
                     const moreCount = crossTreeMatches.length > 5 ? crossTreeMatches.length - 5 : 0;

@@ -40,6 +40,8 @@ test('one match: the badge shows, the setting hides it, a click switches directl
     await expect(page.locator('.cross-tree-badge')).toHaveCount(0);
     await page.evaluate(() => window.Strom.UI.toggleCrossTreeBadges(true));
     await expect(page.locator('.cross-tree-badge').first()).toBeVisible();
+    // The bubble says what the match was found by.
+    await expect(page.locator('.cross-tree-tooltip-reason').first()).toHaveText('Matched by: name, birth');
 
     await page.locator('.cross-tree-badge').first().click();
 
@@ -74,9 +76,28 @@ test('multiple matches: badge opens a chooser that Escape and an outside click c
     // One row per other tree (My Family Tree + Tree B).
     await expect(chooser.locator('.cross-tree-chooser-item')).toHaveCount(2);
     await expect(chooser.locator('.cross-tree-chooser-tree', { hasText: 'Tree B' })).toBeVisible();
+    await expect(chooser.locator('.cross-tree-chooser-reason').first()).toHaveText('Matched by: name, birth');
 
     // Choosing a row switches to that tree and closes the chooser.
     await chooser.locator('.cross-tree-chooser-item', { hasText: 'Tree B' }).click();
     await expect(page.locator('.cross-tree-chooser')).toHaveCount(0);
     await expect(page.locator('#current-tree-name')).toHaveText('Tree B');
+});
+
+test('T22: a namesake sister born a year later in another tree is not offered as the same person', async ({ page }) => {
+    await openApp(page);
+    await page.evaluate(async () => {
+        const base = { isPlaceholder: false, partnerships: [], parentIds: [], childIds: [] };
+        // Jan is Anežka's son, so both cards stand in one view; a child is never compared.
+        const jan = { ...base, id: 'j', firstName: 'Jan', lastName: 'Novak', gender: 'male', birthDate: '1910', parentIds: ['b'] };
+        const anezkaA = { ...base, id: 'b', firstName: 'Anežka', lastName: 'Lipová', gender: 'female', birthDate: '1885', childIds: ['j'] };
+        const anezkaB = { ...base, id: 'b', firstName: 'Anežka', lastName: 'Lipová', gender: 'female', birthDate: '1884', childIds: ['j'] };
+        await window.Strom.DataManager.importAsNewTree({ persons: { j: jan, b: anezkaA }, partnerships: {} } as never, 'Tree A');
+        await window.Strom.DataManager.importAsNewTree({ persons: { j: jan, b: anezkaB }, partnerships: {} } as never, 'Tree B');
+        window.Strom.TreeRenderer.render();
+    });
+    // Jan is the same man in both trees: his pill shows (and proves the badges rendered).
+    await expect(card(page, 'Jan').locator('.cross-tree-badge')).toBeVisible();
+    await expect(card(page, 'Anežka')).toBeVisible();
+    await expect(card(page, 'Anežka').locator('.cross-tree-badge')).toHaveCount(0);
 });

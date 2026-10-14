@@ -4,8 +4,9 @@
  */
 
 import { PersonId, Person, StromData, TreeId } from './types.js';
-import { quickMatchScore } from './merge/matching.js';
+import { quickMatch, QuickMatchReason } from './merge/matching.js';
 import { shownNameOrEmpty } from './person-name.js';
+import { strings } from './strings.js';
 
 // ==================== TYPES ====================
 
@@ -15,6 +16,8 @@ export interface CrossTreeMatch {
     personId: PersonId;
     personName: string;
     confidence: number;  // 0-100
+    /** What the match was found by (name, birth, parents …), shown in the "Also in" bubble. */
+    reasons: QuickMatchReason[];
 }
 
 // ==================== CACHE ====================
@@ -104,7 +107,7 @@ export function findCrossTreeMatches(
             // Skip placeholders
             if (otherPerson.isPlaceholder) continue;
 
-            const score = quickMatchScore(person, otherPerson, currentData, tree.data);
+            const { score, reasons } = quickMatch(person, otherPerson, currentData, tree.data);
 
             if (score >= MATCH_THRESHOLD) {
                 const personName = shownNameOrEmpty(otherPerson);
@@ -115,7 +118,8 @@ export function findCrossTreeMatches(
                     treeName: tree.name,
                     personId: otherPerson.id,
                     personName: birthYear ? `${personName} (*${birthYear})` : personName,
-                    confidence: score
+                    confidence: score,
+                    reasons
                 });
             }
         }
@@ -128,6 +132,12 @@ export function findCrossTreeMatches(
     matchCache.set(cacheKey, matches);
 
     return matches;
+}
+
+/** The short "Matched by: name, birth, parents" line for the "Also in" bubble and the chooser. */
+export function matchReasonsText(match: CrossTreeMatch): string {
+    const labels = strings.crossTree.matchReasons;
+    return strings.crossTree.matchedBy(match.reasons.map(r => labels[r]).join(', '));
 }
 
 /**

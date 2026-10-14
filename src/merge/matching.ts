@@ -895,6 +895,26 @@ function calculateParentMatchScore(
     existingData: StromData,
     incomingData: StromData
 ): number {
+    const matchingParents = countMatchingParents(existing, incoming, existingData, incomingData, false);
+    // Score based on matching parents
+    if (matchingParents >= 2) return 18;
+    if (matchingParents >= 1) return 10;
+    return 0;
+}
+
+/**
+ * How many parents of the two persons are the same people, compared by name
+ * (the persons come from different data sets, so ids say nothing). With
+ * `checkYears`, parents whose known birth years lie more than 5 years apart
+ * are different people even when the names agree.
+ */
+function countMatchingParents(
+    existing: Person,
+    incoming: Person,
+    existingData: StromData,
+    incomingData: StromData,
+    checkYears: boolean
+): number {
     if (existing.parentIds.length === 0 || incoming.parentIds.length === 0) {
         return 0;
     }
@@ -918,16 +938,18 @@ function calculateParentMatchScore(
 
             // Accept if first name is similar (last name may differ for women)
             if (firstNameSim >= 0.85 && (lastNameSim >= 0.7 || firstNameSim >= 0.95)) {
+                if (checkYears) {
+                    const y1 = extractYear(existingParent.birthDate);
+                    const y2 = extractYear(incomingParent.birthDate);
+                    if (y1 !== null && y2 !== null && Math.abs(y1 - y2) > 5) continue;
+                }
                 matchingParents++;
                 break;
             }
         }
     }
 
-    // Score based on matching parents
-    if (matchingParents >= 2) return 18;
-    if (matchingParents >= 1) return 10;
-    return 0;
+    return matchingParents;
 }
 
 /**
@@ -1064,18 +1086,79 @@ export function detectConflicts(existing: Person, incoming: Person): FieldConfli
 
 // ==================== CROSS-TREE MATCHING ====================
 
+/** What a quick (cross-tree) match was found by, in display order. */
+export type QuickMatchReason = 'name' | 'birth' | 'death' | 'parents' | 'partner';
+
+export interface QuickMatchResult {
+    score: number;
+    reasons: QuickMatchReason[];
+}
+
+const NO_QUICK_MATCH: QuickMatchResult = { score: 0, reasons: [] };
+
+/** Years further apart than this on plain or "about" dates mean two people. */
+const QUICK_MAX_YEAR_GAP = 5;
+
 /**
- * Quick match score for cross-tree comparison
- * Simplified version without relationship propagation (faster)
- * Returns score 0-100, threshold 50+ = match
+ * How two recorded dates of one event compare:
+ * - 'conflict': they cannot be the same event — both are plain dates known to
+ *   the month and their known components differ (twin-named siblings born a
+ *   year or a few months apart), or plain/"about" years lie more than
+ *   QUICK_MAX_YEAR_GAP apart;
+ * - 'day' / 'month' / 'year': they agree to that precision;
+ * - 'near': the years differ by one (a recording slip or a sibling);
+ * - 'none': nothing to say (a date missing, or years 2–5 apart, or
+ *   before/after/range dates that cannot be compared).
  */
-export function quickMatchScore(p1: Person, p2: Person, data1?: StromData, data2?: StromData): number {
+function compareEventDates(
+    d1: string | undefined,
+    d2: string | undefined
+): 'conflict' | 'day' | 'month' | 'year' | 'near' | 'none' {
+    if (!d1 || !d2) return 'none';
+    const a = parseFlexDate(d1);
+    const b = parseFlexDate(d2);
+    if (a && b && !a.end && !b.end) {
+        const plain = a.qualifier === '' && b.qualifier === '';
+        if (plain && a.month !== undefined && b.month !== undefined) {
+            const sameDay = a.day === undefined || b.day === undefined || a.day === b.day;
+            if (a.year !== b.year || a.month !== b.month || !sameDay) return 'conflict';
+            return a.day !== undefined && b.day !== undefined ? 'day' : 'month';
+        }
+        const comparable = (a.qualifier === '' || a.qualifier === '~') && (b.qualifier === '' || b.qualifier === '~');
+        if (comparable && Math.abs(a.year - b.year) > QUICK_MAX_YEAR_GAP) return 'conflict';
+        if (a.year === b.year) {
+            if (a.month !== undefined && a.month === b.month) {
+                return a.day !== undefined && a.day === b.day ? 'day' : 'month';
+            }
+            return 'year';
+        }
+        return Math.abs(a.year - b.year) === 1 ? 'near' : 'none';
+    }
+    if (datesMatch(d1, d2)) return 'day';
+    if (yearsMatch(d1, d2)) return 'year';
+    return yearsClose(d1, d2, 1) ? 'near' : 'none';
+}
+
+/**
+ * Quick match for cross-tree comparison ("Also in" on a card): the persons
+ * come from different trees, so relatives are compared by name, never by id.
+ * Returns a score 0-100 (50+ = match) and what the match was found by.
+ *
+ * - The name is required and carries the base (45 for a near-identical name).
+ * - Birth: the same day +40, month +30, year +25; a year apart +3 only, so a
+ *   name and a neighbouring year alone never pass (two sisters of one name).
+ *   Precise dates that disagree, or years far apart, rule the match out.
+ * - Death: the same day +10, the same year/month +3; a disagreeing date rules
+ *   the match out as for birth.
+ * - Parents of the same names: one +10, both +18; partners as in full merge.
+ */
+export function quickMatch(p1: Person, p2: Person, data1?: StromData, data2?: StromData): QuickMatchResult {
     // Gender must match
-    if (!gendersCompatible(p1.gender, p2.gender)) return 0;
+    if (!gendersCompatible(p1.gender, p2.gender)) return NO_QUICK_MATCH;
 
     // A name is required: two unnamed people share an empty string (similarity
     // 1.0) and would otherwise match on a coincidental birth year alone.
-    if (!`${p1.firstName}${p1.lastName}`.trim() || !`${p2.firstName}${p2.lastName}`.trim()) return 0;
+    if (!`${p1.firstName}${p1.lastName}`.trim() || !`${p2.firstName}${p2.lastName}`.trim()) return NO_QUICK_MATCH;
 
     const firstNameSim = stringSimilarity(p1.firstName, p2.firstName);
     // The same rule/group answer full matching uses (Víšek/Víšková is one
@@ -1088,28 +1171,43 @@ export function quickMatchScore(p1: Person, p2: Person, data1?: StromData, data2
     const nameSim = (firstNameSim + lastNameSim) / 2;
 
     // Names too different - no match
-    if (nameSim < 0.7) return 0;
+    if (nameSim < 0.7) return NO_QUICK_MATCH;
 
+    const birth = compareEventDates(p1.birthDate, p2.birthDate);
+    const death = compareEventDates(p1.deathDate, p2.deathDate);
+    if (birth === 'conflict' || death === 'conflict') return NO_QUICK_MATCH;
+
+    const reasons: QuickMatchReason[] = ['name'];
     // Base score from name similarity
     let score = nameSim >= 0.9 ? 45 : nameSim >= 0.8 ? 35 : 25;
 
-    // Birth date bonus
-    if (datesMatch(p1.birthDate, p2.birthDate)) {
-        score += 40;
-    } else if (yearsMatch(p1.birthDate, p2.birthDate)) {
-        score += 25;
-    } else if (yearsClose(p1.birthDate, p2.birthDate, 3)) {
-        score += 10;
+    const birthPoints = { day: 40, month: 30, year: 25, near: 3, none: 0 }[birth];
+    score += birthPoints;
+    if (birth === 'day' || birth === 'month' || birth === 'year') reasons.push('birth');
+
+    if (death === 'day') score += 10;
+    else if (death === 'month' || death === 'year') score += 3;
+    if (death === 'day' || death === 'month' || death === 'year') reasons.push('death');
+
+    if (data1 && data2) {
+        const parents = countMatchingParents(p1, p2, data1, data2, true);
+        if (parents > 0) {
+            score += parents >= 2 ? 18 : 10;
+            reasons.push('parents');
+        }
+        const partner = calculatePartnerMatchScore(p1, p2, data1, data2);
+        if (partner > 0) {
+            score += partner;
+            reasons.push('partner');
+        }
     }
 
-    // Death date bonus
-    if (datesMatch(p1.deathDate, p2.deathDate)) {
-        score += 10;
-    } else if (yearsMatch(p1.deathDate, p2.deathDate)) {
-        score += 5;
-    }
+    return { score: Math.min(score, 100), reasons };
+}
 
-    return Math.min(score, 100);
+/** The score part of quickMatch (0-100, threshold 50+ = match). */
+export function quickMatchScore(p1: Person, p2: Person, data1?: StromData, data2?: StromData): number {
+    return quickMatch(p1, p2, data1, data2).score;
 }
 
 // ==================== MERGE STATE HELPERS ====================

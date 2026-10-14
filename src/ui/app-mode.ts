@@ -627,6 +627,7 @@ export const appModeMethods = uiModule({
             `<div class="cross-tree-chooser-item" data-index="${i}" role="button" tabindex="0">
                 <div class="cross-tree-chooser-tree">${this.escapeHtml(m.treeName)}</div>
                 <div class="cross-tree-chooser-person">${this.escapeHtml(m.personName)}</div>
+                <div class="cross-tree-chooser-reason">${this.escapeHtml(CrossTree.matchReasonsText(m))}</div>
             </div>`
         ).join('');
         menu.innerHTML = header + rows;
