@@ -349,10 +349,13 @@ function findRelationshipCore(data: StromData, aId: PersonId, bId: PersonId): Ki
             const special = affinityTerm(false, rel.m, rel.n, b.gender);
             const relative = data.persons[partnerId];
             const relDesc = bloodTerm(rel.m, rel.n, relative?.gender);
+            // The term follows "B is, relative to A:", so the relative goes
+            // without a possessive ("husband of a first cousin").
+            const ofRel = `of ${indefiniteEn(relDesc.en)}`;
             const term = special ?? bySex(b.gender,
-                { cs: `manžel — ${relDesc.cs}`, en: `husband of your ${relDesc.en}`, de: `Ehemann — ${relDesc.de}` },
-                { cs: `manželka — ${relDesc.cs}`, en: `wife of your ${relDesc.en}`, de: `Ehefrau — ${relDesc.de}` },
-                { cs: `choť — ${relDesc.cs}`, en: `spouse of your ${relDesc.en}`, de: `Ehepartner — ${relDesc.de}` });
+                { cs: `manžel — ${relDesc.cs}`, en: `husband ${ofRel}`, de: `Ehemann — ${relDesc.de}` },
+                { cs: `manželka — ${relDesc.cs}`, en: `wife ${ofRel}`, de: `Ehefrau — ${relDesc.de}` },
+                { cs: `choť — ${relDesc.cs}`, en: `spouse ${ofRel}`, de: `Ehepartner — ${relDesc.de}` });
             return { path: [...rel.path, bId], term, affinity: true };
         }
     }
@@ -375,6 +378,11 @@ function findRelationshipCore(data: StromData, aId: PersonId, bId: PersonId): Ki
     const best = fallback as { score: number; path: PersonId[] } | null;
     if (best) return { path: best.path, term: relatedByMarriage(b.gender), affinity: true };
     return null;
+}
+
+/** An English noun phrase with its indefinite article ("a niece", "an uncle"). */
+function indefiniteEn(phrase: string): string {
+    return `${/^[aeiou]/i.test(phrase) ? 'an' : 'a'} ${phrase}`;
 }
 
 function siblingInLaw(gender: Gender | undefined): KinshipTerm {

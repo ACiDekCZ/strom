@@ -245,4 +245,29 @@ describe('findRelationship — through two marriages (T27)', () => {
     it('two partners of the same person stay without a relation', () => {
         expect(r('alena', 'pavelEx')).toBeNull();
     });
+
+    it('the partner of a blood relative is named without addressing anyone', () => {
+        expect(r('pavel', 'cousinHusband')!.term.en).toBe('spouse of a first cousin');
+        expect(r('gf', 'vlastimil')!.term.en).toBe('husband of a granddaughter');
+        expect(r('gm', 'alena')!.term.en).toBe('wife of a grandson');
+        expect(r('gf', 'vlastimil')!.term.cs).toBe('manžel — vnučka');
+    });
+});
+
+describe('kinship terms are impersonal', () => {
+    it('no term addresses the reader, in any language', () => {
+        const ids = Object.keys(data.persons) as PersonId[];
+        const addressing = /\b(your|you|yours)\b|\b(váš|vaše|vašeho|tvůj|tvoje|tvého)\b|\b(Ihr|Ihre|Ihres|dein|deine|deines|Sie|du)\b/;
+        let checked = 0;
+        for (const a of ids) {
+            for (const b of ids) {
+                if (a === b) continue;
+                const res = findRelationship(data, a, b);
+                if (!res) continue;
+                checked++;
+                for (const text of [res.term.en, res.term.cs, res.term.de]) expect(text).not.toMatch(addressing);
+            }
+        }
+        expect(checked).toBeGreaterThan(100);
+    });
 });
