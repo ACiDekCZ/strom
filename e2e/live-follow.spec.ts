@@ -151,6 +151,25 @@ test.describe('follow the agent in the tree', () => {
         await expect(pill).toHaveCount(0);
     });
 
+    test('a drag that starts on a card pauses like one from the canvas (T38)', async ({ page }) => {
+        const bridge = await follow(page, { idle: 60_000, on: true });
+        await expect.poll(() => focusRefn(page)).toBe('P0012');
+        await expect.poll(() => offCentre(page, 'P0012')).toBeLessThan(3);
+        const id = await idOf(page, 'P0012');
+        const box = (await page.locator(`.person-card[data-id="${id}"]`).boundingBox())!;
+        const x = box.x + box.width / 2, y = box.y + box.height / 2;
+        await page.mouse.move(x, y);
+        await page.mouse.down();
+        await page.mouse.move(x + 60, y - 20, { steps: 6 });
+        await page.mouse.up();
+        await expect(page.locator('#live-follow-pill')).toContainText('Following paused');
+        await expect(btn(page)).toHaveClass(/is-paused/);
+        // Paused: a new target does not move the tree.
+        bridge.person = 'P0001';
+        await page.waitForTimeout(2500);
+        expect(await focusRefn(page)).toBe('P0012');
+    });
+
     test('Back to the agent: at once; ×: off', async ({ page }) => {
         const bridge = await follow(page, { idle: 60_000, on: true });
         await expect.poll(() => focusRefn(page)).toBe('P0012');

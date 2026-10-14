@@ -248,6 +248,8 @@ export const liveFollowMethods = uiModule({
             if (TreeRenderer.getFocusPersonId() !== lastTarget || TreeRenderer.getViewMode() !== 'family') this.pauseLiveFollow();
         };
         ZoomPan.onChange(movedAway);
+        // A press on a card holds the jump; once it drags past the threshold it is a pan like one from the canvas (T38).
+        ZoomPan.onCardPanStart(() => { if (followActive()) this.pauseLiveFollow(); });
         new MutationObserver(movedAway).observe(document.body, { attributes: true, attributeFilter: ['data-view-mode'] });
         document.addEventListener('keydown', (e) => {
             if (e.key !== 'f' && e.key !== 'F') return;

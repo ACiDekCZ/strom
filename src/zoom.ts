@@ -109,6 +109,8 @@ class ZoomPanClass {
 
     // Listeners notified after every transform change (minimap viewport sync).
     private changeListeners: Array<() => void> = [];
+    // Listeners told when a drag that started on a card becomes a pan (live follow: the user takes the tree).
+    private cardPanListeners: Array<() => void> = [];
 
     init(): void {
         const container = document.getElementById('tree-container');
@@ -193,6 +195,7 @@ class ZoomPanClass {
             this.dragStartX = x - this.tx;
             this.dragStartY = y - this.ty;
             document.getElementById('tree-container')?.classList.add(CARD_PANNING_CLASS);
+            this.notifyCardPanStart();
         }
         if (!this.dragging) return;
         this.beginMotion();
@@ -301,6 +304,7 @@ class ZoomPanClass {
                 if (!this.touchState.isPanning) {
                     // Start panning
                     this.touchState.isPanning = true;
+                    if (this.touchState.fromCard) this.notifyCardPanStart();
                     this.beginMotion();
                     this.touchState.lastX = touch.clientX;
                     this.touchState.lastY = touch.clientY;
@@ -940,6 +944,15 @@ class ZoomPanClass {
     }
 
     /** Register a listener fired after every transform change. */
+    /** Call `cb` whenever a drag that started on a person card turns into a pan (past CARD_PAN_THRESHOLD_PX). */
+    onCardPanStart(cb: () => void): void {
+        this.cardPanListeners.push(cb);
+    }
+
+    private notifyCardPanStart(): void {
+        for (const cb of this.cardPanListeners) cb();
+    }
+
     onChange(cb: () => void): void {
         this.changeListeners.push(cb);
     }
