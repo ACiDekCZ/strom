@@ -52,14 +52,15 @@ async function dropFile(page: Page, content: string): Promise<void> {
     for (const type of ['dragenter', 'dragover', 'drop']) await page.dispatchEvent('#tree-container', type, { dataTransfer });
 }
 
-/** Links the research announced on this computer, and what it last said (before the app starts). */
-async function seed(page: Page, links: string[], stored: Record<string, unknown> | null = null): Promise<void> {
-    await page.addInitScript(([links, stored, uuid]) => {
+/** Links the research announced on this computer, and what it last said (before the app starts); `bridge`: its bridge known here. */
+async function seed(page: Page, links: string[], stored: Record<string, unknown> | null = null, bridge: Record<string, unknown> | null = null): Promise<void> {
+    await page.addInitScript(([links, stored, uuid, bridge]) => {
         if (sessionStorage.getItem('seeded')) return;
         sessionStorage.setItem('seeded', '1');
         if ((links as string[]).length) localStorage.setItem('strom-research-links', JSON.stringify({ actions: links, at: new Date().toISOString() }));
         if (stored) localStorage.setItem(`strom-research-waiting:${uuid}`, JSON.stringify({ items: [], at: new Date(Date.now() - 3600_000).toISOString(), ...stored }));
-    }, [links, stored, UUID] as const);
+        if (bridge) localStorage.setItem(`strom-research-bridge:${uuid}`, JSON.stringify(bridge));
+    }, [links, stored, UUID, bridge] as const);
 }
 
 async function recordLaunches(page: Page): Promise<void> {
@@ -73,9 +74,9 @@ async function recordLaunches(page: Page): Promise<void> {
 const launched = (page: Page) => page.evaluate(() => (window as unknown as { __launched: string[] }).__launched);
 
 /** A research tree on screen; launched links are recorded. */
-async function setup(page: Page, links: string[] = ALL, stored: Record<string, unknown> | null = null): Promise<void> {
+async function setup(page: Page, links: string[] = ALL, stored: Record<string, unknown> | null = null, bridge: Record<string, unknown> | null = null): Promise<void> {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await seed(page, links, stored);
+    await seed(page, links, stored, bridge);
     await openApp(page);
     await dropFile(page, researchGed());
     await expect(card(page, 'Jan')).toBeVisible();
@@ -101,7 +102,13 @@ test.describe('Research menu, second wave', () => {
     test('update line, "Undo last send" with its time, "Research settings"', async ({ page }) => {
         // Earlier today (just after midnight two hours back is yesterday: shown with its date).
         const sentAt = new Date(Math.max(Date.now() - 2 * 3600_000, new Date().setHours(0, 0, 1, 0)));
-        await setup(page, ALL, { update: { version: '1.7.0' }, lastIntake: { id: 'I0042', at: sentAt.toISOString() } });
+        const lastIntake = { id: 'I0042', at: sentAt.toISOString() };
+        // The research's bridge answers and says a newer version is out (T25: only then the update line).
+        await page.route(`${BRIDGE}/**`, (route) => route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' },
+            body: JSON.stringify({ tree: { id: UUID, name: 'Víškovi' }, links: ALL, update: { version: '1.7.0' }, lastIntake }) }));
+        await setup(page, ALL, { lastIntake }, { base: BRIDGE });
+        expect(await page.evaluate(() => window.Strom.UI.pollResearchBridge())).toBe(true);
+        expect(await page.evaluate((id) => window.Strom.UI.researchBridgeFresh(id), UUID)).toBe(true);
         await openResearchMenu(page);
         const block = page.locator('#research-update-block');
         await expect(block).toContainText('New Strom Research 1.7.0');
@@ -124,6 +131,20 @@ test.describe('Research menu, second wave', () => {
             `strom-research://sync-undo?tree=${UUID}&intake=I0042`,
             `strom-research://setup?tree=${UUID}`,
         ]);
+    });
+
+    test('a newer version remembered, the research not running: no update line, the last send stays (T25)', async ({ page }) => {
+        const lastIntake = { id: 'I0042', at: new Date(Date.now() - 600_000).toISOString() };
+        // It said 1.7.0 was out when it last answered; updated and started again since, it does not answer now.
+        await page.route(`${BRIDGE}/**`, (route) => route.abort('connectionrefused'));
+        await setup(page, ALL, { update: { version: '1.7.0' }, lastIntake },
+            { base: BRIDGE, accepts: { sync: { auto: 'off' }, sources: true, verified: true } });
+        expect(await page.evaluate(() => window.Strom.UI.pollResearchBridge())).toBe(false);
+        expect(await page.evaluate((id) => window.Strom.UI.researchBridgeKnownDown(id), UUID)).toBe(true);
+        await openResearchMenu(page);
+        await expect(page.locator('#research-item-undo')).toBeVisible();
+        await expect(page.locator('#research-update-block')).toHaveCount(0);
+        await expect(page.locator('#research-menu')).not.toContainText('New Strom Research');
     });
 
     test('no intake (or an old one), no setup announced: neither row', async ({ page }) => {

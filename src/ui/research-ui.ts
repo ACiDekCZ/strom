@@ -479,7 +479,7 @@ export interface ResearchWaitingState {
     items: LiveWaiting[];
     at: number;
     live: boolean;
-    /** A newer Strom Research is out. */
+    /** A newer Strom Research is out, as its bridge says now (a live session, or an answer within the last half minute). */
     update: { version: string } | null;
     /** The last send the research took in. */
     lastIntake: LiveIntake | null;
@@ -1778,7 +1778,10 @@ export const researchUiMethods = uiModule({
         // An archive has no tasks for the user (whatever its status or an old list says); its update and last send stay.
         // A research that stopped running here has none either until it runs again ("not running" shows instead).
         const none = this.activeResearchArchive() || (!!researchId && this.researchBridgeKnownDown(researchId));
-        return { ...stored, items: none ? [] : stored.items, live: false };
+        // A newer version only as the bridge says it now: one remembered from an earlier answer may be
+        // the very version installed since (the research updated, or not running, or not asked in this page yet).
+        const update = !!researchId && this.researchBridgeFresh(researchId) ? stored.update : null;
+        return { ...stored, items: none ? [] : stored.items, update, live: false };
     },
 
     /** Research menu "Waiting for you": the live panel open at that section, or the last known state. */
