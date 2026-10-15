@@ -82,6 +82,16 @@ test.describe('couldn\'t connect to the research', () => {
         await expect(d.locator('.connect-reason')).toHaveText("The research isn't responding");
     });
 
+    test('waiting for the browser\'s answer: the toast names its question and its button as the dialog does', async ({ page }) => {
+        await setup(page, 'prompt');
+        // The browser holds the request while it asks: no answer yet.
+        await page.unroute(`${BRIDGE}/**`);
+        await page.route(`${BRIDGE}/**`, () => { /* never answered */ });
+        void page.evaluate((b) => window.Strom.UI.openExternalRequest(new URLSearchParams({ live: b })), BRIDGE);
+        await expect(page.locator('.toast[data-kind="research-connect"]')).toHaveText(
+            'Connecting to Strom Research… If the browser asks about “Access other apps and services on this device”, choose Allow.');
+    });
+
     test('allowed and still unreachable: the research is not responding, Try again asks again', async ({ page }) => {
         await setup(page, 'granted');
         await page.evaluate((b) => window.Strom.UI.openExternalRequest(new URLSearchParams({ send: b })), BRIDGE);
