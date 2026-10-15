@@ -6,7 +6,8 @@
  * already sent keep their weight until the user ticks "Transcription
  * verified" on each, which the dialog says and links to. An archive takes
  * transcripts as leads: the setting is not offered there (nor sent), and is
- * kept for a switch to research.
+ * kept for a switch to research. A research waiting for its agent has nobody
+ * to weigh them: the setting is not offered there either.
  */
 
 import { DataManager } from '../data.js';
@@ -241,7 +242,7 @@ export const researchTreeSettingsMethods = uiModule({
                     </div>
                     <button type="button" class="close-btn" id="research-tree-settings-x" aria-label="${esc(strings.buttons.close)}">&times;</button>
                 </div>
-                ${archive ? '' : `
+                ${archive || agentAway ? '' : `
                 <fieldset class="research-transcripts">
                     <legend>${esc(t.transcripts)}</legend>
                     ${option('lead', t.guide, t.guideDesc, true)}

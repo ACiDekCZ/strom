@@ -1697,6 +1697,10 @@ test.describe('a research waiting for its agent (agentHere: false)', () => {
         await expect(dialog).not.toContainText('has been an archive since');
         await expect(dialog).not.toContainText('worked with an agent since');
         await expect(dialog).toContainText('The research writes every send straight away.');
+        // Nobody to weigh transcriptions: the setting is not offered (as in an archive).
+        await expect(dialog.locator('input[name="research-transcripts"]')).toHaveCount(0);
+        await expect(dialog.locator('#research-older-sources')).toHaveCount(0);
+        await expect(dialog).not.toContainText('My source transcriptions');
         await expect(dialog.locator('#research-mode-where')).toHaveText('The research waits for an AI agent. At the top of its menu: “Install or choose the AI agent”, or “Keep it only as an archive”. Open the research ↗');
         await dialog.locator('#research-mode-where-open').click();
         expect(await links(page)).toEqual([`strom-research://open?tree=${UUID}`]);
@@ -1707,6 +1711,11 @@ test.describe('a research waiting for its agent (agentHere: false)', () => {
         await openResearchMenu(page);
         await expect(sub.locator('#research-item-chat')).toBeVisible();
         await expect(block(page)).not.toHaveAttribute('data-state', 'switched');
+        await page.evaluate(() => window.Strom.UI.closeActionsMenu());
+        // With its agent: the transcriptions setting is offered again.
+        await page.evaluate(() => window.Strom.UI.closeResearchTreeSettings());
+        await page.evaluate(() => window.Strom.UI.researchActionTreeSettings());
+        await expect(dialog.locator('input[name="research-transcripts"]')).toHaveCount(2);
     });
 
     test('opened by ?live= while it waits for its agent: opens for editing, not followed', async ({ page }) => {
