@@ -1121,9 +1121,15 @@ export const researchUiMethods = uiModule({
             down: [c.reasonDown, c.textDown], unknown: [c.reasonUnknown, c.textUnknown], safari: [c.reasonSafari, c.textSafari],
             refused: [c.reasonRefused, c.textRefused],
         };
-        const [why, text] = texts[reason];
+        const [why, browserText] = texts[reason];
+        // A ?live= link on a phone: the research runs on a computer, and a browser of the phone
+        // (all of them WebKit on an iPhone) is never the way to it. A touch computer without
+        // a phone's browser or size keeps the computer's texts.
+        const onPhone = request?.param === 'live' && !onComputer()
+            && (reason === 'safari' || isMobile() || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || ''));
+        const text = onPhone ? c.textPhoneLive : browserText;
         // The way to allow it: open where it is the cause, folded where it may be.
-        const how = reason === 'denied' || reason === 'unknown' ? `
+        const how = !onPhone && (reason === 'denied' || reason === 'unknown') ? `
             <details class="connect-how"${reason === 'denied' ? ' open' : ''}>
                 <summary>${this.escapeHtml(c.howTitle)}</summary>
                 <ol>${(currentAppBrowser() === 'brave' ? c.howBrave : currentAppBrowser() === 'firefox' ? c.howFirefox : c.how).map(t => `<li>${this.escapeHtml(t)}</li>`).join('')}</ol>

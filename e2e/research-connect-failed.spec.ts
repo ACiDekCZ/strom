@@ -225,3 +225,22 @@ test.describe('couldn\'t connect to the research', () => {
         expect(await page.evaluate(() => sessionStorage.getItem('strom-pending-adopt'))).toBeNull();
     });
 });
+
+test.describe('a ?live= link on a phone', () => {
+    // An iPhone: every browser there is WebKit, and the research runs on a computer.
+    test.use({
+        viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true,
+        userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1',
+    });
+
+    test('the dialog says where the research is followed, not which browser of the phone to use', async ({ page }) => {
+        await lnaPermission(page, 'none');
+        await openApp(page);
+        await page.route(`${BRIDGE}/**`, route => route.abort('connectionrefused'));
+        await page.evaluate((b) => window.Strom.UI.openExternalRequest(new URLSearchParams({ live: b })), BRIDGE);
+        const d = dialog(page);
+        await expect(d.locator('.connect-text')).toHaveText('The research is followed on the computer where it runs, in Chrome or Edge.');
+        await expect(d).not.toContainText('Firefox');
+        await expect(d.locator('.connect-how')).toHaveCount(0);
+    });
+});
