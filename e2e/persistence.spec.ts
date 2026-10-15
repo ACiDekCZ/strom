@@ -145,6 +145,29 @@ test('bottom-bar regime: the state rides the More tab as a warning triangle and 
     await expect(badge).toBeHidden();
 });
 
+test('Firefox\'s storage prompt left unanswered: the notice comes after a few seconds all the same', async ({ page }) => {
+    // persist() settles only when the user answers the prompt: here never.
+    await page.addInitScript(() => {
+        Object.defineProperty(navigator, 'storage', {
+            configurable: true,
+            value: {
+                ...(navigator.storage ? { estimate: navigator.storage.estimate.bind(navigator.storage), getDirectory: navigator.storage.getDirectory?.bind(navigator.storage) } : {}),
+                persisted: async () => false,
+                persist: () => {
+                    (window as unknown as { __persistAsked: number }).__persistAsked = 1;
+                    return new Promise<boolean>(() => { /* the prompt stays open */ });
+                },
+            },
+        });
+    });
+    await openApp(page, { fileCopyReminders: true });
+    await importBigTree(page, 'Unanswered');
+    await page.waitForFunction(() => (window as unknown as { __persistAsked?: number }).__persistAsked === 1);
+    await addPerson(page, 'First');
+    await expect(page.locator('#file-copy-notice')).toBeVisible({ timeout: 8000 });
+    await expect(page.locator('#file-copy-notice')).toContainText('Unanswered');
+});
+
 test('the backups dialog says whether the browser may clear the data', async ({ page }) => {
     await stubPersistence(page, false);
     await openApp(page);

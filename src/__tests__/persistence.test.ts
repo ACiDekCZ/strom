@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import {
     requestPersistentStorage, resetPersistenceRequestForTests, getPersistenceState,
-    getRequestedPersistenceState, settledPersistenceState,
+    getRequestedPersistenceState, settledPersistenceState, PERSISTENCE_SETTLE_MS, PersistenceState,
 } from '../persistence.js';
 
 function stubStorage(storage: unknown): void {
@@ -72,6 +72,30 @@ describe('settledPersistenceState', () => {
         await vi.waitFor(() => expect(grant).not.toBeNull());
         grant!(true);
         expect(await settled).toBe('persistent');
+    });
+
+    it('a request unanswered for a few seconds (Firefox\'s prompt left open) counts as not persistent; a later grant counts then', async () => {
+        vi.useFakeTimers();
+        try {
+            let grant: ((ok: boolean) => void) | null = null;
+            let persistent = false;
+            stubStorage({
+                persisted: vi.fn(async () => persistent),
+                persist: vi.fn(() => new Promise<boolean>(r => { grant = (ok) => { persistent = ok; r(ok); }; })),
+            });
+            void requestPersistentStorage();
+            let settled: PersistenceState | null = null;
+            void settledPersistenceState().then(st => { settled = st; });
+            await vi.advanceTimersByTimeAsync(PERSISTENCE_SETTLE_MS - 1);
+            expect(settled).toBeNull();
+            await vi.advanceTimersByTimeAsync(1);
+            expect(settled).toBe('best-effort');
+            // The user allows it later: the next ask says so.
+            grant!(true);
+            expect(await settledPersistenceState()).toBe('persistent');
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('reads the state when nothing was asked in this load', async () => {

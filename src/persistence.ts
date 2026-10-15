@@ -79,13 +79,27 @@ async function askPersistence(): Promise<PersistenceState> {
     return state;
 }
 
+/** How long a request still in flight is waited for (Firefox answers only when the user does). */
+export const PERSISTENCE_SETTLE_MS = 3000;
+
 /**
  * The state to act on now: waits for this load's request when one is still in
  * flight (a save asks, and a notice raised before the answer would warn about
- * storage the browser is about to make persistent). Never throws.
+ * storage the browser is about to make persistent) — but only a few seconds:
+ * Firefox's persist() settles only once the user answers its prompt, and
+ * until then the storage is not persistent (best-effort). A later grant fires
+ * PERSISTENCE_EVENT, which redraws. Never throws.
  */
-export async function settledPersistenceState(): Promise<PersistenceState> {
-    if (pendingRequest) await pendingRequest;
+export async function settledPersistenceState(maxWaitMs = PERSISTENCE_SETTLE_MS): Promise<PersistenceState> {
+    if (pendingRequest) {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const answered = await Promise.race([
+            pendingRequest.then(() => true),
+            new Promise<false>(resolve => { timer = setTimeout(() => resolve(false), maxWaitMs); }),
+        ]);
+        clearTimeout(timer);
+        if (!answered) return 'best-effort';
+    }
     return lastRequestedState ?? getPersistenceState();
 }
 
