@@ -320,7 +320,7 @@ test.describe('installing the research from the app', () => {
         await expect(ready).toContainText('full quality');
         // An archive: said so, with the Archive tag of the Research menu; no row for an agent, no word of one (A3).
         await expect(ready.locator('.install-ready-rows dt').nth(1)).toHaveText('Kind');
-        await expect(ready.locator('#research-ready-archive')).toHaveText('Archive');
+        await expect(ready.locator('#research-ready-archive')).toHaveText('Strom archive');
         await expect(ready).not.toContainText(/\bagent|\bAI\b|Claude/i);
         expect(posted[0]).toContain('1 NAME Jan /Novak/');
         // Every request names the app's version (the research decides what to send by it).
@@ -913,7 +913,7 @@ test.describe('"The research is ready" by the research\'s mode', () => {
         await sendMode('auto');
         await showReady(page, { mode: 'archive', sync: { auto: 'mirror' } }, false);
         await expect(ready(page).locator('.modal-content p').first()).toHaveText('The tree is empty for now. Whatever is added is written to the research automatically.');
-        await expect(ready(page).locator('#research-ready-archive')).toHaveText('Archive');
+        await expect(ready(page).locator('#research-ready-archive')).toHaveText('Strom archive');
     });
 });
 

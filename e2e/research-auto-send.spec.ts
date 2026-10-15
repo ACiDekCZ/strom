@@ -1371,7 +1371,7 @@ test.describe('the research as an archive', () => {
         // Taking the last send back stays the user's in an archive.
         await expect(sub.locator('#research-item-undo')).toBeVisible();
         // "Archive" beside the menu's title, not again in the state block.
-        await expect(sub.locator('.research-menu-heading #research-menu-archive')).toHaveText('Archive');
+        await expect(sub.locator('.research-menu-heading #research-menu-archive')).toHaveText('Strom archive');
         await expect(block(page).locator('.research-sync-tag')).toHaveCount(0);
         await page.evaluate(() => window.Strom.UI.closeActionsMenu());
         const actions = await page.evaluate(() => {
@@ -1446,7 +1446,7 @@ test.describe('the research as an archive', () => {
         await expect(dot(page)).toBeVisible();
         await openResearchMenu(page);
         await expect(block(page)).toHaveAttribute('data-state', 'switched');
-        await expect(block(page)).toContainText('The research is now an archive.');
+        await expect(block(page)).toContainText('The research is now a Strom archive.');
         await block(page).getByRole('menuitem', { name: 'Got it' }).click();
         await expect(dot(page)).toBeHidden();
         await page.reload();
@@ -1456,8 +1456,8 @@ test.describe('the research as an archive', () => {
         await expect(block(page)).not.toHaveAttribute('data-state', 'switched');
         await page.evaluate(() => window.Strom.UI.researchActionTreeSettings());
         const dialog = page.locator('#research-tree-settings-modal');
-        await expect(dialog.locator('h2 .research-sync-tag')).toHaveText('Archive');
-        await expect(dialog).toContainText('The research has been an archive since');
+        await expect(dialog.locator('h2 .research-sync-tag')).toHaveText('Strom archive');
+        await expect(dialog).toContainText('The research has been a Strom archive since');
         // An archive takes transcripts as leads: no setting for them (it waits for a switch to research).
         await expect(dialog.locator('input[name="research-transcripts"]')).toHaveCount(0);
         await expect(dialog).toContainText('The research writes every send straight away.');
@@ -1507,7 +1507,7 @@ test.describe('the research as an archive', () => {
         // Before any send: the archive has the tree it gave.
         await askDelete();
         await expect(page.locator('#confirmation-modal')).toHaveClass(/active/);
-        await expect(page.locator('.confirm-note')).toContainText('Archive The research sets it aside; it can be restored.');
+        await expect(page.locator('.confirm-note')).toContainText('Strom archive The research sets it aside; it can be restored.');
         await page.locator('#confirm-cancel-btn').click();
         bridge.accepts = { mode: 'research', sync: { auto: 'write' }, sources: true, verified: true, media: null };
         await poll(page);
@@ -1537,11 +1537,11 @@ test.describe('the research as an archive', () => {
         await expect(pill(page)).toContainText('Research not running · 3 changes waiting');
         await openResearchMenu(page);
         // An archive is not running (not "the research"); its changes wait (A9).
-        await expect(block(page).locator('.research-sync-title')).toContainText("The archive hasn't been running since");
-        await expect(block(page)).toContainText("The archive can't take anything now. 3 changes waiting");
+        await expect(block(page).locator('.research-sync-title')).toContainText("The Strom archive hasn't been running since");
+        await expect(block(page)).toContainText("The Strom archive can't take anything now. 3 changes waiting");
         await page.evaluate(() => window.Strom.UI.closeActionsMenu());
         await page.evaluate(() => window.Strom.UI.researchActionTreeSettings());
-        await expect(page.locator('#research-send-status')).toContainText("The archive hasn't been running since");
+        await expect(page.locator('#research-send-status')).toContainText("The Strom archive hasn't been running since");
     });
 
     test('a second switch of mode: the date in Research for this tree is the last switch (K5.3)', async ({ page }) => {
@@ -1567,7 +1567,7 @@ test.describe('the research as an archive', () => {
         await poll(page);
         await gotIt();
         const first = await modeLine();
-        expect(first).toMatch(/^The research has been an archive since .*1.*Oct.*2026|^The research has been an archive since .*2026/);
+        expect(first).toMatch(/^The research has been a Strom archive since .*1.*Oct.*2026|^The research has been a Strom archive since .*2026/);
         // 10 October: back to research — the line says so, from that day.
         await page.clock.setSystemTime(new Date('2026-10-10T10:00:00'));
         bridge.accepts = RESEARCH;
@@ -1588,14 +1588,14 @@ test.describe('the research as an archive', () => {
         await poll(page);
         const where = page.locator('#research-tree-settings-modal #research-mode-where');
         await page.evaluate(() => window.Strom.UI.researchActionTreeSettings());
-        await expect(where).toHaveText('The research is switched to an archive in the research: Settings → “Research, or only an archive”. Open the research ↗');
+        await expect(where).toHaveText('The research is switched to a Strom archive in the research: Settings → “Research, or only an archive”. Open the research ↗');
         await where.locator('#research-mode-where-open').click();
         await expect(page.locator('#research-tree-settings-modal')).toHaveCount(0);
         expect(await links(page)).toEqual([`strom-research://open?tree=${UUID}`]);
         bridge.accepts = ARCHIVE;
         await poll(page);
         await page.evaluate(() => window.Strom.UI.researchActionTreeSettings());
-        await expect(where).toHaveText('The archive is switched to research in the research, with the first item of its menu: “Switch research on”. Open the research ↗');
+        await expect(where).toHaveText('The Strom archive is switched to research in the research, with the first item of its menu: “Switch research on”. Open the research ↗');
         await where.locator('#research-mode-where-open').click();
         expect(await links(page)).toEqual([`strom-research://open?tree=${UUID}`, `strom-research://open?tree=${UUID}`]);
     });
@@ -1694,7 +1694,7 @@ test.describe('a research waiting for its agent (agentHere: false)', () => {
         await page.evaluate(() => window.Strom.UI.researchActionTreeSettings());
         const dialog = page.locator('#research-tree-settings-modal');
         await expect(dialog.locator('h2 .research-sync-tag')).toHaveCount(0);
-        await expect(dialog).not.toContainText('has been an archive since');
+        await expect(dialog).not.toContainText('has been a Strom archive since');
         await expect(dialog).not.toContainText('worked with an agent since');
         await expect(dialog).toContainText('The research writes every send straight away.');
         // Nobody to weigh transcriptions: the setting is not offered (as in an archive).

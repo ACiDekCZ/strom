@@ -387,7 +387,7 @@ test.describe('research directions', () => {
     // The bridge keeps its stream open (hello once): the switch comes as a change (`strom mode archive`
     // commits), or as nothing at all on the stream (the agent gone) and only the regular ask says it.
     for (const [what, accepts, toast, via] of [
-        ['switched to an archive', { mode: 'archive', sync: { auto: 'mirror' } }, 'The research is now an archive, so following stopped. The tree can be edited.', 'change'],
+        ['switched to an archive', { mode: 'archive', sync: { auto: 'mirror' } }, 'The research is now a Strom archive, so following stopped. The tree can be edited.', 'change'],
         ['its agent gone from this computer', { mode: 'research', agentHere: false, sync: { auto: 'mirror' } }, 'The research waits for an AI agent, so following stopped. The tree can be edited.', 'change'],
         ['its agent gone from this computer, the stream silent', { mode: 'research', agentHere: false, sync: { auto: 'mirror' } }, 'The research waits for an AI agent, so following stopped. The tree can be edited.', 'poll'],
     ] as const) {
