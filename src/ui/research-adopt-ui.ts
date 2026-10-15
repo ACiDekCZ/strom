@@ -394,12 +394,15 @@ export const researchAdoptMethods = uiModule({
         let where = '';
         let agent = '';
         let archive = false;
+        // A research whose agent is not on this computer (`accepts.agentHere: false`): it waits for one.
+        let agentAway = false;
         try {
             const res = await fetchWithTimeout(`${base}/status`, 3000);
             if (res.ok) {
-                const st = await res.json() as { path?: unknown; agent?: unknown; accepts?: { mode?: unknown } };
+                const st = await res.json() as { path?: unknown; agent?: unknown; accepts?: { mode?: unknown; agentHere?: unknown } };
                 if (typeof st.path === 'string') where = st.path.slice(0, 300);
                 archive = st.accepts?.mode === 'archive';
+                agentAway = !archive && st.accepts?.agentHere === false;
                 // `agent: { id, name, where? }` (an archive has none); a bare name from an older shape too.
                 const named = st.agent && typeof st.agent === 'object' ? (st.agent as { name?: unknown }).name : st.agent;
                 if (typeof named === 'string') agent = named.slice(0, 60);
@@ -413,19 +416,24 @@ export const researchAdoptMethods = uiModule({
         const overlay = document.createElement('div');
         overlay.className = 'modal-overlay active';
         overlay.id = READY_ID;
+        // An archive says so (the tag of the Research menu), and nothing of an agent; an empty tree too.
+        const kindRow = archive ? `<dt>${esc(s.kindLabel)}</dt><dd><span class="research-sync-tag research-sync-tag--inline" id="research-ready-archive">${esc(strings.sync.archiveTag)}</span></dd>` : '';
+        const agentRow = archive ? '' : `<dt>${esc(s.agentRowLabel)}</dt><dd>${esc(agentAway ? s.agentRowAway : agent ? s.agentRowOn(agent) : s.agentRow)}</dd>`;
         const rows = hasPeople ? `
                 <dl class="install-ready-rows">
                     ${where ? `<dt>${esc(s.where)}</dt><dd class="install-ready-path">${esc(where)}</dd>` : ''}
-                    ${archive ? '' : `<dt>${esc(s.agentRowLabel)}</dt><dd>${esc(agent ? s.agentRowOn(agent) : s.agentRow)}</dd>`}
+                    ${kindRow}
+                    ${agentRow}
                     <dt>${esc(s.originalsLabel)}</dt><dd>${esc(s.originalsRow)}</dd>
-                </dl>` : '';
+                </dl>` : kindRow ? `<dl class="install-ready-rows">${kindRow}</dl>` : '';
+        const sendMode = researchSendMode(TreeManager.getTreeMetadata(DataManager.getCurrentTreeId() ?? ('' as TreeId))?.research);
         overlay.innerHTML = `
             <div class="modal modal--sm research-ready-modal" role="dialog" data-dialog-kind="decision" aria-modal="true" aria-labelledby="research-ready-title">
                 <div class="modal-header">
                     <h2 id="research-ready-title"><span class="install-ready-check" aria-hidden="true">✓</span> ${esc(hasPeople ? s.readyTitle : s.liveTitle(researchName))}</h2>
                 </div>
                 <div class="modal-content">
-                    <p>${esc(hasPeople ? s.readyText(researchSendMode(TreeManager.getTreeMetadata(DataManager.getCurrentTreeId() ?? ('' as TreeId))?.research)) : s.liveText)}</p>
+                    <p>${esc(hasPeople ? s.readyText(sendMode) : s.liveText(sendMode))}</p>
                     ${rows}
                     ${movedFrom && hasPeople ? `<p class="install-ready-moved">${esc(movedFrom === 'mobile' ? strings.research.transferCopyLeftMobile : strings.research.transferCopyLeft(appBrowserName(movedFrom)))}</p>` : ''}
                     ${offerApp ? `<div class="install-ready-app">${APP_ICON_SVG}<div class="install-ready-app-text"><span class="install-ready-app-line">${esc(strings.research.transferAppNote)}</span><button type="button" class="link-button" data-act="install-app">${esc(strings.research.transferInstallApp)}</button></div></div>` : ''}

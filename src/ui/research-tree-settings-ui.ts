@@ -188,7 +188,15 @@ export const researchTreeSettingsMethods = uiModule({
         const sendingShown = this.researchSyncCapable(link.id);
         const compact = compactScreen();
         const sendMode = researchSendMode(link);
-        const effect = archive ? t.effectArchive : this.researchReviewOn(link.id) ? t.effectReview : t.effectAgent;
+        // A research waiting for its agent writes as an archive does.
+        const agentAway = !archive && this.researchAgentAway(link.id, link);
+        const effect = archive || agentAway ? t.effectArchive : this.researchReviewOn(link.id) ? t.effectReview : t.effectAgent;
+        // Where the mode is switched, both ways (in the research, in a terminal): one sentence, the research a click away.
+        const modeWhere = sendingShown && onComputer() ? (archive ? t.modeWhereArchive : agentAway ? t.modeWhereWaiting : t.modeWhereResearch) : '';
+        const openUrl = modeWhere && this.researchLinkAvailable('open') ? researchSchemeUrl('open', { tree: link.id }, announcedResearchScheme()) : null;
+        const modeWhereHtml = modeWhere ? `
+                <p class="research-mode-where" id="research-mode-where"><span>${esc(modeWhere)}</span>${openUrl
+                    ? ` <button type="button" class="link-button" id="research-mode-where-open">${esc(s.openResearch)}</button>` : ''}</p>` : '';
         const olderLine = sendingShown ? '' : this.researchOlderLineHtml('settings');
         const sendingHtml = !sendingShown ? (olderLine ? `<p class="research-older-line">${olderLine}</p>` : '') : `
                 <fieldset class="research-transcripts research-send-mode">
@@ -243,6 +251,7 @@ export const researchTreeSettingsMethods = uiModule({
                 <button type="button" class="link-button research-older-sources" id="research-older-sources" hidden></button>`}
                 ${sendingHtml}
                 ${originalsHtml}
+                ${modeWhereHtml}
                 <div class="buttons research-tree-settings-buttons">
                     ${setup ? `<button type="button" class="link-button research-settings-in-research" id="research-settings-in-research">${esc(strings.research.settingsInResearch)} ↗</button>` : ''}
                     <button type="button" class="primary" id="research-tree-settings-done" data-dismiss>${esc(t.done)}</button>
@@ -254,6 +263,10 @@ export const researchTreeSettingsMethods = uiModule({
         overlay.onclick = (e) => { if (e.target === overlay) close(); };
         (overlay.querySelector('#research-tree-settings-x') as HTMLButtonElement).onclick = close;
         (overlay.querySelector('#research-tree-settings-done') as HTMLButtonElement).onclick = close;
+        overlay.querySelector<HTMLButtonElement>('#research-mode-where-open')?.addEventListener('click', () => {
+            close();
+            if (openUrl) this.launchResearchLink(openUrl);
+        });
         overlay.querySelector<HTMLButtonElement>('#research-settings-in-research')?.addEventListener('click', () => {
             close();
             if (setup) this.launchResearchLink(setup);

@@ -1536,7 +1536,172 @@ test.describe('the research as an archive', () => {
         await page.clock.fastForward(QUIET + 1000);
         await expect(pill(page)).toContainText('Research not running · 3 changes waiting');
         await openResearchMenu(page);
+        // An archive is not running (not "the research"); its changes wait (A9).
+        await expect(block(page).locator('.research-sync-title')).toContainText("The archive hasn't been running since");
         await expect(block(page)).toContainText("The archive can't take anything now. 3 changes waiting");
+        await page.evaluate(() => window.Strom.UI.closeActionsMenu());
+        await page.evaluate(() => window.Strom.UI.researchActionTreeSettings());
+        await expect(page.locator('#research-send-status')).toContainText("The archive hasn't been running since");
+    });
+
+    test('a second switch of mode: the date in Research for this tree is the last switch (K5.3)', async ({ page }) => {
+        await page.clock.install({ time: new Date('2026-10-01T10:00:00') });
+        await openResearch(page, { auto: true });
+        const RESEARCH = { mode: 'research', sync: { auto: 'write' }, sources: true, verified: true, media: null };
+        const bridge = await fakeBridge(page, { accepts: RESEARCH });
+        await page.evaluate(() => localStorage.setItem('strom-research-auto-intro-seen', '1'));
+        await poll(page);
+        const modeLine = async (): Promise<string> => {
+            await page.evaluate(() => window.Strom.UI.researchActionTreeSettings());
+            const text = await page.locator('#research-tree-settings-modal .research-mode-line').first().innerText();
+            await page.evaluate(() => window.Strom.UI.closeResearchTreeSettings());
+            return text;
+        };
+        const gotIt = async (): Promise<void> => {
+            await openResearchMenu(page);
+            await expect(block(page)).toHaveAttribute('data-state', 'switched');
+            await block(page).getByRole('menuitem', { name: 'Got it' }).click();
+        };
+        // 1 October: to an archive.
+        bridge.accepts = ARCHIVE;
+        await poll(page);
+        await gotIt();
+        const first = await modeLine();
+        expect(first).toMatch(/^The research has been an archive since .*1.*Oct.*2026|^The research has been an archive since .*2026/);
+        // 10 October: back to research — the line says so, from that day.
+        await page.clock.setSystemTime(new Date('2026-10-10T10:00:00'));
+        bridge.accepts = RESEARCH;
+        await poll(page);
+        await gotIt();
+        const second = await modeLine();
+        expect(second).toMatch(/^The research has worked with an agent since /);
+        expect(second).toContain('10');
+        expect(second.replace(/^.* since /, '')).not.toBe(first.replace(/^.* since /, ''));
+    });
+
+    test('Research for this tree says where the mode is switched, both ways, with Open the research (K5.4)', async ({ page }) => {
+        await page.clock.install();
+        await openResearch(page, { auto: true });
+        const RESEARCH = { mode: 'research', sync: { auto: 'write' }, sources: true, verified: true, media: null };
+        const bridge = await fakeBridge(page, { accepts: RESEARCH });
+        await page.evaluate(() => localStorage.setItem('strom-research-auto-intro-seen', '1'));
+        await poll(page);
+        const where = page.locator('#research-tree-settings-modal #research-mode-where');
+        await page.evaluate(() => window.Strom.UI.researchActionTreeSettings());
+        await expect(where).toHaveText('The research is switched to an archive in the research: Settings → “Research, or only an archive”. Open the research ↗');
+        await where.locator('#research-mode-where-open').click();
+        await expect(page.locator('#research-tree-settings-modal')).toHaveCount(0);
+        expect(await links(page)).toEqual([`strom-research://open?tree=${UUID}`]);
+        bridge.accepts = ARCHIVE;
+        await poll(page);
+        await page.evaluate(() => window.Strom.UI.researchActionTreeSettings());
+        await expect(where).toHaveText('The archive is switched to research in the research, with the first item of its menu: “Switch research on”. Open the research ↗');
+        await where.locator('#research-mode-where-open').click();
+        expect(await links(page)).toEqual([`strom-research://open?tree=${UUID}`, `strom-research://open?tree=${UUID}`]);
+    });
+
+    test('batches in an archive are stored, never waiting to be filed (K5.5)', async ({ page }) => {
+        await page.clock.install();
+        await openResearch(page, { auto: true, media: true });
+        const MEDIA = { max: 500 * 1024 * 1024, region: true, batch: { files: 5000, bytes: 20 * 1024 * 1024 * 1024, zip: true } };
+        const batches = [{ id: 'b-12345678', name: 'Matriky', state: 'closed', at: new Date().toISOString(), files: 5, known: 0, refused: 0, sorted: 0 }];
+        const bridge = await fakeBridge(page, { accepts: { mode: 'research', sync: { auto: 'write' }, sources: true, verified: true, media: MEDIA }, batches });
+        await page.evaluate(() => localStorage.setItem('strom-research-auto-intro-seen', '1'));
+        await poll(page);
+        // With an agent: how far it sorted.
+        await openResearchMenu(page);
+        await expect(page.locator('#research-menu .batch-line')).toContainText('Matriky');
+        await page.evaluate(() => window.Strom.UI.closeActionsMenu());
+        // An archive: nothing waits there ('kept', or an older one that says closed).
+        bridge.accepts = { ...ARCHIVE, media: MEDIA };
+        await poll(page);
+        await openResearchMenu(page);
+        await expect(page.locator('#research-menu')).toBeVisible();
+        await expect(page.locator('#research-menu .batch-line')).toHaveCount(0);
+        await expect(page.locator('#research-menu')).not.toContainText(/waiting to be filed/);
+        await page.evaluate(() => window.Strom.UI.closeActionsMenu());
+        bridge.batches = [{ ...batches[0], state: 'kept' }];
+        await poll(page);
+        await openResearchMenu(page);
+        await expect(page.locator('#research-menu .batch-line')).toHaveCount(0);
+    });
+});
+
+test.describe('a research waiting for its agent (agentHere: false)', () => {
+    // No agent on this computer: still a research (no Archive tag), writing as an archive does.
+    const WAITING = { mode: 'research', agentHere: false, sync: { auto: 'mirror' }, sources: true, verified: true, media: null };
+    const ALL = ['send', 'open', 'live', 'app', 'setup', 'chat', 'review', 'research', 'sync-undo', 'conflict', 'direction'];
+
+    test('nothing of the agent: no agent rows, queue, spend or "Claude Code"; no Archive tag, no switch said; installing the agent offered (K5.1)', async ({ page }) => {
+        await page.clock.install();
+        await openResearch(page, { auto: true });
+        const bridge = await fakeBridge(page, { accepts: { mode: 'research', sync: { auto: 'write' }, sources: true, verified: true, media: null }, links: ALL,
+            lastIntake: { id: 'I0041', at: new Date().toISOString() },
+            waiting: [{ id: 'T0010', what: 'Confirm the father', person: 'P0012', at: new Date().toISOString() }],
+            statusExtra: { agent: { id: 'claude', name: 'Claude Code' } } });
+        await page.evaluate(() => localStorage.setItem('strom-research-auto-intro-seen', '1'));
+        await poll(page);
+        await openResearchMenu(page);
+        const sub = page.locator('#research-menu');
+        await expect(sub.locator('#research-item-chat')).toBeVisible();
+        await expect(sub.locator('#research-item-waiting')).toBeVisible();
+        await page.evaluate(() => window.Strom.UI.closeActionsMenu());
+
+        // The agent is gone from this computer: the bridge says so (and sends no agent, queue or spend).
+        bridge.accepts = WAITING;
+        bridge.statusExtra = {};
+        await poll(page);
+        expect(await page.evaluate(() => window.Strom.UI.activeResearchArchive())).toBe(false);
+        expect(await page.evaluate(() => window.Strom.UI.activeResearchNoAgent())).toBe(true);
+        await openResearchMenu(page);
+        await expect(sub).toBeVisible();
+        for (const id of ['research-item-chat', 'research-item-live', 'research-item-waiting']) await expect(sub.locator(`#${id}`)).toHaveCount(0);
+        await expect(sub.locator('#research-item-open')).toBeVisible();
+        // Taking the last send back stays the user's.
+        await expect(sub.locator('#research-item-undo')).toBeVisible();
+        // Not an archive: no tag, no "switched" said; where to install the agent instead.
+        await expect(sub.locator('#research-menu-archive')).toHaveCount(0);
+        await expect(block(page)).not.toHaveAttribute('data-state', 'switched');
+        await expect(sub.locator('.research-submenu-note')).toHaveText('↗ continues in the research on this computer. The research waits for an AI agent: the first item of its menu installs one.');
+        await expect(sub).not.toContainText(/Claude Code|USD|\$/);
+        await expect(dot(page)).toBeHidden();
+        await page.evaluate(() => window.Strom.UI.closeActionsMenu());
+
+        // The person menu: only what the research knows.
+        const actions = await page.evaluate(() => {
+            const jan = Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.firstName === 'Jan') as any;
+            return window.Strom.UI.getPersonMenuActions(jan.id).map((a: any) => [a.action, ...(a.submenu ?? []).map((x: any) => x.action)]).flat();
+        });
+        for (const a of ['research-review', 'research-ancestors', 'research-descendants', 'research-ask']) expect(actions).not.toContain(a);
+
+        // Research for this tree: no tag, a send written at once, the way to install the agent, Open the research.
+        await page.evaluate(() => window.Strom.UI.researchActionTreeSettings());
+        const dialog = page.locator('#research-tree-settings-modal');
+        await expect(dialog.locator('h2 .research-sync-tag')).toHaveCount(0);
+        await expect(dialog).not.toContainText('has been an archive since');
+        await expect(dialog).not.toContainText('worked with an agent since');
+        await expect(dialog).toContainText('The research writes every send straight away.');
+        await expect(dialog.locator('#research-mode-where')).toHaveText('The research waits for an AI agent. At the top of its menu: “Install or choose the AI agent”, or “Keep it only as an archive”. Open the research ↗');
+        await dialog.locator('#research-mode-where-open').click();
+        expect(await links(page)).toEqual([`strom-research://open?tree=${UUID}`]);
+
+        // The agent installed: the research again, nothing switched, nothing to say.
+        bridge.accepts = { mode: 'research', sync: { auto: 'write' }, sources: true, verified: true, media: null };
+        await poll(page);
+        await openResearchMenu(page);
+        await expect(sub.locator('#research-item-chat')).toBeVisible();
+        await expect(block(page)).not.toHaveAttribute('data-state', 'switched');
+    });
+
+    test('opened by ?live= while it waits for its agent: opens for editing, not followed', async ({ page }) => {
+        await page.clock.install();
+        await openResearch(page, { auto: true });
+        await fakeBridge(page, { accepts: WAITING });
+        await page.evaluate((b) => window.Strom.UI.startLiveFollow(b), BRIDGE);
+        await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.id)).toBe(UUID);
+        expect(await page.evaluate(() => window.Strom.UI.isFollowingActiveResearch())).toBe(false);
+        expect(await page.evaluate(() => window.Strom.DataManager.isLiveFollowing())).toBe(false);
+        await expect(page.locator('.live-panel')).toHaveCount(0);
     });
 });
 

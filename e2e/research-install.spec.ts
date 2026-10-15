@@ -318,8 +318,10 @@ test.describe('installing the research from the app', () => {
         await expect(ready.locator('h2')).toContainText('The research is ready', AFTER_HAND_OVER);
         await expect(ready.locator('.install-ready-path')).toHaveText('/Users/jan/Strom/Novakovi');
         await expect(ready).toContainText('full quality');
-        // An archive: no row for an agent.
-        await expect(ready).not.toContainText('Agent');
+        // An archive: said so, with the Archive tag of the Research menu; no row for an agent, no word of one (A3).
+        await expect(ready.locator('.install-ready-rows dt').nth(1)).toHaveText('Kind');
+        await expect(ready.locator('#research-ready-archive')).toHaveText('Archive');
+        await expect(ready).not.toContainText(/\bagent|\bAI\b|Claude/i);
         expect(posted[0]).toContain('1 NAME Jan /Novak/');
         // Every request names the app's version (the research decides what to send by it).
         expect(versions.length).toBeGreaterThan(1);
@@ -865,6 +867,55 @@ const lineOf = async (page: Page, os: 'mac' | 'win' | 'linux'): Promise<string> 
     await dialog(page).locator(`.install-os-btn[data-os="${os}"]`).click();
     return (await dialog(page).locator('.install-line').first().getAttribute('data-line'))!;
 };
+
+test.describe('"The research is ready" by the research\'s mode', () => {
+    const ready = (page: Page) => page.locator('#research-ready-modal');
+    async function showReady(page: Page, accepts: Record<string, unknown>, hasPeople: boolean, extra: Record<string, unknown> = {}): Promise<void> {
+        await page.route(`${BRIDGE}/**`, (route) => new URL(route.request().url()).pathname.endsWith('/status')
+            ? route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' },
+                body: JSON.stringify({ tree: { id: UUID, name: 'Novákovi' }, path: '/Users/jan/Strom/Novakovi', accepts, ...extra }) })
+            : route.fulfill({ status: 404, headers: cors, body: '' }));
+        await page.evaluate(({ b, id, people }) => window.Strom.UI.showResearchReady(b, id, 'Novákovi', people), { b: BRIDGE, id: UUID, people: hasPeople });
+        await expect(ready(page)).toBeVisible();
+    }
+
+    test('a research waiting for its agent: the Agent row says none is here yet, no Archive (K5.4)', async ({ page }) => {
+        await page.setViewportSize({ width: 1280, height: 900 });
+        await openApp(page);
+        await showReady(page, { mode: 'research', agentHere: false, sync: { auto: 'mirror' } }, true);
+        await expect(ready(page).locator('.install-ready-rows')).toContainText('AgentNone on this computer yet. Once an AI agent is installed, the research goes on by itself.');
+        await expect(ready(page).locator('#research-ready-archive')).toHaveCount(0);
+    });
+
+    test('with an agent: its name; an older research that names none: where it is installed (A3)', async ({ page }) => {
+        await page.setViewportSize({ width: 1280, height: 900 });
+        await openApp(page);
+        await showReady(page, { mode: 'research', sync: { auto: 'write' } }, true, { agent: { id: 'codex', name: 'Codex' } });
+        await expect(ready(page).locator('.install-ready-rows')).toContainText('Codex · work is confirmed in the research');
+        await page.evaluate(() => window.Strom.UI.closeResearchReady());
+        await showReady(page, { mode: 'research', sync: { auto: 'write' } }, true);
+        await expect(ready(page).locator('.install-ready-rows')).toContainText('None yet. It can be installed any time from the research menu; the tree and the data stay.');
+        await expect(ready(page)).not.toContainText('archive stay');
+    });
+
+    test('an empty tree: what happens to what is added, as the tree sends (A8); an archive says Archive', async ({ page }) => {
+        await page.setViewportSize({ width: 1280, height: 900 });
+        await openApp(page);
+        await createFirstPerson(page, 'Jan', 'Novák');
+        const sendMode = (mode: string) => page.evaluate((m) => {
+            const tm = window.Strom.TreeManager;
+            tm.setResearchLink(tm.getActiveTreeId()!, { id: '3f2c9a10-7b1e-4c55-9d2a-0e8f6b4a1c77', fingerprint: '', syncedAt: new Date().toISOString(), sendMode: m } as never);
+        }, mode);
+        await sendMode('manual');
+        await showReady(page, { mode: 'research', sync: { auto: 'write' } }, false);
+        await expect(ready(page).locator('.modal-content p').first()).toHaveText('The tree is empty for now. Whatever is added goes to the research when Send is clicked.');
+        await page.evaluate(() => window.Strom.UI.closeResearchReady());
+        await sendMode('auto');
+        await showReady(page, { mode: 'archive', sync: { auto: 'mirror' } }, false);
+        await expect(ready(page).locator('.modal-content p').first()).toHaveText('The tree is empty for now. Whatever is added is written to the research automatically.');
+        await expect(ready(page).locator('#research-ready-archive')).toHaveText('Archive');
+    });
+});
 
 test.describe('the research\'s beta channel: only the beta app\'s lines', () => {
     test('the beta app (beta.stromapp.info): the beta line for all three systems, Windows within 259, npm\'s beta tag', async ({ browser }) => {

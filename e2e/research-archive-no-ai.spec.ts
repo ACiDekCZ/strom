@@ -45,7 +45,9 @@ async function openArchive(page: Page): Promise<FakeBridge> {
     await page.evaluate(({ uuid, base, accepts }) => {
         localStorage.setItem(`strom-research-bridge:${uuid}`, JSON.stringify({ base, accepts }));
     }, { uuid: UUID, base: BRIDGE, accepts: ARCHIVE });
-    const bridge = await fakeBridge(page, { accepts: ARCHIVE, links: ALL_LINKS, treeGed: archiveGed(), lastIntake: { id: 'I0041', at: new Date().toISOString() } });
+    const bridge = await fakeBridge(page, { accepts: ARCHIVE, links: ALL_LINKS, treeGed: archiveGed(), lastIntake: { id: 'I0041', at: new Date().toISOString() },
+        // A batch the archive stored (an older archive says closed, never sorted): nothing waits to be filed (K5.5).
+        batches: [{ id: 'b-12345678', name: 'Matriky', state: 'closed', at: new Date().toISOString(), files: 5, known: 0, refused: 0, sorted: 0 }] });
     // Set to Evidence while the research worked with an agent: kept, not offered nor sent in the archive.
     await page.evaluate(() => {
         const tm = window.Strom.TreeManager;
@@ -83,6 +85,7 @@ for (const locale of ['en-US', 'cs-CZ', 'de-DE']) {
             await expect(page.locator('#research-menu-archive')).toBeVisible();
             await expect(page.locator('#research-item-chat')).toHaveCount(0);
             await expect(page.locator('#research-item-live')).toHaveCount(0);
+            await expect(page.locator('#research-menu .batch-line')).toHaveCount(0);
             expectNoAgent('Research menu', await shownText(page, '#research-menu'));
             await page.evaluate(() => window.Strom.UI.closeResearchMenu());
             await page.evaluate(() => window.Strom.UI.toggleActionsMenu());
@@ -99,6 +102,9 @@ for (const locale of ['en-US', 'cs-CZ', 'de-DE']) {
             await expect(page.locator('#research-tree-settings-modal')).toBeVisible();
             await expect(page.locator('#research-tree-settings-modal input[name="research-send-mode"]')).toHaveCount(3);
             await expect(page.locator('#research-tree-settings-modal input[name="research-transcripts"]')).toHaveCount(0);
+            // Where an archive is switched to research: one sentence, the research a click away (K5.4).
+            await expect(page.locator('#research-mode-where')).toBeVisible();
+            await expect(page.locator('#research-mode-where-open')).toBeVisible();
             expectNoAgent('Research for this tree', await shownText(page, '#research-tree-settings-modal'));
             await page.evaluate(() => window.Strom.UI.closeResearchTreeSettings());
 
@@ -140,6 +146,12 @@ for (const locale of ['en-US', 'cs-CZ', 'de-DE']) {
             await expect(page.locator('#research-edge-motion-toggle')).toHaveCount(0);
             expectNoAgent('Settings', await shownText(page, '#settings-modal'));
             await page.evaluate(() => window.Strom.UI.closeSettingsDialog());
+
+            // "The research is ready" after an installation that made an archive: Archive, nothing of an agent (K5.4).
+            await page.evaluate(({ b, id }) => window.Strom.UI.showResearchReady(b, id, 'Víškovi', true), { b: BRIDGE, id: UUID });
+            await expect(page.locator('#research-ready-archive')).toBeVisible();
+            expectNoAgent('the research is ready', await shownText(page, '#research-ready-modal'));
+            await page.evaluate(() => window.Strom.UI.closeResearchReady());
 
             // Awaiting action and the list of changes.
             await page.evaluate(() => window.Strom.UI.showResearchWaiting());

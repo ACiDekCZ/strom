@@ -942,12 +942,14 @@ export const batchMethods = uiModule({
             return line(`${b.unfinishedTitle(rec.name)} · ${b.unfinishedSub(rec.done, rec.total)}`,
                 btn(b.resume, 'showBatchDialog()') + btn(b.discard, 'discardUnfinishedBatch()'), true);
         }
+        // An archive stores a batch as it is (nobody sorts it): nothing waits there to be filed (K5.5),
+        // and a batch 'kept' never does.
+        if (this.researchModeOf(link.researchId) === 'archive') return '';
         const batches = this.researchStatusOf(link.researchId)?.batches ?? [];
         const pending = batches.find(x => x.state === 'closed' && x.sorted < x.files);
         if (!pending) return '';
-        const archive = this.researchModeOf(link.researchId) === 'archive';
         const open = this.researchLinkAvailable('open') ? btn(b.overview, 'researchSyncAction(\'openResearch\')') : '';
-        return line(archive ? b.archiveWaiting(pending.name, pending.files - pending.sorted) : b.sortedLine(pending.name, pending.sorted, pending.files), open);
+        return line(b.sortedLine(pending.name, pending.sorted, pending.files), open);
     },
 
     discardUnfinishedBatch(): void {

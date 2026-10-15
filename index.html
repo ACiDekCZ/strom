@@ -10846,6 +10846,7 @@
         .research-adopt-send > legend { font-weight: 600; font-size: 15px; margin-bottom: 6px; }
         .confirm-note { margin: 10px 0 0; font-size: 13px; line-height: 1.4; color: var(--text-light); }
         .confirm-note .research-sync-tag--inline { margin-left: 0; margin-right: 6px; }
+        .install-ready-rows .research-sync-tag--inline { margin-left: 0; }
         /* A toast's own action ("Send again", "Open the research ↗"). */
         .toast-action {
             margin-left: 12px; padding: 0; border: 0; background: none; cursor: pointer;
@@ -10903,6 +10904,10 @@
         }
         .research-older-sources { margin: 4px 0 0; }
         .research-older-sources[hidden] { display: none; }
+        /* Where the research's mode is switched (in the research), with "Open the research". */
+        .research-mode-where { margin: 12px 0 0; font-size: 13px; line-height: 1.45; color: var(--text-light); overflow-wrap: anywhere; }
+        .research-mode-where .link-button { font-size: inherit; white-space: nowrap; }
+        @media (max-width: 640px) { .research-mode-where { font-size: 12px; } }
         .research-tree-settings-buttons { align-items: center; }
         .research-tree-settings-buttons .research-settings-in-research { margin-right: auto; }
         /* Source editor: "Transcription verified"; the research's reading. */
