@@ -1897,6 +1897,15 @@ export function sanitizeLiveChange(value: unknown): LiveChange | null {
     return { head: cleanText(r.head, 80), what, at: cleanText(r.at, 40), ...(entries && entries.length > 0 ? { entries } : {}) };
 }
 
+/** The bridge's `end` event (`live.end`): whether a bridge comes back on the same address (null: not said). Untrusted input. */
+export function sanitizeLiveEnd(value: unknown): { back: boolean | null; reason: string } {
+    const r = asRecord(value);
+    return {
+        back: typeof r?.back === 'boolean' ? r.back : null,
+        reason: r ? cleanText(r.reason, 40) : '',
+    };
+}
+
 /** People a research text line names ("… [P0019] …"). */
 export function textPersonRefs(line: string): string[] {
     return [...line.matchAll(/\[(P\d{1,7})\]/g)].map(m => m[1]);

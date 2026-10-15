@@ -400,6 +400,105 @@ test.describe('live research (?live=)', () => {
     });
 });
 
+test.describe('the bridge says it ends (live.end)', () => {
+    const status = { strom: '1.15.0', tree: { id: UUID, name: 'Víškovi', lang: 'cs' }, head: 'h1',
+        features: ['live.end'], researches: [], working: [], open: [], waiting: [] };
+    /** A bridge whose next event stream (after `state.end` is set) carries `event: end` with that payload. */
+    async function bridgeThatEnds(page: Page) {
+        const state = { down: false, end: null as Record<string, unknown> | null, endSentAt: 0, eventCalls: 0 };
+        await page.route(`${BRIDGE}/**`, async (route) => {
+            if (state.down) return route.abort('connectionrefused');
+            const path = new URL(route.request().url()).pathname;
+            if (path.endsWith('/status')) {
+                return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(status) });
+            }
+            if (path.endsWith('/tree.ged')) {
+                return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/plain; charset=utf-8' }, body: researchGed() });
+            }
+            if (path.endsWith('/events')) {
+                state.eventCalls++;
+                let body = `event: hello\ndata: ${JSON.stringify(status)}\n\n`;
+                if (state.end) {
+                    body += `event: end\ndata: ${JSON.stringify(state.end)}\n\n`;
+                    state.endSentAt = Date.now();
+                }
+                return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/event-stream' }, body });
+            }
+            return route.fulfill({ status: 404, headers: cors, body: '' });
+        });
+        return state;
+    }
+    /** Whether the panel ever showed "lost" or "ended" from now on. */
+    const watchPanel = (page: Page) => page.evaluate(() => {
+        const seen = { lost: false, ended: false };
+        (window as unknown as { __panelSeen: typeof seen }).__panelSeen = seen;
+        const look = () => {
+            const p = document.getElementById('live-panel');
+            if (p?.classList.contains('lost')) seen.lost = true;
+            if (p?.classList.contains('ended')) seen.ended = true;
+        };
+        new MutationObserver(look).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'], childList: true });
+    });
+    const panelSeen = (page: Page) => page.evaluate(() => (window as unknown as { __panelSeen: { lost: boolean; ended: boolean } }).__panelSeen);
+
+    test('back:false (strom live stop): following ends within a second, the tree is editable', async ({ page }) => {
+        const state = await bridgeThatEnds(page);
+        await page.goto(`/strom.html?live=${encodeURIComponent(BRIDGE)}`);
+        const panel = page.locator('#live-panel');
+        await expect(panel.locator('.live-panel-state')).toContainText('Following');
+        await expect(page.locator('body')).toHaveClass(/tree-locked/);
+        await watchPanel(page);
+
+        state.end = { reason: 'stopped', back: false, at: new Date().toISOString() };
+        // The next stream carries the end; afterwards the bridge is gone.
+        await expect.poll(() => state.endSentAt, { timeout: 10000 }).toBeGreaterThan(0);
+        state.down = true;
+        await expect(panel).toHaveClass(/ended/, { timeout: 1000 });
+        expect(Date.now() - state.endSentAt).toBeLessThan(1000);
+        await expect(page.locator('body')).not.toHaveClass(/tree-locked/);
+        await expect(panel).toContainText('Following ended');
+        expect((await panelSeen(page)).lost).toBe(false);
+    });
+
+    test('back:true (a newer bridge on the same address): reconnects quietly, no loss, no end', async ({ page }) => {
+        // Without the announcement this silence would end following.
+        await page.addInitScript(() => { (globalThis as { __LIVE_GRACE_MS?: number }).__LIVE_GRACE_MS = 1500; });
+        const state = await bridgeThatEnds(page);
+        await page.goto(`/strom.html?live=${encodeURIComponent(BRIDGE)}`);
+        const panel = page.locator('#live-panel');
+        await expect(panel.locator('.live-panel-state')).toContainText('Following');
+        await watchPanel(page);
+
+        state.end = { reason: 'restart', back: true, at: new Date().toISOString() };
+        await expect.poll(() => state.endSentAt, { timeout: 10000 }).toBeGreaterThan(0);
+        // The old bridge is gone, the new one takes a few seconds to start.
+        state.end = null;
+        state.down = true;
+        await page.waitForTimeout(3000);
+        const callsBefore = state.eventCalls;
+        state.down = false;
+        await expect.poll(() => state.eventCalls, { timeout: 10000 }).toBeGreaterThan(callsBefore);
+        await expect(panel.locator('.live-panel-state')).toContainText('Following');
+        await expect(page.locator('body')).toHaveClass(/tree-locked/);
+        expect(await panelSeen(page)).toEqual({ lost: false, ended: false });
+    });
+
+    test('without back: the status decides (the bridge answers → following goes on)', async ({ page }) => {
+        const state = await bridgeThatEnds(page);
+        await page.goto(`/strom.html?live=${encodeURIComponent(BRIDGE)}`);
+        const panel = page.locator('#live-panel');
+        await expect(panel.locator('.live-panel-state')).toContainText('Following');
+        await watchPanel(page);
+
+        state.end = { reason: 'signal' };
+        await expect.poll(() => state.endSentAt, { timeout: 10000 }).toBeGreaterThan(0);
+        const callsBefore = state.eventCalls;
+        await expect.poll(() => state.eventCalls, { timeout: 10000 }).toBeGreaterThan(callsBefore);
+        await expect(panel.locator('.live-panel-state')).toContainText('Following');
+        expect(await panelSeen(page)).toEqual({ lost: false, ended: false });
+    });
+});
+
 test.describe('live panel layout', () => {
     async function followQuietBridge(page: Page): Promise<void> {
         await page.route(`${BRIDGE}/**`, async (route) => {

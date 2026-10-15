@@ -33,7 +33,7 @@ import { isMobile } from '../breakpoints.js';
 import {
     readResearchHeader, parseLoopbackUrl, parseLiveBridge, contentFingerprint, fingerprintLike,
     decideResearchOpen, stabilizeIds, keepTitles, researchHasTitles, withResearchTitles, TITLES_FEATURE, carryOverMedia, carryOverUnknownPartners, sanitizeLiveStatus, sanitizeLiveChange,
-    sanitizeWorking, parseEventData, extractChangedRefs, personsByRefs,
+    sanitizeLiveEnd, sanitizeWorking, parseEventData, extractChangedRefs, personsByRefs,
     humanizeChange, isGedcomFileName, isSafariBrowser,
     parseSendBridge, pickSendDefault, sanitizeSyncReply, researchSchemeUrl, researchTaskRef,
     ResearchLinkAction, ResearchLinkParams, LiveBridgeUrls, LiveStatus, LiveChange, LiveWorker, LiveWaiting,
@@ -165,6 +165,8 @@ export interface LiveSession {
     failures: number;
     /** Since when the bridge does not answer (null: it does); it may come back (a restart). */
     lostSince: number | null;
+    /** The bridge said another one comes up on its address: silence until then is no loss, even after the old one still answered (null: not said). */
+    backBy?: number | null;
     /** Serialises tree refreshes (a change never overtakes another). */
     chain: Promise<void>;
 }
@@ -185,6 +187,10 @@ const WORKING_STATUS_MIN_MS = 5000;
 function lostGraceMs(): number {
     return (globalThis as { __LIVE_GRACE_MS?: number }).__LIVE_GRACE_MS ?? 60_000;
 }
+/** After the bridge said another one comes up on its address: so long its silence shows no loss. */
+const BACK_QUIET_MS = 15000;
+/** The first status asked after that (the new bridge starts). */
+const BACK_FIRST_MS = 500;
 /** The longest wait between two attempts while the bridge is silent. */
 const RETRY_MAX_MS = 5000;
 /** Most change lines kept while following (the overview lists them all). */
@@ -2123,6 +2129,21 @@ export const researchUiMethods = uiModule({
             // The event names only who works: the directions (their spinner, tasks and what waits) come with a status.
             this.liveStatusSoon(s);
         });
+        // The bridge says it ends (`live.end`): gone for good → ended at once; another one coming → reconnect quietly.
+        es.addEventListener('end', (e) => {
+            if (s.es !== es) return;
+            es.close();
+            s.es = null;
+            const end = sanitizeLiveEnd(payload(e));
+            if (end.back === false) {
+                this.endLiveFollow(s, 'ended');
+            } else if (end.back === true) {
+                s.backBy = Date.now() + BACK_QUIET_MS;
+                this.scheduleLive(s, () => this.probeLive(s), BACK_FIRST_MS);
+            } else {
+                void this.probeLive(s);
+            }
+        });
         es.onerror = () => {
             if (s.es !== es) return;
             // The stream dropped: find out whether the bridge is still there
@@ -2147,6 +2168,12 @@ export const researchUiMethods = uiModule({
         } catch {
             s.failures++;
             const now = Date.now();
+            if (s.backBy && now < s.backBy) {
+                // A new bridge is starting on this address: no loss yet.
+                this.scheduleLive(s, () => this.probeLive(s), Math.min(RECONNECT_MS * s.failures, RETRY_MAX_MS));
+                return;
+            }
+            s.backBy = null;
             if (s.lostSince === null) {
                 s.lostSince = now;
                 this.renderLivePanel();

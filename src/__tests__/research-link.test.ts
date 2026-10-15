@@ -8,7 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import { changeKind, changeAdds, sanitizeLiveLog, textKind, textPersonRefs, textWithoutRefs,
     readResearchHeader, parseLoopbackUrl, parseLiveBridge, contentFingerprint, fingerprintLike,
-    decideResearchOpen, stabilizeIds, keepTitles, carryOverMedia, sanitizeLiveStatus, sanitizeLiveChange,
+    decideResearchOpen, stabilizeIds, keepTitles, carryOverMedia, sanitizeLiveStatus, sanitizeLiveChange, sanitizeLiveEnd,
     sanitizeWorking, extractChangedRefs, personsByRefs, humanizeChange,
     isGedcomFileName, normalizeResearchId, parseEventData, isSafariBrowser,
     sanitizeResearchLinks, researchSchemeUrl, researchSourceRef, researchClip, researchPersonRef, researchTaskRef,
@@ -588,6 +588,15 @@ describe('bridge messages are untrusted', () => {
         const c = sanitizeLiveChange({ head: 'h2', what: ['a'], at: '2026-09-29T22:38:00Z', entries: [{ head: 'h2', at: '2026-09-29T22:38:00Z', what: ['a'], task: 'T1 x', text: ['A'] }] })!;
         expect(c.entries).toEqual([{ head: 'h2', at: '2026-09-29T22:38:00Z', what: ['a'], task: 'T1 x', text: ['A'] }]);
         expect(sanitizeLiveChange({ head: 'h3', what: ['a'], entries: 'x' })!.entries).toBeUndefined();
+    });
+
+    it('the end event (live.end): back only when the bridge says it, untrusted input', () => {
+        expect(sanitizeLiveEnd({ reason: 'stopped', back: false, at: '2026-10-15T13:39:50.299Z' })).toEqual({ back: false, reason: 'stopped' });
+        expect(sanitizeLiveEnd({ reason: 'restart', back: true })).toEqual({ back: true, reason: 'restart' });
+        // Not said (or not a boolean): unknown, the status decides.
+        expect(sanitizeLiveEnd({ reason: 'signal' }).back).toBeNull();
+        expect(sanitizeLiveEnd({ back: 'false' }).back).toBeNull();
+        expect(sanitizeLiveEnd(null)).toEqual({ back: null, reason: '' });
     });
 
     it('text lines: the people they name, shown without the marks, and their filter', () => {
