@@ -13722,6 +13722,16 @@
             visibility: hidden !important;
             transition: none !important;
         } }
+        /* Holding a card to pan the canvas is not pointing at it: no hover card
+           while the drag lasts (#tree-container.is-card-panning), nor on the card
+           the pointer rests on after the release until it leaves (.tooltip-quiet,
+           src/zoom.ts). */
+        #tree-container.is-card-panning .card-tooltip,
+        .person-card.tooltip-quiet .card-tooltip {
+            opacity: 0 !important;
+            visibility: hidden !important;
+            transition: none !important;
+        }
         @media (max-width: 1024px) { .card-tooltip { visibility: hidden !important; } }
 
         /* Print CSS */

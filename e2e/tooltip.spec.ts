@@ -172,3 +172,34 @@ test('every union has its own line, in the order of the marriages, with its own 
     const lines = tip(page, 'Marie').locator('.tt-rel');
     await expect(lines).toHaveText(['1st ∞ 1857 Jiří Klaus · 3 children', '2nd ∞ 1873 Josef Ježek · 1 child']);
 });
+
+test('holding a card to pan hides its hover card until the pointer leaves the card', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1880' });
+    const shown = () => tip(page, 'Jan').evaluate(el => getComputedStyle(el).visibility === 'visible');
+    const box = (await card(page, 'Jan').boundingBox())!;
+    const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
+
+    // Pointing at the card shows the hint after its dwell.
+    await page.mouse.move(cx, cy);
+    await expect.poll(shown).toBe(true);
+
+    // The press turns into a pan: the hint goes at once and stays away while held.
+    await page.mouse.down();
+    await page.mouse.move(cx - 60, cy + 40, { steps: 6 });
+    await expect.poll(shown).toBe(false);
+    await page.waitForTimeout(700);
+    expect(await shown()).toBe(false);
+
+    // Let go over the same card (it moved with the pointer): still no hint.
+    await page.mouse.up();
+    await page.waitForTimeout(700);
+    expect(await shown()).toBe(false);
+
+    // Leave the card and point at it again: the hint is back as usual.
+    await page.mouse.move(cx - 60, cy + 40 + 300, { steps: 3 });
+    const again = (await card(page, 'Jan').boundingBox())!;
+    await page.mouse.move(again.x + again.width / 2, again.y + again.height / 2, { steps: 3 });
+    await expect.poll(shown).toBe(true);
+});

@@ -27,6 +27,13 @@ const CARD_PAN_CLICK_SWALLOW_MS = 500;
 /** Class on #tree-container while a drag that started on a card pans it (grabbing cursor). */
 const CARD_PANNING_CLASS = 'is-card-panning';
 /**
+ * Class on the person card the pointer rests on when a drag from a card ends:
+ * its hover card stays hidden until the pointer leaves that card, so letting
+ * go of a pan does not pop the hint up (the hover card is for pointing at a
+ * person, not for holding one). While the drag lasts, CARD_PANNING_CLASS hides it.
+ */
+const TOOLTIP_QUIET_CLASS = 'tooltip-quiet';
+/**
  * Manual zoom floor (wheel, pinch, the − button) for a tree that fits the
  * screen at this scale or above. A wider tree lowers the floor to its own fit
  * scale (see minScale), so "fit to screen" shows all of it and zooming out by
@@ -60,6 +67,14 @@ const MOVING_CLASS = 'is-moving';
 /** Views drawn in their own container over the (hidden) tree canvas. */
 // The welcome of an empty tree scrolls itself too (a phone held sideways is shorter than it).
 const STANDALONE_VIEW_SELECTOR = '.timeline-container, .fan-container, .map-container, #empty-state';
+
+/** Keep the hover card of the person card at (x, y) hidden until the pointer leaves it. */
+function quietTooltipUntilLeave(x: number, y: number): void {
+    const cardEl = document.elementFromPoint(x, y)?.closest<HTMLElement>('.person-card');
+    if (!cardEl || cardEl.classList.contains(TOOLTIP_QUIET_CLASS)) return;
+    cardEl.classList.add(TOOLTIP_QUIET_CLASS);
+    cardEl.addEventListener('mouseleave', () => cardEl.classList.remove(TOOLTIP_QUIET_CLASS), { once: true });
+}
 
 interface TouchState {
     startTime: number;
@@ -119,8 +134,8 @@ class ZoomPanClass {
         // Mouse events
         container.addEventListener('mousedown', (e) => this.onMouseDown(e));
         container.addEventListener('mousemove', (e) => this.onMouseMove(e));
-        container.addEventListener('mouseup', () => this.onMouseUp());
-        container.addEventListener('mouseleave', () => this.onMouseUp());
+        container.addEventListener('mouseup', (e) => this.onMouseUp(e));
+        container.addEventListener('mouseleave', (e) => this.onMouseUp(e));
         container.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
 
         // Touch events - use passive: false only where needed
@@ -161,9 +176,10 @@ class ZoomPanClass {
             && !target.closest('.context-menu, input, select, textarea');
     }
 
-    private endCardPan(): void {
+    private endCardPan(at?: { x: number; y: number }): void {
         this.swallowClickUntil = performance.now() + CARD_PAN_CLICK_SWALLOW_MS;
         document.getElementById('tree-container')?.classList.remove(CARD_PANNING_CLASS);
+        if (at) quietTooltipUntilLeave(at.x, at.y);
     }
 
     // ==================== MOUSE EVENTS ====================
@@ -204,11 +220,11 @@ class ZoomPanClass {
         this.apply();
     }
 
-    private onMouseUp(): void {
+    private onMouseUp(e: MouseEvent): void {
         this.cardPress = null;
         if (this.dragFromCard) {
             this.dragFromCard = false;
-            this.endCardPan();
+            this.endCardPan({ x: e.clientX, y: e.clientY });
         }
         this.dragging = false;
         this.endMotion();
@@ -304,7 +320,10 @@ class ZoomPanClass {
                 if (!this.touchState.isPanning) {
                     // Start panning
                     this.touchState.isPanning = true;
-                    if (this.touchState.fromCard) this.notifyCardPanStart();
+                    if (this.touchState.fromCard) {
+                        document.getElementById('tree-container')?.classList.add(CARD_PANNING_CLASS);
+                        this.notifyCardPanStart();
+                    }
                     this.beginMotion();
                     this.touchState.lastX = touch.clientX;
                     this.touchState.lastY = touch.clientY;
@@ -381,6 +400,7 @@ class ZoomPanClass {
     }
 
     private onTouchCancel(): void {
+        if (this.touchState?.fromCard && this.touchState.isPanning) this.endCardPan();
         this.touchState = null;
         this.lastPinchDistance = 0;
         this.endMotion();
