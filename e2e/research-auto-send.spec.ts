@@ -1600,30 +1600,46 @@ test.describe('the research as an archive', () => {
         expect(await links(page)).toEqual([`strom-research://open?tree=${UUID}`, `strom-research://open?tree=${UUID}`]);
     });
 
-    test('batches in an archive are stored, never waiting to be filed (K5.5)', async ({ page }) => {
+    test('batches nobody sorts are stored, never waiting to be filed: kept by the bridge, or an archive of an older bridge (K4.5)', async ({ page }) => {
         await page.clock.install();
         await openResearch(page, { auto: true, media: true });
         const MEDIA = { max: 500 * 1024 * 1024, region: true, batch: { files: 5000, bytes: 20 * 1024 * 1024 * 1024, zip: true } };
         const batches = [{ id: 'b-12345678', name: 'Matriky', state: 'closed', at: new Date().toISOString(), files: 5, known: 0, refused: 0, sorted: 0 }];
-        const bridge = await fakeBridge(page, { accepts: { mode: 'research', sync: { auto: 'write' }, sources: true, verified: true, media: MEDIA }, batches });
+        const kept = [{ ...batches[0], kept: true }];
+        const RESEARCH = { mode: 'research', sync: { auto: 'write' }, sources: true, verified: true, media: MEDIA };
+        const bridge = await fakeBridge(page, { accepts: RESEARCH, batches });
         await page.evaluate(() => localStorage.setItem('strom-research-auto-intro-seen', '1'));
-        await poll(page);
+        const batchLine = async (): Promise<string> => {
+            await poll(page);
+            await openResearchMenu(page);
+            await expect(page.locator('#research-menu')).toBeVisible();
+            const text = await page.locator('#research-menu .batch-line').count() ? await page.locator('#research-menu .batch-line .research-sync-line2-text').innerText() : '';
+            await page.evaluate(() => window.Strom.UI.closeActionsMenu());
+            return text;
+        };
         // With an agent: how far it sorted.
-        await openResearchMenu(page);
-        await expect(page.locator('#research-menu .batch-line')).toContainText('Matriky');
-        await page.evaluate(() => window.Strom.UI.closeActionsMenu());
-        // An archive: nothing waits there ('kept', or an older one that says closed).
+        expect(await batchLine()).toBe('Matriky: 0 of 5 sorted');
+        // An archive of an older bridge (no batch.kept): stored by the archive's mode.
         bridge.accepts = { ...ARCHIVE, media: MEDIA };
-        await poll(page);
+        expect(await batchLine()).toBe('Matriky: 5 files stored');
         await openResearchMenu(page);
-        await expect(page.locator('#research-menu')).toBeVisible();
-        await expect(page.locator('#research-menu .batch-line')).toHaveCount(0);
-        await expect(page.locator('#research-menu')).not.toContainText(/waiting to be filed/);
+        await expect(page.locator('#research-menu .batch-line')).toContainText('Overview');
+        await expect(page.locator('#research-menu')).not.toContainText(/waiting to be filed|sorted/);
         await page.evaluate(() => window.Strom.UI.closeActionsMenu());
-        bridge.batches = [{ ...batches[0], state: 'kept' }];
-        await poll(page);
-        await openResearchMenu(page);
-        await expect(page.locator('#research-menu .batch-line')).toHaveCount(0);
+        // A bridge that marks kept batches: in the archive, and in a research waiting for its agent.
+        bridge.features = ['batch.kept'];
+        bridge.batches = kept;
+        expect(await batchLine()).toBe('Matriky: 5 files stored');
+        bridge.accepts = { ...RESEARCH, agentHere: false };
+        expect(await batchLine()).toBe('Matriky: 5 files stored');
+        // Waiting for its agent on an older bridge (no kept): as before.
+        bridge.features = undefined;
+        bridge.batches = batches;
+        expect(await batchLine()).toBe('Matriky: 0 of 5 sorted');
+        // With an agent and the feature, a batch not kept: how far it sorted.
+        bridge.features = ['batch.kept'];
+        bridge.accepts = RESEARCH;
+        expect(await batchLine()).toBe('Matriky: 0 of 5 sorted');
     });
 });
 

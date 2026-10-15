@@ -1148,12 +1148,17 @@ export interface LiveStatus {
     channel?: 'beta';
 }
 
+/** `/status.features`: the bridge marks a batch nobody sorts (`kept: true`, an archive or a research waiting for its agent). */
+export const BATCH_KEPT_FEATURE = 'batch.kept';
+
 /** One batch as the research keeps it (`/status.batches`). */
 export interface LiveBatch {
     id: string;
     name: string;
-    /** 'kept': stored as it is, nobody sorts it (an archive); an unknown state reads as closed. */
-    state: 'open' | 'closed' | 'kept';
+    /** An unknown state reads as closed. */
+    state: 'open' | 'closed';
+    /** Stored as it is, nobody sorts it (an archive, a research waiting for its agent); `sorted` then means nothing. */
+    kept?: true;
     at: string;
     files: number;
     known: number;
@@ -1171,9 +1176,10 @@ export function sanitizeBatches(value: unknown): LiveBatch[] | null {
         if (!b || !id) continue;
         const at = cleanText(b.at, 40);
         out.push({
-            id, name: cleanText(b.name, MAX_NAME), state: b.state === 'open' ? 'open' : b.state === 'kept' ? 'kept' : 'closed',
+            id, name: cleanText(b.name, MAX_NAME), state: b.state === 'open' ? 'open' : 'closed',
             at: Number.isFinite(Date.parse(at)) ? at : '',
             files: asCount(b.files) ?? 0, known: asCount(b.known) ?? 0, refused: asCount(b.refused) ?? 0, sorted: asCount(b.sorted) ?? 0,
+            ...(b.kept === true ? { kept: true as const } : {}),
         });
     }
     return out;

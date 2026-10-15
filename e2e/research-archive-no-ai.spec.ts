@@ -69,6 +69,13 @@ function expectNoAgent(where: string, text: string): void {
     expect(hit ? `${where}: …${text.slice(Math.max(0, hit.index - 60), hit.index + 60)}…` : '', where).toBe('');
 }
 
+/** The block's line of a stored batch (Matriky, 5 files). */
+const STORED_LINE: Record<string, string> = {
+    'en-US': 'Matriky: 5 files stored',
+    'cs-CZ': 'Matriky: uloženo, souborů: 5',
+    'de-DE': 'Matriky: 5 Dateien gespeichert',
+};
+
 for (const locale of ['en-US', 'cs-CZ', 'de-DE']) {
     test.describe(`an archive never speaks of an agent or AI (${locale})`, () => {
         test.use({ locale });
@@ -85,9 +92,20 @@ for (const locale of ['en-US', 'cs-CZ', 'de-DE']) {
             await expect(page.locator('#research-menu-archive')).toBeVisible();
             await expect(page.locator('#research-item-chat')).toHaveCount(0);
             await expect(page.locator('#research-item-live')).toHaveCount(0);
-            await expect(page.locator('#research-menu .batch-line')).toHaveCount(0);
+            // A batch the archive stored (an older bridge, by the archive's mode): stored, never waiting to be filed (K4.5).
+            const storedLine = STORED_LINE[locale];
+            await expect(page.locator('#research-menu .batch-line .research-sync-line2-text')).toHaveText(storedLine);
             expectNoAgent('Research menu', await shownText(page, '#research-menu'));
             await page.evaluate(() => window.Strom.UI.closeResearchMenu());
+            // A bridge that marks it kept: the same.
+            bridge.features = ['batch.kept'];
+            bridge.batches = [{ id: 'b-12345678', name: 'Matriky', state: 'closed', kept: true, at: new Date().toISOString(), files: 5, known: 0, refused: 0, sorted: 0 }];
+            await poll(page);
+            await openResearchMenu(page);
+            await expect(page.locator('#research-menu .batch-line .research-sync-line2-text')).toHaveText(storedLine);
+            await page.evaluate(() => window.Strom.UI.closeResearchMenu());
+            bridge.features = undefined;
+            await poll(page);
             await page.evaluate(() => window.Strom.UI.toggleActionsMenu());
             expectNoAgent('Actions menu', await shownText(page, '#actions-menu-dropdown'));
             await page.evaluate(() => window.Strom.UI.closeActionsMenu());

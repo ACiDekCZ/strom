@@ -318,12 +318,16 @@ describe('what the bridge says', () => {
         expect(sanitizeAccepts({ mode: 'archive', modeSince: 'yesterday' })).not.toHaveProperty('modeSince');
     });
 
-    it('batches: an archive keeps a batch as it is (kept), never waiting to be sorted', () => {
-        const batches = sanitizeLiveStatus({ tree: RID, batches: [
-            { id: 'b-12345678', name: 'Matriky', state: 'kept', files: 5, sorted: 0 },
+    it('batches: a batch nobody sorts is kept (kept: true only), the state stays open or closed (K4.5)', () => {
+        const batches = sanitizeLiveStatus({ tree: RID, features: ['batch.kept'], batches: [
+            { id: 'b-12345678', name: 'Matriky', state: 'closed', kept: true, files: 5, sorted: 0 },
             { id: 'b-87654321', name: 'Fotky', state: 'whatever', files: 3, sorted: 1 },
+            { id: 'b-11112222', name: 'Listy', state: 'kept', kept: 'yes', files: 2, sorted: 0 },
+            { id: 'b-33334444', name: 'Nové', state: 'open', kept: true, files: 1, sorted: 0 },
         ] })?.batches;
-        expect(batches?.map(b => b.state)).toEqual(['kept', 'closed']);
+        expect(batches?.map(b => b.state)).toEqual(['closed', 'closed', 'closed', 'open']);
+        expect(batches?.map(b => b.kept)).toEqual([true, undefined, undefined, true]);
+        expect(batches?.[1]).not.toHaveProperty('kept');
     });
 
     it('inbox: clean entries only', () => {

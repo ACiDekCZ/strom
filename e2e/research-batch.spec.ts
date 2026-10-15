@@ -303,6 +303,25 @@ test.describe('Add materials', () => {
         await openResearchMenu(page);
         await expect(page.locator('#research-item-batch')).toHaveCount(0);
     });
+
+    test('a research waiting for its agent: the batch is stored as it is, no privacy, cost or sorting said (K4.5)', async ({ page }) => {
+        const b = await fakeBridge(page, { accepts: { ...BATCH_ACCEPTS, mode: 'research', agentHere: false }, features: ['batch.kept'] });
+        await openResearch(page, { media: true });
+        await poll(page);
+        await page.evaluate(() => (window.Strom.UI as any).showBatchDialog());
+        await addFiles(page, ['Krabice/a.jpg', 'Krabice/b.jpg']);
+        const dialog = page.locator('#batch-modal');
+        await dialog.locator('[data-act="next"]').click();
+        await expect(dialog.locator('.batch-confirm-title')).toHaveText('Send to the research?');
+        await expect(dialog.locator('.material-box')).toHaveText(/The files are stored in the research as they are, outside git\./);
+        await expect(dialog.locator('.batch-cost-row')).toHaveCount(0);
+        await expect(dialog).not.toContainText(/Privacy|model provider|Estimated cost/);
+        await dialog.getByRole('button', { name: 'Send 2 files' }).click();
+        await expect(dialog.locator('.batch-confirm-title')).toContainText('Batch “Krabice” is in the research');
+        await expect(dialog.locator('.batch-done-text')).toHaveText('The files are stored in the research.');
+        await expect(dialog).not.toContainText(/agent will sort|Sorting tasks/);
+        expect(b.mediaPuts).toHaveLength(2);
+    });
 });
 
 test.describe('Add materials in Czech', () => {

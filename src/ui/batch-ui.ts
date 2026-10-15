@@ -13,7 +13,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { PersonId } from '../types.js';
 import { sha256OfBlob } from '../sha256.js';
 import { originalTargets, mediaReplyId } from '../originals.js';
-import { parseLiveBridge, withAppVersion, researchSchemeUrl, sanitizeLiveStatus } from '../research-link.js';
+import { parseLiveBridge, withAppVersion, researchSchemeUrl, sanitizeLiveStatus, BATCH_KEPT_FEATURE } from '../research-link.js';
 import { storedResearchBridge, announcedResearchScheme } from '../research-device.js';
 import {
     BatchSkip, BatchFolder, batchSkip, batchLimitsOf, batchOverLimit, batchEstimate, batchDefaultName, batchTree,
@@ -424,6 +424,8 @@ export const batchMethods = uiModule({
         const s = st!;
         const link = this.researchOriginalsLink()!;
         const archive = this.researchModeOf(link.researchId) === 'archive';
+        // A research waiting for its agent stores the batch as it is, as an archive does (nobody sorts it, K4.5).
+        const stored = archive || this.researchAgentAway(link.researchId);
         const chosen = s.items.filter(i => i.checked);
         const bytes = chosen.reduce((sum, i) => sum + i.size, 0);
         const rates = this.researchAcceptsOf(link.researchId)?.mediaEstimate ?? null;
@@ -434,8 +436,8 @@ export const batchMethods = uiModule({
             try { return new Intl.NumberFormat(getCurrentLanguage(), { style: 'currency', currency: cur, maximumFractionDigits: n < 10 ? 2 : 0 }).format(n); }
             catch { return `${n} ${cur}`; }
         };
-        const info = archive
-            ? `<p class="material-box"><span class="research-not-retroactive-icon" aria-hidden="true">i</span><span>${esc(b.archiveInfo)}</span></p>`
+        const info = stored
+            ? `<p class="material-box"><span class="research-not-retroactive-icon" aria-hidden="true">i</span><span>${esc(archive ? b.archiveInfo : b.storedInfo)}</span></p>`
             : `<div class="batch-confirm-block"><div class="batch-confirm-label">${esc(b.privacyTitle)}</div><p>${esc(b.privacy)}</p></div>
                <div class="batch-confirm-block"><div class="batch-confirm-label">${esc(b.costTitle)}</div>${est
                     ? `<div class="batch-cost-row"><span>${esc(b.costSort)}</span><strong>${esc(smallBatch ? b.atMost(money(est.amount, est.currency)) : b.about(money(est.amount, est.currency)))}</strong></div><p class="batch-cost-note">${esc(b.costNote)}</p>`
@@ -493,6 +495,7 @@ export const batchMethods = uiModule({
         const r = run!;
         const link = this.researchOriginalsLink();
         const archive = !!link && this.researchModeOf(link.researchId) === 'archive';
+        const stored = archive || (!!link && this.researchAgentAway(link.researchId));
         const received = r.result?.inputs ?? r.received;
         // What the research already had: its count at the close (sent and known) plus what was skipped before sending.
         const known = (r.result ? r.result.known : r.skipped) + r.skippedAsked;
@@ -507,8 +510,8 @@ export const batchMethods = uiModule({
                     <div class="batch-done-row"><span>${esc(archive ? b.receivedArchive : b.received)}</span><strong>${received}</strong></div>
                     ${known ? `<div class="batch-done-row"><span>${esc(archive ? b.alreadyHadArchive : b.alreadyHad)}</span><strong>${known}</strong></div>` : ''}
                     ${refusedRow}
-                    ${!archive && r.result?.tasks ? `<div class="batch-done-row"><span>${esc(b.tasks)}</span><strong>${r.result.tasks}</strong></div>` : ''}
-                    <p class="batch-done-text">${esc(archive ? b.doneTextArchive : b.doneText)}</p>
+                    ${!stored && r.result?.tasks ? `<div class="batch-done-row"><span>${esc(b.tasks)}</span><strong>${r.result.tasks}</strong></div>` : ''}
+                    <p class="batch-done-text">${esc(archive ? b.doneTextArchive : stored ? b.doneTextStored : b.doneText)}</p>
                     ${open ? `<button type="button" class="research-sync-link" data-act="open-research">${esc(b.openInResearch)}</button>` : ''}
                 </div>
                 <div class="buttons batch-footer">
@@ -942,14 +945,14 @@ export const batchMethods = uiModule({
             return line(`${b.unfinishedTitle(rec.name)} · ${b.unfinishedSub(rec.done, rec.total)}`,
                 btn(b.resume, 'showBatchDialog()') + btn(b.discard, 'discardUnfinishedBatch()'), true);
         }
-        // An archive stores a batch as it is (nobody sorts it): nothing waits there to be filed (K5.5),
-        // and a batch 'kept' never does.
-        if (this.researchModeOf(link.researchId) === 'archive') return '';
-        const batches = this.researchStatusOf(link.researchId)?.batches ?? [];
-        const pending = batches.find(x => x.state === 'closed' && x.sorted < x.files);
-        if (!pending) return '';
+        const status = this.researchStatusOf(link.researchId);
+        // A batch nobody sorts is stored, never waiting to be filed (K4.5): the bridge marks it `kept`
+        // (an archive, a research waiting for its agent); an older bridge only by the archive's mode.
+        const keptByMode = !status?.features?.includes(BATCH_KEPT_FEATURE) && this.researchModeOf(link.researchId) === 'archive';
+        const batch = (status?.batches ?? []).find(x => x.state === 'closed' && (x.kept || keptByMode || x.sorted < x.files));
+        if (!batch) return '';
         const open = this.researchLinkAvailable('open') ? btn(b.overview, 'researchSyncAction(\'openResearch\')') : '';
-        return line(b.sortedLine(pending.name, pending.sorted, pending.files), open);
+        return line(batch.kept || keptByMode ? b.keptLine(batch.name, batch.files) : b.sortedLine(batch.name, batch.sorted, batch.files), open);
     },
 
     discardUnfinishedBatch(): void {
