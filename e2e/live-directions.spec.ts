@@ -47,6 +47,8 @@ interface Bridge {
     working?: Record<string, unknown>[];
     /** Every `/status` asked. */
     statusAsks: number;
+    /** What the research takes (`/status.accepts`); absent: an older research that does not say. */
+    accepts?: Record<string, unknown>;
 }
 
 const AGENT = { who: 'agent-matriky', since: ago(16), task: 'T0101 Matriky Chlumy', person: 'P0012', research: 'G0001', session: 'N0132' };
@@ -73,6 +75,7 @@ async function follow(page: Page, researches: Record<string, unknown>[] = DIRECT
         ],
         links: ALL,
         researches: bridge.researches,
+        ...(bridge.accepts ? { accepts: bridge.accepts } : {}),
     });
     await page.route(`${BRIDGE}/**`, async (route) => {
         const path = new URL(route.request().url()).pathname;
@@ -368,4 +371,44 @@ test.describe('research directions', () => {
         await page.waitForTimeout(1500);
         expect(bridge.statusAsks - before).toBe(1);
     });
+
+    // K5.2 (A2): switched to an archive while followed, or the agent gone from this computer: nobody to follow.
+    for (const [what, accepts, toast] of [
+        ['switched to an archive', { mode: 'archive', sync: { auto: 'mirror' } }, 'The research is now an archive, so following stopped. The tree can be edited.'],
+        ['its agent gone from this computer', { mode: 'research', agentHere: false, sync: { auto: 'mirror' } }, 'The research waits for an AI agent, so following stopped. The tree can be edited.'],
+    ] as const) {
+        test(`${what} while followed: following ends, the tree opens for editing, nothing of the agent stays`, async ({ page }) => {
+            const bridge = await follow(page);
+            // Followed: the tree is locked.
+            expect(await page.evaluate(() => window.Strom.DataManager.isLiveFollowing())).toBe(true);
+            await openOverview(page);
+            await expect(row(page, 'G0001')).toBeVisible();
+            // The research switches; its next status (the stream comes back every couple of seconds) says so.
+            bridge.accepts = accepts;
+            await expect.poll(() => page.evaluate(() => window.Strom.UI.isFollowingActiveResearch()), { timeout: 10000 }).toBe(false);
+            expect(await page.evaluate(() => window.Strom.DataManager.isLiveFollowing())).toBe(false);
+            expect(await page.evaluate(() => window.Strom.DataManager.isReadOnly())).toBe(false);
+            await expect(page.locator('.toast').filter({ hasText: toast })).toBeVisible();
+            await expect(page.locator('#live-panel')).toBeHidden();
+            await expect(ov(page)).toBeHidden();
+            await expect(page.locator('.research-direction__actions [data-do="work"]')).toHaveCount(0);
+            // Not "watching live · tree locked", no "Back to the agent", no old "awaiting" from the live status.
+            await page.evaluate(() => window.Strom.UI.openResearchMenu());
+            const menu = page.locator('#research-menu');
+            await expect(menu).toBeVisible();
+            await expect(menu.locator('#research-menu-following')).toHaveCount(0);
+            for (const id of ['research-item-chat', 'research-item-live', 'research-item-overview', 'research-item-waiting']) {
+                await expect(menu.locator(`#${id}`)).toHaveCount(0);
+            }
+            await expect(page.locator('body')).not.toContainText('Back to the agent');
+            expect(await page.evaluate(() => window.Strom.UI.researchWaiting()?.items.length ?? 0)).toBe(0);
+            // The tree can be edited.
+            await page.evaluate(() => {
+                const dm = window.Strom.DataManager;
+                const jan = dm.getAllPersons().find(p => p.firstName === 'Jan')!;
+                dm.updatePerson(jan.id, { birthPlace: 'Praha' });
+            });
+            expect(await page.evaluate(() => window.Strom.DataManager.getAllPersons().find(p => p.firstName === 'Jan')?.birthPlace)).toBe('Praha');
+        });
+    }
 });

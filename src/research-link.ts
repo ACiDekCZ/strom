@@ -1152,7 +1152,8 @@ export interface LiveStatus {
 export interface LiveBatch {
     id: string;
     name: string;
-    state: 'open' | 'closed';
+    /** 'kept': stored as it is, nobody sorts it (an archive); an unknown state reads as closed. */
+    state: 'open' | 'closed' | 'kept';
     at: string;
     files: number;
     known: number;
@@ -1170,7 +1171,7 @@ export function sanitizeBatches(value: unknown): LiveBatch[] | null {
         if (!b || !id) continue;
         const at = cleanText(b.at, 40);
         out.push({
-            id, name: cleanText(b.name, MAX_NAME), state: b.state === 'open' ? 'open' : 'closed',
+            id, name: cleanText(b.name, MAX_NAME), state: b.state === 'open' ? 'open' : b.state === 'kept' ? 'kept' : 'closed',
             at: Number.isFinite(Date.parse(at)) ? at : '',
             files: asCount(b.files) ?? 0, known: asCount(b.known) ?? 0, refused: asCount(b.refused) ?? 0, sorted: asCount(b.sorted) ?? 0,
         });
@@ -1308,6 +1309,14 @@ export interface ResearchAccepts {
     mode: 'agent' | 'archive';
     /** The bridge said its mode (an older one does not: then the file's `_STROM_MODE` decides). */
     modeSaid?: boolean;
+    /**
+     * `agentHere: false`: a research (mode stays 'agent') whose agent is not on
+     * this computer. It waits for one and takes the app's data as an archive
+     * does; absent: the agent is here, or an older bridge that does not say.
+     */
+    agentHere?: false;
+    /** When the research's mode was last switched (`accepts.modeSince`, ISO), when the bridge says. */
+    modeSince?: string;
     /** A send waits in the research's inbox for the user (`sync.auto: "off"`). */
     review: boolean;
 }
@@ -1381,6 +1390,8 @@ export function sanitizeAccepts(value: unknown): ResearchAccepts | null {
         mediaEstimate: mediaEstimate(asRecord(r.media)?.estimate),
         mode: r.mode === 'archive' ? 'archive' : 'agent',
         ...(typeof r.mode === 'string' && r.mode ? { modeSaid: true } : {}),
+        ...(r.agentHere === false && r.mode !== 'archive' ? { agentHere: false as const } : {}),
+        ...(typeof r.modeSince === 'string' && r.modeSince.length <= 40 && Number.isFinite(Date.parse(r.modeSince)) ? { modeSince: r.modeSince } : {}),
         review: auto === 'off' && r.mode !== 'archive',
     };
 }

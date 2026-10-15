@@ -304,6 +304,28 @@ describe('what the bridge says', () => {
         expect(sanitizeAccepts({ mode: 'robot' })?.mode).toBe('agent');
     });
 
+    it('accepts: a research waiting for its agent (agentHere: false) and when the mode was switched', () => {
+        // Waiting for an agent: still a research (no archive), the flag kept.
+        expect(sanitizeAccepts({ mode: 'research', agentHere: false, sync: { auto: 'mirror' } }))
+            .toMatchObject({ mode: 'agent', agentHere: false, syncAuto: 'mirror', review: false });
+        // Only `false` counts; an archive needs no flag; absent (older bridge, agent here): as before.
+        expect(sanitizeAccepts({ mode: 'research', agentHere: 'no' })?.agentHere).toBeUndefined();
+        expect(sanitizeAccepts({ mode: 'research', agentHere: true })?.agentHere).toBeUndefined();
+        expect(sanitizeAccepts({ mode: 'archive', agentHere: false })?.agentHere).toBeUndefined();
+        expect(sanitizeAccepts({ mode: 'research' })).not.toHaveProperty('agentHere');
+        // The date of the last switch, when the bridge says (a date only).
+        expect(sanitizeAccepts({ mode: 'archive', modeSince: '2026-10-10T08:00:00Z' })?.modeSince).toBe('2026-10-10T08:00:00Z');
+        expect(sanitizeAccepts({ mode: 'archive', modeSince: 'yesterday' })).not.toHaveProperty('modeSince');
+    });
+
+    it('batches: an archive keeps a batch as it is (kept), never waiting to be sorted', () => {
+        const batches = sanitizeLiveStatus({ tree: RID, batches: [
+            { id: 'b-12345678', name: 'Matriky', state: 'kept', files: 5, sorted: 0 },
+            { id: 'b-87654321', name: 'Fotky', state: 'whatever', files: 3, sorted: 1 },
+        ] })?.batches;
+        expect(batches?.map(b => b.state)).toEqual(['kept', 'closed']);
+    });
+
     it('inbox: clean entries only', () => {
         const inbox = sanitizeInbox({
             trees: [

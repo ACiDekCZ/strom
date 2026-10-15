@@ -188,6 +188,8 @@ function writeBridge(researchId: string, value: StoredResearchBridge): void {
                 } } : {}),
                 // Said by the bridge: kept either way (an archive switched back to research too).
                 ...(value.accepts.mode === 'archive' ? { mode: 'archive' } : value.accepts.modeSaid ? { mode: 'research' } : {}),
+                ...(value.accepts.agentHere === false ? { agentHere: false } : {}),
+                ...(value.accepts.modeSince ? { modeSince: value.accepts.modeSince } : {}),
             } } : {}),
             ...(value.head ? { head: value.head } : {}),
         }));
@@ -287,6 +289,8 @@ export interface ResearchAutoState {
     modeSeen?: 'agent' | 'archive';
     /** When the mode last switched (ISO): the line in Research for this tree. */
     modeSince?: string;
+    /** The research's mode as last noticed (a later switch dates `modeSince` anew). */
+    modeNoticed?: 'agent' | 'archive';
     /** The offer to send by itself (an archive, a tree sent by hand) was answered. */
     offerSeen?: true;
     /** Edits since the last send ("3 changes waiting"). */
@@ -438,6 +442,7 @@ export function researchAutoState(treeId: string): ResearchAutoState {
         }
         if (p.modeSeen === 'agent' || p.modeSeen === 'archive') out.modeSeen = p.modeSeen;
         if (typeof p.modeSince === 'string' && Number.isFinite(Date.parse(p.modeSince))) out.modeSince = p.modeSince;
+        if (p.modeNoticed === 'agent' || p.modeNoticed === 'archive') out.modeNoticed = p.modeNoticed;
         if (p.offerSeen === true) out.offerSeen = true;
         if (typeof p.edits === 'number' && p.edits > 0) out.edits = Math.min(Math.floor(p.edits), 99999);
         if (typeof p.unsentSince === 'string' && Number.isFinite(Date.parse(p.unsentSince))) out.unsentSince = p.unsentSince;

@@ -412,7 +412,7 @@ export const researchEdgeUiMethods = uiModule({
         const work: string[] = [];
         if (edge.searches !== undefined) work.push(re.searches(edge.searches));
         // The agent's sessions and their price: not in an archive.
-        if (edge.sessions && !this.activeResearchArchive()) {
+        if (edge.sessions && !this.activeResearchAgentless()) {
             work.push(re.sessions(edge.sessions.n));
             if (edge.sessions.cost !== undefined) work.push(re.cost(edge.sessions.cost.toFixed(2), !!edge.sessions.partial));
         }
@@ -549,7 +549,7 @@ export const researchEdgeUiMethods = uiModule({
                     ${option('off', re.modeOff)}${work ? option('mine', re.modeMine) : ''}${option('all', re.modeAll)}
                 </div>
             </div>
-            ${work && !this.activeResearchArchive() ? `<label class="settings-checkbox settings-row settings-row-dependent${mode === 'off' ? ' is-disabled' : ''}">
+            ${work && !this.activeResearchAgentless() ? `<label class="settings-checkbox settings-row settings-row-dependent${mode === 'off' ? ' is-disabled' : ''}">
                 <input type="checkbox" id="research-edge-motion-toggle"${TreeManager.isResearchEdgeMotion(treeId) ? ' checked' : ''}${mode === 'off' ? ' disabled' : ''}>
                 <span class="settings-text">
                     <span class="settings-name">${esc(re.motionLabel)}</span>

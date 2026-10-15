@@ -214,8 +214,10 @@ export const researchActionsMethods = uiModule({
         const autoSend = capable && this.researchAutoOn(ctx?.link);
         // An archive: nothing that leads to an agent.
         const archive = capable && this.activeResearchArchive();
-        // Nothing that leads to an agent in an archive, nor while the research's mode is not known here.
-        const noAgent = archive || !this.activeResearchModeKnown();
+        // A research waiting for its agent (none on this computer): as an archive, without the tag.
+        const agentAway = capable && this.activeResearchAgentAway();
+        // Nothing that leads to an agent in an archive, while waiting for one, nor while the research's mode is not known here.
+        const noAgent = archive || agentAway || !this.activeResearchModeKnown();
         // Only loading from the research: nothing to send, no row for it.
         const sendOff = capable && !!ctx && researchSendMode(ctx.link) === 'off';
         // "Send changes…" opens "What will be sent" first; without the preview it sends at once (no dots).
@@ -282,7 +284,7 @@ export const researchActionsMethods = uiModule({
             const intake = known?.lastIntake;
             const sentAt = intake ? Date.parse(intake.at) : NaN;
             // Taking the last send back is the user's (an archive too); not while the research's mode is not known here.
-            if ((archive || !noAgent) && intake && this.researchLinkAvailable('sync-undo') && Number.isFinite(sentAt) && Date.now() - sentAt < UNDO_MAX_AGE_MS) {
+            if ((archive || agentAway || !noAgent) && intake && this.researchLinkAvailable('sync-undo') && Number.isFinite(sentAt) && Date.now() - sentAt < UNDO_MAX_AGE_MS) {
                 occasional.push({ id: 'research-item-undo', label: r.undoSend, method: 'researchActionUndoSend', ext: true,
                     sub: r.sentAt(formatLiveClock(sentAt, Date.now(), getCurrentLanguage())) });
             }
@@ -291,7 +293,8 @@ export const researchActionsMethods = uiModule({
                 occasional.push({ id: 'research-item-setup', label: capable ? r.settingsInResearch : r.settings, method: 'researchActionSetup', ext: true });
             }
             groups = [{ items: frequent }, { items: middle }, { items: occasional, quiet: true }];
-            note = archive ? r.submenuNoteArchive : r.submenuNote;
+            // Waiting for an agent: where one is installed (the research's menu, first items).
+            note = archive ? r.submenuNoteArchive : agentAway ? r.submenuNoteWaiting : r.submenuNote;
             // A newer research: one framed line under the state, "Update ↗" the item in it.
             if (known?.update) {
                 const canUpdate = this.researchLinkAvailable('update');

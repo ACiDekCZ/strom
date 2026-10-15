@@ -1527,7 +1527,9 @@ export const researchUiMethods = uiModule({
         // Who would lose what (A2): at most five people, then "and N more".
         const names = treeId === DataManager.getCurrentTreeId() ? await this.researchOverwriteNames() : '';
         if (bridgeUp) {
-            const message = [u.unsentBody(treeName), names, mediaLine].filter(Boolean).join('\n\n');
+            // Confirmed in the research only while sends wait in its inbox; else written at once (an archive, writing straight).
+            const review = !!link && this.researchReviewOn(link.id);
+            const message = [u.unsentBody(treeName, review), names, mediaLine].filter(Boolean).join('\n\n');
             // "Only load from the research": sending first is no way out here.
             const sendOff = link?.sendMode === 'off';
             const pick = await this.showChoice(message, u.unsentTitle, [
@@ -1770,14 +1772,15 @@ export const researchUiMethods = uiModule({
     researchWaiting(): ResearchWaitingState | null {
         const treeId = DataManager.getCurrentTreeId();
         if (live && !live.ended && live.treeId === treeId) {
-            return { items: live.waiting, at: Date.now(), live: true, update: live.update, lastIntake: live.lastIntake };
+            // An archive (or a research waiting for its agent) has no tasks for the user, live or not.
+            return { items: this.activeResearchAgentless() ? [] : live.waiting, at: Date.now(), live: true, update: live.update, lastIntake: live.lastIntake };
         }
         const researchId = this.activeResearchId();
         const stored = researchId ? storedResearchWaiting(researchId) : null;
         if (!stored) return null;
         // An archive has no tasks for the user (whatever its status or an old list says); its update and last send stay.
         // A research that stopped running here has none either until it runs again ("not running" shows instead).
-        const none = this.activeResearchArchive() || (!!researchId && this.researchBridgeKnownDown(researchId));
+        const none = this.activeResearchAgentless() || (!!researchId && this.researchBridgeKnownDown(researchId));
         // A newer version only as the bridge says it now: one remembered from an earlier answer may be
         // the very version installed since (the research updated, or not running, or not asked in this page yet).
         const update = !!researchId && this.researchBridgeFresh(researchId) ? stored.update : null;
@@ -2018,7 +2021,7 @@ export const researchUiMethods = uiModule({
             }
             // An archive has no agent to follow: the tree opens for editing, its
             // bridge remembered (the changes go to it by themselves).
-            if (status.accepts?.mode === 'archive') {
+            if (status.accepts?.mode === 'archive' || status.accepts?.agentHere === false) {
                 if (opts.resume) forgetLiveBridge();
                 this.refreshResearchSyncUi();
                 void this.pollResearchBridge();
@@ -2096,7 +2099,7 @@ export const researchUiMethods = uiModule({
             const status = sanitizeLiveStatus(payload(e));
             if (status) this.onLiveStatus(s, status);
             // After a reconnect: what happened meanwhile, from the research's history.
-            if (s.logged) void this.fetchLiveLog(s);
+            if (s.logged && !s.ended) void this.fetchLiveLog(s);
         });
         es.addEventListener('change', (e) => {
             this.liveBridgeBack(s);
@@ -2184,6 +2187,17 @@ export const researchUiMethods = uiModule({
     onLiveStatus(s: LiveSession, status: LiveStatus): void {
         if (status.treeId && status.treeId !== s.researchId) {
             this.endLiveFollow(s, 'other');
+            return;
+        }
+        // Switched to an archive while followed (or its agent gone from this computer): nobody works
+        // in it to follow, so following ends and the tree opens for editing, as a ?live= to an archive does (A2).
+        if (status.accepts && (status.accepts.mode === 'archive' || status.accepts.agentHere === false)) {
+            if (status.treeId) noteResearchBridgeStatus(status.treeId, status.accepts, status.head);
+            this.endLiveFollow(s, 'stopped');
+            this.renderLiveFollowPill();
+            this.showToast(status.accepts.mode === 'archive' ? strings.research.liveEndedArchive : strings.research.liveEndedNoAgent, 6000);
+            this.refreshResearchSyncUi();
+            void this.pollResearchBridge();
             return;
         }
         if (status.headAt) s.headAt = status.headAt;

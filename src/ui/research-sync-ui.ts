@@ -492,9 +492,31 @@ export const researchSyncMethods = uiModule({
         return !!runtime.get(id)?.status || !!storedResearchBridge(id)?.base || ctx.link.mode === 'archive' || !anyResearchBridgeKnown();
     },
 
-    /** Nothing that leads to an agent: an archive, or a research whose mode is not known here. */
+    /** Nothing that leads to an agent: an archive, a research waiting for its agent, or one whose mode is not known here. */
     activeResearchNoAgent(): boolean {
-        return this.activeResearchArchive() || !this.activeResearchModeKnown();
+        return this.activeResearchAgentless() || !this.activeResearchModeKnown();
+    },
+
+    /**
+     * A research (not an archive) whose agent is not on this computer
+     * (`accepts.agentHere: false`): it waits for one, takes the app's data as
+     * an archive does, and the app offers nothing of the agent's. Its mode
+     * stays research (no "Archive" tag, no switch said).
+     */
+    researchAgentAway(researchId: string, link?: Pick<ResearchLink, 'mode'>): boolean {
+        const accepts = runtime.get(researchId)?.status?.accepts ?? storedResearchBridge(researchId)?.accepts;
+        return accepts?.agentHere === false && this.researchModeOf(researchId, link) !== 'archive';
+    },
+
+    /** The active research tree waits for its agent (see researchAgentAway). */
+    activeResearchAgentAway(): boolean {
+        const ctx = this.researchSyncLink();
+        return !!ctx && this.researchAgentAway(ctx.link.id, ctx.link);
+    },
+
+    /** The active research tree works without an agent now: an archive, or a research waiting for its agent. */
+    activeResearchAgentless(): boolean {
+        return this.activeResearchArchive() || this.activeResearchAgentAway();
     },
 
     /** The active research tree is an archive (no agent): the agent's actions are not offered. */
@@ -585,7 +607,8 @@ export const researchSyncMethods = uiModule({
             openConflicts: this.researchSendsOpenConflicts(treeId, link) > 0,
             auto,
             sendOff: researchSendMode(link) === 'off',
-            archive: mode === 'archive',
+            // A research waiting for its agent writes a send at once, as an archive does.
+            archive: mode === 'archive' || this.researchAgentAway(link.id, link),
             sending: sendingTree === treeId,
             autoDue: autoDue.has(treeId),
             written: st.lastWritten ?? null,
@@ -753,8 +776,16 @@ export const researchSyncMethods = uiModule({
         if (!link || !this.researchSyncCapable(link.id)) return;
         const mode = this.researchModeOf(link.id, link);
         const st = researchAutoState(treeId);
-        if (!st.modeSeen) patchResearchAutoState(treeId, { modeSeen: mode });
-        else if (st.modeSeen !== mode && !st.modeSince) patchResearchAutoState(treeId, { modeSince: new Date().toISOString() });
+        if (!st.modeSeen) patchResearchAutoState(treeId, { modeSeen: mode, modeNoticed: mode });
+        else {
+            // The mode noticed last (kept before: the one seen, or the one already dated): each
+            // switch since dates the line anew (the last switch, A1), by the bridge's own date when it says.
+            const noticed = st.modeNoticed ?? (st.modeSince ? mode : st.modeSeen);
+            if (noticed !== mode) {
+                const said = (runtime.get(link.id)?.status?.accepts ?? storedResearchBridge(link.id)?.accepts)?.modeSince;
+                patchResearchAutoState(treeId, { modeSince: said || new Date().toISOString(), modeNoticed: mode });
+            } else if (st.modeNoticed !== mode) patchResearchAutoState(treeId, { modeNoticed: mode });
+        }
         // An archive: the tasks it listed with an agent are not the user's any more.
         if (mode === 'archive') forgetResearchWaitingItems(link.id);
     },
@@ -2186,9 +2217,10 @@ export const researchSyncMethods = uiModule({
             autoWaiting: () => ({ tone: 'quiet', title: s.autoWaitingTitle,
                 sub: [changed ? s.changedAt(changed) : '', this.researchAutoDueClock(treeId) ? s.autoSendsAt(this.researchAutoDueClock(treeId)) : ''].filter(Boolean).join(' · ') || undefined,
                 actions: [{ action: 'send', label: s.sendNow, asLink: true }] }),
-            sending: () => ({ tone: 'quiet', title: archive ? s.markWriting : s.markSending, spinner: true }),
+            // An archive, or a research waiting for its agent: a send is written at once.
+            sending: () => ({ tone: 'quiet', title: archive || (!!link && this.researchAgentAway(link.id, link)) ? s.markWriting : s.markSending, spinner: true }),
             autoBridgeDown: () => archive
-                ? { tone: 'warn', title: s.bridgeDownSince(whenMs(rt?.downSince ?? 0) || changed), sub: s.archiveBridgeDownSub(edits), actions: start }
+                ? { tone: 'warn', title: s.archiveBridgeDownSince(whenMs(rt?.downSince ?? 0) || changed), sub: s.archiveBridgeDownSub(edits), actions: start }
                 : { tone: 'warn', title: s.stateBridgeDown, sub: s.autoBridgeDownSub(changed), actions: start },
             autoPaused: () => ({ tone: 'warn', title: s.stateRefused,
                 sub: [state.reason ? `${state.reason}.` : '', s.autoStoppedSub].filter(Boolean).join(' '), actions: [{ action: 'sendAgain', label: s.sendAgain }] }),
