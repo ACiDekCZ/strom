@@ -53,6 +53,30 @@ test('exported standalone HTML opens in read-only view mode', async ({ page }, t
     await expect(page.locator('.toolbar-buttons')).toBeHidden();
 });
 
+test('every stromapp.info link of the exported file carries the exported tree, not the file\'s own default tree', async ({ page }, testInfo) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    await page.evaluate(() => {
+        const tm = window.Strom.TreeManager;
+        tm.renameTree(tm.getActiveTreeId()!, 'Sledovany');
+    });
+
+    await openAppExportDialog(page);
+    await saveAndOpen(page, testInfo, (async () => {
+        const [d] = await Promise.all([
+            page.waitForEvent('download'),
+            page.locator('#export-password-modal').locator('#export-submit-btn').click(),
+        ]);
+        return d;
+    })());
+    await expect(page.locator('#view-mode-banner')).toBeVisible();
+
+    // The view mode button, the top banner link and the info dialog link alike.
+    for (const id of ['view-mode-go-online', 'go-online-link', 'embedded-info-go-online']) {
+        await expect(page.locator(`#${id}`)).toHaveAttribute('href', /[?&]import=from-file&name=Sledovany$/);
+    }
+});
+
 test('encrypted exported HTML requires the correct password to reveal the tree', async ({ page }, testInfo) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');

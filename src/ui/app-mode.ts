@@ -34,6 +34,9 @@ import {
 } from '../merge/index.js';
 import { PersonPicker } from '../person-picker.js';
 
+/** The links to the hosted app that carry the tree name (exported file: view mode, banner, info dialog). */
+const GO_ONLINE_LINK_IDS = ['view-mode-go-online', 'go-online-link', 'embedded-info-go-online'];
+
 /** "4. 10. 2026 8:12": a moment in the app's language. */
 function formatDateTime(iso: string): string {
     const t = Date.parse(iso);
@@ -112,15 +115,7 @@ export const appModeMethods = uiModule({
      * Update view mode go-online link with tree name
      */
     updateViewModeGoOnlineLink(): void {
-        const treeName = DataManager.getCurrentEmbeddedTreeName();
-        if (!treeName) return;
-
-        const url = importFromFileUrl(treeName, location.hostname, APP_VERSION);
-
-        const link = document.getElementById('view-mode-go-online');
-        if (link) {
-            link.setAttribute('href', url);
-        }
+        this.updateGoOnlineLinks();
     },
 
     /**
@@ -471,6 +466,7 @@ export const appModeMethods = uiModule({
      */
     initEmbeddedMode(mode: AppMode): void {
         this.appMode = mode;
+        this.refreshGoOnlineLinksOnClick();
 
         if (mode === 'embedded') {
             this.showEmbeddedBanner();
@@ -494,25 +490,24 @@ export const appModeMethods = uiModule({
     },
 
     /**
-     * Update go-online links with current tree name in URL
+     * Update every go-online link (view mode button, banner, info dialog) with
+     * the tree name in the URL: the tree shown from the file while viewing it,
+     * else the active tree of the file's own storage.
      */
     updateGoOnlineLinks(): void {
-        const metadata = TreeManager.getActiveTreeMetadata();
-        const treeName = metadata?.name;
+        const treeName = DataManager.getCurrentEmbeddedTreeName() || TreeManager.getActiveTreeMetadata()?.name;
         if (!treeName) return;
 
         const url = importFromFileUrl(treeName, location.hostname, APP_VERSION);
-
-        // Update banner link
-        const bannerLink = document.getElementById('go-online-link');
-        if (bannerLink) {
-            bannerLink.setAttribute('href', url);
+        for (const id of GO_ONLINE_LINK_IDS) {
+            document.getElementById(id)?.setAttribute('href', url);
         }
+    },
 
-        // Update info dialog link
-        const infoLink = document.getElementById('embedded-info-go-online');
-        if (infoLink) {
-            infoLink.setAttribute('href', url);
+    /** The tree may change after the links were set (imported, switched): each click takes the current one. */
+    refreshGoOnlineLinksOnClick(): void {
+        for (const id of GO_ONLINE_LINK_IDS) {
+            document.getElementById(id)?.addEventListener('click', () => this.updateGoOnlineLinks());
         }
     },
 
