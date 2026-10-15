@@ -261,3 +261,34 @@ test('GEDCOM result: "Merge with existing" matches the shared person and adds th
     // My original tree is unchanged.
     expect(trees.find(t => t.id === originalId)!.names).toEqual(['Jan']);
 });
+
+for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 800 }]) {
+    test(`GEDCOM result: every tile label fits its tile in cs, en and de (${viewport.width} px)`, async ({ page }, testInfo) => {
+        await page.setViewportSize(viewport);
+        await openApp(page);
+        const ged = writeFamilyGedcom(testInfo);
+        for (const lang of ['cs', 'en', 'de']) {
+            await page.evaluate((l) => window.Strom.UI.setLanguage(l), lang);
+            await page.locator('#gedcom-input').setInputFiles(ged);
+            const result = page.locator('#gedcom-result-modal');
+            await expect(result).toBeVisible();
+            // Show the tiles a plain file leaves out too: all of them must fit at once.
+            const clipped = await result.evaluate((modal) => {
+                const stats = modal.querySelector<HTMLElement>('.gedcom-stats')!;
+                stats.querySelectorAll<HTMLElement>('.stat-item').forEach(t => { t.style.display = ''; });
+                const box = stats.getBoundingClientRect();
+                return [...stats.querySelectorAll<HTMLElement>('.stat-item')].flatMap(t => {
+                    const label = t.querySelector<HTMLElement>('.label')!;
+                    const tile = t.getBoundingClientRect();
+                    const bad = label.scrollWidth > label.clientWidth
+                        || tile.left < box.left - 0.5 || tile.right > box.right + 0.5;
+                    return bad ? [label.textContent] : [];
+                });
+            });
+            expect(clipped, `${lang}: clipped tile labels`).toEqual([]);
+            await page.evaluate(() => window.Strom.UI.closeGedcomResultDialog());
+            await expect(result).toBeHidden();
+            await page.locator('#gedcom-input').setInputFiles([]);
+        }
+    });
+}

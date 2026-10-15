@@ -8278,18 +8278,26 @@
             margin: -4px 0 10px;
             overflow-wrap: anywhere;
         }
+        /* Tiles share a row evenly but never get narrower than the longest word
+           of their label (min-content): one-word labels such as "Partnerschaften"
+           or "Nepodporováno" stay whole in every language, a tile that does not
+           fit moves to the next row. break-word only guards a word wider than
+           the whole dialog. */
         .gedcom-stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(74px, 1fr));
+            display: flex;
+            flex-wrap: wrap;
             gap: 8px;
             margin-bottom: 20px;
             text-align: center;
         }
         .gedcom-stats .stat-item {
+            flex: 1 1 74px;
+            min-width: min-content;
+            max-width: 100%;
             background: var(--surface-2);
             padding: 10px 6px;
             border-radius: 8px;
-            min-width: 0;
+            overflow-wrap: break-word;
         }
         .gedcom-stats .number {
             font-size: 24px;
