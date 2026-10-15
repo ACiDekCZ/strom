@@ -43,6 +43,17 @@ export function appModeFor(hostname: string): AppMode {
     return 'embedded';
 }
 
+/**
+ * The hosted app a tree from an exported file goes to ("Go to stromapp.info"):
+ * its /run/ page with `?import=from-file&name=…` (main.ts opens the new-tree
+ * menu there). The beta site from the beta site or a beta build (its own
+ * storage: trees of a beta belong there), else the public app. Pure for testing.
+ */
+export function importFromFileUrl(treeName: string, hostname: string, appVersion: string): string {
+    const beta = hostname === BETA_HOSTNAME || (hostname !== PWA_HOSTNAME && /-beta\b/.test(appVersion));
+    return `https://${beta ? BETA_HOSTNAME : PWA_HOSTNAME}/run/?import=from-file&name=${encodeURIComponent(treeName)}`;
+}
+
 /** This page is the pre-release test build (for modules that do not get the app's mode handed). */
 export function isBetaBuildHere(): boolean {
     return typeof location !== 'undefined' && isBetaBuild(appModeFor(location.hostname));

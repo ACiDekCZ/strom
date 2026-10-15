@@ -41,7 +41,8 @@ function formatDateTime(iso: string): string {
 }
 import { AppExporter } from '../export.js';
 import { SettingsManager } from '../settings.js';
-import { ThemeMode, LanguageSetting, AppMode, AuditLog } from '../types.js';
+import { ThemeMode, LanguageSetting, AppMode, AuditLog, APP_VERSION } from '../types.js';
+import { importFromFileUrl } from '../pwa.js';
 import { normalizeCardDensity } from '../card-fields.js';
 import { CryptoSession, isEncrypted, encrypt, decrypt, EncryptedData } from '../crypto.js';
 import { validateTreeData, ValidationResult as TreeValidationResult, ValidationIssue } from '../validation.js';
@@ -114,8 +115,7 @@ export const appModeMethods = uiModule({
         const treeName = DataManager.getCurrentEmbeddedTreeName();
         if (!treeName) return;
 
-        const encodedName = encodeURIComponent(treeName);
-        const url = `https://stromapp.info?import=from-file&name=${encodedName}`;
+        const url = importFromFileUrl(treeName, location.hostname, APP_VERSION);
 
         const link = document.getElementById('view-mode-go-online');
         if (link) {
@@ -501,8 +501,7 @@ export const appModeMethods = uiModule({
         const treeName = metadata?.name;
         if (!treeName) return;
 
-        const encodedName = encodeURIComponent(treeName);
-        const url = `https://stromapp.info?import=from-file&name=${encodedName}`;
+        const url = importFromFileUrl(treeName, location.hostname, APP_VERSION);
 
         // Update banner link
         const bannerLink = document.getElementById('go-online-link');

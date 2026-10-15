@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { shouldRegisterServiceWorker, pwaBasePath, isBetaLocation, watchForUpdate, appModeFor, isBetaBuildHere } from '../pwa.js';
+import { shouldRegisterServiceWorker, pwaBasePath, isBetaLocation, watchForUpdate, appModeFor, isBetaBuildHere, importFromFileUrl } from '../pwa.js';
 
 describe('shouldRegisterServiceWorker', () => {
     it('registers only on the hosted PWA', () => {
@@ -204,5 +204,22 @@ describe('watchForUpdate (finding 34: the refresh prompt)', () => {
         const told = run(registration({ installing: w }), false);
         w.become('installed');
         expect(told()).toBe(0);
+    });
+});
+
+describe('importFromFileUrl (A48: Go to stromapp.info from an exported file)', () => {
+    it('goes to the app at /run/, never the website home, with the tree name', () => {
+        expect(importFromFileUrl('Novákovi & spol.', '', '3.11.0'))
+            .toBe('https://stromapp.info/run/?import=from-file&name=Nov%C3%A1kovi%20%26%20spol.');
+    });
+
+    it('a beta build (an exported file, any other host) goes to the beta site', () => {
+        expect(importFromFileUrl('T', '', '3.12.0-beta.1')).toBe('https://beta.stromapp.info/run/?import=from-file&name=T');
+        expect(importFromFileUrl('T', 'example.org', '3.12.0-beta.1')).toBe('https://beta.stromapp.info/run/?import=from-file&name=T');
+    });
+
+    it('the hosted sites go to their own app', () => {
+        expect(importFromFileUrl('T', 'beta.stromapp.info', '3.11.0')).toBe('https://beta.stromapp.info/run/?import=from-file&name=T');
+        expect(importFromFileUrl('T', 'stromapp.info', '3.12.0-beta.1')).toBe('https://stromapp.info/run/?import=from-file&name=T');
     });
 });
