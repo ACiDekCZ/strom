@@ -219,7 +219,7 @@ test.describe('installing the research from the app', () => {
         await d.locator('[data-act="pasted"]').click();
         await expect(d.locator('.install-wait')).toHaveAttribute('data-phase', 'waiting');
         await expect(d.locator('.install-wait-title')).toHaveText('Waiting for the research to respond…');
-        await expect(d.locator('.install-note')).toContainText('Allow access to devices on your local network');
+        await expect(d.locator('.install-note')).toContainText('The browser may then ask about “Access other apps and services on this device”');
         await page.clock.fastForward(5 * 60 * 1000);
         expect(local).toEqual([]);
         await page.clock.fastForward(11 * 60 * 1000);

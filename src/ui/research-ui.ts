@@ -1128,6 +1128,8 @@ export const researchUiMethods = uiModule({
         const onPhone = request?.param === 'live' && !onComputer()
             && (reason === 'safari' || isMobile() || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || ''));
         const text = onPhone ? c.textPhoneLive : browserText;
+        // The heading too: no browser of the phone is the cause, the computer is the way.
+        const heading = onPhone ? c.reasonPhoneLive : why;
         // The way to allow it: open where it is the cause, folded where it may be.
         const how = !onPhone && (reason === 'denied' || reason === 'unknown') ? `
             <details class="connect-how"${reason === 'denied' ? ' open' : ''}>
@@ -1143,7 +1145,7 @@ export const researchUiMethods = uiModule({
                 <div class="modal-header">
                     <div class="audit-log-heading">
                         <h2 id="connect-failed-title">${this.escapeHtml(c.title)}</h2>
-                        <div class="audit-log-subtitle connect-reason"><span class="connect-dot" aria-hidden="true"></span>${this.escapeHtml(why)}</div>
+                        <div class="audit-log-subtitle connect-reason"><span class="connect-dot" aria-hidden="true"></span>${this.escapeHtml(heading)}</div>
                     </div>
                 </div>
                 <div class="modal-content">

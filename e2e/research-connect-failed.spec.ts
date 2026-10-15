@@ -68,6 +68,9 @@ test.describe('couldn\'t connect to the research', () => {
         await page.evaluate((b) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: b })), BRIDGE);
         const d = dialog(page);
         await expect(d.locator('.connect-reason')).toHaveText('The browser is waiting for permission');
+        // The browser's question in its own words (Chrome 155), not "local network".
+        await expect(d.locator('.connect-text')).toHaveText(
+            'Next to the address bar, the browser asks about “Access other apps and services on this device”. Choose Allow and Strom connects by itself.');
         await expect(d.locator('.connect-how')).toHaveCount(0);
         let asked = 0;
         await page.unroute(`${BRIDGE}/**`);
@@ -154,6 +157,8 @@ test.describe('couldn\'t connect to the research', () => {
         await page.evaluate((b) => window.Strom.UI.openExternalRequest(new URLSearchParams({ live: b })), BRIDGE);
         const d = dialog(page);
         await expect(d.locator('.connect-text')).toContainText('the browser is blocking it');
+        await expect(d.locator('.connect-text')).toContainText('access to other apps and services on this device');
+        await expect(d.locator('.connect-text')).not.toContainText('local network');
         await expect(d.locator('.connect-how')).not.toHaveAttribute('open', '');
     });
 
@@ -239,8 +244,29 @@ test.describe('a ?live= link on a phone', () => {
         await page.route(`${BRIDGE}/**`, route => route.abort('connectionrefused'));
         await page.evaluate((b) => window.Strom.UI.openExternalRequest(new URLSearchParams({ live: b })), BRIDGE);
         const d = dialog(page);
+        // The heading says the same as the sentence: no "Safari won't connect" on a phone.
+        await expect(d.locator('.connect-reason')).toHaveText('The research runs on a computer');
         await expect(d.locator('.connect-text')).toHaveText('The research is followed on the computer where it runs, in Chrome or Edge.');
         await expect(d).not.toContainText('Firefox');
+        await expect(d).not.toContainText('Safari');
+        await expect(d.locator('.connect-how')).toHaveCount(0);
+    });
+});
+
+test.describe('a ?live= link on an Android phone', () => {
+    test.use({
+        viewport: { width: 412, height: 915 }, hasTouch: true, isMobile: true,
+        userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36',
+    });
+
+    test('waiting for permission: the heading says where the research runs, not that the browser waits', async ({ page }) => {
+        await lnaPermission(page, 'prompt');
+        await openApp(page);
+        await page.route(`${BRIDGE}/**`, route => route.abort('connectionrefused'));
+        await page.evaluate((b) => window.Strom.UI.openExternalRequest(new URLSearchParams({ live: b })), BRIDGE);
+        const d = dialog(page);
+        await expect(d.locator('.connect-reason')).toHaveText('The research runs on a computer');
+        await expect(d.locator('.connect-text')).toHaveText('The research is followed on the computer where it runs, in Chrome or Edge.');
         await expect(d.locator('.connect-how')).toHaveCount(0);
     });
 });

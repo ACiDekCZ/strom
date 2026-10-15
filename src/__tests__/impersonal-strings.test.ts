@@ -20,8 +20,8 @@ const ADDRESS: Record<'en' | 'cs' | 'de', RegExp> = {
 
 /** Per language: texts quoting another program, and words that only look like an address (group.key). */
 const EXCEPTIONS: Record<'en' | 'cs' | 'de', Set<string>> = {
-    // Chrome's own question, quoted as the browser shows it; the sample message the sender writes to a relative.
-    en: new Set(['install.waitLna', 'connect.textPrompt', 'share.messagePlaceholder']),
+    // The sample message the sender writes to a relative.
+    en: new Set(['share.messagePlaceholder']),
     // The sample message the sender writes to a relative.
     cs: new Set(['share.messagePlaceholder']),
     // A sentence-initial "Sie" meaning "it/they" (the changes, the source, the backup, the originals, the research).
