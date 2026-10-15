@@ -2105,6 +2105,9 @@ export const researchUiMethods = uiModule({
             this.liveBridgeBack(s);
             const change = sanitizeLiveChange(payload(e));
             if (change) this.enqueueLive(s, () => this.onLiveChange(s, change));
+            // The stream stays open (hello comes once): a change may be a switch of mode
+            // (`strom mode archive` commits), which only the status says.
+            this.liveStatusSoon(s);
         });
         es.addEventListener('working', (e) => {
             s.working = sanitizeWorking(payload(e));
@@ -2189,14 +2192,7 @@ export const researchUiMethods = uiModule({
             this.endLiveFollow(s, 'other');
             return;
         }
-        // Switched to an archive while followed (or its agent gone from this computer): nobody works
-        // in it to follow, so following ends and the tree opens for editing, as a ?live= to an archive does (A2).
-        if (status.accepts && (status.accepts.mode === 'archive' || status.accepts.agentHere === false)) {
-            if (status.treeId) noteResearchBridgeStatus(status.treeId, status.accepts, status.head);
-            this.endLiveFollow(s, 'stopped');
-            this.renderLiveFollowPill();
-            this.showToast(status.accepts.mode === 'archive' ? strings.research.liveEndedArchive : strings.research.liveEndedNoAgent, 6000);
-            this.refreshResearchSyncUi();
+        if (this.liveEndIfAgentless(s.researchId, status)) {
             void this.pollResearchBridge();
             return;
         }
@@ -2237,6 +2233,25 @@ export const researchUiMethods = uiModule({
             this.enqueueLive(s, () => this.onLiveChange(s, { head: status.head, what: [], at: '' }));
         }
         this.renderLivePanel();
+    },
+
+    /**
+     * Switched to an archive while followed (or its agent gone from this computer): nobody works
+     * in it to follow, so following ends and the tree opens for editing, as a ?live= to an archive
+     * does (A2). Any status of the followed research decides (the stream's, or the regular ask's),
+     * said once. True when following ended here.
+     */
+    liveEndIfAgentless(researchId: string, status: LiveStatus): boolean {
+        const s = live;
+        if (!s || s.ended || s.researchId !== researchId) return false;
+        const accepts = status.accepts;
+        if (!accepts || (accepts.mode !== 'archive' && accepts.agentHere !== false)) return false;
+        if (status.treeId) noteResearchBridgeStatus(status.treeId, accepts, status.head);
+        this.endLiveFollow(s, 'stopped');
+        this.renderLiveFollowPill();
+        this.showToast(accepts.mode === 'archive' ? strings.research.liveEndedArchive : strings.research.liveEndedNoAgent, 6000);
+        this.refreshResearchSyncUi();
+        return true;
     },
 
     /** A change: refresh the tree, list what changed, light up those people. */

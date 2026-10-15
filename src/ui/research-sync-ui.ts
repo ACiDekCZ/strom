@@ -693,6 +693,8 @@ export const researchSyncMethods = uiModule({
         } finally {
             polling = false;
         }
+        // Followed live and now an archive or waiting for its agent: following ends (the stream may never say so).
+        if (status) this.liveEndIfAgentless(researchId, status);
         this.researchNoteMode(ctx.treeId);
         // The next ask by what this one found (down with changes waiting: soon).
         if (opts.reschedule !== false) this.scheduleResearchPoll();

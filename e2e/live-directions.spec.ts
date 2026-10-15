@@ -107,6 +107,37 @@ async function openOverview(page: Page): Promise<void> {
 const ov = (page: Page) => page.locator('#research-overview');
 const row = (page: Page, id: string) => ov(page).locator(`.research-direction[data-direction="${id}"]`);
 
+/**
+ * An event stream that stays open, as the research's bridge keeps it: hello with the
+ * status once, then only what the test sends (`emit`); never a reconnect.
+ */
+async function openStream(page: Page): Promise<void> {
+    await page.addInitScript(() => {
+        class FakeEventSource {
+            url: string;
+            readyState = 1;
+            onerror: ((e: Event) => void) | null = null;
+            private listeners: Record<string, ((e: MessageEvent) => void)[]> = {};
+            constructor(url: string) {
+                this.url = url;
+                (window as unknown as { __es: FakeEventSource }).__es = this;
+                void fetch(url.replace(/\/events(\?.*)?$/, '/status')).then(r => r.json()).then(st => this.emit('hello', st));
+            }
+            addEventListener(type: string, fn: (e: MessageEvent) => void): void { (this.listeners[type] ??= []).push(fn); }
+            removeEventListener(): void { /* not needed */ }
+            close(): void { this.readyState = 2; }
+            emit(type: string, data: unknown): void {
+                for (const fn of this.listeners[type] ?? []) fn(new MessageEvent(type, { data: JSON.stringify(data) }));
+            }
+        }
+        Object.defineProperty(window, 'EventSource', { value: FakeEventSource, configurable: true, writable: true });
+    });
+}
+
+const emit = (page: Page, type: string, data: unknown) => page.evaluate(([t, d]) => {
+    (window as unknown as { __es: { emit(t: string, d: unknown): void } }).__es.emit(t as string, d);
+}, [type, data] as const);
+
 test.describe('research directions', () => {
     test('one direction: no section, tasks name none, no queue filter', async ({ page }) => {
         await follow(page, [DIRECTIONS[2]]);
@@ -329,27 +360,7 @@ test.describe('research directions', () => {
     });
 
     test('N41: the agent stops (a working event, the stream staying open): the spinner and the counts follow without a reconnect, one status for a burst', async ({ page }) => {
-        // An event stream that stays open: hello with the status, then only what the test sends.
-        await page.addInitScript(() => {
-            class FakeEventSource {
-                url: string;
-                readyState = 1;
-                onerror: ((e: Event) => void) | null = null;
-                private listeners: Record<string, ((e: MessageEvent) => void)[]> = {};
-                constructor(url: string) {
-                    this.url = url;
-                    (window as unknown as { __es: FakeEventSource }).__es = this;
-                    void fetch(url.replace(/\/events(\?.*)?$/, '/status')).then(r => r.json()).then(st => this.emit('hello', st));
-                }
-                addEventListener(type: string, fn: (e: MessageEvent) => void): void { (this.listeners[type] ??= []).push(fn); }
-                removeEventListener(): void { /* not needed */ }
-                close(): void { this.readyState = 2; }
-                emit(type: string, data: unknown): void {
-                    for (const fn of this.listeners[type] ?? []) fn(new MessageEvent(type, { data: JSON.stringify(data) }));
-                }
-            }
-            Object.defineProperty(window, 'EventSource', { value: FakeEventSource, configurable: true, writable: true });
-        });
+        await openStream(page);
         const bridge = await follow(page);
         await openOverview(page);
         await expect(row(page, 'G0001').locator('.agent-mark--spin')).toHaveCount(1);
@@ -373,22 +384,28 @@ test.describe('research directions', () => {
     });
 
     // K5.2 (A2): switched to an archive while followed, or the agent gone from this computer: nobody to follow.
-    for (const [what, accepts, toast] of [
-        ['switched to an archive', { mode: 'archive', sync: { auto: 'mirror' } }, 'The research is now an archive, so following stopped. The tree can be edited.'],
-        ['its agent gone from this computer', { mode: 'research', agentHere: false, sync: { auto: 'mirror' } }, 'The research waits for an AI agent, so following stopped. The tree can be edited.'],
+    // The bridge keeps its stream open (hello once): the switch comes as a change (`strom mode archive`
+    // commits), or as nothing at all on the stream (the agent gone) and only the regular ask says it.
+    for (const [what, accepts, toast, via] of [
+        ['switched to an archive', { mode: 'archive', sync: { auto: 'mirror' } }, 'The research is now an archive, so following stopped. The tree can be edited.', 'change'],
+        ['its agent gone from this computer', { mode: 'research', agentHere: false, sync: { auto: 'mirror' } }, 'The research waits for an AI agent, so following stopped. The tree can be edited.', 'change'],
+        ['its agent gone from this computer, the stream silent', { mode: 'research', agentHere: false, sync: { auto: 'mirror' } }, 'The research waits for an AI agent, so following stopped. The tree can be edited.', 'poll'],
     ] as const) {
         test(`${what} while followed: following ends, the tree opens for editing, nothing of the agent stays`, async ({ page }) => {
+            await openStream(page);
             const bridge = await follow(page);
             // Followed: the tree is locked.
             expect(await page.evaluate(() => window.Strom.DataManager.isLiveFollowing())).toBe(true);
             await openOverview(page);
             await expect(row(page, 'G0001')).toBeVisible();
-            // The research switches; its next status (the stream comes back every couple of seconds) says so.
+            // The research switches; the open stream sends a change (no hello again), or nothing.
             bridge.accepts = accepts;
+            if (via === 'change') await emit(page, 'change', { head: 'h2', what: ['Režim: archiv'], at: new Date().toISOString() });
+            else await page.evaluate(() => window.Strom.UI.pollResearchBridge());
             await expect.poll(() => page.evaluate(() => window.Strom.UI.isFollowingActiveResearch()), { timeout: 10000 }).toBe(false);
             expect(await page.evaluate(() => window.Strom.DataManager.isLiveFollowing())).toBe(false);
             expect(await page.evaluate(() => window.Strom.DataManager.isReadOnly())).toBe(false);
-            await expect(page.locator('.toast').filter({ hasText: toast })).toBeVisible();
+            await expect(page.locator('.toast').filter({ hasText: toast })).toHaveCount(1);
             await expect(page.locator('#live-panel')).toBeHidden();
             await expect(ov(page)).toBeHidden();
             await expect(page.locator('.research-direction__actions [data-do="work"]')).toHaveCount(0);
