@@ -1588,7 +1588,7 @@ test.describe('the research as an archive', () => {
         await poll(page);
         const where = page.locator('#research-tree-settings-modal #research-mode-where');
         await page.evaluate(() => window.Strom.UI.researchActionTreeSettings());
-        await expect(where).toHaveText('The research is switched to a Strom archive in the research: Settings → “Research, or only an archive”. Open the research ↗');
+        await expect(where).toHaveText('The research is switched to a Strom archive in the research: Settings → “Research, or only a Strom archive”. Open the research ↗');
         await where.locator('#research-mode-where-open').click();
         await expect(page.locator('#research-tree-settings-modal')).toHaveCount(0);
         expect(await links(page)).toEqual([`strom-research://open?tree=${UUID}`]);
@@ -1701,7 +1701,7 @@ test.describe('a research waiting for its agent (agentHere: false)', () => {
         await expect(dialog.locator('input[name="research-transcripts"]')).toHaveCount(0);
         await expect(dialog.locator('#research-older-sources')).toHaveCount(0);
         await expect(dialog).not.toContainText('My source transcriptions');
-        await expect(dialog.locator('#research-mode-where')).toHaveText('The research waits for an AI agent. At the top of its menu: “Install or choose the AI agent”, or “Keep it only as an archive”. Open the research ↗');
+        await expect(dialog.locator('#research-mode-where')).toHaveText('The research waits for an AI agent. At the top of its menu: “Install or choose the AI agent”, or “Keep it only as a Strom archive”. Open the research ↗');
         await dialog.locator('#research-mode-where-open').click();
         expect(await links(page)).toEqual([`strom-research://open?tree=${UUID}`]);
 

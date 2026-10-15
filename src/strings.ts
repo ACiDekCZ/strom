@@ -1145,9 +1145,9 @@ const stringsEN = {
         statusSafari: "Safari can't send, not even automatically. Open the tree in Chrome, Edge or Firefox.",
         modeAgentSince: (d: string) => `The research has worked with an agent since ${d}.`,
         modeArchiveSince: (d: string) => `The research has been a Strom archive since ${d}.`,
-        modeWhereResearch: 'The research is switched to a Strom archive in the research: Settings → “Research, or only an archive”.',
+        modeWhereResearch: 'The research is switched to a Strom archive in the research: Settings → “Research, or only a Strom archive”.',
         modeWhereArchive: 'The Strom archive is switched to research in the research, with the first item of its menu: “Switch research on”.',
-        modeWhereWaiting: 'The research waits for an AI agent. At the top of its menu: “Install or choose the AI agent”, or “Keep it only as an archive”.',
+        modeWhereWaiting: 'The research waits for an AI agent. At the top of its menu: “Install or choose the AI agent”, or “Keep it only as a Strom archive”.',
     },
 
     // Originals for the research: the state line of an attachment / excerpt, full quality
@@ -5036,9 +5036,9 @@ const stringsCZ: StringsType = {
         statusSafari: 'V Safari se neposílá, ani automaticky. Posílání funguje v Chrome, Edge nebo Firefoxu.',
         modeAgentSince: (d: string) => `Výzkum pracuje s agentem od ${d}.`,
         modeArchiveSince: (d: string) => `Výzkum je Archiv Stromu od ${d}.`,
-        modeWhereResearch: 'Na Archiv Stromu se výzkum přepíná ve výzkumu: Nastavení → „Výzkum, nebo jen archiv“.',
+        modeWhereResearch: 'Na Archiv Stromu se výzkum přepíná ve výzkumu: Nastavení → „Výzkum, nebo jen Archiv Stromu“.',
         modeWhereArchive: 'Na výzkum se Archiv Stromu přepíná ve výzkumu, první položkou jeho menu: „Zapnout výzkum“.',
-        modeWhereWaiting: 'Výzkum čeká na AI agenta. Nahoře v jeho menu: „Nainstalovat nebo vybrat AI agenta“, nebo „Nechat jen jako archiv“.',
+        modeWhereWaiting: 'Výzkum čeká na AI agenta. Nahoře v jeho menu: „Nainstalovat nebo vybrat AI agenta“, nebo „Nechat jen jako Archiv Stromu“.',
     },
 
     // Originals for the research: the state line of an attachment / excerpt, full quality
@@ -8911,9 +8911,9 @@ const stringsDE: StringsType = {
         statusSafari: 'In Safari wird nicht gesendet, auch nicht automatisch. Den Stammbaum in Chrome, Edge oder Firefox öffnen.',
         modeAgentSince: (d: string) => `Die Forschung arbeitet seit ${d} mit einem Agenten.`,
         modeArchiveSince: (d: string) => `Die Forschung ist seit ${d} ein Strom-Archiv.`,
-        modeWhereResearch: 'Auf ein Strom-Archiv wird die Forschung in der Forschung umgestellt: Einstellungen → „Forschung oder nur ein Archiv“.',
+        modeWhereResearch: 'Auf ein Strom-Archiv wird die Forschung in der Forschung umgestellt: Einstellungen → „Forschung oder nur ein Strom-Archiv“.',
         modeWhereArchive: 'Auf Forschung wird das Strom-Archiv in der Forschung umgestellt, mit dem ersten Punkt ihres Menüs: „Forschung einschalten“.',
-        modeWhereWaiting: 'Die Forschung wartet auf einen KI-Agenten. Oben in ihrem Menü: „Den KI-Agenten installieren oder wählen“ oder „Nur als Archiv behalten“.',
+        modeWhereWaiting: 'Die Forschung wartet auf einen KI-Agenten. Oben in ihrem Menü: „Den KI-Agenten installieren oder wählen“ oder „Nur als Strom-Archiv behalten“.',
     },
 
     // Originals for the research: the state line of an attachment / excerpt, full quality
