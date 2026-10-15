@@ -2,8 +2,8 @@
  * Progressive Web App wiring: register the service worker (only on the hosted
  * PWA), surface updates through a callback, and expose the registration gate as
  * a pure function for testing. The service worker itself lives in the WEB repo
- * (strom-app-info: /run/sw.js, and /beta/sw.js for the test build) — this file only registers it and drives the
- * update handshake. Data (IndexedDB) is never touched by the SW.
+ * (strom-app-info: /run/sw.js on stromapp.info, and on beta.stromapp.info for the test build) — this file only
+ * registers it and drives the update handshake. Data (IndexedDB) is never touched by the SW.
  */
 
 import { AppMode, BETA_HOSTNAME, PWA_HOSTNAME } from './types.js';
@@ -11,17 +11,20 @@ import { detectAppBrowser } from './research-transfer.js';
 import { isIosDevice } from './file-copy.js';
 
 /**
- * The hosted app's base path: the public app lives at /run/, the pre-release
- * test build at /beta/ (same origin, its own worker, cache and manifest).
- * Pure for testing.
+ * The hosted app's base path: /run/, for the public app and for the
+ * pre-release test build alike (the beta lives on its own origin,
+ * beta.stromapp.info, with its own storage, worker, cache and manifest).
+ * The old /beta/ path on stromapp.info is retired (a redirect to the
+ * subdomain and a kill-switch worker); a page still served from there keeps
+ * its own scope. Pure for testing.
  */
 export function pwaBasePath(pathname: string): '/run/' | '/beta/' {
     return pathname === '/beta' || pathname.startsWith('/beta/') ? '/beta/' : '/run/';
 }
 
 /**
- * True for the pre-release test build: the beta site (beta.stromapp.info) or
- * /beta/ on the hosted site. Pure for testing.
+ * True for the pre-release test build: the beta site (beta.stromapp.info), or
+ * a page still served from the retired /beta/ path. Pure for testing.
  */
 export function isBetaLocation(hostname: string, pathname: string): boolean {
     return hostname === BETA_HOSTNAME || pwaBasePath(pathname) === '/beta/';

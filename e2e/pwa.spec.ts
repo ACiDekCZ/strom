@@ -63,6 +63,9 @@ test.describe('Safari\'s own app is told apart by name and icon', () => {
     test('Chromium and an iPad: "Strom" as before', async ({ browser }) => {
         const chrome = await hosted(browser, null);
         await expect.poll(() => head(chrome.page)).toMatchObject({ manifest: '/run/manifest.json', touch: '/run/icons/apple-touch-icon.png', title: null });
+        // A55: the beta's own origin keeps its own data; trees move by export and import.
+        await expect(chrome.page.locator('.beta-badge')).toHaveAttribute('title',
+            'Test version before release. It keeps its own data, separate from the regular app. Trees move between them by export and import; a backup before moving is a good habit.');
         await chrome.ctx.close();
         const ipad = await hosted(browser, SAFARI, 5);
         await expect.poll(() => head(ipad.page)).toMatchObject({ manifest: '/run/manifest.json', touch: '/run/icons/apple-touch-icon.png', title: null });
