@@ -4,7 +4,7 @@
 
 ## 3.12.0
 
-*Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
+*Vydáno 16. října 2026.*
 
 - **Archiv Stromu**: režim výzkumu bez AI agenta se v celé aplikaci jmenuje *Archiv Stromu*, od volby ve *Výzkumu předků* po štítek v menu Výzkum. Archiv i výzkum, který čeká na agenta, neukazují akce agenta a materiály a dávky se v nich ukládají tak, jak jsou.
 - **Přehled výzkumu**: *Teď* je nad *Čeká na vyřízení*. Práce mimo linie výzkumu se ukáže v řádku *Mimo linie* a živý panel u každé práce jmenuje osobu; osobu, kterou strom v aplikaci nemá, jmenuje identifikátorem výzkumu. Sledování živě skončí hned, když výzkum skončí, stane se archivem nebo čeká na agenta.

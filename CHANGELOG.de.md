@@ -4,7 +4,7 @@
 
 ## 3.12.0
 
-*Diese Version ist in Vorbereitung; dieser Abschnitt wächst mit jeder Testversion.*
+*Veröffentlicht am 16. Oktober 2026.*
 
 - **Strom-Archiv**: Der Forschungsmodus ohne KI-Agent heißt in der ganzen App *Strom-Archiv*, von der Wahl in *Ahnenforschung* bis zum Etikett im Menü Forschung. Ein Archiv und eine Forschung, die auf ihren Agenten wartet, zeigen keine Aktionen des Agenten, und ihre Materialien und Stapel werden so gespeichert, wie sie sind.
 - **Forschungsübersicht**: *Jetzt* steht über *Wartet auf Bearbeitung*. Arbeit außerhalb der Forschungsrichtungen erscheint in der Zeile *Außerhalb der Richtungen*, und das Live-Feld nennt die Person, an der jeder Lauf arbeitet; eine Person, die der Stammbaum in der App nicht hat, wird mit der Kennung der Forschung genannt. Das Live-Folgen endet sofort, wenn die Forschung endet, zum Archiv wird oder auf ihren Agenten wartet.

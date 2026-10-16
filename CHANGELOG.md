@@ -4,7 +4,7 @@ English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md)
 
 ## 3.12.0
 
-*This version is in preparation; this section grows with every test version.*
+*Released 16 October 2026.*
 
 - **Strom archive**: the research mode without an AI agent is called *Strom archive* everywhere in the app, from the choice in *Ancestor research* to its tag in the Research menu. An archive, and a research waiting for its agent, show no agent actions, and their materials and batches are stored as they are.
 - **Research overview**: *Now* comes above *Awaiting action*. Work outside the research directions shows in the row *Outside the directions*, and the live panel names the person each run works on; a person the tree in the app lacks is named by the research identifier. Following live ends at once when the research ends, becomes an archive or waits for its agent.
