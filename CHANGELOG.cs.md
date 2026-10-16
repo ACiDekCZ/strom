@@ -13,7 +13,7 @@
 - **Zjistit vztah…**: partner sourozence partnera je *švagr* nebo *švagrová* a každé jiné spojení přes sňatky je *příbuzný sňatkem* / *příbuzná sňatkem* s cestou ke zvýraznění, místo „Žádný vztah nenalezen“.
 - **Karty a úprava osoby**: † se řídí vlastními údaji osoby, ne úmrtím potomka; úprava osoby řadí narození, události a úmrtí v pořadí života; styl karty *Značky*, kolečko s fotkou u dvouřádkového jména a dlouhá místa vedle pilulky ⇄ (osoba je i v jiném stromu) jsou srovnané. Počet u *Výročí* říká, co počítá („3 výročí v příštích 7 dnech“).
 - **Opravy**: „Také v:“ už nebere jmenovkyně sestry za jednu osobu; *Přejít na stromapp.info* v exportovaném souboru otevře aplikaci se stromem připraveným k importu; souhrn importu GEDCOM už neořezává popisky; ve Firefoxu upozornění na úpravy jen v prohlížeči nečeká na dotaz k úložišti.
-- **O aplikaci**: odkaz *Co je nového ↗* otevře tento přehled změn v jazyce aplikace. Při prvním spuštění nové verze se jednou ukáže okno *Co je nového* s body té verze, s odkazem *Všechny změny ↗* a volbou *Příště nezobrazovat*; zpět ho zapne *Nastavení → Jazyk a vzhled → Co je nového po aktualizaci*.
+- **O aplikaci**: odkaz *Co je nového ↗* otevře tento přehled změn v jazyce aplikace. Při prvním spuštění nové verze se jednou ukáže okno *Co je nového* s body té verze, s odkazem *Všechny změny ↗* a volbou *Příště nezobrazovat*; zpět ho zapne *Nastavení → Jazyk a vzhled → Co je nového po aktualizaci*. Na počítači se Strom Research přidá nová verze výzkumu do okna své body (*Výzkum X.Y.Z*, s odkazem *Všechny změny výzkumu ↗*) a O aplikaci ukáže *Výzkum X.Y.Z • Co je nového ↗*.
 
 ## 3.11.0
 

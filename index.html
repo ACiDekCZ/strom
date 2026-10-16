@@ -1790,6 +1790,8 @@
         .about-meta span {
             margin: 0 6px;
         }
+        /* Strom Research's line (src/ui/release-notes-ui.ts): its version is text, not a separator. */
+        .about-meta .about-research-version { margin: 0; }
         @media (hover: hover) {
             .about-meta a:hover { text-decoration: underline; }
         }
@@ -10979,6 +10981,15 @@
         /* The italic face leans into the following space. */
         .release-notes-content em { padding-right: 0.06em; }
         .release-notes-full-row { margin: 4px 0 0; }
+        .release-notes-content code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.9em;
+            padding: 0 4px; border-radius: 4px; background: var(--surface-2); border: 1px solid var(--border);
+            overflow-wrap: anywhere;
+        }
+        /* Strom Research's section under the app's (or alone). */
+        .release-notes-research { margin: 0; }
+        .release-notes-full-row + .release-notes-research { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+        .release-notes-research-title { margin: 0 0 8px; font-size: 15px; font-weight: 600; color: var(--text); }
         .release-notes-full { color: var(--primary); font-weight: 600; text-decoration: none; }
         @media (hover: hover) { .release-notes-full:hover { text-decoration: underline; } }
         .release-notes-buttons { align-items: center; }
@@ -10993,12 +11004,15 @@
             .release-notes-content { font-size: 15px; }
             .release-notes-list { padding-left: 18px; }
             .modal label.release-notes-dont-show { justify-content: flex-start; padding: 4px 0; }
+            .release-notes-research-title { font-size: 16px; }
         }
         /* Phone sideways: little height, so the list scrolls between header and footer;
            the footer stays on one row. */
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             .release-notes-content { font-size: 13px; }
             .release-notes-list li { margin-bottom: 4px; }
+            .release-notes-full-row + .release-notes-research { margin-top: 10px; padding-top: 8px; }
+            .release-notes-research-title { font-size: 14px; margin-bottom: 4px; }
         }
         @media (pointer: coarse) {
             .modal label.release-notes-dont-show { min-height: 44px; }

@@ -84,11 +84,27 @@ describe('markdown subset', () => {
     });
 
     it('keeps markup-like text literal (nothing becomes HTML)', () => {
-        expect(parseInline('<img src=x onerror=alert(1)> & `code`')).toEqual([
-            { text: '<img src=x onerror=alert(1)> & `code`' },
+        expect(parseInline('<img src=x onerror=alert(1)> & <b>bold</b>')).toEqual([
+            { text: '<img src=x onerror=alert(1)> & <b>bold</b>' },
         ]);
         expect(parseInline('3 * 4 * 5')).toEqual([{ text: '3 * 4 * 5' }]);
         expect(parseInline('snake_case_name')).toEqual([{ text: 'snake_case_name' }]);
+    });
+
+    it('reads `code` as a run of its own, its content literal', () => {
+        expect(parseInline('After `strom update` and **bold**')).toEqual([
+            { text: 'After ' },
+            { text: 'strom update', code: true },
+            { text: ' and ' },
+            { text: 'bold', bold: true },
+        ]);
+        expect(parseInline('`**not bold**` and `<b>x</b>`')).toEqual([
+            { text: '**not bold**', code: true },
+            { text: ' and ' },
+            { text: '<b>x</b>', code: true },
+        ]);
+        // A lone backtick stays text.
+        expect(parseInline('a ` b')).toEqual([{ text: 'a ` b' }]);
     });
 
     it('turns the section into bullet points, leaving out the italic "in preparation" note', () => {

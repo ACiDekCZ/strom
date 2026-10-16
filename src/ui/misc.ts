@@ -91,6 +91,8 @@ export const miscMethods = uiModule({
             row.appendChild(link);
             meta.appendChild(row);
         }
+        // Strom Research known on this computer: its version and its "What's new".
+        if (meta) this.fillAboutResearchRow(meta);
 
         // Calculate and display stats
         this.updateAboutStats();

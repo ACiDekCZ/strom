@@ -63,11 +63,12 @@ export function changelogSection(markdown: string, version: string): string | nu
     return text === '' ? null : text;
 }
 
-/** A run of text: plain, **bold** or *italic*. */
+/** A run of text: plain, **bold**, *italic* or `code`. */
 export interface NotesInline {
     text: string;
     bold?: boolean;
     italic?: boolean;
+    code?: boolean;
 }
 
 /** A bullet point or a paragraph of the section. */
@@ -77,25 +78,26 @@ export interface NotesBlock {
 }
 
 /**
- * The inline subset: **bold** and *italic* (also __bold__ and _italic_);
- * everything else stays literal text, so nothing in the changelog can become
- * markup in the page.
+ * The inline subset: **bold**, *italic* (also __bold__ and _italic_) and
+ * `code` (its content literal, no emphasis inside); everything else stays
+ * literal text, so nothing in the changelog can become markup in the page.
  */
 export function parseInline(text: string): NotesInline[] {
     const out: NotesInline[] = [];
-    const re = /\*\*(.+?)\*\*|__(.+?)__|\*([^*\s](?:[^*]*?[^*\s])?)\*|(?<![\p{L}\p{N}])_([^_\s](?:[^_]*?[^_\s])?)_(?![\p{L}\p{N}])/gu;
+    const re = /`([^`\n]+)`|\*\*(.+?)\*\*|__(.+?)__|\*([^*\s](?:[^*]*?[^*\s])?)\*|(?<![\p{L}\p{N}])_([^_\s](?:[^_]*?[^_\s])?)_(?![\p{L}\p{N}])/gu;
     let last = 0;
     let m: RegExpExecArray | null;
     const push = (part: NotesInline): void => {
         if (part.text === '') return;
         const prev = out[out.length - 1];
-        if (prev && !prev.bold && !prev.italic && !part.bold && !part.italic) prev.text += part.text;
+        if (prev && !prev.bold && !prev.italic && !prev.code && !part.bold && !part.italic && !part.code) prev.text += part.text;
         else out.push(part);
     };
     while ((m = re.exec(text)) !== null) {
         push({ text: text.slice(last, m.index) });
-        if (m[1] !== undefined || m[2] !== undefined) push({ text: m[1] ?? m[2], bold: true });
-        else push({ text: m[3] ?? m[4], italic: true });
+        if (m[1] !== undefined) push({ text: m[1], code: true });
+        else if (m[2] !== undefined || m[3] !== undefined) push({ text: m[2] ?? m[3], bold: true });
+        else push({ text: m[4] ?? m[5], italic: true });
         last = m.index + m[0].length;
     }
     push({ text: text.slice(last) });

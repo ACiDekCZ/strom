@@ -282,9 +282,24 @@ function researchBaseStands(link: ResearchLink): boolean {
     return Number.isFinite(sentAt) && Number.isFinite(loadedAt) && sentAt < loadedAt;
 }
 
+/** Told of every status a research's bridge gives in this page (e.g. the research's "What's new"). */
+type BridgeStatusListener = (researchId: string, status: LiveStatus) => void;
+const bridgeStatusListeners: BridgeStatusListener[] = [];
+
+export function onBridgeStatus(listener: BridgeStatusListener): void {
+    if (!bridgeStatusListeners.includes(listener)) bridgeStatusListeners.push(listener);
+}
+
+function tellBridgeStatus(researchId: string, status: LiveStatus): void {
+    for (const listener of bridgeStatusListeners) {
+        try { listener(researchId, status); } catch (err) { console.warn('Bridge status listener failed', err); }
+    }
+}
+
 /** A status the bridge gave elsewhere (?live=, ?send=, following): it runs, and this is what it said. */
 export function rememberBridgeStatus(researchId: string, status: LiveStatus): void {
     runtime.set(researchId, { up: true, checkedAt: Date.now(), status, blocked: false, downSince: 0 });
+    tellBridgeStatus(researchId, status);
 }
 
 /** The research's name as its bridge said it (else the generic one). */
@@ -659,6 +674,7 @@ export const researchSyncMethods = uiModule({
             noteResearchLinks(status.links, status.linkScheme);
             noteResearchWaiting(researchId, status.waiting, status);
             noteResearchBridgeStatus(researchId, status.accepts, status.head);
+            tellBridgeStatus(researchId, status);
         }
         return status;
     },
