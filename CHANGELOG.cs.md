@@ -1,0 +1,27 @@
+# Přehled změn
+
+[English](CHANGELOG.md) · Čeština · [Deutsch](CHANGELOG.de.md)
+
+## 3.12.0
+
+*Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
+
+- **Archiv Stromu**: režim výzkumu bez AI agenta se v celé aplikaci jmenuje *Archiv Stromu*, od volby ve *Výzkumu předků* po štítek v menu Výzkum. Archiv i výzkum, který čeká na agenta, neukazují akce agenta a materiály a dávky se v nich ukládají tak, jak jsou.
+- **Přehled výzkumu**: *Teď* je nad *Čeká na vyřízení*. Práce mimo linie výzkumu se ukáže v řádku *Mimo linie* a živý panel u každé práce jmenuje osobu; osobu, kterou strom v aplikaci nemá, jmenuje identifikátorem výzkumu. Sledování živě skončí hned, když výzkum skončí, stane se archivem nebo čeká na agenta.
+- **Posun z karty**: tah začatý na kartě osoby posouvá plátno, myší i jedním prstem; krátký stisk zůstává kliknutím, ťuknutím nebo dlouhým stiskem. Při posunu se karta s náhledem osoby schová.
+- **Náhled osoby**: každý svazek osoby má vlastní řádek v pořadí manželství a s vlastními dětmi.
+- **Zjistit vztah…**: partner sourozence partnera je *švagr* nebo *švagrová* a každé jiné spojení přes sňatky je *příbuzný sňatkem* / *příbuzná sňatkem* s cestou ke zvýraznění, místo „Žádný vztah nenalezen“.
+- **Karty a úprava osoby**: † se řídí vlastními údaji osoby, ne úmrtím potomka; úprava osoby řadí narození, události a úmrtí v pořadí života; styl karty *Značky*, kolečko s fotkou u dvouřádkového jména a dlouhá místa vedle pilulky ⇄ (osoba je i v jiném stromu) jsou srovnané. Počet u *Výročí* říká, co počítá („3 výročí v příštích 7 dnech“).
+- **Opravy**: „Také v:“ už nebere jmenovkyně sestry za jednu osobu; *Přejít na stromapp.info* v exportovaném souboru otevře aplikaci se stromem připraveným k importu; souhrn importu GEDCOM už neořezává popisky; ve Firefoxu upozornění na úpravy jen v prohlížeči nečeká na dotaz k úložišti.
+- **O aplikaci**: odkaz *Co je nového ↗* otevře tento přehled změn v jazyce aplikace.
+
+## 3.11.0
+
+- **Připojeno jen v zobrazení**: rodinu, kterou by připojila hypotéza výzkumu, jde ukázat tam, kam ji hypotéza staví, jako šrafované karty duchů, beze změny stromu. Počty, ostatní pohledy, poslání i všechny výstupy ukázaná připojení vynechají. Ukazatel nad pohledem otevře seznam ukázaných připojení.
+- **Co ví výzkum** vypíše hypotézy osoby se stavem a verzemi a s přepínačem u každé verze, kterou jde ukázat.
+- **Rozpory z úpravy v aplikaci** ukazují dvě strany, *Z aplikace* a *Ve výzkumu*; na počítači s výzkumem jde jednu z hodnot ponechat jedním krokem.
+- **Čekající v přehledu výzkumu**: čipy podle druhu, dvě fáze (*K vyřízení* a *Čeká na odpověď*), položky seskupené podle místa a *Odesláno* zapsané rovnou do výzkumu, s možností Vrátit.
+- **Výzkum**: *Posledních 24 h* bere čísla od výzkumu, *Tento měsíc* zahrnuje náklady na čtenáře skenů, odmítnuté poslání řekne důvod v jazyce aplikace a prázdný strom nabídne *Začít výzkum s tímto stromem*.
+- **O aplikaci**: v českém rozhraní odkaz na skupinu uživatelů na Facebooku.
+- **Opravy**: jediný rodič v řetězu manželství stojí nad svým dítětem; smazání stromu hned po přidání osob uvede správný počet osob; spodní panely na dotykové obrazovce jsou neprůhledné od prvního snímku.
+- **Data**: datová verze 12 jako v 3.10, nic se nepřevádí. Nové části výzkumu potřebují Strom Research 1.14.
