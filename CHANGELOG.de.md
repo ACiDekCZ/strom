@@ -2,6 +2,12 @@
 
 [English](CHANGELOG.md) · [Čeština](CHANGELOG.cs.md) · Deutsch
 
+## 3.13.0
+
+*Diese Version ist in Vorbereitung; dieser Abschnitt wächst mit jeder Testversion.*
+
+- **Fehlerbehebungen**: Die Pille *+ Familie · N* am Rand des Stammbaums zählt die Familie, die sie zeigt: Bei einer Hypothese, deren Varianten jeweils eine andere Familie außerhalb des Stammbaums verbinden würden, gehören die Zahl der Personen und der wartenden Aufgaben jetzt zu der Familie, die nach einem Klick erscheint.
+
 ## 3.12.0
 
 *Veröffentlicht am 16. Oktober 2026.*

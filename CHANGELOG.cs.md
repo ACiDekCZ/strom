@@ -2,6 +2,12 @@
 
 [English](CHANGELOG.md) · Čeština · [Deutsch](CHANGELOG.de.md)
 
+## 3.13.0
+
+*Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
+
+- **Opravy**: pilulka *+ rodina · N* na kraji stromu počítá rodinu, kterou ukáže: u hypotézy, jejíž varianty by napojily každá jinou rodinu mimo strom, patří počet lidí a čekajících úkolů k rodině, která se po kliknutí objeví.
+
 ## 3.12.0
 
 *Vydáno 16. října 2026.*
