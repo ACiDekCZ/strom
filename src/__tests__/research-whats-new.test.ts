@@ -68,9 +68,19 @@ describe('when to ask the research', () => {
         expect(decideResearchWhatsNew(ctx({ seenVersion: '1.15.0-beta.5' }))).toBe('ask');
     });
 
-    it('the first link here: only remember', () => {
+    it('the first link here, made in this page: only remember', () => {
         expect(decideResearchWhatsNew(ctx({ seenVersion: null }))).toBe('remember');
         expect(decideResearchWhatsNew(ctx({ seenVersion: 'garbage' }))).toBe('remember');
+        expect(decideResearchWhatsNew(ctx({ seenVersion: null, linkedAtStart: false }))).toBe('remember');
+    });
+
+    it('nothing seen yet by a research linked before this page started: ask', () => {
+        expect(decideResearchWhatsNew(ctx({ seenVersion: null, linkedAtStart: true }))).toBe('ask');
+        expect(decideResearchWhatsNew(ctx({ seenVersion: 'garbage', linkedAtStart: true }))).toBe('ask');
+        // The other rules stay: an older bridge, the setting off, no usable version.
+        expect(decideResearchWhatsNew(ctx({ seenVersion: null, linkedAtStart: true, hasFeature: false }))).toBe('remember');
+        expect(decideResearchWhatsNew(ctx({ seenVersion: null, linkedAtStart: true, enabled: false }))).toBe('remember');
+        expect(decideResearchWhatsNew(ctx({ seenVersion: null, linkedAtStart: true, bridgeVersion: 'x' }))).toBe('skip');
     });
 
     it('the same version: nothing', () => {

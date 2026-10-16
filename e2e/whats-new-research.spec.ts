@@ -1,14 +1,17 @@
 import { test, expect, Page, Route } from '@playwright/test';
 import { openApp, waitForPersist, PACKAGE_VERSION } from './helpers.js';
-import { openResearch, fakeBridge, poll, FakeBridge } from './research-bridge.js';
+import { openResearch, fakeBridge, poll, FakeBridge, BRIDGE } from './research-bridge.js';
 
 /**
  * "What's new" of Strom Research in the app: when the bridge of the linked
  * research says a newer version than the one seen on this computer and that
  * it answers `/whats-new`, the dialog shows the research's points (alone, or
- * under the app's); the first link only records the version; an older bridge
- * is never asked. About shows "Research X.Y.Z • What's new ↗". Nothing on a
- * phone. The bridge is answered by page.route (invented data).
+ * under the app's); a link made in the page only records the version, a
+ * research linked before the page started is told its first version too; an
+ * older bridge is never asked; an open from the research (?live=) shows the
+ * research's section alone and keeps the app's for the next usual start.
+ * About shows "Research X.Y.Z • What's new ↗". Nothing on a phone. The bridge
+ * is answered by page.route (invented data).
  */
 
 const APP_SEEN_KEY = 'strom-whats-new-seen';
@@ -157,13 +160,54 @@ test.describe('Strom Research in "What\'s new" (computer)', () => {
         await expect(d.getByRole('heading', { name: `Research ${NEW}` })).toBeVisible();
     });
 
-    test('the first link to a research: no dialog, no question, its version recorded', async ({ page }) => {
+    test('the first link to a research, made in this page: no dialog, no question, its version recorded', async ({ page }) => {
         const { w } = await linked(page, { seen: null });
-        await reload(page);
+        await poll(page);
         await expect.poll(() => getKey(page, SEEN_KEY)).toBe(NEW);
         await page.waitForTimeout(PAST_FIRST_CHECK_MS);
         await expect(dialog(page)).toHaveCount(0);
         expect(w.asks).toHaveLength(0);
+    });
+
+    test('a research linked before this start, its version never seen here: the dialog with its section', async ({ page }) => {
+        const { w } = await linked(page, { seen: null });
+        await reload(page);
+        const d = dialog(page);
+        await expect(d.getByRole('heading', { name: `Research ${NEW}` })).toBeVisible();
+        await expect(d.locator('.release-notes-version')).toHaveCount(0);
+        expect(w.asks).toHaveLength(1);
+        await d.locator('.release-notes-close').click();
+        await expect(d).toHaveCount(0);
+        expect(await getKey(page, SEEN_KEY)).toBe(NEW);
+    });
+
+    test('an open from the research (?live=) with the app and the research both new: the research\'s section alone, the app\'s at the next usual start', async ({ page }) => {
+        const { w } = await linked(page, { seen: SEEN });
+        await setKey(page, APP_SEEN_KEY, OLDER_APP);
+        await page.goto(`/strom.html?live=${encodeURIComponent(BRIDGE)}`);
+        await expect(page.locator('html')).not.toHaveClass(/app-loading/);
+
+        const d = dialog(page);
+        await expect(d.getByRole('heading', { name: `Research ${NEW}` })).toBeVisible();
+        await expect(d.locator('.release-notes-version')).toHaveCount(0);
+        await expect(d.getByRole('link', { name: 'All changes ↗' })).toHaveCount(0);
+        expect(w.asks).toHaveLength(1);
+        await d.locator('.release-notes-close').click();
+        await expect(d).toHaveCount(0);
+        expect(await getKey(page, SEEN_KEY)).toBe(NEW);
+        // The app's version stays unrecorded: nothing more in this page.
+        expect(await getKey(page, APP_SEEN_KEY)).toBe(OLDER_APP);
+        await page.waitForTimeout(PAST_FIRST_CHECK_MS);
+        await expect(d).toHaveCount(0);
+
+        // The next usual start: not the same tab resuming the live follow.
+        await page.evaluate(() => sessionStorage.removeItem('strom.live'));
+        await page.goto('/strom.html');
+        await expect(d.locator('.release-notes-version')).toHaveText(`Strom ${PACKAGE_VERSION}`);
+        await expect(d.locator('.release-notes-research')).toHaveCount(0);
+        await d.locator('.release-notes-close').click();
+        expect(await getKey(page, APP_SEEN_KEY)).toBe(PACKAGE_VERSION);
+        expect(w.asks).toHaveLength(1);
     });
 
     test('a bridge without "whats.new": never asked, no dialog; About shows its version without a link', async ({ page }) => {
@@ -181,9 +225,9 @@ test.describe('Strom Research in "What\'s new" (computer)', () => {
     });
 
     test('About: "Research X.Y.Z • What\'s new ↗", the link asked once and then kept', async ({ page }) => {
-        const { b, w } = await linked(page, { seen: null });
+        const { b, w } = await linked(page, { seen: NEW });
         await reload(page);
-        await expect.poll(() => getKey(page, SEEN_KEY)).toBe(NEW);
+        await expect.poll(() => page.evaluate(() => localStorage.getItem('strom-research-whats-new'))).toContain(NEW);
 
         await page.evaluate(() => window.Strom.UI.showAboutDialog());
         const row = page.locator('#about-modal .about-research');

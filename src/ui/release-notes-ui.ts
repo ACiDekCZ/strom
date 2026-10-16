@@ -11,8 +11,11 @@
  * Strom Research: when its bridge on this computer says a newer version than
  * the one seen here (one per computer) and that it answers `/whats-new`, its
  * points come as a section of their own under the app's, or in a dialog of
- * their own (src/research-whats-new.ts). The About dialog gets a line with the
- * research's version and its changelog link.
+ * their own (src/research-whats-new.ts). The first version met here is told
+ * too when the app had a research linked before this page started. An open
+ * from Strom Research holds the app's section back (it waits for the next
+ * usual start); the research's comes alone once the app is free. The About
+ * dialog gets a line with the research's version and its changelog link.
  *
  * See src/ui/module.ts for the composition pattern.
  */
@@ -40,7 +43,7 @@ import {
     sanitizeResearchWhatsNew,
 } from '../research-whats-new.js';
 import { parseLiveBridge, LiveStatus } from '../research-link.js';
-import { storedResearchBridge } from '../research-device.js';
+import { anyResearchBridgeKnown, storedResearchBridge } from '../research-device.js';
 import { onComputer, fetchWithTimeout } from './research-ui.js';
 import { onBridgeStatus } from './research-sync-ui.js';
 import { uiModule } from './module.js';
@@ -70,6 +73,8 @@ const RESEARCH_WAIT_STEP_MS = 100;
 
 /** Trees with persons when the app started (a new user has none); fixed at the first check. */
 let hadDataAtStart: boolean | null = null;
+/** A tree linked to a research, or a research's bridge, known when the app started; fixed at the first check. */
+let hadResearchAtStart: boolean | null = null;
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 /** When the first look is due (0: not started yet). */
 let firstCheckDue = 0;
@@ -206,7 +211,8 @@ export const releaseNotesMethods = uiModule({
     /**
      * Right after the stored trees are read, before editing may begin: did
      * this browser hold any persons? (A new user has one empty tree; a person
-     * added during the start must not make them an existing user.) From now
+     * added during the start must not make them an existing user.) And a
+     * research linked already (an open from the research comes later)? From now
      * on every status of a research's bridge is looked at for its version.
      */
     captureReleaseNotesStart(): void {
@@ -214,6 +220,13 @@ export const releaseNotesMethods = uiModule({
             if (hadDataAtStart === null) hadDataAtStart = TreeManager.getTrees().some(t => (t.personCount ?? 0) > 0);
         } catch {
             hadDataAtStart = false;
+        }
+        try {
+            if (hadResearchAtStart === null) {
+                hadResearchAtStart = TreeManager.getTrees().some(t => !!t.research) || anyResearchBridgeKnown();
+            }
+        } catch {
+            hadResearchAtStart = false;
         }
         if (!bridgeListening) {
             bridgeListening = true;
@@ -250,18 +263,30 @@ export const releaseNotesMethods = uiModule({
     },
 
     /**
-     * Something is in the way of the dialog: another dialog, sheet or menu,
-     * the tour or its offer, the one-time 3.0 card, the "new version
-     * available" toast, a locked start, or an open from Strom Research.
+     * Something is in the way of the app's section: anything that holds the
+     * dialog (isReleaseNotesBusy), or an open from Strom Research.
      */
     isReleaseNotesBlocked(): boolean {
+        return this.isReleaseNotesBusy() || this.isReleaseNotesFromResearch();
+    },
+
+    /** This start is an open from Strom Research (?live=, ?import-url=, ?open=, following live). */
+    isReleaseNotesFromResearch(): boolean {
+        return this.researchPromoContext().cliOpen;
+    },
+
+    /**
+     * Something is in the way of the dialog: another dialog, sheet or menu,
+     * the tour or its offer, the one-time 3.0 card, the "new version
+     * available" toast, a locked start, an open from outside still loading.
+     */
+    isReleaseNotesBusy(): boolean {
         return this.isWhatsNewBlocked()
             || this.isWhatsNewCardOpen()
             || this.tourActive
             || !!document.querySelector('.pwa-update, #tour-overlay.active, .bottom-sheet-overlay.active, .actions-menu-dropdown.active')
             || document.body.classList.contains('data-locked')
-            || DataManager.isLocked()
-            || this.researchPromoContext().cliOpen;
+            || DataManager.isLocked();
     },
 
     scheduleReleaseNotes(delay: number): void {
@@ -275,20 +300,22 @@ export const releaseNotesMethods = uiModule({
     /**
      * Show the dialog when the app's decision says so or the research brought
      * a section; while the app is busy, look again later. While the research
-     * is still being asked, the app's dialog waits for it a little.
+     * is still being asked, the app's dialog waits for it a little. An open
+     * from Strom Research shows only the research's section: the app's waits
+     * for the next usual start (its version stays unrecorded).
      */
     maybeShowReleaseNotes(): void {
         try {
             if (document.getElementById(RELEASE_NOTES_DIALOG_ID)) return;
             const decision = this.releaseNotesDecision();
             if (decision === 'mark-seen') writeSeenVersion();
-            const app = decision === 'show' || decision === 'wait';
+            const app = (decision === 'show' || decision === 'wait') && !this.isReleaseNotesFromResearch();
             if (researchSection && !SettingsManager.isWhatsNewAfterUpdateEnabled()) {
                 writeResearchSeen(researchSection.version);
                 researchSection = null;
             }
             if (!app && !researchSection) return;
-            if (decision === 'wait' || this.isReleaseNotesBlocked()) {
+            if ((app && decision === 'wait') || this.isReleaseNotesBusy()) {
                 this.scheduleReleaseNotes(RETRY_MS);
                 return;
             }
@@ -413,9 +440,10 @@ export const releaseNotesMethods = uiModule({
     /**
      * A research's bridge said its status: keep its version, and when it is
      * newer than the one seen on this computer (and the bridge answers
-     * `/whats-new`), ask for its points — once per version and page. The
-     * first link here, an older bridge and the setting off only record the
-     * version. Nothing on a phone or tablet.
+     * `/whats-new`), ask for its points — once per version and page. No
+     * version seen yet: asked when a research was linked before this page
+     * started, else (a link made in this page) only recorded, as for an older
+     * bridge and the setting off. Nothing on a phone or tablet.
      */
     noteResearchWhatsNewStatus(researchId: string, status: LiveStatus): void {
         if (!onComputer() || !status.version) return;
@@ -427,6 +455,7 @@ export const releaseNotesMethods = uiModule({
             bridgeVersion: status.version,
             hasFeature: feature,
             enabled: SettingsManager.isWhatsNewAfterUpdateEnabled(),
+            linkedAtStart: hadResearchAtStart === true,
         });
         if (decision === 'remember') { writeResearchSeen(status.version); return; }
         if (decision !== 'ask' || researchAsk || researchAsked.has(status.version)) return;

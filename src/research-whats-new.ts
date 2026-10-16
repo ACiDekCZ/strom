@@ -77,12 +77,20 @@ export interface ResearchWhatsNewContext {
     hasFeature: boolean;
     /** The setting "What's new after an update" is on. */
     enabled: boolean;
+    /**
+     * The app already had a tree linked to a research (or knew a research's
+     * bridge) when this page started: a user of the research meeting the
+     * bridge's version for the first time here, not a link made just now.
+     */
+    linkedAtStart?: boolean;
 }
 
 /**
  * - `remember`: record the bridge's version as seen, ask nothing (the first
- *   link on this computer, a version not newer, an older bridge, the setting off);
- * - `ask`: a newer version than seen — ask the bridge for its points;
+ *   link on this computer made in this page, a version not newer, an older
+ *   bridge, the setting off);
+ * - `ask`: a newer version than seen, or none seen yet by a research linked
+ *   before this page started — ask the bridge for its points;
  * - `skip`: nothing to do (the same version, or no usable version).
  */
 export type ResearchWhatsNewDecision = 'remember' | 'ask' | 'skip';
@@ -92,8 +100,9 @@ export function decideResearchWhatsNew(ctx: ResearchWhatsNewContext): ResearchWh
     if (!isAppVersion(current)) return 'skip';
     const seen = ctx.seenVersion?.trim() ?? '';
     if (seen === current) return 'skip';
-    // Nothing (or nothing readable) stored: the first link to a research here, not an update.
-    if (!isAppVersion(seen)) return 'remember';
+    // Nothing (or nothing readable) stored: a link made in this page is the first
+    // one here, not an update; a research linked before has news to tell.
+    if (!isAppVersion(seen)) return ctx.linkedAtStart && ctx.enabled && ctx.hasFeature ? 'ask' : 'remember';
     // Back from a beta to a release, or the same: nothing to tell.
     if (compareAppVersions(current, seen) <= 0) return 'remember';
     if (!ctx.enabled || !ctx.hasFeature) return 'remember';
