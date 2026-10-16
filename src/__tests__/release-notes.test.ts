@@ -63,6 +63,14 @@ describe('changelog section', () => {
             expect(parseReleaseNotes(section!).length, file).toBeGreaterThan(0);
         }
     });
+
+    it('the language versions of the section have the same points', () => {
+        const version = JSON.parse(readFileSync('package.json', 'utf-8')).version as string;
+        const counts = ['CHANGELOG.md', 'CHANGELOG.cs.md', 'CHANGELOG.de.md'].map(file =>
+            changelogSection(readFileSync(file, 'utf-8'), version)!.split('\n').filter(line => line.startsWith('- ')).length);
+        expect(counts[1]).toBe(counts[0]);
+        expect(counts[2]).toBe(counts[0]);
+    });
 });
 
 describe('markdown subset', () => {
