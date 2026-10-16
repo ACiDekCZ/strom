@@ -2650,6 +2650,8 @@ const stringsEN = {
         sourceCode: 'Source code',
         // Shown only in the Czech UI (a Czech community; see about-links.ts).
         usersGroup: 'Users\' group on Facebook ↗',
+        // The changelog on GitHub in the UI language (see about-links.ts).
+        whatsNew: 'What\'s new ↗',
         close: 'Close',
         currentData: 'Current data',
         stats: {
@@ -6534,6 +6536,7 @@ const stringsCZ: StringsType = {
         authorName: 'Milan Víšek',
         sourceCode: 'Zdrojový kód',
         usersGroup: 'Skupina uživatelů na Facebooku ↗',
+        whatsNew: 'Co je nového ↗',
         close: 'Zavřít',
         currentData: 'Aktuální data',
         stats: {
@@ -10385,6 +10388,7 @@ const stringsDE: StringsType = {
         authorName: 'Milan Víšek',
         sourceCode: 'Quellcode',
         usersGroup: 'Nutzergruppe auf Facebook ↗',
+        whatsNew: 'Was ist neu ↗',
         close: 'Schließen',
         currentData: 'Aktuelle Daten',
         stats: {

@@ -26,6 +26,39 @@ test('About shows the version and offers "Buy me a coffee" as a plain link in a 
 });
 
 /**
+ * What's new: About links the changelog on GitHub in the UI language at the
+ * section of the running version, in a new tab. The tests run on localhost,
+ * where the branch follows the version: a beta version reads the beta branch,
+ * a released one main. The anchor is the version without its suffix.
+ */
+const CHANGELOG_BRANCH = /-beta\b/.test(APP_VERSION) ? 'beta' : 'main';
+const CHANGELOG_ANCHOR = APP_VERSION.split('-')[0].replace(/\./g, '');
+const changelogHref = (file: string) =>
+    `https://github.com/ACiDekCZ/strom/blob/${CHANGELOG_BRANCH}/${file}#${CHANGELOG_ANCHOR}`;
+
+for (const { locale, label, file } of [
+    { locale: 'en-US', label: "What's new ↗", file: 'CHANGELOG.md' },
+    { locale: 'cs-CZ', label: 'Co je nového ↗', file: 'CHANGELOG.cs.md' },
+    { locale: 'de-DE', label: 'Was ist neu ↗', file: 'CHANGELOG.de.md' },
+]) {
+    test.describe(`What's new (${locale})`, () => {
+        test.use({ locale });
+        test(`About links the changelog in the UI language at this version (${locale})`, async ({ page }) => {
+            await openApp(page);
+            await page.locator('.app-logo').click();
+            const about = page.locator('#about-modal');
+            await expect(about).toBeVisible();
+            const link = about.getByRole('link', { name: label });
+            await expect(link).toBeVisible();
+            await expect(link).toHaveAttribute('href', changelogHref(file));
+            await expect(link).toHaveAttribute('target', '_blank');
+            await expect(link).toHaveAttribute('rel', /noopener/);
+            await expect(link).toHaveAttribute('rel', /noreferrer/);
+        });
+    });
+}
+
+/**
  * License: AGPL-3.0-or-later. The app runs over the network, so (AGPL
  * section 13) About offers the corresponding source: a visible link to the
  * public repository in a new tab, on a phone as well as a tablet and a desktop.
@@ -63,6 +96,16 @@ for (const vp of [
         expect(box!.x).toBeGreaterThanOrEqual(dialog!.x);
         expect(box!.x + box!.width).toBeLessThanOrEqual(dialog!.x + dialog!.width);
         expect(box!.x + box!.width).toBeLessThanOrEqual(vp.width);
+
+        // What's new sits beside the source link, inside the dialog and the viewport too.
+        const whatsNew = about.getByRole('link', { name: "What's new ↗" });
+        await whatsNew.scrollIntoViewIfNeeded();
+        await expect(whatsNew).toBeVisible();
+        const wn = await whatsNew.boundingBox();
+        expect(wn).not.toBeNull();
+        expect(wn!.x).toBeGreaterThanOrEqual(dialog!.x);
+        expect(wn!.x + wn!.width).toBeLessThanOrEqual(dialog!.x + dialog!.width);
+        expect(wn!.x + wn!.width).toBeLessThanOrEqual(vp.width);
     });
 }
 

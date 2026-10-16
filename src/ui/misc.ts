@@ -25,7 +25,7 @@ import {
     LastFocusedMarker
 } from '../types.js';
 import { strings, getCurrentLanguage } from '../strings.js';
-import { aboutUsersGroupLink } from '../about-links.js';
+import { aboutUsersGroupLink, aboutChangelogLink, changelogIsBeta } from '../about-links.js';
 import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-parser.js';
 import {
     validateJsonImport,
@@ -61,6 +61,18 @@ export const miscMethods = uiModule({
         const versionEl = document.getElementById('about-version');
         if (versionEl) {
             versionEl.textContent = APP_VERSION;
+        }
+
+        // What's new: the changelog in the UI language at this version's
+        // section, on the beta branch for a beta build (see about-links.ts).
+        const changelogEl = modal.querySelector<HTMLAnchorElement>('#about-changelog');
+        if (changelogEl) {
+            const changelog = aboutChangelogLink(getCurrentLanguage(), APP_VERSION,
+                changelogIsBeta(location.hostname, APP_VERSION));
+            changelogEl.href = changelog.href;
+            changelogEl.target = changelog.target;
+            changelogEl.rel = changelog.rel;
+            changelogEl.textContent = changelog.label;
         }
 
         // The users' group: a row of its own under the source link, only in the
