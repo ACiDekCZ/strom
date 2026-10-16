@@ -509,7 +509,8 @@ export function researchEdgeFromLines(block: RawResearchBlock): ResearchEdge | n
             else if (tag === '_PARTIAL' && v.toUpperCase() === 'Y') sessions.partial = true;
         } else if (item.tag === '_HYPO' && level === 3) {
             const hypo = target as ResearchEdgeHypo;
-            if (tag === '_JOIN' && RESEARCH_ID.P.test(v)) hypo.join = v;
+            // Several joins: one per variant, in their order; `_ISLAND` / `_HELD` are the first's.
+            if (tag === '_JOIN' && RESEARCH_ID.P.test(v)) hypo.join ??= v;
             else if (tag === '_VAR') { const label = researchVariantLabel(v); if (label && !hypo.variants?.includes(label)) (hypo.variants ??= []).push(label); }
             else if (tag === '_ISLAND') { const n = researchInt(v, 1, 1e6); if (n !== undefined) hypo.island = n; }
             else if (tag === '_HELD') { const n = researchInt(v, 0, 1e6); if (n !== undefined) hypo.held = n; }
@@ -534,7 +535,7 @@ export function researchIslandFromLines(block: RawResearchBlock): ResearchIsland
             if (tag === '_HYPO' && RESEARCH_ID.H.test(v)) { hypo = { id: v }; island.hypos.push(hypo); }
             else if (tag === '_HELD') { const n = researchInt(v, 0, 1e6); if (n !== undefined) island.held = n; }
         } else if (level === 3 && hypo && tag === '_JOIN' && RESEARCH_ID.P.test(v)) {
-            hypo.join = v;
+            hypo.join ??= v;
         } else if (level === 3 && hypo && tag === '_VAR') {
             const label = researchVariantLabel(v);
             if (label && !hypo.variants?.includes(label)) (hypo.variants ??= []).push(label);

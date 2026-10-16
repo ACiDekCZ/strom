@@ -29,7 +29,7 @@ import {
 import { checkRecordedAge, ageBirthDate } from './recorded-age.js';
 import { ACTION_GLYPH, AGENT_DONE_MS, AGENT_DONE_FADE_MS, AGENT_SPIN_MS, CardSignalContext, CardSignalInfo, cardSignalInfo, researchCardInfoNow, sharedPhaseDelay, stateStripesHtml } from './card-signals.js';
 import { EvidenceLevel, treeHasAnySource, unionsByPerson } from './evidence-level.js';
-import { EdgeView, edgeMoves, edgeNamedOptions, edgeView } from './research-edge.js';
+import { EdgeView, edgeHypoFamily, edgeMoves, edgeNamedOptions, edgeView } from './research-edge.js';
 import {
     computeLayout,
     StromLayoutEngine,
@@ -2369,10 +2369,12 @@ class TreeRendererClass {
                 pill.style.left = `${(tip.x + tx) / 2}px`;
                 pill.style.top = `${0.125 * tip.y + 0.75 * midY + 0.125 * ty}px`;
             } else {
-                if (!hypo.island) continue;
+                // As many people as reaching the family shows (its own count, not the hypothesis').
+                const size = edgeHypoFamily(hypo, DataManager.getPerson(joinId)).size;
+                if (!size) continue;
                 pill.className = 'edge-link-pill edge-link-pill--family';
-                pill.textContent = re.familyPill(hypo.island);
-                pill.setAttribute('aria-label', re.familyPillSr(hypo.island));
+                pill.textContent = re.familyPill(size);
+                pill.setAttribute('aria-label', re.familyPillSr(size));
                 pill.style.left = `${tip.x}px`;
                 pill.style.top = `${tip.y - 4}px`;
             }

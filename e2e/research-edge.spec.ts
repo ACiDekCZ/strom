@@ -104,6 +104,42 @@ test.describe('research edge', () => {
         await expect(card(page, 'Matouš').locator('.island-caption')).toHaveText('outside the tree · family of 2 · 1 task waiting');
     });
 
+    test('a hypothesis joining two families: "+ family" counts the one it goes to', async ({ page }) => {
+        // H0001 has a join per version: Matouš's family of 2 first, then Tomáš's family of 3;
+        // the research writes the first one's _ISLAND only.
+        const ged = researchGed()
+            .replace('3 _JOIN P0005\n3 _ISLAND 2', '3 _JOIN P0005\n3 _JOIN P0007\n3 _ISLAND 2')
+            .replace('0 @F0001@ FAM', [
+                '0 @P0007@ INDI', '1 NAME Tomáš /Novák/', '1 SEX M', '1 REFN P0007', '1 FAMS @F0010@',
+                '1 _STROM_ISLAND 3', '2 _HYPO H0001', '3 _JOIN P0001', '2 _HELD 2',
+                '0 @P0008@ INDI', '1 NAME Eva /Malá/', '1 SEX F', '1 REFN P0008', '1 FAMS @F0010@',
+                '1 _STROM_ISLAND 3', '2 _HYPO H0001', '3 _JOIN P0001', '2 _HELD 2',
+                '0 @P0009@ INDI', '1 NAME Petr /Novák/', '1 SEX M', '1 REFN P0009', '1 FAMC @F0010@',
+                '1 _STROM_ISLAND 3', '2 _HYPO H0001', '3 _JOIN P0001', '2 _HELD 2',
+                '0 @F0010@ FAM', '1 HUSB @P0007@', '1 WIFE @P0008@', '1 CHIL @P0009@',
+                '0 @F0001@ FAM',
+            ].join('\n'));
+        expect(ged).toContain('3 _JOIN P0007');
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await openApp(page);
+        await dropFile(page, ged);
+        await expect(card(page, 'Jan')).toBeVisible();
+        await page.evaluate(() => {
+            const jan = window.Strom.DataManager.getAllPersons().find(p => p.firstName === 'Jan')!;
+            window.Strom.TreeRenderer.setFocus(jan.id);
+            window.Strom.ZoomPan.reset();
+        });
+        const pill = page.locator('.edge-link-pill--family');
+        await expect(pill).toHaveText('+ family · 2');
+        await stub(page, 'Josef').hover();
+        await expect(page.locator('#research-edge-bubble .reb-hypo')).toContainText('Matouš Novák · family outside the tree, 2 people');
+        await page.mouse.move(5, 5);
+        await expect(page.locator('#research-edge-bubble')).toHaveCount(0);
+        await pill.click();
+        await expect(card(page, 'Matouš').locator('.island-caption')).toHaveText('outside the tree · family of 2 · 1 task waiting');
+        await expect(page.locator('.person-card.research-island')).toHaveCount(2);
+    });
+
     test('hover shows the bubble, a click opens "Above the person"', async ({ page }) => {
         await setup(page);
         await stub(page, 'Josef').hover();

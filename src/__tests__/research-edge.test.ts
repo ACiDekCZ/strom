@@ -7,7 +7,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { exportToGedcom } from '../ged-exporter.js';
-import { edgeMoves, edgeView, edgeShape, edgeTone, effectiveNext, edgeEndText, edgeNextText, edgeFactsLine, edgeEstimateText, edgeTimeline } from '../research-edge.js';
+import { edgeHypoFamily, edgeMoves, edgeView, edgeShape, edgeTone, effectiveNext, edgeEndText, edgeNextText, edgeFactsLine, edgeEstimateText, edgeTimeline } from '../research-edge.js';
 import { getStringsForLang, setLanguage } from '../strings.js';
 import { applyContentOptions } from '../privacy.js';
 import { ResearchEdge, StromData } from '../types.js';
@@ -139,6 +139,49 @@ describe('reading _STROM_EDGE and _STROM_ISLAND', () => {
         expect(edge.last).toBe('2026-09-12');
         expect(edge.conflicts).toEqual(['X0003']);
         expect(edge.hypos).toEqual([{ id: 'H0002', tests: [] }]);
+    });
+
+    it('a hypothesis with a join per variant: the first join, and the family it reaches counts', () => {
+        // Variant A joins Matouš (a family of 2), variant B Tomáš (a family of 3);
+        // the research writes one _ISLAND / _HELD, the first variant's.
+        const body = `0 @I1@ INDI
+1 NAME Josef /Novák/
+1 REFN P0001
+1 _STROM_EDGE parents
+2 _HYPO H0001
+3 _JOIN P0005
+3 _JOIN P0007
+3 _VAR A
+3 _VAR B
+3 _ISLAND 2
+3 _HELD 1
+0 @I5@ INDI
+1 NAME Matouš /Novák/
+1 REFN P0005
+1 _STROM_ISLAND 2
+2 _HYPO H0001
+3 _JOIN P0001
+3 _VAR A
+2 _HELD 1
+0 @I7@ INDI
+1 NAME Tomáš /Novák/
+1 REFN P0007
+1 _STROM_ISLAND 3
+2 _HYPO H0001
+3 _JOIN P0001
+3 _VAR B
+2 _HELD 4
+0 TRLR
+`;
+        const data = load(true, body);
+        const hypo = byRefn(data, 'P0001').research!.edge!.hypos[0];
+        expect(hypo).toEqual({ id: 'H0001', join: 'P0005', variants: ['A', 'B'], island: 2, held: 1, tests: [] });
+        expect(edgeHypoFamily(hypo, byRefn(data, 'P0005'))).toEqual({ size: 2, held: 1 });
+        // The island person's own count wins over the hypothesis' number…
+        expect(edgeHypoFamily({ ...hypo, island: 11, held: 10 }, byRefn(data, 'P0007'))).toEqual({ size: 3, held: 4 });
+        // …which stays for an island person without its record.
+        expect(edgeHypoFamily(hypo, byRefn(data, 'P0001'))).toEqual({ size: 2, held: 1 });
+        expect(edgeHypoFamily(hypo, null)).toEqual({ size: 2, held: 1 });
     });
 
     it('a foreign GEDCOM keeps nothing of it', () => {

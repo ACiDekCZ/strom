@@ -10,7 +10,7 @@
  * something here"). Pure.
  */
 
-import { Person, ResearchEdge, ResearchEdgeMode, ResearchHypothesis } from './types.js';
+import { Person, ResearchEdge, ResearchEdgeHypo, ResearchEdgeMode, ResearchHypothesis } from './types.js';
 import { strings } from './strings.js';
 import { formatFlexDate } from './dates.js';
 
@@ -83,6 +83,17 @@ export function edgeNamedOptions(person: Pick<Person, 'research'>): number {
     const h = edgeNamedHypothesis(person);
     if (h) return h.variants!.length;
     return person.research?.edge?.hypos.find(x => (x.variants?.length ?? 0) > 0)?.variants?.length ?? 0;
+}
+
+/**
+ * The family outside the tree an edge's hypothesis would link: its people
+ * and the tasks waiting about it. The island person it joins says it best
+ * (its `_STROM_ISLAND` is the family shown when it is reached); the
+ * hypothesis' own `_ISLAND` / `_HELD` only when that person has none.
+ */
+export function edgeHypoFamily(hypo: ResearchEdgeHypo, joined: Pick<Person, 'research'> | null | undefined): { size?: number; held?: number } {
+    const island = joined?.research?.island;
+    return island ? { size: island.size, held: island.held } : { size: hypo.island, held: hypo.held };
 }
 
 export function edgeShape(end: string | undefined): EdgeShape {

@@ -183,8 +183,8 @@ describe('a research file with hypothesis variants, links and the named edge end
         const edge = byRefn(data, 'P0010').research!.edge!;
         expect(edge).toMatchObject({ missing: 'parents', scope: 'in', research: 'G0001', gen: 2, end: 'named', next: 'decide', window: { from: 1815, to: 1821 } });
         expect(edge.est).toEqual({ year: 1818, place: 'Lhota' });
-        // the joins read as before (the last one kept)
-        expect(edge.hypos).toMatchObject([{ id: 'H0022', join: 'P0130', island: 5, held: 0, tests: [] }]);
+        // the first join kept: the family of the first variant (B), the one _ISLAND counts
+        expect(edge.hypos).toMatchObject([{ id: 'H0022', join: 'P0126', island: 5, held: 0, tests: [] }]);
         expect(edgeShape(edge.end)).toBe('open');
         const view = edgeView(edge, 'all')!;
         // Without the number of its options no short word; with it, "named · 3 options".

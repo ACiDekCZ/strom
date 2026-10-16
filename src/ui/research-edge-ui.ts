@@ -12,7 +12,7 @@ import { strings } from '../strings.js';
 import { formatFlexDate } from '../dates.js';
 import { PersonId, ResearchEdge, ResearchEdgeMode, ResearchHypothesis } from '../types.js';
 import {
-    edgeEndText, edgeEstimateText, edgeFactsLine, edgeNamedHypothesis, edgeNextText, edgeTimeline, edgeTone, edgeMuted, effectiveNext,
+    edgeEndText, edgeEstimateText, edgeFactsLine, edgeHypoFamily, edgeNamedHypothesis, edgeNextText, edgeTimeline, edgeTone, edgeMuted, effectiveNext,
 } from '../research-edge.js';
 import { researchCardInfoNow } from '../card-signals.js';
 import { uiModule } from './module.js';
@@ -140,6 +140,7 @@ export const researchEdgeUiMethods = uiModule({
             const facts = edgeFactsLine(edge);
             const hypo = edge.hypos.find(h => h.join) ?? null;
             const joinId = hypo?.join ? personByRefn(hypo.join) : null;
+            const family = hypo && joinId ? edgeHypoFamily(hypo, DataManager.getPerson(joinId)) : {};
             const hypoTitle = hypo ? person.research?.hypotheses?.find(h => h.id === hypo.id)?.title ?? '' : '';
             bubble.innerHTML = `
             <div class="reb-end" id="${BUBBLE_ID}-title">${esc(edgeEndText(edge))}</div>
@@ -148,7 +149,7 @@ export const researchEdgeUiMethods = uiModule({
             ${hypo && joinId ? `
                 <div class="reb-hypo">
                     <span class="reb-hypo-label">${esc(re.possibleLink)}</span>
-                    <button type="button" class="link-button reb-join" data-person="${esc(joinId)}">${esc(personName(joinId))}</button>${hypo.island ? ` · ${esc(re.islandFamily(hypo.island))}` : ''}
+                    <button type="button" class="link-button reb-join" data-person="${esc(joinId)}">${esc(personName(joinId))}</button>${family.size ? ` · ${esc(re.islandFamily(family.size))}` : ''}
                     ${hypoTitle ? `<div class="reb-hypo-title">${esc(hypoTitle)}</div>` : ''}
                 </div>` : ''}
             <button type="button" class="link-button reb-more">${esc(re.moreInResearch)}</button>`;
@@ -424,10 +425,11 @@ export const researchEdgeUiMethods = uiModule({
             parts.push(`<div class="rep-block"><div class="rep-sub">${esc(strings.research.hypotheses)}</div>
                 ${edge.hypos.map(h => {
                     const joinId = h.join ? personByRefn(h.join) : null;
+                    const family = edgeHypoFamily(h, joinId ? DataManager.getPerson(joinId) : null);
                     const bits = [
                         joinId ? `${esc(re.possibleLink)}: <button type="button" class="link-button rep-join" data-person="${esc(joinId)}">${esc(personName(joinId))}</button>` : '',
-                        h.island ? esc(re.islandFamily(h.island)) : '',
-                        h.held ? esc(re.hypoWaiting(h.held)) : '',
+                        family.size ? esc(re.islandFamily(family.size)) : '',
+                        family.held ? esc(re.hypoWaiting(family.held)) : '',
                         h.tests.length > 0 ? `${esc(re.hypoTests)} ${esc(h.tests.join(', '))}` : '',
                     ].filter(Boolean);
                     return `<div class="rep-hypo">

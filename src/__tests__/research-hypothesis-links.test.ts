@@ -62,7 +62,8 @@ describe('hypothesis variants from a research file', () => {
     it('reads the variants of the joins at the edge and on the islands, and the named end', () => {
         const { data, id } = loadHypothesisLinksTree();
         const edge = data.persons[id('P0010')].research!.edge!;
-        expect(edge.hypos).toEqual([{ id: 'H0022', join: 'P0130', island: 5, held: 0, tests: [], variants: ['B', 'C'] }]);
+        // The first join: Marie of the family of five (B), the one _ISLAND counts — not Jan alone (C).
+        expect(edge.hypos).toEqual([{ id: 'H0022', join: 'P0126', island: 5, held: 0, tests: [], variants: ['B', 'C'] }]);
         expect(data.persons[id('P0125')].research!.island).toEqual({ size: 5, hypos: [
             { id: 'H0022', join: 'P0010', variants: ['B'] }, { id: 'H0028', join: 'P0012', variants: ['A'] },
         ], held: 0 });
