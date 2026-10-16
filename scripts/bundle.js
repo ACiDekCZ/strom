@@ -2,15 +2,41 @@
  * Build script - creates a single strom.html file with inlined JS
  */
 
-import { readFileSync, writeFileSync } from 'fs';
-import { execSync } from 'child_process';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { buildSync } from 'esbuild';
 
 // Build the TypeScript bundle first. Inject the app version from package.json
 // so the About dialog and export metadata always match the released version.
 console.log('Building TypeScript...');
 const pkgVersion = JSON.parse(readFileSync('package.json', 'utf-8')).version;
-const versionDefine = `--define:__APP_VERSION__='${JSON.stringify(pkgVersion)}'`;
-execSync(`npx esbuild src/main.ts --bundle --minify ${versionDefine} --outfile=dist/bundle.js`, { stdio: 'inherit' });
+
+// "What's new" after an update: the section of this version from each
+// changelog (CHANGELOG.md, .cs.md, .de.md), cut by the same code the app's
+// tests check (src/release-notes.ts), embedded so the dialog needs no network.
+const notesHelper = buildSync({
+    entryPoints: ['src/release-notes.ts'], bundle: true, format: 'esm', platform: 'neutral', write: false,
+});
+const { changelogSection, changelogFileName, CHANGELOG_LANGUAGES } = await import(
+    'data:text/javascript;base64,' + Buffer.from(notesHelper.outputFiles[0].text).toString('base64'));
+const sections = {};
+for (const lang of CHANGELOG_LANGUAGES) {
+    const file = changelogFileName(lang);
+    sections[lang] = existsSync(file) ? changelogSection(readFileSync(file, 'utf-8'), pkgVersion) : null;
+}
+const releaseNotes = { version: pkgVersion, sections };
+console.log('What\'s new sections: ' + CHANGELOG_LANGUAGES.map(l => `${l} ${sections[l] ? 'yes' : 'none'}`).join(', '));
+
+buildSync({
+    entryPoints: ['src/main.ts'],
+    bundle: true,
+    minify: true,
+    outfile: 'dist/bundle.js',
+    define: {
+        __APP_VERSION__: JSON.stringify(pkgVersion),
+        __RELEASE_NOTES__: JSON.stringify(releaseNotes),
+    },
+    logLevel: 'warning',
+});
 
 // Read the HTML template and JS bundle
 const html = readFileSync('index.html', 'utf-8');

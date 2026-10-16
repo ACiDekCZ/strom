@@ -274,6 +274,16 @@ class SettingsManagerClass {
         this.save();
     }
 
+    /** "What's new" after an update, default ON (undefined = enabled). */
+    isWhatsNewAfterUpdateEnabled(): boolean {
+        return this.settings.whatsNewAfterUpdate !== false;
+    }
+
+    setWhatsNewAfterUpdate(enabled: boolean): void {
+        this.settings.whatsNewAfterUpdate = enabled;
+        this.save();
+    }
+
     /** Branch colour coding default ON (undefined = enabled). */
     isBranchColorsEnabled(): boolean {
         return this.settings.branchColors !== false;

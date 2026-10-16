@@ -1,4 +1,8 @@
 import { Page, expect, Locator } from '@playwright/test';
+import { readFileSync } from 'fs';
+
+/** The version of the build under test (e2e-dist is built from this package.json). */
+export const PACKAGE_VERSION: string = JSON.parse(readFileSync('package.json', 'utf-8')).version;
 
 /**
  * Mark the Strom Research promotion (3.0) as already seen in this page's
@@ -18,6 +22,20 @@ export async function seedResearchPromoSeen(page: Page): Promise<void> {
             if (changed) localStorage.setItem(key, JSON.stringify(settings));
         } catch { /* no storage: nothing to seed */ }
     });
+}
+
+/**
+ * Mark the "What's new" of the running version as already seen in this
+ * page's browser: an existing tree and no seen version would otherwise bring
+ * the dialog over suites that test something else. Set only when nothing is
+ * stored yet, on every navigation of the page.
+ */
+export async function seedWhatsNewSeen(page: Page): Promise<void> {
+    await page.addInitScript((version) => {
+        try {
+            if (localStorage.getItem('strom-whats-new-seen') === null) localStorage.setItem('strom-whats-new-seen', version);
+        } catch { /* no storage: nothing to seed */ }
+    }, PACKAGE_VERSION);
 }
 
 /**
@@ -45,13 +63,15 @@ export async function seedSetting(page: Page, name: string, value: unknown): Pro
  * the "changes only in the browser" notice is off unless `{ fileCopyReminders: true }`;
  * the one-time tour offer after the sample tree counts as already made unless
  * `{ tourOffer: true }` — it sits over the bottom of the screen for 15 s and
- * would make every click there wait it out.
+ * would make every click there wait it out; the "What's new" of this version
+ * counts as seen unless `{ whatsNew: true }` (see seedWhatsNewSeen).
  */
 export async function openApp(
     page: Page,
-    opts: { researchPromo?: boolean; fileCopyReminders?: boolean; tourOffer?: boolean } = {},
+    opts: { researchPromo?: boolean; fileCopyReminders?: boolean; tourOffer?: boolean; whatsNew?: boolean } = {},
 ): Promise<void> {
     if (!opts.researchPromo) await seedResearchPromoSeen(page);
+    if (!opts.whatsNew) await seedWhatsNewSeen(page);
     if (!opts.fileCopyReminders) await seedSetting(page, 'fileCopyReminders', false);
     if (!opts.tourOffer) {
         await page.addInitScript(() => {

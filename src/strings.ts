@@ -824,6 +824,16 @@ const stringsEN = {
         settingHint: 'Show a daily "on this day" reminder when opening a tree',
     },
 
+    // "What's new" after an update (src/ui/release-notes-ui.ts)
+    releaseNotes: {
+        title: 'What\'s new',
+        version: (version: string) => `Strom ${version}`,
+        fullChangelog: 'All changes ↗',
+        dontShowAgain: 'Don\'t show next time',
+        settingLabel: 'What\'s new after an update',
+        settingHint: 'Show a short overview of the changes at the first start of a new version',
+    },
+
     // Family wizard (add a whole family at once)
     familyWizard: {
         menu: 'Add family…',
@@ -4720,6 +4730,16 @@ const stringsCZ: StringsType = {
         settingHint: 'Při otevření stromu ukázat denní připomínku „v tento den“',
     },
 
+    // "What's new" after an update (src/ui/release-notes-ui.ts)
+    releaseNotes: {
+        title: 'Co je nového',
+        version: (version: string) => `Strom ${version}`,
+        fullChangelog: 'Všechny změny ↗',
+        dontShowAgain: 'Příště nezobrazovat',
+        settingLabel: 'Co je nového po aktualizaci',
+        settingHint: 'Při prvním spuštění nové verze ukázat krátký přehled změn',
+    },
+
     // Family wizard (add a whole family at once)
     familyWizard: {
         menu: 'Přidat rodinu…',
@@ -8594,6 +8614,16 @@ const stringsDE: StringsType = {
         otdWedding: (a: string, b: string, ago: string) => `${ago} heirateten ${a} & ${b}`,
         settingLabel: 'An diesem Tag',
         settingHint: 'Beim Öffnen eines Stammbaums eine tägliche „An diesem Tag“-Erinnerung anzeigen',
+    },
+
+    // "What's new" after an update (src/ui/release-notes-ui.ts)
+    releaseNotes: {
+        title: 'Was ist neu',
+        version: (version: string) => `Strom ${version}`,
+        fullChangelog: 'Alle Änderungen ↗',
+        dontShowAgain: 'Nächstes Mal nicht anzeigen',
+        settingLabel: '„Was ist neu“ nach einem Update',
+        settingHint: 'Beim ersten Start einer neuen Version eine kurze Übersicht der Änderungen anzeigen',
     },
 
     // Family wizard (add a whole family at once)

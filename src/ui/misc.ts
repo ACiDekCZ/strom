@@ -308,6 +308,8 @@ export const miscMethods = uiModule({
         if (deathAnnToggle) deathAnnToggle.checked = SettingsManager.isDeathAnniversariesEnabled();
         const otdAllToggle = document.getElementById('on-this-day-all-trees-toggle') as HTMLInputElement | null;
         if (otdAllToggle) otdAllToggle.checked = SettingsManager.isOnThisDayAllTrees();
+        const whatsNewToggle = document.getElementById('whats-new-after-update-toggle') as HTMLInputElement | null;
+        if (whatsNewToggle) whatsNewToggle.checked = SettingsManager.isWhatsNewAfterUpdateEnabled();
         const fileCopyToggle = document.getElementById('file-copy-reminders-toggle') as HTMLInputElement | null;
         if (fileCopyToggle) fileCopyToggle.checked = SettingsManager.isFileCopyRemindersEnabled();
         // Only where the research announced its links (computer, not phone).
@@ -836,6 +838,10 @@ export const miscMethods = uiModule({
                     }
                     if (currentDialog === 'research-info-modal') {
                         this.closeResearchInfoDialog();
+                        return;
+                    }
+                    if (currentDialog === 'release-notes-modal') {
+                        this.closeReleaseNotesDialog();
                         return;
                     }
                     if (currentDialog === 'person-sources-modal') {

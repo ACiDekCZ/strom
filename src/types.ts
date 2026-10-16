@@ -1193,6 +1193,7 @@ export interface AppSettings {
     branchLegend?: boolean;  // default: false - show the branch-colour legend box
     deathAnniversaries?: boolean;  // default: false - include yearly death anniversaries
     onThisDayAllTrees?: boolean;   // default: false - "on this day" also from the other visible trees
+    whatsNewAfterUpdate?: boolean;  // default: true - the "What's new" dialog at the first start of a new version
     crossTreeBadges?: boolean;  // default: true - show cross-tree connection badges
     fanKekule?: boolean;  // default: false - show Kekule (ahnentafel) numbers in the fan chart
     lifelineChildEvents?: boolean;  // default: false - person card's life timeline also lists the children's events

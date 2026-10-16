@@ -10965,6 +10965,45 @@
         .research-update-dialog { width: 560px; max-width: calc(100vw - 32px); }
         @media (max-width: 640px) { .research-update-dialog { max-width: calc(100vw - 16px); } }
         @media (min-width: 641px) and (max-width: 1024px) { .research-update-dialog { width: 500px; } }
+        /* "What's new" after an update (src/ui/release-notes-ui.ts). Colours from
+           the theme tokens, so dark mode follows; the md width and the phone's
+           full width and stacked footer come from .modal--md and .modal .buttons. */
+        .release-notes-heading { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; min-width: 0; }
+        .release-notes-version { font-size: 13px; color: var(--text-light); white-space: nowrap; }
+        .release-notes-content { font-size: 14px; line-height: 1.5; color: var(--text); }
+        .release-notes-list { margin: 0 0 12px; padding-left: 20px; }
+        .release-notes-list li { margin: 0 0 8px; }
+        .release-notes-list li::marker { color: var(--primary); }
+        .release-notes-para { margin: 0 0 10px; }
+        .release-notes-content strong { font-weight: 600; }
+        /* The italic face leans into the following space. */
+        .release-notes-content em { padding-right: 0.06em; }
+        .release-notes-full-row { margin: 4px 0 0; }
+        .release-notes-full { color: var(--primary); font-weight: 600; text-decoration: none; }
+        @media (hover: hover) { .release-notes-full:hover { text-decoration: underline; } }
+        .release-notes-buttons { align-items: center; }
+        /* `.modal label { display: block }` would win over a single class. */
+        .modal label.release-notes-dont-show {
+            display: inline-flex; align-items: center; gap: 8px; margin: 0 auto 0 0;
+            font-size: 13px; font-weight: 400; color: var(--text-light); cursor: pointer;
+        }
+        .release-notes-dont-show input { width: 16px; height: 16px; margin: 0; flex-shrink: 0; accent-color: var(--primary); }
+        @media (min-width: 641px) and (max-width: 1024px) { .release-notes-dialog.modal--md { width: 520px; } }
+        @media (max-width: 640px) {
+            .release-notes-content { font-size: 15px; }
+            .release-notes-list { padding-left: 18px; }
+            .modal label.release-notes-dont-show { justify-content: flex-start; padding: 4px 0; }
+        }
+        /* Phone sideways: little height, so the list scrolls between header and footer;
+           the footer stays on one row. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .release-notes-content { font-size: 13px; }
+            .release-notes-list li { margin-bottom: 4px; }
+        }
+        @media (pointer: coarse) {
+            .modal label.release-notes-dont-show { min-height: 44px; }
+            .release-notes-dont-show input { width: 20px; height: 20px; }
+        }
         .research-update-action, .toolbar .research-update-action {
             padding: 0; border: 0; border-radius: 0; background: none; color: var(--primary);
             font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer;
@@ -15210,6 +15249,13 @@
                         <span class="settings-text">
                             <span class="settings-name" data-i18n="familyWizard.settingLabel"></span>
                             <span class="settings-desc" data-i18n="familyWizard.settingHint"></span>
+                        </span>
+                    </label>
+                    <label class="settings-checkbox settings-row">
+                        <input type="checkbox" id="whats-new-after-update-toggle" onchange="window.Strom.UI.toggleWhatsNewAfterUpdate(this.checked)">
+                        <span class="settings-text">
+                            <span class="settings-name" data-i18n="releaseNotes.settingLabel"></span>
+                            <span class="settings-desc" data-i18n="releaseNotes.settingHint"></span>
                         </span>
                     </label>
                 </div>

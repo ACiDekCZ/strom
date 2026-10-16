@@ -115,6 +115,7 @@ import { originalsMethods } from './originals-ui.js';
 import { researchTreeSettingsMethods } from './research-tree-settings-ui.js';
 import { researchLoadMethods } from './research-load-ui.js';
 import { tourMethods, TourStepDef } from './tour.js';
+import { releaseNotesMethods } from './release-notes-ui.js';
 
 export class UIClass {
     currentId: PersonId | null = null;
@@ -696,5 +697,9 @@ Object.assign(UIClass.prototype, researchPromoMethods);
 type TourMethods = typeof tourMethods;
 export interface UIClass extends TourMethods {}
 Object.assign(UIClass.prototype, tourMethods);
+
+type ReleaseNotesMethods = typeof releaseNotesMethods;
+export interface UIClass extends ReleaseNotesMethods {}
+Object.assign(UIClass.prototype, releaseNotesMethods);
 
 export const UI = new UIClass();

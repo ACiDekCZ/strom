@@ -329,6 +329,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         showStartupError(err);
         return;
     }
+    // "What's new": whether this browser held trees before anything can be added.
+    UI.captureReleaseNotesStart();
     // The startup tree is in memory: editing may begin (see .app-loading).
     document.documentElement.classList.remove('app-loading');
     document.getElementById('storage-blocked-notice')?.remove();
@@ -442,6 +444,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Strom Research: light the "New" marker, maybe the one-time 3.0 card.
         UI.researchPromoAfterFirstRender();
+
+        // "What's new" at the first start of a new version, once the app is free.
+        UI.initReleaseNotes();
 
         // Where the data is: the "changes only in the browser" indicator, and
         // the notice at an edit no file holds (src/file-copy.ts).
