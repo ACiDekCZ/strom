@@ -8,6 +8,7 @@ English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md)
 
 - **Edge of the tree**: a hypothesis whose versions would each link a different family outside the tree shows all of them. The bubble at the edge of the tree and *Above the person* list every family with its versions, people and waiting tasks, each a link to that family; the pill reads *+ 2 families* and offers each one. With Strom Research 1.16 or later.
 - **Research for this tree**: one sentence says where the terminal the research opens in is chosen: in the research's settings, with *Settings in the research* beside it. On a computer, with Strom Research 1.16 or later, which brings the choice itself (Terminal or iTerm2 on a Mac).
+- **Married surname**: a GEDCOM import keeps the surname after marriage (a second `NAME` with `TYPE married`, or `_MARNM`) apart from the birth surname instead of turning it into another spelling of the name, writes it back on export and to the research, and search finds the person under it too. The name shown stays the birth surname for now.
 - **Fixes**: the *+ family · N* pill at the edge of the tree counts the family it shows: for a hypothesis whose variants would each connect a different family outside the tree, the number of people and waiting tasks now belongs to the family that appears on a click.
 
 ## 3.12.0

@@ -108,7 +108,8 @@ unsupported tag.
 |---|---|
 | `NAME` | Given name and surname; the surname goes between slashes. A person with neither (`1 NAME //`, or `?`) is an unknown stand-in; a surname alone (`1 NAME /Nováková/`) is a real person. Strom writes its stand-in as `1 NAME //` and a person it knows without a name as `1 NAME ? //` (`? /Unknown/` before 3.10.0-beta.7, read back as no surname from such a file — see "Files Strom wrote itself"): in its own file the latter stays a person |
 | `NAME` (repeated) | Further spellings of the same person, kept as name variants |
-| `NAME` > `TYPE` | Read to keep the birth surname as the person's surname: a `married` name listed first swaps places with the `birth` (or `maiden`) one. The type itself is not stored |
+| `NAME` > `TYPE` | Keeps the birth surname as the person's surname: a `married` name listed first swaps places with the `birth` (or `maiden`) one. The **last** `married` name in file order gives the **married surname** (a field of its own) and is not kept as a name variant; earlier `married` names stay name variants. A `married` name listed first with no `birth` name beside it stays the surname (the birth one is not known) and the married surname stays empty. Other types are not stored |
+| `_MARNM` (level 1, or level 2 under a `NAME`) | The married surname as Legacy, PAF and some exports write it, when no `NAME` with `TYPE married` gives one; of several, the last one in the file. A value with slashes reads the surname between them |
 | `NAME` > `SOUR` | The record the name comes from — cites the person, with `PAGE` and `QUAY` |
 | `NAME` > `GIVN`, `SURN` | Win over the `NAME` line, which is only how a program wrote them. Without them the surname is the last pair of slashes. A line without slashes, with `GIVN` and no `SURN` (`Petr Novotný` + `GIVN Petr`), keeps the rest of the line after the given name as the surname |
 | `NAME` > `NPFX`, `NSFX` | The titles before and after the name (`Ing.`, `MUDr.` / `ml.`, `Ph.D.`), kept in fields of their own and shown with the name (Settings → "Show titles"). Written in the `NAME` line too, they are taken off its start and end, so a title never doubles. A `NAME` line without these tags is never searched for titles. A list of titles with GEDCOM's commas (`Prof., Dr.`) reads with spaces (`Prof. Dr.`); a file written by Strom keeps a title as it was typed |
@@ -129,6 +130,23 @@ every other name stays one plain line:
 2 SURN Novák
 2 NSFX ml.
 ```
+
+A name variant that only repeats the given name with the married surname
+(`1 NAME Marie Nováková` beside the married surname Nováková — what an older
+Strom or Strom Research wrote) is dropped on import, so it never doubles. The
+married surname is exported as a second `NAME` right after the primary one,
+with the person's given name, and the other spellings follow as before; a
+send to a research carries it the same way:
+
+```
+1 NAME Marie /Dvořáková/
+1 NAME Marie /Nováková/
+2 TYPE married
+1 NAME Mařenka Dvořáková
+```
+
+Search finds the person under the married surname too (and under its other
+forms); the name shown is still the birth surname.
 
 A second `BIRT` or `DEAT` block does not overwrite the first: it is kept as a
 labelled event, because two contradictory birth records are a research finding,
@@ -633,6 +651,13 @@ the research in the header:
   12 (3.10) the app keeps an unknown sex as such and never guesses one; an
   older app (3.9) wrote `U` only where the research's unknown stayed unchanged
   and guessed the sex elsewhere.
+
+A research that does not say `person.marriedSurname` in its features stores
+the married name as one more spelling and gives it back as a bare `NAME`; when
+its version comes back, each person keeps the married surname of the previous
+state (matched by `REFN`) and the bare spelling that repeats it goes. A
+research with the feature decides the married surname, a removed one included,
+except one it still holds only as that bare spelling.
 
 ### What happens to an opened research
 

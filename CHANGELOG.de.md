@@ -8,6 +8,7 @@
 
 - **Rand des Stammbaums**: Eine Hypothese, deren Versionen jeweils eine andere Familie außerhalb des Stammbaums verbinden würden, zeigt alle. Die Blase am Rand des Stammbaums und *Über der Person* führen jede Familie mit ihren Versionen, Personen und wartenden Aufgaben auf, jede als Link zu ihr; die Pille zeigt *+ 2 Familien* und bietet jede an. Mit Strom Research 1.16 oder neuer.
 - **Forschung für diesen Stammbaum**: Ein Satz sagt, wo das Terminal gewählt wird, in dem sich die Forschung öffnet: in den Einstellungen der Forschung, mit *Einstellungen in der Forschung* gleich daneben. Am Computer, mit Strom Research 1.16 oder neuer, das die Wahl selbst mitbringt (Terminal oder iTerm2 auf dem Mac).
+- **Ehename**: Ein GEDCOM-Import hält den Ehenamen (ein zweites `NAME` mit `TYPE married` oder `_MARNM`) getrennt vom Geburtsnamen, statt eine weitere Schreibweise des Namens daraus zu machen, der Export und das Senden an die Forschung schreiben ihn zurück, und die Suche findet die Person auch unter ihm. Der angezeigte Name bleibt vorerst der Geburtsname.
 - **Fehlerbehebungen**: Die Pille *+ Familie · N* am Rand des Stammbaums zählt die Familie, die sie zeigt: Bei einer Hypothese, deren Varianten jeweils eine andere Familie außerhalb des Stammbaums verbinden würden, gehören die Zahl der Personen und der wartenden Aufgaben jetzt zu der Familie, die nach einem Klick erscheint.
 
 ## 3.12.0
