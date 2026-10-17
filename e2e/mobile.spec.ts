@@ -225,7 +225,7 @@ test('the Tree row opens the tree-actions sheet: name, summary, the six groups a
 
     await expect(sheet.locator('.bottom-sheet-section')).toHaveText(['Overview', 'Outputs', 'Tree settings', 'Structure', 'Manage']);
     const keys = await sheet.locator('.tree-actions-row').evaluateAll(els => els.map(el => (el as HTMLElement).dataset.action));
-    expect(keys).toEqual(['overview', 'export', 'snapshots', 'rename', 'defaultPerson', 'startup', 'places', 'surnames',
+    expect(keys).toEqual(['overview', 'overview-quality', 'export', 'snapshots', 'rename', 'defaultPerson', 'startup', 'places', 'surnames',
         'makeTree', 'mergeView', 'splitFamilies', 'split', 'mergeInto', 'duplicate', 'visibility', 'lock', 'delete']);
     for (const box of await sheet.locator('.tree-actions-row').evaluateAll(els => els.map(el => el.getBoundingClientRect().height))) {
         expect(Math.round(box)).toBeGreaterThanOrEqual(48); // subpixel layout

@@ -255,6 +255,11 @@
             --info-soft: #e4ebf1;     /* informational tint backgrounds */
             --pending: #d0a23c;       /* unfinished merge state (dashed) */
             --chart-soft: #c9d8cc;    /* lighter shade for single-hue charts */
+            /* research certainty (FactStatus): proven → probable → possible → lead (hatched) */
+            --certainty-1: #35577f;
+            --certainty-2: #6f93bd;
+            --certainty-3: #adc3dc;
+            --certainty-4: repeating-linear-gradient(45deg, #adc3dc 0 2px, #eef2f7 2px 4px);
 
             /* gender (avatar ring only); unknown: a sex the records do not give */
             --male: #5b7f9e;
@@ -376,6 +381,11 @@
             --on-warning: #1f1a10;
             --info-soft: #2a3139;
             --chart-soft: #3a4a3f;
+            /* lightest = most certain, so it keeps the contrast on the dark surface */
+            --certainty-1: #b5d0ee;
+            --certainty-2: #82a8d6;
+            --certainty-3: #5a7fae;
+            --certainty-4: repeating-linear-gradient(45deg, #5a7fae 0 2px, #3a3f47 2px 4px);
 
             --male: #7da3c4;
             --female: #c49290;
@@ -702,6 +712,8 @@
         .tree-switcher-action:last-child {
             border-radius: 0 0 10px 10px;
         }
+        /* A secondary shortcut (the overview's "Data quality"): text level, quieter than its neighbours. */
+        .tree-switcher-action.is-quiet { color: var(--text-faint); }
         .tree-switcher-badge {
             margin-left: auto;
             min-width: 18px;
@@ -2334,6 +2346,7 @@
         }
         .tree-actions-row .bottom-sheet-label { flex: 1; min-width: 0; }
         .tree-actions-row:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        .bottom-sheet-menu .bottom-sheet-item.tree-actions-row.is-quiet { color: var(--text-light); }
         .tree-actions-value {
             max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
             font-size: 14px; color: var(--text-faint);
@@ -9258,6 +9271,7 @@
         }
         .tree-row-menu-item:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
         .tree-row-menu-item.danger { color: var(--danger); }
+        .tree-row-menu-item.is-quiet { color: var(--text-light); }
         .tree-row-menu-check { display: inline-flex; width: 14px; color: var(--primary); }
         .tree-row-menu { max-width: min(320px, calc(100vw - 16px)); }
         .tree-row-menu-note {
@@ -11930,6 +11944,54 @@
         .tov-anni-sep { color: var(--text-faint); }
         .tov-anni .tov-tile-who { font-size: 13.5px; }
         .tov-anni .tov-link.tov-tile-who { text-align: left; }
+        /* Ancestors › Ask the family (rememberers) */
+        .tov-rem { display: flex; flex-direction: column; border-top: 1px solid var(--divider); padding-top: 6px; }
+        .tov-rem-h { margin: 0; font: inherit; }
+        .tov-rem-head {
+            display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 0; border: 0;
+            background: none; font: inherit; color: var(--text); text-align: left; cursor: pointer;
+        }
+        .tov-rem-head:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 4px; }
+        .tov-rem-title { font-size: 14px; font-weight: 600; }
+        .tov-rem-aside { flex: 1; min-width: 0; text-align: right; font-size: 13px; color: var(--text-light); }
+        .tov-rem-body { display: flex; flex-direction: column; gap: 2px; padding-left: 22px; }
+        .tov-rem-body[hidden] { display: none; }
+        .tov-rem-intro { margin: 0; padding-bottom: 8px; font-size: 13px; line-height: 1.5; color: var(--text-light); text-wrap: pretty; }
+        .tov-rem-empty { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--text-light); }
+        .tov-rem-list { display: flex; flex-direction: column; }
+        .tov-rem-row { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px 12px; padding: 10px 0; border-top: 1px solid var(--divider); }
+        .tov-rem-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+        .tov-rem-who { font-size: 14px; line-height: 1.4; }
+        .tov-rem-who .tov-link { font-weight: 500; }
+        .tov-rem-meta { color: var(--text-faint); font-size: 12.5px; }
+        .tov-rem-miss { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: 12px; color: var(--text-light); }
+        .tov-chip { padding: 1px 7px; border-radius: 10px; border: 1px solid var(--border); white-space: nowrap; }
+        .tov-rem-q { font-size: 12.5px; font-style: italic; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .tov-rem-btn { padding: 6px 10px; border-color: var(--border); color: var(--text); font-size: 12.5px; }
+        .tov-rem-row.is-editing > .tov-rem-btn, .tov-rem-row.is-editing > .tov-disabled-wrap, .tov-rem-row.is-editing .tov-rem-q { display: none; }
+        .tov-rem-editor { flex: 1 0 100%; display: flex; flex-direction: column; gap: 8px; }
+        .tov-rem-label { font-size: 12.5px; font-weight: 500; color: var(--text-light); }
+        .tov-rem-input {
+            box-sizing: border-box; width: 100%; min-height: 64px; padding: 8px 10px; resize: vertical;
+            border: 1px solid var(--primary); border-radius: 8px; background: var(--surface); color: var(--text);
+            font: inherit; font-size: 13.5px; line-height: 1.45;
+        }
+        .tov-rem-input:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        .tov-rem-editor-actions { display: flex; justify-content: flex-end; gap: 8px; }
+        .tov-rem-cancel { border-color: var(--border); color: var(--text); }
+        /* Data quality › Certainty of research facts (a blue scale, not the evidence green) */
+        .tov-cert-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--text-light); }
+        .tov-cert-leg { display: inline-flex; align-items: center; gap: 5px; }
+        .tov-cert-key { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+        .tov-cert--proven { background: var(--certainty-1); }
+        .tov-cert--probable { background: var(--certainty-2); }
+        .tov-cert--possible { background: var(--certainty-3); }
+        .tov-cert--lead { background: var(--certainty-4); }
+        .tov-cert-row { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 10px; align-items: center; font-size: 13px; }
+        .tov-cert-cell { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+        .tov-cert-bar { display: flex; height: 12px; border-radius: 3px; overflow: hidden; background: var(--surface-2); }
+        .tov-cert-seg { display: block; height: 100%; min-width: 2px; }
+        .tov-cert-counts { font-size: 11.5px; color: var(--text-light); font-variant-numeric: tabular-nums; }
         /* Tablet: the desktop dialog, a 24px margin each side. */
         @media (min-width: 641px) and (max-width: 1024px) {
             .modal.tov { width: min(720px, calc(100vw - 48px)); }
@@ -12013,6 +12075,8 @@
         @media (pointer: coarse) {
             .tov-ev-row { min-height: 44px; }
             .tov-actions .tov-btn, .tov-ev-row .tov-btn { min-height: 44px; }
+            .tov-rem-head { min-height: 48px; }
+            .tov-rem-btn, .tov-rem-editor-actions .tov-btn { min-height: 44px; }
         }
         @media (max-width: 640px) {
             .tov-tiles, .tov-splits { grid-template-columns: minmax(0, 1fr); }
@@ -12033,9 +12097,25 @@
             .tov-actions { flex-direction: column; align-items: stretch; }
             .tov-actions .tov-btn, .tov-actions .tov-disabled-wrap { width: 100%; min-height: 44px; }
             .tov-actions .tov-disabled-wrap { align-items: stretch; }
+            /* Ask the family: name, years and relation on their own lines, the button under the text. */
+            .tov-rem-head { min-height: 48px; font-size: 15px; }
+            .tov-rem-aside { display: none; }
+            .tov-rem-body { padding-left: 0; }
+            .tov-rem-row { flex-direction: column; align-items: stretch; gap: 6px; }
+            .tov-rem-who { font-size: 15px; }
+            .tov-rem-meta { display: block; margin-top: 2px; }
+            .tov-rem-miss { font-size: 12.5px; }
+            .tov-chip { padding: 1px 8px; }
+            .tov-rem-q { font-size: 13px; }
+            .tov-rem-btn, .tov-rem-row > .tov-disabled-wrap { width: 100%; min-height: 44px; font-size: 14px; border-radius: 10px; }
+            .tov-rem-row > .tov-disabled-wrap { align-items: stretch; }
+            .tov-rem-row > .tov-disabled-wrap .tov-btn { width: 100%; }
+            .tov-rem-editor-actions .tov-btn { flex: 1; min-height: 44px; }
+            .tov-cert-row { grid-template-columns: minmax(0, 1fr); gap: 4px; }
         }
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
             .tov-tile-value { font-size: 20px; }
+            .tov-rem-aside { display: none; }
             .tov-month-col { height: 56px; }
         }
 

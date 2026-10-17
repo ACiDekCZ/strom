@@ -20,7 +20,7 @@
  *   the order the highlight's "Next ›" walks (src/ui/evidence-ui.ts).
  */
 
-import { StromData, Person, PersonId, Partnership, parentSlots } from './types.js';
+import { StromData, Person, PersonId, Partnership, parentSlots, FactStatus, FACT_STATUSES } from './types.js';
 import { parseFlexDate, ageBetween, ageRangeBetween, toCanonical, yearOf } from './dates.js';
 import { assignGenerations } from './generations.js';
 import { personEvidence, unionsByPerson } from './evidence-level.js';
@@ -435,9 +435,18 @@ export function rememberers(data: StromData, rootId: PersonId, currentYear: numb
     return out.sort((a, b) => a.generation - b.generation || name(a.id, b.id));
 }
 
-/** The rememberers with at least one gap (the "Ask the family" card's count and highlight). */
+/** The rememberers with at least one gap: the people the "Ask the family" list shows. */
 export function remembererGaps(list: readonly Rememberer[]): PersonId[] {
     return list.filter(r => r.missing.length > 0).map(r => r.id);
+}
+
+/**
+ * The rememberers whose death date or death place is missing (the "Where to
+ * focus" card: "N people who died in the last 100 years: date or place of
+ * death missing").
+ */
+export function remembererDeathGaps(list: readonly Rememberer[]): PersonId[] {
+    return list.filter(r => r.missing.includes('deathDate') || r.missing.includes('deathPlace')).map(r => r.id);
 }
 
 /**
@@ -473,13 +482,22 @@ function siblingParents(data: StromData, p: Person): PersonId[] {
     return [...new Set(p.parentIds)].filter(pid => !!data.persons[pid] && isBioTie(p, pid));
 }
 
-/** What the record of a death and a birth lacks; a fact on a matching event counts as present. */
+/**
+ * What the record of a death and a birth lacks; a fact on a matching event
+ * counts as present. The death date counts only when it is complete (day,
+ * month and year, no "about" / "before" / range): a bare year is exactly what
+ * the family may still be able to complete.
+ */
 function missingFacts(p: Person): MissingFact[] {
     const events = p.events ?? [];
     const has = (types: string[], field: 'date' | 'place' | 'cause'): boolean =>
         events.some(e => types.includes(e.type) && !!e[field]?.trim());
     const out: MissingFact[] = [];
-    if (!p.deathDate && !has(['death'], 'date')) out.push('deathDate');
+    const fullDate = (value?: string): boolean => {
+        const d = parseFlexDate(value);
+        return !!d && !d.qualifier && !d.end && d.day !== undefined;
+    };
+    if (!fullDate(p.deathDate) && !events.some(e => e.type === 'death' && fullDate(e.date))) out.push('deathDate');
     if (!p.deathPlace?.trim() && !has(['death'], 'place')) out.push('deathPlace');
     if (!p.deathCause?.trim() && !has(['death', 'burial'], 'cause')) out.push('deathCause');
     if (!p.birthPlace?.trim() && !has(['birth', 'baptism'], 'place')) out.push('birthPlace');
@@ -788,6 +806,75 @@ export function overviewHeader(data: StromData): OverviewHeader {
     };
 }
 
+// ==================== research certainty (K5.3) ====================
+
+/** How many facts of one kind carry each research status. */
+export interface CertaintyCounts {
+    proven: number;
+    probable: number;
+    possible: number;
+    lead: number;
+    /** proven + probable + possible + lead (facts without a status are not counted). */
+    total: number;
+}
+
+export interface ResearchCertainty {
+    birth: CertaintyCounts;
+    death: CertaintyCounts;
+    marriage: CertaintyCounts;
+}
+
+/**
+ * The research's statuses (FactStatus) of births, deaths and marriages, for
+ * the "Certainty of research facts" bars of a research tree. A birth or a
+ * death counts once per real person: the status of the birth / death fields,
+ * else the status of a birth / death event. A marriage counts once per union
+ * with at least one real partner: the status of the wedding fields
+ * (Partnership.startStatus). A fact without a status is not counted — it is
+ * not "uncertain", the research simply has not graded it.
+ */
+export function researchCertainty(data: StromData): ResearchCertainty {
+    const empty = (): CertaintyCounts => ({ proven: 0, probable: 0, possible: 0, lead: 0, total: 0 });
+    const out: ResearchCertainty = { birth: empty(), death: empty(), marriage: empty() };
+    const add = (c: CertaintyCounts, status: FactStatus | undefined): void => {
+        if (!status || !(FACT_STATUSES as readonly string[]).includes(status)) return;
+        c[status]++;
+        c.total++;
+    };
+    for (const p of Object.values(data.persons)) {
+        if (p.isPlaceholder) continue;
+        add(out.birth, p.birthStatus ?? p.events?.find(e => e.type === 'birth' && e.status)?.status);
+        add(out.death, p.deathStatus ?? p.events?.find(e => e.type === 'death' && e.status)?.status);
+    }
+    for (const u of Object.values(data.partnerships)) {
+        if (!realPerson(data, u.person1Id) && !realPerson(data, u.person2Id)) continue;
+        add(out.marriage, u.startStatus);
+    }
+    return out;
+}
+
+// ==================== percentages ====================
+
+/**
+ * The number part of a percentage, the one format of the whole overview:
+ * whole numbers from 10 % on ("62"), under 10 % one decimal unless it is zero
+ * ("5", "0,2"), "< 0,1" for a share above zero that would round to 0, and
+ * never "100" while a part is still missing ("99"). Decimal separator by
+ * language.
+ */
+export function percentNumber(part: number, whole: number, lang: Language): string {
+    if (whole <= 0 || part <= 0) return '0';
+    const p = (part / whole) * 100;
+    const decimal = (x: number): string => x.toLocaleString(lang, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    if (p >= 10) {
+        const r = Math.round(p);
+        return String(r >= 100 && part < whole ? 99 : r);
+    }
+    const tenths = Math.round(p * 10);
+    if (tenths === 0) return `<\u00a0${decimal(0.1)}`;
+    return tenths % 10 === 0 ? String(tenths / 10) : decimal(tenths / 10);
+}
+
 // ==================== 8. focus cards (K2.1) ====================
 
 /** At most this many cards in "Where to focus". */
@@ -815,7 +902,7 @@ export type FocusCard =
     | { kind: 'ancestorGap'; count: number; n: number; known: number; filled: number; expected: number; ids: PersonId[] }
     /** Direct ancestors' births without a source. */
     | { kind: 'birthNoSource'; count: number; ids: PersonId[] }
-    /** Rememberers with gaps (remembererGaps). */
+    /** Rememberers missing a death date or place (remembererDeathGaps). */
     | { kind: 'rememberers'; count: number; ids: PersonId[] }
     /** What waits for the user in the research (research trees only). */
     | { kind: 'researchWaiting'; count: number };
@@ -827,7 +914,7 @@ export interface FocusCardInput {
     generations: readonly AncestorGeneration[];
     /** ancestorGenerations(...).birthNoSource */
     ancestorBirthsNoSource: readonly PersonId[];
-    /** remembererGaps(rememberers(...)) */
+    /** remembererDeathGaps(rememberers(...)) ([] without a chosen person). */
     rememberers: readonly PersonId[];
     /** Items waiting in the research; undefined for a tree that is not a research tree. */
     researchWaiting?: number;

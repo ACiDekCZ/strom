@@ -114,7 +114,7 @@ test.describe('actions menu "Tree:" submenu', () => {
         const items = async () => (await submenu.locator('.tree-switcher-action:visible, .menu-section-header:visible').allInnerTexts())
             .map(t => t.trim()).filter(t => t !== 'Save to file…');
         await expect.poll(items).toEqual([
-            'Tree overview',
+            'Tree overview', 'Data quality',
             'Rename', 'Duplicate', 'Hide',
             'FROM THE CURRENT VIEW', 'Make a new tree', 'Merge view into…',
             'Merge into another tree…', 'Split into families…',
@@ -437,6 +437,7 @@ test.describe('tree manager ⋯ menu on desktop: the tree-action groups', () => 
             ['Overview', 'Outputs', 'Tree settings', 'Structure', 'Manage']);
         const keys = await menu.locator('.tree-row-menu-item:visible').evaluateAll(els => els.map(el => (el as HTMLElement).dataset.action));
         expect(keys[0]).toBe('overview');
+        expect(keys[1]).toBe('overview-quality');
         expect(keys).not.toContain('stats');
         expect(keys).not.toContain('health');
         expect(keys).toContain('places');

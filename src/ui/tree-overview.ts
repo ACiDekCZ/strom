@@ -11,8 +11,12 @@
  * - A section still calculating shows "Calculating…" after 150 ms and keeps
  *   it at least 300 ms once shown (aria-busy on its body).
  * - Results are cached by section + tree + chosen person + revision; the
- *   revision moves on every data change and tree switch.
- * - Device memory: which sections are open (`overview.open`), the chosen
+ *   revision moves on every data change (edits and undo included) and tree
+ *   switch. An open overview of the open tree is refreshed after an edit
+ *   (debounced; open sections, the chosen person and the scroll position
+ *   kept; postponed while a question is being edited).
+ * - Device memory: which sections are open (`overview.open`), whether
+ *   Ancestors › Ask the family is open (`overview.rememberers`), the chosen
  *   person per tree (`overview.root.{treeId}`) and the recently chosen ones
  *   (`overview.recent.{treeId}`). Every storage access may fail.
  * - A tree that is not open is read only: actions that change data are
@@ -31,8 +35,11 @@ import {
     AncestorOverview, FocusCard, GrandparentLine, ancestorGenerationLabel, ancestorGenerations, birthYearOf,
     deathDateOf, focusBirthNoSource, grandparentLines, lineEndIds, overviewHeader, selectFocusCards, OverviewHeader,
     deathAgeSummary, adultLifespanByBirthPeriod, hasEnoughSample, relativeGenerations, childrenPerCoupleByGeneration,
-    DeathAgeSummary, PeriodMedian, GenerationChildren,
+    DeathAgeSummary, PeriodMedian, GenerationChildren, Rememberer, rememberers, remembererGaps, remembererDeathGaps,
+    researchCertainty, ResearchCertainty, CertaintyCounts, percentNumber,
 } from '../tree-overview.js';
+import { FACT_STATUSES } from '../types.js';
+import { factStatusLabel } from './fact-status.js';
 import { computeFamilyStats, computeCompleteness, computeEvidenceGaps, EvidenceKind, FamilyStats, Completeness, EvidenceGaps } from '../stats.js';
 import { isLivingPerson, inferBirthUpperBounds } from '../privacy.js';
 import { findComponents, componentName } from '../components.js';
@@ -81,6 +88,10 @@ const MAX_ANNIVERSARIES = 10;
 const LOW_SHARE = 0.5;
 const DEFAULT_OPEN: readonly SectionId[] = ['focus', 'ancestors'];
 const OPEN_KEY = 'overview.open';
+/** Ancestors › Ask the family: '1' when open (collapsed by default). */
+const REMEMBERERS_KEY = 'overview.rememberers';
+/** Edits close together refresh an open overview once. */
+const REFRESH_DELAY_MS = 120;
 const rootKey = (treeId: string): string => `overview.root.${treeId}`;
 const recentKey = (treeId: string): string => `overview.recent.${treeId}`;
 const MAX_RECENT = 3;
@@ -113,6 +124,16 @@ const cache = new Map<string, unknown>();
 const scrollMemory = new Map<string, number>();
 /** Closes the person popover (null: none open). */
 let closePopover: (() => void) | null = null;
+/** The debounced refresh after an edit (null: none scheduled). */
+let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+/** An edit came while a question was being edited: refresh when the editor closes. */
+let refreshPending = false;
+/**
+ * The section the overview was opened at (`scroll`): the sections above it
+ * fill after a frame and grow, so it is brought into view again as each one
+ * fills, until the dialog is scrolled, clicked or typed into.
+ */
+let scrollTarget: SectionId | null = null;
 
 function isSection(x: unknown): x is SectionId {
     return typeof x === 'string' && (ALL_SECTIONS as readonly string[]).includes(x);
@@ -131,6 +152,14 @@ function readOpen(): Set<SectionId> {
 
 function writeOpen(open: ReadonlySet<SectionId>): void {
     try { localStorage.setItem(OPEN_KEY, JSON.stringify([...open])); } catch { /* not kept */ }
+}
+
+function readRemembersOpen(): boolean {
+    try { return localStorage.getItem(REMEMBERERS_KEY) === '1'; } catch { return false; }
+}
+
+function writeRemembersOpen(open: boolean): void {
+    try { localStorage.setItem(REMEMBERERS_KEY, open ? '1' : '0'); } catch { /* not kept */ }
 }
 
 function readString(key: string): string | null {
@@ -187,14 +216,9 @@ function typeInSentence(type: string): string {
     return getCurrentLanguage() === 'de' ? name : name.charAt(0).toLocaleLowerCase() + name.slice(1);
 }
 
-/** "62 %" with one decimal under 10 % ("0,2 %"). */
+/** "62 %", "5 %", "0,2 %", "< 0,1 %" (percentNumber: the one format of the overview). */
 function percentText(part: number, whole: number): string {
-    const lang = getCurrentLanguage();
-    const p = whole > 0 ? (part / whole) * 100 : 0;
-    const text = p === 0 || p >= 10
-        ? String(Math.round(p))
-        : p.toLocaleString(lang, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-    return strings.treeOverview.percent(text);
+    return strings.treeOverview.percent(percentNumber(part, whole, getCurrentLanguage()));
 }
 
 /** A generation label split into its faint number and the name ("4." + "generace předků", "5" + "3rd great-…"). */
@@ -216,6 +240,14 @@ function lifeYears(p: Person): string {
     if (born) return `* ${born}`;
     if (d !== null) return `† ${d}`;
     return '';
+}
+
+/** A rememberer's years: "1929–2001", "* 1934, death unknown", "† 2001". */
+function remembererYears(r: Rememberer): string {
+    const born = r.birthYear ? `${r.birthYear.approx ? '~' : ''}${r.birthYear.year}` : '';
+    if (born && r.deathYear !== null) return `${born}–${r.deathYear}`;
+    if (born) return strings.treeOverview.remBornDeathUnknown(born);
+    return r.deathYear !== null ? `† ${r.deathYear}` : '';
 }
 
 /** A section's content and its closed-state summary (both HTML, escaped). */
@@ -266,7 +298,6 @@ interface QualityData {
     completeness: Completeness;
     deceased: number;
     deceasedWithDeathDate: number;
-    withSource: number;
     photos: number;
     photoBytes: number;
     events: number;
@@ -342,9 +373,21 @@ export const treeOverviewMethods = uiModule({
 
         this.fillTreeOverviewSections(open);
         if (opts.section && opts.scroll) {
-            overlay.querySelector(`.tov-sec[data-section="${opts.section}"]`)?.scrollIntoView({ block: 'start' });
+            scrollTarget = opts.section;
+            const stop = (): void => { scrollTarget = null; };
+            const scroller = overlay.querySelector<HTMLElement>('.tov-scroll');
+            for (const type of ['wheel', 'touchstart', 'pointerdown', 'keydown'] as const) {
+                (type === 'keydown' ? overlay : scroller)?.addEventListener(type, stop, { once: true, passive: true });
+            }
+            this.scrollTreeOverviewToTarget();
         }
         overlay.querySelector<HTMLElement>('.tov-close')?.focus({ preventScroll: true });
+    },
+
+    /** Bring the section the overview was opened at to the top of the dialog. */
+    scrollTreeOverviewToTarget(): void {
+        if (!scrollTarget) return;
+        document.querySelector(`#${OVERLAY_ID} .tov-sec[data-section="${scrollTarget}"]`)?.scrollIntoView({ block: 'start' });
     },
 
     /** The focus bar's person count: the overview of the open tree. */
@@ -365,6 +408,10 @@ export const treeOverviewMethods = uiModule({
         this.dialogStack = this.dialogStack.filter(id => id !== OVERLAY_ID);
         idleRun++;
         returnParent = null;
+        if (refreshTimer) clearTimeout(refreshTimer);
+        refreshTimer = null;
+        refreshPending = false;
+        scrollTarget = null;
     },
 
     /** A plain close (×, Escape, backdrop): back to the dialog it was opened from, if any. */
@@ -378,10 +425,15 @@ export const treeOverviewMethods = uiModule({
         }
     },
 
-    /** Escape on the overview: the person popover first. True when it closed something. */
+    /** Escape on the overview: the person popover first, then an open question field. True when it closed something. */
     closeTreeOverviewPopover(): boolean {
-        if (!closePopover) return false;
-        closePopover();
+        if (closePopover) {
+            closePopover();
+            return true;
+        }
+        const row = document.querySelector<HTMLElement>(`#${OVERLAY_ID} .tov-rem-row.is-editing`);
+        if (!row) return false;
+        this.closeTreeOverviewQuestion(row);
         return true;
     },
 
@@ -396,8 +448,76 @@ export const treeOverviewMethods = uiModule({
             revision++;
             cache.clear();
         };
-        window.addEventListener('strom:data-changed', bump);
+        // An edit or an undo of the open tree (strom:user-change) and a load
+        // or import into it (strom:data-changed): the numbers move on, and an
+        // open overview of that tree is refreshed once the edits settle.
+        const changed = (treeId: string | null | undefined): void => {
+            bump();
+            if (!state || !state.active || !this.isTreeOverviewOpen()) return;
+            if ((treeId ?? TreeManager.getActiveTreeId()) !== state.treeId) return;
+            if (refreshTimer) clearTimeout(refreshTimer);
+            refreshTimer = setTimeout(() => {
+                refreshTimer = null;
+                this.refreshTreeOverview();
+            }, REFRESH_DELAY_MS);
+        };
+        window.addEventListener('strom:user-change', (e) => changed((e as CustomEvent<{ treeId?: string }>).detail?.treeId));
+        window.addEventListener('strom:data-changed', () => changed(null));
         window.addEventListener('strom:tree-switched', bump);
+    },
+
+    /**
+     * Show the open tree's current data in the open overview: the header
+     * numbers, the chosen person (another one when the chosen person was
+     * deleted) and every section computed so far — open ones at once, closed
+     * ones again on the idle callbacks — keeping the scroll position. Waits
+     * while a question is being edited (the editor would be lost).
+     */
+    refreshTreeOverview(): void {
+        if (refreshTimer) clearTimeout(refreshTimer);
+        refreshTimer = null;
+        const overlay = document.getElementById(OVERLAY_ID);
+        const st = state;
+        if (!overlay || !st || !st.active) return;
+        if (overlay.querySelector('.tov-rem-editor')) {
+            refreshPending = true;
+            return;
+        }
+        refreshPending = false;
+        closePopover?.();
+        revision++;
+        cache.clear();
+        st.data = DataManager.getData();
+        if (st.focusId && !realPerson(st.data, st.focusId)) st.focusId = null;
+        if (!realPerson(st.data, st.rootId)) st.rootId = st.focusId ?? realPerson(st.data, TreeRenderer.getFocusPersonId())?.id ?? null;
+        const scroller = overlay.querySelector<HTMLElement>('.tov-scroll');
+        const top = scroller?.scrollTop ?? 0;
+        const header = overviewHeader(st.data);
+        const nums = overlay.querySelector<HTMLElement>('.tov-nums');
+        if (!nums || header.persons === 0) {
+            // Emptied, or no longer empty: the frame itself changes.
+            overlay.innerHTML = this.treeOverviewShellHtml(header, readOpen());
+            this.fillTreeOverviewSections(readOpen());
+            return;
+        }
+        nums.innerHTML = this.treeOverviewNumsHtml(header);
+        const root = overlay.querySelector<HTMLElement>('.tov-root');
+        if (root) root.innerHTML = this.treeOverviewRootHtml();
+        for (const id of ALL_SECTIONS) {
+            const sec = overlay.querySelector<HTMLElement>(`.tov-sec[data-section="${id}"]`);
+            if (!sec || sec.dataset.fill === undefined) continue;
+            const isOpen = sec.querySelector('.tov-sec-head')?.getAttribute('aria-expanded') === 'true';
+            if (isOpen || EAGER_SECTIONS.includes(id)) {
+                this.fillTreeOverviewSection(id, true);
+            } else {
+                delete sec.dataset.fill;
+                sec.dataset.ready = 'false';
+                const sum = sec.querySelector<HTMLElement>('.tov-sum');
+                if (sum) sum.textContent = '';
+            }
+        }
+        if (scroller) scroller.scrollTop = top;
+        this.startTreeOverviewIdle();
     },
 
     /** The dialog frame: header (title, numbers, read-only banner, person), sections, footer. */
@@ -420,15 +540,7 @@ export const treeOverviewMethods = uiModule({
                 <div class="tov-foot"><button type="button" class="secondary" data-tov="close">${esc(t.close)}</button></div>
             </div>`;
         }
-        const num = (value: string, label: string, cls = ''): string =>
-            `<span class="tov-num${cls}"><strong>${esc(value)}</strong>${label ? ` ${label}` : ''}</span>`;
-        const nums = [
-            num(String(header.persons), esc(t.numPersons(header.persons))),
-            num(String(header.generations),
-                `<span class="tov-gen-long">${esc(t.numGenerations(header.generations))}</span><span class="tov-gen-short">${esc(t.numGenerationsShort)}</span>`),
-            header.yearSpan ? num(`${header.yearSpan.first}–${header.yearSpan.last}`, '') : '',
-            num(t.percent(String(Math.round(header.withSourceShare * 100))), esc(t.numWithSource)),
-        ].filter(Boolean).join('<span class="tov-num-sep" aria-hidden="true"> · </span>');
+        const nums = this.treeOverviewNumsHtml(header);
         const banner = st.active ? '' : `
             <div class="tov-inactive" role="note">
                 <span class="tov-inactive-text">${esc(t.inactive)}</span>
@@ -448,6 +560,21 @@ export const treeOverviewMethods = uiModule({
                 </div>
                 <div class="tov-foot"><button type="button" class="secondary" data-tov="close">${esc(t.close)}</button></div>
             </div>`;
+    },
+
+    /** The header numbers: people · generations · year span · with a source. */
+    treeOverviewNumsHtml(header: OverviewHeader): string {
+        const t = strings.treeOverview;
+        const esc = (s: string): string => this.escapeHtml(s);
+        const num = (value: string, label: string, cls = ''): string =>
+            `<span class="tov-num${cls}"><strong>${esc(value)}</strong>${label ? ` ${label}` : ''}</span>`;
+        return [
+            num(String(header.persons), esc(t.numPersons(header.persons))),
+            num(String(header.generations),
+                `<span class="tov-gen-long">${esc(t.numGenerations(header.generations))}</span><span class="tov-gen-short">${esc(t.numGenerationsShort)}</span>`),
+            header.yearSpan ? num(`${header.yearSpan.first}–${header.yearSpan.last}`, '') : '',
+            num(percentText(header.withSource, header.persons), esc(t.numWithSource)),
+        ].filter(Boolean).join('<span class="tov-num-sep" aria-hidden="true"> · </span>');
     },
 
     /** "Ancestors of: [name ▾]  ◉ section is calculated from this person". */
@@ -569,6 +696,7 @@ export const treeOverviewMethods = uiModule({
                 sum.innerHTML = html.summary;
                 body.removeAttribute('aria-busy');
                 sec.dataset.ready = 'true';
+                this.scrollTreeOverviewToTarget();
             };
             if (wait > 0) setTimeout(show, wait);
             else show();
@@ -608,8 +736,7 @@ export const treeOverviewMethods = uiModule({
                 validationErrors: validation.stats.errors,
                 generations: anc?.generations ?? [],
                 ancestorBirthsNoSource: anc ? focusBirthNoSource(anc) : [],
-                // The rememberers card comes with the Rememberers block.
-                rememberers: [],
+                rememberers: remembererDeathGaps(this.treeOverviewRemembererData()),
                 researchWaiting: st.active && st.research ? this.researchWaitingCount() : undefined,
             });
             return { cards, topErrorType };
@@ -657,7 +784,9 @@ export const treeOverviewMethods = uiModule({
                     button = `<button type="button" class="tov-btn" data-tov="research">${esc(t.actOpen)}</button>`;
                     break;
                 case 'rememberers':
-                    return '';
+                    text = t.cardRememberers(card.count);
+                    button = `<button type="button" class="tov-btn" data-tov="rememberers">${esc(t.actShow)}</button>`;
+                    break;
             }
             return `
                 <div class="tov-card${error ? ' tov-card--error' : ''}" data-card="${card.kind}">
@@ -736,7 +865,6 @@ export const treeOverviewMethods = uiModule({
         const endsButton = lineEnds.length === 0 ? '' : st.active
             ? `<button type="button" class="tov-btn" data-tov="line-ends">${esc(t.lineEndsCount(lineEnds.length))}</button>`
             : `<span class="tov-lines-ends-label">${esc(t.hlLineEnds(lineEnds.length))}</span><button type="button" class="tov-btn" data-tov="line-ends">${esc(t.openAndShow)}</button>`;
-        // The Rememberers block (spec 005, P4) joins here, at the end of Ancestors.
         const body = `
             <div class="tov-anc">
                 <div class="tov-anc-table">${legend}${table}</div>
@@ -745,9 +873,184 @@ export const treeOverviewMethods = uiModule({
             <div class="tov-lines">
                 <div class="tov-lines-head"><span class="tov-lines-title">${esc(t.linesTitle)}</span>${endsButton}</div>
                 <div class="tov-lines-grid">${tiles}</div>
-            </div>`;
+            </div>
+            ${this.treeOverviewRemembererHtml()}`;
         const deepest = gens[gens.length - 1].n;
         return { body, summary: esc(t.ancestorsSummary(overview?.generationOf.size ?? 0, deepest)) };
+    },
+
+    /** Everyone within living memory of the chosen person (the list shows those with gaps). */
+    treeOverviewRemembererData(): Rememberer[] {
+        return cached('rememberers', true, () => {
+            const st = state!;
+            return st.rootId ? rememberers(st.data, st.rootId, new Date().getFullYear()) : [];
+        });
+    },
+
+    /**
+     * Ancestors › Ask the family: a collapsible block at the end of the
+     * section (collapsed by default, remembered), the people who died in the
+     * last 100 years with what is missing and the question for relatives.
+     */
+    treeOverviewRemembererHtml(): string {
+        const st = state!;
+        const t = strings.treeOverview;
+        const esc = (s: string): string => this.escapeHtml(s);
+        const all = this.treeOverviewRemembererData();
+        const shown = new Set(remembererGaps(all));
+        const list = all.filter(r => shown.has(r.id));
+        const open = readRemembersOpen();
+        const rows = list.map(r => {
+            const p = st.data.persons[r.id];
+            const relation = r.kind === 'ancestor'
+                ? t.remRelation(r.path)
+                : t.remRelation(r.path, { gender: p.gender, half: r.half });
+            const meta = [remembererYears(r), relation].filter(Boolean).join(' \u00b7 ');
+            const chips = r.missing.map(m => `<span class="tov-chip" data-missing="${m}">${esc(t.remFacts[m])}</span>`).join('');
+            const question = r.question
+                ? `<span class="tov-rem-q" title="${esc(r.question)}">${esc(t.remQuestion)} ${esc(r.question)}</span>` : '';
+            const label = r.question ? t.remEdit : t.remAdd;
+            return `
+                <div class="tov-rem-row" data-id="${esc(r.id)}">
+                    <div class="tov-rem-main">
+                        <span class="tov-rem-who"><button type="button" class="tov-link" data-tov="person" data-id="${esc(r.id)}">${esc(shownName(p))}</button>
+                            <span class="tov-rem-meta">${esc(meta)}</span></span>
+                        <span class="tov-rem-miss">${esc(t.remMissing)}${chips}</span>
+                        ${question}
+                    </div>
+                    ${this.treeOverviewActionHtml('rem-question', label, 'tov-btn tov-rem-btn', `data-id="${esc(r.id)}"`)}
+                </div>`;
+        }).join('');
+        const content = list.length > 0
+            ? `<p class="tov-rem-intro">${esc(t.remIntro)}</p><div class="tov-rem-list">${rows}</div>`
+            : `<p class="tov-rem-empty">${esc(t.remEmpty)}</p>`;
+        return `
+            <div class="tov-rem" data-count="${list.length}">
+                <h4 class="tov-rem-h">
+                    <button type="button" class="tov-rem-head" data-tov="rem-toggle" aria-expanded="${open}" aria-controls="tov-rem-body">
+                        <span class="tov-chev" aria-hidden="true">${open ? '▾' : '▸'}</span>
+                        <span class="tov-rem-title">${esc(list.length > 0 ? t.remTitleCount(list.length) : t.remTitle)}</span>
+                        <span class="tov-rem-aside">${esc(t.remAside)}</span>
+                    </button>
+                </h4>
+                <div class="tov-rem-body" id="tov-rem-body"${open ? '' : ' hidden'}>${content}</div>
+            </div>`;
+    },
+
+    /** Open or close Ancestors › Ask the family (remembered). */
+    setTreeOverviewRemembersOpen(open: boolean): void {
+        writeRemembersOpen(open);
+        const box = document.querySelector<HTMLElement>(`#${OVERLAY_ID} .tov-rem`);
+        const head = box?.querySelector<HTMLElement>('.tov-rem-head');
+        const body = box?.querySelector<HTMLElement>('.tov-rem-body');
+        if (!head || !body) return;
+        head.setAttribute('aria-expanded', String(open));
+        head.querySelector('.tov-chev')!.textContent = open ? '▾' : '▸';
+        body.hidden = !open;
+    },
+
+    /** The "Where to focus" card: expand Ancestors › Ask the family and scroll to it. */
+    showTreeOverviewRememberers(): void {
+        const overlay = document.getElementById(OVERLAY_ID);
+        const sec = overlay?.querySelector<HTMLElement>('.tov-sec[data-section="ancestors"]');
+        if (!sec) return;
+        if (sec.querySelector('.tov-sec-head')?.getAttribute('aria-expanded') !== 'true') this.toggleTreeOverviewSection('ancestors');
+        if (!sec.querySelector('.tov-rem')) this.fillTreeOverviewSection('ancestors', true);
+        this.setTreeOverviewRemembersOpen(true);
+        const box = sec.querySelector<HTMLElement>('.tov-rem');
+        box?.scrollIntoView({ block: 'start' });
+        box?.querySelector<HTMLElement>('.tov-rem-head')?.focus({ preventScroll: true });
+    },
+
+    /** "Add a question" / "Edit question": the field opens inside the row (one editor at a time). */
+    openTreeOverviewQuestion(id: PersonId): void {
+        if (!state?.active) return;
+        const overlay = document.getElementById(OVERLAY_ID);
+        const row = overlay?.querySelector<HTMLElement>(`.tov-rem-row[data-id="${CSS.escape(id)}"]`);
+        const person = realPerson(state.data, id);
+        if (!row || !person) return;
+        if (row.querySelector('.tov-rem-editor')) return;
+        overlay!.querySelectorAll<HTMLElement>('.tov-rem-row.is-editing').forEach(r => this.closeTreeOverviewQuestion(r, false));
+        const t = strings.treeOverview;
+        const esc = (s: string): string => this.escapeHtml(s);
+        const fieldId = `tov-rem-field-${row.dataset.id}`;
+        const editor = document.createElement('div');
+        editor.className = 'tov-rem-editor';
+        editor.innerHTML = `
+            <label class="tov-rem-label" for="${esc(fieldId)}">${esc(t.remField)}</label>
+            <textarea class="tov-rem-input" id="${esc(fieldId)}" rows="3">${esc(person.question ?? '')}</textarea>
+            <div class="tov-rem-editor-actions">
+                <button type="button" class="tov-btn tov-rem-cancel" data-tov="rem-cancel">${esc(t.remCancel)}</button>
+                <button type="button" class="primary tov-btn-primary tov-rem-save" data-tov="rem-save">${esc(t.remSave)}</button>
+            </div>`;
+        row.classList.add('is-editing');
+        row.appendChild(editor);
+        const field = editor.querySelector<HTMLTextAreaElement>('textarea')!;
+        field.addEventListener('keydown', (e) => {
+            if ((e.key === 'Enter' && (e.metaKey || e.ctrlKey))) {
+                e.preventDefault();
+                this.saveTreeOverviewQuestion(row);
+            }
+        });
+        field.focus();
+        field.setSelectionRange(field.value.length, field.value.length);
+    },
+
+    /** Close a row's question editor; `focus` puts the focus back on its button. A refresh postponed meanwhile runs now. */
+    closeTreeOverviewQuestion(row: HTMLElement, focus = true): void {
+        row.querySelector('.tov-rem-editor')?.remove();
+        row.classList.remove('is-editing');
+        if (focus) row.querySelector<HTMLElement>('.tov-rem-btn')?.focus({ preventScroll: true });
+        if (refreshPending && !document.querySelector(`#${OVERLAY_ID} .tov-rem-editor`)) this.refreshTreeOverview();
+    },
+
+    /** "Save question": Person.question through the usual edit (undo, history, save); an empty field clears it. */
+    saveTreeOverviewQuestion(row: HTMLElement): void {
+        const st = state;
+        const id = row.dataset.id as PersonId | undefined;
+        const field = row.querySelector<HTMLTextAreaElement>('.tov-rem-input');
+        if (!st?.active || !id || !field) return;
+        const value = field.value.trim();
+        const before = (DataManager.getPerson(id)?.question ?? '').trim();
+        row.querySelector('.tov-rem-editor')?.remove();
+        row.classList.remove('is-editing');
+        if (value !== before) {
+            DataManager.updatePerson(id, { question: value });
+            TreeRenderer.render();
+        }
+        this.refreshTreeOverview();
+        document.querySelector<HTMLElement>(`#${OVERLAY_ID} .tov-rem-row[data-id="${CSS.escape(id)}"] .tov-rem-btn`)
+            ?.focus({ preventScroll: true });
+    },
+
+    /** The research's certainty of births, deaths and marriages (research trees). */
+    treeOverviewCertaintyHtml(): string {
+        const t = strings.treeOverview;
+        const esc = (s: string): string => this.escapeHtml(s);
+        const c = cached<ResearchCertainty>('certainty', false, () => researchCertainty(state!.data));
+        // Most certain first, as the legend reads.
+        const order = [...FACT_STATUSES].reverse();
+        const legend = order.map(k => `<span class="tov-cert-leg"><i class="tov-cert-key tov-cert--${k}" aria-hidden="true"></i>${esc(factStatusLabel(k))}</span>`).join('');
+        const row = (fact: keyof ResearchCertainty, counts: CertaintyCounts): string => {
+            const label = t.certaintyRows[fact];
+            if (counts.total === 0) {
+                return `<div class="tov-cert-row" data-fact="${fact}"><span class="tov-cert-label">${esc(label)}</span>
+                    <span class="tov-cert-counts tov-muted">${esc(t.certaintyNone)}</span></div>`;
+            }
+            const parts = order.filter(k => counts[k] > 0);
+            const text = parts.map(k => `${factStatusLabel(k)} ${counts[k]}`).join(' \u00b7 ');
+            const segments = parts.map(k =>
+                `<span class="tov-cert-seg tov-cert--${k}" data-status="${k}" style="width:${barWidth(counts[k], counts.total)}"></span>`).join('');
+            return `<div class="tov-cert-row" data-fact="${fact}"><span class="tov-cert-label">${esc(label)}</span>
+                <span class="tov-cert-cell"><span class="tov-cert-bar" role="img" aria-label="${esc(`${label}: ${text}`)}">${segments}</span>
+                <span class="tov-cert-counts">${esc(text)}</span></span></div>`;
+        };
+        return `<div class="tov-block tov-cert" data-block="certainty">
+            <span class="tov-block-title">${esc(t.certaintyTitle)}</span>
+            <span class="tov-note tov-cert-desc">${esc(t.certaintyDesc)}</span>
+            <div class="tov-cert-legend">${legend}</div>
+            ${row('birth', c.birth)}${row('death', c.death)}${row('marriage', c.marriage)}
+        </div>`;
     },
 
     treeOverviewLifeData(): LifeData {
@@ -933,7 +1236,6 @@ export const treeOverviewMethods = uiModule({
                 validation: this.treeOverviewValidation(),
                 completeness: computeCompleteness(data),
                 deceased, deceasedWithDeathDate,
-                withSource: overviewHeader(data).withSource,
                 photos, photoBytes: totalPhotoBytes(data), events,
                 sources: Object.keys(data.sources ?? {}).length,
                 attachments, attachmentBytes: totalAttachmentBytes(data),
@@ -974,7 +1276,8 @@ export const treeOverviewMethods = uiModule({
             ? `<button type="button" class="tov-link tov-more" data-tov="validation">${esc(t.moreIssues(issues.length - TOP_ISSUES))}</button>` : '';
         const consistency = block('consistency', t.consistencyTitle, counts + (findings ? `<div class="tov-findings">${findings}</div>` : '') + more);
 
-        // Completeness: five bars, the tree's content, the media warning.
+        // Completeness: four bars (the share with a source is the header's
+        // number, so it is not repeated here), the tree's content, the media warning.
         const c = q.completeness;
         const bar = (kind: string, label: string, part: number, whole: number, hint = ''): string => {
             if (whole === 0) return '';
@@ -994,7 +1297,6 @@ export const treeOverviewMethods = uiModule({
             bar('birthDate', t.fieldBirthDate, c.withBirthDate, c.total)
             + bar('deathDate', t.fieldDeathDate, q.deceasedWithDeathDate, q.deceased, t.deathDateHint)
             + bar('birthPlace', t.fieldBirthPlace, c.withBirthPlace, c.total)
-            + bar('source', t.fieldSource, q.withSource, c.total)
             + bar('photo', t.fieldPhoto, c.withPhoto, c.total)
             + (content.length ? `<span class="tov-note tov-content">${esc(`${t.contentLabel} ${content.join(' · ')}`)}</span>` : '')
             + (q.photoBytes + q.attachmentBytes > ATTACHMENT_WARN_BYTES ? `<span class="tov-warn">${esc(t.mediaWarning)}</span>` : ''));
@@ -1042,7 +1344,8 @@ export const treeOverviewMethods = uiModule({
                 : esc(t.qualityNoErrors) + (v.warnings > 0 ? ` · ${esc(t.countWarnings(v.warnings))}` : ''),
             q.parts.length > 1 ? esc(t.qualityParts(q.parts.length)) : '',
         ].filter(Boolean).join(' · ');
-        return { body: consistency + completeness + evidence + structure + actions, summary };
+        const certainty = st.research ? this.treeOverviewCertaintyHtml() : '';
+        return { body: consistency + completeness + certainty + evidence + structure + actions, summary };
     },
 
     treeOverviewHighlightsData(): HighlightsData {
@@ -1133,6 +1436,25 @@ export const treeOverviewMethods = uiModule({
                 this.closeTreeOverview();
                 this.showResearchWaiting();
                 return;
+            case 'rememberers':
+                this.showTreeOverviewRememberers();
+                return;
+            case 'rem-toggle':
+                this.setTreeOverviewRemembersOpen(target.getAttribute('aria-expanded') !== 'true');
+                return;
+            case 'rem-question':
+                if (target.dataset.id) this.openTreeOverviewQuestion(target.dataset.id as PersonId);
+                return;
+            case 'rem-cancel': {
+                const row = target.closest<HTMLElement>('.tov-rem-row');
+                if (row) this.closeTreeOverviewQuestion(row);
+                return;
+            }
+            case 'rem-save': {
+                const row = target.closest<HTMLElement>('.tov-rem-row');
+                if (row) this.saveTreeOverviewQuestion(row);
+                return;
+            }
             case 'gap': {
                 const n = Number(target.dataset.n);
                 const card = this.treeOverviewFocusData().cards.find(c => c.kind === 'ancestorGap');

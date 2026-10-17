@@ -7,13 +7,14 @@
 
 import { describe, it, expect, afterEach } from 'vitest';
 import {
-    ancestorGenerations, grandparentLines, lineEndIds, rememberers, remembererGaps, deathAgeOf, deathAgeSummary,
+    ancestorGenerations, grandparentLines, lineEndIds, rememberers, remembererGaps, remembererDeathGaps, deathAgeOf, deathAgeSummary,
+    researchCertainty, percentNumber,
     relativeGenerations, adultDeathAgeByGeneration, childrenPerCoupleByGeneration, ancestorGenerationName,
     descendantGenerationName, relativeGenerationName, overviewHeader, selectFocusCards, hasEnoughSample, MIN_SAMPLE,
     AncestorGeneration, ancestorGenerationLabel, focusBirthNoSource, adultLifespanByBirthPeriod,
 } from '../tree-overview.js';
 import { computeFamilyStats, computeEvidenceGaps } from '../stats.js';
-import { setLanguage } from '../strings.js';
+import { setLanguage, getStringsForLang } from '../strings.js';
 import { StromData, Person, PersonId, Partnership, PartnershipId, toPersonId, toPartnershipId } from '../types.js';
 
 const id = (s: string): PersonId => toPersonId(s);
@@ -223,7 +224,7 @@ describe('rememberers', () => {
             .person('Gf', { birthDate: '1880', deathDate: '1927-01-05' })
             .person('Gm', { ...female, birthDate: '1885', deathDate: '1926-12-31' })
             .person('Other', { ...female, birthDate: '1890' , deathDate: '1960' })
-            .person('Half', { ...female, birthDate: '1915', deathDate: '1990', deathPlace: 'Ves', deathCause: 'mrtvice',
+            .person('Half', { ...female, birthDate: '1915', deathDate: '1990-04-02', deathPlace: 'Ves', deathCause: 'mrtvice',
                 birthPlace: 'Ves' })
             .person('Aunt', { ...female, birthDate: '1907', isDeceased: true, question: 'Kde je pohřbena?' })
             .person('F', { birthDate: '1906', isDeceased: true })
@@ -306,6 +307,117 @@ describe('rememberers', () => {
     it('moves with the current year', () => {
         const list = rememberers(family().data(), id('R'), 2027);
         expect(list.map(r => r.id)).not.toContain('Gf'); // died 1927: not after 1927
+    });
+
+    it('counts only a complete death date (day, month and year, not about / before / a range)', () => {
+        const t = family();
+        const missingDate = (deathDate: string, events: Person['events'] = undefined): boolean => {
+            t.persons[id('Half')].deathDate = deathDate;
+            t.persons[id('Half')].events = events;
+            return rememberers(t.data(), id('R'), 2026).find(r => r.id === 'Half')!.missing.includes('deathDate');
+        };
+        expect(missingDate('1990-04-02')).toBe(false);
+        expect(missingDate('1990')).toBe(true);
+        expect(missingDate('1990-04')).toBe(true);
+        expect(missingDate('~1990-04-02')).toBe(true);
+        expect(missingDate('1990-04-02..1990-04-09')).toBe(true);
+        // A complete date on the death event counts.
+        expect(missingDate('1990', [{ id: 'd', type: 'death', date: '1990-04-02' }])).toBe(false);
+    });
+
+    it('lists an ancestor reached along two lines once and leaves placeholders out', () => {
+        // Root's parents are first cousins: Gf and Gm are reached through both of them.
+        const t = cousinMarriage();
+        for (const pid of ['Gf', 'Gm']) Object.assign(t.persons[id(pid)], { birthDate: '1900', deathDate: '1960' });
+        for (const pid of ['S1', 'X1', 'X2', 'S2']) Object.assign(t.persons[id(pid)], { birthDate: '1925', deathDate: '1990' });
+        for (const pid of ['F', 'M']) Object.assign(t.persons[id(pid)], { birthDate: '1950' });
+        t.persons[id('Ggf')].birthDate = '1870';
+        // A placeholder sibling of S1 that would be in the window.
+        t.person('Ph', { isPlaceholder: true, birthDate: '1927', deathDate: '1995' }).family('Gf', 'Gm', ['Ph']);
+        const list = rememberers(t.data(), id('R'), 2026);
+        const ids = list.map(r => r.id);
+        expect(ids.filter(x => x === 'Gf')).toHaveLength(1);
+        expect(ids.filter(x => x === 'Gm')).toHaveLength(1);
+        expect(ids).not.toContain('Ph');
+        // F and M (born 1950, no death) are living; Ggf (born 1870, no death) is outside the 120-year window.
+        expect(ids).not.toContain('F');
+        expect(ids).not.toContain('Ggf');
+        // Both lines are as long; the walk goes father first, so through S1.
+        expect(list.find(r => r.id === 'Gf')!.path).toEqual(['F', 'F', 'F']);
+    });
+
+    it('gives the card only those missing a death date or place', () => {
+        const list = rememberers(family().data(), id('R'), 2026);
+        const t = family();
+        Object.assign(t.persons[id('Gf')], { deathPlace: 'Ves' });
+        // Gf then lacks only the cause and the birthplace: listed, but not on the card.
+        const after = rememberers(t.data(), id('R'), 2026);
+        expect(remembererGaps(after)).toEqual(['Aunt', 'Gf']);
+        expect(remembererDeathGaps(after)).toEqual(['Aunt']);
+        expect(remembererDeathGaps(list)).toEqual(['Aunt', 'Gf']);
+    });
+});
+
+describe('relation labels (Ask the family)', () => {
+    it('names the ancestor and the sibling of an ancestor by the path', () => {
+        const cs = getStringsForLang('cs').treeOverview.remRelation;
+        const en = getStringsForLang('en').treeOverview.remRelation;
+        const de = getStringsForLang('de').treeOverview.remRelation;
+        expect(cs(['F'])).toBe('otec');
+        expect(cs(['F', 'F'])).toBe('otec otce');
+        expect(cs(['M', 'F'])).toBe('otec matky');
+        expect(cs(['F', 'M'])).toBe('matka otce');
+        expect(cs(['F', 'F', 'M'])).toBe('matka otcova otce');
+        expect(cs(['M', 'M', 'F'])).toBe('otec matčiny matky');
+        expect(cs(['F', 'M', 'F', 'M'])).toBe('matka otce otcovy matky');
+        expect(cs(['F', 'F'], { gender: 'male', half: false })).toBe('bratr otcova otce');
+        expect(cs(['M'], { gender: 'female', half: true })).toBe('nevlastní sestra matky');
+        expect(en(['F', 'F', 'M'])).toBe('father\u2019s father\u2019s mother');
+        expect(en(['F', 'F'], { gender: 'male', half: false })).toBe('father\u2019s father\u2019s brother');
+        expect(en(['M'], { gender: undefined, half: true })).toBe('mother\u2019s half-sibling');
+        expect(de(['F', 'F', 'M'])).toBe('Mutter des Vaters des Vaters');
+        expect(de(['M'], { gender: 'male', half: false })).toBe('Bruder der Mutter');
+        expect(de(['F'], { gender: 'female', half: true })).toBe('Halbschwester des Vaters');
+    });
+});
+
+describe('researchCertainty', () => {
+    it('counts the statuses of births, deaths and marriages, without the facts that have none', () => {
+        const t = new Tree()
+            .person('A', { birthStatus: 'proven', deathStatus: 'probable' })
+            .person('B', { ...female, birthStatus: 'possible', events: [{ id: 'd', type: 'death', status: 'lead' }] })
+            .person('C', { birthDate: '1900' })
+            .person('Ph', { isPlaceholder: true, birthStatus: 'proven' })
+            .person('Ph2', { ...female, isPlaceholder: true })
+            .person('K')
+            .family('A', 'B', ['C'], { startStatus: 'probable' })
+            .family('Ph', 'Ph2', ['K'], { startStatus: 'proven' });
+        const c = researchCertainty(t.data());
+        expect(c.birth).toEqual({ proven: 1, probable: 0, possible: 1, lead: 0, total: 2 });
+        expect(c.death).toEqual({ proven: 0, probable: 1, possible: 0, lead: 1, total: 2 });
+        // The union of two placeholders does not count.
+        expect(c.marriage).toEqual({ proven: 0, probable: 1, possible: 0, lead: 0, total: 1 });
+    });
+});
+
+describe('percentNumber', () => {
+    it('shows whole numbers, one decimal only under 10 % and where it is not zero', () => {
+        expect(percentNumber(0, 10, 'cs')).toBe('0');
+        expect(percentNumber(3, 0, 'cs')).toBe('0');
+        expect(percentNumber(5, 100, 'cs')).toBe('5');
+        expect(percentNumber(1, 20, 'en')).toBe('5');
+        expect(percentNumber(21, 400, 'cs')).toBe('5,3');
+        expect(percentNumber(21, 400, 'en')).toBe('5.3');
+        expect(percentNumber(1, 3, 'cs')).toBe('33');
+        expect(percentNumber(1, 8, 'cs')).toBe('13');
+        expect(percentNumber(100, 100, 'cs')).toBe('100');
+    });
+
+    it('never rounds a small share to 0 or an incomplete one to 100', () => {
+        expect(percentNumber(1, 10000, 'cs')).toBe('<\u00a00,1');
+        expect(percentNumber(1, 10000, 'en')).toBe('<\u00a00.1');
+        expect(percentNumber(1, 1000, 'cs')).toBe('0,1');
+        expect(percentNumber(999, 1000, 'cs')).toBe('99');
     });
 });
 
@@ -534,6 +646,17 @@ describe('selectFocusCards', () => {
         expect(cards.map(c => c.kind)).toEqual(['validation', 'ancestorGap', 'birthNoSource']);
         // Generation 2 misses 1 of 4 (not more than a quarter); generation 3 misses 3 of 8.
         expect(cards[1]).toEqual({ kind: 'ancestorGap', count: 3, n: 3, known: 5, filled: 5, expected: 8, ids: ['a'] });
+    });
+
+    it('puts the rememberers card after the births and before the research', () => {
+        const cards = selectFocusCards({
+            validationErrors: 0, generations: [row(1, 2), row(2, 4)], ancestorBirthsNoSource: [id('b')],
+            rememberers: [id('c')], researchWaiting: 3,
+        });
+        expect(cards.map(c => c.kind)).toEqual(['birthNoSource', 'rememberers', 'researchWaiting']);
+        expect(selectFocusCards({
+            validationErrors: 0, generations: [], ancestorBirthsNoSource: [], rememberers: [],
+        }).map(c => c.kind)).toEqual([]);
     });
 
     it('moves on to the rememberers and the research when earlier cards do not apply', () => {

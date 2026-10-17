@@ -236,10 +236,13 @@ test.describe('tree overview', () => {
         await expect(quality.locator('.tov-count-err')).toHaveText('2 errors');
         await expect(quality.locator('.tov-finding').first()).toHaveClass(/tov-finding--error/);
         await expect(quality.locator('.tov-finding').first().locator('.tov-link').first()).toHaveText('Elin Lindqvist');
-        // Completeness: every birth date, no birthplace (low), one source of eight.
+        // Completeness: every birth date, no birthplace (low); the share with a source is the
+        // header's number ("13% with a source") and is not repeated here.
         await expect(quality.locator('.tov-comp-row[data-field="birthDate"] .tov-comp-pct')).toHaveText('100%');
         await expect(quality.locator('.tov-comp-row[data-field="birthPlace"] .tov-comp-fill')).toHaveClass(/is-low/);
-        await expect(quality.locator('.tov-comp-row[data-field="source"] .tov-comp-pct')).toHaveText('13%');
+        await expect(quality.locator('.tov-comp-row')).toHaveCount(4);
+        await expect(quality.locator('.tov-comp-row[data-field="source"]')).toHaveCount(0);
+        await expect(quality.locator('[data-block="certainty"]')).toHaveCount(0); // not a research tree
         await expect(quality.locator('.tov-comp-row[data-field="deathDate"]')).toHaveAttribute('title', 'counted among the deceased');
         // Where evidence is missing, from the person in focus.
         const evidence = quality.locator('[data-block="evidence"]');
@@ -324,11 +327,12 @@ test.describe('tree overview', () => {
 
     test('entry points: the tree actions, the tree manager and back to it', async ({ page }) => {
         const treeId = await setup(page);
-        // ⋯ → Tree: the Overview group is the overview and (when offered) the change history.
+        // ⋯ → Tree: the Overview group is the overview, its Data quality shortcut and (when offered) the change history.
         await page.locator('.actions-menu-btn').click();
         await page.locator('#actions-tree-row').hover();
         const rows = page.locator('#actions-tree-overview-rows .tree-switcher-action');
-        await expect(rows).toHaveText(['Tree overview']);
+        await expect(rows).toHaveText(['Tree overview', 'Data quality']);
+        await expect(rows.nth(1)).toHaveClass(/is-quiet/);
         await page.keyboard.press('Escape');
 
         // The tree manager's ⋯ → Tree overview: the manager steps aside and comes back on Escape.
@@ -524,5 +528,330 @@ test.describe('tree overview', () => {
         const best = Math.min(...times);
         console.log(`[tree-overview K1.5] 5000 persons: open ${times.map(t => t.toFixed(0)).join(' / ')} ms, best ${best.toFixed(0)} ms`);
         expect(best).toBeLessThan(1000);
+    });
+});
+
+/**
+ * Ask the family (rememberers), years relative to the current year:
+ *
+ *   Dag ⚭ Fia             Eir (living)
+ *       |                  |
+ *   Bo + brother Cid  ⚭  Ada
+ *            |
+ *          Rune (+ great-uncle Ulf, born 125 years ago, outside the window)
+ *
+ * Ada died (no date), Bo has a full death date and place, Cid and Dag only a
+ * death year, Fia has everything recorded.
+ */
+function memories(): { persons: Record<string, P>; partnerships: Record<string, P>; defaultPersonId: string } {
+    const y = new Date().getFullYear();
+    const persons: Record<string, P> = {};
+    const add = (id: string, firstName: string, gender: 'male' | 'female', extra: P = {}): void => {
+        persons[id] = {
+            id, firstName, lastName: 'Holm', gender, isPlaceholder: false,
+            partnerships: [], parentIds: [], childIds: [], ...extra,
+        };
+    };
+    add('dag', 'Dag', 'male', { birthDate: String(y - 100), deathDate: String(y - 30), deathPlace: 'Lund' });
+    add('fia', 'Fia', 'female', {
+        birthDate: String(y - 98), birthPlace: 'Ystad', deathDate: `${y - 25}-05-02`, deathPlace: 'Lund', deathCause: 'stroke',
+    });
+    add('ulf', 'Ulf', 'male', { birthDate: String(y - 125) });
+    add('bo', 'Bo', 'male', { birthDate: String(y - 70), deathDate: `${y - 10}-03-14`, deathPlace: 'Malmö' });
+    add('cid', 'Cid', 'male', { birthDate: String(y - 72), deathDate: String(y - 5) });
+    add('eir', 'Eir', 'male', { birthDate: String(y - 95) });
+    add('ada', 'Ada', 'female', { birthDate: String(y - 68), isDeceased: true });
+    add('rune', 'Rune', 'male', { birthDate: String(y - 40) });
+    const partnerships: Record<string, P> = {};
+    const union = (uid: string, a: string, b: string | null, children: string[]): void => {
+        if (b) {
+            partnerships[uid] = { id: uid, person1Id: a, person2Id: b, childIds: children, status: 'married' };
+            (persons[a].partnerships as string[]).push(uid);
+            (persons[b].partnerships as string[]).push(uid);
+        }
+        for (const c of children) {
+            for (const p of [a, b].filter((x): x is string => !!x)) {
+                (persons[c].parentIds as string[]).push(p);
+                (persons[p].childIds as string[]).push(c);
+            }
+        }
+    };
+    union('u1', 'dag', 'fia', ['bo', 'cid', 'ulf']);
+    union('u2', 'eir', null, ['ada']);
+    union('u3', 'bo', 'ada', ['rune']);
+    return { persons, partnerships, defaultPersonId: 'rune' };
+}
+
+async function setupMemories(page: Page, width = 1440, height = 900): Promise<string> {
+    await page.setViewportSize({ width, height });
+    await openApp(page);
+    return importTree(page, memories(), 'Holm', 'rune');
+}
+
+test.describe('tree overview: ask the family, certainty, the Data quality shortcut', () => {
+    test('the card shows Ask the family; a question is added, edited and saved to the person', async ({ page }) => {
+        const treeId = await setupMemories(page);
+        const dialog = await openOverview(page, treeId);
+        // Ada (no date, no place), Dag and Cid (a death year only): date or place of death missing.
+        const card = section(dialog, 'focus').locator('.tov-card[data-card="rememberers"]');
+        await expect(card).toContainText('3 people who died in the last 100 years: date or place of death missing.');
+
+        const anc = section(dialog, 'ancestors');
+        const rem = anc.locator('.tov-rem');
+        // Collapsed by default.
+        await expect(rem.locator('.tov-rem-head')).toHaveAttribute('aria-expanded', 'false');
+        await expect(rem.locator('.tov-rem-body')).toBeHidden();
+        await card.getByRole('button', { name: 'Show' }).click();
+        await expect(rem.locator('.tov-rem-head')).toHaveAttribute('aria-expanded', 'true');
+        await expect(rem).toBeInViewport();
+
+        // Bo is listed too (cause and birthplace missing); Fia has no gaps, Eir is living, Ulf is outside the window.
+        await expect(rem.locator('.tov-rem-title')).toHaveText('Ask the family (4)');
+        await expect(rem.locator('.tov-rem-aside')).toHaveText('what only the family knows');
+        await expect(rem.locator('.tov-rem-intro')).toContainText('People who died in the last 100 years.');
+        const rows = rem.locator('.tov-rem-row');
+        await expect(rows.locator('.tov-rem-who .tov-link')).toHaveText(['Ada Holm', 'Bo Holm', 'Cid Holm', 'Dag Holm']);
+        const y = new Date().getFullYear();
+        await expect(rows.nth(0).locator('.tov-rem-meta')).toHaveText(`b. ${y - 68}, death unknown · mother`);
+        await expect(rows.nth(0).locator('.tov-chip')).toHaveText(['date of death', 'place of death', 'cause', 'place of birth']);
+        await expect(rows.nth(1).locator('.tov-chip')).toHaveText(['cause', 'place of birth']);
+        await expect(rows.nth(2).locator('.tov-rem-meta')).toHaveText(`${y - 72}–${y - 5} · father\u2019s brother`);
+        await expect(rows.nth(3).locator('.tov-rem-meta')).toHaveText(`${y - 100}–${y - 30} · father\u2019s father`);
+        await expect(rows.nth(3).locator('.tov-chip')).toHaveText(['date of death', 'cause', 'place of birth']);
+
+        // Add a question: the field opens in the row, Save writes Person.question.
+        const bo = rows.nth(1);
+        await bo.getByRole('button', { name: 'Add a question' }).click();
+        const field = bo.getByLabel('Question for relatives');
+        await expect(field).toBeFocused();
+        expect((await field.boundingBox())!.height).toBeGreaterThanOrEqual(64);
+        await field.fill('Where was he born?');
+        await bo.getByRole('button', { name: 'Save question' }).click();
+        await expect(bo.locator('.tov-rem-editor')).toHaveCount(0);
+        await expect(bo.locator('.tov-rem-q')).toHaveText('Question: Where was he born?');
+        await expect(bo.getByRole('button', { name: 'Edit question' })).toBeFocused();
+        expect(await page.evaluate(() => window.Strom.DataManager.getPerson('bo' as never)?.question)).toBe('Where was he born?');
+        // The edit is one undo step.
+        expect(await page.evaluate(() => window.Strom.DataManager.lastUndoDescription())).toBeTruthy();
+
+        // Edit question: the field holds the question; Cancel (and Escape) keep it.
+        await bo.getByRole('button', { name: 'Edit question' }).click();
+        await expect(bo.getByLabel('Question for relatives')).toHaveValue('Where was he born?');
+        await bo.getByLabel('Question for relatives').fill('Something else');
+        await bo.getByRole('button', { name: 'Cancel' }).click();
+        await expect(bo.locator('.tov-rem-q')).toHaveText('Question: Where was he born?');
+        await bo.getByRole('button', { name: 'Edit question' }).click();
+        await page.keyboard.press('Escape');
+        await expect(bo.locator('.tov-rem-editor')).toHaveCount(0);
+        await expect(page.locator('#tree-overview-modal')).toHaveCount(1);
+        expect(await page.evaluate(() => window.Strom.DataManager.getPerson('bo' as never)?.question)).toBe('Where was he born?');
+
+        // The expansion is remembered.
+        await page.keyboard.press('Escape');
+        const again = await openOverview(page, treeId);
+        await expect(section(again, 'ancestors').locator('.tov-rem-head')).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    test('Ask the family: empty without gaps, the question disabled outside the open tree', async ({ page }) => {
+        // The Lindqvist tree: nobody died in the last 100 years (the parents are living).
+        const treeId = await setup(page);
+        let dialog = await openOverview(page, treeId);
+        await expect(section(dialog, 'focus').locator('.tov-card[data-card="rememberers"]')).toHaveCount(0);
+        const rem = section(dialog, 'ancestors').locator('.tov-rem');
+        await expect(rem.locator('.tov-rem-title')).toHaveText('Ask the family');
+        await rem.locator('.tov-rem-head').click();
+        await expect(rem.locator('.tov-rem-empty')).toHaveText('Nobody who died in the last 100 years has gaps in their details.');
+        await page.keyboard.press('Escape');
+
+        // Another tree is the open one: Add a question explains instead of acting.
+        const holm = await importTree(page, memories(), 'Holm', 'rune');
+        await importTree(page, { persons: { x: { id: 'x', firstName: 'Ida', lastName: 'Berg', gender: 'female', isPlaceholder: false, partnerships: [], parentIds: [], childIds: [] } }, partnerships: {} }, 'Berg', 'x');
+        dialog = await openOverview(page, holm);
+        const button = section(dialog, 'ancestors').locator('.tov-rem-row').first().getByRole('button', { name: 'Add a question' });
+        await expect(button).toHaveAttribute('aria-disabled', 'true');
+        await button.click({ force: true });
+        await expect(section(dialog, 'ancestors').locator('.tov-rem-editor')).toHaveCount(0);
+        await expect(section(dialog, 'ancestors').locator('.tov-rem-row').first().locator('.tov-disabled-hint')).toBeVisible();
+    });
+
+    test('an open overview follows a data change and keeps its place', async ({ page }) => {
+        const treeId = await setup(page, 1440, 700);
+        const dialog = await openOverview(page, treeId, { section: 'quality' });
+        await expect(dialog.locator('.tov-nums')).toContainText('8 people');
+        await expect(section(dialog, 'quality')).toHaveAttribute('data-ready', 'true');
+        const birthPlace = section(dialog, 'quality').locator('.tov-comp-row[data-field="birthPlace"] .tov-comp-pct');
+        await expect(birthPlace).toHaveText('0%');
+        const scroller = dialog.locator('.tov-scroll');
+        await scroller.evaluate(el => { el.scrollTop = 300; });
+        const top = await scroller.evaluate(el => el.scrollTop);
+        expect(top).toBeGreaterThan(0);
+        // Two edits close together: one refresh.
+        await page.evaluate(() => {
+            const D = window.Strom.DataManager;
+            D.updatePerson('m' as never, { birthPlace: 'Ystad' });
+            D.createPerson({ firstName: 'Lena', lastName: 'Lindqvist', gender: 'female' } as never);
+            D.updatePerson('r' as never, { firstName: 'Anton' });
+        });
+        await expect(dialog.locator('.tov-nums')).toContainText('9 people');
+        await expect(dialog.locator('.tov-root-btn')).toHaveText(/Anton Lindqvist/);
+        await expect(birthPlace).toHaveText('11%');
+        await expect(section(dialog, 'quality').locator('.tov-sec-head')).toHaveAttribute('aria-expanded', 'true');
+        expect(await scroller.evaluate(el => el.scrollTop)).toBe(top);
+        // Undo comes back the same way.
+        await page.evaluate(() => { const D = window.Strom.DataManager; D.undo(); D.undo(); D.undo(); });
+        await expect(dialog.locator('.tov-nums')).toContainText('8 people');
+        await expect(birthPlace).toHaveText('0%');
+        await expect(dialog.locator('.tov-root-btn')).toHaveText(/Anders Lindqvist/);
+    });
+
+    test('percentages have no ",0": whole numbers, one decimal under 10 % only where it is not zero', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await openApp(page);
+        // 20 unrelated people, one with a source and a birthplace: 5 %.
+        const persons: Record<string, P> = {};
+        for (let i = 0; i < 20; i++) {
+            persons[`p${i}`] = {
+                id: `p${i}`, firstName: `N${i}`, lastName: 'Ek', gender: i % 2 ? 'female' : 'male', isPlaceholder: false,
+                partnerships: [], parentIds: [], childIds: [], birthDate: String(1900 + i),
+                ...(i === 0 ? { birthSourceIds: ['s1'], birthPlace: 'Ystad' } : {}),
+            };
+        }
+        const treeId = await importTree(page, { persons, partnerships: {} }, 'Ek', 'p0');
+        await page.evaluate(() => window.Strom.UI.setLanguage('cs' as never));
+        const dialog = await openOverview(page, treeId, { section: 'quality' });
+        await expect(dialog.locator('.tov-nums')).toContainText('5\u00a0% s pramenem');
+        await expect(section(dialog, 'quality').locator('.tov-comp-row[data-field="birthPlace"] .tov-comp-pct')).toHaveText('5\u00a0%');
+        await expect(dialog).not.toContainText(',0\u00a0%');
+    });
+
+    test('Certainty of research facts: bars in a research tree, none in a plain one', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await openApp(page);
+        const data = family();
+        Object.assign(data.persons.f, { birthStatus: 'proven', deathStatus: 'possible' });
+        Object.assign(data.persons.m, { birthStatus: 'probable' });
+        Object.assign(data.persons.ff, { birthStatus: 'lead' });
+        Object.assign(data.partnerships.u4, { startStatus: 'proven' });
+        const treeId = await importTree(page, data, 'Lindqvist', 'r');
+        await page.evaluate((id) => {
+            window.Strom.TreeManager.setResearchLink(id as never, {
+                id: '0c0c0c0c-1111-4222-8333-444455556666', fingerprint: 'x', syncedAt: new Date().toISOString(),
+            });
+        }, treeId);
+        const dialog = await openOverview(page, treeId, { section: 'quality', scroll: true });
+        const block = section(dialog, 'quality').locator('[data-block="certainty"]');
+        await expect(block.locator('.tov-block-title')).toHaveText('Certainty of research facts');
+        // After Data completeness.
+        expect(await section(dialog, 'quality').locator('[data-block]').evaluateAll(els => els.map(el => (el as HTMLElement).dataset.block)))
+            .toEqual(['consistency', 'completeness', 'certainty', 'evidence', 'structure', 'actions']);
+        await expect(block.locator('.tov-cert-leg')).toHaveText(['Proven', 'Probable', 'Possible', 'Lead']);
+        await expect(block.locator('.tov-cert-label')).toHaveText(['Birth', 'Death', 'Marriage']);
+        const birth = block.locator('.tov-cert-row[data-fact="birth"]');
+        await expect(birth.locator('.tov-cert-seg')).toHaveCount(3);
+        await expect(birth.locator('.tov-cert-counts')).toHaveText('Proven 1 · Probable 1 · Lead 1');
+        const bar = await birth.locator('.tov-cert-bar').boundingBox();
+        expect(Math.round(bar!.height)).toBe(12);
+        await expect(block.locator('.tov-cert-row[data-fact="death"] .tov-cert-counts')).toHaveText('Possible 1');
+        await expect(block.locator('.tov-cert-row[data-fact="marriage"] .tov-cert-counts')).toHaveText('Proven 1');
+        // The four shades differ (tokens), the lead one is hatched.
+        const colors = await block.locator('.tov-cert-key').evaluateAll(els => els.map(el => getComputedStyle(el).backgroundImage + getComputedStyle(el).backgroundColor));
+        expect(new Set(colors).size).toBe(4);
+        expect(colors[3]).toContain('repeating-linear-gradient');
+        expect(await dialog.locator('.tov-scroll').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    });
+
+    test('Data quality in the menu: the tree actions and the manager (a tree that is not open)', async ({ page }) => {
+        const treeId = await setup(page);
+        await page.locator('.actions-menu-btn').click();
+        await page.locator('#actions-tree-row').hover();
+        await page.locator('#actions-tree-overview-rows .tree-switcher-action', { hasText: 'Data quality' }).click();
+        let dialog = page.locator('#tree-overview-modal .modal.tov');
+        await expect(section(dialog, 'quality').locator('.tov-sec-head')).toHaveAttribute('aria-expanded', 'true');
+        await expect(section(dialog, 'quality').locator('.tov-sec-head')).toBeInViewport();
+        await page.keyboard.press('Escape');
+
+        // In the manager, for a tree that is not open: muted at text level, opens Data quality read only.
+        await importTree(page, { persons: { x: { id: 'x', firstName: 'Ida', lastName: 'Berg', gender: 'female', isPlaceholder: false, partnerships: [], parentIds: [], childIds: [] } }, partnerships: {} }, 'Berg', 'x');
+        await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+        const row = page.locator('.tree-manager-item', { hasText: 'Lindqvist' });
+        await row.locator('.tree-row-menu-btn').click();
+        const item = row.locator('.tree-row-menu.open .tree-row-menu-item[data-action="overview-quality"]');
+        await expect(item).toHaveText('Data quality');
+        const [overviewX, qualityX] = await Promise.all([
+            row.locator('.tree-row-menu.open .tree-row-menu-item[data-action="overview"] .tree-row-menu-label').evaluate(el => el.getBoundingClientRect().x),
+            item.locator('.tree-row-menu-label').evaluate(el => el.getBoundingClientRect().x),
+        ]);
+        expect(qualityX).toBe(overviewX);
+        const [quietColor, textLight] = await item.evaluate(el => [getComputedStyle(el).color, (() => {
+            const probe = document.createElement('span');
+            probe.style.color = 'var(--text-light)';
+            document.body.appendChild(probe);
+            const c = getComputedStyle(probe).color;
+            probe.remove();
+            return c;
+        })()]);
+        expect(quietColor).toBe(textLight);
+        await item.click();
+        dialog = page.locator('#tree-overview-modal .modal.tov');
+        await expect(dialog.locator('.tov-inactive')).toBeVisible();
+        await expect(section(dialog, 'quality').locator('.tov-sec-head')).toHaveAttribute('aria-expanded', 'true');
+        expect(treeId).toBeTruthy();
+    });
+
+    test('phone: Data quality in the tree-actions sheet, Ask the family without horizontal scroll', async ({ browser }) => {
+        const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+        const page = await context.newPage();
+        await openApp(page);
+        const treeId = await importTree(page, memories(), 'Holm', 'rune');
+        await page.evaluate(() => window.Strom.UI.showTreeActionsSheet());
+        const sheet = page.locator('.bottom-sheet-tree-actions');
+        const item = sheet.locator('.tree-actions-row[data-action="overview-quality"]');
+        await expect(item).toHaveText('Data quality');
+        await expect(item).toHaveClass(/is-quiet/);
+        expect(Math.round((await item.boundingBox())!.height)).toBeGreaterThanOrEqual(48);
+        await item.click();
+        const dialog = page.locator('#tree-overview-modal .modal.tov');
+        await expect(section(dialog, 'quality').locator('.tov-sec-head')).toHaveAttribute('aria-expanded', 'true');
+
+        // Ask the family on the phone: the button under the text, full width, 44px.
+        await section(dialog, 'focus').locator('.tov-card[data-card="rememberers"] .tov-btn').click();
+        const row = section(dialog, 'ancestors').locator('.tov-rem-row').first();
+        const button = row.locator('.tov-rem-btn');
+        const b = await button.boundingBox();
+        const text = await row.locator('.tov-rem-main').boundingBox();
+        expect(b!.height).toBeGreaterThanOrEqual(44);
+        expect(b!.width).toBeGreaterThan(300);
+        expect(b!.y).toBeGreaterThanOrEqual(text!.y + text!.height - 1);
+        await button.click();
+        await expect(row.getByLabel('Question for relatives')).toBeVisible();
+        expect(await dialog.locator('.tov-scroll').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+        expect(treeId).toBeTruthy();
+        await context.close();
+    });
+
+    test('Ask the family in Czech and German', async ({ page }) => {
+        const treeId = await setupMemories(page);
+        await page.evaluate(() => window.Strom.UI.setLanguage('cs' as never));
+        let dialog = await openOverview(page, treeId);
+        await expect(section(dialog, 'focus').locator('.tov-card[data-card="rememberers"]'))
+            .toContainText('3 zemřelí z posledních 100 let: chybí datum nebo místo úmrtí.');
+        await section(dialog, 'focus').locator('.tov-card[data-card="rememberers"]').getByRole('button', { name: 'Ukázat' }).click();
+        let rem = section(dialog, 'ancestors').locator('.tov-rem');
+        await expect(rem.locator('.tov-rem-title')).toHaveText('Pamětníci (4)');
+        await expect(rem.locator('.tov-rem-aside')).toHaveText('co ví už jen rodina');
+        await expect(rem.locator('.tov-rem-row').nth(2).locator('.tov-rem-meta')).toContainText('bratr otce');
+        await expect(rem.locator('.tov-rem-row').nth(0).locator('.tov-rem-miss')).toContainText('chybí:');
+        await expect(rem.locator('.tov-rem-row').nth(0).getByRole('button', { name: 'Přidat otázku' })).toBeVisible();
+        await page.keyboard.press('Escape');
+
+        await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
+        dialog = await openOverview(page, treeId);
+        await expect(section(dialog, 'focus').locator('.tov-card[data-card="rememberers"]'))
+            .toContainText('3 in den letzten 100 Jahren Verstorbene: Sterbedatum oder -ort fehlt.');
+        rem = section(dialog, 'ancestors').locator('.tov-rem');
+        await expect(rem.locator('.tov-rem-title')).toHaveText('Zeitzeugen (4)');
+        await expect(rem.locator('.tov-rem-row').nth(3).locator('.tov-rem-meta')).toContainText('Vater des Vaters');
+        await expect(rem.locator('.tov-rem-row').nth(0).getByRole('button', { name: 'Frage hinzufügen' })).toBeVisible();
     });
 });

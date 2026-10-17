@@ -82,6 +82,45 @@ function zeCs(m: number): string {
 /** German count form shorthand: `${n} ${word}`. */
 const nDe = (n: number, one: string, other: string): string => `${n} ${plural('de', n, one, other)}`;
 
+/**
+ * Tree overview, "Ask the family": a relative named by the path from the
+ * chosen person ('F' = father, 'M' = mother, nearest first) — the ancestor at
+ * the end of the path, or, with `sibling`, a sibling of that ancestor.
+ */
+type RelationSibling = { gender?: string; half: boolean };
+const relationChain = (path: readonly string[], sibling?: RelationSibling): string[] =>
+    sibling ? [...path] : path.slice(0, -1);
+/** Czech: "matka otcova otce", "bratr otcova otce", "otec matky otce otcovy matky". */
+function relationCs(path: readonly string[], sibling?: RelationSibling): string {
+    const nom = (x: string) => x === 'F' ? 'otec' : 'matka';
+    const gen = (x: string) => x === 'F' ? 'otce' : 'matky';
+    const adj = (x: string, head: string) => x === 'F' ? (head === 'F' ? 'otcova' : 'otcovy') : (head === 'F' ? 'matčina' : 'matčiny');
+    const head = sibling
+        ? `${sibling.half ? 'nevlastní ' : ''}${sibling.gender === 'male' ? 'bratr' : sibling.gender === 'female' ? 'sestra' : 'sourozenec'}`
+        : nom(path[path.length - 1] ?? 'F');
+    const chain = relationChain(path, sibling);
+    if (chain.length === 0) return head;
+    if (chain.length === 1) return `${head} ${gen(chain[0])}`;
+    const far = chain.slice(2).reverse().map(gen);
+    return [head, ...far, `${adj(chain[0], chain[1])} ${gen(chain[1])}`].join(' ');
+}
+/** English: "father’s father’s mother", "father’s father’s brother". */
+function relationEn(path: readonly string[], sibling?: RelationSibling): string {
+    const head = sibling
+        ? `${sibling.half ? 'half-' : ''}${sibling.gender === 'male' ? 'brother' : sibling.gender === 'female' ? 'sister' : 'sibling'}`
+        : (path[path.length - 1] ?? 'F') === 'F' ? 'father' : 'mother';
+    return [...relationChain(path, sibling).map(x => x === 'F' ? 'father\u2019s' : 'mother\u2019s'), head].join(' ');
+}
+/** German: "Mutter des Vaters des Vaters", "Bruder des Vaters". */
+function relationDe(path: readonly string[], sibling?: RelationSibling): string {
+    const head = sibling
+        ? (sibling.half
+            ? (sibling.gender === 'male' ? 'Halbbruder' : sibling.gender === 'female' ? 'Halbschwester' : 'Halbgeschwister')
+            : (sibling.gender === 'male' ? 'Bruder' : sibling.gender === 'female' ? 'Schwester' : 'Geschwister'))
+        : (path[path.length - 1] ?? 'F') === 'F' ? 'Vater' : 'Mutter';
+    return [head, ...relationChain(path, sibling).reverse().map(x => x === 'F' ? 'des Vaters' : 'der Mutter')].join(' ');
+}
+
 /** Sending to the research: shared count phrases (strings sync / treeSettings). */
 const syncChangesEn = (n: number) => nEn(n,'change','changes');
 const syncChangesCs = (n: number) => nCs(n,'změna','změny','změn');
@@ -2609,6 +2648,7 @@ const stringsEN = {
         hlNoSource: (n: number) => `People without a source: ${nEn(n, 'person', 'people')}`,
         // Entry points
         menu: 'Tree overview',
+        menuQuality: 'Data quality',
         showTooltip: 'Show tree overview',
         // Life and health: age at death
         deathAgeTitle: 'Age at death',
@@ -2698,6 +2738,32 @@ const stringsEN = {
         anniversariesTitle: 'Anniversaries in the next 30 days',
         noAnniversaries: 'No anniversaries in the next 30 days.',
         highlightsSummary: (n: number) => `${nEn(n, 'anniversary', 'anniversaries')} in 30 days`,
+        // Where to focus: rememberers
+        cardRememberers: (n: number) => n === 1
+            ? '1 person who died in the last 100 years: date or place of death missing.'
+            : `${n} people who died in the last 100 years: date or place of death missing.`,
+        // Ancestors: ask the family (rememberers)
+        remTitle: 'Ask the family',
+        remTitleCount: (n: number) => `Ask the family (${n})`,
+        remAside: 'what only the family knows',
+        remIntro: 'People who died in the last 100 years. Archives mostly do not publish these records yet \u2013 family members may know.',
+        remMissing: 'missing:',
+        remFacts: { deathDate: 'date of death', deathPlace: 'place of death', deathCause: 'cause', birthPlace: 'place of birth' },
+        remRelation: relationEn,
+        remBornDeathUnknown: (year: string) => `b. ${year}, death unknown`,
+        remQuestion: 'Question:',
+        remAdd: 'Add a question',
+        remEdit: 'Edit question',
+        remField: 'Question for relatives',
+        remSave: 'Save question',
+        remCancel: 'Cancel',
+        remEmpty: 'Nobody who died in the last 100 years has gaps in their details.',
+        remSummary: (n: number) => nEn(n, 'person', 'people'),
+        // Data quality: certainty of research facts
+        certaintyTitle: 'Certainty of research facts',
+        certaintyDesc: 'How certain a fact is according to research. Not the same as source evidence (\u25cf \u25d0 \u25cb in Where evidence is missing).',
+        certaintyRows: { birth: 'Birth', death: 'Death', marriage: 'Marriage' },
+        certaintyNone: 'no status yet',
     },
 
     // Branch tabs (family context navigation)
@@ -6629,6 +6695,7 @@ const stringsCZ: StringsType = {
         hlNoSource: (n: number) => `Osoby bez pramene: ${nCs(n, 'osoba', 'osoby', 'osob')}`,
         // Vstupy
         menu: 'Přehled stromu',
+        menuQuality: 'Kvalita dat',
         showTooltip: 'Zobrazit přehled stromu',
         // Život a zdraví: věk při úmrtí
         deathAgeTitle: 'Věk při úmrtí',
@@ -6718,6 +6785,32 @@ const stringsCZ: StringsType = {
         anniversariesTitle: 'Výročí do 30 dní',
         noAnniversaries: 'V příštích 30 dnech není žádné výročí.',
         highlightsSummary: (n: number) => `${nCs(n, 'výročí', 'výročí', 'výročí')} do 30 dní`,
+        // Na co se zaměřit: pamětníci
+        cardRememberers: (n: number) => n === 1
+            ? '1 osoba zemřelá v posledních 100 letech: chybí datum nebo místo úmrtí.'
+            : `${n} ${plural('cs', n, 'zemřelý', 'zemřelí', 'zemřelých')} z posledních 100 let: chybí datum nebo místo úmrtí.`,
+        // Předci: pamětníci
+        remTitle: 'Pamětníci',
+        remTitleCount: (n: number) => `Pamětníci (${n})`,
+        remAside: 'co ví už jen rodina',
+        remIntro: 'Zemřelí z posledních 100 let. Archivy tyto údaje většinou ještě nezveřejňují \u2013 vědí je pamětníci v rodině.',
+        remMissing: 'chybí:',
+        remFacts: { deathDate: 'datum úmrtí', deathPlace: 'místo úmrtí', deathCause: 'příčina', birthPlace: 'místo narození' },
+        remRelation: relationCs,
+        remBornDeathUnknown: (year: string) => `* ${year}, úmrtí neznámé`,
+        remQuestion: 'Otázka:',
+        remAdd: 'Přidat otázku',
+        remEdit: 'Upravit otázku',
+        remField: 'Otázka pro příbuzné',
+        remSave: 'Uložit otázku',
+        remCancel: 'Zrušit',
+        remEmpty: 'Nikdo ze zemřelých z posledních 100 let nemá mezery v údajích.',
+        remSummary: (n: number) => nCs(n, 'osoba', 'osoby', 'osob'),
+        // Kvalita dat: jistota údajů z výzkumu
+        certaintyTitle: 'Jistota údajů z výzkumu',
+        certaintyDesc: 'Jak jistý je údaj podle výzkumu. Nezaměňovat s doložením pramenem (\u25cf \u25d0 \u25cb v Kde chybí doklady).',
+        certaintyRows: { birth: 'Narození', death: 'Úmrtí', marriage: 'Sňatek' },
+        certaintyNone: 'zatím bez stavu',
     },
 
     // Branch tabs (family context navigation)
@@ -10619,6 +10712,7 @@ const stringsDE: StringsType = {
         hlNoSource: (n: number) => `Personen ohne Quelle: ${nDe(n, 'Person', 'Personen')}`,
         // Einstiege
         menu: 'Stammbaum-Überblick',
+        menuQuality: 'Datenqualität',
         showTooltip: 'Stammbaum-Überblick anzeigen',
         // Leben und Gesundheit: Sterbealter
         deathAgeTitle: 'Sterbealter',
@@ -10708,6 +10802,32 @@ const stringsDE: StringsType = {
         anniversariesTitle: 'Jahrestage in den nächsten 30 Tagen',
         noAnniversaries: 'In den nächsten 30 Tagen gibt es keine Jahrestage.',
         highlightsSummary: (n: number) => `${nDe(n, 'Jahrestag', 'Jahrestage')} in 30 Tagen`,
+        // Worauf achten: Zeitzeugen
+        cardRememberers: (n: number) => n === 1
+            ? '1 in den letzten 100 Jahren verstorbene Person: Sterbedatum oder -ort fehlt.'
+            : `${n} in den letzten 100 Jahren Verstorbene: Sterbedatum oder -ort fehlt.`,
+        // Vorfahren: Zeitzeugen
+        remTitle: 'Zeitzeugen',
+        remTitleCount: (n: number) => `Zeitzeugen (${n})`,
+        remAside: 'was nur die Familie weiß',
+        remIntro: 'In den letzten 100 Jahren Verstorbene. Archive veröffentlichen diese Angaben meist noch nicht \u2013 Zeitzeugen in der Familie kennen sie.',
+        remMissing: 'fehlt:',
+        remFacts: { deathDate: 'Sterbedatum', deathPlace: 'Sterbeort', deathCause: 'Ursache', birthPlace: 'Geburtsort' },
+        remRelation: relationDe,
+        remBornDeathUnknown: (year: string) => `* ${year}, Tod unbekannt`,
+        remQuestion: 'Frage:',
+        remAdd: 'Frage hinzufügen',
+        remEdit: 'Frage bearbeiten',
+        remField: 'Frage an Verwandte',
+        remSave: 'Frage speichern',
+        remCancel: 'Abbrechen',
+        remEmpty: 'Bei den in den letzten 100 Jahren Verstorbenen fehlen keine Angaben.',
+        remSummary: (n: number) => nDe(n, 'Person', 'Personen'),
+        // Datenqualität: Sicherheit der Forschungsangaben
+        certaintyTitle: 'Sicherheit der Forschungsangaben',
+        certaintyDesc: 'Wie sicher eine Angabe laut Forschung ist. Nicht zu verwechseln mit Quellenbelegen (\u25cf \u25d0 \u25cb unter Wo Belege fehlen).',
+        certaintyRows: { birth: 'Geburt', death: 'Tod', marriage: 'Heirat' },
+        certaintyNone: 'noch ohne Status',
     },
 
     // Branch tabs (family context navigation)

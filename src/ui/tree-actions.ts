@@ -36,6 +36,8 @@ export interface TreeActionRow {
     value?: string;
     /** A quiet hint (tooltip). */
     hint?: string;
+    /** A secondary shortcut drawn muted (the overview's "Data quality" under "Tree overview"). */
+    quiet?: boolean;
 }
 
 export interface TreeActionGroup {
@@ -83,6 +85,10 @@ export const treeActionsMethods = uiModule({
         const groups: TreeActionGroup[] = [
             { key: 'overview', header: g.overview, rows: [
                 { key: 'overview', label: strings.treeOverview.menu, run: () => void this.showTreeOverview(id, { parent }) },
+                {
+                    key: 'overview-quality', label: strings.treeOverview.menuQuality, quiet: true,
+                    run: () => void this.showTreeOverview(id, { section: 'quality', scroll: true, parent }),
+                },
                 ...(auditOffered ? [{ key: 'audit', label: strings.auditLog.viewLog, run: () => this.showAuditLogDialog(id, parent) }] : []),
             ] },
             { key: 'outputs', header: g.outputs, rows: [
@@ -210,7 +216,7 @@ export const treeActionsMethods = uiModule({
             for (const row of group.rows) {
                 const btn = document.createElement('button');
                 btn.type = 'button';
-                btn.className = 'bottom-sheet-item tree-actions-row' + (row.danger ? ' danger' : '');
+                btn.className = 'bottom-sheet-item tree-actions-row' + (row.danger ? ' danger' : '') + (row.quiet ? ' is-quiet' : '');
                 btn.dataset.action = row.key;
                 const label = document.createElement('span');
                 label.className = 'bottom-sheet-label';
