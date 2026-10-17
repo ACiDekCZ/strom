@@ -251,6 +251,36 @@ describe('rememberers', () => {
         expect(list.find(r => r.id === 'Gf')!.path).toEqual(['F', 'F']);
     });
 
+    it('does not call a sibling half when the ancestor has only one parent recorded', () => {
+        // F has only his father Gf in the tree; his brother Bro has both Gf and Gm.
+        const t = new Tree()
+            .person('Gf', { birthDate: '1880', deathDate: '1950' })
+            .person('Gm', { ...female, birthDate: '1885', deathDate: '1950' })
+            .person('Bro', { birthDate: '1910', deathDate: '1990' })
+            .person('F', { birthDate: '1908', deathDate: '1980' })
+            .person('R', { birthDate: '1975' })
+            .family('Gf', 'Gm', ['Bro'])
+            .family('Gf', null, ['F'])
+            .family('F', null, ['R']);
+        const list = rememberers(t.data(), id('R'), 2026);
+        expect(list.find(r => r.id === 'Bro')).toMatchObject({ kind: 'sibling', half: false });
+    });
+
+    it('calls a sibling half when a real parent in the same role differs', () => {
+        const t = new Tree()
+            .person('Gf', { birthDate: '1880', deathDate: '1950' })
+            .person('Gm', { ...female, birthDate: '1885', deathDate: '1950' })
+            .person('Gm2', { ...female, birthDate: '1888', deathDate: '1950' })
+            .person('Bro', { birthDate: '1910', deathDate: '1990' })
+            .person('F', { birthDate: '1908', deathDate: '1980' })
+            .person('R', { birthDate: '1975' })
+            .family('Gf', 'Gm', ['F'])
+            .family('Gf', 'Gm2', ['Bro'])
+            .family('F', null, ['R']);
+        const list = rememberers(t.data(), id('R'), 2026);
+        expect(list.find(r => r.id === 'Bro')).toMatchObject({ kind: 'sibling', half: true });
+    });
+
     it('says what is missing and carries the question', () => {
         const list = rememberers(family().data(), id('R'), 2026);
         const by = Object.fromEntries(list.map(r => [r.id, r]));
@@ -460,8 +490,8 @@ describe('overviewHeader', () => {
 });
 
 describe('selectFocusCards', () => {
-    const row = (n: number, known: number, gapIds: string[] = []): AncestorGeneration => ({
-        n, expected: 2 ** n, known, proven: 0, ids: [], gapIds: gapIds.map(id),
+    const row = (n: number, known: number, gapIds: string[] = [], filled = known): AncestorGeneration => ({
+        n, expected: 2 ** n, known, filled, proven: 0, ids: [], gapIds: gapIds.map(id),
     });
 
     it('keeps the fixed order and at most three cards', () => {
@@ -474,7 +504,7 @@ describe('selectFocusCards', () => {
         });
         expect(cards.map(c => c.kind)).toEqual(['validation', 'ancestorGap', 'birthNoSource']);
         // Generation 2 misses 1 of 4 (not more than a quarter); generation 3 misses 3 of 8.
-        expect(cards[1]).toEqual({ kind: 'ancestorGap', count: 3, n: 3, known: 5, expected: 8, ids: ['a'] });
+        expect(cards[1]).toEqual({ kind: 'ancestorGap', count: 3, n: 3, known: 5, filled: 5, expected: 8, ids: ['a'] });
     });
 
     it('moves on to the rememberers and the research when earlier cards do not apply', () => {
@@ -486,6 +516,41 @@ describe('selectFocusCards', () => {
             { kind: 'rememberers', count: 2, ids: ['c', 'd'] },
             { kind: 'researchWaiting', count: 3 },
         ]);
+    });
+
+    it('counts places a repeated ancestor fills and never shows a generation without gaps', () => {
+        // Generation 3 knows 4 distinct people of 8, but pedigree collapse fills all 8 places.
+        expect(selectFocusCards({
+            validationErrors: 0, generations: [row(1, 2), row(2, 4), row(3, 4, [], 8)], ancestorBirthsNoSource: [], rememberers: [],
+        })).toEqual([]);
+        // A generation short of places but with nobody to attach the missing to (no gapIds) gives no card either.
+        expect(selectFocusCards({
+            validationErrors: 0, generations: [row(3, 4, [], 5)], ancestorBirthsNoSource: [], rememberers: [],
+        })).toEqual([]);
+        // Filled 5 of 8 is below three quarters: the card counts the missing places.
+        expect(selectFocusCards({
+            validationErrors: 0, generations: [row(3, 4, ['a'], 5)], ancestorBirthsNoSource: [], rememberers: [],
+        })).toEqual([{ kind: 'ancestorGap', count: 3, n: 3, known: 4, filled: 5, expected: 8, ids: ['a'] }]);
+    });
+
+    it('gives no gap card for a multiple pedigree collapse where no parent is missing', () => {
+        // Double first cousins: F's parents and M's parents are two pairs of siblings, so R has
+        // only 4 distinct great-grandparents (A1 ⚭ A2, B1 ⚭ B2), each at two places.
+        const t = new Tree()
+            .person('A1').person('A2', female).person('B1').person('B2', female)
+            .person('Pa').person('Pb', female).person('Qb').person('Qa', female)
+            .person('F').person('M', female).person('R')
+            .family('A1', 'A2', ['Pa', 'Qa'])
+            .family('B1', 'B2', ['Pb', 'Qb'])
+            .family('Pa', 'Pb', ['F'])
+            .family('Qb', 'Qa', ['M'])
+            .family('F', 'M', ['R']);
+        const a = ancestorGenerations(t.data(), id('R'));
+        expect(a.generations.map(g => [g.n, g.known, g.filled])).toEqual([[1, 2, 2], [2, 4, 4], [3, 4, 8]]);
+        expect(a.generations[2].gapIds).toEqual([]);
+        expect(selectFocusCards({
+            validationErrors: 0, generations: a.generations, ancestorBirthsNoSource: [], rememberers: [],
+        })).toEqual([]);
     });
 
     it('is empty when the tree is in good shape (and outside the research)', () => {

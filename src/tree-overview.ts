@@ -163,7 +163,15 @@ export interface AncestorGeneration {
     /** The ancestors of this generation, by name. */
     ids: PersonId[];
     /**
-     * The people one generation nearer (the root for n = 1) whose parents are
+     * The places of this generation (out of `expected`) a person in the tree
+     * holds, an ancestor who appears more than once counted at every place
+     * (pedigree collapse fills places without being a new person). At least
+     * `known`; what `expected − filled` is really missing.
+     */
+    filled: number;
+    /**
+     * The people standing one generation nearer (the root for n = 1; along
+     * any line, so a repeated ancestor counts at each depth) whose parents are
      * not both in the tree: where the missing people of this generation would
      * attach. By name. "Show in tree" of the "generation N: known K of E" card.
      */
@@ -219,8 +227,18 @@ export function ancestorGenerations(data: StromData, rootId: PersonId): Ancestor
     const deepest = Math.max(0, ...rows.keys());
     const generations: AncestorGeneration[] = [];
     const birthNoSource: PersonId[] = [];
-    let below: PersonId[] = [root.id];
+    // Places per depth: how many lines of length n lead from the root to each
+    // person. Bounded by `deepest`, so a parent loop (bad data) cannot run on.
+    let places = new Map<PersonId, number>([[root.id, 1]]);
     for (let n = 1; n <= deepest; n++) {
+        const next = new Map<PersonId, number>();
+        let filled = 0;
+        for (const [pid, count] of places) {
+            for (const { person } of bioParents(data, data.persons[pid])) {
+                next.set(person.id, (next.get(person.id) ?? 0) + count);
+                filled += count;
+            }
+        }
         const ids = (rows.get(n) ?? []).slice().sort(name);
         let proven = 0;
         for (const id of ids) {
@@ -228,9 +246,9 @@ export function ancestorGenerations(data: StromData, rootId: PersonId): Ancestor
             if (ev?.birthCited) proven++;
             if (ev && ev.hasBirth && !ev.birthCited) birthNoSource.push(id);
         }
-        const gapIds = below.filter(id => bioParents(data, data.persons[id]).length < 2).sort(name);
-        generations.push({ n, expected: 2 ** n, known: ids.length, proven, ids, gapIds });
-        below = ids;
+        const gapIds = [...places.keys()].filter(id => bioParents(data, data.persons[id]).length < 2).sort(name);
+        generations.push({ n, expected: 2 ** n, known: ids.length, filled: Math.min(filled, 2 ** n), proven, ids, gapIds });
+        places = next;
     }
 
     return {
@@ -409,9 +427,7 @@ export function rememberers(data: StromData, rootId: PersonId, currentYear: numb
                 if (!c || listed.has(c.id) || !isBioTie(c, parentId)) continue;
                 listed.add(c.id);
                 if (!inWindow(c)) continue;
-                const theirs = siblingParents(data, c);
-                const half = theirs.length !== parentsOfA.length || theirs.some(x => !parentsOfA.includes(x));
-                out.push(entry(c, 'sibling', id, half));
+                out.push(entry(c, 'sibling', id, isHalfSibling(data, a, c)));
             }
         }
     }
@@ -422,6 +438,34 @@ export function rememberers(data: StromData, rootId: PersonId, currentYear: numb
 /** The rememberers with at least one gap (the "Ask the family" card's count and highlight). */
 export function remembererGaps(list: readonly Rememberer[]): PersonId[] {
     return list.filter(r => r.missing.length > 0).map(r => r.id);
+}
+
+/**
+ * Whether a sibling of an ancestor is only a half sibling. Parents are matched
+ * by role (father / mother, parentSlots). Half when, in some role, both have a
+ * real (non-placeholder) parent and the two differ, or when in no role that
+ * both have recorded (a placeholder included) they share the parent. A parent
+ * missing on one side proves nothing: an ancestor with only a father recorded
+ * and a sibling with both parents are full siblings as far as the tree knows.
+ */
+function isHalfSibling(data: StromData, a: Person, c: Person): boolean {
+    const roles = (p: Person): [PersonId | null, PersonId | null] => {
+        const [father, mother] = parentSlots(siblingParents(data, p).map(pid => data.persons[pid]).slice(0, 2));
+        return [father?.id ?? null, mother?.id ?? null];
+    };
+    const ra = roles(a);
+    const rc = roles(c);
+    let bothRecorded = 0;
+    let shared = 0;
+    for (let i = 0; i < 2; i++) {
+        const x = ra[i];
+        const y = rc[i];
+        if (!x || !y) continue;
+        bothRecorded++;
+        if (x === y) { shared++; continue; }
+        if (realPerson(data, x) && realPerson(data, y)) return true;
+    }
+    return bothRecorded > 0 && shared === 0;
 }
 
 /** Biological or unspecified parents for sibling links, placeholders included (they stand for a shared parent). */
@@ -709,8 +753,12 @@ export const GENERATION_GAP_SHARE = 1 / 4;
 export type FocusCard =
     /** Validation errors → Fix (validation details). */
     | { kind: 'validation'; count: number }
-    /** The nearest ancestor generation missing more than a quarter: count = expected − known; ids = gapIds. */
-    | { kind: 'ancestorGap'; count: number; n: number; known: number; expected: number; ids: PersonId[] }
+    /**
+     * The nearest ancestor generation whose places are filled less than three
+     * quarters (repeated ancestors fill places too): count = expected − filled;
+     * ids = gapIds.
+     */
+    | { kind: 'ancestorGap'; count: number; n: number; known: number; filled: number; expected: number; ids: PersonId[] }
     /** Direct ancestors' births without a source. */
     | { kind: 'birthNoSource'; count: number; ids: PersonId[] }
     /** Rememberers with gaps (remembererGaps). */
@@ -733,19 +781,20 @@ export interface FocusCardInput {
 
 /**
  * The cards of "Where to focus", in the fixed order validation errors →
- * nearest ancestor generation missing more than a quarter (expected − known >
- * expected / 4) → direct ancestors' births without a source → rememberers →
+ * nearest ancestor generation with less than three quarters of its places
+ * filled (filled < 3/4 · expected, a generation without gapIds never) → direct ancestors' births without a source → rememberers →
  * research waiting; the first MAX_FOCUS_CARDS that apply. Empty: the tree is
  * in good shape (strings.treeOverview.goodShape).
  */
 export function selectFocusCards(input: FocusCardInput): FocusCard[] {
     const cards: FocusCard[] = [];
     if (input.validationErrors > 0) cards.push({ kind: 'validation', count: input.validationErrors });
-    const gap = input.generations.find(g => g.expected - g.known > g.expected * GENERATION_GAP_SHARE);
+    const gap = input.generations.find(g =>
+        g.gapIds.length > 0 && g.filled < g.expected * (1 - GENERATION_GAP_SHARE));
     if (gap) {
         cards.push({
-            kind: 'ancestorGap', count: gap.expected - gap.known, n: gap.n, known: gap.known, expected: gap.expected,
-            ids: [...gap.gapIds],
+            kind: 'ancestorGap', count: gap.expected - gap.filled, n: gap.n, known: gap.known, filled: gap.filled,
+            expected: gap.expected, ids: [...gap.gapIds],
         });
     }
     if (input.ancestorBirthsNoSource.length > 0) {

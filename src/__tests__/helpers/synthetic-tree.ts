@@ -80,7 +80,7 @@ export function syntheticTree(opts: SyntheticOptions = {}): SyntheticTree {
             if (x < 0.65) p.deathDate = date(died) ?? `${died}`;
             else if (x < 0.72) p.deathAge = infant && age === 0 ? 'kojenec' : `${age} let`;
             if (r() < 0.4) p.deathPlace = `Ves ${Math.floor(r() * 120)}`;
-            if (r() < 0.15) p.deathCause = pick(['souchotiny', 'psotník', 'sešlost věkem']);
+            if (r() < 0.15) p.deathCause = pick(['souchotiny', 'vodnatelnost', 'sešlost věkem']);
         }
         if (r() < 0.02) p.question = 'Kdy přesně zemřel(a)?';
         persons[id] = p;
