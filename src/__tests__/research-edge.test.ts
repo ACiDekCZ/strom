@@ -459,3 +459,14 @@ describe('words', () => {
         ]);
     });
 });
+
+describe('the pill of several families for a screen reader', () => {
+    it('Czech takes "z" or "ze" by how the number is read', () => {
+        const re = getStringsForLang('cs').researchEdge;
+        expect(re.familiesPillSr(2)).toBe('Tady možná navazuje jedna ze 2 rodin mimo strom. Vybrat');
+        expect(re.familiesPillSr(4)).toBe('Tady možná navazuje jedna ze 4 rodin mimo strom. Vybrat');
+        expect(re.familiesPillSr(5)).toBe('Tady možná navazuje jedna z 5 rodin mimo strom. Vybrat');
+        expect(re.familiesPillSr(7)).toBe('Tady možná navazuje jedna ze 7 rodin mimo strom. Vybrat');
+        expect(re.familiesPillSr(11)).toBe('Tady možná navazuje jedna z 11 rodin mimo strom. Vybrat');
+    });
+});

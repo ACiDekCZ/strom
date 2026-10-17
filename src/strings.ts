@@ -7551,7 +7551,7 @@ const stringsCZ: StringsType = {
         familyPill: (n: number) => `+ rodina · ${n}`,
         familyPillSr: (n: number) => `Tady možná navazuje rodina mimo strom, ${nCs(n, 'člověk', 'lidé', 'lidí')}. Ukázat ji`,
         familiesPill: (n: number) => `+ ${nCs(n, 'rodina', 'rodiny', 'rodin')}`,
-        familiesPillSr: (n: number) => `Tady možná navazuje jedna z ${n} rodin mimo strom. Vybrat`,
+        familiesPillSr: (n: number) => `Tady možná navazuje jedna ${zeCs(n)} ${n} rodin mimo strom. Vybrat`,
         possibleLinks: 'Možná napojení',
         versions: (ids: string[]) => `verze ${ids.join(', ')}`,
         islandCaption: (size: number, held: number) => ['mimo strom', `rodina ${nCs(size, 'člověk', 'lidé', 'lidí')}`, held > 0 ? `${nCs(held, 'úkol čeká', 'úkoly čekají', 'úkolů čeká')}` : ''].filter(Boolean).join(' · '),
