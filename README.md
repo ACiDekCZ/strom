@@ -20,7 +20,7 @@ Family tree application that runs entirely in your browser. No server required, 
 - Family, descendants-only and timeline view modes
 - Overview minimap for large trees; advanced search filters with in-tree highlighting
 - Relationship calculator ("second cousin once removed")
-- Family statistics charts; anniversaries panel and "on this day" reminders
+- Tree overview: where to focus, ancestors by generation and the four grandparent lines, age at death, data quality; anniversaries panel and "on this day" reminders
 - Responsive design (desktop, tablet, mobile — long-press action sheet on touch)
 - Light/dark theme
 
@@ -31,7 +31,7 @@ Family tree application that runs entirely in your browser. No server required, 
 
 **Tree Management**
 - Multiple trees in one app; rename, duplicate, delete
-- Smart merge with conflict resolution; validation; statistics
+- Smart merge with conflict resolution; validation; tree overview
 - Automatic versioned backups with one-click restore (time capsules)
 - Person and tree locking
 
