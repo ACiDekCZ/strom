@@ -186,6 +186,12 @@ test.describe('research edge', () => {
         await expect(rows).toHaveCount(2);
         await expect(rows.nth(0)).toHaveText('version A: Matouš Novák · family outside the tree, 2 people · 1 task waiting');
         await expect(rows.nth(1)).toHaveText('version B: Tomáš Novák · family outside the tree, 3 people · 2 tasks waiting');
+        // The links sit in their line, in the text's size.
+        const inline = (el: Element) => {
+            const s = getComputedStyle(el), p = getComputedStyle(el.parentElement!);
+            return `${s.paddingTop} ${s.paddingLeft} ${s.fontSize === p.fontSize}`;
+        };
+        expect(await rows.nth(0).locator('.reb-join').evaluate(inline)).toBe('0px 0px true');
         await rows.nth(1).locator('.reb-join').click();
         await expect.poll(focused).toBe('Tomáš');
         await expect(card(page, 'Tomáš').locator('.island-caption')).toHaveText('outside the tree · family of 3 · 2 tasks waiting');
@@ -210,6 +216,7 @@ test.describe('research edge', () => {
         await expect(metas.nth(0)).toHaveText('Possible link, version A: Matouš Novák · family outside the tree, 2 people · 1 task waiting');
         await expect(metas.nth(1)).toHaveText('Possible link, version B: Tomáš Novák · family outside the tree, 3 people · 2 tasks waiting');
         await expect(metas.nth(2)).toHaveText('Tested by T0002');
+        expect(await metas.nth(0).locator('.rep-join').evaluate(inline)).toBe('0px 0px true');
         await metas.nth(1).locator('.rep-join').click();
         await expect.poll(focused).toBe('Tomáš');
     });

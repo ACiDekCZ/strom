@@ -11678,6 +11678,9 @@
         .person-research-hypo-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
         .person-research-hypo-actions:empty { display: none; }
         .rep-hypo-go { padding: 0; font-weight: 600; text-align: left; }
+        /* The links to a family outside the tree: inline in their line, the text's size. */
+        .reb-hypo .reb-join, #research-edge-section .rep-join { padding: 0; min-height: 0; font-size: inherit; vertical-align: baseline; }
+        @media (pointer: coarse) { .reb-hypo .reb-join, #research-edge-section .rep-join { min-height: 44px; } }
         @media (max-width: 640px) {
             .person-research-variant { padding: 10px 12px; gap: 10px; }
             .view-link-switch__label { display: none; }
