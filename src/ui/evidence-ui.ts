@@ -28,12 +28,29 @@ import { uiModule } from './module.js';
 
 /** A highlighted group of people: what it is, who, and where Next › stands. */
 interface Highlight {
-    kind: EvidenceKind | EvidenceLevel | 'changed' | 'direction';
+    kind: EvidenceKind | EvidenceLevel | 'changed' | 'direction' | 'ancestorGap';
     label: string;
     ids: PersonId[];
     index: number;
     /** Recount after a change (null: a fixed group). */
     recount: (() => PersonId[]) | null;
+    /** A titled group ("Line ends: 41 people"): the title carries the count, the pill adds only "i / n" while stepping. */
+    title?: (n: number) => string;
+    /** Offer Cite on the current person (default: the groups without a (birth) source). */
+    cite?: boolean;
+    /** "Back to overview": ends the highlight and reopens where it was started from. */
+    returnTo?: () => void;
+}
+
+/** One group of people to highlight with the pill (the tree overview's cards and line ends). */
+export interface HighlightGroup {
+    kind: Highlight['kind'];
+    title: (n: number) => string;
+    personIds: PersonId[];
+    /** Recount after a change (null: a fixed group). */
+    recount: (() => PersonId[]) | null;
+    cite: boolean;
+    returnTo?: () => void;
 }
 
 /** The highlight being shown (null: none). */
@@ -139,6 +156,27 @@ export const evidenceUiMethods = uiModule({
         evidence = { kind, label, ids, index: -1, recount };
         TreeRenderer.setEvidenceLevels(null);
         TreeRenderer.setEvidenceHighlight(new Set(ids));
+        this.renderEvidencePill();
+    },
+
+    /**
+     * Highlight a titled group: the pill shows "{title}", "i / n" while
+     * stepping, Next ›, Cite (only when `cite`), "Back to overview" (with
+     * `returnTo`) and ×. Nobody in it: a toast.
+     */
+    highlightGroup(group: HighlightGroup): void {
+        this.listenForEvidenceChanges();
+        if (group.personIds.length === 0) {
+            this.showToast(strings.treeHealth.highlightDone, 4000);
+            return;
+        }
+        levelsMode = false;
+        evidence = {
+            kind: group.kind, label: group.title(group.personIds.length), ids: [...group.personIds], index: -1,
+            recount: group.recount, title: group.title, cite: group.cite, returnTo: group.returnTo,
+        };
+        TreeRenderer.setEvidenceLevels(null);
+        TreeRenderer.setEvidenceHighlight(new Set(evidence.ids));
         this.renderEvidencePill();
     },
 
@@ -264,12 +302,20 @@ export const evidenceUiMethods = uiModule({
                 pill.append(btn);
             }
         } else if (evidence) {
-            what.textContent = evidence.label;
             // While going through them: where you are ("3 / 16").
             const n = evidence.ids.length;
-            label.append(what, document.createTextNode(evidence.index >= 0 && evidence.index < n ? ` · ${evidence.index + 1} / ${n}` : ` · ${n}`));
+            const stepping = evidence.index >= 0 && evidence.index < n;
+            if (evidence.title) {
+                what.textContent = evidence.title(n);
+                label.append(what);
+                if (stepping) label.append(document.createTextNode(` · ${evidence.index + 1} / ${n}`));
+            } else {
+                what.textContent = evidence.label;
+                label.append(what, document.createTextNode(stepping ? ` · ${evidence.index + 1} / ${n}` : ` · ${n}`));
+            }
             pill.append(label);
         }
+        pill.classList.toggle('evidence-pill--back', !!evidence?.returnTo);
         if (evidence) {
             const next = document.createElement('button');
             next.type = 'button';
@@ -280,7 +326,8 @@ export const evidenceUiMethods = uiModule({
             // Going through the people without a (birth) source: cite right here.
             const current = evidence.index >= 0 ? evidence.ids[evidence.index] : undefined;
             const kind = evidence.kind;
-            if (current && (kind === 'birthNoSource' || kind === 'noSource') && this.canCiteOnPerson(current)) {
+            const citable = evidence.cite ?? (kind === 'birthNoSource' || kind === 'noSource');
+            if (current && citable && (kind === 'birthNoSource' || kind === 'noSource') && this.canCiteOnPerson(current)) {
                 const cite = document.createElement('button');
                 cite.type = 'button';
                 cite.className = 'evidence-pill-cite';
@@ -289,6 +336,18 @@ export const evidenceUiMethods = uiModule({
                     ? this.showSourcePickerForPersonFact(current, 'birth')
                     : this.showSourcePickerForPersonId(current, true));
                 pill.append(cite);
+            }
+            const returnTo = evidence.returnTo;
+            if (returnTo) {
+                const back = document.createElement('button');
+                back.type = 'button';
+                back.className = 'evidence-pill-back';
+                back.textContent = strings.treeOverview.back;
+                back.onclick = () => {
+                    this.endEvidenceHighlight();
+                    returnTo();
+                };
+                pill.append(back);
             }
         }
         const close = document.createElement('button');

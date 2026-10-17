@@ -869,6 +869,11 @@ export const miscMethods = uiModule({
 
                     // Dynamic overlays (built per-open): full close removes the
                     // element + its stack entry, not just the 'active' class.
+                    if (currentDialog === 'tree-overview-modal') {
+                        if (this.closeTreeOverviewPopover()) return;
+                        this.closeTreeOverview();
+                        return;
+                    }
                     if (currentDialog === 'archives-modal') {
                         this.closeArchiveSearch();
                         return;

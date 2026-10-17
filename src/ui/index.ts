@@ -84,6 +84,7 @@ import { researchUpdateMethods } from './research-update-ui.js';
 import { researchChangesMethods } from './research-changes-ui.js';
 import { batchMethods } from './batch-ui.js';
 import { evidenceUiMethods } from './evidence-ui.js';
+import { treeOverviewMethods } from './tree-overview.js';
 import { cardSignalsUiMethods } from './card-signals-ui.js';
 import { researchOverviewMethods } from './research-overview-ui.js';
 import { researchWaitingWriteMethods } from './research-waiting-write-ui.js';
@@ -579,6 +580,9 @@ Object.assign(UIClass.prototype, batchMethods);
 type EvidenceUiMethods = typeof evidenceUiMethods;
 export interface UIClass extends EvidenceUiMethods {}
 Object.assign(UIClass.prototype, evidenceUiMethods);
+type TreeOverviewMethods = typeof treeOverviewMethods;
+export interface UIClass extends TreeOverviewMethods {}
+Object.assign(UIClass.prototype, treeOverviewMethods);
 
 type CardSignalsUiMethods = typeof cardSignalsUiMethods;
 export interface UIClass extends CardSignalsUiMethods {}

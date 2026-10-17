@@ -10,7 +10,7 @@ import {
     ancestorGenerations, grandparentLines, lineEndIds, rememberers, remembererGaps, deathAgeOf, deathAgeSummary,
     relativeGenerations, adultDeathAgeByGeneration, childrenPerCoupleByGeneration, ancestorGenerationName,
     descendantGenerationName, relativeGenerationName, overviewHeader, selectFocusCards, hasEnoughSample, MIN_SAMPLE,
-    AncestorGeneration,
+    AncestorGeneration, ancestorGenerationLabel, focusBirthNoSource,
 } from '../tree-overview.js';
 import { computeFamilyStats, computeEvidenceGaps } from '../stats.js';
 import { setLanguage } from '../strings.js';
@@ -558,5 +558,36 @@ describe('selectFocusCards', () => {
         expect(selectFocusCards({
             validationErrors: 0, generations: [], ancestorBirthsNoSource: [], rememberers: [], researchWaiting: 0,
         })).toEqual([]);
+    });
+});
+
+describe('ancestorGenerationLabel', () => {
+    it('names ancestor, own and descendant generations in both forms and all languages', () => {
+        expect([1, 2, 3, 4, 5].map(n => ancestorGenerationLabel(n, 'cs'))).toEqual([
+            'rodiče', 'prarodiče', 'praprarodiče', '4. generace předků', '5. generace předků',
+        ]);
+        expect([1, 2, 3, 4].map(n => ancestorGenerationLabel(n, 'cs', 'of'))).toEqual([
+            'generace rodičů', 'generace prarodičů', 'generace praprarodičů', '4. generace předků',
+        ]);
+        expect([-1, -2, -3, -4].map(n => ancestorGenerationLabel(n, 'cs', 'of'))).toEqual([
+            'generace dětí', 'generace vnuků', 'generace pravnuků', '4. generace potomků',
+        ]);
+        expect(ancestorGenerationLabel(0, 'cs', 'of')).toBe('generace osoby');
+        expect([1, 3, 4, 5].map(n => ancestorGenerationLabel(n, 'en'))).toEqual([
+            'parents', 'great-grandparents', '2nd great-grandparents', '3rd great-grandparents',
+        ]);
+        expect(ancestorGenerationLabel(-2, 'en')).toBe('grandchildren');
+        expect([4, 5].map(n => ancestorGenerationLabel(n, 'de'))).toEqual(['Ururgroßeltern', '5. Ahnengeneration']);
+        expect(ancestorGenerationLabel(-1, 'de', 'of')).toBe('Generation der Kinder');
+    });
+});
+
+describe('focusBirthNoSource', () => {
+    it('keeps the direct ancestors of generations 1 to 4 only', () => {
+        // Ggf (generation 4) has a cited birth; give a deeper ancestor an uncited one.
+        const t = cousinMarriage().person('Gggf', { birthDate: '1710' }).family('Gggf', null, ['Ggf']);
+        const a = ancestorGenerations(t.data(), id('R'));
+        expect(a.birthNoSource).toContain('Gggf');
+        expect(focusBirthNoSource(a)).toEqual(['S1', 'S2', 'Gm']);
     });
 });

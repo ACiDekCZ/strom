@@ -27,7 +27,7 @@ import { personEvidence, unionsByPerson } from './evidence-level.js';
 import { isLivingPerson, inferBirthUpperBounds } from './privacy.js';
 import { readRecordedAge, ageBirthDate } from './recorded-age.js';
 import { findComponents } from './components.js';
-import { strings } from './strings.js';
+import { strings, getStringsForLang, Language } from './strings.js';
 
 // ==================== shared helpers ====================
 
@@ -690,6 +690,19 @@ export function relativeGenerationName(offset: number): string {
     return strings.treeOverview.sameGeneration;
 }
 
+/**
+ * A generation relative to a person, in a language: n > 0 ancestors (1 =
+ * parents), n < 0 descendants (−1 = children), 0 the person's own.
+ * 'plural' names the people ("grandparents"), 'of' the generation as a whole
+ * ("grandparents' generation"). The one name every overview section uses.
+ */
+export function ancestorGenerationLabel(n: number, lang: Language, form: 'plural' | 'of' = 'plural'): string {
+    const t = getStringsForLang(lang).treeOverview;
+    if (n > 0) return form === 'of' ? t.ancestorGenerationOf(n) : t.ancestorGeneration(n);
+    if (n < 0) return form === 'of' ? t.descendantGenerationOf(-n) : t.descendantGeneration(-n);
+    return form === 'of' ? t.sameGenerationOf : t.sameGeneration;
+}
+
 // ==================== 7. header (unified definitions) ====================
 
 export interface OverviewHeader {
@@ -746,6 +759,14 @@ export function overviewHeader(data: StromData): OverviewHeader {
 
 /** At most this many cards in "Where to focus". */
 export const MAX_FOCUS_CARDS = 3;
+
+/** The "births without a documented birth" card looks at the direct ancestors up to this generation. */
+export const FOCUS_BIRTH_GENERATIONS = 4;
+
+/** The direct ancestors of generations 1…FOCUS_BIRTH_GENERATIONS whose birth no source cites (the card's people). */
+export function focusBirthNoSource(overview: AncestorOverview): PersonId[] {
+    return overview.birthNoSource.filter(id => (overview.generationOf.get(id) ?? Infinity) <= FOCUS_BIRTH_GENERATIONS);
+}
 
 /** A generation counts as a gap when more than this share of its places is missing. */
 export const GENERATION_GAP_SHARE = 1 / 4;
