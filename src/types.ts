@@ -373,6 +373,13 @@ export interface Person {
      * surname. Search and merge matching find the person under both.
      */
     marriedSurname?: string;
+    /**
+     * The married surname the person editor suggested (from the husband's
+     * surname) and the user hid with ×: that suggestion is not offered again;
+     * a different one (another husband, his surname changed) is. App-local:
+     * never exported to GEDCOM nor sent to the research.
+     */
+    dismissedMarriedSuggestion?: string;
     gender: Gender;
     isPlaceholder: boolean;
     partnerships: PartnershipId[];
@@ -891,6 +898,7 @@ export function partnershipParticipants(u: Pick<Partnership, 'participants' | 'e
  * so it keeps the titles on a re-save; it only shows the name without them.
  * Person.marriedSurname (3.13) likewise came without a bump: an older app keeps
  * it on a re-save and reads the married name as another spelling meanwhile.
+ * Person.dismissedMarriedSuggestion (3.13, app-local) the same way.
  * v12 (2026-10): Gender 'unknown' (GEDCOM SEX U, or no SEX): a sex the records
  *   do not give, no longer guessed from the family role (or female). Older
  *   data keeps its male/female; a missing or invalid gender reads as unknown

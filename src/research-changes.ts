@@ -28,7 +28,8 @@ const BIRTH_FIELDS: (keyof Person)[] = ['birthDate', 'birthPlace', 'birthAddress
 const DEATH_FIELDS: (keyof Person)[] = ['deathDate', 'deathPlace', 'deathCause', 'deathAge', 'deathAddress', 'isDeceased'];
 const CITATION_FIELDS: (keyof Person)[] = ['sourceIds', 'birthSourceIds', 'deathSourceIds'];
 /** Not the user's: the research's own knowledge and statuses, and what the app keeps for itself. */
-const IGNORED_FIELDS = new Set<string>(['research', 'birthStatus', 'deathStatus', 'photoOriginalName', 'partnerships', 'childIds', 'isLocked']);
+const IGNORED_FIELDS = new Set<string>(['research', 'birthStatus', 'deathStatus', 'photoOriginalName', 'partnerships', 'childIds', 'isLocked',
+    'dismissedMarriedSuggestion']);
 const MARRIAGE_FIELDS: (keyof Partnership)[] = ['status', 'startDate', 'startPlace', 'endDate', 'endPlace', 'address', 'ages', 'note'];
 
 /** JSON with sorted keys and images reduced to their length (two copies of one tree compare equal). */
@@ -229,7 +230,9 @@ export interface ValueDiff {
     /**
      * Of those, the values it puts into a field of a person here that is
      * empty here (a deleted date coming back), one each as a row would say
-     * it (`here` empty) — counted in addedFacts, never listed as rows.
+     * it (`here` empty) — counted in addedFacts, never listed as rows. A
+     * married surname is the exception: it changes the name on the card, so
+     * it comes as a row with `here` empty, not here.
      */
     filled: ValueChange[];
 }
@@ -314,7 +317,10 @@ export function diffValues(here: StromData, there: StromData): ValueDiff {
     const field = (p: Person, f: ValueField, a: string, b: string, extra: Partial<ValueChange> = {}): void => {
         if (a === b) return;
         const row: ValueChange = { personId: p.id, name: fullName(p), field: f, here: a, there: b, ...extra };
-        if (!a) {
+        // A married surname coming into an empty field changes the name the
+        // card shows (emptied in the app, the research still has it): said
+        // as a row ("– → Nováková"), not counted among the added facts.
+        if (!a && f !== 'marriedSurname') {
             addedFacts++;
             filled.push(row);
             return;

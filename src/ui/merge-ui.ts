@@ -42,7 +42,7 @@ import { validateTreeData, ValidationResult as TreeValidationResult, ValidationI
 import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
-import { shownNameOrEmpty } from '../person-name.js';
+import { shownNameOrEmpty, fitNameHtml } from '../person-name.js';
 
 export const mergeUiMethods = uiModule({
     // ---- PENDING MERGES ----
@@ -210,8 +210,7 @@ export const mergeUiMethods = uiModule({
 
         // Show keep person info
         const birthYear = person.birthDate?.split('-')[0] || '';
-        const name = shownNameOrEmpty(person);
-        keepDisplay.textContent = birthYear ? `${name} (*${birthYear})` : name;
+        keepDisplay.innerHTML = fitNameHtml(person, shownNameOrEmpty(person), birthYear ? `(*${birthYear})` : '');
 
         // Hide sections initially
         if (previewSection) previewSection.style.display = 'none';
@@ -272,8 +271,7 @@ export const mergeUiMethods = uiModule({
         // Show other person info
         if (otherDisplay) {
             const birthYear = otherPerson.birthDate?.split('-')[0] || '';
-            const name = shownNameOrEmpty(otherPerson);
-            otherDisplay.textContent = birthYear ? `${name} (*${birthYear})` : name;
+            otherDisplay.innerHTML = fitNameHtml(otherPerson, shownNameOrEmpty(otherPerson), birthYear ? `(*${birthYear})` : '');
         }
 
         // Show delete warning

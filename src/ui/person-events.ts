@@ -23,7 +23,7 @@ import { uiModule } from './module.js';
 import { factStatusHtml } from './fact-status.js';
 import { autoGrowAll } from './autogrow.js';
 import { DETAIL_KEYS, offeredDetails, refreshDetailGroup, resetDetailGroup, renderAgeCheck, ageBirthDate, eventDetailLine } from './event-details-ui.js';
-import { shownNameOrEmpty } from '../person-name.js';
+import { shownNameOrEmpty, fitNameHtml } from '../person-name.js';
 
 /** HTML-escape a user string for safe innerHTML insertion. */
 function esc(text: string): string {
@@ -138,20 +138,21 @@ export const personEventsMethods = uiModule({
      * locked person) rendered without edit/delete actions.
      */
     /**
-     * "Godparent: Marie Dvořáková · Witness: Josef Krátký" — the point of
+     * "Godparent: Marie Dvořáková · Witness: Josef Krátký" (HTML) — the point of
      * recording them is seeing them, and reopening the editor to find out who
      * stood at a baptism defeats it.
      */
     participantsSummary(event: LifeEvent): string {
         return (event.participants ?? []).map(p => {
             const person = p.personId ? DataManager.getPerson(p.personId) : null;
-            const name = person ? shownNameOrEmpty(person) : (p.name ?? '');
+            const name = person ? fitNameHtml(person, shownNameOrEmpty(person)) : esc(p.name ?? '');
             const extra = extraParticipantRole(p);
-            return `${extra ? strings.events.extraRoles[extra.role] : strings.events.roles[p.role]}: ${name}`;
+            return `${esc(`${extra ? strings.events.extraRoles[extra.role] : strings.events.roles[p.role]}: `)}${name}`;
         }).join('  ·  ');
     },
 
-    eventRowHtml(typeLabel: string, meta: string, eventId: string | null, participants = '', details = '', status?: FactStatus): string {
+    /** `participantsHtml`: participantsSummary's HTML (escaped already). */
+    eventRowHtml(typeLabel: string, meta: string, eventId: string | null, participantsHtml = '', details = '', status?: FactStatus): string {
         const actions = eventId === null ? '' : `
             <div class="event-actions">
                 <button type="button" class="event-edit-btn" title="${esc(strings.events.edit)}" aria-label="${esc(strings.events.edit)}"
@@ -160,8 +161,8 @@ export const personEventsMethods = uiModule({
                     data-event-id="${esc(eventId)}">${iconSvg('trash')}</button>
             </div>`;
         const metaHtml = meta ? `<span class="event-meta"> — ${esc(meta)}</span>` : '';
-        const peopleHtml = participants
-            ? `<div class="event-participants">${esc(participants)}</div>` : '';
+        const peopleHtml = participantsHtml
+            ? `<div class="event-participants">${participantsHtml}</div>` : '';
         // Cause · age · house, quietly under the event (src/ui/event-details-ui.ts).
         const detailsHtml = details ? `<div class="event-details-line">${esc(details)}</div>` : '';
         return `

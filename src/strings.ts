@@ -743,6 +743,17 @@ const stringsEN = {
         birthAbbr: 'née',
     },
 
+    // The person editor's married surname (Person.marriedSurname) and its suggestion from the husband's surname.
+    person: {
+        marriedSurname: 'Married surname',
+        addMarriedSurname: '+ married surname',
+        suggestion: (surname: string) => `Suggestion: ${surname}`,
+        suggestionSource: (name: string) => `from husband’s surname ${name}`,
+        suggestionOtherForm: 'also among other name forms',
+        useSuggestion: 'Use',
+        dismissSuggestion: 'Hide suggestion',
+    },
+
     titles: {
         settingLabel: 'Show titles',
         settingHint: 'Titles before and after names (Dr., Jr.) on cards and in lists',
@@ -4673,6 +4684,17 @@ const stringsCZ: StringsType = {
         birthAbbr: 'roz.',
     },
 
+    // Příjmení po sňatku v editoru osoby (Person.marriedSurname) a návrh z příjmení manžela.
+    person: {
+        marriedSurname: 'Příjmení po sňatku',
+        addMarriedSurname: '+ příjmení po sňatku',
+        suggestion: (surname: string) => `Návrh: ${surname}`,
+        suggestionSource: (name: string) => `z příjmení manžela ${name}`,
+        suggestionOtherForm: 'i v Jiných tvarech jména',
+        useSuggestion: 'Použít',
+        dismissSuggestion: 'Skrýt návrh',
+    },
+
     titles: {
         settingLabel: 'Zobrazovat tituly',
         settingHint: 'Tituly před jménem a za ním (Ing., ml.) na kartách a v seznamech',
@@ -8581,6 +8603,17 @@ const stringsDE: StringsType = {
     // Geburtsname nach dem Ehenamen: „Anna Müller (geb. Schmidt)“.
     name: {
         birthAbbr: 'geb.',
+    },
+
+    // Der Ehename im Personeneditor (Person.marriedSurname) und sein Vorschlag aus dem Nachnamen des Ehemanns.
+    person: {
+        marriedSurname: 'Ehename',
+        addMarriedSurname: '+ Ehename',
+        suggestion: (surname: string) => `Vorschlag: ${surname}`,
+        suggestionSource: (name: string) => `aus dem Nachnamen des Ehemanns ${name}`,
+        suggestionOtherForm: 'auch unter weiteren Namensformen',
+        useSuggestion: 'Übernehmen',
+        dismissSuggestion: 'Vorschlag ausblenden',
     },
 
     titles: {

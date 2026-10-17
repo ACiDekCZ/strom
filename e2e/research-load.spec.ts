@@ -85,4 +85,27 @@ test.describe('loading the research version', () => {
         await dialog(page).locator('#research-load-ok').click();
         await expect.poll(() => head(page)).toBe(NEW_HEAD);
     });
+
+    test('a married surname the research\'s version has and the tree here not: a row "– → Novák", not an added fact', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await page.clock.install();
+        await openResearch(page);
+        const bridge = await fakeBridge(page, { accepts: ACCEPTS });
+        await poll(page);
+        bridge.head = NEW_HEAD;
+        // Jan's record (the last before the family) gets the married NAME.
+        bridge.treeGed = researchGed(NEW_HEAD, ['1 NAME Jan /Novák/', '2 TYPE married']);
+        await poll(page);
+        await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+        await expect(dialog(page)).toBeVisible();
+        const row = dialog(page).locator('tbody tr', { hasText: 'Married surname' });
+        await expect(row).toHaveCount(1);
+        await expect(row).toContainText('Jan Víšek');
+        await expect(row.locator('.research-load-here')).toHaveText('–');
+        await expect(row.locator('.research-load-there')).toHaveText('Novák');
+        await expect(dialog(page).locator('.research-load-added')).toHaveCount(0);
+        await dialog(page).locator('#research-load-ok').click();
+        await expect.poll(() => head(page)).toBe(NEW_HEAD);
+        expect(await page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons) as any[]).find(p => p.firstName === 'Jan').marriedSurname)).toBe('Novák');
+    });
 });

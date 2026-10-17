@@ -60,7 +60,7 @@ import { sourceReadings, researchSendVouches, conflictTakeovers, heldConflicts }
 import { currentAppBrowser, appBrowserName } from '../research-transfer.js';
 import { localNetworkStatus } from '../local-network.js';
 import { pendingAdopt } from './pending-adopt.js';
-import { shownNameOrEmpty } from '../person-name.js';
+import { shownNameOrEmpty, fitNameHtml } from '../person-name.js';
 
 /** What a research open needs to know from the file (or the bridge). */
 export interface ResearchSource {
@@ -2608,6 +2608,7 @@ export const researchUiMethods = uiModule({
             if (person) {
                 li.appendChild(document.createTextNode(' · '));
                 const link = el('button', 'live-person-link live-working__person', shownNameOrEmpty(person) || r.showInTree);
+                if (shownNameOrEmpty(person)) link.innerHTML = fitNameHtml(person, shownNameOrEmpty(person));
                 link.type = 'button';
                 link.title = r.showInTree;
                 link.onclick = () => this.overviewShowPerson(person.id, 'docked');

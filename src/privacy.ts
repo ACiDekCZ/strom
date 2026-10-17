@@ -300,6 +300,8 @@ function stripDetails(person: Person): void {
     delete person.titleAfter;
     // The surname after marriage is the name a living woman goes by today.
     delete person.marriedSurname;
+    // …and the one the editor suggested from the husband's surname.
+    delete person.dismissedMarriedSuggestion;
     delete person.question;
     delete person.refn;
     delete person.refnType;

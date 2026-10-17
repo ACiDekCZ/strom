@@ -35,7 +35,7 @@ import {
 import { storyWaitingPeople } from './story-compare-ui.js';
 import { taskDirectionName } from './research-directions-ui.js';
 import { conflictValueSaid, researchValueText } from './person-research-ui.js';
-import { shownName } from '../person-name.js';
+import { shownName, fitNameHtml } from '../person-name.js';
 import { isOpenHypothesis } from '../view-links.js';
 
 /** The overview stays open over a reload / the next following (per device). */
@@ -640,7 +640,8 @@ export const researchOverviewMethods = uiModule({
         const meta = el('div', 'research-overview__waiting-meta');
         const person = personByRefn(w.person);
         if (person) {
-            const link = el('button', 'live-person-link', fullName(person));
+            const link = el('button', 'live-person-link');
+            link.innerHTML = fitNameHtml(person, fullName(person));
             link.type = 'button';
             link.onclick = () => this.overviewShowPerson(person.id, mode);
             meta.appendChild(link);

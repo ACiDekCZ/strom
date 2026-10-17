@@ -47,7 +47,7 @@ import {
     listMergeSessionsInfo,
     hasPendingMerges
 } from './persistence.js';
-import { shownNameOrEmpty } from '../person-name.js';
+import { shownNameOrEmpty, fitNameHtml } from '../person-name.js';
 
 // Auto-save debounce delay (ms)
 const AUTO_SAVE_DELAY = 2000;
@@ -732,8 +732,8 @@ class MergerUIClass {
         const confidenceTooltip = this.getConfidenceTooltip(match.confidence);
 
         // Format person info
-        const existingInfo = this.formatPersonInfo(match.existingPerson);
-        const incomingInfo = this.formatPersonInfo(match.incomingPerson);
+        const existingInfo = this.formatPersonInfoHtml(match.existingPerson);
+        const incomingInfo = this.formatPersonInfoHtml(match.incomingPerson);
 
         // Match reasons
         const reasonsText = match.reasons
@@ -764,7 +764,7 @@ class MergerUIClass {
                         ${statusSymbol}
                     </span>
                     <span class="merge-item-names">
-                        ${this.escapeHtml(existingInfo)} ↔ ${this.escapeHtml(incomingInfo)}
+                        ${existingInfo} ↔ ${incomingInfo}
                     </span>
                     ${conflictIndicator}
                     <span class="merge-item-score confidence-${confidenceClass}" title="${confidenceTooltip}">
@@ -799,7 +799,7 @@ class MergerUIClass {
      * Render unmatched item
      */
     private renderUnmatchedItem(person: Person, personId: PersonId, index: number): string {
-        const info = this.formatPersonInfo(person);
+        const info = this.formatPersonInfoHtml(person);
         const isSkipped = this.mergeState?.decisions.get(personId)?.type === 'skip';
 
         // In updateOnly mode every unmatched person is left out anyway; the badge
@@ -814,7 +814,7 @@ class MergerUIClass {
                 <div class="merge-item-header">
                     <span class="merge-item-status ${isSkipped ? 'skipped' : 'new'}">${isSkipped ? '⊘' : '+'}</span>
                     <span class="merge-item-names">
-                        ${this.escapeHtml(info)}
+                        ${info}
                     </span>
                     ${badge}
                 </div>
@@ -863,6 +863,12 @@ class MergerUIClass {
         const name = shownNameOrEmpty(person);
         const year = person.birthDate?.split('-')[0] || '';
         return year ? `${name} (*${year})` : name;
+    }
+
+    /** formatPersonInfo as HTML for a list row: a married surname's birth note shortens to fit. */
+    private formatPersonInfoHtml(person: Person): string {
+        const year = person.birthDate?.split('-')[0] || '';
+        return fitNameHtml(person, shownNameOrEmpty(person), year ? `(*${year})` : '');
     }
 
     /**

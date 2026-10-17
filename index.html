@@ -4153,6 +4153,94 @@
         }
         .age-check strong { font-weight: 600; }
         .age-check--warn { color: var(--warning-text); }
+        /* "+ title" and "+ married surname" side by side under the name. */
+        .detail-group .detail-links { display: flex; flex-wrap: wrap; column-gap: 16px; }
+        .detail-group .married-surname-more {
+            display: inline-block;
+            background: none;
+            border: none;
+            padding: 2px 0;
+            margin: -4px 0 12px;
+            min-height: 0;
+            font: inherit;
+            font-size: 13px;
+            color: var(--primary);
+            text-decoration: underline dotted;
+            text-underline-offset: 3px;
+            cursor: pointer;
+            box-shadow: none;
+        }
+        .detail-group .married-surname-more[hidden],
+        .married-surname-row[hidden],
+        .married-suggestion[hidden] { display: none !important; }
+        @media (hover: hover) { .detail-group .married-surname-more:hover { color: var(--primary-dark); background: none; } }
+        .married-surname-row { margin-bottom: 12px; }
+        /* The suggestion from the husband's surname: a quiet chip under the
+           empty field, never a placeholder (that would read as a value). */
+        .married-suggestion {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 6px;
+            padding: 6px 4px 6px 12px;
+            background: var(--surface-2);
+            border: 1px dashed var(--line-color);
+            border-radius: 8px;
+        }
+        .married-suggestion-text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+        .married-suggestion-main { font-size: 13.5px; color: var(--text); }
+        .married-suggestion-main strong { font-weight: 600; }
+        .married-suggestion-source { font-size: 12px; line-height: 1.35; color: var(--text-light); text-wrap: pretty; }
+        .married-suggestion .married-suggestion-use {
+            flex: none;
+            height: 32px;
+            min-height: 0;
+            padding: 0 12px;
+            border: 1px solid var(--primary);
+            border-radius: 7px;
+            background: var(--surface);
+            color: var(--primary);
+            font: inherit;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            box-shadow: none;
+        }
+        .married-suggestion .married-suggestion-dismiss {
+            flex: none;
+            width: 32px;
+            height: 32px;
+            min-height: 0;
+            padding: 0;
+            border: none;
+            border-radius: 7px;
+            background: none;
+            color: var(--text-light);
+            font-size: 17px;
+            line-height: 1;
+            cursor: pointer;
+            box-shadow: none;
+        }
+        @media (hover: hover) {
+            .married-suggestion .married-suggestion-use:hover { background: var(--primary-soft); }
+            .married-suggestion .married-suggestion-dismiss:hover { background: var(--hover-bg); color: var(--text); }
+        }
+        @media (pointer: coarse) {
+            .married-suggestion .married-suggestion-use { height: 44px; padding: 0 14px; font-size: 14px; }
+            .married-suggestion .married-suggestion-dismiss { width: 44px; height: 44px; font-size: 19px; }
+            .detail-group .married-surname-more { min-height: 44px; }
+        }
+        @media (max-width: 640px) {
+            .married-suggestion { padding: 4px 4px 4px 12px; gap: 8px; }
+            .married-suggestion .married-suggestion-use { height: 44px; padding: 0 14px; font-size: 14px; }
+            .married-suggestion .married-suggestion-dismiss { width: 44px; height: 44px; font-size: 19px; }
+            /* A tap target, like "+ title" beside it. */
+            .detail-group .married-surname-more { min-height: 44px; margin: -8px 0 4px; }
+        }
+        /* Phone (upright or sideways): a 44px field, 16px text so iOS does not zoom in. */
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            #input-married-surname { min-height: 44px; font-size: 16px; }
+        }
         /* The two titles are short: side by side on every screen, the phone too. */
         .detail-group .name-titles { grid-template-columns: 1fr 1fr; }
         @media (max-width: 640px) {
@@ -14501,8 +14589,27 @@
                     </div>
                 </div>
                 <!-- Titles of the name ("Ing.", "ml."): shown when filled, otherwise
-                     behind the quiet "+ title" link (src/ui/event-details-ui.ts). -->
+                     behind the quiet "+ title" link (src/ui/event-details-ui.ts).
+                     The surname after marriage sits right under the surname: always
+                     there for a woman with a union or when filled, otherwise behind
+                     "+ married surname" beside "+ title"; under it the suggestion
+                     from the husband's surname (src/ui/person-modal.ts). -->
                 <div class="detail-group" id="name-details">
+                    <div class="form-grid married-surname-row" id="married-surname-row" hidden>
+                        <div class="detail-spacer"></div>
+                        <div class="form-group">
+                            <label for="input-married-surname" data-i18n="person.marriedSurname"></label>
+                            <input type="text" id="input-married-surname" autocomplete="off">
+                            <div class="married-suggestion" id="married-suggestion" hidden>
+                                <div class="married-suggestion-text">
+                                    <span class="married-suggestion-main" id="married-suggestion-main"></span>
+                                    <span class="married-suggestion-source" id="married-suggestion-source"></span>
+                                </div>
+                                <button type="button" class="married-suggestion-use" id="married-suggestion-use" data-i18n="person.useSuggestion"></button>
+                                <button type="button" class="married-suggestion-dismiss" id="married-suggestion-dismiss" data-i18n-title="person.dismissSuggestion" data-i18n-aria-label="person.dismissSuggestion">&times;</button>
+                            </div>
+                        </div>
+                    </div>
                     <div class="form-grid detail-field name-titles" data-detail="title">
                         <div class="form-group">
                             <label for="input-title-before" data-i18n="labels.titleBefore"></label>
@@ -14513,7 +14620,10 @@
                             <input type="text" id="input-title-after" data-i18n-placeholder="placeholders.titleAfter" autocomplete="off">
                         </div>
                     </div>
-                    <button type="button" class="detail-more" hidden></button>
+                    <div class="detail-links">
+                        <button type="button" class="detail-more" hidden></button>
+                        <button type="button" class="married-surname-more" id="married-surname-more" hidden data-i18n="person.addMarriedSurname"></button>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label data-i18n="labels.gender"></label>

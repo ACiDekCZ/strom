@@ -183,6 +183,10 @@ export function migrateData(data: unknown): StromData {
             && (typeof person.marriedSurname !== 'string' || !person.marriedSurname.trim())) {
             delete person.marriedSurname;
         }
+        if (person && typeof person === 'object' && 'dismissedMarriedSuggestion' in person
+            && (typeof person.dismissedMarriedSuggestion !== 'string' || !person.dismissedMarriedSuggestion.trim())) {
+            delete person.dismissedMarriedSuggestion;
+        }
     }
     // Preserve the source catalog if present.
     if (d.sources && typeof d.sources === 'object') {
@@ -1833,6 +1837,11 @@ class DataManagerClass {
         for (const key of ['titleBefore', 'titleAfter', 'marriedSurname'] as const) {
             const v = updates[key];
             if (v !== undefined) person[key] = v.trim() || undefined;
+        }
+        // The married-surname suggestion hidden in the editor (app-local, no
+        // audit line: it is not a fact about the person).
+        if (updates.dismissedMarriedSuggestion !== undefined) {
+            person.dismissedMarriedSuggestion = updates.dismissedMarriedSuggestion.trim() || undefined;
         }
 
         // Extended info

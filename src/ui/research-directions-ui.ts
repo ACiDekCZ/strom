@@ -15,7 +15,7 @@ import { Person, PersonId } from '../types.js';
 import { LiveDirection, LiveDirectionKind, LiveWorker, ResearchDirectionDo } from '../research-link.js';
 import { uiModule } from './module.js';
 import { LiveSession, el, liveSection, liveSession } from './research-ui.js';
-import { shownName } from '../person-name.js';
+import { shownName, fitNameHtml } from '../person-name.js';
 
 type Mode = 'docked' | 'overlay' | 'sheet';
 
@@ -205,7 +205,8 @@ export const researchDirectionsMethods = uiModule({
         } else {
             const focus = personByRefn(d.focus);
             if (focus) {
-                const link = el('button', 'live-person-link', fullName(focus));
+                const link = el('button', 'live-person-link');
+                link.innerHTML = fitNameHtml(focus, fullName(focus));
                 link.type = 'button';
                 link.onclick = () => this.overviewShowPerson(focus.id, mode);
                 meta.appendChild(link);
@@ -264,7 +265,8 @@ export const researchDirectionsMethods = uiModule({
             meta.appendChild(el('span', 'research-direction__task', w.task || w.who));
             const person = personByRefn(w.person);
             if (person) {
-                const link = el('button', 'live-person-link', fullName(person));
+                const link = el('button', 'live-person-link');
+                link.innerHTML = fitNameHtml(person, fullName(person));
                 link.type = 'button';
                 link.title = L.showInTree;
                 link.onclick = () => this.overviewShowPerson(person.id, mode);

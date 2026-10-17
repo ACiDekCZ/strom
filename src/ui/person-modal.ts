@@ -51,7 +51,8 @@ import { validateTreeData, ValidationResult as TreeValidationResult, ValidationI
 import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
-import { isMobile, MQ_MOBILE } from '../breakpoints.js';
+import { isMobile, isPhoneBar, MQ_MOBILE } from '../breakpoints.js';
+import { suggestMarriedSurname, MarriedSurnameSuggestion } from '../married-suggestion.js';
 import { isValidDateInput, normalizeDateInput, formatDateForInput } from '../dates.js';
 import { autoGrowAll } from './autogrow.js';
 import { computePersonLifeline, LifelinePoint } from '../timeline.js';
@@ -81,8 +82,18 @@ function placePersonDeleteLink(): void {
     }
 }
 
+/** The nearest ancestor that scrolls its content (the dialog's body), or null. */
+function scrollParentOf(el: HTMLElement): HTMLElement | null {
+    for (let node = el.parentElement; node; node = node.parentElement) {
+        const overflow = getComputedStyle(node).overflowY;
+        if ((overflow === 'auto' || overflow === 'scroll') && node.scrollHeight > node.clientHeight) return node;
+    }
+    return null;
+}
+
 /** The person dialog's detail inputs and the Person fields they edit. */
 const PERSON_DETAIL_FIELDS = [
+    ['input-married-surname', 'marriedSurname'],
     ['input-title-before', 'titleBefore'],
     ['input-title-after', 'titleAfter'],
     ['input-birth-address', 'birthAddress'],
@@ -202,7 +213,7 @@ export const personModalMethods = uiModule({
         this.initDuplicateSuggest('person');
 
         // Setup Enter as Tab for form fields
-        this.setupEnterAsTab('person-modal', ['input-firstname', 'input-lastname', 'input-gender', 'input-birthdate', 'input-birthplace', 'input-deathdate', 'input-deathplace'], () => this.savePerson());
+        this.setupEnterAsTab('person-modal', ['input-firstname', 'input-lastname', 'input-married-surname', 'input-gender', 'input-birthdate', 'input-birthplace', 'input-deathdate', 'input-deathplace'], () => this.savePerson());
     },
 
     /**
@@ -281,6 +292,8 @@ export const personModalMethods = uiModule({
             }
             // Keep the Male/Female segment and the header avatar ring in step.
             this.syncGenderSegment();
+            // A woman with a union has the married surname at hand (and maybe its suggestion).
+            this.refreshMarriedSurname();
         };
 
         genderSelect.onchange = updateLastnameLabel;
@@ -815,7 +828,7 @@ export const personModalMethods = uiModule({
         if (!DataManager.isPersonLocked(id)) firstNameInput.focus();
 
         // Setup Enter as Tab for form fields
-        this.setupEnterAsTab('person-modal', ['input-firstname', 'input-lastname', 'input-gender', 'input-birthdate', 'input-birthplace', 'input-deathdate', 'input-deathplace'], () => this.savePerson());
+        this.setupEnterAsTab('person-modal', ['input-firstname', 'input-lastname', 'input-married-surname', 'input-gender', 'input-birthdate', 'input-birthplace', 'input-deathdate', 'input-deathplace'], () => this.savePerson());
     },
 
     /**
@@ -1221,6 +1234,11 @@ export const personModalMethods = uiModule({
         }
         const readOnly = !!person && DataManager.isPersonLocked(person.id);
         resetDetailGroup(document.getElementById('name-details'), ['title'], readOnly);
+        // The married surname: a fresh form has hidden no suggestion yet.
+        this.marriedSuggestionDismissed = null;
+        this.marriedSurnameOpened = !!person?.marriedSurname?.trim();
+        this.setupMarriedSurname();
+        this.refreshMarriedSurname();
         resetDetailGroup(document.getElementById('birth-details'), offeredDetails('birth'), readOnly);
         resetDetailGroup(document.getElementById('death-details'), offeredDetails('death'), readOnly);
         for (const id of ['input-death-age', 'input-birthdate', 'input-deathdate']) {
@@ -1254,6 +1272,133 @@ export const personModalMethods = uiModule({
             out[key] = (document.getElementById(inputId) as HTMLInputElement | null)?.value.trim() ?? '';
         }
         return out;
+    },
+
+    /**
+     * The married surname field (spec 010, K1.1): right under the surname,
+     * always there for a woman with a union and whenever it holds a value;
+     * otherwise behind the quiet "+ married surname" link beside "+ title".
+     * Under the empty field, the suggestion from the husband's surname (K3.1).
+     */
+    refreshMarriedSurname(): void {
+        const row = document.getElementById('married-surname-row');
+        const link = document.getElementById('married-surname-more');
+        const input = document.getElementById('input-married-surname') as HTMLInputElement | null;
+        if (!row || !link || !input) return;
+        const person = this.currentId ? DataManager.getPerson(this.currentId) : null;
+        const readOnly = !!person && DataManager.isPersonLocked(person.id);
+        const female = (document.getElementById('input-gender') as HTMLSelectElement | null)?.value === 'female';
+        const hasUnion = !!person && person.partnerships.length > 0;
+        const filled = input.value.trim() !== '';
+        // Once on screen it stays while the form is open (emptying it does not hide it mid-typing).
+        if (filled) this.marriedSurnameOpened = true;
+        const show = filled || (!readOnly && (this.marriedSurnameOpened || (female && hasUnion)));
+        row.hidden = !show;
+        link.hidden = show || readOnly;
+
+        const suggestion = show && !readOnly ? this.currentMarriedSuggestion() : null;
+        const chip = document.getElementById('married-suggestion');
+        const main = document.getElementById('married-suggestion-main');
+        const source = document.getElementById('married-suggestion-source');
+        if (!chip || !main || !source) return;
+        chip.hidden = !suggestion;
+        if (!suggestion) return;
+        const marker = '';
+        main.innerHTML = this.escapeHtml(strings.person.suggestion(marker))
+            .replace(marker, `<strong>${this.escapeHtml(suggestion.surname)}</strong>`);
+        source.textContent = [
+            strings.person.suggestionSource(shownName(suggestion.husband)),
+            ...(suggestion.inNameVariants ? [strings.person.suggestionOtherForm] : []),
+        ].join(' · ');
+    },
+
+    /** The suggestion for the form as it is now (sex, surnames, spellings as typed), or null. */
+    currentMarriedSuggestion(): MarriedSurnameSuggestion | null {
+        const person = this.currentId ? DataManager.getPerson(this.currentId) : null;
+        if (!person) return null;
+        const val = (id: string) => (document.getElementById(id) as HTMLInputElement | HTMLSelectElement | null)?.value ?? '';
+        const gender = val('input-gender');
+        return suggestMarriedSurname(DataManager.getData(), person.id, {
+            gender: isGender(gender) ? gender : 'unknown',
+            lastName: val('input-lastname'),
+            marriedSurname: val('input-married-surname'),
+            dismissed: this.marriedSuggestionDismissed ?? person.dismissedMarriedSuggestion,
+            nameVariants: val('input-name-variants').split(',').map(v => v.trim()).filter(Boolean),
+        });
+    },
+
+    /** Wire the married surname's link, suggestion and phone scrolling once (listeners survive reopening). */
+    setupMarriedSurname(): void {
+        const input = document.getElementById('input-married-surname') as HTMLInputElement | null;
+        if (!input || input.dataset.marriedWired) return;
+        input.dataset.marriedWired = '1';
+        const refresh = () => this.refreshMarriedSurname();
+        for (const id of ['input-married-surname', 'input-lastname', 'input-name-variants']) {
+            document.getElementById(id)?.addEventListener('input', refresh);
+        }
+        const link = document.getElementById('married-surname-more');
+        if (link) link.onclick = () => {
+            this.marriedSurnameOpened = true;
+            this.refreshMarriedSurname();
+            input.focus();
+        };
+        const use = document.getElementById('married-suggestion-use');
+        if (use) use.onclick = () => {
+            const suggestion = this.currentMarriedSuggestion();
+            if (!suggestion) return;
+            input.focus();
+            // Typed into the field as an edit, so Ctrl/⌘Z in the field takes it back.
+            const typed = typeof document.execCommand === 'function'
+                && document.execCommand('insertText', false, suggestion.surname);
+            if (!typed || input.value !== suggestion.surname) {
+                input.value = suggestion.surname;
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+            const end = input.value.length;
+            input.setSelectionRange(end, end);
+        };
+        const dismiss = document.getElementById('married-suggestion-dismiss');
+        if (dismiss) dismiss.onclick = () => {
+            const suggestion = this.currentMarriedSuggestion();
+            if (!suggestion) return;
+            // Kept with the person when the form is saved; gone from the form now.
+            this.marriedSuggestionDismissed = suggestion.surname;
+            this.refreshMarriedSurname();
+            // Keyboard focus stays in the form; a tap does not raise the keyboard.
+            if (!window.matchMedia('(pointer: coarse)').matches) input.focus();
+        };
+        this.keepMarriedSurnameAboveKeyboard(input);
+    },
+
+    /**
+     * Phone: the focused married surname sits in the upper third of what the
+     * on-screen keyboard leaves visible, with its suggestion right under it,
+     * above the keyboard. The dialog's own scroll moves (scrollTop), not the
+     * page (scrollIntoView would also scroll the page behind the dialog).
+     */
+    keepMarriedSurnameAboveKeyboard(input: HTMLInputElement): void {
+        const vv = window.visualViewport;
+        const place = () => {
+            if (document.activeElement !== input || !isPhoneBar()) return;
+            const scroller = scrollParentOf(input);
+            if (!scroller) return;
+            const viewTop = vv?.offsetTop ?? 0;
+            const height = vv?.height ?? window.innerHeight;
+            // The dialog's own header stays on top: the visible part of the scroll starts under it.
+            const from = Math.max(scroller.getBoundingClientRect().top, viewTop);
+            const top = input.getBoundingClientRect().top;
+            // Room for the field's label above it.
+            const want = from + 32;
+            // Already in the upper third, under the header: leave it.
+            if (top >= want && top - viewTop <= height / 3) return;
+            scroller.scrollTop += top - want;
+        };
+        input.addEventListener('focus', () => {
+            place();
+            // The keyboard opens after the focus: place again once the visible area shrinks.
+            vv?.addEventListener('resize', place);
+        });
+        input.addEventListener('blur', () => vv?.removeEventListener('resize', place));
     },
 
     savePerson(): void {
@@ -1324,6 +1469,8 @@ export const personModalMethods = uiModule({
                     deathDate,
                     deathPlace,
                     ...this.collectPersonDetails(),
+                    // The suggestion hidden with × is not offered again (app-local).
+                    ...(this.marriedSuggestionDismissed ? { dismissedMarriedSuggestion: this.marriedSuggestionDismissed } : {}),
                     notes,
                     nameVariants,
                     refn,
@@ -1348,9 +1495,10 @@ export const personModalMethods = uiModule({
             const story = this.collectStory(undefined);
             const newPerson = DataManager.runBatch(null, () => {
                 const details = this.collectPersonDetails();
-                // The titles with the name, so the undo step says it as the card does.
+                // The titles and the married surname with the name, so the undo step says it as the card does.
                 const created = DataManager.createPerson({
                     firstName, lastName, gender, titleBefore: details.titleBefore, titleAfter: details.titleAfter,
+                    marriedSurname: details.marriedSurname,
                 });
                 // Update with extended info if provided
                 if (birthDate || birthPlace || deathDate || deathPlace || notes || refn || question
@@ -1509,7 +1657,9 @@ export const personModalMethods = uiModule({
             || occupation !== s.occupation || residence !== s.residence
             || nameVariants !== s.nameVariants || deceased !== s.deceased || photo !== s.photo
             || story.storyTitle !== s.storyTitle || story.storyText !== s.storyText
-            || this.personDetailsSnapshot() !== s.details;
+            || this.personDetailsSnapshot() !== s.details
+            // A suggestion hidden with × is kept only by saving.
+            || this.marriedSuggestionDismissed !== null;
     },
 
     /**
@@ -1545,7 +1695,9 @@ export const personModalMethods = uiModule({
             if (input && input.value === (before[i] ?? '')) input.value = person[key] ?? '';
         });
         snap.details = PERSON_DETAIL_FIELDS.map(([, key]) => person[key] ?? '').join('\u0000');
+        if (person.marriedSurname?.trim()) this.marriedSurnameOpened = true;
         this.syncGenderSegment();
+        this.refreshMarriedSurname();
         this.updateBirthEstimate(person);
         this.updateDeathAgeCheck();
         this.updatePersonModalHeader(person, person.isPlaceholder ? strings.personModal.completeTitle : strings.personModal.editTitle);

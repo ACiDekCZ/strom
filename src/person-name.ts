@@ -134,3 +134,17 @@ export function nameHtml(person: Named, opts: NameHtmlOptions = {}): string {
     if (note === 'fit') return `<span class="pn-fit">${main}${noteSpan}</span>`;
     return `${main} ${noteSpan}`;
 }
+
+/**
+ * A name on one row of a dense list (merge lists, research panels,
+ * participants), as HTML: with a birth-surname note, the name whole and the
+ * note shortened to fit (nameHtml 'fit'), then `suffix` ("(*1900)");
+ * without one exactly `plain` + `suffix`, escaped — the row's text as it was
+ * before married surnames.
+ */
+export function fitNameHtml(person: Named, plain: string, suffix = ''): string {
+    const { birthNote } = shownNameParts(person, '', titlesShown(), surnameDisplay());
+    const tail = suffix ? ` ${escapeHtml(suffix)}` : '';
+    if (!birthNote) return escapeHtml(plain) + tail;
+    return nameHtml(person, { note: 'fit' }) + tail;
+}

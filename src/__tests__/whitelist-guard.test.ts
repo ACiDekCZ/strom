@@ -291,7 +291,7 @@ describe('validateJsonImport on the real devel-demo fixture', () => {
  * change in the person modal belongs here.
  */
 type EditedByUpdatePerson =
-    | 'firstName' | 'lastName' | 'titleBefore' | 'titleAfter' | 'marriedSurname' | 'gender' | 'nameVariants'
+    | 'firstName' | 'lastName' | 'titleBefore' | 'titleAfter' | 'marriedSurname' | 'dismissedMarriedSuggestion' | 'gender' | 'nameVariants'
     | 'birthDate' | 'birthPlace' | 'birthAddress' | 'deathDate' | 'deathPlace'
     | 'deathCause' | 'deathAge' | 'deathAddress'
     | 'notes' | 'refn' | 'question' | 'isDeceased' | 'isLocked' | 'photo' | 'story';
@@ -362,6 +362,7 @@ describe('updatePerson applies every field it owns', () => {
         titleBefore: 'MUDr.',
         titleAfter: 'st.',
         marriedSurname: 'Dvořáková',
+        dismissedMarriedSuggestion: 'Nováková',
         gender: 'female',
         nameVariants: ['Wischek', 'u Kováře'],
         birthDate: '1901-02-03',

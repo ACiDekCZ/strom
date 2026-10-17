@@ -219,6 +219,10 @@ export class UIClass {
         /** House, cause and age of the birth and death, joined (personDetailsSnapshot). */
         details: string;
     } | null = null;
+    /** Person modal: the married-surname suggestion hidden with × in the open form (saved as Person.dismissedMarriedSuggestion). */
+    marriedSuggestionDismissed: string | null = null;
+    /** Person modal: the married-surname field was opened in this form ("+ married surname", or it held a value). */
+    marriedSurnameOpened: boolean = false;
 
     // Debounce timer for the live search filter/highlight.
     searchFilterTimer: ReturnType<typeof setTimeout> | null = null;
