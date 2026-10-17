@@ -10,7 +10,8 @@ out by step 7 and its cards link to each other (see "Line Invariants"). The
 former relaxations — `inherent-crossing` (a crossing between cross-married
 unions forced by the topology) and the `KNOWN_LINE_KNOTS` class (in-law column
 inside a sibling bus span) — are now omitted edges instead of drawn knots;
-`KNOWN_LINE_KNOTS` is empty. Partner-chain invariants added 2026-07-13.
+the audit no longer has an `inherent-crossing` class and `KNOWN_LINE_KNOTS`
+is empty. Partner-chain invariants added 2026-07-13.
 
 ---
 

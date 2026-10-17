@@ -65,8 +65,8 @@ describe('sample tree', () => {
                 });
                 assertValidPositions(result.positions);
                 assertNoNodeOverlap(result.positions, config.cardWidth, config.cardHeight);
-                const hard = auditGeometry(result, config, data).filter(v => v.type !== 'inherent-crossing');
-                expect(hard.map(v => `[${v.type}] ${v.detail}`), `${personId} [${mode.name}, ${card}]`).toEqual([]);
+                const violations = auditGeometry(result, config);
+                expect(violations.map(v => `[${v.type}] ${v.detail}`), `${personId} [${mode.name}, ${card}]`).toEqual([]);
             });
         }
     }

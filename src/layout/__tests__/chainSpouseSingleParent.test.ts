@@ -54,7 +54,7 @@ describe('a single parent beside the parents of a partner in a chain', () => {
             const x = (id: string) => result.positions.get(id as PersonId)!.x;
             expect(x('husband')).toBeLessThan(x('wife'));
             expect(x('husband_parent')).toBeLessThan(x('wife_father'));
-            expect(auditGeometry(result, DEFAULT_LAYOUT_CONFIG, data).filter(v => v.type !== 'inherent-crossing')).toEqual([]);
+            expect(auditGeometry(result, DEFAULT_LAYOUT_CONFIG)).toEqual([]);
         });
     }
 });

@@ -181,24 +181,12 @@ for (const fixtureName of FIXTURES) {
                         }
                     }
 
-                    // 4. Strict geometry audit: crossings (incl. classification
-                    // of topologically forced ones between cross-married
-                    // unions), collinear line merges, endpoint touches on
-                    // foreign lines, lines through cards
-                    const violations = auditGeometry(result, modeConfig, data);
-                    const inherent = violations.filter(v => v.type === 'inherent-crossing');
-                    const hard = violations.filter(v => v.type !== 'inherent-crossing');
-                    for (const violation of hard.slice(0, 5)) {
+                    // 4. Strict geometry audit: crossings, collinear line
+                    // merges, endpoint touches on foreign lines, lines through
+                    // cards. Nothing is tolerated: a knot no placement avoids
+                    // is left out by step 7 (4b) and shown as card links.
+                    for (const violation of auditGeometry(result, modeConfig).slice(0, 5)) {
                         failures.push(`Geometry: [${violation.type}] ${violation.detail}`);
-                    }
-                    // Inherent crossings (double in-law etc.) are logged in the
-                    // report but do not fail the test — they cannot be avoided
-                    // with atomic couples and single-bus T-routing.
-                    if (failures.length === 0 && inherent.length > 0) {
-                        allFailures.push({
-                            personId, name: displayName, mode: mode.name,
-                            failures: inherent.slice(0, 3).map(v => `INHERENT: ${v.detail}`)
-                        });
                     }
 
                     // 4b. Lines left out (step 7): their cards are there, and

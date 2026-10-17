@@ -17,79 +17,34 @@
  * which step 7 and the built-in validation use); the audit adds the cards.
  */
 
-import { PersonId, LayoutConfig, StromData, personCardHeight } from '../../../types.js';
-import { Connection, LayoutResult } from '../../pipeline/types.js';
+import { PersonId, LayoutConfig, personCardHeight } from '../../../types.js';
+import { LayoutResult } from '../../pipeline/types.js';
 import { layoutSegments, findLineViolations } from '../../pipeline/line-geometry.js';
 
 const CARD_INSET = 2;     // cards are shrunk by this before the interior test
 
 export interface GeometryViolation {
-    /**
-     * 'inherent-crossing' = a crossing between two CROSS-MARRIED unions
-     * (a child of one is partnered with a child of the other, and both
-     * unions have 2+ child drops). With atomic couples on one row and
-     * single-bus T-routing, the two unions' drop intervals always interleave
-     * or nest, so one clean perpendicular crossing is topologically
-     * unavoidable — this is how genealogists draw it on paper too. Reported
-     * separately so it can be tolerated without hiding avoidable crossings.
-     */
-    type: 'crossing' | 'inherent-crossing' | 'collinear' | 't-touch' | 'line-through-card';
+    type: 'crossing' | 'collinear' | 't-touch' | 'line-through-card';
     detail: string;
 }
 
 /**
- * Audit all segments and cards of a layout result.
- *
- * When `data` is provided, crossings between cross-married unions (see
- * GeometryViolation) are classified as 'inherent-crossing' instead of
- * 'crossing'.
+ * Audit all segments and cards of a layout result. No line contact is
+ * tolerated: a knot no placement avoids (two cross-married families, an
+ * in-law column inside a sibling bus) is resolved by step 7 leaving the line
+ * out (LayoutResult.omittedEdges, shown as card links), never by the audit.
  */
 export function auditGeometry(
     result: LayoutResult,
-    config: LayoutConfig,
-    data?: StromData
+    config: LayoutConfig
 ): GeometryViolation[] {
     const violations: GeometryViolation[] = [];
 
     const segments = layoutSegments(result);
-    const connByUnion = new Map<string, Connection>();
-    for (const conn of result.connections) connByUnion.set(String(conn.unionId), conn);
-
-    // Partner pairs from raw data (for the inherent-crossing classification)
-    const partnerPairs = new Set<string>();
-    if (data) {
-        for (const p of Object.values(data.partnerships)) {
-            if (p.person1Id && p.person2Id) {
-                partnerPairs.add([p.person1Id, p.person2Id].sort().join('|'));
-            }
-        }
-    }
-
-    /** True when a crossing between these two unions is topologically forced. */
-    const isInherentCrossing = (ownerA: string, ownerB: string): boolean => {
-        if (partnerPairs.size === 0) return false;
-        const a = connByUnion.get(ownerA);
-        const b = connByUnion.get(ownerB);
-        if (!a || !b) return false;
-        // Both unions must have 2+ drops — with a single drop the crossing is
-        // avoidable by ordering (e.g. pedigree-collapse partner swap)
-        if (a.drops.length < 2 || b.drops.length < 2) return false;
-        for (const da of a.drops) {
-            for (const db of b.drops) {
-                if (partnerPairs.has([da.personId, db.personId].sort().join('|'))) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    };
 
     // --- Line checks (shared with the layout) ---
     for (const v of findLineViolations(segments)) {
-        violations.push({
-            type: v.type === 'crossing' && isInherentCrossing(v.a.owner, v.b.owner) ? 'inherent-crossing' : v.type,
-            detail: v.detail
-        });
+        violations.push({ type: v.type, detail: v.detail });
     }
 
     // --- Line-through-card checks ---

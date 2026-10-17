@@ -69,11 +69,11 @@ function layout(data: StromData, focus: string, displayPolicy: typeof MODES[numb
 }
 
 /** Overlaps, validation and the strict geometry audit, as in the all-persons harness. */
-function expectSound(r: LayoutResult, data: StromData): void {
+function expectSound(r: LayoutResult): void {
     assertValidPositions(r.positions);
     assertNoNodeOverlap(r.positions, config.cardWidth, config.cardHeight);
     expect(r.diagnostics.errors).toEqual([]);
-    expect(auditGeometry(r, config, data).map(v => `${v.type}: ${v.detail}`)).toEqual([]);
+    expect(auditGeometry(r, config).map(v => `${v.type}: ${v.detail}`)).toEqual([]);
 }
 
 /** The line to `child` starts at the bottom centre of M's card. */
@@ -108,7 +108,7 @@ describe('an empty "?" stand-in is not drawn (T11)', () => {
                 for (const focus of ['M', 'K1', 'GF', 'S']) {
                     const r = layout(data, focus, mode.displayPolicy);
                     expectNoStandIn(r, ['X']);
-                    expectSound(r, data);
+                    expectSound(r);
                     expectLedFromM(r, 'K1');
                     // A single parent: the drop comes down in the stem's axis.
                     const conn = r.connections.find(c => c.drops.some(d => d.personId === 'K1'))!;
@@ -121,7 +121,7 @@ describe('an empty "?" stand-in is not drawn (T11)', () => {
                 for (const focus of ['M', 'K1', 'K2', 'H', 'GF', 'S']) {
                     const r = layout(data, focus, mode.displayPolicy);
                     expectNoStandIn(r, ['X']);
-                    expectSound(r, data);
+                    expectSound(r);
                     // Without expansion only the focus's own family of M is shown.
                     if (!shown(mode, focus, 'K1')) { expect(r.positions.has('K1' as PersonId)).toBe(false); continue; }
                     expectLedFromM(r, 'K1');
@@ -136,7 +136,7 @@ describe('an empty "?" stand-in is not drawn (T11)', () => {
                 for (const focus of ['M', 'K1', 'K3', 'K2', 'GF']) {
                     const r = layout(data, focus, mode.displayPolicy);
                     expectNoStandIn(r, ['X', 'X2']);
-                    expectSound(r, data);
+                    expectSound(r);
                     if (!shown(mode, focus, 'K1')) { expect(r.positions.has('K1' as PersonId)).toBe(false); continue; }
                     expectLedFromM(r, 'K1');
                     const conn = r.connections.find(c => c.drops.some(d => d.personId === 'K1'))!;
@@ -148,7 +148,7 @@ describe('an empty "?" stand-in is not drawn (T11)', () => {
                 const data = build({ secondStandIn: true });
                 const r = layout(data, 'M', mode.displayPolicy);
                 expectNoStandIn(r, ['X', 'X2']);
-                expectSound(r, data);
+                expectSound(r);
                 expectLedFromM(r, 'K1');
                 expectLedFromM(r, 'K3');
             });

@@ -126,6 +126,12 @@ failing hard. The only rendering that removes the crossing entirely would be
 duplicating the in-law parent cards (MyHeritage-style) — a possible future
 feature, not a layout defect.
 
+**Superseded (2026-10, F2).** The crossing is no longer drawn: step 7 leaves
+out one child's drop of the two cross-married unions (never on the focus's own
+line when the other helps) and the cards link to each other (Finding 7). The
+`inherent-crossing` class is removed from the geometry audit and the harness;
+every crossing fails the run.
+
 ---
 
 ## Finding 5 — Merged transitive chain (expanded mode): collinear stem merge

@@ -220,8 +220,7 @@ for (const scenario of SCENARIOS) {
                     try { assertValidPositions(result.positions); } catch (e) { failures.push(`Positions: ${(e as Error).message.split('\n')[0]}`); }
                     try { assertNoNodeOverlap(result.positions, modeConfig.cardWidth, modeConfig.cardHeight); } catch (e) { failures.push(`Overlap: ${(e as Error).message.split('\n')[0]}`); }
                     if (!result.diagnostics.validationPassed) for (const err of result.diagnostics.errors.slice(0, 5)) failures.push(`Validation: ${err}`);
-                    const layoutData = result.viewLayer?.data ?? data;
-                    for (const v of auditGeometry(result, modeConfig, layoutData).filter(v => v.type !== 'inherent-crossing').slice(0, 5)) {
+                    for (const v of auditGeometry(result, modeConfig).slice(0, 5)) {
                         failures.push(`Geometry: [${v.type}] ${v.detail}`);
                     }
                     if (mode.heights) for (const v of auditBands(result, modeConfig, run(DEFAULT_LAYOUT_CONFIG)).slice(0, 5)) failures.push(`Bands: ${v}`);

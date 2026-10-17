@@ -779,8 +779,9 @@ lines through cards). Lines step 7 left out are listed in the report
 (`test/failures-full-<fixture>.txt`, "Omitted lines") and fail the run when
 one is on the focus's own line. `KNOWN_LINE_KNOTS` is empty since step 7
 omits unroutable lines; an entry whose run is clean fails the harness.
-`inherent-crossing` marks topologically forced crossings between
-cross-married unions (none remain drawn).
+The audit has no tolerated class: the former `inherent-crossing` (a
+topologically forced crossing between cross-married unions) is gone, those
+knots are omitted lines shown as card links.
 
 **Fixtures** — `comprehensive.json` (53 persons), targeted `edge-*.json`,
 generated `etalon-*.json` scenarios A–O (`npm run gen:etalon`), plus a local

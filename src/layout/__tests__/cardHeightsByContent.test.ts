@@ -142,7 +142,7 @@ describe('cards of their own heights (U02 V3)', () => {
                 assertValidPositions(tall.positions);
                 assertNoNodeOverlap(tall.positions, v3.cardWidth, v3.cardHeight);
                 expect(tall.diagnostics.errors).toEqual([]);
-                expect(auditGeometry(tall, v3, build()).map(v => `${v.type}: ${v.detail}`)).toEqual([]);
+                expect(auditGeometry(tall, v3).map(v => `${v.type}: ${v.detail}`)).toEqual([]);
             }
         }
     });
