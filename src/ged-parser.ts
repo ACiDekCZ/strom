@@ -52,6 +52,7 @@ import {
     ResearchEdge,
     ResearchEdgeBook,
     ResearchEdgeHypo,
+    ResearchEdgeJoin,
     ResearchEdgeTask,
     ResearchHypothesis,
     ResearchHypothesisVariant,
@@ -434,11 +435,14 @@ export function researchEdgeFromLines(block: RawResearchBlock): ResearchEdge | n
     // The level-2 item the level-3 lines belong to, and the level-3 line for CONT/CONC.
     let item: { tag: string; target?: ResearchEdgeBook | ResearchEdgeTask | ResearchEdgeHypo | ResearchEdge['est'] | ResearchEdge['sessions'] } | null = null;
     let sub = '';
+    // The hypothesis' `_JOIN` the level-4 lines under it belong to.
+    let join: ResearchEdgeJoin | null = null;
     for (const { level, tag, value } of block.lines) {
         const v = value.trim();
         if (level === 2) {
             item = { tag };
             sub = '';
+            join = null;
             switch (tag) {
                 case '_SCOPE': { const w = researchWord(v); if (w) edge.scope = w; break; }
                 case '_RESEARCH': if (RESEARCH_ID.G.test(v)) edge.research = v; break;
@@ -478,7 +482,7 @@ export function researchEdgeFromLines(block: RawResearchBlock): ResearchEdge | n
         }
         const target = item?.target;
         if (!item || !target) continue;
-        if (level === 3) sub = tag;
+        if (level === 3) { sub = tag; join = null; }
         if (item.tag === '_EST' && level === 3) {
             const est = target as NonNullable<ResearchEdge['est']>;
             if (tag === 'PLAC' && v) est.place = v;
@@ -509,13 +513,24 @@ export function researchEdgeFromLines(block: RawResearchBlock): ResearchEdge | n
             else if (tag === '_PARTIAL' && v.toUpperCase() === 'Y') sessions.partial = true;
         } else if (item.tag === '_HYPO' && level === 3) {
             const hypo = target as ResearchEdgeHypo;
-            // Several joins: one per variant, in their order; `_ISLAND` / `_HELD` are the first's.
-            if (tag === '_JOIN' && RESEARCH_ID.P.test(v)) hypo.join ??= v;
-            else if (tag === '_VAR') { const label = researchVariantLabel(v); if (label && !hypo.variants?.includes(label)) (hypo.variants ??= []).push(label); }
+            // Several joins: the first is the one `_ISLAND` / `_HELD` count; each its own below (level 4).
+            if (tag === '_JOIN' && RESEARCH_ID.P.test(v)) {
+                hypo.join ??= v;
+                join = { person: v };
+                (hypo.joins ??= []).push(join);
+            } else if (tag === '_VAR') { const label = researchVariantLabel(v); if (label && !hypo.variants?.includes(label)) (hypo.variants ??= []).push(label); }
             else if (tag === '_ISLAND') { const n = researchInt(v, 1, 1e6); if (n !== undefined) hypo.island = n; }
             else if (tag === '_HELD') { const n = researchInt(v, 0, 1e6); if (n !== undefined) hypo.held = n; }
             else if (tag === '_TEST' && RESEARCH_ID.T.test(v)) hypo.tests.push(v);
+        } else if (item.tag === '_HYPO' && level === 4 && join) {
+            if (tag === '_VAR') { const label = researchVariantLabel(v); if (label && !join.variants?.includes(label)) (join.variants ??= []).push(label); }
+            else if (tag === '_ISLAND') { const n = researchInt(v, 1, 1e6); if (n !== undefined) join.island = n; }
+            else if (tag === '_HELD') { const n = researchInt(v, 0, 1e6); if (n !== undefined) join.held = n; }
         }
+    }
+    // A research without level 4 under its joins (before Strom Research 1.16): the first join only, as before.
+    for (const hypo of edge.hypos) {
+        if (hypo.joins && !hypo.joins.some(j => j.variants || j.island !== undefined || j.held !== undefined)) delete hypo.joins;
     }
     edge.books = edge.books.filter(b => b.title);
     edge.tasks = edge.tasks.filter(t => t.title.trim()).map(t => ({ ...t, title: t.title.trim() }));

@@ -140,6 +140,80 @@ test.describe('research edge', () => {
         await expect(page.locator('.person-card.research-island')).toHaveCount(2);
     });
 
+    test('a hypothesis that would link one of two families: the stub offers both, each with its numbers', async ({ page }) => {
+        // H0001: version A joins Matouš (a family of 2), version B the couple Tomáš and Eva (a family of 3);
+        // each join carries its own family (level 4, Strom Research 1.16).
+        const ged = researchGed()
+            .replace('3 _JOIN P0005\n3 _ISLAND 2', [
+                '3 _JOIN P0005', '4 _VAR A', '4 _ISLAND 2', '4 _HELD 1',
+                '3 _JOIN P0007', '4 _VAR B', '4 _ISLAND 3', '4 _HELD 2',
+                '3 _JOIN P0008', '4 _VAR B', '4 _ISLAND 3', '4 _HELD 2',
+                '3 _VAR A', '3 _VAR B', '3 _ISLAND 2',
+            ].join('\n'))
+            .replace('0 @F0001@ FAM', [
+                '0 @P0007@ INDI', '1 NAME Tomáš /Novák/', '1 SEX M', '1 REFN P0007', '1 FAMS @F0010@',
+                '1 _STROM_ISLAND 3', '2 _HYPO H0001', '3 _JOIN P0001', '3 _VAR B', '2 _HELD 2',
+                '0 @P0008@ INDI', '1 NAME Eva /Malá/', '1 SEX F', '1 REFN P0008', '1 FAMS @F0010@',
+                '1 _STROM_ISLAND 3', '2 _HYPO H0001', '3 _JOIN P0001', '3 _VAR B', '2 _HELD 2',
+                '0 @P0009@ INDI', '1 NAME Petr /Novák/', '1 SEX M', '1 REFN P0009', '1 FAMC @F0010@',
+                '1 _STROM_ISLAND 3', '2 _HYPO H0001', '3 _JOIN P0001', '3 _VAR B', '2 _HELD 2',
+                '0 @F0010@ FAM', '1 HUSB @P0007@', '1 WIFE @P0008@', '1 CHIL @P0009@',
+                '0 @F0001@ FAM',
+            ].join('\n'));
+        expect(ged).toContain('4 _ISLAND 3');
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await openApp(page);
+        await dropFile(page, ged);
+        await expect(card(page, 'Jan')).toBeVisible();
+        const focusJan = () => page.evaluate(() => {
+            const jan = window.Strom.DataManager.getAllPersons().find(p => p.firstName === 'Jan')!;
+            window.Strom.TreeRenderer.setFocus(jan.id);
+            window.Strom.ZoomPan.reset();
+        });
+        const focused = () => page.evaluate(() => window.Strom.DataManager.getPerson(window.Strom.TreeRenderer.getFocusPersonId()!)?.firstName);
+        await focusJan();
+        // One pill: two families, not the first one's people.
+        const pill = page.locator('.edge-link-pill--family');
+        await expect(pill).toHaveCount(1);
+        await expect(pill).toHaveText('+ 2 families');
+        await expect(pill).toHaveAttribute('aria-label', 'One of 2 families outside the tree may connect here. Choose one');
+
+        // The bubble: both families, each once (Tomáš and Eva are one), with their versions and numbers.
+        await stub(page, 'Josef').hover();
+        const bubble = page.locator('#research-edge-bubble');
+        await expect(bubble.locator('.reb-hypo-label')).toHaveText('Possible links');
+        const rows = bubble.locator('.reb-hypo-join');
+        await expect(rows).toHaveCount(2);
+        await expect(rows.nth(0)).toHaveText('version A: Matouš Novák · family outside the tree, 2 people · 1 task waiting');
+        await expect(rows.nth(1)).toHaveText('version B: Tomáš Novák · family outside the tree, 3 people · 2 tasks waiting');
+        await rows.nth(1).locator('.reb-join').click();
+        await expect.poll(focused).toBe('Tomáš');
+        await expect(card(page, 'Tomáš').locator('.island-caption')).toHaveText('outside the tree · family of 3 · 2 tasks waiting');
+
+        // The pill: a menu of the families, each going to its own.
+        await focusJan();
+        await pill.click();
+        const items = page.getByRole('menu').getByRole('menuitem');
+        await expect(items).toHaveCount(2);
+        await expect(items.nth(0).locator('.view-link-menu__label')).toHaveText('Go to the family');
+        await expect(items.nth(0)).toContainText('H0001 A · Matouš Novák, + 2 people');
+        await expect(items.nth(1)).toContainText('H0001 B · Tomáš Novák, + 3 people');
+        await items.nth(0).click();
+        await expect.poll(focused).toBe('Matouš');
+        await expect(page.locator('.person-card.research-island')).toHaveCount(2);
+
+        // "Above the person": a line per family, the tests below.
+        await focusJan();
+        await stub(page, 'Josef').click();
+        const metas = page.locator('#research-edge-section .rep-hypo-meta');
+        await expect(metas).toHaveCount(3);
+        await expect(metas.nth(0)).toHaveText('Possible link, version A: Matouš Novák · family outside the tree, 2 people · 1 task waiting');
+        await expect(metas.nth(1)).toHaveText('Possible link, version B: Tomáš Novák · family outside the tree, 3 people · 2 tasks waiting');
+        await expect(metas.nth(2)).toHaveText('Tested by T0002');
+        await metas.nth(1).locator('.rep-join').click();
+        await expect.poll(focused).toBe('Tomáš');
+    });
+
     test('hover shows the bubble, a click opens "Above the person"', async ({ page }) => {
         await setup(page);
         await stub(page, 'Josef').hover();

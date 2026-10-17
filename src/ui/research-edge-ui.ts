@@ -10,9 +10,10 @@ import { TreeRenderer } from '../renderer.js';
 import { TreeManager } from '../tree-manager.js';
 import { strings } from '../strings.js';
 import { formatFlexDate } from '../dates.js';
-import { PersonId, ResearchEdge, ResearchEdgeMode, ResearchHypothesis } from '../types.js';
+import { PersonId, ResearchEdge, ResearchEdgeHypo, ResearchEdgeMode, ResearchHypothesis } from '../types.js';
+import { familyGroups } from '../view-links.js';
 import {
-    edgeEndText, edgeEstimateText, edgeFactsLine, edgeHypoFamily, edgeNamedHypothesis, edgeNextText, edgeTimeline, edgeTone, edgeMuted, effectiveNext,
+    EdgeHypoFamilyLink, edgeEndText, edgeEstimateText, edgeFactsLine, edgeHypoFamilies, edgeNamedHypothesis, edgeNextText, edgeTimeline, edgeTone, edgeMuted, effectiveNext,
 } from '../research-edge.js';
 import { researchCardInfoNow } from '../card-signals.js';
 import { uiModule } from './module.js';
@@ -66,6 +67,20 @@ function edgeOf(personId: PersonId): { edge: ResearchEdge; next: string | undefi
 /** A person of the tree by the research's REFN. */
 function personByRefn(refn: string): PersonId | null {
     return DataManager.getAllPersons().find(p => p.refn === refn)?.id ?? null;
+}
+
+/** The families outside the tree a hypothesis of the edge would link, each with the person reaching it. */
+function hypoFamilies(hypo: ResearchEdgeHypo): (EdgeHypoFamilyLink & { personId: PersonId })[] {
+    let group: Map<PersonId, number> | null = null;
+    const families = edgeHypoFamilies(hypo,
+        refn => { const id = personByRefn(refn); return id ? DataManager.getPerson(id) : null; },
+        refn => {
+            const id = personByRefn(refn);
+            if (!id) return undefined;
+            group ??= familyGroups(DataManager.getData());
+            return group.get(id);
+        });
+    return families.map(f => ({ ...f, personId: personByRefn(f.join)! }));
 }
 
 function personName(id: PersonId): string {
@@ -138,25 +153,38 @@ export const researchEdgeUiMethods = uiModule({
             bubble.innerHTML = this.namedEdgeBubbleHtml(personId, namedHypo, nextText, tone, !!opts.pinned);
         } else {
             const facts = edgeFactsLine(edge);
-            const hypo = edge.hypos.find(h => h.join) ?? null;
-            const joinId = hypo?.join ? personByRefn(hypo.join) : null;
-            const family = hypo && joinId ? edgeHypoFamily(hypo, DataManager.getPerson(joinId)) : {};
+            let hypo: ResearchEdgeHypo | null = null, families: ReturnType<typeof hypoFamilies> = [];
+            for (const h of edge.hypos) {
+                families = h.join ? hypoFamilies(h) : [];
+                if (families.length > 0) { hypo = h; break; }
+            }
+            const joinId = families[0]?.personId ?? null;
+            const family = families[0] ?? {};
+            // One of several families: each with its versions, people and waiting tasks.
+            const several = families.length > 1 ? families.map(f => `<div class="reb-hypo-join">${f.variants.length > 0 ? `${esc(re.versions(f.variants))}: ` : ''}`
+                + `<button type="button" class="link-button reb-join" data-person="${esc(f.personId)}">${esc(personName(f.personId))}</button>`
+                + `${f.size ? ` · ${esc(re.islandFamily(f.size))}` : ''}${f.held ? ` · ${esc(re.hypoWaiting(f.held))}` : ''}</div>`).join('') : '';
             const hypoTitle = hypo ? person.research?.hypotheses?.find(h => h.id === hypo.id)?.title ?? '' : '';
             bubble.innerHTML = `
             <div class="reb-end" id="${BUBBLE_ID}-title">${esc(edgeEndText(edge))}</div>
             ${nextText ? `<div class="reb-next tone-${tone}"><span class="reb-dot" aria-hidden="true"></span>${esc(nextText)}</div>` : ''}
             ${facts ? `<div class="reb-facts">${esc(facts)}</div>` : ''}
-            ${hypo && joinId ? `
+            ${hypo && several ? `
+                <div class="reb-hypo">
+                    <span class="reb-hypo-label">${esc(re.possibleLinks)}</span>
+                    ${several}
+                    ${hypoTitle ? `<div class="reb-hypo-title">${esc(hypoTitle)}</div>` : ''}
+                </div>` : hypo && joinId ? `
                 <div class="reb-hypo">
                     <span class="reb-hypo-label">${esc(re.possibleLink)}</span>
                     <button type="button" class="link-button reb-join" data-person="${esc(joinId)}">${esc(personName(joinId))}</button>${family.size ? ` · ${esc(re.islandFamily(family.size))}` : ''}
                     ${hypoTitle ? `<div class="reb-hypo-title">${esc(hypoTitle)}</div>` : ''}
                 </div>` : ''}
             <button type="button" class="link-button reb-more">${esc(re.moreInResearch)}</button>`;
-            bubble.querySelector<HTMLButtonElement>('.reb-join')?.addEventListener('click', () => {
+            bubble.querySelectorAll<HTMLButtonElement>('.reb-join').forEach(btn => btn.addEventListener('click', () => {
                 this.hideResearchEdgeBubble();
-                void TreeRenderer.setFocus(joinId!);
-            });
+                void TreeRenderer.setFocus(btn.dataset.person as PersonId);
+            }));
         }
         document.body.appendChild(bubble);
         bubbleFor = personId;
@@ -424,20 +452,27 @@ export const researchEdgeUiMethods = uiModule({
             const titles = new Map((person.research?.hypotheses ?? []).filter(h => h.id).map(h => [h.id!, h.title]));
             parts.push(`<div class="rep-block"><div class="rep-sub">${esc(strings.research.hypotheses)}</div>
                 ${edge.hypos.map(h => {
-                    const joinId = h.join ? personByRefn(h.join) : null;
-                    const family = edgeHypoFamily(h, joinId ? DataManager.getPerson(joinId) : null);
-                    const bits = [
-                        joinId ? `${esc(re.possibleLink)}: <button type="button" class="link-button rep-join" data-person="${esc(joinId)}">${esc(personName(joinId))}</button>` : '',
-                        family.size ? esc(re.islandFamily(family.size)) : '',
-                        family.held ? esc(re.hypoWaiting(family.held)) : '',
-                        h.tests.length > 0 ? `${esc(re.hypoTests)} ${esc(h.tests.join(', '))}` : '',
-                    ].filter(Boolean);
+                    const families = h.join ? hypoFamilies(h) : [];
+                    const joinLine = (f: (typeof families)[number]): string[] => [
+                        `${esc(re.possibleLink)}${families.length > 1 && f.variants.length > 0 ? `, ${esc(re.versions(f.variants))}` : ''}: `
+                            + `<button type="button" class="link-button rep-join" data-person="${esc(f.personId)}">${esc(personName(f.personId))}</button>`,
+                        f.size ? esc(re.islandFamily(f.size)) : '',
+                        f.held ? esc(re.hypoWaiting(f.held)) : '',
+                    ];
+                    const tests = h.tests.length > 0 ? `${esc(re.hypoTests)} ${esc(h.tests.join(', '))}` : '';
+                    // One family: one line with the tests; several: a line each, the tests below.
+                    const lines = families.length > 1
+                        ? [...families.map(f => joinLine(f).filter(Boolean).join(' · ')), tests]
+                        : [[...(families[0] ? joinLine(families[0])
+                            // Its person not in this tree's data: the research's numbers alone.
+                            : [h.island ? esc(re.islandFamily(h.island)) : '', h.held ? esc(re.hypoWaiting(h.held)) : '']), tests].filter(Boolean).join(' · ')];
+                    const bits = lines.filter(Boolean);
                     return `<div class="rep-hypo">
                         ${titles.has(h.id)
                             // Its versions are in the hypotheses below: a link there.
                             ? `<button type="button" class="link-button rep-hypo-title rep-hypo-go" data-hypo="${esc(h.id)}">${esc(titles.get(h.id)!)}</button>`
                             : `<div class="rep-hypo-title">${esc(h.id)}</div>`}
-                        ${bits.length > 0 ? `<div class="rep-hypo-meta">${bits.join(' · ')}</div>` : ''}
+                        ${bits.map(b => `<div class="rep-hypo-meta">${b}</div>`).join('')}
                     </div>`;
                 }).join('')}
             </div>`);

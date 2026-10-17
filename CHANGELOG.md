@@ -6,6 +6,7 @@ English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md)
 
 *This version is in preparation; this section grows with every test version.*
 
+- **Edge of the tree**: a hypothesis whose versions would each link a different family outside the tree shows all of them. The bubble at the edge of the tree and *Above the person* list every family with its versions, people and waiting tasks, each a link to that family; the pill reads *+ 2 families* and offers each one. With Strom Research 1.16 or later.
 - **Fixes**: the *+ family · N* pill at the edge of the tree counts the family it shows: for a hypothesis whose variants would each connect a different family outside the tree, the number of people and waiting tasks now belongs to the family that appears on a click.
 
 ## 3.12.0

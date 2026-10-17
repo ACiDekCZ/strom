@@ -7,9 +7,10 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { exportToGedcom } from '../ged-exporter.js';
-import { edgeHypoFamily, edgeMoves, edgeView, edgeShape, edgeTone, effectiveNext, edgeEndText, edgeNextText, edgeFactsLine, edgeEstimateText, edgeTimeline } from '../research-edge.js';
+import { edgeHypoFamilies, edgeHypoFamily, edgeMoves, edgeView, edgeShape, edgeTone, effectiveNext, edgeEndText, edgeNextText, edgeFactsLine, edgeEstimateText, edgeTimeline } from '../research-edge.js';
 import { getStringsForLang, setLanguage } from '../strings.js';
 import { applyContentOptions } from '../privacy.js';
+import { familyGroups } from '../view-links.js';
 import { ResearchEdge, StromData } from '../types.js';
 
 const head = (research: boolean): string => `0 HEAD
@@ -182,6 +183,111 @@ describe('reading _STROM_EDGE and _STROM_ISLAND', () => {
         // …which stays for an island person without its record.
         expect(edgeHypoFamily(hypo, byRefn(data, 'P0001'))).toEqual({ size: 2, held: 1 });
         expect(edgeHypoFamily(hypo, null)).toEqual({ size: 2, held: 1 });
+    });
+
+    it('a hypothesis with each join\'s own family (level 4): every family, once, with its versions and numbers', () => {
+        // Version A joins Matouš (a family of 1), version B the couple Tomáš and Anna (a family of 2).
+        const body = `0 @I1@ INDI
+1 NAME Josef /Novák/
+1 REFN P0001
+1 _STROM_EDGE parents
+2 _HYPO H0001
+3 _JOIN P0005
+4 _VAR A
+4 _ISLAND 1
+4 _HELD 0
+3 _JOIN P0003
+4 _VAR B
+4 _ISLAND 2
+4 _HELD 3
+3 _JOIN P0004
+4 _VAR B
+4 _ISLAND 2
+4 _HELD 3
+3 _JOIN P0009
+4 _VAR C
+4 _ISLAND 4
+3 _VAR A
+3 _VAR B
+3 _VAR C
+3 _ISLAND 1
+3 _HELD 0
+0 @I5@ INDI
+1 NAME Matouš /Novák/
+1 REFN P0005
+1 _STROM_ISLAND 1
+2 _HYPO H0001
+3 _JOIN P0001
+3 _VAR A
+0 @I3@ INDI
+1 NAME Tomáš /Novák/
+1 REFN P0003
+1 FAMS @F1@
+0 @I4@ INDI
+1 NAME Anna /Nováková/
+1 REFN P0004
+1 FAMS @F1@
+0 @F1@ FAM
+1 HUSB @I3@
+1 WIFE @I4@
+0 TRLR
+`;
+        const data = load(true, body);
+        const hypo = byRefn(data, 'P0001').research!.edge!.hypos[0];
+        // Level 3 as before (the first join, the first's numbers), each join below.
+        expect(hypo).toMatchObject({ id: 'H0001', join: 'P0005', variants: ['A', 'B', 'C'], island: 1, held: 0 });
+        expect(hypo.joins).toEqual([
+            { person: 'P0005', variants: ['A'], island: 1, held: 0 },
+            { person: 'P0003', variants: ['B'], island: 2, held: 3 },
+            { person: 'P0004', variants: ['B'], island: 2, held: 3 },
+            { person: 'P0009', variants: ['C'], island: 4 },
+        ]);
+        const pid = (refn: string) => Object.values(data.persons).find(p => p.refn === refn) ?? null;
+        const groups = familyGroups(data);
+        const familyOf = (refn: string) => { const p = pid(refn); return p ? groups.get(p.id) : undefined; };
+        // The couple is one family; P0009 is not in this tree's data: nothing to reach.
+        expect(edgeHypoFamilies(hypo, pid, familyOf)).toEqual([
+            { join: 'P0005', variants: ['A'], size: 1, held: undefined },
+            { join: 'P0003', variants: ['B'], size: 2, held: 3 },
+        ]);
+        // Without telling families apart, every join is its own.
+        expect(edgeHypoFamilies(hypo, pid, () => undefined).map(f => f.join)).toEqual(['P0005', 'P0003', 'P0004']);
+        // A copy keeps the families (not the waiting tasks).
+        const copied = byRefn(applyContentOptions(data, false), 'P0001').research!.edge!.hypos[0];
+        expect(copied.joins).toEqual([
+            { person: 'P0005', variants: ['A'], island: 1 },
+            { person: 'P0003', variants: ['B'], island: 2 },
+            { person: 'P0004', variants: ['B'], island: 2 },
+            { person: 'P0009', variants: ['C'], island: 4 },
+        ]);
+    });
+
+    it('a research without level 4: the first join alone, as before', () => {
+        const body = `0 @I1@ INDI
+1 NAME Josef /Novák/
+1 REFN P0001
+1 _STROM_EDGE parents
+2 _HYPO H0001
+3 _JOIN P0005
+3 _JOIN P0007
+3 _VAR A
+3 _VAR B
+3 _ISLAND 2
+3 _HELD 1
+0 @I5@ INDI
+1 NAME Matouš /Novák/
+1 REFN P0005
+0 @I7@ INDI
+1 NAME Tomáš /Novák/
+1 REFN P0007
+0 TRLR
+`;
+        const data = load(true, body);
+        const hypo = byRefn(data, 'P0001').research!.edge!.hypos[0];
+        expect(hypo.joins).toBeUndefined();
+        const pid = (refn: string) => Object.values(data.persons).find(p => p.refn === refn) ?? null;
+        expect(edgeHypoFamilies(hypo, pid, refn => refn)).toEqual([{ join: 'P0005', variants: ['A', 'B'], size: 2, held: 1 }]);
+        expect(edgeHypoFamilies(hypo, () => null, refn => refn)).toEqual([]);
     });
 
     it('a foreign GEDCOM keeps nothing of it', () => {

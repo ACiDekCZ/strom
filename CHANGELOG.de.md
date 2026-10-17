@@ -6,6 +6,7 @@
 
 *Diese Version ist in Vorbereitung; dieser Abschnitt wächst mit jeder Testversion.*
 
+- **Rand des Stammbaums**: Eine Hypothese, deren Versionen jeweils eine andere Familie außerhalb des Stammbaums verbinden würden, zeigt alle. Die Blase am Rand des Stammbaums und *Über der Person* führen jede Familie mit ihren Versionen, Personen und wartenden Aufgaben auf, jede als Link zu ihr; die Pille zeigt *+ 2 Familien* und bietet jede an. Mit Strom Research 1.16 oder neuer.
 - **Fehlerbehebungen**: Die Pille *+ Familie · N* am Rand des Stammbaums zählt die Familie, die sie zeigt: Bei einer Hypothese, deren Varianten jeweils eine andere Familie außerhalb des Stammbaums verbinden würden, gehören die Zahl der Personen und der wartenden Aufgaben jetzt zu der Familie, die nach einem Klick erscheint.
 
 ## 3.12.0

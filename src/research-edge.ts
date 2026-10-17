@@ -91,9 +91,52 @@ export function edgeNamedOptions(person: Pick<Person, 'research'>): number {
  * (its `_STROM_ISLAND` is the family shown when it is reached); the
  * hypothesis' own `_ISLAND` / `_HELD` only when that person has none.
  */
-export function edgeHypoFamily(hypo: ResearchEdgeHypo, joined: Pick<Person, 'research'> | null | undefined): { size?: number; held?: number } {
+export function edgeHypoFamily(hypo: Pick<ResearchEdgeHypo, 'island' | 'held'>, joined: Pick<Person, 'research'> | null | undefined): { size?: number; held?: number } {
     const island = joined?.research?.island;
     return island ? { size: island.size, held: island.held } : { size: hypo.island, held: hypo.held };
+}
+
+/** One family outside the tree an edge's hypothesis would link (see edgeHypoFamilies). */
+export interface EdgeHypoFamilyLink {
+    /** REFN of the person reaching it: the first of its people the hypothesis joins. */
+    join: string;
+    /** The variants that would link it (empty: not known). */
+    variants: string[];
+    size?: number;
+    held?: number;
+}
+
+/**
+ * The families outside the tree an edge's hypothesis would link, in the
+ * research's order: its joins grouped by the family they belong to
+ * (`familyOf`: the same key for people of one family). A person not in the
+ * data (`person` gives none) cannot be reached: left out. The numbers as in edgeHypoFamily, the
+ * join's own (level 4) before the hypothesis' (the first join's). A research
+ * without level 4 gives the first join alone, as before.
+ */
+export function edgeHypoFamilies(
+    hypo: ResearchEdgeHypo,
+    person: (refn: string) => Pick<Person, 'research'> | null | undefined,
+    familyOf: (refn: string) => unknown,
+): EdgeHypoFamilyLink[] {
+    if (!hypo.joins?.length) {
+        if (!hypo.join || !person(hypo.join)) return [];
+        return [{ join: hypo.join, variants: [...hypo.variants ?? []], ...edgeHypoFamily(hypo, person(hypo.join)) }];
+    }
+    const families = new Map<unknown, EdgeHypoFamilyLink>();
+    hypo.joins.forEach((j, i) => {
+        const joined = person(j.person);
+        if (!joined) return;
+        const key = familyOf(j.person) ?? j.person;
+        const known = families.get(key);
+        if (known) {
+            for (const v of j.variants ?? []) if (!known.variants.includes(v)) known.variants.push(v);
+            return;
+        }
+        const own = { island: j.island ?? (i === 0 ? hypo.island : undefined), held: j.held ?? (i === 0 ? hypo.held : undefined) };
+        families.set(key, { join: j.person, variants: [...j.variants ?? []], ...edgeHypoFamily(own, joined) });
+    });
+    return [...families.values()];
 }
 
 export function edgeShape(end: string | undefined): EdgeShape {

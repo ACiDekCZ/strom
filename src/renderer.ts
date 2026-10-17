@@ -20,7 +20,7 @@ import {
 import { TreeManager } from './tree-manager.js';
 import { chainLinkSvg, iconSvg } from './icons.js';
 import * as CrossTree from './cross-tree.js';
-import { ViewMode, STANDALONE_VIEWS, ResearchEdgeMode } from './types.js';
+import { ViewMode, STANDALONE_VIEWS, ResearchEdgeMode, ResearchEdgeHypo } from './types.js';
 import { cardLines, CardLine, cardLineHtml, cardYears, CardLineStyle, cardDateReferences, cardAge, formatAge, isFieldCardDensity } from './card-fields.js';
 import {
     CustomCardMetrics, CardLineRows, CardHead, customCardMetrics, customCardRows, customCardViewHeight, customCardSpouseLineY,
@@ -29,7 +29,7 @@ import {
 import { checkRecordedAge, ageBirthDate } from './recorded-age.js';
 import { ACTION_GLYPH, AGENT_DONE_MS, AGENT_DONE_FADE_MS, AGENT_SPIN_MS, CardSignalContext, CardSignalInfo, cardSignalInfo, researchCardInfoNow, sharedPhaseDelay, stateStripesHtml } from './card-signals.js';
 import { EvidenceLevel, treeHasAnySource, unionsByPerson } from './evidence-level.js';
-import { EdgeView, edgeHypoFamily, edgeMoves, edgeNamedOptions, edgeView } from './research-edge.js';
+import { EdgeHypoFamilyLink, EdgeView, edgeHypoFamilies, edgeMoves, edgeNamedOptions, edgeView } from './research-edge.js';
 import {
     computeLayout,
     StromLayoutEngine,
@@ -70,7 +70,7 @@ import { measureUnionOrderPills, measureTabRows, rowKey, unionOrderPillKey, unio
 import { openCardMenuFromKeyboard } from './ui/keyboard-access.js';
 import { syncDepthStepper } from './ui/depth-stepper.js';
 import {
-    ViewLink, ViewLinkCandidate, loadViewLinks, isViewLinksMaster, viewLinksToDraw, viewLinksAvailable, viewLinkContext, viewLinkCandidates,
+    ViewLink, ViewLinkCandidate, loadViewLinks, isViewLinksMaster, viewLinksToDraw, viewLinksAvailable, viewLinkContext, viewLinkCandidates, familyGroups,
 } from './view-links.js';
 import { LineSegment, chainSegments, labelSpot, polylinePath, splitBus } from './view-link-lines.js';
 import { maxGenerationsWithSiblings } from './focus-depth.js';
@@ -2338,20 +2338,40 @@ class TreeRendererClass {
         const byRefn = new Map<string, PersonId>();
         for (const p of DataManager.getAllPersons()) if (p.refn) byRefn.set(p.refn, p.id);
         const re = strings.researchEdge;
+        let group: Map<PersonId, number> | null = null;
+        const familyOf = (refn: string): number | undefined => {
+            const pid = byRefn.get(refn);
+            if (!pid) return undefined;
+            group ??= familyGroups(DataManager.getData());
+            return group.get(pid);
+        };
+        const personOf = (refn: string): Person | null => {
+            const pid = byRefn.get(refn);
+            return pid ? DataManager.getPerson(pid) : null;
+        };
         for (const [id, v] of this.edgeViews) {
             const person = DataManager.getPerson(id);
             // The island's own edges point back to the tree: the tree's side draws the link.
             if (!person || person.research?.island || v.kind === 'proof' || v.named) continue;
-            const hypo = person.research?.edge?.hypos.find(h => h.join && byRefn.has(h.join));
             const tip = this.edgeStubTip(id);
-            if (!hypo || !tip) continue;
-            const joinId = byRefn.get(hypo.join!)!;
-            // The family shown "linked in the view only" stands linked: no pill, no curve to it.
-            if (this.viewLayer?.ghostOf.has(joinId)) continue;
-            const target = this.positions.get(joinId);
-            const pill = document.createElement('button');
-            pill.type = 'button';
-            if (target) {
+            if (!tip) continue;
+            let hypo: ResearchEdgeHypo | undefined, families: EdgeHypoFamilyLink[] = [];
+            for (const h of person.research?.edge?.hypos ?? []) {
+                if (!h.join) continue;
+                families = edgeHypoFamilies(h, personOf, familyOf);
+                if (families.length > 0) { hypo = h; break; }
+            }
+            if (!hypo) continue;
+            // A family shown "linked in the view only" stands linked: no pill, no curve to any.
+            if (families.some(f => this.viewLayer?.ghostOf.has(byRefn.get(f.join)!))) continue;
+            const several = families.length > 1;
+            // Families drawn: a curve to each; the rest one pill at the stub's end.
+            const away = families.filter(f => !this.positions.has(byRefn.get(f.join)!));
+            for (const f of families.filter(x => !away.includes(x))) {
+                const joinId = byRefn.get(f.join)!;
+                const target = this.positions.get(joinId)!;
+                const pill = document.createElement('button');
+                pill.type = 'button';
                 const w = this.config.cardWidth, h = this.cardHeightOf(joinId);
                 // Into the island card's nearest side (its top when it is above).
                 const above = target.y + h < tip.y;
@@ -2364,24 +2384,39 @@ class TreeRendererClass {
                 path.setAttribute('fill', 'none');
                 svg.appendChild(path);
                 pill.className = 'edge-link-pill edge-link-pill--link';
-                pill.textContent = re.linkPill(hypo.id);
+                // Several families: which version reaches this one.
+                pill.textContent = re.linkPill(several && f.variants.length > 0 ? `${hypo.id} ${f.variants.join(', ')}` : hypo.id);
                 // The curve's midpoint (t = 0.5 of the cubic above).
                 pill.style.left = `${(tip.x + tx) / 2}px`;
                 pill.style.top = `${0.125 * tip.y + 0.75 * midY + 0.125 * ty}px`;
+                pill.dataset.edgePerson = id;
+                pill.dataset.edgeHypo = hypo.id;
+                canvas.appendChild(pill);
+                UI.bindEdgeLinkPill(id, pill, joinId, hypo.id);
+            }
+            if (away.length === 0) continue;
+            const pill = document.createElement('button');
+            pill.type = 'button';
+            if (away.length > 1) {
+                // One of several: the pill offers each (src/ui/view-links-ui.ts).
+                pill.className = 'edge-link-pill edge-link-pill--family edge-link-pill--families';
+                pill.textContent = re.familiesPill(away.length);
+                pill.setAttribute('aria-label', re.familiesPillSr(away.length));
             } else {
                 // As many people as reaching the family shows (its own count, not the hypothesis').
-                const size = edgeHypoFamily(hypo, DataManager.getPerson(joinId)).size;
+                const size = away[0].size;
                 if (!size) continue;
                 pill.className = 'edge-link-pill edge-link-pill--family';
                 pill.textContent = re.familyPill(size);
                 pill.setAttribute('aria-label', re.familyPillSr(size));
-                pill.style.left = `${tip.x}px`;
-                pill.style.top = `${tip.y - 4}px`;
             }
+            pill.style.left = `${tip.x}px`;
+            pill.style.top = `${tip.y - 4}px`;
             pill.dataset.edgePerson = id;
             pill.dataset.edgeHypo = hypo.id;
             canvas.appendChild(pill);
-            UI.bindEdgeLinkPill(id, pill, joinId, hypo.id);
+            UI.bindEdgeLinkPill(id, pill, byRefn.get(away[0].join)!, hypo.id, away.length > 1
+                ? away.map(f => ({ personId: byRefn.get(f.join)!, variants: f.variants, size: f.size })) : undefined);
         }
     }
 

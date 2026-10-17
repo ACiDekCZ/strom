@@ -38,6 +38,15 @@ export interface ViewLinkMenuItem {
     run: () => void;
 }
 
+/** One of several families an edge pill can reach (src/renderer.ts renderEdgeLinks). */
+export interface EdgeLinkFamily {
+    /** The person reaching it. */
+    personId: PersonId;
+    /** The versions that would link it. */
+    variants: string[];
+    size?: number;
+}
+
 let menuCleanup: (() => void) | null = null;
 let chainCleanup: ((ok: boolean) => void) | null = null;
 
@@ -521,10 +530,23 @@ export const viewLinksUiMethods = uiModule({
      * it; pointing at it shows the edge's bubble. Elsewhere "+ family" goes to
      * the family, the curve's pill is only a label.
      */
-    bindEdgeLinkPill(personId: PersonId, pill: HTMLButtonElement, joinId: PersonId, hypo: string): void {
+    bindEdgeLinkPill(personId: PersonId, pill: HTMLButtonElement, joinId: PersonId, hypo: string, families?: readonly EdgeLinkFamily[]): void {
         const family = pill.classList.contains('edge-link-pill--family');
         if (!TreeRenderer.viewLinksOffered()) {
-            if (family) pill.onclick = (e) => { e.stopPropagation(); void TreeRenderer.setFocus(joinId); };
+            // Several families: a menu of them, not the first one alone.
+            if (families) {
+                pill.setAttribute('aria-haspopup', 'menu');
+                pill.setAttribute('aria-expanded', 'false');
+                pill.onclick = (e) => {
+                    e.stopPropagation();
+                    this.hideResearchEdgeBubble();
+                    this.openViewLinkFamilyMenu(pill, personId, joinId, hypo, families);
+                };
+                pill.addEventListener('mouseenter', () => {
+                    if (!touch() && !menuCleanup) this.showResearchEdgeBubble(personId, pill);
+                });
+                pill.addEventListener('mouseleave', () => this.hideResearchEdgeBubbleSoon());
+            } else if (family) pill.onclick = (e) => { e.stopPropagation(); void TreeRenderer.setFocus(joinId); };
             else {
                 pill.tabIndex = -1;
                 pill.classList.add('is-inert');
@@ -536,7 +558,7 @@ export const viewLinksUiMethods = uiModule({
         pill.onclick = (e) => {
             e.stopPropagation();
             this.hideResearchEdgeBubble();
-            this.openViewLinkFamilyMenu(pill, personId, joinId, hypo);
+            this.openViewLinkFamilyMenu(pill, personId, joinId, hypo, families);
         };
         pill.addEventListener('mouseenter', () => {
             if (!touch() && !menuCleanup) this.showResearchEdgeBubble(personId, pill);
@@ -544,11 +566,16 @@ export const viewLinksUiMethods = uiModule({
         pill.addEventListener('mouseleave', () => this.hideResearchEdgeBubbleSoon());
     },
 
-    /** The pill's menu: "Show as linked" per version (or "Unlink" while shown), then "Go to the family". */
-    openViewLinkFamilyMenu(pill: HTMLElement, personId: PersonId, joinId: PersonId, hypo: string): void {
+    /**
+     * The pill's menu: "Show as linked" per version (or "Unlink" while shown),
+     * then "Go to the family" (one per family, with its versions and people,
+     * when the hypothesis would link one of several). Without view links only
+     * the families.
+     */
+    openViewLinkFamilyMenu(pill: HTMLElement, personId: PersonId, joinId: PersonId, hypo: string, families?: readonly EdgeLinkFamily[]): void {
         const v = strings.viewLinks;
         const variants = DataManager.getPerson(personId)?.research?.edge?.hypos.find(h => h.id === hypo)?.variants;
-        const offers = this.viewLinkOffersFor(hypo)
+        const offers = !TreeRenderer.viewLinksOffered() ? [] : this.viewLinkOffersFor(hypo)
             .filter(o => o.choice?.anchorId === personId && (!variants?.length || variants.includes(o.variant)));
         const items: ViewLinkMenuItem[] = [];
         const shown = offers.find(o => o.shown);
@@ -568,7 +595,16 @@ export const viewLinksUiMethods = uiModule({
                 });
             }
         }
-        items.push({ label: v.goToFamily, hint: v.goBackHint, action: 'go', run: () => void TreeRenderer.setFocus(joinId) });
+        if (families) {
+            for (const f of families) {
+                const who = [personName(f.personId), f.size ? v.people(f.size) : ''].filter(Boolean).join(', ');
+                items.push({
+                    label: v.goToFamily, action: 'go',
+                    hint: f.variants.length > 0 ? `${hypo} ${f.variants.join(', ')} · ${who}` : who,
+                    run: () => void TreeRenderer.setFocus(f.personId),
+                });
+            }
+        } else items.push({ label: v.goToFamily, hint: v.goBackHint, action: 'go', run: () => void TreeRenderer.setFocus(joinId) });
         this.openViewLinkMenu(pill, items, v.menuAria(personName(personId)));
     },
 

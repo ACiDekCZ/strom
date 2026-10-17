@@ -553,6 +553,24 @@ export interface ResearchEdgeHypo {
     tests: string[];
     /** The variants of the hypothesis that would make the join (3 _VAR): their letters. */
     variants?: string[];
+    /**
+     * Every person it names to join, in the research's order, each with its
+     * own family (level 4 under `_JOIN`); none from a research that writes
+     * no level 4 (the first `join` and the numbers above then).
+     */
+    joins?: ResearchEdgeJoin[];
+}
+
+/** One person an edge's hypothesis would join, and the family outside the tree it belongs to. */
+export interface ResearchEdgeJoin {
+    /** REFN of the person. */
+    person: string;
+    /** The variants naming this person (4 _VAR): their letters. */
+    variants?: string[];
+    /** People in its family outside the tree. */
+    island?: number;
+    /** Tasks about that family waiting outside the queue. */
+    held?: number;
 }
 
 /** A person of a family nothing links to the tree yet. */

@@ -230,7 +230,7 @@ export function viewLinkContext(data: StromData): ViewLinkContext {
 }
 
 /** Connected groups of people over the real links (union–find). */
-function familyGroups(data: StromData): Map<PersonId, number> {
+export function familyGroups(data: StromData): Map<PersonId, number> {
     const ids = Object.keys(data.persons ?? {}) as PersonId[];
     const index = new Map(ids.map((id, i) => [id, i]));
     const parent = ids.map((_, i) => i);

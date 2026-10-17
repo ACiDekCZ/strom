@@ -148,7 +148,8 @@ export function stripResearchWork(data: StromData): StromData {
                 tasks: [],
                 tried: [],
                 conflicts: e.conflicts,
-                hypos: e.hypos.map(h => ({ id: h.id, ...(h.join ? { join: h.join } : {}), ...(h.island !== undefined ? { island: h.island } : {}), tests: [], ...(h.variants ? { variants: h.variants } : {}) })),
+                hypos: e.hypos.map(h => ({ id: h.id, ...(h.join ? { join: h.join } : {}), ...(h.island !== undefined ? { island: h.island } : {}), tests: [], ...(h.variants ? { variants: h.variants } : {}),
+                    ...(h.joins ? { joins: h.joins.map(j => ({ person: j.person, ...(j.variants ? { variants: j.variants } : {}), ...(j.island !== undefined ? { island: j.island } : {}) })) } : {}) })),
             };
         }
         if (r.island) r.island = { size: r.island.size, hypos: r.island.hypos };
