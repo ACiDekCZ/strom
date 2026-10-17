@@ -61,6 +61,9 @@ async function exportAppFile(page: Page, testInfo: TestInfo, name: string, passw
 }
 
 /** Jan + Marie Novak with their son Petr (3 persons, 1 couple). */
+/** A name as the embedded data carries it; the app's own code may hold the bare name (e.g. a settings sample). */
+const DATA_NAME = '"firstName":"Marie"';
+
 async function buildFamily(page: Page): Promise<void> {
     await createFirstPerson(page, 'Jan', 'Novak');
     await addRelation(page, 'Jan', 'partner', 'Marie', 'Novak', 'female');
@@ -72,6 +75,8 @@ test('an exported HTML app imports through "From HTML file" as a new tree with i
     await openApp(page);
     await buildFamily(page);
     const file = await exportAppFile(page, testInfo, 'family.html');
+    // An unprotected file carries the names as plain JSON data.
+    expect(readFileSync(file, 'utf-8')).toContain(DATA_NAME);
     const before = await treeSummaries(page);
     expect(before).toHaveLength(1);
 
@@ -99,7 +104,7 @@ test('a password-protected HTML app asks for the file password: wrong keeps aski
     const file = await exportAppFile(page, testInfo, 'locked.html', FILE_PASSWORD);
     // The exported file keeps the names encrypted.
     const html = readFileSync(file, 'utf-8');
-    expect(html).not.toContain('Marie');
+    expect(html).not.toContain(DATA_NAME);
 
     await importFromManager(page, 'From HTML file', file);
     const prompt = page.locator('#password-prompt-modal');
