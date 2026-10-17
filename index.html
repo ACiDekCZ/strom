@@ -4153,8 +4153,12 @@
         }
         .age-check strong { font-weight: 600; }
         .age-check--warn { color: var(--warning-text); }
-        /* "+ title" and "+ married surname" side by side under the name. */
-        .detail-group .detail-links { display: flex; flex-wrap: wrap; column-gap: 16px; }
+        /* "+ title" and "+ married surname" side by side under the name. Inline
+           in a plain block, not flex: the line box (with its strut) places the
+           links exactly where "+ title" alone always sat; a flex row dropped the
+           strut and lifted the link and the form under it by 5px. */
+        .detail-group .detail-links { display: block; }
+        .detail-group .detail-links .detail-more:not([hidden]) + .married-surname-more { margin-left: 16px; }
         .detail-group .married-surname-more {
             display: inline-block;
             background: none;
@@ -14621,8 +14625,8 @@
                         </div>
                     </div>
                     <div class="detail-links">
-                        <button type="button" class="detail-more" hidden></button>
-                        <button type="button" class="married-surname-more" id="married-surname-more" hidden data-i18n="person.addMarriedSurname"></button>
+                        <!-- No white space between the two: the gap is the margin. -->
+                        <button type="button" class="detail-more" hidden></button><button type="button" class="married-surname-more" id="married-surname-more" hidden data-i18n="person.addMarriedSurname"></button>
                     </div>
                 </div>
                 <div class="form-group">

@@ -202,7 +202,7 @@ test('several marriages: from the latest wedding; one among her other spellings 
     const chip = modal.locator('#married-suggestion');
     await cardAction(page, 'Marie', 'edit');
     await expect(chip.locator('.married-suggestion-main')).toHaveText('Suggestion: Nováková');
-    await expect(chip.locator('.married-suggestion-source')).toHaveText('from husband’s surname Jan Novák · also among other name forms');
+    await expect(chip.locator('.married-suggestion-source')).toHaveText('from husband’s surname Jan Novák · also among other spellings of the name');
     await modal.getByRole('button', { name: 'Cancel' }).click();
 
     // Karel married later: his surname.
