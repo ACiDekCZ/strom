@@ -23,7 +23,7 @@
  */
 
 import { PartnershipId, PersonId, Position, StromData, Partnership } from './types.js';
-import type { Connection, SpouseLine } from './layout/pipeline/types.js';
+import type { Connection, SpouseLine, OmittedEdge } from './layout/pipeline/types.js';
 import { parseFlexDate, displayYear } from './dates.js';
 import { isDiagramStandIn } from './layout/pipeline/placeholders.js';
 
@@ -252,6 +252,55 @@ export function hiddenRelativesTabs(
     }
     if (siblings.size > 0 && ![...siblings].some(inView)) out.push('siblings');
     if (person.childIds.length > 0 && !person.childIds.some(inView)) out.push('children');
+    return out;
+}
+
+/**
+ * A tab that stands for a line the layout left out (LayoutResult.omittedEdges):
+ * on the child's card "parents ↗", on a parent's card "child ↗" (or
+ * "children ↗" for several). A click jumps to the other end.
+ */
+export type LineLinkTab = 'linkParents' | 'linkChild' | 'linkChildren';
+
+/** Any tab on a card's top edge, in one row: the hidden-relatives tabs, then the line links. */
+export type BranchTab = HiddenRelativesTab | LineLinkTab;
+
+/** The other ends of a card's left-out lines: its parents (as a child) and its children (as a parent). */
+export interface LineLinks {
+    parentIds: PersonId[];
+    childIds: PersonId[];
+}
+
+/**
+ * The line links of every card with a left-out line, in the layout's order
+ * (each id once). A parent of several left-out children gets one link to all.
+ */
+export function lineLinksOf(edges: readonly OmittedEdge[]): Map<PersonId, LineLinks> {
+    const out = new Map<PersonId, LineLinks>();
+    const of = (id: PersonId): LineLinks => {
+        let links = out.get(id);
+        if (!links) { links = { parentIds: [], childIds: [] }; out.set(id, links); }
+        return links;
+    };
+    for (const edge of edges) {
+        if (edge.parentIds.length === 0) continue;
+        const child = of(edge.childId);
+        for (const parentId of edge.parentIds) {
+            if (!child.parentIds.includes(parentId)) child.parentIds.push(parentId);
+            const parent = of(parentId);
+            if (!parent.childIds.includes(edge.childId)) parent.childIds.push(edge.childId);
+        }
+    }
+    return out;
+}
+
+/** The line-link tabs of a card, in the order the card shows them. */
+export function lineLinkTabs(links: LineLinks | undefined): LineLinkTab[] {
+    if (!links) return [];
+    const out: LineLinkTab[] = [];
+    if (links.parentIds.length > 0) out.push('linkParents');
+    if (links.childIds.length === 1) out.push('linkChild');
+    else if (links.childIds.length > 1) out.push('linkChildren');
     return out;
 }
 

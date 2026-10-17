@@ -7,7 +7,7 @@
  * measure again).
  */
 
-import { PillMetrics, HiddenRelativesTab, estimatePillMetrics } from './marriage-order.js';
+import { PillMetrics, BranchTab, estimatePillMetrics } from './marriage-order.js';
 import { strings } from './strings.js';
 
 /** The face of the pill and tab texts (index.html: 600 10px var(--font-sans)). */
@@ -52,15 +52,24 @@ export function unionOrderPillPartsHtml(ordinal: string, year: string, glyph = t
         + (year ? `<span class="uo-year">${escapeHtml(year)}</span>` : '');
 }
 
-const TAB_GLYPH: Record<HiddenRelativesTab, string> = { parents: '◂', siblings: '◆', children: '▸' };
+const TAB_GLYPH: Record<BranchTab, string> = {
+    parents: '◂', siblings: '◆', children: '▸', linkParents: '◂', linkChild: '▸', linkChildren: '▸',
+};
 
-function tabLabel(kind: HiddenRelativesTab): string {
-    return kind === 'parents' ? strings.focus.branchTabParents
-        : kind === 'siblings' ? strings.focus.branchTabSiblings : strings.focus.branchTabChildren;
+/** The word of a card's top-edge tab (a hidden-relatives tab or a line link). */
+export function tabLabel(kind: BranchTab): string {
+    switch (kind) {
+        case 'parents': return strings.focus.branchTabParents;
+        case 'siblings': return strings.focus.branchTabSiblings;
+        case 'children': return strings.focus.branchTabChildren;
+        case 'linkParents': return strings.focus.linkTabParents;
+        case 'linkChild': return strings.focus.linkTabChild;
+        case 'linkChildren': return strings.focus.linkTabChildren;
+    }
 }
 
-/** The resting look of a hidden-relatives tab (no bubble): its glyph and word. */
-export function branchTabRestHtml(kind: HiddenRelativesTab): string {
+/** The resting look of a top-edge tab (no bubble): its glyph and word. */
+export function branchTabRestHtml(kind: BranchTab): string {
     return `<span class="pill-glyph">${TAB_GLYPH[kind]}</span><span class="pill-text">${escapeHtml(tabLabel(kind))}</span>`;
 }
 
@@ -128,17 +137,17 @@ export function measureUnionOrderPill(ordinal: string, year: string, glyph = tru
 export { pillKey as unionOrderPillKey };
 
 /** The key of a row of tabs in measureTabRows' result (its words: the language's). */
-export function rowKey(kinds: readonly HiddenRelativesTab[]): string {
+export function rowKey(kinds: readonly BranchTab[]): string {
     return kinds.map(k => `${k}:${tabLabel(k)}`).join(',');
 }
 
 /**
- * Widths of rows of resting hidden-relatives tabs (4px apart, as on the card's
+ * Widths of rows of resting top-edge tabs (hidden relatives, line links; 4px apart, as on the card's
  * top edge), one per distinct row; 0 for an empty row.
  */
-export function measureTabRows(rows: Iterable<readonly HiddenRelativesTab[]>): Map<string, number> {
+export function measureTabRows(rows: Iterable<readonly BranchTab[]>): Map<string, number> {
     const out = new Map<string, number>();
-    const todo: Array<{ key: string; kinds: readonly HiddenRelativesTab[] }> = [];
+    const todo: Array<{ key: string; kinds: readonly BranchTab[] }> = [];
     for (const kinds of rows) {
         const key = rowKey(kinds);
         if (out.has(key)) continue;

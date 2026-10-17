@@ -36,6 +36,7 @@ import {
     LayoutRequest,
     Connection,
     SpouseLine,
+    OmittedEdge,
     DisplayPolicy,
     runLayoutPipelineWithDebug,
     collectBloodDescendants,
@@ -63,10 +64,10 @@ import { isMobile as isMobileViewport } from './breakpoints.js';
 import { parentRelKind, parentRelDash, connectionDash } from './parent-rel-style.js';
 import { isDiagramStandIn } from './layout/pipeline/placeholders.js';
 import {
-    unionOrderBadges, UnionOrderBadge, hiddenRelativesTabs, HiddenRelativesTab, placeUnionOrderPill, PillPlacement, REL_LINK_ICON_WIDTH,
+    unionOrderBadges, UnionOrderBadge, hiddenRelativesTabs, BranchTab, lineLinksOf, lineLinkTabs, LineLinks, placeUnionOrderPill, PillPlacement, REL_LINK_ICON_WIDTH,
     viewLineSegments, segmentsNearCard, EDGE_INSET, PillLabel, pillLabelForms, pillLabelWidths, unionSummaries,
 } from './marriage-order.js';
-import { measureUnionOrderPills, measureTabRows, rowKey, unionOrderPillKey, unionOrderPillPartsHtml, pillFontsPending } from './union-order-measure.js';
+import { measureUnionOrderPills, measureTabRows, rowKey, unionOrderPillKey, unionOrderPillPartsHtml, pillFontsPending, branchTabRestHtml } from './union-order-measure.js';
 import { openCardMenuFromKeyboard } from './ui/keyboard-access.js';
 import { syncDepthStepper } from './ui/depth-stepper.js';
 import {
@@ -121,6 +122,8 @@ interface OutputLayout {
     positions: Map<PersonId, Position>;
     connections: Connection[];
     spouseLines: SpouseLine[];
+    /** The lines left out (step 7): the image labels their cards instead. */
+    omittedEdges: OmittedEdge[];
     box: CardBox;
     custom: CustomCardMetrics | null;
 }
@@ -190,6 +193,9 @@ class TreeRendererClass {
 
     // Connections for line rendering from layout engine
     private connections: Connection[] = [];
+    /** The lines the layout left out (LayoutResult.omittedEdges) and their other ends, per card. */
+    private omittedEdges: OmittedEdge[] = [];
+    private lineLinks = new Map<PersonId, LineLinks>();
     /**
      * Links "linked in the view only" the current render laid out (null:
      * none — another view, the feature not available, the main switch off).
@@ -311,6 +317,8 @@ class TreeRendererClass {
         svg.innerHTML = '';
         this.positions.clear();
         this.connections = [];
+        this.omittedEdges = [];
+        this.lineLinks = new Map();
         this.generationBands = [];
         this.layoutBands = [];
         this.viewLayer = null;
@@ -409,6 +417,8 @@ class TreeRendererClass {
         // Apply layout result
         this.positions = result.positions;
         this.connections = result.connections;
+        this.omittedEdges = result.omittedEdges ?? [];
+        this.lineLinks = lineLinksOf(this.omittedEdges);
         this.spouseLines = result.spouseLines;
         this.layoutBands = result.bands ?? [];
         this.viewLayer = result.viewLayer ?? null;
@@ -615,7 +625,8 @@ class TreeRendererClass {
         if (!this.viewLayer || !this.focusPersonId) {
             return {
                 positions: this.positions, connections: this.withoutEdgeRoom(this.connections, this.edgeRoomIds),
-                spouseLines: this.spouseLines, box: this.posterBox(this.config, this.edgeRoomIds), custom: this.customMetrics,
+                spouseLines: this.spouseLines, omittedEdges: this.omittedEdges,
+                box: this.posterBox(this.config, this.edgeRoomIds), custom: this.customMetrics,
             };
         }
         if (this.outputLayoutCache?.seq === this.renderSeq) return this.outputLayoutCache.output;
@@ -638,7 +649,7 @@ class TreeRendererClass {
         }
         const output: OutputLayout = {
             positions: result.positions, connections: this.withoutEdgeRoom(result.connections, edgeRoomIds),
-            spouseLines: result.spouseLines, box: this.posterBox(config, edgeRoomIds), custom,
+            spouseLines: result.spouseLines, omittedEdges: result.omittedEdges ?? [], box: this.posterBox(config, edgeRoomIds), custom,
         };
         this.outputLayoutCache = { seq: this.renderSeq, output };
         return output;
@@ -1401,15 +1412,18 @@ class TreeRendererClass {
      * own layout of the view; `includeView: true` — the minimap — takes the
      * screen's, ghosts and all).
      */
-    getPosterLayout(opts: { includeView?: boolean } = {}): { positions: Map<PersonId, Position>; connections: Connection[]; spouseLines: SpouseLine[] } {
+    getPosterLayout(opts: { includeView?: boolean } = {}): {
+        positions: Map<PersonId, Position>; connections: Connection[]; spouseLines: SpouseLine[]; omittedEdges: OmittedEdge[];
+    } {
         if (!opts.includeView) {
-            const { positions, connections, spouseLines } = this.outputLayout();
-            return { positions, connections, spouseLines };
+            const { positions, connections, spouseLines, omittedEdges } = this.outputLayout();
+            return { positions, connections, spouseLines, omittedEdges };
         }
         return {
             positions: this.positions,
             connections: this.withoutEdgeRoom(this.connections, this.edgeRoomIds),
             spouseLines: this.spouseLines,
+            omittedEdges: this.omittedEdges,
         };
     }
 
@@ -1744,6 +1758,12 @@ class TreeRendererClass {
                     branchTabsHtml += `<button class="branch-tab" data-action="focus-child"><span class="pill-glyph">▸</span><span class="pill-text">${strings.focus.branchTabChildren}</span><div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenChildrenTooltip}</div>${childItems}</div></button>`;
                 }
             }
+
+            // Line links (after the hidden-relatives tabs, in every view, the
+            // descendants chart too): a line the layout left out because it
+            // could not be drawn without crossing or running along another
+            // family's line (step 7). A click jumps to the other end.
+            branchTabsHtml += this.lineLinkTabsHtml(id);
 
             // Hidden relationship indicators (bottom-left edge slot): ∞ partners, ⌂ families.
             // Gen >= -1 persons are auto-expanded, so these only appear for ancestors (gen <= -2).
@@ -2089,11 +2109,20 @@ class TreeRendererClass {
             }
 
             // Attach event listeners for branch tabs - all focus on this person
-            const branchTabs = card.querySelectorAll('.branch-tab');
+            const branchTabs = card.querySelectorAll('.branch-tab:not(.line-link)');
             branchTabs.forEach(tab => {
                 tab.addEventListener('click', (e) => {
                     e.stopPropagation();
                     this.setFocus(id);
+                });
+            });
+            // Line links jump to the other end of the left-out line; the focus stays
+            card.querySelectorAll<HTMLElement>('.branch-tab.line-link').forEach(tab => {
+                tab.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const links = this.lineLinks.get(id);
+                    if (!links) return;
+                    this.jumpToPersons(tab.dataset.action === 'jump-parents' ? links.parentIds : links.childIds);
                 });
             });
 
@@ -3273,9 +3302,11 @@ class TreeRendererClass {
         const showTabs = this.viewMode !== 'descendants';
         const formsOf = (b: UnionOrderBadge) => pillLabelForms(strings.focus.unionOrdinal(b.number), b.year);
         const pills = measureUnionOrderPills([...badges.values()].flatMap(formsOf));
-        const tabsOf = new Map<PersonId, HiddenRelativesTab[]>();
+        const tabsOf = new Map<PersonId, BranchTab[]>();
         for (const id of badges.keys()) {
-            tabsOf.set(id, showTabs ? hiddenRelativesTabs(data, id, pid => this.positions.has(pid), unionChildIds) : []);
+            // The line links show in every view (the descendants chart too)
+            const hidden = showTabs ? hiddenRelativesTabs(data, id, pid => this.positions.has(pid), unionChildIds) : [];
+            tabsOf.set(id, [...hidden, ...lineLinkTabs(this.lineLinks.get(id))]);
         }
         const tabRows = measureTabRows(tabsOf.values());
         const segments = viewLineSegments({ connections: this.connections, spouseLines: this.spouseLines });
@@ -3309,6 +3340,43 @@ class TreeRendererClass {
         const seq = this.renderSeq;
         pillFontsPending()?.then(() => { if (seq === this.renderSeq) this.render(); });
         return out;
+    }
+
+    /**
+     * The line-link tabs of a card (lineLinkTabs): the branch-tab pill, its
+     * bubble naming the people at the other end of the left-out line.
+     */
+    private lineLinkTabsHtml(id: PersonId): string {
+        const links = this.lineLinks.get(id);
+        let html = '';
+        for (const kind of lineLinkTabs(links)) {
+            const toParents = kind === 'linkParents';
+            const people = (toParents ? links!.parentIds : links!.childIds)
+                .map(pid => DataManager.getPerson(pid))
+                .filter((p): p is Person => p !== null);
+            const header = kind === 'linkParents' ? strings.focus.linkParentsTooltip
+                : kind === 'linkChild' ? strings.focus.linkChildTooltip : strings.focus.linkChildrenTooltip;
+            const items = people.map(p => {
+                const year = displayYear(p.birthDate);
+                return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(shownName(p, '?'))}</span>${year ? `<span class="badge-tooltip-detail"> *${this.escapeHtml(year)}</span>` : ''}</div>`;
+            }).join('');
+            const label = `${header}: ${people.map(p => shownName(p, '?')).join(', ')}`;
+            html += `<button type="button" class="branch-tab line-link" data-action="${toParents ? 'jump-parents' : 'jump-child'}" aria-label="${this.escapeHtml(label)}">`
+                + `${branchTabRestHtml(kind)}<div class="badge-tooltip" aria-hidden="true"><div class="badge-tooltip-header">${this.escapeHtml(header)}</div>${items}</div></button>`;
+        }
+        return html;
+    }
+
+    /**
+     * Bring these cards into view and highlight them, without changing the
+     * focus (a line link's other end): one card centred, several fitted.
+     */
+    private jumpToPersons(ids: readonly PersonId[]): void {
+        const shown = ids.filter(pid => this.positions.has(pid));
+        if (shown.length === 0) return;
+        if (shown.length === 1) ZoomPan.centerOnPerson(shown[0]);
+        else ZoomPan.fitPersons(shown);
+        for (const pid of shown) ZoomPan.highlightPerson(pid);
     }
 
     private escapeHtml(text: string): string {

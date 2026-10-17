@@ -2925,6 +2925,10 @@
         .branch-tab:hover .badge-tooltip {
             display: block;
         } }
+        /* A line link (a line the layout left out, src/renderer.ts lineLinkTabsHtml):
+           the branch tab; from the keyboard it shows its bubble too. */
+        .branch-tab.line-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .branch-tab.line-link:focus-visible .badge-tooltip { display: block; }
         .badge-tooltip-header {
             font-weight: 600;
             font-size: 10.5px;

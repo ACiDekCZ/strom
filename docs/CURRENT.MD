@@ -461,6 +461,53 @@ For each union with children:
 Post-processing:
 - `resolveBusCollisions`: lane-based bus routing for overlapping buses
 - `resolveElbowClearance`: nudging drop positions for min distance
+- `omitUnroutableDrops`: lines that still cannot be drawn cleanly are left out
+
+### Lines that cannot be routed (omitted edges)
+
+After the lanes and the elbow clearance, step 7 checks every line of the
+layout (`pipeline/line-geometry.ts`): a crossing, a collinear run (two lines
+merged on one X or Y) or a T-touch (an endpoint on a foreign line) between
+the lines of two different unions. A union's own segments and its partner
+line meet freely. The check uses a uniform grid (128 px cells) over the
+segments' boxes, so it costs about O(S · k), not O(S²); it is the same
+function the built-in validation and the test geometry audit use.
+
+When violations remain, `omitUnroutableDrops` removes one child's drop at a
+time, greedily and deterministically:
+
+1. Candidates: the drop on a violating segment, or every drop of a union
+   whose stem, connector or bus is involved.
+2. Score: the violations the drop's removal clears (the union's line counted
+   again without that drop, its bus recomputed from the remaining drops).
+3. Order: a drop off the focus's own line (the focus, their ancestors and
+   descendants) always before one on it; then the higher score; then the drop
+   farther from the focus (relationship distance); then a single-child union;
+   then union id and child id.
+4. After each removal the lanes are allocated again from their zero offsets
+   (`resolveBusCollisions` + `resolveElbowClearance`; reverted when that adds
+   violations). At most `MAX_OMITTED_DROPS` (10) drops per layout; the loop
+   stops when nothing is left or no candidate helps.
+
+The last drop of a union takes its whole line with it. Card positions never
+change. Lines of the view layer (links "linked in the view only") are
+candidates under the same rules. Each removal is listed in
+`RoutedModel.omittedEdges` / `LayoutResult.omittedEdges`
+(`OmittedEdge { unionId, childId, parentIds, stemPersonId?, view? }`;
+`parentIds` are the union's shown partners, a hidden "?" stand-in left out;
+`view` is set by `flagViewLayer` like the lines' flags).
+
+The renderer turns an omitted edge into links on the cards, in the
+`.branch-tab` pill of the top-right edge slot: "◂ parents ↗" on the child's
+card, "▸ child ↗" (or "children ↗" for several) on each parent's card, the
+bubble naming the other end. They show in every view, the descendants chart
+too; a click or Enter brings the other end into view (`ZoomPan.centerOnPerson`
+for one card, `fitPersons` for several) and highlights it, without changing
+the focus. The marriage-order pill's placement counts them with the other
+tabs (`measureTabRows`). The image export (poster, family book) draws a
+static label under the card instead: "parents: …", "child: …".
+
+Debug: `globalThis.__OMIT_DEBUG = true` logs each round's candidates.
 
 ---
 
@@ -470,6 +517,9 @@ Post-processing:
    (see Generation bands); `LayoutResult.bands` lists the bands
 2. Normalizes X: shifts everything so minX = padding
 3. Normalization includes: positions, connections, spouseLines, branch bounds
+4. Passes `omittedEdges` through (ids only, nothing to normalize); the
+   built-in validation checks every line (`line-geometry.ts`) and that each
+   omitted edge names a child and at least one parent with a card
 
 ### Generation bands
 
@@ -725,12 +775,15 @@ touch UI on a phone, a phone held sideways and a tablet.
 EVERY person of every fixture as focus, in standard + expanded modes, checking
 card overlaps, position validity, built-in validation and the strict geometry
 audit (`helpers/geometryAudit.ts`: crossings, collinear merges, T-touches,
-lines through cards). `KNOWN_LINE_KNOTS` lists the only tolerated
-constellation class; `inherent-crossing` marks topologically forced crossings
-between cross-married unions.
+lines through cards). Lines step 7 left out are listed in the report
+(`test/failures-full-<fixture>.txt`, "Omitted lines") and fail the run when
+one is on the focus's own line. `KNOWN_LINE_KNOTS` is empty since step 7
+omits unroutable lines; an entry whose run is clean fails the harness.
+`inherent-crossing` marks topologically forced crossings between
+cross-married unions (none remain drawn).
 
 **Fixtures** — `comprehensive.json` (53 persons), targeted `edge-*.json`,
-generated `etalon-*.json` scenarios A–N (`npm run gen:etalon`), plus a local
+generated `etalon-*.json` scenarios A–O (`npm run gen:etalon`), plus a local
 gitignored real-data fixture (skipped gracefully when absent).
 
 **Pipeline unit tests** — per-step tests (`buildModel`, `assignGenerations`,

@@ -2495,6 +2495,19 @@ const stringsEN = {
         branchTabParents: 'parents',
         branchTabSiblings: 'siblings',
         branchTabChildren: 'family',
+        // A line the layout could not draw cleanly is left out (step 7): the
+        // child's card links to its parents, the parents' cards to the child.
+        // The tab jumps to the other end without changing the focus.
+        linkTabParents: 'parents ↗',
+        linkTabChild: 'child ↗',
+        linkTabChildren: 'children ↗',
+        linkParentsTooltip: 'Parents stand elsewhere in the tree',
+        linkChildTooltip: 'Child stands elsewhere in the tree',
+        linkChildrenTooltip: 'Children stand elsewhere in the tree',
+        // The same link on the poster and in the book (a static label).
+        linkPosterParents: (names: string) => `parents: ${names}`,
+        linkPosterChild: (names: string) => `child: ${names}`,
+        linkPosterChildren: (names: string) => `children: ${names}`,
         // Marriage-order pill on a partner's card (T13): "1st ∞ 1866"; its hover
         // bubble names whose marriage the number counts.
         unionOrdinal: (n: number) => ordEn(n),
@@ -6510,6 +6523,15 @@ const stringsCZ: StringsType = {
         branchTabParents: 'rodiče',
         branchTabSiblings: 'sourozenci',
         branchTabChildren: 'rodina',
+        linkTabParents: 'rodiče ↗',
+        linkTabChild: 'dítě ↗',
+        linkTabChildren: 'děti ↗',
+        linkParentsTooltip: 'Rodiče stojí jinde ve stromu',
+        linkChildTooltip: 'Dítě stojí jinde ve stromu',
+        linkChildrenTooltip: 'Děti stojí jinde ve stromu',
+        linkPosterParents: (names: string) => `rodiče: ${names}`,
+        linkPosterChild: (names: string) => `dítě: ${names}`,
+        linkPosterChildren: (names: string) => `děti: ${names}`,
         // Marriage-order pill on a partner's card (T13): "1. ∞ 1866"; its hover
         // bubble names whose marriage the number counts (the name first, so
         // it needs no genitive: "Jan Novák: 2. sňatek, 1885").
@@ -10492,6 +10514,15 @@ const stringsDE: StringsType = {
         branchTabParents: 'Eltern',
         branchTabSiblings: 'Geschwister',
         branchTabChildren: 'Familie',
+        linkTabParents: 'Eltern ↗',
+        linkTabChild: 'Kind ↗',
+        linkTabChildren: 'Kinder ↗',
+        linkParentsTooltip: 'Die Eltern stehen an anderer Stelle im Baum',
+        linkChildTooltip: 'Das Kind steht an anderer Stelle im Baum',
+        linkChildrenTooltip: 'Die Kinder stehen an anderer Stelle im Baum',
+        linkPosterParents: (names: string) => `Eltern: ${names}`,
+        linkPosterChild: (names: string) => `Kind: ${names}`,
+        linkPosterChildren: (names: string) => `Kinder: ${names}`,
         // Marriage-order pill on a partner's card (T13): "1. ∞ 1866"; its hover
         // bubble names whose marriage the number counts.
         unionOrdinal: (n: number) => `${n}.`,

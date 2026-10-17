@@ -21,11 +21,11 @@ import { shownName, shownNameParts, birthNoteText } from './person-name.js';
 import { strings } from './strings.js';
 import {
     unionOrderBadges, UnionOrderBadge, PillMetrics, estimatePillMetrics, placeUnionOrderPill, viewLineSegments,
-    segmentsNearCard, EDGE_INSET, PillLabel, pillLabelForms, pillLabelWidths,
+    segmentsNearCard, EDGE_INSET, PillLabel, pillLabelForms, pillLabelWidths, PillSegment, EDGE_GAP, lineLinksOf, lineLinkTabs, LineLinkTab,
 } from './marriage-order.js';
 
 /** The subset of a LayoutResult the poster needs (no diagnostics required). */
-export type PosterLayout = Pick<LayoutResult, 'positions' | 'connections' | 'spouseLines'>;
+export type PosterLayout = Pick<LayoutResult, 'positions' | 'connections' | 'spouseLines' | 'omittedEdges'>;
 
 /** Light-theme colors matching the on-canvas card styles. */
 // "Letopis" poster palette (parity with the on-screen light theme). Cards are
@@ -158,6 +158,38 @@ export function unionOrderPillSvg(b: UnionOrderBadge, m: PillMetrics, x: number,
     }
     if (b.year && label === 'full') parts.push(`<text x="${(x + m.yearX).toFixed(2)}" y="${base}" ${font}>${escapeXml(b.year)}</text>`);
     return `<g class="union-order-pill" data-union-order="${b.number}" data-person="${escapeXml(b.personId)}" data-toward="${escapeXml(b.towardId)}"${dimmed ? ' opacity="0.5"' : ''}${label !== 'full' ? ` data-label="${label}"` : ''}>${parts.join('')}</g>`;
+}
+
+/**
+ * The text of a line-link label (a line the layout left out, step 7): the
+ * screen's tab as a static label naming the other end ("parents: Jan Novák,
+ * Marie Nováková"), shortened with "…" to `maxW` (text width, px).
+ */
+export function lineLinkLabel(kind: LineLinkTab, names: readonly string[], maxW: number): string {
+    const text = (list: string) => kind === 'linkParents' ? strings.focus.linkPosterParents(list)
+        : kind === 'linkChild' ? strings.focus.linkPosterChild(list) : strings.focus.linkPosterChildren(list);
+    const full = text(names.join(', '));
+    if (estWidth(full, 10, true) <= maxW) return full;
+    for (let n = full.length - 1; n > 1; n--) {
+        const cut = `${full.slice(0, n).trimEnd()}…`;
+        if (estWidth(cut, 10, true) <= maxW) return cut;
+    }
+    return full.slice(0, 1) + '…';
+}
+
+/** A line-link label's pill (the screen's tab look, no glyph, no shadow): its left edge at `x`, its top at `y`. */
+export function lineLinkPillSvg(text: string, personId: string, x: number, y: number, dimmed = false): { svg: string; width: number } {
+    const width = estWidth(text, 10, true) + 16;
+    const svg = `<g class="line-link-pill" data-person="${escapeXml(personId)}"${dimmed ? ' opacity="0.5"' : ''}>`
+        + `<rect x="${(x + 0.5).toFixed(2)}" y="${(y + 0.5).toFixed(1)}" width="${(width - 1).toFixed(2)}" height="17" rx="8.5" fill="${COLORS.cardBg}" stroke="${COLORS.cardBorder}" stroke-width="1"/>`
+        + `<text x="${(x + 8).toFixed(2)}" y="${(y + 12.5).toFixed(1)}" ${LINE_FONT} font-size="10" font-weight="600" fill="${COLORS.textLight}">${escapeXml(text)}</text></g>`;
+    return { svg, width };
+}
+
+/** Whether a pill (absolute box) lies on one of the lines. */
+function pillHitsLine(x: number, y: number, w: number, h: number, segments: ReadonlyArray<PillSegment>): boolean {
+    return segments.some(s => Math.max(s.x1, s.x2) >= x - 2 && Math.min(s.x1, s.x2) <= x + w + 2
+        && Math.max(s.y1, s.y2) >= y - 2 && Math.min(s.y1, s.y2) <= y + h + 2);
 }
 
 export interface SvgBounds {
@@ -703,6 +735,36 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
             if (!slot) continue;
             const m = metrics[forms.findIndex(f => f.label === slot.label)];
             out.push(unionOrderPillSvg(b, m, pos.x + slot.x, pos.y + slot.y, !!options.dimmedIds?.has(personId), slot.label));
+        }
+        out.push('</g>');
+    }
+
+    // --- Line links: a line the layout left out (step 7) — the screen's tab
+    //     as a static label under the card, naming the other end; in one row
+    //     where a card has two, clear of the lines where there is room ---
+    const links = lineLinksOf(result.omittedEdges ?? []);
+    if (links.size > 0) {
+        const segments = viewLineSegments(result);
+        const nameOf = (id: PersonId) => { const p = data.persons[id]; return p ? shownName(p, '?') : '?'; };
+        out.push('<g class="line-link-pills">');
+        for (const [personId, link] of [...links.entries()].sort((a, b) => String(a[0]).localeCompare(String(b[0])))) {
+            const pos = result.positions.get(personId);
+            if (!pos) continue;
+            const kinds = lineLinkTabs(link);
+            const inset = 1 + EDGE_INSET;
+            const budget = (cw - 2 * inset - EDGE_GAP * (kinds.length - 1)) / kinds.length;
+            const texts = kinds.map(k => lineLinkLabel(k, (k === 'linkParents' ? link.parentIds : link.childIds).map(nameOf), budget - 16));
+            const widths = texts.map(t => estWidth(t, 10, true) + 16);
+            const rowW = widths.reduce((a, w) => a + w, 0) + EDGE_GAP * (kinds.length - 1);
+            const y = pos.y + heightOf(personId) + 3;
+            // Left, centred or right under the card: the first clear of the lines
+            const starts = [pos.x + inset, pos.x + (cw - rowW) / 2, pos.x + cw - inset - rowW];
+            const x0 = starts.find(x => !pillHitsLine(x, y, rowW, 18, segments)) ?? starts[0];
+            let x = x0;
+            texts.forEach((t, i) => {
+                out.push(lineLinkPillSvg(t, personId, x, y, !!options.dimmedIds?.has(personId)).svg);
+                x += widths[i] + EDGE_GAP;
+            });
         }
         out.push('</g>');
     }
