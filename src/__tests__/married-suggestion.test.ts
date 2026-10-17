@@ -19,6 +19,8 @@ import { exportToGedcom } from '../ged-exporter.js';
 import { buildPersonsCsv } from '../csv-export.js';
 import { setLanguage } from '../strings.js';
 import { fitNameHtml } from '../person-name.js';
+import { keepMarriedSurname, keepDismissedMarriedSuggestions, stabilizeIds, contentFingerprint, MARRIED_SURNAME_FEATURE } from '../research-link.js';
+import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import { SettingsManager } from '../settings.js';
 import { Person, PersonId, PartnershipId, Partnership, StromData, TreeId, toPersonId } from '../types.js';
 
@@ -225,6 +227,60 @@ describe('a married surname the research\'s version brings back (load dialog)', 
         const diff = diffValues(a, b);
         expect(diff.rows).toEqual([]);
         expect(diff.addedFacts).toBe(1);
+    });
+});
+
+describe('the hidden suggestion across a research version load (K3.1)', () => {
+    const RESEARCH = [
+        '0 HEAD', '1 SOUR STROM_RESEARCH', '2 VERS 1.14.0', '2 NAME Strom Research', '1 CHAR UTF-8',
+        '0 @P0001@ INDI', '1 NAME Marie /Dvořáková/', '1 SEX F', '1 REFN P0001',
+        '0 @P0002@ INDI', '1 NAME Josef /Novák/', '1 SEX M', '1 REFN P0002',
+        '0 @P0003@ INDI', '1 NAME Anna /Svobodová/', '1 SEX F', '1 BIRT', '2 DATE 1901',
+        '0 TRLR',
+    ].join('\n');
+    const load = (): StromData => convertToStrom(parseGedcom(RESEARCH)).data;
+    const named = (d: StromData, first: string): Person => Object.values(d.persons).find(p => p.firstName === first)!;
+    /** The tree here: the suggestion hidden for Marie (REFN) and Anna (none yet). */
+    const here = (): StromData => {
+        const d = load();
+        named(d, 'Marie').dismissedMarriedSuggestion = 'Nováková';
+        named(d, 'Anna').dismissedMarriedSuggestion = 'Kovářová';
+        return d;
+    };
+
+    it('stays with the person, matched by REFN, whatever the research knows', () => {
+        const previous = here();
+        for (const [features, received] of [[null, false], [[MARRIED_SURNAME_FEATURE], false], [[MARRIED_SURNAME_FEATURE], true]] as const) {
+            const next = load();
+            expect(named(next, 'Marie').id).not.toBe(named(previous, 'Marie').id);
+            const out = stabilizeIds(keepMarriedSurname(next, previous, features, received), previous);
+            expect(out.persons[named(previous, 'Marie').id].dismissedMarriedSuggestion).toBe('Nováková');
+            expect(named(out, 'Josef').dismissedMarriedSuggestion).toBeUndefined();
+            // The research never has it: its version is unchanged.
+            expect(named(next, 'Marie').dismissedMarriedSuggestion).toBeUndefined();
+        }
+    });
+
+    it('a person without a REFN yet is paired by name, birth and sex; one already there stays', () => {
+        const out = keepDismissedMarriedSuggestions(load(), here());
+        expect(named(out, 'Anna').dismissedMarriedSuggestion).toBe('Kovářová');
+        const next = load();
+        named(next, 'Marie').dismissedMarriedSuggestion = 'Svobodová';
+        expect(named(keepDismissedMarriedSuggestions(next, here()), 'Marie').dismissedMarriedSuggestion).toBe('Svobodová');
+    });
+
+    it('hiding one leaves the tree in step with the research (same fingerprint)', () => {
+        const before = load();
+        const after = structuredClone(before);
+        named(after, 'Marie').dismissedMarriedSuggestion = 'Nováková';
+        expect(contentFingerprint(after)).toBe(contentFingerprint(before));
+        named(after, 'Marie').marriedSurname = 'Nováková';
+        expect(contentFingerprint(after)).not.toBe(contentFingerprint(before));
+    });
+
+    it('nothing hidden before: the version comes as it is', () => {
+        const next = load();
+        expect(keepDismissedMarriedSuggestions(next, load())).toBe(next);
     });
 });
 

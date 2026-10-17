@@ -459,13 +459,30 @@ function fnv1a(text: string, seed: number): number {
     return h >>> 0;
 }
 
+/**
+ * People without what the app keeps for itself and never sends (a hidden
+ * married surname suggestion): hiding one leaves the tree in step with the
+ * research. People without such a field are the same objects, so a tree
+ * that has none keeps its fingerprint.
+ */
+function withoutAppLocal(persons: StromData['persons']): StromData['persons'] {
+    let out: StromData['persons'] | null = null;
+    for (const [id, p] of Object.entries(persons)) {
+        if (p?.dismissedMarriedSuggestion === undefined) continue;
+        out ??= { ...persons };
+        const { dismissedMarriedSuggestion: _local, ...rest } = p;
+        out[id as PersonId] = rest as Person;
+    }
+    return out ?? persons;
+}
+
 /** The parts of a tree the user can change (see contentFingerprint). */
 function fingerprintParts(raw: StromData): unknown[] {
     // The "?" families the conversion made count as the parent links they were (src/single-parent.ts):
     // a tree in step with the research before the conversion stays in step after it.
     const data = withoutConvertedStandIns(raw);
     return [
-        data.persons ?? {},
+        withoutAppLocal(data.persons ?? {}),
         data.partnerships ?? {},
         data.sources ?? null,
         data.places ?? null,
@@ -711,9 +728,16 @@ export const MARRIED_SURNAME_FEATURE = 'person.marriedSurname';
  * it while it did not keep the kind, so it never had it as married.
  * `received`: the research has had the tree's surnames after marriage as
  * such; then `next` comes back as it is.
+ * The suggestion the person editor was told not to offer again
+ * (Person.dismissedMarriedSuggestion) is the app's own and always carried
+ * over (keepDismissedMarriedSuggestions), whatever the research knows.
  * Returns a new object when any person changed; neither input is changed.
  */
 export function keepMarriedSurname(next: StromData, previous: StromData, features: readonly string[] | null | undefined, received = false): StromData {
+    return keepDismissedMarriedSuggestions(keepMarriedSurnameField(next, previous, features, received), previous);
+}
+
+function keepMarriedSurnameField(next: StromData, previous: StromData, features: readonly string[] | null | undefined, received: boolean): StromData {
     const knows = !!features?.includes(MARRIED_SURNAME_FEATURE);
     if (knows && received) return next;
     const prevByRefn = uniqueRefns(previous);
@@ -737,6 +761,37 @@ export function keepMarriedSurname(next: StromData, previous: StromData, feature
         else delete changed.nameVariants;
         persons ??= { ...next.persons };
         persons[id] = changed;
+    }
+    return persons ? { ...next, persons } : next;
+}
+
+/**
+ * Person.dismissedMarriedSuggestion is the app's own: a research never has
+ * it, so a research version would drop it and the person editor would offer
+ * the same surname after marriage again. Each person of `next` keeps the
+ * previous state's, matched by REFN, else by the same id (already
+ * stabilized), else (no REFN yet) by matchUnlinkedPersons. One `next`
+ * already has stays. Returns a new object when any person changed; neither
+ * input is changed.
+ */
+export function keepDismissedMarriedSuggestions(next: StromData, previous: StromData): StromData {
+    const dismissed = Object.entries(previous.persons ?? {}).filter(([, p]) => p?.dismissedMarriedSuggestion);
+    if (dismissed.length === 0) return next;
+    const prevToNext = new Map<string, string>();
+    const nextByRefn = uniqueRefns(next);
+    for (const [refn, prevId] of uniqueRefns(previous)) {
+        const nextId = nextByRefn.get(refn);
+        if (nextId) prevToNext.set(prevId, nextId);
+    }
+    const unlinked = matchUnlinkedPersons(next, previous);
+    let persons: StromData['persons'] | null = null;
+    for (const [prevId, was] of dismissed) {
+        const sameId = next.persons?.[prevId as PersonId] && (!was.refn?.trim() || next.persons[prevId as PersonId].refn?.trim() === was.refn.trim());
+        const nextId = (prevToNext.get(prevId) ?? (sameId ? prevId : unlinked.get(prevId))) as PersonId | undefined;
+        const p = nextId ? next.persons[nextId] : undefined;
+        if (!nextId || !p || p.dismissedMarriedSuggestion) continue;
+        persons ??= { ...next.persons };
+        persons[nextId] = { ...p, dismissedMarriedSuggestion: was.dismissedMarriedSuggestion };
     }
     return persons ? { ...next, persons } : next;
 }

@@ -108,4 +108,27 @@ test.describe('loading the research version', () => {
         await expect.poll(() => head(page)).toBe(NEW_HEAD);
         expect(await page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons) as any[]).find(p => p.firstName === 'Jan').marriedSurname)).toBe('Novák');
     });
+
+    test('a married surname suggestion hidden here stays hidden after the research\'s version loads (K3.1)', async ({ page }) => {
+        await page.clock.install();
+        await openResearch(page);
+        const bridge = await fakeBridge(page, { accepts: ACCEPTS });
+        await poll(page);
+        const anna = () => page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons) as any[]).find(p => p.firstName === 'Anna').dismissedMarriedSuggestion);
+        await page.evaluate(() => {
+            const dm = window.Strom.DataManager;
+            const id = (Object.values(dm.getData().persons) as any[]).find(p => p.firstName === 'Anna').id;
+            dm.updatePerson(id, { dismissedMarriedSuggestion: 'Nováková' });
+        });
+        expect(await anna()).toBe('Nováková');
+        // Nothing to send: hiding it leaves the tree in step with the research.
+        await expect(page.locator('#research-menu-btn')).toHaveAttribute('aria-label', 'Research');
+        bridge.head = NEW_HEAD;
+        bridge.treeGed = researchGed(NEW_HEAD, ['1 OCCU tesař']);
+        await poll(page);
+        await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+        await dialog(page).locator('#research-load-ok').click();
+        await expect.poll(() => head(page)).toBe(NEW_HEAD);
+        expect(await anna()).toBe('Nováková');
+    });
 });
