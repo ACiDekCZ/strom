@@ -9,7 +9,7 @@ All findings below have since been **RESOLVED** (2026-07-11) — either fixed in
 the layout engine or proven topologically inherent; each entry carries its
 resolution note. Since F1 (2026-10) no knot is tolerated: a line that cannot
 be routed cleanly is left out by step 7 and its cards link to each other
-(Finding 7); `KNOWN_LINE_KNOTS` in the harness is empty.
+(Finding 7); the harness has no `KNOWN_LINE_KNOTS` list any more.
 Each finding cites the fixture, a representative focus + mode, the violation
 type taken verbatim from `test/failures-full-<fixture>.txt`, and a rendered
 SVG in `docs/etalon-findings/`.
@@ -198,7 +198,10 @@ or duplicated in-law cards.
 
 **Since F1 (2026-10):** step 7 leaves out the two drops of that run
 (`eNB_FF_FM → eNB_F`, `eNB_MF_MM → eNB_M`, off the focus's line), every other
-line is drawn clean, and the entry left `KNOWN_LINE_KNOTS` (Finding 7).
+line is drawn clean, and the entry left `KNOWN_LINE_KNOTS` (Finding 7). One
+of the two lines shared the bus's lane with the NC sibling bus (a 2-cycle in
+the lane order); since F3 such a shared lane is never left drawn, and the
+`KNOWN_LINE_KNOTS` list is gone.
 
 ---
 
@@ -223,7 +226,8 @@ added to `KNOWN_LINE_KNOTS`. If the knot is ever solved, these runs will start
 passing and can be removed from that set.
 
 **Update (2026-10):** both runs had long been clean (the entries were stale);
-they left `KNOWN_LINE_KNOTS` together with the stale-entry check of Finding 7.
+they left `KNOWN_LINE_KNOTS` together with the stale-entry check of Finding 7,
+and the list itself is gone since F3.
 
 ---
 
@@ -247,12 +251,13 @@ elbow clearance it finds the remaining crossings, collinear runs and T-touches
 audit), and removes one child's drop at a time — the one that clears the most
 violations, never a line of the focus's own line when another helps, then the
 one farther from the focus, of a single-child union, by union and child id —
-re-running the lane allocation after each, up to 10 drops. The cards never
-move. `LayoutResult.omittedEdges` lists the lines left out; the renderer puts
+then allocates the lanes again (up to 10 drops in F1; no cap since F3, when
+the whole line of an involved family became a candidate where no single drop
+helps). The cards never move. `LayoutResult.omittedEdges` lists the lines left out; the renderer puts
 a "parents ↗" branch tab on the child's card and "child ↗" / "children ↗" on
 the parents' cards (a click jumps to the other end, the focus stays), and the
 image export labels the cards ("parents: …"). In scenario O exactly the
 father's line (`union_eO_half_fa_eO_half_ph → eO_gen6_w1`) is left out. The
 same step clears the inherent crossings of Findings 3 and 4 (one drop each,
-off the focus's line) and the stress knot above; `KNOWN_LINE_KNOTS` is empty
-and an entry whose run is clean now fails the harness.
+off the focus's line) and the stress knot above; the `KNOWN_LINE_KNOTS` list
+is gone from the harness (F3), and the loop has no cap on lines left out.

@@ -18,7 +18,7 @@
 import { PersonId, LayoutConfig, spouseLineOffset, personCardHeight } from '../../types.js';
 import { computeGenerationBands } from './bands.js';
 import { findChainExtraPartner } from './6-constraints.js';
-import { connectionSegments, layoutSegments, LineViolation, SegmentIndex } from './line-geometry.js';
+import { connectionSegments, layoutSegments, LineViolation, LINE_EPS, SegmentIndex } from './line-geometry.js';
 import {
     FamilyBlockModel,
     LayoutModel,
@@ -155,11 +155,12 @@ export function routeEdges(input: RouteEdgesInput): RoutedModel {
     const laneZeroY = new Map<Connection, number>(connections.map(c => [c, c.branchY]));
     resolveBusCollisions(connections, config, hasBranches ? branchModel : null);
 
-    // NOTE: resolveBusCollisions skips lane offset for connections where
-    // offsetting would create a stem-bus crossing (stem at higher lane
-    // crossing a bus at lower lane). These connections keep collinear
-    // horizontal segments at the same Y; omitUnroutableDrops below leaves
-    // out the line that cannot be drawn cleanly.
+    // Two lines whose lane order is contradictory (each must lie above the
+    // other: a 2-cycle in the lane graph) or that a lane bump cannot separate
+    // are left on one lane by resolveBusCollisions. Their runs then merge
+    // (a collinear violation), so omitUnroutableDrops below leaves out a
+    // drop of one of them; no two lines share a lane with overlapping runs
+    // in the result.
 
     // Resolve elbow clearance violations (nudge drops away from near segments)
     resolveElbowClearance(connections, config);
@@ -190,21 +191,33 @@ export function routeEdges(input: RouteEdgesInput): RoutedModel {
 
 // ==================== LINES THAT CANNOT BE ROUTED ====================
 
-/** At most this many child lines are left out of one layout. */
-export const MAX_OMITTED_DROPS = 10;
+// In the browser IS_TEST = false; in Vitest globalThis.__vitest_worker__ is set.
+const IS_TEST = typeof (globalThis as Record<string, unknown>).__vitest_worker__ !== 'undefined';
 
-/** One child's line that may be left out. */
+/**
+ * A line left out: one child's drop, or (childId null) the whole line with
+ * all its drops, when no single drop clears a violation.
+ */
 interface OmitCandidate {
     conn: Connection;
-    childId: PersonId;
+    childId: PersonId | null;
+}
+
+interface ScoredOmission {
+    c: OmitCandidate;
+    score: number;
+    onLine: boolean;
+    dist: number;
+    single: boolean;
 }
 
 /**
  * Leave out the child lines that cannot be drawn without crossing, running
  * along or touching (T-touch) lines of other families (line-geometry.ts).
  * No layout rule avoids these knots (an in-law column inside a sibling bus,
- * two cross-married families, half-siblings married into two branches), so
- * the line is not drawn and the cards link to each other instead.
+ * two cross-married families, half-siblings married into two branches, two
+ * lines the lane allocation had to leave on one lane), so the line is not
+ * drawn and the cards link to each other instead.
  *
  * Greedy and deterministic, one child's drop at a time: a drop of every line
  * in a violation is a candidate (a drop's own, or each drop of a line whose
@@ -213,12 +226,21 @@ interface OmitCandidate {
  * remaining drops, the whole line gone with its last drop). The pick:
  * a line off the focus's line (the focus, their ancestors and descendants)
  * whenever one helps, then the highest score, then the child farther from
- * the focus, a line with a single child, and the union and person ids.
- * Repeated until the lines are clean (at most MAX_OMITTED_DROPS). Cards
+ * the focus, a line with a single child, and the union and person ids. When
+ * no drop off the focus's line helps on its own (a stem that touches a
+ * foreign line stays as long as one drop is left), the whole line of an
+ * involved family is a candidate too.
+ *
+ * Every pick removes at least one violation more than it adds, so the loop
+ * ends within as many rounds as there were violations, and with the whole
+ * line as a candidate it ends clean whenever every violation involves a
+ * parent-child line: there is no cap on the number of lines left out. Cards
  * never move; afterwards `relane` allocates the lanes again, kept only when
- * it adds no violation.
+ * it adds no violation. Under Vitest a violation or a lane shared by two
+ * overlapping lines left after this step throws; in the browser the built-in
+ * validation reports it (validation.ts, the same line check).
  */
-function omitUnroutableDrops(
+export function omitUnroutableDrops(
     connections: Connection[],
     spouseLines: SpouseLine[],
     model: LayoutModel,
@@ -231,16 +253,17 @@ function omitUnroutableDrops(
         return { index, violations: index.violations() };
     };
     let { index, violations } = check();
-    if (violations.length === 0) return [];
-
-    const { line, distance } = focusRelations(model, focusPersonId);
     const omitted: OmittedEdge[] = [];
-    for (let round = 0; round < MAX_OMITTED_DROPS && violations.length > 0; round++) {
+    const { line, distance } = violations.length > 0
+        ? focusRelations(model, focusPersonId)
+        : { line: new Set<PersonId>(), distance: new Map<PersonId, number>() };
+    const initial = violations.length;
+    for (let round = 0; round < initial && violations.length > 0; round++) {
         const pick = bestOmission(connections, index, violations, line, distance);
         if ((globalThis as unknown as { __OMIT_DEBUG?: boolean }).__OMIT_DEBUG) {
             console.log(`[omit] round ${round}: ${violations.length} violations`,
                 violations.slice(0, 8).map(v => `${v.type} ${v.detail}`),
-                pick ? `→ omit ${pick.conn.unionId} → ${pick.childId}` : '→ nothing helps');
+                pick ? `→ omit ${pick.conn.unionId} → ${pick.childId ?? 'whole line'}` : '→ nothing helps');
         }
         if (!pick) break;
         const { conn, childId } = pick;
@@ -249,26 +272,55 @@ function omitUnroutableDrops(
             ? [union.partnerA, union.partnerB].filter((id): id is PersonId =>
                 !!id && !model.hiddenPersonIds?.has(id) && personX.has(id))
             : [];
-        omitted.push({
-            unionId: conn.unionId,
-            childId,
-            parentIds,
-            ...(conn.stemPersonId !== undefined ? { stemPersonId: conn.stemPersonId } : {})
-        });
+        for (const drop of conn.drops) {
+            if (childId !== null && drop.personId !== childId) continue;
+            omitted.push({
+                unionId: conn.unionId,
+                childId: drop.personId,
+                parentIds,
+                ...(conn.stemPersonId !== undefined ? { stemPersonId: conn.stemPersonId } : {})
+            });
+        }
         // In place: the lane bookkeeping (relane) knows the line by its object
-        const rest = withoutDrop(conn, childId);
+        const rest = childId === null ? null : withoutDrop(conn, childId);
         if (rest) Object.assign(conn, rest); else connections.splice(connections.indexOf(conn), 1);
         ({ index, violations } = check());
     }
-    if (omitted.length === 0) return [];
 
-    // The lanes without the omitted lines (fewer lanes where they forced
-    // some); kept only when they add no violation
-    const before = violations.length;
-    const saved = connections.map(cloneConnection);
-    relane();
-    if (check().violations.length > before) connections.splice(0, connections.length, ...saved);
+    if (omitted.length > 0) {
+        // The lanes without the omitted lines (fewer lanes where they forced
+        // some); kept only when they add no violation
+        const before = violations.length;
+        const saved = connections.map(cloneConnection);
+        relane();
+        violations = check().violations;
+        if (violations.length > before) {
+            connections.splice(0, connections.length, ...saved);
+            violations = check().violations;
+        }
+    }
+
+    if (IS_TEST) {
+        const shared = sharedLaneOverlaps(connections);
+        if (violations.length > 0 || shared.length > 0) {
+            throw new Error(`Step 7 left ${violations.length} line violation(s) and ${shared.length} shared lane(s) after omitting ${omitted.length} line(s): ` +
+                [...violations.slice(0, 5).map(v => `${v.type} ${v.detail}`), ...shared.slice(0, 5)].join('; '));
+        }
+    }
     return omitted;
+}
+
+/**
+ * Two lines on one lane whose horizontal runs (connector + bus) overlap:
+ * they would read as one line. None may be left after omitUnroutableDrops.
+ */
+export function sharedLaneOverlaps(connections: readonly Connection[]): string[] {
+    const found: string[] = [];
+    for (const c of detectBusCollisions(connections as Connection[])) {
+        if (c.overlapX[1] - c.overlapX[0] <= LINE_EPS) continue;
+        found.push(`${c.unionId1} and ${c.unionId2} share the lane at Y=${c.y.toFixed(0)} over X=[${c.overlapX[0].toFixed(0)},${c.overlapX[1].toFixed(0)}]`);
+    }
+    return found;
 }
 
 /** The candidate to leave out next, or null when none removes a violation. */
@@ -302,36 +354,50 @@ function bestOmission(
         for (const owner of owners) involved.set(owner, (involved.get(owner) ?? 0) + 1);
     }
 
-    let best: { c: OmitCandidate; score: number; onLine: boolean; dist: number; single: boolean } | null = null;
+    let best: ScoredOmission | null = null;
     for (const c of candidates.values()) {
         const owner = String(c.conn.unionId);
-        const rest = withoutDrop(c.conn, c.childId);
+        const rest = withoutDrop(c.conn, c.childId!);
         let after = 0;
         if (rest) for (const seg of connectionSegments(rest)) after += index.countViolationsWith(seg, owner);
         const score = (involved.get(owner) ?? 0) - after;
         if (score <= 0) continue;
         const entry = {
             c, score,
-            onLine: focusLine.has(c.childId),
-            dist: distance.get(c.childId) ?? Number.MAX_SAFE_INTEGER,
+            onLine: focusLine.has(c.childId!),
+            dist: distance.get(c.childId!) ?? Number.MAX_SAFE_INTEGER,
             single: c.conn.drops.length === 1
+        };
+        if (!best || betterOmission(entry, best)) best = entry;
+    }
+    if (best && !best.onLine) return best.c;
+
+    // No drop off the focus's line helps on its own: the whole line of an
+    // involved family (all its violations go with it)
+    for (const [owner, count] of involved) {
+        const conn = byUnion.get(owner)!;
+        if (conn.drops.length < 2) continue; // the same as its one drop
+        const entry = {
+            c: { conn, childId: null }, score: count,
+            onLine: conn.drops.some(d => focusLine.has(d.personId)),
+            dist: Math.min(...conn.drops.map(d => distance.get(d.personId) ?? Number.MAX_SAFE_INTEGER)),
+            single: false
         };
         if (!best || betterOmission(entry, best)) best = entry;
     }
     return best?.c ?? null;
 }
 
-function betterOmission(
-    a: { c: OmitCandidate; score: number; onLine: boolean; dist: number; single: boolean },
-    b: { c: OmitCandidate; score: number; onLine: boolean; dist: number; single: boolean }
-): boolean {
+function betterOmission(a: ScoredOmission, b: ScoredOmission): boolean {
     if (a.onLine !== b.onLine) return !a.onLine;
     if (a.score !== b.score) return a.score > b.score;
     if (a.dist !== b.dist) return a.dist > b.dist;
     if (a.single !== b.single) return a.single;
     const au = String(a.c.conn.unionId), bu = String(b.c.conn.unionId);
     if (au !== bu) return au < bu;
-    return a.c.childId < b.c.childId;
+    // A single drop before the whole line of the same family
+    if ((a.c.childId === null) !== (b.c.childId === null)) return a.c.childId !== null;
+    return (a.c.childId ?? '') < (b.c.childId ?? '');
 }
 
 /** A line without one child's drop (bus and connector from the rest), or null without drops. */
@@ -782,8 +848,10 @@ function resolveBusCollisions(
         //       otherwise pierce a's run), or
         //     - a's drop X falls inside b's horizontal run (a's drop pierces
         //       b's run whenever b is below a).
-        // A cycle means a genuine topological knot — those pairs stay at the
-        // same lane (collinear overlap is the least-bad rendering).
+        // A cycle means a genuine topological knot: no lane order routes
+        // both lines cleanly. Those pairs stay on one lane here, and the
+        // merged run is a collinear violation that omitUnroutableDrops
+        // resolves by leaving out a drop of one of them.
         const n = group.length;
         const above: boolean[][] = Array.from({ length: n }, () => new Array(n).fill(false));
         const inside = (x: number, left: number, right: number): boolean =>
@@ -805,7 +873,8 @@ function resolveBusCollisions(
             }
         }
 
-        // Drop mutually-contradictory constraints (knots): keep neither
+        // Drop mutually-contradictory constraints (knots): keep neither (the
+        // pair is left to omitUnroutableDrops)
         for (let i = 0; i < n; i++) {
             for (let j = i + 1; j < n; j++) {
                 if (above[i][j] && above[j][i]) {
@@ -851,7 +920,9 @@ function resolveBusCollisions(
                 if (!moved) {
                     for (let j = 0; j < n; j++) {
                         if (above[i][j] && candidate >= lane[j]) {
-                            // i must stay above j — can't resolve by bumping; give up
+                            // i must stay above j: bumping cannot separate
+                            // them, i keeps its lane and the overlap is left
+                            // to omitUnroutableDrops
                             candidate = lane[i];
                             moved = false;
                             break;

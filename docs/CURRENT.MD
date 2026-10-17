@@ -484,10 +484,23 @@ time, greedily and deterministically:
    descendants) always before one on it; then the higher score; then the drop
    farther from the focus (relationship distance); then a single-child union;
    then union id and child id.
-4. After each removal the lanes are allocated again from their zero offsets
+4. When no single drop off the focus's line clears a violation (a stem on a
+   foreign line stays while one drop is left), the whole line of an involved
+   family is a candidate too, scored by all its violations.
+5. There is no cap: every pick clears more violations than it adds, so the
+   loop ends within as many rounds as there were violations, clean whenever
+   every violation involves a parent-child line.
+6. After the removals the lanes are allocated again from their zero offsets
    (`resolveBusCollisions` + `resolveElbowClearance`; reverted when that adds
-   violations). At most `MAX_OMITTED_DROPS` (10) drops per layout; the loop
-   stops when nothing is left or no candidate helps.
+   violations).
+
+`resolveBusCollisions` leaves two lines on one lane when their lane order is
+contradictory (each must lie above the other, a 2-cycle) or a lane bump
+cannot separate them; their merged run is a collinear violation, so one of
+them loses a drop here. No two drawn lines share a lane with overlapping
+runs. Under Vitest a line violation or a shared lane left after this step
+throws (`sharedLaneOverlaps`); in the browser the built-in validation reports
+any violation (the same line check).
 
 The last drop of a union takes its whole line with it. Card positions never
 change. Lines of the view layer (links "linked in the view only") are
@@ -777,8 +790,8 @@ card overlaps, position validity, built-in validation and the strict geometry
 audit (`helpers/geometryAudit.ts`: crossings, collinear merges, T-touches,
 lines through cards). Lines step 7 left out are listed in the report
 (`test/failures-full-<fixture>.txt`, "Omitted lines") and fail the run when
-one is on the focus's own line. `KNOWN_LINE_KNOTS` is empty since step 7
-omits unroutable lines; an entry whose run is clean fails the harness.
+one is on the focus's own line. No run is tolerated: the former
+`KNOWN_LINE_KNOTS` list is gone, step 7 omits the unroutable lines.
 The audit has no tolerated class: the former `inherent-crossing` (a
 topologically forced crossing between cross-married unions) is gone, those
 knots are omitted lines shown as card links.

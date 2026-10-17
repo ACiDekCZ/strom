@@ -10,8 +10,8 @@ out by step 7 and its cards link to each other (see "Line Invariants"). The
 former relaxations — `inherent-crossing` (a crossing between cross-married
 unions forced by the topology) and the `KNOWN_LINE_KNOTS` class (in-law column
 inside a sibling bus span) — are now omitted edges instead of drawn knots;
-the audit no longer has an `inherent-crossing` class and `KNOWN_LINE_KNOTS`
-is empty. Partner-chain invariants added 2026-07-13.
+the audit no longer has an `inherent-crossing` class and the
+`KNOWN_LINE_KNOTS` list is gone from the harness. Partner-chain invariants added 2026-07-13.
 
 ---
 
@@ -187,8 +187,13 @@ segment of another union's. A union's own segments meet freely.
 
 **Enforcement:** `line-geometry.ts` finds every violation (grid-indexed); step
 7's `omitUnroutableDrops` removes child drops one at a time until none is
-left (greedy, deterministic, at most 10 per layout, never a line of the
-focus's own line when another helps; cards never move). Every line drawn is
+left (greedy, deterministic, no cap: every pick clears more violations than
+it adds, and when no single drop helps the whole line of an involved family
+goes; never a line of the focus's own line when another helps; cards never
+move). Two lines the lane allocation had to leave on one lane (a 2-cycle in
+the lane order) merge into a collinear run and are resolved the same way, so
+no two drawn lines share a lane with overlapping runs. Under Vitest a
+violation or shared lane left after step 7 throws. Every line drawn is
 clean; each line left out is an `OmittedEdge` in `LayoutResult.omittedEdges`
 and is shown as a link on its cards (a "parents ↗" / "child ↗" branch tab on
 screen, a "parents: …" label in the image export). The built-in validation

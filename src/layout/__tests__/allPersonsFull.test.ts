@@ -89,15 +89,6 @@ const MODES = [
 ];
 
 /**
- * Known limitations: runs whose line knots are tolerated (line-crossing and
- * bus-overlap failures only; anything else still fails the test). Empty since
- * step 7 leaves out the child lines that cannot be routed cleanly
- * (omitUnroutableDrops: the cards link to each other instead); an entry whose
- * run has no failure fails the test, so a stale one cannot linger.
- */
-const KNOWN_LINE_KNOTS = new Set<string>([]);
-
-/**
  * The focus, their ancestors and their descendants: lines to them are never
  * left out (step 7 prefers any other line that removes a violation).
  */
@@ -208,22 +199,6 @@ for (const fixtureName of FIXTURES) {
                         for (const v of auditBands(result, modeConfig, run(config)).slice(0, 5)) {
                             failures.push(`Bands: ${v}`);
                         }
-                    }
-
-                    // The same known knots with cards of any height (X is the same)
-                    const limitationKey = `${fixtureName}/${personId}/${mode.base}`;
-                    if (KNOWN_LINE_KNOTS.has(limitationKey) && failures.length === 0) {
-                        failures.push(`Stale KNOWN_LINE_KNOTS entry ${limitationKey}: the run has no line knot`);
-                    } else if (KNOWN_LINE_KNOTS.has(limitationKey) &&
-                        failures.every(f =>
-                            f.startsWith('Validation: Bus line overlap') ||
-                            f.startsWith('Crossing:') ||
-                            f.startsWith('Geometry:'))) {
-                        allFailures.push({
-                            personId, name: displayName, mode: mode.name,
-                            failures: failures.map(f => `KNOWN LIMITATION: ${f}`)
-                        });
-                        return;
                     }
 
                     if (failures.length > 0) {

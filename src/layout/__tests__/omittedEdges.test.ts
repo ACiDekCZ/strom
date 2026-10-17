@@ -18,11 +18,12 @@ import { validateLayout } from '../pipeline/validation.js';
 import {
     LineSegment, segmentPairViolation, findLineViolations, SegmentIndex
 } from '../pipeline/line-geometry.js';
-import { Connection, LayoutResult, UnionId } from '../pipeline/types.js';
+import { Connection, LayoutModel, LayoutResult, SpouseLine, UnionId } from '../pipeline/types.js';
+import { omitUnroutableDrops, sharedLaneOverlaps } from '../pipeline/7-route-edges.js';
 import { auditGeometry } from './helpers/geometryAudit.js';
 import { syntheticPersonHeights } from './helpers/bandAudit.js';
 import { loadFixture } from './helpers/loadFixture.js';
-import { DEFAULT_LAYOUT_CONFIG, LayoutConfig, PersonId, StromData } from '../../types.js';
+import { DEFAULT_LAYOUT_CONFIG, LayoutConfig, Person, PartnershipId, PersonId, StromData } from '../../types.js';
 
 function layout(data: StromData, focus: string, expanded: boolean, depth = 5, config: LayoutConfig = DEFAULT_LAYOUT_CONFIG): LayoutResult {
     return runLayoutPipeline({
@@ -127,6 +128,97 @@ const H = (x1: number, x2: number, y: number, owner: string, kind: LineSegment['
     ({ x1, y1: y, x2, y2: y, owner, kind, label: `${kind}-${owner}` });
 const V = (x: number, y1: number, y2: number, owner: string, kind: LineSegment['kind'] = 'drop'): LineSegment =>
     ({ x1: x, y1, x2: x, y2, owner, kind, label: `${kind}-${owner}` });
+
+/**
+ * `n` pairs of siblings among the focus's children, each pair's children
+ * married to each other twice (double first cousins): every pair is a forced
+ * knot of two cross-married families, so `n` lines have to go.
+ */
+function doubleCousins(n: number): StromData {
+    const d = { persons: {}, partnerships: {} } as unknown as StromData;
+    const person = (id: string, gender: 'male' | 'female', birthDate?: string): PersonId => {
+        d.persons[id as PersonId] = { id: id as PersonId, firstName: id, lastName: '', gender, isPlaceholder: false,
+            partnerships: [], parentIds: [], childIds: [], ...(birthDate ? { birthDate } : {}) } as Person;
+        return id as PersonId;
+    };
+    const family = (id: string, a: PersonId, b: PersonId, children: PersonId[]): void => {
+        d.partnerships[id as PartnershipId] = { id: id as PartnershipId, person1Id: a, person2Id: b, childIds: [...children], status: 'married' };
+        d.persons[a].partnerships.push(id as PartnershipId);
+        d.persons[b].partnerships.push(id as PartnershipId);
+        for (const c of children) {
+            d.persons[c].parentIds.push(a, b);
+            d.persons[a].childIds.push(c);
+            d.persons[b].childIds.push(c);
+        }
+    };
+    const root = person('root', 'male'), rootWife = person('root_wife', 'female');
+    const kids: PersonId[] = [];
+    for (let k = 1; k <= n; k++) {
+        const i = String(k).padStart(2, '0');
+        const son = person(`son${i}`, 'male', `19${i}-01-01`), daughter = person(`daughter${i}`, 'female', `19${i}-06-01`);
+        kids.push(son, daughter);
+        const b1 = person(`grandson${i}a`, 'male', '1950-01-01'), b2 = person(`grandson${i}b`, 'male', '1952-01-01');
+        const s1 = person(`granddaughter${i}a`, 'female', '1950-06-01'), s2 = person(`granddaughter${i}b`, 'female', '1952-06-01');
+        family(`u_son${i}`, son, person(`son${i}_wife`, 'female'), [b1, b2]);
+        family(`u_daughter${i}`, person(`daughter${i}_husband`, 'male'), daughter, [s1, s2]);
+        family(`u_cousins${i}a`, b1, s1, []);
+        family(`u_cousins${i}b`, b2, s2, []);
+    }
+    family('u_root', root, rootWife, kids);
+    return d;
+}
+
+describe('nothing is left drawn wrong after step 7, however many lines have to go', () => {
+    it.each([false, true])('twelve forced knots in one view: twelve lines left out, all others clean (expanded %s)', (expanded) => {
+        const r = layout(doubleCousins(12), 'root', expanded);
+        // Once capped at ten: two knots stayed drawn
+        expect(r.omittedEdges).toHaveLength(12);
+        expect(lineViolations(r)).toEqual([]);
+        expect(sharedLaneOverlaps(r.connections)).toEqual([]);
+        expect(r.diagnostics.errors).toEqual([]);
+        // One drop per knot: every family keeps its line to the other child
+        const unions = new Set(r.omittedEdges!.map(e => e.unionId));
+        expect(unions.size).toBe(12);
+        for (const u of unions) expect(r.connections.some(c => c.unionId === u)).toBe(true);
+    });
+
+    it.each([false, true])('stress NC: the two lines the lane allocation left on the bus\'s lane are left out (expanded %s)', (expanded) => {
+        const r = layout(loadFixture('etalon-stress-all'), 'eNC_gk10_1', expanded);
+        expect(edges(r)).toEqual(['union_eNB_FF_eNB_FM -> eNB_F', 'union_eNB_MF_eNB_MM -> eNB_M']);
+        expect(sharedLaneOverlaps(r.connections)).toEqual([]);
+        expect(lineViolations(r)).toEqual([]);
+    });
+
+    // Two hand-made lines: A's stem comes down through B's connector, and
+    // neither family's drops reach it, so no single drop helps
+    const model = { persons: new Map(), unions: new Map(), childToParentUnion: new Map() } as unknown as LayoutModel;
+    const line = (unionId: string, stemX: number, y: number, dropXs: number[]): Connection => {
+        const left = Math.min(...dropXs), right = Math.max(...dropXs);
+        return {
+            unionId: unionId as UnionId, stemX, stemTopY: y - 40, stemBottomY: y, branchY: y,
+            branchLeftX: left, branchRightX: right, connectorFromX: stemX,
+            connectorToX: stemX < left ? left : stemX > right ? right : stemX, connectorY: y,
+            drops: dropXs.map((x, i) => ({ personId: `${unionId}_kid${i}` as PersonId, x, topY: y, bottomY: 100 })),
+        };
+    };
+
+    it('when no single drop helps, the whole line of one family goes', () => {
+        const connections = [line('uA', 100, 60, [110, 130]), line('uB', 150, 40, [0, 90])];
+        const omitted = omitUnroutableDrops(connections, [], model, new Map(), undefined, () => {});
+        expect(omitted.map(e => `${e.unionId} -> ${e.childId}`)).toEqual(['uA -> uA_kid0', 'uA -> uA_kid1']);
+        expect(connections.map(c => c.unionId)).toEqual(['uB']);
+    });
+
+    it('a knot step 7 cannot resolve is an error under test', () => {
+        const spouse = (unionId: string, xMin: number, xMax: number): SpouseLine => ({
+            unionId: unionId as UnionId, person1Id: `${unionId}_a` as PersonId, person2Id: `${unionId}_b` as PersonId,
+            partnershipId: null, y: 50, xMin, xMax,
+        });
+        // Two partner lines merged at one height: no parent-child line to leave out
+        expect(() => omitUnroutableDrops([], [spouse('u1', 0, 100), spouse('u2', 50, 150)], model, new Map(), undefined, () => {}))
+            .toThrow(/Step 7 left 1 line violation/);
+    });
+});
 
 describe('line geometry', () => {
     it('crossing, collinear run and T-touch between different unions', () => {
