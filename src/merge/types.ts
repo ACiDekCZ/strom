@@ -33,6 +33,7 @@ export type MatchReason =
     | 'child_of_matched'              // Child of already matched person
     | 'parent_of_matched'             // Parent of already matched person
     | 'partner_similarity'            // Partners have similar names
+    | 'unknown_name_relative'         // Unknown given name, paired through a matched relative
     | 'manual';                       // Manual assignment
 
 /** Person match between existing and incoming data */

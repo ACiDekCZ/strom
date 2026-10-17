@@ -6,7 +6,7 @@
 import { parseFlexDate, yearOf } from '../dates.js';
 import { PersonId, Person, Partnership, StromData, gendersCompatible } from '../types.js';
 import { sameSurname } from '../surnames.js';
-import { detectPartnershipConflicts } from './executor.js';
+import { detectPartnershipConflicts, AUTO_CONFIRM_SCORE } from './executor.js';
 import {
     PersonMatch,
     MatchConfidence,
@@ -343,6 +343,20 @@ export function findMatches(
         seeds = propagatedMatches;
     }
 
+    // Phase 2b: persons whose given name is unknown ('?' or empty) have no
+    // name to match by. One is proposed through a matched relative instead —
+    // always for review, and it seeds only further persons of unknown name.
+    const unknownBlocked = new Set<PersonId>();
+    let unknownSeeds = matches;
+    for (let round = 0; round < maxRounds; round++) {
+        const found = matchUnknownNamedRelatives(
+            existingData, incomingData, unknownSeeds, usedExisting, usedIncoming, unknownBlocked
+        );
+        if (found.length === 0) break;
+        matches.push(...found);
+        unknownSeeds = found;
+    }
+
     // Phase 3: Find remaining matches with lower threshold
     const remainingMatches = findRemainingMatches(
         existingData, incomingData, usedExisting, usedIncoming
@@ -590,6 +604,114 @@ function propagateFromMatches(
     }
 
     return propagated;
+}
+
+/** A person whose given name is unknown: '?', empty or punctuation only. */
+function hasUnknownGivenName(person: Person): boolean {
+    return normalizeName(person.firstName) === '';
+}
+
+/**
+ * The score of a match found through a relative of a person of unknown given
+ * name: below the auto-confirm bar, so the wizard always asks for a look.
+ */
+const UNKNOWN_NAME_MATCH_SCORE = AUTO_CONFIRM_SCORE - 5;
+
+/** The relations a person of unknown given name is paired through. */
+const UNKNOWN_NAME_RELATIONS: Array<{
+    relatives: (person: Person, data: StromData) => Person[];
+    reason: MatchReason;
+}> = [
+    { relatives: getPartners, reason: 'partner_of_matched' },
+    { relatives: getChildren, reason: 'child_of_matched' },
+    { relatives: getParents, reason: 'parent_of_matched' },
+];
+
+/**
+ * Phase 2b: a person of unknown given name ("1 NAME /Nováková/" — MyHeritage
+ * writes a wife known only by her surname this way) is the person in the tree
+ * who stands in the same relation (partner, child or parent) to the matched
+ * counterpart of a matched relative, when there is exactly one such person in
+ * the tree of the same sex and surname (birth or after marriage) with an
+ * unknown given name, no conflicting dates, and exactly one such person on the
+ * incoming side too. Anything ambiguous on any path, or a tree person already
+ * taken, leaves the person unmatched (`blocked` remembers that across rounds).
+ *
+ * Such a match is always 'medium' with a score below AUTO_CONFIRM_SCORE: a
+ * surname alone never confirms itself. Every match found by name or by
+ * propagation is a seed, an uncertain one too: what comes of it is for review
+ * just like the seed (the relaxed phase 3 runs later and seeds nothing). A
+ * match found here seeds only this phase again, never the name-based
+ * propagation.
+ */
+function matchUnknownNamedRelatives(
+    existingData: StromData,
+    incomingData: StromData,
+    seeds: PersonMatch[],
+    usedExisting: Set<PersonId>,
+    usedIncoming: Set<PersonId>,
+    blocked: Set<PersonId>
+): PersonMatch[] {
+    const proposals = new Map<PersonId, { existing: Person; incoming: Person; reason: MatchReason }>();
+
+    const samePerson = (existing: Person, incoming: Person): boolean =>
+        existing.gender === incoming.gender
+        && bestLastNameMatch(existing, incoming, existingData, incomingData).exact
+        && compareEventDates(existing.birthDate, incoming.birthDate) !== 'conflict'
+        && compareEventDates(existing.deathDate, incoming.deathDate) !== 'conflict';
+    const unknownNamed = (people: Person[]): Person[] =>
+        people.filter(p => !p.isPlaceholder && hasUnknownGivenName(p));
+
+    for (const seed of seeds) {
+        for (const relation of UNKNOWN_NAME_RELATIONS) {
+            const incomingRelatives = unknownNamed(relation.relatives(seed.incomingPerson, incomingData));
+            if (incomingRelatives.length === 0) continue;
+            const existingRelatives = unknownNamed(relation.relatives(seed.existingPerson, existingData));
+
+            for (const incoming of incomingRelatives) {
+                if (usedIncoming.has(incoming.id) || blocked.has(incoming.id)) continue;
+                const candidates = existingRelatives.filter(e => samePerson(e, incoming));
+                const existing = candidates.length === 1 ? candidates[0] : undefined;
+                const earlier = proposals.get(incoming.id);
+                if (!existing
+                    || usedExisting.has(existing.id)
+                    || incomingRelatives.filter(i => samePerson(existing, i)).length !== 1
+                    || (earlier && earlier.existing.id !== existing.id)) {
+                    blocked.add(incoming.id);
+                    proposals.delete(incoming.id);
+                    continue;
+                }
+                if (!earlier) proposals.set(incoming.id, { existing, incoming, reason: relation.reason });
+            }
+        }
+    }
+
+    // One tree person proposed for two incoming persons: neither is certain.
+    const proposedFor = new Map<PersonId, number>();
+    for (const { existing } of proposals.values()) {
+        proposedFor.set(existing.id, (proposedFor.get(existing.id) ?? 0) + 1);
+    }
+
+    const found: PersonMatch[] = [];
+    for (const { existing, incoming, reason } of proposals.values()) {
+        if (proposedFor.get(existing.id)! > 1) {
+            blocked.add(incoming.id);
+            continue;
+        }
+        found.push({
+            existingId: existing.id,
+            incomingId: incoming.id,
+            confidence: 'medium',
+            reasons: ['unknown_name_relative', reason],
+            score: UNKNOWN_NAME_MATCH_SCORE,
+            existingPerson: existing,
+            incomingPerson: incoming,
+            conflicts: detectConflicts(existing, incoming)
+        });
+        usedExisting.add(existing.id);
+        usedIncoming.add(incoming.id);
+    }
+    return found;
 }
 
 /**
