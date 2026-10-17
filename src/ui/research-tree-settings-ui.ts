@@ -198,6 +198,9 @@ export const researchTreeSettingsMethods = uiModule({
         const modeWhereHtml = modeWhere ? `
                 <p class="research-mode-where" id="research-mode-where"><span>${esc(modeWhere)}</span>${openUrl
                     ? ` <button type="button" class="link-button" id="research-mode-where-open">${esc(s.openResearch)}</button>` : ''}</p>` : '';
+        // The terminal the research opens in is the research's own setting: one sentence, its settings a click away.
+        const terminalWhereHtml = setup ? `
+                <p class="research-mode-where research-terminal-where" id="research-terminal-where"><span>${esc(t.terminalWhere)}</span> <button type="button" class="link-button research-settings-in-research" id="research-settings-in-research">${esc(strings.research.settingsInResearch)} ↗</button></p>` : '';
         const olderLine = sendingShown ? '' : this.researchOlderLineHtml('settings');
         const sendingHtml = !sendingShown ? (olderLine ? `<p class="research-older-line">${olderLine}</p>` : '') : `
                 <fieldset class="research-transcripts research-send-mode">
@@ -253,8 +256,8 @@ export const researchTreeSettingsMethods = uiModule({
                 ${sendingHtml}
                 ${originalsHtml}
                 ${modeWhereHtml}
+                ${terminalWhereHtml}
                 <div class="buttons research-tree-settings-buttons">
-                    ${setup ? `<button type="button" class="link-button research-settings-in-research" id="research-settings-in-research">${esc(strings.research.settingsInResearch)} ↗</button>` : ''}
                     <button type="button" class="primary" id="research-tree-settings-done" data-dismiss>${esc(t.done)}</button>
                 </div>
             </div>`;

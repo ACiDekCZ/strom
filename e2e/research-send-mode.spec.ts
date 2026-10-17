@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { editJan, fakeBridge, FakeBridge, openResearch, openResearchMenu, poll, researchGed, NEW_HEAD, HEAD } from './research-bridge.js';
+import { editJan, fakeBridge, FakeBridge, links, UUID, openResearch, openResearchMenu, poll, researchGed, NEW_HEAD, HEAD } from './research-bridge.js';
 
 /**
  * How changes go to the research, as one set of cards everywhere (the
@@ -737,4 +737,41 @@ test('"Send, then load" where the research takes nothing new: said so (never "th
     await ok.click();
     const names = () => page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons) as any[]).map(p => p.firstName));
     await expect.poll(names).toContain('Bohumil');
+});
+
+test.describe('the terminal the research opens in (spec 009, K2.4)', () => {
+    const where = (page: Page) => settings(page).locator('#research-terminal-where');
+
+    test('on a computer, a research that takes the setup link: the sentence with Settings in the research, which opens the setup link', async ({ page }) => {
+        await manualTree(page);
+        await page.evaluate(() => window.Strom.UI.researchActionTreeSettings());
+        await expect(where(page)).toHaveText("The terminal the research opens in is chosen in the research's settings. Settings in the research ↗");
+        // One button only: the sentence carries it, the dialog's buttons do not repeat it.
+        await expect(settings(page).locator('#research-settings-in-research')).toHaveCount(1);
+        await where(page).locator('#research-settings-in-research').click();
+        await expect(settings(page)).toHaveCount(0);
+        expect(await links(page)).toEqual([`strom-research://setup?tree=${UUID}`]);
+    });
+
+    test('a research that does not announce the setup link: no sentence, no button', async ({ page }) => {
+        await page.clock.install();
+        await openResearch(page);
+        await fakeBridge(page, { accepts: ACCEPTS, links: ['send', 'open', 'live', 'app'] });
+        await poll(page);
+        await page.evaluate(() => window.Strom.UI.researchActionTreeSettings());
+        await expect(settings(page)).toBeVisible();
+        await expect(where(page)).toHaveCount(0);
+        await expect(settings(page).locator('#research-settings-in-research')).toHaveCount(0);
+    });
+
+    test('a touch device: no sentence, no button', async ({ browser }) => {
+        const context = await browser.newContext({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
+        const page = await context.newPage();
+        await manualTree(page);
+        await page.evaluate(() => window.Strom.UI.researchActionTreeSettings());
+        await expect(settings(page)).toBeVisible();
+        await expect(where(page)).toHaveCount(0);
+        await expect(settings(page).locator('#research-settings-in-research')).toHaveCount(0);
+        await context.close();
+    });
 });

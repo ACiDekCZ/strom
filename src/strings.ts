@@ -1161,6 +1161,7 @@ const stringsEN = {
         modeWhereResearch: 'The research is switched to a Strom archive in the research: Settings → “Research, or only a Strom archive”.',
         modeWhereArchive: 'The Strom archive is switched to research in the research, with the first item of its menu: “Switch research on”.',
         modeWhereWaiting: 'The research waits for an AI agent. At the top of its menu: “Install or choose the AI agent”, or “Keep it only as a Strom archive”.',
+        terminalWhere: "The terminal the research opens in is chosen in the research's settings.",
     },
 
     // Originals for the research: the state line of an attachment / excerpt, full quality
@@ -5070,6 +5071,7 @@ const stringsCZ: StringsType = {
         modeWhereResearch: 'Na Archiv Stromu se výzkum přepíná ve výzkumu: Nastavení → „Výzkum, nebo jen Archiv Stromu“.',
         modeWhereArchive: 'Na výzkum se Archiv Stromu přepíná ve výzkumu, první položkou jeho menu: „Zapnout výzkum“.',
         modeWhereWaiting: 'Výzkum čeká na AI agenta. Nahoře v jeho menu: „Nainstalovat nebo vybrat AI agenta“, nebo „Nechat jen jako Archiv Stromu“.',
+        terminalWhere: 'Terminál, ve kterém se výzkum otevírá, se volí v nastavení výzkumu.',
     },
 
     // Originals for the research: the state line of an attachment / excerpt, full quality
@@ -8962,6 +8964,7 @@ const stringsDE: StringsType = {
         modeWhereResearch: 'Auf ein Strom-Archiv wird die Forschung in der Forschung umgestellt: Einstellungen → „Forschung oder nur ein Strom-Archiv“.',
         modeWhereArchive: 'Auf Forschung wird das Strom-Archiv in der Forschung umgestellt, mit dem ersten Punkt ihres Menüs: „Forschung einschalten“.',
         modeWhereWaiting: 'Die Forschung wartet auf einen KI-Agenten. Oben in ihrem Menü: „Den KI-Agenten installieren oder wählen“ oder „Nur als Strom-Archiv behalten“.',
+        terminalWhere: 'Das Terminal, in dem sich die Forschung öffnet, wird in den Einstellungen der Forschung gewählt.',
     },
 
     // Originals for the research: the state line of an attachment / excerpt, full quality
