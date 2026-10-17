@@ -935,7 +935,7 @@ export const researchOverviewMethods = uiModule({
         host.appendChild(list);
     },
 
-    /** Foot: where evidence is missing (tree health), Open the research ↗. */
+    /** Foot: where evidence is missing (the tree overview's Data quality), Open the research ↗. */
     appendOverviewFoot(root: HTMLElement, s: LiveSession, mode: Mode): void {
         const L = strings.live;
         const foot = el('div', 'research-overview__foot');
@@ -943,7 +943,10 @@ export const researchOverviewMethods = uiModule({
         if (missing > 0) {
             const link = el('button', 'link-button', L.missingLink(missing));
             link.type = 'button';
-            link.onclick = () => this.showTreeHealthDialog(s.treeId);
+            link.onclick = () => {
+                if (mode === 'sheet') this.closeResearchOverview();
+                void this.showTreeOverview(s.treeId, { section: 'quality', scroll: true });
+            };
             foot.appendChild(link);
         }
         // The research runs on the computer: a phone gets no ↗ into it.

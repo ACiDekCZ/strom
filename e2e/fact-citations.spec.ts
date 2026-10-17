@@ -5,7 +5,8 @@ import { openApp, card } from './helpers.js';
  * Citations of the birth and the death on their own (Person.birthSourceIds /
  * deathSourceIds): the "Source" rows under those fields in the person editor,
  * the "Supports" choice when citing from the person's sources, citing from
- * the tree-health walk, and the source viewer naming the fact.
+ * the tree overview's walk through births without a source, and the source
+ * viewer naming the fact.
  */
 
 async function tree(page: Page, persons: Record<string, Record<string, unknown>>, advanced = false): Promise<void> {
@@ -162,20 +163,20 @@ test.describe('birth and death citations', () => {
         await expect(page.locator('#source-picker-modal .source-picker-item', { hasText: 'Matrika' })).toHaveCount(0);
     });
 
-    test('tree health: going through births without a source, Cite takes the person off the list', async ({ page }) => {
+    test('tree overview: going through births without a source, Cite takes the person off the list', async ({ page }) => {
         await tree(page, {
             j: { firstName: 'Jan', lastName: 'Víšek', birthDate: '1865', sourceIds: ['s2'] },
             a: { firstName: 'Anna', lastName: 'Víšková', gender: 'female', birthDate: '1870', sourceIds: ['s2'] },
         });
-        await page.evaluate(() => window.Strom.UI.showTreeHealthDialog(window.Strom.DataManager.getCurrentTreeId()));
-        await page.locator('[data-evidence="birthNoSource"]').click();
+        await page.evaluate(() => window.Strom.UI.showTreeOverview(window.Strom.DataManager.getCurrentTreeId(), { section: 'quality' }));
+        await page.locator('#tree-overview-modal [data-block="evidence"] [data-kind="birthNoSource"]').click();
         const pill = page.locator('#evidence-pill');
-        await expect(pill).toContainText('· 2');
+        await expect(pill).toContainText('Births without a source: 2 people');
         await expect(pill.locator('.evidence-pill-cite')).toHaveCount(0);
         await pill.locator('.evidence-pill-next').click();
         await pill.locator('.evidence-pill-cite').click();
         await page.locator('#source-picker-modal .source-picker-item', { hasText: 'Matrika' }).click();
-        await expect(pill).toContainText('Births without a source · 1');
+        await expect(pill).toContainText('Births without a source: 1 person');
         const cited = await page.evaluate(() => ['j', 'a'].filter(id => window.Strom.DataManager.getPerson(id as never)?.birthSourceIds?.length));
         expect(cited).toHaveLength(1);
     });

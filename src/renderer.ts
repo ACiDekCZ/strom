@@ -224,7 +224,7 @@ class TreeRendererClass {
     private highlightIds: Set<PersonId> | null = null;
     /** People the last live-research change touched: 'live-changed' glow. */
     private changedIds: Set<PersonId> | null = null;
-    /** "Show in tree" from tree health: these people stand out, the rest dims. Not kept over a reload. */
+    /** "Show in tree" from the tree overview: these people stand out, the rest dims. Not kept over a reload. */
     private evidenceIds: Set<PersonId> | null = null;
     /** The Evidence mode: every card framed by its level (null: off). */
     private evidenceLevelMap: Map<PersonId, EvidenceLevel> | null = null;

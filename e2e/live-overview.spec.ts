@@ -605,6 +605,16 @@ test.describe('Research overview', () => {
         await expect(page.locator('#research-item-live')).toHaveCount(0);
     });
 
+    test('Missing evidence in the foot opens the tree overview at Data quality', async ({ page }) => {
+        await follow(page);
+        await page.locator('#live-panel .live-panel-expand').click();
+        const link = page.locator('#research-overview .research-overview__foot .link-button', { hasText: /^Missing evidence: \d+ (person|people) ›$/ });
+        await link.click();
+        const quality = page.locator('#tree-overview-modal .tov-sec[data-section="quality"]');
+        await expect(quality.locator('.tov-sec-head')).toHaveAttribute('aria-expanded', 'true');
+        await expect(quality.locator('[data-block="evidence"]')).toBeVisible();
+    });
+
     test('switching the language redraws the panel and the overview', async ({ page }) => {
         await follow(page);
         await expect(page.locator('#live-panel .live-changes li')).toHaveCount(5);

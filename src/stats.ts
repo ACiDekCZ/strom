@@ -1,7 +1,7 @@
 /**
- * Family statistics: pure computations over StromData for the visual stats
- * section of the tree-stats dialog. No DOM, no mutation — every function takes
- * data and returns plain numbers/labels; the UI renders them as inline SVG.
+ * Family statistics: pure computations over StromData for the tree overview
+ * (src/ui/tree-overview.ts). No DOM, no mutation — every function takes data
+ * and returns plain numbers/labels.
  *
  * Persons/dates that lack the needed data are silently skipped; each result
  * carries an `n` (how many persons/couples it was computed from) so the UI can
@@ -31,11 +31,11 @@ export interface FamilyStats {
     birthsByMonth: MonthCount[];  // always 12 entries, month 1..12
     birthsByMonthN: number;
     /** Longest-lived documented person (birth+death). */
-    oldest: { name: string; years: number } | null;
+    oldest: { id: PersonId; name: string; years: number } | null;
     /** Longest documented marriage (partnership start+end). */
-    longestMarriage: { names: string; years: number } | null;
+    longestMarriage: { ids: PersonId[]; names: string; years: number } | null;
     /** Couple with the most children. */
-    largestFamily: { names: string; count: number } | null;
+    largestFamily: { ids: PersonId[]; names: string; count: number } | null;
     /** Number of generation rows the tree spans. */
     generations: number;
 }
@@ -44,7 +44,7 @@ function fullName(p: Person): string {
     return shownNameOrEmpty(p);
 }
 
-/** Share of real persons carrying each key fact (R4 tree-health completeness). */
+/** Share of real persons carrying each key fact (the tree overview's Data quality › Completeness). */
 export interface Completeness {
     /** Real persons (placeholders excluded) — the denominator for every share. */
     total: number;
@@ -92,7 +92,7 @@ export function computeFamilyStats(data: StromData): FamilyStats {
 
     // ---- lifespan per generation ----
     const lifeSum = new Map<number, { sum: number; n: number }>();
-    let oldest: { name: string; years: number } | null = null;
+    let oldest: FamilyStats['oldest'] = null;
     for (const p of persons) {
         const age = ageBetween(p.birthDate, p.deathDate);
         if (!age || !p.birthDate || !p.deathDate) continue;  // need both endpoints
@@ -100,7 +100,7 @@ export function computeFamilyStats(data: StromData): FamilyStats {
         const acc = lifeSum.get(g) ?? { sum: 0, n: 0 };
         acc.sum += age.years; acc.n += 1;
         lifeSum.set(g, acc);
-        if (!oldest || age.years > oldest.years) oldest = { name: fullName(p), years: age.years };
+        if (!oldest || age.years > oldest.years) oldest = { id: p.id, name: fullName(p), years: age.years };
     }
     const lifespanByGen: GenLifespan[] = [...lifeSum.entries()]
         .map(([generation, { sum, n }]) => ({ generation, avgYears: Math.round((sum / n) * 10) / 10, n }))
@@ -132,13 +132,13 @@ export function computeFamilyStats(data: StromData): FamilyStats {
     const birthsByMonth: MonthCount[] = monthCounts.map((count, i) => ({ month: i + 1, count }));
 
     // ---- largest family (couple with most children) ----
-    let largestFamily: { names: string; count: number } | null = null;
+    let largestFamily: FamilyStats['largestFamily'] = null;
     for (const u of Object.values(data.partnerships)) {
         if (u.childIds.length === 0) continue;
         if (!largestFamily || u.childIds.length > largestFamily.count) {
             const p1 = data.persons[u.person1Id], p2 = data.persons[u.person2Id];
-            const names = [p1, p2].filter(Boolean).map(p => fullName(p!)).join(' & ');
-            largestFamily = { names, count: u.childIds.length };
+            const both = [p1, p2].filter((p): p is Person => !!p);
+            largestFamily = { ids: both.map(p => p.id), names: both.map(fullName).join(' & '), count: u.childIds.length };
         }
     }
 
@@ -150,7 +150,7 @@ export function computeFamilyStats(data: StromData): FamilyStats {
     // ---- longest marriage ----
     // Ends at the first of: the recorded end (divorce), either partner's
     // death. A marriage with neither documented has no known length.
-    let longestMarriage: { names: string; years: number } | null = null;
+    let longestMarriage: FamilyStats['longestMarriage'] = null;
     for (const u of Object.values(data.partnerships)) {
         if (!u.startDate) continue;
         const ends = [u.endDate, data.persons[u.person1Id]?.deathDate, data.persons[u.person2Id]?.deathDate];
@@ -163,8 +163,8 @@ export function computeFamilyStats(data: StromData): FamilyStats {
         if (!span) continue;
         if (!longestMarriage || span.years > longestMarriage.years) {
             const p1 = data.persons[u.person1Id], p2 = data.persons[u.person2Id];
-            const names = [p1, p2].filter(Boolean).map(p => fullName(p!)).join(' & ');
-            longestMarriage = { names, years: span.years };
+            const both = [p1, p2].filter((p): p is Person => !!p);
+            longestMarriage = { ids: both.map(p => p.id), names: both.map(fullName).join(' & '), years: span.years };
         }
     }
 
@@ -182,7 +182,7 @@ export function computeFamilyStats(data: StromData): FamilyStats {
     };
 }
 
-/** People whose evidence is missing ("Where evidence is missing" in tree health). */
+/** People whose evidence is missing ("Where evidence is missing" in the tree overview). */
 export interface EvidenceGaps {
     /** Real persons (placeholders excluded). */
     total: number;

@@ -35,6 +35,15 @@ async function treeSubmenu(page: Page, item: string): Promise<void> {
     await page.locator('#actions-tree-submenu .tree-switcher-action', { hasText: item }).click();
 }
 
+/** In the open tree overview: expand Data quality and press one of its buttons. */
+async function qualityAction(page: Page, name: string): Promise<void> {
+    const quality = page.locator('#tree-overview-modal .tov-sec[data-section="quality"]');
+    await expect(quality).toBeVisible();
+    const head = quality.locator('.tov-sec-head');
+    if (await head.getAttribute('aria-expanded') !== 'true') await head.click();
+    await quality.locator('.tov-sec-body').getByRole('button', { name, exact: true }).click();
+}
+
 function activeTreeName(page: Page): Promise<string> {
     return page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata().name);
 }
@@ -141,7 +150,7 @@ test('duplicate dialog: Cancel and an empty name create nothing; Escape returns 
 
 // ---------------------------------------------------------------- Tree: submenu
 
-test('⋯ → Tree: Duplicate / Rename / Tree health / Merge into / Hide act on the active tree', async ({ page }) => {
+test('⋯ → Tree: Duplicate / Rename / Tree overview / Merge into / Hide act on the active tree', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
     await waitForPersist(page, 'Jan');
@@ -168,12 +177,12 @@ test('⋯ → Tree: Duplicate / Rename / Tree health / Merge into / Hide act on 
     await expect(rename).toBeHidden();
     await expect(page.locator('.tree-switcher-btn .tree-name')).toHaveText('Dvorak');
 
-    // Tree health opens for the active tree.
-    await treeSubmenu(page, 'Tree health');
-    const health = page.locator('#tree-health-modal');
-    await expect(health).toHaveClass(/active/);
-    await expect(health.locator('#tree-health-title')).toContainText('Dvorak');
-    await page.evaluate(() => window.Strom.UI.closeTreeHealthDialog());
+    // The tree overview opens for the active tree.
+    await treeSubmenu(page, 'Tree overview');
+    const overview = page.locator('#tree-overview-modal .modal.tov');
+    await expect(overview).toBeVisible();
+    await expect(overview.locator('.tov-title')).toHaveText('Tree overview: Dvorak');
+    await page.evaluate(() => window.Strom.UI.closeTreeOverview());
 
     // Merge into another tree: the active tree is the source, the others are targets.
     await treeSubmenu(page, 'Merge into another tree');
@@ -404,17 +413,16 @@ test('validation of another tree: a person link switches to that tree and focuse
     const first = await activeTreeName(page);
     await createTree(page, 'Second');
 
-    // Row ⋯ → Tree health of the first tree → Validation details.
-    await rowAction(page, first, 'Tree health');
-    const health = page.locator('#tree-health-modal');
-    await expect(health).toHaveClass(/active/);
-    await health.locator('.health-action[data-action="validate"]').click();
+    // Row ⋯ → Tree overview of the first tree → Data quality → Validation details.
+    await rowAction(page, first, 'Tree overview');
+    await qualityAction(page, 'Validation details');
     const validation = page.locator('#tree-validation-modal');
     await expect(validation).toBeVisible();
     const issue = validation.locator('.validation-issue', { hasText: 'Death date is before birth' });
     await issue.locator('.validation-person-link', { hasText: 'Petr' }).click();
 
     await expect(validation).toBeHidden();
+    await expect(page.locator('#tree-overview-modal')).toHaveCount(0);
     await expect(page.locator('.tree-switcher-btn .tree-name')).toHaveText(first);
     await expect(card(page, 'Petr')).toHaveClass(/focused/);
 });
@@ -465,8 +473,8 @@ test('Fix in the validation dialog of a non-active tree switches to it and repai
     const first = await activeTreeName(page);
     await createTree(page, 'Second');
 
-    await rowAction(page, first, 'Tree health');
-    await page.locator('#tree-health-modal .health-action[data-action="validate"]').click();
+    await rowAction(page, first, 'Tree overview');
+    await qualityAction(page, 'Validation details');
     const modal = page.locator('#tree-validation-modal');
     const issue = modal.locator('.validation-issue', { hasText: 'written several ways' });
     await issue.locator('.validation-fix-btn').click();

@@ -871,7 +871,7 @@ export const miscMethods = uiModule({
                     // element + its stack entry, not just the 'active' class.
                     if (currentDialog === 'tree-overview-modal') {
                         if (this.closeTreeOverviewPopover()) return;
-                        this.closeTreeOverview();
+                        this.dismissTreeOverview();
                         return;
                     }
                     if (currentDialog === 'archives-modal') {

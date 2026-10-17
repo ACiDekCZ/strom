@@ -411,8 +411,9 @@ test.describe('card signals', () => {
 
     test('Evidence in tree: every card framed by its level, counts switch to a group', async ({ page }) => {
         await setup(page);
-        await page.evaluate(() => window.Strom.UI.showTreeHealthDialog(window.Strom.DataManager.getCurrentTreeId()));
-        await page.locator('[data-evidence="levels"]').click();
+        await page.evaluate(() => window.Strom.UI.showTreeOverview(window.Strom.DataManager.getCurrentTreeId(), { section: 'quality' }));
+        await page.locator('#tree-overview-modal [data-tov="levels"]').click();
+        await expect(page.locator('#tree-overview-modal')).toHaveCount(0);
         await expect(card(page, 'Jan')).toHaveClass(/evl-full/);
         await expect(card(page, 'Josef')).toHaveClass(/evl-none/);
         await expect(page.locator('.person-card.evidence-dim')).toHaveCount(0);

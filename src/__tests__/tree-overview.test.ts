@@ -10,7 +10,7 @@ import {
     ancestorGenerations, grandparentLines, lineEndIds, rememberers, remembererGaps, deathAgeOf, deathAgeSummary,
     relativeGenerations, adultDeathAgeByGeneration, childrenPerCoupleByGeneration, ancestorGenerationName,
     descendantGenerationName, relativeGenerationName, overviewHeader, selectFocusCards, hasEnoughSample, MIN_SAMPLE,
-    AncestorGeneration, ancestorGenerationLabel, focusBirthNoSource,
+    AncestorGeneration, ancestorGenerationLabel, focusBirthNoSource, adultLifespanByBirthPeriod,
 } from '../tree-overview.js';
 import { computeFamilyStats, computeEvidenceGaps } from '../stats.js';
 import { setLanguage } from '../strings.js';
@@ -371,6 +371,35 @@ describe('deathAgeOf and deathAgeSummary', () => {
         expect(MIN_SAMPLE).toBe(5);
         expect(hasEnoughSample(4)).toBe(false);
         expect(hasEnoughSample(5)).toBe(true);
+    });
+});
+
+describe('adultLifespanByBirthPeriod', () => {
+    it('gives the adult median per 50-year birth period, only from n = 5, oldest first', () => {
+        const t = new Tree();
+        // 1800–1849: five adults (40, 50, 60, 70, 80) plus an infant and a teen that do not count.
+        [40, 50, 60, 70, 80].forEach((age, i) =>
+            t.person(`a${i}`, { birthDate: `${1800 + i * 10}-01-01`, deathDate: `${1800 + i * 10 + age}-06-01` }));
+        t.person('infant', { birthDate: '1820-01-01', deathDate: '1820-03-01' });
+        t.person('teen', { birthDate: '1830', deathDate: '1845' });
+        // 1850–1899: five adults, one by the baptism year only.
+        [30, 40, 50, 60].forEach((age, i) =>
+            t.person(`b${i}`, { birthDate: `${1850 + i * 10}-01-01`, deathDate: `${1850 + i * 10 + age}-06-01` }));
+        t.person('bapt', { events: [{ id: 'bp', type: 'baptism', date: '1899-02-01' }], deathDate: '1970-03-01' });
+        // 1900–1949: four adults only, left out.
+        [60, 70, 80, 90].forEach((age, i) =>
+            t.person(`c${i}`, { birthDate: `${1900 + i}-01-01`, deathDate: `${1900 + i + age}-06-01` }));
+        // A recorded age without a birth year has no period.
+        t.person('noBirth', { deathAge: '55 let' });
+        const r = adultLifespanByBirthPeriod(t.data());
+        expect(r).toEqual([
+            { from: 1800, to: 1849, median: 60, n: 5 },
+            { from: 1850, to: 1899, median: 50, n: 5 },
+        ]);
+        expect(adultLifespanByBirthPeriod(t.data(), [id('a0'), id('a1')])).toEqual([]);
+        expect(adultLifespanByBirthPeriod(t.data(), undefined, 100)).toEqual([
+            { from: 1800, to: 1899, median: 55, n: 10 },
+        ]);
     });
 });
 

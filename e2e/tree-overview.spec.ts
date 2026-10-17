@@ -1,9 +1,12 @@
 /**
  * Tree overview (spec 005): header numbers, "Where to focus", Ancestors with
- * the four grandparent lines, the person choice and its memory, the
- * remembered expansion, the highlight with "Back to overview", a tree that is
- * not open, the phone sheet, an empty tree and the opening time of a
- * 5 000-person tree. Invented names only.
+ * the four grandparent lines, Life and health, Family through time, Data
+ * quality, Highlights, the person choice and its memory, the remembered
+ * expansion, the highlight with "Back to overview", a tree that is not open,
+ * the entry points (tree actions, the tree manager and back), Czech and
+ * German texts, the phone sheet, an empty tree and the opening time of a
+ * 5 000-person tree. Invented names only. The statistics on the sample tree
+ * are in stats.spec.ts.
  */
 
 import { test, expect, Page, Locator } from '@playwright/test';
@@ -222,6 +225,158 @@ test.describe('tree overview', () => {
         expect(JSON.parse(await page.evaluate(() => localStorage.getItem('overview.open') ?? '[]')).sort()).toEqual(['ancestors', 'focus']);
     });
 
+    test('Data quality: consistency, completeness, missing evidence, structure and quick actions', async ({ page }) => {
+        const treeId = await setup(page);
+        const dialog = await openOverview(page, treeId, { section: 'quality', scroll: true });
+        const quality = section(dialog, 'quality');
+        await expect(quality).toHaveAttribute('data-ready', 'true');
+        await expect(quality.locator('.tov-mark')).toHaveCount(0);
+        await expect(quality.locator('.tov-sum .tov-sum-err')).toHaveText('2 errors');
+        // Consistency: the counts, the most serious findings first, names lead to the person.
+        await expect(quality.locator('.tov-count-err')).toHaveText('2 errors');
+        await expect(quality.locator('.tov-finding').first()).toHaveClass(/tov-finding--error/);
+        await expect(quality.locator('.tov-finding').first().locator('.tov-link').first()).toHaveText('Elin Lindqvist');
+        // Completeness: every birth date, no birthplace (low), one source of eight.
+        await expect(quality.locator('.tov-comp-row[data-field="birthDate"] .tov-comp-pct')).toHaveText('100%');
+        await expect(quality.locator('.tov-comp-row[data-field="birthPlace"] .tov-comp-fill')).toHaveClass(/is-low/);
+        await expect(quality.locator('.tov-comp-row[data-field="source"] .tov-comp-pct')).toHaveText('13%');
+        await expect(quality.locator('.tov-comp-row[data-field="deathDate"]')).toHaveAttribute('title', 'counted among the deceased');
+        // Where evidence is missing, from the person in focus.
+        const evidence = quality.locator('[data-block="evidence"]');
+        await expect(evidence.locator('.tov-ev-row[data-evidence="noSource"] .tov-ev-count')).toHaveText('7 of 8');
+        await expect(evidence.locator('.tov-ev-row[data-evidence="lineEnds"] .tov-ev-count')).toHaveText('3');
+        // Structure: one family; the quick actions (nothing to clean up: disabled).
+        await expect(quality.locator('[data-block="structure"] .tov-struct-line')).toHaveText('4 unions. All people are connected into one family.');
+        await expect(quality.locator('[data-block="actions"] .tov-btn')).toHaveText(
+            ['Validation details', 'Clean up orphaned places (0)', 'Split into families']);
+        await expect(quality.getByRole('button', { name: 'Clean up orphaned places (0)' })).toBeDisabled();
+        // People without a source: the highlight with Cite.
+        await evidence.locator('[data-kind="noSource"]').click();
+        const pill = page.locator('#evidence-pill');
+        await expect(pill).toContainText('People without a source: 7 people');
+        await pill.getByRole('button', { name: 'Next person ›' }).click();
+        await expect(pill.getByRole('button', { name: 'Cite' })).toBeVisible();
+        await pill.getByRole('button', { name: 'Back to overview' }).click();
+        await expect(section(page.locator('#tree-overview-modal'), 'quality').locator('.tov-sec-head')).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    test('Data quality: unconnected parts, Separate returns to the overview', async ({ page }) => {
+        const data = family();
+        data.persons.x = { id: 'x', firstName: 'Ida', lastName: 'Berg', gender: 'female', isPlaceholder: false, partnerships: [], parentIds: [], childIds: [] };
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await openApp(page);
+        const treeId = await importTree(page, data, 'Lindqvist', 'r');
+        const dialog = await openOverview(page, treeId, { section: 'quality' });
+        const quality = section(dialog, 'quality');
+        await expect(quality.locator('.tov-sum')).toContainText('2 unconnected parts');
+        const structure = quality.locator('[data-block="structure"]');
+        await expect(structure.locator('.tov-struct-line')).toHaveText('4 unions · 2 unconnected parts:');
+        await expect(structure.locator('.tov-parts li')).toHaveCount(2);
+        await structure.getByRole('button', { name: 'Separate unconnected parts' }).click();
+        await expect(page.locator('#split-modal')).toBeVisible();
+        await expect(dialog).toBeHidden();
+        await page.keyboard.press('Escape');
+        await expect(dialog).toBeVisible();
+    });
+
+    test('Life, Family through time and Highlights on a small tree: not enough data, the rest shown', async ({ page }) => {
+        const treeId = await setup(page);
+        const dialog = await openOverview(page, treeId);
+        // Computed on idle callbacks while closed.
+        for (const id of ['life', 'time', 'quality', 'highlights']) {
+            await expect(section(dialog, id)).toHaveAttribute('data-ready', 'true');
+        }
+        await expect(section(dialog, 'life').locator('.tov-sum')).toHaveText('');
+        await expect(section(dialog, 'time').locator('.tov-sum')).toHaveText('5 men, 3 women');
+        await section(dialog, 'life').locator('.tov-sec-head').click();
+        await expect(section(dialog, 'life').locator('.tov-muted')).toHaveText(/^Not enough data yet: age at death is known for \d+ (person|people)\.$/);
+        await expect(section(dialog, 'life').locator('.tov-tile')).toHaveCount(0);
+
+        const time = section(dialog, 'time');
+        await time.locator('.tov-sec-head').click();
+        await expect(time.locator('.tov-mark')).toHaveCount(1);
+        await expect(time.locator('.tov-split[data-split="sex"] .tov-split-counts')).toHaveText('5 men · 3 women');
+        await expect(time.locator('[data-chart="children"] .tov-muted')).toHaveText(/^Not enough data yet: the number of children is known for \d+ couples?\.$/);
+        await expect(time.locator('[data-chart="months"] .tov-muted')).toHaveText('Not enough data yet: the birth month is known for 0 people.');
+
+        const hl = section(dialog, 'highlights');
+        await hl.locator('.tov-sec-head').click();
+        await expect(hl.locator('.tov-tile[data-tile="children"] .tov-tile-value')).toHaveText('2 children');
+        // Five children in four unions (single parents included).
+        await expect(hl.locator('.tov-tile[data-tile="average"] .tov-tile-value')).toHaveText('1.3');
+        await expect(hl.locator('[data-block="anniversaries"] .tov-muted')).toHaveText('No anniversaries in the next 30 days.');
+        await expect(hl.locator('.tov-sum')).toHaveText('');
+    });
+
+    test('Family through time follows the chosen person; without one it asks for a person', async ({ page }) => {
+        const treeId = await setup(page);
+        await page.evaluate((id) => localStorage.setItem(`overview.root.${id}`, 'gone'), treeId);
+        await page.evaluate(() => { (window.Strom.TreeRenderer as unknown as { focusPersonId: null }).focusPersonId = null; });
+        const dialog = await openOverview(page, treeId, { section: 'time' });
+        const time = section(dialog, 'time');
+        await expect(time.locator('.tov-need')).toContainText('Generations are calculated from a selected person.');
+        await time.getByRole('button', { name: 'Choose person' }).click();
+        await page.locator('.tov-pop .tov-pop-search').fill('Erik');
+        await page.locator('.tov-pop-row', { hasText: 'Erik' }).click();
+        await expect(time.locator('.tov-need')).toHaveCount(0);
+        await expect(time.locator('[data-chart="children"]')).toContainText('Not enough data yet');
+    });
+
+    test('entry points: the tree actions, the tree manager and back to it', async ({ page }) => {
+        const treeId = await setup(page);
+        // ⋯ → Tree: the Overview group is the overview and (when offered) the change history.
+        await page.locator('.actions-menu-btn').click();
+        await page.locator('#actions-tree-row').hover();
+        const rows = page.locator('#actions-tree-overview-rows .tree-switcher-action');
+        await expect(rows).toHaveText(['Tree overview']);
+        await page.keyboard.press('Escape');
+
+        // The tree manager's ⋯ → Tree overview: the manager steps aside and comes back on Escape.
+        await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
+        const manager = page.locator('#tree-manager-modal');
+        const row = page.locator('.tree-manager-item.active');
+        await row.locator('.tree-row-menu-btn').click();
+        await row.locator('.tree-row-menu.open .tree-row-menu-item[data-action="overview"]').click();
+        const dialog = page.locator('#tree-overview-modal .modal.tov');
+        await expect(dialog).toBeVisible();
+        await expect(manager).toBeHidden();
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#tree-overview-modal')).toHaveCount(0);
+        await expect(manager).toBeVisible();
+
+        // Again with Close; a person link goes to the tree and not back to the manager.
+        await row.locator('.tree-row-menu-btn').click();
+        await row.locator('.tree-row-menu.open .tree-row-menu-item[data-action="overview"]').click();
+        await dialog.locator('.tov-foot').getByRole('button', { name: 'Close' }).click();
+        await expect(manager).toBeVisible();
+        await row.locator('.tree-row-menu-btn').click();
+        await row.locator('.tree-row-menu.open .tree-row-menu-item[data-action="overview"]').click();
+        await section(dialog, 'ancestors').locator('.tov-line[data-slot="FF"] .tov-link').first().click();
+        await expect(page.locator('#tree-overview-modal')).toHaveCount(0);
+        await expect(manager).toBeHidden();
+        expect(treeId).toBeTruthy();
+    });
+
+    test('Czech and German texts', async ({ page }) => {
+        const treeId = await setup(page);
+        await page.evaluate(() => window.Strom.UI.setLanguage('cs' as never));
+        let dialog = await openOverview(page, treeId);
+        await expect(dialog.locator('.tov-title')).toHaveText('Přehled stromu: Lindqvist');
+        await expect(dialog.locator('.tov-sec-title')).toHaveText(['Na co se zaměřit', 'Předci', 'Život a zdraví', 'Rod v čase', 'Kvalita dat', 'Zajímavosti']);
+        await expect(section(dialog, 'quality').locator('.tov-sum .tov-sum-err')).toHaveText('2 chyby');
+        await section(dialog, 'quality').locator('.tov-sec-head').click();
+        await expect(section(dialog, 'quality').locator('[data-block="structure"] .tov-struct-line')).toHaveText('4 svazky. Všechny osoby jsou propojeny do jedné rodiny.');
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#toolbar-focus-count:visible, #focus-person-count:visible').first()).toHaveAttribute('title', 'Zobrazit přehled stromu');
+
+        await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
+        dialog = await openOverview(page, treeId);
+        await expect(dialog.locator('.tov-title')).toHaveText('Stammbaum-Überblick: Lindqvist');
+        await expect(section(dialog, 'quality').locator('.tov-sum .tov-sum-err')).toHaveText('2 Fehler');
+        await expect(section(dialog, 'quality').locator('[data-block="structure"] .tov-struct-line')).toHaveText('4 Verbindungen. Alle Personen sind zu einer Familie verbunden.');
+        await expect(section(dialog, 'time').locator('.tov-split[data-split="sex"] .tov-split-label')).toHaveText('Männer / Frauen');
+    });
+
     test('a tree that is not open is read only', async ({ page }) => {
         const treeId = await setup(page);
         // Another tree becomes the open one.
@@ -353,7 +508,10 @@ test.describe('tree overview', () => {
                 const t0 = performance.now();
                 await window.Strom.UI.showTreeOverview(treeId);
                 await new Promise<void>((resolve) => {
-                    const done = (): boolean => document.querySelectorAll('#tree-overview-modal .tov-sec[data-ready="true"]').length === 2;
+                    // The eager sections: the others follow on idle callbacks.
+                    const ready = (id: string): boolean =>
+                        document.querySelector(`#tree-overview-modal .tov-sec[data-section="${id}"]`)?.getAttribute('data-ready') === 'true';
+                    const done = (): boolean => ready('focus') && ready('ancestors');
                     const tick = (): void => { if (done()) resolve(); else requestAnimationFrame(tick); };
                     tick();
                 });

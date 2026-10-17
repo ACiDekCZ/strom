@@ -7,7 +7,7 @@ import { openApp, createFirstPerson, card } from './helpers.js';
  *   R1 — descendants poster export
  *   R2 — life timeline section in the person modal
  *   R3 — desktop Undo/Redo toolbar buttons after a silent bulk flow
- *   R4 — tree-health dashboard
+ *   R4 — tree health, now Data quality in the tree overview
  */
 
 /** Load the built-in sample tree (the Berg family) from the empty state. */
@@ -163,31 +163,31 @@ test('R3: a silent bulk flow clears the redo stack AND greys the Redo button', a
     await expect(redoBtn).toBeDisabled();
 });
 
-// ==================== R4: tree-health dashboard ====================
+// ==================== R4: tree health, now Data quality in the tree overview ====================
 
-test('R4: the tree-health dashboard opens with all its blocks', async ({ page }) => {
+test('R4: Data quality in the tree overview shows all its blocks', async ({ page }) => {
     await loadSample(page);
 
     await page.evaluate(() => {
         const id = window.Strom.DataManager.getCurrentTreeId();
-        if (id) window.Strom.UI.showTreeHealthDialog(id);
+        if (id) void window.Strom.UI.showTreeOverview(id, { section: 'quality' });
     });
 
-    const modal = page.locator('#tree-health-modal');
-    await expect(modal).toHaveClass(/active/);
+    const quality = page.locator('#tree-overview-modal .tov-sec[data-section="quality"]');
+    await expect(quality).toHaveAttribute('data-ready', 'true');
 
-    // Five composed blocks: validation, completeness, structure, actions,
-    // where evidence is missing.
-    await expect(modal.locator('.health-block')).toHaveCount(5);
-    await expect(modal.locator('.health-block').last()).toHaveClass(/health-evidence/);
-    // Completeness renders four bars (birth date/place, death date, photo).
-    await expect(modal.locator('.health-bar-row')).toHaveCount(4);
-    // Structure renders four stat tiles (people/unions/generations/islands).
-    await expect(modal.locator('.health-tile')).toHaveCount(4);
-    // Quick actions row: validate, clean places, split.
-    await expect(modal.locator('.health-action')).toHaveCount(3);
+    // Five blocks: consistency, completeness, where evidence is missing,
+    // structure, quick actions.
+    await expect(quality.locator('.tov-block')).toHaveCount(5);
+    await expect(quality.locator('.tov-block').nth(2)).toHaveAttribute('data-block', 'evidence');
+    // Completeness: birth date, death date (among the deceased), birthplace, source, photo.
+    await expect(quality.locator('.tov-comp-row')).toHaveCount(5);
+    // Structure: the unions, all in one family.
+    await expect(quality.locator('[data-block="structure"]')).toContainText('All people are connected into one family.');
+    // Quick actions: validation details, clean places, split into families.
+    await expect(quality.locator('[data-block="actions"] .tov-btn')).toHaveCount(3);
 
-    // The people tile counts the real persons in the sample.
-    const peopleTile = modal.locator('.health-tile').first().locator('.health-tile-num');
-    expect(parseInt(await peopleTile.innerText(), 10)).toBeGreaterThan(3);
+    // The header counts the real persons in the sample.
+    const people = await page.locator('#tree-overview-modal .tov-nums').innerText();
+    expect(parseInt(people, 10)).toBeGreaterThan(3);
 });

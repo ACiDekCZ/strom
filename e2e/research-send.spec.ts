@@ -339,7 +339,7 @@ test.describe('where the tree menu offers it', () => {
         await expect(page.locator('#tree-manager-modal')).toBeVisible();
         await page.locator('.tree-manager-item.active .tree-row-menu-btn').tap();
         const sheet = page.locator('.bottom-sheet-tree-actions');
-        await expect(sheet.locator('[data-action="stats"]')).toBeVisible();
+        await expect(sheet.locator('[data-action="overview"]')).toBeVisible();
         await expect(sheet).not.toContainText('Send changes to the research');
         await ctx.close();
     });

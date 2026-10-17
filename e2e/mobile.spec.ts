@@ -225,7 +225,7 @@ test('the Tree row opens the tree-actions sheet: name, summary, the six groups a
 
     await expect(sheet.locator('.bottom-sheet-section')).toHaveText(['Overview', 'Outputs', 'Tree settings', 'Structure', 'Manage']);
     const keys = await sheet.locator('.tree-actions-row').evaluateAll(els => els.map(el => (el as HTMLElement).dataset.action));
-    expect(keys).toEqual(['stats', 'health', 'export', 'snapshots', 'rename', 'defaultPerson', 'startup', 'places', 'surnames',
+    expect(keys).toEqual(['overview', 'export', 'snapshots', 'rename', 'defaultPerson', 'startup', 'places', 'surnames',
         'makeTree', 'mergeView', 'splitFamilies', 'split', 'mergeInto', 'duplicate', 'visibility', 'lock', 'delete']);
     for (const box of await sheet.locator('.tree-actions-row').evaluateAll(els => els.map(el => el.getBoundingClientRect().height))) {
         expect(Math.round(box)).toBeGreaterThanOrEqual(48); // subpixel layout
@@ -244,9 +244,9 @@ test('the Tree row opens the tree-actions sheet: name, summary, the six groups a
     await expect(sheet).toBeVisible();
 
     // Any other row closes the sheet and runs.
-    await sheet.locator('[data-action="stats"]').click();
+    await sheet.locator('[data-action="overview"]').click();
     await expect(page.locator('.bottom-sheet-tree-actions')).toHaveCount(0);
-    await expect(page.locator('#tree-stats-modal')).toHaveClass(/active/);
+    await expect(page.locator('#tree-overview-modal .modal.tov')).toBeVisible();
 });
 
 test('the tree manager on a phone: ⋯ opens the sheet over it; another tree has no open-tree rows and a note', async ({ page }) => {

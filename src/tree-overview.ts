@@ -671,6 +671,39 @@ export function childrenPerCoupleByGeneration(data: StromData, gens: Map<PersonI
         .sort((a, b) => a.generation - b.generation);
 }
 
+/** Years in one period of "Adult lifespan by birth period". */
+export const BIRTH_PERIOD_YEARS = 50;
+
+/** One birth period ("1800–1849") with its adults' median age at death. */
+export interface PeriodMedian { from: number; to: number; median: number; n: number; }
+
+/**
+ * Adult lifespan per birth period: the median age at death of those who
+ * reached 15 (deathAgeSummary's rule: an age range from 15 up), grouped by the
+ * birth year (birthYearOf: the birth, else the baptism) into periods of
+ * `years` starting at a multiple of it (1800–1849, 1850–1899). Over `ids`
+ * (default: every real person). Only periods with hasEnoughSample(n), oldest
+ * first; a period without enough adults is left out.
+ */
+export function adultLifespanByBirthPeriod(
+    data: StromData, ids?: Iterable<PersonId>, years: number = BIRTH_PERIOD_YEARS,
+): PeriodMedian[] {
+    const groups = new Map<number, number[]>();
+    for (const id of ids ?? (Object.keys(data.persons) as PersonId[])) {
+        const p = realPerson(data, id);
+        if (!p) continue;
+        const age = deathAgeOf(p);
+        const born = birthYearOf(p);
+        if (!age || !born || age.min < ADULT_AGE) continue;
+        const from = Math.floor(born.year / years) * years;
+        (groups.get(from) ?? groups.set(from, []).get(from)!).push(age.years);
+    }
+    return [...groups.entries()]
+        .filter(([, ages]) => hasEnoughSample(ages.length))
+        .map(([from, ages]) => ({ from, to: from + years - 1, median: median(ages)!, n: ages.length }))
+        .sort((a, b) => a.from - b.from);
+}
+
 // ==================== 6. generation names (Decision 17 Oct) ====================
 
 /** "parents", "grandparents", "great-grandparents", "2nd great-grandparents"… (n ≥ 1). */

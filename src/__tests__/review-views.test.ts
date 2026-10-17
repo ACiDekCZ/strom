@@ -14,7 +14,7 @@ import { computeFamilyStats } from '../stats.js';
 import { buildFamilyBook } from '../book.js';
 import { findRelationship } from '../kinship.js';
 import { buildFanModel, buildFanSvg } from '../fan-chart.js';
-import { treeStatsMethods } from '../ui/tree-stats.js';
+import { overviewHeader } from '../tree-overview.js';
 import { ARCHIVE_PORTALS } from '../archives.js';
 
 interface Opts {
@@ -138,18 +138,15 @@ describe('stats: longest marriage ends at divorce or the first death', () => {
     });
 });
 
-describe('S28 tree stats skip placeholders', () => {
-    it('placeholder is not counted as a person or as living', () => {
+describe('S28 tree overview skips placeholders', () => {
+    it('placeholder is not counted as a person or as an island', () => {
         const d = data([
             p('a', 'Jan', 'A', 'male', { birthDate: '1990-01-01' }),
             p('ph', '', '', 'female', { isPlaceholder: true }),
         ]);
-        const ctx = { ...treeStatsMethods, escapeHtml: (t: string) => t };
-        const html = (treeStatsMethods.generateTreeStatsHtml as (this: unknown, d: StromData) => string).call(ctx, d);
-        const header = (label: string) => new RegExp(`header-value">(\\d+)</div>\\s*<div class="tree-stats-header-label">${label}<`).exec(html)?.[1];
-        expect(header('People')).toBe('1');
-        expect(html).toMatch(/Males <b>1<\/b>/);
-        expect(html).not.toContain('tree-stats-unrelated');
+        const header = overviewHeader(d);
+        expect(header.persons).toBe(1);
+        expect(header.islands).toBe(1);
     });
 });
 

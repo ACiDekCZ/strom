@@ -430,16 +430,10 @@
         button, input, select, textarea { font-family: var(--font-sans); }
         /* Inline SVG UI glyphs (src/icons.ts iconSvg): sit on the text line. */
         .ui-icon { display: inline-block; vertical-align: -2px; flex-shrink: 0; }
-        .toolbar h1,
-        .modal h1, .modal h2,
-        .modal-header h2, .modal-title,
-        .tree-stats-header-value, .stats-record-value,
-        .about-stats-total { font-family: var(--font-serif); }
+        .toolbar h1, .modal h1, .modal h2, .modal-header h2, .modal-title, .about-stats-total { font-family: var(--font-serif); }
 
         /* Tabular figures for all number/date/year displays (cards handled later). */
-        .stat-value, .stats-bar-value, .stats-record-value, .merge-stat-value,
-        .tree-stats-header-value, .about-stats, .about-stats-total, .focus-count,
-        .tl-tick, .tl-yr, .tree-stats-anniversary-date {
+        .stat-value, .merge-stat-value, .about-stats, .about-stats-total, .focus-count, .tl-tick, .tl-yr {
             font-variant-numeric: tabular-nums;
         }
 
@@ -2364,11 +2358,6 @@
            --accent/--text-light) — no dark-mode overrides needed. */
         /* .merge-trees-option / .merge-trees-warning are tokenized — no dark override needed. */
 
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 12px;
-        }
         .stat-item {
             text-align: center;
             padding: 8px 4px;
@@ -3232,20 +3221,6 @@
         .modal textarea { resize: vertical; }
         /* Make empty date input placeholder very light */
                 /* Archive search */
-        .tree-stats-unrelated {
-            display: flex;
-            flex-direction: column;
-            gap: 3px;
-            margin-bottom: 14px;
-            padding: 10px 12px;
-            border-radius: 8px;
-            border-left: 3px solid var(--primary, #4a7c59);
-            background: color-mix(in srgb, var(--primary, #4a7c59) 8%, transparent);
-            font-size: 12px;
-            color: var(--text-color, #222);
-        }
-        .tree-stats-unrelated span { color: var(--text-light); }
-        .tree-stats-unrelated-hint { font-style: italic; }
 
         /* ---- Surname spellings that mean one family (K3 v2) ---- */
         .surnames-modal { max-width: 560px; }
@@ -9449,226 +9424,6 @@
         .tree-manager-item-actions .btn-text {
             display: none;
         }
-        /* Tree stats dialog - Desktop default */
-        .tree-stats-modal {
-            min-width: min(500px, 90vw);
-            max-width: 600px;
-        }
-        .tree-stats-content {
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-        }
-        .tree-stats-sections {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-        }
-        .tree-stats-header {
-            display: flex;
-            justify-content: space-around;
-            text-align: center;
-            padding: 16px 24px;
-            background: var(--surface-2);
-            border: 1px solid var(--border);
-            border-radius: var(--r-lg);
-            color: var(--text);
-        }
-        .tree-stats-header-item {
-            flex: 1;
-        }
-        .tree-stats-header-value {
-            font-size: 26px;
-            font-weight: 600;
-            line-height: 1.1;
-            color: var(--text);
-        }
-        .tree-stats-header-label {
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            color: var(--text-light);
-        }
-        .tree-stats-header-value.tree-stats-header-span { font-size: 18px; padding-top: 8px; }
-
-        /* Proportional split bars (men/women, living/deceased). */
-        .stats-split { padding: 6px 0; }
-        .stats-split-labels {
-            display: flex; justify-content: space-between;
-            font-size: 12px; color: var(--text-secondary, #666); margin-bottom: 4px;
-        }
-        .stats-split-labels b { color: var(--text); }
-        .stats-split-note { font-size: 12px; color: var(--text-secondary, #666); margin: -2px 0 4px; }
-        .stats-split-bar {
-            display: flex; height: 14px; border-radius: 999px; overflow: hidden;
-            background: rgba(128,128,128,0.18);
-        }
-        .stats-split-bar span { height: 100%; flex: 1; }
-        .stats-split-bar span:first-child { flex: none; }
-        /* Single-hue split: full green vs. the soft shade. */
-        .stats-split-male { background: var(--primary); }
-        .stats-split-female { background: var(--chart-soft); }
-        .stats-split-living { background: var(--primary); }
-        .stats-split-deceased { background: var(--chart-soft); }
-
-        /* Completeness progress bars. */
-        .stats-progress { display: flex; align-items: center; gap: 10px; padding: 4px 0; font-size: 13px; }
-        .stats-progress .label { flex: 1; color: var(--text-secondary, #666); }
-        .stats-progress-track {
-            flex: 1.1; height: 8px; border-radius: 6px;
-            background: rgba(128,128,128,0.18); overflow: hidden;
-        }
-        .stats-progress-fill { display: block; height: 100%; border-radius: 6px; background: var(--primary); }
-        .stats-progress-fill.low { background: var(--accent); }
-        .stats-progress .pct { width: 42px; text-align: right; font-weight: 600; font-size: 12px; }
-
-        /* Family records as highlight cards. */
-        .stats-record-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; }
-        .stats-record-card {
-            display: flex; align-items: center; gap: 10px;
-            background: rgba(128,128,128,0.09); border-radius: 8px; padding: 8px 10px;
-            min-width: 0;
-        }
-        .stats-record-icon { font-size: 18px; flex-shrink: 0; }
-        .stats-record-text { min-width: 0; }
-        .stats-record-label {
-            font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px;
-            color: var(--text-secondary, #888);
-        }
-        .stats-record-value { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
-        @media (max-width: 640px) {
-            .stats-record-cards { grid-template-columns: 1fr; }
-            .tree-stats-header { flex-wrap: wrap; row-gap: 10px; }
-            .tree-stats-header-item { flex-basis: 45%; }
-        }
-        .tree-stats-section {
-            background: var(--surface-2);
-            border: 1px solid var(--border);
-            border-radius: var(--r-lg);
-            padding: 10px 12px;
-        }
-        .tree-stats-section-title {
-            font-size: 11px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            color: var(--accent-text);
-            margin-bottom: 6px;
-            padding-bottom: 4px;
-            border-bottom: 1px solid var(--divider);
-        }
-        /* Visual family statistics (collapsible) */
-        .tree-stats-family-summary {
-            font-size: 11px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.3px;
-            color: var(--text-light);
-            cursor: pointer;
-            padding: 6px 0;
-            user-select: none;
-        }
-        .tree-stats-family[open] .tree-stats-family-summary {
-            border-bottom: 1px solid var(--divider);
-            margin-bottom: 8px;
-        }
-        .stats-chart-block { margin-bottom: 14px; }
-        .stats-chart-title {
-            font-size: 12px;
-            font-weight: 600;
-            color: var(--text-color);
-            margin-bottom: 4px;
-        }
-        .stats-bar-chart { display: block; max-width: 100%; height: auto; overflow: visible; }
-        .stats-bar-chart .stats-bar-label {
-            font-size: 12px;
-            fill: var(--text-color);
-        }
-        .stats-bar-chart .stats-bar-value {
-            font-size: 11px;
-            fill: var(--text-light);
-        }
-        .stats-bar-chart .stats-bar-rect { fill: var(--chart-soft); }
-        .stats-bar-chart .stats-bar-rect.hi { fill: var(--primary); }
-        /* Vertical-column chart (births by month, by-generation series).
-           Fixed pixel height per frame 2b — few columns stay short, not tall. */
-        .stats-col-chart { display: block; width: 100%; height: 74px; overflow: visible; }
-        .stats-col-chart .stats-col-rect { fill: var(--chart-soft); }
-        .stats-col-chart .stats-col-rect.hi { fill: var(--primary); }
-        .stats-col-chart .stats-col-label { font-size: 9.5px; fill: var(--text-faint); }
-        .stats-empty {
-            font-size: 12px;
-            color: var(--text-light);
-            padding: 4px 0;
-        }
-        .tree-stats-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 4px 16px;
-        }
-        .tree-stats-row {
-            display: flex;
-            justify-content: space-between;
-            font-size: 13px;
-            padding: 3px 0;
-        }
-        .tree-stats-row .label {
-            color: var(--text-light);
-        }
-        .tree-stats-row .value {
-            font-weight: 500;
-            text-align: right;
-        }
-        .tree-stats-anniversaries {
-            /* No nested scroll - dialog itself scrolls */
-        }
-        .tree-stats-anniversary {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 6px 0;
-            font-size: 13px;
-            border-bottom: 1px solid var(--divider);
-        }
-        .tree-stats-anniversary:last-child {
-            border-bottom: none;
-        }
-        .tree-stats-anniversary-icon {
-            font-size: 16px;
-            flex-shrink: 0;
-        }
-        .tree-stats-anniversary-info {
-            flex: 1;
-            min-width: 0;
-        }
-        .tree-stats-anniversary-name {
-            font-weight: 500;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        .tree-stats-anniversary-detail {
-            font-size: 11px;
-            color: var(--text-light);
-        }
-        .tree-stats-anniversary-date {
-            font-size: 11px;
-            color: var(--text-light);
-            flex-shrink: 0;
-        }
-        .tree-stats-anniversary-today {
-            background: color-mix(in srgb, var(--primary) 10%, transparent);
-            margin: 0 -12px;
-            padding: 6px 12px;
-            border-radius: 6px;
-        }
-        .tree-stats-none {
-            color: var(--text-light);
-            font-size: 13px;
-            text-align: center;
-            padding: 12px;
-        }
-
         /* Validation dialog */
         .validation-modal {
             min-width: min(500px, 90vw);
@@ -9726,69 +9481,6 @@
         .validation-count.info {
             color: var(--text-light);
         }
-
-        /* ===== Tree health dashboard (R4) ===== */
-        .tree-health-modal { min-width: min(520px, 90vw); max-width: 640px; }
-        .tree-health-content {
-            display: flex;
-            flex-direction: column;
-            gap: 18px;
-        }
-        .health-empty { padding: 28px; text-align: center; color: var(--text-light); }
-        .health-block {
-            background: var(--surface-2);
-            border: 1px solid var(--line-color);
-            border-radius: 10px;
-            padding: 14px 16px;
-        }
-        .health-block-title {
-            font-size: 11px;
-            font-weight: 600;
-            letter-spacing: 0.12em;
-            text-transform: uppercase;
-            color: var(--accent-text);
-            margin-bottom: 10px;
-        }
-        .health-block-hint { font-size: 12px; color: var(--text-light); margin: 6px 0; }
-        .health-summary { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
-        .health-ok { font-size: 14px; font-weight: 500; color: var(--primary); }
-        .health-issues { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
-        .health-issue { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; }
-        .health-issue .validation-issue-dot {
-            flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; margin-top: 5px;
-        }
-        .health-issue.error .validation-issue-dot { background: var(--danger); }
-        .health-issue.warning .validation-issue-dot { background: var(--warning); }
-        .health-issue.info .validation-issue-dot { background: var(--text-light); }
-        .health-issue-msg { color: var(--text); }
-        .health-issue-persons { font-size: 12px; margin-top: 2px; }
-        .health-more { font-size: 12px; color: var(--text-light); margin-top: 4px; }
-        /* Completeness bars */
-        .health-bar-row { display: flex; align-items: center; gap: 10px; margin: 7px 0; }
-        .health-bar-label { flex: 0 0 120px; font-size: 13px; color: var(--text); }
-        .health-bar-track {
-            flex: 1 1 auto; height: 8px; border-radius: 5px;
-            background: var(--line-color); overflow: hidden;
-        }
-        .health-bar-fill { display: block; height: 100%; background: var(--primary); border-radius: 5px; }
-        .health-bar-val {
-            flex: 0 0 40px; text-align: right; font-size: 12px;
-            font-variant-numeric: tabular-nums; color: var(--text-light);
-        }
-        /* Structure tiles */
-        .health-tiles { display: flex; flex-wrap: wrap; gap: 10px; }
-        .health-tile {
-            flex: 1 1 90px; min-width: 84px;
-            display: flex; flex-direction: column; align-items: center; gap: 2px;
-            padding: 10px 6px; border-radius: 8px; background: var(--surface);
-            border: 1px solid var(--line-color);
-        }
-        .health-tile-num { font-size: 22px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
-        .health-tile-lbl { font-size: 11px; color: var(--text-light); text-align: center; }
-        .health-islands { margin-top: 10px; }
-        .health-island-list { margin: 6px 0; padding-left: 18px; font-size: 13px; color: var(--text); }
-        .health-island-list li { margin: 2px 0; }
-        .health-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 
         .validation-issues {
             display: flex;
@@ -11935,20 +11627,6 @@
         @media (hover: hover) { .toast-close:hover { opacity: 1; background: color-mix(in srgb, var(--surface) 15%, transparent); } }
         .toast-close:focus-visible { outline: 2px solid var(--surface); outline-offset: 1px; }
 
-        /* Tree health: "Where evidence is missing". */
-        .health-evidence-row {
-            display: flex; align-items: center; gap: 10px; padding: 6px 0;
-            border-bottom: 1px solid var(--divider);
-        }
-        .health-evidence-row:last-child { border-bottom: 0; }
-        .health-evidence-label { flex: 1; min-width: 0; font-size: 14px; color: var(--text); }
-        .health-evidence-count { flex: none; font-size: 13px; color: var(--text-light); font-variant-numeric: tabular-nums; }
-        .health-evidence-show { flex: none; padding: 4px 10px; font-size: 13px; }
-        @media (max-width: 640px) {
-            .health-evidence-row { flex-wrap: wrap; }
-            .health-evidence-show { width: 100%; min-height: 44px; }
-        }
-
         /* "Show in tree": the others dim, those found get a dashed frame; lines stay. */
         .person-card.evidence-dim { opacity: 0.45; }
         .person-card.evidence-hit { outline: 1.5px dashed var(--accent); outline-offset: 2px; }
@@ -12173,6 +11851,76 @@
         .tov-pop-name { font-size: 14px; font-weight: 500; }
         .tov-pop-meta { font-size: 12px; color: var(--text-faint); }
         .tov-pop-none { padding: 8px 10px; font-size: 13px; color: var(--text-light); }
+        /* Life and health, Family through time, Data quality, Highlights */
+        .tov-block { display: flex; flex-direction: column; gap: 8px; }
+        .tov-block-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; }
+        .tov-block-title, .tov-chart-title { font-size: 13.5px; font-weight: 600; }
+        .tov-block-scope, .tov-faint { font-size: 12px; color: var(--text-faint); font-weight: 400; }
+        .tov-note { font-size: 12.5px; line-height: 1.45; color: var(--text-light); }
+        .tov-warn { font-size: 13px; line-height: 1.45; color: var(--accent-text); }
+        .tov-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+        .tov-tile { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border-radius: 10px; background: var(--surface-2); min-width: 0; }
+        .tov-tile-label { font-size: 12.5px; color: var(--text-light); }
+        .tov-tile-value { font-family: var(--font-serif); font-size: 24px; font-weight: 600; line-height: 1.25; font-variant-numeric: tabular-nums; }
+        .tov-tile-note, .tov-tile-who { font-size: 12.5px; color: var(--text-faint); line-height: 1.4; }
+        .tov-tile .tov-link.tov-tile-who { color: var(--primary); text-align: left; }
+        .tov-chart { display: flex; flex-direction: column; gap: 6px; }
+        .tov-hbar-row { display: grid; grid-template-columns: 200px minmax(0, 1fr) 96px; gap: 10px; align-items: center; min-height: 24px; font-size: 13.5px; }
+        .tov-hbar-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .tov-hbar { display: block; height: 10px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+        .tov-hbar-fill { display: block; height: 100%; min-width: 2px; background: var(--primary); }
+        .tov-hbar-value { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+        .tov-chart[data-chart="children"] .tov-hbar-row { grid-template-columns: 200px minmax(0, 1fr) 40px; }
+        .tov-splits { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+        .tov-split { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 10px; background: var(--surface-2); min-width: 0; }
+        .tov-split-label { font-size: 12.5px; color: var(--text-light); }
+        .tov-split-counts { font-size: 13.5px; }
+        .tov-split-counts strong, .tov-counts strong { font-weight: 600; font-variant-numeric: tabular-nums; }
+        .tov-split-bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--surface); }
+        .tov-split-bar > span { display: block; height: 100%; }
+        .tov-split-male { background: var(--male); }
+        .tov-split-female { background: var(--female); }
+        .tov-split-unknown { background: var(--unknown); }
+        .tov-split-living { background: var(--primary); }
+        .tov-split-deceased { background: var(--chart-soft); }
+        .tov-months { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 4px; }
+        .tov-month { display: flex; flex-direction: column; align-items: stretch; gap: 4px; min-width: 0; }
+        .tov-month-col { position: relative; display: block; height: 80px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+        .tov-month-fill { position: absolute; left: 0; right: 0; bottom: 0; min-height: 2px; background: var(--primary); }
+        .tov-month-label { text-align: center; font-size: 11px; color: var(--text-faint); }
+        .tov-names { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 24px; }
+        .tov-names-col { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .tov-names-col .tov-chart-title { margin-bottom: 4px; }
+        .tov-name-row { display: flex; justify-content: space-between; gap: 8px; font-size: 13.5px; min-height: 22px; align-items: center; }
+        .tov-name-n { color: var(--text-light); font-variant-numeric: tabular-nums; }
+        .tov-counts { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13.5px; }
+        .tov-count-err, .tov-sum-err { color: var(--danger); }
+        .tov-findings { display: flex; flex-direction: column; gap: 4px; }
+        .tov-finding { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 8px; font-size: 13.5px; line-height: 1.45; }
+        .tov-finding .tov-dot { align-self: center; }
+        .tov-finding--error .tov-dot { border: 0; background: var(--danger); }
+        .tov-finding--warning .tov-dot { border: 0; background: var(--accent); }
+        .tov-finding-what { color: var(--text-light); }
+        .tov-more, .tov-ev-levels { align-self: flex-start; font-size: 13px; }
+        .tov-comp-row { display: grid; grid-template-columns: 140px minmax(0, 1fr) 44px; gap: 10px; align-items: center; min-height: 24px; font-size: 13.5px; }
+        .tov-comp-track { display: block; height: 10px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+        .tov-comp-fill { display: block; height: 100%; background: var(--primary); }
+        .tov-comp-fill.is-low { background: var(--accent); }
+        .tov-comp-pct { text-align: right; color: var(--text-light); font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .tov-ev-row { display: flex; align-items: center; gap: 10px; min-height: 34px; font-size: 13.5px; }
+        .tov-ev-label { flex: 1; min-width: 0; }
+        .tov-ev-count { color: var(--text-light); font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .tov-struct-line { font-size: 13.5px; line-height: 1.45; }
+        .tov-parts { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 2px; font-size: 13.5px; }
+        .tov-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+        .tov-btn:disabled { border-color: var(--border); color: var(--text-faint); cursor: default; }
+        @media (hover: hover) { .tov-btn:disabled:hover { background: none; } }
+        .tov-anni { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 8px; font-size: 13.5px; line-height: 1.45; }
+        .tov-anni-date { flex: none; min-width: 84px; color: var(--text-light); font-variant-numeric: tabular-nums; }
+        .tov-anni--today .tov-anni-date { color: var(--accent-text); font-weight: 600; }
+        .tov-anni-sep { color: var(--text-faint); }
+        .tov-anni .tov-tile-who { font-size: 13.5px; }
+        .tov-anni .tov-link.tov-tile-who { text-align: left; }
         /* Tablet: the desktop dialog, a 24px margin each side. */
         @media (min-width: 641px) and (max-width: 1024px) {
             .modal.tov { width: min(720px, calc(100vw - 48px)); }
@@ -12250,6 +11998,36 @@
             .tov-close { order: 3; width: 44px; height: 44px; }
             .tov-inactive { order: 4; flex: 1 0 100%; margin-bottom: 6px; }
             .tov-foot { display: none; }
+        }
+
+        /* Tree overview sections: touch, phone, phone sideways. */
+        @media (pointer: coarse) {
+            .tov-ev-row { min-height: 44px; }
+            .tov-actions .tov-btn, .tov-ev-row .tov-btn { min-height: 44px; }
+        }
+        @media (max-width: 640px) {
+            .tov-tiles, .tov-splits { grid-template-columns: minmax(0, 1fr); }
+            .tov-tiles--records { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .tov-tile-value { font-size: 20px; }
+            .tov-hbar-row, .tov-chart[data-chart="children"] .tov-hbar-row {
+                grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "label value" "bar bar"; row-gap: 4px;
+            }
+            .tov-hbar-label { grid-area: label; white-space: normal; }
+            .tov-hbar-value { grid-area: value; }
+            .tov-hbar { grid-area: bar; }
+            .tov-months { gap: 2px; }
+            .tov-month-label { font-size: 10px; }
+            .tov-names { grid-template-columns: minmax(0, 1fr); }
+            .tov-comp-row { grid-template-columns: minmax(96px, 120px) minmax(0, 1fr) 44px; gap: 8px; }
+            .tov-ev-row { flex-wrap: wrap; }
+            .tov-ev-row .tov-btn { flex: 1 0 100%; min-height: 44px; }
+            .tov-actions { flex-direction: column; align-items: stretch; }
+            .tov-actions .tov-btn, .tov-actions .tov-disabled-wrap { width: 100%; min-height: 44px; }
+            .tov-actions .tov-disabled-wrap { align-items: stretch; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .tov-tile-value { font-size: 20px; }
+            .tov-month-col { height: 56px; }
         }
 
         /* Undo toast — paper pill raised after each single user mutation. */
@@ -12648,23 +12426,10 @@
                 padding: 10px;
                 margin-bottom: 8px;
             }
-            /* Tree stats on tablet */
-            .tree-stats-modal {
-                min-width: 450px;
-                max-width: 500px;
-            }
-            .tree-stats-header-value {
-                font-size: 24px;
-            }
             /* Validation on tablet */
             .validation-modal {
                 min-width: 450px;
                 max-width: 550px;
-            }
-            /* Tree health on tablet (R4) */
-            .tree-health-modal {
-                min-width: 450px;
-                max-width: 560px;
             }
         }
 
@@ -12975,29 +12740,6 @@
                 padding: 12px 16px;
             }
 
-            /* Tree stats on mobile */
-            .tree-stats-modal {
-                min-width: 100vw;
-                max-width: 100vw;
-                border-radius: 0;
-                margin: 0;
-            }
-            .tree-stats-sections {
-                grid-template-columns: 1fr;
-            }
-            .tree-stats-header {
-                flex-direction: column;
-                gap: 8px;
-            }
-            .tree-stats-header-value {
-                font-size: 22px;
-            }
-            .tree-stats-header-label {
-                font-size: 10px;
-            }
-            .tree-stats-grid {
-                grid-template-columns: 1fr;
-            }
             /* Validation on mobile */
             .validation-modal {
                 min-width: 100vw;
@@ -13005,14 +12747,6 @@
                 border-radius: 0;
                 margin: 0;
             }
-            /* Tree health on mobile (R4) */
-            .tree-health-modal {
-                min-width: 100vw;
-                max-width: 100vw;
-                border-radius: 0;
-                margin: 0;
-            }
-            .tree-health-modal .health-bar-label { flex-basis: 96px; }
             .validation-content {
                 max-height: 50vh;
             }
@@ -14422,7 +14156,7 @@
         <!-- Toolbar Focus Info (tablet landscape) -->
         <div class="toolbar-focus tablet-only">
             <strong id="toolbar-focus-name" role="button" tabindex="0" onclick="window.Strom.UI.focusNameTap()" style="cursor:pointer;" data-i18n-title="uiTips.centerOnFocus"></strong>
-            <span id="toolbar-focus-count" class="focus-count" role="button" tabindex="0" onclick="window.Strom.UI.showActiveTreeStats()" style="cursor:pointer;" data-i18n-title="uiTips.showStats"></span>
+            <span id="toolbar-focus-count" class="focus-count" role="button" tabindex="0" onclick="window.Strom.UI.showActiveTreeOverview()" style="cursor:pointer;" data-i18n-title="treeOverview.showTooltip"></span>
             <!-- A phone sideways: ↑n ↓n chips in the header; the steppers as a popover -->
             <div class="focus-chips">
                 <button type="button" class="focus-chip" data-for="toolbar-depth-up" aria-expanded="false" onclick="window.Strom.UI.toggleFocusSteppers()" data-i18n-aria-label="depth.toggle"><span aria-hidden="true">↑</span><span class="focus-chip-value"></span></button>
@@ -14536,15 +14270,8 @@
                         <span class="actions-tree-chevron" aria-hidden="true">&rsaquo;</span>
                     </div>
                     <div class="actions-tree-submenu" id="actions-tree-submenu" role="menu">
-                        <div class="tree-switcher-action" role="menuitem" onclick="window.Strom.UI.treeActionStats()" tabindex="0">
-                            <span data-i18n="treeManager.stats"></span>
-                        </div>
-                        <div class="tree-switcher-action" role="menuitem" onclick="window.Strom.UI.treeActionHealth()" tabindex="0">
-                            <span data-i18n="treeHealth.menu"></span>
-                        </div>
-                        <div class="tree-switcher-action" id="actions-tree-audit-row" style="display:none;" role="menuitem" onclick="window.Strom.UI.treeActionAudit()" tabindex="0">
-                            <span data-i18n="auditLog.viewLog"></span>
-                        </div>
+                        <!-- The Overview group of the tree actions (treeActionGroups), rendered on opening. -->
+                        <div id="actions-tree-overview-rows" role="none"></div>
                         <div class="tree-switcher-divider edit-only"></div>
                         <div class="tree-switcher-action edit-only" role="menuitem" onclick="window.Strom.UI.treeActionRename()" tabindex="0">
                             <span data-i18n="treeManager.rename"></span>
@@ -14779,7 +14506,7 @@
         <div class="focus-info">
             <span class="focus-label" data-i18n="focus.focusedOn"></span>
             <strong id="focus-name" onclick="window.Strom.UI.focusNameTap()" style="cursor:pointer;" data-i18n-title="uiTips.centerOnFocus"></strong>
-            <span id="focus-person-count" class="focus-count" onclick="window.Strom.UI.showActiveTreeStats()" style="cursor:pointer;" data-i18n-title="uiTips.showStats"></span>
+            <span id="focus-person-count" class="focus-count" onclick="window.Strom.UI.showActiveTreeOverview()" style="cursor:pointer;" data-i18n-title="treeOverview.showTooltip"></span>
         </div>
         <!-- Phone: ↑n ↓n chips; a tap unfolds the steppers in a second row -->
         <div class="focus-chips">
@@ -16561,22 +16288,6 @@
         </div>
     </div>
 
-    <!-- Tree Stats Dialog -->
-    <div class="modal-overlay" id="tree-stats-modal">
-        <div class="modal tree-stats-modal modal--lg" role="dialog" data-dialog-kind="info" aria-modal="true">
-            <div class="modal-header">
-                <h2 id="tree-stats-title" data-i18n="treeManager.statsTitle">Tree statistics</h2>
-                <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeTreeStatsDialog()">&times;</button>
-            </div>
-            <div id="tree-stats-content" class="tree-stats-content">
-                <!-- Stats rendered dynamically -->
-            </div>
-            <div class="buttons">
-                <button class="secondary" data-dismiss onclick="window.Strom.UI.closeTreeStatsDialog()" data-i18n="buttons.close"></button>
-            </div>
-        </div>
-    </div>
-
     <!-- Tree Validation Dialog (genealogical consistency checks) -->
     <div class="modal-overlay" id="tree-validation-modal">
         <div class="modal validation-modal modal--lg" role="dialog" data-dialog-kind="info" aria-modal="true">
@@ -16589,22 +16300,6 @@
             </div>
             <div class="buttons">
                 <button class="secondary" data-dismiss onclick="window.Strom.UI.closeTreeValidationDialog()" data-i18n="buttons.close"></button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Tree Health Dashboard (R4) -->
-    <div class="modal-overlay" id="tree-health-modal">
-        <div class="modal tree-health-modal modal--lg" role="dialog" data-dialog-kind="info" aria-modal="true">
-            <div class="modal-header">
-                <h2 id="tree-health-title" data-i18n="treeHealth.menu">Tree health</h2>
-                <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeTreeHealthDialog()">&times;</button>
-            </div>
-            <div id="tree-health-content" class="tree-health-content">
-                <!-- Health dashboard rendered dynamically -->
-            </div>
-            <div class="buttons">
-                <button class="secondary" data-dismiss onclick="window.Strom.UI.closeTreeHealthDialog()" data-i18n="buttons.close"></button>
             </div>
         </div>
     </div>

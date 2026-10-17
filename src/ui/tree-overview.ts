@@ -4,9 +4,10 @@
  * rooted sections are calculated from), an accordion of sections and a
  * footer with Close.
  *
- * - The header numbers are computed at once. "Where to focus" and
- *   "Ancestors" are computed when the dialog opens; the other sections
- *   (later) when first expanded or on idle callbacks, one per callback.
+ * - The header numbers are computed at once. "Where to focus", "Ancestors"
+ *   and any other section remembered open are computed when the dialog
+ *   opens; the rest on idle callbacks (life → time → quality → highlights,
+ *   one per callback) or at once when expanded first.
  * - A section still calculating shows "Calculating…" after 150 ms and keeps
  *   it at least 300 ms once shown (aria-busy on its body).
  * - Results are cached by section + tree + chosen person + revision; the
@@ -25,17 +26,27 @@ import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { LAST_FOCUSED, Person, PersonId, StromData, TreeId } from '../types.js';
-import { validateTreeData, translateValidationType, ValidationResult } from '../validation.js';
+import { validateTreeData, translateValidationType, ValidationResult, ValidationIssue } from '../validation.js';
 import {
     AncestorOverview, FocusCard, GrandparentLine, ancestorGenerationLabel, ancestorGenerations, birthYearOf,
     deathDateOf, focusBirthNoSource, grandparentLines, lineEndIds, overviewHeader, selectFocusCards, OverviewHeader,
+    deathAgeSummary, adultLifespanByBirthPeriod, hasEnoughSample, relativeGenerations, childrenPerCoupleByGeneration,
+    DeathAgeSummary, PeriodMedian, GenerationChildren,
 } from '../tree-overview.js';
+import { computeFamilyStats, computeCompleteness, computeEvidenceGaps, EvidenceKind, FamilyStats, Completeness, EvidenceGaps } from '../stats.js';
+import { isLivingPerson, inferBirthUpperBounds } from '../privacy.js';
+import { findComponents, componentName } from '../components.js';
+import { orphanedPlaceKeys } from '../places.js';
+import { totalPhotoBytes } from '../photo.js';
+import { totalAttachmentBytes, ATTACHMENT_WARN_BYTES } from '../attachments.js';
+import { upcomingAnniversaries, Anniversary } from '../anniversaries.js';
+import { SettingsManager } from '../settings.js';
 import { shownName } from '../person-name.js';
 import { filterAndSort } from '../person-picker.js';
 import { displayYear, yearOf } from '../dates.js';
 import { MQ_MOBILE } from '../breakpoints.js';
 import { uiModule } from './module.js';
-import type { HighlightGroup } from './evidence-ui.js';
+import { evidenceIds, type HighlightGroup } from './evidence-ui.js';
 
 export type SectionId = 'focus' | 'ancestors' | 'life' | 'time' | 'quality' | 'highlights';
 
@@ -44,14 +55,30 @@ export interface TreeOverviewOptions {
     section?: SectionId;
     /** Scroll the section into view. */
     scroll?: boolean;
+    /** A dialog hidden while the overview is open and shown again on a plain close (the tree manager). */
+    parent?: string;
 }
 
 const OVERLAY_ID = 'tree-overview-modal';
+/** The dialog a plain close returns to (set by `parent`, dropped by any other close). */
+let returnParent: string | null = null;
 const ALL_SECTIONS: readonly SectionId[] = ['focus', 'ancestors', 'life', 'time', 'quality', 'highlights'];
-/** The sections this build shows, in order. The others come with later packages. */
-const SHOWN_SECTIONS: readonly SectionId[] = ['focus', 'ancestors'];
-/** Sections calculated from the chosen person (marked ◉). */
-const ROOTED: ReadonlySet<SectionId> = new Set<SectionId>(['focus', 'ancestors', 'life', 'time']);
+/** Computed when the dialog opens (the rest: idle callbacks, or when expanded). */
+const EAGER_SECTIONS: readonly SectionId[] = ['focus', 'ancestors'];
+/** The order the idle callbacks compute the other sections in, one per callback. */
+const IDLE_SECTIONS: readonly SectionId[] = ['life', 'time', 'quality', 'highlights'];
+/**
+ * Sections calculated from the chosen person (marked ◉). "Life and health"
+ * shows only the whole-tree age at death for now, so it is not rooted.
+ */
+const ROOTED: ReadonlySet<SectionId> = new Set<SectionId>(['focus', 'ancestors', 'time']);
+/** Findings listed under Consistency (the rest via "and N more…"). */
+const TOP_ISSUES = 5;
+/** Upcoming anniversaries: the horizon in days and the most listed. */
+const ANNIVERSARY_DAYS = 30;
+const MAX_ANNIVERSARIES = 10;
+/** A completeness bar below this share is drawn in the accent (a thin spot). */
+const LOW_SHARE = 0.5;
 const DEFAULT_OPEN: readonly SectionId[] = ['focus', 'ancestors'];
 const OPEN_KEY = 'overview.open';
 const rootKey = (treeId: string): string => `overview.root.${treeId}`;
@@ -78,6 +105,8 @@ interface OverviewState {
 
 let state: OverviewState | null = null;
 let revision = 0;
+/** The idle chain running (a newer one stops the older). */
+let idleRun = 0;
 let listening = false;
 const cache = new Map<string, unknown>();
 /** Where each tree's overview was scrolled when it closed (this session). */
@@ -189,6 +218,73 @@ function lifeYears(p: Person): string {
     return '';
 }
 
+/** A section's content and its closed-state summary (both HTML, escaped). */
+interface SectionContent {
+    body: string;
+    summary: string;
+}
+
+/** Run on an idle callback (fallback: a 50 ms timeout). */
+function whenIdle(run: () => void): void {
+    const w = window as Window & { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number };
+    if (typeof w.requestIdleCallback === 'function') w.requestIdleCallback(run, { timeout: 1000 });
+    else setTimeout(run, 50);
+}
+
+/** A number in the UI language ("3,4" in Czech). */
+function localNumber(n: number, digits = 0): string {
+    return n.toLocaleString(getCurrentLanguage(), { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+
+/** Bytes as "14,2 MB" or "640 kB". */
+function sizeText(bytes: number): string {
+    const mb = bytes / (1024 * 1024);
+    if (mb >= 1) return `${localNumber(mb, 1)}\u00a0MB`;
+    return `${localNumber(Math.max(1, Math.round(bytes / 1024)))}\u00a0kB`;
+}
+
+/** Bar width for `part` of `whole` as a CSS percentage. */
+const barWidth = (part: number, whole: number): string => `${whole > 0 ? Math.min(100, (part / whole) * 100).toFixed(2) : '0'}%`;
+
+interface LifeData {
+    summary: DeathAgeSummary;
+    periods: PeriodMedian[];
+}
+
+interface TimeData {
+    men: number;
+    women: number;
+    unknown: number;
+    living: number;
+    deceased: number;
+    /** Children per couple by generation relative to the chosen person (null: no person). */
+    children: GenerationChildren[] | null;
+}
+
+interface QualityData {
+    validation: ValidationResult;
+    completeness: Completeness;
+    deceased: number;
+    deceasedWithDeathDate: number;
+    withSource: number;
+    photos: number;
+    photoBytes: number;
+    events: number;
+    sources: number;
+    attachments: number;
+    attachmentBytes: number;
+    gaps: EvidenceGaps;
+    unions: number;
+    parts: { name: string; count: number }[];
+    orphanPlaces: number;
+}
+
+interface HighlightsData {
+    stats: FamilyStats;
+    avgChildren: number | null;
+    anniversaries: Anniversary[];
+}
+
 interface FocusData {
     cards: FocusCard[];
     topErrorType: string | null;
@@ -212,6 +308,10 @@ export const treeOverviewMethods = uiModule({
         if (!meta || !data) return;
         this.listenForOverviewChanges();
         this.closeTreeOverview();
+        if (opts.parent) {
+            this.closeDialogById(opts.parent);
+            returnParent = opts.parent;
+        }
 
         const focusId = active
             ? realPerson(data, TreeRenderer.getFocusPersonId())?.id ?? null
@@ -234,17 +334,23 @@ export const treeOverviewMethods = uiModule({
         overlay.innerHTML = this.treeOverviewShellHtml(overviewHeader(data), open);
         document.body.appendChild(overlay);
         overlay.addEventListener('mousedown', (e) => {
-            if (e.target === overlay) this.closeTreeOverview();
+            if (e.target === overlay) this.dismissTreeOverview();
         });
         overlay.addEventListener('click', (e) => this.onTreeOverviewClick(e));
         this.clearDialogStack();
         this.pushDialog(OVERLAY_ID);
 
-        this.fillTreeOverviewSections();
+        this.fillTreeOverviewSections(open);
         if (opts.section && opts.scroll) {
             overlay.querySelector(`.tov-sec[data-section="${opts.section}"]`)?.scrollIntoView({ block: 'start' });
         }
         overlay.querySelector<HTMLElement>('.tov-close')?.focus({ preventScroll: true });
+    },
+
+    /** The focus bar's person count: the overview of the open tree. */
+    showActiveTreeOverview(): void {
+        const id = TreeManager.getActiveTreeId();
+        if (id) void this.showTreeOverview(id);
     },
 
     /** Close the overview (its scroll position is kept for "Back to overview"). */
@@ -257,6 +363,19 @@ export const treeOverviewMethods = uiModule({
             overlay.remove();
         }
         this.dialogStack = this.dialogStack.filter(id => id !== OVERLAY_ID);
+        idleRun++;
+        returnParent = null;
+    },
+
+    /** A plain close (×, Escape, backdrop): back to the dialog it was opened from, if any. */
+    dismissTreeOverview(): void {
+        const parent = returnParent;
+        this.closeTreeOverview();
+        if (parent) {
+            this.clearDialogStack();
+            this.pushDialog(parent);
+            this.openDialogById(parent);
+        }
     },
 
     /** Escape on the overview: the person popover first. True when it closed something. */
@@ -315,7 +434,7 @@ export const treeOverviewMethods = uiModule({
                 <span class="tov-inactive-text">${esc(t.inactive)}</span>
                 <button type="button" class="secondary tov-open-tree" data-tov="open-tree">${esc(t.openTree)}</button>
             </div>`;
-        const sections = SHOWN_SECTIONS.map(id => this.treeOverviewSectionHtml(id, open.has(id))).join('');
+        const sections = ALL_SECTIONS.map(id => this.treeOverviewSectionHtml(id, open.has(id))).join('');
         return `
             <div class="modal tov" role="dialog" aria-modal="true" aria-labelledby="tov-title" data-dialog-kind="info" data-skeleton="skip">
                 <div class="tov-scroll">
@@ -367,16 +486,55 @@ export const treeOverviewMethods = uiModule({
             </section>`;
     },
 
-    /** Compute and fill every shown section (focus + ancestors: at once, on open and on a person change). */
-    fillTreeOverviewSections(): void {
-        for (const id of SHOWN_SECTIONS) this.fillTreeOverviewSection(id);
+    /**
+     * On open: fill "Where to focus", "Ancestors" and every other section
+     * that is open, then the remaining ones on idle callbacks.
+     */
+    fillTreeOverviewSections(open: ReadonlySet<SectionId>): void {
+        for (const id of ALL_SECTIONS) {
+            if (EAGER_SECTIONS.includes(id) || open.has(id)) this.fillTreeOverviewSection(id);
+        }
+        this.startTreeOverviewIdle();
+    },
+
+    /**
+     * Compute the sections not computed yet on idle callbacks, one per
+     * callback (life → time → quality → highlights), so their summaries
+     * appear without expanding them. Stops when the dialog closes.
+     */
+    startTreeOverviewIdle(): void {
+        const run = ++idleRun;
+        const step = (): void => {
+            if (run !== idleRun || !state) return;
+            const overlay = document.getElementById(OVERLAY_ID);
+            if (!overlay) return;
+            const next = IDLE_SECTIONS.find(id =>
+                overlay.querySelector<HTMLElement>(`.tov-sec[data-section="${id}"]`)?.dataset.fill === undefined);
+            if (!next) return;
+            this.fillTreeOverviewSection(next, true);
+            whenIdle(step);
+        };
+        whenIdle(step);
+    },
+
+    /** One section's content and summary. */
+    treeOverviewSectionContent(id: SectionId): SectionContent {
+        switch (id) {
+            case 'focus': return this.treeOverviewFocusHtml();
+            case 'ancestors': return this.treeOverviewAncestorsHtml();
+            case 'life': return this.treeOverviewLifeHtml();
+            case 'time': return this.treeOverviewTimeHtml();
+            case 'quality': return this.treeOverviewQualityHtml();
+            case 'highlights': return this.treeOverviewHighlightsHtml();
+        }
     },
 
     /**
      * Fill one section: "Calculating…" (visible after 150 ms) while the
      * result is computed after the next frame, then the content and summary.
+     * `now` (the idle callbacks): compute right away, without the indicator.
      */
-    fillTreeOverviewSection(id: SectionId): void {
+    fillTreeOverviewSection(id: SectionId, now = false): void {
         const overlay = document.getElementById(OVERLAY_ID);
         const sec = overlay?.querySelector<HTMLElement>(`.tov-sec[data-section="${id}"]`);
         const body = sec?.querySelector<HTMLElement>('.tov-sec-body');
@@ -384,6 +542,14 @@ export const treeOverviewMethods = uiModule({
         if (!sec || !body || !sum || !state) return;
         const token = `${state.treeId}|${state.rootId ?? ''}|${revision}|${Date.now()}`;
         sec.dataset.fill = token;
+        if (now) {
+            const content = this.treeOverviewSectionContent(id);
+            body.innerHTML = content.body;
+            sum.innerHTML = content.summary;
+            body.removeAttribute('aria-busy');
+            sec.dataset.ready = 'true';
+            return;
+        }
         sum.textContent = '';
         body.setAttribute('aria-busy', 'true');
         body.innerHTML = `
@@ -394,13 +560,13 @@ export const treeOverviewMethods = uiModule({
         const start = performance.now();
         const run = (): void => {
             if (sec.dataset.fill !== token || !state) return;
-            const html = id === 'focus' ? this.treeOverviewFocusHtml() : this.treeOverviewAncestorsHtml();
+            const html = this.treeOverviewSectionContent(id);
             const elapsed = performance.now() - start;
             const wait = elapsed >= BUSY_DELAY_MS ? Math.max(0, BUSY_DELAY_MS + BUSY_MIN_MS - elapsed) : 0;
             const show = (): void => {
                 if (sec.dataset.fill !== token) return;
                 body.innerHTML = html.body;
-                sum.textContent = html.summary;
+                sum.innerHTML = html.summary;
                 body.removeAttribute('aria-busy');
                 sec.dataset.ready = 'true';
             };
@@ -460,12 +626,12 @@ export const treeOverviewMethods = uiModule({
             title="${esc(hint)}" ${attrs}>${esc(label)}</button><span class="tov-disabled-hint" hidden>${esc(hint)}</span></span>`;
     },
 
-    treeOverviewFocusHtml(): { body: string; summary: string } {
+    treeOverviewFocusHtml(): SectionContent {
         const st = state!;
         const t = strings.treeOverview;
         const esc = (s: string): string => this.escapeHtml(s);
         const { cards, topErrorType } = this.treeOverviewFocusData();
-        if (cards.length === 0) return { body: `<p class="tov-good">${esc(t.goodShape)}</p>`, summary: t.focusGood };
+        if (cards.length === 0) return { body: `<p class="tov-good">${esc(t.goodShape)}</p>`, summary: esc(t.focusGood) };
         const show = st.active ? t.actShowInTree : t.openAndShow;
         const lang = getCurrentLanguage();
         const items = cards.map(card => {
@@ -500,10 +666,10 @@ export const treeOverviewMethods = uiModule({
                     ${button}
                 </div>`;
         }).join('');
-        return { body: `<div class="tov-cards">${items}</div>`, summary: t.focusSummary(cards.length) };
+        return { body: `<div class="tov-cards">${items}</div>`, summary: esc(t.focusSummary(cards.length)) };
     },
 
-    treeOverviewAncestorsHtml(): { body: string; summary: string } {
+    treeOverviewAncestorsHtml(): SectionContent {
         const st = state!;
         const t = strings.treeOverview;
         const esc = (s: string): string => this.escapeHtml(s);
@@ -521,7 +687,7 @@ export const treeOverviewMethods = uiModule({
             return {
                 body: `<p class="tov-muted">${esc(t.noParents(shownName(root)))}
                     <button type="button" class="tov-link" data-tov="pick">${esc(t.chooseOther)}</button></p>`,
-                summary: t.ancestorsNoParentsSummary,
+                summary: esc(t.ancestorsNoParentsSummary),
             };
         }
         const rows = gens.map(g => ({ n: g.n, expected: g.expected, known: g.known, proven: g.proven }));
@@ -581,7 +747,360 @@ export const treeOverviewMethods = uiModule({
                 <div class="tov-lines-grid">${tiles}</div>
             </div>`;
         const deepest = gens[gens.length - 1].n;
-        return { body, summary: t.ancestorsSummary(overview?.generationOf.size ?? 0, deepest) };
+        return { body, summary: esc(t.ancestorsSummary(overview?.generationOf.size ?? 0, deepest)) };
+    },
+
+    treeOverviewLifeData(): LifeData {
+        return cached('life', false, () => ({
+            summary: deathAgeSummary(state!.data),
+            periods: adultLifespanByBirthPeriod(state!.data),
+        }));
+    },
+
+    /** Life and health: for now only the age at death in the whole tree (spec 005 K5.1). */
+    treeOverviewLifeHtml(): SectionContent {
+        const t = strings.treeOverview;
+        const esc = (s: string): string => this.escapeHtml(s);
+        const { summary: s, periods } = this.treeOverviewLifeData();
+        const under5 = hasEnoughSample(s.diedUnder5.n);
+        const adults = hasEnoughSample(s.adultMedian.n) && s.adultMedian.median !== null;
+        const head = `<div class="tov-block-head"><span class="tov-block-title">${esc(t.deathAgeTitle)}</span><span class="tov-block-scope">${esc(t.deathAgeScope)}</span></div>`;
+        if (!under5 && !adults) {
+            return { body: `<div class="tov-block">${head}<p class="tov-muted">${esc(t.deathAgeNotEnough(s.diedUnder5.n))}</p></div>`, summary: '' };
+        }
+        const median = adults ? Math.round(s.adultMedian.median!) : 0;
+        const tile = (label: string, value: string, note: string, kind: string): string => `
+            <div class="tov-tile" data-tile="${kind}">
+                <span class="tov-tile-label">${esc(label)}</span>
+                ${value ? `<span class="tov-tile-value">${esc(value)}</span>` : ''}
+                <span class="tov-tile-note">${esc(note)}</span>
+            </div>`;
+        const tiles = [
+            under5
+                ? tile(t.diedUnder5, percentText(s.diedUnder5.count, s.diedUnder5.n), t.diedUnder5Of(s.diedUnder5.count, s.diedUnder5.n), 'under5')
+                : tile(t.diedUnder5, '', t.deathAgeNotEnough(s.diedUnder5.n), 'under5'),
+            adults
+                ? tile(t.adultLifespan, t.adultMedian(median), t.adultOf(s.adultMedian.n), 'adults')
+                : tile(t.adultLifespan, '', t.adultNotEnough(s.adultMedian.n), 'adults'),
+        ].join('');
+        const top = Math.max(...periods.map(p => p.median), 1);
+        const bars = periods.length === 0 ? '' : `
+            <div class="tov-chart" data-chart="periods">
+                <span class="tov-chart-title">${esc(t.periodsTitle)}</span>
+                ${periods.map(p => `
+                <div class="tov-hbar-row" data-from="${p.from}">
+                    <span class="tov-hbar-label">${esc(t.periodLabel(p.from, p.to))}</span>
+                    <span class="tov-hbar" aria-hidden="true"><span class="tov-hbar-fill" style="width:${barWidth(p.median, top)}"></span></span>
+                    <span class="tov-hbar-value">${esc(t.periodValue(Math.round(p.median)))} <span class="tov-faint">(${esc(t.sampleN(p.n))})</span></span>
+                </div>`).join('')}
+            </div>`;
+        return {
+            body: `<div class="tov-block">${head}<div class="tov-tiles">${tiles}</div>${bars}</div>`,
+            summary: adults ? esc(t.lifeSummary(median)) : '',
+        };
+    },
+
+    /** Computed once for "Family through time" and "Highlights" (names, months, records). */
+    treeOverviewFamilyStats(): FamilyStats {
+        return cached('familyStats', false, () => computeFamilyStats(state!.data));
+    },
+
+    treeOverviewTimeData(): TimeData {
+        return cached('time', true, () => {
+            const st = state!;
+            const persons = Object.values(st.data.persons).filter(p => !p.isPlaceholder);
+            const year = new Date().getFullYear();
+            const bounds = inferBirthUpperBounds(st.data);
+            let men = 0, women = 0, unknown = 0, deceased = 0;
+            for (const p of persons) {
+                if (p.gender === 'male') men++; else if (p.gender === 'female') women++; else unknown++;
+                if (!isLivingPerson(p, year, bounds)) deceased++;
+            }
+            const children = st.rootId && realPerson(st.data, st.rootId)
+                ? childrenPerCoupleByGeneration(st.data, relativeGenerations(st.data, st.rootId))
+                : null;
+            return { men, women, unknown, living: persons.length - deceased, deceased, children };
+        });
+    },
+
+    /** Family through time: men / women, living / deceased, children per couple, births by month, names. */
+    treeOverviewTimeHtml(): SectionContent {
+        const st = state!;
+        const t = strings.treeOverview;
+        const esc = (s: string): string => this.escapeHtml(s);
+        const lang = getCurrentLanguage();
+        const d = this.treeOverviewTimeData();
+        const stats = this.treeOverviewFamilyStats();
+        const split = (kind: string, label: string, parts: { text: string; n: number; cls: string }[]): string => {
+            const total = parts.reduce((sum, x) => sum + x.n, 0);
+            const shown = parts.filter(x => x.n > 0);
+            return `
+                <div class="tov-split" data-split="${kind}">
+                    <span class="tov-split-label">${esc(label)}</span>
+                    <span class="tov-split-counts">${shown.map(x => esc(x.text).replace(/^(\d+)/, '<strong>$1</strong>')).join(' · ')}</span>
+                    <span class="tov-split-bar" aria-hidden="true">${shown.map(x =>
+                        `<span class="${x.cls}" style="width:${barWidth(x.n, total)}"></span>`).join('')}</span>
+                </div>`;
+        };
+        const splits = `
+            <div class="tov-splits">
+                ${split('sex', t.menWomen, [
+                    { text: t.men(d.men), n: d.men, cls: 'tov-split-male' },
+                    { text: t.women(d.women), n: d.women, cls: 'tov-split-female' },
+                    { text: t.unknownSex(d.unknown), n: d.unknown, cls: 'tov-split-unknown' },
+                ])}
+                ${split('living', t.livingDeceased, [
+                    { text: t.living(d.living), n: d.living, cls: 'tov-split-living' },
+                    { text: t.deceased(d.deceased), n: d.deceased, cls: 'tov-split-deceased' },
+                ])}
+            </div>`;
+
+        // Children per couple, by generation relative to the chosen person.
+        let children: string;
+        const root = realPerson(st.data, st.rootId);
+        if (!d.children || !root) {
+            children = `<div class="tov-need"><p>${esc(t.childrenNeedPerson)}</p>
+                <button type="button" class="primary tov-btn-primary" data-tov="pick">${esc(t.choosePerson)}</button></div>`;
+        } else {
+            const couples = d.children.reduce((sum, g) => sum + g.n, 0);
+            const rows = d.children.filter(g => g.n >= 2);
+            if (!hasEnoughSample(couples) || rows.length === 0) {
+                children = `<p class="tov-muted">${esc(t.childrenNotEnough(couples))}</p>`;
+            } else {
+                const top = Math.max(...rows.map(g => g.avgChildren), 1);
+                children = rows.map(g => `
+                    <div class="tov-hbar-row" data-generation="${g.generation}" title="${esc(t.couplesN(g.n))}">
+                        <span class="tov-hbar-label">${esc(capitalize(ancestorGenerationLabel(-g.generation, lang, 'of')))}</span>
+                        <span class="tov-hbar" aria-hidden="true"><span class="tov-hbar-fill" style="width:${barWidth(g.avgChildren, top)}"></span></span>
+                        <span class="tov-hbar-value">${esc(localNumber(g.avgChildren, 1))}</span>
+                    </div>`).join('') + `<span class="tov-note">${esc(t.childrenGenNote(shownName(root)))}</span>`;
+            }
+        }
+        const childrenBlock = `<div class="tov-chart" data-chart="children"><span class="tov-chart-title">${esc(t.childrenByGen)}</span>${children}</div>`;
+
+        // Births by month.
+        let months: string;
+        if (!hasEnoughSample(stats.birthsByMonthN)) {
+            months = `<p class="tov-muted">${esc(t.monthsNotEnough(stats.birthsByMonthN))}</p>`;
+        } else {
+            const top = Math.max(...stats.birthsByMonth.map(m => m.count), 1);
+            months = `
+                <div class="tov-months">${stats.birthsByMonth.map(m => `
+                    <span class="tov-month" title="${esc(t.monthBirths(t.monthNames[m.month - 1], m.count))}">
+                        <span class="tov-month-col"><span class="tov-month-fill" style="height:${barWidth(m.count, top)}"></span></span>
+                        <span class="tov-month-label">${esc(t.monthMarks[m.month - 1])}</span>
+                    </span>`).join('')}
+                </div>`;
+        }
+        const monthsBlock = `<div class="tov-chart" data-chart="months"><span class="tov-chart-title">${esc(t.birthsByMonth)}</span>${months}</div>`;
+
+        // Most common first names.
+        const names = (title: string, list: { name: string; count: number }[], kind: string): string => list.length === 0 ? '' : `
+            <div class="tov-names-col" data-names="${kind}">
+                <span class="tov-chart-title">${esc(title)}</span>
+                ${list.map(n => `<div class="tov-name-row"><span>${esc(n.name)}</span><span class="tov-name-n">${n.count}</span></div>`).join('')}
+            </div>`;
+        const namesHtml = names(t.topMaleNames, stats.topMaleNames, 'male') + names(t.topFemaleNames, stats.topFemaleNames, 'female');
+        const namesBlock = namesHtml ? `<div class="tov-names">${namesHtml}</div>` : '';
+
+        return {
+            body: splits + childrenBlock + monthsBlock + namesBlock,
+            summary: esc(t.timeSummary(d.men, d.women)),
+        };
+    },
+
+    treeOverviewQualityData(): QualityData {
+        return cached('quality', false, () => {
+            const st = state!;
+            const data = st.data;
+            const persons = Object.values(data.persons).filter(p => !p.isPlaceholder);
+            const year = new Date().getFullYear();
+            const bounds = inferBirthUpperBounds(data);
+            let deceased = 0, deceasedWithDeathDate = 0, photos = 0, events = 0, attachments = 0;
+            for (const p of persons) {
+                if (!isLivingPerson(p, year, bounds)) {
+                    deceased++;
+                    if (p.deathDate) deceasedWithDeathDate++;
+                }
+                if (p.photo) photos++;
+                events += p.events?.length ?? 0;
+                attachments += p.attachments?.length ?? 0;
+            }
+            const parts = findComponents(data).filter(c => c.count > 0).map(c => ({
+                name: componentName(c, strings.split.familyName, strings.split.noSurname), count: c.count,
+            }));
+            return {
+                validation: this.treeOverviewValidation(),
+                completeness: computeCompleteness(data),
+                deceased, deceasedWithDeathDate,
+                withSource: overviewHeader(data).withSource,
+                photos, photoBytes: totalPhotoBytes(data), events,
+                sources: Object.keys(data.sources ?? {}).length,
+                attachments, attachmentBytes: totalAttachmentBytes(data),
+                gaps: computeEvidenceGaps(data, st.focusId),
+                unions: Object.keys(data.partnerships).length,
+                parts: parts.length > 1 ? parts : [],
+                orphanPlaces: orphanedPlaceKeys(data).length,
+            };
+        });
+    },
+
+    /** Data quality: consistency, completeness, missing evidence, structure, quick actions. */
+    treeOverviewQualityHtml(): SectionContent {
+        const st = state!;
+        const t = strings.treeOverview;
+        const esc = (s: string): string => this.escapeHtml(s);
+        const q = this.treeOverviewQualityData();
+        const v = q.validation.stats;
+        const block = (kind: string, title: string, content: string): string =>
+            `<div class="tov-block" data-block="${kind}"><span class="tov-block-title">${esc(title)}</span>${content}</div>`;
+
+        // Consistency: the counts, the five most serious findings, "and N more…".
+        const order: Record<ValidationIssue['severity'], number> = { error: 0, warning: 1, info: 2 };
+        const issues = [...q.validation.issues].sort((a, b) => order[a.severity] - order[b.severity]);
+        const strong = (text: string): string => esc(text).replace(/^(\d+)/, '<strong>$1</strong>');
+        const counts = v.errors > 0
+            ? `<div class="tov-counts"><span class="tov-count-err">${strong(t.countErrors(v.errors))}</span>`
+                + `<span>${strong(t.countWarnings(v.warnings))}</span><span>${strong(t.countNotes(v.infos))}</span></div>`
+            : `<p class="tov-muted">${esc(t.noErrors(v.warnings, v.infos))}</p>`;
+        const findings = issues.slice(0, TOP_ISSUES).map(issue => {
+            const who = (issue.personIds ?? []).map(id => realPerson(st.data, id)).filter((p): p is Person => !!p)
+                .map(p => `<button type="button" class="tov-link" data-tov="person" data-id="${esc(p.id)}">${esc(shownName(p))}</button>`)
+                .join(', ');
+            return `<div class="tov-finding tov-finding--${issue.severity}"><span class="tov-dot" aria-hidden="true"></span>`
+                + `${who ? `<span class="tov-finding-who">${who}</span>` : ''}<span class="tov-finding-what">${esc(translateValidationType(issue.type))}</span></div>`;
+        }).join('');
+        const more = issues.length > TOP_ISSUES
+            ? `<button type="button" class="tov-link tov-more" data-tov="validation">${esc(t.moreIssues(issues.length - TOP_ISSUES))}</button>` : '';
+        const consistency = block('consistency', t.consistencyTitle, counts + (findings ? `<div class="tov-findings">${findings}</div>` : '') + more);
+
+        // Completeness: five bars, the tree's content, the media warning.
+        const c = q.completeness;
+        const bar = (kind: string, label: string, part: number, whole: number, hint = ''): string => {
+            if (whole === 0) return '';
+            const low = part / whole < LOW_SHARE;
+            return `<div class="tov-comp-row" data-field="${kind}"${hint ? ` title="${esc(hint)}"` : ''}>
+                <span class="tov-comp-label">${esc(label)}</span>
+                <span class="tov-comp-track" aria-hidden="true"><span class="tov-comp-fill${low ? ' is-low' : ''}" style="width:${barWidth(part, whole)}"></span></span>
+                <span class="tov-comp-pct">${esc(percentText(part, whole))}</span></div>`;
+        };
+        const content = [
+            q.photos > 0 ? t.contentPhotos(q.photos, sizeText(q.photoBytes)) : '',
+            q.events > 0 ? t.contentEvents(q.events) : '',
+            q.sources > 0 ? t.contentSources(q.sources) : '',
+            q.attachments > 0 ? t.contentAttachments(q.attachments, sizeText(q.attachmentBytes)) : '',
+        ].filter(Boolean);
+        const completeness = block('completeness', t.completenessTitle,
+            bar('birthDate', t.fieldBirthDate, c.withBirthDate, c.total)
+            + bar('deathDate', t.fieldDeathDate, q.deceasedWithDeathDate, q.deceased, t.deathDateHint)
+            + bar('birthPlace', t.fieldBirthPlace, c.withBirthPlace, c.total)
+            + bar('source', t.fieldSource, q.withSource, c.total)
+            + bar('photo', t.fieldPhoto, c.withPhoto, c.total)
+            + (content.length ? `<span class="tov-note tov-content">${esc(`${t.contentLabel} ${content.join(' · ')}`)}</span>` : '')
+            + (q.photoBytes + q.attachmentBytes > ATTACHMENT_WARN_BYTES ? `<span class="tov-warn">${esc(t.mediaWarning)}</span>` : ''));
+
+        // Where evidence is missing.
+        const show = st.active ? t.actShowInTree : t.openAndShow;
+        const kinds: { kind: EvidenceKind; label: string }[] = [
+            { kind: 'noSource', label: t.evNoSource },
+            { kind: 'birthNoSource', label: t.evBirthNoSource },
+            { kind: 'lineEnds', label: t.evLineEnds },
+        ];
+        const rows = kinds.filter(k => q.gaps[k.kind].length > 0);
+        const evidence = block('evidence', t.evidenceTitle,
+            (rows.length === 0
+                ? `<p class="tov-muted">${esc(t.evAllGood)}</p>`
+                : rows.map((k, i) => `
+                    <div class="tov-ev-row" data-evidence="${k.kind}">
+                        <span class="tov-ev-label">${esc(k.label)}</span>
+                        <span class="tov-ev-count">${esc(i === 0 && k.kind === 'noSource' ? t.evOfTotal(q.gaps[k.kind].length, q.gaps.total) : String(q.gaps[k.kind].length))}</span>
+                        <button type="button" class="tov-btn" data-tov="evidence" data-kind="${k.kind}">${esc(show)}</button>
+                    </div>`).join(''))
+            + `<button type="button" class="tov-link tov-ev-levels" data-tov="levels">${esc(t.evLevels)}</button>`);
+
+        // Structure: unions and the unconnected parts.
+        const structure = block('structure', t.structureTitle, q.parts.length > 1
+            ? `<span class="tov-struct-line">${esc(t.unions(q.unions))} · ${esc(t.parts(q.parts.length))}</span>
+               <ul class="tov-parts">${q.parts.map(part => `<li>${esc(t.partItem(part.name, part.count))}</li>`).join('')}</ul>
+               <span class="tov-note">${esc(t.partsHint)}</span>
+               <div class="tov-actions">${this.treeOverviewActionHtml('separate', t.separateParts, 'tov-btn')}</div>`
+            : `<span class="tov-struct-line">${esc(t.unions(q.unions))}. ${esc(t.allConnected)}</span>`);
+
+        // Quick actions.
+        const clean = st.active && q.orphanPlaces === 0
+            ? `<button type="button" class="tov-btn is-disabled" disabled>${esc(t.actCleanPlaces(0))}</button>`
+            : this.treeOverviewActionHtml('clean-places', t.actCleanPlaces(q.orphanPlaces), 'tov-btn');
+        const actions = block('actions', t.quickActions, `<div class="tov-actions">
+            <button type="button" class="tov-btn" data-tov="validation">${esc(t.actValidation)}</button>
+            ${clean}
+            ${this.treeOverviewActionHtml('split-families', t.actSplitFamilies, 'tov-btn')}
+        </div>`);
+
+        const summary = [
+            v.errors > 0
+                ? `<span class="tov-sum-err">${esc(t.countErrors(v.errors))}</span>${v.warnings > 0 ? `, ${esc(t.countWarnings(v.warnings))}` : ''}`
+                : esc(t.qualityNoErrors) + (v.warnings > 0 ? ` · ${esc(t.countWarnings(v.warnings))}` : ''),
+            q.parts.length > 1 ? esc(t.qualityParts(q.parts.length)) : '',
+        ].filter(Boolean).join(' · ');
+        return { body: consistency + completeness + evidence + structure + actions, summary };
+    },
+
+    treeOverviewHighlightsData(): HighlightsData {
+        return cached('highlights', false, () => {
+            const data = state!.data;
+            const unions = Object.values(data.partnerships);
+            const children = unions.reduce((sum, u) => sum + (u.childIds?.length ?? 0), 0);
+            return {
+                stats: this.treeOverviewFamilyStats(),
+                avgChildren: unions.length > 0 ? children / unions.length : null,
+                anniversaries: upcomingAnniversaries(data, new Date(), ANNIVERSARY_DAYS, SettingsManager.isDeathAnniversariesEnabled())
+                    .slice(0, MAX_ANNIVERSARIES),
+            };
+        });
+    },
+
+    /** Highlights: the records (names link to the person) and the anniversaries of the next 30 days. */
+    treeOverviewHighlightsHtml(): SectionContent {
+        const st = state!;
+        const t = strings.treeOverview;
+        const esc = (s: string): string => this.escapeHtml(s);
+        const lang = getCurrentLanguage();
+        const { stats, avgChildren, anniversaries } = this.treeOverviewHighlightsData();
+        const who = (id: PersonId | undefined, text: string): string => id && realPerson(st.data, id)
+            ? `<button type="button" class="tov-link tov-tile-who" data-tov="person" data-id="${esc(id)}">${esc(text)}</button>`
+            : `<span class="tov-tile-who">${esc(text)}</span>`;
+        const tile = (kind: string, label: string, value: string, person = ''): string => `
+            <div class="tov-tile" data-tile="${kind}">
+                <span class="tov-tile-label">${esc(label)}</span>
+                <span class="tov-tile-value">${esc(value)}</span>
+                ${person}
+            </div>`;
+        const tiles = [
+            stats.oldest ? tile('oldest', t.recOldest, t.recYears(stats.oldest.years), who(stats.oldest.id, stats.oldest.name)) : '',
+            stats.longestMarriage ? tile('marriage', t.recMarriage, t.recYears(stats.longestMarriage.years),
+                who(stats.longestMarriage.ids[0], stats.longestMarriage.names)) : '',
+            stats.largestFamily ? tile('children', t.recChildren, t.recChildCount(stats.largestFamily.count),
+                who(stats.largestFamily.ids[0], stats.largestFamily.names)) : '',
+            avgChildren !== null ? tile('average', t.recAverage, localNumber(avgChildren, 1)) : '',
+        ].filter(Boolean).join('');
+        const items = anniversaries.map(item => {
+            const names = item.personIds.map(id => {
+                const p = st.data.persons[id as PersonId];
+                return p ? shownName(p) : '';
+            });
+            const date = item.date.toLocaleDateString(lang, { day: 'numeric', month: 'long' });
+            const label = this.anniversaryLabel(item, names);
+            return `<div class="tov-anni${item.daysUntil === 0 ? ' tov-anni--today' : ''}">
+                <span class="tov-anni-date">${esc(date)}</span>
+                <span class="tov-anni-sep" aria-hidden="true">·</span>
+                ${who(item.personIds[0] as PersonId, label)}</div>`;
+        }).join('');
+        const annis = `<div class="tov-block" data-block="anniversaries"><span class="tov-block-title">${esc(t.anniversariesTitle)}</span>
+            ${items || `<p class="tov-muted">${esc(t.noAnniversaries)}</p>`}</div>`;
+        return {
+            body: (tiles ? `<div class="tov-tiles tov-tiles--records">${tiles}</div>` : '') + annis,
+            summary: anniversaries.length > 0 ? esc(t.highlightsSummary(anniversaries.length)) : '',
+        };
     },
 
     /** One click handler for the whole dialog (delegated by data-tov). */
@@ -591,7 +1110,7 @@ export const treeOverviewMethods = uiModule({
         const st = state;
         switch (target.dataset.tov) {
             case 'close':
-                this.closeTreeOverview();
+                this.dismissTreeOverview();
                 return;
             case 'toggle':
                 this.toggleTreeOverviewSection(target.closest<HTMLElement>('.tov-sec')?.dataset.section as SectionId);
@@ -656,7 +1175,47 @@ export const treeOverviewMethods = uiModule({
                 void this.focusPersonFromOverview(id);
                 return;
             }
+            case 'evidence': {
+                const kind = target.dataset.kind as EvidenceKind;
+                const focus = st.focusId;
+                const t = strings.treeOverview;
+                const title = kind === 'noSource' ? t.hlNoSource : kind === 'birthNoSource' ? t.hlBirth : t.hlLineEnds;
+                void this.startTreeOverviewHighlight({
+                    kind, cite: kind !== 'lineEnds', title,
+                    personIds: evidenceIds(st.data, kind, focus),
+                    recount: () => evidenceIds(DataManager.getData(), kind, focus),
+                });
+                return;
+            }
+            case 'levels':
+                void this.showEvidenceLevelsFromOverview();
+                return;
+            case 'separate':
+                void this.showSplitDialog(st.treeId, OVERLAY_ID);
+                return;
+            case 'clean-places':
+                void Promise.resolve(this.cleanOrphanPlaces()).then(() => {
+                    if (state !== st || !this.isTreeOverviewOpen()) return;
+                    st.data = DataManager.getData();
+                    cache.clear();
+                    this.fillTreeOverviewSection('quality');
+                });
+                return;
+            case 'split-families':
+                this.closeTreeOverview();
+                this.showSplitFamiliesDialog();
+                return;
         }
+    },
+
+    /** "Evidence in the tree": close the overview (opening its tree first) and frame every card by its level. */
+    async showEvidenceLevelsFromOverview(): Promise<void> {
+        if (!state) return;
+        const { treeId, active } = state;
+        this.closeTreeOverview();
+        if (!active) await this.switchToTree(treeId as TreeId);
+        this.listenForEvidenceChanges();
+        this.showEvidenceLevels();
     },
 
     toggleTreeOverviewSection(id: SectionId): void {
@@ -680,9 +1239,24 @@ export const treeOverviewMethods = uiModule({
         if (!state || !realPerson(state.data, id)) return;
         state.rootId = id;
         rememberRoot(state.treeId, id);
-        const root = document.querySelector<HTMLElement>(`#${OVERLAY_ID} .tov-root`);
+        const overlay = document.getElementById(OVERLAY_ID);
+        const root = overlay?.querySelector<HTMLElement>('.tov-root');
         if (root) root.innerHTML = this.treeOverviewRootHtml();
-        this.fillTreeOverviewSections();
+        // The rooted sections computed (or computing) are recomputed: an open
+        // one at once, a closed one again on the idle callbacks.
+        for (const sid of ROOTED) {
+            const sec = overlay?.querySelector<HTMLElement>(`.tov-sec[data-section="${sid}"]`);
+            if (!sec || sec.dataset.fill === undefined) continue;
+            if (sec.querySelector('.tov-sec-head')?.getAttribute('aria-expanded') === 'true') {
+                this.fillTreeOverviewSection(sid);
+            } else {
+                delete sec.dataset.fill;
+                sec.dataset.ready = 'false';
+                const sum = sec.querySelector<HTMLElement>('.tov-sum');
+                if (sum) sum.textContent = '';
+            }
+        }
+        this.startTreeOverviewIdle();
     },
 
     /** The person popover: search, then the person in focus and the recently chosen. */

@@ -862,7 +862,7 @@ test.describe('Start research with this tree (G3)', () => {
     });
 });
 
-test.describe('Where evidence is missing (tree health)', () => {
+test.describe('Where evidence is missing (tree overview, Data quality)', () => {
     async function tree(page: Page): Promise<void> {
         await page.setViewportSize({ width: 1440, height: 900 });
         await openApp(page);
@@ -887,24 +887,31 @@ test.describe('Where evidence is missing (tree health)', () => {
         await expect(card(page, 'Ondřej')).toBeVisible();
     }
 
+    /** The open tree's overview with Data quality expanded and filled. */
+    async function openQuality(page: Page): Promise<void> {
+        await page.evaluate(() => window.Strom.UI.showTreeOverview(window.Strom.DataManager.getCurrentTreeId(), { section: 'quality' }));
+        await expect(page.locator('#tree-overview-modal .tov-sec[data-section="quality"]')).toHaveAttribute('data-ready', 'true');
+    }
+
     test('counts (a marriage citation counts), Show in tree, Next, Escape', async ({ page }) => {
         await tree(page);
-        await page.evaluate(() => window.Strom.UI.showTreeHealthDialog(window.Strom.DataManager.getCurrentTreeId()));
-        const block = page.locator('#tree-health-content .health-evidence');
-        await expect(block.locator('.health-block-title')).toHaveText('Where evidence is missing');
-        await expect(block.locator('.health-evidence-label')).toHaveText(['People without a source', 'Births without a source', 'Line ends (no parents)', 'Evidence in tree']);
-        await expect(block.locator('.health-evidence-count')).toHaveText(['1 of 4', '1', '2']);
+        await openQuality(page);
+        const block = page.locator('#tree-overview-modal [data-block="evidence"]');
+        await expect(block.locator('.tov-block-title')).toHaveText('Where evidence is missing');
+        await expect(block.locator('.tov-ev-label')).toHaveText(['People without a source', 'Births without a source', 'Line ends']);
+        await expect(block.locator('.tov-ev-count')).toHaveText(['1 of 4', '1', '2']);
+        await expect(block.locator('.tov-ev-levels')).toHaveText('Evidence in the tree (● ◐ ○ on cards)');
 
-        await block.locator('[data-evidence="lineEnds"]').click();
-        await expect(page.locator('#tree-health-modal')).toBeHidden();
+        await block.locator('[data-kind="lineEnds"]').click();
+        await expect(page.locator('#tree-overview-modal')).toHaveCount(0);
         const pill = page.locator('#evidence-pill');
-        await expect(pill).toContainText('Line ends (no parents) · 2');
+        await expect(pill).toContainText('Line ends: 2 people');
         await expect(card(page, 'Václav')).toHaveClass(/evidence-hit/);
         await expect(card(page, 'Ondřej')).toHaveClass(/evidence-dim/);
         await expect(pill.locator('.evidence-pill-next')).toHaveText('Next person ›');
         await pill.locator('.evidence-pill-next').click();
         // Going through them says where you are.
-        await expect(pill).toContainText('Line ends (no parents) · 1 / 2');
+        await expect(pill).toContainText('1 / 2');
         await expect(card(page, 'Marie').or(card(page, 'Václav')).first()).toBeVisible();
         await page.keyboard.press('Escape');
         await expect(pill).toHaveCount(0);
@@ -913,9 +920,9 @@ test.describe('Where evidence is missing (tree health)', () => {
 
     test('citing the last person ends the highlight with a toast', async ({ page }) => {
         await tree(page);
-        await page.evaluate(() => window.Strom.UI.showTreeHealthDialog(window.Strom.DataManager.getCurrentTreeId()));
-        await page.locator('[data-evidence="noSource"]').click();
-        await expect(page.locator('#evidence-pill')).toContainText('People without a source · 1');
+        await openQuality(page);
+        await page.locator('#tree-overview-modal [data-kind="noSource"]').click();
+        await expect(page.locator('#evidence-pill')).toContainText('People without a source: 1 person');
         await expect(card(page, 'Ondřej')).toHaveClass(/evidence-hit/);
         await page.evaluate(() => window.Strom.DataManager.citePerson('s' as never, 's1'));
         await expect(page.locator('.toast')).toContainText('Done, no one left in this selection.');
@@ -932,7 +939,7 @@ test.describe('Where evidence is missing (tree health)', () => {
                 partnerships: {}, sources: { s1: { id: 's1', title: 'Matrika' } },
             }, 'Malí');
         });
-        await page.evaluate(() => window.Strom.UI.showTreeHealthDialog(window.Strom.DataManager.getCurrentTreeId()));
-        await expect(page.locator('.health-evidence-good')).toHaveText('Everyone has a source and parents.');
+        await openQuality(page);
+        await expect(page.locator('#tree-overview-modal [data-block="evidence"] .tov-muted')).toHaveText('Everyone has a source and parents.');
     });
 });

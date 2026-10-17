@@ -114,7 +114,7 @@ test.describe('actions menu "Tree:" submenu', () => {
         const items = async () => (await submenu.locator('.tree-switcher-action:visible, .menu-section-header:visible').allInnerTexts())
             .map(t => t.trim()).filter(t => t !== 'Save to file…');
         await expect.poll(items).toEqual([
-            'Statistics', 'Tree health',
+            'Tree overview',
             'Rename', 'Duplicate', 'Hide',
             'FROM THE CURRENT VIEW', 'Make a new tree', 'Merge view into…',
             'Merge into another tree…', 'Split into families…',
@@ -312,16 +312,17 @@ test.describe('tree manager row menu: Escape', () => {
         }
     });
 
-    test('Statistics acts on the active tree and closes the whole menu', async ({ page }) => {
+    test('Tree overview acts on the active tree and closes the whole menu', async ({ page }) => {
         await openApp(page);
         await createFirstPerson(page, 'Jan', 'Novak');
 
         await page.locator('.actions-menu-btn').click();
         await page.locator('#actions-tree-row').hover();
-        await page.locator('#actions-tree-submenu .tree-switcher-action', { hasText: 'Statistics' }).click();
+        await page.locator('#actions-tree-submenu .tree-switcher-action', { hasText: 'Tree overview' }).click();
 
-        // The tree statistics dialog opens; the actions menu is dismissed.
-        await expect(page.locator('#tree-stats-modal')).toHaveClass(/active/);
+        // The tree overview opens; the actions menu is dismissed.
+        await expect(page.locator('#tree-overview-modal .modal.tov')).toBeVisible();
+        await expect(page.locator('#tree-overview-modal .tov-title')).toHaveText(/^Tree overview: /);
         await expect(page.locator('#actions-menu-dropdown')).not.toHaveClass(/active/);
     });
 });
@@ -435,14 +436,16 @@ test.describe('tree manager ⋯ menu on desktop: the tree-action groups', () => 
         await expect(menu.locator('.tree-row-menu-group:visible')).toHaveText(
             ['Overview', 'Outputs', 'Tree settings', 'Structure', 'Manage']);
         const keys = await menu.locator('.tree-row-menu-item:visible').evaluateAll(els => els.map(el => (el as HTMLElement).dataset.action));
-        expect(keys.slice(0, 2)).toEqual(['stats', 'health']);
+        expect(keys[0]).toBe('overview');
+        expect(keys).not.toContain('stats');
+        expect(keys).not.toContain('health');
         expect(keys).toContain('places');
         expect(keys).toContain('surnames');
         expect(keys).toContain('split');
         expect(keys[keys.length - 1]).toBe('delete');
 
         // Rows, not bordered centered buttons (the row buttons' style leaked in).
-        const item = menu.locator('.tree-row-menu-item[data-action="stats"]');
+        const item = menu.locator('.tree-row-menu-item[data-action="overview"]');
         const style = await item.evaluate(el => {
             const cs = getComputedStyle(el);
             return { border: cs.borderTopWidth, align: cs.textAlign, justify: cs.justifyContent, font: cs.fontSize, h: el.getBoundingClientRect().height };
@@ -479,7 +482,7 @@ test.describe('tree manager ⋯ menu on desktop: the tree-action groups', () => 
         for (const key of ['audit', 'places', 'surnames', 'makeTree', 'splitFamilies', 'split', 'saveToFile']) {
             await expect(menu.locator(`[data-action="${key}"]`)).toHaveCount(0);
         }
-        for (const key of ['stats', 'export', 'rename', 'mergeInto', 'duplicate', 'delete']) {
+        for (const key of ['overview', 'export', 'rename', 'mergeInto', 'duplicate', 'delete']) {
             await expect(menu.locator(`[data-action="${key}"]`)).toHaveCount(1);
         }
         await expect(menu.locator('.tree-row-menu-note')).toHaveText(

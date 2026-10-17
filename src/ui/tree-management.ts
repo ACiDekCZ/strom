@@ -255,9 +255,6 @@ export const treeManagementMethods = uiModule({
                 else row.removeAttribute('aria-label');
             }
         }
-        // "Change history" row is only offered when the audit log is enabled.
-        const auditRow = document.getElementById('actions-tree-audit-row');
-        if (auditRow) auditRow.style.display = SettingsManager.isAuditLogEnabled() ? '' : 'none';
         const sourcesRow = document.getElementById('actions-sources-row');
         if (sourcesRow) sourcesRow.style.display = this.isSourcesMenuOffered() ? '' : 'none';
         // Strom Research "New" label on its menu row.
@@ -334,6 +331,35 @@ export const treeManagementMethods = uiModule({
         wrap.style.display = '';
         nameEl.textContent = active.name;
         nameEl.title = active.name;
+        void this.renderActionsTreeOverviewRows(active.id);
+    },
+
+    /**
+     * The submenu's Overview rows come from the same list as the tree manager's
+     * ⋯ and the More sheet (treeActionGroups), so they never drift apart. The
+     * previous rows stay until the new ones are ready (no empty flash).
+     */
+    async renderActionsTreeOverviewRows(treeId: TreeId): Promise<void> {
+        const host = document.getElementById('actions-tree-overview-rows');
+        if (!host) return;
+        const groups = await this.treeActionGroups(treeId, 'more');
+        const rows = groups.find(g => g.key === 'overview')?.rows ?? [];
+        host.replaceChildren(...rows.map(row => {
+            const item = document.createElement('div');
+            item.className = 'tree-switcher-action';
+            item.setAttribute('role', 'menuitem');
+            item.tabIndex = 0;
+            item.dataset.action = row.key;
+            if (row.key === 'audit') item.id = 'actions-tree-audit-row';
+            const label = document.createElement('span');
+            label.textContent = row.label;
+            item.appendChild(label);
+            item.addEventListener('click', () => {
+                this.closeActionsMenu();
+                row.run();
+            });
+            return item;
+        }));
     },
 
     /** The "Tree:" submenu opens on hover; click / →  toggles it for keyboard. */
@@ -411,15 +437,6 @@ export const treeManagementMethods = uiModule({
         this.closeActionsMenu();
         if (id) this.showMergeTreesDialog(id);
     },
-    treeActionStats(): void {
-        this.closeActionsMenu();
-        this.showActiveTreeStats();
-    },
-    treeActionHealth(): void {
-        const id = TreeManager.getActiveTreeId();
-        this.closeActionsMenu();
-        if (id) void this.showTreeHealthDialog(id);
-    },
     /**
      * The source catalog is a research tool: offered when advanced fields are on,
      * or as soon as the tree has a source (imported or cited), so nobody is left
@@ -451,10 +468,6 @@ export const treeManagementMethods = uiModule({
     treeActionAnniversaries(): void {
         this.closeActionsMenu();
         this.showAnniversariesDialog();
-    },
-    treeActionAudit(): void {
-        this.closeActionsMenu();
-        this.showAuditLogDialog();
     },
     treeActionSplitFamilies(): void {
         // WYSIWYG: the active tree IS the live view, so no person picker — the

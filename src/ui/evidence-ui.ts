@@ -1,7 +1,8 @@
 /**
- * "Where evidence is missing" — for every tree, research or not. Tree health
- * counts people without a source, births without a source and line ends
- * (src/stats.ts computeEvidenceGaps); "Show in tree" dims everyone else and
+ * "Where evidence is missing" — for every tree, research or not. The tree
+ * overview's Quality section counts people without a source, births without a
+ * source and line ends (src/stats.ts computeEvidenceGaps); "Show in tree"
+ * (src/ui/tree-overview.ts) dims everyone else and
  * frames them, with a pill at the top: "{what} · n", Next › (centres the next
  * one, by generation then name) and × to end. Changes that document a person
  * recount; when nobody is left the mode ends with a toast. Not kept over a
@@ -17,10 +18,9 @@
 
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
-import { TreeManager } from '../tree-manager.js';
 import { ZoomPan } from '../zoom.js';
 import { strings } from '../strings.js';
-import { PersonId, StromData, TreeId } from '../types.js';
+import { PersonId, StromData } from '../types.js';
 import { computeEvidenceGaps, EvidenceKind } from '../stats.js';
 import { EvidenceLevel, evidenceLevels } from '../evidence-level.js';
 import { assignGenerations } from '../generations.js';
@@ -84,60 +84,12 @@ function levelIds(data: StromData, level: EvidenceLevel): PersonId[] {
     return walkOrder(data, ids);
 }
 
-const KINDS: EvidenceKind[] = ['noSource', 'birthNoSource', 'lineEnds'];
-
-function kindLabel(kind: EvidenceKind): string {
-    const s = strings.treeHealth;
-    return kind === 'noSource' ? s.noSource : kind === 'birthNoSource' ? s.birthNoSource : s.lineEnds;
-}
-
 /** The people of `kind` in `data`, in the order Next walks them: generation, then name. */
-function evidenceIds(data: StromData, kind: EvidenceKind, focus: PersonId | null): PersonId[] {
+export function evidenceIds(data: StromData, kind: EvidenceKind, focus: PersonId | null): PersonId[] {
     return walkOrder(data, computeEvidenceGaps(data, focus)[kind]);
 }
 
 export const evidenceUiMethods = uiModule({
-    /** The tree-health section (HTML): counts, "Show in tree", or the all-good sentence. */
-    evidenceHealthHtml(data: StromData, treeId: string): string {
-        const s = strings.treeHealth;
-        const focus = DataManager.getCurrentTreeId() === treeId ? TreeRenderer.getFocusPersonId() : null;
-        const gaps = computeEvidenceGaps(data, focus ?? data.lastFocusPersonId ?? null);
-        const rows = KINDS.filter(k => gaps[k].length > 0);
-        const body = rows.length === 0
-            ? `<div class="health-block-hint health-evidence-good">${this.escapeHtml(s.evidenceAllGood)}</div>`
-            : rows.map((k, i) => `
-                <div class="health-evidence-row">
-                    <span class="health-evidence-label">${this.escapeHtml(kindLabel(k))}</span>
-                    <span class="health-evidence-count">${this.escapeHtml(i === 0 ? s.ofTotal(gaps[k].length, gaps.total) : String(gaps[k].length))}</span>
-                    <button type="button" class="secondary health-evidence-show" data-evidence="${k}">${this.escapeHtml(s.showInTree)}</button>
-                </div>`).join('');
-        const levels = `
-                <div class="health-evidence-row health-evidence-levels">
-                    <span class="health-evidence-label">${this.escapeHtml(s.showEvidence)}</span>
-                    <span class="health-evidence-spacer" aria-hidden="true"></span>
-                    <button type="button" class="secondary health-evidence-show" data-evidence="levels">${this.escapeHtml(s.showInTree)}</button>
-                </div>`;
-        return `
-            <div class="health-block health-evidence">
-                <div class="health-block-title">${this.escapeHtml(s.evidenceTitle)}</div>
-                ${body}
-                ${levels}
-            </div>`;
-    },
-
-    /** "Show in tree": close tree health, switch to its tree, start the highlight. */
-    async showEvidenceInTree(kind: EvidenceKind | 'levels', treeId: string): Promise<void> {
-        this.closeTreeHealthDialog();
-        if (TreeManager.getActiveTreeId() !== treeId) await this.switchToTree(treeId as TreeId);
-        this.listenForEvidenceChanges();
-        if (kind === 'levels') {
-            this.showEvidenceLevels();
-            return;
-        }
-        const recount = () => evidenceIds(DataManager.getData(), kind, TreeRenderer.getFocusPersonId());
-        this.startPersonHighlight(kind, kindLabel(kind), recount(), recount);
-    },
-
     listenForEvidenceChanges(): void {
         if (listening) return;
         listening = true;

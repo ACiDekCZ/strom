@@ -82,8 +82,7 @@ export const treeActionsMethods = uiModule({
 
         const groups: TreeActionGroup[] = [
             { key: 'overview', header: g.overview, rows: [
-                { key: 'stats', label: s.stats, run: () => void this.showTreeStatsDialog(id, parent) },
-                { key: 'health', label: strings.treeHealth.menu, run: () => void this.showTreeHealthDialog(id, parent) },
+                { key: 'overview', label: strings.treeOverview.menu, run: () => void this.showTreeOverview(id, { parent }) },
                 ...(auditOffered ? [{ key: 'audit', label: strings.auditLog.viewLog, run: () => this.showAuditLogDialog(id, parent) }] : []),
             ] },
             { key: 'outputs', header: g.outputs, rows: [

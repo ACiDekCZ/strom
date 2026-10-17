@@ -53,7 +53,7 @@ describe('computeFamilyStats — lifespan by generation', () => {
         expect(gen1.avgYears).toBe(60);
 
         // Longest-lived person is the 80-year-old.
-        expect(stats.oldest).toEqual({ name: 'A X', years: 80 });
+        expect(stats.oldest).toMatchObject({ name: 'A X', years: 80 });
     });
 
     it('skips persons missing a birth or death date', () => {
@@ -130,7 +130,8 @@ describe('computeFamilyStats — longest marriage and empty states', () => {
         const u1 = union('u1', 'a', 'b', [], { startDate: '1920', endDate: '1965' }); // 45
         const u2 = union('u2', 'c', 'd', [], { startDate: '1950', endDate: '1960' }); // 10
         const stats = computeFamilyStats(data([a, b, c, dd], [u1, u2]));
-        expect(stats.longestMarriage).toEqual({ names: 'A X & B Y', years: 45 });
+        expect(stats.longestMarriage).toMatchObject({ names: 'A X & B Y', years: 45 });
+        expect(stats.longestMarriage?.ids).toHaveLength(2);
     });
 
     it('returns empty results for an empty tree', () => {

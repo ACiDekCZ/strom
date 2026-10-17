@@ -51,18 +51,18 @@ test('switching the UI language at runtime updates the interface', async ({ page
     await expect(about).toContainText('Created by');
 });
 
-test('tree stats dialog shows the person count', async ({ page }) => {
+test('the focus bar person count opens the tree overview with the person count', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
     await addRelation(page, 'Jan', 'partner', 'Marie', 'Novak', 'female');
 
-    await page.evaluate(() => window.Strom.UI.showActiveTreeStats());
-    const modal = page.locator('#tree-stats-modal');
-    await expect(modal).toBeVisible();
-    const content = modal.locator('#tree-stats-content');
-    await expect(content).toBeVisible();
+    const count = page.locator('#toolbar-focus-count:visible, #focus-person-count:visible').first();
+    await expect(count).toHaveAttribute('title', 'Show tree overview');
+    await count.click();
+    const overview = page.locator('#tree-overview-modal .modal.tov');
+    await expect(overview).toBeVisible();
     // Two real persons are reported.
-    await expect(content).toContainText('2');
+    await expect(overview.locator('.tov-nums')).toContainText('2 people');
 });
 
 test('audit log records a mutation when enabled', async ({ page }) => {

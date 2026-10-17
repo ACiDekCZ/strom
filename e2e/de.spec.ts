@@ -135,12 +135,16 @@ test('German UI: html lang and the main dialogs are free of English words', { ta
     await expectNoEnglish(settings, 'Settings');
     await closeWithEscape(page, settings);
 
-    // Tree statistics.
-    await page.evaluate((id) => window.Strom.UI.showTreeStatsDialog(id), treeId);
-    const stats = page.locator('#tree-stats-modal');
-    await expect(stats).toContainText('3');
-    await expectNoEnglish(stats, 'Statistics');
-    await closeWithEscape(page, stats);
+    // Tree overview with every section expanded.
+    await page.evaluate((id) => window.Strom.UI.showTreeOverview(id), treeId);
+    const overview = page.locator('#tree-overview-modal .modal.tov');
+    await expect(overview.locator('.tov-nums')).toContainText('3');
+    const closed = overview.locator('.tov-sec-head[aria-expanded="false"]');
+    while (await closed.count() > 0) await closed.first().click();
+    await expect(overview.locator('.tov-sec[data-ready="true"]')).toHaveCount(6);
+    await expect(overview.locator('.tov-sec[data-section="time"]')).toContainText('Männer / Frauen');
+    await expectNoEnglish(overview, 'Tree overview');
+    await closeWithEscape(page, overview);
 
     // Kinship calculator with a result.
     await cardAction(page, 'Hans', 'relationship');
