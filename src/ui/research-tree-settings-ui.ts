@@ -14,7 +14,7 @@ import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { strings } from '../strings.js';
 import { TreeId, ResearchTranscripts, ResearchSendMode, StromData } from '../types.js';
-import { researchSchemeUrl } from '../research-link.js';
+import { researchSchemeUrl, TERMINAL_CHOICE_FEATURE } from '../research-link.js';
 import { researchAutoState, patchResearchAutoState, researchSendPreviewSkipped, noteResearchSendPreviewSkipped, announcedResearchScheme } from '../research-device.js';
 import { sourceReadingHash, unverifiedOlderSources } from '../research-sync.js';
 import { uiModule } from './module.js';
@@ -198,8 +198,10 @@ export const researchTreeSettingsMethods = uiModule({
         const modeWhereHtml = modeWhere ? `
                 <p class="research-mode-where" id="research-mode-where"><span>${esc(modeWhere)}</span>${openUrl
                     ? ` <button type="button" class="link-button" id="research-mode-where-open">${esc(s.openResearch)}</button>` : ''}</p>` : '';
-        // The terminal the research opens in is the research's own setting: one sentence, its settings a click away.
-        const terminalWhereHtml = setup ? `
+        // The terminal the research opens in is the research's own setting: one sentence, its settings a click away
+        // (a research that chooses it); otherwise the settings stay a button beside Done.
+        const terminalWhere = !!setup && !!this.researchStatusOf(link.id)?.features?.includes(TERMINAL_CHOICE_FEATURE);
+        const terminalWhereHtml = terminalWhere ? `
                 <p class="research-mode-where research-terminal-where" id="research-terminal-where"><span>${esc(t.terminalWhere)}</span> <button type="button" class="link-button research-settings-in-research" id="research-settings-in-research">${esc(strings.research.settingsInResearch)} ↗</button></p>` : '';
         const olderLine = sendingShown ? '' : this.researchOlderLineHtml('settings');
         const sendingHtml = !sendingShown ? (olderLine ? `<p class="research-older-line">${olderLine}</p>` : '') : `
@@ -258,6 +260,7 @@ export const researchTreeSettingsMethods = uiModule({
                 ${modeWhereHtml}
                 ${terminalWhereHtml}
                 <div class="buttons research-tree-settings-buttons">
+                    ${setup && !terminalWhere ? `<button type="button" class="link-button research-settings-in-research" id="research-settings-in-research">${esc(strings.research.settingsInResearch)} ↗</button>` : ''}
                     <button type="button" class="primary" id="research-tree-settings-done" data-dismiss>${esc(t.done)}</button>
                 </div>
             </div>`;

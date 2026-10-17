@@ -741,14 +741,33 @@ test('"Send, then load" where the research takes nothing new: said so (never "th
 
 test.describe('the terminal the research opens in (spec 009, K2.4)', () => {
     const where = (page: Page) => settings(page).locator('#research-terminal-where');
+    const buttons = (page: Page) => settings(page).locator('.research-tree-settings-buttons');
+    const choosingTree = async (page: Page): Promise<void> => {
+        await page.clock.install();
+        await openResearch(page);
+        await fakeBridge(page, { accepts: ACCEPTS, features: ['terminal.choice'] });
+        await poll(page);
+    };
 
-    test('on a computer, a research that takes the setup link: the sentence with Settings in the research, which opens the setup link', async ({ page }) => {
-        await manualTree(page);
+    test('on a computer, a research that chooses its terminal: the sentence with Settings in the research, which opens the setup link', async ({ page }) => {
+        await choosingTree(page);
         await page.evaluate(() => window.Strom.UI.researchActionTreeSettings());
         await expect(where(page)).toHaveText("The terminal the research opens in is chosen in the research's settings. Settings in the research ↗");
         // One button only: the sentence carries it, the dialog's buttons do not repeat it.
         await expect(settings(page).locator('#research-settings-in-research')).toHaveCount(1);
+        await expect(buttons(page).locator('#research-settings-in-research')).toHaveCount(0);
         await where(page).locator('#research-settings-in-research').click();
+        await expect(settings(page)).toHaveCount(0);
+        expect(await links(page)).toEqual([`strom-research://setup?tree=${UUID}`]);
+    });
+
+    test('a research that takes the setup link but does not choose its terminal (1.15): no sentence, Settings in the research beside Done', async ({ page }) => {
+        await manualTree(page);
+        await page.evaluate(() => window.Strom.UI.researchActionTreeSettings());
+        await expect(settings(page)).toBeVisible();
+        await expect(where(page)).toHaveCount(0);
+        await expect(buttons(page).locator('#research-settings-in-research')).toHaveText('Settings in the research ↗');
+        await buttons(page).locator('#research-settings-in-research').click();
         await expect(settings(page)).toHaveCount(0);
         expect(await links(page)).toEqual([`strom-research://setup?tree=${UUID}`]);
     });
@@ -756,7 +775,7 @@ test.describe('the terminal the research opens in (spec 009, K2.4)', () => {
     test('a research that does not announce the setup link: no sentence, no button', async ({ page }) => {
         await page.clock.install();
         await openResearch(page);
-        await fakeBridge(page, { accepts: ACCEPTS, links: ['send', 'open', 'live', 'app'] });
+        await fakeBridge(page, { accepts: ACCEPTS, links: ['send', 'open', 'live', 'app'], features: ['terminal.choice'] });
         await poll(page);
         await page.evaluate(() => window.Strom.UI.researchActionTreeSettings());
         await expect(settings(page)).toBeVisible();
@@ -767,7 +786,7 @@ test.describe('the terminal the research opens in (spec 009, K2.4)', () => {
     test('a touch device: no sentence, no button', async ({ browser }) => {
         const context = await browser.newContext({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
         const page = await context.newPage();
-        await manualTree(page);
+        await choosingTree(page);
         await page.evaluate(() => window.Strom.UI.researchActionTreeSettings());
         await expect(settings(page)).toBeVisible();
         await expect(where(page)).toHaveCount(0);

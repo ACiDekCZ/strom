@@ -1696,6 +1696,9 @@ export function sanitizeIntake(value: unknown): LiveIntake | null {
     return id && at ? { id, at } : null;
 }
 
+/** `/status.features`: the research's settings choose the terminal it opens in (Strom Research 1.16, spec 009). */
+export const TERMINAL_CHOICE_FEATURE = 'terminal.choice';
+
 /** The bridge feature that sends `/status.recent`. */
 export const RECENT_FEATURE = 'status.recent';
 /** Most ids a `/status.recent` list carries. */

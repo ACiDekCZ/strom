@@ -7,7 +7,7 @@
 *Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
 
 - **Kraj stromu**: hypotéza, jejíž verze by napojily každá jinou rodinu mimo strom, ukáže všechny. Bublina na kraji stromu i *Nad osobou* vypíšou každou rodinu s jejími verzemi, lidmi a čekajícími úkoly, každou jako odkaz na ni; pilulka ukáže *+ 2 rodiny* a nabídne každou z nich. Se Strom Research 1.16 a novějším.
-- **Výzkum u tohoto stromu**: jedna věta říká, kde se volí terminál, ve kterém se výzkum otevírá: v nastavení výzkumu, s tlačítkem *Nastavení ve výzkumu* hned vedle. Na počítači, u výzkumu, který své nastavení z aplikace nabízí; samotná volba (Terminál nebo iTerm2 na Macu) přichází se Strom Research 1.16.
+- **Výzkum u tohoto stromu**: jedna věta říká, kde se volí terminál, ve kterém se výzkum otevírá: v nastavení výzkumu, s tlačítkem *Nastavení ve výzkumu* hned vedle. Na počítači, se Strom Research 1.16 nebo novějším, který samotnou volbu přináší (Terminál nebo iTerm2 na Macu).
 - **Opravy**: pilulka *+ rodina · N* na kraji stromu počítá rodinu, kterou ukáže: u hypotézy, jejíž varianty by napojily každá jinou rodinu mimo strom, patří počet lidí a čekajících úkolů k rodině, která se po kliknutí objeví.
 
 ## 3.12.0
