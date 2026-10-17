@@ -180,8 +180,9 @@ test('R4: Data quality in the tree overview shows all its blocks', async ({ page
     // structure, quick actions.
     await expect(quality.locator('.tov-block')).toHaveCount(5);
     await expect(quality.locator('.tov-block').nth(2)).toHaveAttribute('data-block', 'evidence');
-    // Completeness: birth date, death date (among the deceased), birthplace, source, photo.
-    await expect(quality.locator('.tov-comp-row')).toHaveCount(5);
+    // Completeness: birth date, death date (among the deceased), birthplace, photo
+    // (the share with a source is the header's number, not repeated here).
+    await expect(quality.locator('.tov-comp-row')).toHaveCount(4);
     // Structure: the unions, all in one family.
     await expect(quality.locator('[data-block="structure"]')).toContainText('All people are connected into one family.');
     // Quick actions: validation details, clean places, split into families.

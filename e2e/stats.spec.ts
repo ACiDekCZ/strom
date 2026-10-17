@@ -47,7 +47,7 @@ test('Life and health: age at death in the whole tree and adult lifespan by birt
     await expect(life.locator('.tov-mark')).toHaveCount(0);
     await expect(life.locator('.tov-block-scope')).toHaveText('in the whole tree');
     const under5 = life.locator('.tov-tile[data-tile="under5"]');
-    await expect(under5.locator('.tov-tile-value')).toHaveText('5.0%');
+    await expect(under5.locator('.tov-tile-value')).toHaveText('5%');
     await expect(under5.locator('.tov-tile-note')).toHaveText('1 of 20 deaths with known birth');
     const adults = life.locator('.tov-tile[data-tile="adults"]');
     await expect(adults.locator('.tov-tile-value')).toHaveText('median 75 years');
