@@ -2,12 +2,15 @@
 
 This document describes the invariants enforced by the Strom layout algorithm.
 
-**Last updated:** 2026-07-13 — invariants are machine-enforced by the
+**Last updated:** 2026-10-17 — invariants are machine-enforced by the
 all-persons harness + strict geometry audit (see "Testing" in `CLAUDE.md`).
-Two documented relaxations: `inherent-crossing` (one clean perpendicular
-crossing between cross-married unions is topologically unavoidable — proof in
-`docs/ETALON_FINDINGS.md`) and the `KNOWN_LINE_KNOTS` class (in-law column
-inside a sibling bus span). Partner-chain invariants added 2026-07-13.
+The line rules (no line crossings; bus routing standard) now hold strictly: a line
+that cannot be drawn without a crossing, a collinear run or a T-touch is left
+out by step 7 and its cards link to each other (see "Line Invariants"). The
+former relaxations — `inherent-crossing` (a crossing between cross-married
+unions forced by the topology) and the `KNOWN_LINE_KNOTS` class (in-law column
+inside a sibling bus span) — are now omitted edges instead of drawn knots;
+`KNOWN_LINE_KNOTS` is empty. Partner-chain invariants added 2026-07-13.
 
 ---
 
@@ -173,6 +176,33 @@ more child-bearing unions in the selection are not chain-expanded at all
 
 ---
 
+## Line Invariants (step 7)
+
+### 16. No Line Crossings, Merges or T-Touches
+
+**Rule:** No segment of one union's line (stem, connector, bus, drops) or
+partner line crosses, runs along (collinear overlap) or ends on (T-touch) a
+segment of another union's. A union's own segments meet freely.
+
+**Enforcement:** `line-geometry.ts` finds every violation (grid-indexed); step
+7's `omitUnroutableDrops` removes child drops one at a time until none is
+left (greedy, deterministic, at most 10 per layout, never a line of the
+focus's own line when another helps; cards never move). Every line drawn is
+clean; each line left out is an `OmittedEdge` in `LayoutResult.omittedEdges`
+and is shown as a link on its cards (a "parents ↗" / "child ↗" branch tab on
+screen, a "parents: …" label in the image export). The built-in validation
+runs the same check on every layout.
+
+### 17. Bus Routing Standard
+
+**Rule:** Each drawn parent-child line runs stem → (connector) → bus → drops,
+the bus between the parents' band bottom and the children's band top (lanes
+offset it inside that gap), drops strictly vertical. A union whose drops were
+all left out draws no line; a union with some drops left draws its bus over
+the remaining drops only.
+
+---
+
 ## Invariant Hierarchy
 
 For H-side ancestor blocks (from strictest to loosest):
@@ -236,6 +266,8 @@ The primary enforcement is `allPersonsFull.test.ts`: the full pipeline runs
 with every person of every fixture as focus, in standard and expanded modes,
 against the built-in validation plus the strict geometry audit
 (`helpers/geometryAudit.ts`). Per-step unit tests cover the individual
-pipeline stages.
+pipeline stages. `omittedEdges.test.ts` holds the line omission: which line
+goes in scenario O, in the real-data knot and in the in-law cases, and that
+the grid check finds exactly the violations of every pair.
 
 **Total: 29 test files, 2556 tests, 0 failures (plus 17 Playwright e2e).**

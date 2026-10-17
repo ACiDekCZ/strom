@@ -208,7 +208,8 @@ export function buildViewLayer(data: StromData, links: readonly ViewLink[] | und
  * a family line whose every drop is virtual is `virtual` as a whole, one of
  * a shown family's own parents `ghost` (its other drops too); a partner line
  * between two people who are no couple in the data is `virtual`, one between
- * two ghosts `ghost`.
+ * two ghosts `ghost`. An omitted line (LayoutResult.omittedEdges) is flagged
+ * as its drop would be.
  */
 export function flagViewLayer(result: LayoutResult, model: LayoutModel, layer: ViewLayer): void {
     const ghost = (id: PersonId | null | undefined): boolean => !!id && layer.ghostOf.has(id);
@@ -226,6 +227,15 @@ export function flagViewLayer(result: LayoutResult, model: LayoutModel, layer: V
             conn.view = 'ghost';
             for (const drop of conn.drops) if (!drop.view) drop.view = 'ghost';
         }
+    }
+    // A line left out (step 7) keeps the flag its drop would have had
+    for (const edge of result.omittedEdges ?? []) {
+        const u = model.unions.get(edge.unionId);
+        if (!u) continue;
+        const parents = [u.partnerA, u.partnerB].filter((id): id is PersonId => !!id);
+        const link = layer.childAnchors.get(edge.childId);
+        if (link && parents.some(p => link.islandIds.includes(p))) edge.view = 'virtual';
+        else if (edge.parentIds.length > 0 && edge.parentIds.every(ghost)) edge.view = 'ghost';
     }
     for (const line of result.spouseLines) {
         if (!layer.realCouples.has(coupleKey(line.person1Id, line.person2Id))) line.view = 'virtual';

@@ -199,11 +199,15 @@ describe('ghost and virtual flags', () => {
     });
 
     it('the sibling left in the "?" family keeps its plain line', () => {
-        const { data, sib } = withRealMother(true);
+        const { data, sib, mother } = withRealMother(true);
         const r = layout(data, VACLAV, { viewLinks: [link(C)] });
         expect(dropTo(r, VACLAV)!.drop.view).toBe('virtual');
-        expect(dropTo(r, sib!)!.drop.view).toBeUndefined();
-        expect(dropTo(r, sib!)!.conn.view).toBeUndefined();
+        // The sibling's line from the mother alone would cross the line of
+        // the shown family: it is left out (step 7), as a plain line
+        expect(dropTo(r, sib!)).toBeNull();
+        const omitted = r.omittedEdges!.find(e => e.childId === sib)!;
+        expect(omitted.parentIds).toEqual([mother]);
+        expect(omitted.view).toBeUndefined();
     });
 
     it('the Descendants view of a shown parent reaches the tree through the link', () => {

@@ -114,7 +114,8 @@ export function runPipeline(
     // Stage 7: Route edges
     const routed = routeEdges({
         constrained,
-        config
+        config,
+        focusPersonId: focusId
     });
 
     // Stage 8: Emit result

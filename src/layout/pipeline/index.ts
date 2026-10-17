@@ -486,7 +486,8 @@ export function runLayoutPipeline(input: PipelineInput): LayoutResult {
     // Step 7: Route edges
     const routed = routeEdges({
         constrained,
-        config
+        config,
+        focusPersonId
     });
 
     // Step 8: Emit result
@@ -723,7 +724,8 @@ export function runLayoutPipelineWithDebug(
     // Step 7: Route edges
     const routed = routeEdges({
         constrained,
-        config
+        config,
+        focusPersonId
     });
 
     snapshots.push(createSnapshot(7, { selection, model, genModel, measured, placed: constrained.placed, constrained, routed }));

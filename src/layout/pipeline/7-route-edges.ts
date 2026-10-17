@@ -7,7 +7,10 @@
  * - Vertical drops to each child
  *
  * Key simplification: connectorY === branchY always (no staircase).
- * Edge crossings are prevented by Step 6 (no sibling family interleaving).
+ * Edge crossings are prevented by Step 6 (no sibling family interleaving);
+ * a child's line that still cannot be routed without crossing, running
+ * along or touching lines of other families is not drawn at all
+ * (omitUnroutableDrops): the cards link to each other instead.
  *
  * Also creates spouse lines between partners in unions.
  */
@@ -15,8 +18,11 @@
 import { PersonId, LayoutConfig, spouseLineOffset, personCardHeight } from '../../types.js';
 import { computeGenerationBands } from './bands.js';
 import { findChainExtraPartner } from './6-constraints.js';
+import { connectionSegments, layoutSegments, LineViolation, SegmentIndex } from './line-geometry.js';
 import {
     FamilyBlockModel,
+    LayoutModel,
+    OmittedEdge,
     RouteEdgesInput,
     RoutedModel,
     Connection,
@@ -144,21 +150,275 @@ export function routeEdges(input: RouteEdgesInput): RoutedModel {
     // Resolve bus collisions via lane allocation (branch-aware)
     const branchModel = measured as BranchModel;
     const hasBranches = branchModel.branches && branchModel.branches.size > 0;
+    // Lane 0 of every line (resolveBusCollisions moves a line's horizontal
+    // runs down to its lane)
+    const laneZeroY = new Map<Connection, number>(connections.map(c => [c, c.branchY]));
     resolveBusCollisions(connections, config, hasBranches ? branchModel : null);
 
     // NOTE: resolveBusCollisions skips lane offset for connections where
     // offsetting would create a stem-bus crossing (stem at higher lane
     // crossing a bus at lower lane). These connections keep collinear
-    // horizontal segments at the same Y, which is acceptable.
+    // horizontal segments at the same Y; omitUnroutableDrops below leaves
+    // out the line that cannot be drawn cleanly.
 
     // Resolve elbow clearance violations (nudge drops away from near segments)
     resolveElbowClearance(connections, config);
 
+    // Lines that still cross, run along or touch lines of other families are
+    // not drawn (the cards link to each other); the lanes are then allocated
+    // again without them.
+    const omittedEdges = omitUnroutableDrops(connections, spouseLines, model, personX, input.focusPersonId, () => {
+        for (const conn of connections) {
+            const offset = conn.branchY - (laneZeroY.get(conn) ?? conn.branchY);
+            if (offset === 0) continue;
+            conn.branchY -= offset;
+            conn.connectorY -= offset;
+            conn.stemBottomY -= offset;
+            for (const drop of conn.drops) drop.topY -= offset;
+        }
+        resolveBusCollisions(connections, config, hasBranches ? branchModel : null);
+        resolveElbowClearance(connections, config);
+    });
+
     return {
         constrained,
         connections,
-        spouseLines
+        spouseLines,
+        ...(omittedEdges.length > 0 ? { omittedEdges } : {})
     };
+}
+
+// ==================== LINES THAT CANNOT BE ROUTED ====================
+
+/** At most this many child lines are left out of one layout. */
+export const MAX_OMITTED_DROPS = 10;
+
+/** One child's line that may be left out. */
+interface OmitCandidate {
+    conn: Connection;
+    childId: PersonId;
+}
+
+/**
+ * Leave out the child lines that cannot be drawn without crossing, running
+ * along or touching (T-touch) lines of other families (line-geometry.ts).
+ * No layout rule avoids these knots (an in-law column inside a sibling bus,
+ * two cross-married families, half-siblings married into two branches), so
+ * the line is not drawn and the cards link to each other instead.
+ *
+ * Greedy and deterministic, one child's drop at a time: a drop of every line
+ * in a violation is a candidate (a drop's own, or each drop of a line whose
+ * stem, connector or bus is in it); its score is the number of violations
+ * that disappear with it (the line's bus and connector recomputed from the
+ * remaining drops, the whole line gone with its last drop). The pick:
+ * a line off the focus's line (the focus, their ancestors and descendants)
+ * whenever one helps, then the highest score, then the child farther from
+ * the focus, a line with a single child, and the union and person ids.
+ * Repeated until the lines are clean (at most MAX_OMITTED_DROPS). Cards
+ * never move; afterwards `relane` allocates the lanes again, kept only when
+ * it adds no violation.
+ */
+function omitUnroutableDrops(
+    connections: Connection[],
+    spouseLines: SpouseLine[],
+    model: LayoutModel,
+    personX: Map<PersonId, number>,
+    focusPersonId: PersonId | undefined,
+    relane: () => void
+): OmittedEdge[] {
+    const check = () => {
+        const index = new SegmentIndex(layoutSegments({ connections, spouseLines }));
+        return { index, violations: index.violations() };
+    };
+    let { index, violations } = check();
+    if (violations.length === 0) return [];
+
+    const { line, distance } = focusRelations(model, focusPersonId);
+    const omitted: OmittedEdge[] = [];
+    for (let round = 0; round < MAX_OMITTED_DROPS && violations.length > 0; round++) {
+        const pick = bestOmission(connections, index, violations, line, distance);
+        if ((globalThis as unknown as { __OMIT_DEBUG?: boolean }).__OMIT_DEBUG) {
+            console.log(`[omit] round ${round}: ${violations.length} violations`,
+                violations.slice(0, 8).map(v => `${v.type} ${v.detail}`),
+                pick ? `→ omit ${pick.conn.unionId} → ${pick.childId}` : '→ nothing helps');
+        }
+        if (!pick) break;
+        const { conn, childId } = pick;
+        const union = model.unions.get(conn.unionId);
+        const parentIds = union
+            ? [union.partnerA, union.partnerB].filter((id): id is PersonId =>
+                !!id && !model.hiddenPersonIds?.has(id) && personX.has(id))
+            : [];
+        omitted.push({
+            unionId: conn.unionId,
+            childId,
+            parentIds,
+            ...(conn.stemPersonId !== undefined ? { stemPersonId: conn.stemPersonId } : {})
+        });
+        // In place: the lane bookkeeping (relane) knows the line by its object
+        const rest = withoutDrop(conn, childId);
+        if (rest) Object.assign(conn, rest); else connections.splice(connections.indexOf(conn), 1);
+        ({ index, violations } = check());
+    }
+    if (omitted.length === 0) return [];
+
+    // The lanes without the omitted lines (fewer lanes where they forced
+    // some); kept only when they add no violation
+    const before = violations.length;
+    const saved = connections.map(cloneConnection);
+    relane();
+    if (check().violations.length > before) connections.splice(0, connections.length, ...saved);
+    return omitted;
+}
+
+/** The candidate to leave out next, or null when none removes a violation. */
+function bestOmission(
+    connections: Connection[],
+    index: SegmentIndex,
+    violations: LineViolation[],
+    focusLine: ReadonlySet<PersonId>,
+    distance: ReadonlyMap<PersonId, number>
+): OmitCandidate | null {
+    const byUnion = new Map<string, Connection>();
+    for (const conn of connections) byUnion.set(String(conn.unionId), conn);
+
+    // Violations each line is in, and the candidates
+    const involved = new Map<string, number>();
+    const candidates = new Map<string, OmitCandidate>();
+    const add = (conn: Connection, childId: PersonId) => {
+        const key = `${conn.unionId}\u0000${childId}`;
+        if (!candidates.has(key)) candidates.set(key, { conn, childId });
+    };
+    for (const v of violations) {
+        const owners = new Set<string>();
+        for (const seg of [v.a, v.b]) {
+            if (seg.kind === 'spouse') continue;
+            const conn = byUnion.get(seg.owner);
+            if (!conn) continue;
+            owners.add(seg.owner);
+            if (seg.kind === 'drop' && seg.childId) add(conn, seg.childId);
+            else for (const drop of conn.drops) add(conn, drop.personId);
+        }
+        for (const owner of owners) involved.set(owner, (involved.get(owner) ?? 0) + 1);
+    }
+
+    let best: { c: OmitCandidate; score: number; onLine: boolean; dist: number; single: boolean } | null = null;
+    for (const c of candidates.values()) {
+        const owner = String(c.conn.unionId);
+        const rest = withoutDrop(c.conn, c.childId);
+        let after = 0;
+        if (rest) for (const seg of connectionSegments(rest)) after += index.countViolationsWith(seg, owner);
+        const score = (involved.get(owner) ?? 0) - after;
+        if (score <= 0) continue;
+        const entry = {
+            c, score,
+            onLine: focusLine.has(c.childId),
+            dist: distance.get(c.childId) ?? Number.MAX_SAFE_INTEGER,
+            single: c.conn.drops.length === 1
+        };
+        if (!best || betterOmission(entry, best)) best = entry;
+    }
+    return best?.c ?? null;
+}
+
+function betterOmission(
+    a: { c: OmitCandidate; score: number; onLine: boolean; dist: number; single: boolean },
+    b: { c: OmitCandidate; score: number; onLine: boolean; dist: number; single: boolean }
+): boolean {
+    if (a.onLine !== b.onLine) return !a.onLine;
+    if (a.score !== b.score) return a.score > b.score;
+    if (a.dist !== b.dist) return a.dist > b.dist;
+    if (a.single !== b.single) return a.single;
+    const au = String(a.c.conn.unionId), bu = String(b.c.conn.unionId);
+    if (au !== bu) return au < bu;
+    return a.c.childId < b.c.childId;
+}
+
+/** A line without one child's drop (bus and connector from the rest), or null without drops. */
+function withoutDrop(conn: Connection, childId: PersonId): Connection | null {
+    const drops = conn.drops.filter(d => d.personId !== childId).map(d => ({ ...d }));
+    if (drops.length === 0) return null;
+    const branchLeftX = Math.min(...drops.map(d => d.x));
+    const branchRightX = Math.max(...drops.map(d => d.x));
+    const connectorToX = conn.stemX < branchLeftX ? branchLeftX
+        : conn.stemX > branchRightX ? branchRightX : conn.stemX;
+    return { ...conn, drops, branchLeftX, branchRightX, connectorFromX: conn.stemX, connectorToX };
+}
+
+function cloneConnection(conn: Connection): Connection {
+    return { ...conn, drops: conn.drops.map(d => ({ ...d })) };
+}
+
+/**
+ * The focus's line (the focus, their ancestors and descendants) and every
+ * person's distance from the focus (steps over partners, parents, children
+ * and siblings).
+ */
+function focusRelations(model: LayoutModel, focusPersonId: PersonId | undefined):
+    { line: Set<PersonId>; distance: Map<PersonId, number> } {
+    const line = new Set<PersonId>();
+    const distance = new Map<PersonId, number>();
+    if (!focusPersonId || !model.persons.has(focusPersonId)) return { line, distance };
+
+    const unionsOf = new Map<PersonId, UnionNode[]>();
+    for (const union of model.unions.values()) {
+        for (const pid of [union.partnerA, union.partnerB]) {
+            if (!pid) continue;
+            const list = unionsOf.get(pid);
+            if (list) list.push(union); else unionsOf.set(pid, [union]);
+        }
+    }
+    const parentUnion = (pid: PersonId): UnionNode | undefined => {
+        const uid = model.childToParentUnion.get(pid);
+        return uid ? model.unions.get(uid) : undefined;
+    };
+
+    line.add(focusPersonId);
+    const up: PersonId[] = [focusPersonId];
+    while (up.length > 0) {
+        const u = parentUnion(up.pop()!);
+        if (!u) continue;
+        for (const pid of [u.partnerA, u.partnerB]) {
+            if (pid && !line.has(pid)) { line.add(pid); up.push(pid); }
+        }
+    }
+    const down: PersonId[] = [focusPersonId];
+    const seen = new Set<PersonId>(down);
+    while (down.length > 0) {
+        for (const u of unionsOf.get(down.pop()!) ?? []) {
+            for (const cid of u.childIds) {
+                if (seen.has(cid)) continue;
+                seen.add(cid);
+                line.add(cid);
+                down.push(cid);
+            }
+        }
+    }
+
+    distance.set(focusPersonId, 0);
+    const queue: PersonId[] = [focusPersonId];
+    for (let head = 0; head < queue.length; head++) {
+        const pid = queue[head];
+        const d = distance.get(pid)!;
+        const next: PersonId[] = [];
+        for (const u of unionsOf.get(pid) ?? []) {
+            if (u.partnerA) next.push(u.partnerA);
+            if (u.partnerB) next.push(u.partnerB);
+            next.push(...u.childIds);
+        }
+        const pu = parentUnion(pid);
+        if (pu) {
+            if (pu.partnerA) next.push(pu.partnerA);
+            if (pu.partnerB) next.push(pu.partnerB);
+            next.push(...pu.childIds);
+        }
+        for (const n of next) {
+            if (distance.has(n)) continue;
+            distance.set(n, d + 1);
+            queue.push(n);
+        }
+    }
+    return { line, distance };
 }
 
 /** Vertical distance between spouse lines that overlap in X (T14). */

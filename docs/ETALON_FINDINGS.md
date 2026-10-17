@@ -7,8 +7,9 @@ modes, every person as focus).
 
 All findings below have since been **RESOLVED** (2026-07-11) — either fixed in
 the layout engine or proven topologically inherent; each entry carries its
-resolution note. The single exception, scenario K, reproduces the pre-existing
-in-law-column knot and is documented at the bottom as a known limitation.
+resolution note. Since F1 (2026-10) no knot is tolerated: a line that cannot
+be routed cleanly is left out by step 7 and its cards link to each other
+(Finding 7); `KNOWN_LINE_KNOTS` in the harness is empty.
 Each finding cites the fixture, a representative focus + mode, the violation
 type taken verbatim from `test/failures-full-<fixture>.txt`, and a rendered
 SVG in `docs/etalon-findings/`.
@@ -189,6 +190,10 @@ needs couple re-orientation planning (place the married-in spouse on the outer
 side of the focus couple so the in-law column lands outside the sibling span)
 or duplicated in-law cards.
 
+**Since F1 (2026-10):** step 7 leaves out the two drops of that run
+(`eNB_FF_FM → eNB_F`, `eNB_MF_MM → eNB_M`, off the focus's line), every other
+line is drawn clean, and the entry left `KNOWN_LINE_KNOTS` (Finding 7).
+
 ---
 
 ## Known limitation (not a new finding) — Scenario K reproduces the in-law-column knot
@@ -210,3 +215,38 @@ This is the same cyclic-lane knot already tolerated for `real-large` (see the
 scenario K exists to hold this knot in isolated, minimal form; its two runs are
 added to `KNOWN_LINE_KNOTS`. If the knot is ever solved, these runs will start
 passing and can be removed from that set.
+
+**Update (2026-10):** both runs had long been clean (the entries were stale);
+they left `KNOWN_LINE_KNOTS` together with the stale-entry check of Finding 7.
+
+---
+
+## Finding 7 — Half-sisters married into two branches: a line that cannot be routed
+
+- **Fixture:** `etalon-half-sisters` (scenario O)
+- **Runs:** `eO_focus`, `eO_line2`, `eO_gen5`, … (expanded; depth 8)
+- **Violation types (before):** `Geometry: [crossing]`, `[t-touch]`
+
+Two half-sisters (one father; the elder's mother is a "?" stand-in that has no
+card) marry into two branches of one long line, and the elder sister's
+husband marries twice. In the expanded view the lone father's line to the
+elder sister must cross the lines of the families placed between them: no
+lane order and no X nudge routes it without a crossing or a T-touch, and the
+cards stay where the placement put them.
+
+**RESOLVED (2026-10, F1)** — step 7 leaves such a line out
+(`omitUnroutableDrops` in `7-route-edges.ts`): after lane allocation and the
+elbow clearance it finds the remaining crossings, collinear runs and T-touches
+(`line-geometry.ts`, the same check as the built-in validation and the test
+audit), and removes one child's drop at a time — the one that clears the most
+violations, never a line of the focus's own line when another helps, then the
+one farther from the focus, of a single-child union, by union and child id —
+re-running the lane allocation after each, up to 10 drops. The cards never
+move. `LayoutResult.omittedEdges` lists the lines left out; the renderer puts
+a "parents ↗" branch tab on the child's card and "child ↗" / "children ↗" on
+the parents' cards (a click jumps to the other end, the focus stays), and the
+image export labels the cards ("parents: …"). In scenario O exactly the
+father's line (`union_eO_half_fa_eO_half_ph → eO_gen6_w1`) is left out. The
+same step clears the inherent crossings of Findings 3 and 4 (one drop each,
+off the focus's line) and the stress knot above; `KNOWN_LINE_KNOTS` is empty
+and an entry whose run is clean now fails the harness.

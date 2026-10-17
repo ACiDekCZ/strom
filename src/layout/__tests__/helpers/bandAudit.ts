@@ -142,6 +142,9 @@ function compareWithUniform(result: LayoutResult, uniform: LayoutResult): string
         const above = r.bands![i - 1];
         return (above.top + above.height + y) / 2;
     };
+    // The same lines left out (step 7 decides by X and the order of the lanes)
+    const omitted = (r: LayoutResult) => (r.omittedEdges ?? []).map(e => `${e.unionId}>${e.childId}`).join(',');
+    if (omitted(result) !== omitted(uniform)) out.push(`omitted lines ${omitted(result)}, uniform ${omitted(uniform)}`);
     const uniformConn = new Map(uniform.connections.map(c => [c.unionId, c]));
     if (result.connections.length !== uniform.connections.length) {
         out.push(`${result.connections.length} connections, uniform ${uniform.connections.length}`);

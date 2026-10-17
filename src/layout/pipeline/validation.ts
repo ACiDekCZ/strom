@@ -3,13 +3,15 @@
  *
  * Checks layout invariants:
  * 1. No card overlap
- * 2. No line crossings
+ * 2. No line crossings, collinear runs or T-touches between the lines of
+ *    different families (line-geometry.ts, the check step 7 omits by)
  * 3. All positions within bounds
- * 4. All connections reference existing persons
+ * 4. All connections and omitted lines reference existing persons
  */
 
 import { PersonId, Position, LayoutConfig, personCardHeight } from '../../types.js';
-import { LayoutResult, ValidationResult, Connection } from './types.js';
+import { LayoutResult, ValidationResult } from './types.js';
+import { layoutSegments, findLineViolations } from './line-geometry.js';
 
 /**
  * Validate the final layout result.
@@ -32,8 +34,8 @@ export function validateLayout(
     const boundsErrors = checkBounds(result.positions);
     errors.push(...boundsErrors);
 
-    // 4. Check for line segment crossings (basic check)
-    const crossingErrors = checkLineCrossings(result.connections);
+    // 4. Check for line crossings, collinear runs and T-touches
+    const crossingErrors = checkLineCrossings(result);
     errors.push(...crossingErrors);
 
     return {
@@ -116,6 +118,21 @@ function checkConnectionReferences(result: LayoutResult): string[] {
         }
     }
 
+    // An omitted line links its child and its shown parents: all have cards
+    for (const edge of result.omittedEdges ?? []) {
+        if (!positions.has(edge.childId)) {
+            errors.push(`Omitted line references missing child: ${edge.childId}`);
+        }
+        if (edge.parentIds.length === 0) {
+            errors.push(`Omitted line to ${edge.childId} has no shown parent`);
+        }
+        for (const parentId of edge.parentIds) {
+            if (!positions.has(parentId)) {
+                errors.push(`Omitted line references missing parent: ${parentId}`);
+            }
+        }
+    }
+
     return errors;
 }
 
@@ -143,49 +160,14 @@ function checkBounds(
 }
 
 /**
- * Basic check for line segment crossings.
- * Only checks horizontal bus segments for now.
+ * Line crossings, collinear runs (e.g. two buses merged at one Y) and
+ * T-touches between the lines of different families.
  */
-function checkLineCrossings(connections: Connection[]): string[] {
-    const errors: string[] = [];
-
-    // Collect horizontal segments (buses)
-    const horizontalSegments: Array<{
-        y: number;
-        x1: number;
-        x2: number;
-        unionId: string;
-    }> = [];
-
-    for (const conn of connections) {
-        horizontalSegments.push({
-            y: conn.branchY,
-            x1: Math.min(conn.branchLeftX, conn.branchRightX),
-            x2: Math.max(conn.branchLeftX, conn.branchRightX),
-            unionId: conn.unionId
-        });
-    }
-
-    // Check for overlapping horizontal segments at same Y
-    for (let i = 0; i < horizontalSegments.length; i++) {
-        for (let j = i + 1; j < horizontalSegments.length; j++) {
-            const seg1 = horizontalSegments[i];
-            const seg2 = horizontalSegments[j];
-
-            // Only check segments at same Y (within tolerance)
-            if (Math.abs(seg1.y - seg2.y) < 1) {
-                // Check for X overlap
-                if (seg1.x1 < seg2.x2 && seg2.x1 < seg1.x2) {
-                    errors.push(
-                        `Bus line overlap at Y=${seg1.y.toFixed(0)}: ` +
-                        `${seg1.unionId} and ${seg2.unionId}`
-                    );
-                }
-            }
-        }
-    }
-
-    return errors;
+function checkLineCrossings(result: LayoutResult): string[] {
+    return findLineViolations(layoutSegments(result)).map(v =>
+        v.type === 'collinear' && v.a.kind === 'bus' && v.b.kind === 'bus'
+            ? `Bus line overlap at Y=${v.a.y1.toFixed(0)}: ${v.a.owner} and ${v.b.owner}`
+            : `Line ${v.type}: ${v.detail}`);
 }
 
 /**

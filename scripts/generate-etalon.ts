@@ -165,7 +165,7 @@ class Builder {
 }
 
 // ============================================================================
-// Scenarios A-N
+// Scenarios A-O
 // ============================================================================
 
 const STEP = 28; // years per generation
@@ -556,6 +556,56 @@ function scenarioIncomplete(code = 'M'): Builder {
     return b;
 }
 
+/**
+ * O. Half-sisters married into two branches of the pedigree (a constellation
+ * from a user's tree, invented names): a direct paternal line of six
+ * generations above the focus. The ancestor at gen -6 has two wives: the
+ * FIRST, childless, is the daughter of a father of gen -7 alone (her mother
+ * unknown, a "?" stand-in); the second is the mother of the ancestor at gen
+ * -5. The same father's daughter with his wife is the mother of the gen -5
+ * ancestor's wife, so she stands in the neighbouring branch: the line from
+ * the father alone to the first wife would run ~1300px along the buses of
+ * the families in between (expanded mode, where the deep ancestor's
+ * childless wife is drawn as an appendage). Step 7 leaves it out; the cards
+ * link to each other.
+ */
+function scenarioHalfSistersTwoBranches(code = 'O'): Builder {
+    const b = new Builder(code);
+    // Direct line: focus (gen 0) … line4 (gen -4), each with a wife without parents
+    const line: string[] = [b.person('focus', 'male', { year: 2000 })];
+    const wives: string[] = [];
+    for (let g = 1; g <= 4; g++) {
+        line.push(b.person(`line${g}`, 'male', { year: 2000 - 25 * g }));
+        wives.push(b.person(`line${g}_w`, 'female', { year: 2000 - 25 * g + 2 }));
+    }
+    // Gen -5: the ancestor and his wife
+    const gen5 = b.person('gen5', 'male', { year: 1875 });
+    const gen5W = b.person('gen5_w', 'female', { year: 1877 });
+    b.kids(b.marry(gen5, gen5W), line[4]);
+    for (let g = 4; g >= 1; g--) b.kids(b.marry(line[g], wives[g - 1]), line[g - 1]);
+    // Gen -6: the ancestor with two wives, the first childless, the second gen5's mother
+    const gen6 = b.person('gen6', 'male', { year: 1850 });
+    const firstWife = b.person('gen6_w1', 'female', { year: 1852 });
+    const secondWife = b.person('gen6_w2', 'female', { year: 1854 });
+    b.marry(gen6, firstWife);
+    b.kids(b.marry(gen6, secondWife), gen5);
+    b.kids(b.marry(b.person('gen6_fa', 'male', { year: 1825 }), b.person('gen6_mo', 'female', { year: 1827 })), gen6);
+    b.kids(b.marry(b.person('w2_fa', 'male', { year: 1828 }), b.person('w2_mo', 'female', { year: 1829 })), secondWife);
+    // Gen -7: the father of the half-sisters; with his wife the mother of gen5's wife,
+    // alone (a "?" stand-in) the first wife of gen6
+    const father = b.person('half_fa', 'male', { year: 1822 });
+    const mother = b.person('half_mo', 'female', { year: 1824 });
+    const unknown = b.person('half_ph', 'female', { placeholder: true });
+    const sister = b.person('half_sis', 'female', { year: 1851 });
+    b.kids(b.marry(father, mother), sister);
+    b.kids(b.marry(father, unknown), firstWife);
+    // Gen5's wife: daughter of the half-sister and a man with parents
+    const sisterHusband = b.person('gen5_w_fa', 'male', { year: 1850 });
+    b.kids(b.marry(sisterHusband, sister), gen5W);
+    b.kids(b.marry(b.person('n_fa', 'male', { year: 1824 }), b.person('n_mo', 'female', { year: 1825 })), sisterHusband);
+    return b;
+}
+
 /** N. Stress: ~250-300 persons combining representative scenarios, joined by marriages. */
 function scenarioStress(code = 'N'): Builder {
     const b = new Builder(code);
@@ -608,6 +658,7 @@ const SCENARIOS: Array<{ file: string; build: () => Builder }> = [
     { file: 'etalon-descendant-partner-ancestors', build: () => scenarioDescPartnerAncestors('L') },
     { file: 'etalon-incomplete-data', build: () => scenarioIncomplete('M') },
     { file: 'etalon-stress-all', build: () => scenarioStress('N') },
+    { file: 'etalon-half-sisters', build: () => scenarioHalfSistersTwoBranches('O') },
 ];
 
 function main(): void {

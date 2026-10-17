@@ -43,8 +43,9 @@ surfaced by the set are catalogued in `docs/ETALON_FINDINGS.md` (with SVGs in
 | L | `etalon-descendant-partner-ancestors` | 12 | A descendant's partner carries 2 full generations of ancestors. |
 | M | `etalon-incomplete-data` | 12 | Placeholder/single parents at several levels; missing surnames; missing birthdates; mixed sibling ordering. |
 | N | `etalon-stress-all` | 258 | Stress: representative scenarios combined into one graph, joined by bridge marriages (replaces `real-large.json`). |
+| O | `etalon-half-sisters` | 25 | Two half-sisters (one father, two mothers, one of them a "?" stand-in) married into two branches of one long line; the elder sister's husband marries twice. In the expanded view the lone father's line to the elder sister cannot be routed cleanly: step 7 leaves it out and the cards link to each other. |
 
-Total across scenarios A–N: **394 persons** in 14 fixtures.
+Total across scenarios A–O: **419 persons** in 15 fixtures.
 
 ## Data model reminders
 

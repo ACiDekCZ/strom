@@ -6,7 +6,8 @@
  * with EVERY person as focus, in both display modes.
  *
  * Checks: valid positions, no card overlap, no edge crossings,
- * built-in validateLayout diagnostics.
+ * built-in validateLayout diagnostics, and the lines step 7 left out
+ * (omittedEdges: listed in the report, never on the focus's line).
  *
  * The "-v3" modes lay every focus out once more with cards of their own
  * heights (custom card "by content": deterministic synthetic heights of
@@ -29,7 +30,7 @@ import {
 } from './helpers/assertions.js';
 import { auditGeometry } from './helpers/geometryAudit.js';
 import { auditBands, syntheticPersonHeights } from './helpers/bandAudit.js';
-import { PersonId, LayoutConfig, DEFAULT_LAYOUT_CONFIG } from '../../types.js';
+import { PersonId, LayoutConfig, StromData, DEFAULT_LAYOUT_CONFIG } from '../../types.js';
 
 const DEFAULT_FIXTURES = [
     'comprehensive',
@@ -61,6 +62,7 @@ const DEFAULT_FIXTURES = [
     'etalon-descendant-partner-ancestors',
     'etalon-incomplete-data',
     'etalon-stress-all',
+    'etalon-half-sisters',
     // Development demo tree (fictional; see scripts/generate-devel-demo.ts).
     'devel-demo',
 ];
@@ -87,36 +89,42 @@ const MODES = [
 ];
 
 /**
- * Known limitations: cases where an in-law family COLUMN (a descendant
- * spouse's parents + their ancestors) stands INSIDE a sibling-group bus span.
- * The lane constraint graph is cyclic there (the foreign stem must be above
- * the bus, but the foreign drop must be below it), so no routing avoids the
- * line contact; fixing it needs relocating anchored columns, which would
- * break parent-child alignment elsewhere. Line-crossing and bus-overlap
- * failures are tolerated for these runs; anything else still fails the test.
+ * Known limitations: runs whose line knots are tolerated (line-crossing and
+ * bus-overlap failures only; anything else still fails the test). Empty since
+ * step 7 leaves out the child lines that cannot be routed cleanly
+ * (omitUnroutableDrops: the cards link to each other instead); an entry whose
+ * run has no failure fails the test, so a stale one cannot linger.
  */
-const KNOWN_LINE_KNOTS = new Set([
-    'real-large/p_1783746448938_6w3g1/standard',
-    'real-large/p_1783746448938_6w3g1/expanded',
-    // Etalon scenario K (etalon-inlaw-column): isolated minimal reproduction of
-    // the same knot. With eK_focus as focus, the husband's paternal-grandparent
-    // stem must cross the focus's paternal-grandparent bus — the foreign in-law
-    // column stands inside that sibling-group bus span. Same class as above.
-    'etalon-inlaw-column/eK_focus/standard',
-    'etalon-inlaw-column/eK_focus/expanded',
-    // Same knot class in the stress graph: the bridge spouse's parents
-    // (eNB_F couple) anchor above the spouse INSIDE the 12-child NC sibling
-    // bus span; the drop to them must cross that bus at every lane order.
-    // Escaping needs couple re-orientation planning (spouse on the outer
-    // side) or duplicated in-law cards — future work, see ETALON_FINDINGS.
-    'etalon-stress-all/eNC_gk10_1/standard',
-    'etalon-stress-all/eNC_gk10_1/expanded',
-]);
+const KNOWN_LINE_KNOTS = new Set<string>([]);
+
+/**
+ * The focus, their ancestors and their descendants: lines to them are never
+ * left out (step 7 prefers any other line that removes a violation).
+ */
+function focusLine(data: StromData, focusId: PersonId): Set<PersonId> {
+    const line = new Set<PersonId>([focusId]);
+    const up: PersonId[] = [focusId];
+    while (up.length > 0) {
+        for (const pid of data.persons[up.pop()!]?.parentIds ?? []) {
+            if (!line.has(pid)) { line.add(pid); up.push(pid); }
+        }
+    }
+    const down: PersonId[] = [focusId];
+    const seen = new Set<PersonId>(down);
+    while (down.length > 0) {
+        for (const cid of data.persons[down.pop()!]?.childIds ?? []) {
+            if (!seen.has(cid)) { seen.add(cid); line.add(cid); down.push(cid); }
+        }
+    }
+    return line;
+}
 
 for (const fixtureName of FIXTURES) {
     const data = loadFixture(fixtureName);
     const personIds = Object.keys(data.persons) as PersonId[];
     const allFailures: PersonFailure[] = [];
+    // Lines step 7 left out, per run (the report lists them)
+    const allOmitted: Array<{ personId: string; name: string; mode: string; edges: string[] }> = [];
     const outputFile = join(process.cwd(), 'test', `failures-full-${fixtureName}.txt`);
     // Cards of their own heights, the partner line at the header (as the custom card)
     const v3Config: LayoutConfig = { ...config, spouseLineY: 25, personHeights: syntheticPersonHeights(personIds) };
@@ -193,6 +201,19 @@ for (const fixtureName of FIXTURES) {
                         });
                     }
 
+                    // 4b. Lines left out (step 7): their cards are there, and
+                    // none is a line of the focus's own line
+                    if (result.omittedEdges?.length) {
+                        allOmitted.push({
+                            personId, name: displayName, mode: mode.name,
+                            edges: result.omittedEdges.map(e => `${e.unionId} -> ${e.childId}`)
+                        });
+                        const line = focusLine(data, personId);
+                        for (const edge of result.omittedEdges) {
+                            if (line.has(edge.childId)) failures.push(`Omitted line on the focus line: ${edge.unionId} -> ${edge.childId}`);
+                        }
+                    }
+
                     // 5. Cards of their own heights: bands, stems, drops, and
                     // the uniform layout's X placement and bus lanes
                     if (mode.heights) {
@@ -203,7 +224,9 @@ for (const fixtureName of FIXTURES) {
 
                     // The same known knots with cards of any height (X is the same)
                     const limitationKey = `${fixtureName}/${personId}/${mode.base}`;
-                    if (KNOWN_LINE_KNOTS.has(limitationKey) &&
+                    if (KNOWN_LINE_KNOTS.has(limitationKey) && failures.length === 0) {
+                        failures.push(`Stale KNOWN_LINE_KNOTS entry ${limitationKey}: the run has no line knot`);
+                    } else if (KNOWN_LINE_KNOTS.has(limitationKey) &&
                         failures.every(f =>
                             f.startsWith('Validation: Bus line overlap') ||
                             f.startsWith('Crossing:') ||
@@ -241,6 +264,12 @@ for (const fixtureName of FIXTURES) {
                     }
                     lines.push('');
                 }
+            }
+
+            lines.push('');
+            lines.push(`Omitted lines (step 7): ${allOmitted.length} runs, ${allOmitted.reduce((n, o) => n + o.edges.length, 0)} lines`);
+            for (const o of allOmitted) {
+                lines.push(`  ${o.name} [${o.personId}] (${o.mode}): ${o.edges.length} — ${o.edges.join(', ')}`);
             }
 
             writeFileSync(outputFile, lines.join('\n'), 'utf-8');

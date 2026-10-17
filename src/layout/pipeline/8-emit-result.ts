@@ -23,7 +23,7 @@ import { computeGenerationBands } from './bands.js';
  */
 export function emitLayoutResult(input: EmitInput): LayoutResult {
     const { routed, config } = input;
-    const { constrained, connections, spouseLines } = routed;
+    const { constrained, connections, spouseLines, omittedEdges } = routed;
     const { placed, iterations } = constrained;
     const { measured, personX } = placed;
     const { genModel } = measured;
@@ -76,7 +76,8 @@ export function emitLayoutResult(input: EmitInput): LayoutResult {
         spouseLines,
         diagnostics,
         partnerChains,
-        bands
+        bands,
+        ...(omittedEdges && omittedEdges.length > 0 ? { omittedEdges } : {})
     };
 }
 

@@ -375,6 +375,8 @@ export interface ConstrainedModel {
 export interface RouteEdgesInput {
     constrained: ConstrainedModel;
     config: LayoutConfig;
+    /** The focus person: their line (ancestors, descendants) keeps its lines when another can be omitted. */
+    focusPersonId?: PersonId;
 }
 
 /**
@@ -440,12 +442,31 @@ export interface SpouseLine {
 }
 
 /**
+ * OmittedEdge - a parent-child line step 7 did not draw: it could not be
+ * routed without crossing, running along or touching lines of other families
+ * (omitUnroutableDrops). The child's card links to its parents instead, and
+ * the parents' cards to the child.
+ */
+export interface OmittedEdge {
+    unionId: UnionId;
+    childId: PersonId;
+    /** The shown parents (one or two; never a hidden "?" stand-in). */
+    parentIds: PersonId[];
+    /** The parent whose card the line would have left (Connection.stemPersonId). */
+    stemPersonId?: PersonId;
+    /** View layer (as ChildDrop.view): the omitted line exists only in the view, or is inside a shown family. */
+    view?: ViewLineFlag;
+}
+
+/**
  * RoutedModel - model with connection routing complete.
  */
 export interface RoutedModel {
     constrained: ConstrainedModel;
     connections: Connection[];
     spouseLines: SpouseLine[];
+    /** Lines not drawn (see OmittedEdge); absent when every line was drawn. */
+    omittedEdges?: OmittedEdge[];
 }
 
 // ==================== STEP 8: EMIT RESULT ====================
@@ -491,6 +512,8 @@ export interface LayoutResult {
     bands?: GenerationBand[];
     /** The view links laid out (PipelineInput.viewLinks); absent when none was applied. */
     viewLayer?: LayoutViewLayer;
+    /** Parent-child lines not drawn (see OmittedEdge); absent when every line was drawn. */
+    omittedEdges?: OmittedEdge[];
 }
 
 /**
