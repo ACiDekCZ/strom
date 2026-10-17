@@ -1062,6 +1062,9 @@ export function detectConflicts(existing: Person, incoming: Person): FieldConfli
         'birthPlace',
         'deathDate',
         'deathPlace',
+        // The surname after marriage: a gap is filled (mergePersonData), two
+        // different ones are a choice like the birth surname, never a silent keep.
+        'marriedSurname',
         // Two different portraits cannot both be kept on one person — offer the
         // choice instead of silently keeping one. The conflict dialog renders a
         // thumbnail for this field, never the data URL as text.

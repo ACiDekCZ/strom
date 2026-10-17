@@ -712,7 +712,8 @@ function deepCloneStromData(data: StromData): StromData {
 }
 
 /**
- * Record the spelling that lost a first/last-name conflict as a name variant,
+ * Record the spelling that lost a name conflict (first, last or married
+ * surname) as a name variant,
  * so a later import of the same source matches this person under that spelling
  * instead of adding a duplicate. Skips empty/'?' values and anything already
  * present (case/diacritics-insensitive), including the winning spelling itself.
@@ -722,7 +723,7 @@ function addLosingNameVariant(existing: Person, winner: string, loser: string): 
     if (!v || v === '?') return;
     const key = surnameKey(v);
     if (!key || key === surnameKey(winner)) return;
-    const have = new Set<string>([surnameKey(existing.firstName), surnameKey(existing.lastName)]);
+    const have = new Set<string>([surnameKey(existing.firstName), surnameKey(existing.lastName), surnameKey(existing.marriedSurname ?? '')]);
     for (const nv of existing.nameVariants ?? []) have.add(surnameKey(nv));
     if (have.has(key)) return;
     (existing.nameVariants ??= []).push(v);
@@ -772,8 +773,8 @@ export function mergePersonData(
     // existing tree's stay.
     if (!existing.titleBefore && incoming.titleBefore) existing.titleBefore = incoming.titleBefore;
     if (!existing.titleAfter && incoming.titleAfter) existing.titleAfter = incoming.titleAfter;
-    // The surname after marriage likewise: the existing tree's stays, the
-    // incoming one fills a gap.
+    // The surname after marriage: the incoming one fills a gap; two different
+    // ones are a conflict (detectConflicts) resolved below.
     if (!existing.marriedSurname && incoming.marriedSurname) existing.marriedSurname = incoming.marriedSurname;
 
     // Open question / reference number / death-status: fill when missing.
@@ -802,7 +803,8 @@ export function mergePersonData(
         const useIncoming = conflict.resolution === 'use_incoming';
         switch (conflict.field) {
             case 'firstName':
-            case 'lastName': {
+            case 'lastName':
+            case 'marriedSurname': {
                 // The spelling that LOSES the conflict is not thrown away: it is
                 // recorded as a name variant so the next import of the same
                 // source matches this person again instead of re-adding them.
@@ -812,7 +814,8 @@ export function mergePersonData(
                 const loser = (useIncoming ? conflict.existingValue : conflict.incomingValue) ?? '';
                 if (useIncoming) {
                     if (conflict.field === 'firstName') existing.firstName = incoming.firstName;
-                    else existing.lastName = incoming.lastName;
+                    else if (conflict.field === 'lastName') existing.lastName = incoming.lastName;
+                    else existing.marriedSurname = incoming.marriedSurname;
                 }
                 addLosingNameVariant(existing, winner, loser);
                 break;
