@@ -2576,6 +2576,16 @@ const stringsEN = {
         generationN: (offset: number) => `GENERATION ${offset > 0 ? '+' : '−'}${Math.abs(offset)}`,
     },
 
+    // Tree overview: plural generation names relative to the chosen person
+    treeOverview: {
+        ancestorGeneration: (n: number) => n <= 1 ? 'parents' : n === 2 ? 'grandparents'
+            : n === 3 ? 'great-grandparents' : `${ordEn(n - 2)} great-grandparents`,
+        descendantGeneration: (n: number) => n <= 1 ? 'children' : n === 2 ? 'grandchildren'
+            : n === 3 ? 'great-grandchildren' : `${ordEn(n - 2)} great-grandchildren`,
+        sameGeneration: 'same generation',
+        goodShape: 'The tree is in good shape.',
+    },
+
     // Branch tabs (family context navigation)
     branchTabs: {
         viewFamily: 'View as parent (show own family)'
@@ -6507,6 +6517,16 @@ const stringsCZ: StringsType = {
         generationN: (offset: number) => `GENERACE ${offset > 0 ? '+' : '−'}${Math.abs(offset)}`,
     },
 
+    // Tree overview: plural generation names relative to the chosen person
+    treeOverview: {
+        ancestorGeneration: (n: number) => n <= 1 ? 'rodiče' : n === 2 ? 'prarodiče'
+            : n === 3 ? 'praprarodiče' : `${n}. generace předků`,
+        descendantGeneration: (n: number) => n <= 1 ? 'děti' : n === 2 ? 'vnoučata'
+            : n === 3 ? 'pravnoučata' : `${n}. generace potomků`,
+        sameGeneration: 'generace osoby',
+        goodShape: 'Strom je v dobrém stavu.',
+    },
+
     // Branch tabs (family context navigation)
     branchTabs: {
         viewFamily: 'Zobrazit jako rodiče (ukázat vlastní rodinu)'
@@ -10401,6 +10421,16 @@ const stringsDE: StringsType = {
         children: 'KINDER',
         grandchildren: 'ENKELKINDER',
         generationN: (offset: number) => `GENERATION ${offset > 0 ? '+' : '−'}${Math.abs(offset)}`,
+    },
+
+    // Tree overview: plural generation names relative to the chosen person
+    treeOverview: {
+        ancestorGeneration: (n: number) => n <= 1 ? 'Eltern' : n === 2 ? 'Großeltern'
+            : n === 3 ? 'Urgroßeltern' : n === 4 ? 'Ururgroßeltern' : `${n}. Ahnengeneration`,
+        descendantGeneration: (n: number) => n <= 1 ? 'Kinder' : n === 2 ? 'Enkel'
+            : n === 3 ? 'Urenkel' : n === 4 ? 'Ururenkel' : `${n}. Nachkommengeneration`,
+        sameGeneration: 'eigene Generation',
+        goodShape: 'Der Stammbaum ist in gutem Zustand.',
     },
 
     // Branch tabs (family context navigation)
