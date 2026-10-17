@@ -4,7 +4,7 @@ English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md)
 
 ## 3.13.0
 
-*This version is in preparation; this section grows with every test version.*
+*Released 17 October 2026.*
 
 - **Edge of the tree**: a hypothesis whose versions would each link a different family outside the tree shows all of them. The bubble at the edge of the tree and *Above the person* list every family with its versions, people and waiting tasks, each a link to that family; the pill reads *+ 2 families* and offers each one. With Strom Research 1.16 or later.
 - **Research for this tree**: one sentence says where the terminal the research opens in is chosen: in the research's settings, with *Settings in the research* beside it. On a computer, with Strom Research 1.16 or later, which brings the choice itself (Terminal or iTerm2 on a Mac).

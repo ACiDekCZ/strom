@@ -4,7 +4,7 @@
 
 ## 3.13.0
 
-*Diese Version ist in Vorbereitung; dieser Abschnitt wächst mit jeder Testversion.*
+*Veröffentlicht am 17. Oktober 2026.*
 
 - **Rand des Stammbaums**: Eine Hypothese, deren Versionen jeweils eine andere Familie außerhalb des Stammbaums verbinden würden, zeigt alle. Die Blase am Rand des Stammbaums und *Über der Person* führen jede Familie mit ihren Versionen, Personen und wartenden Aufgaben auf, jede als Link zu ihr; die Pille zeigt *+ 2 Familien* und bietet jede an. Mit Strom Research 1.16 oder neuer.
 - **Forschung für diesen Stammbaum**: Ein Satz sagt, wo das Terminal gewählt wird, in dem sich die Forschung öffnet: in den Einstellungen der Forschung, mit *Einstellungen in der Forschung* gleich daneben. Am Computer, mit Strom Research 1.16 oder neuer, das die Wahl selbst mitbringt (Terminal oder iTerm2 auf dem Mac).
