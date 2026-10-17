@@ -486,7 +486,10 @@ time, greedily and deterministically:
    then union id and child id.
 4. When no single drop off the focus's line clears a violation (a stem on a
    foreign line stays while one drop is left), the whole line of an involved
-   family is a candidate too, scored by all its violations.
+   family is a candidate too: the one with the fewest drops on the focus's
+   line, then the fewest drops, then the most violations, then union id. It
+   is taken over a single drop on the focus's line only when none of its own
+   drops is on that line.
 5. There is no cap: every pick clears more violations than it adds, so the
    loop ends within as many rounds as there were violations, clean whenever
    every violation involves a parent-child line.
@@ -648,9 +651,11 @@ with two adaptations: `computeAncestorTreeWidth` uses the chain block's real
 - An in-law column (a spouse's parents and theirs) beside a sibling family
   standing on that spouse's side — a parent's other family (expanded mode)
   or, for the focus, the maternal aunts' families while the focus's spouse
-  has parents with their own parents — gets a crossing. Same class as
-  `KNOWN_LINE_KNOTS` (needs couple re-orientation planning); found with view
-  links in `viewLinksFull.test.ts`, it is the same with the links made real.
+  has parents with their own parents — cannot be drawn without a crossing.
+  Step 7 leaves one of its lines out and the cards link to each other (a
+  couple re-orientation rule could keep some of them drawn); found with view
+  links in `viewLinksFull.test.ts`, which checks these scenarios as strictly
+  as all others, and the same with the links made real.
 - Sibling couples can stand between a chain person's far wives when the
   siblings and the wives share the parents' bus row (Tudor/Henry VIII
   constellation) — spouse lines then run across foreign cards' row space.

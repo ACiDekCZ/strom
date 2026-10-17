@@ -229,7 +229,8 @@ interface ScoredOmission {
  * the focus, a line with a single child, and the union and person ids. When
  * no drop off the focus's line helps on its own (a stem that touches a
  * foreign line stays as long as one drop is left), the whole line of an
- * involved family is a candidate too.
+ * involved family is a candidate too (the fewest drops on the focus's line,
+ * then the fewest drops: a family of two loses its line before one of five).
  *
  * Every pick removes at least one violation more than it adds, so the loop
  * ends within as many rounds as there were violations, and with the whole
@@ -373,19 +374,29 @@ function bestOmission(
     if (best && !best.onLine) return best.c;
 
     // No drop off the focus's line helps on its own: the whole line of an
-    // involved family (all its violations go with it)
+    // involved family (all its violations go with it), the one with the
+    // fewest drops on the focus's line, then the fewest drops, then the most
+    // violations cleared, by union id. It is taken over a single drop on the
+    // focus's line only when none of its own drops is on that line.
+    let whole: { conn: Connection; onLine: number; drops: number; score: number } | null = null;
     for (const [owner, count] of involved) {
         const conn = byUnion.get(owner)!;
         if (conn.drops.length < 2) continue; // the same as its one drop
-        const entry = {
-            c: { conn, childId: null }, score: count,
-            onLine: conn.drops.some(d => focusLine.has(d.personId)),
-            dist: Math.min(...conn.drops.map(d => distance.get(d.personId) ?? Number.MAX_SAFE_INTEGER)),
-            single: false
-        };
-        if (!best || betterOmission(entry, best)) best = entry;
+        const entry = { conn, onLine: conn.drops.filter(d => focusLine.has(d.personId)).length, drops: conn.drops.length, score: count };
+        if (!whole || betterWholeLine(entry, whole)) whole = entry;
     }
+    if (whole && (!best || whole.onLine === 0)) return { conn: whole.conn, childId: null };
     return best?.c ?? null;
+}
+
+function betterWholeLine(
+    a: { conn: Connection; onLine: number; drops: number; score: number },
+    b: { conn: Connection; onLine: number; drops: number; score: number }
+): boolean {
+    if (a.onLine !== b.onLine) return a.onLine < b.onLine;
+    if (a.drops !== b.drops) return a.drops < b.drops;
+    if (a.score !== b.score) return a.score > b.score;
+    return String(a.conn.unionId) < String(b.conn.unionId);
 }
 
 function betterOmission(a: ScoredOmission, b: ScoredOmission): boolean {
@@ -395,9 +406,7 @@ function betterOmission(a: ScoredOmission, b: ScoredOmission): boolean {
     if (a.single !== b.single) return a.single;
     const au = String(a.c.conn.unionId), bu = String(b.c.conn.unionId);
     if (au !== bu) return au < bu;
-    // A single drop before the whole line of the same family
-    if ((a.c.childId === null) !== (b.c.childId === null)) return a.c.childId !== null;
-    return (a.c.childId ?? '') < (b.c.childId ?? '');
+    return a.c.childId! < b.c.childId!;
 }
 
 /** A line without one child's drop (bus and connector from the rest), or null without drops. */
@@ -885,7 +894,9 @@ function resolveBusCollisions(
         }
 
         // Longest-path lane assignment over the constraint DAG (cycles beyond
-        // 2-node knots are broken by the iteration bound)
+        // 2-node knots are broken by the iteration bound, lanes stop at
+        // MAX_LANES; a line left crossing or sharing a lane that way is left
+        // to omitUnroutableDrops)
         const lane = new Array<number>(n).fill(0);
         for (let pass = 0; pass < n; pass++) {
             let changed = false;

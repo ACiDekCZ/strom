@@ -202,11 +202,16 @@ describe('nothing is left drawn wrong after step 7, however many lines have to g
         };
     };
 
-    it('when no single drop helps, the whole line of one family goes', () => {
-        const connections = [line('uA', 100, 60, [110, 130]), line('uB', 150, 40, [0, 90])];
-        const omitted = omitUnroutableDrops(connections, [], model, new Map(), undefined, () => {});
+    it('when no single drop helps, the whole line of one family goes: the one with fewer drops, then by id', () => {
+        const equal = [line('uA', 100, 60, [110, 130]), line('uB', 150, 40, [0, 90])];
+        const omitted = omitUnroutableDrops(equal, [], model, new Map(), undefined, () => {});
         expect(omitted.map(e => `${e.unionId} -> ${e.childId}`)).toEqual(['uA -> uA_kid0', 'uA -> uA_kid1']);
-        expect(connections.map(c => c.unionId)).toEqual(['uB']);
+        expect(equal.map(c => c.unionId)).toEqual(['uB']);
+
+        const larger = [line('uA', 100, 60, [110, 130, 140]), line('uB', 150, 40, [0, 90])];
+        expect(omitUnroutableDrops(larger, [], model, new Map(), undefined, () => {}).map(e => e.childId))
+            .toEqual(['uB_kid0', 'uB_kid1']);
+        expect(larger.map(c => c.unionId)).toEqual(['uA']);
     });
 
     it('a knot step 7 cannot resolve is an error under test', () => {

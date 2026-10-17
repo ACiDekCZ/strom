@@ -11,7 +11,8 @@
  *    data stay untouched.
  * 2. Every link of a scenario is laid out with its line flagged.
  * 3. Equivalence: every focus and mode, the view link lays out exactly as
- *    the same link made real (the derived data stored as a tree).
+ *    the same link made real (the derived data stored as a tree), with the
+ *    same lines left out.
  *
  * Scenarios (invented data only):
  * - the research fixture (e2e/fixtures/research-hypothesis-links.ged): H0022
@@ -76,7 +77,7 @@ function addSingleParentChild(d: StromData, parent: PersonId, child: PersonId): 
 
 interface Scenario { name: string; data: StromData; links: ViewLink[] }
 
-function researchScenarios(): { strict: Scenario[]; equivalence: Scenario[] } {
+function researchScenarios(): Scenario[] {
     const { data, id } = loadHypothesisLinksTree();
     const VACLAV = id('P0010'), ANTONIN = id('P0012'), JAKUB = id('P0125'), MARIE = id('P0126'), JAN = id('P0130');
     const B = vl('H0022', 'child', VACLAV, [JAKUB, MARIE]);
@@ -116,23 +117,19 @@ function researchScenarios(): { strict: Scenario[]; equivalence: Scenario[] } {
     vSibling.persons[mother].childIds.push(vSib);
     vSibling.persons[vStand].childIds.push(vSib);
 
-    return {
-        strict: [
-            { name: 'H0022 B', data, links: [B] },
-            { name: 'H0022 C', data, links: [C] },
-            { name: 'H0022 B + H0024 + H0030 chain', data, links: [B, PARTNER, CHAIN] },
-            { name: 'H0022 C + H0024', data, links: [C, PARTNER] },
-            { name: 'real mother + shown father (fills "?")', data: withMother, links: [C, PARTNER] },
-            { name: 'real mother + shown father, sibling stays with "?"', data: withSibling, links: [B, A_FATHER, PARTNER] },
-        ],
-        equivalence: [
-            { name: 'Václav: half-sibling on the wife\'s side', data: vSibling, links: [C, PARTNER] },
-        ],
-    };
+    return [
+        { name: 'H0022 B', data, links: [B] },
+        { name: 'H0022 C', data, links: [C] },
+        { name: 'H0022 B + H0024 + H0030 chain', data, links: [B, PARTNER, CHAIN] },
+        { name: 'H0022 C + H0024', data, links: [C, PARTNER] },
+        { name: 'real mother + shown father (fills "?")', data: withMother, links: [C, PARTNER] },
+        { name: 'real mother + shown father, sibling stays with "?"', data: withSibling, links: [B, A_FATHER, PARTNER] },
+        { name: 'Václav: half-sibling on the wife\'s side', data: vSibling, links: [C, PARTNER] },
+    ];
 }
 
 /** The comprehensive fixture with families outside it, and the links that attach them. */
-function comprehensiveScenarios(): { strict: Scenario[]; equivalence: Scenario[] } {
+function comprehensiveScenarios(): Scenario[] {
     const d = loadFixture('comprehensive');
     const P = (id: string) => id as PersonId;
     // Parents of a child's spouse (a sibling, the father's parents); a chain inside that island.
@@ -173,30 +170,23 @@ function comprehensiveScenarios(): { strict: Scenario[]; equivalence: Scenario[]
     ];
     const SPOUSE_PARTNER = vl('H0104', 'partners', P('focus_spouse'), [cp], 4);
     const SPOUSE_PARENTS = vl('H0109', 'child', P('focus_spouse'), [sf, sm], 9);
-    return {
-        strict: [
-            { name: 'comprehensive + islands', data: d, links: ISLANDS },
-            { name: 'comprehensive + partner of the focus\'s spouse', data: d, links: [SPOUSE_PARTNER] },
-        ],
-        equivalence: [
-            { name: 'comprehensive: parents of the focus\'s spouse', data: d, links: [SPOUSE_PARENTS] },
-            { name: 'comprehensive: all islands', data: d, links: [...ISLANDS, SPOUSE_PARTNER, SPOUSE_PARENTS] },
-        ],
-    };
+    return [
+        { name: 'comprehensive + islands', data: d, links: ISLANDS },
+        { name: 'comprehensive + partner of the focus\'s spouse', data: d, links: [SPOUSE_PARTNER] },
+        { name: 'comprehensive: parents of the focus\'s spouse', data: d, links: [SPOUSE_PARENTS] },
+        { name: 'comprehensive: all islands', data: d, links: [...ISLANDS, SPOUSE_PARTNER, SPOUSE_PARENTS] },
+    ];
 }
 
-const research = researchScenarios();
-const comprehensive = comprehensiveScenarios();
-const SCENARIOS: Scenario[] = [...research.strict, ...comprehensive.strict];
 /**
- * Constellations the layout does not yet draw without a crossing even when
- * the link is real — the in-law column of a spouse beside a sibling family on
- * that spouse's side (a parent's other family there; the parents of the
- * focus's spouse beside the focus's maternal aunts). The class needs couple
- * re-orientation planning (see KNOWN_LINE_KNOTS in allPersonsFull.test.ts);
- * here they prove that the view link draws them exactly as the real link.
+ * Every scenario gets the strict checks, including the in-law columns of a
+ * spouse beside a sibling family on that spouse's side (a parent's other
+ * family there; the parents of the focus's spouse beside the focus's
+ * maternal aunts): no lane order draws those lines clean, so step 7 leaves
+ * one out and the cards link to each other, with the view link as with the
+ * real one.
  */
-const EQUIVALENCE_ONLY: Scenario[] = [...research.equivalence, ...comprehensive.equivalence];
+const SCENARIOS: Scenario[] = [...researchScenarios(), ...comprehensiveScenarios()];
 
 for (const scenario of SCENARIOS) {
     const { data, links } = scenario;
@@ -257,6 +247,25 @@ for (const scenario of SCENARIOS) {
     });
 }
 
+describe('View links: an in-law column no lane order draws clean', () => {
+    it('focus grandchild_1, all islands, expanded: the island grandparents\' line goes, the focus\'s grandparents keep theirs', () => {
+        const { data, links } = SCENARIOS.find(s => s.name === 'comprehensive: all islands')!;
+        const result = runLayoutPipeline({
+            data, focusPersonId: 'grandchild_1' as PersonId, config: DEFAULT_LAYOUT_CONFIG,
+            ancestorDepth: DEPTH, descendantDepth: DEPTH,
+            includeSpouseAncestors: true, includeParentSiblings: true, includeParentSiblingDescendants: true,
+            displayPolicy: { mode: 'standard', autoExpand: true }, viewLinks: links,
+        });
+        // The island parents' stem stands inside the grandparents' bus: their
+        // line of two children goes as a whole, not the line of five
+        expect((result.omittedEdges ?? []).map(e => `${e.unionId} -> ${e.childId}`)).toEqual([
+            'union_iA_father_iA_mother -> iA_sibling', 'union_iA_father_iA_mother -> child_1_spouse',
+        ]);
+        expect(result.connections.find(c => c.unionId === 'union_focus_focus_spouse')?.drops).toHaveLength(5);
+        expect(auditGeometry(result, DEFAULT_LAYOUT_CONFIG)).toEqual([]);
+    });
+});
+
 /** A layout without the view flags (for comparing with the same links made real). */
 function geometry(result: ReturnType<typeof runLayoutPipeline>): unknown {
     const strip = <T extends { view?: unknown }>(x: T): Omit<T, 'view'> => { const { view: _view, ...rest } = x; return rest; };
@@ -264,11 +273,13 @@ function geometry(result: ReturnType<typeof runLayoutPipeline>): unknown {
         positions: [...result.positions],
         connections: result.connections.map(c => ({ ...strip(c), unionId: undefined, drops: c.drops.map(strip) })),
         spouseLines: result.spouseLines.map(l => ({ ...strip(l), unionId: undefined, partnershipId: undefined })),
+        // The same lines left out, to the same cards
+        omittedEdges: (result.omittedEdges ?? []).map(e => ({ ...strip(e), unionId: undefined })),
     };
 }
 
 describe('View links: laid out exactly as the same links made real', () => {
-    for (const scenario of [...SCENARIOS, ...EQUIVALENCE_ONLY]) {
+    for (const scenario of SCENARIOS) {
         it(scenario.name, () => {
             const { data, links } = scenario;
             // The links made real: the derived data stored as a tree of its own.
