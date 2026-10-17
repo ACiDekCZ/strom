@@ -44,7 +44,7 @@ function formatDateTime(iso: string): string {
 }
 import { AppExporter } from '../export.js';
 import { SettingsManager } from '../settings.js';
-import { ThemeMode, LanguageSetting, AppMode, AuditLog, APP_VERSION } from '../types.js';
+import { ThemeMode, LanguageSetting, AppMode, AuditLog, APP_VERSION, SurnameDisplay } from '../types.js';
 import { importFromFileUrl } from '../pwa.js';
 import { normalizeCardDensity } from '../card-fields.js';
 import { CryptoSession, isEncrypted, encrypt, decrypt, EncryptedData } from '../crypto.js';
@@ -768,6 +768,15 @@ export const appModeMethods = uiModule({
     toggleShowTitles(enabled: boolean): void {
         SettingsManager.setShowTitles(enabled);
         TreeRenderer.render();
+    },
+
+    /** Settings > Surname display: redraw everything that shows names. */
+    setSurnameDisplay(display: SurnameDisplay): void {
+        SettingsManager.setSurnameDisplay(display);
+        this.syncSurnameDisplaySetting();
+        TreeRenderer.render();
+        this.refreshSearch();
+        if (this.relationshipsPanelPersonId) this.refreshRelationshipsPanel();
     },
 
     toggleCrossTreeBadges(enabled: boolean): void {

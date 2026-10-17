@@ -1205,6 +1205,15 @@ export function isEmbeddedEnvelope(obj: unknown): obj is EmbeddedDataEnvelope {
 export const SETTINGS_KEY = 'strom-settings';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
+
+/**
+ * Which surname a name shows (Settings → "Surname display"): the birth surname
+ * (lastName); the married one (Person.marriedSurname) with the birth surname
+ * as a note ("Marie Nováková (roz. Dvořáková)"); the married one alone. A
+ * person without a married surname shows the birth surname in all three.
+ */
+export type SurnameDisplay = 'birth' | 'both' | 'married';
+export const SURNAME_DISPLAYS: readonly SurnameDisplay[] = ['birth', 'both', 'married'];
 export type LanguageSetting = 'en' | 'cs' | 'de' | 'system';
 
 export interface AppSettings {
@@ -1232,6 +1241,7 @@ export interface AppSettings {
     familyButton?: boolean;  // default: false - toolbar shortcut to the family wizard
     descendantsFullFamilies?: boolean;  // default: false - descendants view shows partners' other families
     showTitles?: boolean;  // default: true - titles before/after the name (Person.titleBefore / titleAfter) shown with it
+    surnameDisplay?: SurnameDisplay;  // default: 'both' - which surname names show (Person.lastName / marriedSurname)
     advancedFields?: boolean;  // default: false (basic mode) - sources/attachments/refn/name variants/question on a person
     geocoding?: boolean;   // default: undefined (never asked) - user allowed sending place names to the geocoder
     mapTiles?: boolean;    // default: undefined (not seen) - user saw that map tiles come from openstreetmap.org

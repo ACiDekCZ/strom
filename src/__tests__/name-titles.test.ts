@@ -227,12 +227,12 @@ describe('the name as shown', () => {
 
     it('shows the titles with the name, the given name and the surname each with its own', () => {
         expect(shownName(jan, '', true)).toBe('Ing. Jan Novák ml.');
-        expect(shownNameParts(jan, '?', true)).toEqual({ given: 'Ing. Jan', surname: 'Novák ml.' });
+        expect(shownNameParts(jan, '?', true)).toEqual({ given: 'Ing. Jan', surname: 'Novák ml.', birthNote: '' });
     });
 
     it('shows the bare name with the setting off', () => {
         expect(shownName(jan, '', false)).toBe('Jan Novák');
-        expect(shownNameParts(jan, '?', false)).toEqual({ given: 'Jan', surname: 'Novák' });
+        expect(shownNameParts(jan, '?', false)).toEqual({ given: 'Jan', surname: 'Novák', birthNote: '' });
     });
 
     it('follows the setting (on by default)', () => {

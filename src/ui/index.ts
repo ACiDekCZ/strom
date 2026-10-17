@@ -335,6 +335,8 @@ export class UIClass {
     // Surname-spellings dialog: what is picked, and what to return to.
     surnamePicks: string[] = [];
     surnamesParentDialog: string | null = null;
+    /** Surname key whose married-surname holders are expanded, or null. */
+    surnameMarriedOpen: string | null = null;
 
     // Split-by-families dialog.
     splitTreeId: TreeId | null = null;

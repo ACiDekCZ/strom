@@ -11,7 +11,7 @@ import { StromData, Gender, LifeEventType, CoupleEventType, PartnershipId, Partn
 import { yearOf, parseFlexDate, yearFraction } from './dates.js';
 import { eventValueIsOnTag, isPosthumousEvent } from './events.js';
 import { isLivingPerson } from './privacy.js';
-import { shownNameOrEmpty } from './person-name.js';
+import { shownNameOrEmpty, shownNameFull } from './person-name.js';
 
 export interface TimelineEvent {
     year: number;
@@ -23,6 +23,8 @@ export interface TimelineEvent {
 export interface TimelineRow {
     personId: string;
     name: string;
+    /** The name with the birth-surname note ("Marie Nováková (roz. Dvořáková)") for the tooltip; absent when it is `name`. */
+    fullName?: string;
     gender: Gender;
     startYear: number;
     endYear: number;
@@ -95,6 +97,7 @@ export function computeTimelineModel(
         rows.push({
             personId: id,
             name: shownNameOrEmpty(p),
+            ...(shownNameFull(p) !== shownNameOrEmpty(p) && shownNameOrEmpty(p) ? { fullName: shownNameFull(p) } : {}),
             gender: p.gender,
             startYear,
             endYear: Math.max(endYear, startYear),

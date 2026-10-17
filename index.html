@@ -1531,6 +1531,19 @@
         /* Meta shrinks to 10.5px (years only) when the name goes two-line, so
            both rows still fit the unchanged 64px card. */
         .person-card .birth-date.meta-short { font-size: 10.5px; }
+        /* The birth surname under a married surname ("roz. Dvořáková", Settings →
+           Surname display "both"): a quiet 11/13px row between the name and the
+           meta. It shortens with "…" and drops out (fitCardBirths) when fewer
+           than 4 letters would show. Only with a note: no note, no element. */
+        .person-card .card-birth {
+            font-size: 11px;
+            line-height: 13px;
+            color: var(--text-faint);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .person-card .card-birth.is-dropped { display: none; }
 
         /* ==================== ZOOM-LEVEL RESPONSIVE ==================== */
         /* Fonts scale naturally with zoom transform - no hiding needed */
@@ -2038,6 +2051,59 @@
             color: var(--text-light);
             margin-top: 10px;
             line-height: 1.4;
+        }
+        /* Surname display (Settings > Card): a segment like Theme with one
+           shared sample under it; on a phone (and when the German labels do
+           not fit the segment, .is-rows) three radio rows, each with its own
+           sample. */
+        .surname-opt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .settings-segment .settings-radio span.surname-opt-sample { display: none; font-size: 13px; }
+        .settings-segment .settings-radio span.surname-opt-label { white-space: nowrap; overflow: hidden; }
+        .surname-display-sample {
+            background: var(--surface-2); border-radius: var(--r-md);
+            padding: 10px 12px; font-size: 15px; color: var(--text);
+        }
+            .surname-display-setting.is-rows .surname-display-options {
+                flex-direction: column; border: none; background: none; border-radius: 0; gap: 6px;
+            }
+            .surname-display-setting.is-rows .surname-display-options .settings-radio {
+                justify-content: flex-start; text-align: left; min-height: 48px; padding: 8px 12px;
+                border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface);
+            }
+            .surname-display-setting.is-rows .surname-display-options .settings-radio + .settings-radio { border-left: 1px solid var(--border); }
+            .surname-display-setting.is-rows .surname-display-options .settings-radio input[type="radio"] {
+                position: static; width: 18px; height: 18px; opacity: 1; flex: none; accent-color: var(--primary);
+            }
+            .surname-display-setting.is-rows .surname-display-options .settings-radio:has(input:checked) {
+                background: var(--surface); border-color: var(--primary);
+            }
+            .surname-display-setting.is-rows .surname-display-options .settings-radio:has(input:checked) span { color: var(--text); font-weight: 400; }
+            .surname-display-setting.is-rows .surname-display-options .settings-radio:has(input:checked) .surname-opt-label { font-weight: 600; }
+            .surname-display-setting.is-rows .surname-display-options .settings-radio span.surname-opt-sample { display: block; color: var(--text-light); }
+            .surname-display-setting.is-rows .surname-display-options .settings-radio:has(input:checked) .pn-note { color: var(--text-faint); }
+            .surname-display-setting.is-rows .surname-display-options .settings-radio span.surname-opt-label { font-size: 14px; white-space: normal; }
+            .surname-display-setting.is-rows .surname-display-sample { display: none; }
+        @media (max-width: 640px) {
+            .surname-display-setting .surname-display-options {
+                flex-direction: column; border: none; background: none; border-radius: 0; gap: 6px;
+            }
+            .surname-display-setting .surname-display-options .settings-radio {
+                justify-content: flex-start; text-align: left; min-height: 48px; padding: 8px 12px;
+                border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface);
+            }
+            .surname-display-setting .surname-display-options .settings-radio + .settings-radio { border-left: 1px solid var(--border); }
+            .surname-display-setting .surname-display-options .settings-radio input[type="radio"] {
+                position: static; width: 18px; height: 18px; opacity: 1; flex: none; accent-color: var(--primary);
+            }
+            .surname-display-setting .surname-display-options .settings-radio:has(input:checked) {
+                background: var(--surface); border-color: var(--primary);
+            }
+            .surname-display-setting .surname-display-options .settings-radio:has(input:checked) span { color: var(--text); font-weight: 400; }
+            .surname-display-setting .surname-display-options .settings-radio:has(input:checked) .surname-opt-label { font-weight: 600; }
+            .surname-display-setting .surname-display-options .settings-radio span.surname-opt-sample { display: block; color: var(--text-light); }
+            .surname-display-setting .surname-display-options .settings-radio:has(input:checked) .pn-note { color: var(--text-faint); }
+            .surname-display-setting .surname-display-options .settings-radio span.surname-opt-label { font-size: 14px; white-space: normal; }
+            .surname-display-setting .surname-display-sample { display: none; }
         }
         @media (max-width: 640px) {
             .settings-row, .settings-checkbox.settings-row { padding: 10px 12px; }
@@ -3208,7 +3274,7 @@
         .surnames-none.empty-block { margin: 0 0 4px; }
         .surnames-add { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
         .surnames-hint { margin: 0 0 8px; font-size: 12px; color: var(--text-light); }
-        .surnames-picker { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+        .surnames-picker { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px; margin-bottom: 10px; }
         /* `.modal button` (0,1,1) sets border:none and its own padding, so a
            bare `.surname-chip` (0,1,0) loses to it and the chips come out as
            plain text. Same shape as `.modal button.primary` for the same reason. */
@@ -3223,6 +3289,28 @@
             background: var(--primary, #4a7c59); border-color: var(--primary, #4a7c59); color: var(--on-primary);
         }
         .surname-chip-count { font-size: 11px; opacity: 0.7; }
+        /* Married surnames beside a surname: a quiet link under the chip that
+           opens the people on a line of its own (counts stay birth surnames). */
+        .surname-item { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+        .modal button.surname-married-toggle,
+        .modal button.surname-married-person {
+            background: none; border: none; padding: 2px 4px; color: var(--text-light);
+            font-size: 12px; cursor: pointer; text-align: left; border-radius: 4px;
+        }
+        .modal button.surname-married-person { color: var(--text-color, #222); font-size: 13px; padding: 4px 6px; }
+        .surname-married-year { color: var(--text-faint); font-size: 12px; }
+        .surname-married-list {
+            flex-basis: 100%; display: flex; flex-direction: column; align-items: flex-start;
+            padding: 4px 0 6px 10px; border-left: 2px solid var(--border-color, #ddd);
+        }
+        @media (hover: hover) {
+            .modal button.surname-married-toggle:hover,
+            .modal button.surname-married-person:hover { background: var(--surface-2); }
+        }
+        @media (pointer: coarse) {
+            .modal button.surname-married-toggle,
+            .modal button.surname-married-person { min-height: 44px; }
+        }
         .surnames-add-row { display: flex; gap: 6px; margin-bottom: 10px; }
         .surnames-add-row input { flex: 1; min-width: 0; }
         .surnames-add-row button { padding: 6px 12px; }
@@ -3737,6 +3825,8 @@
             overflow: hidden;
             text-overflow: ellipsis;
         }
+        /* With the birth surname's note the name may wrap (the note as one piece). */
+        .pm-name:has(.pn-note) { white-space: normal; text-wrap: pretty; }
         .pm-context {
             font-size: 12px;
             color: var(--text-light);
@@ -6398,6 +6488,29 @@
             from { opacity: 0; transform: scale(0.95); }
             to { opacity: 1; transform: scale(1); }
         }
+        /* A name's birth-surname note (src/person-name.ts nameHtml): "(roz.
+           Dvořáková)" in the plain face, 2–3px smaller and quiet; it wraps as
+           one piece ("roz." never parts from the surname). In a dense one-row
+           list (.pn-fit) the name stays whole and the note shortens with "…". */
+        .pn-note {
+            font-family: var(--font-sans);
+            font-weight: 400;
+            font-style: normal;
+            font-size: 0.85em;
+            color: var(--text-faint);
+            white-space: nowrap;
+        }
+        .pn-note--line { display: block; }
+        .pn-fit {
+            display: inline-flex;
+            align-items: baseline;
+            gap: 0.3em;
+            max-width: 100%;
+            min-width: 0;
+            vertical-align: bottom;
+        }
+        .pn-fit .pn-main { white-space: nowrap; flex: none; }
+        .pn-fit .pn-note { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
         /* Header names the person the menu acts on (serif). */
         .context-menu-header {
             font-family: var(--font-serif);
@@ -6412,6 +6525,8 @@
             text-overflow: ellipsis;
             max-width: 260px;
         }
+        /* With the birth surname's note the name wraps (the note as a whole). */
+        .context-menu-header:has(.pn-note) { white-space: normal; text-wrap: pretty; }
         .context-menu-item {
             padding: 10px 16px;
             cursor: pointer;
@@ -6897,6 +7012,10 @@
         .card-body--custom .name--rows .name-text,
         .card-body--custom .card-head-text > .name:not(:only-child) .name-text { line-height: 19px; }
         .card-body--custom .name--rows .name-row { display: block; min-width: 0; overflow: hidden; white-space: nowrap; }
+        /* The birth surname's 14px row under the name: never widens the card
+           (src/card-width.ts measures the name and the years only). */
+        .card-body--custom .card-birth { display: block; width: 0; min-width: 100%; line-height: 14px; }
+        .card-body--custom .card-birth.is-dropped { display: none; }
         .card-body--custom .card-years {
             font-size: 11px; line-height: 14px; font-weight: 400; color: var(--text-light);
             font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -12004,6 +12123,8 @@
             overflow: hidden;
             text-overflow: ellipsis;
         }
+        /* A name with its birth-surname note may take a second line. */
+        .person-picker-item:has(.pn-note) { white-space: normal; }
         .person-picker-item:last-child {
             border-bottom: none;
         }
@@ -15150,6 +15271,34 @@
                             <span class="settings-desc" data-i18n="titles.settingHint"></span>
                         </span>
                     </label>
+                    <div class="settings-row settings-row-stacked surname-display-setting" id="surname-display-setting">
+                        <span class="settings-name" id="settings-surname-label" data-i18n="settings.surnameDisplay"></span>
+                        <div class="settings-options settings-segment surname-display-options" role="radiogroup" aria-labelledby="settings-surname-label">
+                            <label class="settings-radio">
+                                <input type="radio" name="surname-display" value="birth" onchange="window.Strom.UI.setSurnameDisplay('birth')">
+                                <span class="surname-opt">
+                                    <span class="surname-opt-label" data-i18n="settings.optBirth"></span>
+                                    <span class="surname-opt-sample" data-surname-sample="birth"></span>
+                                </span>
+                            </label>
+                            <label class="settings-radio">
+                                <input type="radio" name="surname-display" value="both" onchange="window.Strom.UI.setSurnameDisplay('both')">
+                                <span class="surname-opt">
+                                    <span class="surname-opt-label" data-i18n="settings.optBoth"></span>
+                                    <span class="surname-opt-sample" data-surname-sample="both"></span>
+                                </span>
+                            </label>
+                            <label class="settings-radio">
+                                <input type="radio" name="surname-display" value="married" onchange="window.Strom.UI.setSurnameDisplay('married')">
+                                <span class="surname-opt">
+                                    <span class="surname-opt-label" data-i18n="settings.optMarried"></span>
+                                    <span class="surname-opt-sample" data-surname-sample="married"></span>
+                                </span>
+                            </label>
+                        </div>
+                        <div class="surname-display-sample" id="surname-display-sample" aria-hidden="true"></div>
+                        <span class="settings-desc" data-i18n="settings.surnameHint"></span>
+                    </div>
                     <label class="settings-checkbox settings-row">
                         <input type="checkbox" id="cross-tree-badges-toggle" onchange="window.Strom.UI.toggleCrossTreeBadges(this.checked)">
                         <span class="settings-text">

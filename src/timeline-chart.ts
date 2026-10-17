@@ -141,7 +141,7 @@ function rowSvg(
             + ` <tspan class="tl-yr-txt">${yearsEsc}</tspan></text>`;
     } else {
         label = `<foreignObject x="2" y="${y}" width="${labelW - 6}" height="${rowH}">`
-            + `<div xmlns="http://www.w3.org/1999/xhtml" class="tl-name" title="${nameEsc}">`
+            + `<div xmlns="http://www.w3.org/1999/xhtml" class="tl-name" title="${r.fullName ? esc(r.fullName) : nameEsc}">`
             + `<span class="tl-nm">${nameEsc}</span> <span class="tl-yr">${yearsEsc}</span></div></foreignObject>`;
     }
 

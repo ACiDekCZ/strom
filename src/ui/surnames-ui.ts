@@ -14,7 +14,10 @@
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings } from '../strings.js';
-import { surnamesInTree, surnameKey } from '../surnames.js';
+import { surnamesInTree, surnameKey, marriedSurnameHolders } from '../surnames.js';
+import { shownNameFull } from '../person-name.js';
+import { displayYear } from '../dates.js';
+import { PersonId } from '../types.js';
 import { uiModule } from './module.js';
 import { emptyStateHtml } from './empty-state.js';
 
@@ -23,6 +26,7 @@ export const surnamesMethods = uiModule({
     showSurnamesDialog(parentDialogId?: string): void {
         this.surnamesParentDialog = parentDialogId ?? null;
         this.surnamePicks = [];
+        this.surnameMarriedOpen = null;
 
         document.getElementById('surnames-modal')?.remove();
         const overlay = document.createElement('div');
@@ -133,16 +137,56 @@ export const surnamesMethods = uiModule({
             .filter(p => !inTree.some(t => surnameKey(t.surname) === surnameKey(p)))
             .map(surname => ({ surname, count: 0 }));
 
+        const data = DataManager.getData();
         box.innerHTML = [...inTree, ...typed].map(({ surname, count }) => {
             const picked = this.surnamePicks.some(p => surnameKey(p) === surnameKey(surname));
-            return `
+            const chip = `
                 <button type="button" class="surname-chip${picked ? ' picked' : ''}"
                         data-surname="${this.escapeHtml(surname)}">
                     ${this.escapeHtml(surname)}
                     <span class="surname-chip-count">${count > 0
                         ? strings.surnames.inTree(count) : strings.surnames.notInTree}</span>
                 </button>`;
+            // Married surnames are shown beside the count, never added to it.
+            const married = count > 0 ? marriedSurnameHolders(surname, data) : [];
+            if (married.length === 0) return chip;
+            const key = surnameKey(surname);
+            const open = this.surnameMarriedOpen === key;
+            const list = open ? `
+                <div class="surname-married-list" id="surname-married-${this.escapeHtml(key)}">
+                    ${married.map(p => {
+                        const year = displayYear(p.birthDate);
+                        return `<button type="button" class="surname-married-person" data-person-id="${this.escapeHtml(p.id)}">${
+                            this.escapeHtml(shownNameFull(p))}${year ? ` <span class="surname-married-year">*${this.escapeHtml(year)}</span>` : ''}</button>`;
+                    }).join('')}
+                </div>` : '';
+            return `
+                <span class="surname-item">${chip}
+                    <button type="button" class="surname-married-toggle" data-key="${this.escapeHtml(key)}"
+                            aria-expanded="${open}">${this.escapeHtml(strings.surnames.alsoMarried(married.length))} ${open ? '▴' : '▾'}</button>
+                </span>${list}`;
         }).join('');
+
+        box.querySelectorAll<HTMLButtonElement>('.surname-married-toggle').forEach(btn => {
+            btn.onclick = () => {
+                const key = btn.dataset.key ?? '';
+                this.surnameMarriedOpen = this.surnameMarriedOpen === key ? null : key;
+                this.renderSurnamePicker();
+                (document.querySelector(`.surname-married-toggle[data-key="${CSS.escape(key)}"]`) as HTMLElement | null)?.focus();
+            };
+        });
+        // A person in the list: close the dialog and bring that person to the
+        // tree's focus, as a found person does.
+        box.querySelectorAll<HTMLButtonElement>('.surname-married-person').forEach(btn => {
+            btn.onclick = () => {
+                const id = btn.dataset.personId ?? '';
+                this.surnamesParentDialog = null;
+                this.closeSurnamesDialog();
+                this.clearDialogStack();
+                TreeRenderer.setFocus(id as PersonId);
+                TreeRenderer.render();
+            };
+        });
 
         box.querySelectorAll('.surname-chip').forEach(chip => {
             (chip as HTMLButtonElement).onclick = () => {

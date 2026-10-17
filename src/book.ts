@@ -404,18 +404,36 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
         if (parentChapter.has(p.id)) return true;
         return chapterUnions.some(u => u.childIds.includes(p.id));
     };
-    const indexRows = Object.values(persons)
-        .filter(p => !p.isPlaceholder && inBook(p))
-        .sort((a, b) => `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`, lang))
-        .map(p => {
-            const refs = new Set<number>();
-            const pc = parentChapter.get(p.id);
-            if (pc) refs.add(pc);
-            for (const u of chapterUnions) if (u.childIds.includes(p.id)) refs.add(chapterNo.get(u.id)!);
-            const refStr = [...refs].sort((a, b) => a - b).join(', ');
-            const indexName = p.lastName ? `${p.lastName}, ${p.firstName}` : p.firstName;
-            return `<div class="book-index-row"><span>${esc(indexName)}</span><span class="book-dots"></span><span class="book-muted">${esc(dates(p)) || '—'}</span>${refStr ? `<span class="book-index-ref">${B.chapterShort} ${refStr}</span>` : ''}</div>`;
-        }).join('');
+    // A person with a married surname (Person.marriedSurname) stands under the
+    // birth surname with "married name Nováková" after the name, and a
+    // cross-reference under the married one ("Nováková, Marie → see Dvořáková,
+    // Marie", no chapters), whatever the surname display setting.
+    const indexEntries: { key: string; html: string }[] = [];
+    for (const p of Object.values(persons)) {
+        if (p.isPlaceholder || !inBook(p)) continue;
+        const refs = new Set<number>();
+        const pc = parentChapter.get(p.id);
+        if (pc) refs.add(pc);
+        for (const u of chapterUnions) if (u.childIds.includes(p.id)) refs.add(chapterNo.get(u.id)!);
+        const refStr = [...refs].sort((a, b) => a - b).join(', ');
+        const indexName = p.lastName ? `${p.lastName}, ${p.firstName}` : p.firstName;
+        const married = p.marriedSurname?.trim();
+        const marriedNote = married ? `<span class="book-muted">, ${esc(B.indexMarried(married))}</span>` : '';
+        indexEntries.push({
+            key: `${p.lastName} ${p.firstName}`,
+            html: `<div class="book-index-row"><span>${esc(indexName)}${marriedNote}</span><span class="book-dots"></span><span class="book-muted">${esc(dates(p)) || '—'}</span>${refStr ? `<span class="book-index-ref">${B.chapterShort} ${refStr}</span>` : ''}</div>`,
+        });
+        if (married && married !== p.lastName?.trim()) {
+            const marriedName = `${married}, ${p.firstName}`;
+            indexEntries.push({
+                key: `${married} ${p.firstName}`,
+                html: `<div class="book-index-row book-index-see">${esc(B.indexSee(marriedName, indexName))}</div>`,
+            });
+        }
+    }
+    const indexRows = indexEntries
+        .sort((a, b) => a.key.localeCompare(b.key, lang))
+        .map(e => e.html).join('');
 
     // ---- title-page stats ----
     const indexedPersons = Object.values(persons).filter(p => !p.isPlaceholder && inBook(p));
@@ -500,6 +518,7 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
 
     .book-index-row { display: flex; align-items: baseline; gap: 8px; font-size: 13px; line-height: 1.9; }
     .book-index-row .book-dots { flex: 1; border-bottom: 1px dotted var(--book-rule); }
+    .book-index-see { font-style: italic; }
 
     /* Floating toolbar: the book opens in its own window/view — standalone
        PWAs have no browser chrome, so it must carry its own Close + Print. */

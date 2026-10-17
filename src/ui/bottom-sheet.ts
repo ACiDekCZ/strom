@@ -16,7 +16,7 @@ import { DataManager } from '../data.js';
 import { ZoomPan, CARD_PAN_THRESHOLD_PX } from '../zoom.js';
 import { isPhoneBar } from '../breakpoints.js';
 import { menuItemBody, menuItemAria, PersonMenuAction } from './context-menu.js';
-import { shownName } from '../person-name.js';
+import { shownName, shownNameFull, nameHtml } from '../person-name.js';
 import type { ResearchSheetGroup } from './research-actions-ui.js';
 import { researchTrialTagHtml } from './research-tree-settings-ui.js';
 
@@ -128,10 +128,10 @@ export const bottomSheetMethods = uiModule({
         const overlay = document.createElement('div');
         overlay.className = 'bottom-sheet-overlay';
         overlay.innerHTML = `
-            <div class="bottom-sheet bottom-sheet-person" role="menu"${personName ? ` aria-label="${esc(personName)}"` : ''}>
+            <div class="bottom-sheet bottom-sheet-person" role="menu"${personName && person ? ` aria-label="${esc(shownNameFull(person))}"` : ''}>
                 <div class="bottom-sheet-handle"></div>
                 <div class="sheet-page sheet-page-root">
-                    ${personName ? `<div class="bottom-sheet-menu-title">${esc(personName)}</div>` : ''}
+                    ${personName && person ? `<div class="bottom-sheet-menu-title">${nameHtml(person)}</div>` : ''}
                     <div class="bottom-sheet-items">
                         ${lead.length > 0 ? `<div class="sheet-view-link-head">${lead.map(r => itemHtml(r.a, r.index)).join('')}</div><div class="bottom-sheet-divider" role="separator"></div>` : ''}
                         ${this.personSignalsMenuHtml(personId, true, 'bottom-sheet-item')}

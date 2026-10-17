@@ -14,7 +14,7 @@
  * the farm a family was known by.
  */
 
-import { StromData } from './types.js';
+import { Person, StromData } from './types.js';
 import { getCurrentLanguage } from './strings.js';
 
 /**
@@ -262,4 +262,16 @@ export function surnamesInTree(data: StromData): { surname: string; count: numbe
         else counts.set(key, { surname: name, count: 1 });
     }
     return [...counts.values()].sort((a, b) => b.count - a.count || a.surname.localeCompare(b.surname));
+}
+
+/**
+ * The people who carry this surname (or another form of it, see sameSurname)
+ * as their married surname — shown beside a surname's count, never added to
+ * it: counts stay with the birth surname (lastName).
+ */
+export function marriedSurnameHolders(surname: string, data: StromData): Person[] {
+    return Object.values(data.persons)
+        .filter(p => !p.isPlaceholder && !!p.marriedSurname?.trim()
+            && sameSurname(surname, p.marriedSurname.trim(), data))
+        .sort((a, b) => (a.firstName ?? '').localeCompare(b.firstName ?? '') || a.id.localeCompare(b.id));
 }

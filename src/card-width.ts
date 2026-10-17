@@ -94,6 +94,12 @@ export interface CustomCardEntry<L extends CardLineText = CardLine> {
     /** The life years under the name ("1841 – 1922"); absent or empty: no such row. */
     years?: string;
     /**
+     * The birth-surname note under the name ("roz. Dvořáková", src/person-name.ts);
+     * absent or empty: no such row. It shortens to the card's width and never
+     * widens the card (the width counts the name and the years only).
+     */
+    birth?: string;
+    /**
      * The room (px) the last line keeps free at its right: the ⇄ pill on the
      * bottom-right edge of a card of one height for the view
      * (CARD_EDGE_PILL_RIGHT). Its rows are wrapped that much narrower, so a
@@ -506,7 +512,9 @@ export interface CardHead {
     cut: boolean;
     /** The years row under the name ('' = none). */
     years: string;
-    /** The height of the header's content: the avatar's 30px, or the name's rows and the years when taller. */
+    /** The birth-surname row between the name and the years ('' = none). */
+    birth: string;
+    /** The height of the header's content: the avatar's 30px, or the name's rows, the birth surname and the years when taller. */
     block: number;
 }
 
@@ -516,6 +524,8 @@ export const CARD_AVATAR_SIZE = 30;
 export const CARD_NAME_ROW_HEIGHT = 19;
 /** The years under the name (11px text). */
 export const CARD_YEARS_ROW_HEIGHT = 14;
+/** The birth surname under the name ("roz. Dvořáková", 11px text). */
+export const CARD_BIRTH_ROW_HEIGHT = 14;
 /** A name wraps into at most this many rows (when details may wrap). */
 export const CARD_NAME_MAX_ROWS = 2;
 /** The card's header: 10px padding, the 30px name row, 10px padding. A card without lines is this tall. */
@@ -547,12 +557,14 @@ export const CARD_HEAD_LINE_Y = 25;
 export const CARD_HEAD_LINE_Y_YEARS = 10 + (CARD_NAME_ROW_HEIGHT + CARD_YEARS_ROW_HEIGHT) / 2;
 
 /**
- * The height of a header's content: the name's rows (19px each) and the
- * years (14px) when there are any, at least the avatar's 30px. One row: 30;
- * with years 33; two rows 38; two rows and years 52.
+ * The height of a header's content: the name's rows (19px each), the birth
+ * surname (14px) and the years (14px) when there are any, at least the
+ * avatar's 30px. One row: 30; with years 33; two rows 38; two rows and years
+ * 52; one row, the birth surname and years 47.
  */
-export function cardHeadBlock(nameRows: number, years: boolean): number {
-    return Math.max(CARD_AVATAR_SIZE, CARD_NAME_ROW_HEIGHT * Math.max(1, nameRows) + (years ? CARD_YEARS_ROW_HEIGHT : 0));
+export function cardHeadBlock(nameRows: number, years: boolean, birth = false): number {
+    return Math.max(CARD_AVATAR_SIZE, CARD_NAME_ROW_HEIGHT * Math.max(1, nameRows)
+        + (birth ? CARD_BIRTH_ROW_HEIGHT : 0) + (years ? CARD_YEARS_ROW_HEIGHT : 0));
 }
 
 /** Where the first line starts on a card with this header content, from the card's top. */
@@ -688,7 +700,8 @@ export function customCardRows<L extends CardLineText>(entries: Iterable<CustomC
         const wrapped = names?.[i];
         const name = wrapped && wrapped.rows.length ? wrapped.rows.map(r => r.text) : [e.name];
         const years = e.years ?? '';
-        return { name, cut: !!wrapped?.cut, years, block: cardHeadBlock(name.length, !!years) };
+        const birth = e.birth ?? '';
+        return { name, cut: !!wrapped?.cut, years, birth, block: cardHeadBlock(name.length, !!years, !!birth) };
     });
     const detailGap = valueLines === 1 ? 0 : CARD_DETAIL_GAP;
     const heights = list.map((e, i) => customCardHeight(e.lines.map(l => valueLines === 1 ? 1 : rows.get(l)!.rows.length),
@@ -715,14 +728,17 @@ export function customCardHeight(rowCounts: readonly number[], headBlock: number
  * The one card height of a view (the height "equal": the layout spaces every
  * card by it). One row a detail: 56 + 17 × the details on (3px more with the
  * years under the name), the card as it always was (it does not change with
- * the focus). Two rows or the whole detail: the tallest card of the view
+ * the focus); taller by the birth-surname row when a card of the view has one
+ * (`birth`). Two rows or the whole detail: the tallest card of the view
  * (`heights`, customCardRows). With the height "by content" every card is
  * its own height (customCardRows heights, LayoutConfig.personHeights).
  */
 export function customCardViewHeight(detailsOn: number, valueLines: CardValueLines, heights: Iterable<number>,
-    years = false): number {
+    years = false, birth = false): number {
     if (valueLines === 1) {
-        return customCardHeight([], cardHeadBlock(1, years)) + CARD_LINES_GAP + CARD_ROW_HEIGHT * Math.max(0, detailsOn);
+        // `birth`: a card of the view has the birth surname under its name
+        // (src/person-name.ts); the header of every card makes room for it.
+        return customCardHeight([], cardHeadBlock(1, years, birth)) + CARD_LINES_GAP + CARD_ROW_HEIGHT * Math.max(0, detailsOn);
     }
     let tallest = CARD_HEAD_HEIGHT;
     for (const h of heights) tallest = Math.max(tallest, h);

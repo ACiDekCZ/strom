@@ -31,7 +31,7 @@ import { strings } from '../strings.js';
 import { isLivingPerson, inferBirthUpperBounds } from '../privacy.js';
 import { compressPhoto, dataUrlByteSize, rotatePhotoDataUrl } from '../photo.js';
 import { personInitials } from '../initials.js';
-import { shownName } from '../person-name.js';
+import { shownName, nameHtml } from '../person-name.js';
 import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-parser.js';
 import {
     validateJsonImport,
@@ -336,17 +336,26 @@ export const personModalMethods = uiModule({
         const val = (id: string) => (document.getElementById(id) as HTMLInputElement | null)?.value.trim() || '';
         const first = val('input-firstname');
         const last = val('input-lastname');
+        // The married surname being typed (#input-married-surname), else the
+        // edited person's own: the header shows the surname Settings →
+        // "Surname display" picks, with "(roz. …)" as the cards' tooltip does.
+        const marriedInput = document.getElementById('input-married-surname') as HTMLInputElement | null;
+        const married = marriedInput
+            ? marriedInput.value.trim()
+            : (this.currentId ? DataManager.getPerson(this.currentId)?.marriedSurname?.trim() ?? '' : '');
         // With its titles, as the cards show it — the titles only beside a name.
-        const full = first || last
-            ? shownName({ firstName: first, lastName: last, titleBefore: val('input-title-before'), titleAfter: val('input-title-after') })
-            : '';
-        if (nameEl) nameEl.textContent = full || strings.personModal.newPersonName;
+        const named = { firstName: first, lastName: last, titleBefore: val('input-title-before'), titleAfter: val('input-title-after'),
+            ...(married ? { marriedSurname: married } : {}) };
+        if (nameEl) {
+            if (first || last) nameEl.innerHTML = nameHtml(named);
+            else nameEl.textContent = strings.personModal.newPersonName;
+        }
         this.updateHeaderAvatar();
     },
 
     /** Wire the name inputs to the header once (listeners survive reopening). */
     bindLivePersonModalName(): void {
-        for (const id of ['input-firstname', 'input-lastname', 'input-title-before', 'input-title-after']) {
+        for (const id of ['input-firstname', 'input-lastname', 'input-title-before', 'input-title-after', 'input-married-surname']) {
             const input = document.getElementById(id) as HTMLInputElement | null;
             if (!input || input.dataset.liveHeader) continue;
             input.dataset.liveHeader = '1';

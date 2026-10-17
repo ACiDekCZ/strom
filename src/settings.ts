@@ -3,7 +3,7 @@
  * Settings are NOT exported with tree data - they are local preferences
  */
 
-import { AppSettings, ThemeMode, LanguageSetting, CardDensity, SETTINGS_KEY, StromData, personSourceIds, CARD_SIZE } from './types.js';
+import { AppSettings, ThemeMode, SurnameDisplay, SURNAME_DISPLAYS, LanguageSetting, CardDensity, SETTINGS_KEY, StromData, personSourceIds, CARD_SIZE } from './types.js';
 import { CardFieldSettings, normalizeCardFields, customCardSize, normalizeCardDensity, effectiveCardFields } from './card-fields.js';
 import { initLanguage, Language } from './strings.js';
 
@@ -123,6 +123,17 @@ class SettingsManagerClass {
 
     setShowTitles(enabled: boolean): void {
         this.settings.showTitles = enabled;
+        this.save();
+    }
+
+    /** Which surname names show, default 'both' (married surname with the birth one as a note). */
+    getSurnameDisplay(): SurnameDisplay {
+        const v = this.settings.surnameDisplay;
+        return v && SURNAME_DISPLAYS.includes(v) ? v : 'both';
+    }
+
+    setSurnameDisplay(display: SurnameDisplay): void {
+        this.settings.surnameDisplay = SURNAME_DISPLAYS.includes(display) ? display : 'both';
         this.save();
     }
 

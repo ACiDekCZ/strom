@@ -210,6 +210,8 @@ const stringsEN = {
 
     // Family book
     book: {
+        indexSee: (a: string, b: string) => `${a} → see ${b}`,
+        indexMarried: (surname: string) => `married name ${surname}`,
         menu: 'Family book',
         menuDesc: 'Printable book: chapters by family, photos, sources and a person index',
         toolbarPrint: 'Print',
@@ -415,6 +417,7 @@ const stringsEN = {
     },
 
     surnames: {
+        alsoMarried: (n: number) => `also as a married surname: ${n}`,
         menu: 'Surname spellings',
         title: 'Surname spellings',
         intro: 'Before about 1900 the registers spell a family differently from one entry to the next. Say once that spellings mean the same family and search and merging find them all — however each person happens to be written, including people added later.',
@@ -735,6 +738,11 @@ const stringsEN = {
     },
 
     // Titles of the name shown with it (Person.titleBefore / titleAfter)
+    // A name's birth-surname note after the married surname: "Mary Smith (née Brown)".
+    name: {
+        birthAbbr: 'née',
+    },
+
     titles: {
         settingLabel: 'Show titles',
         settingHint: 'Titles before and after names (Dr., Jr.) on cards and in lists',
@@ -2564,6 +2572,8 @@ const stringsEN = {
 
     // Search
     search: {
+        married: (surname: string) => `married name ${surname}`,
+        birth: (surname: string) => `née ${surname}`,
         placeholder: 'Search person...',
         noResults: 'No results',
         multipleResults: 'Multiple results found',
@@ -3013,6 +3023,11 @@ const stringsEN = {
     },
 
     settings: {
+        surnameDisplay: 'Surname display',
+        optBirth: 'Birth surname',
+        optBoth: 'Married (née birth surname)',
+        optMarried: 'Married surname',
+        surnameHint: 'Without a married surname, the birth surname is shown.',
         groupTree: 'Tree view',
         groupNotifications: 'Notifications',
         groupCard: 'Person card',
@@ -4131,6 +4146,8 @@ const stringsCZ: StringsType = {
 
     // Family book
     book: {
+        indexSee: (a: string, b: string) => `${a} → viz ${b}`,
+        indexMarried: (surname: string) => `po sňatku ${surname}`,
         menu: 'Kniha rodu',
         toolbarPrint: 'Tisk',
         toolbarClose: 'Zavřít',
@@ -4335,6 +4352,7 @@ const stringsCZ: StringsType = {
     },
 
     surnames: {
+        alsoMarried: (n: number) => `i jako příjmení po sňatku: ${n}`,
         menu: 'Tvary příjmení',
         title: 'Tvary příjmení',
         intro: 'Do zhruba roku 1900 píší matriky rod pokaždé jinak. Stačí jednou určit, že tvary znamenají tentýž rod, a hledání i slučování je najdou všechny — ať je kdo zapsaný jakkoli, včetně lidí přidaných později.',
@@ -4650,6 +4668,11 @@ const stringsCZ: StringsType = {
     },
 
     // Titles of the name shown with it (Person.titleBefore / titleAfter)
+    // Rodné příjmení za příjmením po sňatku: „Marie Nováková (roz. Dvořáková)“.
+    name: {
+        birthAbbr: 'roz.',
+    },
+
     titles: {
         settingLabel: 'Zobrazovat tituly',
         settingHint: 'Tituly před jménem a za ním (Ing., ml.) na kartách a v seznamech',
@@ -6469,6 +6492,8 @@ const stringsCZ: StringsType = {
 
     // Search
     search: {
+        married: (surname: string) => `po sňatku ${surname}`,
+        birth: (surname: string) => `roz. ${surname}`,
         placeholder: 'Hledat osobu...',
         noResults: 'Nic nenalezeno',
         multipleResults: 'Nalezeno více výsledků',
@@ -6924,6 +6949,11 @@ const stringsCZ: StringsType = {
     },
 
     settings: {
+        surnameDisplay: 'Zobrazení příjmení',
+        optBirth: 'Rodné',
+        optBoth: 'Po sňatku (roz. rodné)',
+        optMarried: 'Po sňatku',
+        surnameHint: 'Bez příjmení po sňatku se ukáže rodné.',
         groupTree: 'Zobrazení stromu',
         groupNotifications: 'Upozornění',
         groupCard: 'Karta osoby',
@@ -8034,6 +8064,8 @@ const stringsDE: StringsType = {
 
     // Family book
     book: {
+        indexSee: (a: string, b: string) => `${a} → siehe ${b}`,
+        indexMarried: (surname: string) => `verh. ${surname}`,
         menu: 'Familienbuch',
         menuDesc: 'Druckbares Buch: Kapitel nach Familien, Fotos, Quellen und ein Personenregister',
         toolbarPrint: 'Drucken',
@@ -8230,6 +8262,7 @@ const stringsDE: StringsType = {
     },
 
     surnames: {
+        alsoMarried: (n: number) => `auch als Ehename: ${n}`,
         menu: 'Namensschreibweisen',
         title: 'Namensschreibweisen',
         intro: 'Vor etwa 1900 schreiben die Kirchenbücher eine Familie von Eintrag zu Eintrag unterschiedlich. Einmal festgelegt, dass Schreibweisen dieselbe Familie meinen, finden Suche und Zusammenführen sie alle — egal wie eine Person geschrieben ist, auch später hinzugefügte Personen.',
@@ -8545,6 +8578,11 @@ const stringsDE: StringsType = {
     },
 
     // Titles of the name shown with it (Person.titleBefore / titleAfter)
+    // Geburtsname nach dem Ehenamen: „Anna Müller (geb. Schmidt)“.
+    name: {
+        birthAbbr: 'geb.',
+    },
+
     titles: {
         settingLabel: 'Titel anzeigen',
         settingHint: 'Titel vor und nach dem Namen (Dr., jun.) auf Karten und in Listen',
@@ -10339,6 +10377,8 @@ const stringsDE: StringsType = {
 
     // Search
     search: {
+        married: (surname: string) => `Ehename ${surname}`,
+        birth: (surname: string) => `geb. ${surname}`,
         placeholder: 'Person suchen...',
         noResults: 'Keine Ergebnisse',
         multipleResults: 'Mehrere Ergebnisse gefunden',
@@ -10770,6 +10810,11 @@ const stringsDE: StringsType = {
     },
 
     settings: {
+        surnameDisplay: 'Nachname anzeigen',
+        optBirth: 'Geburtsname',
+        optBoth: 'Ehename (geb. Geburtsname)',
+        optMarried: 'Ehename',
+        surnameHint: 'Ohne Ehenamen wird der Geburtsname angezeigt.',
         groupTree: 'Stammbaumansicht',
         groupNotifications: 'Hinweise',
         groupCard: 'Personenkarte',

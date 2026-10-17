@@ -53,7 +53,7 @@ import { extraParticipantRole } from '../godparents.js';
 import { sourceChipOpenHtml } from './sources.js';
 import { offeredDetails, refreshDetailGroup, resetDetailGroup, renderAgeCheck, ageBirthDate } from './event-details-ui.js';
 import { factStatusHtml } from './fact-status.js';
-import { shownName, shownNameOrEmpty } from '../person-name.js';
+import { shownName, shownNameOrEmpty, nameHtml } from '../person-name.js';
 export const relationshipsPanelMethods = uiModule({
     showRelationshipsPanel(personId: PersonId, returnToEdit: boolean = false, preservePending: boolean = false): void {
         // Setup dialog stack for standalone mode (when opened directly from card, not from edit dialog)
@@ -86,7 +86,12 @@ export const relationshipsPanelMethods = uiModule({
         if (!modal || !title || !content) return;
 
         const name = shownNameOrEmpty(person);
-        title.textContent = strings.relationships.title(name);
+        // The name with its birth-surname note (nameHtml escapes); the rest of the title as text.
+        const mark = '\u0000';
+        const titleParts = strings.relationships.title(mark).split(mark);
+        if (name && titleParts.length === 2 && nameHtml(person) !== this.escapeHtml(name)) {
+            title.innerHTML = `${this.escapeHtml(titleParts[0])}${nameHtml(person)}${this.escapeHtml(titleParts[1])}`;
+        } else title.textContent = strings.relationships.title(name);
 
         // Build relationships content
         const parents = person.parentIds

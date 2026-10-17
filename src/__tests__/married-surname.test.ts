@@ -216,8 +216,10 @@ describe('the surname after marriage in the data', () => {
         expect(DataManager.getPerson(ph.id)?.marriedSurname).toBeUndefined();
     });
 
-    it('the name as shown does not change (the birth surname)', () => {
-        expect(shownName(person('p1', 'Marie', 'Dvořáková', { marriedSurname: 'Nováková' }))).toBe('Marie Dvořáková');
+    it('the name as shown follows Settings → Surname display (married by default, the birth one with "birth")', () => {
+        const marie = person('p1', 'Marie', 'Dvořáková', { marriedSurname: 'Nováková' });
+        expect(shownName(marie)).toBe('Marie Nováková');
+        expect(shownName(marie, '', true, 'birth')).toBe('Marie Dvořáková');
     });
 
     it('search over the tree finds her by the surname after marriage, with or without diacritics, and its forms', () => {

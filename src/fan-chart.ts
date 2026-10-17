@@ -7,7 +7,7 @@
 
 import { StromData, Person, PersonId, ParentChildRelType, parentSlots } from './types.js';
 import { displayYear } from './dates.js';
-import { shownName } from './person-name.js';
+import { shownName, shownNameFull } from './person-name.js';
 import {
     posterFooterSvg, PosterFooterMeta, FOOTER_HEIGHT, POSTER_PADDING, POSTER_FONT, POSTER_BG,
 } from './export-image.js';
@@ -349,7 +349,7 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
             + `<path d="${path}"/>`
             + textSvg
             + kekuleSvg
-            + `<title>#${s.ahnentafel} · ${esc(name)}${years ? ` (${esc(years)})` : ''}${relLabel ? ` · ${esc(relLabel)}` : ''}</title></g>`);
+            + `<title>#${s.ahnentafel} · ${esc(shownNameFull(p))}${years ? ` (${esc(years)})` : ''}${relLabel ? ` · ${esc(relLabel)}` : ''}</title></g>`);
     }
 
     // Focus disc at the fan's center bottom.
@@ -360,7 +360,7 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
         + `<circle cx="${fmt(cx)}" cy="${fmt(cy)}" r="${FOCUS_R}"/>`
         + `<text x="${fmt(cx)}" y="${fmt(cy - 6)}" text-anchor="middle" class="fan-name g0">${esc(truncate(fname, 18))}</text>`
         + (fyears ? `<text x="${fmt(cx)}" y="${fmt(cy + 12)}" text-anchor="middle" class="fan-years g0">${esc(fyears)}</text>` : '')
-        + `<title>#1 · ${esc(fname)}</title></g>`);
+        + `<title>#1 · ${esc(shownNameFull(model.focus))}</title></g>`);
 
     const style = opts.embedStyles ? `<style>${FAN_LIGHT_STYLE}</style>` : '';
     return `<svg class="fan-svg" viewBox="0 0 ${fmt(W)} ${fmt(H)}" role="img">`

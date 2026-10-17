@@ -9,7 +9,8 @@ import { DataManager } from './data.js';
 import { normalizeSearchText as normalizeText, alternateNames, nameMatchesQuery } from './name-search.js';
 import { detailMatch } from './search-filter.js';
 import { displayYear } from './dates.js';
-import { shownName } from './person-name.js';
+import { nameHtml, surnameDisplay } from './person-name.js';
+import { surnameForms } from './surnames.js';
 
 /**
  * Sort persons by name (lastName, firstName)
@@ -459,7 +460,6 @@ export class PersonPicker {
     private renderItem(person: Person, index: number): string {
         // The list shows the name with its titles; the input keeps the bare
         // name (formatPersonName), which is what the search matches.
-        const name = shownName(person);
         const birthYear = this.options.showBirthYear && person.birthDate
             ? `<span class="birth-year">(*${this.escapeHtml(person.birthDate.split('-')[0])})</span>`
             : '';
@@ -467,9 +467,36 @@ export class PersonPicker {
         return `
             <div class="person-picker-item${index === this.selectedIndex ? ' selected' : ''}"
                  data-id="${this.escapeHtml(person.id)}">
-                ${this.escapeHtml(name)} ${birthYear}${this.detailMatchHtml(person)}
+                ${nameHtml(person)} ${birthYear}${this.hiddenSurnameMatchHtml(person)}${this.detailMatchHtml(person)}
             </div>
         `;
+    }
+
+    /**
+     * Found by the surname the shown name leaves out (Settings → "Surname
+     * display"): "po sňatku Nováková" when only the birth surname shows,
+     * "roz. Dvořáková" when only the married one does, the surname marked.
+     * With both shown nothing is added.
+     */
+    private hiddenSurnameMatchHtml(person: Person): string {
+        const married = person.marriedSurname?.trim();
+        if (!married || person.isPlaceholder) return '';
+        const display = surnameDisplay();
+        if (display === 'both') return '';
+        const words = normalizeText(this.input.value.trim()).split(' ').filter(Boolean);
+        if (!words.length) return '';
+        const data = this.searchData();
+        const formsOf = (surname: string): string[] =>
+            (data ? surnameForms(surname, data) : [surname]).map(f => normalizeText(f)).filter(Boolean);
+        const hidden = display === 'birth' ? married : person.lastName ?? '';
+        const shown = [normalizeText(person.firstName ?? ''), ...formsOf(display === 'birth' ? person.lastName ?? '' : married)];
+        const hiddenForms = formsOf(hidden);
+        const found = words.some(w => !shown.some(n => n.includes(w)) && hiddenForms.some(n => n.includes(w)));
+        if (!found || !hidden.trim()) return '';
+        const marked = `\u0000`;
+        const text = (display === 'birth' ? strings.search.married : strings.search.birth)(marked);
+        const [before, after = ''] = text.split(marked);
+        return `<div class="person-picker-match">${this.escapeHtml(before)}<mark>${this.escapeHtml(hidden.trim())}</mark>${this.escapeHtml(after)}</div>`;
     }
 
     /**

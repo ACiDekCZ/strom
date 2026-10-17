@@ -13,7 +13,7 @@ import { uiModule } from './module.js';
 import { isCoarsePointer } from './bottom-sheet.js';
 import { isTabletOrMobile } from '../breakpoints.js';
 import { fitFlyout, FLYOUT_MARGIN } from './flyout.js';
-import { shownName } from '../person-name.js';
+import { shownName, nameHtml } from '../person-name.js';
 
 /** One entry in the person action menu (context menu / bottom sheet). */
 export interface PersonMenuAction {
@@ -350,7 +350,7 @@ export const contextMenuMethods = uiModule({
         const person = DataManager.getPerson(personId);
         const personName = person ? shownName(person) : '';
         const header = personName
-            ? `<div class="context-menu-header">${this.escapeHtml(personName)}</div>`
+            ? `<div class="context-menu-header">${person ? nameHtml(person) : this.escapeHtml(personName)}</div>`
             : '';
         // Items are text-only here (the mobile bottom sheet keeps the glyphs).
         menu.innerHTML = header + this.personSignalsMenuHtml(personId, false, 'context-menu-item') + this.contextMenuItemsHtml(actions);

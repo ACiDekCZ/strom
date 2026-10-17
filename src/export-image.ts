@@ -14,10 +14,10 @@ import { parentRelKind, parentRelDash, connectionDash } from './parent-rel-style
 import type { CardLine, CardLineStyle, CardValueLines } from './card-fields.js';
 import {
     CARD_MARK_WIDTH, CARD_COLUMN_GAP, CUSTOM_CARD_PAD_X, CARD_ROW_HEIGHT, CARD_DETAIL_GAP, CARD_LABEL_GAP,
-    CARD_VALUE_DATE_GAP, CARD_NAME_ROW_HEIGHT, CARD_YEARS_ROW_HEIGHT, CARD_AVATAR_WIDTH, CARD_HEAD_GAP,
+    CARD_VALUE_DATE_GAP, CARD_NAME_ROW_HEIGHT, CARD_YEARS_ROW_HEIGHT, CARD_BIRTH_ROW_HEIGHT, CARD_AVATAR_WIDTH, CARD_HEAD_GAP,
     MeasureTexts, CardRow, cardPlaceOffset, cardLinesTop, customCardRows, cardHeadBlock,
 } from './card-width.js';
-import { shownName } from './person-name.js';
+import { shownName, shownNameParts, birthNoteText } from './person-name.js';
 import { strings } from './strings.js';
 import {
     unionOrderBadges, UnionOrderBadge, PillMetrics, estimatePillMetrics, placeUnionOrderPill, viewLineSegments,
@@ -119,6 +119,23 @@ function fittedText(
         ? ` textLength="${maxW.toFixed(0)}" lengthAdjust="spacingAndGlyphs"` : '';
     const weight = bold ? ' font-weight="600"' : '';
     return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="${anchor}" font-size="${fs}"${weight} fill="${fill}"${clamp}>${escapeXml(text)}</text>`;
+}
+
+/**
+ * The birth surname's row ("roz. Dvořáková") as it fits `maxW`: whole, or
+ * shortened with "…" (never squeezed with textLength), or '' when fewer than
+ * 4 letters of the surname would show — the screen's rule (fitCardBirths).
+ * `width` measures a text in the row's font.
+ */
+export function fitBirthRow(birth: string, maxW: number, width: (text: string) => number): string {
+    const full = birthNoteText(birth);
+    if (!full || width(full) <= maxW) return full;
+    const head = full.length - birth.length;
+    for (let n = birth.length - 1; n >= Math.min(4, birth.length); n--) {
+        const text = `${full.slice(0, head + n).trimEnd()}…`;
+        if (width(text) <= maxW) return text;
+    }
+    return '';
 }
 
 /**
@@ -271,9 +288,11 @@ function customCardSvg(
     const left = pos.x + CUSTOM_CARD_PAD_X;
     const right = pos.x + cw - CUSTOM_CARD_PAD_X;
     const name = shownName(person, '?');
+    const birth = shownNameParts(person, '?').birthNote;
+    const birthRow = birthNoteText(birth);
     const metrics = { cardWidth: cw, dateColumn, ...(style === 'labels' ? { labelColumn } : {}) };
-    const { rows, heads } = customCardRows([{ name, avatar: !person.isPlaceholder, lines, ...(years ? { years } : {}) }],
-        metrics, measure, valueLines, style);
+    const { rows, heads } = customCardRows([{ name, avatar: !person.isPlaceholder, lines, ...(years ? { years } : {}),
+        ...(birthRow ? { birth: birthRow } : {}) }], metrics, measure, valueLines, style);
     const head = heads[0];
     let textX = left;
     if (!person.isPlaceholder) {
@@ -285,7 +304,7 @@ function customCardSvg(
             out.push(`<image href="${escapeXml(person.photo)}" x="${(cx - 15).toFixed(1)}" y="${(cy - 15).toFixed(1)}" width="30" height="30" preserveAspectRatio="xMidYMid slice" clip-path="url(#${clipId})"/>`);
             out.push(`<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="15" fill="none" stroke="${ring}" stroke-width="1.5"/>`);
         } else {
-            const initials = personInitials(person.firstName, person.lastName) || '?';
+            const initials = personInitials(person.firstName, shownNameParts(person, '', false).surname) || '?';
             out.push(`<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="15" fill="${COLORS.avatarBg}" stroke="${ring}" stroke-width="1.5"/>`);
             out.push(`<text x="${cx.toFixed(1)}" y="${(cy + 4).toFixed(1)}" text-anchor="middle" font-size="11" font-weight="600" fill="${COLORS.initials}">${escapeXml(initials)}</text>`);
         }
@@ -293,7 +312,8 @@ function customCardSvg(
     }
     const nameRoom = right - textX;
     // The name's rows and the years, as a block in the middle of the header; a 15px text's baseline 14.5px into its 19px row.
-    const blockTop = pos.y + 10 + (head.block - CARD_NAME_ROW_HEIGHT * head.name.length - (head.years ? CARD_YEARS_ROW_HEIGHT : 0)) / 2;
+    const birthH = head.birth ? CARD_BIRTH_ROW_HEIGHT : 0;
+    const blockTop = pos.y + 10 + (head.block - CARD_NAME_ROW_HEIGHT * head.name.length - birthH - (head.years ? CARD_YEARS_ROW_HEIGHT : 0)) / 2;
     if (valueLines === 1) {
         const nameAt15 = measure('name', [name]).get(name) ?? 0;
         let fs = 15;
@@ -320,9 +340,15 @@ function customCardSvg(
     }
     // The 11px years 10.5px into their 14px row, under the name.
     const pin = (w: number): string => exact && w > 0 ? ` textLength="${w.toFixed(1)}" lengthAdjust="spacingAndGlyphs"` : '';
+    // The birth surname 10.5px into its 14px row under the name: shortened, never squeezed.
+    const birthText = head.birth ? fitBirthRow(birth, nameRoom, t => measure('years', [t]).get(t) ?? 0) : '';
+    if (birthText) {
+        const y = blockTop + CARD_NAME_ROW_HEIGHT * head.name.length + 10.5;
+        out.push(`<text class="card-birth" x="${textX.toFixed(1)}" y="${y.toFixed(1)}" font-size="11" fill="${COLORS.textFaint}" ${LINE_FONT}>${escapeXml(birthText)}</text>`);
+    }
     if (head.years) {
         const w = Math.min(measure('years', [head.years]).get(head.years) ?? 0, nameRoom);
-        const y = blockTop + CARD_NAME_ROW_HEIGHT * head.name.length + 10.5;
+        const y = blockTop + CARD_NAME_ROW_HEIGHT * head.name.length + birthH + 10.5;
         out.push(`<text class="card-years" x="${textX.toFixed(1)}" y="${y.toFixed(1)}" font-size="11" fill="${COLORS.textLight}"${pin(w)} ${LINE_FONT}>${escapeXml(head.years)}</text>`);
     }
 
@@ -597,7 +623,7 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
                 out.push(`<image href="${escapeXml(person.photo!)}" x="${(cxAv - r).toFixed(1)}" y="${(cyAv - r).toFixed(1)}" width="${2 * r}" height="${2 * r}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${clipId})"/>`);
                 out.push(`<circle cx="${cxAv.toFixed(1)}" cy="${cyAv.toFixed(1)}" r="${r}" fill="none" stroke="${ring}" stroke-width="2"/>`);
             } else {
-                const initials = personInitials(person.firstName, person.lastName) || '?';
+                const initials = personInitials(person.firstName, shownNameParts(person, '', false).surname) || '?';
                 const initialsSize = 12;
                 out.push(`<circle cx="${cxAv.toFixed(1)}" cy="${cyAv.toFixed(1)}" r="${r}" fill="${COLORS.avatarBg}" stroke="${ring}" stroke-width="2"/>`);
                 out.push(`<text x="${cxAv.toFixed(1)}" y="${(cyAv + initialsSize / 3).toFixed(1)}" text-anchor="middle" font-size="${initialsSize}" font-weight="600" fill="${COLORS.initials}">${escapeXml(initials)}</text>`);
@@ -619,9 +645,34 @@ export function buildTreeSvg(data: StromData, result: PosterLayout, options: Pos
             else if (isDeceasedP) metaYears = '†';
             const metaPlace = person.birthPlace?.trim() || '';
             const meta = [metaYears, metaPlace].filter(Boolean).join(' · ');
-            out.push(fittedText(fullName, cx, pos.y + 28, contentW, [15, 13, 11], true, COLORS.text));
-            if (meta) {
-                out.push(fittedText(meta, cx, pos.y + 45, contentW, [11, 10, 9], false, COLORS.textLight));
+            const parts = shownNameParts(person, '?');
+            const birthText = parts.birthNote ? fitBirthRow(parts.birthNote, contentW, t => estWidth(t, 11, false)) : '';
+            if (!birthText) {
+                out.push(fittedText(fullName, cx, pos.y + 28, contentW, [15, 13, 11], true, COLORS.text));
+                if (meta) {
+                    out.push(fittedText(meta, cx, pos.y + 45, contentW, [11, 10, 9], false, COLORS.textLight));
+                }
+            } else {
+                // With the birth surname's row: the screen's rows (fitCardNames) — the
+                // name on one line 15 → 14 → 13px, else given name / surname at
+                // 12.5px; then "roz. …" at 11px, then the meta (years only after a
+                // split name). The birth row shortens, never squeezes.
+                const oneLine = [15, 14, 13].find(fs => estWidth(fullName, fs, true) <= contentW);
+                const nameText = (t: string, y: number, fs: number) => {
+                    let shown = t;
+                    for (let n = t.length - 1; n > 0 && estWidth(shown, fs, true) > contentW; n--) shown = `${t.slice(0, n).trimEnd()}…`;
+                    return `<text x="${cx.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="middle" font-size="${fs}" font-weight="600" fill="${COLORS.text}">${escapeXml(shown)}</text>`;
+                };
+                if (oneLine) {
+                    out.push(nameText(fullName, pos.y + 24, oneLine));
+                    out.push(`<text class="card-birth" x="${cx.toFixed(1)}" y="${(pos.y + 38.5).toFixed(1)}" text-anchor="middle" font-size="11" fill="${COLORS.textFaint}">${escapeXml(birthText)}</text>`);
+                    if (meta) out.push(fittedText(meta, cx, pos.y + 52.5, contentW, [11, 10, 9], false, COLORS.textLight));
+                } else {
+                    out.push(nameText(parts.given, pos.y + 15, 12.5));
+                    out.push(nameText(parts.surname, pos.y + 29.5, 12.5));
+                    out.push(`<text class="card-birth" x="${cx.toFixed(1)}" y="${(pos.y + 43).toFixed(1)}" text-anchor="middle" font-size="11" fill="${COLORS.textFaint}">${escapeXml(birthText)}</text>`);
+                    if (metaYears) out.push(fittedText(metaYears, cx, pos.y + 56.5, contentW, [10.5], false, COLORS.textLight));
+                }
             }
         }
 

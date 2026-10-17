@@ -55,7 +55,7 @@ import { presumedDeceasedSet } from './privacy.js';
 import { placeList } from './places.js';
 import { SettingsManager } from './settings.js';
 import { personInitials } from './initials.js';
-import { shownName, shownNameParts } from './person-name.js';
+import { shownName, shownNameParts, shownNameFull, birthNoteText } from './person-name.js';
 import { extractSubtree } from './subtree.js';
 import { buildFanModel, buildFanSvg } from './fan-chart.js';
 import { computeIndirectIds } from './indirect.js';
@@ -731,6 +731,7 @@ class TreeRendererClass {
         // A card of one height for the view keeps its last line clear of the ⇄ pill
         // (index.html .has-edge-br): its rows are wrapped that much narrower.
         const edgeRightIds = new Set<PersonId>();
+        let anyBirth = false;
         for (const id of positions.keys()) {
             const person = DataManager.getPerson(id);
             if (!person) continue;
@@ -739,8 +740,12 @@ class TreeRendererClass {
             ids.push(id);
             const reserve = fields.height !== 'content' && personLines.length > 0 && this.hasCrossTreePill(person, this.lastCrossTrees);
             if (reserve) edgeRightIds.add(id);
+            // The birth surname under the name (src/person-name.ts): its row never widens the card.
+            const birth = birthNoteText(shownNameParts(person, '?').birthNote);
+            if (birth) anyBirth = true;
             entries.push({
                 name: shownName(person, '?'), avatar: !person.isPlaceholder, lines: personLines,
+                ...(birth ? { birth } : {}),
                 ...(presumed ? { years: cardYears(person, presumed.has(id)) } : {}),
                 ...(reserve ? { lastLineReserve: CARD_EDGE_PILL_RIGHT } : {}),
             });
@@ -770,7 +775,7 @@ class TreeRendererClass {
             for (const h of heights) tallest = Math.max(tallest, h);
             return { ...measured, metrics: { ...metrics, cardHeight: tallest, personHeights: new Map(ids.map((id, i) => [id, heights[i]])) } };
         }
-        return { ...measured, metrics: { ...metrics, cardHeight: customCardViewHeight(fields.on.length, fields.lines, heights, fields.years) } };
+        return { ...measured, metrics: { ...metrics, cardHeight: customCardViewHeight(fields.on.length, fields.lines, heights, fields.years, anyBirth) } };
     }
 
     /** The custom card's width and date column of the drawn view (null in other densities). */
@@ -1667,7 +1672,12 @@ class TreeRendererClass {
             // The name as shown: the given name with the title before it, the
             // person's own lastName (maiden name for women) with the title
             // after it (src/person-name.ts) — the two lines of a split name.
-            const { given: displayName, surname: displaySurname } = shownNameParts(person, '?');
+            // With a married surname and Settings → "Surname display" on 'both',
+            // the birth surname is a quiet row of its own (.card-birth) on the
+            // normal and the field cards; never on the compact one.
+            const { given: displayName, surname: displaySurname, birthNote } = shownNameParts(person, '?');
+            // Tooltip and screen reader: the whole name with the note ("Marie Nováková (roz. Dvořáková)").
+            const fullTitle = shownNameFull(person, '?');
 
             // Birth year for the card meta row (the year range replaces the dagger).
             const birthYear = person.birthDate ? displayYear(person.birthDate) : '';
@@ -1793,7 +1803,7 @@ class TreeRendererClass {
             // Full name on one row (never shrunk — overflow ellipsizes).
             const fullName = `${displayName} ${displaySurname}`.trim();
             // Avatar initials (first name + surname, never a title), used when there is no photo.
-            const initials = personInitials(person.firstName, person.lastName) || '?';
+            const initials = personInitials(person.firstName, shownNameParts(person, '', false).surname) || '?';
 
             // Meta row (row 2): life-year range. The year range carries the
             // "deceased" cue (the † dagger is gone from the name row): a dead
@@ -1838,9 +1848,12 @@ class TreeRendererClass {
                 : `<span class="avatar-initials">${this.escapeHtml(initials)}</span>`;
             const avatarHtml = showAvatar
                 ? `<div class="card-avatar-wrap"><div class="card-avatar">${avatarInner}</div>${badgeHtml}</div>` : '';
-            const nameAttrs = `title="${this.escapeHtml(fullName)}" data-given="${this.escapeHtml(displayName)}" data-surname="${this.escapeHtml(displaySurname)}"`;
+            const nameAttrs = `title="${this.escapeHtml(fullTitle)}" data-given="${this.escapeHtml(displayName)}" data-surname="${this.escapeHtml(displaySurname)}"`;
             const nameHtml = `<div class="name"><span class="name-text" ${nameAttrs}>${this.escapeHtml(fullName)}</span></div>`;
             const head = customLines ? this.customHeads.get(id) : undefined;
+            // The birth surname's row (only with a note: no note, no element).
+            const birthHtml = birthNote && density !== 'compact'
+                ? `<div class="card-birth" data-birth="${this.escapeHtml(birthNote)}">${this.escapeHtml(birthNoteText(birthNote))}</div>` : '';
 
             // Custom: the avatar and the name (and the years under it) on one
             // row, then one line per chosen event (src/card-fields.ts). When
@@ -1851,7 +1864,7 @@ class TreeRendererClass {
                     <div class="card-head${head?.years ? ' card-head--years' : ''}">${avatarHtml}<div class="card-head-text">${head && this.customWrapped
                         ? `<div class="name name--rows"><span class="name-text" ${nameAttrs}>${head.name.map(r =>
                             `<span class="name-row">${this.escapeHtml(r)}</span>`).join('')}</span></div>`
-                        : nameHtml}${head?.years ? `<div class="card-years">${this.escapeHtml(head.years)}</div>` : ''}</div></div>
+                        : nameHtml}${birthHtml}${head?.years ? `<div class="card-years">${this.escapeHtml(head.years)}</div>` : ''}</div></div>
                     <div class="card-lines${this.customWrapped ? ' card-lines--rows' : ''}">${customLines.map(l => {
                         const rows = this.customRows.get(l);
                         return cardLineHtml(l, t => this.escapeHtml(t), !!rows?.cut, this.customWrapped ? rows : undefined, this.customStyle,
@@ -1860,7 +1873,7 @@ class TreeRendererClass {
                 </div>` : `
                 ${avatarHtml}
                 <div class="card-body">
-                    ${nameHtml}
+                    ${nameHtml}${birthHtml}
                     ${density !== 'compact' && metaText ? `<div class="birth-date" data-years="${this.escapeHtml(metaYears)}"><span class="meta-text">${this.escapeHtml(metaText)}</span></div>` : ''}
                 </div>
             `;
@@ -2039,7 +2052,7 @@ class TreeRendererClass {
                 : '';
             if (ttBirthLine || ttDeathLine || ttRelLines.length > 0 || ttSignals || ttViewLink) {
                 const rows = [
-                    `<div class="tt-name">${this.escapeHtml(fullName)}</div>`,
+                    `<div class="tt-name">${this.escapeHtml(fullTitle)}</div>`,
                     ttBirthLine ? `<div class="tt-line">${this.escapeHtml(ttBirthLine)}</div>` : '',
                     ttDeathLine ? `<div class="tt-line">${this.escapeHtml(ttDeathLine)}</div>` : '',
                     ttRecorded ? `<div class="tt-line tt-warn">${this.escapeHtml(ttRecorded)}</div>` : '',
@@ -2230,7 +2243,10 @@ class TreeRendererClass {
         // that floor at matching specificity).
         // The custom card has one name row above its lines: no two-line step either.
         const density = SettingsManager.getCardDensity();
-        if (density === 'compact' || isFieldCardDensity(density)) return;
+        if (density === 'compact' || isFieldCardDensity(density)) {
+            this.fitCardBirths(canvas);
+            return;
+        }
 
         // Step 2: two lines (break between given name and surname) + years-only meta.
         for (const { nameEl, textEl, given, surname, meta, metaText } of left) {
@@ -2254,6 +2270,39 @@ class TreeRendererClass {
         }
         // Step 3 (ellipsis on an overflowing line) is handled by the
         // .name-line { text-overflow: ellipsis } CSS.
+        this.fitCardBirths(canvas);
+    }
+
+    /**
+     * The birth surname's row under a name ("roz. Dvořáková", .card-birth)
+     * shortens with "…" (CSS); when less than 4 letters of the surname would
+     * show, the row is left out (the full name stays in the tooltip). Reads
+     * only after the name has been fitted, one layout for all cards.
+     */
+    private fitCardBirths(canvas: HTMLElement): void {
+        const rows = [...canvas.querySelectorAll<HTMLElement>('.person-card .card-birth')];
+        if (!rows.length) return;
+        rows.forEach(el => el.classList.remove('is-dropped'));
+        const drop: HTMLElement[] = [];
+        for (const el of rows) {
+            const text = el.firstChild;
+            const box = el.getBoundingClientRect().width;
+            if (!text || text.nodeType !== Node.TEXT_NODE || box === 0) continue;
+            const full = text.textContent ?? '';
+            const birth = el.dataset.birth ?? '';
+            // "roz. " and the surname's first 4 letters, and the ellipsis after them when the rest is cut.
+            const keep = Math.min(full.length, full.length - birth.length + Math.min(4, birth.length));
+            const range = document.createRange();
+            range.setStart(text, 0);
+            range.setEnd(text, full.length);
+            const fullW = range.getBoundingClientRect().width;
+            if (fullW <= box + 0.01) continue;
+            range.setEnd(text, keep);
+            const keepW = range.getBoundingClientRect().width;
+            const ellipsisW = keepW / Math.max(1, keep);
+            if (keepW + ellipsisW > box) drop.push(el);
+        }
+        drop.forEach(el => el.classList.add('is-dropped'));
     }
 
     // ============= Research edge =============
@@ -2576,7 +2625,7 @@ class TreeRendererClass {
     /** The card's accessible name: the name, then its status and what waits. */
     private cardAriaLabel(person: Person, s: CardSignalInfo): string {
         const c = strings.card;
-        const parts = [shownName(person)];
+        const parts = [shownNameFull(person)];
         if (s.showEvidence && s.evidence) parts.push(c.ariaEv[s.evidence.level]);
         if (s.showStory) parts.push(s.story === 'draft' ? c.ariaStoryDraft : s.storyNew ? c.ariaStoryNew : c.ariaStory);
         if (s.action === 'waiting') parts.push(c.ariaWaiting);

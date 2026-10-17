@@ -39,7 +39,7 @@ import {
 import { PersonPicker } from '../person-picker.js';
 import { AppExporter } from '../export.js';
 import { SettingsManager } from '../settings.js';
-import { ThemeMode, LanguageSetting, AppMode, AuditLog, APP_VERSION, ViewMode, STANDALONE_VIEWS } from '../types.js';
+import { ThemeMode, LanguageSetting, AppMode, AuditLog, APP_VERSION, ViewMode, STANDALONE_VIEWS, SurnameDisplay } from '../types.js';
 import { CryptoSession, isEncrypted, encrypt, decrypt, EncryptedData } from '../crypto.js';
 import { validateTreeData, ValidationResult as TreeValidationResult, ValidationIssue } from '../validation.js';
 import * as CrossTree from '../cross-tree.js';
@@ -47,9 +47,13 @@ import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
 import { yearOf } from '../dates.js';
 import { twoFiguresSvg } from '../icons.js';
-import { shownNameOrEmpty } from '../person-name.js';
+import { shownNameOrEmpty, nameHtml } from '../person-name.js';
 import { forgetCardTypeCopy } from './card-fields-ui.js';
 import { syncControlBlock } from './minimap.js';
+
+
+/** The sample name under Settings > Surname display (no titles shown). */
+const SURNAME_SAMPLE = { firstName: 'Marie', lastName: 'Dvořáková', marriedSurname: 'Nováková' };
 
 export const miscMethods = uiModule({
     // ---- ABOUT DIALOG ----
@@ -329,6 +333,7 @@ export const miscMethods = uiModule({
         if (kekuleToggle) kekuleToggle.checked = SettingsManager.isFanKekuleEnabled();
         const titlesToggle = document.getElementById('show-titles-toggle') as HTMLInputElement | null;
         if (titlesToggle) titlesToggle.checked = SettingsManager.isShowTitles();
+        this.syncSurnameDisplaySetting();
         const crossTreeToggle = document.getElementById('cross-tree-badges-toggle') as HTMLInputElement | null;
         if (crossTreeToggle) crossTreeToggle.checked = SettingsManager.isCrossTreeBadgesEnabled();
         const branchColorsToggle = document.getElementById('branch-colors-toggle') as HTMLInputElement | null;
@@ -352,6 +357,36 @@ export const miscMethods = uiModule({
 
         this.syncSettingsDependents();
         modal.classList.add('active');
+        this.fitSurnameDisplaySetting();
+    },
+
+    /** Surname display: the checked option and the name samples. */
+    syncSurnameDisplaySetting(): void {
+        const current = SettingsManager.getSurnameDisplay();
+        document.querySelectorAll<HTMLInputElement>('input[name="surname-display"]').forEach(radio => {
+            radio.checked = radio.value === current;
+        });
+        document.querySelectorAll<HTMLElement>('[data-surname-sample]').forEach(el => {
+            el.innerHTML = nameHtml(SURNAME_SAMPLE, { display: el.dataset.surnameSample as SurnameDisplay });
+        });
+        const shared = document.getElementById('surname-display-sample');
+        if (shared) shared.innerHTML = nameHtml(SURNAME_SAMPLE, { display: current });
+    },
+
+    /**
+     * The segment holds three labels side by side; where they do not fit
+     * (German in the 480 px panel) the option shows as three radio rows, as on
+     * a phone. Measured once the dialog is visible.
+     */
+    fitSurnameDisplaySetting(): void {
+        const row = document.getElementById('surname-display-setting');
+        if (!row) return;
+        row.classList.remove('is-rows');
+        const segment = row.querySelector<HTMLElement>('.surname-display-options');
+        const tooWide = (!!segment && segment.scrollWidth > segment.clientWidth + 1)
+            || [...row.querySelectorAll<HTMLElement>('.surname-opt-label')]
+                .some(label => label.scrollWidth > label.clientWidth + 1);
+        row.classList.toggle('is-rows', tooWide);
     },
 
     /**
