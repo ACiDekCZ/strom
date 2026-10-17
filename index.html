@@ -1627,7 +1627,12 @@
             z-index: 6;
         }
         .card-edge > * { pointer-events: auto; }
-        .edge-top-left     { top: -9px; left: 12px; }
+        /* The edge whose pill shows its bubble rises above the card's other
+           edges (the marriage-order pill above the tabs comes later in the
+           DOM and would cover the bubble of a tab below it). */
+        .card-edge:focus-within { z-index: 8; }
+        @media (hover: hover) { .card-edge:hover { z-index: 8; } }
+        .edge-top-left    { top: -9px; left: 12px; }
         .edge-top-right    { top: -9px; right: 12px; }
         /* The marriage-order pill above the tabs (its left set by the renderer). */
         .edge-top-above    { top: -29px; }

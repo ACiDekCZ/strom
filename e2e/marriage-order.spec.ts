@@ -561,3 +561,59 @@ test('N35: on a hovered card the relations icon never covers the marriage-order 
     expect(errors).toEqual([]);
     expect(hovered).toBeGreaterThan(0);
 });
+
+/**
+ * A pill above the tabs (.edge-top-above) never covers the bubble of a tab
+ * below it: the hovered tab's edge rises above the card's other edges. Each
+ * card with a pill above its tabs, each of its tabs hovered in turn; every
+ * point where the bubble and the pill meet shows the bubble.
+ */
+test('a pill above the tabs never covers the bubble of a hovered tab', async ({ page }) => {
+    test.setTimeout(120_000);
+    const errors: string[] = [];
+    let overlaps = 0;
+    for (const [name, make, focuses] of HARNESS) {
+        await loadTree(page, make(), focuses[0]);
+        for (const density of ['compact', 'normal'] as const) {
+            await page.evaluate((d) => window.Strom.UI.setCardDensity(d as never), density);
+            for (const focus of focuses) {
+                await page.evaluate((f) => window.Strom.TreeRenderer.setFocus(f as never), focus);
+                await page.evaluate(() => document.fonts.ready);
+                const ids = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('#tree-canvas .person-card')]
+                    .filter(c => c.querySelector(':scope > .edge-top-above .union-order-pill') && c.querySelector('.edge-top-right :is(.branch-tab, .hidden-families-btn)'))
+                    .map(c => c.dataset.id!));
+                for (const id of ids) {
+                    await zoomTo(page, 1, id);
+                    const tabs = byId(page, id).locator('.edge-top-right :is(.branch-tab, .hidden-families-btn)');
+                    for (let i = 0; i < await tabs.count(); i++) {
+                        const box = (await tabs.nth(i).boundingBox())!;
+                        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+                        await expect(tabs.nth(i).locator('.badge-tooltip')).toBeVisible();
+                        const r = await tabs.nth(i).evaluate((tab) => {
+                            const tip = tab.querySelector('.badge-tooltip')!;
+                            const t = tip.getBoundingClientRect();
+                            const p = tab.closest('.person-card')!.querySelector('.edge-top-above .union-order-pill')!.getBoundingClientRect();
+                            const left = Math.max(t.left, p.left) + 1, right = Math.min(t.right, p.right) - 1;
+                            const top = Math.max(t.top, p.top) + 1, bottom = Math.min(t.bottom, p.bottom) - 1;
+                            if (left >= right || top >= bottom) return { overlap: false, covered: 0 };
+                            let covered = 0;
+                            for (let x = left; x <= right; x += 3) for (let y = top; y <= bottom; y += 3) {
+                                // the bubble's rounded corners (8px) leave their outer points to what lies below
+                                if (Math.min(x - t.left, t.right - x) < 8 && Math.min(y - t.top, t.bottom - y) < 8) continue;
+                                const el = document.elementFromPoint(x, y);
+                                if (!el || !tip.contains(el)) covered++;
+                            }
+                            return { overlap: true, covered };
+                        });
+                        if (r.overlap) overlaps++;
+                        if (r.covered) errors.push(`${name}/${density}/focus ${focus}: the pill of ${id} covers ${r.covered} points of tab ${i}'s bubble`);
+                        await page.mouse.move(0, 0);
+                    }
+                }
+            }
+        }
+    }
+    console.log(`pill over a bubble: ${overlaps} bubbles meeting a pill above the tabs, ${errors.length} covered`);
+    expect(errors).toEqual([]);
+    expect(overlaps).toBeGreaterThan(0);
+});
