@@ -187,22 +187,32 @@ function firstNamesMatch(name1: string, name2: string): { exact: boolean; firstW
     return { exact: false, firstWord, anyWord, prefix, matchedWord };
 }
 
-/** What is actually written for this person: their surname and their own spellings. */
-function writtenSurnames(person: { lastName: string; nameVariants?: string[] }): string[] {
-    return [person.lastName, ...(person.nameVariants ?? [])].filter(Boolean);
+/** The written-name fields matching reads. */
+type SurnameFields = { lastName: string; marriedSurname?: string; nameVariants?: string[] };
+
+/**
+ * What is actually written for this person: their surname, their surname
+ * after marriage (another program may keep that one as THE surname) and
+ * their own spellings.
+ */
+function writtenSurnames(person: SurnameFields): string[] {
+    return [person.lastName, person.marriedSurname ?? '', ...(person.nameVariants ?? [])].filter(Boolean);
 }
 
 /** The best match across every written form of both names. */
 function bestLastNameMatch(
-    existing: { lastName: string; nameVariants?: string[] },
-    incoming: { lastName: string; nameVariants?: string[] },
+    existing: SurnameFields,
+    incoming: SurnameFields,
     existingData?: StromData,
     incomingData?: StromData,
 ): { exact: boolean; similar: boolean; similarity: number } {
     // A rule (Víšek/Víšková) or a group the user entered is not a similarity
     // question — it is an answer, so it does not go near the fuzzy comparison.
+    // Both the birth surname and the one after marriage are asked.
+    const surnames = (p: SurnameFields): string[] => [p.lastName, p.marriedSurname ?? ''].filter(Boolean);
     const rulesSay = (data?: StromData): boolean =>
-        !!data && sameSurname(existing.lastName, incoming.lastName, data);
+        !!data && (sameSurname(existing.lastName, incoming.lastName, data)
+            || surnames(existing).some(a => surnames(incoming).some(b => sameSurname(a, b, data))));
     if (rulesSay(existingData) || rulesSay(incomingData)) {
         return { exact: true, similar: true, similarity: 1.0 };
     }

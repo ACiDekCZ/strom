@@ -43,6 +43,7 @@ function fieldLabel(row: ValueChange): string {
     const death = strings.events.types.death;
     switch (row.field) {
         case 'name': return s.fieldName;
+        case 'marriedSurname': return strings.labels.marriedSurname;
         case 'gender': return s.fieldGender;
         case 'birthDate': return `${birth} · ${e.date}`;
         case 'birthPlace': return `${birth} · ${e.place}`;

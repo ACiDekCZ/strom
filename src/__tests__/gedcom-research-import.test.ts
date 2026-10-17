@@ -184,7 +184,9 @@ describe('GEDCOM from a research tool', () => {
     it('files a woman under her birth surname when the file puts the married one first', () => {
         const anna = byName(data, 'Anna');
         expect(anna.lastName).toBe('Svobodová');
-        expect(anna.nameVariants).toEqual(['Anna Nováková']);
+        // The married name is her surname after marriage, not one more spelling.
+        expect(anna.marriedSurname).toBe('Nováková');
+        expect(anna.nameVariants).toBeUndefined();
     });
 
     it('cites the record a name comes from on the person (its own page: a source of that page)', () => {

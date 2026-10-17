@@ -298,6 +298,8 @@ function stripDetails(person: Person): void {
     // Titles ("Ing.", "ml.") narrow down who someone is as much as a name variant.
     delete person.titleBefore;
     delete person.titleAfter;
+    // The surname after marriage is the name a living woman goes by today.
+    delete person.marriedSurname;
     delete person.question;
     delete person.refn;
     delete person.refnType;
@@ -382,10 +384,13 @@ export function applyLivingPrivacy(
         switch (mode) {
             case 'initials': {
                 const birthYear = yearOf(person.birthDate);
+                const married = initial(person.marriedSurname ?? '');
                 person.firstName = initial(person.firstName);
                 person.lastName = initial(person.lastName);
                 stripDetails(person);
                 if (birthYear !== null) person.birthDate = String(birthYear);
+                // Shortened like the surname, never kept whole.
+                if (married) person.marriedSurname = married;
                 break;
             }
             case 'anonymous': {

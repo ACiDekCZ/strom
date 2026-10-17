@@ -573,6 +573,13 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         } else {
             pushName(lines, person, options.titles);
         }
+        // The surname after marriage as the name she had after it, right
+        // after the primary one (the birth name), as the research writes it.
+        const married = person.marriedSurname?.trim();
+        if (married) {
+            pushWrapped(lines, 1, 'NAME', formatGedcomName(person.firstName, married));
+            lines.push('2 TYPE married');
+        }
         // Other spellings as further NAME lines — the first one above stays the
         // primary, which is what every reader expects.
         for (const variant of person.nameVariants ?? []) {

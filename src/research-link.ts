@@ -693,6 +693,54 @@ export function withResearchTitles(tree: StromData, research: StromData): StromD
     return persons ? { ...tree, persons } : tree;
 }
 
+/** The bridge feature of a research that keeps a name's kind married apart (reads `2 TYPE married` from the app). */
+export const MARRIED_SURNAME_FEATURE = 'person.marriedSurname';
+
+/**
+ * The surname after marriage (Person.marriedSurname) that a research
+ * version lacks. The app sends it as a second NAME with `2 TYPE married`; a
+ * research that does not keep the kind (no `person.marriedSurname` in its
+ * `features`; not known = an older research) stores it as one more spelling
+ * and gives it back as a bare NAME, which reads as a name variant. So each
+ * person keeps the surname after marriage of the previous state, matched by
+ * REFN (as stabilizeIds matches them), and the bare variant that only
+ * repeats it ("Marie Nováková") goes. One the research's version has stays.
+ *
+ * With the feature the research decides, a removed one included — except
+ * where its version still has the name only as that bare spelling: it got
+ * it while it did not keep the kind, so it never had it as married.
+ * `received`: the research has had the tree's surnames after marriage as
+ * such; then `next` comes back as it is.
+ * Returns a new object when any person changed; neither input is changed.
+ */
+export function keepMarriedSurname(next: StromData, previous: StromData, features: readonly string[] | null | undefined, received = false): StromData {
+    const knows = !!features?.includes(MARRIED_SURNAME_FEATURE);
+    if (knows && received) return next;
+    const prevByRefn = uniqueRefns(previous);
+    if (prevByRefn.size === 0) return next;
+    const key = (v: string): string => v.replace(/\//g, ' ').replace(/\s+/g, ' ').trim().normalize('NFC').toLocaleLowerCase();
+    let persons: StromData['persons'] | null = null;
+    for (const [refn, id] of uniqueRefns(next)) {
+        const prevId = prevByRefn.get(refn);
+        const was = prevId ? previous.persons[prevId] : undefined;
+        const married = was?.marriedSurname?.trim();
+        if (!was || !married) continue;
+        const p = next.persons[id];
+        if (p.marriedSurname?.trim()) continue;
+        const repeats = new Set([key(`${p.firstName ?? ''} ${married}`), key(`${was.firstName ?? ''} ${married}`)]);
+        const variants = p.nameVariants ?? [];
+        const kept = variants.filter(v => !repeats.has(key(v)));
+        // A research that keeps the kind and has no such spelling took it off.
+        if (knows && kept.length === variants.length) continue;
+        const changed: Person = { ...p, marriedSurname: was.marriedSurname };
+        if (kept.length > 0) changed.nameVariants = kept;
+        else delete changed.nameVariants;
+        persons ??= { ...next.persons };
+        persons[id] = changed;
+    }
+    return persons ? { ...next, persons } : next;
+}
+
 /**
  * `name` without every copy of `title` at its start (or end), compared word
  * by word (a comma after a word aside: GEDCOM lists titles with commas,

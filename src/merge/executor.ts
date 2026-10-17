@@ -772,6 +772,9 @@ export function mergePersonData(
     // existing tree's stay.
     if (!existing.titleBefore && incoming.titleBefore) existing.titleBefore = incoming.titleBefore;
     if (!existing.titleAfter && incoming.titleAfter) existing.titleAfter = incoming.titleAfter;
+    // The surname after marriage likewise: the existing tree's stays, the
+    // incoming one fills a gap.
+    if (!existing.marriedSurname && incoming.marriedSurname) existing.marriedSurname = incoming.marriedSurname;
 
     // Open question / reference number / death-status: fill when missing.
     if (!existing.question && incoming.question) existing.question = incoming.question;

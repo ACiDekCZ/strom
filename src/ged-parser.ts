@@ -888,6 +888,14 @@ interface GedcomIndividual {
     /** NAME > GIVN / SURN / SPFX / NPFX / NSFX of the primary name and of each variant. */
     primaryNameParts: GedcomNameParts;
     variantNameParts: GedcomNameParts[];
+    /**
+     * _MARNM values in file order (level 1, or level 2 under a NAME), the
+     * married surname some programs (Legacy, PAF) write instead of a second
+     * NAME with TYPE married.
+     */
+    marnm: string[];
+    /** The surname after marriage (Person.marriedSurname), set after the names are read. */
+    marriedSurname?: string;
     /** A description the file wrote instead of the given name — goes to the note. */
     nameDescription?: string;
     /** The app's own file names a person it knows without a name ("? //"): no stand-in. */
@@ -1437,8 +1445,54 @@ const NAME_PART_TAGS = new Map<string, keyof GedcomNameParts>([
  * Parse GEDCOM file content into structured data
  */
 
+/**
+ * The surname after marriage of a person whose names are read (after the swap
+ * of a married name put first): the LAST NAME with TYPE married in file order
+ * takes it, and that name leaves the other spellings (earlier married names
+ * stay there); without one, the last _MARNM (level 1 or under a NAME). A
+ * person whose primary name is the married one with no birth name beside it
+ * keeps it as the surname, the field stays empty (the birth surname is not
+ * known). Another spelling that is just the given name with the married
+ * surname (an older Strom's or research's file wrote it so) is dropped too:
+ * it would only repeat the field.
+ */
+function readMarriedSurname(
+    indi: GedcomIndividual,
+    opts: { fromStrom: boolean; unknownIsNoSurname: boolean },
+): void {
+    if (indi.primaryNameType === 'married') return;
+    let married = '';
+    for (let k = indi.variantNameTypes.length - 1; k >= 0; k--) {
+        if (indi.variantNameTypes[k] !== 'married') continue;
+        const read = readGedcomName(indi.nameVariants[k], indi.variantNameParts[k], { ...opts, descriptions: false });
+        if (!read.lastName) continue;
+        married = read.lastName;
+        indi.nameVariants.splice(k, 1);
+        indi.variantNameTypes.splice(k, 1);
+        indi.variantNameParts.splice(k, 1);
+        break;
+    }
+    if (!married) {
+        for (let k = indi.marnm.length - 1; k >= 0 && !married; k--) {
+            const v = indi.marnm[k];
+            married = (v.includes('/') ? readGedcomName(v, {}, { ...opts, descriptions: false }).lastName : v.replace(/\s+/g, ' ')).trim();
+        }
+    }
+    if (!married) return;
+    indi.marriedSurname = married;
+    // "Marie Nováková" beside the field says nothing more.
+    const key = (v: string): string => v.replace(/\//g, ' ').replace(/\s+/g, ' ').trim().normalize('NFC').toLocaleLowerCase();
+    const repeat = key(`${indi.firstName} ${married}`);
+    for (let k = indi.nameVariants.length - 1; k >= 0; k--) {
+        if (key(indi.nameVariants[k]) !== repeat) continue;
+        indi.nameVariants.splice(k, 1);
+        indi.variantNameTypes.splice(k, 1);
+        indi.variantNameParts.splice(k, 1);
+    }
+}
+
 /** Level-1 INDI tags the parser understands (everything else is counted as dropped). */
-const KNOWN_INDI_TAGS = new Set(['NAME', 'SEX', 'FAMS', 'FAMC', 'NOTE', 'SOUR', 'BIRT', 'DEAT', 'OBJE', 'REFN', 'ASSO', '_STORY', '_QUESTION',
+const KNOWN_INDI_TAGS = new Set(['NAME', 'SEX', 'FAMS', 'FAMC', 'NOTE', 'SOUR', 'BIRT', 'DEAT', 'OBJE', 'REFN', 'ASSO', '_STORY', '_QUESTION', '_MARNM',
     ...Object.keys(EVENT_TAG_TO_TYPE)]);
 /** Level-1 FAM tags the parser understands. */
 const KNOWN_FAM_TAGS = new Set(['HUSB', 'WIFE', 'CHIL', 'NOTE', 'MARR', 'DIV', 'SOUR', '_STORY', '_STAT']);
@@ -1890,6 +1944,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                     variantNameTypes: [],
                     primaryNameParts: {},
                     variantNameParts: [],
+                    marnm: [],
                     sourceRefs: [],
                     birthSourceRefs: [],
                     deathSourceRefs: [],
@@ -2123,6 +2178,10 @@ export function parseGedcom(content: string): ParsedGedcom {
                             break;
                         case 'REFN':
                             indi.refn = value;
+                            break;
+                        case '_MARNM':
+                            // The married surname (Legacy, PAF, some exports).
+                            if (value.trim()) indi.marnm.push(value.trim());
                             break;
                         case '_QUESTION':
                             // Strom's own tag: the open question about this
@@ -2516,6 +2575,9 @@ export function parseGedcom(content: string): ParsedGedcom {
                             else indi.variantNameTypes[currentNameSlot] = type;
                         } else if (tag === 'SOUR' && value) {
                             cite(indi.sourceRefs, value);
+                        } else if (tag === '_MARNM' && value.trim()) {
+                            // 2 _MARNM under a NAME: the married surname.
+                            indi.marnm.push(value.trim());
                         } else if (NAME_PART_TAGS.has(tag) && currentNameSlot !== null && value.trim()) {
                             // 2 GIVN / SURN / SPFX / NPFX / NSFX: the name's own parts.
                             const parts = currentNameSlot === -1 ? indi.primaryNameParts : indi.variantNameParts[currentNameSlot];
@@ -2796,6 +2858,7 @@ export function parseGedcom(content: string): ParsedGedcom {
         if (stromApp && read.firstName === '?' && !read.lastName && line && !/^\/\s*\/$/.test(line)) indi.knownNameless = true;
         if (read.titleBefore) indi.titleBefore = read.titleBefore;
         if (read.titleAfter) indi.titleAfter = read.titleAfter;
+        readMarriedSurname(indi, { fromStrom, unknownIsNoSurname });
     }
 
     // A child the file links only from its own side (INDI > FAMC, no CHIL in
@@ -2985,6 +3048,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
 
         if (indi.titleBefore) person.titleBefore = indi.titleBefore;
         if (indi.titleAfter) person.titleAfter = indi.titleAfter;
+        if (indi.marriedSurname) person.marriedSurname = indi.marriedSurname;
 
         // Add extended info if present
         if (indi.birthDate) person.birthDate = indi.birthDate;

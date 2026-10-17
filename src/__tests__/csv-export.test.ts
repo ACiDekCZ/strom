@@ -37,7 +37,7 @@ describe('buildPersonsCsv', () => {
         initLanguage('en');
         const csv = buildPersonsCsv(FAMILY);
         const lines = csv.split('\r\n');
-        expect(lines[0]).toContain('First name;Last name;Gender');
+        expect(lines[0]).toContain('First name;Last name;Married surname;Gender');
         const petr = lines.find(l => l.startsWith('Petr'))!;
         expect(petr).toContain('Jan Novák');       // father
         expect(petr).toContain('Eva Nováková');    // mother
@@ -51,7 +51,7 @@ describe('buildPersonsCsv', () => {
         initLanguage('cs');
         const csv = buildPersonsCsv(FAMILY);
         expect(csv.charCodeAt(0)).toBe(0xFEFF);
-        expect(csv).toContain('Jméno;Příjmení;Pohlaví');
+        expect(csv).toContain('Jméno;Příjmení;Příjmení po sňatku;Pohlaví');
         expect(csv).toContain('Žena');
         initLanguage('en');
     });

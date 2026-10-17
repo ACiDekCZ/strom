@@ -1,8 +1,9 @@
 /**
  * Searchable name text shared by every person search (toolbar picker,
  * advanced filter). A person is findable under any of their names: the
- * written surname, every other form of it (masculine/feminine pair, spellings
- * the tree groups together) and their own name variants (alias, farm name).
+ * written surname, the surname after marriage, every other form of either
+ * (masculine/feminine pair, spellings the tree groups together) and their own
+ * name variants (alias, farm name).
  * All forms are lowercased and diacritics-insensitive.
  */
 
@@ -18,9 +19,16 @@ export function normalizeSearchText(text: string): string {
     return normalizeName(text);
 }
 
-/** Every surname this person is known under, normalized, own surname first. */
+/**
+ * Every surname this person is known under, normalized, own surname first,
+ * then the surname after marriage and its forms.
+ */
 export function searchableSurnames(person: Person, data: StromData | null | undefined): string[] {
-    const forms = data ? surnameForms(person.lastName ?? '', data) : [person.lastName ?? ''];
+    const formsOf = (surname: string): string[] => data ? surnameForms(surname, data) : [surname];
+    const forms = [
+        ...formsOf(person.lastName ?? ''),
+        ...(person.marriedSurname ? formsOf(person.marriedSurname) : []),
+    ];
     const out: string[] = [];
     for (const f of forms) {
         const n = normalizeSearchText(f);
@@ -30,8 +38,8 @@ export function searchableSurnames(person: Person, data: StromData | null | unde
 }
 
 /**
- * Alternative names of this person, normalized: other surname forms and the
- * person's own name variants. Excludes the written first/last name.
+ * Alternative names of this person, normalized: other surname forms, the
+ * surname after marriage and the person's own name variants. Excludes the written first/last name.
  */
 export function alternateNames(person: Person, data: StromData | null | undefined): string[] {
     const own = normalizeSearchText(person.lastName ?? '');
@@ -45,8 +53,8 @@ export function alternateNames(person: Person, data: StromData | null | undefine
 }
 
 /**
- * One normalized string with every name of the person (first, last, other
- * surname forms, name variants), suitable for substring matching.
+ * One normalized string with every name of the person (first, last, the
+ * surname after marriage, other surname forms, name variants), suitable for substring matching.
  */
 export function searchableNameText(person: Person, data: StromData | null | undefined): string {
     return [

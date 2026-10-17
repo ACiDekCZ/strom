@@ -23,7 +23,7 @@ export interface PersonChange {
     deleted?: boolean;
 }
 
-const NAME_FIELDS: (keyof Person)[] = ['firstName', 'lastName', 'titleBefore', 'titleAfter', 'nameVariants'];
+const NAME_FIELDS: (keyof Person)[] = ['firstName', 'lastName', 'titleBefore', 'titleAfter', 'marriedSurname', 'nameVariants'];
 const BIRTH_FIELDS: (keyof Person)[] = ['birthDate', 'birthPlace', 'birthAddress'];
 const DEATH_FIELDS: (keyof Person)[] = ['deathDate', 'deathPlace', 'deathCause', 'deathAge', 'deathAddress', 'isDeceased'];
 const CITATION_FIELDS: (keyof Person)[] = ['sourceIds', 'birthSourceIds', 'deathSourceIds'];
@@ -198,7 +198,7 @@ export function diffByPerson(base: StromData, current: StromData): PersonChange[
 
 /** Which value a row is about (the UI names it). */
 export type ValueField =
-    | 'name' | 'gender' | 'birthDate' | 'birthPlace' | 'deathDate' | 'deathPlace' | 'deathCause' | 'notes'
+    | 'name' | 'marriedSurname' | 'gender' | 'birthDate' | 'birthPlace' | 'deathDate' | 'deathPlace' | 'deathCause' | 'notes'
     | 'person' | 'event' | 'eventDate' | 'eventPlace' | 'eventValue' | 'citation' | 'marriageDate' | 'marriagePlace';
 
 /** One value here that loading the research's version replaces or removes. */
@@ -331,6 +331,7 @@ export function diffValues(here: StromData, there: StromData): ValueDiff {
         const open = openConflictFacts(t);
         field(h, 'name', fullName(h) === '?' ? '' : titledName(h), fullName(t) === '?' ? '' : titledName(t),
             open.has('NAME') || open.has('NPFX') || open.has('NSFX') ? { conflict: true } : {});
+        field(h, 'marriedSurname', str(h.marriedSurname), str(t.marriedSurname), open.has('NAME') ? { conflict: true } : {});
         if (h.gender !== t.gender && h.gender && t.gender) rows.push({ personId: h.id, name: fullName(h), field: 'gender', here: h.gender, there: t.gender, ...(open.has('SEX') ? { conflict: true } : {}) });
         const birth = open.has('BIRT') ? { conflict: true } : {};
         const death = open.has('DEAT') ? { conflict: true } : {};

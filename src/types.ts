@@ -367,6 +367,12 @@ export interface Person {
      */
     titleBefore?: string;
     titleAfter?: string;
+    /**
+     * Surname after marriage — the latest one when there were several
+     * (GEDCOM NAME > TYPE married, _MARNM). `lastName` stays the birth
+     * surname. Search and merge matching find the person under both.
+     */
+    marriedSurname?: string;
     gender: Gender;
     isPlaceholder: boolean;
     partnerships: PartnershipId[];
@@ -883,6 +889,8 @@ export function partnershipParticipants(u: Pick<Partnership, 'participants' | 'e
  * Person.titleBefore / titleAfter (3.10) came without a bump: an older app
  * carries persons whole (migrateData) and edits them in place (updatePerson),
  * so it keeps the titles on a re-save; it only shows the name without them.
+ * Person.marriedSurname (3.13) likewise came without a bump: an older app keeps
+ * it on a re-save and reads the married name as another spelling meanwhile.
  * v12 (2026-10): Gender 'unknown' (GEDCOM SEX U, or no SEX): a sex the records
  *   do not give, no longer guessed from the family role (or female). Older
  *   data keeps its male/female; a missing or invalid gender reads as unknown
@@ -979,6 +987,8 @@ export interface NewPersonData {
     /** The titles of the name ("Ing.", "ml."), set with the person so its first undo step names them. */
     titleBefore?: string;
     titleAfter?: string;
+    /** The surname after marriage (Person.marriedSurname). */
+    marriedSurname?: string;
 }
 
 // ==================== RENDERING TYPES ====================

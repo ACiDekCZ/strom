@@ -41,7 +41,7 @@ function personName(p?: Person | null): string {
 export function buildPersonsCsv(data: StromData): string {
     const s = strings.csv;
     const header = [
-        s.firstName, s.lastName, s.gender, s.birthDate, s.birthPlace, s.birthAddress,
+        s.firstName, s.lastName, s.marriedSurname, s.gender, s.birthDate, s.birthPlace, s.birthAddress,
         s.deathDate, s.deathPlace, s.deathCause, s.deathAge, s.deathAddress,
         s.father, s.mother, s.partners, s.notes,
     ];
@@ -69,7 +69,7 @@ export function buildPersonsCsv(data: StromData): string {
             .filter((x): x is string => !!x);
 
         rows.push([
-            p.firstName, p.lastName,
+            p.firstName, p.lastName, p.marriedSurname ?? '',
             strings.gender[p.gender] ?? strings.gender.unknown,
             p.birthDate ?? '', p.birthPlace ?? '', p.birthAddress ?? '',
             // What the register adds to the death: kept as written.
