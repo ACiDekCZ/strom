@@ -430,6 +430,8 @@ test('reopening an exported HTML file after editing the stored tree: Update stor
     await page.goto(fileUrl);
     await page.locator('#view-mode-banner').getByText('Stay with this file').click();
     await expect(card(page, 'Jan')).toBeVisible();
+    // The stored copy must reach IndexedDB before the file is opened again.
+    await waitForPersist(page, 'Jan');
     // Opened again right away (nothing edited): no warning.
     await page.goto(fileUrl);
     const existing = page.locator('#existing-export-modal');

@@ -54,8 +54,13 @@ test.describe('Minimap', () => {
         await openApp(page);
         await page.getByRole('button', { name: 'Try a sample tree' }).click();
         await expect(card(page, 'Johan')).toBeVisible();
+        const scale = () => page.evaluate(() => window.Strom.ZoomPan.getTransform().scale);
+        const s0 = await scale();
         for (let i = 0; i < 4; i++) await page.evaluate(() => window.Strom.ZoomPan.zoomIn());
         await expect(page.locator('#minimap-panel')).toBeVisible();
+        // The zoom glide must be over: while it runs, each frame re-centres the
+        // view on the point it started from and overrides the drag.
+        await expect.poll(scale).toBeCloseTo(s0 * 1.3 ** 4, 5);
         // The control block settles after the panel appears: measure once it stands still.
         const where = async () => JSON.stringify(await page.locator('#minimap-canvas').boundingBox());
         let last = '';
