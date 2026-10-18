@@ -399,8 +399,8 @@ test.describe('card signals', () => {
         const k = card(page, 'Kateřina');
         await expect(k.locator(':scope > .card-state .st-ev')).toBeVisible();
         await expect(k.locator(':scope > .card-story.draft')).toBeVisible();
-        const clipped = await k.locator('.name-text').evaluate(el => el.scrollWidth > el.clientWidth + 0.5);
-        expect(clipped).toBe(false);
+        // The names are fitted a frame after the render (and again once the card fonts are in).
+        await expect.poll(() => k.locator('.name-text').evaluate(el => el.scrollWidth > el.clientWidth + 0.5)).toBe(false);
         // The card keeps its width (the focused card is drawn a little larger).
         expect(await k.evaluate(el => (el as HTMLElement).offsetWidth)).toBe(188);
         const box = await k.boundingBox();

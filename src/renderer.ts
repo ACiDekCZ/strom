@@ -2206,6 +2206,9 @@ class TreeRendererClass {
             requestAnimationFrame(() => this.fitCardNames(canvas, attempt + 1));
             return;
         }
+        // Fitted in the fallback font before the card fonts were in: fit again
+        // once they are (the serif name is wider, it would end up clipped).
+        cardFontsPending()?.then(() => { if (canvas.isConnected) this.fitCardNames(canvas); });
         // In passes over all cards (each card fits on its own: fixed width,
         // absolutely placed): every write of a step, then one round of reads.
         // A write and a read per card forced a layout of the page per card
