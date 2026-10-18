@@ -12,6 +12,7 @@
 - **Sprung zu einem Abschnitt**: *Datenqualität* aus den Stammbaum-Aktionen oder der Forschungsübersicht und *Zeitzeugen* zeigen die Überschrift ganz unter dem Kopf des Überblicks.
 - **Tschechische Verwandtschaftsbegriffe**: Ein Geschwister mit einem gemeinsamen Elternteil heißt *polorodý bratr* oder *polorodá sestra*, im Stammbaum-Überblick und in *Verwandtschaft finden…*.
 - **Live-Ansicht**: Die Überschrift der Richtungen zählt die aktiven Richtungen (*Richtungen · 3 aktiv*), und das Personenmenü nennt eine laufende Richtung *bereits aktiv*.
+- **Recherche in anderen Stammbäumen**: Die Stammbaum-Auswahl markiert jeden Recherche-Stammbaum auf diesem Computer (*live*, *2 Richtungen*, *3 offen*, *läuft nicht*), geschlossen trägt sie einen Punkt für die anderen Stammbäume. Das Recherche-Panel und *Jetzt* in der Forschungsübersicht nennen einen anderen Stammbaum, in dem ein Agent arbeitet oder etwas offen ist (*Anderswo*); die Auswahl wechselt dorthin. Ein Stammbaum, dessen Recherche nicht antwortet, zeigt *Die Recherche läuft gerade nicht*, was zuletzt offen war und wie sie sich wieder verbindet.
 - **Fehlerbehebungen**: Zwei schnelle Änderungen hintereinander zeigen nicht mehr zwei Rückgängig-Hinweise auf einmal; Namen auf den Karten werden nach dem Laden der Kartenschriften neu eingepasst, sodass ein langer Name nicht mehr abgeschnitten wird.
 
 ## 3.13.0

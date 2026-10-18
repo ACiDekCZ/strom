@@ -12,6 +12,7 @@
 - **Skok na sekci**: *Kvalita dat* z akcí stromu nebo z přehledu výzkumu a *Pamětníci* ukážou nadpis celý pod záhlavím přehledu.
 - **Příbuzenské vztahy**: sourozenec s jedním společným rodičem je *polorodý bratr* nebo *polorodá sestra*, v přehledu stromu i v *Zjistit vztah…*.
 - **Živý přehled**: nadpis linií počítá aktivní linie (*Linie · 3 aktivní*) a menu osoby u běžící linie píše *už je aktivní*.
+- **Výzkum v dalších stromech**: přepínač stromů označí každý strom výzkumu na tomto počítači (*živě*, *2 linie*, *čeká 3*, *neběží*) a zavřený nese tečku za ostatní stromy. Panel Výzkum a *Teď* v přehledu výzkumu jmenují jiný strom, kde pracuje agent nebo něco čeká (*Jinde*); výběrem se na něj přepne. Strom, jehož výzkum neodpovídá, píše *Výzkum teď neběží*, co naposledy čekalo a jak se znovu spojí.
 - **Opravy**: dvě rychlé změny za sebou už neukážou dvě upozornění Zpět najednou; jména na kartách se po načtení písma karet znovu přizpůsobí, takže dlouhé jméno už není oříznuté.
 
 ## 3.13.0

@@ -12,6 +12,7 @@ English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md)
 - **Jumping to a section**: *Data quality* from the tree actions or the research overview, and *Ask the family*, bring the heading fully into view under the overview's header.
 - **Czech relationship terms**: a sibling with one shared parent is a *polorodý bratr* or *polorodá sestra*, in the tree overview and in *Find relationship…*.
 - **Live view**: the directions heading counts the active directions (*Directions · 3 active*), and the person menu calls a running direction *already active*.
+- **Research in other trees**: the tree switcher marks every research tree on this computer (*live*, *2 directions*, *3 waiting*, *not running*), and when closed it carries a dot for the other trees. The research panel and *Now* in the research overview name another tree where an agent works or something waits (*Elsewhere*); selecting it switches there. A tree whose research does not answer says *Research not running right now*, what waited last and how it reconnects.
 - **Fixes**: two quick changes in a row no longer show two Undo notices at once; names on the cards are fitted again once the card fonts are in, so a long name is no longer clipped.
 
 ## 3.13.0
