@@ -152,7 +152,7 @@ test.describe('research directions', () => {
         await follow(page);
         await openOverview(page);
         const sec = ov(page).locator('.research-directions');
-        await expect(ov(page).locator('.live-section__title', { hasText: 'Directions' })).toHaveText('Directions · 3 running');
+        await expect(ov(page).locator('.live-section__title', { hasText: 'Directions' })).toHaveText('Directions · 3 active');
         await expect(sec.locator('.research-direction__name')).toHaveText(['Předci: Jan', 'Potomci: Josef', 'Revize Anny']);
         await expect(row(page, 'G0001').locator('.research-direction__icon')).toHaveText('↑');
         await expect(row(page, 'G0001').locator('.agent-mark--spin')).toHaveCount(1);
@@ -161,7 +161,7 @@ test.describe('research directions', () => {
         const titles = await ov(page).locator('.live-section__title').allTextContents();
         expect(titles.indexOf('Now')).toBe(0);
         expect(titles[1]).toMatch(/^Awaiting action/);
-        expect(titles.indexOf('Directions · 3 running')).toBe(2);
+        expect(titles.indexOf('Directions · 3 active')).toBe(2);
         const inactive = sec.locator('.research-directions__inactive');
         await expect(inactive).toHaveText('▸Paused and ended · 2');
         await inactive.click();
