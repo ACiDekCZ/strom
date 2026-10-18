@@ -2,6 +2,18 @@
 
 [English](CHANGELOG.md) · [Čeština](CHANGELOG.cs.md) · Deutsch
 
+## 3.13.1
+
+*Diese Version ist in Vorbereitung; dieser Abschnitt wächst mit jeder Testversion.*
+
+- **Stammbaum-Überblick**: *Geburten ohne Quelle* und *Linienenden* werden unter den Vorfahren der gewählten Person gezählt (*3 von 14 Vorfahren*), das Sterbedatum ist als bei Verstorbenen gezählt beschriftet, jede Spalte der Geburtsmonate trägt ihre Zahl (auf Touch-Geräten per Tippen), Prozentwerte folgen der Sprache der App, und nach einer Änderung der Daten kehrt der Tastaturfokus zum selben Element zurück.
+- **Stammbaum-Überblick, Datenqualität**: Ein nicht geöffneter Stammbaum bietet *Validierungsdetails*; ein Befund nennt den wiederkehrenden Paten (*Pate: …*) oder den mehrfach geschriebenen Ort (*Ort: …*); Links im Überblick lassen kein Leerzeichen mehr vor einem Komma; die Sicherheitsabschnitte trennt eine schmale Lücke, mit neuen Tönen im dunklen Modus.
+- **Forschungsstammbäume**: In *Vorfahren* zählt eine von der Forschung bewertete Geburt nur als belegt, wenn die Forschung sie bewiesen hat, wie in der Statistik der Forschung; ein Hinweis unter der Tabelle sagt, dass der eingelesene Stammbaum ein Hinweis ist.
+- **Sprung zu einem Abschnitt**: *Datenqualität* aus den Stammbaum-Aktionen oder der Forschungsübersicht und *Zeitzeugen* zeigen die Überschrift ganz unter dem Kopf des Überblicks.
+- **Tschechische Verwandtschaftsbegriffe**: Ein Geschwister mit einem gemeinsamen Elternteil heißt *polorodý bratr* oder *polorodá sestra*, im Stammbaum-Überblick und in *Verwandtschaft finden…*.
+- **Live-Ansicht**: Die Überschrift der Richtungen zählt die aktiven Richtungen (*Richtungen · 3 aktiv*).
+- **Fehlerbehebungen**: Zwei schnelle Änderungen hintereinander zeigen nicht mehr zwei Rückgängig-Hinweise auf einmal.
+
 ## 3.13.0
 
 *Veröffentlicht am 17. Oktober 2026.*

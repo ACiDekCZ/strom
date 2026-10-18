@@ -2,6 +2,18 @@
 
 English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md)
 
+## 3.13.1
+
+*This version is in preparation; this section grows with every test version.*
+
+- **Tree overview**: *Births without a source* and *Line ends* count among the chosen person's ancestors (*3 of 14 ancestors*), the date of death is labelled as counted among the deceased, each birth month column is named with its count (a tap shows it on touch), percentages follow the language of the app, and after a change in the data the keyboard focus returns to the same control.
+- **Tree overview, Data quality**: a tree that is not open offers *Validation details*; a finding names the recurring godparent (*Godparent: …*) or the place written several ways (*Place: …*); links in the overview no longer leave a space before a comma; the certainty segments are separated by a thin gap, with new dark-mode shades.
+- **Research trees**: in *Ancestors*, a birth graded by the research counts as documented only when the research has proven it, as in the research's own statistics; a note under the table says that the imported family tree is a lead.
+- **Jumping to a section**: *Data quality* from the tree actions or the research overview, and *Ask the family*, bring the heading fully into view under the overview's header.
+- **Czech relationship terms**: a sibling with one shared parent is a *polorodý bratr* or *polorodá sestra*, in the tree overview and in *Find relationship…*.
+- **Live view**: the directions heading counts the active directions (*Directions · 3 active*).
+- **Fixes**: two quick changes in a row no longer show two Undo notices at once.
+
 ## 3.13.0
 
 *Released 17 October 2026.*
