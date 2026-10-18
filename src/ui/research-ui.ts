@@ -45,6 +45,7 @@ import { AGENT_DONE_MS, AGENT_DONE_FADE_MS, ResearchCardInfo, setResearchCardInf
 import { activeDirections, directionsMulti, queueDirectionFilter, setQueueDirectionFilter, taskDirectionName } from './research-directions-ui.js';
 import { iconSvg } from '../icons.js';
 import { OTHER_GROUP, panelWaiting, textWithLinks, todoWaiting, waitingSection, waitingTodoCount } from '../research-waiting.js';
+import { agoShort } from '../research-others.js';
 import { SettingsManager } from '../settings.js';
 import { countImages, stripMedia } from '../attachments.js';
 import { exportToGedcom, countFamilies } from '../ged-exporter.js';
@@ -2647,6 +2648,9 @@ export const researchUiMethods = uiModule({
     /** Draw the "Research now" panel. Bridge text is set as text, never HTML. */
     renderLivePanel(): void {
         syncResearchCardInfo();
+        // The switcher's marks follow the live status (in place, after this redraw).
+        this.refreshResearchMarks();
+        this.noteResearchMarksDrawn();
         // Following the agent in the tree reacts to every status and change (after this redraw).
         queueMicrotask(() => this.syncLiveFollow());
         const s = live;
@@ -2695,6 +2699,9 @@ export const researchUiMethods = uiModule({
         chevron.innerHTML = iconSvg('chevron-down', { size: 14 });
         toggle.appendChild(chevron);
         head.appendChild(toggle);
+        // Folded: the other trees as one chip (unfolds the panel with them shown; spec 011).
+        const otherChip = collapsed && !phone && !s.ended ? this.researchElsewhereChip('collapsed') : null;
+        if (otherChip) head.appendChild(otherChip);
         const followBtn = phone ? null : this.liveFollowButton('panel');
         if (followBtn) head.appendChild(followBtn);
         if (this.canOpenResearchOverview()) {
@@ -2711,6 +2718,8 @@ export const researchUiMethods = uiModule({
         head.appendChild(action);
         panel.appendChild(head);
         if (!s.ended && s.update && !phone) this.appendUpdateStrip(panel, s.update.version);
+        // Under the head: the other trees where an agent works or something waits (spec 011).
+        if (!collapsed && !s.ended) this.appendResearchElsewhere(panel, 'panel');
         // Collapsed: what the hidden body would say first. On a phone: the state and what waits.
         if (collapsed) {
             const summary = el('div', 'live-panel-summary');
@@ -2718,6 +2727,9 @@ export const researchUiMethods = uiModule({
                 summary.appendChild(el('span', 'live-panel-chip', liveState(s).label));
                 const todo = waitingTodoCount(s.waiting);
                 if (todo > 0) summary.appendChild(el('span', 'live-panel-chip live-panel-chip--warn', `${r.waiting} ${todo}`));
+                // The other trees: a chip of its own that opens the tree list.
+                const chip = this.researchElsewhereChip('phone');
+                if (chip) summary.appendChild(chip);
             }
             const fresh = s.changes.length - s.seenChanges;
             if (fresh > 0) summary.appendChild(el('span', 'live-panel-chip live-panel-new', r.newChanges(fresh)));
@@ -3024,14 +3036,39 @@ export const researchUiMethods = uiModule({
         close.onclick = () => this.closeResearchIdlePanel();
         head.appendChild(close);
         panel.appendChild(head);
+        // Under the head: the other trees where an agent works or something waits (spec 011).
+        this.appendResearchElsewhere(panel, 'panel');
 
         const body = el('div', 'live-panel-body');
-        this.appendWaitingSection(body, state?.items ?? [], false);
-        if (state) {
-            const when = new Date(state.at).toLocaleString(getCurrentLanguage(), {
-                day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit',
+        const o = strings.otherResearch;
+        const answer = researchId && this.otherResearchEnabled() ? this.researchAnswerOf(researchId) : null;
+        // Its bridge did not answer (not the browser's refusal): not running — no list to act on, how it reconnects (§5).
+        const off = !!researchId && answer?.result === 'off' && this.researchModeOf(researchId) !== 'archive';
+        panel.classList.toggle('is-off', off);
+        if (off) {
+            body.appendChild(el('p', 'live-panel-state', o.offPanel));
+            const last = state ? waitingTodoCount(state.items) : 0;
+            const hint = el('p', 'live-panel-hint rs-off-hint');
+            if (last > 0) hint.appendChild(document.createTextNode(`${o.offLast(last, agoShort(state!.at, Date.now(), getCurrentLanguage()))} `));
+            const parts = o.offReconnect.split('strom app');
+            parts.forEach((part, i) => {
+                if (part) hint.appendChild(document.createTextNode(part));
+                if (i < parts.length - 1) hint.appendChild(el('code', undefined, 'strom app'));
             });
-            body.appendChild(el('p', 'live-panel-hint', r.waitingAsOf(when)));
+            body.appendChild(hint);
+        } else {
+            // Connected, nobody at work: edits go by themselves.
+            const status = answer?.result === 'up' ? answer.status : null;
+            const connected = !!status && !this.activeResearchAgentless() && !status.working.some(w => !w.paused);
+            if (connected) body.appendChild(el('p', 'live-panel-state', o.idlePanel));
+            this.appendWaitingSection(body, state?.items ?? [], false);
+            // "As of …, not running" only when it is not known to answer now.
+            if (state && !connected) {
+                const when = new Date(state.at).toLocaleString(getCurrentLanguage(), {
+                    day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit',
+                });
+                body.appendChild(el('p', 'live-panel-hint', r.waitingAsOf(when)));
+            }
         }
         panel.appendChild(body);
 

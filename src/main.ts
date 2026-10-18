@@ -429,6 +429,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         UI.initExternalOpen();
         // Where a research tree stands with its research (a research that says so).
         UI.initResearchSync();
+        // The other research trees' state (switcher marks, "Elsewhere" in the panel).
+        UI.initOtherResearch();
         // Originals waiting for a research (their state lines).
         void UI.initOriginalsQueue();
         // A tree downloaded in Safari to move to another browser for the research: its banner.

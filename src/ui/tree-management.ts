@@ -153,8 +153,8 @@ export const treeManagementMethods = uiModule({
                         html += `
                             <div class="tree-switcher-item ${tree.isActive ? 'active' : ''}" role="menuitem" tabindex="0"
                                  data-embedded-tree-id="${this.escapeHtml(tree.id)}">
+                                <span class="tree-item-check">${tree.isActive ? iconSvg('check') : ''}</span>
                                 <span class="tree-item-name">${this.escapeHtml(tree.name)}</span>
-                                ${tree.isActive ? `<span class="tree-item-check">${iconSvg('check')}</span>` : ''}
                             </div>
                         `;
                     }
@@ -162,8 +162,8 @@ export const treeManagementMethods = uiModule({
                     // Single tree - just show it as active (no click handler needed)
                     html += `
                         <div class="tree-switcher-item active" role="menuitem" tabindex="0" aria-current="true">
-                            <span class="tree-item-name">${this.escapeHtml(embeddedTrees[0].name)}</span>
                             <span class="tree-item-check">${iconSvg('check')}</span>
+                            <span class="tree-item-name">${this.escapeHtml(embeddedTrees[0].name)}</span>
                         </div>
                     `;
                 }
@@ -200,17 +200,22 @@ export const treeManagementMethods = uiModule({
 
         let html = '';
 
-        // Tree list (only visible trees)
+        // Tree list (only visible trees): ✓ in its own column, the name, the research marks (spec 011).
         for (const tree of trees) {
             const isActive = tree.id === activeId;
+            const title = this.treeSwitcherTitle(tree);
             html += `
-                <div class="tree-switcher-item ${isActive ? 'active' : ''}" role="menuitem" tabindex="0"
-                     onclick="window.Strom.UI.switchToTree('${tree.id}')">
+                <div class="tree-switcher-item ${isActive ? 'active' : ''}" role="menuitem" tabindex="0" data-tree-id="${tree.id}"
+                     ${title ? `title="${this.escapeHtml(title)}"` : ''} onclick="window.Strom.UI.switchToTree('${tree.id}')">
+                    <span class="tree-item-check">${isActive ? iconSvg('check') : ''}</span>
                     <span class="tree-item-name">${this.escapeHtml(tree.name)}</span>
-                    ${isActive ? `<span class="tree-item-check">${iconSvg('check')}</span>` : ''}
+                    ${this.treeSwitcherMarksHtml(tree)}
                 </div>
             `;
         }
+        // The browser keeps the page from the research programs: said once, above Manage trees.
+        if (this.otherResearchEnabled()) html += this.treeSwitcherBlockedHtml();
+        dropdown.classList.toggle('with-research', this.treeSwitcherMarksShown());
 
         // The switcher is trees only now: view/tree actions moved to the ⋯
         // actions menu (desktop) and the mobile "More" sheet (≤1024px).
@@ -222,6 +227,7 @@ export const treeManagementMethods = uiModule({
         `;
 
         dropdown.innerHTML = html;
+        this.refreshTreeSwitcherDot();
     },
 
     /**
@@ -502,6 +508,8 @@ export const treeManagementMethods = uiModule({
             dropdown.classList.toggle('active');
             if (dropdown.classList.contains('active')) {
                 this.updateTreeSwitcher();
+                // The other trees' research state: asked now unless fresh.
+                this.kickOtherResearch();
             }
         }
     },
@@ -512,16 +520,28 @@ export const treeManagementMethods = uiModule({
         const trees = TreeManager.getVisibleTrees();
         this.noteBottomSheetTrigger();
         this.hideBottomSheet();
+        const o = strings.otherResearch;
+        const blocked = this.otherResearchEnabled() ? {
+            id: 'tree-sheet-research-blocked', text: o.blockedSwitcher, link: `${o.blockedHow} ↗`,
+            run: () => this.showOtherResearchAllowHow(), hidden: !this.researchMarksBlocked(),
+        } : undefined;
         this.presentMenuSheet(strings.treeManager.switcherTitle, [
-            { rows: trees.map(tree => ({
-                label: tree.name,
-                active: tree.id === activeId,
-                run: () => { if (tree.id !== activeId) void this.switchToTree(tree.id); },
-            })) },
-            { divider: true, rows: [
+            { rows: trees.map(tree => {
+                const marks = this.treeSheetMarks(tree);
+                return {
+                    label: tree.name,
+                    active: tree.id === activeId,
+                    treeId: tree.id,
+                    extra: marks?.extra,
+                    run: () => { if (tree.id !== activeId) void this.switchToTree(tree.id); },
+                };
+            }) },
+            { divider: true, lead: blocked, rows: [
                 { label: strings.treeManager.manageTreesTitle, value: '\u203a', run: () => this.showTreeManagerDialog() },
             ] },
         ]);
+        // The other trees' research state: asked now unless fresh.
+        this.kickOtherResearch();
     },
 
     /**

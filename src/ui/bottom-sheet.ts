@@ -41,6 +41,10 @@ interface MenuRow {
     ext?: boolean;
     /** A quiet line with a link under the row (the "Export all" reminder under Export…). */
     after?: { id: string; text: string; link: string; run: () => void };
+    /** The tree the row opens (its research marks update in place). */
+    treeId?: string;
+    /** A second line of the row's own (the tree's research marks). */
+    extra?: HTMLElement;
 }
 /** The prominent "Strom: {name}" row that opens the second-level tree sheet
  *  (serif name + chevron + tinted background — mirrors the desktop submenu row). */
@@ -51,6 +55,8 @@ interface MenuBlock {
     header?: string; rows: MenuRow[]; pair?: MenuRow[]; treeRow?: TreeRow; divider?: boolean; storageRow?: StorageRow; note?: string;
     /** The research group (a narrow window with a mouse): title, state, frequent actions, "All research actions ›". */
     research?: ResearchSheetGroup;
+    /** A quiet line with its link before the block (the research programs out of the browser's reach); hidden until it applies. */
+    lead?: { id: string; text: string; link: string; run: () => void; hidden?: boolean };
 }
 
 /** Coarse pointer = touch device; used to gate touch-only behaviour. */
@@ -457,7 +463,9 @@ export const bottomSheetMethods = uiModule({
                 sub.textContent = row.sub;
                 label.appendChild(sub);
             }
+            if (row.extra) label.appendChild(row.extra);
             btn.appendChild(label);
+            if (row.treeId) btn.dataset.treeId = row.treeId;
             if (row.value) {
                 const value = document.createElement('span');
                 value.className = 'bottom-sheet-value';
@@ -671,6 +679,12 @@ export const bottomSheetMethods = uiModule({
 
         for (const block of blocks) {
             if (block.storageRow) list.appendChild(makeStorageButton(block.storageRow));
+            if (block.lead) {
+                const lead = makeAfter(block.lead);
+                lead.classList.add('bottom-sheet-lead');
+                lead.hidden = !!block.lead.hidden;
+                list.appendChild(lead);
+            }
             if (block.note) {
                 const note = document.createElement('p');
                 note.className = 'bottom-sheet-note';

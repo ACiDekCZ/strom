@@ -734,6 +734,8 @@ export const researchOverviewMethods = uiModule({
             ...fold, title: L.now,
             summary: w0 ? [w0.who, w0.paused ? L.statePaused : Number.isFinite(since0) ? liveDuration(since0) : ''].filter(Boolean).join(' · ') : L.nobody,
         });
+        // First in Now: the other trees where an agent works or something waits (spec 011).
+        this.appendResearchElsewhere(host, 'overview');
         const list = el('ul', 'live-panel-list live-working research-overview__now');
         host.appendChild(list);
         if (s.working.length === 0) list.appendChild(el('li', 'live-empty', L.nobody));

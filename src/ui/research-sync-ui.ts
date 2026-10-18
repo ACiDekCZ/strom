@@ -221,6 +221,16 @@ function visible(): boolean {
     return typeof document === 'undefined' || document.visibilityState !== 'hidden';
 }
 
+/** This browser can ask the research bridges at all (not Safari, which cannot reach them; spec 011 asks the other trees'). */
+export function researchBridgesAskable(): boolean {
+    return !safariBrowser();
+}
+
+/** The page is seen (a hidden page asks no bridge). */
+export function researchPageVisible(): boolean {
+    return visible();
+}
+
 /** The toolbar has the research's place (the mark, the button, the pill) at this width. */
 function toolbarWide(): boolean {
     return typeof window === 'undefined' || window.innerWidth >= TOOLBAR_MIN_WIDTH;
@@ -571,6 +581,16 @@ export const researchSyncMethods = uiModule({
         if (rt.why === 'refused') return { title: s.stateAddressRefused, sub: s.addressRefusedSub, warn: true };
         if (rt.why === 'denied') return { title: s.stateBlocked, sub: blockedSub(), warn: true };
         return { title: s.stateBridgeDown, sub: s.bridgeDownSub, warn: false };
+    },
+
+    /**
+     * How the last ask of a research's bridge in this page went (null: not
+     * asked): up, or how it failed; `busy` — it said 503 (its state stands).
+     */
+    researchBridgeAnswer(researchId: string): { up: boolean; why: '' | 'hung' | 'refused' | 'denied'; busy: boolean; at: number; status: LiveStatus | null } | null {
+        const rt = runtime.get(researchId);
+        if (!rt) return null;
+        return { up: rt.up, why: rt.why ?? '', busy: !rt.up && !!rt.busyUntil, at: rt.checkedAt, status: rt.status };
     },
 
     /** The bridge was asked in this page and did not answer (stopped): what it listed waits until it runs. */
@@ -2035,6 +2055,8 @@ export const researchSyncMethods = uiModule({
         this.viewLinksBridgeChanged();
         // The conflicts' cards: how they are decided here, and whether sending comes first.
         this.refreshResearchConflictCards();
+        // The switcher's research marks (the open tree's own ask answered; spec 011).
+        this.refreshResearchMarks();
     },
 
     /**

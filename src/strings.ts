@@ -4212,6 +4212,32 @@ const stringsEN = {
         guideInfo: (pages: number, rows: number, cols: number, overlap: number) =>
             `${nEn(pages, 'sheet', 'sheets')} (${rows} × ${cols}), ${overlap} mm overlap — glue by the grid below.`,
         emptySheet: 'empty — not printed'
+    },
+
+    /** Other research trees' state (switcher marks, "Elsewhere" in the panel, a bridge not answering; spec 011). */
+    otherResearch: {
+        badgeLive: (n: number) => n >= 2 ? `live · ${nEn(n, 'direction', 'directions')}` : 'live',
+        badgeLiveShort: (n: number) => n >= 2 ? `live · ${n}` : 'live',
+        badgeRunning: (n: number) => n >= 2 ? nEn(n, 'direction', 'directions') : 'running',
+        badgeWaiting: (n: number) => `${n} waiting`,
+        badgeOff: 'not running',
+        srWaiting: (n: number) => `${nEn(n, 'item', 'items')} waiting.`,
+        srLive: (n: number) => n > 0 ? `Research followed live. ${nEn(n, 'direction', 'directions')} at work.` : 'Research followed live.',
+        srRunning: (n: number) => `Research running, ${nEn(n, 'direction', 'directions')} at work.`,
+        srIdle: 'Research connected, nobody at work.',
+        srOff: 'Research not running right now.',
+        offLast: (n: number, ago: string) => `Last time ${nEn(n, 'item was', 'items were')} waiting (${ago}).`,
+        offReconnect: 'Reconnects when the tree is opened from the research (strom app in the terminal).',
+        offReconnectShort: 'reconnect: strom app',
+        offPanel: 'Research not running right now. The tree can be edited; edits are sent once the research reconnects.',
+        idlePanel: 'Research connected, nobody at work right now. Edits are sent to it automatically.',
+        switcherDotSr: (name: string, waiting: number) => `Tree: ${name}. ${waiting > 0 ? `${nEn(waiting, 'item', 'items')} waiting in another tree.` : 'Research running in another tree.'}`,
+        otherTreeLabel: 'Elsewhere',
+        otherTreeSr: (name: string, state: string) => `Also running in another tree: ${name}, ${state}. Selecting it switches there.`,
+        otherTrees: (n: number) => `Other trees: ${n}`,
+        otherTreesChip: (n: number) => `+${nEn(n, 'tree', 'trees')}`,
+        blockedSwitcher: 'Research status not visible: the browser has not allowed access to programs on this computer.',
+        blockedHow: 'How to allow',
     }
 };
 
@@ -8267,6 +8293,33 @@ const stringsCZ: StringsType = {
         guideInfo: (pages: number, rows: number, cols: number, overlap: number) =>
             `${nCs(pages, 'list', 'listy', 'listů')} (${rows} × ${cols}), přesah ${overlap} mm — lepí se podle mřížky níže.`,
         emptySheet: 'prázdný — netiskne se'
+    },
+
+    otherResearch: {
+        badgeLive: (n: number) => n >= 2 ? `živě · ${nCs(n, 'linie', 'linie', 'linií')}` : 'živě',
+        badgeLiveShort: (n: number) => n >= 2 ? `živě · ${n}` : 'živě',
+        badgeRunning: (n: number) => n >= 2 ? nCs(n, 'linie', 'linie', 'linií') : 'běží',
+        badgeWaiting: (n: number) => `čeká ${n}`,
+        badgeOff: 'neběží',
+        srWaiting: (n: number) => `Na vyřízení ${plural('cs', n, 'čeká', 'čekají', 'čeká')} ${nCs(n, 'věc', 'věci', 'věcí')}.`,
+        srLive: (n: number) => n > 0 ? `Výzkum se sleduje živě. ${plural('cs', n, 'Pracuje', 'Pracují', 'Pracuje')} ${nCs(n, 'linie', 'linie', 'linií')}.` : 'Výzkum se sleduje živě.',
+        srRunning: (n: number) => `Výzkum běží, ${plural('cs', n, 'pracuje', 'pracují', 'pracuje')} ${nCs(n, 'linie', 'linie', 'linií')}.`,
+        srIdle: 'Výzkum je spojený, nikdo na něm nepracuje.',
+        srOff: 'Výzkum teď neběží.',
+        offLast: (n: number, ago: string) => `Naposledy ${plural('cs', n, 'čekala', 'čekaly', 'čekalo')} ${nCs(n, 'věc', 'věci', 'věcí')} (${ago}).`,
+        offReconnect: 'Znovu se spojí otevřením stromu z výzkumu (v terminálu strom app).',
+        offReconnectShort: 'znovu spojí strom app',
+        offPanel: 'Výzkum teď neběží. Strom jde upravovat; úpravy se pošlou, až se výzkum znovu spojí.',
+        idlePanel: 'Výzkum je spojený, nikdo na něm teď nepracuje. Úpravy se do něj posílají samy.',
+        switcherDotSr: (name: string, waiting: number) => `Strom: ${name}. ${waiting > 0
+            ? `V jiném stromu ${plural('cs', waiting, 'čeká', 'čekají', 'čeká')} ${nCs(waiting, 'věc', 'věci', 'věcí')} na vyřízení.`
+            : 'V jiném stromu běží výzkum.'}`,
+        otherTreeLabel: 'Jinde',
+        otherTreeSr: (name: string, state: string) => `Běží i v jiném stromu: ${name}, ${state}. Výběrem se na něj přepne.`,
+        otherTrees: (n: number) => `Další stromy: ${n}`,
+        otherTreesChip: (n: number) => `+${nCs(n, 'strom', 'stromy', 'stromů')}`,
+        blockedSwitcher: 'Stav výzkumů není vidět: prohlížeč nedovolil přístup k programům na tomto počítači.',
+        blockedHow: 'Jak povolit',
     }
 };
 
@@ -12246,6 +12299,33 @@ const stringsDE: StringsType = {
         guideInfo: (pages: number, rows: number, cols: number, overlap: number) =>
             `${nDe(pages, 'Blatt', 'Blätter')} (${rows} × ${cols}), ${overlap} mm Überlappung — nach dem Raster unten zusammenkleben.`,
         emptySheet: 'leer — nicht gedruckt'
+    },
+
+    otherResearch: {
+        badgeLive: (n: number) => n >= 2 ? `live · ${nDe(n, 'Richtung', 'Richtungen')}` : 'live',
+        badgeLiveShort: (n: number) => n >= 2 ? `live · ${n}` : 'live',
+        badgeRunning: (n: number) => n >= 2 ? nDe(n, 'Richtung', 'Richtungen') : 'läuft',
+        badgeWaiting: (n: number) => `${n} offen`,
+        badgeOff: 'läuft nicht',
+        srWaiting: (n: number) => `${nDe(n, 'Punkt', 'Punkte')} offen.`,
+        srLive: (n: number) => n > 0 ? `Recherche wird live verfolgt. ${nDe(n, 'Richtung', 'Richtungen')} in Arbeit.` : 'Recherche wird live verfolgt.',
+        srRunning: (n: number) => `Recherche läuft, ${nDe(n, 'Richtung', 'Richtungen')} in Arbeit.`,
+        srIdle: 'Recherche verbunden, niemand arbeitet daran.',
+        srOff: 'Die Recherche läuft gerade nicht.',
+        offLast: (n: number, ago: string) => `Zuletzt ${n === 1 ? 'war' : 'waren'} ${nDe(n, 'Punkt', 'Punkte')} offen (${ago}).`,
+        offReconnect: 'Verbindet sich wieder, wenn der Stammbaum aus der Recherche geöffnet wird (strom app im Terminal).',
+        offReconnectShort: 'neu verbinden: strom app',
+        offPanel: 'Die Recherche läuft gerade nicht. Der Stammbaum ist bearbeitbar; Änderungen werden gesendet, sobald die Recherche wieder verbunden ist.',
+        idlePanel: 'Recherche verbunden, gerade arbeitet niemand daran. Änderungen gehen automatisch hinein.',
+        switcherDotSr: (name: string, waiting: number) => `Stammbaum: ${name}. ${waiting > 0
+            ? `In einem anderen Stammbaum ${waiting === 1 ? 'ist' : 'sind'} ${nDe(waiting, 'Punkt', 'Punkte')} offen.`
+            : 'In einem anderen Stammbaum läuft eine Recherche.'}`,
+        otherTreeLabel: 'Anderswo',
+        otherTreeSr: (name: string, state: string) => `Läuft auch in einem anderen Stammbaum: ${name}, ${state}. Auswahl wechselt dorthin.`,
+        otherTrees: (n: number) => `Weitere Stammbäume: ${n}`,
+        otherTreesChip: (n: number) => `+${nDe(n, 'Stammbaum', 'Stammbäume')}`,
+        blockedSwitcher: 'Recherchestatus nicht sichtbar: Der Browser hat den Zugriff auf Programme auf diesem Computer nicht erlaubt.',
+        blockedHow: 'So wird es erlaubt',
     }
 };
 

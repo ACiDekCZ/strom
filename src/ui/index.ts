@@ -112,6 +112,7 @@ import { fileAccessMethods } from './file-access-ui.js';
 import { fileCopyMethods } from './file-copy-ui.js';
 import { researchUiMethods } from './research-ui.js';
 import { researchSyncMethods } from './research-sync-ui.js';
+import { researchOthersMethods } from './research-others-ui.js';
 import { originalsMethods } from './originals-ui.js';
 import { researchTreeSettingsMethods } from './research-tree-settings-ui.js';
 import { researchLoadMethods } from './research-load-ui.js';
@@ -683,6 +684,10 @@ Object.assign(UIClass.prototype, researchUiMethods);
 type ResearchSyncMethods = typeof researchSyncMethods;
 export interface UIClass extends ResearchSyncMethods {}
 Object.assign(UIClass.prototype, researchSyncMethods);
+
+type ResearchOthersMethods = typeof researchOthersMethods;
+export interface UIClass extends ResearchOthersMethods {}
+Object.assign(UIClass.prototype, researchOthersMethods);
 
 type OriginalsMethods = typeof originalsMethods;
 export interface UIClass extends OriginalsMethods {}

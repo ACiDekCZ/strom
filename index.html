@@ -252,6 +252,7 @@
             --dir-icon-fg: #5c5546;
             --gen-track: #ebe4d6;
             --on-warning: #2b2100;    /* mark drawn on a --warning fill */
+            --research-waiting-dot: #b5772a; /* amber dot: something waits in another research tree */
             --info-soft: #e4ebf1;     /* informational tint backgrounds */
             --pending: #d0a23c;       /* unfinished merge state (dashed) */
             --chart-soft: #c9d8cc;    /* lighter shade for single-hue charts */
@@ -378,6 +379,7 @@
             --dir-icon-bg: #34302a;
             --dir-icon-fg: #b3aa98;
             --gen-track: #3d3930;
+            --research-waiting-dot: #d39a52;
             --on-warning: #1f1a10;
             --info-soft: #2a3139;
             --chart-soft: #3a4a3f;
@@ -690,6 +692,73 @@
             font-weight: bold;
             display: inline-flex;
         }
+        /* Research marks (spec 011): ✓ in its own column, the name (shortened, never the marks), the marks at the end. */
+        .tree-switcher-item { justify-content: flex-start; gap: 8px; }
+        .tree-switcher-item .tree-item-check { flex: none; width: 16px; justify-content: center; }
+        .tree-switcher-item .tree-item-check:empty { visibility: hidden; }
+        .tree-switcher-item .tree-item-name { flex: 0 1 auto; min-width: 0; }
+        .tree-switcher-dropdown.with-research { min-width: 340px; max-width: calc(100vw - 24px); }
+        .tree-switcher-dropdown.with-research .tree-switcher-item.active { background: var(--surface-2); }
+        .tree-item-badges { margin-left: auto; flex: none; display: inline-flex; align-items: center; gap: 6px; }
+        .tree-switcher-blocked {
+            padding: 10px 14px; border-top: 1px solid var(--divider);
+            font-size: 12.5px; line-height: 1.45; color: var(--text-light);
+        }
+        .tree-switcher-blocked[hidden] { display: none; }
+        .tree-switcher-blocked-link { font-size: inherit; white-space: nowrap; }
+        /* The closed switcher's dot: the other research trees (amber: something waits; green: an agent works). */
+        .toolbar .tree-switcher-btn { position: relative; }
+        .tree-switcher-dot {
+            position: absolute; top: -3px; right: -3px; width: 9px; height: 9px; border-radius: 50%;
+            background: var(--primary); box-shadow: 0 0 0 2px var(--surface); pointer-events: none;
+        }
+        .tree-switcher-dot[data-kind="waiting"] { background: var(--research-waiting-dot); }
+        /* One mark: live (pill with a ringed dot), running (dot + text), waiting (amber pill), not running (ring). */
+        .rs-marks { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+        .rs-mark { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; line-height: 1; white-space: nowrap; box-sizing: border-box; }
+        .rs-mark--live {
+            height: 20px; padding: 0 8px 0 7px; border-radius: var(--r-pill);
+            background: var(--primary-soft); color: var(--primary-dark); font-weight: 600;
+        }
+        .rs-mark--live::before, .rs-mark--running::before {
+            content: ''; flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--primary);
+        }
+        .rs-mark--live::before { width: 6px; height: 6px; box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 22%, transparent); }
+        .rs-mark--running { color: var(--primary-dark); font-weight: 500; }
+        .rs-mark--waiting {
+            height: 20px; padding: 0 7px; border-radius: var(--r-pill);
+            background: var(--warning-soft); border: 1px solid color-mix(in srgb, var(--warning) 45%, transparent);
+            color: var(--warning-text); font-weight: 600;
+        }
+        .rs-mark--off { color: var(--text-faint); }
+        .rs-mark--off::before {
+            content: ''; flex: none; width: 6px; height: 6px; border-radius: 50%;
+            border: 1.5px solid var(--text-ghost); box-sizing: border-box;
+        }
+        .rs-short { display: none; }
+        .rs-marks__hint { font-size: 12px; color: var(--text-faint); white-space: nowrap; }
+        .rs-marks__hint code, .rs-off-hint code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.95em;
+            background: var(--surface-2); border-radius: 3px; padding: 0 3px;
+        }
+        /* The phone sheet "Trees": the marks on a second line, the row at least 52px. */
+        .bottom-sheet-item[data-tree-id] { min-height: 52px; }
+        .rs-marks--sheet { display: flex; flex-wrap: wrap; margin-top: 4px; }
+        .rs-marks--sheet:empty { display: none; }
+        .bottom-sheet-lead[hidden] { display: none; }
+        .bottom-sheet-lead { padding-top: 8px; font-size: 13px; color: var(--text-light); }
+        @media (min-width: 641px) and (max-width: 1024px) {
+            .tree-switcher-dropdown.with-research { min-width: 300px; }
+        }
+        /* A phone held sideways: one-line rows (44px) as on a computer, "live · 2". */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .rs-full { display: none; }
+            .rs-short { display: inline; }
+            .bottom-sheet-item[data-tree-id] { min-height: 44px; }
+            .bottom-sheet-item[data-tree-id] .bottom-sheet-label { display: flex; align-items: center; gap: 8px; min-width: 0; }
+            .rs-marks--sheet { margin: 0 0 0 auto; flex-wrap: nowrap; }
+            .rs-marks--sheet .rs-marks__hint { display: none; }
+        }
         .tree-switcher-divider {
             height: 1px;
             background: var(--divider);
@@ -957,6 +1026,7 @@
                 font-family: var(--font-serif); font-size: 17px; font-weight: 600;
             }
             .toolbar .tree-switcher-btn .tree-dropdown-arrow { flex: none; width: 16px; height: 16px; color: var(--text-light); }
+            .toolbar .tree-switcher-btn .tree-switcher-dot { position: static; flex: none; order: 3; box-shadow: none; }
             /* One dot before the name: only in the browser, or offline (More says which). */
             body.storage-unsaved .toolbar-state-dot,
             body.is-offline .toolbar-state-dot {
@@ -11007,6 +11077,47 @@
         /* Phone: the panel is a strip; a tap opens the overview sheet. */
         .live-panel.phone-strip .live-panel-chevron { display: none; }
         .live-panel.phone-strip .live-panel-toggle { min-height: 40px; }
+
+        /* "Elsewhere" (spec 011): the other research trees where an agent works or something waits,
+           a strip under the panel's head (first in the overview's Now). */
+        .rs-elsewhere { flex: none; background: var(--surface-2); border-bottom: 1px solid var(--divider); font-size: 13px; }
+        .rs-elsewhere--overview { border: 1px solid var(--divider); border-radius: var(--r-md); margin: 0 0 8px; overflow: hidden; }
+        .rs-elsewhere__row, .rs-elsewhere__sum {
+            display: flex; align-items: center; gap: 8px; width: 100%; min-height: 36px; box-sizing: border-box;
+            padding: 6px 12px; background: none; border: 0; border-radius: 0; box-shadow: none;
+            font: inherit; color: var(--text); text-align: left; cursor: pointer;
+        }
+        .rs-elsewhere__rows .rs-elsewhere__row { padding-left: 32px; }
+        .rs-elsewhere__rows[hidden] { display: none; }
+        @media (hover: hover) {
+            .rs-elsewhere__row:hover, .rs-elsewhere__sum:hover { background: var(--hover-bg); }
+            .rs-elsewhere-chip:hover { border-color: var(--primary); }
+        }
+        .rs-elsewhere__row:focus-visible, .rs-elsewhere__sum:focus-visible, .rs-elsewhere-chip:focus-visible {
+            outline: 2px solid var(--primary); outline-offset: -2px;
+        }
+        .rs-elsewhere__label { flex: none; color: var(--text-faint); }
+        .rs-elsewhere__name { flex: 0 1 auto; min-width: 0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .rs-elsewhere__row .rs-marks { margin-left: auto; }
+        .rs-elsewhere__chev { flex: none; color: var(--text-faint); font-size: 16px; line-height: 1; }
+        .rs-elsewhere__caret { flex: none; width: 12px; color: var(--text-faint); font-size: 11px; }
+        .rs-elsewhere__sumtext { flex: 1 1 auto; min-width: 0; }
+        .rs-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--primary); }
+        .rs-dot--waiting { background: var(--research-waiting-dot); }
+        .rs-elsewhere-chip { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; font-family: inherit; box-shadow: none; }
+        .live-panel-head .rs-elsewhere-chip { margin-left: -2px; }
+        @media (pointer: coarse) {
+            .rs-elsewhere__row, .rs-elsewhere__sum { min-height: 44px; }
+            .rs-elsewhere-chip { min-height: 44px; padding: 0 10px; }
+        }
+        /* The research's bridge does not answer: a ring, not the live dot. */
+        .live-panel.idle.is-off .live-dot { background: none; box-shadow: none; border: 1.5px solid var(--text-ghost); box-sizing: border-box; }
+        @media (max-width: 640px) {
+            .rs-elsewhere__row, .rs-elsewhere__sum { padding-left: 14px; padding-right: 14px; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .rs-elsewhere__row, .rs-elsewhere__sum { min-height: 32px; padding-top: 4px; padding-bottom: 4px; }
+        }
 
         /* The card a change row points at, while the row is hovered. */
         .person-card.overview-hover {
