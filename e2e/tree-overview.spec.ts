@@ -855,6 +855,52 @@ test.describe('tree overview: ask the family, certainty, the Data quality shortc
             .toHaveText('Belegt heißt hier: in der Forschung bewiesen; der eingelesene Stammbaum ist ein Hinweis.');
     });
 
+    test('K3.2: in a research tree a cited lead birth counts as not documented; its pill offers Sources, an ungraded one Cite', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await openApp(page);
+        const data = family();
+        // Erik's birth is cited (the imported file) but only a lead; the other ancestors have no grade.
+        Object.assign(data.persons.f, { birthStatus: 'lead' });
+        const treeId = await importTree(page, data, 'Lindqvist', 'r');
+        await page.evaluate((id) => {
+            window.Strom.TreeManager.setResearchLink(id as never, {
+                id: '0c0c0c0c-1111-4222-8333-444455556666', fingerprint: 'x', syncedAt: new Date().toISOString(),
+            });
+        }, treeId);
+        let dialog = await openOverview(page, treeId);
+        // Gustav, Oskar, Elin, Nils, Karin without a source and Erik's lead: six, the card agrees with the table.
+        await expect(section(dialog, 'focus').locator('.tov-card[data-card="birthNoSource"]'))
+            .toContainText('6 direct ancestors have no documented birth.');
+        await expect(section(dialog, 'quality').locator('.tov-ev-row[data-evidence="birthNoSource"] .tov-ev-label'))
+            .toContainText('Births not proven in the research');
+        await section(dialog, 'focus').locator('.tov-card[data-card="birthNoSource"]').getByRole('button', { name: 'Show in tree' }).click();
+        const pill = page.locator('#evidence-pill');
+        await expect(pill).toContainText('Births not proven: 6 people');
+        await pill.getByRole('button', { name: 'Next person ›' }).click();
+        // Erik first (parents' generation, by name): graded by the research, so Sources, not Cite.
+        await expect(pill.locator('.evidence-pill-cite')).toHaveCount(0);
+        await pill.getByRole('button', { name: 'Sources' }).click();
+        await expect(page.locator('#person-sources-modal')).toBeVisible();
+        await expect(page.locator('#person-sources-modal')).toContainText('Parish register');
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#person-sources-modal')).toHaveCount(0);
+        // Karin has no grade: the citation rule and Cite.
+        await pill.getByRole('button', { name: 'Next person ›' }).click();
+        await expect(pill.getByRole('button', { name: 'Cite' })).toBeVisible();
+        await expect(pill.locator('.evidence-pill-sources')).toHaveCount(0);
+        await pill.locator('.evidence-pill-close').click();
+        // Czech and German labels.
+        await page.evaluate(() => window.Strom.UI.setLanguage('cs' as never));
+        dialog = await openOverview(page, treeId);
+        await expect(section(dialog, 'quality').locator('.tov-ev-row[data-evidence="birthNoSource"] .tov-ev-label'))
+            .toContainText('Narození neověřená výzkumem');
+        await page.keyboard.press('Escape');
+        await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
+        dialog = await openOverview(page, treeId);
+        await expect(section(dialog, 'quality').locator('.tov-ev-row[data-evidence="birthNoSource"] .tov-ev-label'))
+            .toContainText('Geburten in der Forschung nicht bewiesen');
+    });
+
     test('Data quality in the menu: the tree actions and the manager (a tree that is not open)', async ({ page }) => {
         const treeId = await setup(page);
         await page.locator('.actions-menu-btn').click();

@@ -198,9 +198,10 @@ export interface AncestorOverview {
      */
     pedigreeCollapse: PersonId[];
     /**
-     * Ancestors with a birth (date, place or a baptism) that no source cites —
-     * the same rule as tree health's "Births without a source", among the
-     * direct ancestors only. By generation, then name.
+     * Ancestors with a birth (date, place or a baptism) that is not documented
+     * (`birthDocumented`, the "documented" column's rule): no source cites it,
+     * or the research grades it below "proven". Among the direct ancestors
+     * only. By generation, then name.
      */
     birthNoSource: PersonId[];
 }
@@ -271,8 +272,9 @@ export function ancestorGenerations(data: StromData, rootId: PersonId): Ancestor
         let proven = 0;
         for (const id of ids) {
             const ev = personEvidence(data.persons[id], data, unions);
-            if (birthDocumented(data.persons[id], !!ev?.birthCited)) proven++;
-            if (ev && ev.hasBirth && !ev.birthCited) birthNoSource.push(id);
+            const documented = birthDocumented(data.persons[id], !!ev?.birthCited);
+            if (documented) proven++;
+            else if (ev?.hasBirth) birthNoSource.push(id);
         }
         const gapIds = [...places.keys()].filter(id => bioParents(data, data.persons[id]).length < 2).sort(name);
         generations.push({ n, expected: 2 ** n, known: ids.length, filled: Math.min(filled, 2 ** n), proven, ids, gapIds });
@@ -921,7 +923,7 @@ export const MAX_FOCUS_CARDS = 3;
 /** The "births without a documented birth" card looks at the direct ancestors up to this generation. */
 export const FOCUS_BIRTH_GENERATIONS = 4;
 
-/** The direct ancestors of generations 1…FOCUS_BIRTH_GENERATIONS whose birth no source cites (the card's people). */
+/** The direct ancestors of generations 1…FOCUS_BIRTH_GENERATIONS whose birth is not documented (the card's people). */
 export function focusBirthNoSource(overview: AncestorOverview): PersonId[] {
     return overview.birthNoSource.filter(id => (overview.generationOf.get(id) ?? Infinity) <= FOCUS_BIRTH_GENERATIONS);
 }

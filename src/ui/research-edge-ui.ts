@@ -228,8 +228,8 @@ export const researchEdgeUiMethods = uiModule({
     /**
      * The bubble of a `named` stub: "Parents named, not linked", what comes
      * next, the hypothesis and its versions — each with what it would bring
-     * ("+ 5 people" / "The tree records this already" / "link not recorded
-     * yet"); pinned, a version with a
+     * ("+ 5 people" / "The tree records this already" / "no link to people
+     * in the tree"); pinned, a version with a
      * link can be shown ("Show as linked"; while another is shown "Show
      * instead of B"; the shown one "Shown" · "Unlink").
      */

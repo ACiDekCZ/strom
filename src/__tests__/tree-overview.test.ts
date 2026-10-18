@@ -135,8 +135,11 @@ describe('ancestorGenerations', () => {
         expect(ancestorGenerations(proven, id('R')).generations.map(g => g.proven)).toEqual([1, 4]);
         // No grade anywhere (a plain GEDCOM import): the citation rule, every birth documented.
         expect(ancestorGenerations(tree(() => ({})), id('R')).generations.map(g => g.proven)).toEqual([2, 4]);
-        // Births without a source stay a citation matter: none of these lacks one.
-        expect(ancestorGenerations(leads, id('R')).birthNoSource).toEqual([]);
+        // The births not documented follow the same rule (the card and the evidence row):
+        // every lead, though each is cited; of the graded ones only the probable birth.
+        expect(ancestorGenerations(leads, id('R')).birthNoSource).toEqual(['F', 'M', 'FF', 'FM', 'MF', 'MM']);
+        expect(ancestorGenerations(proven, id('R')).birthNoSource).toEqual(['M']);
+        expect(ancestorGenerations(tree(() => ({})), id('R')).birthNoSource).toEqual([]);
     });
 
     it('birthResearchStatus: the birth fields, else a birth event, else a baptism event', () => {

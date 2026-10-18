@@ -11678,13 +11678,13 @@
             box-shadow: var(--shadow-lg); font-size: 13px;
         }
         .evidence-pill-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 4px; }
-        .evidence-pill-next, .evidence-pill-cite, .evidence-pill-close {
+        .evidence-pill-next, .evidence-pill-cite, .evidence-pill-sources, .evidence-pill-close {
             flex: none; height: 30px; padding: 0 10px; cursor: pointer; border: 0; border-radius: 999px;
             background: none; color: var(--primary); font: inherit; font-size: 13px; font-weight: 500;
         }
         .evidence-pill-close { width: 30px; padding: 0; color: var(--text-light); font-size: 18px; }
-        @media (hover: hover) { .evidence-pill-next:hover, .evidence-pill-cite:hover, .evidence-pill-close:hover { background: var(--hover-bg); } }
-        .evidence-pill-next:focus-visible, .evidence-pill-cite:focus-visible, .evidence-pill-close:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        @media (hover: hover) { .evidence-pill-next:hover, .evidence-pill-cite:hover, .evidence-pill-sources:hover, .evidence-pill-close:hover { background: var(--hover-bg); } }
+        .evidence-pill-next:focus-visible, .evidence-pill-cite:focus-visible, .evidence-pill-sources:focus-visible, .evidence-pill-close:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
         body[data-view-mode="timeline"] .evidence-pill, body[data-view-mode="map"] .evidence-pill { display: none; }
         /* Tablet: same place, wider margins. */
         @media (min-width: 641px) and (max-width: 1024px) {
@@ -11697,7 +11697,7 @@
                 left: 16px; right: 80px; transform: none; max-width: none;
             }
             .evidence-pill-label { flex: 1; }
-            .evidence-pill-next, .evidence-pill-cite, .evidence-pill-close { height: 40px; min-width: 40px; }
+            .evidence-pill-next, .evidence-pill-cite, .evidence-pill-sources, .evidence-pill-close { height: 40px; min-width: 40px; }
         }
 
         /* Back to the tree overview from its highlight: on phones the pill takes two rows. */
@@ -11712,7 +11712,7 @@
             .evidence-pill--back .evidence-pill-label { flex: 1 1 calc(100% - 56px); order: 0; }
             .evidence-pill--back .evidence-pill-close { order: 1; }
             .evidence-pill--back .evidence-pill-back { order: 2; height: 44px; margin-right: auto; }
-            .evidence-pill--back .evidence-pill-cite, .evidence-pill--back .evidence-pill-next { order: 3; height: 44px; }
+            .evidence-pill--back .evidence-pill-cite, .evidence-pill--back .evidence-pill-sources, .evidence-pill--back .evidence-pill-next { order: 3; height: 44px; }
         }
         @media (pointer: coarse) {
             .evidence-pill-back { min-height: 44px; }

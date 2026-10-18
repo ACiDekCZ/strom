@@ -34,7 +34,7 @@ export interface PersonMenuAction {
     external?: boolean;
     /** A small warm label at the end ("1 conflict"). */
     tag?: string;
-    /** It is already so (quiet look, a green word at the end: "already running"). */
+    /** It is already so (quiet look, a green word at the end: "already active"). */
     state?: string;
     /** A small line under the label ("Paused · restart"). */
     note?: string;

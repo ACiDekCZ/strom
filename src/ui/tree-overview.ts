@@ -1411,7 +1411,7 @@ export const treeOverviewMethods = uiModule({
         if (anc.overview && ancestors > 0) {
             const births = anc.overview.birthNoSource.length;
             evRows.push(
-                { kind: 'birthNoSource', label: t.evBirthNoSource, count: t.evOfAncestors(births, ancestors), rooted: true, n: births },
+                { kind: 'birthNoSource', label: st.research ? t.evBirthUnproven : t.evBirthNoSource, count: t.evOfAncestors(births, ancestors), rooted: true, n: births },
                 { kind: 'lineEnds', label: t.evLineEnds, count: t.evOfAncestors(anc.lineEnds.length, ancestors), rooted: true, n: anc.lineEnds.length },
             );
         }
@@ -1589,7 +1589,7 @@ export const treeOverviewMethods = uiModule({
                 const ids = focusBirthNoSource(this.treeOverviewAncestorData().overview!);
                 void this.startTreeOverviewHighlight({
                     kind: 'birthNoSource', cite: true, personIds: ids,
-                    title: (n) => strings.treeOverview.hlBirth(n),
+                    title: (n) => (st.research ? strings.treeOverview.hlBirthUnproven : strings.treeOverview.hlBirth)(n),
                     recount: () => focusBirthNoSource(ancestorGenerations(DataManager.getData(), root)),
                 });
                 return;
@@ -1627,7 +1627,8 @@ export const treeOverviewMethods = uiModule({
                     ? ancestorGenerations(data, root).birthNoSource
                     : lineEndIds(data, root);
                 void this.startTreeOverviewHighlight({
-                    kind, cite: kind === 'birthNoSource', title: kind === 'birthNoSource' ? t.hlBirth : t.hlLineEnds,
+                    kind, cite: kind === 'birthNoSource',
+                    title: kind === 'birthNoSource' ? (st.research ? t.hlBirthUnproven : t.hlBirth) : t.hlLineEnds,
                     personIds: ids(st.data),
                     recount: () => ids(DataManager.getData()),
                 });

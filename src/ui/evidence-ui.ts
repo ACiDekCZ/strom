@@ -24,6 +24,7 @@ import { PersonId, StromData } from '../types.js';
 import { computeEvidenceGaps, EvidenceKind } from '../stats.js';
 import { EvidenceLevel, evidenceLevels } from '../evidence-level.js';
 import { assignGenerations } from '../generations.js';
+import { birthResearchStatus } from '../tree-overview.js';
 import { uiModule } from './module.js';
 
 /** A highlighted group of people: what it is, who, and where Next › stands. */
@@ -279,7 +280,21 @@ export const evidenceUiMethods = uiModule({
             const current = evidence.index >= 0 ? evidence.ids[evidence.index] : undefined;
             const kind = evidence.kind;
             const citable = evidence.cite ?? (kind === 'birthNoSource' || kind === 'noSource');
-            if (current && citable && (kind === 'birthNoSource' || kind === 'noSource') && this.canCiteOnPerson(current)) {
+            // A birth the research grades: one more citation does not prove it, the research
+            // does (K3.2) — its sources instead.
+            const graded = !!current && kind === 'birthNoSource' && !!DataManager.getPerson(current)
+                && birthResearchStatus(DataManager.getPerson(current)!) !== undefined;
+            if (current && citable && graded) {
+                const sources = document.createElement('button');
+                sources.type = 'button';
+                sources.className = 'evidence-pill-sources';
+                sources.textContent = s.sourcesAction;
+                sources.onclick = () => {
+                    this.pushDialog('person-sources-modal');
+                    this.showPersonSourcesDialog(current);
+                };
+                pill.append(sources);
+            } else if (current && citable && (kind === 'birthNoSource' || kind === 'noSource') && this.canCiteOnPerson(current)) {
                 const cite = document.createElement('button');
                 cite.type = 'button';
                 cite.className = 'evidence-pill-cite';

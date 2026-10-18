@@ -324,7 +324,7 @@ test.describe('research directions', () => {
         await card(page, 'Jan').click();
         await openPersonSubmenu(page, 'research');
         const item = page.locator('.context-submenu [data-action="research-ancestors"]');
-        await expect(item.locator('.menu-item-state')).toHaveText('already running');
+        await expect(item.locator('.menu-item-state')).toHaveText('already active');
         await item.click();
         await expect(row(page, 'G0001').locator('.research-direction__detail')).toBeVisible();
         await page.keyboard.press('Escape');
