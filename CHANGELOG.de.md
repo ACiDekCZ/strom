@@ -8,11 +8,11 @@
 
 - **Stammbaum-Überblick**: *Geburten ohne Quelle* und *Linienenden* werden unter den Vorfahren der gewählten Person gezählt (*3 von 14 Vorfahren*), das Sterbedatum ist als bei Verstorbenen gezählt beschriftet, jede Spalte der Geburtsmonate trägt ihre Zahl (auf Touch-Geräten per Tippen), Prozentwerte folgen der Sprache der App, und nach einer Änderung der Daten kehrt der Tastaturfokus zum selben Element zurück.
 - **Stammbaum-Überblick, Datenqualität**: Ein nicht geöffneter Stammbaum bietet *Validierungsdetails*; ein Befund nennt den wiederkehrenden Paten (*Pate: …*) oder den mehrfach geschriebenen Ort (*Ort: …*); Links im Überblick lassen kein Leerzeichen mehr vor einem Komma; die Sicherheitsabschnitte trennt eine schmale Lücke, mit neuen Tönen im dunklen Modus.
-- **Forschungsstammbäume**: In *Vorfahren* zählt eine von der Forschung bewertete Geburt nur als belegt, wenn die Forschung sie bewiesen hat, wie in der Statistik der Forschung; ein Hinweis unter der Tabelle sagt, dass der eingelesene Stammbaum ein Hinweis ist.
+- **Forschungsstammbäume**: In *Vorfahren* zählt eine von der Forschung bewertete Geburt nur als belegt, wenn die Forschung sie bewiesen hat, wie in der Statistik der Forschung; ein Hinweis unter der Tabelle sagt, dass der eingelesene Stammbaum ein Hinweis ist. Die Geburten, die *Worauf achten* als nicht belegt nennt, folgen derselben Regel (*Geburten nicht bewiesen: 3 Personen*), und eine von der Forschung bewertete Geburt bietet *Quellen* statt *Zitieren*. Eine Version einer Hypothese ohne Verbindung zeigt *keine Verbindung zu Personen im Baum*.
 - **Sprung zu einem Abschnitt**: *Datenqualität* aus den Stammbaum-Aktionen oder der Forschungsübersicht und *Zeitzeugen* zeigen die Überschrift ganz unter dem Kopf des Überblicks.
 - **Tschechische Verwandtschaftsbegriffe**: Ein Geschwister mit einem gemeinsamen Elternteil heißt *polorodý bratr* oder *polorodá sestra*, im Stammbaum-Überblick und in *Verwandtschaft finden…*.
-- **Live-Ansicht**: Die Überschrift der Richtungen zählt die aktiven Richtungen (*Richtungen · 3 aktiv*).
-- **Fehlerbehebungen**: Zwei schnelle Änderungen hintereinander zeigen nicht mehr zwei Rückgängig-Hinweise auf einmal.
+- **Live-Ansicht**: Die Überschrift der Richtungen zählt die aktiven Richtungen (*Richtungen · 3 aktiv*), und das Personenmenü nennt eine laufende Richtung *bereits aktiv*.
+- **Fehlerbehebungen**: Zwei schnelle Änderungen hintereinander zeigen nicht mehr zwei Rückgängig-Hinweise auf einmal; Namen auf den Karten werden nach dem Laden der Kartenschriften neu eingepasst, sodass ein langer Name nicht mehr abgeschnitten wird.
 
 ## 3.13.0
 

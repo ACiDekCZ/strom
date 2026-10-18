@@ -8,11 +8,11 @@
 
 - **Přehled stromu**: *Narození bez pramene* a *Konce linií* se počítají mezi předky vybrané osoby (*3 z 14 předků*), datum úmrtí má popisek, že se počítá u zemřelých, každý sloupec měsíců narození nese svůj počet (na dotyku se ukáže klepnutím), procenta se píšou podle jazyka aplikace a po změně dat se fokus klávesnice vrátí na stejný prvek.
 - **Přehled stromu, Kvalita dat**: strom, který není otevřený, nabízí *Detaily validace*; nález jmenuje opakujícího se kmotra (*Kmotr: …*) nebo místo zapsané víckrát (*Místo: …*); odkazy v přehledu už nenechávají mezeru před čárkou; úseky jistoty dělí tenká mezera, s novými odstíny v tmavém režimu.
-- **Výzkumné stromy**: v *Předcích* se narození, které výzkum hodnotí, počítá jako doložené, jen když ho výzkum prokázal, stejně jako ve statistice výzkumu; poznámka pod tabulkou říká, že vstupní rodokmen je vodítko.
+- **Výzkumné stromy**: v *Předcích* se narození, které výzkum hodnotí, počítá jako doložené, jen když ho výzkum prokázal, stejně jako ve statistice výzkumu; poznámka pod tabulkou říká, že vstupní rodokmen je vodítko. Narození, která *Na co se zaměřit* uvádí jako nedoložená, se řídí stejným pravidlem (*Narození neověřená: 3 osoby*) a u narození, které výzkum hodnotí, je *Prameny* místo *Citovat*. Verze hypotézy bez vazby píše *bez vazby k osobám stromu*.
 - **Skok na sekci**: *Kvalita dat* z akcí stromu nebo z přehledu výzkumu a *Pamětníci* ukážou nadpis celý pod záhlavím přehledu.
 - **Příbuzenské vztahy**: sourozenec s jedním společným rodičem je *polorodý bratr* nebo *polorodá sestra*, v přehledu stromu i v *Zjistit vztah…*.
-- **Živý přehled**: nadpis linií počítá aktivní linie (*Linie · 3 aktivní*).
-- **Opravy**: dvě rychlé změny za sebou už neukážou dvě upozornění Zpět najednou.
+- **Živý přehled**: nadpis linií počítá aktivní linie (*Linie · 3 aktivní*) a menu osoby u běžící linie píše *už je aktivní*.
+- **Opravy**: dvě rychlé změny za sebou už neukážou dvě upozornění Zpět najednou; jména na kartách se po načtení písma karet znovu přizpůsobí, takže dlouhé jméno už není oříznuté.
 
 ## 3.13.0
 
