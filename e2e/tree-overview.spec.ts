@@ -230,7 +230,9 @@ test.describe('tree overview', () => {
         const dialog = await openOverview(page, treeId, { section: 'quality', scroll: true });
         const quality = section(dialog, 'quality');
         await expect(quality).toHaveAttribute('data-ready', 'true');
-        await expect(quality.locator('.tov-mark')).toHaveCount(0);
+        // Whole tree: no mark in the head; only the ancestor rows of Missing evidence carry one.
+        await expect(quality.locator('.tov-sec-head .tov-mark')).toHaveCount(0);
+        await expect(quality.locator('.tov-mark')).toHaveCount(2);
         await expect(quality.locator('.tov-sum .tov-sum-err')).toHaveText('2 errors');
         // Consistency: the counts, the most serious findings first, names lead to the person.
         await expect(quality.locator('.tov-count-err')).toHaveText('2 errors');
@@ -243,11 +245,30 @@ test.describe('tree overview', () => {
         await expect(quality.locator('.tov-comp-row')).toHaveCount(4);
         await expect(quality.locator('.tov-comp-row[data-field="source"]')).toHaveCount(0);
         await expect(quality.locator('[data-block="certainty"]')).toHaveCount(0); // not a research tree
-        await expect(quality.locator('.tov-comp-row[data-field="deathDate"]')).toHaveAttribute('title', 'counted among the deceased');
-        // Where evidence is missing, from the person in focus.
+        // Counted among the deceased only, and the label says so (a tooltip is not seen on touch).
+        await expect(quality.locator('.tov-comp-row[data-field="deathDate"] .tov-comp-label')).toHaveText('Date of death (deceased)');
+        // Where evidence is missing: people without a source in the whole tree (with the
+        // header's "13% with a source" all 8 people), births and line ends among the chosen
+        // person's 6 direct ancestors, those two rows marked ◉.
         const evidence = quality.locator('[data-block="evidence"]');
         await expect(evidence.locator('.tov-ev-row[data-evidence="noSource"] .tov-ev-count')).toHaveText('7 of 8');
-        await expect(evidence.locator('.tov-ev-row[data-evidence="lineEnds"] .tov-ev-count')).toHaveText('3');
+        await expect(evidence.locator('.tov-ev-row[data-evidence="noSource"] .tov-mark')).toHaveCount(0);
+        await expect(evidence.locator('.tov-ev-row[data-evidence="birthNoSource"] .tov-ev-count')).toHaveText('5 of 6 ancestors');
+        await expect(evidence.locator('.tov-ev-row[data-evidence="lineEnds"] .tov-ev-count')).toHaveText('3 of 6 ancestors');
+        await expect(evidence.locator('.tov-ev-row[data-evidence="birthNoSource"] .tov-mark')).toHaveAttribute('aria-label', 'Calculated from the selected person');
+        await expect(evidence.locator('.tov-ev-row[data-evidence="lineEnds"] .tov-mark')).toHaveCount(1);
+        // Another person: the ancestor rows follow, the whole-tree row stays.
+        await dialog.locator('.tov-root-btn').click();
+        await page.locator('.tov-pop .tov-pop-search').fill('Erik');
+        await page.locator('.tov-pop-row', { hasText: 'Erik' }).click();
+        await expect(evidence.locator('.tov-ev-row[data-evidence="birthNoSource"] .tov-ev-count')).toHaveText('3 of 3 ancestors');
+        await expect(evidence.locator('.tov-ev-row[data-evidence="lineEnds"] .tov-ev-count')).toHaveText('2 of 3 ancestors');
+        await expect(evidence.locator('.tov-ev-row[data-evidence="noSource"] .tov-ev-count')).toHaveText('7 of 8');
+        // Births without a source of Erik's ancestors: the highlight with Cite.
+        await evidence.locator('[data-kind="birthNoSource"]').click();
+        await expect(page.locator('#evidence-pill')).toContainText('Births without a source: 3 people');
+        await page.locator('#evidence-pill').getByRole('button', { name: 'Back to overview' }).click();
+        await expect(section(page.locator('#tree-overview-modal'), 'quality')).toHaveAttribute('data-ready', 'true');
         // Structure: one family; the quick actions (nothing to clean up: disabled).
         await expect(quality.locator('[data-block="structure"] .tov-struct-line')).toHaveText('4 unions. All people are connected into one family.');
         await expect(quality.locator('[data-block="actions"] .tov-btn')).toHaveText(
@@ -389,14 +410,25 @@ test.describe('tree overview', () => {
         await expect(dialog.locator('.tov-inactive')).toContainText('This tree is not open – read only.');
         // The person that tree starts with.
         await expect(dialog.locator('.tov-root-btn')).toHaveText(/Anders Lindqvist/);
-        const fix = section(dialog, 'focus').getByRole('button', { name: 'Fix' });
-        await expect(fix).toHaveAttribute('aria-disabled', 'true');
-        await expect(fix).toHaveAttribute('title', 'This tree is not open. Only an open tree can be changed.');
-        // aria-disabled keeps it focusable and clickable: the click explains instead of acting.
-        await fix.click({ force: true });
-        await expect(page.locator('#tree-validation-modal')).toBeHidden();
-        await expect(section(dialog, 'focus').locator('.tov-disabled-hint')).toBeVisible();
+        // The error card offers the validation details instead of Fix: reading them changes nothing.
+        const card = section(dialog, 'focus').locator('.tov-card[data-card="validation"]');
+        await expect(card.getByRole('button', { name: 'Fix' })).toHaveCount(0);
+        const details = card.getByRole('button', { name: 'Validation details' });
+        await expect(details).not.toHaveAttribute('aria-disabled', 'true');
+        await details.click();
+        await expect(page.locator('#tree-validation-modal')).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(dialog).toBeVisible();
         await expect(section(dialog, 'focus').getByRole('button', { name: 'Open tree and show' })).toHaveCount(2);
+        // An action that changes data: aria-disabled keeps it focusable and clickable, the click explains instead of acting.
+        await section(dialog, 'quality').locator('.tov-sec-head').click();
+        const split = section(dialog, 'quality').getByRole('button', { name: 'Split into families' });
+        await expect(split).toHaveAttribute('aria-disabled', 'true');
+        await expect(split).toHaveAttribute('title', 'This tree is not open. Only an open tree can be changed.');
+        await split.click({ force: true });
+        await expect(split.locator('xpath=following-sibling::span[contains(@class, "tov-disabled-hint")]')).toBeVisible();
+        expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeId())).not.toBe(treeId);
+        await section(dialog, 'quality').locator('.tov-sec-head').click();
         await expect(section(dialog, 'ancestors')).toContainText('Line ends: 3 people');
         // Open tree and show: the tree opens, the highlight starts.
         await section(dialog, 'ancestors').getByRole('button', { name: 'Open tree and show' }).click();
@@ -612,7 +644,7 @@ test.describe('tree overview: ask the family, certainty, the Data quality shortc
         const rows = rem.locator('.tov-rem-row');
         await expect(rows.locator('.tov-rem-who .tov-link')).toHaveText(['Ada Holm', 'Bo Holm', 'Cid Holm', 'Dag Holm']);
         const y = new Date().getFullYear();
-        await expect(rows.nth(0).locator('.tov-rem-meta')).toHaveText(`b. ${y - 68}, death unknown · mother`);
+        await expect(rows.nth(0).locator('.tov-rem-meta')).toHaveText(`b. ${y - 68} · death unknown · mother`);
         await expect(rows.nth(0).locator('.tov-chip')).toHaveText(['date of death', 'place of death', 'cause', 'place of birth']);
         await expect(rows.nth(1).locator('.tov-chip')).toHaveText(['cause', 'place of birth']);
         await expect(rows.nth(2).locator('.tov-rem-meta')).toHaveText(`${y - 72}–${y - 5} · father\u2019s brother`);
@@ -645,6 +677,17 @@ test.describe('tree overview: ask the family, certainty, the Data quality shortc
         await expect(bo.locator('.tov-rem-editor')).toHaveCount(0);
         await expect(page.locator('#tree-overview-modal')).toHaveCount(1);
         expect(await page.evaluate(() => window.Strom.DataManager.getPerson('bo' as never)?.question)).toBe('Where was he born?');
+
+        // A data change redraws the overview: the expansion stays open, the keyboard focus returns to the same control.
+        const edit = bo.getByRole('button', { name: 'Edit question' });
+        await edit.focus();
+        const key = await edit.getAttribute('data-key');
+        expect(key).toBeTruthy();
+        await page.evaluate(() => window.Strom.DataManager.updatePerson('ada' as never, { firstName: 'Alma' }));
+        await expect(rows.locator('.tov-rem-who .tov-link').first()).toHaveText('Alma Holm');
+        await expect(rem.locator('.tov-rem-head')).toHaveAttribute('aria-expanded', 'true');
+        await expect(rem.locator('.tov-rem-body')).toBeVisible();
+        await expect.poll(() => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.key)).toBe(key);
 
         // The expansion is remembered.
         await page.keyboard.press('Escape');
@@ -683,6 +726,12 @@ test.describe('tree overview: ask the family, certainty, the Data quality shortc
         await expect(birthPlace).toHaveText('0%');
         const scroller = dialog.locator('.tov-scroll');
         await scroller.evaluate(el => { el.scrollTop = 300; });
+        // The keyboard focus sits on a control of the section; the redraw puts it back on the same one.
+        const split = section(dialog, 'quality').getByRole('button', { name: 'Split into families' });
+        await split.evaluate(el => (el as HTMLElement).focus({ preventScroll: true }));
+        const key = await split.getAttribute('data-key');
+        expect(key).toBeTruthy();
+        await scroller.evaluate(el => { el.scrollTop = 300; });
         const top = await scroller.evaluate(el => el.scrollTop);
         expect(top).toBeGreaterThan(0);
         // Two edits close together: one refresh.
@@ -697,6 +746,7 @@ test.describe('tree overview: ask the family, certainty, the Data quality shortc
         await expect(birthPlace).toHaveText('11%');
         await expect(section(dialog, 'quality').locator('.tov-sec-head')).toHaveAttribute('aria-expanded', 'true');
         expect(await scroller.evaluate(el => el.scrollTop)).toBe(top);
+        expect(await page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.key)).toBe(key);
         // Undo comes back the same way.
         await page.evaluate(() => { const D = window.Strom.DataManager; D.undo(); D.undo(); D.undo(); });
         await expect(dialog.locator('.tov-nums')).toContainText('8 people');
@@ -751,6 +801,14 @@ test.describe('tree overview: ask the family, certainty, the Data quality shortc
         await expect(birth.locator('.tov-cert-counts')).toHaveText('Proven 1 · Probable 1 · Lead 1');
         const bar = await birth.locator('.tov-cert-bar').boundingBox();
         expect(Math.round(bar!.height)).toBe(12);
+        // The light shades by the table, a 1px gap in the background colour between the segments.
+        const segs = await birth.locator('.tov-cert-seg').evaluateAll(els => els.map(el => {
+            const cs = getComputedStyle(el);
+            return { bg: cs.backgroundColor, border: cs.borderLeftWidth, borderStyle: cs.borderLeftStyle };
+        }));
+        expect(segs[0]).toEqual({ bg: 'rgb(53, 87, 127)', border: '0px', borderStyle: 'none' });
+        expect(segs[1]).toEqual({ bg: 'rgb(111, 147, 189)', border: '1px', borderStyle: 'solid' });
+        expect(segs[2].border).toBe('1px');
         await expect(block.locator('.tov-cert-row[data-fact="death"] .tov-cert-counts')).toHaveText('Possible 1');
         await expect(block.locator('.tov-cert-row[data-fact="marriage"] .tov-cert-counts')).toHaveText('Proven 1');
         // The four shades differ (tokens), the lead one is hatched.
@@ -828,6 +886,51 @@ test.describe('tree overview: ask the family, certainty, the Data quality shortc
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
         expect(treeId).toBeTruthy();
         await context.close();
+    });
+
+    test('births by month: the full month and count in the label, a tap on touch shows it under the chart', async ({ browser }) => {
+        // Six full birth dates: three in January, two in March, one in December.
+        const months = ['1900-01-03', '1902-01-15', '1904-01-28', '1906-03-02', '1908-03-09', '1910-12-24'];
+        const persons: Record<string, P> = {};
+        months.forEach((birthDate, i) => {
+            persons[`p${i}`] = { id: `p${i}`, firstName: `N${i}`, lastName: 'Ek', gender: i % 2 ? 'female' : 'male', isPlaceholder: false, partnerships: [], parentIds: [], childIds: [], birthDate };
+        });
+        const check = async (touch: boolean): Promise<void> => {
+            const context = await browser.newContext(touch
+                ? { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true }
+                : { viewport: { width: 1440, height: 900 } });
+            const page = await context.newPage();
+            await openApp(page);
+            const treeId = await importTree(page, { persons, partnerships: {} }, 'Ek', 'p0');
+            const dialog = await openOverview(page, treeId, { section: 'time' });
+            const chart = section(dialog, 'time').locator('[data-chart="months"]');
+            const cols = chart.locator('.tov-month');
+            await expect(cols).toHaveCount(12);
+            await expect(cols.nth(0)).toHaveAttribute('aria-label', 'January: 3 births');
+            await expect(cols.nth(0)).toHaveAttribute('role', 'img');
+            await expect(cols.nth(1)).toHaveAttribute('aria-label', 'February: 0 births');
+            await expect(cols.nth(11)).toHaveAttribute('aria-label', 'December: 1 birth');
+            const detail = chart.locator('.tov-month-detail');
+            await expect(detail).toBeHidden();
+            if (touch) {
+                await cols.nth(2).tap();
+                await expect(detail).toBeVisible();
+                await expect(detail).toHaveText('March: 2 births');
+                await expect(cols.nth(2)).toHaveClass(/is-picked/);
+                await cols.nth(0).tap();
+                await expect(detail).toHaveText('January: 3 births');
+                // The same column again hides it.
+                await cols.nth(0).tap();
+                await expect(detail).toBeHidden();
+            } else {
+                // The mouse has the tooltip: a click writes nothing under the chart.
+                await cols.nth(2).click();
+                await expect(detail).toBeHidden();
+            }
+            await context.close();
+        };
+        await check(false);
+        await check(true);
     });
 
     test('Ask the family in Czech and German', async ({ page }) => {

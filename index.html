@@ -382,10 +382,10 @@
             --info-soft: #2a3139;
             --chart-soft: #3a4a3f;
             /* lightest = most certain, so it keeps the contrast on the dark surface */
-            --certainty-1: #b5d0ee;
-            --certainty-2: #82a8d6;
-            --certainty-3: #5a7fae;
-            --certainty-4: repeating-linear-gradient(45deg, #5a7fae 0 2px, #3a3f47 2px 4px);
+            --certainty-1: #8fb3dc;
+            --certainty-2: #6489b4;
+            --certainty-3: #43607f;
+            --certainty-4: repeating-linear-gradient(45deg, #43607f 0 2px, #2a2722 2px 4px);
 
             --male: #7da3c4;
             --female: #c49290;
@@ -11811,8 +11811,10 @@
             .tov-btn--danger:hover { background: var(--danger); filter: brightness(1.08); }
         }
         .tov-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-        .tov-btn.is-disabled, .tov-btn.is-disabled:hover {
-            border-color: var(--border); background: none; color: var(--text-faint); cursor: default; filter: none;
+        /* Disabled outside the open tree (aria-disabled, still focusable): faded; the not-allowed cursor only for a mouse. */
+        .tov-btn.is-disabled { opacity: .5; cursor: default; }
+        @media (hover: hover) {
+            .tov-btn.is-disabled:hover { background: none; filter: none; cursor: not-allowed; }
         }
         .tov-disabled-wrap { flex: none; display: inline-flex; flex-direction: column; align-items: flex-end; gap: 4px; }
         .tov-disabled-hint { font-size: 12px; color: var(--text-light); max-width: 240px; text-align: right; }
@@ -11911,6 +11913,9 @@
         .tov-month-col { position: relative; display: block; height: 80px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
         .tov-month-fill { position: absolute; left: 0; right: 0; bottom: 0; min-height: 2px; background: var(--primary); }
         .tov-month-label { text-align: center; font-size: 11px; color: var(--text-faint); }
+        .tov-month.is-picked .tov-month-col { box-shadow: inset 0 0 0 2px var(--primary); }
+        .tov-month.is-picked .tov-month-label { color: var(--text); font-weight: 600; }
+        .tov-month-detail { margin: 6px 0 0; }
         .tov-names { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 24px; }
         .tov-names-col { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
         .tov-names-col .tov-chart-title { margin-bottom: 4px; }
@@ -11944,6 +11949,8 @@
         .tov-anni-sep { color: var(--text-faint); }
         .tov-anni .tov-tile-who { font-size: 13.5px; }
         .tov-anni .tov-link.tov-tile-who { text-align: left; }
+        .tov-anni-when { margin-left: auto; flex: none; font-size: 12.5px; color: var(--text-light); white-space: nowrap; }
+        .tov-anni--today .tov-anni-when { color: var(--accent-text); font-weight: 600; }
         /* Ancestors › Ask the family (rememberers) */
         .tov-rem { display: flex; flex-direction: column; border-top: 1px solid var(--divider); padding-top: 6px; }
         .tov-rem-h { margin: 0; font: inherit; }
@@ -11990,7 +11997,9 @@
         .tov-cert-row { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 10px; align-items: center; font-size: 13px; }
         .tov-cert-cell { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
         .tov-cert-bar { display: flex; height: 12px; border-radius: 3px; overflow: hidden; background: var(--surface-2); }
-        .tov-cert-seg { display: block; height: 100%; min-width: 2px; }
+        .tov-cert-seg { display: block; height: 100%; min-width: 2px; box-sizing: border-box; }
+        /* 1px of the dialog's background between the parts of a bar */
+        .tov-cert-seg + .tov-cert-seg { border-left: 1px solid var(--surface); min-width: 3px; }
         .tov-cert-counts { font-size: 11.5px; color: var(--text-light); font-variant-numeric: tabular-nums; }
         /* Tablet: the desktop dialog, a 24px margin each side. */
         @media (min-width: 641px) and (max-width: 1024px) {

@@ -898,8 +898,11 @@ test.describe('Where evidence is missing (tree overview, Data quality)', () => {
         await openQuality(page);
         const block = page.locator('#tree-overview-modal [data-block="evidence"]');
         await expect(block.locator('.tov-block-title')).toHaveText('Where evidence is missing');
-        await expect(block.locator('.tov-ev-label')).toHaveText(['People without a source', 'Births without a source', 'Line ends']);
-        await expect(block.locator('.tov-ev-count')).toHaveText(['1 of 4', '1', '2']);
+        // People without a source: the whole tree. Births and line ends: Ondřej's direct ancestors
+        // (marked ◉); his own birth is not theirs, and the ancestors' births have a source or no date,
+        // so that row is not shown.
+        await expect(block.locator('.tov-ev-label')).toHaveText(['People without a source', /^Line ends ◉$/]);
+        await expect(block.locator('.tov-ev-count')).toHaveText(['1 of 4', '2 of 3 ancestors']);
         await expect(block.locator('.tov-ev-levels')).toHaveText('Evidence in the tree (● ◐ ○ on cards)');
 
         await block.locator('[data-kind="lineEnds"]').click();

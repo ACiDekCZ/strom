@@ -371,7 +371,12 @@ describe('relation labels (Ask the family)', () => {
         expect(cs(['M', 'M', 'F'])).toBe('otec matčiny matky');
         expect(cs(['F', 'M', 'F', 'M'])).toBe('matka otce otcovy matky');
         expect(cs(['F', 'F'], { gender: 'male', half: false })).toBe('bratr otcova otce');
-        expect(cs(['M'], { gender: 'female', half: true })).toBe('nevlastní sestra matky');
+        // A sibling sharing one parent is "polorodý / polorodá"; "nevlastní" means no blood tie (step-sibling).
+        expect(cs(['M'], { gender: 'female', half: true })).toBe('polorodá sestra matky');
+        expect(cs(['F', 'F'], { gender: 'male', half: true })).toBe('polorodý bratr otcova otce');
+        expect(cs(['F'], { gender: undefined, half: true })).toBe('polorodý sourozenec otce');
+        expect(en(['M'], { gender: 'male', half: true })).toBe('mother\u2019s half-brother');
+        expect(de(['M'], { gender: 'male', half: true })).toBe('Halbbruder der Mutter');
         expect(en(['F', 'F', 'M'])).toBe('father\u2019s father\u2019s mother');
         expect(en(['F', 'F'], { gender: 'male', half: false })).toBe('father\u2019s father\u2019s brother');
         expect(en(['M'], { gender: undefined, half: true })).toBe('mother\u2019s half-sibling');
@@ -418,6 +423,17 @@ describe('percentNumber', () => {
         expect(percentNumber(1, 10000, 'en')).toBe('<\u00a00.1');
         expect(percentNumber(1, 1000, 'cs')).toBe('0,1');
         expect(percentNumber(999, 1000, 'cs')).toBe('99');
+        expect(percentNumber(9999, 10000, 'de')).toBe('99');
+        expect(percentNumber(1, 30000, 'de')).toBe('<\u00a00,1');
+    });
+
+    it('formats the decimal by the language (Intl.NumberFormat)', () => {
+        expect(percentNumber(1, 40, 'cs')).toBe('2,5');
+        expect(percentNumber(1, 40, 'de')).toBe('2,5');
+        expect(percentNumber(1, 40, 'en')).toBe('2.5');
+        expect(getStringsForLang('cs').treeOverview.percent(percentNumber(1, 40, 'cs'))).toBe('2,5\u00a0%');
+        expect(getStringsForLang('de').treeOverview.percent(percentNumber(1, 40, 'de'))).toBe('2,5\u00a0%');
+        expect(getStringsForLang('en').treeOverview.percent(percentNumber(1, 40, 'en'))).toBe('2.5%');
     });
 });
 

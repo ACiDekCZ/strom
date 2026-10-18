@@ -858,21 +858,31 @@ export function researchCertainty(data: StromData): ResearchCertainty {
 /**
  * The number part of a percentage, the one format of the whole overview:
  * whole numbers from 10 % on ("62"), under 10 % one decimal unless it is zero
- * ("5", "0,2"), "< 0,1" for a share above zero that would round to 0, and
- * never "100" while a part is still missing ("99"). Decimal separator by
- * language.
+ * ("5", "0,2"), formatted by the language (Intl.NumberFormat: "2,5" in Czech
+ * and German, "2.5" in English). Honest at both ends: "0" only when nothing
+ * is there ("< 0,1" for a share above zero that would round to 0) and "100"
+ * only when nothing is missing ("99" / "99,9" otherwise).
  */
 export function percentNumber(part: number, whole: number, lang: Language): string {
     if (whole <= 0 || part <= 0) return '0';
+    if (part >= whole) return format(lang, 0).format(100);
     const p = (part / whole) * 100;
-    const decimal = (x: number): string => x.toLocaleString(lang, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-    if (p >= 10) {
-        const r = Math.round(p);
-        return String(r >= 100 && part < whole ? 99 : r);
-    }
+    if (p >= 10) return format(lang, 0).format(Math.min(99, Math.round(p)));
     const tenths = Math.round(p * 10);
-    if (tenths === 0) return `<\u00a0${decimal(0.1)}`;
-    return tenths % 10 === 0 ? String(tenths / 10) : decimal(tenths / 10);
+    if (tenths === 0) return `<\u00a0${format(lang, 1).format(0.1)}`;
+    return format(lang, tenths % 10 === 0 ? 0 : 1).format(tenths / 10);
+}
+
+const percentFormats = new Map<string, Intl.NumberFormat>();
+/** A cached number format of a language with exactly `digits` decimals. */
+function format(lang: Language, digits: number): Intl.NumberFormat {
+    const key = `${lang}|${digits}`;
+    let f = percentFormats.get(key);
+    if (!f) {
+        f = new Intl.NumberFormat(lang, { minimumFractionDigits: digits, maximumFractionDigits: digits, useGrouping: false });
+        percentFormats.set(key, f);
+    }
+    return f;
 }
 
 // ==================== 8. focus cards (K2.1) ====================

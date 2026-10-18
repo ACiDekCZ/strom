@@ -96,7 +96,9 @@ function relationCs(path: readonly string[], sibling?: RelationSibling): string 
     const gen = (x: string) => x === 'F' ? 'otce' : 'matky';
     const adj = (x: string, head: string) => x === 'F' ? (head === 'F' ? 'otcova' : 'otcovy') : (head === 'F' ? 'matčina' : 'matčiny');
     const head = sibling
-        ? `${sibling.half ? 'nevlastní ' : ''}${sibling.gender === 'male' ? 'bratr' : sibling.gender === 'female' ? 'sestra' : 'sourozenec'}`
+        ? (sibling.gender === 'male' ? `${sibling.half ? 'polorodý ' : ''}bratr`
+            : sibling.gender === 'female' ? `${sibling.half ? 'polorodá ' : ''}sestra`
+            : `${sibling.half ? 'polorodý ' : ''}sourozenec`)
         : nom(path[path.length - 1] ?? 'F');
     const chain = relationChain(path, sibling);
     if (chain.length === 0) return head;
@@ -2697,11 +2699,10 @@ const stringsEN = {
         moreIssues: (n: number) => `and ${n} more…`,
         completenessTitle: 'Data completeness',
         fieldBirthDate: 'Birth date',
-        fieldDeathDate: 'Death date',
+        fieldDeathDate: 'Date of death (deceased)',
         fieldBirthPlace: 'Birthplace',
         fieldSource: 'Source',
         fieldPhoto: 'Photo',
-        deathDateHint: 'counted among the deceased',
         contentLabel: 'Tree content:',
         contentPhotos: (n: number, size: string) => `${nEn(n, 'photo', 'photos')} (${size})`,
         contentEvents: (n: number) => nEn(n, 'event', 'events'),
@@ -2713,6 +2714,7 @@ const stringsEN = {
         evBirthNoSource: 'Births without a source',
         evLineEnds: 'Line ends',
         evOfTotal: (n: number, total: number) => `${n} of ${total}`,
+        evOfAncestors: (n: number, total: number) => `${n} of ${total} ${total === 1 ? 'ancestor' : 'ancestors'}`,
         evAllGood: 'Everyone has a source and parents.',
         evLevels: 'Evidence in the tree (● ◐ ○ on cards)',
         structureTitle: 'Structure',
@@ -2750,7 +2752,7 @@ const stringsEN = {
         remMissing: 'missing:',
         remFacts: { deathDate: 'date of death', deathPlace: 'place of death', deathCause: 'cause', birthPlace: 'place of birth' },
         remRelation: relationEn,
-        remBornDeathUnknown: (year: string) => `b. ${year}, death unknown`,
+        remBornDeathUnknown: (year: string) => `b. ${year} \u00b7 death unknown`,
         remQuestion: 'Question:',
         remAdd: 'Add a question',
         remEdit: 'Edit question',
@@ -6744,11 +6746,10 @@ const stringsCZ: StringsType = {
         moreIssues: (n: number) => `a dalších ${n}…`,
         completenessTitle: 'Úplnost dat',
         fieldBirthDate: 'Datum narození',
-        fieldDeathDate: 'Datum úmrtí',
+        fieldDeathDate: 'Datum úmrtí (u zemřelých)',
         fieldBirthPlace: 'Místo narození',
         fieldSource: 'Pramen',
         fieldPhoto: 'Fotografie',
-        deathDateHint: 'počítá se u zemřelých',
         contentLabel: 'Obsah stromu:',
         contentPhotos: (n: number, size: string) => `${nCs(n, 'fotka', 'fotky', 'fotek')} (${size})`,
         contentEvents: (n: number) => nCs(n, 'událost', 'události', 'událostí'),
@@ -6760,6 +6761,7 @@ const stringsCZ: StringsType = {
         evBirthNoSource: 'Narození bez pramene',
         evLineEnds: 'Konce linií',
         evOfTotal: (n: number, total: number) => `${n} z ${total}`,
+        evOfAncestors: (n: number, total: number) => `${n} z ${total} ${total === 1 ? 'předka' : 'předků'}`,
         evAllGood: 'Všichni mají pramen i rodiče.',
         evLevels: 'Doložení ve stromu (● ◐ ○ na kartách)',
         structureTitle: 'Struktura',
@@ -6797,7 +6799,7 @@ const stringsCZ: StringsType = {
         remMissing: 'chybí:',
         remFacts: { deathDate: 'datum úmrtí', deathPlace: 'místo úmrtí', deathCause: 'příčina', birthPlace: 'místo narození' },
         remRelation: relationCs,
-        remBornDeathUnknown: (year: string) => `* ${year}, úmrtí neznámé`,
+        remBornDeathUnknown: (year: string) => `* ${year} \u00b7 úmrtí neznámé`,
         remQuestion: 'Otázka:',
         remAdd: 'Přidat otázku',
         remEdit: 'Upravit otázku',
@@ -10761,11 +10763,10 @@ const stringsDE: StringsType = {
         moreIssues: (n: number) => `und ${n} weitere…`,
         completenessTitle: 'Vollständigkeit',
         fieldBirthDate: 'Geburtsdatum',
-        fieldDeathDate: 'Sterbedatum',
+        fieldDeathDate: 'Sterbedatum (Verstorbene)',
         fieldBirthPlace: 'Geburtsort',
         fieldSource: 'Quelle',
         fieldPhoto: 'Foto',
-        deathDateHint: 'bei Verstorbenen gezählt',
         contentLabel: 'Inhalt:',
         contentPhotos: (n: number, size: string) => `${nDe(n, 'Foto', 'Fotos')} (${size})`,
         contentEvents: (n: number) => nDe(n, 'Ereignis', 'Ereignisse'),
@@ -10777,6 +10778,7 @@ const stringsDE: StringsType = {
         evBirthNoSource: 'Geburten ohne Quelle',
         evLineEnds: 'Linienenden',
         evOfTotal: (n: number, total: number) => `${n} von ${total}`,
+        evOfAncestors: (n: number, total: number) => `${n} von ${total} Vorfahren`,
         evAllGood: 'Alle haben eine Quelle und Eltern.',
         evLevels: 'Belege im Baum (● ◐ ○ auf Karten)',
         structureTitle: 'Struktur',
@@ -10814,7 +10816,7 @@ const stringsDE: StringsType = {
         remMissing: 'fehlt:',
         remFacts: { deathDate: 'Sterbedatum', deathPlace: 'Sterbeort', deathCause: 'Ursache', birthPlace: 'Geburtsort' },
         remRelation: relationDe,
-        remBornDeathUnknown: (year: string) => `* ${year}, Tod unbekannt`,
+        remBornDeathUnknown: (year: string) => `* ${year} \u00b7 Tod unbekannt`,
         remQuestion: 'Frage:',
         remAdd: 'Frage hinzufügen',
         remEdit: 'Frage bearbeiten',

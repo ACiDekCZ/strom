@@ -40,7 +40,7 @@ import {
 } from '../tree-overview.js';
 import { FACT_STATUSES } from '../types.js';
 import { factStatusLabel } from './fact-status.js';
-import { computeFamilyStats, computeCompleteness, computeEvidenceGaps, EvidenceKind, FamilyStats, Completeness, EvidenceGaps } from '../stats.js';
+import { computeFamilyStats, computeCompleteness, computeEvidenceGaps, EvidenceKind, FamilyStats, Completeness } from '../stats.js';
 import { isLivingPerson, inferBirthUpperBounds } from '../privacy.js';
 import { findComponents, componentName } from '../components.js';
 import { orphanedPlaceKeys } from '../places.js';
@@ -79,11 +79,19 @@ const IDLE_SECTIONS: readonly SectionId[] = ['life', 'time', 'quality', 'highlig
  * shows only the whole-tree age at death for now, so it is not rooted.
  */
 const ROOTED: ReadonlySet<SectionId> = new Set<SectionId>(['focus', 'ancestors', 'time']);
+/**
+ * Sections recomputed when the chosen person changes: the marked ones, and
+ * Data quality, whose "Births without a source" and "Line ends" rows count the
+ * chosen person's direct ancestors (marked per row, not on the section).
+ */
+const ROOT_DEPENDENT: readonly SectionId[] = ['focus', 'ancestors', 'time', 'quality'];
 /** Findings listed under Consistency (the rest via "and N more…"). */
 const TOP_ISSUES = 5;
 /** Upcoming anniversaries: the horizon in days and the most listed. */
 const ANNIVERSARY_DAYS = 30;
 const MAX_ANNIVERSARIES = 10;
+/** Anniversaries this close also say when ("in 3 days", "tomorrow", "today"). */
+const ANNIVERSARY_SOON_DAYS = 7;
 /** A completeness bar below this share is drawn in the accent (a thin spot). */
 const LOW_SHARE = 0.5;
 const DEFAULT_OPEN: readonly SectionId[] = ['focus', 'ancestors'];
@@ -102,6 +110,8 @@ const BUSY_MIN_MS = 300;
 /** Ancestor rows shown at least (empty generations padded). */
 const MIN_ANCESTOR_ROWS = 3;
 const PICK_LIMIT = 50;
+/** A touch screen: no tooltips to read. */
+const MQ_COARSE = '(pointer: coarse)';
 
 /** What one open dialog is about. */
 interface OverviewState {
@@ -154,12 +164,41 @@ function writeOpen(open: ReadonlySet<SectionId>): void {
     try { localStorage.setItem(OPEN_KEY, JSON.stringify([...open])); } catch { /* not kept */ }
 }
 
+/** Ask the family open, for this session: what a refresh keeps when the device storage cannot. */
+let remembersOpen = false;
+
 function readRemembersOpen(): boolean {
-    try { return localStorage.getItem(REMEMBERERS_KEY) === '1'; } catch { return false; }
+    try {
+        const v = localStorage.getItem(REMEMBERERS_KEY);
+        if (v !== null) return v === '1';
+    } catch { /* no storage: this session's state */ }
+    return remembersOpen;
 }
 
 function writeRemembersOpen(open: boolean): void {
-    try { localStorage.setItem(REMEMBERERS_KEY, open ? '1' : '0'); } catch { /* not kept */ }
+    remembersOpen = open;
+    try { localStorage.setItem(REMEMBERERS_KEY, open ? '1' : '0'); } catch { /* kept for this session only */ }
+}
+
+/** What can take the keyboard focus inside the dialog. */
+const FOCUSABLE = 'button, a[href], input, textarea, select, [tabindex]';
+
+/**
+ * Give every focusable element of freshly rendered HTML a `data-key` that the
+ * same element gets again after a re-render (scope, action, person or kind,
+ * then the occurrence), so a refresh can put the keyboard focus back on it.
+ * Elements whose template sets a key keep it.
+ */
+function stampFocusKeys(scope: HTMLElement, prefix: string): void {
+    const seen = new Map<string, number>();
+    for (const el of scope.querySelectorAll<HTMLElement>(FOCUSABLE)) {
+        if (el.dataset.key) continue;
+        const d = el.dataset;
+        const base = [prefix, d.tov ?? el.tagName.toLowerCase(), d.id ?? '', d.kind ?? '', d.n ?? '', d.month ?? ''].join('|');
+        const i = seen.get(base) ?? 0;
+        seen.set(base, i + 1);
+        d.key = i === 0 ? base : `${base}#${i}`;
+    }
 }
 
 function readString(key: string): string | null {
@@ -304,7 +343,9 @@ interface QualityData {
     sources: number;
     attachments: number;
     attachmentBytes: number;
-    gaps: EvidenceGaps;
+    /** Real persons, and those without a source (the whole tree; the header's share is the rest). */
+    persons: number;
+    noSource: number;
     unions: number;
     parts: { name: string; count: number }[];
     orphanPlaces: number;
@@ -470,8 +511,11 @@ export const treeOverviewMethods = uiModule({
      * Show the open tree's current data in the open overview: the header
      * numbers, the chosen person (another one when the chosen person was
      * deleted) and every section computed so far — open ones at once, closed
-     * ones again on the idle callbacks — keeping the scroll position. Waits
-     * while a question is being edited (the editor would be lost).
+     * ones again on the idle callbacks — keeping the scroll position, the
+     * expanded parts (sections, Ancestors › Ask the family) and the keyboard
+     * focus (back on the element with the same `data-key`, else on the head
+     * of its section). Waits while a question is being edited (the editor
+     * would be lost).
      */
     refreshTreeOverview(): void {
         if (refreshTimer) clearTimeout(refreshTimer);
@@ -485,6 +529,17 @@ export const treeOverviewMethods = uiModule({
         }
         refreshPending = false;
         closePopover?.();
+        const focused = document.activeElement instanceof HTMLElement && overlay.contains(document.activeElement)
+            ? document.activeElement : null;
+        const focusKey = focused?.dataset.key ?? null;
+        const focusSection = focused?.closest<HTMLElement>('.tov-sec')?.dataset.section ?? null;
+        const restoreFocus = (): void => {
+            if (!focused || (focused.isConnected && overlay.contains(focused))) return;
+            const again = (focusKey ? overlay.querySelector<HTMLElement>(`[data-key="${CSS.escape(focusKey)}"]`) : null)
+                ?? (focusSection ? overlay.querySelector<HTMLElement>(`#tov-head-${focusSection}`) : null)
+                ?? overlay.querySelector<HTMLElement>('.tov-close');
+            again?.focus({ preventScroll: true });
+        };
         revision++;
         cache.clear();
         st.data = DataManager.getData();
@@ -498,6 +553,7 @@ export const treeOverviewMethods = uiModule({
             // Emptied, or no longer empty: the frame itself changes.
             overlay.innerHTML = this.treeOverviewShellHtml(header, readOpen());
             this.fillTreeOverviewSections(readOpen());
+            restoreFocus();
             return;
         }
         nums.innerHTML = this.treeOverviewNumsHtml(header);
@@ -516,6 +572,7 @@ export const treeOverviewMethods = uiModule({
                 if (sum) sum.textContent = '';
             }
         }
+        restoreFocus();
         if (scroller) scroller.scrollTop = top;
         this.startTreeOverviewIdle();
     },
@@ -528,7 +585,7 @@ export const treeOverviewMethods = uiModule({
         const titleBar = `
             <div class="tov-titlebar">
                 <h2 class="tov-title" id="tov-title">${esc(t.title(st.treeName))}</h2>
-                <button type="button" class="tov-close" data-tov="close" aria-label="${esc(t.close)}" title="${esc(t.close)}">&times;</button>
+                <button type="button" class="tov-close" data-tov="close" data-key="close" aria-label="${esc(t.close)}" title="${esc(t.close)}">&times;</button>
             </div>`;
         if (header.persons === 0) {
             return `
@@ -537,14 +594,14 @@ export const treeOverviewMethods = uiModule({
                     <div class="tov-head">${titleBar}</div>
                     <p class="tov-empty">${esc(t.empty)}</p>
                 </div>
-                <div class="tov-foot"><button type="button" class="secondary" data-tov="close">${esc(t.close)}</button></div>
+                <div class="tov-foot"><button type="button" class="secondary" data-tov="close" data-key="foot-close">${esc(t.close)}</button></div>
             </div>`;
         }
         const nums = this.treeOverviewNumsHtml(header);
         const banner = st.active ? '' : `
             <div class="tov-inactive" role="note">
                 <span class="tov-inactive-text">${esc(t.inactive)}</span>
-                <button type="button" class="secondary tov-open-tree" data-tov="open-tree">${esc(t.openTree)}</button>
+                <button type="button" class="secondary tov-open-tree" data-tov="open-tree" data-key="open-tree">${esc(t.openTree)}</button>
             </div>`;
         const sections = ALL_SECTIONS.map(id => this.treeOverviewSectionHtml(id, open.has(id))).join('');
         return `
@@ -558,7 +615,7 @@ export const treeOverviewMethods = uiModule({
                     </div>
                     <div class="tov-sections">${sections}</div>
                 </div>
-                <div class="tov-foot"><button type="button" class="secondary" data-tov="close">${esc(t.close)}</button></div>
+                <div class="tov-foot"><button type="button" class="secondary" data-tov="close" data-key="foot-close">${esc(t.close)}</button></div>
             </div>`;
     },
 
@@ -586,7 +643,7 @@ export const treeOverviewMethods = uiModule({
         const name = root ? shownName(root) : t.notSelected;
         return `
             <span class="tov-root-label" id="tov-root-label">${esc(t.rootLabel)}</span>
-            <button type="button" class="tov-root-btn${root ? '' : ' tov-root-btn--none'}" data-tov="pick"
+            <button type="button" class="tov-root-btn${root ? '' : ' tov-root-btn--none'}" data-tov="pick" data-key="root"
                 aria-haspopup="listbox" aria-expanded="false" aria-describedby="tov-root-label">
                 <span class="tov-root-name">${esc(name)}</span><span class="tov-root-caret" aria-hidden="true">▾</span>
             </button>
@@ -602,7 +659,7 @@ export const treeOverviewMethods = uiModule({
         return `
             <section class="tov-sec" data-section="${id}">
                 <h3 class="tov-sec-h">
-                    <button type="button" class="tov-sec-head" data-tov="toggle" aria-expanded="${open}"
+                    <button type="button" class="tov-sec-head" data-tov="toggle" data-key="sec-${id}" aria-expanded="${open}"
                         aria-controls="tov-body-${id}" id="tov-head-${id}">
                         <span class="tov-chev" aria-hidden="true">${open ? '▾' : '▸'}</span>
                         <span class="tov-sec-title">${esc(t.sections[id])}</span>${mark}
@@ -672,6 +729,7 @@ export const treeOverviewMethods = uiModule({
         if (now) {
             const content = this.treeOverviewSectionContent(id);
             body.innerHTML = content.body;
+            stampFocusKeys(body, id);
             sum.innerHTML = content.summary;
             body.removeAttribute('aria-busy');
             sec.dataset.ready = 'true';
@@ -693,6 +751,7 @@ export const treeOverviewMethods = uiModule({
             const show = (): void => {
                 if (sec.dataset.fill !== token) return;
                 body.innerHTML = html.body;
+                stampFocusKeys(body, id);
                 sum.innerHTML = html.summary;
                 body.removeAttribute('aria-busy');
                 sec.dataset.ready = 'true';
@@ -769,7 +828,9 @@ export const treeOverviewMethods = uiModule({
                 case 'validation':
                     error = true;
                     text = t.cardValidation(card.count, topErrorType ? typeInSentence(topErrorType) : '');
-                    button = this.treeOverviewActionHtml('validation', t.actFix, 'tov-btn tov-btn--danger');
+                    // Outside the open tree nothing can be fixed, but the details only read:
+                    // "Validation details" instead of a disabled "Fix".
+                    button = `<button type="button" class="tov-btn tov-btn--danger" data-tov="validation">${esc(st.active ? t.actFix : t.actValidation)}</button>`;
                     break;
                 case 'ancestorGap':
                     text = t.cardGap(capitalize(ancestorGenerationLabel(card.n, lang)), card.known, card.expected);
@@ -1187,13 +1248,19 @@ export const treeOverviewMethods = uiModule({
             months = `<p class="tov-muted">${esc(t.monthsNotEnough(stats.birthsByMonthN))}</p>`;
         } else {
             const top = Math.max(...stats.birthsByMonth.map(m => m.count), 1);
+            // The full month and its count: a tooltip for the mouse, the label for
+            // a screen reader, and on touch (no tooltip) a tap shows it under the chart.
             months = `
-                <div class="tov-months">${stats.birthsByMonth.map(m => `
-                    <span class="tov-month" title="${esc(t.monthBirths(t.monthNames[m.month - 1], m.count))}">
-                        <span class="tov-month-col"><span class="tov-month-fill" style="height:${barWidth(m.count, top)}"></span></span>
-                        <span class="tov-month-label">${esc(t.monthMarks[m.month - 1])}</span>
-                    </span>`).join('')}
-                </div>`;
+                <div class="tov-months">${stats.birthsByMonth.map(m => {
+                    const text = esc(t.monthBirths(t.monthNames[m.month - 1], m.count));
+                    return `
+                    <span class="tov-month" role="img" data-tov="month" data-month="${m.month}" title="${text}" aria-label="${text}">
+                        <span class="tov-month-col" aria-hidden="true"><span class="tov-month-fill" style="height:${barWidth(m.count, top)}"></span></span>
+                        <span class="tov-month-label" aria-hidden="true">${esc(t.monthMarks[m.month - 1])}</span>
+                    </span>`;
+                }).join('')}
+                </div>
+                <p class="tov-month-detail tov-note" aria-live="polite" hidden></p>`;
         }
         const monthsBlock = `<div class="tov-chart" data-chart="months"><span class="tov-chart-title">${esc(t.birthsByMonth)}</span>${months}</div>`;
 
@@ -1239,7 +1306,8 @@ export const treeOverviewMethods = uiModule({
                 photos, photoBytes: totalPhotoBytes(data), events,
                 sources: Object.keys(data.sources ?? {}).length,
                 attachments, attachmentBytes: totalAttachmentBytes(data),
-                gaps: computeEvidenceGaps(data, st.focusId),
+                persons: persons.length,
+                noSource: computeEvidenceGaps(data).noSource.length,
                 unions: Object.keys(data.partnerships).length,
                 parts: parts.length > 1 ? parts : [],
                 orphanPlaces: orphanedPlaceKeys(data).length,
@@ -1279,10 +1347,10 @@ export const treeOverviewMethods = uiModule({
         // Completeness: four bars (the share with a source is the header's
         // number, so it is not repeated here), the tree's content, the media warning.
         const c = q.completeness;
-        const bar = (kind: string, label: string, part: number, whole: number, hint = ''): string => {
+        const bar = (kind: string, label: string, part: number, whole: number): string => {
             if (whole === 0) return '';
             const low = part / whole < LOW_SHARE;
-            return `<div class="tov-comp-row" data-field="${kind}"${hint ? ` title="${esc(hint)}"` : ''}>
+            return `<div class="tov-comp-row" data-field="${kind}">
                 <span class="tov-comp-label">${esc(label)}</span>
                 <span class="tov-comp-track" aria-hidden="true"><span class="tov-comp-fill${low ? ' is-low' : ''}" style="width:${barWidth(part, whole)}"></span></span>
                 <span class="tov-comp-pct">${esc(percentText(part, whole))}</span></div>`;
@@ -1295,28 +1363,39 @@ export const treeOverviewMethods = uiModule({
         ].filter(Boolean);
         const completeness = block('completeness', t.completenessTitle,
             bar('birthDate', t.fieldBirthDate, c.withBirthDate, c.total)
-            + bar('deathDate', t.fieldDeathDate, q.deceasedWithDeathDate, q.deceased, t.deathDateHint)
+            + bar('deathDate', t.fieldDeathDate, q.deceasedWithDeathDate, q.deceased)
             + bar('birthPlace', t.fieldBirthPlace, c.withBirthPlace, c.total)
             + bar('photo', t.fieldPhoto, c.withPhoto, c.total)
             + (content.length ? `<span class="tov-note tov-content">${esc(`${t.contentLabel} ${content.join(' · ')}`)}</span>` : '')
             + (q.photoBytes + q.attachmentBytes > ATTACHMENT_WARN_BYTES ? `<span class="tov-warn">${esc(t.mediaWarning)}</span>` : ''));
 
-        // Where evidence is missing.
+        // Where evidence is missing: people without a source in the whole tree
+        // (with the header's "N % with a source" it makes all people); births
+        // without a source and line ends among the chosen person's direct
+        // ancestors ("X of N ancestors", marked ◉).
         const show = st.active ? t.actShowInTree : t.openAndShow;
-        const kinds: { kind: EvidenceKind; label: string }[] = [
-            { kind: 'noSource', label: t.evNoSource },
-            { kind: 'birthNoSource', label: t.evBirthNoSource },
-            { kind: 'lineEnds', label: t.evLineEnds },
+        const anc = this.treeOverviewAncestorData();
+        const ancestors = anc.overview?.generationOf.size ?? 0;
+        const mark = `<span class="tov-mark" title="${esc(t.rootMark)}" aria-label="${esc(t.rootMark)}">◉</span>`;
+        const evRows: { kind: EvidenceKind; label: string; count: string; rooted: boolean; n: number }[] = [
+            { kind: 'noSource', label: t.evNoSource, count: t.evOfTotal(q.noSource, q.persons), rooted: false, n: q.noSource },
         ];
-        const rows = kinds.filter(k => q.gaps[k.kind].length > 0);
+        if (anc.overview && ancestors > 0) {
+            const births = anc.overview.birthNoSource.length;
+            evRows.push(
+                { kind: 'birthNoSource', label: t.evBirthNoSource, count: t.evOfAncestors(births, ancestors), rooted: true, n: births },
+                { kind: 'lineEnds', label: t.evLineEnds, count: t.evOfAncestors(anc.lineEnds.length, ancestors), rooted: true, n: anc.lineEnds.length },
+            );
+        }
+        const rows = evRows.filter(r => r.n > 0);
         const evidence = block('evidence', t.evidenceTitle,
             (rows.length === 0
                 ? `<p class="tov-muted">${esc(t.evAllGood)}</p>`
-                : rows.map((k, i) => `
-                    <div class="tov-ev-row" data-evidence="${k.kind}">
-                        <span class="tov-ev-label">${esc(k.label)}</span>
-                        <span class="tov-ev-count">${esc(i === 0 && k.kind === 'noSource' ? t.evOfTotal(q.gaps[k.kind].length, q.gaps.total) : String(q.gaps[k.kind].length))}</span>
-                        <button type="button" class="tov-btn" data-tov="evidence" data-kind="${k.kind}">${esc(show)}</button>
+                : rows.map(r => `
+                    <div class="tov-ev-row" data-evidence="${r.kind}">
+                        <span class="tov-ev-label">${esc(r.label)}${r.rooted ? ` ${mark}` : ''}</span>
+                        <span class="tov-ev-count">${esc(r.count)}</span>
+                        <button type="button" class="tov-btn" data-tov="evidence" data-kind="${r.kind}">${esc(show)}</button>
                     </div>`).join(''))
             + `<button type="button" class="tov-link tov-ev-levels" data-tov="levels">${esc(t.evLevels)}</button>`);
 
@@ -1393,10 +1472,14 @@ export const treeOverviewMethods = uiModule({
             });
             const date = item.date.toLocaleDateString(lang, { day: 'numeric', month: 'long' });
             const label = this.anniversaryLabel(item, names);
+            // Within a week also "in 3 days" / "tomorrow" / "today" on the right; later ones only the date.
+            const a = strings.anniversaries;
+            const when = item.daysUntil > ANNIVERSARY_SOON_DAYS ? ''
+                : item.daysUntil === 0 ? a.today : item.daysUntil === 1 ? a.tomorrow : a.inDays(item.daysUntil);
             return `<div class="tov-anni${item.daysUntil === 0 ? ' tov-anni--today' : ''}">
                 <span class="tov-anni-date">${esc(date)}</span>
                 <span class="tov-anni-sep" aria-hidden="true">·</span>
-                ${who(item.personIds[0] as PersonId, label)}</div>`;
+                ${who(item.personIds[0] as PersonId, label)}${when ? `<span class="tov-anni-when">${esc(when)}</span>` : ''}</div>`;
         }).join('');
         const annis = `<div class="tov-block" data-block="anniversaries"><span class="tov-block-title">${esc(t.anniversariesTitle)}</span>
             ${items || `<p class="tov-muted">${esc(t.noAnniversaries)}</p>`}</div>`;
@@ -1499,18 +1582,34 @@ export const treeOverviewMethods = uiModule({
             }
             case 'evidence': {
                 const kind = target.dataset.kind as EvidenceKind;
-                const focus = st.focusId;
                 const t = strings.treeOverview;
-                const title = kind === 'noSource' ? t.hlNoSource : kind === 'birthNoSource' ? t.hlBirth : t.hlLineEnds;
+                if (kind === 'noSource') {
+                    // The whole tree.
+                    void this.startTreeOverviewHighlight({
+                        kind, cite: true, title: t.hlNoSource,
+                        personIds: evidenceIds(st.data, kind, null),
+                        recount: () => evidenceIds(DataManager.getData(), kind, null),
+                    });
+                    return;
+                }
+                // The chosen person's direct ancestors.
+                const root = st.rootId;
+                if (!root) return;
+                const ids = (data: StromData): PersonId[] => kind === 'birthNoSource'
+                    ? ancestorGenerations(data, root).birthNoSource
+                    : lineEndIds(data, root);
                 void this.startTreeOverviewHighlight({
-                    kind, cite: kind !== 'lineEnds', title,
-                    personIds: evidenceIds(st.data, kind, focus),
-                    recount: () => evidenceIds(DataManager.getData(), kind, focus),
+                    kind, cite: kind === 'birthNoSource', title: kind === 'birthNoSource' ? t.hlBirth : t.hlLineEnds,
+                    personIds: ids(st.data),
+                    recount: () => ids(DataManager.getData()),
                 });
                 return;
             }
             case 'levels':
                 void this.showEvidenceLevelsFromOverview();
+                return;
+            case 'month':
+                this.showTreeOverviewMonth(target);
                 return;
             case 'separate':
                 void this.showSplitDialog(st.treeId, OVERLAY_ID);
@@ -1528,6 +1627,28 @@ export const treeOverviewMethods = uiModule({
                 this.showSplitFamiliesDialog();
                 return;
         }
+    },
+
+    /**
+     * Births by month on touch, where the tooltip cannot be seen: a tap on a
+     * column writes its month and count under the chart (a second tap on the
+     * same column hides it again).
+     */
+    showTreeOverviewMonth(column: HTMLElement): void {
+        if (!window.matchMedia(MQ_COARSE).matches) return;
+        const chart = column.closest<HTMLElement>('.tov-chart');
+        const detail = chart?.querySelector<HTMLElement>('.tov-month-detail');
+        if (!chart || !detail) return;
+        const again = column.classList.contains('is-picked');
+        chart.querySelectorAll('.tov-month.is-picked').forEach(el => el.classList.remove('is-picked'));
+        if (again) {
+            detail.hidden = true;
+            detail.textContent = '';
+            return;
+        }
+        column.classList.add('is-picked');
+        detail.textContent = column.getAttribute('aria-label') ?? '';
+        detail.hidden = false;
     },
 
     /** "Evidence in the tree": close the overview (opening its tree first) and frame every card by its level. */
@@ -1566,7 +1687,7 @@ export const treeOverviewMethods = uiModule({
         if (root) root.innerHTML = this.treeOverviewRootHtml();
         // The rooted sections computed (or computing) are recomputed: an open
         // one at once, a closed one again on the idle callbacks.
-        for (const sid of ROOTED) {
+        for (const sid of ROOT_DEPENDENT) {
             const sec = overlay?.querySelector<HTMLElement>(`.tov-sec[data-section="${sid}"]`);
             if (!sec || sec.dataset.fill === undefined) continue;
             if (sec.querySelector('.tov-sec-head')?.getAttribute('aria-expanded') === 'true') {
