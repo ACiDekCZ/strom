@@ -203,7 +203,7 @@ const stringsEN = {
 
     demo: {
         tryDemo: 'Try a sample tree',
-        tryDemoDesc: 'Explore a made-up family that shows what a tree can hold',
+        tryDemoDesc: 'A made-up family that shows what a tree can hold',
         treeName: 'Sample: the Berg family',
         hint: 'Click a card to see actions. This is an ordinary tree — it can be deleted in the tree manager.',
         // The made-up family's words; its names and places read the same in every language.
@@ -8335,7 +8335,7 @@ const stringsDE: StringsType = {
 
     demo: {
         tryDemo: 'Beispiel-Stammbaum ausprobieren',
-        tryDemoDesc: 'Eine erfundene Familie erkunden, die zeigt, was ein Stammbaum alles festhält',
+        tryDemoDesc: 'Eine erfundene Familie, die zeigt, was ein Stammbaum alles festhält',
         treeName: 'Beispiel: Familie Berg',
         hint: 'Ein Klick auf eine Karte zeigt Aktionen. Es ist ein ganz normaler Stammbaum — löschen lässt er sich in der Stammbaum-Verwaltung.',
         data: {
