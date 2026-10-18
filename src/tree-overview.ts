@@ -158,7 +158,10 @@ export interface AncestorGeneration {
     expected: number;
     /** Distinct ancestors counted in this generation (each in the nearest one only). */
     known: number;
-    /** Of them, with a documented birth (personEvidence().birthCited: birthSourceIds, a cited birth or baptism event). */
+    /**
+     * Of them, with a documented birth (`birthDocumented`): a birth the research
+     * grades "proven", or, without a research status, a cited birth or baptism.
+     */
     proven: number;
     /** The ancestors of this generation, by name. */
     ids: PersonId[];
@@ -203,10 +206,35 @@ export interface AncestorOverview {
 }
 
 /**
+ * The research's status (FactStatus) of a person's birth: the birth fields'
+ * status, else the status of a birth event, else of a baptism event
+ * (the research's birth fact is its first BIRT, CHR or BAPM). Undefined: the
+ * research has not graded the birth (any plain tree).
+ */
+export function birthResearchStatus(p: Person): FactStatus | undefined {
+    const valid = (s: FactStatus | undefined): FactStatus | undefined =>
+        s && (FACT_STATUSES as readonly string[]).includes(s) ? s : undefined;
+    return valid(p.birthStatus)
+        ?? valid(p.events?.find(e => e.type === 'birth' && valid(e.status))?.status)
+        ?? valid(p.events?.find(e => e.type === 'baptism' && valid(e.status))?.status);
+}
+
+/**
+ * "Documented" in the ancestors table (K3.2, Milan 18 Oct, variant A): a birth
+ * with a research status only when it is "proven" — the research's own
+ * `strom stats` count, where a birth cited to the imported family tree is still
+ * a lead; a birth without a status by the citation rule of evidence-level.ts
+ * (`birthCited`).
+ */
+export function birthDocumented(p: Person, birthCited: boolean): boolean {
+    const status = birthResearchStatus(p);
+    return status ? status === 'proven' : birthCited;
+}
+
+/**
  * The person's ancestors per generation: expected (2^n) / known / proven.
- * Agrees with the research's `strom stats` on expected and known (same walk);
- * proven differs by design: the app counts a cited birth or baptism
- * (src/evidence-level.ts), the research a birth whose status is "proven".
+ * Agrees with the research's `strom stats` on expected and known (same walk)
+ * and, for births the research grades, on proven (`birthDocumented`).
  */
 export function ancestorGenerations(data: StromData, rootId: PersonId): AncestorOverview {
     const root = realPerson(data, rootId);
@@ -243,7 +271,7 @@ export function ancestorGenerations(data: StromData, rootId: PersonId): Ancestor
         let proven = 0;
         for (const id of ids) {
             const ev = personEvidence(data.persons[id], data, unions);
-            if (ev?.birthCited) proven++;
+            if (birthDocumented(data.persons[id], !!ev?.birthCited)) proven++;
             if (ev && ev.hasBirth && !ev.birthCited) birthNoSource.push(id);
         }
         const gapIds = [...places.keys()].filter(id => bioParents(data, data.persons[id]).length < 2).sort(name);

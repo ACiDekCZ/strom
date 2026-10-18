@@ -922,6 +922,8 @@ export const treeOverviewMethods = uiModule({
                 <span class="tov-anc-pct">%</span>
                 <span class="tov-anc-doc">${esc(t.colDocumented)}</span>
             </div>`;
+        // A research tree counts a graded birth as documented only when proven (K3.2).
+        const docNote = st.research ? `<p class="tov-note tov-anc-note">${esc(t.docResearchNote)}</p>` : '';
         const collapse = overview && overview.pedigreeCollapse.length > 0
             ? `<p class="tov-collapse">${esc(t.collapse(overview.pedigreeCollapse.length))}</p>` : '';
 
@@ -948,6 +950,7 @@ export const treeOverviewMethods = uiModule({
         const body = `
             <div class="tov-anc">
                 <div class="tov-anc-table">${legend}${table}</div>
+                ${docNote}
                 ${collapse}
             </div>
             <div class="tov-lines">

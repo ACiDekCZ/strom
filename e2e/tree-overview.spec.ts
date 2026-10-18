@@ -818,6 +818,43 @@ test.describe('tree overview: ask the family, certainty, the Data quality shortc
         expect(await dialog.locator('.tov-scroll').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
     });
 
+    test('K3.2: documented births follow the research status, a research tree says so under the table', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await openApp(page);
+        const data = family();
+        // Erik's birth is cited (the imported file) but only a lead; Oskar's is proven without a citation.
+        Object.assign(data.persons.f, { birthStatus: 'lead' });
+        Object.assign(data.persons.ff, { birthStatus: 'proven' });
+        const treeId = await importTree(page, data, 'Lindqvist', 'r');
+        let dialog = await openOverview(page, treeId);
+        let rows = section(dialog, 'ancestors').locator('.tov-anc-row:not(.tov-anc-legend) .tov-anc-doc');
+        await expect(rows.nth(0)).toHaveText(/\b0$/);
+        await expect(rows.nth(1)).toHaveText(/\b1$/);
+        // Not linked to a research: no note.
+        await expect(section(dialog, 'ancestors').locator('.tov-anc-note')).toHaveCount(0);
+        await page.keyboard.press('Escape');
+        await page.evaluate((id) => {
+            window.Strom.TreeManager.setResearchLink(id as never, {
+                id: '0c0c0c0c-1111-4222-8333-444455556666', fingerprint: 'x', syncedAt: new Date().toISOString(),
+            });
+        }, treeId);
+        dialog = await openOverview(page, treeId);
+        rows = section(dialog, 'ancestors').locator('.tov-anc-row:not(.tov-anc-legend) .tov-anc-doc');
+        await expect(rows.nth(0)).toHaveText(/\b0$/);
+        await expect(section(dialog, 'ancestors').locator('.tov-anc-note'))
+            .toHaveText('Documented here means proven in the research; the imported family tree is a lead.');
+        await page.keyboard.press('Escape');
+        await page.evaluate(() => window.Strom.UI.setLanguage('cs' as never));
+        dialog = await openOverview(page, treeId);
+        await expect(section(dialog, 'ancestors').locator('.tov-anc-note'))
+            .toHaveText('Doloženo zde znamená ověřeno ve výzkumu; vstupní rodokmen je vodítko.');
+        await page.keyboard.press('Escape');
+        await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
+        dialog = await openOverview(page, treeId);
+        await expect(section(dialog, 'ancestors').locator('.tov-anc-note'))
+            .toHaveText('Belegt heißt hier: in der Forschung bewiesen; der eingelesene Stammbaum ist ein Hinweis.');
+    });
+
     test('Data quality in the menu: the tree actions and the manager (a tree that is not open)', async ({ page }) => {
         const treeId = await setup(page);
         await page.locator('.actions-menu-btn').click();

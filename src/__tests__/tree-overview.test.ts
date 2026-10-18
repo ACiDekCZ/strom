@@ -11,7 +11,7 @@ import {
     researchCertainty, percentNumber,
     relativeGenerations, adultDeathAgeByGeneration, childrenPerCoupleByGeneration, ancestorGenerationName,
     descendantGenerationName, relativeGenerationName, overviewHeader, selectFocusCards, hasEnoughSample, MIN_SAMPLE,
-    AncestorGeneration, ancestorGenerationLabel, focusBirthNoSource, adultLifespanByBirthPeriod,
+    AncestorGeneration, ancestorGenerationLabel, focusBirthNoSource, adultLifespanByBirthPeriod, birthResearchStatus,
 } from '../tree-overview.js';
 import { computeFamilyStats, computeEvidenceGaps } from '../stats.js';
 import { setLanguage, getStringsForLang } from '../strings.js';
@@ -107,6 +107,50 @@ describe('ancestorGenerations', () => {
         expect(a.generations.map(g => g.proven)).toEqual([1, 0, 1, 1]);
         // A birth on record that nothing cites: S1 (date), S2 (place), Gm (date). X1, X2 and M have no birth at all.
         expect(a.birthNoSource).toEqual(['S1', 'S2', 'Gm']);
+    });
+
+    it('K3.2: a birth the research grades is documented only when proven; without a grade the citation counts', () => {
+        // Parents F and M, grandparents FF, FM, MF, MM: every birth cited to the source.
+        const tree = (status: (who: string) => Partial<Person>): StromData => new Tree()
+            .person('FF', { birthDate: '1850', birthSourceIds: ['s1'], ...status('FF') })
+            .person('FM', { ...female, birthDate: '1852', birthSourceIds: ['s1'], ...status('FM') })
+            .person('MF', { events: [{ id: 'b_mf', type: 'baptism', date: '1855', sourceIds: ['s1'] }], ...status('MF') })
+            .person('MM', { ...female, birthDate: '1856', birthSourceIds: ['s1'], ...status('MM') })
+            .person('F', { birthDate: '1880', birthSourceIds: ['s1'], ...status('F') })
+            .person('M', { ...female, birthDate: '1882', birthSourceIds: ['s1'], ...status('M') })
+            .person('R')
+            .family('FF', 'FM', ['F'])
+            .family('MF', 'MM', ['M'])
+            .family('F', 'M', ['R'])
+            .data();
+        // A tree built from leads (every birth cited to the imported file, graded "lead"): nothing documented.
+        const leads = tree((who) => who === 'MF'
+            ? { events: [{ id: 'b_mf', type: 'baptism', date: '1855', sourceIds: ['s1'], status: 'lead' }] }
+            : { birthStatus: 'lead' });
+        expect(ancestorGenerations(leads, id('R')).generations.map(g => g.proven)).toEqual([0, 0]);
+        // Proven by the research: documented (the birth fields' status, or the baptism event's).
+        const proven = tree((who) => who === 'MF'
+            ? { events: [{ id: 'b_mf', type: 'baptism', date: '1855', sourceIds: ['s1'], status: 'proven' }] }
+            : who === 'F' ? { birthStatus: 'proven' } : who === 'M' ? { birthStatus: 'probable' } : {});
+        expect(ancestorGenerations(proven, id('R')).generations.map(g => g.proven)).toEqual([1, 4]);
+        // No grade anywhere (a plain GEDCOM import): the citation rule, every birth documented.
+        expect(ancestorGenerations(tree(() => ({})), id('R')).generations.map(g => g.proven)).toEqual([2, 4]);
+        // Births without a source stay a citation matter: none of these lacks one.
+        expect(ancestorGenerations(leads, id('R')).birthNoSource).toEqual([]);
+    });
+
+    it('birthResearchStatus: the birth fields, else a birth event, else a baptism event', () => {
+        const p = (extra: Partial<Person>): Person => ({
+            id: id('P'), firstName: 'P', lastName: 'T', gender: 'male', isPlaceholder: false,
+            partnerships: [], parentIds: [], childIds: [], ...extra,
+        });
+        expect(birthResearchStatus(p({}))).toBeUndefined();
+        expect(birthResearchStatus(p({ birthStatus: 'probable', events: [{ id: 'e', type: 'birth', status: 'proven' }] }))).toBe('probable');
+        expect(birthResearchStatus(p({ events: [
+            { id: 'c', type: 'baptism', status: 'lead' }, { id: 'b', type: 'birth', status: 'proven' },
+        ] }))).toBe('proven');
+        expect(birthResearchStatus(p({ events: [{ id: 'c', type: 'baptism', status: 'possible' }] }))).toBe('possible');
+        expect(birthResearchStatus(p({ events: [{ id: 'd', type: 'death', status: 'proven' }] }))).toBeUndefined();
     });
 
     it('lists, per generation, the people below whose parents are not both known', () => {
