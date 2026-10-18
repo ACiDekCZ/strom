@@ -165,9 +165,12 @@ test.describe('birth and death citations', () => {
 
     test('tree overview: going through births without a source, Cite takes the person off the list', async ({ page }) => {
         await tree(page, {
-            j: { firstName: 'Jan', lastName: 'Víšek', birthDate: '1865', sourceIds: ['s2'] },
-            a: { firstName: 'Anna', lastName: 'Víšková', gender: 'female', birthDate: '1870', sourceIds: ['s2'] },
+            j: { firstName: 'Jan', lastName: 'Víšek', birthDate: '1865', sourceIds: ['s2'], childIds: ['c'] },
+            a: { firstName: 'Anna', lastName: 'Víšková', gender: 'female', birthDate: '1870', sourceIds: ['s2'], childIds: ['c'] },
+            c: { firstName: 'Karel', lastName: 'Víšek', birthDate: '1895', birthSourceIds: ['s1'], parentIds: ['j', 'a'] },
         });
+        // Births without a source are counted among the chosen person's ancestors: Karel's parents.
+        await page.evaluate(() => window.Strom.TreeRenderer.setFocus('c' as never));
         await page.evaluate(() => window.Strom.UI.showTreeOverview(window.Strom.DataManager.getCurrentTreeId(), { section: 'quality' }));
         await page.locator('#tree-overview-modal [data-block="evidence"] [data-kind="birthNoSource"]').click();
         const pill = page.locator('#evidence-pill');
