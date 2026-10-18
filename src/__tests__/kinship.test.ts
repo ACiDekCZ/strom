@@ -34,7 +34,8 @@ describe('findRelationship — blood relations', () => {
         const sib = rel('focus', 'sibling_1')!;
         expect(sib.term.cs).toMatch(/^(bratr|sestra)$/);
         const half = rel('focus', 'halfsibling_1')!;
-        expect(half.term.cs).toContain('nevlastní');
+        // One shared parent: "polorodý", not "nevlastní" (no blood tie at all).
+        expect(half.term.cs).toMatch(/^(polorodý bratr|polorodá sestra|polorodý sourozenec)$/);
     });
 
     it('uncle, aunt, nephew', () => {

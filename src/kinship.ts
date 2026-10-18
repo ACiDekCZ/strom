@@ -304,9 +304,9 @@ function findRelationshipCore(data: StromData, aId: PersonId, bId: PersonId): Ki
                 && !(aParents.every(p => bParents.includes(p)));
             if (differ) {
                 term = bySex(b.gender,
-                    { cs: 'nevlastní bratr (společný jeden rodič)', en: 'half-brother', de: 'Halbbruder' },
-                    { cs: 'nevlastní sestra (společný jeden rodič)', en: 'half-sister', de: 'Halbschwester' },
-                    { cs: 'nevlastní sourozenec (společný jeden rodič)', en: 'half-sibling', de: 'Halbgeschwister' });
+                    { cs: 'polorodý bratr', en: 'half-brother', de: 'Halbbruder' },
+                    { cs: 'polorodá sestra', en: 'half-sister', de: 'Halbschwester' },
+                    { cs: 'polorodý sourozenec', en: 'half-sibling', de: 'Halbgeschwister' });
             }
         }
         return { path: blood.path, term, affinity: false };
