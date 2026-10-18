@@ -1626,7 +1626,8 @@ export const miscMethods = uiModule({
         el.addEventListener('mouseleave', () => { arm(); });
         arm();
 
-        requestAnimationFrame(() => el.classList.add('show'));
+        // A toast dismissed before this frame (a second change right after) stays hidden.
+        requestAnimationFrame(() => { if (this.undoToastEl === el) el.classList.add('show'); });
     },
 
     /** Remove the Undo toast (if any) and cancel its countdown. */
