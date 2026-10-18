@@ -2697,6 +2697,9 @@ const stringsEN = {
             ? 'No errors, warnings or notes.'
             : `No errors. ${[w ? nEn(w, 'warning', 'warnings') : '', p ? nEn(p, 'note', 'notes') : ''].filter(Boolean).join(', ')}.`,
         moreIssues: (n: number) => `and ${n} more…`,
+        /** Who or what a finding is about when it is not a person of the tree. */
+        findingGodparent: (name: string) => `Godparent: ${name}`,
+        findingPlace: (place: string) => `Place: ${place}`,
         completenessTitle: 'Data completeness',
         fieldBirthDate: 'Birth date',
         fieldDeathDate: 'Date of death (deceased)',
@@ -6744,6 +6747,8 @@ const stringsCZ: StringsType = {
             ? 'Bez chyb, varování i poznámek.'
             : `Bez chyb. ${[w ? nCs(w, 'varování', 'varování', 'varování') : '', p ? nCs(p, 'poznámka', 'poznámky', 'poznámek') : ''].filter(Boolean).join(', ')}.`,
         moreIssues: (n: number) => `a dalších ${n}…`,
+        findingGodparent: (name: string) => `Kmotr: ${name}`,
+        findingPlace: (place: string) => `Místo: ${place}`,
         completenessTitle: 'Úplnost dat',
         fieldBirthDate: 'Datum narození',
         fieldDeathDate: 'Datum úmrtí (u zemřelých)',
@@ -10761,6 +10766,8 @@ const stringsDE: StringsType = {
             ? 'Keine Fehler, Warnungen oder Hinweise.'
             : `Keine Fehler. ${[w ? nDe(w, 'Warnung', 'Warnungen') : '', p ? nDe(p, 'Hinweis', 'Hinweise') : ''].filter(Boolean).join(', ')}.`,
         moreIssues: (n: number) => `und ${n} weitere…`,
+        findingGodparent: (name: string) => `Pate: ${name}`,
+        findingPlace: (place: string) => `Ort: ${place}`,
         completenessTitle: 'Vollständigkeit',
         fieldBirthDate: 'Geburtsdatum',
         fieldDeathDate: 'Sterbedatum (Verstorbene)',

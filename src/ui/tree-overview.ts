@@ -145,6 +145,24 @@ let refreshPending = false;
  */
 let scrollTarget: SectionId | null = null;
 
+/**
+ * Scroll the overview so `el` starts right under the sticky header. The header
+ * sits inside the same scroller (desktop: `.tov-head`; phone: the title bar and
+ * the person choice, each sticky on its own), so `scrollIntoView` alone would
+ * leave the target's heading under it.
+ */
+function scrollBelowHeader(el: HTMLElement): void {
+    const scroller = el.closest<HTMLElement>('.tov-scroll');
+    if (!scroller) { el.scrollIntoView({ block: 'start' }); return; }
+    let covered = 0;
+    for (const bar of scroller.querySelectorAll<HTMLElement>('.tov-head, .tov-titlebar, .tov-root')) {
+        const style = getComputedStyle(bar);
+        if (style.position !== 'sticky') continue;
+        covered = Math.max(covered, (parseFloat(style.top) || 0) + bar.getBoundingClientRect().height);
+    }
+    scroller.scrollTop += el.getBoundingClientRect().top - scroller.getBoundingClientRect().top - covered;
+}
+
 function isSection(x: unknown): x is SectionId {
     return typeof x === 'string' && (ALL_SECTIONS as readonly string[]).includes(x);
 }
@@ -425,10 +443,11 @@ export const treeOverviewMethods = uiModule({
         overlay.querySelector<HTMLElement>('.tov-close')?.focus({ preventScroll: true });
     },
 
-    /** Bring the section the overview was opened at to the top of the dialog. */
+    /** Bring the section the overview was opened at right under the dialog's header. */
     scrollTreeOverviewToTarget(): void {
         if (!scrollTarget) return;
-        document.querySelector(`#${OVERLAY_ID} .tov-sec[data-section="${scrollTarget}"]`)?.scrollIntoView({ block: 'start' });
+        const sec = document.querySelector<HTMLElement>(`#${OVERLAY_ID} .tov-sec[data-section="${scrollTarget}"]`);
+        if (sec) scrollBelowHeader(sec);
     },
 
     /** The focus bar's person count: the overview of the open tree. */
@@ -1019,7 +1038,7 @@ export const treeOverviewMethods = uiModule({
         if (!sec.querySelector('.tov-rem')) this.fillTreeOverviewSection('ancestors', true);
         this.setTreeOverviewRemembersOpen(true);
         const box = sec.querySelector<HTMLElement>('.tov-rem');
-        box?.scrollIntoView({ block: 'start' });
+        if (box) scrollBelowHeader(box);
         box?.querySelector<HTMLElement>('.tov-rem-head')?.focus({ preventScroll: true });
     },
 
@@ -1337,8 +1356,14 @@ export const treeOverviewMethods = uiModule({
             const who = (issue.personIds ?? []).map(id => realPerson(st.data, id)).filter((p): p is Person => !!p)
                 .map(p => `<button type="button" class="tov-link" data-tov="person" data-id="${esc(p.id)}">${esc(shownName(p))}</button>`)
                 .join(', ');
+            // The godparent or the place the finding is about: without it the line
+            // says "a godparent keeps turning up" and never which one.
+            const subject = !issue.subject ? ''
+                : issue.type === 'recurringGodparent' ? t.findingGodparent(issue.subject)
+                : issue.type === 'placeSpelling' ? t.findingPlace(issue.subject) : '';
             return `<div class="tov-finding tov-finding--${issue.severity}"><span class="tov-dot" aria-hidden="true"></span>`
-                + `${who ? `<span class="tov-finding-who">${who}</span>` : ''}<span class="tov-finding-what">${esc(translateValidationType(issue.type))}</span></div>`;
+                + `${who ? `<span class="tov-finding-who">${who}</span>` : ''}<span class="tov-finding-what">${esc(translateValidationType(issue.type))}</span>`
+                + `${subject ? `<span class="tov-finding-subject">${esc(subject)}</span>` : ''}</div>`;
         }).join('');
         const more = issues.length > TOP_ISSUES
             ? `<button type="button" class="tov-link tov-more" data-tov="validation">${esc(t.moreIssues(issues.length - TOP_ISSUES))}</button>` : '';

@@ -11794,6 +11794,9 @@
             text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
         }
         .tov-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; border-radius: 2px; }
+        /* `.modal button` (10px 18px) outranks `.tov-link`: a link sits in the text with no box,
+           so a comma after a name stays next to it. */
+        .modal.tov .tov-link { padding: 0; border-radius: 2px; }
         /* Where to focus */
         .tov-cards { display: flex; flex-direction: column; gap: 8px; }
         .tov-card { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: 10px; background: var(--surface-2); }
@@ -11929,6 +11932,7 @@
         .tov-finding--error .tov-dot { border: 0; background: var(--danger); }
         .tov-finding--warning .tov-dot { border: 0; background: var(--accent); }
         .tov-finding-what { color: var(--text-light); }
+        .tov-finding-subject { color: var(--text); }
         .tov-more, .tov-ev-levels { align-self: flex-start; font-size: 13px; }
         .tov-comp-row { display: grid; grid-template-columns: 140px minmax(0, 1fr) 44px; gap: 10px; align-items: center; min-height: 24px; font-size: 13.5px; }
         .tov-comp-track { display: block; height: 10px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
@@ -12011,7 +12015,7 @@
             .tov-root-btn, .tov-btn, .tov-inactive .tov-open-tree, .tov-btn-primary, .tov-foot .secondary { min-height: 44px; }
             .tov-pop-row { min-height: 44px; justify-content: center; }
             .tov-pop-search { height: 44px; }
-            .tov-link { padding: 10px 0; }
+            .modal.tov .tov-link { padding: 10px 0; }
         }
         /* Phone: a full-screen sheet. */
         @media (max-width: 640px) {

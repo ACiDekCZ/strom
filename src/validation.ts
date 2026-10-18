@@ -23,6 +23,11 @@ export interface ValidationIssue {
     partnershipIds?: PartnershipId[];
     /** Language-neutral specifics (years, labels) shown under the localized message. */
     detail?: string;
+    /**
+     * Who or what the finding is about when that is not a person of the tree:
+     * the recurring godparent's name, the place written several ways.
+     */
+    subject?: string;
 }
 
 export interface ValidationResult {
@@ -50,7 +55,8 @@ export function validateTreeData(data: StromData): ValidationResult {
         message: string,
         personIds?: PersonId[],
         partnershipIds?: PartnershipId[],
-        detail?: string
+        detail?: string,
+        subject?: string
     ) => {
         issues.push({
             id: `issue_${++issueId}`,
@@ -59,7 +65,8 @@ export function validateTreeData(data: StromData): ValidationResult {
             message,
             personIds,
             partnershipIds,
-            ...(detail ? { detail } : {})
+            ...(detail ? { detail } : {}),
+            ...(subject ? { subject } : {})
         });
     };
 
@@ -793,7 +800,7 @@ function checkPhotoData(data: StromData, addIssue: AddIssue): void {
 
 type AddIssue = (
     s: IssueSeverity, t: string, m: string,
-    p?: PersonId[], pp?: PartnershipId[], detail?: string
+    p?: PersonId[], pp?: PartnershipId[], detail?: string, subject?: string
 ) => void;
 
 /**
@@ -1000,18 +1007,17 @@ function checkSourceIntegrity(data: StromData, addIssue: AddIssue): void {
  */
 function checkPlaceSpellings(
     data: StromData,
-    addIssue: (s: IssueSeverity, t: string, m: string, p?: PersonId[], pp?: PartnershipId[], d?: string) => void
+    addIssue: AddIssue
 ): void {
     for (const place of collectPlaces(data).values()) {
         if (place.variants.size < 2) continue;
         // Most-used spelling first — that is the one a fix would unify to.
-        const spellings = [...place.variants.entries()]
-            .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-            .map(([name, n]) => `${name} (${n}×)`)
-            .join('  ·  ');
+        const ranked = [...place.variants.entries()]
+            .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+        const spellings = ranked.map(([name, n]) => `${name} (${n}×)`).join('  ·  ');
         addIssue('info', 'placeSpelling',
             `"${place.display}" is written in ${place.variants.size} ways`,
-            undefined, undefined, spellings);
+            undefined, undefined, spellings, ranked[0][0]);
     }
 }
 
@@ -1130,7 +1136,7 @@ function checkRecurringGodparents(data: StromData, addIssue: AddIssue): void {
             + (lead.personId ? '' : ` · ${strings.treeManager.valRecurringGodparentByName}`);
         addIssue('info', 'recurringGodparent',
             `${lead.name} appears at ${lead.count} events of ${lead.subjects.length} people`,
-            lead.subjects.map(s => s.id), undefined, detail);
+            lead.subjects.map(s => s.id), undefined, detail, lead.name);
     }
 }
 

@@ -958,3 +958,88 @@ test.describe('tree overview: ask the family, certainty, the Data quality shortc
         await expect(rem.locator('.tov-rem-row').nth(0).getByRole('button', { name: 'Frage hinzufügen' })).toBeVisible();
     });
 });
+
+test.describe('tree overview: the jump to a section, the findings', () => {
+    /** The bottom edge of what stays on top while the overview scrolls (desktop: the header; phone: the person choice). */
+    async function headerBottom(dialog: Locator): Promise<number> {
+        return dialog.locator('.tov-scroll').evaluate((scroller) => {
+            let bottom = scroller.getBoundingClientRect().top;
+            for (const bar of scroller.querySelectorAll<HTMLElement>('.tov-head, .tov-titlebar, .tov-root')) {
+                if (getComputedStyle(bar).position !== 'sticky') continue;
+                const r = bar.getBoundingClientRect();
+                if (r.height > 0) bottom = Math.max(bottom, r.bottom);
+            }
+            return bottom;
+        });
+    }
+
+    async function expectJumpBelowHeader(page: Page, treeId: string): Promise<void> {
+        const dialog = await openOverview(page, treeId, { section: 'quality', scroll: true });
+        const quality = section(dialog, 'quality');
+        await expect(quality).toHaveAttribute('data-ready', 'true');
+        expect(await dialog.locator('.tov-scroll').evaluate(el => el.scrollTop)).toBeGreaterThan(0);
+        // The section's heading is whole under the header, not hidden behind it.
+        const head = (await quality.locator('.tov-sec-head').boundingBox())!;
+        const bottom = await headerBottom(dialog);
+        expect(head.y).toBeGreaterThanOrEqual(bottom - 1);
+        expect(head.y).toBeLessThanOrEqual(bottom + 2);
+    }
+
+    test('opened at Data quality: the heading is right under the header (desktop)', async ({ page }) => {
+        const treeId = await setup(page, 1440, 700);
+        await expectJumpBelowHeader(page, treeId);
+    });
+
+    test('opened at Data quality: the heading is right under the sticky bars (phone)', async ({ browser }) => {
+        const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+        const page = await context.newPage();
+        await openApp(page);
+        const treeId = await importTree(page, family(), 'Lindqvist', 'r');
+        await expectJumpBelowHeader(page, treeId);
+        await context.close();
+    });
+
+    test('a finding names the godparent and the place, the comma stays next to the name', async ({ page }) => {
+        const data = family();
+        const baptism = (id: string, date: string): P => ({
+            id, type: 'baptism', date, participants: [{ id: `pt_${id}`, role: 'godparent', name: 'Ivar Dahl' }],
+        });
+        data.persons.r.events = [baptism('e_r', '1955')];
+        data.persons.s.events = [baptism('e_s', '1958')];
+        // The place is named by its most-used spelling.
+        data.persons.r.birthPlace = 'Växjö';
+        data.persons.f.birthPlace = 'Växjö';
+        data.persons.s.birthPlace = 'vaxjo';
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await openApp(page);
+        const treeId = await importTree(page, data, 'Lindqvist', 'r');
+        const dialog = await openOverview(page, treeId, { section: 'quality', scroll: true });
+        const quality = section(dialog, 'quality');
+        await expect(quality).toHaveAttribute('data-ready', 'true');
+        const godparent = quality.locator('.tov-finding', { hasText: 'A godparent who keeps turning up' });
+        await expect(godparent.locator('.tov-finding-subject')).toHaveText('Godparent: Ivar Dahl');
+        await expect(godparent.locator('.tov-link')).toHaveText(['Anders Lindqvist', 'Greta Lindqvist']);
+        const place = quality.locator('.tov-finding', { hasText: 'One place written several ways' });
+        await expect(place.locator('.tov-finding-subject')).toHaveText('Place: Växjö');
+        // "Anders Lindqvist, Greta Lindqvist": the comma right after the first name's text.
+        const gap = await godparent.locator('.tov-finding-who').evaluate((who) => {
+            const link = who.querySelector('.tov-link')!;
+            const name = document.createRange();
+            name.selectNodeContents(link.firstChild!);
+            const comma = document.createRange();
+            comma.setStart(link.nextSibling!, 0);
+            comma.setEnd(link.nextSibling!, 1);
+            return comma.getBoundingClientRect().left - name.getBoundingClientRect().right;
+        });
+        expect(Math.abs(gap)).toBeLessThan(1.5);
+
+        await page.keyboard.press('Escape');
+        await page.evaluate(() => window.Strom.UI.setLanguage('cs' as never));
+        const cs = section(await openOverview(page, treeId, { section: 'quality', scroll: true }), 'quality');
+        await expect(cs.locator('.tov-finding-subject')).toHaveText(['Místo: Växjö', 'Kmotr: Ivar Dahl']);
+        await page.keyboard.press('Escape');
+        await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
+        const de = section(await openOverview(page, treeId, { section: 'quality', scroll: true }), 'quality');
+        await expect(de.locator('.tov-finding-subject')).toHaveText(['Ort: Växjö', 'Pate: Ivar Dahl']);
+    });
+});
