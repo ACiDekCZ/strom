@@ -586,6 +586,18 @@ export function unknownSexFromTie(data: StromData, sexU: unknown): StromData | n
 /** The bridge feature of a research that keeps titles apart from the name (NPFX / NSFX; Strom Research 1.13). */
 export const TITLES_FEATURE = 'person.titles';
 
+/** `/status.features`: the research takes a source sent as an entry of its reading (`_STROM_READING`) in `/sync`. */
+export const READ_SYNC_FEATURE = 'read.sync';
+
+/**
+ * A source's reading marks (`_STROM_READING`, `_STROM_ENTRY`, `_STROM_SHA` on
+ * the record) go to this research: only one that says it takes them. An
+ * older one (or one not asked yet) gets the source as a source of the app's own.
+ */
+export function researchSendsReadings(status: { features: readonly string[] | null } | null | undefined): boolean {
+    return !!status?.features?.includes(READ_SYNC_FEATURE);
+}
+
 /** How a GEDCOM writes the titles of a name (see GedcomExportOptions.titles in ged-exporter.ts). */
 export type TitlesInGedcom = 'line' | 'tags' | 'none';
 
@@ -2300,6 +2312,46 @@ export interface SyncReply {
     notWritten: SyncNotWritten[];
     /** The research's numbers for the people and sources this send added, by the sent file's xrefs (`ids`, 1.12.0-rc.26). */
     ids: AdoptIds | null;
+    /** How the research took each source sent as an entry of a reading (`readings`, `read.sync`). */
+    readings: SyncReading[];
+}
+
+/**
+ * One source sent as an entry of a reading (`_STROM_READING`): taken as that
+ * reading's entry (`ok`), or not (`code`: `reading.none` | `reading.state` |
+ * `reading.sha` | `reading.entry`) — then the research keeps it as a source
+ * of the app's own.
+ */
+export interface SyncReading {
+    /** The source's xref in the sent file ("@X9@"), or the research's "S0012". */
+    source: string;
+    read: string;
+    ok: boolean;
+    entry: string;
+    /** The transcription sent differs from the reading's. */
+    edited: boolean;
+    code: string;
+}
+
+/** The `readings` of a sync's answer, checked (at most 200). */
+export function sanitizeSyncReadings(value: unknown): SyncReading[] {
+    if (!Array.isArray(value)) return [];
+    const out: SyncReading[] = [];
+    for (const item of value.slice(0, 200)) {
+        const r = asRecord(item);
+        if (!r) continue;
+        const source = typeof r.source === 'string' && /^(@[A-Za-z0-9_-]{1,20}@|S\d{1,9})$/.test(r.source) ? r.source : '';
+        const read = typeof r.read === 'string' && /^D\d{14}-[0-9a-f]{4}$/.test(r.read) ? r.read : '';
+        if (!source && !read) continue;
+        out.push({
+            source, read,
+            ok: r.ok === true,
+            entry: typeof r.entry === 'string' && /^[A-Za-z][A-Za-z0-9_-]{0,20}$/.test(r.entry) ? r.entry : '',
+            edited: r.edited === true,
+            code: typeof r.code === 'string' && /^[a-z0-9.-]{1,40}$/.test(r.code) ? r.code : '',
+        });
+    }
+    return out;
 }
 
 /** One change a send carried that the research did not write (`notWritten[]`). */
@@ -2316,7 +2368,7 @@ export interface SyncNotWritten {
 
 export function sanitizeSyncReply(value: unknown): SyncReply {
     const r = asRecord(value);
-    if (!r) return { ok: false, changes: null, error: '', inbox: null, intake: '', head: '', applied: null, pending: false, conflicts: null, conflictPersons: [], conflictIds: [], conflictTakeIds: [], kept: null, reason: '', skipped: [], code: '', undoneSince: [], takenBack: null, notWritten: [], ids: null };
+    if (!r) return { ok: false, changes: null, error: '', inbox: null, intake: '', head: '', applied: null, pending: false, conflicts: null, conflictPersons: [], conflictIds: [], conflictTakeIds: [], kept: null, reason: '', skipped: [], code: '', undoneSince: [], takenBack: null, notWritten: [], ids: null, readings: [] };
     const idsRec = asRecord(r.ids);
     const idPersons = adoptIdMap(idsRec?.persons, /^P\d{1,9}$/);
     const idSources = adoptIdMap(idsRec?.sources, /^S\d{1,9}$/);
@@ -2353,6 +2405,7 @@ export function sanitizeSyncReply(value: unknown): SyncReply {
                 name: cleanText(x.name, 120),
             })),
         ids: Object.keys(idPersons).length || Object.keys(idSources).length ? { persons: idPersons, sources: idSources } : null,
+        readings: sanitizeSyncReadings(r.readings),
     };
 }
 

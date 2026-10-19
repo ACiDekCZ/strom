@@ -55,6 +55,13 @@ export interface GedcomExportOptions {
      *   them from the line into the name (B-1); they stay in the app.
      */
     titles?: TitlesInGedcom;
+    /**
+     * A source written from a reading of the research ("Read a document")
+     * carries its marks: `1 _STROM_READING D…` + `2 _STROM_ENTRY e…`, and
+     * `1 _STROM_SHA` when no excerpt names the page. Default true; false for
+     * a research that does not take them (`read.sync`, see researchSendsReadings).
+     */
+    readings?: boolean;
 }
 
 /** Partnership statuses MARR/DIV cannot express, written as 1 _STAT. */
@@ -428,6 +435,7 @@ export const STROM_SEX_U_LINE = '1 _STROM_SEX_U Y';
 
 export function exportToGedcom(data: StromData, treeName?: string, options: GedcomExportOptions = {}): GedcomExportResult {
     if (options.content) data = applyContentOptions(data, options.content);
+    const writeReadings = options.readings !== false;
     const lines: string[] = [];
 
     // Create ID mappings (PersonId -> @I1@, PartnershipId -> @F1@)
@@ -1004,6 +1012,13 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         if (source.transcript) pushLongValue(lines, 1, 'TEXT', source.transcript);
         // The user read the transcript from the record (Strom Research: the first reading).
         if (source.transcriptVerified && source.transcript) lines.push('1 _STROM_VERIFIED Y');
+        // An entry of a research's reading: which reading and entry, and the page when no excerpt says it.
+        if (writeReadings && source.reading && /^D\d{14}-[0-9a-f]{4}$/.test(source.reading)) {
+            lines.push(`1 _STROM_READING ${source.reading}`);
+            if (source.readingEntry && /^[A-Za-z][A-Za-z0-9_-]{0,20}$/.test(source.readingEntry)) lines.push(`2 _STROM_ENTRY ${source.readingEntry}`);
+            const pageSha = normalizeSha256(source.readingSha);
+            if (pageSha && !(source.excerpts ?? []).some(e => normalizeSha256(e.originalSha) === pageSha)) lines.push(`1 _STROM_SHA ${pageSha}`);
+        }
         if (source.url) pushWrapped(lines, 1, 'WWW', source.url);
         if (source.note) pushNote(lines, 1, source.note);
         // Crops of the entry, embedded like person media (other programs

@@ -36,7 +36,7 @@ import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import {
     LiveStatus, contentFingerprint, fingerprintLike, sanitizeLiveStatus, sanitizeSyncReply, isSafariBrowser,
     parseLiveBridge, researchSchemeUrl, readResearchHeader, stabilizeIds, researchPersonRef, ResearchAccepts,
-    researchIdsByContent, holdsResearchIds, ResearchSendRecord, AdoptIds, ExportXrefs, applySyncIds, researchGedcomTitles,
+    researchIdsByContent, holdsResearchIds, ResearchSendRecord, AdoptIds, ExportXrefs, applySyncIds, researchGedcomTitles, researchSendsReadings, SyncReading,
     researchHasTitles, hasTitles, withoutTitles, TITLES_FEATURE, researchConflictRef,
 } from '../research-link.js';
 import { loadResearchCopy } from '../research-copy.js';
@@ -132,6 +132,8 @@ let titlesCatchingUp = false;
 
 /** Researches that said nothing of what they take, asked once in this page whether they do now. */
 const olderAsked = new Set<string>();
+/** Reading sources the research did not take as entries of its reading, already said (`read/entry/code`). */
+const readingsSaid = new Set<string>();
 
 /** What the app knows about one research's bridge in this page. */
 interface BridgeRuntime {
@@ -324,6 +326,19 @@ export function researchSendMode(link: ResearchLink | undefined): ResearchSendMo
 }
 
 export const researchSyncMethods = uiModule({
+    /**
+     * A send's answer about the sources sent as entries of a reading
+     * (`readings`): one not taken as such (`ok: false`) stays a source of the
+     * app's own there. Said once in a quiet line; the code goes to the console.
+     */
+    noteReadingsNotTaken(readings: readonly SyncReading[]): void {
+        const fresh = readings.filter(r => !r.ok && !readingsSaid.has(`${r.read}/${r.entry}/${r.code}`));
+        if (fresh.length === 0) return;
+        for (const r of fresh) readingsSaid.add(`${r.read}/${r.entry}/${r.code}`);
+        console.warn('The research took reading sources as sources of the app', fresh.map(r => `${r.source} ${r.read} ${r.code}`).join(', '));
+        this.showToast(strings.read.readingNotTaken, 6000);
+    },
+
     /** Start watching the active research tree (after the first render; once). */
     initResearchSync(): void {
         if (started || typeof window === 'undefined') return;
@@ -1372,7 +1387,7 @@ export const researchSyncMethods = uiModule({
         const exported = again ? null : researchGedcomExport(data, meta?.name ?? '', {
             id: link.id, head: link.head, appTree: treeId, transcripts: this.researchTranscriptsLink(link).transcripts, sent: fps.current,
             ...(since ? { since } : {}),
-        }, titles);
+        }, titles, researchSendsReadings(this.researchStatusOf(link.id)));
         const gedcom = exported?.content ?? '';
         // What this send carries, person by person (what was written, once it is).
         if (!again) this.researchNoteSending(treeId, data, fps.current);
@@ -1455,6 +1470,8 @@ export const researchSyncMethods = uiModule({
             else await this.showResearchRefused(why, { ...opts, details: reply.reason });
             return;
         }
+        // Sources sent as entries of a reading that the research took as sources of the app's own: said quietly, once.
+        this.noteReadingsNotTaken(reply.readings);
         const now = new Date().toISOString();
         // A send taken back, sent again, and the research still writes nothing: the changes are here
         // and not there — never shown as in step (finding 35). The bar stays; said why, with the way out.

@@ -622,6 +622,11 @@ function absorbSourceDetails(kept: Source, incoming: Source): void {
     if (!kept.transcript && incoming.transcript) kept.transcript = incoming.transcript;
     if (!kept.recordDate && incoming.recordDate) kept.recordDate = incoming.recordDate;
     if (!kept.refn && incoming.refn) kept.refn = incoming.refn;
+    if (!kept.reading && incoming.reading) {
+        kept.reading = incoming.reading;
+        if (incoming.readingEntry) kept.readingEntry = incoming.readingEntry;
+        if (incoming.readingSha) kept.readingSha = incoming.readingSha;
+    }
     // "Transcription verified" belongs to that very wording.
     if (!kept.transcriptVerified && incoming.transcriptVerified && kept.transcript === incoming.transcript) kept.transcriptVerified = true;
     for (const exc of incoming.excerpts ?? []) {

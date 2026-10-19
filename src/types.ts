@@ -306,6 +306,20 @@ export interface Source {
      * the source viewer only; absent from an older research.
      */
     readBy?: SourceReadBy;
+    /**
+     * The research's reading this entry was written from ("Read a document":
+     * its id, `D…`). With it the research takes the source as that reading's
+     * entry. GEDCOM `1 _STROM_READING` on the record (only to a research that
+     * knows readings).
+     */
+    reading?: string;
+    /** That reading's entry (`entries[].id`, e.g. "e1"). GEDCOM `2 _STROM_ENTRY` under `_STROM_READING`. */
+    readingEntry?: string;
+    /**
+     * The SHA-256 of the page the entry is on, when no excerpt carries it
+     * (`excerpts[].originalSha`). GEDCOM `1 _STROM_SHA` on the record.
+     */
+    readingSha?: string;
 }
 
 /** Who read a source's entry (see Source.readBy). */

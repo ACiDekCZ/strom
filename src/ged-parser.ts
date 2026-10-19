@@ -846,6 +846,11 @@ interface RawSource {
     verified?: boolean;
     /** _STROM_READ: who read the entry (a Strom Research file). */
     readBy?: SourceReadBy;
+    /** _STROM_READING (+ 2 _STROM_ENTRY): the research's reading the entry was written from. */
+    reading?: string;
+    readingEntry?: string;
+    /** 1 _STROM_SHA on the record: the page the entry is on. */
+    readingSha?: string;
     /** Record date from a citation's DATA > DATE (first wins). */
     recordDate?: string;
     /** OBJE on the record: crops of the entry (Strom: _STROM_KIND excerpt). */
@@ -2074,6 +2079,8 @@ export function parseGedcom(content: string): ParsedGedcom {
                     const who = value.trim().toLowerCase();
                     if (who === 'user' || who === 'research' || who === 'both') src.readBy = who;
                 }
+                else if (tag === '_STROM_READING') { if (/^D\d{14}-[0-9a-f]{4}$/.test(value.trim())) src.reading = value.trim(); }
+                else if (tag === '_STROM_SHA') src.readingSha = normalizeSha256(value) ?? undefined;
                 else if (tag === 'OBJE') src.media.push({ title: '', file: '' });
                 else if (tag === 'QUAY') { const q = parseInt(value, 10); if (q >= 0 && q <= 3) src.quality = q; }
                 else if (tag === 'WWW' || tag === 'URL') src.url = value;
@@ -2099,6 +2106,8 @@ export function parseGedcom(content: string): ParsedGedcom {
                     || currentSubTag === 'PUBL' || currentSubTag === 'AUTH') {
                     if (tag === 'CONT') src.note += (src.note ? '\n' : '') + plain(value);
                     else if (tag === 'CONC') src.note += plain(value);
+                } else if (currentSubTag === '_STROM_READING' && tag === '_STROM_ENTRY') {
+                    if (src.reading && /^[A-Za-z][A-Za-z0-9_-]{0,20}$/.test(value.trim())) src.readingEntry = value.trim();
                 } else if (currentSubTag === 'REPO' && tag === 'CALN' && value) {
                     addLine(strings.gedcomNotes.sourceCallNumber(value), '\n');
                 } else if (currentSubTag === 'OBJE' && src.media.length > 0) {
@@ -2962,6 +2971,11 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         if (raw.refn) src.refn = raw.refn;
         if (raw.verified && src.transcript) src.transcriptVerified = true;
         if (raw.readBy) src.readBy = raw.readBy;
+        if (raw.reading) {
+            src.reading = raw.reading;
+            if (raw.readingEntry) src.readingEntry = raw.readingEntry;
+        }
+        if (raw.readingSha) src.readingSha = raw.readingSha;
         if (raw.recordDate) src.recordDate = raw.recordDate;
         // Images on a source record are crops of its entry. Only embedded
         // raster images come in; a path or URL (another program's media
