@@ -12,6 +12,7 @@
 import { test, expect, Page, Locator } from '@playwright/test';
 import { openApp } from './helpers';
 import { syntheticTree } from '../src/__tests__/helpers/synthetic-tree';
+import { calibrationWorkload, machineFactor, normalizedMs } from '../src/__tests__/helpers/perf-budget';
 
 type P = Record<string, unknown>;
 
@@ -82,6 +83,14 @@ async function openOverview(page: Page, treeId: string, opts?: Record<string, un
     await expect(dialog).toBeVisible();
     return dialog;
 }
+
+/**
+ * K1.5 calibration (see the test): rounds of the script workload, and the best
+ * time of the whole calibration (script + DOM) on the reference machine at rest
+ * (Apple M-series laptop, Chromium of Playwright); about a third of the opening.
+ */
+const K15_CALIBRATION_ROUNDS = 16;
+const K15_CALIBRATION_REFERENCE_MS = 155;
 
 const section = (dialog: Locator, id: string): Locator => dialog.locator(`.tov-sec[data-section="${id}"]`);
 
@@ -525,6 +534,14 @@ test.describe('tree overview', () => {
     });
 
     test('K1.5: a 5 000-person tree opens within 1 s (best of three)', async ({ page }) => {
+        // The 1 s holds on an idle machine; parallel workers, CI shards or
+        // another checkout's suite on the same computer made the opening
+        // several times slower with no change in the code. Each opening is
+        // scaled by the page's speed at that moment, measured with a fixed
+        // calibration (script and DOM work) run in the page right before it
+        // (src/__tests__/helpers/perf-budget.ts): idle it counts as it is,
+        // loaded it is divided by the slowdown (at most 5×). A slower
+        // overview does not slow the calibration, so it still fails.
         test.setTimeout(120_000);
         await page.setViewportSize({ width: 1440, height: 900 });
         await openApp(page);
@@ -536,8 +553,40 @@ test.describe('tree overview', () => {
             await S.TreeRenderer.renderAsync();
             return id as string;
         }, { data, rootId });
-        const times: number[] = [];
+        const calibrate = async (): Promise<number> => {
+            const script = await page.evaluate(([fn, rounds]) => {
+                // One function for all runs, so the JIT optimizes it as it
+                // does the app's code (a new one each time stayed cold).
+                const w = window as unknown as { __calibration?: (r: number) => number };
+                w.__calibration ??= new Function(`return (${fn})`)() as (r: number) => number;
+                const t = performance.now();
+                w.__calibration(rounds);
+                return performance.now() - t;
+            }, [calibrationWorkload.toString(), K15_CALIBRATION_ROUNDS] as const);
+            const dom = await page.evaluate(() => {
+                // A fixed block of cards built, laid out and removed.
+                const t = performance.now();
+                const box = document.createElement('div');
+                box.style.cssText = 'position:absolute;left:0;top:0;width:1200px;visibility:hidden';
+                for (let i = 0; i < 2000; i++) {
+                    const el = document.createElement('div');
+                    el.className = 'tov-card';
+                    el.style.cssText = 'display:inline-block;width:110px;padding:4px;margin:2px;border:1px solid';
+                    el.textContent = `Calibration ${i} · ${1700 + (i % 300)}`;
+                    box.appendChild(el);
+                }
+                document.body.appendChild(box);
+                let h = 0;
+                for (let i = 0; i < 2000; i += 100) h += (box.children[i] as HTMLElement).offsetTop;
+                box.remove();
+                return h >= 0 ? performance.now() - t : 0;
+            });
+            return script + dom;
+        };
+        await calibrate(); // warm-up (JIT)
+        const runs: { ms: number; cal: number; normalized: number }[] = [];
         for (let i = 0; i < 3; i++) {
+            const cal = await calibrate();
             const ms = await page.evaluate(async (treeId) => {
                 // A fresh revision: nothing cached from the run before.
                 window.dispatchEvent(new CustomEvent('strom:data-changed'));
@@ -555,11 +604,12 @@ test.describe('tree overview', () => {
                 window.Strom.UI.closeTreeOverview();
                 return ms;
             }, treeId);
-            times.push(ms);
+            runs.push({ ms, cal, normalized: normalizedMs(ms, cal, K15_CALIBRATION_REFERENCE_MS) });
         }
-        const best = Math.min(...times);
-        console.log(`[tree-overview K1.5] 5000 persons: open ${times.map(t => t.toFixed(0)).join(' / ')} ms, best ${best.toFixed(0)} ms`);
-        expect(best).toBeLessThan(1000);
+        const best = runs.reduce((a, b) => (b.normalized < a.normalized ? b : a));
+        console.log(`[tree-overview K1.5] 5000 persons: open ${runs.map(r => `${r.ms.toFixed(0)} (cal ${r.cal.toFixed(0)})`).join(' / ')} ms, best ${
+            best.normalized.toFixed(0)} ms normalized (machine ×${machineFactor(best.cal, K15_CALIBRATION_REFERENCE_MS).toFixed(2)})`);
+        expect(best.normalized).toBeLessThan(1000);
     });
 });
 
