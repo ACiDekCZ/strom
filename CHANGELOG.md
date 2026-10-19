@@ -7,6 +7,7 @@ English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md)
 *This version is in preparation; this section grows with every test version.*
 
 - **Phone on the home network**: when the research offers it, the *Research* menu has *Connect phone…*. It says what appears on the computer, turns the connection on through a window on the computer (or names the terminal command) and shows a QR code for one phone with how long it is valid, and the other network when the computer has two. *Paired phones* lists each phone with when it was last seen, *Unpair* has *Undo*, and a phone paired again offers to unpair its older entry. When the phone has not reached the computer after a minute, a short checklist appears; *Turn connection off* stops it, and the menu and a dot on the *Research* button show while it is on.
+- **Fixes**: switching to *Descendants* right after zooming in with + no longer leaves the tree off-screen.
 
 ## 3.13.1
 
