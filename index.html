@@ -196,6 +196,8 @@
              641–900px  inline depth steppers use ↑ / ↓ glyphs.
              ≤ 360px    the narrowest phones: smaller labels.
              1180/1600px  room for the research side panels beside the tree.
+             ≤ 1180px   a read document's result: scan and text columns 2 : 3.
+             ≤ 900px    a read document's result: the scan becomes a strip on top.
            Height-only queries (short windows) stand on their own. */
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -236,6 +238,14 @@
             --warning: #d0a23c;       /* pending merge */
             --danger-soft: #f5e6e2;   /* error/destructive tint backgrounds */
             --warning-soft: #f6ecd3;  /* warning tint backgrounds */
+            --read-amber-bg: #fbf5e6;   /* a read document: uncertain, readers differ */
+            --read-amber-line: #e8d7ae;
+            --read-amber-text: #7f5500;
+            --read-amber-dot: #b5772a;
+            --read-illegible-bg: #e3ddd0;
+            --read-illegible-text: #5c5546;
+            --read-line-bg: #eef3ef;    /* the transcription line shown on the scan */
+            --read-scan-bg: #f1ece1;
             --code-bg: #2b2822;       /* a line to paste into a terminal (dark in both themes) */
             --code-text: #f1ece1;
             --code-token: #a9d1b6;    /* the tree's token in that line */
@@ -368,6 +378,14 @@
             --pending: #d8b25e;
             --danger-soft: #3d2b27;
             --warning-soft: #3a3324;
+            --read-amber-bg: #3a3324;
+            --read-amber-line: #6b5a32;
+            --read-amber-text: #e9c77f;
+            --read-amber-dot: #d19a4a;
+            --read-illegible-bg: #3e3a30;
+            --read-illegible-text: #cfc6b4;
+            --read-line-bg: #2c3830;
+            --read-scan-bg: #1f1c17;
             --code-bg: #171511;
             --code-text: #ece6d8;
             --code-token: #a9d1b6;
@@ -488,7 +506,7 @@
         /* Pre-release test build (/beta/) marker next to the wordmark. */
         .beta-badge {
             display: inline-block; margin-left: 6px; padding: 2px 6px;
-            font-family: var(--font-sans, inherit); font-size: 10px; font-weight: 700;
+            font-family: var(--font-sans); font-size: 10px; font-weight: 700;
             letter-spacing: 0.06em; text-transform: uppercase; vertical-align: middle;
             color: var(--accent); background: var(--warning-soft);
             border: 1px solid var(--accent); border-radius: var(--r-sm);
@@ -10844,11 +10862,152 @@
         .read-error { padding: 8px 0; }
         .read-error-title { margin: 0 0 6px; font-size: 16px; font-weight: 600; font-family: inherit; }
         .read-error-text { margin: 0; font-size: 13.5px; color: var(--text-light); }
-        .read-result { display: flex; flex-direction: column; gap: 16px; }
-        .read-partial { margin: 0; padding: 10px 12px; border-radius: var(--r-md); background: var(--warning-soft); color: var(--warning-text); font-size: 13px; }
-        .read-section-title { margin: 0 0 6px; font-size: 13px; font-weight: 600; font-family: inherit; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-light); }
-        .read-transcript { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-serif); font-size: 15px; line-height: 1.6; }
+        /* The result (§4): scan left, text right; header and footer stand, each column scrolls. */
+        #read-document-modal .read-content--result { padding: 0; display: flex; overflow: hidden; }
+        .read-result-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 2px; }
+        .read-file { font-size: 12.5px; color: var(--text-light); overflow-wrap: anywhere; }
+        .read-pills { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+        .read-pill { display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 999px; border: 1px solid transparent; font-size: 12px; line-height: 1.4; white-space: nowrap; }
+        .read-pill.is-ok { background: var(--primary-soft); color: var(--primary); }
+        .read-pill.is-warn { background: var(--read-amber-bg); border-color: var(--read-amber-line); color: var(--read-amber-text); }
+        .read-pill.is-muted { background: var(--surface-2); border-color: var(--border); color: var(--text-light); }
+        .read-result { flex: 1; min-width: 0; min-height: 0; display: grid; grid-template-columns: 520px minmax(0, 1fr); }
+        .read-scan { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 10px; padding: 12px 16px; background: var(--read-scan-bg); border-right: 1px solid var(--border); }
+        .read-entries, .read-page-tabs { flex: none; display: flex; flex-wrap: wrap; gap: 6px; }
+        .read-entry-pill, .read-page-tab {
+            display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 4px 10px; border-radius: 999px;
+            border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 13px; line-height: 1.3; cursor: pointer;
+        }
+        .read-page-tab { border-radius: 6px; font-size: 12.5px; }
+        .read-entry-pill.is-selected, .read-page-tab.is-selected { border-color: var(--primary); background: var(--primary-soft); box-shadow: inset 0 0 0 1px var(--primary); }
+        .read-entry-n { font-weight: 700; }
+        .read-entry-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .read-entry-name::before { content: '· '; }
+        .read-scan-box { flex: 1; min-height: 0; position: relative; display: flex; }
+        .read-scan-view { flex: 1; min-width: 0; min-height: 0; position: relative; overflow: auto; border-radius: var(--r-md); }
+        .read-scan-sheet { position: relative; width: 100%; background: var(--surface); box-shadow: 0 1px 4px rgba(20, 16, 8, 0.18); }
+        .read-scan-img { display: block; width: 100%; height: 100%; user-select: none; }
+        .read-scan-noimg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 12px; text-align: center; font-size: 13px; color: var(--text-faint); }
+        .read-scan-marks { position: absolute; inset: 0; }
+        .read-frame {
+            position: absolute; margin: 0; padding: 0 !important; border: 1.5px dashed var(--primary); border-radius: 3px;
+            background: transparent; box-shadow: none; cursor: pointer; min-height: 0; min-width: 0;
+        }
+        .read-frame.is-selected { border: 2px solid var(--primary); background: rgba(63, 107, 79, 0.05); cursor: crosshair; }
+        .read-frame:focus-visible { outline: 3px solid var(--primary-soft); outline-offset: 1px; }
+        .read-frame-n {
+            position: absolute; top: -10px; left: -10px; width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--primary);
+            background: var(--surface); color: var(--primary); font-size: 11px; font-weight: 700; line-height: 17px; text-align: center;
+        }
+        .read-frame.is-selected .read-frame-n { background: var(--primary); color: #fff; }
+        .read-scan-var { position: absolute; pointer-events: none; background: rgba(232, 215, 174, 0.38); border: 1px dashed var(--read-amber-dot); border-radius: 2px; }
+        .read-scan-line { position: absolute; pointer-events: none; background: rgba(63, 107, 79, 0.14); outline: 2px solid var(--primary); border-radius: 2px; }
+        .read-scan-line.is-variant { background: rgba(232, 215, 174, 0.5); outline-color: var(--read-amber-dot); }
+        .read-scan-line[hidden] { display: none; }
+        .read-scan-open {
+            position: absolute; top: 8px; right: 8px; width: 32px; height: 32px; padding: 0 !important; border-radius: 8px;
+            border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 16px; line-height: 1; cursor: pointer;
+            box-shadow: 0 1px 3px rgba(20, 16, 8, 0.15);
+        }
+        .read-scan-hint { flex: none; margin: 0; font-size: 12px; color: var(--text-light); }
+        .read-text { min-width: 0; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 22px; padding: 18px 24px 28px; }
+        .read-partial { margin: 0; padding: 10px 12px; border-radius: var(--r-md); background: var(--read-amber-bg); border: 1px solid var(--read-amber-line); color: var(--read-amber-text); font-size: 13.5px; line-height: 1.5; }
+        .read-link {
+            display: inline; padding: 0 !important; margin: 0; border: 0 !important; background: none !important; box-shadow: none !important;
+            color: inherit; font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; min-height: 0;
+        }
+        .read-section-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-bottom: 8px; }
+        .read-section-title { margin: 0; font-size: 13px; font-weight: 600; font-family: inherit; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-light); }
+        .read-section-sub { font-size: 12.5px; color: var(--text-faint); }
+        .read-copy {
+            margin-left: auto; padding: 4px 10px !important; border-radius: 6px; border: 1px solid var(--border); background: var(--surface);
+            color: var(--text); font-size: 12.5px; cursor: pointer;
+        }
+        .read-transcript { margin: 0; overflow-wrap: anywhere; font-family: var(--font-serif); font-size: 18px; line-height: 1.75; color: var(--text); }
+        .read-line { margin: 0 -6px; padding: 0 6px; border-radius: 4px; }
+        .read-line[tabindex] { cursor: pointer; }
+        .read-line.is-active, .read-line:focus-visible { background: var(--read-line-bg); outline: none; box-shadow: inset 3px 0 0 var(--primary); }
+        mark.uncertain { background: var(--read-amber-bg); color: inherit; border-bottom: 2px dotted var(--read-amber-dot); padding: 0 1px; }
+        .illegible {
+            display: inline-block; padding: 0 6px; border-radius: 3px; background: var(--read-illegible-bg); color: var(--read-illegible-text);
+            font-family: var(--font-sans); font-size: 0.68em; font-style: italic; line-height: 1.6; vertical-align: 0.12em; letter-spacing: 0.02em;
+        }
+        .read-sep { color: var(--text-faint); }
+        .read-variant { padding: 0 3px; border: 1px solid var(--read-amber-line); border-radius: 4px; background: var(--read-amber-bg); }
+        .read-variant-slash { margin: 0 3px; color: var(--read-amber-text); font-weight: 600; }
+        .read-variant-b { color: var(--read-amber-text); }
+        .read-legend { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--text-light); }
+        .read-legend li { display: flex; align-items: baseline; gap: 8px; }
+        .read-key { flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 15px; padding: 0 3px; border-radius: 3px; font-size: 11px; line-height: 1; }
+        .read-key--uncertain { background: var(--read-amber-bg); border-bottom: 2px dotted var(--read-amber-dot); color: var(--read-amber-text); }
+        .read-key--variant { background: var(--read-amber-bg); border: 1px solid var(--read-amber-line); color: var(--read-amber-text); font-weight: 700; }
+        .read-key--illegible { background: var(--read-illegible-bg); }
+        .read-translation p { margin: 0 0 4px; font-size: 16px; line-height: 1.6; overflow-wrap: anywhere; }
+        .read-gloss-toggle {
+            display: inline-flex; align-items: center; gap: 6px; padding: 0 !important; border: 0 !important; background: none !important; box-shadow: none !important;
+            color: inherit; font: inherit; text-transform: inherit; letter-spacing: inherit; cursor: pointer; min-height: 0;
+        }
+        .read-chev::before { content: '▸'; display: inline-block; transition: transform 0.15s; }
+        .read-section--gloss.is-open .read-chev::before { transform: rotate(90deg); }
+        .read-gloss-body[hidden] { display: none; }
+        .read-gloss { display: grid; grid-template-columns: minmax(96px, max-content) minmax(0, 1fr); gap: 6px 16px; margin: 0; }
+        .read-gloss dt { font-family: var(--font-serif); font-style: italic; font-size: 15px; overflow-wrap: anywhere; }
+        .read-gloss dd { margin: 0; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+        .read-gloss-kind { font-size: 12px; color: var(--text-faint); }
+        .read-about-title { margin: 14px 0 4px; font-size: 13px; font-weight: 600; font-family: inherit; }
+        .read-about { margin: 0; font-size: 14px; line-height: 1.55; white-space: pre-line; overflow-wrap: anywhere; }
+        .read-mentioned { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+        .read-person-name { font-weight: 500; }
+        .read-person-meta { color: var(--text-light); font-size: 13px; }
+        .read-kept { font-size: 12.5px; color: var(--text-light); }
         .read-empty { margin: 0; color: var(--text-light); font-size: 13px; }
+        .read-sofar { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
+        .read-sofar .read-section-title { margin-bottom: 6px; }
+        .read-sofar-entry { margin: 0 0 8px; font-family: var(--font-serif); font-size: 15px; line-height: 1.6; overflow-wrap: anywhere; }
+        .read-sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+        .read-crop { position: relative; display: inline-block; overflow: hidden; border-radius: 4px; background: var(--read-scan-bg); vertical-align: middle; }
+        .read-crop img { position: absolute; max-width: none; }
+        @media (hover: hover) {
+            .read-line[tabindex]:hover { background: var(--read-line-bg); }
+            .read-entry-pill:hover, .read-page-tab:hover, .read-copy:hover, .read-scan-open:hover { border-color: var(--primary); }
+            .read-frame:not(.is-selected):hover { background: rgba(63, 107, 79, 0.08); }
+        }
+        @media (max-width: 1180px) {
+            .read-result { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); }
+        }
+        /* Narrow (tablet upright, phones): the scan is a strip on top with the chosen entry's crop; ⤢ shows the whole page. */
+        @media (max-width: 900px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .read-result { display: flex; flex-direction: column; }
+            .read-scan { flex: none; gap: 8px; padding: 8px 12px; border-right: 0; border-bottom: 1px solid var(--border); }
+            .read-scan-box { order: 1; flex: none; height: 210px; }
+            .read-entries { order: 2; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; }
+            .read-page-tabs { order: 3; flex-wrap: nowrap; overflow-x: auto; }
+            .read-entry-pill, .read-page-tab { flex: none; }
+            .read-scan-hint { display: none; }
+            .read-scan-view { overflow: hidden; }
+            .read-scan-view.is-strip .read-scan-sheet { position: absolute; }
+            .read-text { flex: 1; padding: 14px 16px 18px; gap: 18px; }
+            .read-footer--result button { min-height: 44px; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .read-result { overflow-y: auto; }
+            .read-scan-box { height: 150px; }
+            .read-text { flex: none; overflow: visible; }
+        }
+        @media (max-width: 640px) {
+            #read-document-modal .read-dialog--wide { width: calc(100vw - 16px); }
+            .read-text { padding: 12px 14px 16px; }
+            .read-transcript { font-size: 17px; }
+            .read-gloss { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+            .read-gloss dd { margin-bottom: 6px; }
+            /* The phone's footer stacks its buttons (column); the note goes under them. */
+            .read-footer--result { flex-wrap: nowrap; }
+            .read-footer--result .batch-foot-note { flex-basis: auto; text-align: center; }
+        }
+        @media (pointer: coarse) {
+            .read-entry-pill, .read-page-tab, .read-copy { min-height: 44px; }
+            .read-scan-open { width: 44px; height: 44px; }
+        }
         .drop-overlay--read { align-items: stretch; justify-content: stretch; padding: 24px; box-sizing: border-box; }
         .drop-zones { flex: 1; display: flex; gap: 16px; }
         .drop-zone {

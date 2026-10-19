@@ -141,12 +141,14 @@ export interface FakeRead {
     startReply?: { status: number; body: unknown; retryAfter?: string };
     /** `POST /read/<id>/cancel` answers this instead of cancelling. */
     cancelReply?: { status: number; body: unknown };
+    /** Every page image asked for ("<id>/<n>"). */
+    pageAsks: string[];
 }
 
 export const READ_ID = 'D20261019153012-a1b2';
 
 export function fakeRead(init: Partial<FakeRead> = {}): FakeRead {
-    return { reads: [], posts: [], cancels: [], agains: [], results: new Map(), nextId: READ_ID, ...init };
+    return { reads: [], posts: [], cancels: [], agains: [], results: new Map(), nextId: READ_ID, pageAsks: [], ...init };
 }
 
 /** `accepts.read` of a research that reads (its fields as the bridge says them). */
@@ -265,6 +267,14 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
             return known ? json(200, { known }) : json(404, { error: 'unknown' });
         }
         const rd = b.read;
+        // A read page's image (`read/<id>/page/<n>.jpg`): a drawn sheet with ruled lines (invented, no real document).
+        const pageImg = /\/read\/([^/]+)\/page\/(\d+)\.jpg$/.exec(url.pathname);
+        if (rd && pageImg && method === 'GET') {
+            rd.pageAsks.push(`${decodeURIComponent(pageImg[1])}/${pageImg[2]}`);
+            const lines = Array.from({ length: 24 }, (_, i) => `<line x1="40" x2="560" y1="${60 + i * 30}" y2="${60 + i * 30}" stroke="#c9bfa8" stroke-width="2"/>`).join('');
+            const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800" viewBox="0 0 600 800"><rect width="600" height="800" fill="#f6efe0"/>${lines}</svg>`;
+            return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'image/svg+xml' }, body: svg });
+        }
         const readPath = /\/read(?:\/([^/]+)(?:\/(cancel|again))?)?$/.exec(url.pathname);
         if (rd && readPath) {
             const id = readPath[1] ? decodeURIComponent(readPath[1]) : '';

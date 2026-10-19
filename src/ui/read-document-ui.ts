@@ -20,10 +20,15 @@ import { originalTargets } from '../originals.js';
 import { parseLiveBridge, researchSchemeUrl, LiveStatus } from '../research-link.js';
 import { storedResearchBridge, announcedResearchScheme } from '../research-device.js';
 import {
-    ReadAccepts, LiveRead, ReadResult, ReadFailure, ReadFileRefusal, ReadState,
+    ReadAccepts, LiveRead, ReadResult, ReadFailure, ReadFileRefusal, ReadState, ReadPage, ReadEntry, ReadRegion,
     readRunning, readFileMime, readFileKind, readFileRefusals, readUsualMinutes, readDocYear, readPageImageUrl,
     putReadPage, startRead, fetchReadResult, readAgain, cancelRead, sanitizeLiveRead,
 } from '../research-read.js';
+import {
+    LineSeg, parseTranscript, parseBlock, lineRegion, lineAt, defaultEntryIndex, canPropose, resultSections, glossFlavor,
+    entryName, variantCount, cropLayout,
+} from '../read-result.js';
+import { openImageViewer } from './image-viewer.js';
 import { formatBytesShort } from './originals-ui.js';
 import { onComputer, bridgeFailure } from './research-ui.js';
 import { onBridgeStatus } from './research-sync-ui.js';
@@ -36,6 +41,10 @@ const RECENT_MAX = 20;
 const POLL_MS = 5000;
 const NOTICE_MS = 10_000;
 const NOTE_MAX = 500;
+/** The explanation unfolded (`'1'`) or folded (`'0'`) in the result; unset: unfolded where there is room. */
+const GLOSS_KEY = 'read.glossOpen';
+/** Below this the result's scan is a strip over the text with the chosen entry's crop. */
+const STRIP_QUERY = '(max-width: 900px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape)';
 
 /** One inserted file (a page of the document). */
 interface Page {
@@ -75,6 +84,12 @@ interface DialogState {
     notice: string;
     picker: PersonPicker | null;
     busy: boolean;
+    /** The result's chosen entry (index into `entries`). */
+    entry: number;
+    /** The chosen transcription line of that entry (-1 = none). */
+    line: number;
+    /** The page shown on the scan (`pages[].n`). */
+    page: number;
 }
 
 /** A reading the app started: shown as done in the menu and the panel until opened. */
@@ -94,6 +109,8 @@ let tickTimer: ReturnType<typeof setInterval> | null = null;
 let pasteHandler: ((e: ClipboardEvent) => void) | null = null;
 /** What the menu, the panel strip and the button last showed of the readings (redrawn when it changes). */
 let drawnKey = '';
+/** Lays the result's scan out again when its box changes size. */
+let scanObserver: ResizeObserver | null = null;
 
 function esc(text: string): string {
     return text
@@ -165,16 +182,86 @@ function docLabel(res: ReadResult | null | undefined): string {
     return year ? `${kind}, ${year}` : kind;
 }
 
-/** "2 readers, agree" / "2 readers, 3 places differ" / "1 reader". */
-function agreeText(res: ReadResult): string {
+/** "2 readers, agree" (green) / "2 readers, 3 places differ" (amber) / "1 reader" (grey). */
+function agreeTone(res: ReadResult): { tone: 'is-ok' | 'is-warn' | 'is-muted'; text: string } {
     const t = strings.read;
-    const n = Math.max(res.readers.ran, res.readers.asked);
-    if (n < 2) return t.oneReader;
-    if (res.readers.agree === 'differ') {
-        const k = res.entries.reduce((sum, e) => sum + e.variants.length, 0);
-        return t.differ(n, Math.max(1, k));
+    const n = res.readers.ran || res.readers.asked;
+    if (n < 2) return { tone: 'is-muted', text: t.oneReader };
+    if (res.readers.agree === 'differ' || res.readers.agree === 'fixed') {
+        return { tone: 'is-warn', text: t.differ(n, Math.max(1, variantCount(res.entries))) };
     }
-    return t.agree;
+    return { tone: 'is-ok', text: t.agree };
+}
+
+function agreeText(res: ReadResult): string {
+    return agreeTone(res).text;
+}
+
+/** A language's name in the app's language ("Latin", "latinsky"). */
+function langName(code: string): string {
+    const base = code.toLowerCase().split('-')[0];
+    const own = strings.read.langNames[base];
+    if (own) return own;
+    try {
+        return new Intl.DisplayNames([getCurrentLanguage()], { type: 'language' }).of(code) ?? code;
+    } catch {
+        return code;
+    }
+}
+
+function langNames(codes: readonly string[]): string {
+    return codes.map(langName).join(' / ');
+}
+
+/** A transcription's span without its marks (for a sentence): `[?]` dropped, `[...]` as an ellipsis. */
+function plainMarks(text: string): string {
+    return text.replace(/\[\?\]/g, '').replace(/\[(?:\.{2,}|…)\]/g, '…').replace(/\s+/g, ' ').trim();
+}
+
+/** Transcription segments as HTML: shape and colour for every mark (dotted, a block, a slash). */
+function segsHtml(segs: readonly LineSeg[]): string {
+    const t = strings.read;
+    return segs.map((sg): string => {
+        switch (sg.t) {
+            case 'text': return esc(sg.s);
+            case 'uncertain':
+                return `<mark class="uncertain" title="${esc(t.uncertain)}">${esc(sg.s || '?')}<span class="read-sr"> (${esc(t.uncertain)})</span></mark>`;
+            case 'illegible': return `<span class="illegible" role="img" aria-label="${esc(t.illegibleSr)}">${esc(t.illegible)}</span>`;
+            case 'sep': return '<span class="read-sep" aria-hidden="true"> | </span>';
+            case 'variant':
+                return `<span class="read-variant" title="${esc(t.variantNote(plainMarks(sg.at), plainMarks(sg.other)))}">`
+                    + `<span class="read-variant-a">${segsHtml(sg.a)}</span><span class="read-variant-slash" aria-hidden="true">/</span>`
+                    + `<span class="read-variant-b">${segsHtml(sg.b)}</span></span>`;
+        }
+    }).join('');
+}
+
+/** A region (fractions of the page) as absolute position in per cent. */
+function regionStyle(r: ReadRegion): string {
+    const pc = (v: number): string => `${Math.round(v * 100000) / 1000}%`;
+    return `left:${pc(r[0])};top:${pc(r[1])};width:${pc(r[2])};height:${pc(r[3])}`;
+}
+
+/** The explanation unfolded: as last chosen, else where the result has room for it. */
+function glossOpen(): boolean {
+    try {
+        const v = localStorage.getItem(GLOSS_KEY);
+        if (v === '1' || v === '0') return v === '1';
+    } catch { /* storage off */ }
+    return window.innerWidth > 1180;
+}
+
+/**
+ * A crop of a read page as HTML: `region` (fractions; null = the whole page)
+ * fitted into a `w` × `h` box. For a person's or an event's crop in a
+ * suggestion (e.g. 96 × 34).
+ */
+export function readCropHtml(imageUrl: string, page: Pick<ReadPage, 'w' | 'h'> | null, region: ReadRegion | null, w: number, h: number, alt = ''): string {
+    if (!imageUrl) return `<span class="read-crop read-crop--empty" style="width:${w}px;height:${h}px"></span>`;
+    const ratio = page && page.w > 0 && page.h > 0 ? page.w / page.h : 0.75;
+    const c = cropLayout(region, w, h, ratio, 0.01);
+    return `<span class="read-crop" style="width:${w}px;height:${h}px"><img src="${esc(imageUrl)}" alt="${esc(alt)}" draggable="false"`
+        + ` style="width:${c.width.toFixed(1)}px;height:${c.height.toFixed(1)}px;left:${c.left.toFixed(1)}px;top:${c.top.toFixed(1)}px"></span>`;
 }
 
 function whyReason(accepts: ReadAccepts): string {
@@ -314,7 +401,7 @@ export const readDocumentMethods = uiModule({
             const before = prev.get(r.id);
             const shownHere = !!st && st.readId === r.id && !!document.getElementById(DIALOG_ID);
             if (shownHere) {
-                if (!before || before.state !== r.state || before.done !== r.done || before.version !== r.version) this.followReadInDialog(r);
+                if (!before || before.state !== r.state || before.done !== r.done || before.version !== r.version || before.entries !== r.entries) this.followReadInDialog(r);
                 continue;
             }
             // Ended with the dialog closed (or showing something else): the notice, once.
@@ -460,7 +547,7 @@ export const readDocumentMethods = uiModule({
         st = {
             phase: 'input', pages: [], personId: opts.personId ?? '', note: '', readers: storedReaders(), readId: '',
             sending: null, sawChecking: false, startedAt: Date.now(), error: null, result: results.get(opts.readId ?? '') ?? null,
-            notice: '', picker: null, busy: false,
+            notice: '', picker: null, busy: false, entry: 0, line: -1, page: 1,
         };
         const overlay = document.createElement('div');
         overlay.id = DIALOG_ID;
@@ -494,6 +581,8 @@ export const readDocumentMethods = uiModule({
         if (pasteHandler) document.removeEventListener('paste', pasteHandler);
         pasteHandler = null;
         if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
+        scanObserver?.disconnect();
+        scanObserver = null;
         if (st) {
             st.picker?.destroy();
             revoke(st.pages);
@@ -576,11 +665,14 @@ export const readDocumentMethods = uiModule({
         }
         st.picker?.destroy();
         st.picker = null;
+        scanObserver?.disconnect();
+        scanObserver = null;
         const link = this.researchOriginalsLink();
         const tree = link ? TreeManager.getTreeMetadata(link.treeId)?.name ?? '' : '';
         const t = strings.read;
         let title = t.title;
         let sub = t.sub(tree);
+        let subHtml = '';
         let body = '';
         let foot = '';
         let wide = false;
@@ -594,10 +686,8 @@ export const readDocumentMethods = uiModule({
             body = this.readProgressHtml();
             foot = this.readProgressFootHtml();
         } else if (st.phase === 'result' && st.result) {
-            title = docLabel(st.result) || t.title;
-            const label = title.charAt(0).toLocaleUpperCase() + title.slice(1);
-            title = label;
-            sub = this.readResultSubtitle(st.result);
+            title = this.readResultTitle(st.result);
+            subHtml = this.readResultSubtitle(st.result);
             body = this.readResultHtml(st.result, link ? this.readBridgeBase(link.researchId) : '');
             foot = this.readResultFootHtml();
             wide = true;
@@ -610,13 +700,13 @@ export const readDocumentMethods = uiModule({
                 <div class="modal-header batch-header">
                     <div class="audit-log-heading">
                         <h2 id="read-title">${esc(title)}</h2>
-                        <div class="audit-log-subtitle">${esc(sub)}</div>
+                        <div class="audit-log-subtitle${subHtml ? ' read-result-sub' : ''}">${subHtml || esc(sub)}</div>
                     </div>
                     <button type="button" class="close-btn" data-act="close" aria-label="${esc(strings.buttons.close)}">&times;</button>
                 </div>
                 ${st.notice ? `<p class="read-notice" role="status">${esc(st.notice)}</p>` : ''}
-                <div class="modal-content batch-content read-content">${body}</div>
-                <div class="buttons batch-footer read-footer">${foot}</div>
+                <div class="modal-content batch-content read-content${wide ? ' read-content--result' : ''}">${body}</div>
+                <div class="buttons batch-footer read-footer${wide ? ' read-footer--result' : ''}">${foot}</div>
             </div>`;
         this.wireReadDialog(overlay);
         this.tickReadProgress();
@@ -782,7 +872,17 @@ export const readDocumentMethods = uiModule({
                 </div>
                 <p class="read-progress-time" id="read-progress-time"></p>
                 <p class="read-progress-slow" id="read-progress-slow" hidden>${esc(t.slow)}</p>
-                <p class="read-progress-note">${esc(t.closeNote)}</p>`;
+                <p class="read-progress-note">${esc(t.closeNote)}</p>
+                ${this.readSoFarHtml()}`;
+    },
+
+    /** While it reads: the entries read so far (a result that grows), with their marks. */
+    readSoFarHtml(): string {
+        const sofar = st ? results.get(st.readId) : undefined;
+        if (!sofar || !readRunning(sofar.state) || sofar.entries.length === 0) return '';
+        const entries = sofar.entries.map(e => `<div class="read-sofar-entry">${parseTranscript(e).lines
+            .map(l => `<div class="read-sofar-line">${segsHtml(l.segs)}</div>`).join('')}</div>`).join('');
+        return `<section class="read-sofar" aria-live="polite"><h3 class="read-section-title">${esc(strings.read.soFar(sofar.entries.length))}</h3>${entries}</section>`;
     },
 
     readProgressFootHtml(): string {
@@ -827,6 +927,14 @@ export const readDocumentMethods = uiModule({
         if (readRunning(r.state)) {
             st.phase = 'progress';
             this.renderReadDialog();
+            // Entries read so far show under the progress (the bridge gives the result as it grows).
+            const link = this.researchOriginalsLink();
+            const have = results.get(r.id)?.entries.length ?? 0;
+            if (link && r.entries > have) {
+                void this.loadReadResult(link.researchId, r.id).then(res => {
+                    if (res && st && st.readId === r.id && st.phase === 'progress' && res.entries.length > have) this.renderReadDialog();
+                });
+            }
             return;
         }
         if (r.state === 'done') { void this.openReadResult(r.id); return; }
@@ -865,48 +973,404 @@ export const readDocumentMethods = uiModule({
         } else {
             st.result = res;
             st.phase = 'result';
+            const refn = this.readLiveOf(id)?.person
+                || (st.personId ? originalTargets({ personId: st.personId as PersonId }, DataManager.getData()).person ?? '' : '');
+            st.entry = defaultEntryIndex(res.entries, refn);
+            st.line = -1;
+            st.page = res.entries[st.entry]?.page ?? res.pages[0]?.n ?? 1;
         }
         this.renderReadDialog();
         this.refreshReadSurfaces();
     },
 
-    // ==================== THE RESULT (a skeleton; its full view comes with §4) ====================
+    // ==================== THE RESULT ====================
 
-    /** The result's subtitle: legibility and agreement. */
+    /** "Baptism entry, Latin, Kurrent, 1846": the document's kind, languages, script and year. */
+    readResultTitle(res: ReadResult): string {
+        const t = strings.read;
+        const kind = t.kindTitles[res.doc.kind] ?? t.kindTitles.other;
+        return [kind, langNames(res.doc.language), t.scripts[res.doc.script] ?? '', readDocYear(res.doc.date)].filter(Boolean).join(', ');
+    },
+
+    /** The result's subtitle (HTML): the file's name, then legibility and the readers as pills. */
     readResultSubtitle(res: ReadResult): string {
         const t = strings.read;
-        const legible = res.doc.legible === 'yes' ? t.legible : res.doc.legible === 'partly' ? t.partly : t.notLegible;
-        return [legible, agreeText(res)].join(' · ');
+        const name = res.pages[0]?.name ?? '';
+        const file = name
+            ? `<span class="read-file" title="${esc(name)}">${esc(res.pages.length > 1 ? t.progressSub(middleName(name, 40), res.pages.length) : middleName(name, 48))}</span>` : '';
+        const legible = res.doc.legible === 'yes' ? { tone: 'is-ok', text: t.legible }
+            : { tone: 'is-warn', text: res.doc.legible === 'partly' ? t.partly : t.notLegible };
+        const agree = agreeTone(res);
+        return `${file}<span class="read-pills"><span class="read-pill ${legible.tone}" data-pill="legible">${esc(legible.text)}</span>`
+            + `<span class="read-pill ${agree.tone}" data-pill="readers">${esc(agree.text)}</span></span>`;
     },
 
     /**
-     * The result's body: the transcription as plain text. `base` is the
-     * bridge's address: a page's image is `readPageImageUrl(base, page)`.
+     * The result's body: the scan (left) and the text of the chosen entry
+     * (right). `base` is the bridge's address: a page's image is
+     * `readPageImageUrl(base, page)`.
      */
     readResultHtml(res: ReadResult, base: string): string {
-        const t = strings.read;
-        void base;
-        const partial = res.doc.legible === 'partly'
-            ? `<p class="read-partial">${esc(t.partial(t.whyText[res.doc.why ?? 'other'] ?? t.whyText.other))}</p>` : '';
-        const transcript = res.entries.map(e => e.transcript).filter(Boolean).join('\n\n');
-        const translation = res.entries.map(e => e.translation).filter(Boolean).join('\n\n');
+        const s = st!;
+        const entry = res.entries[s.entry] ?? null;
         return `
-                <div class="read-result" id="read-result" data-read="${esc(res.id)}">
-                    ${partial}
-                    <section class="read-section">
-                        <h3 class="read-section-title">${esc(t.sTranscript)}</h3>
-                        ${transcript ? `<pre class="read-transcript">${esc(transcript)}</pre>` : `<p class="read-empty">${esc(t.noEntries)}</p>`}
-                    </section>
-                    ${translation ? `<section class="read-section"><h3 class="read-section-title">${esc(t.sTranslation)}</h3><pre class="read-transcript">${esc(translation)}</pre></section>` : ''}
+                <div class="read-result" id="read-result" data-read="${esc(res.id)}" data-entry="${s.entry}">
+                    <div class="read-scan" id="read-scan">${this.readScanHtml(res, base)}</div>
+                    <div class="read-text" id="read-text">${this.readTextHtml(res, entry)}</div>
                 </div>`;
+    },
+
+    /** The page shown on the scan (the chosen entry's, or the one picked by its tab). */
+    readShownPage(res: ReadResult): ReadPage | null {
+        const s = st!;
+        return res.pages.find(p => p.n === s.page) ?? res.pages[0] ?? null;
+    },
+
+    /** The scan: the entries' pills, the pages' tabs, the page with the entries' frames, the hint. */
+    readScanHtml(res: ReadResult, base: string): string {
+        const s = st!;
+        const t = strings.read;
+        const entries = res.entries;
+        const page = this.readShownPage(res);
+        const pageN = page?.n ?? s.page;
+        const pills = entries.length >= 2
+            ? `<div class="read-entries" role="group" aria-label="${esc(t.entriesLabel)}">${entries.map((e, k) => {
+                const name = entryName(e);
+                return `<button type="button" class="read-entry-pill${k === s.entry ? ' is-selected' : ''}" data-act="entry" data-entry="${k}"`
+                    + ` aria-pressed="${k === s.entry}" aria-label="${esc(t.entrySr(k + 1, name))}"><span class="read-entry-n">${k + 1}</span>`
+                    + `${name ? `<span class="read-entry-name">${esc(middleName(name, 28))}</span>` : ''}</button>`;
+            }).join('')}</div>` : '';
+        const tabs = res.pages.length >= 2
+            ? `<div class="read-page-tabs" role="group">${res.pages.map(p =>
+                `<button type="button" class="read-page-tab${p.n === pageN ? ' is-selected' : ''}" data-act="page" data-page="${p.n}" aria-pressed="${p.n === pageN}">${esc(t.pageAlt(p.n))}</button>`).join('')}</div>`
+            : '';
+        const url = page && base ? readPageImageUrl(base, page) : '';
+        const ratio = page && page.w > 0 && page.h > 0 ? `${page.w} / ${page.h}` : '3 / 4';
+        const img = url
+            ? `<img class="read-scan-img" src="${esc(url)}" alt="${esc(t.pageAlt(pageN))}" draggable="false">`
+            : `<span class="read-scan-noimg">${esc(t.noImage)}</span>`;
+        const variants = (entries[s.entry]?.variants.length ?? 0) > 0;
+        const hint = entries.length >= 2 || variants ? `<p class="read-scan-hint">${esc(t.scanHint(variants))}</p>` : '';
+        return `${pills}${tabs}
+                    <div class="read-scan-box">
+                        <div class="read-scan-view" id="read-scan-view">
+                            <div class="read-scan-sheet" id="read-scan-sheet" style="aspect-ratio: ${ratio}">
+                                ${img}
+                                <div class="read-scan-marks" id="read-scan-marks">${this.readScanMarksHtml(res, pageN)}</div>
+                            </div>
+                        </div>
+                        ${url ? `<button type="button" class="read-scan-open" data-act="open-page" aria-label="${esc(t.openPage)}" title="${esc(t.openPage)}"><span aria-hidden="true">⤢</span></button>` : ''}
+                    </div>
+                    ${hint}`;
+    },
+
+    /** The frames of the entries on a page (the chosen one solid), the lines that differ (amber), the shown line. */
+    readScanMarksHtml(res: ReadResult, pageN: number): string {
+        const s = st!;
+        const t = strings.read;
+        const many = res.entries.length >= 2;
+        const frames = res.entries.map((e, k) => {
+            if (e.page !== pageN || !e.region) return '';
+            const name = entryName(e);
+            return `<button type="button" class="read-frame${k === s.entry ? ' is-selected' : ''}" data-entry="${k}" style="${regionStyle(e.region)}"`
+                + ` aria-label="${esc(t.entrySr(k + 1, name))}" aria-pressed="${k === s.entry}">`
+                + `${many ? `<span class="read-frame-n" aria-hidden="true">${k + 1}</span>` : ''}</button>`;
+        }).join('');
+        const entry = res.entries[s.entry];
+        let lines = '';
+        if (entry?.region && entry.page === pageN) {
+            const parsed = parseTranscript(entry);
+            const n = parsed.lines.length;
+            lines = parsed.lines.map((l, j) => l.variant
+                ? `<span class="read-scan-var" data-line="${j}" style="${regionStyle(lineRegion(entry.region!, j, n))}"></span>` : '').join('');
+        }
+        return `${frames}${lines}<span class="read-scan-line" id="read-scan-line" hidden></span>`;
+    },
+
+    /** The text column: a partly legible note, then the sections the document's kind and its data give. */
+    readTextHtml(res: ReadResult, entry: ReadEntry | null): string {
+        const s = st!;
+        const t = strings.read;
+        const partial = res.doc.legible !== 'yes'
+            ? `<div class="read-partial" role="note"><strong>${esc(t.partialLead)}</strong> ${esc(t.partialText(t.whyText[res.doc.why ?? 'other'] ?? t.whyText.other))}`
+              + ` <button type="button" class="read-link" data-act="insert-other">${esc(t.betterPhoto)}</button></div>` : '';
+        if (!entry) return `${partial}<p class="read-empty">${esc(t.noEntries)}</p>`;
+        const sec = resultSections(res, entry, getCurrentLanguage());
+        const parts: string[] = [partial];
+        if (sec.transcript) {
+            const parsed = parseTranscript(entry);
+            const focusable = entry.region ? ' tabindex="0"' : '';
+            const lines = parsed.lines.map((l, j) =>
+                `<div class="read-line${l.variant ? ' has-variant' : ''}${j === s.line ? ' is-active' : ''}" data-line="${j}"${focusable}>${segsHtml(l.segs)}</div>`).join('');
+            const legend: string[] = [];
+            if (parsed.marks.uncertain) legend.push(`<li><span class="read-key read-key--uncertain" aria-hidden="true">a</span>${esc(t.uncertain)}</li>`);
+            if (parsed.marks.variant) {
+                for (const v of entry.variants.slice(0, 6)) {
+                    legend.push(`<li><span class="read-key read-key--variant" aria-hidden="true">/</span>${esc(t.variantNote(plainMarks(v.at), plainMarks(v.other)))}</li>`);
+                }
+            }
+            if (parsed.marks.illegible) legend.push(`<li><span class="read-key read-key--illegible" aria-hidden="true"></span>${esc(t.illegibleNote)}</li>`);
+            const langs = langNames(res.doc.language);
+            parts.push(`
+                <section class="read-section read-section--transcript" aria-labelledby="read-s-transcript">
+                    <div class="read-section-head">
+                        <h3 class="read-section-title" id="read-s-transcript">${esc(sec.inscription ? t.sInscription : t.sTranscript)}</h3>
+                        <span class="read-section-sub">${esc(t.transcriptSub(langs))}</span>
+                        <button type="button" class="read-copy" data-act="copy">${esc(t.copy)}</button>
+                    </div>
+                    <div class="read-transcript" id="read-transcript">${lines}</div>
+                    ${legend.length ? `<ul class="read-legend">${legend.join('')}</ul>` : ''}
+                </section>`);
+        }
+        if (sec.translation) {
+            parts.push(`
+                <section class="read-section read-section--translation" aria-labelledby="read-s-translation">
+                    <div class="read-section-head"><h3 class="read-section-title" id="read-s-translation">${esc(t.sTranslation)}</h3></div>
+                    <div class="read-translation">${parseBlock(entry.translation).map(l => `<p>${segsHtml(l)}</p>`).join('')}</div>
+                </section>`);
+        }
+        if (sec.gloss) {
+            const flavor = glossFlavor(res.doc.kind);
+            const n = entry.glossary.length;
+            const sub = flavor === 'terms' ? (n ? t.glossTerms(n) : '') : flavor === 'symbols' ? t.glossSymbols : flavor === 'context' ? t.glossContext : '';
+            const open = glossOpen();
+            const items = entry.glossary.map(g => `<dt>${esc(g.term)}</dt><dd>${esc(g.meaning)}`
+                + `${g.kind !== 'term' ? ` <span class="read-gloss-kind">${esc(t.glossKinds[g.kind] ?? g.kind)}</span>` : ''}</dd>`).join('');
+            parts.push(`
+                <section class="read-section read-section--gloss${open ? ' is-open' : ''}">
+                    <div class="read-section-head">
+                        <h3 class="read-section-title"><button type="button" class="read-gloss-toggle" data-act="gloss" aria-expanded="${open}" aria-controls="read-gloss-body">`
+                            + `<span class="read-chev" aria-hidden="true"></span>${esc(t.sGloss)}</button></h3>
+                        ${sub ? `<span class="read-section-sub">${esc(sub)}</span>` : ''}
+                    </div>
+                    <div class="read-gloss-body" id="read-gloss-body"${open ? '' : ' hidden'}>
+                        ${items ? `<dl class="read-gloss">${items}</dl>` : ''}
+                        ${sec.about ? `<h4 class="read-about-title">${esc(t.sAbout)}</h4><p class="read-about">${esc(res.context)}</p>` : ''}
+                    </div>
+                </section>`);
+        }
+        if (sec.mentioned) {
+            const people = entry.persons.map(p => {
+                const name = [p.given, p.surname].filter(Boolean).join(' ') || p.written;
+                const role = p.role === 'mentioned' ? '' : p.roleText || t.roles[p.role] || '';
+                const meta = [role, p.age, p.occupation, p.residence].filter(Boolean).join(' · ');
+                return `<li><span class="read-person-name">${esc(name)}</span>${meta ? ` <span class="read-person-meta">${esc(meta)}</span>` : ''}</li>`;
+            }).join('');
+            parts.push(`
+                <section class="read-section read-section--mentioned" aria-labelledby="read-s-mentioned">
+                    <div class="read-section-head"><h3 class="read-section-title" id="read-s-mentioned">${esc(t.sMentioned)}</h3></div>
+                    <ul class="read-mentioned">${people}</ul>
+                </section>`);
+        }
+        return parts.join('');
     },
 
     readResultFootHtml(): string {
         const t = strings.read;
+        const res = st?.result;
+        const propose = canPropose(res?.entries[st?.entry ?? 0]);
         const another = this.readDocumentReady()
             ? `<button type="button" class="secondary" data-act="another">${esc(t.another)}</button>` : '';
-        return `<span class="batch-foot-note"></span>${another}
-                <button type="button" class="primary" data-act="close">${esc(t.close)}</button>`;
+        return `<span class="batch-foot-note read-kept">${esc(t.kept)}</span>${another}
+                <button type="button" class="${propose ? 'secondary' : 'primary'}" data-act="close">${esc(t.close)}</button>
+                ${propose ? `<button type="button" class="primary" data-act="propose">${esc(t.propose)}</button>` : ''}`;
+    },
+
+    /** Choose an entry: the whole result (scan, text, suggestion) follows it. */
+    readSelectEntry(i: number): void {
+        const s = st;
+        const res = s?.result;
+        if (!s || !res || !res.entries[i] || i === s.entry) return;
+        s.entry = i;
+        s.line = -1;
+        s.page = res.entries[i].page;
+        this.readRedrawResult(true);
+    },
+
+    /** Show another page of the document on the scan. */
+    readSelectPage(n: number): void {
+        const s = st;
+        if (!s?.result || n === s.page || !s.result.pages.some(p => p.n === n)) return;
+        s.page = n;
+        this.readRedrawResult(false);
+    },
+
+    /** Redraw the scan, the text and the footer (the header stays). */
+    readRedrawResult(textToTop: boolean): void {
+        const overlay = document.getElementById(DIALOG_ID);
+        const s = st;
+        if (!overlay || !s?.result || s.phase !== 'result') return;
+        const link = this.researchOriginalsLink();
+        const scan = overlay.querySelector<HTMLElement>('#read-scan');
+        const text = overlay.querySelector<HTMLElement>('#read-text');
+        const foot = overlay.querySelector<HTMLElement>('.read-footer');
+        const keep = text?.scrollTop ?? 0;
+        overlay.querySelector('#read-result')?.setAttribute('data-entry', String(s.entry));
+        if (scan) scan.innerHTML = this.readScanHtml(s.result, link ? this.readBridgeBase(link.researchId) : '');
+        if (text) {
+            text.innerHTML = this.readTextHtml(s.result, s.result.entries[s.entry] ?? null);
+            text.scrollTop = textToTop ? 0 : keep;
+        }
+        if (foot) foot.innerHTML = this.readResultFootHtml();
+        this.wireReadResult(overlay);
+    },
+
+    /** The result's own wiring: lines ↔ scan, frames, the scan's layout. */
+    wireReadResult(overlay: HTMLElement): void {
+        const s = st;
+        if (!s?.result) return;
+        scanObserver?.disconnect();
+        scanObserver = null;
+        const view = overlay.querySelector<HTMLElement>('#read-scan-view');
+        const sheet = overlay.querySelector<HTMLElement>('#read-scan-sheet');
+        const img = sheet?.querySelector<HTMLImageElement>('img');
+        img?.addEventListener('load', () => this.layoutReadScan());
+        img?.addEventListener('error', () => {
+            img.replaceWith(Object.assign(document.createElement('span'), { className: 'read-scan-noimg', textContent: strings.read.noImage }));
+            overlay.querySelector('.read-scan-open')?.remove();
+        });
+        overlay.querySelectorAll<HTMLElement>('.read-line[data-line]').forEach(line => {
+            const j = Number(line.dataset.line);
+            line.addEventListener('mouseenter', () => this.showReadScanLine(j));
+            line.addEventListener('mouseleave', () => this.showReadScanLine(st?.line ?? -1));
+            line.addEventListener('focus', () => this.showReadScanLine(j));
+            line.addEventListener('blur', () => this.showReadScanLine(st?.line ?? -1));
+            line.addEventListener('click', () => this.readSelectLine(j === st?.line ? -1 : j, false));
+            line.addEventListener('keydown', (e) => {
+                if (e.key !== 'Enter' && e.key !== ' ') return;
+                e.preventDefault();
+                this.readSelectLine(j === st?.line ? -1 : j, false);
+            });
+        });
+        overlay.querySelectorAll<HTMLElement>('.read-frame').forEach(frame => frame.addEventListener('click', (e) => {
+            const k = Number(frame.dataset.entry);
+            const cur = st;
+            if (!cur?.result) return;
+            if (k !== cur.entry) { this.readSelectEntry(k); return; }
+            const entry = cur.result.entries[k];
+            if (!entry?.region || !sheet || e.detail === 0) return;
+            const rect = sheet.getBoundingClientRect();
+            if (rect.width <= 0 || rect.height <= 0) return;
+            const n = parseTranscript(entry).lines.length;
+            const j = lineAt(entry.region, (e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height, n);
+            if (j >= 0) this.readSelectLine(j, true);
+        }));
+        if (view && typeof ResizeObserver !== 'undefined') {
+            scanObserver = new ResizeObserver(() => this.layoutReadScan());
+            scanObserver.observe(view);
+        }
+        this.layoutReadScan();
+        this.showReadScanLine(s.line);
+        this.readScrollScanToEntry();
+    },
+
+    /** A transcription line chosen (on the text or the scan): marked in both; -1 clears it. */
+    readSelectLine(j: number, fromScan: boolean): void {
+        const s = st;
+        if (!s) return;
+        s.line = j;
+        const lines = document.querySelectorAll<HTMLElement>(`#${DIALOG_ID} .read-line[data-line]`);
+        lines.forEach(l => l.classList.toggle('is-active', Number(l.dataset.line) === j));
+        this.showReadScanLine(j);
+        if (fromScan && j >= 0) {
+            const line = document.querySelector<HTMLElement>(`#${DIALOG_ID} .read-line[data-line="${j}"]`);
+            line?.scrollIntoView({ block: 'nearest' });
+        }
+    },
+
+    /** The highlight of line `j` of the chosen entry on the scan (its region split evenly); -1 hides it. */
+    showReadScanLine(j: number): void {
+        const el = document.getElementById('read-scan-line');
+        const s = st;
+        if (!el || !s?.result) return;
+        const entry = s.result.entries[s.entry];
+        const page = this.readShownPage(s.result);
+        if (j < 0 || !entry?.region || entry.page !== (page?.n ?? entry.page)) { el.hidden = true; return; }
+        const parsed = parseTranscript(entry);
+        el.hidden = false;
+        el.setAttribute('style', regionStyle(lineRegion(entry.region, j, parsed.lines.length)));
+        el.classList.toggle('is-variant', !!parsed.lines[j]?.variant);
+    },
+
+    /** Lay the page out: whole and scrollable beside the text, or the chosen entry's crop in the narrow strip. */
+    layoutReadScan(): void {
+        const s = st;
+        const view = document.getElementById('read-scan-view');
+        const sheet = document.getElementById('read-scan-sheet');
+        if (!s?.result || !view || !sheet) return;
+        const page = this.readShownPage(s.result);
+        const img = sheet.querySelector('img');
+        let ratio = page && page.w > 0 && page.h > 0 ? page.w / page.h : 0;
+        if (!ratio && img && img.naturalWidth > 0 && img.naturalHeight > 0) {
+            ratio = img.naturalWidth / img.naturalHeight;
+            sheet.style.aspectRatio = `${img.naturalWidth} / ${img.naturalHeight}`;
+        }
+        const strip = window.matchMedia(STRIP_QUERY).matches;
+        view.classList.toggle('is-strip', strip);
+        if (!strip) {
+            sheet.style.width = sheet.style.height = sheet.style.left = sheet.style.top = '';
+            return;
+        }
+        const entry = s.result.entries[s.entry];
+        const region = entry && entry.page === page?.n ? entry.region : null;
+        const c = cropLayout(region, view.clientWidth, view.clientHeight, ratio || 0.75);
+        sheet.style.width = `${c.width}px`;
+        sheet.style.height = `${c.height}px`;
+        sheet.style.left = `${c.left}px`;
+        sheet.style.top = `${c.top}px`;
+    },
+
+    /** Beside the text: scroll the page so the chosen entry's frame shows. */
+    readScrollScanToEntry(): void {
+        const view = document.getElementById('read-scan-view');
+        const frame = view?.querySelector<HTMLElement>('.read-frame.is-selected');
+        if (!view || !frame || view.classList.contains('is-strip')) return;
+        const v = view.getBoundingClientRect();
+        const f = frame.getBoundingClientRect();
+        if (f.top >= v.top && f.bottom <= v.bottom) return;
+        view.scrollTop += f.top - v.top - 24;
+    },
+
+    /** "Copy transcription": the chosen entry's text with its original marks (`[?]`, `[...]`). */
+    async copyReadTranscript(): Promise<void> {
+        const entry = st?.result?.entries[st.entry];
+        if (!entry) return;
+        try {
+            await navigator.clipboard.writeText(entry.transcript);
+            this.showToast(strings.read.copied);
+        } catch {
+            this.showToast(strings.read.copyFailed);
+        }
+    },
+
+    /** Fold or unfold the explanation (remembered). */
+    toggleReadGloss(btn: HTMLElement): void {
+        const open = btn.getAttribute('aria-expanded') !== 'true';
+        btn.setAttribute('aria-expanded', String(open));
+        const body = document.getElementById('read-gloss-body');
+        if (body) body.hidden = !open;
+        btn.closest('.read-section')?.classList.toggle('is-open', open);
+        try { localStorage.setItem(GLOSS_KEY, open ? '1' : '0'); } catch { /* storage off */ }
+    },
+
+    /** The whole page in the image viewer (⤢). */
+    openReadPage(): void {
+        const s = st;
+        const link = this.researchOriginalsLink();
+        if (!s?.result || !link) return;
+        const page = this.readShownPage(s.result);
+        const base = this.readBridgeBase(link.researchId);
+        if (page && base && page.image) openImageViewer(readPageImageUrl(base, page));
+    },
+
+    /**
+     * "Suggest for the tree…": the step that builds the suggestion from the
+     * chosen entry (`readDocumentSelection()`). The step itself comes with the
+     * suggestion's own view; until then the button only exists.
+     */
+    readDocumentPropose(): void {
+        const sel = this.readDocumentSelection();
+        if (!sel || !canPropose(sel.entry)) return;
     },
 
     /** The dialog's result now: the reading, its result and the bridge's address (for the result's own view). */
@@ -914,6 +1378,23 @@ export const readDocumentMethods = uiModule({
         const link = this.researchOriginalsLink();
         if (!st?.result || !link) return null;
         return { readId: st.readId, result: st.result, base: this.readBridgeBase(link.researchId), researchId: link.researchId };
+    },
+
+    /**
+     * The chosen entry with what a suggestion needs: its page and that page's
+     * image URL ('' = none). A person's or an event's crop is
+     * `readCropHtml(sel.imageUrl, sel.page, region, w, h)`.
+     */
+    readDocumentSelection(): {
+        readId: string; result: ReadResult; base: string; researchId: string;
+        entryIndex: number; entry: ReadEntry; page: ReadPage | null; imageUrl: string;
+    } | null {
+        const cur = this.readDocumentCurrent();
+        const s = st;
+        const entry = cur && s ? cur.result.entries[s.entry] : undefined;
+        if (!cur || !s || !entry) return null;
+        const page = cur.result.pages.find(p => p.n === entry.page) ?? null;
+        return { ...cur, entryIndex: s.entry, entry, page, imageUrl: page && cur.base ? readPageImageUrl(cur.base, page) : '' };
     },
 
     // ==================== ERRORS ====================
@@ -983,39 +1464,15 @@ export const readDocumentMethods = uiModule({
     wireReadDialog(overlay: HTMLElement): void {
         const s = st;
         if (!s) return;
-        overlay.querySelectorAll<HTMLElement>('[data-act]').forEach(el => el.addEventListener('click', () => {
-            this.readReadFields(overlay);
-            const key = Number(el.dataset.key);
-            switch (el.dataset.act) {
-                case 'close': this.closeReadDocumentDialog(); break;
-                case 'pick': overlay.querySelector<HTMLInputElement>('#read-input')?.click(); break;
-                case 'remove': this.moveReadPage(key, 0); break;
-                case 'up': this.moveReadPage(key, -1); break;
-                case 'down': this.moveReadPage(key, 1); break;
-                case 'read': void this.submitReadDocument(); break;
-                case 'cancel': void this.cancelReadDocument(); break;
-                case 'retry': void this.retryReadDocument(); break;
-                case 'again': void this.readDocumentAgain(); break;
-                case 'another': this.newReadInput(); break;
-                case 'insert-other': this.newReadInput(true); break;
-                case 'show-running': {
-                    const running = this.readRunningNow();
-                    if (running) { s.readId = running.id; this.followReadInDialog(running); }
-                    break;
-                }
-                case 'open-research': this.openResearchFromRead(); break;
-                case 'update-research':
-                    if (this.researchLinkAvailable('update')) this.researchActionUpdate();
-                    else this.showResearchUpdateHelp();
-                    break;
-                case 'as-material': {
-                    const files = s.pages.map(p => ({ file: p.file, path: p.file.name }));
-                    this.closeReadDocumentDialog();
-                    this.showBatchDialog({ files });
-                    break;
-                }
-            }
-        }));
+        // One delegated listener for every action (the overlay stays, its content is redrawn).
+        if (!overlay.dataset.wired) {
+            overlay.dataset.wired = '1';
+            overlay.addEventListener('click', (e) => {
+                const el = (e.target as Element | null)?.closest<HTMLElement>('[data-act]');
+                if (!el || !overlay.contains(el) || (el as HTMLButtonElement).disabled) return;
+                this.readDialogAct(el, overlay);
+            });
+        }
         const input = overlay.querySelector<HTMLInputElement>('#read-input');
         input?.addEventListener('change', () => {
             this.readReadFields(overlay);
@@ -1084,10 +1541,7 @@ export const readDocumentMethods = uiModule({
             s.readers = radio.value === '2' ? 2 : 1;
             overlay.querySelectorAll('.read-reader').forEach(card => card.classList.toggle('is-checked', !!card.querySelector('input:checked')));
             const foot = overlay.querySelector('.read-footer');
-            if (foot) {
-                foot.innerHTML = this.readInputFootHtml();
-                this.wireReadFooter(overlay);
-            }
+            if (foot) foot.innerHTML = this.readInputFootHtml();
         }));
         const pickerHost = overlay.querySelector<HTMLElement>('#read-person-picker');
         if (pickerHost && s.phase === 'input') {
@@ -1105,16 +1559,51 @@ export const readDocumentMethods = uiModule({
                 console.warn('Person picker unavailable', err);
             }
         }
+        if (s.phase === 'result') this.wireReadResult(overlay);
         if (s.phase === 'error' || s.phase === 'result') overlay.querySelector<HTMLElement>('.read-footer .primary')?.focus();
     },
 
-    /** The footer alone again (the readers changed its sum). */
-    wireReadFooter(overlay: HTMLElement): void {
-        overlay.querySelectorAll<HTMLElement>('.read-footer [data-act]').forEach(el => el.addEventListener('click', () => {
-            this.readReadFields(overlay);
-            if (el.dataset.act === 'close') this.closeReadDocumentDialog();
-            else if (el.dataset.act === 'read') void this.submitReadDocument();
-        }));
+    /** A click on an element with `data-act` in the dialog. */
+    readDialogAct(el: HTMLElement, overlay: HTMLElement): void {
+        const s = st;
+        if (!s) return;
+        this.readReadFields(overlay);
+        const key = Number(el.dataset.key);
+        switch (el.dataset.act) {
+            case 'close': this.closeReadDocumentDialog(); break;
+            case 'pick': overlay.querySelector<HTMLInputElement>('#read-input')?.click(); break;
+            case 'remove': this.moveReadPage(key, 0); break;
+            case 'up': this.moveReadPage(key, -1); break;
+            case 'down': this.moveReadPage(key, 1); break;
+            case 'read': void this.submitReadDocument(); break;
+            case 'cancel': void this.cancelReadDocument(); break;
+            case 'retry': void this.retryReadDocument(); break;
+            case 'again': void this.readDocumentAgain(); break;
+            case 'another': this.newReadInput(); break;
+            case 'insert-other': this.newReadInput(true); break;
+            case 'show-running': {
+                const running = this.readRunningNow();
+                if (running) { s.readId = running.id; this.followReadInDialog(running); }
+                break;
+            }
+            case 'open-research': this.openResearchFromRead(); break;
+            case 'update-research':
+                if (this.researchLinkAvailable('update')) this.researchActionUpdate();
+                else this.showResearchUpdateHelp();
+                break;
+            case 'as-material': {
+                const files = s.pages.map(p => ({ file: p.file, path: p.file.name }));
+                this.closeReadDocumentDialog();
+                this.showBatchDialog({ files });
+                break;
+            }
+            case 'entry': this.readSelectEntry(Number(el.dataset.entry)); break;
+            case 'page': this.readSelectPage(Number(el.dataset.page)); break;
+            case 'open-page': this.openReadPage(); break;
+            case 'copy': void this.copyReadTranscript(); break;
+            case 'gloss': this.toggleReadGloss(el); break;
+            case 'propose': this.readDocumentPropose(); break;
+        }
     },
 
     /** The person and the note as typed (kept across redraws). */
@@ -1166,6 +1655,9 @@ export const readDocumentMethods = uiModule({
         st.notice = '';
         st.sending = null;
         st.sawChecking = false;
+        st.entry = 0;
+        st.line = -1;
+        st.page = 1;
         this.renderReadDialog();
     },
 
