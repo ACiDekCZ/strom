@@ -294,11 +294,19 @@ test.describe('switching trees follows the research where an agent works', () =>
                     await expect(title).toHaveText(name);
                     expect(await fits(), `${name} ${lang} ${width}`).toBe(true);
                     // The buttons stay in the head, inside the panel.
-                    const box = (await panel.boundingBox())!;
-                    for (const b of await panel.locator('.live-panel-head button').all()) {
-                        const bb = (await b.boundingBox())!;
-                        expect(bb.x >= box.x && bb.x + bb.width <= box.x + box.width + 0.5, `${lang} ${width}`).toBe(true);
-                    }
+                    // Measured when shown: a re-render under load replaces the buttons (no box for a moment).
+                    const buttons = panel.locator('.live-panel-head button');
+                    await expect(buttons.first()).toBeVisible();
+                    await expect.poll(async () => {
+                        const box = await panel.boundingBox();
+                        if (!box) return 'no panel box';
+                        for (const b of await buttons.all()) {
+                            const bb = await b.boundingBox();
+                            if (!bb) return 'no button box';
+                            if (!(bb.x >= box.x && bb.x + bb.width <= box.x + box.width + 0.5)) return 'outside';
+                        }
+                        return 'inside';
+                    }, { message: `${lang} ${width}` }).toBe('inside');
                 }
             }
         }
