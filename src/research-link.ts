@@ -11,6 +11,7 @@
 import { StromData, Person, PersonId, PartnershipId, Partnership, ResearchLink, Source, APP_VERSION } from './types.js';
 import { withoutConvertedStandIns, isPurePlaceholder } from './single-parent.js';
 import { PhoneSummary, sanitizePhoneSummary } from './phone.js';
+import { ReadAccepts, LiveRead, READ_FEATURE, sanitizeReadAccepts, sanitizeReads } from './research-read.js';
 
 /** `1 SOUR` value that marks a file written by Strom Research. */
 export const STROM_RESEARCH_SOURCE = 'STROM_RESEARCH';
@@ -1252,6 +1253,8 @@ export interface LiveStatus {
     channel?: 'beta';
     /** The phone connection of this computer (`status.phone`, read only with `phone` in `features`); absent: the research has none. */
     phone?: PhoneSummary;
+    /** Documents read, being read or waiting (`status.reads`, with `read.now` in `features`), newest first; absent: none said. */
+    reads?: LiveRead[];
 }
 
 /** `/status.features`: the research can connect a phone on the home network (spec 012). */
@@ -1434,6 +1437,12 @@ export interface ResearchAccepts {
     modeSince?: string;
     /** A send waits in the research's inbox for the user (`sync.auto: "off"`). */
     review: boolean;
+    /**
+     * It reads a document for the app now (`accepts.read`, spec 013; kept only
+     * with `read.now` in a status's `features`); absent: an archive, no agent,
+     * or an older research.
+     */
+    read?: ReadAccepts;
 }
 
 /** One send waiting in the research's inbox. */
@@ -1508,6 +1517,7 @@ export function sanitizeAccepts(value: unknown): ResearchAccepts | null {
         ...(r.agentHere === false && r.mode !== 'archive' ? { agentHere: false as const } : {}),
         ...(typeof r.modeSince === 'string' && r.modeSince.length <= 40 && Number.isFinite(Date.parse(r.modeSince)) ? { modeSince: r.modeSince } : {}),
         review: auto === 'off' && r.mode !== 'archive',
+        ...(r.mode !== 'archive' && sanitizeReadAccepts(r.read) ? { read: sanitizeReadAccepts(r.read)! } : {}),
     };
 }
 
@@ -1915,7 +1925,7 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         spend: sanitizeSpend(r.spend, !!features?.includes(SPEND_READERS_FEATURE)),
         lastIntake: sanitizeIntake(r.lastIntake),
         researches: sanitizeDirections(r.researches),
-        accepts: sanitizeAccepts(r.accepts),
+        accepts: readAcceptsGated(sanitizeAccepts(r.accepts), !!features?.includes(READ_FEATURE)),
         inbox: sanitizeInbox(r.inbox),
         sends: sanitizeSends(r.sends),
         version: researchVersion(r.strom),
@@ -1926,7 +1936,15 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         ...(researchLinkScheme(r.linkScheme) !== DEFAULT_RESEARCH_SCHEME ? { linkScheme: researchLinkScheme(r.linkScheme) } : {}),
         ...(r.channel === 'beta' ? { channel: 'beta' as const } : {}),
         ...(features?.includes(PHONE_FEATURE) ? { phone: sanitizePhoneSummary(r.phone) } : {}),
+        ...(features?.includes(READ_FEATURE) && sanitizeReads(r.reads) ? { reads: sanitizeReads(r.reads)! } : {}),
     };
+}
+
+/** `accepts.read` stays only from a bridge that says it reads now (`read.now` in `features`). */
+function readAcceptsGated(accepts: ResearchAccepts | null, reads: boolean): ResearchAccepts | null {
+    if (!accepts?.read || reads) return accepts;
+    const { read: _read, ...rest } = accepts;
+    return rest;
 }
 
 /** A version as the research names itself ("1.11.0", "1.12.0-beta.2"), or ''. Untrusted. */
