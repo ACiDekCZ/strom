@@ -65,10 +65,15 @@ describe('N40: changes per person after a send the research took nothing from', 
 
     // The first load of the UI modules transforms their whole import graph; on a busy machine
     // that alone could pass the test's 5 s. Done once here, a fresh page only evaluates them again.
+    // The graph is the whole app (the UI modules reach the renderer and its layout pipeline, the
+    // strings of every language: about 230 modules, 6 MB of source), so the work cannot be made
+    // smaller without mocking most of what the test runs. About 1 s on an idle machine; with the
+    // full suite's workers all asking the one transform server at the same time it passed the
+    // default 10 s hook timeout. 60 s, as the other tests that load these modules in beforeAll.
     beforeAll(async () => {
         await import('../ui/research-changes-ui.js');
         await import('../ui/research-sync-ui.js');
-    });
+    }, 60_000);
 
     beforeEach(() => {
         store.copies.clear();
