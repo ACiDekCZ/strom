@@ -10,6 +10,7 @@
 
 import { StromData, Person, PersonId, PartnershipId, Partnership, ResearchLink, Source, APP_VERSION } from './types.js';
 import { withoutConvertedStandIns, isPurePlaceholder } from './single-parent.js';
+import { PhoneSummary, sanitizePhoneSummary } from './phone.js';
 
 /** `1 SOUR` value that marks a file written by Strom Research. */
 export const STROM_RESEARCH_SOURCE = 'STROM_RESEARCH';
@@ -1249,7 +1250,12 @@ export interface LiveStatus {
     linkScheme?: string;
     /** `channel: "beta"`: the research runs in its beta channel; absent: production (or an older research). */
     channel?: 'beta';
+    /** The phone connection of this computer (`status.phone`, read only with `phone` in `features`); absent: the research has none. */
+    phone?: PhoneSummary;
 }
+
+/** `/status.features`: the research can connect a phone on the home network (spec 012). */
+export const PHONE_FEATURE = 'phone';
 
 /** `/status.features`: the bridge marks a batch nobody sorts (`kept: true`, an archive or a research waiting for its agent). */
 export const BATCH_KEPT_FEATURE = 'batch.kept';
@@ -1919,6 +1925,7 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         batches: sanitizeBatches(r.batches),
         ...(researchLinkScheme(r.linkScheme) !== DEFAULT_RESEARCH_SCHEME ? { linkScheme: researchLinkScheme(r.linkScheme) } : {}),
         ...(r.channel === 'beta' ? { channel: 'beta' as const } : {}),
+        ...(features?.includes(PHONE_FEATURE) ? { phone: sanitizePhoneSummary(r.phone) } : {}),
     };
 }
 

@@ -111,6 +111,52 @@ export interface FakeBridge {
      * does, so as not to tell the address is a bridge), or this status with a JSON error.
      */
     tokenRefusal?: number;
+    /** The phone connection (`/phone*`, spec 012); its summary goes into `/status.phone` when `features` has `phone`. */
+    phone?: FakePhone;
+}
+
+/** A paired phone as the research lists it. */
+export interface FakePhoneEntry {
+    id: string;
+    name: string;
+    pairedAt: string;
+    lastSeenAt: string;
+    address: string;
+    stale: boolean;
+    maybeReplaces?: string[];
+}
+
+/** What the fake research says about the phone connection, and what it was asked. */
+export interface FakePhone {
+    state: 'off' | 'confirm' | 'on' | 'declined' | 'error';
+    since: string;
+    addresses: { url: string; iface: string; kind: 'wifi' | 'ethernet' | null }[];
+    addressChangedAt: string;
+    lanSeenAt: string;
+    phones: FakePhoneEntry[];
+    error: { code: string; detail: string } | null;
+    platform: string;
+    network: { category: string | null; checkedAt: string } | null;
+    firewall: { on: boolean | null; checkedAt: string } | null;
+    /** `POST phone/on`: the window shown (`confirm`) or none possible (`no-dialog`). */
+    onReply: 'confirm' | 'no-dialog';
+    /** The code's end (ISO) for `qr.svg`; default: 10 minutes from the ask. */
+    qrExpiresAt?: string;
+    /** Every `qr.svg` ask's query (`lang=…&address=…`). */
+    qrAsks: string[];
+    /** Every POST: `on {"lang":"en"}`, `off`, `remove/<id>`, `restore/<id>`. */
+    posts: string[];
+    /** Unpaired, still restorable. */
+    removed: Map<string, FakePhoneEntry>;
+}
+
+/** A phone connection that is off, nothing paired, one address; `init` changes any of it. */
+export function fakePhone(init: Partial<FakePhone> = {}): FakePhone {
+    return {
+        state: 'off', since: '', addresses: [{ url: 'http://192.168.1.23:47800', iface: 'en0', kind: 'wifi' }],
+        addressChangedAt: '', lanSeenAt: '', phones: [], error: null, platform: 'darwin', network: null, firewall: null,
+        onReply: 'confirm', qrAsks: [], posts: [], removed: new Map(), ...init,
+    };
 }
 
 export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Promise<FakeBridge> {
@@ -190,6 +236,7 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
                 ...(b.waiting ? { waiting: b.waiting } : {}),
                 ...(b.features ? { features: b.features } : {}),
                 ...(b.accepts ? { sends: b.sends } : {}),
+                ...(b.phone ? { phone: { state: b.phone.state === 'on' || b.phone.state === 'error' ? b.phone.state : 'off', phones: b.phone.phones.length } } : {}),
                 ...(b.statusExtra ?? {}),
             });
         }
@@ -245,6 +292,62 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
             (b.batchDone ??= []).push({ id: decodeURIComponent(done[1]), body });
             const files = b.mediaPuts.filter(p => p.headers['x-strom-batch'] === decodeURIComponent(done[1])).length;
             return json(200, { batch: done[1], name: body.name, inputs: files, known: 0, refused: 0, nested: [], tasks: files ? ['T0101'] : [], head: b.head });
+        }
+        const ph = b.phone;
+        const phonePath = /\/phone(?:\/(.*))?$/.exec(url.pathname);
+        if (ph && phonePath) {
+            const rest = phonePath[1] ?? '';
+            if (method === 'GET' && rest === '') {
+                const { onReply: _r, qrExpiresAt: _q, qrAsks: _a, posts: _p, removed: _m, ...state } = ph;
+                return json(200, { ...state, pair: ph.state === 'on' ? { expiresAt: ph.qrExpiresAt ?? new Date(Date.now() + 600_000).toISOString() } : null });
+            }
+            if (method === 'GET' && rest === 'qr.svg') {
+                ph.qrAsks.push(url.searchParams.toString().replace(/(^|&)app=[^&]*/, ''));
+                if (ph.state !== 'on') return json(409, { error: 'The phone connection is off.', code: 'phone.off' });
+                const address = url.searchParams.get('address') || ph.addresses[0]?.url || '';
+                return route.fulfill({
+                    status: 200,
+                    headers: {
+                        ...cors, 'content-type': 'image/svg+xml', 'cache-control': 'no-store',
+                        'access-control-expose-headers': 'X-Strom-Pair-Expires, X-Strom-Pair-Url',
+                        'x-strom-pair-expires': ph.qrExpiresAt ?? new Date(Date.now() + 600_000).toISOString(),
+                        'x-strom-pair-url': address,
+                    },
+                    body: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 29 29"><rect width="29" height="29" fill="#fff"/><path d="M4 4h7v7H4zM18 4h7v7h-7zM4 18h7v7H4zM14 14h2v2h-2z" fill="#000"/></svg>',
+                });
+            }
+            if (method === 'POST') {
+                const body = route.request().postData() ?? '';
+                ph.posts.push(rest === 'on' ? `on ${body}` : rest);
+                if (rest === 'on') {
+                    if (ph.onReply === 'no-dialog') return json(200, { state: 'off', error: { code: 'no-dialog' } });
+                    ph.state = 'confirm';
+                    return json(200, { state: 'confirm' });
+                }
+                if (rest === 'off') {
+                    ph.state = 'off';
+                    ph.error = null;
+                    return json(200, { state: 'off' });
+                }
+                const remove = /^remove\/(.+)$/.exec(rest);
+                if (remove) {
+                    const id = decodeURIComponent(remove[1]);
+                    const at = ph.phones.findIndex(x => x.id === id);
+                    if (at < 0) return json(404, { error: 'No such phone.', code: 'phone.unknown' });
+                    ph.removed.set(id, ph.phones[at]);
+                    ph.phones.splice(at, 1);
+                    return json(200, { phones: ph.phones });
+                }
+                const restore = /^restore\/(.+)$/.exec(rest);
+                if (restore) {
+                    const id = decodeURIComponent(restore[1]);
+                    const entry = ph.removed.get(id);
+                    if (!entry) return json(404, { error: 'Gone.', code: 'phone.gone' });
+                    ph.removed.delete(id);
+                    ph.phones.push(entry);
+                    return json(200, { phones: ph.phones });
+                }
+            }
         }
         return route.fulfill({ status: 404, headers: cors, body: '' });
     };

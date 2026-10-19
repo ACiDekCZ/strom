@@ -4639,6 +4639,21 @@
             width: auto; height: 20px; min-width: 20px; padding: 0 6px; border-radius: 999px;
             background: var(--signal-warn); color: var(--on-signal-warn); font-size: 12px; font-weight: 600; line-height: 1;
         }
+        /* The phone connection on (spec 012): a small dot in the button's corner, ringed in the toolbar's colour. */
+        .research-menu-phone {
+            position: absolute; top: -3px; right: -3px; width: 8px; height: 8px; border-radius: 50%;
+            background: var(--primary); box-shadow: 0 0 0 2px var(--toolbar-bg); pointer-events: none;
+        }
+        .research-menu-phone[hidden] { display: none; }
+        /* The phone item's state pill ("on · 2", "connection problem"): never wraps. */
+        .research-item-pill {
+            display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 8px; margin-left: auto; border-radius: 999px;
+            flex-shrink: 0; white-space: nowrap; font-size: 12px; font-weight: 600; line-height: 1;
+        }
+        .research-item-pill.is-on { background: var(--primary-soft); color: var(--primary-dark); }
+        .research-item-pill.is-error { background: var(--warning-soft); color: var(--warning-text); }
+        .research-item-pill-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--primary); }
+        .research-item-pill.is-error .research-item-pill-dot { display: none; }
         .research-menu-dropdown {
             left: auto; right: 0; width: 340px; max-width: calc(100vw - 16px); box-sizing: border-box;
             margin-top: 6px; padding: 4px 0 6px; overflow-y: auto;
@@ -10720,6 +10735,152 @@
             .batch-row .batch-reason { grid-column: 1 / -1; padding-bottom: 6px; }
             .batch-footer { flex-wrap: wrap; }
             .batch-foot-note { flex-basis: 100%; }
+        }
+        /* ===== "Connect phone" (spec 012): the dialog (phone-ui.ts) ===== */
+        #phone-modal .phone-dialog { width: 600px; max-width: calc(100vw - 32px); max-height: calc(100vh - 32px); }
+        #phone-modal .phone-dialog--wide { width: 640px; }
+        .phone-header { gap: 10px; justify-content: flex-start; }
+        .phone-header h2 { flex: 1; min-width: 0; }
+        .phone-back {
+            flex: none; width: 32px; height: 32px; padding: 0 !important; border-radius: 8px; border: 0;
+            background: transparent !important; color: var(--text); font-size: 18px; cursor: pointer;
+        }
+        @media (hover: hover) { .phone-back:hover { background: var(--hover-bg) !important; } }
+        .phone-back:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .phone-content { padding: 18px 24px 20px; font-size: 14px; line-height: 1.5; color: var(--text); }
+        .phone-content.is-lost .phone-body { opacity: 0.55; }
+        .phone-body { display: flex; flex-direction: column; gap: 14px; }
+        .phone-loading { min-height: 120px; display: flex; align-items: center; justify-content: center; }
+        .phone-spinner { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--border); border-top-color: var(--primary); animation: phone-spin 0.9s linear infinite; }
+        @keyframes phone-spin { to { transform: rotate(360deg); } }
+        @media (prefers-reduced-motion: reduce) { .phone-spinner { animation: none; } }
+        .phone-lost, .phone-note { margin: 0 0 12px; padding: 8px 12px; border-radius: 8px; background: var(--surface-2); color: var(--text-light); font-size: 13px; }
+        .phone-note { background: var(--warning-soft); color: var(--warning-text); }
+        .phone-footer { gap: 10px; }
+        .phone-foot-note { flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-light); }
+        #phone-modal .btn-sm { padding: 7px 14px; font-size: 14px; flex: none; white-space: nowrap; }
+        .phone-quiet { margin: 0; color: var(--text-light); font-size: 13px; }
+        .phone-link {
+            display: inline; padding: 0 !important; border: 0; background: none !important; color: var(--primary-dark);
+            font: inherit; font-weight: 500; cursor: pointer; text-align: left;
+        }
+        @media (hover: hover) { .phone-link:hover { text-decoration: underline; } }
+        .phone-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 2px; }
+        .phone-link:disabled { color: var(--text-light); cursor: default; }
+        .phone-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; box-sizing: border-box; }
+        .phone-dot.is-on { background: var(--primary); }
+        .phone-dot.is-ring { border: 1.5px solid var(--text-faint); }
+        .phone-dot.is-error { background: var(--danger); }
+        /* A bar's dot sits on its first line (the title), whatever the bar's height. */
+        .phone-bar > .phone-dot { align-self: flex-start; margin-top: 6px; }
+        .phone-dot.is-wait { width: 10px; height: 10px; margin-top: 6px; background: var(--warning); box-shadow: 0 0 0 4px var(--warning-soft); }
+        .phone-section-title { margin: 0 0 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-text); }
+        .phone-intro { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+        .phone-intro li { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 8px; }
+        .phone-check { color: var(--primary); }
+        .phone-sys { border: 1px solid var(--border); border-radius: 12px; background: var(--bg); padding: 14px 16px; font-size: 13.5px; }
+        .phone-sys-grid { display: grid; grid-template-columns: minmax(0, 1fr) 216px; gap: 16px; align-items: start; margin-top: 6px; }
+        .phone-sys-grid.is-single { grid-template-columns: minmax(0, 1fr); }
+        .phone-sys-text { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+        .phone-sys-text ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; }
+        /* A sketch of the Windows firewall window: light like the real one, in both themes. */
+        .phone-fw { background: #fff; color: #333; border: 1px solid #c9c5bd; border-radius: 4px; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 10px; overflow: hidden; }
+        .phone-fw-title { background: #f0f0f0; padding: 5px 8px; border-bottom: 1px solid #ddd; }
+        .phone-fw-line { padding: 8px 8px 0; color: #555; line-height: 1.35; }
+        .phone-fw-opt { display: flex; align-items: center; gap: 5px; margin: 6px 5px 0; padding: 3px; color: #777; border-radius: 3px; }
+        .phone-fw-opt.is-on { color: #333; box-shadow: 0 0 0 2px var(--primary); }
+        .phone-fw-box { width: 10px; height: 10px; border: 1px solid #999; border-radius: 2px; font-size: 9px; line-height: 10px; text-align: center; }
+        .phone-fw-opt.is-on .phone-fw-box { border-color: #333; }
+        .phone-fw-buttons { display: flex; gap: 5px; justify-content: flex-end; padding: 8px; }
+        .phone-fw-btn { padding: 3px 7px; border: 1px solid #aaa; border-radius: 2px; white-space: nowrap; }
+        .phone-fw-btn.is-on { border-color: #333; box-shadow: 0 0 0 2px var(--primary); }
+        .phone-public { padding: 10px 14px; border-radius: 10px; background: var(--warning-soft); color: var(--warning-text); font-size: 13px; }
+        .phone-state { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; }
+        .phone-state > .phone-dot.is-ring { margin-top: 7px; }
+        .phone-state--col { flex-direction: column; gap: 8px; }
+        .phone-state--col p { margin: 0; }
+        .phone-state-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+        .phone-state-text strong { font-size: 15px; font-weight: 600; }
+        .phone-state-text p { margin: 0; color: var(--text-light); }
+        .phone-state-text .phone-quiet { font-size: 13px; }
+        .phone-cmd { display: block; padding: 8px 12px; border-radius: 8px; background: var(--code-bg); color: var(--code-text); font-family: var(--font-mono, ui-monospace, monospace); font-size: 13px; }
+        .phone-bar { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 10px; }
+        .phone-bar-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; font-size: 12.5px; }
+        .phone-bar-text strong { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+        .phone-bar.is-on { background: var(--primary-soft); color: var(--primary-dark); }
+        .phone-bar.is-off { background: var(--bg); border: 1px solid var(--divider); }
+        .phone-bar.is-off .phone-bar-text > span { color: var(--text-light); }
+        .phone-bar.is-error { background: var(--danger-soft); }
+        .phone-bar.is-error .phone-bar-text > span { color: var(--text-light); }
+        .phone-bar.is-address { align-items: flex-start; background: var(--warning-soft); color: var(--warning-text); border: 1px solid var(--warning); }
+        .phone-bar.is-address .phone-bar-text { font-size: 13.5px; gap: 4px; }
+        .phone-bar.is-address .phone-hint { color: var(--text-light); font-size: 12.5px; }
+        .phone-keep { margin: -8px 0 0; font-size: 12.5px; color: var(--text-light); }
+        .phone-list .phone-rows { list-style: none; margin: 0; padding: 0; }
+        .phone-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--divider); }
+        .phone-row:last-child { border-bottom: 0; }
+        .phone-row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+        .phone-row-name { font-size: 15px; font-weight: 500; overflow-wrap: anywhere; }
+        .phone-row-sub { font-size: 12.5px; color: var(--text-faint); }
+        .phone-row-stale { font-size: 12.5px; color: var(--warning-text); }
+        .phone-row.is-removed .phone-row-name { color: var(--text-faint); font-weight: 400; }
+        .phone-row.is-removed .phone-row-sub { color: var(--text-light); }
+        .phone-qr { display: grid; grid-template-columns: 232px minmax(0, 1fr); gap: 24px; align-items: start; }
+        /* The code on white in both themes: phones read dark modules on light. */
+        .phone-qr-box { width: 232px; height: 232px; box-sizing: border-box; padding: 8px; background: #fff; border: 1px solid var(--border); border-radius: 12px; display: flex; align-items: center; justify-content: center; }
+        .phone-qr-img { display: block; width: 100%; height: 100%; }
+        .phone-qr-box.is-expired .phone-qr-img { opacity: 0.25; filter: grayscale(1); }
+        .phone-qr-wait { color: #746c5c; font-size: 13px; text-align: center; }
+        .phone-qr-text { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+        .phone-qr-text p { margin: 0; }
+        .phone-qr-lead { font-size: 16px; font-weight: 500; line-height: 1.45; }
+        .phone-url { font-family: var(--font-mono, ui-monospace, monospace); font-size: 12.5px; color: var(--text-light); overflow-wrap: anywhere; background: none; padding: 0; }
+        .phone-valid { font-size: 12.5px; color: var(--text-faint); margin-top: -8px !important; }
+        .phone-expired { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+        .phone-expired strong { font-size: 15px; font-weight: 500; }
+        .phone-expired span { font-size: 13px; color: var(--text-light); }
+        .phone-nets { font-size: 13px; color: var(--text-light); }
+        .phone-checklist { border-top: 1px solid var(--divider); padding-top: 10px; font-size: 13px; }
+        .phone-checklist strong { font-weight: 600; color: var(--text-light); }
+        .phone-checklist ul { margin: 6px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+        .phone-checklist li { display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 6px; }
+        .phone-checklist li::before { content: '○'; color: var(--text-faint); }
+        .phone-checklist li .phone-link { display: inline; }
+        .phone-paired { display: flex; align-items: flex-start; gap: 14px; padding: 6px 0; }
+        .phone-paired p { margin: 4px 0 0; color: var(--text-light); font-size: 13.5px; }
+        .phone-paired strong { font-size: 18px; font-weight: 600; overflow-wrap: anywhere; }
+        .phone-paired-mark { flex: none; width: 44px; height: 44px; border-radius: 50%; background: var(--primary-soft); color: var(--primary); font-size: 22px; font-weight: 600; display: flex; align-items: center; justify-content: center; }
+        .phone-replaces { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 10px; background: var(--bg); border: 1px solid var(--divider); font-size: 13px; }
+        .phone-replaces span { flex: 1; min-width: 0; }
+        @media (min-width: 641px) and (max-width: 1024px) {
+            #phone-modal .phone-dialog { max-height: calc(100vh - 24px); }
+        }
+        @media (max-width: 640px) {
+            #phone-modal .phone-dialog, #phone-modal .phone-dialog--wide { width: 100%; max-width: calc(100vw - 16px); max-height: calc(100vh - 16px); }
+            .phone-content { padding: 14px 16px; }
+            .phone-sys-grid { grid-template-columns: minmax(0, 1fr); }
+            .phone-fw { max-width: 216px; }
+            /* The code above its text. */
+            .phone-qr { grid-template-columns: minmax(0, 1fr); gap: 14px; justify-items: center; }
+            .phone-qr-text { justify-self: stretch; }
+            .phone-bar, .phone-replaces { flex-wrap: wrap; }
+            .phone-bar .phone-bar-text { flex-basis: calc(100% - 20px); }
+            .phone-bar.is-address .phone-bar-text { flex-basis: 100%; }
+            .phone-footer { flex-wrap: wrap; }
+            .phone-foot-note:empty { display: none; }
+            /* The buttons stack bottom-up (primary lowest): the note goes above them. */
+            .phone-foot-note { flex: none; order: 1; }
+        }
+        /* A phone held sideways: a short window, the code smaller beside its text. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            #phone-modal .phone-dialog { max-height: calc(100vh - 12px); }
+            .phone-content { padding: 10px 16px; }
+            .phone-qr { grid-template-columns: 168px minmax(0, 1fr); gap: 16px; }
+            .phone-qr-box { width: 168px; height: 168px; }
+        }
+        @media (pointer: coarse) {
+            #phone-modal .btn-sm, .phone-back { min-height: 44px; }
+            .phone-link { min-height: 32px; }
         }
         /* A large file for a research being read (hash, preview). */
         .attachment-preparing { align-items: center; }

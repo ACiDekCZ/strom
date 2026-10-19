@@ -73,6 +73,8 @@ interface SubmenuItem {
     count?: number;
     /** A quiet second line ("sent 11:20"). */
     sub?: string;
+    /** A state pill at the end ("on · 2", "connection problem"). */
+    pill?: { text: string; tone: 'on' | 'error' };
 }
 
 /** A group of the research menu; the occasional ones are drawn quieter. */
@@ -128,6 +130,7 @@ function itemCall(item: SubmenuItem): string {
 function itemAria(item: SubmenuItem): string {
     const r = strings.research;
     const aria = [item.count ? r.waitingCountSr(item.count) : item.label];
+    if (item.pill) aria.push(item.pill.text);
     if (item.ai) aria.push(r.aiBadge);
     if (item.sub) aria.push(item.sub);
     if (item.ext) aria.push(r.opensInResearchSr);
@@ -142,6 +145,7 @@ function submenuItemHtml(item: SubmenuItem): string {
             ? `<span class="research-item-label research-item-label--two"><span>${esc(item.label)}</span><span class="research-item-sub">${esc(item.sub)}</span></span>`
             : `<span class="research-item-label">${esc(item.label)}</span>`)
         + (item.count ? `<span class="tree-switcher-badge research-count-badge" aria-hidden="true">${item.count}</span>` : '')
+        + (item.pill ? `<span class="research-item-pill is-${item.pill.tone}" aria-hidden="true"><span class="research-item-pill-dot"></span>${esc(item.pill.text)}</span>` : '')
         + (item.ai ? `<span class="research-ai-badge" title="${esc(r.aiCostHint)}" aria-hidden="true">${esc(r.aiBadge)}</span>` : '')
         + (item.ext ? '<span class="research-item-ext" aria-hidden="true">↗</span>' : '')
         + '</div>';
@@ -229,6 +233,9 @@ export const researchActionsMethods = uiModule({
         const treeSettings: SubmenuItem[] = this.researchTranscriptsCapable(researchId ?? undefined)
             ? [{ id: 'research-item-tree-settings', label: strings.sync.treeSettings, method: 'researchActionTreeSettings' }] : [];
         const batch: SubmenuItem[] = this.batchAvailable() ? [{ id: 'research-item-batch', label: strings.batch.menu, method: 'showBatchDialog' }] : [];
+        // Connect phone (spec 012): right after the materials, its state in a pill.
+        const phoneItem = this.phoneMenuItem();
+        if (phoneItem) batch.push({ id: 'research-item-phone', method: 'showPhoneDialog', ...phoneItem });
         // Linked in the view only: the list, with how many are shown (a tree whose research says what a variant connects).
         const viewLinks: SubmenuItem[] = this.viewLinksListOffered()
             ? [{ id: 'research-item-view-links', label: strings.viewLinks.menuItem(this.viewLinksShownCount()), method: 'researchActionViewLinks' }] : [];
@@ -389,6 +396,7 @@ export const researchActionsMethods = uiModule({
             + '<span class="research-menu-live" aria-hidden="true"></span>'
             + `<span class="research-menu-label">${esc(strings.research.menuTitle)}</span>`
             + '<span class="research-menu-signal" id="research-menu-signal" aria-hidden="true" hidden></span>'
+            + '<span class="research-menu-phone" aria-hidden="true" hidden></span>'
             + CHEVRON + '</button>'
             + '<div id="research-menu" class="tree-switcher-dropdown research-menu-dropdown research-menu-body" role="menu" aria-labelledby="research-menu-title"></div>';
         actions.parentElement.insertBefore(wrap, actions);
@@ -434,7 +442,14 @@ export const researchActionsMethods = uiModule({
         const label = btn.querySelector('.research-menu-label');
         if (label) label.textContent = r.menuTitle;
         btn.classList.toggle('is-live', DataManager.isLiveFollowing());
-        btn.setAttribute('aria-label', waiting > 0 ? r.menuButtonAriaWaiting(waiting) : unsent.label ? r.menuButtonAriaUnsent : r.menuTitle);
+        // The phone connection on: a small dot in the corner, said in the name (beside any count).
+        const phoneOn = this.phoneSummaryNow()?.state === 'on';
+        const phoneDot = btn.querySelector<HTMLElement>('.research-menu-phone');
+        if (phoneDot) phoneDot.hidden = !phoneOn;
+        const name = waiting > 0 ? r.menuButtonAriaWaiting(waiting) : unsent.label ? r.menuButtonAriaUnsent : r.menuTitle;
+        btn.setAttribute('aria-label', phoneOn ? `${name}, ${strings.phone.btnOn}` : name);
+        if (phoneOn) btn.title = `${r.menuTitle} · ${strings.phone.btnOn}`;
+        else btn.removeAttribute('title');
         return signal;
     },
 

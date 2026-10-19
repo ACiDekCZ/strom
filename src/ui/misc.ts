@@ -914,6 +914,10 @@ export const miscMethods = uiModule({
                         void this.cancelBatchDialog();
                         return;
                     }
+                    if (currentDialog === 'phone-modal') {
+                        this.closePhoneDialog();
+                        return;
+                    }
                     if (currentDialog === 'research-update-modal') {
                         this.closeResearchUpdateHelp();
                         return;

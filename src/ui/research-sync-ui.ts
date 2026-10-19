@@ -27,6 +27,7 @@ import { ZoomPan } from '../zoom.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { TreeId, PersonId, ResearchLink, ResearchSend, ResearchSendMode, StromData, ResearchConflict } from '../types.js';
 import { formatLiveClock } from '../live-time.js';
+import { PhoneSummary } from '../phone.js';
 import { localNetworkDenied } from '../local-network.js';
 import { currentAppBrowser } from '../research-transfer.js';
 import { isTreeStale } from '../tab-sync.js';
@@ -426,6 +427,20 @@ export const researchSyncMethods = uiModule({
     /** The research's last status in this page (null: not asked yet, or it did not answer). */
     researchStatusOf(researchId: string): LiveStatus | null {
         return runtime.get(researchId)?.status ?? null;
+    },
+
+    /**
+     * The phone connection as the dialog just read it (`GET phone`), put into
+     * the last status so the menu item and the button's dot follow at once
+     * instead of at the next status poll. Only for a research that has it.
+     * True: it changed (the menu is to be redrawn).
+     */
+    notePhoneSummary(researchId: string, phone: PhoneSummary): boolean {
+        const rt = runtime.get(researchId);
+        if (!rt?.status?.phone) return false;
+        if (rt.status.phone.state === phone.state && rt.status.phone.phones === phone.phones) return false;
+        runtime.set(researchId, { ...rt, status: { ...rt.status, phone } });
+        return true;
     },
 
     /** The research's version as its bridge said it in this page ('' = not asked yet, or not said). */
