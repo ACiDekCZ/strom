@@ -425,6 +425,22 @@ class ZoomPanClass {
         document.getElementById('tree-canvas')?.classList.remove(MOVING_CLASS);
     }
 
+    /**
+     * Stop a running zoom or glide before the view jumps. Left running, its
+     * next frame puts back the transform it was heading for and undoes the
+     * jump: a view-mode switch right after + or − recentered the chart, and
+     * the zoom's next frame threw it back off-screen. A button zoom lands on
+     * the scale it was heading for, so the zoom asked for is kept.
+     */
+    private settleAnimation(): void {
+        if (this.animationFrame === null) return;
+        cancelAnimationFrame(this.animationFrame);
+        this.animationFrame = null;
+        if (this.zoomTarget !== null) this.scale = this.zoomTarget;
+        this.zoomTarget = null;
+        this.endMotion();
+    }
+
     // ==================== HELPER METHODS ====================
 
     private isInteractiveElement(target: HTMLElement): boolean {
@@ -572,12 +588,7 @@ class ZoomPanClass {
     reset(): void {
         if (this.isStandaloneViewActive()) return;
         // A pending zoom animation would overwrite the reset on its next frame
-        if (this.animationFrame) {
-            cancelAnimationFrame(this.animationFrame);
-            this.animationFrame = null;
-            this.zoomTarget = null;
-            this.endMotion();
-        }
+        this.settleAnimation();
         this.scale = 1;
         this.tx = 0;
         this.ty = 0;
@@ -600,6 +611,7 @@ class ZoomPanClass {
         const renderer = getTreeRenderer();
         const focusedId = renderer?.getFocusPersonId();
         if (focusedId) {
+            this.settleAnimation();
             this.scale = 0.75;
             this.tx = 0;
             this.ty = 0;
@@ -671,6 +683,7 @@ class ZoomPanClass {
         const container = document.getElementById('tree-container');
         const fit = this.computeFit();
         if (!container || !fit) return;
+        this.settleAnimation();
 
         // Don't zoom in too much if the tree is small
         this.scale = Math.max(FIT_MIN_SCALE, Math.min(FIT_MAX_SCALE, fit.scale));
@@ -705,6 +718,7 @@ class ZoomPanClass {
 
         const cards = canvas.querySelectorAll('.person-card') as NodeListOf<HTMLElement>;
         if (cards.length === 0) return;
+        this.settleAnimation();
 
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
         cards.forEach(card => {
@@ -857,6 +871,7 @@ class ZoomPanClass {
         const container = document.getElementById('tree-container');
         const card = document.querySelector(`.person-card[data-id="${personId}"]`) as HTMLElement;
         if (!container || !card) return;
+        this.settleAnimation();
 
         // Get card position (these are in canvas coordinates)
         const cardLeft = parseFloat(card.style.left) || 0;
@@ -907,12 +922,7 @@ class ZoomPanClass {
         const inView = minX * this.scale + this.tx >= pad && maxX * this.scale + this.tx <= cw - pad
             && minY * this.scale + this.ty >= pad && maxY * this.scale + this.ty <= ch - pad;
         if (inView) return;
-        if (this.animationFrame) {
-            cancelAnimationFrame(this.animationFrame);
-            this.animationFrame = null;
-            this.zoomTarget = null;
-            this.endMotion();
-        }
+        this.settleAnimation();
         const fit = Math.min(cw / (maxX - minX + 2 * FIT_PADDING), ch / (maxY - minY + 2 * FIT_PADDING));
         if (Number.isFinite(fit) && fit > 0) this.scale = Math.max(FIT_MIN_SCALE, Math.min(this.scale, fit));
         this.tx = cw / 2 - ((minX + maxX) / 2) * this.scale;
@@ -979,6 +989,7 @@ class ZoomPanClass {
 
     /** Center the viewport on a world-space point, keeping the current scale. */
     centerOnWorldPoint(worldX: number, worldY: number): void {
+        this.settleAnimation();
         const { width, height } = this.getViewportSize();
         this.tx = width / 2 - worldX * this.scale;
         this.ty = height / 2 - worldY * this.scale;

@@ -62,17 +62,53 @@ test('descendants view recenters — cards stay visible after prior pan/zoom', a
     await page.locator('#view-mode-descendants').click();
     await expect(page.locator('#descendants-badge')).toBeVisible();
     // At least the root card must be inside the viewport.
-    await expect.poll(async () => {
-        return page.evaluate(() => {
-            const cont = document.getElementById('tree-container')!.getBoundingClientRect();
-            let visible = 0;
-            document.querySelectorAll('.person-card').forEach(el => {
-                const r = el.getBoundingClientRect();
-                if (r.right > cont.left && r.left < cont.right && r.bottom > cont.top && r.top < cont.bottom) visible++;
-            });
-            return visible;
+    const visibleCards = () => page.evaluate(() => {
+        const cont = document.getElementById('tree-container')!.getBoundingClientRect();
+        let visible = 0;
+        document.querySelectorAll('.person-card').forEach(el => {
+            const r = el.getBoundingClientRect();
+            if (r.right > cont.left && r.left < cont.right && r.bottom > cont.top && r.top < cont.bottom) visible++;
         });
-    }).toBeGreaterThan(0);
+        return visible;
+    });
+    await expect.poll(visibleCards).toBeGreaterThan(0);
+    // And it stays there once the + zoom (200 ms) is over: the zoom still
+    // running used to put its own transform back on its next frame, so a
+    // check made quickly passed and a later one (a loaded machine) failed.
+    await page.waitForTimeout(400);
+    expect(await visibleCards()).toBeGreaterThan(0);
+});
+
+test('a recenter while a button zoom runs is not undone by the zoom', async ({ page }) => {
+    // The test above failed now and then: the view-mode switch recentered
+    // while the + zoom (200 ms) was still running, and the zoom's next frame
+    // put the old, off-screen transform back. Here the order is forced.
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    await addRelation(page, 'Jan', 'child', 'Petr', 'Novak');
+    await cardAction(page, 'Jan', 'focus');
+    await page.locator('#view-mode-descendants').click();
+    await expect(page.locator('#descendants-badge')).toBeVisible();
+
+    const result = await page.evaluate(async () => {
+        const Z = window.Strom.ZoomPan;
+        Z.centerOnWorldPoint(-20000, -20000); // nothing on screen
+        const before = Z.getScale();
+        Z.zoomIn();                              // the zoom starts...
+        window.Strom.TreeRenderer.centerForViewMode(); // ...and the switch's recenter lands meanwhile
+        await new Promise(r => setTimeout(r, 400));     // the zoom would have finished by now
+        await new Promise(r => requestAnimationFrame(() => r(null)));
+        const cont = document.getElementById('tree-container')!.getBoundingClientRect();
+        let visible = 0;
+        document.querySelectorAll('.person-card').forEach(el => {
+            const r = el.getBoundingClientRect();
+            if (r.right > cont.left && r.left < cont.right && r.bottom > cont.top && r.top < cont.bottom) visible++;
+        });
+        return { visible, zoomed: Z.getScale() > before };
+    });
+    expect(result.visible).toBeGreaterThan(0);
+    // The zoom asked for is kept (it lands on its target, not halfway).
+    expect(result.zoomed).toBe(true);
 });
 
 test('descendants view: hidden-relative badges are not rendered', async ({ page }) => {
