@@ -914,6 +914,10 @@ export const miscMethods = uiModule({
                         void this.cancelBatchDialog();
                         return;
                     }
+                    if (currentDialog === 'read-document-modal') {
+                        this.closeReadDocumentDialog();
+                        return;
+                    }
                     if (currentDialog === 'phone-modal') {
                         this.closePhoneDialog();
                         return;
@@ -1490,7 +1494,7 @@ export const miscMethods = uiModule({
      * A short message at the bottom. `duration` Infinity keeps it until it is
      * replaced or (with `closable`) closed with its ×.
      */
-    showToast(message: string, duration = 3000, opts: { title?: string; spinner?: boolean; closable?: boolean; kind?: string; action?: { label: string; run: () => void } } = {}): void {
+    showToast(message: string, duration = 3000, opts: { title?: string; spinner?: boolean; closable?: boolean; kind?: string; action?: { label: string; run: () => void }; hold?: boolean } = {}): void {
         // Remove existing toast
         const existing = document.querySelector('.toast');
         if (existing) existing.remove();
@@ -1550,11 +1554,16 @@ export const miscMethods = uiModule({
         });
 
         // Auto-hide; a toast with an action stays while the keyboard is on it
-        // (reached with Tab) and goes once focus leaves.
+        // (reached with Tab) and goes once focus leaves (`hold`: also under the pointer).
         if (!Number.isFinite(duration)) return;
         const hide = (): void => {
             if (opts.action && toast.isConnected && toast.contains(document.activeElement)) {
                 toast.addEventListener('focusout', () => setTimeout(hide, 0), { once: true });
+                return;
+            }
+            // `hold`: it also stays while the pointer is on it.
+            if (opts.hold && toast.isConnected && toast.matches(':hover')) {
+                toast.addEventListener('mouseleave', () => setTimeout(hide, 1000), { once: true });
                 return;
             }
             toast.classList.remove('show');

@@ -1082,10 +1082,14 @@ export const researchUiMethods = uiModule({
         const onFileInput = (e: Event): boolean =>
             !!(e.target as Element | null)?.closest?.('input[type="file"]');
         const modalOpen = (): boolean => !!document.querySelector('.modal-overlay.active');
+        // Files reading can take (spec 013): two zones, "Read now" left and "Add to materials" right.
+        let readZones = false;
+        let dropCancelled = false;
+        const zoneAt = (e: DragEvent): 'read' | 'add' => (!this.batchAvailable() || e.clientX < window.innerWidth / 2 ? 'read' : 'add');
         const overlay = (show: boolean): void => {
             let node = document.getElementById('drop-overlay');
             if (!show) {
-                node?.classList.remove('active');
+                node?.classList.remove('active', 'drop-overlay--read');
                 return;
             }
             if (!node) {
@@ -1095,9 +1099,27 @@ export const researchUiMethods = uiModule({
                 node.appendChild(el('div', 'drop-overlay-box', strings.research.dropHint));
                 document.body.appendChild(node);
             }
-            const box = node.firstElementChild;
-            // A tree linked to a research that takes batches: other files go there as material.
-            if (box && this.batchAvailable()) {
+            node.querySelector('.drop-zones')?.remove();
+            const box = node.firstElementChild as HTMLElement | null;
+            if (box) box.hidden = readZones;
+            node.classList.toggle('drop-overlay--read', readZones);
+            if (readZones) {
+                const t = strings.read;
+                const zones = el('div', 'drop-zones');
+                const zone = (kind: 'read' | 'add', title: string, sub: string, ai: boolean): HTMLElement => {
+                    const z = el('div', `drop-zone drop-zone--${kind}`);
+                    z.dataset.zone = kind;
+                    const head = z.appendChild(el('div', 'drop-overlay-title'));
+                    head.appendChild(el('span', undefined, title));
+                    if (ai) head.appendChild(el('span', 'research-ai-badge', strings.research.aiBadge));
+                    z.appendChild(el('div', 'drop-overlay-sub', sub));
+                    return z;
+                };
+                zones.appendChild(zone('read', t.dropRead, t.dropReadSub, true));
+                if (this.batchAvailable()) zones.appendChild(zone('add', t.dropAdd, t.dropAddSub, false));
+                node.appendChild(zones);
+            } else if (box && this.batchAvailable()) {
+                // A tree linked to a research that takes batches: other files go there as material.
                 box.innerHTML = '';
                 box.appendChild(el('div', 'drop-overlay-title', strings.batch.dropTitle));
                 box.appendChild(el('div', 'drop-overlay-sub', strings.batch.dropSub));
@@ -1109,14 +1131,28 @@ export const researchUiMethods = uiModule({
             window.addEventListener('dragenter', (e) => {
                 if (!hasFiles(e) || onFileInput(e)) return;
                 e.preventDefault();
+                if (depth === 0) {
+                    dropCancelled = false;
+                    readZones = !modalOpen() && this.readDropOffered(e.dataTransfer);
+                }
                 depth++;
-                if (!modalOpen()) overlay(true);
+                if (!modalOpen() && !dropCancelled) overlay(true);
             });
             window.addEventListener('dragover', (e) => {
                 if (!hasFiles(e) || onFileInput(e)) return;
                 // Without this the browser would navigate away to the file.
                 e.preventDefault();
-                if (e.dataTransfer) e.dataTransfer.dropEffect = modalOpen() ? 'none' : 'copy';
+                if (e.dataTransfer) e.dataTransfer.dropEffect = modalOpen() || dropCancelled ? 'none' : 'copy';
+                if (readZones && !dropCancelled) {
+                    const at = zoneAt(e);
+                    document.querySelectorAll<HTMLElement>('#drop-overlay .drop-zone').forEach(z => z.classList.toggle('is-over', z.dataset.zone === at));
+                }
+            });
+            // Esc while dragging: the overlay goes, the drop does nothing.
+            window.addEventListener('keydown', (e) => {
+                if (e.key !== 'Escape' || !document.getElementById('drop-overlay')?.classList.contains('active')) return;
+                dropCancelled = true;
+                overlay(false);
             });
             window.addEventListener('dragleave', (e) => {
                 if (!hasFiles(e)) return;
@@ -1129,7 +1165,15 @@ export const researchUiMethods = uiModule({
                 if (!hasFiles(e) || onFileInput(e)) return;
                 e.preventDefault();
                 if (modalOpen()) return;
+                if (dropCancelled) { dropCancelled = false; return; }
                 const files = Array.from(e.dataTransfer?.files ?? []);
+                // "Read now": the dialog with the files in it (reading starts from there).
+                if (readZones && zoneAt(e) === 'read') {
+                    readZones = false;
+                    this.showReadDocumentDialog({ files });
+                    return;
+                }
+                readZones = false;
                 // Anything but one family tree, for a research that takes batches: the batch's review.
                 if (this.batchAvailable() && !(files.length === 1 && isGedcomFileName(files[0].name))) {
                     void this.batchFilesFromDrop(e.dataTransfer).then(list => this.showBatchDialog({ files: list }));
@@ -2354,6 +2398,12 @@ export const researchUiMethods = uiModule({
             // (`strom mode archive` commits), which only the status says.
             this.liveStatusSoon(s);
         });
+        // A reading's new state (spec 013): at once, its full status soon after.
+        es.addEventListener('read', (e) => {
+            this.liveBridgeBack(s);
+            this.noteReadEvent(s.researchId, payload(e));
+            this.liveStatusSoon(s);
+        });
         es.addEventListener('working', (e) => {
             s.working = sanitizeWorking(payload(e));
             this.renderLivePanel();
@@ -2967,7 +3017,8 @@ export const researchUiMethods = uiModule({
         // Which tree is followed now (after a switch): under the head, above "Elsewhere".
         if (!panel.hidden) appendFollowNote(panel, s);
         if (!s.ended && s.update && !phone) this.appendUpdateStrip(panel, s.update.version);
-        // Under the head: the other trees where an agent works or something waits (spec 011).
+        // Under the head: a document being read (spec 013), then the other trees where an agent works or something waits (spec 011).
+        if (!collapsed && !s.ended) this.appendReadStrip(panel);
         if (!collapsed && !s.ended) this.appendResearchElsewhere(panel, 'panel');
         // Collapsed: what the hidden body would say first. On a phone: the state and what waits.
         if (collapsed) {
@@ -3322,7 +3373,8 @@ export const researchUiMethods = uiModule({
         close.onclick = () => this.closeResearchIdlePanel();
         head.appendChild(close);
         panel.appendChild(head);
-        // Under the head: the other trees where an agent works or something waits (spec 011).
+        // Under the head: a document being read (spec 013), then the other trees where an agent works or something waits (spec 011).
+        this.appendReadStrip(panel);
         this.appendResearchElsewhere(panel, 'panel');
 
         const body = el('div', 'live-panel-body');

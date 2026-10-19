@@ -75,6 +75,12 @@ interface SubmenuItem {
     sub?: string;
     /** A state pill at the end ("on · 2", "connection problem"). */
     pill?: { text: string; tone: 'on' | 'error' };
+    /** Not possible now (`aria-disabled`, grey): its second line says why. */
+    disabled?: boolean;
+    /** A separate item right under it ("Open research ↗" beside an inactive item). */
+    link?: { label: string; method: string };
+    /** Something of it runs now: a green dot with a ring. */
+    dot?: boolean;
 }
 
 /** A group of the research menu; the occasional ones are drawn quieter. */
@@ -139,8 +145,14 @@ function itemAria(item: SubmenuItem): string {
 
 function submenuItemHtml(item: SubmenuItem): string {
     const r = strings.research;
-    return `<div class="tree-switcher-action" id="${item.id}" role="menuitem" tabindex="0"`
-        + ` aria-label="${esc(itemAria(item))}" onclick="${itemCall(item)}">`
+    const link = item.link
+        ? `<div class="tree-switcher-action research-item-sublink" id="${item.id}-link" role="menuitem" tabindex="0"`
+            + ` aria-label="${esc(item.link.label.replace(' ↗', ''))}, ${esc(r.opensInResearchSr)}" onclick="${call(item.link.method)}">`
+            + `<span class="research-item-label">${esc(item.link.label)}</span></div>`
+        : '';
+    return `<div class="tree-switcher-action${item.disabled ? ' is-disabled' : ''}${item.sub ? ' research-item--two' : ''}" id="${item.id}" role="menuitem" tabindex="0"`
+        + ` aria-label="${esc(itemAria(item))}"${item.disabled ? ' aria-disabled="true"' : ` onclick="${itemCall(item)}"`}>`
+        + (item.dot ? '<span class="research-item-dot" aria-hidden="true"></span>' : '')
         + (item.sub
             ? `<span class="research-item-label research-item-label--two"><span>${esc(item.label)}</span><span class="research-item-sub">${esc(item.sub)}</span></span>`
             : `<span class="research-item-label">${esc(item.label)}</span>`)
@@ -148,7 +160,7 @@ function submenuItemHtml(item: SubmenuItem): string {
         + (item.pill ? `<span class="research-item-pill is-${item.pill.tone}" aria-hidden="true"><span class="research-item-pill-dot"></span>${esc(item.pill.text)}</span>` : '')
         + (item.ai ? `<span class="research-ai-badge" title="${esc(r.aiCostHint)}" aria-hidden="true">${esc(r.aiBadge)}</span>` : '')
         + (item.ext ? '<span class="research-item-ext" aria-hidden="true">↗</span>' : '')
-        + '</div>';
+        + '</div>' + link;
 }
 
 const SEPARATOR = '<div class="tree-switcher-divider" role="separator"></div>';
@@ -267,6 +279,9 @@ export const researchActionsMethods = uiModule({
             const frequent: SubmenuItem[] = [];
             if (waiting > 0) frequent.push({ id: 'research-item-waiting', label: r.waiting, method: 'researchActionWaiting', count: waiting });
             if (!noAgent && this.researchLinkAvailable('chat')) frequent.push({ id: 'research-item-chat', label: r.continueAgent, method: 'researchActionChat', ext: true, ai: true });
+            // Read a document (spec 013): right under the agent, above the research itself.
+            const read = noAgent ? null : this.readMenuEntry();
+            if (read) frequent.push({ id: 'research-item-read', method: 'showReadDocumentDialog', ...read, link: read.link && this.researchLinkAvailable('open') ? read.link : undefined });
             if (this.researchLinkAvailable('open')) frequent.push({ id: 'research-item-open', label: r.openResearch, method: 'researchActionOpen', ext: true });
             frequent.push(...sendRow);
             // Now and then: a version to load, following live, materials.
@@ -415,7 +430,7 @@ export const researchActionsMethods = uiModule({
         // An item done closes the menu (its own action may have opened a dialog already).
         menu.addEventListener('click', (e) => {
             const item = (e.target as Element | null)?.closest('[role="menuitem"]');
-            if (!item || item.matches('.research-trial-tag, [data-action="cancelLoad"], [data-action="conflicts"]')) return;
+            if (!item || item.matches('.research-trial-tag, [data-action="cancelLoad"], [data-action="conflicts"], [aria-disabled="true"]')) return;
             if (this.isResearchMenuOpen()) this.closeResearchMenu();
         });
         // Tab out of it: the menu closes, focus goes on in the toolbar.
@@ -442,11 +457,15 @@ export const researchActionsMethods = uiModule({
         const label = btn.querySelector('.research-menu-label');
         if (label) label.textContent = r.menuTitle;
         btn.classList.toggle('is-live', DataManager.isLiveFollowing());
+        // A document being read: the green dot, only when nothing else is signalled.
+        const reading = !!this.readRunningNow();
+        btn.classList.toggle('is-reading', reading && signal === '' && !DataManager.isLiveFollowing());
         // The phone connection on: a small dot in the corner, said in the name (beside any count).
         const phoneOn = this.phoneSummaryNow()?.state === 'on';
         const phoneDot = btn.querySelector<HTMLElement>('.research-menu-phone');
         if (phoneDot) phoneDot.hidden = !phoneOn;
-        const name = waiting > 0 ? r.menuButtonAriaWaiting(waiting) : unsent.label ? r.menuButtonAriaUnsent : r.menuTitle;
+        const base = waiting > 0 ? r.menuButtonAriaWaiting(waiting) : unsent.label ? r.menuButtonAriaUnsent : r.menuTitle;
+        const name = reading ? `${base}, ${strings.read.stripRunning}` : base;
         btn.setAttribute('aria-label', phoneOn ? `${name}, ${strings.phone.btnOn}` : name);
         if (phoneOn) btn.title = `${r.menuTitle} · ${strings.phone.btnOn}`;
         else btn.removeAttribute('title');
@@ -537,9 +556,9 @@ export const researchActionsMethods = uiModule({
     researchSheetGroup(): ResearchSheetGroup | null {
         if (!this.researchMenuShown()) return null;
         const model = this.researchMenuModel();
-        const frequent = new Set(['research-item-waiting', 'research-item-chat', 'research-item-open']);
+        const frequent = new Set(['research-item-waiting', 'research-item-chat', 'research-item-read', 'research-item-open']);
         const ui = this as unknown as Record<string, (...args: string[]) => void>;
-        const rows: ResearchSheetRow[] = model.groups.flatMap(g => g.items).filter(i => frequent.has(i.id)).map(i => ({
+        const rows: ResearchSheetRow[] = model.groups.flatMap(g => g.items).filter(i => frequent.has(i.id) && !i.disabled).map(i => ({
             label: i.label, count: i.count, ai: i.ai, ext: i.ext, ariaLabel: itemAria(i),
             run: () => ui[i.method](...(i.args ?? [])),
         }));

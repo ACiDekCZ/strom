@@ -143,6 +143,10 @@ export const contextMenuMethods = uiModule({
         // Files about the person, to the research (right after what it knows).
         const material: PersonMenuAction[] = !isViewMode && this.materialAvailable()
             ? [{ action: 'research-material', label: strings.material.send }] : [];
+        // Read a document about the person: right under the material, only when reading can start now.
+        if (!isViewMode && this.readDocumentReady()) {
+            material.push({ action: 'research-read', label: strings.read.menuPerson, note: strings.read.menuSub, badge: 'ai' });
+        }
         const head = [...(knows ? [knows] : []), ...material];
         const research = submenuRow('research', strings.research.personSection, [
             ...head,
@@ -287,6 +291,10 @@ export const contextMenuMethods = uiModule({
             case 'research-material':
                 this.clearDialogStack();
                 this.showMaterialDialog({ personId });
+                break;
+            case 'research-read':
+                this.clearDialogStack();
+                this.showReadDocumentDialog({ personId });
                 break;
             case 'research-review':
             case 'research-ancestors':

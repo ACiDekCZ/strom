@@ -619,10 +619,11 @@ async function call(url: string, init: RequestInit, timeoutMs: number): Promise<
 
 const ok = (status: number) => status >= 200 && status < 300;
 
-/** One page for reading: `PUT media/<sha>` with `X-Strom-Read: 1`. `name` and `person` (REFN) go as headers. */
-export async function putReadPage(base: string, sha: string, file: Blob, opts: { name?: string; person?: string } = {}): Promise<ReadReply<{ input: string }>> {
+/** One page for reading: `PUT media/<sha>` with `X-Strom-Read: 1`. `name` and `person` (REFN) go as headers, `mime` as its type. */
+export async function putReadPage(base: string, sha: string, file: Blob, opts: { name?: string; person?: string; mime?: string } = {}): Promise<ReadReply<{ input: string }>> {
     const headers: Record<string, string> = {
-        'Content-Type': file.type || 'application/octet-stream',
+        // A HEIC often comes without a type: the one known from its name.
+        'Content-Type': opts.mime || file.type || 'application/octet-stream',
         'X-Strom-Read': '1',
         ...(opts.name ? { 'X-Strom-Name': encodeURIComponent(opts.name) } : {}),
         ...(opts.person && researchPersonRef(opts.person) ? { 'X-Strom-Person': opts.person } : {}),
