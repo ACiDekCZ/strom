@@ -10445,7 +10445,12 @@
            up to two lines there; only a really long name is cut. */
         .live-panel-head { flex-wrap: wrap; justify-content: flex-end; row-gap: 4px; }
         .live-panel-head > .live-panel-toggle { flex: 1 0 auto; max-width: calc(100% - 17px); }
-        .live-panel-actions { flex: none; display: flex; align-items: center; gap: 8px; }
+        /* Never wider than the head: a group that does not fit (the folded
+           panel's "+N trees" chip beside the buttons) wraps, right-aligned. */
+        .live-panel-actions {
+            flex: none; max-width: 100%; display: flex; flex-wrap: wrap; justify-content: flex-end;
+            align-items: center; gap: 4px 8px;
+        }
         .live-panel-toggle .live-panel-title {
             white-space: normal; overflow-wrap: anywhere;
             display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2;

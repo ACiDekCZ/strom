@@ -307,4 +307,48 @@ test.describe('other research trees', () => {
         const overview = page.locator('#research-overview');
         await expect(overview.locator('.rs-elsewhere--overview .rs-elsewhere__sum')).toContainText('Other trees: 2');
     });
+
+    // A long followed name and another tree waiting: folded, the chip and the buttons stay inside the panel.
+    for (const [lang, width, chipText] of [['cs', 1024, '+1 strom'], ['de', 1440, '+1 Stammbaum'], ['en', 1024, '+1 tree']] as const) {
+        test(`folded with a long name (${lang} ${width}): the chip and the buttons stay inside the panel`, async ({ page }) => {
+            await page.setViewportSize({ width, height: 900 });
+            await fastRounds(page);
+            await page.addInitScript((links) => {
+                if (sessionStorage.getItem('seeded')) return;
+                sessionStorage.setItem('seeded', '1');
+                localStorage.setItem('strom-research-links', JSON.stringify({ actions: links, at: new Date().toISOString() }));
+            }, LINKS);
+            const NAME = 'Novákovi a Svobodovi z Kolína';
+            const GED = [
+                '0 HEAD', '1 SOUR STROM_RESEARCH', '1 DATE 30 SEP 2026', `1 _STROM_TREE ${HORAK}`, '1 CHAR UTF-8', `1 NOTE ${NAME}`,
+                '0 @P0001@ INDI', '1 NAME Josef /Horák/', '1 SEX M', '1 REFN P0001',
+                '0 TRLR',
+            ].join('\n');
+            const live = () => status(HORAK, NAME, { working: [worker('G0001', 'Křest')] });
+            await page.route(`${B_HORAK}/**`, async (route) => {
+                const path = new URL(route.request().url()).pathname;
+                if (path.endsWith('/status')) return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(live()) });
+                if (path.endsWith('/tree.ged')) return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/plain; charset=utf-8' }, body: GED });
+                if (path.endsWith('/events')) return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/event-stream' }, body: `event: hello\ndata: ${JSON.stringify(live())}\n\n` });
+                return route.fulfill({ status: 404, headers: cors, body: '' });
+            });
+            await page.goto(`/strom.html?live=${encodeURIComponent(B_HORAK)}`);
+            const panel = page.locator('#live-panel');
+            await expect(panel).toBeVisible();
+            await bridges(page, { [B_DVORAK]: { id: DVORAK, name: 'Morava', answer: () => ({ waiting: [item('T1')] }) } });
+            await addTrees(page, [{ name: 'Dvořákovi (Morava)', id: DVORAK, base: B_DVORAK }]);
+            await settled(page, [DVORAK]);
+            await page.evaluate((l) => window.Strom.UI.setLanguage(l as never), lang);
+            await panel.locator('.live-panel-toggle').click();
+            await expect(panel).toHaveClass(/collapsed/);
+            const chip = panel.locator('.live-panel-head .rs-elsewhere-chip');
+            await expect(chip).toHaveText(chipText);
+            const box = (await panel.boundingBox())!;
+            for (const part of [chip, panel.locator('.live-follow-btn'), panel.locator('.live-panel-expand'), panel.locator('.live-panel-action')]) {
+                const b = (await part.boundingBox())!;
+                expect(b.x).toBeGreaterThanOrEqual(box.x);
+                expect(b.x + b.width).toBeLessThanOrEqual(box.x + box.width);
+            }
+        });
+    }
 });
