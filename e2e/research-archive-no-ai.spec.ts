@@ -150,7 +150,7 @@ for (const locale of ['en-US', 'cs-CZ', 'de-DE']) {
 
             // A source with a transcript the user wrote: the tree set to Evidence does not count in an archive,
             // the source offers its own "Transcription verified".
-            const sourceId = await page.evaluate(() => window.Strom.DataManager.addSource({ title: 'Matrika', transcript: 'Jan Víšek, narozen 1865' }).id);
+            const sourceId = await page.evaluate(() => window.Strom.DataManager.addSource({ title: 'Matrika', transcript: 'Jan Fíšek, narozen 1865' }).id);
             await page.evaluate((id) => window.Strom.UI.showEditSourceModal(id), sourceId);
             await expect(page.locator('#source-verified-row')).toBeVisible();
             await expect(page.locator('#source-verified-bytree')).toBeHidden();
@@ -166,7 +166,7 @@ for (const locale of ['en-US', 'cs-CZ', 'de-DE']) {
             await page.evaluate(() => window.Strom.UI.closeSettingsDialog());
 
             // "The research is ready" after an installation that made an archive: Archive, nothing of an agent (K5.4).
-            await page.evaluate(({ b, id }) => window.Strom.UI.showResearchReady(b, id, 'Víškovi', true), { b: BRIDGE, id: UUID });
+            await page.evaluate(({ b, id }) => window.Strom.UI.showResearchReady(b, id, 'Fíškovi', true), { b: BRIDGE, id: UUID });
             await expect(page.locator('#research-ready-archive')).toBeVisible();
             expectNoAgent('the research is ready', await shownText(page, '#research-ready-modal'));
             await page.evaluate(() => window.Strom.UI.closeResearchReady());

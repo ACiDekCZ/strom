@@ -400,7 +400,7 @@ describe('lead or evidence: the user\'s transcripts', () => {
         const l = link({ transcripts: 'evidence', olderSources: older });
         expect(isOlderSource(src(), l)).toBe(true);
         expect(verifiedOffer(src(), l, true)).toBe('checkbox');
-        expect(verifiedOffer(src({ transcript: 'Anna, dcera Josefa Víška' }), l, true)).toBe('byTree');
+        expect(verifiedOffer(src({ transcript: 'Anna, dcera Josefa Fíška' }), l, true)).toBe('byTree');
         expect(verifiedOffer(src({ id: 's2' }), l, true)).toBe('byTree');
         // Already ticked: shown (it can be unticked).
         expect(verifiedOffer(src({ id: 's2', transcriptVerified: true }), l, true)).toBe('checkbox');

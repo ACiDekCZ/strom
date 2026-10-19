@@ -98,17 +98,17 @@ describe('tree-level registries travel in the packet (Fix 3)', () => {
         const current = clone(comprehensive);
         // The relative geocodes a place and groups two spellings.
         current.places = { ...(current.places ?? {}), kolin: { lat: 50.0281, lon: 15.2003, label: 'Kolín' } };
-        current.surnameVariants = [...(current.surnameVariants ?? []), ['Víšek', 'Vyšek']];
+        current.surnameVariants = [...(current.surnameVariants ?? []), ['Fíšek', 'Fyšek']];
 
         const packet = buildChangePacket(base, current, META);
         expect(isEmptyPacket(packet)).toBe(false);
         expect(packet.formatVersion).toBe(2);
         expect(packet.places?.changed.kolin).toBeDefined();
-        expect(packet.surnameVariants).toContainEqual(['Víšek', 'Vyšek']);
+        expect(packet.surnameVariants).toContainEqual(['Fíšek', 'Fyšek']);
 
         const rebuilt = applyChangePacket(base, packet);
         expect(rebuilt.places?.kolin).toEqual({ lat: 50.0281, lon: 15.2003, label: 'Kolín' });
-        expect(rebuilt.surnameVariants).toContainEqual(['Víšek', 'Vyšek']);
+        expect(rebuilt.surnameVariants).toContainEqual(['Fíšek', 'Fyšek']);
     });
 
     it('a place removed by the relative is removed on apply', () => {
@@ -125,16 +125,16 @@ describe('tree-level registries travel in the packet (Fix 3)', () => {
 
     it('unioning a group into an overlapping baseline group keeps transitivity', () => {
         const base = clone(comprehensive);
-        base.surnameVariants = [['Vyšek', 'Wischek']];
+        base.surnameVariants = [['Fyšek', 'Fischek']];
         const current = clone(base);
-        current.surnameVariants = [['Vyšek', 'Wischek'], ['Víšek', 'Vyšek']];
+        current.surnameVariants = [['Fyšek', 'Fischek'], ['Fíšek', 'Fyšek']];
 
         const packet = buildChangePacket(base, current, META);
         const rebuilt = applyChangePacket(base, packet);
-        // Víšek, Vyšek and Wischek must all end up in ONE group.
-        const group = (rebuilt.surnameVariants ?? []).find(g => g.some(n => n === 'Víšek'));
+        // Fíšek, Fyšek and Fischek must all end up in ONE group.
+        const group = (rebuilt.surnameVariants ?? []).find(g => g.some(n => n === 'Fíšek'));
         expect(group).toBeDefined();
-        expect(group).toEqual(expect.arrayContaining(['Víšek', 'Vyšek', 'Wischek']));
+        expect(group).toEqual(expect.arrayContaining(['Fíšek', 'Fyšek', 'Fischek']));
     });
 
     it('a person-only packet stays v1 (older apps still apply it)', () => {

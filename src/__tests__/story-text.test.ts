@@ -20,9 +20,9 @@ describe('storyProseHtml', () => {
     });
 
     it('a leading # line repeating the title is left out; a different one stays', () => {
-        const title = 'Anna Konopásková, rozená Widmannová (1831)';
+        const title = 'Anna Mrkvásková, rozená Zwirnmannová (1831)';
         expect(storyProseHtml(`# ${title}\n\nText.`, { title })).toBe('<p>Text.</p>');
-        expect(storyProseHtml('# **anna konopásková, rozená widmannová (1831).**\nText.', { title })).toBe('<p>Text.</p>');
+        expect(storyProseHtml('# **anna mrkvásková, rozená zwirnmannová (1831).**\nText.', { title })).toBe('<p>Text.</p>');
         expect(storyProseHtml('# Jiný nadpis\n\nText.', { title })).toBe('<h4 class="story-subhead">Jiný nadpis</h4><p>Text.</p>');
         expect(storyProseHtml(`# ${title}`)).toBe(`<h4 class="story-subhead">${title}</h4>`);
         // Only as the first line.

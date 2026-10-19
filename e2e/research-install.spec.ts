@@ -945,7 +945,7 @@ test.describe('the research\'s beta channel: only the beta app\'s lines', () => 
         await page.evaluate(() => window.Strom.UI.closeResearchInstall());
         await page.evaluate(() => {
             const tm = window.Strom.TreeManager;
-            tm.renameTree(tm.getActiveTreeId()!, 'Velmi dlouhý název rodiny Víšků z Čáslavi a okolí, Novákovi a další příbuzní');
+            tm.renameTree(tm.getActiveTreeId()!, 'Velmi dlouhý název rodiny Fíšků z Čáslavi a okolí, Novákovi a další příbuzní');
         });
         await page.evaluate(() => window.Strom.UI.showResearchInstall('install'));
         const long = await lineOf(page, 'win');

@@ -80,10 +80,10 @@ export function conflictGed(v: Version = {}): string {
     return [
         '0 HEAD', '1 SOUR STROM_RESEARCH', '2 NAME Strom Research', '1 DATE 9 OCT 2026',
         `1 _STROM_TREE ${UUID}`, `1 _STROM_HEAD ${v.head ?? HEAD}`, `1 _STROM_LINKS ${(v.links ?? LINKS).join(' ')}`,
-        ...(v.archive ? ['1 _STROM_MODE archive'] : []), '1 CHAR UTF-8', '1 NOTE Víškovi',
-        '0 @P0001@ INDI', '1 NAME Josef /Víšek/', '1 SEX M', '1 REFN P0001', '2 TYPE strom-research', '1 FAMS @F0001@', ...family,
+        ...(v.archive ? ['1 _STROM_MODE archive'] : []), '1 CHAR UTF-8', '1 NOTE Fíškovi',
+        '0 @P0001@ INDI', '1 NAME Josef /Fíšek/', '1 SEX M', '1 REFN P0001', '2 TYPE strom-research', '1 FAMS @F0001@', ...family,
         '0 @P0002@ INDI', '1 NAME Anna /Svobodová/', '1 SEX F', '1 REFN P0002', '2 TYPE strom-research', '1 FAMS @F0001@', ...family,
-        '0 @P0003@ INDI', `1 NAME ${v.janName ?? 'Jan /Víšek/'}`, ...titles, `1 SEX ${v.janSex ?? 'M'}`, '1 REFN P0003', '2 TYPE strom-research', '1 FAMC @F0001@',
+        '0 @P0003@ INDI', `1 NAME ${v.janName ?? 'Jan /Fíšek/'}`, ...titles, `1 SEX ${v.janSex ?? 'M'}`, '1 REFN P0003', '2 TYPE strom-research', '1 FAMC @F0001@',
         '1 BIRT', `2 DATE ${v.janBirth ?? '1865'}`, '2 PLAC Chlumy',
         '1 DEAT', ...(v.janDeath === '' ? [] : [`2 DATE ${v.janDeath ?? '1932'}`]), ...(v.janDeathPlace ? [`2 PLAC ${v.janDeathPlace}`] : []),
         ...(v.janFacts ?? []),
@@ -92,7 +92,7 @@ export function conflictGed(v: Version = {}): string {
         ...(v.janConflicts ?? []),
         '0 @F0001@ FAM', '1 HUSB @P0001@', '1 WIFE @P0002@', '1 CHIL @P0003@',
         ...(v.wedding || v.weddingPlace ? ['1 MARR', ...(v.wedding ? [`2 DATE ${v.wedding}`] : []), ...(v.weddingPlace ? [`2 PLAC ${v.weddingPlace}`] : [])] : []),
-        '0 @S0001@ SOUR', '1 TITL Oddací matrika Čáslav', '1 PAGE fol. 41', '1 REFN S0001', '1 TEXT Josef Víšek a Anna', '1 _STROM_READ research',
+        '0 @S0001@ SOUR', '1 TITL Oddací matrika Čáslav', '1 PAGE fol. 41', '1 REFN S0001', '1 TEXT Josef Fíšek a Anna', '1 _STROM_READ research',
         '0 TRLR',
     ].join('\n');
 }

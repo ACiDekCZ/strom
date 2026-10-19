@@ -15,18 +15,18 @@ const UUID = '3f2c9a10-7b1e-4c55-9d2a-0e8f6b4a1c77';
 function researchGed(): string {
     return [
         '0 HEAD', '1 SOUR STROM_RESEARCH', '1 DATE 27 SEP 2026', `1 _STROM_TREE ${UUID}`, '1 _STROM_HEAD 3f2a9c1e5b7d',
-        '1 CHAR UTF-8', '1 NOTE Víškovi',
+        '1 CHAR UTF-8', '1 NOTE Fíškovi',
         '0 @S12@ SOUR', '1 TITL Křestní matrika Chlumy 1865', '1 REFN S0012',
-        '0 @P0001@ INDI', '1 NAME Josef /Víšek/', '1 SEX M', '1 BIRT', '2 DATE 1840', '1 DEAT', '2 DATE 1900',
+        '0 @P0001@ INDI', '1 NAME Josef /Fíšek/', '1 SEX M', '1 BIRT', '2 DATE 1840', '1 DEAT', '2 DATE 1900',
         '1 REFN P0001', '1 FAMS @F0001@',
         '1 _STORY', '2 STAT hotovo', '2 TEXT Josef hospodařil na čp. 12.',
         '0 @P0002@ INDI', '1 NAME Anna /Svobodová/', '1 SEX F', '1 REFN P0002', '1 FAMS @F0001@',
-        '0 @P0012@ INDI', '1 NAME Jan /Víšek/', '1 SEX M', '1 BIRT', '2 DATE 1865', '2 SOUR @S12@', '1 DEAT', '2 DATE 1932', '2 SOUR @S12@',
+        '0 @P0012@ INDI', '1 NAME Jan /Fíšek/', '1 SEX M', '1 BIRT', '2 DATE 1865', '2 SOUR @S12@', '1 DEAT', '2 DATE 1932', '2 SOUR @S12@',
         '1 REFN P0012', '1 FAMC @F0001@',
         '1 _STORY', '2 STAT navrh', '2 TEXT Jan se narodil v Chlumech.',
         '1 _STROM_CONFLICT X0007', '2 TYPE BIRT', '2 STAT open', '2 VAL 3 FEB 1865', '3 SOUR @S12@', '2 VAL 1866',
-        '1 _STROM_HYPO', '2 TITL Otec: Josef, nebo Jan Víšek?',
-        '0 @P0013@ INDI', '1 NAME Eva /Víšková/', '1 SEX F', '1 BIRT', '2 DATE 1868', '1 REFN P0013', '1 FAMC @F0001@',
+        '1 _STROM_HYPO', '2 TITL Otec: Josef, nebo Jan Fíšek?',
+        '0 @P0013@ INDI', '1 NAME Eva /Fíšková/', '1 SEX F', '1 BIRT', '2 DATE 1868', '1 REFN P0013', '1 FAMC @F0001@',
         '1 _STROM_CONFLICT X0010', '2 TYPE DEAT', '2 STAT open', '2 VAL 1930', '2 VAL 1931',
         '0 @F0001@ FAM', '1 HUSB @P0001@', '1 WIFE @P0002@', '1 CHIL @P0012@', '1 CHIL @P0013@',
         '0 TRLR',
@@ -101,7 +101,7 @@ test.describe('card signals', () => {
         await expect(card(page, 'Josef').locator('.card-signal')).toHaveCount(0);
         await expect(card(page, 'Eva').locator('.card-signal')).toHaveAttribute('aria-label', 'Awaiting action: Uložte snímek oddací matriky');
 
-        await expect(card(page, 'Jan')).toHaveAttribute('aria-label', 'Jan Víšek, documented by sources, story in draft, conflicting sources');
+        await expect(card(page, 'Jan')).toHaveAttribute('aria-label', 'Jan Fíšek, documented by sources, story in draft, conflicting sources');
         const tt = card(page, 'Jan').locator('.card-tooltip .tt-signals');
         await expect(tt.locator('.tt-ev')).toHaveText('1 source · birth documented');
         await expect(tt.locator('.tt-story')).toHaveText('Story (draft)');
@@ -391,7 +391,7 @@ test.describe('card signals', () => {
     test('the name keeps its whole row; the stripes stay inside the card', async ({ page }) => {
         await plainTree(page, {
             k: {
-                firstName: 'Kateřina', lastName: 'Výšková', birthDate: '1842', deathDate: '1901',
+                firstName: 'Kateřina', lastName: 'Fýšková', birthDate: '1842', deathDate: '1901',
                 birthPlace: 'Chlumy u Třeboně, okres Jindřichův Hradec', sourceIds: ['s1'],
                 story: { text: 'Kateřina vedla hospodu.', status: 'draft' },
             },

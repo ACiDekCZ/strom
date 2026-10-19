@@ -244,37 +244,37 @@ describe('mergePersonData carries fields the audit found dropped', () => {
 });
 
 describe('name conflict keeps the losing spelling as a variant (Fix 2)', () => {
-    it('appends the losing surname spelling (Víšek/Vyšek) on keep_existing', () => {
-        const existing = person('e1', 'Josef', 'Víšek');
-        const incoming = person('i1', 'Josef', 'Vyšek');
+    it('appends the losing surname spelling (Fíšek/Fyšek) on keep_existing', () => {
+        const existing = person('e1', 'Josef', 'Fíšek');
+        const incoming = person('i1', 'Josef', 'Fyšek');
         const conflicts = detectConflicts(existing, incoming);
         // Default is keep_existing (the two spellings do not contain one another).
         mergePersonData(existing, incoming, conflicts);
-        expect(existing.lastName).toBe('Víšek');
-        expect(existing.nameVariants).toContain('Vyšek');
+        expect(existing.lastName).toBe('Fíšek');
+        expect(existing.nameVariants).toContain('Fyšek');
     });
 
-    it('appends the losing surname (Víšek/Vyšek) on use_incoming too', () => {
-        const existing = person('e1', 'Josef', 'Vyšek');
-        const incoming = person('i1', 'Josef', 'Víšek');
+    it('appends the losing surname (Fíšek/Fyšek) on use_incoming too', () => {
+        const existing = person('e1', 'Josef', 'Fyšek');
+        const incoming = person('i1', 'Josef', 'Fíšek');
         const conflicts = detectConflicts(existing, incoming);
         conflicts.find(c => c.field === 'lastName')!.resolution = 'use_incoming';
         mergePersonData(existing, incoming, conflicts);
-        expect(existing.lastName).toBe('Víšek');
-        expect(existing.nameVariants).toContain('Vyšek');
+        expect(existing.lastName).toBe('Fíšek');
+        expect(existing.nameVariants).toContain('Fyšek');
     });
 
-    it('keeps both spellings for Elsa Charlotta Voigtová / Elsa Voigt', () => {
-        const existing = person('e1', 'Elsa Charlotta', 'Voigtová', { gender: 'female' });
-        const incoming = person('i1', 'Elsa', 'Voigt', { gender: 'female' });
+    it('keeps both spellings for Elsa Charlotta Leiptová / Elsa Leipt', () => {
+        const existing = person('e1', 'Elsa Charlotta', 'Leiptová', { gender: 'female' });
+        const incoming = person('i1', 'Elsa', 'Leipt', { gender: 'female' });
         const conflicts = detectConflicts(existing, incoming);
         mergePersonData(existing, incoming, conflicts);
         // The more complete spellings win; the shorter ones survive as variants,
-        // so the next import of "Elsa Voigt" matches this person again.
+        // so the next import of "Elsa Leipt" matches this person again.
         expect(existing.firstName).toBe('Elsa Charlotta');
-        expect(existing.lastName).toBe('Voigtová');
+        expect(existing.lastName).toBe('Leiptová');
         expect(existing.nameVariants).toContain('Elsa');
-        expect(existing.nameVariants).toContain('Voigt');
+        expect(existing.nameVariants).toContain('Leipt');
     });
 
     it('adds nothing when the two spellings differ only in case/diacritics', () => {

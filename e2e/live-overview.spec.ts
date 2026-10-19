@@ -19,17 +19,17 @@ const ALL = ['send', 'excerpt', 'app', 'open', 'chat', 'task', 'review', 'resear
 
 function ged(extra: boolean): string {
     return [
-        '0 HEAD', '1 SOUR STROM_RESEARCH', '1 DATE 27 SEP 2026', `1 _STROM_TREE ${UUID}`, '1 CHAR UTF-8', '1 NOTE Víškovi',
+        '0 HEAD', '1 SOUR STROM_RESEARCH', '1 DATE 27 SEP 2026', `1 _STROM_TREE ${UUID}`, '1 CHAR UTF-8', '1 NOTE Fíškovi',
         '0 @S12@ SOUR', '1 TITL Křestní matrika Chlumy 1865', '1 REFN S0012',
         ...(extra ? ['0 @S31@ SOUR', '1 TITL Sčítání lidu 1880', '1 REFN S0031'] : []),
-        '0 @P0001@ INDI', '1 NAME Josef /Víšek/', '1 SEX M', '1 BIRT', '2 DATE 1840', '1 REFN P0001', '1 FAMS @F0001@',
+        '0 @P0001@ INDI', '1 NAME Josef /Fíšek/', '1 SEX M', '1 BIRT', '2 DATE 1840', '1 REFN P0001', '1 FAMS @F0001@',
         '0 @P0002@ INDI', '1 NAME Anna /Svobodová/', '1 SEX F', '1 REFN P0002', '1 FAMS @F0001@',
-        '0 @P0012@ INDI', '1 NAME Jan /Víšek/', '1 SEX M', '1 BIRT', '2 DATE 1865', '2 SOUR @S12@', '1 REFN P0012', '1 FAMC @F0001@',
+        '0 @P0012@ INDI', '1 NAME Jan /Fíšek/', '1 SEX M', '1 BIRT', '2 DATE 1865', '2 SOUR @S12@', '1 REFN P0012', '1 FAMC @F0001@',
         '1 _STROM_CONFLICT X0007', '2 TYPE BIRT', '2 STAT open', '2 VAL 3 FEB 1865', '2 VAL 1866',
         ...(extra ? [
-            '0 @P0004@ INDI', '1 NAME Ludmila /Víšková/', '1 SEX F', '1 REFN P0004', '1 FAMC @F0001@',
-            '0 @P0005@ INDI', '1 NAME Marie /Víšková/', '1 SEX F', '1 REFN P0005', '1 FAMC @F0001@',
-            '0 @P0006@ INDI', '1 NAME Karel /Víšek/', '1 SEX M', '1 REFN P0006', '1 FAMC @F0001@',
+            '0 @P0004@ INDI', '1 NAME Ludmila /Fíšková/', '1 SEX F', '1 REFN P0004', '1 FAMC @F0001@',
+            '0 @P0005@ INDI', '1 NAME Marie /Fíšková/', '1 SEX F', '1 REFN P0005', '1 FAMC @F0001@',
+            '0 @P0006@ INDI', '1 NAME Karel /Fíšek/', '1 SEX M', '1 REFN P0006', '1 FAMC @F0001@',
         ] : []),
         '0 @F0001@ FAM', '1 HUSB @P0001@', '1 WIFE @P0002@', '1 CHIL @P0012@',
         ...(extra ? ['1 CHIL @P0004@', '1 CHIL @P0005@', '1 CHIL @P0006@'] : []),
@@ -38,9 +38,9 @@ function ged(extra: boolean): string {
 }
 
 const CHANGE = [
-    '+P0004 Ludmila /Víšková/ · E0006 BIRT 1868 [lead]',
-    '+P0005 Marie /Víšková/',
-    '+P0006 Karel /Víšek/',
+    '+P0004 Ludmila /Fíšková/ · E0006 BIRT 1868 [lead]',
+    '+P0005 Marie /Fíšková/',
+    '+P0006 Karel /Fíšek/',
     '+S0031 Sčítání lidu 1880',
     'P0012 _STORY navrh',
     'F0001 +child P0006',
@@ -89,7 +89,7 @@ async function follow(page: Page, size: { width: number; height: number } = { wi
     };
     setup(bridge);
     const status = () => ({
-        tree: { id: UUID, name: 'Víškovi' }, head: bridge.gedCalls > 1 ? 'h2' : 'h1', persons: 3,
+        tree: { id: UUID, name: 'Fíškovi' }, head: bridge.gedCalls > 1 ? 'h2' : 'h1', persons: 3,
         working: bridge.workDone ? [] : [{ who: 'agent-matriky', since: new Date(Date.now() - 16 * 60_000).toISOString(), ...(bridge.paused ? { paused: bridge.paused } : { task: 'Sčítání 1921', person: bridge.workPerson }) }],
         waiting: bridge.waiting, links: ALL,
         queue: [{ id: 'T0101', text: 'Matriky Chlumy', state: 'next', person: 'P0001' }, { id: 'T0102', text: 'Pozemková kniha', state: 'next' }],
@@ -173,7 +173,7 @@ test.describe('small live panel', () => {
         const panel = page.locator('#live-panel');
         await expect(panel.locator('.live-changes li')).toHaveCount(5);
         // Newest first; the people in a change are links.
-        await expect(panel.locator('.live-change-text .live-person-link').first()).toHaveText('Karel Víšek');
+        await expect(panel.locator('.live-change-text .live-person-link').first()).toHaveText('Karel Fíšek');
         await expect(panel.locator('.live-section__title')).toHaveText(['At work', 'Awaiting action · 2', 'Latest changes', 'Up next']);
         await expect(head(page, '#live-panel', 'At work').locator('.live-section__sum')).toHaveText(/agent-matriky · 1[67] min/);
         await expect(panel.locator('.live-working .live-time')).toHaveText(/^since (?:\S+ )?\d{1,2}:\d{2}.* · 1[67] min$/);   // a date before the time across midnight
@@ -231,7 +231,7 @@ test.describe('the research history (/log)', () => {
         const panel = page.locator('#live-panel');
         await expect(panel.locator('.live-changes li')).toHaveCount(4);
         // Newest first; within one version its last line first (as the changes that come live).
-        await expect(panel.locator('.live-changes li')).toContainText(['N0007 closed', 'Jan Víšek', 'Sčítání lidu 1880', 'Starý Záznam']);
+        await expect(panel.locator('.live-changes li')).toContainText(['N0007 closed', 'Jan Fíšek', 'Sčítání lidu 1880', 'Starý Záznam']);
         // The history is not news: no "N new".
         await expect(panel.locator('.live-section__sum--new')).toHaveCount(0);
         await panel.locator('.live-panel-expand').click();
@@ -268,9 +268,9 @@ test.describe('the research history (/log)', () => {
         persons: { added: 17, ids: ['P0102', 'P0103'] }, sources: { added: 4, ids: ['S0031'] },
     };
     const recentLog = () => ({ entries: [
-        { head: 'c3c3c3c3c3c3c3c3', at: new Date(Date.now() - 60_000).toISOString(), what: ['+P0006 Karel /Víšek/'], task: '' },
-        { head: 'b2b2b2b2b2b2b2b2', at: new Date(Date.now() - 3 * 60_000).toISOString(), what: ['+S0031 Sčítání lidu 1880', '+P0005 Marie /Víšková/'], task: '' },
-        { head: 'a1a1a1a1a1a1a1a1', at: new Date(Date.now() - 5 * 60_000).toISOString(), what: ['+P0004 Ludmila /Víšková/'], task: '' },
+        { head: 'c3c3c3c3c3c3c3c3', at: new Date(Date.now() - 60_000).toISOString(), what: ['+P0006 Karel /Fíšek/'], task: '' },
+        { head: 'b2b2b2b2b2b2b2b2', at: new Date(Date.now() - 3 * 60_000).toISOString(), what: ['+S0031 Sčítání lidu 1880', '+P0005 Marie /Fíšková/'], task: '' },
+        { head: 'a1a1a1a1a1a1a1a1', at: new Date(Date.now() - 5 * 60_000).toISOString(), what: ['+P0004 Ludmila /Fíšková/'], task: '' },
     ] });
 
     test('last 24 hours: the bridge count, plus what came after it', async ({ page }) => {
@@ -348,14 +348,14 @@ test.describe('the research says it in its language (text)', () => {
             b.events = false;
             b.log = { entries: [
                 { head: 'h3', at: new Date(Date.now() - 2 * 60_000).toISOString(), what: ['N0010 closed: T0200 · output/tree.ged'], task: 'T0200 Křty', text: [] },
-                { head: 'h2', at: new Date(Date.now() - 3 * 60_000).toISOString(), what: ['+P0004 Ludmila /Víšková/'], task: 'T0200 Křty', text: ['Nová osoba: Jan Víšek (*1865) [P0012]'] },
+                { head: 'h2', at: new Date(Date.now() - 3 * 60_000).toISOString(), what: ['+P0004 Ludmila /Fíšková/'], task: 'T0200 Křty', text: ['Nová osoba: Jan Fíšek (*1865) [P0012]'] },
             ] };
         });
         const rows = page.locator('#live-panel .live-changes li');
         await expect(rows).toHaveCount(1);
-        await expect(rows.first()).toContainText('Nová osoba: Jan Víšek (*1865)');
+        await expect(rows.first()).toContainText('Nová osoba: Jan Fíšek (*1865)');
         await expect(rows.first()).not.toContainText('[P0012]');
-        await expect(rows.first().locator('.live-person-link')).toHaveText('Jan Víšek');
+        await expect(rows.first().locator('.live-person-link')).toHaveText('Jan Fíšek');
         await page.locator('#live-panel .live-panel-expand').click();
         // The count comes from what the commit added ("+P…"), not from the words.
         await expect(page.locator('#research-overview .research-overview__cell-value').nth(1)).toHaveText('+1 person');
@@ -532,13 +532,13 @@ test.describe('Research overview', () => {
         // An older research (no waiting.groups): compact rows in its order, no chips or phases.
         const rows = ov.locator('.research-overview__waiting-item');
         await expect(rows).toHaveCount(2);
-        await expect(rows.nth(0).locator('.research-overview__waiting-who')).toHaveText('Jan Víšek');
+        await expect(rows.nth(0).locator('.research-overview__waiting-who')).toHaveText('Jan Fíšek');
         await expect(rows.nth(1)).toContainText('whole research');
         await expect(ov.locator('.research-overview__waiting-filters')).toHaveCount(0);
         await expect(ov.locator('.research-overview__phase-head')).toHaveCount(0);
         await expect(ov.locator('.research-overview__waiting-detail')).toHaveCount(0);
         await rows.nth(0).locator('.research-overview__waiting-row').click();
-        await expect(rows.nth(0).locator('.research-overview__waiting-detail .live-person-link')).toHaveText('Jan Víšek');
+        await expect(rows.nth(0).locator('.research-overview__waiting-detail .live-person-link')).toHaveText('Jan Fíšek');
         // Without actions from the research: only "Answer ↗", as before; no hint.
         await expect(rows.nth(0).locator('.research-overview__waiting-action')).toHaveText(['Answer ↗']);
         await expect(rows.nth(0).locator('.research-overview__waiting-hint')).toHaveCount(0);
@@ -653,7 +653,7 @@ test.describe('Research overview', () => {
         await ov.locator('.research-overview__waiting-row').first().click();
         await expect(ov.locator('.live-waiting-answer')).toHaveCount(0);
         await expect(ov.locator('.research-overview__waiting-detail')).toContainText('answered in the research on the computer');
-        await ov.locator('.research-overview__row .live-person-link', { hasText: 'Karel Víšek' }).first().click();
+        await ov.locator('.research-overview__row .live-person-link', { hasText: 'Karel Fíšek' }).first().click();
         await expect(ov).toHaveCount(0);
         await expect(card(page, 'Karel')).toBeVisible();
     });
@@ -780,7 +780,7 @@ test.describe('Awaiting action from a research with waiting.groups', () => {
         const items = ov.locator('.research-overview__waiting-item');
         await expect(items).toHaveCount(10);
         await expect(items.first().locator('.live-kind')).toHaveText('Images');
-        await expect(items.first().locator('.research-overview__waiting-who')).toHaveText('Jan Víšek');
+        await expect(items.first().locator('.research-overview__waiting-who')).toHaveText('Jan Fíšek');
         await items.first().locator('.research-overview__waiting-row').click();
         await expect(items.first().locator('.research-overview__waiting-row')).toHaveAttribute('aria-expanded', 'true');
         const detail = items.first().locator('.research-overview__waiting-detail');

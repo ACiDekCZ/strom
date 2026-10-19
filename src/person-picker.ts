@@ -43,7 +43,7 @@ function calculateMatchScore(person: Person, query: string, data: StromData | nu
     if (lastNameIdx >= 0) return 60 - lastNameIdx;
 
     // Other forms of the surname and the person's name variants: someone
-    // searching "Visek" must find "Víšková", "Wischek" the alias.
+    // searching "Fisek" must find "Fíšková", "Fischek" the alias.
     const alternates = alternateNames(person, data);
     if (alternates.some(n => n.startsWith(query))) return 55;
     if (alternates.some(n => n.includes(query))) return 45;

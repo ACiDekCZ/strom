@@ -54,7 +54,7 @@ test('a field that already has something in it is never hidden', async ({ page }
     await page.evaluate(() => {
         const dm = window.Strom.DataManager;
         dm.updatePerson(dm.getAllPersons()[0].id, {
-            refn: 'box 12/1880', nameVariants: ['Wischek'], question: 'Kdo byli rodiče?',
+            refn: 'box 12/1880', nameVariants: ['Fischek'], question: 'Kdo byli rodiče?',
         });
     });
     // Research fields are OFF...
@@ -66,7 +66,7 @@ test('a field that already has something in it is never hidden', async ({ page }
     await expect(modal.locator('#refn-group')).toBeVisible();
     await expect(modal.locator('#input-refn')).toHaveValue('box 12/1880');
     await expect(modal.locator('#name-variants-group')).toBeVisible();
-    await expect(modal.locator('#input-name-variants')).toHaveValue('Wischek');
+    await expect(modal.locator('#input-name-variants')).toHaveValue('Fischek');
     await expect(modal.locator('#question-group')).toBeVisible();
     // The empty ones stay out of the way.
     await expect(modal.locator('#person-sources-section')).toBeHidden();

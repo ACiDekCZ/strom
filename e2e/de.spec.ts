@@ -221,7 +221,7 @@ test('German UI: the research — its menu, the states of the block, Research fo
 
     // A write that leaves a conflict: the pill and the block (finding 40).
     bridge.syncReply = { status: 200, body: { ok: true, inbox: false, changes: 1, applied: 1, input: 'I0042', conflicts: [{ id: 'X0008', person: 'P0003', fact: 'NAME' }] } };
-    bridge.onWrite = () => ({ head: 'c1c1c1c1c1c1', ged: researchGed('c1c1c1c1c1c1', ['1 _STROM_CONFLICT X0008', '2 TYPE NAME', '2 STAT open', '2 VAL Jan /Víšek/', '2 VAL Johann /Víšek/']) });
+    bridge.onWrite = () => ({ head: 'c1c1c1c1c1c1', ged: researchGed('c1c1c1c1c1c1', ['1 _STROM_CONFLICT X0008', '2 TYPE NAME', '2 STAT open', '2 VAL Jan /Fíšek/', '2 VAL Johann /Fíšek/']) });
     await page.evaluate((id) => window.Strom.DataManager.updatePerson(id, { firstName: 'Johann' }), janId);
     await page.evaluate(() => window.Strom.UI.researchSendNow());
     // By hand: "What will be sent" first, in German too.

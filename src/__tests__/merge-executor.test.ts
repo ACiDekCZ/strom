@@ -49,19 +49,19 @@ beforeEach(() => {
     vi.spyOn(StorageManager, 'set').mockResolvedValue(undefined as never);
 });
 
-describe('executeMerge enforces parent/child symmetry (Bredlow shape)', () => {
+describe('executeMerge enforces parent/child symmetry (Mardlow shape)', () => {
     it('a duplicate mother added for a child that already has two parents leaves no dangling link', async () => {
         // Existing: child Karel with two parents (Josef + Anna), married union.
-        const D = P('D', 'Josef', 'Bredlow', { birthDate: '1900', childIds: ['X'], partnerships: ['U1'] });
-        const M1 = P('M1', 'Anna', 'Bredlow', { gender: 'female', birthDate: '1905', childIds: ['X'], partnerships: ['U1'] });
-        const X = P('X', 'Karel', 'Bredlow', { birthDate: '1930', parentIds: ['D', 'M1'] });
+        const D = P('D', 'Josef', 'Mardlow', { birthDate: '1900', childIds: ['X'], partnerships: ['U1'] });
+        const M1 = P('M1', 'Anna', 'Mardlow', { gender: 'female', birthDate: '1905', childIds: ['X'], partnerships: ['U1'] });
+        const X = P('X', 'Karel', 'Mardlow', { birthDate: '1930', parentIds: ['D', 'M1'] });
         const existingData = tree([D, M1, X], [U('U1', 'D', 'M1', ['X'])]);
 
         // Incoming: same father + same child, but a DIFFERENT (duplicate) mother,
         // married to the father, listing the same child.
-        const iD = P('iD', 'Josef', 'Bredlow', { birthDate: '1900', childIds: ['iX'], partnerships: ['iU2'] });
-        const iM2 = P('iM2', 'Marie', 'Bredlow', { gender: 'female', birthDate: '1908', childIds: ['iX'], partnerships: ['iU2'] });
-        const iX = P('iX', 'Karel', 'Bredlow', { birthDate: '1930', parentIds: ['iD', 'iM2'] });
+        const iD = P('iD', 'Josef', 'Mardlow', { birthDate: '1900', childIds: ['iX'], partnerships: ['iU2'] });
+        const iM2 = P('iM2', 'Marie', 'Mardlow', { gender: 'female', birthDate: '1908', childIds: ['iX'], partnerships: ['iU2'] });
+        const iX = P('iX', 'Karel', 'Mardlow', { birthDate: '1930', parentIds: ['iD', 'iM2'] });
         const incomingData = tree([iD, iM2, iX], [U('iU2', 'iD', 'iM2', ['iX'])]);
 
         const state: MergeState = {

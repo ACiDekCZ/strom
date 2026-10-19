@@ -251,7 +251,7 @@ test.describe('the panel for the name, the sex and the titles', () => {
     test.use({ locale: 'en-US', viewport: { width: 1280, height: 900 } });
 
     test('the name: "conflict ›" at the given name opens the panel; Keep decides it', async ({ page }) => {
-        const name = conflictOf('X0011', 'NAME', 'Johann Wischek', 'Jan Víšek');
+        const name = conflictOf('X0011', 'NAME', 'Johann Fischek', 'Jan Fíšek');
         const { decide } = await setupConflict(page, { opened: { noBirthConflict: true, janConflicts: name } });
         await editJosef(page);
         await openEdit(page);
@@ -261,9 +261,9 @@ test.describe('the panel for the name, the sex and the titles', () => {
         await t.click();
         const p = panel(page);
         await expect(p.locator('.prc-panel-title')).toHaveText('Conflict · Name');
-        await expect(p.locator('.prc-panel-row[data-side="user"] .prc-panel-value')).toHaveText('Jan Víšek');
-        await expect(p.locator('.prc-panel-row[data-side="research"] .prc-panel-value')).toHaveText('Johann Wischek');
-        decide.replies.push(reply('X0011', 'user', { head: NEW_HEAD, noBirthConflict: true, janConflicts: conflictOf('X0011', 'NAME', 'Johann Wischek', 'Jan Víšek', undefined, 'decided') }));
+        await expect(p.locator('.prc-panel-row[data-side="user"] .prc-panel-value')).toHaveText('Jan Fíšek');
+        await expect(p.locator('.prc-panel-row[data-side="research"] .prc-panel-value')).toHaveText('Johann Fischek');
+        decide.replies.push(reply('X0011', 'user', { head: NEW_HEAD, noBirthConflict: true, janConflicts: conflictOf('X0011', 'NAME', 'Johann Fischek', 'Jan Fíšek', undefined, 'decided') }));
         await choice(page, 'user').click();
         await expect(p).toHaveCount(0);
         await expect(t).toHaveCount(0);
@@ -478,9 +478,9 @@ test.describe('nothing new where nothing is decidable', () => {
 async function setupPlain(page: Page): Promise<void> {
     await dropFile(page, 'family.ged', [
         '0 HEAD', '1 SOUR OTHER', '1 CHAR UTF-8',
-        '0 @I1@ INDI', '1 NAME Josef /Víšek/', '1 SEX M', '1 FAMS @F1@',
+        '0 @I1@ INDI', '1 NAME Josef /Fíšek/', '1 SEX M', '1 FAMS @F1@',
         '0 @I2@ INDI', '1 NAME Anna /Svobodová/', '1 SEX F', '1 FAMS @F1@',
-        '0 @I3@ INDI', '1 NAME Jan /Víšek/', '1 SEX M', '1 BIRT', '2 DATE 1865', '1 FAMC @F1@',
+        '0 @I3@ INDI', '1 NAME Jan /Fíšek/', '1 SEX M', '1 BIRT', '2 DATE 1865', '1 FAMC @F1@',
         '0 @F1@ FAM', '1 HUSB @I1@', '1 WIFE @I2@', '1 CHIL @I3@', '0 TRLR',
     ].join('\n'));
     await page.locator('.modal-overlay.active').getByText('Import as a new tree', { exact: true }).first().click();

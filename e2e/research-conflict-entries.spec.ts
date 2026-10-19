@@ -357,7 +357,7 @@ test.describe('the Research menu, the ≠ and the dialog at the card', () => {
         const { bridge, treeId } = await setup(page);
         await writtenWithConflict(page, bridge, treeId);
         await openResearchMenu(page);
-        await expect(block(page).locator('.research-sync-lead')).toHaveText('Jan Víšek · Birth');
+        await expect(block(page).locator('.research-sync-lead')).toHaveText('Jan Fíšek · Birth');
         const show = block(page).locator('[data-action="showConflict"]');
         await expect(show).toHaveText('Show');
         await expect(show).toHaveClass(/research-sync-btn/);
@@ -389,7 +389,7 @@ test.describe('the Research menu, the ≠ and the dialog at the card', () => {
         await poll(page);
         expect(await page.evaluate(() => window.Strom.UI.currentResearchSyncState().kind)).toBe('written');
         await openResearchMenu(page);
-        await expect(block(page).locator('.research-sync-lead')).toHaveText('Jan Víšek · Birth');
+        await expect(block(page).locator('.research-sync-lead')).toHaveText('Jan Fíšek · Birth');
         await block(page).locator('[data-action="showConflict"]').click();
         await expect(cardOf(page)).toHaveClass(/prc--highlight/);
     });

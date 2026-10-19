@@ -32,7 +32,7 @@ async function nameEllipsized(page: Page, firstName: string): Promise<boolean> {
 
 test('normal card is 188x64 and shows the acceptance name + meta unshrunk', async ({ page }) => {
     await openApp(page);
-    await createFirstPerson(page, 'Kateřina', 'Výšková', {
+    await createFirstPerson(page, 'Kateřina', 'Fýšková', {
         gender: 'female', birthDate: '1874', birthPlace: 'Bělušice',
     });
     // Give her a death year so the meta reads "1874 – 1879 · Bělušice".
@@ -52,7 +52,7 @@ test('normal card is 188x64 and shows the acceptance name + meta unshrunk', asyn
     expect(size).toEqual({ w: 188, h: 64 });
 
     // §2: the acceptance name fits the top step, no ellipsis (poll until fitting
-    // settles). The reference platform holds 15px with ~0.3px to spare; a
+    // settles). The reference platform holds 15px with ~0.8px to spare; a
     // platform whose serif renders a hair wider shrinks one step to 14px to
     // avoid clipping (the fitting measures fractional width, see fitCardNames).
     // The portable invariant is "top-or-one-step and never clipped", not an
@@ -89,9 +89,9 @@ async function nameLineCount(page: Page, firstName: string): Promise<number> {
     return card(page, firstName).locator('.name-text .name-line').count();
 }
 
-test('the Detailed card widens for Kateřina Výšková and a long birth place, never clipping either (U03a)', async ({ page }) => {
+test('the Detailed card widens for Kateřina Fýšková and a long birth place, never clipping either (U03a)', async ({ page }) => {
     await openApp(page);
-    await createFirstPerson(page, 'Kateřina', 'Výšková', { gender: 'female', birthDate: '1874', birthPlace: 'Landsberg an der Warthe' });
+    await createFirstPerson(page, 'Kateřina', 'Fýšková', { gender: 'female', birthDate: '1874', birthPlace: 'Landsberg an der Warthe' });
     await page.evaluate(() => window.Strom.UI.setCardDensity('detailed'));
 
     const c = card(page, 'Kateřina');
@@ -127,12 +127,12 @@ test('compact shrinks a long name to the 12.5px floor as one line before ellipsi
 test('a sub-pixel overflow shrinks the name instead of clipping it (Adéla Pospíšilová)', async ({ page }) => {
     // "Adéla Pospíšilová" measures about 126.6px at 15px in the card serif —
     // half a pixel over the normal card's 126px column (it was "Maria
-    // Paroulková" on the old detailed card's 128px column). The browser ellipsizes on
+    // Laroulková" on the old detailed card's 128px column). The browser ellipsizes on
     // ANY layout overflow, but the integer scrollWidth rounds it away (and
     // never reports below the box width), so the old fitting pass left the
     // name at 15px, cut. The fix measures fractional Range rects.
     await openApp(page);
-    await createFirstPerson(page, 'Jan', 'Výšek', { birthDate: '1871' });
+    await createFirstPerson(page, 'Jan', 'Fýšek', { birthDate: '1871' });
     await addRelation(page, 'Jan', 'partner', 'Adéla', 'Pospíšilová', 'female');
     await page.evaluate(() => window.Strom.UI.setCardDensity('normal'));
 

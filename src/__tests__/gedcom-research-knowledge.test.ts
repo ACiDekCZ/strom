@@ -19,7 +19,7 @@ const BODY = `0 @S12@ SOUR
 0 @S31@ SOUR
 1 TITL Sčítání lidu 1880
 0 @I1@ INDI
-1 NAME Anna /Víšková/
+1 NAME Anna /Fíšková/
 1 SEX F
 1 REFN P0012
 1 BIRT
@@ -49,7 +49,7 @@ const BODY = `0 @S12@ SOUR
 2 TYPE BIRT
 2 VAL 1870
 1 _STROM_HYPO
-2 TITL Otec: Václav, nebo Jan Víšek?
+2 TITL Otec: Václav, nebo Jan Fíšek?
 2 NOTE Oba žili v Chlumech.
 3 CONT Rozhodne oddací zápis.
 1 _STROM_SEARCHED
@@ -88,7 +88,7 @@ describe('Strom Research knowledge in GEDCOM', () => {
         expect(decided.decision?.value).toBe('1945 (S0031)');
         expect(decided.decision?.sourceIds).toBeUndefined();
         expect(decided.values[0].sourceIds).toBeUndefined();
-        expect(r.hypotheses).toEqual([{ title: 'Otec: Václav, nebo Jan Víšek?', note: 'Oba žili v Chlumech.\nRozhodne oddací zápis.' }]);
+        expect(r.hypotheses).toEqual([{ title: 'Otec: Václav, nebo Jan Fíšek?', note: 'Oba žili v Chlumech.\nRozhodne oddací zápis.' }]);
         expect(r.searched).toEqual([
             { title: 'Oddací matrika Chlumy', from: 1890, to: 1900, result: 'none', at: '2026-09-18' },
             { title: 'Křestní matrika Chlumy', from: 1871, to: 1871, result: 'found' },

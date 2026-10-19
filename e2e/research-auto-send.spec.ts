@@ -75,7 +75,7 @@ test.describe('sending by itself', () => {
         writesAtOnce(bridge);
         const first = await treeId(page);
         await editJan(page);
-        const other = await page.evaluate(() => window.Strom.DataManager.importAsNewTree({ version: 11, persons: {}, partnerships: {} } as never, 'Konopáskovi'));
+        const other = await page.evaluate(() => window.Strom.DataManager.importAsNewTree({ version: 11, persons: {}, partnerships: {} } as never, 'Mrkváskovi'));
         await page.evaluate((id) => window.Strom.UI.switchToTree(id), other);
         await expect.poll(() => bridge.posts.length).toBe(1);
         expect(bridge.posts[0]).toContain(`1 _STROM_APP_TREE ${first}`);
@@ -231,7 +231,7 @@ test.describe('sending by itself', () => {
         expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe(headBefore);
         const note = page.locator('.research-sync-note');
         await expect(note).toContainText('Written, 1 conflict to decide');
-        await expect(note.getByRole('button', { name: 'Jan Víšek ›' })).toBeVisible();
+        await expect(note.getByRole('button', { name: 'Jan Fíšek ›' })).toBeVisible();
         expect(await view()).toEqual(before);
         // Gone after 8 s; the conflict stays in sight (its version, holding the research's value, not loaded).
         await page.clock.fastForward(9000);
@@ -253,7 +253,7 @@ test('the research names the conflicts in its reply: the note names the person',
     await expect.poll(() => bridge.posts.length).toBe(1);
     const note = page.locator('.research-sync-note');
     await expect(note).toContainText('Written, 1 conflict to decide');
-    await expect(note.getByRole('button', { name: 'Jan Víšek ›' })).toBeVisible();
+    await expect(note.getByRole('button', { name: 'Jan Fíšek ›' })).toBeVisible();
 });
 
 test('a window narrower than the toolbar\'s mark (1100 px): a new conflict is told by a toast with the person', async ({ page }) => {
@@ -265,7 +265,7 @@ test('a window narrower than the toolbar\'s mark (1100 px): a new conflict is to
     await page.clock.fastForward(QUIET + 1000);
     await expect.poll(() => bridge.posts.length).toBe(1);
     const toast = page.locator('.toast', { hasText: 'Written, 1 conflict to decide' });
-    await expect(toast.getByRole('button', { name: 'Jan Víšek' })).toBeVisible();
+    await expect(toast.getByRole('button', { name: 'Jan Fíšek' })).toBeVisible();
 });
 
 test('waiting for the quiet time: the mark and the block say when the changes go', async ({ page }) => {
@@ -417,22 +417,22 @@ test('finding 29: a write that left a conflict (named in the reply): the note sa
 
 /** Jan by the research's number (his first name changes in these tests). */
 const janFirst = (page: Page) => page.evaluate(() =>
-    (Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.lastName === 'Víšek' && p.firstName !== 'Josef') as any).firstName);
+    (Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.lastName === 'Fíšek' && p.firstName !== 'Josef') as any).firstName);
 const janBirthPlace = (page: Page, place: string) => page.evaluate((place) => {
     const dm = window.Strom.DataManager;
-    const jan = Object.values(dm.getData().persons).find((p: any) => p.lastName === 'Víšek' && p.firstName !== 'Josef') as any;
+    const jan = Object.values(dm.getData().persons).find((p: any) => p.lastName === 'Fíšek' && p.firstName !== 'Josef') as any;
     dm.updatePerson(jan.id, { birthPlace: place });
 }, place);
 const janWhere = (page: Page) => page.evaluate(() =>
-    (Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.lastName === 'Víšek' && p.firstName !== 'Josef') as any).birthPlace ?? '');
+    (Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.lastName === 'Fíšek' && p.firstName !== 'Josef') as any).birthPlace ?? '');
 const renameJan = (page: Page, first: string) => page.evaluate((first) => {
     const dm = window.Strom.DataManager;
-    const jan = Object.values(dm.getData().persons).find((p: any) => p.lastName === 'Víšek' && p.firstName !== 'Josef') as any;
+    const jan = Object.values(dm.getData().persons).find((p: any) => p.lastName === 'Fíšek' && p.firstName !== 'Josef') as any;
     dm.updatePerson(jan.id, { firstName: first });
 }, first);
 /** The research's version: its own name for Jan, the conflict about it still open, the user's birth place written. */
 const nameConflictGed = (head: string, birth: string[] = []) => researchGed(head, [...birth,
-    '1 _STROM_CONFLICT X0001', '2 TYPE NAME', '2 STAT open', '2 VAL Jan /Víšek/', '2 VAL Jenda /Víšek/']);
+    '1 _STROM_CONFLICT X0001', '2 TYPE NAME', '2 STAT open', '2 VAL Jan /Fíšek/', '2 VAL Jenda /Fíšek/']);
 
 test('finding 37: a later send written without a conflict never takes over the name an earlier conflict is about', async ({ page }) => {
     const bridge = await autoTree(page);
@@ -575,7 +575,7 @@ test('finding 40: a conflict the next rename updates shows its new value in What
     await page.setViewportSize({ width: 1600, height: 900 });
     const bridge = await autoTree(page);
     const conflictGed = (head: string, user: string, birth: string[] = []) => researchGed(head, [...birth,
-        '1 _STROM_CONFLICT X0001', '2 TYPE NAME', '2 STAT open', '2 VAL Jan /Víšek/', `2 VAL ${user} /Víšek/`]);
+        '1 _STROM_CONFLICT X0001', '2 TYPE NAME', '2 STAT open', '2 VAL Jan /Fíšek/', `2 VAL ${user} /Fíšek/`]);
     const conflicts = [{ id: 'X0001', person: 'P0003', fact: 'NAME' }];
     bridge.syncReply = { status: 200, body: { ...WRITE.body, conflicts } };
     bridge.onWrite = () => ({ head: 'c1c1c1c1c1c1', ged: conflictGed('c1c1c1c1c1c1', 'Jenda') });
@@ -589,7 +589,7 @@ test('finding 40: a conflict the next rename updates shows its new value in What
     await expect.poll(() => bridge.posts.length).toBe(2);
     const janId = await page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.firstName === 'Jendula') as any).id);
     await expect.poll(() => page.evaluate((id) => window.Strom.UI.researchConflictsOf(id).flatMap((c: any) => c.values.map((v: any) => v.value)), janId))
-        .toContain('Jendula /Víšek/');
+        .toContain('Jendula /Fíšek/');
     await page.evaluate((id) => window.Strom.UI.showPersonResearchDialog(id), janId);
     await expect(page.locator('.modal-overlay.active').last()).toContainText('Jendula');
     await page.keyboard.press('Escape');
@@ -650,7 +650,7 @@ test('findings D/E: "Send, then load" with a conflict still open over the user\'
     await expect(pill(page)).toContainText('Written, 1 conflict to decide');
     // Asked by the user, the question names the conflict that Update would replace.
     await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
-    await expect(page.locator('.dialog-confirm')).toContainText('A conflict is still open in the research about Jenda Víšek');
+    await expect(page.locator('.dialog-confirm')).toContainText('A conflict is still open in the research about Jenda Fíšek');
     await page.keyboard.press('Escape');
     expect(await janFirst(page)).toBe('Jenda');
     // The research stops: said beside the conflict.
@@ -1094,7 +1094,7 @@ test('rc.25: what the research did not write is listed with its reason (notWritt
     // "What was written": not written first, with the reason; the person named there is not listed as written.
     const panel = page.locator('#research-changes-panel');
     await expect(panel.locator('.research-changes-section.is-warn')).toHaveText('Not written · 1');
-    await expect(panel.locator('.research-changes-row.is-not-written')).toContainText('Jan Víšek');
+    await expect(panel.locator('.research-changes-row.is-not-written')).toContainText('Jan Fíšek');
     await expect(panel.locator('.research-changes-row.is-not-written')).toContainText('Birth');
     await expect(panel.locator('.research-changes-row.is-not-written')).toContainText('no common ground: choose in the research');
     await expect(panel.locator('.research-changes-row:not(.is-not-written)')).toHaveCount(0);
@@ -1120,7 +1120,7 @@ test('V-J: what the research did not write is the state until the next send (a d
     await expect(block(page)).toContainText('What was not written stays here in the app.');
     await block(page).getByRole('menuitem', { name: 'Show' }).click();
     const panel = page.locator('#research-changes-panel');
-    await expect(panel.locator('.research-changes-row.is-not-written')).toContainText('Jan Víšek');
+    await expect(panel.locator('.research-changes-row.is-not-written')).toContainText('Jan Fíšek');
     // Jan is not claimed as written (V-J): his citation went with the change kept there.
     await expect(panel.locator('.research-changes-list.is-quiet')).toHaveCount(0);
     await page.keyboard.press('Escape');
@@ -1141,7 +1141,7 @@ test('V-J: what the research did not write is the state until the next send (a d
 
 test('rc.26: the numbers the research gave what a send added (ids, by its xrefs) are kept, quietly — no new send, the next names them', async ({ page }) => {
     const bridge = await conflictLeft(page);
-    await page.evaluate(() => window.Strom.DataManager.createPerson({ firstName: 'Petr', lastName: 'Víšek', gender: 'male' }));
+    await page.evaluate(() => window.Strom.DataManager.createPerson({ firstName: 'Petr', lastName: 'Fíšek', gender: 'male' }));
     bridge.syncReply = WRITE;
     bridge.onWrite = () => ({ head: 'c2c2c2c2c2c2', ged: nameConflictGed('c2c2c2c2c2c2') });
     bridge.replyExtra = (posted) => {
@@ -2050,7 +2050,7 @@ test.describe('"What will be sent" before sending by hand', () => {
         await page.evaluate(() => window.Strom.UI.researchSendNow());
         await expect(panel(page)).toBeVisible();
         await expect(panel(page)).toContainText('What will be sent');
-        await expect(panel(page)).toContainText('Jan Víšek');
+        await expect(panel(page)).toContainText('Jan Fíšek');
         expect(bridge.posts).toHaveLength(0);
         // Close leaves it unsent; the state block offers the send (no "Send changes…" row beside it).
         await panel(page).getByRole('button', { name: 'Close' }).click();
@@ -2141,7 +2141,7 @@ test('R6 of the N1 round: after a send taken back, "What will be sent" lists wha
     await page.evaluate(() => window.Strom.UI.showResearchChanges('send'));
     const panel = page.locator('#research-changes-panel');
     await expect(panel).toBeVisible();
-    await expect(panel).toContainText('Jan Víšek');
+    await expect(panel).toContainText('Jan Fíšek');
     await expect(panel).not.toContainText('cannot be told');
 });
 

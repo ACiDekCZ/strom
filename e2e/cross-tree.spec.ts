@@ -88,12 +88,12 @@ test('T22: a namesake sister born a year later, of the same parents, in another 
     await openApp(page);
     await page.evaluate(async () => {
         const base = { isPlaceholder: false, partnerships: [], parentIds: [], childIds: [] };
-        // Both Anežkas are daughters of Josef Lipa and Kateřina Horká;
+        // Both Anežkas are daughters of Josef Lipa and Kateřina Prudká;
         // Jan is Anežka's son, so all cards stand in one view.
         const tree = (anezkaBirth: string) => ({
             persons: {
                 f: { ...base, id: 'f', firstName: 'Josef', lastName: 'Lipa', gender: 'male', birthDate: '1855', partnerships: ['u'], childIds: ['b'] },
-                m: { ...base, id: 'm', firstName: 'Kateřina', lastName: 'Horká', gender: 'female', birthDate: '1858', partnerships: ['u'], childIds: ['b'] },
+                m: { ...base, id: 'm', firstName: 'Kateřina', lastName: 'Prudká', gender: 'female', birthDate: '1858', partnerships: ['u'], childIds: ['b'] },
                 b: { ...base, id: 'b', firstName: 'Anežka', lastName: 'Lipová', gender: 'female', birthDate: anezkaBirth, parentIds: ['f', 'm'], childIds: ['j'] },
                 j: { ...base, id: 'j', firstName: 'Jan', lastName: 'Novak', gender: 'male', birthDate: '1910', parentIds: ['b'] },
             },

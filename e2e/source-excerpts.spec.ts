@@ -465,9 +465,9 @@ test.describe('leaving images out of an import', () => {
 test.describe('a research update', () => {
     const researchGed = (jpeg: string, extra = false) => [
         '0 HEAD', '1 SOUR STROM_RESEARCH', '1 DATE 23 SEP 2026',
-        '1 _STROM_TREE 3f2c9a10-7b1e-4c55-9d2a-0e8f6b4a1c77', '1 CHAR UTF-8', '1 NOTE Víškovi',
-        '0 @P0001@ INDI', '1 NAME Josef /Víšek/', '1 SEX M', '1 REFN P0001', '1 SOUR @S0001@',
-        ...(extra ? ['0 @P0002@ INDI', '1 NAME Anna /Víšková/', '1 SEX F', '1 REFN P0002'] : []),
+        '1 _STROM_TREE 3f2c9a10-7b1e-4c55-9d2a-0e8f6b4a1c77', '1 CHAR UTF-8', '1 NOTE Fíškovi',
+        '0 @P0001@ INDI', '1 NAME Josef /Fíšek/', '1 SEX M', '1 REFN P0001', '1 SOUR @S0001@',
+        ...(extra ? ['0 @P0002@ INDI', '1 NAME Anna /Fíšková/', '1 SEX F', '1 REFN P0002'] : []),
         '0 @S0001@ SOUR', '1 TITL Křest Josefa', '1 REFN S0001',
         '1 OBJE', '2 _STROM_KIND excerpt', `2 FILE ${jpeg}`,
         '0 TRLR',

@@ -24,7 +24,7 @@ async function setup(page: Page, orient: string | null): Promise<string> {
     const jpeg = await wideJpeg(page);
     const ged = [
         '0 HEAD', '1 GEDC', '2 VERS 5.5.1', '1 CHAR UTF-8',
-        '0 @I1@ INDI', '1 NAME Anna /Víšková/', '1 SEX F', '1 BIRT', '2 DATE 1888', '2 SOUR @S1@',
+        '0 @I1@ INDI', '1 NAME Anna /Fíšková/', '1 SEX F', '1 BIRT', '2 DATE 1888', '2 SOUR @S1@',
         '0 @S1@ SOUR', '1 TITL Křestní matrika Čáslav',
         '1 OBJE', '2 FORM jpeg', '2 _STROM_KIND excerpt', '2 _STROM_CLIP C0007', `2 _STROM_SHA ${'c'.repeat(64)}`,
         ...(orient ? [`2 _STROM_ORIENT ${orient}`] : []),
@@ -33,7 +33,7 @@ async function setup(page: Page, orient: string | null): Promise<string> {
     ].join('\n');
     const dataTransfer = await page.evaluateHandle((content) => {
         const dt = new DataTransfer();
-        dt.items.add(new File([content], 'viskovi.ged', { type: 'text/plain' }));
+        dt.items.add(new File([content], 'fiskovi.ged', { type: 'text/plain' }));
         return dt;
     }, ged);
     for (const type of ['dragenter', 'dragover', 'drop']) await page.dispatchEvent('#tree-container', type, { dataTransfer });

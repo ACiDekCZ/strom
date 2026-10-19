@@ -125,13 +125,13 @@ describe('buildFanSvg', () => {
             person('gf', 'male', ['ggf'], {}),
             person('gm', 'female'),
             // gen 3 (radial text): a long multi-word name must word-wrap, not truncate
-            person('ggf', 'male', [], { firstName: 'Johannes Jacobus', lastName: 'Paroulek' }),
+            person('ggf', 'male', [], { firstName: 'Johannes Jacobus', lastName: 'Laroulek' }),
         ]);
         const model = buildFanModel(d, 'me' as PersonId, 4)!;
         const svg = buildFanSvg(model, svgOpts);
         expect(svg).toContain('>Johannes<');
         expect(svg).toContain('>Jacobus<');
-        expect(svg).toContain('>Paroulek<');
+        expect(svg).toContain('>Laroulek<');
         expect(svg).not.toContain('Johannes Jaco…');
     });
 

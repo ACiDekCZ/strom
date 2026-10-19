@@ -20,24 +20,24 @@ const ALL = ['send', 'excerpt', 'app', 'open', 'chat', 'task', 'review', 'resear
 function researchGed(): string {
     return [
         '0 HEAD', '1 SOUR STROM_RESEARCH', '1 DATE 27 SEP 2026', `1 _STROM_TREE ${UUID}`, '1 _STROM_HEAD 3f2a9c1e5b7d',
-        '1 _STROM_ASOF 2026-09-20', '1 CHAR UTF-8', '1 NOTE Víškovi',
+        '1 _STROM_ASOF 2026-09-20', '1 CHAR UTF-8', '1 NOTE Fíškovi',
         '0 @S12@ SOUR', '1 TITL Křestní matrika Chlumy 1865', '1 REFN S0012',
         '0 @S31@ SOUR', '1 TITL Sčítání lidu 1880', '1 REFN S0031',
-        '0 @P0001@ INDI', '1 NAME Josef /Víšek/', '1 SEX M', '1 BIRT', '2 DATE 1840', '1 DEAT', '2 DATE 1900',
+        '0 @P0001@ INDI', '1 NAME Josef /Fíšek/', '1 SEX M', '1 BIRT', '2 DATE 1840', '1 DEAT', '2 DATE 1900',
         '1 REFN P0001', '1 FAMS @F0001@',
         '1 _STORY', '2 STAT hotovo', '2 TEXT Josef hospodařil na čp. 12.',
         '0 @P0002@ INDI', '1 NAME Anna /Svobodová/', '1 SEX F', '1 REFN P0002', '1 FAMS @F0001@',
         '1 _STROM_SEARCHED', '2 TITL Oddací matrika Chlumy', '2 DATE FROM 1860 TO 1864', '2 RESN none',
-        '0 @P0012@ INDI', '1 NAME Jan /Víšek/', '1 SEX M', '1 BIRT', '2 DATE 1865', '2 SOUR @S12@', '1 DEAT', '2 DATE 1932',
+        '0 @P0012@ INDI', '1 NAME Jan /Fíšek/', '1 SEX M', '1 BIRT', '2 DATE 1865', '2 SOUR @S12@', '1 DEAT', '2 DATE 1932',
         '1 REFN P0012', '1 FAMC @F0001@',
         '1 _STORY', '2 STAT navrh', '2 TEXT Jan se narodil v Chlumech.',
         '1 _STROM_CONFLICT X0007', '2 TYPE BIRT', '2 STAT open', '2 VAL 3 FEB 1865', '3 SOUR @S12@', '2 VAL 1866', '3 SOUR @S31@',
         '1 _STROM_CONFLICT X0008', '2 TYPE DEAT', '2 STAT decided', '2 VAL 1931', '2 VAL 1932', '2 DECI 1932 (S0031)',
         '1 _STROM_CONFLICT X0009', '2 TYPE EVEN', '2 TITL Rok sňatku rodičů', '2 STAT open', '2 VAL 70 let při úmrtí 1937', '2 VAL 1890',
-        '1 _STROM_HYPO', '2 TITL Otec: Josef, nebo Jan Víšek?', '2 NOTE Oba žili v Chlumech.',
+        '1 _STROM_HYPO', '2 TITL Otec: Josef, nebo Jan Fíšek?', '2 NOTE Oba žili v Chlumech.',
         '1 _STROM_SEARCHED', '2 TITL Sčítání lidu 1880', '2 DATE 1880', '2 RESN found',
         '1 _STROM_SEARCHED', '2 TITL Křestní matrika Chlumy', '2 DATE FROM 1860 TO 1870', '2 RESN found',
-        '0 @P0013@ INDI', '1 NAME Eva /Víšková/', '1 SEX F', '1 BIRT', '2 DATE 1990', '1 REFN P0013', '1 FAMC @F0001@',
+        '0 @P0013@ INDI', '1 NAME Eva /Fíšková/', '1 SEX F', '1 BIRT', '2 DATE 1990', '1 REFN P0013', '1 FAMC @F0001@',
         '0 @F0001@ FAM', '1 HUSB @P0001@', '1 WIFE @P0002@', '1 CHIL @P0012@', '1 CHIL @P0013@',
         '0 TRLR',
     ].join('\n');
@@ -105,7 +105,7 @@ test.describe('Research menu, second wave', () => {
         const lastIntake = { id: 'I0042', at: sentAt.toISOString() };
         // The research's bridge answers and says a newer version is out (T25: only then the update line).
         await page.route(`${BRIDGE}/**`, (route) => route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' },
-            body: JSON.stringify({ tree: { id: UUID, name: 'Víškovi' }, links: ALL, update: { version: '1.7.0' }, lastIntake }) }));
+            body: JSON.stringify({ tree: { id: UUID, name: 'Fíškovi' }, links: ALL, update: { version: '1.7.0' }, lastIntake }) }));
         await setup(page, ALL, { lastIntake }, { base: BRIDGE });
         expect(await page.evaluate(() => window.Strom.UI.pollResearchBridge())).toBe(true);
         expect(await page.evaluate((id) => window.Strom.UI.researchBridgeFresh(id), UUID)).toBe(true);
@@ -178,7 +178,7 @@ test.describe('Follow live from the app', () => {
 
 test.describe('live panel: up next, update, spend', () => {
     const status = (extra: Record<string, unknown>) => ({
-        tree: { id: UUID, name: 'Víškovi' }, head: 'h1', working: [], waiting: [], links: ALL, ...extra,
+        tree: { id: UUID, name: 'Fíškovi' }, head: 'h1', working: [], waiting: [], links: ALL, ...extra,
     });
 
     async function follow(page: Page, extra: Record<string, unknown>): Promise<void> {
@@ -318,7 +318,7 @@ test.describe('What the research knows', () => {
         await page.evaluate((id) => window.Strom.UI.runPersonMenuAction(id, 'research-knows'), jan);
         const dialog = page.locator('#person-research-modal');
         await expect(dialog).toBeVisible();
-        await expect(dialog.locator('.audit-log-subtitle')).toHaveText(/^Jan Víšek · 1865–1932 · as of \S*2026$/);
+        await expect(dialog.locator('.audit-log-subtitle')).toHaveText(/^Jan Fíšek · 1865–1932 · as of \S*2026$/);
         await expect(dialog.locator('.menu-section-header')).toHaveText(['Conflicts', 'Hypotheses', 'Searched']);
         const conflict = dialog.locator('.person-research-conflict');
         await expect(conflict.locator('.person-research-fact')).toHaveText(['Birth', 'Rok sňatku rodičů']);
@@ -329,7 +329,7 @@ test.describe('What the research knows', () => {
         await expect(conflict.first().locator('tbody td:first-child')).toHaveText([/^(?!3 FEB).*1865$/, '1866']);
         await expect(dialog.locator('.person-research-decided')).toContainText('Death: 1931 vs. 1932');
         await expect(dialog.locator('.person-research-decision')).toHaveText('decided: 1932 (S0031)');
-        await expect(dialog.locator('.person-research-hypo-title')).toHaveText('Otec: Josef, nebo Jan Víšek?');
+        await expect(dialog.locator('.person-research-hypo-title')).toHaveText('Otec: Josef, nebo Jan Fíšek?');
         await expect(dialog.locator('.person-research-searched tbody td:first-child')).toHaveText(['Křestní matrika Chlumy', 'Sčítání lidu 1880']);
         await expect(dialog.locator('.person-research-years')).toHaveText(['1860–1870', '1880']);
         await expect(dialog.locator('.person-research-result--found')).toHaveText(['found', 'found']);

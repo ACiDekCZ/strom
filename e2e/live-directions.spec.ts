@@ -20,10 +20,10 @@ const ALL = ['send', 'excerpt', 'app', 'open', 'chat', 'task', 'review', 'resear
     'new', 'update', 'sessions', 'conflict', 'story', 'sync-undo', 'setup', 'live', 'direction', 'finish'];
 
 const GED = [
-    '0 HEAD', '1 SOUR STROM_RESEARCH', '1 DATE 30 SEP 2026', `1 _STROM_TREE ${UUID}`, '1 CHAR UTF-8', '1 NOTE Víškovi',
-    '0 @P0001@ INDI', '1 NAME Josef /Víšek/', '1 SEX M', '1 BIRT', '2 DATE 1840', '1 REFN P0001', '1 FAMS @F0001@',
+    '0 HEAD', '1 SOUR STROM_RESEARCH', '1 DATE 30 SEP 2026', `1 _STROM_TREE ${UUID}`, '1 CHAR UTF-8', '1 NOTE Fíškovi',
+    '0 @P0001@ INDI', '1 NAME Josef /Fíšek/', '1 SEX M', '1 BIRT', '2 DATE 1840', '1 REFN P0001', '1 FAMS @F0001@',
     '0 @P0002@ INDI', '1 NAME Anna /Svobodová/', '1 SEX F', '1 REFN P0002', '1 FAMS @F0001@',
-    '0 @P0012@ INDI', '1 NAME Jan /Víšek/', '1 SEX M', '1 BIRT', '2 DATE 1865', '1 REFN P0012', '1 FAMC @F0001@',
+    '0 @P0012@ INDI', '1 NAME Jan /Fíšek/', '1 SEX M', '1 BIRT', '2 DATE 1865', '1 REFN P0012', '1 FAMC @F0001@',
     // No family link to the others: not in the family view of Josef or Jan.
     '0 @P0050@ INDI', '1 NAME Marie /Dvořáková/', '1 SEX F', '1 BIRT', '2 DATE 1902', '1 REFN P0050',
     '0 @F0001@ FAM', '1 HUSB @P0001@', '1 WIFE @P0002@', '1 CHIL @P0012@',
@@ -65,7 +65,7 @@ async function follow(page: Page, researches: Record<string, unknown>[] = DIRECT
     }, ALL);
     const bridge: Bridge = { researches, statusAsks: 0, ...(working ? { working } : {}) };
     const status = () => ({
-        tree: { id: UUID, name: 'Víškovi' }, head: 'h1', persons: 3,
+        tree: { id: UUID, name: 'Fíškovi' }, head: 'h1', persons: 3,
         working: bridge.working ?? [AGENT],
         waiting: [{ id: 'T0004', what: 'Potvrďte otce Jana', person: 'P0012', research: 'G0001', at: ago(5) }],
         queue: [
@@ -156,7 +156,7 @@ test.describe('research directions', () => {
         await expect(sec.locator('.research-direction__name')).toHaveText(['Předci: Jan', 'Potomci: Josef', 'Revize Anny']);
         await expect(row(page, 'G0001').locator('.research-direction__icon')).toHaveText('↑');
         await expect(row(page, 'G0001').locator('.agent-mark--spin')).toHaveCount(1);
-        await expect(row(page, 'G0001').locator('.research-direction__meta')).toHaveText(/Jan Víšek.*2 tasks.*1 awaiting an answer/);
+        await expect(row(page, 'G0001').locator('.research-direction__meta')).toHaveText(/Jan Fíšek.*2 tasks.*1 awaiting an answer/);
         // Now first, then what awaits action, then Directions.
         const titles = await ov(page).locator('.live-section__title').allTextContents();
         expect(titles.indexOf('Now')).toBe(0);

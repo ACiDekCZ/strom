@@ -24,16 +24,16 @@ async function setup(page: Page, width = 1440, height = 900): Promise<void> {
         });
         await window.Strom.DataManager.importAsNewTree({
             persons: {
-                j: p('j', { firstName: 'Josef', lastName: 'Víšek', gender: 'male', birthDate: '1841',
+                j: p('j', { firstName: 'Josef', lastName: 'Fíšek', gender: 'male', birthDate: '1841',
                     partnerships: ['u2', 'u3', 'u1'], childIds: ['k', 'h', 'r'] }),
                 a: p('a', { firstName: 'Anna', lastName: 'Králová', birthDate: '1845', partnerships: ['u1'], childIds: ['k'] }),
                 m: p('m', { firstName: 'Marie', lastName: 'Nováková', birthDate: '1870', partnerships: ['u2'], childIds: ['h'] }),
                 e: p('e', { firstName: 'Eva', lastName: 'Malá', birthDate: '1850', partnerships: ['u3'], childIds: ['r'] }),
-                k: p('k', { firstName: 'Karel', lastName: 'Víšek', gender: 'male', birthDate: '1867',
+                k: p('k', { firstName: 'Karel', lastName: 'Fíšek', gender: 'male', birthDate: '1867',
                     partnerships: ['u4'], parentIds: ['j', 'a'] }),
-                l: p('l', { firstName: 'Ludmila', lastName: 'Víšková', birthDate: '1870', partnerships: ['u4'] }),
-                h: p('h', { firstName: 'Hana', lastName: 'Víšková', birthDate: '1909', parentIds: ['j', 'm'] }),
-                r: p('r', { firstName: 'Rudolf', lastName: 'Víšek', gender: 'male', birthDate: '1885', parentIds: ['j', 'e'] }),
+                l: p('l', { firstName: 'Ludmila', lastName: 'Fíšková', birthDate: '1870', partnerships: ['u4'] }),
+                h: p('h', { firstName: 'Hana', lastName: 'Fíšková', birthDate: '1909', parentIds: ['j', 'm'] }),
+                r: p('r', { firstName: 'Rudolf', lastName: 'Fíšek', gender: 'male', birthDate: '1885', parentIds: ['j', 'e'] }),
             },
             partnerships: {
                 u1: { id: 'u1', person1Id: 'j', person2Id: 'a', status: 'married', childIds: ['k'], startDate: '1866-02-14', startPlace: 'Dolní Lhota' },
@@ -41,7 +41,7 @@ async function setup(page: Page, width = 1440, height = 900): Promise<void> {
                 u3: { id: 'u3', person1Id: 'j', person2Id: 'e', status: 'married', childIds: ['r'] },
                 u4: { id: 'u4', person1Id: 'k', person2Id: 'l', status: 'married', childIds: [], startDate: '1890' },
             },
-        } as never, 'Víškovi');
+        } as never, 'Fíškovi');
         window.Strom.TreeRenderer.setFocus('j' as never);
     });
     await expect(card(page, 'Marie')).toBeVisible();
@@ -105,9 +105,9 @@ test.describe('marriage-order pill (T13)', () => {
         await expect(tip).toBeHidden();
         await pill(page, 'Anna').hover();
         await expect(tip).toBeVisible();
-        await expect(tip).toHaveText("Josef Víšek's 1st marriage, 1866, Dolní Lhota");
+        await expect(tip).toHaveText("Josef Fíšek's 1st marriage, 1866, Dolní Lhota");
         await expect(card(page, 'Anna').locator('.card-tooltip')).not.toBeVisible();
-        await expect(pill(page, 'Marie')).toHaveAttribute('aria-label', "Josef Víšek's 2nd marriage, 1908, Praha");
+        await expect(pill(page, 'Marie')).toHaveAttribute('aria-label', "Josef Fíšek's 2nd marriage, 1908, Praha");
         await expect(pill(page, 'Anna')).toHaveCSS('cursor', 'default');
     });
 
@@ -178,10 +178,10 @@ test.describe('marriage-order pill (T13)', () => {
             screenW[id] = await pill(page, name).evaluate(el => el.getBoundingClientRect().width);
         }
         // The bubble and the accessible label keep the year and the place.
-        await expect(pill(page, 'Marie')).toHaveAttribute('aria-label', "Josef Víšek's 2nd marriage, 1908, Praha");
+        await expect(pill(page, 'Marie')).toHaveAttribute('aria-label', "Josef Fíšek's 2nd marriage, 1908, Praha");
         await pill(page, 'Marie').hover();
         await expect(pill(page, 'Marie').locator('.uo-tip')).toBeVisible();
-        await expect(pill(page, 'Marie').locator('.uo-tip')).toHaveText("Josef Víšek's 2nd marriage, 1908, Praha");
+        await expect(pill(page, 'Marie').locator('.uo-tip')).toHaveText("Josef Fíšek's 2nd marriage, 1908, Praha");
         await page.mouse.move(0, 0);
 
         // The SVG export draws the same label, as wide as the screen.
@@ -215,7 +215,7 @@ test.describe('marriage-order pill (T13)', () => {
         await setup(page);
         await page.evaluate(() => window.Strom.UI.setCardDensity('compact' as never));
         await zoomTo(page, 1);
-        for (const [name, text, tip] of [['Anna', '1st', "Josef Víšek's 1st marriage, 1866, Dolní Lhota"], ['Marie', '2nd', "Josef Víšek's 2nd marriage, 1908, Praha"]] as const) {
+        for (const [name, text, tip] of [['Anna', '1st', "Josef Fíšek's 1st marriage, 1866, Dolní Lhota"], ['Marie', '2nd', "Josef Fíšek's 2nd marriage, 1908, Praha"]] as const) {
             await expect(pill(page, name)).toHaveAttribute('data-label', 'ordinal');
             expect(await pillText(page, name)).toBe(text);
             await expect(pill(page, name).locator('.uo-glyph, .uo-year')).toHaveCount(0);
@@ -526,10 +526,10 @@ async function hoverCollisions(page: Page): Promise<{ hovered: number; errors: s
 /** Josef married Anna and then Marie; both wives' parents and siblings are out of view (two tabs each). */
 function twoWives(): Tree {
     const t = builder();
-    t.person('Josef', 'Josef', 'Víšek', 'male', '1841');
+    t.person('Josef', 'Josef', 'Fíšek', 'male', '1841');
     t.person('Anna', 'Anna', 'Králová', 'female', '1845'); t.person('Marie', 'Marie', 'Nováková', 'female', '1850');
     t.kin('Anna'); t.kin('Marie');
-    t.person('k1', 'Karel', 'Víšek', 'male', '1867'); t.person('k2', 'Hana', 'Víšková', 'female', '1879');
+    t.person('k1', 'Karel', 'Fíšek', 'male', '1867'); t.person('k2', 'Hana', 'Fíšková', 'female', '1879');
     t.union('u1', 'Josef', 'Anna', '1866', ['k1']);
     t.union('u2', 'Josef', 'Marie', '1878', ['k2']);
     return t.tree();
@@ -548,7 +548,7 @@ test('N35: on a hovered card the relations icon never covers the marriage-order 
         for (let n = 0; n < steps; n++) {
             await page.evaluate((n) => {
                 const dm = window.Strom.DataManager;
-                dm.updatePerson('k1' as never, { lastName: 'Víšek' + 'i'.repeat(n) });
+                dm.updatePerson('k1' as never, { lastName: 'Fíšek' + 'i'.repeat(n) });
                 window.Strom.TreeRenderer.setFocus('Josef' as never);
             }, n);
             await page.evaluate(() => document.fonts.ready);

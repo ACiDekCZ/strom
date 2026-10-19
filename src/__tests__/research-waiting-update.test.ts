@@ -61,7 +61,7 @@ describe('the update notice of the research menu', () => {
     }
 
     const status = (update: { version: string } | null) => () => new Response(JSON.stringify({
-        tree: { id: TREE, name: 'Víškovi' }, head: '3f2a9c1e5b7d', links: ['open', 'update'], lastIntake: INTAKE,
+        tree: { id: TREE, name: 'Fíškovi' }, head: '3f2a9c1e5b7d', links: ['open', 'update'], lastIntake: INTAKE,
         ...(update ? { update } : {}),
     }), { status: 200, headers: { 'content-type': 'application/json' } });
 

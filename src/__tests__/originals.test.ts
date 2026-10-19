@@ -192,7 +192,7 @@ describe('_STROM_SHA and _STROM_REGION in GEDCOM', () => {
     const tree = (): StromData => (<unknown>{
         persons: {
             p1: {
-                id: 'p1' as PersonId, firstName: 'Anna', lastName: 'Víšková', gender: 'female', isPlaceholder: false,
+                id: 'p1' as PersonId, firstName: 'Anna', lastName: 'Fíšková', gender: 'female', isPlaceholder: false,
                 partnerships: [], parentIds: [], childIds: [], sourceIds: ['s1'],
                 attachments: [{
                     id: 'att1', name: 'IMG_4021.jpg', mimeType: 'image/jpeg', dataUrl: PNG, sizeBytes: 70,

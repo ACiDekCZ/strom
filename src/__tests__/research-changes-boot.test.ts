@@ -11,7 +11,7 @@ import type { StromData, ResearchLink, TreeId, TreeMetadata } from '../types.js'
 const TREE = 'boot-tree' as TreeId;
 
 const person = (id: string, firstName: string, birthPlace?: string) => ({
-    id, firstName, lastName: 'Víšek', gender: 'male', isPlaceholder: false, partnerships: [], parentIds: [], childIds: [],
+    id, firstName, lastName: 'Fíšek', gender: 'male', isPlaceholder: false, partnerships: [], parentIds: [], childIds: [],
     refn: id.toUpperCase(), ...(birthPlace ? { birthPlace } : {}),
 });
 const researchVersion = (): StromData => ({
@@ -62,6 +62,6 @@ describe('the changes per person asked before the startup tree is in', () => {
         const tree = researchVersion();
         (tree.persons as Record<string, unknown>).p2 = person('p2', 'Jan', 'Brno');
         data = tree;
-        expect(ui.researchChangesNow()?.map(c => `${c.name}: ${c.kinds.join(',')}`)).toEqual(['Jan Víšek: birth']);
+        expect(ui.researchChangesNow()?.map(c => `${c.name}: ${c.kinds.join(',')}`)).toEqual(['Jan Fíšek: birth']);
     });
 });

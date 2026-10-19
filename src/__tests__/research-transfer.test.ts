@@ -65,8 +65,8 @@ describe('what the line and the link tell the research', () => {
         expect(file).toBe('strom-prenos-AbCdEfGh.json');
         expect(legacyInstallLine('mac', TOKEN, null, '', { browser: 'safari', file }))
             .toBe(`curl -fsSL https://github.com/ACiDekCZ/strom-research/releases/latest/download/install.sh | STROM_FROM_APP=${TOKEN} STROM_FROM_BROWSER=safari STROM_FROM_FILE=${file} sh`);
-        expect(legacyInstallLine('linux', TOKEN, null, 'Víškovi', { browser: 'firefox' }))
-            .toContain(`STROM_FROM_APP_NAME='Víškovi' STROM_FROM_BROWSER=firefox sh`);
+        expect(legacyInstallLine('linux', TOKEN, null, 'Fíškovi', { browser: 'firefox' }))
+            .toContain(`STROM_FROM_APP_NAME='Fíškovi' STROM_FROM_BROWSER=firefox sh`);
         expect(legacyInstallLine('win', TOKEN, null, '', { browser: 'edge' }))
             .toContain(`si env:STROM_FROM_APP '${TOKEN}'; si env:STROM_FROM_BROWSER 'edge'; irm`);
         expect(legacyNpmLines('mac', TOKEN, BETA, '', { browser: 'chrome' })[1]).toBe(`STROM_FROM_APP=${TOKEN} STROM_FROM_BROWSER=chrome STROM_APP_URL=${BETA} strom-research`);
@@ -76,7 +76,7 @@ describe('what the line and the link tell the research', () => {
     });
 
     it('fits Win + R: the name shortened first, then the browser left out (the beta line)', () => {
-        const name = 'Velmi dlouhý název rodiny Víšků z Čáslavi a okolí';
+        const name = 'Velmi dlouhý název rodiny Fíšků z Čáslavi a okolí';
         const prod = legacyInstallLine('win', TOKEN, null, name, { browser: 'firefox' });
         expect(prod.length).toBeLessThanOrEqual(259);
         expect(prod).toContain("si env:STROM_FROM_BROWSER 'firefox'; ");

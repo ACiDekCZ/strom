@@ -767,8 +767,8 @@ describe('name variants survive the round-trip (K3)', () => {
 2 VERS 5.5.1
 1 CHAR UTF-8
 0 @I1@ INDI
-1 NAME Josef /Visek/
-1 NAME Wischek
+1 NAME Josef /Fisek/
+1 NAME Fischek
 1 NAME u Kovare
 1 SEX M
 0 TRLR`;
@@ -776,13 +776,13 @@ describe('name variants survive the round-trip (K3)', () => {
     it('keeps the first name as the name, and the rest as variants', () => {
         const person = Object.values(importGed(GED).persons)[0];
         expect(person.firstName).toBe('Josef');
-        expect(person.lastName).toBe('Visek');       // NOT overwritten by the last NAME
-        expect(person.nameVariants).toEqual(['Wischek', 'u Kovare']);
+        expect(person.lastName).toBe('Fisek');       // NOT overwritten by the last NAME
+        expect(person.nameVariants).toEqual(['Fischek', 'u Kovare']);
     });
 
     it('writes them back as further NAME lines', () => {
         const ged = exportGed(importGed(GED));
-        expect(ged).toMatch(/1 NAME Josef \/Visek\/\n1 NAME Wischek\n1 NAME u Kovare/);
+        expect(ged).toMatch(/1 NAME Josef \/Fisek\/\n1 NAME Fischek\n1 NAME u Kovare/);
     });
 
     it('survives import → export → import unchanged', () => {
@@ -1191,7 +1191,7 @@ describe('_STORY: the narrative written about a person or a couple', () => {
     const GED = `0 HEAD
 1 CHAR UTF-8
 0 @I1@ INDI
-1 NAME František /Krepčík/
+1 NAME František /Krevčík/
 1 SEX M
 1 _STORY
 2 TYPE vypraveni
@@ -1205,7 +1205,7 @@ describe('_STORY: the narrative written about a person or a couple', () => {
 2 DATA CHR 7 MAY 1863 [K-04]
 2 NOTE Sestaveno z doložených faktů. Není pramen.
 0 @I2@ INDI
-1 NAME Anna /Kadeřábková/
+1 NAME Anna /Pazdrábková/
 1 SEX F
 1 FAMS @F1@
 0 @F1@ FAM

@@ -20,8 +20,8 @@ const GED = `0 HEAD
 1 TITL Lučice, kniha narozených 1858-1870
 1 REPO SOA Zámrsk
 0 @I1@ INDI
-1 NAME František /Krepčík/
-1 NAME František /Krepcik/
+1 NAME František /Krevčík/
+1 NAME František /Krevcik/
 1 SEX M
 1 REFN K-04
 1 FAMS @F1@
@@ -47,13 +47,13 @@ const GED = `0 HEAD
 2 TITL Nemanželský syn z čp. 22
 2 STAT hotovo
 2 TEXT František se narodil 5. května 1863 v Lučici jako nemanžel
-3 CONC ský syn Anny Krepčíkové.
+3 CONC ský syn Anny Krevčíkové.
 3 CONT
 3 CONT Otec není v matrice uveden.
 2 DATA BIRT 5 MAY 1863 [M-04]
 2 NOTE Odvozeno z matriky, není to pramen.
 0 @I2@ INDI
-1 NAME Anna /Kadeřábková/
+1 NAME Anna /Pazdrábková/
 1 SEX U
 1 FAMS @F1@
 0 @F1@ FAM
@@ -81,7 +81,7 @@ describe('the published GEDCOM import contract', () => {
 
     it('reads the person: names, reference number, dates', () => {
         const person = groom(imported());
-        expect(person.lastName).toBe('Krepčík');
+        expect(person.lastName).toBe('Krevčík');
         expect(person.nameVariants?.length).toBeGreaterThan(0);
         expect(person.refn).toBe('K-04');
         expect(person.birthDate).toBe('1863-05-05');
@@ -115,7 +115,7 @@ describe('the published GEDCOM import contract', () => {
         // exactly the mistake the document warns about, and the example in it
         // used to make.
         expect(story.text).toBe('František se narodil 5. května 1863 v Lučici'
-            + ' jako nemanželský syn Anny Krepčíkové.\n\nOtec není v matrice uveden.');
+            + ' jako nemanželský syn Anny Krevčíkové.\n\nOtec není v matrice uveden.');
         expect(story.facts).toEqual(['BIRT 5 MAY 1863 [M-04]']);
         expect(story.note).toBe('Odvozeno z matriky, není to pramen.');
     });

@@ -51,12 +51,12 @@ async function bridge111(page: Page): Promise<OldBridge> {
         if (req.method() !== 'GET') return json(404, { error: 'not found' });
         if (what === 'adopt') {
             return b.adoptToken
-                ? json(200, { token: b.adoptToken, name: 'Víškovi', tree: UUID })
+                ? json(200, { token: b.adoptToken, name: 'Fíškovi', tree: UUID })
                 : json(404, { error: 'this research waits for no tree' });
         }
         if (what === 'status') {
             return json(200, {
-                strom: '1.11.0', tree: { id: UUID, name: 'Víškovi', lang: 'cs' }, head: HEAD, headAt: '2026-09-30T10:12:00+02:00',
+                strom: '1.11.0', tree: { id: UUID, name: 'Fíškovi', lang: 'cs' }, head: HEAD, headAt: '2026-09-30T10:12:00+02:00',
                 persons: 3, families: 1, researches: [], working: [], open: [], waiting: [], links: LINKS_1_11,
                 queue: [], queueMore: 0, spend: { month: '2026-10', sessions: 0, amount: 0, currency: 'USD' },
             });

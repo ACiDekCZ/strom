@@ -420,7 +420,7 @@ export interface Person {
     question?: string;
     /**
      * Other written forms of this person's name: how the registers actually
-     * spell it (Wischek / Víšek / Vissek), an alias, or the Czech "jméno po
+     * spell it (Fischek / Fíšek / Fissek), an alias, or the Czech "jméno po
      * chalupě" — the farm a family was known by, which on a village identified
      * people better than a surname did.
      *
@@ -936,13 +936,13 @@ export interface StromData {
 
     /**
      * Surnames that mean the same family, written down once for the whole tree:
-     * [['Víšek', 'Vyšek', 'Wischek']].
+     * [['Fíšek', 'Fyšek', 'Fischek']].
      *
      * A spelling is a fact about the NAME, not about one person — the same way a
      * place's coordinates belong to the place and not to whoever was born there.
      * Kept here so it is entered once and holds for everybody, including people
      * added later; on a person it would have to be repeated for every one of
-     * thirty Víšeks, in both directions, and the thirty-first would miss out.
+     * thirty Fíšeks, in both directions, and the thirty-first would miss out.
      *
      * A group is an equivalence, not "canonical + variants": nobody's spelling
      * is the wrong one, and the registers disagree in every direction.

@@ -20,7 +20,7 @@ async function tree(page: Page, persons: Record<string, Record<string, unknown>>
         }
         await window.Strom.DataManager.importAsNewTree({
             persons: full, partnerships: {},
-            sources: { s1: { id: 's1', title: 'Matrika N Lipany 1840–1870' }, s2: { id: 's2', title: 'Sčítání 1880' } },
+            sources: { s1: { id: 's1', title: 'Matrika N Kolomazov 1840–1870' }, s2: { id: 's2', title: 'Sčítání 1880' } },
         } as never, 'Citace');
     }, { persons, advanced });
 }
@@ -29,11 +29,11 @@ const person = (page: Page, id: string) => page.evaluate((pid) => window.Strom.D
 
 test.describe('birth and death citations', () => {
     test('a birth cited on its own shows under the birth even with advanced fields off', { tag: '@smoke' }, async ({ page }) => {
-        await tree(page, { j: { firstName: 'Jan', lastName: 'Víšek', birthDate: '1865', birthSourceIds: ['s1'] } });
+        await tree(page, { j: { firstName: 'Jan', lastName: 'Fíšek', birthDate: '1865', birthSourceIds: ['s1'] } });
         await page.evaluate(() => window.Strom.UI.showEditPersonModal('j' as never));
         const birth = page.locator('#birth-sources-group');
         await expect(birth).toBeVisible();
-        await expect(birth.locator('.source-chip')).toContainText('Matrika N Lipany');
+        await expect(birth.locator('.source-chip')).toContainText('Matrika N Kolomazov');
         // The person as a whole cites nothing: that section stays hidden.
         await expect(page.locator('#person-sources-section')).toBeHidden();
         // A living person: no death row.
@@ -41,7 +41,7 @@ test.describe('birth and death citations', () => {
     });
 
     test('"+ source" under the birth cites the birth: two stripes without a death', async ({ page }) => {
-        await tree(page, { j: { firstName: 'Jan', lastName: 'Víšek', birthDate: '1865' } }, true);
+        await tree(page, { j: { firstName: 'Jan', lastName: 'Fíšek', birthDate: '1865' } }, true);
         await page.evaluate(() => window.Strom.UI.showEditPersonModal('j' as never));
         await page.locator('#birth-sources-group .fact-cite-btn').click();
         const picker = page.locator('#source-picker-modal');
@@ -56,7 +56,7 @@ test.describe('birth and death citations', () => {
     });
 
     test('"Another page" of a book in the picker: a new source with its title, archive, link, note and quality — its own page, cited there; nothing else copied', async ({ page }) => {
-        await tree(page, { j: { firstName: 'Jan', lastName: 'Víšek', birthDate: '1865', deathDate: '1932', birthSourceIds: ['s1'] } }, true);
+        await tree(page, { j: { firstName: 'Jan', lastName: 'Fíšek', birthDate: '1865', deathDate: '1932', birthSourceIds: ['s1'] } }, true);
         await page.evaluate(() => {
             const dm = window.Strom.DataManager;
             dm.updateSource('s1', { repository: 'SOA Zámrsk', url: 'https://example.org/kniha', note: 'Kniha N\nMatrika N, fol. 12 / Zapsáno: 1865', quality: 3,
@@ -68,7 +68,7 @@ test.describe('birth and death citations', () => {
         await picker.locator('.source-picker-row', { hasText: 'Matrika' }).getByRole('button', { name: 'Another page' }).click();
         const editor = page.locator('#source-editor-modal');
         await expect(editor).toBeVisible();
-        await expect(editor.locator('#input-source-title')).toHaveValue('Matrika N Lipany 1840–1870');
+        await expect(editor.locator('#input-source-title')).toHaveValue('Matrika N Kolomazov 1840–1870');
         await expect(editor.locator('#input-source-repository')).toHaveValue('SOA Zámrsk');
         await expect(editor.locator('#input-source-reference')).toHaveValue('');
         await expect(editor.locator('#input-source-reference')).toBeFocused();
@@ -80,7 +80,7 @@ test.describe('birth and death citations', () => {
         expect(j?.deathSourceIds).toHaveLength(1);
         expect(j?.birthSourceIds).toEqual(['s1']);
         const page2 = await page.evaluate((id) => window.Strom.DataManager.getData().sources![id], j!.deathSourceIds![0]);
-        expect(page2).toMatchObject({ title: 'Matrika N Lipany 1840–1870', repository: 'SOA Zámrsk', url: 'https://example.org/kniha',
+        expect(page2).toMatchObject({ title: 'Matrika N Kolomazov 1840–1870', repository: 'SOA Zámrsk', url: 'https://example.org/kniha',
             note: 'Kniha N', quality: 3, reference: 'fol. 99' });
         expect(page2.transcript ?? '').toBe('');
         expect(page2.refn).toBeUndefined();
@@ -88,7 +88,7 @@ test.describe('birth and death citations', () => {
     });
 
     test('V-D: "Another page" keeps the book of the reference (the page left to type, the cursor at its end), not the entry\'s recording date', async ({ page }) => {
-        await tree(page, { j: { firstName: 'Jan', lastName: 'Víšek', birthDate: '1865', deathDate: '1932', birthSourceIds: ['s1'] } }, true);
+        await tree(page, { j: { firstName: 'Jan', lastName: 'Fíšek', birthDate: '1865', deathDate: '1932', birthSourceIds: ['s1'] } }, true);
         await page.evaluate(() => {
             window.Strom.DataManager.updateSource('s1', { note: 'Farní úřad Voss\nZapsáno: 20 MAR 1825', reference: 'Voss, Ministerialbok 1820–1835, s. 112' } as never);
         });
@@ -108,22 +108,22 @@ test.describe('birth and death citations', () => {
 
     test('"Another page" of an entry titled after another person: the title made from what is cited, not that person\'s', async ({ page }) => {
         await tree(page, {
-            j: { firstName: 'Jan', lastName: 'Víšek', birthDate: '1865', deathDate: '1932' },
-            o: { firstName: 'Ota', lastName: 'Hora', birthDate: '1915', birthSourceIds: ['s3'] },
+            j: { firstName: 'Jan', lastName: 'Fíšek', birthDate: '1865', deathDate: '1932' },
+            o: { firstName: 'Dušan', lastName: 'Pecivál', birthDate: '1915', birthSourceIds: ['s3'] },
         }, true);
         await page.evaluate(() => {
-            window.Strom.DataManager.getData().sources!['s3' as never] = { id: 's3', title: 'Baptism of Ota Hora 1915', reference: 'fol. 15' } as never;
+            window.Strom.DataManager.getData().sources!['s3' as never] = { id: 's3', title: 'Baptism of Dušan Pecivál 1915', reference: 'fol. 15' } as never;
         });
         await page.evaluate(() => window.Strom.UI.showEditPersonModal('j' as never));
         await page.locator('#birth-sources-group .fact-cite-btn').click();
-        await page.locator('#source-picker-modal .source-picker-row', { hasText: 'Ota Hora' }).getByRole('button', { name: 'Another page' }).click();
+        await page.locator('#source-picker-modal .source-picker-row', { hasText: 'Dušan Pecivál' }).getByRole('button', { name: 'Another page' }).click();
         const title = page.locator('#source-editor-modal #input-source-title');
-        await expect(title).not.toHaveValue(/Ota Hora/);
-        await expect(title).toHaveValue(/Jan Víšek/);
+        await expect(title).not.toHaveValue(/Dušan Pecivál/);
+        await expect(title).toHaveValue(/Jan Fíšek/);
     });
 
     test('× on the death chip takes the citation off the death only', async ({ page }) => {
-        await tree(page, { j: { firstName: 'Jan', lastName: 'Víšek', birthDate: '1865', deathDate: '1932', sourceIds: ['s1'], deathSourceIds: ['s1'] } });
+        await tree(page, { j: { firstName: 'Jan', lastName: 'Fíšek', birthDate: '1865', deathDate: '1932', sourceIds: ['s1'], deathSourceIds: ['s1'] } });
         await page.evaluate(() => window.Strom.UI.showEditPersonModal('j' as never));
         const death = page.locator('#death-sources-group');
         await expect(death).toBeVisible();
@@ -134,7 +134,7 @@ test.describe('birth and death citations', () => {
     });
 
     test('citing from the person\'s sources asks what it supports; no death for the living', async ({ page }) => {
-        await tree(page, { j: { firstName: 'Jan', lastName: 'Víšek', birthDate: '1865' } });
+        await tree(page, { j: { firstName: 'Jan', lastName: 'Fíšek', birthDate: '1865' } });
         await page.evaluate(() => window.Strom.UI.showPersonSourcesDialog('j' as never));
         await page.locator('#person-sources-cite').click();
         const fact = page.locator('#source-picker-fact');
@@ -152,7 +152,7 @@ test.describe('birth and death citations', () => {
     });
 
     test('a dead person with the birth cited: the choice starts on the person and offers the death', async ({ page }) => {
-        await tree(page, { j: { firstName: 'Jan', lastName: 'Víšek', birthDate: '1865', deathDate: '1932', birthSourceIds: ['s1'] } });
+        await tree(page, { j: { firstName: 'Jan', lastName: 'Fíšek', birthDate: '1865', deathDate: '1932', birthSourceIds: ['s1'] } });
         await page.evaluate(() => window.Strom.UI.showPersonSourcesDialog('j' as never));
         await page.locator('#person-sources-cite').click();
         const fact = page.locator('#source-picker-fact');
@@ -165,9 +165,9 @@ test.describe('birth and death citations', () => {
 
     test('tree overview: going through births without a source, Cite takes the person off the list', async ({ page }) => {
         await tree(page, {
-            j: { firstName: 'Jan', lastName: 'Víšek', birthDate: '1865', sourceIds: ['s2'], childIds: ['c'] },
-            a: { firstName: 'Anna', lastName: 'Víšková', gender: 'female', birthDate: '1870', sourceIds: ['s2'], childIds: ['c'] },
-            c: { firstName: 'Karel', lastName: 'Víšek', birthDate: '1895', birthSourceIds: ['s1'], parentIds: ['j', 'a'] },
+            j: { firstName: 'Jan', lastName: 'Fíšek', birthDate: '1865', sourceIds: ['s2'], childIds: ['c'] },
+            a: { firstName: 'Anna', lastName: 'Fíšková', gender: 'female', birthDate: '1870', sourceIds: ['s2'], childIds: ['c'] },
+            c: { firstName: 'Karel', lastName: 'Fíšek', birthDate: '1895', birthSourceIds: ['s1'], parentIds: ['j', 'a'] },
         });
         // Births without a source are counted among the chosen person's ancestors: Karel's parents.
         await page.evaluate(() => window.Strom.TreeRenderer.setFocus('c' as never));
@@ -185,8 +185,8 @@ test.describe('birth and death citations', () => {
     });
 
     test('the source viewer names the fact with its year', async ({ page }) => {
-        await tree(page, { j: { firstName: 'Jan', lastName: 'Víšek', birthDate: '1865', birthSourceIds: ['s1'] } });
+        await tree(page, { j: { firstName: 'Jan', lastName: 'Fíšek', birthDate: '1865', birthSourceIds: ['s1'] } });
         await page.evaluate(() => window.Strom.UI.showSourceViewer('s1', null));
-        await expect(page.locator('#source-viewer-modal .viewer-cites')).toContainText('Jan Víšek — Birth (1865)');
+        await expect(page.locator('#source-viewer-modal .viewer-cites')).toContainText('Jan Fíšek — Birth (1865)');
     });
 });

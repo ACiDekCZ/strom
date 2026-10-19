@@ -94,7 +94,7 @@ function fullTree(): Required<StromData> {
         places: {
             'kolin': { lat: 50.0281, lon: 15.2003, label: 'Kolín, Česko' },
         },
-        surnameVariants: [['Víšek', 'Vyšek', 'Wischek']],
+        surnameVariants: [['Fíšek', 'Fyšek', 'Fischek']],
         researchAsOf: '2026-09-20',
         defaultPersonId: LAST_FOCUSED,
         lastFocusPersonId: ALICE,
@@ -364,7 +364,7 @@ describe('updatePerson applies every field it owns', () => {
         marriedSurname: 'Dvořáková',
         dismissedMarriedSuggestion: 'Nováková',
         gender: 'female',
-        nameVariants: ['Wischek', 'u Kováře'],
+        nameVariants: ['Fischek', 'u Kováře'],
         birthDate: '1901-02-03',
         birthPlace: 'Kolín',
         birthAddress: 'čp. 13',
@@ -468,7 +468,7 @@ describe('merge keeps every tree-level field', () => {
         expect(result.mergedData.places?.['beroun']).toBeDefined();
         expect(result.mergedData.places?.['kolin']).toBeDefined();
         expect(result.mergedData.surnameVariants).toContainEqual(['Svoboda', 'Swoboda']);
-        expect(result.mergedData.surnameVariants).toContainEqual(['Víšek', 'Vyšek', 'Wischek']);
+        expect(result.mergedData.surnameVariants).toContainEqual(['Fíšek', 'Fyšek', 'Fischek']);
     });
 });
 

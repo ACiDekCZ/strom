@@ -37,10 +37,10 @@ function researchGed(opts: { tree?: string | null; extraPerson?: boolean; name?:
     if (opts.tree !== null) lines.push(`1 _STROM_TREE ${opts.tree ?? UUID}`);
     lines.push(
         '1 CHAR UTF-8',
-        `1 NOTE ${opts.name ?? 'Víškovi'}`,
+        `1 NOTE ${opts.name ?? 'Fíškovi'}`,
         '2 CONT Rodokmen ze Strom Research',
         '0 @P0001@ INDI',
-        '1 NAME Josef /Víšek/',
+        '1 NAME Josef /Fíšek/',
         '1 SEX M',
         '1 REFN P0001',
         '1 FAMS @F0001@',
@@ -50,13 +50,13 @@ function researchGed(opts: { tree?: string | null; extraPerson?: boolean; name?:
         '1 REFN P0002',
         '1 FAMS @F0001@',
         '0 @P0003@ INDI',
-        '1 NAME Jan /Víšek/',
+        '1 NAME Jan /Fíšek/',
         '1 SEX M',
         '1 REFN P0003',
         '1 FAMC @F0001@',
     );
     if (opts.extraPerson) {
-        lines.push('0 @P0004@ INDI', '1 NAME Ludmila /Víšková/', '1 SEX F', '1 REFN P0004', '1 FAMC @F0001@');
+        lines.push('0 @P0004@ INDI', '1 NAME Ludmila /Fíšková/', '1 SEX F', '1 REFN P0004', '1 FAMC @F0001@');
     }
     lines.push('0 @F0001@ FAM', '1 HUSB @P0001@', '1 WIFE @P0002@', '1 CHIL @P0003@');
     if (opts.extraPerson) lines.push('1 CHIL @P0004@');
@@ -71,7 +71,7 @@ describe('readResearchHeader', () => {
         const h = readResearchHeader(researchGed());
         expect(h.isStromResearch).toBe(true);
         expect(h.treeId).toBe(UUID);
-        expect(h.name).toBe('Víškovi');
+        expect(h.name).toBe('Fíškovi');
         expect(h.date).toBe('23 SEP 2026');
     });
 
@@ -80,7 +80,7 @@ describe('readResearchHeader', () => {
         const h = readResearchHeader(ged);
         expect(h.isStromResearch).toBe(true);
         expect(h.treeId).toBe(UUID);
-        expect(h.name).toBe('Víškovi');
+        expect(h.name).toBe('Fíškovi');
     });
 
     it('_STROM_MODE archive: the research works without an agent (missing: with one)', () => {
@@ -110,17 +110,17 @@ describe('readResearchHeader', () => {
     });
 
     it('reads the name from the first NOTE line, CONC joined', () => {
-        const ged = researchGed().replace('1 NOTE Víškovi', '1 NOTE Víš\n2 CONC kovi');
-        expect(readResearchHeader(ged).name).toBe('Víškovi');
+        const ged = researchGed().replace('1 NOTE Fíškovi', '1 NOTE Fíš\n2 CONC kovi');
+        expect(readResearchHeader(ged).name).toBe('Fíškovi');
     });
 
     it('a name starting on a CONT line is taken from it', () => {
-        const ged = researchGed().replace('1 NOTE Víškovi', '1 NOTE\n2 CONT Krepčíkovi');
-        expect(readResearchHeader(ged).name).toBe('Krepčíkovi');
+        const ged = researchGed().replace('1 NOTE Fíškovi', '1 NOTE\n2 CONT Krevčíkovi');
+        expect(readResearchHeader(ged).name).toBe('Krevčíkovi');
     });
 
     it('only the header is read — a NOTE of a record is not the name', () => {
-        const ged = researchGed().replace('1 NOTE Víškovi\n2 CONT Rodokmen ze Strom Research\n', '')
+        const ged = researchGed().replace('1 NOTE Fíškovi\n2 CONT Rodokmen ze Strom Research\n', '')
             .replace('1 REFN P0001', '1 REFN P0001\n1 NOTE Not the tree name');
         expect(readResearchHeader(ged).name).toBeNull();
     });
@@ -132,8 +132,8 @@ describe('readResearchHeader', () => {
     });
 
     it('strips control characters from the name', () => {
-        const ged = researchGed({ name: 'Víš\u0007kovi <b>' });
-        expect(readResearchHeader(ged).name).toBe('Víš kovi <b>');
+        const ged = researchGed({ name: 'Fíš\u0007kovi <b>' });
+        expect(readResearchHeader(ged).name).toBe('Fíš kovi <b>');
     });
 });
 
@@ -307,7 +307,7 @@ describe('keepTitles — an older research drops titles (T07)', () => {
     };
     /** The research's version with titles of its own (a research that knows them). */
     const withTitles = (ged: string): string => ged
-        .replace('1 NAME Josef /Víšek/', '1 NAME Doc. Josef /Víšek/\n2 NPFX Doc.');
+        .replace('1 NAME Josef /Fíšek/', '1 NAME Doc. Josef /Fíšek/\n2 NPFX Doc.');
 
     it('a research without person.titles: every person keeps the titles of the previous state, matched by REFN', () => {
         const previous = here();
@@ -383,27 +383,27 @@ describe('keepTitles — an older research drops titles (T07)', () => {
     });
 
     it('B-1: a title the research read into the name is never added again; the doubled form comes off', () => {
-        // 1.12 read "Ing. Josef /Víšek/ st." as the given name "Ing. Josef st."; each later round doubled it.
-        for (const line of ['Ing. Josef st. /Víšek/', 'Ing. Ing. Josef st. st. /Víšek/', 'Ing. Ing. Ing. Josef st. st. st. /Víšek/', 'Ing. Josef /Víšek st./']) {
-            const next = importData(researchGed().replace('1 NAME Josef /Víšek/', `1 NAME ${line}`));
+        // 1.12 read "Ing. Josef /Fíšek/ st." as the given name "Ing. Josef st."; each later round doubled it.
+        for (const line of ['Ing. Josef st. /Fíšek/', 'Ing. Ing. Josef st. st. /Fíšek/', 'Ing. Ing. Ing. Josef st. st. st. /Fíšek/', 'Ing. Josef /Fíšek st./']) {
+            const next = importData(researchGed().replace('1 NAME Josef /Fíšek/', `1 NAME ${line}`));
             const once = keepTitles(next, here(), ['sync.ids']);
-            expect(byRefn(once, 'P0001'), line).toMatchObject({ titleBefore: 'Ing.', titleAfter: 'st.', firstName: 'Josef', lastName: 'Víšek' });
+            expect(byRefn(once, 'P0001'), line).toMatchObject({ titleBefore: 'Ing.', titleAfter: 'st.', firstName: 'Josef', lastName: 'Fíšek' });
             // Idempotent: run again over its own result, nothing grows.
             const twice = keepTitles(once, once, ['sync.ids']);
-            expect(byRefn(twice, 'P0001')).toMatchObject({ titleBefore: 'Ing.', titleAfter: 'st.', firstName: 'Josef', lastName: 'Víšek' });
+            expect(byRefn(twice, 'P0001')).toMatchObject({ titleBefore: 'Ing.', titleAfter: 'st.', firstName: 'Josef', lastName: 'Fíšek' });
         }
     });
 
     it('B-1: a title of several words or with commas comes off word by word, never down to no name', () => {
         const prev = here();
         Object.assign(byRefn(prev, 'P0001'), { titleBefore: 'Prof., Dr.', titleAfter: 'Ph.D.' });
-        const next = importData(researchGed().replace('1 NAME Josef /Víšek/', '1 NAME Prof., Dr. Prof., Dr. Josef, Ph.D. /Víšek/'));
+        const next = importData(researchGed().replace('1 NAME Josef /Fíšek/', '1 NAME Prof., Dr. Prof., Dr. Josef, Ph.D. /Fíšek/'));
         expect(byRefn(keepTitles(next, prev, null), 'P0001')).toMatchObject({ firstName: 'Josef', titleBefore: 'Prof., Dr.', titleAfter: 'Ph.D.' });
         // A name that is the title alone stays a name.
-        const bare = importData(researchGed().replace('1 NAME Josef /Víšek/', '1 NAME Ing. /Víšek/'));
+        const bare = importData(researchGed().replace('1 NAME Josef /Fíšek/', '1 NAME Ing. /Fíšek/'));
         expect(byRefn(keepTitles(bare, here(), null), 'P0001').firstName).toBe('Ing.');
         // A word in the middle of the name is not a title at its edge.
-        const inside = importData(researchGed().replace('1 NAME Josef /Víšek/', '1 NAME Josef Ing. Karel /Víšek/'));
+        const inside = importData(researchGed().replace('1 NAME Josef /Fíšek/', '1 NAME Josef Ing. Karel /Fíšek/'));
         expect(byRefn(keepTitles(inside, here(), null), 'P0001').firstName).toBe('Josef Ing. Karel');
     });
 
@@ -420,7 +420,7 @@ describe('keepTitles — an older research drops titles (T07)', () => {
             const ged = exportToGedcom(data, 'T', { titles: researchGedcomTitles(status) }).content;
             data = stabilizeIds(keepTitles(importData(oldResearch(ged)), data, status.features), data);
         }
-        expect(byRefn(data, 'P0001')).toMatchObject({ firstName: 'Josef', lastName: 'Víšek', titleBefore: 'Ing.', titleAfter: 'st.' });
+        expect(byRefn(data, 'P0001')).toMatchObject({ firstName: 'Josef', lastName: 'Fíšek', titleBefore: 'Ing.', titleAfter: 'st.' });
         expect(byRefn(data, 'P0003')).toMatchObject({ firstName: 'Jan', titleBefore: 'Mgr.' });
     });
 
@@ -532,7 +532,7 @@ describe('carryOverMedia', () => {
         const own: StromData = { ...previous, persons: {} as StromData['persons'] };
         for (const p of Object.values(previous.persons)) {
             const id = `app_${p.id}` as PersonId;
-            own.persons[id] = { ...p, id, refn: undefined, firstName: 'Jan', lastName: 'Víšek', gender: 'male' };
+            own.persons[id] = { ...p, id, refn: undefined, firstName: 'Jan', lastName: 'Fíšek', gender: 'male' };
         }
         const next = stabilizeIds(importData(researchGed({ extraPerson: true })), own);
         const { data, lost } = carryOverMedia(next, own);
@@ -545,7 +545,7 @@ describe('bridge messages are untrusted', () => {
     it('cleans the status and drops malformed items', () => {
         const s = sanitizeLiveStatus({
             strom: '1.0.0',
-            tree: { id: UUID.toUpperCase(), name: 'Víškovi\n<img src=x onerror=alert(1)>', lang: 'cs' },
+            tree: { id: UUID.toUpperCase(), name: 'Fíškovi\n<img src=x onerror=alert(1)>', lang: 'cs' },
             head: 'abc123',
             persons: 580,
             families: -4,
@@ -553,7 +553,7 @@ describe('bridge messages are untrusted', () => {
             waiting: [{ id: 'T1', what: 'Potvrďte otce', on: 'user', at: '2026-09-26T12:10:00Z' }, { id: 'T2' }],
         })!;
         expect(s.treeId).toBe(UUID);
-        expect(s.name).toBe('Víškovi <img src=x onerror=alert(1)>');
+        expect(s.name).toBe('Fíškovi <img src=x onerror=alert(1)>');
         expect(s.persons).toBe(580);
         expect(s.families).toBeNull();
         expect(s.working).toEqual([{ who: 'agent-1', since: '2026-09-23T10:00:00Z', task: 'Matriky Lučice' }]);
@@ -600,15 +600,15 @@ describe('bridge messages are untrusted', () => {
     });
 
     it('text lines: the people they name, shown without the marks, and their filter', () => {
-        const line = 'Upřesněno: František Strach (*1869) [P0019] – narození: 2. 10. 1869';
+        const line = 'Upřesněno: František Ostych (*1869) [P0019] – narození: 2. 10. 1869';
         expect(textPersonRefs(line)).toEqual(['P0019']);
-        expect(textWithoutRefs(line)).toBe('Upřesněno: František Strach (*1869) – narození: 2. 10. 1869');
+        expect(textWithoutRefs(line)).toBe('Upřesněno: František Ostych (*1869) – narození: 2. 10. 1869');
         expect(textKind('Nové snímky: Buštěhrad 17 (obr. 16–21)', ['+M2694 image 21 of B0059'])).toBe('other');
         expect(textKind('Záznam z pramene: Sňatek', ['+S0171 source'])).toBe('sources');
         // A mixed commit: a line naming a person is about people, a story line about the story.
         const mixed = ['+S0171 source', 'E0100 BIRT 1869 ← S0171', 'P0019 _STORY draft'];
         expect(textKind(line, mixed)).toBe('persons');
-        expect(textKind('Vyprávění: František Strach [P0019]', mixed)).toBe('stories');
+        expect(textKind('Vyprávění: František Ostych [P0019]', mixed)).toBe('stories');
         expect(textKind('Záznam z pramene: Sňatek', mixed)).toBe('sources');
     });
 
@@ -1128,7 +1128,7 @@ describe('person refs in the live status (card badges, overview)', () => {
     it('keeps a valid P-ref on waiting, working and queue items, drops anything else', () => {
         const status = sanitizeLiveStatus({
             tree: { id: '3f2c9a10-7b1e-4c55-9d2a-0e8f6b4a1c77', name: 'X' }, head: 'h1',
-            working: [{ who: 'agent', task: 'Matriky', person: 'P0012' }, { who: 'agent-2', person: 'Jan Víšek' }],
+            working: [{ who: 'agent', task: 'Matriky', person: 'P0012' }, { who: 'agent-2', person: 'Jan Fíšek' }],
             waiting: [{ id: 'T1', what: 'Snímek', person: ' P0013 ' }, { id: 'T2', what: 'Otec', person: 'P12345678' }],
             queue: [{ id: 'T0101', text: 'Sčítání', state: 'next', person: 'P0004' }, { id: 'T0102', text: 'Kniha', state: 'next', person: 7 }],
         })!;
@@ -1150,18 +1150,18 @@ describe('headAt in the live status', () => {
 describe('the research history (/log)', () => {
     it('keeps entries with a time and lines, newest first; drops the rest', () => {
         const log = sanitizeLiveLog({ entries: [
-            { head: 'a1', at: '2026-09-29T14:36:00+02:00', what: ['+P0006 Karel /Víšek/', ''], task: 'T0134 Úmrtí' },
+            { head: 'a1', at: '2026-09-29T14:36:00+02:00', what: ['+P0006 Karel /Fíšek/', ''], task: 'T0134 Úmrtí' },
             { head: 'a0', at: 'nope', what: ['x'] },
             { head: 'z', at: '2026-09-29T10:00:00Z', what: [] },
             'junk',
         ] })!;
-        expect(log).toEqual([{ head: 'a1', at: '2026-09-29T14:36:00+02:00', what: ['+P0006 Karel /Víšek/'], task: 'T0134 Úmrtí' }]);
+        expect(log).toEqual([{ head: 'a1', at: '2026-09-29T14:36:00+02:00', what: ['+P0006 Karel /Fíšek/'], task: 'T0134 Úmrtí' }]);
         expect(sanitizeLiveLog({ entries: 'no' })).toBeNull();
         expect(sanitizeLiveLog(null)).toBeNull();
     });
 
     it('changeAdds: a new person or source', () => {
-        expect(changeAdds('+P0006 Karel /Víšek/ · E0006 BIRT 1868')).toBe('person');
+        expect(changeAdds('+P0006 Karel /Fíšek/ · E0006 BIRT 1868')).toBe('person');
         expect(changeAdds('+S0031 Sčítání lidu 1880')).toBe('source');
         expect(changeAdds('P0012 E0007 BIRT 1865 ← S0012')).toBeNull();
         expect(changeAdds('F0001 +child P0006')).toBeNull();
@@ -1265,9 +1265,9 @@ describe('B-1: titles in the GEDCOM for a research, by what it says of itself', 
     it('a research that says person.titles gets them as any program does', () => {
         expect(researchGedcomTitles({ features: ['sync.ids', 'person.titles'] })).toBe('line');
         expect(nameBlock(exportToGedcom(titled(), 'T', { titles: 'line' }).content))
-            .toEqual(['1 NAME Ing. Josef /Víšek/ st.', '2 NPFX Ing.', '2 GIVN Josef', '2 SURN Víšek', '2 NSFX st.']);
+            .toEqual(['1 NAME Ing. Josef /Fíšek/ st.', '2 NPFX Ing.', '2 GIVN Josef', '2 SURN Fíšek', '2 NSFX st.']);
         // The default (a file export) is the same.
-        expect(nameBlock(exportToGedcom(titled(), 'T').content)[0]).toBe('1 NAME Ing. Josef /Víšek/ st.');
+        expect(nameBlock(exportToGedcom(titled(), 'T').content)[0]).toBe('1 NAME Ing. Josef /Fíšek/ st.');
     });
 
     it('a research that answered without person.titles gets none: the name as 3.9 wrote it', () => {
@@ -1275,7 +1275,7 @@ describe('B-1: titles in the GEDCOM for a research, by what it says of itself', 
             expect(researchGedcomTitles({ features })).toBe('none');
         }
         const ged = exportToGedcom(titled(), 'T', { titles: 'none' }).content;
-        expect(nameBlock(ged)).toEqual(['1 NAME Josef /Víšek/']);
+        expect(nameBlock(ged)).toEqual(['1 NAME Josef /Fíšek/']);
         expect(ged).not.toMatch(/Ing\.|NPFX|NSFX/);
     });
 
@@ -1283,9 +1283,9 @@ describe('B-1: titles in the GEDCOM for a research, by what it says of itself', 
         expect(researchGedcomTitles(null)).toBe('tags');
         expect(researchGedcomTitles(undefined)).toBe('tags');
         const block = nameBlock(exportToGedcom(titled(), 'T', { titles: 'tags' }).content);
-        expect(block).toEqual(['1 NAME Josef /Víšek/', '2 NPFX Ing.', '2 GIVN Josef', '2 SURN Víšek', '2 NSFX st.']);
+        expect(block).toEqual(['1 NAME Josef /Fíšek/', '2 NPFX Ing.', '2 GIVN Josef', '2 SURN Fíšek', '2 NSFX st.']);
         // The app reads it back whole.
         const back = Object.values(importData(exportToGedcom(titled(), 'T', { titles: 'tags' }).content).persons).find(p => p.refn === 'P0001')!;
-        expect(back).toMatchObject({ firstName: 'Josef', lastName: 'Víšek', titleBefore: 'Ing.', titleAfter: 'st.' });
+        expect(back).toMatchObject({ firstName: 'Josef', lastName: 'Fíšek', titleBefore: 'Ing.', titleAfter: 'st.' });
     });
 });

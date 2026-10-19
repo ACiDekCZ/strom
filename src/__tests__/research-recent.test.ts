@@ -27,7 +27,7 @@ function recent(over: Record<string, unknown> = {}): Record<string, unknown> {
 }
 
 const status = (r: unknown, features: unknown = ['status.recent', 'sync.takenBack']) =>
-    sanitizeLiveStatus({ tree: { id: UUID, name: 'Víškovi' }, head: HEAD, features, recent: r });
+    sanitizeLiveStatus({ tree: { id: UUID, name: 'Fíškovi' }, head: HEAD, features, recent: r });
 
 describe('/status.recent is untrusted', () => {
     it('a valid summary is kept as sent', () => {

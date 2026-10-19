@@ -29,7 +29,7 @@ async function family(page: Page): Promise<void> {
     await addRelation(page, 'Jan', 'partner', 'Marie', 'Dvořáková', 'female');
     await addRelation(page, 'Jan', 'child', 'Bohumila', 'Vondráčková-Šťastná', 'female');
     await setMarried(page, 'Marie', 'Nováková');
-    await setMarried(page, 'Bohumila', 'Zelenková-Hrubá');
+    await setMarried(page, 'Bohumila', 'Pažitková-Hrubá');
     await page.evaluate(() => document.fonts.ready);
     await settle(page);
 }
@@ -59,7 +59,7 @@ test('a normal card shows the married surname with the birth one under it, the c
 
     // A long double surname: the name on two lines, the birth row shortened with "…".
     const bohumila = card(page, 'Bohumila');
-    await expect(bohumila.locator('.name-text')).toHaveAttribute('data-surname', 'Zelenková-Hrubá');
+    await expect(bohumila.locator('.name-text')).toHaveAttribute('data-surname', 'Pažitková-Hrubá');
     const long = await birthRow(page, 'Bohumila');
     expect(long.text).toBe('née Vondráčková-Šťastná');
     expect(long.shown).toBe(true);

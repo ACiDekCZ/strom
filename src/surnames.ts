@@ -1,14 +1,14 @@
 /**
  * Surnames that mean the same family (K3 v2).
  *
- * Before about 1900 spelling was not fixed: one register writes Víšek, the next
- * Vyšek, a German-kept one Wischek. That is a fact about the NAME, so it is
+ * Before about 1900 spelling was not fixed: one register writes Fíšek, the next
+ * Fyšek, a German-kept one Fischek. That is a fact about the NAME, so it is
  * written down once for the whole tree (StromData.surnameVariants) — the same
  * reasoning as a place's coordinates belonging to the place rather than to
  * whoever was born there.
  *
  * A group is an EQUIVALENCE, not "the right spelling plus its variants". Your
- * great-grandfather is written Vyšek and you are Víšek; neither is a variant of
+ * great-grandfather is written Fyšek and you are Fíšek; neither is a variant of
  * the other, and a search for either has to find both. Per-person spellings
  * (Person.nameVariants) stay for what really belongs to one person: an alias, or
  * the farm a family was known by.
@@ -63,8 +63,8 @@ export function withSurnameRules<T>(data: StromData, fn: () => T): T {
  * The masculine form of a Czech feminine surname, or null if it does not look
  * like one.
  *
- * Not a guess — Czech has rules. A woman in the family is Víšková where the men
- * are Víšek, and today searching "Víšek" finds fourteen men and none of the ten
+ * Not a guess — Czech has rules. A woman in the family is Fíšková where the men
+ * are Fíšek, and today searching "Fíšek" finds fourteen men and none of the ten
  * women, because the "e" drops when the name is made feminine. It only ever
  * worked by accident, where the feminine form happens to contain the masculine
  * one as a substring (Novák → Nováková).
@@ -81,14 +81,14 @@ export function masculineForm(surname: string): string | null {
     // Adjectival: Brodská → Brodský, Zelená → Zelený, Roštejnská → Roštejnský.
     if (/ská$/.test(t) || /cká$/.test(t)) return name.slice(0, -1) + 'ý';
 
-    // -ová with a real stem: Víšková → Víšk…. A one- or two-letter remainder is
+    // -ová with a real stem: Fíšková → Fíšk…. A one- or two-letter remainder is
     // not a stem — Nová is the adjective Nový, and "N"/"Na" would pull in real
     // foreign surnames — so such names fall through to the adjectival rule.
     // ASCII "-ova" is accepted too: old exports strip diacritics, and no Czech
     // masculine surname ends in -ova.
     if (/ov[áa]$/.test(t)) {
         const stem = name.slice(0, -3);
-        // The vowel that drops when the name is made feminine: Víšek → Víšková,
+        // The vowel that drops when the name is made feminine: Fíšek → Fíšková,
         // Adamec → Adamcová, Pavel → Pavlová. Putting it back is a guess about
         // WHICH vowel, so all candidates are offered by sameSurname below.
         if (stem.length >= 3) return stem;
@@ -110,12 +110,12 @@ function masculineCandidates(surname: string): string[] {
     if (/ý$/i.test(base)) return [base];   // adjectival: one answer
     // Which spelling the -ová was built from cannot be known, so offer each one
     // the rules allow and let the caller compare: Novák(ová) → "Novák";
-    // Svobod(ová) → "Svoboda"; Víšk(ová) → "Víšek"; Adamc(ová) → "Adamec".
+    // Svobod(ová) → "Svoboda"; Fíšk(ová) → "Fíšek"; Adamc(ová) → "Adamec".
     const out = [base, base + 'a'];
     const last = base.slice(-1);
     const beforeLast = base.slice(-2, -1);
     if (/[^aeiouyáéíóúýůě]/i.test(last) && /[^aeiouyáéíóúýůě]/i.test(beforeLast)) {
-        out.push(base.slice(0, -1) + 'e' + last);   // Víšk → Víšek, Adamc → Adamec
+        out.push(base.slice(0, -1) + 'e' + last);   // Fíšk → Fíšek, Adamc → Adamec
     }
     return out;
 }
@@ -123,7 +123,7 @@ function masculineCandidates(surname: string): string[] {
 /**
  * The feminine form of a Czech masculine surname — the same rules read the other
  * way, so that searching either form reaches the whole family. Without it,
- * "Víšek" found all 24 and "Víšková" only the 10 women, which is the kind of
+ * "Fíšek" found all 24 and "Fíšková" only the 10 women, which is the kind of
  * inconsistency nobody can explain to themselves.
  */
 export function feminineForm(surname: string): string | null {
@@ -142,7 +142,7 @@ export function feminineForm(surname: string): string | null {
     // Na + ová would equate them with real Czech ones (N-ová ↔ Nová).
     if (name.length < 3) return null;
 
-    // The vowel that drops: Víšek → Víšková, Adamec → Adamcová, Pavel → Pavlová.
+    // The vowel that drops: Fíšek → Fíšková, Adamec → Adamcová, Pavel → Pavlová.
     const dropped = /^(.*[^aeiouyáéíóúýůě])[eě]([kcl])$/i.exec(name);
     if (dropped) return `${dropped[1]}${dropped[2]}ová`;
 
@@ -199,7 +199,7 @@ export function sameSurname(a: string, b: string, data: StromData): boolean {
     if (!ka || !kb) return false;
     if (ka === kb) return true;
 
-    // Víšek and Víšková are one family; nobody should have to say so — but only
+    // Fíšek and Fíšková are one family; nobody should have to say so — but only
     // where the Czech rules apply at all (see czechRulesApply above).
     const rules = czechRulesApply(data);
     if (rules) {
@@ -219,9 +219,9 @@ export function sameSurname(a: string, b: string, data: StromData): boolean {
 }
 
 /**
- * Add a group, merging it into any group it overlaps. Adding {Víšek, Vyšek} when
- * {Vyšek, Wischek} exists has to end with one group of three — otherwise Víšek
- * and Wischek would stay strangers despite both being Vyšek.
+ * Add a group, merging it into any group it overlaps. Adding {Fíšek, Fyšek} when
+ * {Fyšek, Fischek} exists has to end with one group of three — otherwise Fíšek
+ * and Fischek would stay strangers despite both being Fyšek.
  */
 export function addSurnameGroup(data: StromData, names: string[]): string[][] {
     const cleaned = [...new Set(names.map(n => n.trim()).filter(Boolean))];

@@ -29,7 +29,7 @@ test.describe('changes per person', () => {
         const panel = page.locator('#research-changes-panel');
         await expect(panel.locator('.research-changes-title')).toHaveText('What will be sent');
         await expect(panel.locator('.research-changes-row')).toHaveCount(1);
-        await expect(panel.locator('.research-changes-name')).toHaveText('Jan Víšek');
+        await expect(panel.locator('.research-changes-name')).toHaveText('Jan Fíšek');
         await expect(panel.locator('.research-changes-kinds')).toHaveText('birth');
         // Esc closes it.
         await page.keyboard.press('Escape');
@@ -51,7 +51,7 @@ test.describe('changes per person', () => {
         await expect(block(page)).toHaveAttribute('data-state', 'written');
         await block(page).getByRole('menuitem', { name: 'What was written ›' }).click();
         await expect(panel.locator('.research-changes-title')).toContainText('Written');
-        await expect(panel.locator('.research-changes-name')).toHaveText('Jan Víšek');
+        await expect(panel.locator('.research-changes-name')).toHaveText('Jan Fíšek');
         await expect(panel.locator('.research-changes-icon')).toHaveText('✓');
         // Nothing left to send: no split part.
         await page.keyboard.press('Escape');
@@ -82,7 +82,7 @@ test.describe('changes per person', () => {
         await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
         const dialog = page.locator('#confirmation-modal');
         await expect(dialog).toContainText("The research doesn't have these changes yet. Loading without sending would overwrite them:");
-        await expect(dialog).toContainText('• Jan Víšek (birth)');
+        await expect(dialog).toContainText('• Jan Fíšek (birth)');
     });
 
     test('a tree in step with the research: nothing to tell, no split part', async ({ page }) => {
@@ -122,7 +122,7 @@ test.describe('changes per person after a send the research took nothing from', 
             await block(page).getByRole('menuitem', { name: 'What will be sent ›' }).click();
             await expect(panel.locator('.research-changes-title')).toHaveText('What will be sent');
             await expect(panel.locator('.research-changes-row')).toHaveCount(1);
-            await expect(panel.locator('.research-changes-name')).toHaveText('Jan Víšek');
+            await expect(panel.locator('.research-changes-name')).toHaveText('Jan Fíšek');
             await expect(panel.locator('.research-changes-kinds')).toHaveText('birth');
             await page.keyboard.press('Escape');
             await expect(panel).toHaveCount(0);
@@ -143,7 +143,7 @@ test.describe('changes per person after a send the research took nothing from', 
         await expect(page.locator('#research-sync-send-more')).toHaveText(/1/);
         await page.locator('#research-sync-send-more').click();
         await expect(panel.locator('.research-changes-row')).toHaveCount(1);
-        await expect(panel.locator('.research-changes-name')).toHaveText('Jan Víšek');
+        await expect(panel.locator('.research-changes-name')).toHaveText('Jan Fíšek');
         await expect(panel.locator('.research-changes-kinds')).toHaveText('birth');
     });
 });

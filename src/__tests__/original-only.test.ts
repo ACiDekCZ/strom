@@ -15,7 +15,7 @@ const SHA = 'c'.repeat(64);
 
 function tree(): StromData {
     const anna: Person = {
-        id: 'p1' as PersonId, firstName: 'Anna', lastName: 'Víšková', gender: 'female', isPlaceholder: false,
+        id: 'p1' as PersonId, firstName: 'Anna', lastName: 'Fíšková', gender: 'female', isPlaceholder: false,
         partnerships: [], parentIds: [], childIds: [],
         attachments: [{
             id: 'att1', name: 'matrika-1846.tif', mimeType: 'image/tiff', dataUrl: '', sizeBytes: 0, originalOnly: true,
@@ -49,7 +49,7 @@ describe('only-original attachments', () => {
     });
 
     it('go to the research as an OBJE without data and come back the same', () => {
-        const ged = exportToGedcom(tree(), 'Víškovi').content;
+        const ged = exportToGedcom(tree(), 'Fíškovi').content;
         const obje = ged.split('\n').slice(ged.split('\n').indexOf('1 OBJE'), ged.split('\n').indexOf('1 OBJE') + 6).join('\n');
         expect(obje).toContain('2 FORM tiff');
         expect(obje).toContain(`2 _STROM_SHA ${SHA}`);

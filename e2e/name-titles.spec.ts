@@ -209,14 +209,14 @@ test.describe('titles and the research\'s version (T07)', () => {
                 dm.updatePerson(jan.id, { titleBefore: 'Ing.', titleAfter: 'ml.' });
             });
             bridge.head = 'cd34ef56ab12';
-            bridge.treeGed = researchGed('cd34ef56ab12').replace('1 NAME Josef /Víšek/', '1 NAME MUDr. Josef /Víšek/\n2 NPFX MUDr.');
+            bridge.treeGed = researchGed('cd34ef56ab12').replace('1 NAME Josef /Fíšek/', '1 NAME MUDr. Josef /Fíšek/\n2 NPFX MUDr.');
             await poll(page);
             await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
             await page.locator('.confirm-aside-btn', { hasText: 'Load without changes' }).click();
             await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe('cd34ef56ab12');
             expect(await titlesOf('Jan')).toEqual(knows ? ['', ''] : ['Ing.', 'ml.']);
             expect(await titlesOf('Josef')).toEqual(['MUDr.', '']);
-            await expect(card(page, 'Jan').locator('.name-text')).toHaveAttribute('title', knows ? 'Jan Víšek' : 'Ing. Jan Víšek ml.');
+            await expect(card(page, 'Jan').locator('.name-text')).toHaveAttribute('title', knows ? 'Jan Fíšek' : 'Ing. Jan Fíšek ml.');
         });
     }
 });
@@ -225,14 +225,14 @@ test('B-1: a research that knows no titles (1.12.1): three sends and loads never
     const { openResearch, fakeBridge, poll, editJan, researchGed, openResearchMenu, HEAD } = await import('./research-bridge.js');
     await page.setViewportSize({ width: 1440, height: 900 });
     // The tree here has titles (a GEDCOM with NPFX / NSFX, or typed in 3.10).
-    await openResearch(page, { ged: researchGed().replace('1 NAME Josef /Víšek/', '1 NAME Ing. Josef /Víšek/ st.\n2 NPFX Ing.\n2 NSFX st.') });
+    await openResearch(page, { ged: researchGed().replace('1 NAME Josef /Fíšek/', '1 NAME Ing. Josef /Fíšek/ st.\n2 NPFX Ing.\n2 NSFX st.') });
     // Strom Research 1.12.1: what its bridge says it can do (no person.titles), and how it reads a file:
     // the NAME line only (no NPFX / NSFX / GIVN / SURN), the text after the surname joined to the given name.
     type Rec = { given: string; surname: string; birthPlace: string };
     const research = new Map<string, Rec>([
-        ['P0001', { given: 'Josef', surname: 'Víšek', birthPlace: '' }],
+        ['P0001', { given: 'Josef', surname: 'Fíšek', birthPlace: '' }],
         ['P0002', { given: 'Anna', surname: 'Svobodová', birthPlace: '' }],
-        ['P0003', { given: 'Jan', surname: 'Víšek', birthPlace: '' }],
+        ['P0003', { given: 'Jan', surname: 'Fíšek', birthPlace: '' }],
     ]);
     const readAsOld = (ged: string): Map<string, Rec> => {
         const out = new Map<string, Rec>();
@@ -283,7 +283,7 @@ test('B-1: a research that knows no titles (1.12.1): three sends and loads never
         const p = (Object.values(window.Strom.DataManager.getData().persons) as any[]).find(x => x.refn === 'P0001');
         return { firstName: p.firstName, lastName: p.lastName, titleBefore: p.titleBefore ?? '', titleAfter: p.titleAfter ?? '' };
     });
-    const asBefore = { firstName: 'Josef', lastName: 'Víšek', titleBefore: 'Ing.', titleAfter: 'st.' };
+    const asBefore = { firstName: 'Josef', lastName: 'Fíšek', titleBefore: 'Ing.', titleAfter: 'st.' };
     expect(await josef()).toEqual(asBefore);
     const places = ['Praha', 'Brno', 'Kolín'];
     for (let round = 0; round < 3; round++) {
@@ -307,9 +307,9 @@ test('B-1: a research that knows no titles (1.12.1): three sends and loads never
     }
     // Each send wrote exactly the one edit; the research holds the name without the titles, never "Ing. Josef st.".
     expect(written).toEqual([1, 1, 1]);
-    expect(research.get('P0001')).toMatchObject({ given: 'Josef', surname: 'Víšek' });
+    expect(research.get('P0001')).toMatchObject({ given: 'Josef', surname: 'Fíšek' });
     for (const posted of bridge.posts) expect(posted).not.toMatch(/Ing\.|NPFX|NSFX/);
-    await expect(card(page, 'Josef').locator('.name-text')).toHaveAttribute('title', 'Ing. Josef Víšek st.');
+    await expect(card(page, 'Josef').locator('.name-text')).toHaveAttribute('title', 'Ing. Josef Fíšek st.');
     // The research menu says the research keeps no titles, with "How to update…".
     await openResearchMenu(page);
     const older = page.locator('#research-older-block');
@@ -327,9 +327,9 @@ async function upgradingResearch(page: Page) {
     const { fakeBridge, researchGed, HEAD } = await import('./research-bridge.js');
     type Rec = { given: string; surname: string; before: string; after: string; birthPlace: string };
     const research = new Map<string, Rec>([
-        ['P0001', { given: 'Josef', surname: 'Víšek', before: '', after: '', birthPlace: '' }],
+        ['P0001', { given: 'Josef', surname: 'Fíšek', before: '', after: '', birthPlace: '' }],
         ['P0002', { given: 'Anna', surname: 'Svobodová', before: '', after: '', birthPlace: '' }],
-        ['P0003', { given: 'Jan', surname: 'Víšek', before: '', after: '', birthPlace: '' }],
+        ['P0003', { given: 'Jan', surname: 'Fíšek', before: '', after: '', birthPlace: '' }],
     ]);
     const state = { titles: false };
     const old = ['sync.again', 'sync.undoneSince', 'sync.takenBack', 'sync.conflictEdit', 'sync.since', 'sync.ids', 'family.noCouple', 'family.alone', 'adopt.transfer', 'adopt.empty'];
@@ -409,7 +409,7 @@ const josefNow = (page: Page) => page.evaluate(() => {
 });
 /** "What will be sent": the people and their kinds (null: not known). */
 const willSend = (page: Page) => page.evaluate(async () => (await window.Strom.UI.researchChangesReady())?.map(c => `${c.name}: ${c.kinds.join(',')}`) ?? null);
-const josefTitled = { firstName: 'Josef', lastName: 'Víšek', titleBefore: 'Ing.', titleAfter: 'st.' };
+const josefTitled = { firstName: 'Josef', lastName: 'Fíšek', titleBefore: 'Ing.', titleAfter: 'st.' };
 
 test('B18-1: the research updated from 1.12.1 to 1.13 never got the titles: a load keeps them, "What will be sent" lists them, the next send carries them in NPFX / NSFX; "Restore the state before loading" keeps them; a title taken off there afterwards goes here too', async ({ page }) => {
     const { openResearch, poll, editJan } = await import('./research-bridge.js');
@@ -434,7 +434,7 @@ test('B18-1: the research updated from 1.12.1 to 1.13 never got the titles: a lo
     r.upgrade();
     await poll(page);
     // They never went: changes to send now.
-    await expect.poll(() => willSend(page)).toEqual(['Josef Víšek: name']);
+    await expect.poll(() => willSend(page)).toEqual(['Josef Fíšek: name']);
 
     // The research's newer version (Anna's birth added there), loaded without sending: the titles stay.
     r.research.get('P0002')!.birthPlace = 'Čáslav';
@@ -445,8 +445,8 @@ test('B18-1: the research updated from 1.12.1 to 1.13 never got the titles: a lo
     const loadedHead = () => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head);
     await expect.poll(loadedHead).toBe(head);
     expect(await josefNow(page)).toEqual(josefTitled);
-    await expect.poll(() => willSend(page)).toEqual(['Josef Víšek: name']);
-    await expect(card(page, 'Josef').locator('.name-text')).toHaveAttribute('title', 'Ing. Josef Víšek st.');
+    await expect.poll(() => willSend(page)).toEqual(['Josef Fíšek: name']);
+    await expect(card(page, 'Josef').locator('.name-text')).toHaveAttribute('title', 'Ing. Josef Fíšek st.');
 
     // "Restore the state before loading": the titles are there, still to send (the list per person is not
     // told exactly after a restore: its base moved, A of rc.34).
@@ -459,14 +459,14 @@ test('B18-1: the research updated from 1.12.1 to 1.13 never got the titles: a lo
         const fps = ui.researchSyncFingerprints(ctx.treeId, ctx.link);
         return !fps.matchesBase && fps.current !== ctx.link.sent?.fingerprint;
     })).toBe(true);
-    expect([null, ['Josef Víšek: name']]).toContainEqual(await willSend(page));
+    expect([null, ['Josef Fíšek: name']]).toContainEqual(await willSend(page));
 
     // The next send carries them, as to any research that keeps titles; the research has them now.
     await page.evaluate(() => window.Strom.UI.researchSendNow({ previewed: true }));
     await expect.poll(() => r.written.length).toBe(2);
     const sent = r.bridge.posts[r.bridge.posts.length - 1];
-    expect(sent).toContain('1 NAME Ing. Josef /Víšek/ st.\n2 NPFX Ing.\n2 GIVN Josef\n2 SURN Víšek\n2 NSFX st.');
-    expect(r.research.get('P0001')).toMatchObject({ given: 'Josef', surname: 'Víšek', before: 'Ing.', after: 'st.' });
+    expect(sent).toContain('1 NAME Ing. Josef /Fíšek/ st.\n2 NPFX Ing.\n2 GIVN Josef\n2 SURN Fíšek\n2 NSFX st.');
+    expect(r.research.get('P0001')).toMatchObject({ given: 'Josef', surname: 'Fíšek', before: 'Ing.', after: 'st.' });
     await expect.poll(() => willSend(page)).toEqual([]);
 
     // Taken off in the research after it had it: a real removal, shown in the load dialog and taken here.
@@ -475,7 +475,7 @@ test('B18-1: the research updated from 1.12.1 to 1.13 never got the titles: a lo
     await poll(page);
     await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
     const modal = page.locator('#research-load-modal');
-    await expect(modal).toContainText('Ing. Josef Víšek st.');
+    await expect(modal).toContainText('Ing. Josef Fíšek st.');
     await modal.locator('#research-load-ok').click();
     await expect.poll(loadedHead).toBe(head2);
     expect(await josefNow(page)).toEqual({ ...josefTitled, titleBefore: '' });
@@ -485,7 +485,7 @@ test('B18-1: a tree handed over to 1.12.1 with titles and reconnected after the 
     const { openResearch, poll, BRIDGE, researchGed } = await import('./research-bridge.js');
     await page.setViewportSize({ width: 1440, height: 900 });
     // The tree here has titles from its first load (a file of the research read before its status was known).
-    await openResearch(page, { ged: researchGed().replace('1 NAME Josef /Víšek/', '1 NAME Ing. Josef /Víšek/ st.\n2 NPFX Ing.\n2 NSFX st.') });
+    await openResearch(page, { ged: researchGed().replace('1 NAME Josef /Fíšek/', '1 NAME Ing. Josef /Fíšek/ st.\n2 NPFX Ing.\n2 NSFX st.') });
     // A tie of beta.18 (or older): nothing says whether the research has had the titles.
     await page.evaluate(() => window.Strom.TreeManager.patchResearchLink(window.Strom.TreeManager.getActiveTreeId()!, { titlesIn: undefined }));
     const r = await upgradingResearch(page);
@@ -512,13 +512,13 @@ test('B18-1: a tree handed over to 1.12.1 with titles and reconnected after the 
     await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe(head);
     expect(await josefNow(page)).toEqual(josefTitled);
     // The research's version is the tree without them: changes to send.
-    await expect.poll(() => willSend(page)).toEqual(['Josef Víšek: name']);
+    await expect.poll(() => willSend(page)).toEqual(['Josef Fíšek: name']);
     await page.evaluate(() => {
         const ui = window.Strom.UI as unknown as { researchTitlesCatchUp: () => Promise<void>; __catchUp: () => Promise<void> };
         ui.researchTitlesCatchUp = ui.__catchUp;
     });
     await poll(page);
-    await expect.poll(() => willSend(page)).toEqual(['Josef Víšek: name']);
+    await expect.poll(() => willSend(page)).toEqual(['Josef Fíšek: name']);
     await page.evaluate(() => window.Strom.UI.researchSendNow({ previewed: true }));
     await expect.poll(() => r.written.length).toBe(1);
     expect(r.bridge.posts[r.bridge.posts.length - 1]).toContain('2 NPFX Ing.');

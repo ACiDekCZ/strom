@@ -880,7 +880,7 @@ export function mergePersonData(
     }
 
     // Merge written name variants: the spelling that made the match possible
-    // ("Wischek") must survive the merge, or the next import of the same
+    // ("Fischek") must survive the merge, or the next import of the same
     // source falls back to fuzzy matching again.
     if (incoming.nameVariants && incoming.nameVariants.length > 0) {
         const have = new Set((existing.nameVariants ?? []).map(v => v.trim().toLowerCase()));

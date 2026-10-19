@@ -213,11 +213,11 @@ describe('the years under the name and the name in two rows (U02)', () => {
     it('a long name wraps into two rows when details may wrap, the second ending in "…"; one row a detail keeps it whole', () => {
         // Room 174 − 38 = 136 (17 characters of the name).
         const metrics = { cardWidth: 200, dateColumn: 0 };
-        const names = ['Kateřina Výšková-Hlavatá z Lipan', 'Bartoloměj Wolfensteiner von Hohenberg', 'Jan Vlk'];
+        const names = ['Kateřina Fýšková-Hlavatá z Lipan', 'Bartoloměj Wolfensteiner von Hohenberg', 'Jan Vlk'];
         const entries = names.map(name => ({ name, avatar: true, lines: [] }));
         const heads = customCardRows(entries, metrics, measure, 0).heads;
         expect(heads.map(h => [h.name, h.cut])).toEqual([
-            [['Kateřina Výšková-', 'Hlavatá z Lipan'], false],
+            [['Kateřina Fýšková-', 'Hlavatá z Lipan'], false],
             [['Bartoloměj', 'Wolfensteiner vo…'], true],
             [['Jan Vlk'], false],
         ]);
@@ -227,7 +227,7 @@ describe('the years under the name and the name in two rows (U02)', () => {
         expect(customCardRows(entries, metrics, measure, 1).heads.map(h => h.name)).toEqual(names.map(n => [n]));
         // Without the avatar the room is 174 (21 characters).
         expect(customCardRows([{ name: names[0], avatar: false, lines: [] }], metrics, measure, 0).heads[0].name)
-            .toEqual(['Kateřina Výšková-', 'Hlavatá z Lipan']);
+            .toEqual(['Kateřina Fýšková-', 'Hlavatá z Lipan']);
     });
 
     it('wrapping with less room on the first row: as much as fits there, the rest at the full width', () => {
@@ -243,7 +243,7 @@ describe('the years under the name and the name in two rows (U02)', () => {
 
 describe('the poster draws labels, years and the name\'s rows like the screen (U02)', () => {
     beforeEach(() => setLanguage('en'));
-    const a = person({ id: 'a' as PersonId, firstName: 'Kateřina', lastName: 'Výšková-Hlavatá z Lipan', gender: 'female' });
+    const a = person({ id: 'a' as PersonId, firstName: 'Kateřina', lastName: 'Fýšková-Hlavatá z Lipan', gender: 'female' });
     const data: StromData = { persons: { [a.id]: a }, partnerships: noUnions };
     const layout: PosterLayout = { positions: new Map([[a.id, { x: 0, y: 0 }]]), connections: [], spouseLines: [] };
     const texts = (svg: string, cls: string) => [...svg.matchAll(new RegExp(`<text class="${cls}" x="([\\d.]+)" y="([\\d.]+)"[^>]*>([^<]*)</text>`, 'g'))]
@@ -275,7 +275,7 @@ describe('the poster draws labels, years and the name\'s rows like the screen (U
         });
         // Header 19 × 2 + 14 = 52: rows at 10 + 14.5 and + 19, the years 10.5 into theirs.
         expect(texts(svg, 'card-name-row')).toEqual([
-            { x: 50, y: 24.5, text: 'Kateřina Výšková-' }, { x: 50, y: 43.5, text: 'Hlavatá z Lipan' },
+            { x: 50, y: 24.5, text: 'Kateřina Fýšková-' }, { x: 50, y: 43.5, text: 'Hlavatá z Lipan' },
         ]);
         expect(texts(svg, 'card-years')).toEqual([{ x: 50, y: 58.5, text: '1846 – 1919' }]);
         // Not in the middle of the 52px header (36): where a one-row name and its years put it, 10 + 33 / 2.
@@ -297,7 +297,7 @@ describe('the poster draws labels, years and the name\'s rows like the screen (U
         });
         expect(svg).not.toContain('card-name-row');
         // (33 − 33) / 2 = 0 → the name's baseline 10 + 14.5, the years 10 + 19 + 10.5.
-        expect(svg).toMatch(/<text x="50.0" y="24.5" font-size="13" font-weight="600"[^>]*>Kateřina Výšková-Hlavatá z Lipan<\/text>/);
+        expect(svg).toMatch(/<text x="50.0" y="24.5" font-size="13" font-weight="600"[^>]*>Kateřina Fýšková-Hlavatá z Lipan<\/text>/);
         expect(texts(svg, 'card-years')).toEqual([{ x: 50, y: 39.5, text: '1846 – 1919' }]);
     });
 });

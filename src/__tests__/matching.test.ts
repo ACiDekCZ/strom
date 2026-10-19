@@ -213,7 +213,7 @@ describe('edge cases', () => {
 
 describe('merge matching sees through name variants (K3)', () => {
     /**
-     * The same family is Wischek in one register and Víšek in the next. Without
+     * The same family is Fischek in one register and Fíšek in the next. Without
      * variants the merge sees two families and refuses to match them — which is
      * exactly the case where merging matters most.
      */
@@ -231,9 +231,9 @@ describe('merge matching sees through name variants (K3)', () => {
         partnerships: {},
     });
 
-    it('matches Wischek to Víšek when the variant says they are the same', () => {
-        const existing = tree(person('a', 'Josef', 'Víšek', ['Wischek']));
-        const incoming = tree(person('b', 'Josef', 'Wischek'));
+    it('matches Fischek to Fíšek when the variant says they are the same', () => {
+        const existing = tree(person('a', 'Josef', 'Fíšek', ['Fischek']));
+        const incoming = tree(person('b', 'Josef', 'Fischek'));
 
         const matches = findMatches(existing, incoming);
         expect(matches).toHaveLength(1);
@@ -241,8 +241,8 @@ describe('merge matching sees through name variants (K3)', () => {
     });
 
     it('still tells two different families apart', () => {
-        // The variant must widen the net, not break it: Svoboda is not Víšek.
-        const existing = tree(person('a', 'Josef', 'Víšek', ['Wischek']));
+        // The variant must widen the net, not break it: Svoboda is not Fíšek.
+        const existing = tree(person('a', 'Josef', 'Fíšek', ['Fischek']));
         const incoming = tree(person('b', 'Josef', 'Svoboda'));
 
         const matches = findMatches(existing, incoming);
@@ -251,8 +251,8 @@ describe('merge matching sees through name variants (K3)', () => {
     });
 
     it('matches when the variant is on the incoming side instead', () => {
-        const existing = tree(person('a', 'Josef', 'Wischek'));
-        const incoming = tree(person('b', 'Josef', 'Víšek', ['Wischek']));
+        const existing = tree(person('a', 'Josef', 'Fischek'));
+        const incoming = tree(person('b', 'Josef', 'Fíšek', ['Fischek']));
         expect(findMatches(existing, incoming)).toHaveLength(1);
     });
 });
@@ -260,8 +260,8 @@ describe('merge matching sees through name variants (K3)', () => {
 describe('merge matching uses the tree’s surname groups (K3 v2)', () => {
     /**
      * Entered once for the tree, and it holds whichever spelling each person
-     * happens to be recorded under — the great-grandfathers are Vyšek, the
-     * living are Víšek, and neither had to be annotated by hand.
+     * happens to be recorded under — the great-grandfathers are Fyšek, the
+     * living are Fíšek, and neither had to be annotated by hand.
      */
     function p(id: string, firstName: string, lastName: string): Person {
         return {
@@ -276,10 +276,10 @@ describe('merge matching uses the tree’s surname groups (K3 v2)', () => {
         ...(groups ? { surnameVariants: groups } : {}),
     });
 
-    it('matches Vyšek to Víšek without a word on either person', () => {
-        const groups = [['Víšek', 'Vyšek']];
-        const existing = tree([p('a', 'Josef', 'Víšek')], groups);
-        const incoming = tree([p('b', 'Josef', 'Vyšek')], groups);
+    it('matches Fyšek to Fíšek without a word on either person', () => {
+        const groups = [['Fíšek', 'Fyšek']];
+        const existing = tree([p('a', 'Josef', 'Fíšek')], groups);
+        const incoming = tree([p('b', 'Josef', 'Fyšek')], groups);
 
         const matches = findMatches(existing, incoming);
         expect(matches).toHaveLength(1);
@@ -287,16 +287,16 @@ describe('merge matching uses the tree’s surname groups (K3 v2)', () => {
     });
 
     it('does not match them when no group says they are the same', () => {
-        const existing = tree([p('a', 'Josef', 'Víšek')]);
-        const incoming = tree([p('b', 'Josef', 'Vyšek')]);
+        const existing = tree([p('a', 'Josef', 'Fíšek')]);
+        const incoming = tree([p('b', 'Josef', 'Fyšek')]);
         const strong = findMatches(existing, incoming)
             .filter(m => m.confidence === 'high');
         expect(strong).toHaveLength(0);
     });
 
     it('still keeps different families apart', () => {
-        const groups = [['Víšek', 'Vyšek']];
-        const existing = tree([p('a', 'Josef', 'Víšek')], groups);
+        const groups = [['Fíšek', 'Fyšek']];
+        const existing = tree([p('a', 'Josef', 'Fíšek')], groups);
         const incoming = tree([p('b', 'Josef', 'Svoboda')], groups);
         const strong = findMatches(existing, incoming)
             .filter(m => m.confidence === 'high' || m.confidence === 'medium');
@@ -307,8 +307,8 @@ describe('merge matching uses the tree’s surname groups (K3 v2)', () => {
 describe('the feminine rule must not leak into fuzzy matching', () => {
     /**
      * Regression: generated forms were fed to the similarity comparison, and
-     * every Czech surname has an -ová form. Víšková/Svobodová measure 0.44 alike
-     * where Víšek/Svoboda measure 0.14 — enough, with the same first name, to
+     * every Czech surname has an -ová form. Fíšková/Svobodová measure 0.44 alike
+     * where Fíšek/Svoboda measure 0.14 — enough, with the same first name, to
      * push two unrelated families over the match threshold. A rule is an answer,
      * not an input to a guess.
      */
@@ -324,13 +324,13 @@ describe('the feminine rule must not leak into fuzzy matching', () => {
         partnerships: {},
     });
 
-    it('does not match Víšek to Svoboda through their -ová forms', () => {
-        const matches = findMatches(tree([p('a', 'Josef', 'Víšek')]), tree([p('b', 'Josef', 'Svoboda')]));
+    it('does not match Fíšek to Svoboda through their -ová forms', () => {
+        const matches = findMatches(tree([p('a', 'Josef', 'Fíšek')]), tree([p('b', 'Josef', 'Svoboda')]));
         expect(matches.filter(m => m.confidence === 'high' || m.confidence === 'medium')).toHaveLength(0);
     });
 
     it('still matches a man to the same family’s woman, which is the point', () => {
-        const matches = findMatches(tree([p('a', 'Josef', 'Víšek')]), tree([p('b', 'Josef', 'Víšková')]));
+        const matches = findMatches(tree([p('a', 'Josef', 'Fíšek')]), tree([p('b', 'Josef', 'Fíšková')]));
         expect(matches).toHaveLength(1);
     });
 });

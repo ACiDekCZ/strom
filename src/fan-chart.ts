@@ -284,7 +284,7 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
             // legibility. First and last name go on SEPARATE lines — the
             // tangential space (arc) fits several lines, while the radial
             // ring width is the scarce direction; splitting the name is what
-            // lets "Antonín Krepčík" fit un-ellipsized. The font shrinks a
+            // lets "Antonín Krevčík" fit un-ellipsized. The font shrinks a
             // little before the ellipsis ever kicks in.
             const midR = (r1 + r2) / 2;
             const [px, py] = pt(cx, cy, midR, mid);
@@ -298,7 +298,7 @@ export function buildFanSvg(model: FanModel, opts: FanSvgOptions): string {
             const maxLines = Math.max(1, Math.min(3, Math.floor(arcLen / (baseFs * 1.3))));
 
             // Greedy word wrap of the full name into the available lines —
-            // "Johannes Jacobus Výsek" becomes three short lines instead of
+            // "Johannes Jacobus Fýsek" becomes three short lines instead of
             // one ellipsized one.
             const charCap = Math.max(4, Math.floor(maxLen / (baseFs * GLYPH_W)));
             const tokens = name.split(/\s+/).filter(Boolean);

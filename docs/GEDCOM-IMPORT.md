@@ -97,7 +97,7 @@ unsupported tag.
 
 ```
 0 @I1@ INDI
-1 NAME František /Krepčík/
+1 NAME František /Krevčík/
 1 SEX M
 1 BIRT
 2 DATE 5 MAY 1863
@@ -488,7 +488,7 @@ sets it in the family book after the facts.
 2 TITL Nemanželský syn z čp. 22
 2 STAT hotovo
 2 TEXT František se narodil 5. května 1863 v Lučici jako nemanžel
-3 CONC ský syn Anny Krepčíkové.
+3 CONC ský syn Anny Krevčíkové.
 3 CONT
 3 CONT Otec není v matrice uveden.
 2 DATA BIRT 5 MAY 1863 [M-04]
@@ -593,7 +593,7 @@ sections above.
 1 DATE 23 SEP 2026
 1 _STROM_TREE 3f2c9a10-7b1e-4c55-9d2a-0e8f6b4a1c77
 1 CHAR UTF-8
-1 NOTE Víškovi
+1 NOTE Fíškovi
 2 CONT …
 ```
 
@@ -602,7 +602,7 @@ sections above.
   `strom.json`, a UUID in the canonical 8-4-4-4-12 hexadecimal form (case does
   not matter; Strom stores it in lower case). It is read **only together with**
   `1 SOUR STROM_RESEARCH`, and a value that is not a UUID is ignored.
-- The **first line of the header `1 NOTE`** is the tree's name ("Víškovi");
+- The **first line of the header `1 NOTE`** is the tree's name ("Fíškovi");
   `CONC` continues it, `CONT` lines after it are not part of the name.
 - `1 DATE` is shown as the "as of" date after opening.
 - Person `REFN` values (`P0001` …) are what keeps a person the same person
@@ -675,7 +675,7 @@ except one it still holds only as that bare spelling.
    The app never overwrites a tree because its name matches.
 5. **Any other GEDCOM** opens the normal import dialog (new tree / merge).
 6. The user's other trees are never touched. A short summary follows:
-   "Opened the research Víškovi from Strom Research — 42 people,
+   "Opened the research Fíškovi from Strom Research — 42 people,
    15 families (as of 23 Sep 2026)".
 
 ### Ways to open a file

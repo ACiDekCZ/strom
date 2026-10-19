@@ -17,8 +17,8 @@ const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJA
 function researchGed(): string {
     return [
         '0 HEAD', '1 SOUR STROM_RESEARCH', '1 DATE 27 SEP 2026', `1 _STROM_TREE ${UUID}`, '1 _STROM_HEAD 3f2a9c1e5b7d',
-        '1 CHAR UTF-8', '1 NOTE Víškovi',
-        '0 @P0001@ INDI', '1 NAME Jan /Víšek/', '1 SEX M', '1 REFN P0001', '2 TYPE strom-research',
+        '1 CHAR UTF-8', '1 NOTE Fíškovi',
+        '0 @P0001@ INDI', '1 NAME Jan /Fíšek/', '1 SEX M', '1 REFN P0001', '2 TYPE strom-research',
         '0 TRLR',
     ].join('\n');
 }
@@ -60,7 +60,7 @@ async function contact(page: Page, links: string[] | null, more: Record<string, 
         const url = new URL(route.request().url()).pathname;
         if (url.endsWith('/status')) {
             return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' },
-                body: JSON.stringify({ tree: UUID, name: 'Víškovi', ...(links ? { links } : {}), ...more }) });
+                body: JSON.stringify({ tree: UUID, name: 'Fíškovi', ...(links ? { links } : {}), ...more }) });
         }
         return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: '{"ok":true}' });
     });

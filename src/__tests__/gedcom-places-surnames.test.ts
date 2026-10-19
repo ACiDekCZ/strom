@@ -97,12 +97,12 @@ describe('GEDCOM place coordinates', () => {
 });
 
 describe('GEDCOM surname-variant groups', () => {
-    const groups = [['Víšek', 'Vyšek', 'Wischek'], ['Novák', 'Nowak']];
+    const groups = [['Fíšek', 'Fyšek', 'Fischek'], ['Novák', 'Nowak']];
 
     it('exports groups as a header NOTE marker', () => {
         const ged = exportToGedcom(treeWith('Praha', { lat: 50, lon: 14 }, groups)).content;
         expect(ged).toContain(`1 NOTE ${SURNAME_GROUPS_MARKER}`);
-        expect(ged).toContain('2 CONT Víšek | Vyšek | Wischek');
+        expect(ged).toContain('2 CONT Fíšek | Fyšek | Fischek');
         expect(ged).toContain('2 CONT Novák | Nowak');
     });
 

@@ -206,7 +206,7 @@ export type ValueField =
 export interface ValueChange {
     /** The person (a couple: the first partner), for the name column and selecting. */
     personId: PersonId;
-    /** The person's name ("Jan Víšek"; a couple "Jan Víšek & Anna Víšková"). */
+    /** The person's name ("Jan Fíšek"; a couple "Jan Fíšek & Anna Fíšková"). */
     name: string;
     field: ValueField;
     /** The event's type for event rows; the fact a citation belongs to ('birth', 'death', 'person' or an event type). */

@@ -17,13 +17,13 @@ const ALL = ['send', 'excerpt', 'app', 'open', 'chat', 'task', 'review', 'resear
 function researchGed(): string {
     return [
         '0 HEAD', '1 SOUR STROM_RESEARCH', '1 DATE 27 SEP 2026', `1 _STROM_TREE ${UUID}`, '1 _STROM_HEAD 3f2a9c1e5b7d',
-        '1 CHAR UTF-8', '1 NOTE Víškovi',
-        '0 @P0001@ INDI', '1 NAME Josef /Víšek/', '1 SEX M', '1 BIRT', '2 DATE 1840', '1 DEAT', '2 DATE 1900',
+        '1 CHAR UTF-8', '1 NOTE Fíškovi',
+        '0 @P0001@ INDI', '1 NAME Josef /Fíšek/', '1 SEX M', '1 BIRT', '2 DATE 1840', '1 DEAT', '2 DATE 1900',
         '1 REFN P0001', '1 FAMS @F0001@',
         '0 @P0002@ INDI', '1 NAME Anna /Svobodová/', '1 SEX F', '1 REFN P0002', '1 FAMS @F0001@',
-        '0 @P0012@ INDI', '1 NAME Jan /Víšek/', '1 SEX M', '1 BIRT', '2 DATE 1865', '1 DEAT', '2 DATE 1932',
+        '0 @P0012@ INDI', '1 NAME Jan /Fíšek/', '1 SEX M', '1 BIRT', '2 DATE 1865', '1 DEAT', '2 DATE 1932',
         '1 REFN P0012', '1 FAMC @F0001@',
-        '0 @P0013@ INDI', '1 NAME Eva /Víšková/', '1 SEX F', '1 BIRT', '2 DATE 1990', '1 REFN P0013', '1 FAMC @F0001@',
+        '0 @P0013@ INDI', '1 NAME Eva /Fíšková/', '1 SEX F', '1 BIRT', '2 DATE 1990', '1 REFN P0013', '1 FAMC @F0001@',
         '0 @I9@ INDI', '1 NAME Karel /Bez/', '1 SEX M', '1 FAMC @F0001@',
         '0 @F0001@ FAM', '1 HUSB @P0001@', '1 WIFE @P0002@', '1 CHIL @P0012@', '1 CHIL @P0013@', '1 CHIL @I9@',
         '0 TRLR',
@@ -257,7 +257,7 @@ test.describe('live research: Awaiting action', () => {
             const path = new URL(route.request().url()).pathname;
             if (path.endsWith('/status')) {
                 return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' },
-                    body: JSON.stringify({ tree: { id: UUID, name: 'Víškovi' }, head: 'h1', working: [], links: ALL,
+                    body: JSON.stringify({ tree: { id: UUID, name: 'Fíškovi' }, head: 'h1', working: [], links: ALL,
                         waiting: [{ id: 'T0007', what: 'Confirm the father of Jan', on: 'user', at: new Date().toISOString() },
                             { id: 'x', what: 'Pick a register', on: 'user' }] }) });
             }
@@ -338,7 +338,7 @@ test.describe('person menu: Research ›', () => {
         const dialog = page.locator('#research-review-modal');
         await expect(dialog).toBeVisible();
         await expect(dialog.locator('.modal')).toHaveAttribute('data-dialog-kind', 'choice');
-        await expect(dialog).toContainText('Jan Víšek · 1865–1932');
+        await expect(dialog).toContainText('Jan Fíšek · 1865–1932');
         await expect(dialog.getByRole('radio', { name: 'Only this person' })).toBeChecked();
         await expect(dialog.locator('.research-review-living')).toHaveCount(0);
         await dialog.getByText('With family').click();

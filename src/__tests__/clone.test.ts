@@ -40,7 +40,7 @@ describe('cloneTreeDataAsJson', () => {
 
 describe('estimateJsonBytes', () => {
     it('matches the UTF-8 size of JSON.stringify for plain tree data', () => {
-        const data = { ...sample(), name: 'Víšek – Žofie 😀', n: 12.5, ok: true, nil: null };
+        const data = { ...sample(), name: 'Fíšek – Žofie 😀', n: 12.5, ok: true, nil: null };
         const exact = new TextEncoder().encode(JSON.stringify(data)).length;
         expect(estimateJsonBytes(data)).toBe(exact);
     });

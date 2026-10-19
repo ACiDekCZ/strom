@@ -2,9 +2,9 @@
  * Saying which surname spellings mean the same family (K3 v2).
  *
  * Written down once for the tree, because a spelling is a fact about the NAME.
- * The first version put spellings on each person, which meant that thirty Víšeks
+ * The first version put spellings on each person, which meant that thirty Fíšeks
  * needed thirty entries — in both directions, since the great-grandfathers are
- * recorded Vyšek and the living are Víšek — and the thirty-first person added
+ * recorded Fyšek and the living are Fíšek — and the thirty-first person added
  * later missed out entirely.
  *
  * See src/surnames.ts for the model and src/ui/module.ts for the composition

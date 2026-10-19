@@ -206,7 +206,7 @@ function bestLastNameMatch(
     existingData?: StromData,
     incomingData?: StromData,
 ): { exact: boolean; similar: boolean; similarity: number } {
-    // A rule (Víšek/Víšková) or a group the user entered is not a similarity
+    // A rule (Fíšek/Fíšková) or a group the user entered is not a similarity
     // question — it is an answer, so it does not go near the fuzzy comparison.
     // Both the birth surname and the one after marriage are asked.
     const surnames = (p: SurnameFields): string[] => [p.lastName, p.marriedSurname ?? ''].filter(Boolean);
@@ -219,8 +219,8 @@ function bestLastNameMatch(
 
     // Otherwise compare what is WRITTEN — never the generated forms. Every Czech
     // surname has an -ová form and they all rhyme: feeding those to the fuzzy
-    // matcher made Víšková/Svobodová look 0.44 alike where Víšek/Svoboda are
-    // 0.14, which was enough to push two unrelated families over the threshold.
+    // matcher made Fíšková/Svobodová look 0.33 alike where Fíšek/Svoboda are
+    // 0, which was enough to push two unrelated families over the threshold.
     let best = lastNamesSimilar(existing.lastName, incoming.lastName);
     for (const a of writtenSurnames(existing)) {
         for (const b of writtenSurnames(incoming)) {
@@ -806,8 +806,8 @@ function calculateMatchScore(
     const firstNameSimilarity = stringSimilarity(existing.firstName, incoming.firstName);
 
     // Analyze last names (handles typos and spelling variations). Recorded name
-    // variants count as this person's surname too: a family written Wischek in
-    // one register and Víšek in another is one family, and without this the
+    // variants count as this person's surname too: a family written Fischek in
+    // one register and Fíšek in another is one family, and without this the
     // merge sees two — exactly when merging matters most.
     const lastNameMatch = bestLastNameMatch(existing, incoming, existingData, incomingData);
 
@@ -1309,7 +1309,7 @@ export function quickMatch(p1: Person, p2: Person, data1?: StromData, data2?: St
     if (!`${p1.firstName}${p1.lastName}`.trim() || !`${p2.firstName}${p2.lastName}`.trim()) return NO_QUICK_MATCH;
 
     const firstNameSim = stringSimilarity(p1.firstName, p2.firstName);
-    // The same rule/group answer full matching uses (Víšek/Víšková is one
+    // The same rule/group answer full matching uses (Fíšek/Fíšková is one
     // family), so cross-tree suggestions agree with the merge matcher.
     const rulesSay = (data?: StromData): boolean =>
         !!data && sameSurname(p1.lastName, p2.lastName, data);

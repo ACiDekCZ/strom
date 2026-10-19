@@ -100,7 +100,7 @@ test.describe('loading the research version', () => {
         await expect(dialog(page)).toBeVisible();
         const row = dialog(page).locator('tbody tr', { hasText: 'Married surname' });
         await expect(row).toHaveCount(1);
-        await expect(row).toContainText('Jan Víšek');
+        await expect(row).toContainText('Jan Fíšek');
         await expect(row.locator('.research-load-here')).toHaveText('–');
         await expect(row.locator('.research-load-there')).toHaveText('Novák');
         await expect(dialog(page).locator('.research-load-added')).toHaveCount(0);

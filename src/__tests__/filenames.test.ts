@@ -1,5 +1,5 @@
 /**
- * Download file names. The bug this locks down: a tree called "Rodina Víšek"
+ * Download file names. The bug this locks down: a tree called "Rodina Fíšek"
  * exported as "v-ek.json" — the accented letters were stripped instead of
  * transliterated, which mangles most non-English tree names.
  */
@@ -9,7 +9,7 @@ import { asciiSlug, safeFileName } from '../filenames.js';
 
 describe('asciiSlug', () => {
     it('transliterates diacritics instead of dropping the letters', () => {
-        expect(asciiSlug('Rodina Víšek')).toBe('rodina-visek');
+        expect(asciiSlug('Rodina Fíšek')).toBe('rodina-fisek');
         expect(asciiSlug('Müller & Söhne')).toBe('muller-sohne');
         expect(asciiSlug('Šťastný Ďáblík')).toBe('stastny-dablik');
     });
@@ -39,6 +39,6 @@ describe('safeFileName', () => {
     });
 
     it('passes a usable name through', () => {
-        expect(safeFileName('Rodina Víšek', 'family-tree')).toBe('rodina-visek');
+        expect(safeFileName('Rodina Fíšek', 'family-tree')).toBe('rodina-fisek');
     });
 });

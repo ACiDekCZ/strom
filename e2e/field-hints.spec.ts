@@ -26,7 +26,7 @@ test('a long field explanation opens as a popup from the "?"', async ({ page }) 
     await toggle.click();
     const popup = page.locator('#confirmation-modal');
     await expect(popup).toHaveClass(/active/);
-    await expect(popup.locator('#confirm-message')).toContainText('Wischek');
+    await expect(popup.locator('#confirm-message')).toContainText('How the registers actually write it');
 
     await popup.locator('#confirm-ok-btn').click();
     await expect(popup).not.toHaveClass(/active/);
@@ -104,7 +104,7 @@ test('the note field grows with its content', async ({ page }) => {
  */
 test('an occupation row says which trade it was', async ({ page }) => {
     await openApp(page);
-    await createFirstPerson(page, 'Frantisek', 'Krepcik', { birthDate: '1863' });
+    await createFirstPerson(page, 'Frantisek', 'Krevcik', { birthDate: '1863' });
     await cardAction(page, 'Frantisek', 'edit');
 
     const modal = personModal(page);

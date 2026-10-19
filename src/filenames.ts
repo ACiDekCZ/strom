@@ -1,9 +1,9 @@
 /**
  * Download file names.
  *
- * Tree names carry diacritics ("Rodina Víšek", "Müller", "Łódź") and the
+ * Tree names carry diacritics ("Rodina Fíšek", "Müller", "Łódź") and the
  * exports used to strip anything outside a-z0-9, which silently DELETED those
- * letters ("Víšek" → "v-ek"). Every name therefore gets transliterated to
+ * letters ("Fíšek" → "f-ek"). Every name therefore gets transliterated to
  * plain ASCII first and only then reduced to characters every file system and
  * download header accepts.
  */
@@ -15,7 +15,7 @@ const STANDALONE: Record<string, string> = {
 };
 
 /**
- * "Rodina Víšek" → "rodina-visek". Returns '' when nothing ASCII survives
+ * "Rodina Fíšek" → "rodina-fisek". Returns '' when nothing ASCII survives
  * (e.g. a purely Cyrillic or CJK name) — callers fall back to a default.
  */
 export function asciiSlug(text: string): string {

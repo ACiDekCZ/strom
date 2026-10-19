@@ -1590,8 +1590,8 @@ class DataManagerClass {
                 // The surname after marriage is her name too (K1.4).
                 person.marriedSurname ?? '',
                 // Every spelling of this surname counts as this person's name:
-                // someone searching "Víšek" must find the great-grandfather they
-                // entered as "Vyšek", or they decide he is missing and add him
+                // someone searching "Fíšek" must find the great-grandfather they
+                // entered as "Fyšek", or they decide he is missing and add him
                 // twice. Written down once per tree, not per person.
                 ...surnameForms(person.lastName, this.data).slice(1),
                 ...(person.marriedSurname ? surnameForms(person.marriedSurname, this.data).slice(1) : []),

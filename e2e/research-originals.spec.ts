@@ -319,7 +319,7 @@ test.describe('originals: the full UI (beta.10)', () => {
         await expect(row).toHaveAttribute('open', '');
         await expect(row.locator('.media-queue-item')).toHaveCount(1);
         await expect(row.locator('.media-queue-item')).toContainText('avatar.png');
-        await expect(row.locator('.media-queue-item')).toContainText('Jan Víšek');
+        await expect(row.locator('.media-queue-item')).toContainText('Jan Fíšek');
         await expect(row.locator('.media-queue-budget-text')).toContainText('reserved for waiting originals');
         await expect(row.locator('.media-queue-info')).toContainText('only in this browser');
 
@@ -466,7 +466,7 @@ test.describe('Send material… (beta.10)', () => {
         await sub.getByText('Send material…').first().click();
         const dialog = page.locator('#material-modal');
         await expect(dialog.locator('h2')).toHaveText('Send material to the research');
-        await expect(dialog.locator('.audit-log-subtitle')).toContainText('Jan Víšek');
+        await expect(dialog.locator('.audit-log-subtitle')).toContainText('Jan Fíšek');
         await dialog.locator('#material-input').setInputFiles([
             { name: 'avatar.png', mimeType: 'image/png', buffer: readFileSync(AVATAR) },
             { name: 'dopis.txt', mimeType: 'text/plain', buffer: Buffer.from('Milá Anno…') },
@@ -478,7 +478,7 @@ test.describe('Send material… (beta.10)', () => {
         await expect(dialog.locator('.material-box')).toContainText('Nothing is added to the tree');
         await dialog.getByRole('button', { name: 'Send 2 files' }).click();
         await expect(dialog).toHaveCount(0);
-        await expect(page.locator('.toast')).toContainText('Sent to the research: 2 files for Jan Víšek');
+        await expect(page.locator('.toast')).toContainText('Sent to the research: 2 files for Jan Fíšek');
         expect(b.mediaPuts).toHaveLength(2);
         for (const put of b.mediaPuts) {
             expect(put.headers['x-strom-person']).toBe('P0003');
@@ -514,7 +514,7 @@ test.describe('Send material… (beta.10)', () => {
         const dialog = page.locator('#material-modal');
         await dialog.locator('#material-input').setInputFiles(AVATAR);
         await dialog.getByRole('button', { name: 'Send 1 file' }).click();
-        await expect(page.locator('.toast')).toContainText('Sent to the research: 1 file for Jan Víšek');
+        await expect(page.locator('.toast')).toContainText('Sent to the research: 1 file for Jan Fíšek');
         await expect(page.locator('.toast')).not.toContainText('refused');
         expect(b.mediaPuts).toHaveLength(1);
     });

@@ -26,7 +26,7 @@ const TREE_GED = `0 HEAD
 1 TITL Oddací matrika Čáslav 1880–1900
 1 PAGE fol. 41
 0 @P0001@ INDI
-1 NAME Josef /Víšek/
+1 NAME Josef /Fíšek/
 2 SOUR @S0002@
 1 SEX M
 1 REFN P0001
@@ -78,7 +78,7 @@ function importGed(text: string): StromData {
 
 /** What the app sends to the research's /sync. */
 function sendGed(data: StromData): string {
-    return exportToGedcom(data, 'Víškovi', { research: RESEARCH }).content;
+    return exportToGedcom(data, 'Fíškovi', { research: RESEARCH }).content;
 }
 
 const byName = (data: StromData, first: string): Person =>
@@ -139,19 +139,19 @@ describe('research sync: godparents, witnesses and citations (step D)', () => {
 
     it('sends an unchanged tree back with the same participants and citations the research reads', () => {
         const ged = sendGed(data);
-        const bapm = factBlock(ged, 'Josef /Víšek/', 'BAPM');
+        const bapm = factBlock(ged, 'Josef /Fíšek/', 'BAPM');
         expect(bapm).toContain('2 _WITN Marie Dvořáková\n3 RELA Godparent\n3 NOTE soused');
         expect(bapm).toContain(`2 ASSO ${xrefOf(ged, 'Václav /Dvořák/')}\n3 RELA Witness`);
         expect(bapm).toMatch(/2 SOUR @S\d+@/);
         // Informant goes out as "was there" with the word, which the research reads as the role.
-        expect(factBlock(ged, 'Josef /Víšek/', 'EVEN')).toContain(
+        expect(factBlock(ged, 'Josef /Fíšek/', 'EVEN')).toContain(
             `2 TYPE ${strings.gedcomNotes.deathRecord}\n2 DATE 1 JAN 1930\n2 _WITN Karel Novák\n3 RELA Present\n3 NOTE Informant`);
         const marr = marriageBlock(ged);
         expect(marr).toContain(`2 ASSO ${xrefOf(ged, 'Václav /Dvořák/')}\n3 RELA Witness`);
         expect(marr).toContain('2 _WITN Jan Kratochvíl\n3 RELA Witness');
         expect(marr).toMatch(/2 SOUR @S\d+@/);
         // The record citing the name comes back as a source of the person, on INDI.
-        expect(ged).toMatch(/1 NAME Josef \/Víšek\/[\s\S]*?\n1 SOUR @S\d+@/);
+        expect(ged).toMatch(/1 NAME Josef \/Fíšek\/[\s\S]*?\n1 SOUR @S\d+@/);
         // ... and a second import changes nothing (no edit the research would see).
         const again = importGed(ged);
         const j = byName(again, 'Josef');
@@ -167,7 +167,7 @@ describe('research sync: godparents, witnesses and citations (step D)', () => {
         const vaclav = byName(d, 'Václav');
         const bapm = ofType(josef, 'baptism');
         // Added a godparent by name.
-        bapm.participants!.push({ id: 'pt_new', role: 'godparent', name: 'Rozálie Víšková', note: 'teta' });
+        bapm.participants!.push({ id: 'pt_new', role: 'godparent', name: 'Rozálie Fíšková', note: 'teta' });
         // Linked the godmother's name to a person of the tree.
         const marie = bapm.participants!.find(p => p.name === 'Marie Dvořáková')!;
         const anna = byName(d, 'Anna');
@@ -179,12 +179,12 @@ describe('research sync: godparents, witnesses and citations (step D)', () => {
         deathRecord(josef).participants = [];
 
         const ged = sendGed(d);
-        const block = factBlock(ged, 'Josef /Víšek/', 'BAPM');
-        expect(block).toContain('2 _WITN Rozálie Víšková\n3 RELA Godparent\n3 NOTE teta');
+        const block = factBlock(ged, 'Josef /Fíšek/', 'BAPM');
+        expect(block).toContain('2 _WITN Rozálie Fíšková\n3 RELA Godparent\n3 NOTE teta');
         expect(block).toContain(`2 ASSO ${xrefOf(ged, 'Anna /Novotná/')}\n3 RELA Godparent\n3 NOTE soused`);
         expect(block).toContain(`2 ASSO ${xrefOf(ged, 'Václav /Dvořák/')}\n3 RELA Godparent`);
         expect(block).not.toContain('Marie Dvořáková');
-        expect(factBlock(ged, 'Josef /Víšek/', 'EVEN')).not.toMatch(/_WITN|ASSO/);
+        expect(factBlock(ged, 'Josef /Fíšek/', 'EVEN')).not.toMatch(/_WITN|ASSO/);
         // The REFNs the research pairs by stay on every record.
         expect(ged).toContain('1 REFN P0001');
         expect(ged).toContain('1 REFN P0003');
@@ -198,7 +198,7 @@ describe('research sync: godparents, witnesses and citations (step D)', () => {
         vaclav.sourceIds = [s1.id];
         // A new partner (no REFN) and a couple the research does not know.
         const ludmila: Person = {
-            id: 'p_new_ludmila' as PersonId, firstName: 'Ludmila', lastName: 'Horká', gender: 'female',
+            id: 'p_new_ludmila' as PersonId, firstName: 'Ludmila', lastName: 'Prudká', gender: 'female',
             isPlaceholder: false, partnerships: [], parentIds: [], childIds: [],
         };
         const couple: Partnership = {

@@ -34,7 +34,7 @@ import { sameSurname, surnameKey } from './surnames.js';
  * How the tree is cut into families — both are focus-invariant (invariant #0):
  *
  * - 'surname': classic family LINES ("rody"). A child belongs to the line of
- *   the parent whose surname they carry (via sameSurname, so Víšková ↔ Víšek
+ *   the parent whose surname they carry (via sameSurname, so Fíšková ↔ Fíšek
  *   and grouped spellings count); the line follows that name up and down. A
  *   spouse who has no parents here and no children after their own name stays
  *   with their partner — anyone with a line of their own founds it.
@@ -94,7 +94,7 @@ export interface FamilyComponent {
      * The real person the family is named after — never a placeholder. The
      * family's own SENIOR member ("Rodina X" reads as the family founded by X),
      * tilted to the spouse carrying the family's dominant surname, so the
-     * Krepčík family is named after František Krepčík, not his wife.
+     * Krevčík family is named after František Krevčík, not his wife.
      */
     nameAnchorId: PersonId;
     /** True for the family that contains the UI focus (presentation only). */
@@ -269,9 +269,9 @@ export function decomposeIntoFamilies(
             // A person with no surname stays with whichever line reaches them
             // first — an unnamed slot must not break a line in two. A spouse is
             // absorbed only when they have no line of their own here: no parents
-            // in the data and no child after their own name. Antonín Krepčík
+            // in the data and no child after their own name. Antonín Krevčík
             // (no parents recorded, children named after him) FOUNDS the
-            // Krepčík line; Zdena the childless in-law stays with her husband.
+            // Krevčík line; Zdena the childless in-law stays with her husband.
             const rodSurname = data.persons[root]?.lastName ?? '';
             const rodKey = surnameKey(rodSurname);
             // Placeholders count as unnamed even when a surname was guessed for
@@ -304,8 +304,8 @@ export function decomposeIntoFamilies(
                     if (inLine(par)) push(par);
                 }
                 // Same-name SIBLINGS belong to the line even when the shared
-                // parent is written differently (Víšek brothers under a father
-                // registered as Výsek) — the parent stays free to found the
+                // parent is written differently (Fíšek brothers under a father
+                // registered as Fýsek) — the parent stays free to found the
                 // differently-written line; grouping the spellings in the
                 // surname register merges the two lines into one.
                 for (const sib of sortIds(data, siblingsOf(data, id).filter(x => !!data.persons[x]))) {
@@ -323,7 +323,7 @@ export function decomposeIntoFamilies(
             // grandchildren into the next family and drew previews full of
             // parentless islands.) A member's PARENTS are deliberately not
             // claimed: each parent couple roots its own family — that is what
-            // keeps the Výsek and Voigt sides of one person's ancestry apart.
+            // keeps the Fýsek and Leipt sides of one person's ancestry apart.
             while (work.length > 0) {
                 const id = work.shift()!;
                 const p = data.persons[id];
@@ -677,8 +677,8 @@ function finaliseComponents(data: StromData, components: FamilyComponent[], mode
         // line ("napojeno na …"), never in the name.
         // Between the senior and their spouse (when both are members), the name
         // goes to whichever of the couple carries the family's most common
-        // surname — "Rodina František Krepčík", not "Rodina Anna Kadeřávková",
-        // for a family of Krepčíks. Tie → the senior (older) one.
+        // surname — "Rodina František Krevčík", not "Rodina Anna Pazdrávková",
+        // for a family of Krevčíks. Tie → the senior (older) one.
         const senior = firstRealOwned(data, { ...c, personIds }) ?? c.focusId;
         const nameAnchorId = pickBetterNamed(data, personIds, senior);
 

@@ -34,7 +34,7 @@ export interface TreePreviewOptions {
      * Person the footer "Focused on:" line names initially. The RENDER focus
      * (focusPersonId) may be a layout-driven choice (the member the whole
      * family draws best from) — naming that person in the footer reads absurd
-     * ("Fokus na: Tomáš Pižl" for the Krepčík family). Once the user refocuses
+     * ("Fokus na: Tomáš Šmidl" for the Krevčík family). Once the user refocuses
      * by hand, the footer follows their choice. */
     focusDisplayId?: PersonId;
     /**

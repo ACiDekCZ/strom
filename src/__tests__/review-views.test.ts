@@ -52,28 +52,28 @@ function data(persons: Person[], partnerships: Partnership[] = [], extra: Partia
 
 describe('V19 search finds every name form', () => {
     const d = data([
-        p('a', 'Marie', 'Víšková', 'female'),
-        p('b', 'Jan', 'Novák', 'male', { nameVariants: ['Wischek'] }),
+        p('a', 'Marie', 'Fíšková', 'female'),
+        p('b', 'Jan', 'Novák', 'male', { nameVariants: ['Fischek'] }),
         p('c', 'Karel', 'Dvořák', 'male'),
     ]);
 
-    it('advanced filter: "visek" finds Víšková, "Wischek" finds the name variant', () => {
-        expect(filterPersons(d, { query: 'visek' })).toEqual(['a']);
-        expect(filterPersons(d, { query: 'Wischek' })).toEqual(['b']);
-        expect(filterPersons(d, { lastName: 'visek' })).toEqual(['a']);
-        expect(filterPersons(d, { query: 'marie visek' })).toEqual(['a']);
+    it('advanced filter: "fisek" finds Fíšková, "Fischek" finds the name variant', () => {
+        expect(filterPersons(d, { query: 'fisek' })).toEqual(['a']);
+        expect(filterPersons(d, { query: 'Fischek' })).toEqual(['b']);
+        expect(filterPersons(d, { lastName: 'fisek' })).toEqual(['a']);
+        expect(filterPersons(d, { query: 'marie fisek' })).toEqual(['a']);
     });
 
     it('toolbar picker scoring uses the same forms', () => {
         const persons = Object.values(d.persons);
-        expect(filterAndSort('visek', persons, d).map(x => x.id)).toEqual(['a']);
-        expect(filterAndSort('wisch', persons, d).map(x => x.id)).toEqual(['b']);
+        expect(filterAndSort('fisek', persons, d).map(x => x.id)).toEqual(['a']);
+        expect(filterAndSort('fischek', persons, d).map(x => x.id)).toEqual(['b']);
         // Direct name matches still rank first.
         expect(filterAndSort('nov', persons, d)[0].id).toBe('b');
     });
 
     it('user surname groups count too', () => {
-        const g = data([p('x', 'Petr', 'Vyšek', 'male')], [], { surnameVariants: [['Vyšek', 'Wyschek']] });
+        const g = data([p('x', 'Petr', 'Fyšek', 'male')], [], { surnameVariants: [['Fyšek', 'Wyschek']] });
         expect(searchableNameText(g.persons['x' as PersonId], g)).toContain('wyschek');
         expect(filterPersons(g, { query: 'wyschek' })).toEqual(['x']);
     });

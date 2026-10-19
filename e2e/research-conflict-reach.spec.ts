@@ -108,7 +108,7 @@ for (const locale of ['de-DE', 'cs-CZ']) {
             await openResearchMenu(page);
             const lead = block(page).locator('.research-sync-lead');
             await expect(lead).toBeVisible();
-            await expect(lead).toHaveText(/^Jan Víšek · \S+/);
+            await expect(lead).toHaveText(/^Jan Fíšek · \S+/);
             expect(await overflowing(lead)).toEqual([]);
             const [b, l, show] = await partBoxes(block(page), [':scope', '.research-sync-lead', '[data-action="showConflict"]']);
             expect(l.x + l.width).toBeLessThanOrEqual(Math.min(360, b.x + b.width) + 0.5);
@@ -369,7 +369,7 @@ test.describe('the ways to the card on a phone and a tablet', () => {
         const { bridge, treeId } = await setupConflict(page, { clock: true });
         await writtenWithConflict(page, bridge, treeId);
         await openResearchMenu(page);
-        await expect(block(page).locator('.research-sync-lead')).toHaveText('Jan Víšek · Birth');
+        await expect(block(page).locator('.research-sync-lead')).toHaveText('Jan Fíšek · Birth');
         await block(page).locator('[data-action="showConflict"]').click();
         await expect(cardOf(page)).toHaveClass(/prc--highlight/);
         await expect(side(page, 'user').locator('.prc-choice')).toBeFocused();

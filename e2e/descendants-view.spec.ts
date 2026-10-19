@@ -97,8 +97,8 @@ test('descendants view: hidden-relative badges are not rendered', async ({ page 
 
 test('descendants view: step-relatives hidden by default, badge toggle shows them dimmed', async ({ page }) => {
     await openApp(page);
-    await createFirstPerson(page, 'Emil', 'Visek');
-    await addRelation(page, 'Emil', 'child', 'Milan', 'Visek');
+    await createFirstPerson(page, 'Emil', 'Fisek');
+    await addRelation(page, 'Emil', 'child', 'Milan', 'Fisek');
     await cardAction(page, 'Emil', 'focus');
     await addRelation(page, 'Milan', 'partner', 'Romana', 'Ditrichova');
     // Romana's child from a previous marriage (not Emil's blood).

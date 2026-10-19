@@ -271,8 +271,8 @@ test.describe('the header of the custom card (U02)', () => {
     });
 
     test('a long name takes two rows on the narrow card, the same rows in the poster, inside the card', async ({ page }) => {
-        const name = 'Kateřina Výšková-Hlavatá z Lipan';
-        await setup(page, { widthCap: 240 }, 1440, 'Kateřina /Výšková-Hlavatá z Lipan/');
+        const name = 'Kateřina Fýšková-Hlavatá z Lipan';
+        await setup(page, { widthCap: 240 }, 1440, 'Kateřina /Fýšková-Hlavatá z Lipan/');
         const rows = await card(page, 'Kateřina').locator('.name-row').allTextContents();
         expect(rows).toHaveLength(2);
         expect(rows.join(' ').replace('- ', '-')).toBe(name);
@@ -294,7 +294,7 @@ test.describe('the header of the custom card (U02)', () => {
 
     for (const years of [false, true]) {
         test(`the avatar stays where a one-row name puts it when the name takes two rows${years ? ', with the years' : ''}, in the poster too (T39)`, async ({ page }) => {
-            await setup(page, { widthCap: 240, years }, 1440, 'Kateřina /Výšková-Hlavatá z Lipan/');
+            await setup(page, { widthCap: 240, years }, 1440, 'Kateřina /Fýšková-Hlavatá z Lipan/');
             await expect(card(page, 'Kateřina').locator('.name-row')).toHaveCount(2);
             await expect(card(page, 'Jan').locator('.name-row')).toHaveCount(1);
             // The avatar's top from the header's top, unscaled: the top of the header (1.5px down with

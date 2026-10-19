@@ -37,11 +37,11 @@ test('it shows the life span and the age it worked out to', async ({ page }) => 
     // richer detail — trade, name spellings, open questions — lives in the
     // person modal, not the hover.
     await openApp(page);
-    await createFirstPerson(page, 'Josef', 'Víšek', { birthDate: '1783' });
+    await createFirstPerson(page, 'Josef', 'Fíšek', { birthDate: '1783' });
     await page.evaluate(() => {
         const dm = window.Strom.DataManager;
         const id = dm.getAllPersons()[0].id;
-        dm.updatePerson(id, { deathDate: '1850', nameVariants: ['Wischek'], question: 'Kdo byli rodiče?' });
+        dm.updatePerson(id, { deathDate: '1850', nameVariants: ['Fischek'], question: 'Kdo byli rodiče?' });
         dm.addLifeEvent(id, { type: 'occupation', note: 'kovář', date: '1810' });
         window.Strom.TreeRenderer.render();
     });

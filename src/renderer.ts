@@ -2245,8 +2245,8 @@ class TreeRendererClass {
         });
 
         // Fractional measurement: the ellipsis triggers on ANY layout
-        // overflow, even sub-pixel ("Maria Paroulková" is 128.34px in a
-        // 128px column — clipped to "Maria Paroulko…"), while the integer
+        // overflow, even sub-pixel ("Maria Laroulková" is 128.14px in a
+        // 128px column — clipped to "Maria Laroulko…"), while the integer
         // scrollWidth rounds that overflow away AND never reports below the
         // box width. Range rects give the true glyph width; both sides come
         // from the same (possibly zoom-transformed) space, so the

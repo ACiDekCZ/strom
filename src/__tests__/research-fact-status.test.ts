@@ -19,7 +19,7 @@ const TREE_GED = `0 HEAD
 1 _STROM_TREE 7d3f0c2e-1111-4222-8333-944455556666
 1 _STROM_HEAD 0123456789abcdef0123456789abcdef01234567
 0 @P0001@ INDI
-1 NAME Josef /Víšek/
+1 NAME Josef /Fíšek/
 1 SEX M
 1 REFN P0001
 1 BIRT
@@ -65,7 +65,7 @@ const RESEARCH = {
 };
 
 const importGed = (text: string): StromData => convertToStrom(parseGedcom(text)).data;
-const sendGed = (data: StromData): string => exportToGedcom(data, 'Víškovi', { research: RESEARCH }).content;
+const sendGed = (data: StromData): string => exportToGedcom(data, 'Fíškovi', { research: RESEARCH }).content;
 const byName = (data: StromData, first: string): Person =>
     Object.values(data.persons).find(p => p.firstName === first)!;
 const union = (data: StromData): Partnership => Object.values(data.partnerships)[0];

@@ -147,7 +147,7 @@ test.describe('a child with one known parent and the research', () => {
         await openResearch(page);
         const bridge = await fakeBridge(page, { accepts: { mode: 'research', sync: { auto: 'write' }, sources: true, verified: true, media: null } });
         await poll(page);
-        await addRelation(page, 'Jan', 'child', 'Ida', 'Víšková', 'female');
+        await addRelation(page, 'Jan', 'child', 'Ida', 'Fíšková', 'female');
         expect(await parentsOf(page, 'Ida')).toEqual(['?', 'Jan']);
         const head = 'ab12cd34ef56';
         bridge.syncReply = { status: 200, body: { ok: true, inbox: false, changes: 1, applied: 1, input: 'I0060' } };
@@ -159,7 +159,7 @@ test.describe('a child with one known parent and the research', () => {
         expect(sent).toMatch(/0 @F\d+@ FAM\n1 HUSB @I\d+@\n1 CHIL @I\d+@\n0 /);
         // The research's version with the child and its one-parent family.
         bridge.head = 'cd34ef56ab12';
-        bridge.treeGed = researchGed('cd34ef56ab12', ['1 FAMS @F0002@', '0 @P0004@ INDI', '1 NAME Ida /Víšková/', '1 SEX F', '1 REFN P0004', '2 TYPE strom-research', '1 FAMC @F0002@',
+        bridge.treeGed = researchGed('cd34ef56ab12', ['1 FAMS @F0002@', '0 @P0004@ INDI', '1 NAME Ida /Fíšková/', '1 SEX F', '1 REFN P0004', '2 TYPE strom-research', '1 FAMC @F0002@',
             '0 @F0002@ FAM', '1 HUSB @P0003@', '1 CHIL @P0004@']);
         await poll(page);
         await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });

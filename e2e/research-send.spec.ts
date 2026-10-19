@@ -17,10 +17,10 @@ const cors = { 'access-control-allow-origin': '*' };
 function researchGed(): string {
     return [
         '0 HEAD', '1 SOUR STROM_RESEARCH', '2 NAME Strom Research', '1 DATE 27 SEP 2026',
-        `1 _STROM_TREE ${UUID}`, `1 _STROM_HEAD ${HEAD}`, '1 CHAR UTF-8', '1 NOTE Víškovi',
-        '0 @P0001@ INDI', '1 NAME Josef /Víšek/', '1 SEX M', '1 REFN P0001', '2 TYPE strom-research', '1 FAMS @F0001@',
+        `1 _STROM_TREE ${UUID}`, `1 _STROM_HEAD ${HEAD}`, '1 CHAR UTF-8', '1 NOTE Fíškovi',
+        '0 @P0001@ INDI', '1 NAME Josef /Fíšek/', '1 SEX M', '1 REFN P0001', '2 TYPE strom-research', '1 FAMS @F0001@',
         '0 @P0002@ INDI', '1 NAME Anna /Svobodová/', '1 SEX F', '1 REFN P0002', '2 TYPE strom-research', '1 FAMS @F0001@',
-        '0 @P0003@ INDI', '1 NAME Jan /Víšek/', '1 SEX M', '1 REFN P0003', '2 TYPE strom-research', '1 FAMC @F0001@',
+        '0 @P0003@ INDI', '1 NAME Jan /Fíšek/', '1 SEX M', '1 REFN P0003', '2 TYPE strom-research', '1 FAMC @F0001@',
         '0 @F0001@ FAM', '1 HUSB @P0001@', '1 WIFE @P0002@', '1 CHIL @P0003@',
         '0 TRLR',
     ].join('\n');
@@ -59,7 +59,7 @@ async function bridge(page: Page, reply: { status?: number; body?: unknown } = {
         const url = new URL(route.request().url()).pathname;
         if (url.endsWith('/status')) {
             return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' },
-                body: JSON.stringify({ tree: UUID, name: 'Víškovi', head: HEAD }) });
+                body: JSON.stringify({ tree: UUID, name: 'Fíškovi', head: HEAD }) });
         }
         if (url.endsWith('/sync') && route.request().method() === 'POST') {
             posts.push({ body: route.request().postData() ?? '', type: route.request().headers()['content-type'] ?? '' });
@@ -88,7 +88,7 @@ test.describe('send changes back to the research', () => {
         const { posts, cancels } = await bridge(page);
 
         const done = send(page);
-        await expect(dialog(page)).toContainText('Send the changes of the tree “Víškovi” to the research “Víškovi”?');
+        await expect(dialog(page)).toContainText('Send the changes of the tree “Fíškovi” to the research “Fíškovi”?');
         expect(posts).toHaveLength(0);   // nothing goes before the confirmation
         await dialog(page).getByRole('button', { name: 'Send' }).click();
         await expect(dialog(page)).toContainText('Sent. Confirm the changes in the research');
@@ -132,19 +132,19 @@ test.describe('send changes back to the research', () => {
     test('several tied trees: the user picks one (the open tree suggested); only that one is sent', async ({ page }) => {
         await openResearch(page, true);
         const firstId = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeId());
-        await page.evaluate((id) => window.Strom.TreeManager.duplicateTree(id, 'Víškovi – pokus'), firstId);
+        await page.evaluate((id) => window.Strom.TreeManager.duplicateTree(id, 'Fíškovi – pokus'), firstId);
         const trees = await page.evaluate(() => window.Strom.TreeManager.getTrees());
-        expect(trees.find((t: any) => t.name === 'Víškovi – pokus').research.copy).toBe(true);
+        expect(trees.find((t: any) => t.name === 'Fíškovi – pokus').research.copy).toBe(true);
         const { posts } = await bridge(page);
 
         const done = send(page);
         await expect(dialog(page)).toContainText('Several trees in the app come from the research');
         const buttons = dialog(page).locator('#confirm-buttons button');
-        await expect(buttons.last()).toContainText('Víškovi (changed');   // the open tree, primary
-        await dialog(page).getByRole('button', { name: /Víškovi – pokus/ }).click();
-        await expect(dialog(page)).toContainText('the tree “Víškovi – pokus”');
+        await expect(buttons.last()).toContainText('Fíškovi (changed');   // the open tree, primary
+        await dialog(page).getByRole('button', { name: /Fíškovi – pokus/ }).click();
+        await expect(dialog(page)).toContainText('the tree “Fíškovi – pokus”');
         // The tree being sent is the one on screen behind the dialog.
-        await expect(page.locator('.tree-switcher-btn .tree-name')).toHaveText('Víškovi – pokus');
+        await expect(page.locator('.tree-switcher-btn .tree-name')).toHaveText('Fíškovi – pokus');
         await dialog(page).getByRole('button', { name: 'Send' }).click();
         await dialog(page).getByRole('button', { name: 'OK' }).click();
         await done;
@@ -155,7 +155,7 @@ test.describe('send changes back to the research', () => {
         await openApp(page);
         const { cancels } = await bridge(page);
         const done = send(page);
-        await expect(dialog(page)).toContainText('The research “Víškovi” is not in the app');
+        await expect(dialog(page)).toContainText('The research “Fíškovi” is not in the app');
         await dialog(page).getByRole('button', { name: 'OK' }).click();
         await done;
         await expect.poll(() => cancels).toEqual(['no-tree']);
@@ -180,7 +180,7 @@ test.describe('send changes back to the research', () => {
         await openResearch(page, true);
         const { posts } = await bridge(page);
         await page.goto(`/strom.html?send=${encodeURIComponent(BRIDGE)}`);
-        await expect(dialog(page)).toContainText('Send the changes of the tree “Víškovi”');
+        await expect(dialog(page)).toContainText('Send the changes of the tree “Fíškovi”');
         expect(page.url()).not.toContain('send=');
         await dialog(page).getByRole('button', { name: 'Send' }).click();
         await expect(dialog(page)).toContainText('Sent.');
@@ -206,7 +206,7 @@ test.describe('send changes back to the research', () => {
         // Chrome brings the open window forward and hands it the address.
         await page.evaluate((b) => (window as unknown as { __launch: (p: unknown) => void })
             .__launch({ targetURL: `${location.origin}/strom.html?send=${encodeURIComponent(b)}`, files: [] }), BRIDGE);
-        await expect(dialog(page)).toContainText('Send the changes of the tree “Víškovi”');
+        await expect(dialog(page)).toContainText('Send the changes of the tree “Fíškovi”');
         await dialog(page).getByRole('button', { name: 'Send' }).click();
         await expect(dialog(page)).toContainText('Sent.');
         expect(posts).toHaveLength(1);
@@ -224,7 +224,7 @@ test.describe('send changes back to the research', () => {
             } });
         }, target);
         await page.goto(target);
-        await expect(dialog(page)).toContainText('Send the changes of the tree “Víškovi”');
+        await expect(dialog(page)).toContainText('Send the changes of the tree “Fíškovi”');
         await dialog(page).getByRole('button', { name: 'Cancel' }).click();
         await page.waitForTimeout(500);
         expect(statusCalls).toBe(1);

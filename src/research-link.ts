@@ -1943,7 +1943,7 @@ export interface LiveLogEntry {
     task: string;
     /**
      * What it did in the research's language, line by line ("Nová osoba: Jan
-     * Víšek (*1865) [P0012]"); empty: nothing worth saying (don't show it).
+     * Fíšek (*1865) [P0012]"); empty: nothing worth saying (don't show it).
      * Absent from an older research (then `what` is shown).
      */
     text?: string[];
@@ -2087,7 +2087,7 @@ export function personsByRefs(data: StromData, refs: string[]): PersonId[] {
  * are named. Lines of any other shape keep their wording.
  */
 export function humanizeChange(line: string, nameOf?: (ref: string) => string | null, words?: ChangeWords): string {
-    // A GEDCOM surname ("Marie /Víšková/") loses its slashes; a path ("output/tree.ged") keeps them.
+    // A GEDCOM surname ("Marie /Fíšková/") loses its slashes; a path ("output/tree.ged") keeps them.
     const plain = line.replace(/(^|\s)\/([^/\s][^/]*)\/(?=$|[\s,.;:·)])/g, '$1$2').replace(/\s+/g, ' ').trim();
     if (!words) return plain;
     const name = (ref: string): string => nameOf?.(ref) || ref;

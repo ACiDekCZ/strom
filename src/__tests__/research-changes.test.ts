@@ -8,7 +8,7 @@ import { diffByPerson, baseCopy } from '../research-changes.js';
 import { StromData, Person, PersonId, PartnershipId } from '../types.js';
 
 const person = (id: string, first: string, extra: Partial<Person> = {}): Person => ({
-    id: id as PersonId, firstName: first, lastName: 'Víšek', gender: 'male', isPlaceholder: false,
+    id: id as PersonId, firstName: first, lastName: 'Fíšek', gender: 'male', isPlaceholder: false,
     partnerships: [], parentIds: [], childIds: [], ...extra,
 });
 
@@ -43,7 +43,7 @@ describe('changes per person since the research\'s version', () => {
         josef.attachments = [{ id: 'a1', name: 'scan.jpg', mimeType: 'image/jpeg', dataUrl: 'data:image/jpeg;base64,AAAA', sizeBytes: 3 }];
         cur.persons['p3' as PersonId].firstName = 'Jan Nepomuk';
         const changes = diffByPerson(base, cur);
-        expect(changes.map(c => c.name)).toEqual(['Jan Nepomuk Víšek', 'Josef Víšek']);
+        expect(changes.map(c => c.name)).toEqual(['Jan Nepomuk Fíšek', 'Josef Fíšek']);
         expect(changes.find(c => c.personId === 'p1')!.kinds).toEqual(['birth', 'godparent', 'citation', 'attachment']);
         expect(changes.find(c => c.personId === 'p3')!.kinds).toEqual(['name']);
     });
@@ -84,7 +84,7 @@ describe('changes per person since the research\'s version', () => {
         expect(changes.find(c => c.personId === 'p1')!.kinds).toEqual(['marriage', 'witness']);
         expect(changes.find(c => c.personId === 'p2')!.kinds).toEqual(['marriage', 'witness']);
         expect(changes.find(c => c.personId === 'p4')!.kinds).toEqual(['added']);
-        expect(changes.find(c => c.personId === 'p3')).toMatchObject({ kinds: ['deleted'], deleted: true, name: 'Jan Víšek' });
+        expect(changes.find(c => c.personId === 'p3')).toMatchObject({ kinds: ['deleted'], deleted: true, name: 'Jan Fíšek' });
     });
 
     it('a photo is compared by its size, not kept in the base', () => {
@@ -102,6 +102,6 @@ describe('changes per person since the research\'s version', () => {
         const base = baseCopy(t);
         const cur = JSON.parse(JSON.stringify(t)) as StromData;
         cur.sources!.s1.transcript = 'Anna, dcera…';
-        expect(diffByPerson(base, cur)).toEqual([{ personId: 'p2', name: 'Anna Víšek', kinds: ['source'] }]);
+        expect(diffByPerson(base, cur)).toEqual([{ personId: 'p2', name: 'Anna Fíšek', kinds: ['source'] }]);
     });
 });

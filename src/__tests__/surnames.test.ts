@@ -2,7 +2,7 @@
  * Surnames that mean the same family (src/surnames.ts).
  *
  * The rule under test: a group is an equivalence written down ONCE for the tree.
- * Your great-grandfather is recorded Vyšek and you are Víšek — neither spelling
+ * Your great-grandfather is recorded Fyšek and you are Fíšek — neither spelling
  * is the variant of the other, and a search for either must find both, whichever
  * way round they happen to be entered.
  */
@@ -30,23 +30,23 @@ function person(id: string, firstName: string, lastName: string, placeholder = f
 
 describe('surnameKey', () => {
     it('ignores case and diacritics, the way search does', () => {
-        expect(surnameKey('Víšek')).toBe(surnameKey('VISEK'));
-        expect(surnameKey('  Vyšek ')).toBe('vysek');
+        expect(surnameKey('Fíšek')).toBe(surnameKey('FISEK'));
+        expect(surnameKey('  Fyšek ')).toBe('fysek');
     });
 
     it('keeps genuinely different spellings apart', () => {
-        expect(surnameKey('Víšek')).not.toBe(surnameKey('Vyšek'));
-        expect(surnameKey('Víšek')).not.toBe(surnameKey('Wischek'));
+        expect(surnameKey('Fíšek')).not.toBe(surnameKey('Fyšek'));
+        expect(surnameKey('Fíšek')).not.toBe(surnameKey('Fischek'));
     });
 });
 
 describe('sameSurname', () => {
-    const data = tree([['Víšek', 'Vyšek', 'Wischek']]);
+    const data = tree([['Fíšek', 'Fyšek', 'Fischek']]);
 
     it('matches any two spellings in the group, both ways round', () => {
-        expect(sameSurname('Víšek', 'Vyšek', data)).toBe(true);
-        expect(sameSurname('Vyšek', 'Víšek', data)).toBe(true);
-        expect(sameSurname('Wischek', 'Vyšek', data)).toBe(true);
+        expect(sameSurname('Fíšek', 'Fyšek', data)).toBe(true);
+        expect(sameSurname('Fyšek', 'Fíšek', data)).toBe(true);
+        expect(sameSurname('Fischek', 'Fyšek', data)).toBe(true);
     });
 
     it('still matches a name with itself when no group mentions it', () => {
@@ -55,20 +55,20 @@ describe('sameSurname', () => {
     });
 
     it('does not make unrelated families the same', () => {
-        expect(sameSurname('Víšek', 'Svoboda', data)).toBe(false);
+        expect(sameSurname('Fíšek', 'Svoboda', data)).toBe(false);
     });
 
     it('has nothing to say about an empty name', () => {
-        expect(sameSurname('', 'Víšek', data)).toBe(false);
+        expect(sameSurname('', 'Fíšek', data)).toBe(false);
     });
 });
 
 describe('surnameForms', () => {
-    const data = tree([['Víšek', 'Vyšek', 'Wischek']]);
+    const data = tree([['Fíšek', 'Fyšek', 'Fischek']]);
 
     it('gives every spelling, the person’s own first', () => {
         // The other gender rides along too, so searching either reaches the family.
-        expect(surnameForms('Vyšek', data)).toEqual(['Vyšek', 'Vyšková', 'Víšek', 'Wischek']);
+        expect(surnameForms('Fyšek', data)).toEqual(['Fyšek', 'Fyšková', 'Fíšek', 'Fischek']);
     });
 
     it('gives back a surname nobody grouped, plus its other gender', () => {
@@ -78,39 +78,39 @@ describe('surnameForms', () => {
 
 describe('addSurnameGroup', () => {
     it('writes the group down once', () => {
-        expect(addSurnameGroup(tree(), ['Víšek', 'Vyšek'])).toEqual([['Víšek', 'Vyšek']]);
+        expect(addSurnameGroup(tree(), ['Fíšek', 'Fyšek'])).toEqual([['Fíšek', 'Fyšek']]);
     });
 
     it('merges into a group it overlaps rather than making a rival one', () => {
-        // {Vyšek, Wischek} exists; adding {Víšek, Vyšek} must end with one group
-        // of three — otherwise Víšek and Wischek stay strangers though both are Vyšek.
-        const data = tree([['Vyšek', 'Wischek']]);
-        const groups = addSurnameGroup(data, ['Víšek', 'Vyšek']);
+        // {Fyšek, Fischek} exists; adding {Fíšek, Fyšek} must end with one group
+        // of three — otherwise Fíšek and Fischek stay strangers though both are Fyšek.
+        const data = tree([['Fyšek', 'Fischek']]);
+        const groups = addSurnameGroup(data, ['Fíšek', 'Fyšek']);
         expect(groups).toHaveLength(1);
-        expect([...groups[0]].sort()).toEqual(['Vyšek', 'Víšek', 'Wischek'].sort());
+        expect([...groups[0]].sort()).toEqual(['Fyšek', 'Fíšek', 'Fischek'].sort());
     });
 
     it('leaves other families alone', () => {
         const data = tree([['Svoboda', 'Swoboda']]);
-        const groups = addSurnameGroup(data, ['Víšek', 'Vyšek']);
+        const groups = addSurnameGroup(data, ['Fíšek', 'Fyšek']);
         expect(groups).toHaveLength(2);
     });
 
     it('refuses a group of one — there is nothing to equate', () => {
-        expect(addSurnameGroup(tree(), ['Víšek'])).toEqual([]);
-        expect(addSurnameGroup(tree(), ['Víšek', '  '])).toEqual([]);
+        expect(addSurnameGroup(tree(), ['Fíšek'])).toEqual([]);
+        expect(addSurnameGroup(tree(), ['Fíšek', '  '])).toEqual([]);
     });
 
     it('does not list the same spelling twice', () => {
-        const groups = addSurnameGroup(tree(), ['Víšek', 'Víšek', 'Vyšek']);
+        const groups = addSurnameGroup(tree(), ['Fíšek', 'Fíšek', 'Fyšek']);
         expect(groups[0]).toHaveLength(2);
     });
 });
 
 describe('removeSurnameGroup', () => {
     it('drops the group of whichever spelling you name', () => {
-        const data = tree([['Víšek', 'Vyšek'], ['Svoboda', 'Swoboda']]);
-        const groups = removeSurnameGroup(data, 'Vyšek');
+        const data = tree([['Fíšek', 'Fyšek'], ['Svoboda', 'Swoboda']]);
+        const groups = removeSurnameGroup(data, 'Fyšek');
         expect(groups).toEqual([['Svoboda', 'Swoboda']]);
     });
 });
@@ -118,25 +118,25 @@ describe('removeSurnameGroup', () => {
 describe('surnamesInTree', () => {
     it('lists the surnames in use, commonest first', () => {
         const data = tree(undefined, [
-            person('a', 'Jan', 'Víšek'), person('b', 'Petr', 'Víšek'),
+            person('a', 'Jan', 'Fíšek'), person('b', 'Petr', 'Fíšek'),
             person('c', 'Josef', 'Svoboda'),
         ]);
         expect(surnamesInTree(data)).toEqual([
-            { surname: 'Víšek', count: 2 },
+            { surname: 'Fíšek', count: 2 },
             { surname: 'Svoboda', count: 1 },
         ]);
     });
 
     it('counts spellings separately — telling them apart is the point', () => {
-        const data = tree(undefined, [person('a', 'Jan', 'Víšek'), person('b', 'Josef', 'Vyšek')]);
+        const data = tree(undefined, [person('a', 'Jan', 'Fíšek'), person('b', 'Josef', 'Fyšek')]);
         expect(surnamesInTree(data)).toHaveLength(2);
     });
 
     it('ignores placeholders and the nameless', () => {
         const data = tree(undefined, [
-            person('a', 'Jan', 'Víšek'), person('b', '?', 'Víšek', true), person('c', 'Kdo', ''),
+            person('a', 'Jan', 'Fíšek'), person('b', '?', 'Fíšek', true), person('c', 'Kdo', ''),
         ]);
-        expect(surnamesInTree(data)).toEqual([{ surname: 'Víšek', count: 1 }]);
+        expect(surnamesInTree(data)).toEqual([{ surname: 'Fíšek', count: 1 }]);
     });
 });
 
@@ -149,10 +149,10 @@ describe('masculine and feminine are one family (P1, found by testing a real tre
     afterAll(() => setLanguage('en'));
 
     it('sees through the vowel that drops — the case that was broken', () => {
-        // Measured on a real tree: "Víšek" found 14 men and none of the 10
+        // Measured on a real tree: "Fíšek" found 14 men and none of the 10
         // women, because the "e" disappears when the name is made feminine.
-        expect(sameSurname('Víšek', 'Víšková', empty)).toBe(true);
-        expect(sameSurname('Víšková', 'Víšek', empty)).toBe(true);
+        expect(sameSurname('Fíšek', 'Fíšková', empty)).toBe(true);
+        expect(sameSurname('Fíšková', 'Fíšek', empty)).toBe(true);
         expect(sameSurname('Adamec', 'Adamcová', empty)).toBe(true);
         expect(sameSurname('Pavel', 'Pavlová', empty)).toBe(true);
     });
@@ -172,9 +172,9 @@ describe('masculine and feminine are one family (P1, found by testing a real tre
     it('does NOT join different families that merely look alike', () => {
         // These all scored >= 0.7 on string similarity in the real tree, which
         // is why suggesting groups from similarity was dropped.
-        expect(sameSurname('Krepčíková', 'Krejčíková', empty)).toBe(false);
+        expect(sameSurname('Krevčíková', 'Krejčíková', empty)).toBe(false);
         expect(sameSurname('Horáková', 'Nováková', empty)).toBe(false);
-        expect(sameSurname('Víšková', 'Vaňková', empty)).toBe(false);
+        expect(sameSurname('Fíšková', 'Vaňková', empty)).toBe(false);
         expect(sameSurname('Novák', 'Horáková', empty)).toBe(false);
     });
 
@@ -186,20 +186,20 @@ describe('masculine and feminine are one family (P1, found by testing a real tre
     });
 
     it('reaches a woman through a grouped spelling of the man’s name', () => {
-        // Vyšek is grouped with Víšek, so Vyšek must find Víšková too.
-        const data = tree([['Víšek', 'Vyšek']]);
-        expect(sameSurname('Vyšek', 'Víšková', data)).toBe(true);
+        // Fyšek is grouped with Fíšek, so Fyšek must find Fíšková too.
+        const data = tree([['Fíšek', 'Fyšek']]);
+        expect(sameSurname('Fyšek', 'Fíšková', data)).toBe(true);
     });
 
     it('offers the masculine form among a woman’s search terms', () => {
-        expect(surnameForms('Víšková', empty)).toContain('Víšek');
+        expect(surnameForms('Fíšková', empty)).toContain('Fíšek');
     });
 
     it('works the other way too, or the two searches disagree', () => {
-        // Measured: "Víšek" reached all 24 and "Víšková" only the 10 women —
+        // Measured: "Fíšek" reached all 24 and "Fíšková" only the 10 women —
         // an inconsistency nobody could explain to themselves.
-        expect(surnameForms('Víšek', empty)).toContain('Víšková');
-        expect(feminineForm('Víšek')).toBe('Víšková');
+        expect(surnameForms('Fíšek', empty)).toContain('Fíšková');
+        expect(feminineForm('Fíšek')).toBe('Fíšková');
         expect(feminineForm('Adamec')).toBe('Adamcová');
         expect(feminineForm('Pavel')).toBe('Pavlová');
         expect(feminineForm('Novák')).toBe('Nováková');
@@ -271,13 +271,13 @@ describe('the rules know where they apply (gating)', () => {
     });
 
     it('turns on when the data itself is Czech', () => {
-        const data = tree(undefined, [person('a', 'Jan', 'Víšek')]);
+        const data = tree(undefined, [person('a', 'Jan', 'Fíšek')]);
         expect(czechRulesApply(data)).toBe(true);
-        expect(sameSurname('Víšek', 'Víšková', data)).toBe(true);
+        expect(sameSurname('Fíšek', 'Fíšková', data)).toBe(true);
     });
 
     it('a Czech group entered by the user is Czech enough', () => {
-        const data = tree([['Víšek', 'Wischek']]);
+        const data = tree([['Fíšek', 'Fischek']]);
         expect(czechRulesApply(data)).toBe(true);
     });
 
@@ -290,7 +290,7 @@ describe('the rules know where they apply (gating)', () => {
     it('notices a Czech person added after the first look', () => {
         const data = tree(undefined, [person('a', 'John', 'Smith')]);
         expect(czechRulesApply(data)).toBe(false);
-        data.persons[toPersonId('b')] = person('b', 'Jan', 'Víšek');
+        data.persons[toPersonId('b')] = person('b', 'Jan', 'Fíšek');
         expect(czechRulesApply(data)).toBe(true);
     });
 });

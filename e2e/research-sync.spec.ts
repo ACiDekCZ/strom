@@ -258,7 +258,7 @@ test.describe('after a send the research wrote', () => {
         Object.assign(bridge.sends[0], { state: 'written', decidedAt: new Date().toISOString() });
         bridge.lastIntake = { id: 'I0001', at: new Date(Date.now() + 1000).toISOString() };
         bridge.head = 'aa11bb22cc33';
-        bridge.treeGed = researchGed('aa11bb22cc33').replace('1 NAME Jan /Víšek/', '1 NAME Jan /Víšek/\n1 BIRT\n2 PLAC Praha');
+        bridge.treeGed = researchGed('aa11bb22cc33').replace('1 NAME Jan /Fíšek/', '1 NAME Jan /Fíšek/\n1 BIRT\n2 PLAC Praha');
         await page.waitForTimeout(5100);   // past the "just asked" window
         await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
         await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sent?.replyHead)).toBe('aa11bb22cc33');
@@ -387,7 +387,7 @@ test.describe('updating over changes the research does not have', () => {
         Object.assign(bridge.sends[0], { state: 'written', decidedAt: new Date().toISOString() });
         bridge.lastIntake = { id: 'I0042', at: new Date(Date.now() + 1000).toISOString() };
         bridge.head = 'aa11bb22cc33';
-        bridge.treeGed = researchGed('aa11bb22cc33').replace('1 NAME Jan /Víšek/', '1 NAME Jan /Víšek/\n1 BIRT\n2 PLAC Praha');
+        bridge.treeGed = researchGed('aa11bb22cc33').replace('1 NAME Jan /Fíšek/', '1 NAME Jan /Fíšek/\n1 BIRT\n2 PLAC Praha');
         await poll(page);
         await expect(page.locator('.toast')).toContainText('Research version loaded.');
         // Sent by hand, nothing to send: only the Send button's empty place stays.
@@ -404,9 +404,9 @@ test.describe('updating over changes the research does not have', () => {
         await poll(page);
         // The user's own tree is open (as when ?live= starts on the last active tree).
         const otherId = await page.evaluate(async () => {
-            const id = await window.Strom.DataManager.importAsNewTree({ version: 11, persons: {}, partnerships: {} } as never, 'Konopáskovi');
+            const id = await window.Strom.DataManager.importAsNewTree({ version: 11, persons: {}, partnerships: {} } as never, 'Mrkváskovi');
             const dm = window.Strom.DataManager;
-            dm.createPerson({ firstName: 'Václav', lastName: 'Konopásek', gender: 'male' } as never);
+            dm.createPerson({ firstName: 'Václav', lastName: 'Mrkvásek', gender: 'male' } as never);
             return id;
         });
         await page.evaluate((id) => window.Strom.UI.switchToTree(id), otherId);
@@ -423,7 +423,7 @@ test.describe('updating over changes the research does not have', () => {
         await dialog.getByRole('button', { name: 'Send, then load' }).click();
         await expect.poll(() => bridge.posts.length).toBe(1);
         expect(bridge.posts[0]).toContain(`1 _STROM_APP_TREE ${researchTreeId}`);
-        expect(bridge.posts[0]).not.toContain('Konopásek');
+        expect(bridge.posts[0]).not.toContain('Mrkvásek');
 
         // "Load without changes" replaces the research tree only.
         // The closed dialog keeps the first question's text: wait for it to
@@ -466,7 +466,7 @@ test.describe('Research for this tree and "Transcription verified"', () => {
         await page.evaluate(() => {
             const dm = window.Strom.DataManager;
             const jan = Object.values(dm.getData().persons).find((p: any) => p.firstName === 'Jan') as any;
-            const src = dm.addSource({ title: 'Křestní matrika Čáslav', reference: 'fol. 112', transcript: 'Jan, syn Josefa Víška' });
+            const src = dm.addSource({ title: 'Křestní matrika Čáslav', reference: 'fol. 112', transcript: 'Jan, syn Josefa Fíška' });
             dm.updatePerson(jan.id, { birthSourceIds: [src.id] });
         });
         await page.evaluate(() => window.Strom.UI.researchSendNow());
@@ -516,7 +516,7 @@ test.describe('Research for this tree and "Transcription verified"', () => {
         await page.locator('#input-source-verified').check();
         await page.locator('#input-source-transcript').fill('');
         await expect(row).toBeHidden();
-        await page.locator('#input-source-transcript').fill('Jan, syn Josefa Víška');
+        await page.locator('#input-source-transcript').fill('Jan, syn Josefa Fíška');
         await expect(page.locator('#input-source-verified')).not.toBeChecked();
         await page.locator('#input-source-verified').check();
         await page.locator('#source-editor-modal .primary', { hasText: 'Save' }).click();
@@ -524,7 +524,7 @@ test.describe('Research for this tree and "Transcription verified"', () => {
         await editJan(page);
         await page.evaluate(() => window.Strom.UI.researchSendNow());
         await expect.poll(() => bridge.posts.length).toBe(1);
-        expect(bridge.posts[0]).toMatch(/1 TEXT Jan, syn Josefa Víška\r?\n1 _STROM_VERIFIED Y/);
+        expect(bridge.posts[0]).toMatch(/1 TEXT Jan, syn Josefa Fíška\r?\n1 _STROM_VERIFIED Y/);
 
         // The research's own source (read by it): no checkbox; the first change says what it becomes there.
         const researchSource = await page.evaluate(() => Object.values(window.Strom.DataManager.getData().sources).find((s: any) => s.refn === 'S0001') as any);

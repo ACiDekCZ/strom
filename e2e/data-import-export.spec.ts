@@ -301,7 +301,7 @@ test('GEDCOM import: photos referenced by URL download directly (MyHeritage)', a
 
 test('plain GEDCOM import clears stale manager intent; new-tree opens naming dialog', async ({ page }) => {
     await openApp(page);
-    await createFirstPerson(page, 'Emil', 'Visek');
+    await createFirstPerson(page, 'Emil', 'Fisek');
     await page.route('https://cdn.mh-test.example/**', route =>
         route.fulfill({ path: 'e2e/fixtures/avatar.png', contentType: 'image/png' }));
 

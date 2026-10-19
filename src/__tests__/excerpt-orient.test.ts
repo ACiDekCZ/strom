@@ -34,7 +34,7 @@ const CROP = tinyJpeg(400, 100);
 function treeGed(orient: string | null): string {
     return [
         '0 HEAD', '1 SOUR STROM_RESEARCH', '1 CHAR UTF-8',
-        '0 @P0001@ INDI', '1 NAME Anna /Víšková/', '1 SEX F', '1 SOUR @S0001@',
+        '0 @P0001@ INDI', '1 NAME Anna /Fíšková/', '1 SEX F', '1 SOUR @S0001@',
         '0 @S0001@ SOUR', '1 TITL Křestní matrika Čáslav',
         '1 OBJE', '2 FORM jpeg', '2 _STROM_KIND excerpt', '2 _STROM_CLIP C0007', `2 _STROM_SHA ${SHA}`,
         ...(orient ? [`2 _STROM_ORIENT ${orient}`] : []),

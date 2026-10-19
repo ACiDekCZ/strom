@@ -20,13 +20,13 @@ function researchGed(opts: { extra?: boolean; tree?: string | null } = {}): stri
         '1 DATE 23 SEP 2026',
         ...(opts.tree === null ? [] : [`1 _STROM_TREE ${opts.tree ?? UUID}`]),
         '1 CHAR UTF-8',
-        '1 NOTE Víškovi',
+        '1 NOTE Fíškovi',
         '2 CONT Rodokmen ze Strom Research',
-        '0 @P0001@ INDI', '1 NAME Josef /Víšek/', '1 SEX M', '1 REFN P0001', '1 FAMS @F0001@',
+        '0 @P0001@ INDI', '1 NAME Josef /Fíšek/', '1 SEX M', '1 REFN P0001', '1 FAMS @F0001@',
         '0 @P0002@ INDI', '1 NAME Anna /Svobodová/', '1 SEX F', '1 REFN P0002', '1 FAMS @F0001@',
-        '0 @P0003@ INDI', '1 NAME Jan /Víšek/', '1 SEX M', '1 REFN P0003', '1 FAMC @F0001@',
+        '0 @P0003@ INDI', '1 NAME Jan /Fíšek/', '1 SEX M', '1 REFN P0003', '1 FAMC @F0001@',
     ];
-    if (opts.extra) lines.push('0 @P0004@ INDI', '1 NAME Ludmila /Víšková/', '1 SEX F', '1 REFN P0004', '1 FAMC @F0001@');
+    if (opts.extra) lines.push('0 @P0004@ INDI', '1 NAME Ludmila /Fíšková/', '1 SEX F', '1 REFN P0004', '1 FAMC @F0001@');
     lines.push('0 @F0001@ FAM', '1 HUSB @P0001@', '1 WIFE @P0002@', '1 CHIL @P0003@');
     if (opts.extra) lines.push('1 CHIL @P0004@');
     lines.push('0 TRLR');
@@ -61,9 +61,9 @@ test.describe('open a research', () => {
     test('drop a Strom Research file → its tree; drop again → the same tree is updated', { tag: '@smoke' }, async ({ page }) => {
         await openApp(page);
         await dropFile(page, 'tree-strom.ged', researchGed());
-        await expect(page.locator('.toast')).toContainText('Opened the research Víškovi from Strom Research — 3 people, 1 family');
+        await expect(page.locator('.toast')).toContainText('Opened the research Fíškovi from Strom Research — 3 people, 1 family');
         await expect(card(page, 'Jan')).toBeVisible();
-        expect(await treeNames(page)).toEqual(['Víškovi']);
+        expect(await treeNames(page)).toEqual(['Fíškovi']);
         const meta = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata());
         expect(meta.research.id).toBe(UUID);
 
@@ -75,7 +75,7 @@ test.describe('open a research', () => {
         await expect(page.locator('.toast')).toContainText('Research version loaded.');
         await expect(card(page, 'Ludmila')).toBeVisible();
         // No duplicate: still exactly one tree.
-        expect(await treeNames(page)).toEqual(['Víškovi']);
+        expect(await treeNames(page)).toEqual(['Fíškovi']);
     });
 
     test('drop overlay appears while dragging a file and a non-GEDCOM file is refused', async ({ page }) => {
@@ -116,13 +116,13 @@ test.describe('open a research', () => {
         await expect(dialog).toBeVisible();
         await expect(dialog).toContainText('was changed in this app');
         await dialog.getByRole('button', { name: 'Open as copy' }).click();
-        await expect(page.locator('.toast')).toContainText('Opened the research Víškovi');
+        await expect(page.locator('.toast')).toContainText('Opened the research Fíškovi');
         await expect(card(page, 'Ludmila')).toBeVisible();
 
         const names = await treeNames(page);
         expect(names.length).toBe(2);
-        expect(names[0]).toBe('Víškovi');
-        expect(names[1]).toMatch(/^Víškovi \(/);
+        expect(names[0]).toBe('Fíškovi');
+        expect(names[1]).toMatch(/^Fíškovi \(/);
         // The new tree takes the research's updates; the edited tree keeps its
         // edit and its tie as a copy (its changes can still be sent back).
         const trees = await page.evaluate(() => window.Strom.TreeManager.getTrees());
@@ -153,7 +153,7 @@ test.describe('open a research', () => {
         await expect(page.locator('.toast')).toContainText('Research version loaded.');
         await expect(card(page, 'Jan')).toBeVisible();
         await expect(card(page, 'Ludmila')).toBeVisible();
-        expect(await treeNames(page)).toEqual(['Víškovi']);
+        expect(await treeNames(page)).toEqual(['Fíškovi']);
     });
 
     test('?import-url= on 127.0.0.1 opens the research and leaves the address clean', async ({ page }) => {
@@ -162,7 +162,7 @@ test.describe('open a research', () => {
         }));
         const url = `${BRIDGE}/tree-strom.ged`;
         await page.goto(`/strom.html?import-url=${encodeURIComponent(url)}`);
-        await expect(page.locator('.toast')).toContainText('Opened the research Víškovi');
+        await expect(page.locator('.toast')).toContainText('Opened the research Fíškovi');
         await expect(card(page, 'Josef')).toBeVisible();
         expect(page.url()).not.toContain('import-url');
     });
@@ -183,7 +183,7 @@ test.describe('open a research', () => {
         await expect(page.locator('html')).toHaveClass(/external-opening/);
         await expect(page.locator('#tree-container')).toHaveCSS('visibility', 'hidden');
         release();
-        await expect(page.locator('.toast')).toContainText('Opened the research Víškovi');
+        await expect(page.locator('.toast')).toContainText('Opened the research Fíškovi');
         await expect(page.locator('html')).not.toHaveClass(/external-opening/);
         await expect(page.locator('#tree-container')).toHaveCSS('visibility', 'visible');
         const counts = await page.evaluate(() => {
@@ -242,7 +242,7 @@ test.describe('open a research', () => {
             });
         }, ged);
         await page.goto('/strom.html?open=file');
-        await expect(page.locator('.toast')).toContainText('Opened the research Víškovi');
+        await expect(page.locator('.toast')).toContainText('Opened the research Fíškovi');
         await expect(card(page, 'Anna')).toBeVisible();
         expect(page.url()).not.toContain('open=file');
     });
@@ -256,7 +256,7 @@ test.describe('live research (?live=)', () => {
             : [{ who: 'agent-2', since: new Date().toISOString(), task: 'Sčítání 1921' }];
         const status = (head: string) => ({
             strom: '1.0.0',
-            tree: { id: UUID, name: 'Víškovi', lang: 'cs' },
+            tree: { id: UUID, name: 'Fíškovi', lang: 'cs' },
             head,
             persons: 3,
             families: 1,
@@ -281,7 +281,7 @@ test.describe('live research (?live=)', () => {
                 state.eventCalls++;
                 const body =
                     `event: hello\ndata: ${JSON.stringify(status(state.gedCalls > 1 ? 'h2' : 'h1'))}\n\n` +
-                    `event: change\ndata: ${JSON.stringify({ head: 'h2', what: ['+P0004 Ludmila /Víšková/ ← S0001'], at: new Date().toISOString() })}\n\n` +
+                    `event: change\ndata: ${JSON.stringify({ head: 'h2', what: ['+P0004 Ludmila /Fíšková/ ← S0001'], at: new Date().toISOString() })}\n\n` +
                     `event: working\ndata: ${JSON.stringify(working('h2'))}\n\n`;
                 return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/event-stream' }, body });
             }
@@ -301,7 +301,7 @@ test.describe('live research (?live=)', () => {
         // The change arrives: Ludmila appears, glows, is listed.
         await expect(card(page, 'Ludmila')).toBeVisible();
         await expect(card(page, 'Ludmila')).toHaveClass(/live-changed/);
-        await expect(panel.locator('.live-changes')).toContainText('New person: Ludmila Víšková');
+        await expect(panel.locator('.live-changes')).toContainText('New person: Ludmila Fíšková');
         await expect(panel.locator('.live-working')).toContainText('agent-2');
         await expect(panel.locator('.live-working')).toContainText('Sčítání 1921');
         // "on: user" only repeats the heading — not shown; where to answer is.
@@ -313,7 +313,7 @@ test.describe('live research (?live=)', () => {
 
         // Read-only while following.
         await expect(page.locator('body')).toHaveClass(/tree-locked/);
-        expect(await treeNames(page)).toEqual(['Víškovi']);
+        expect(await treeNames(page)).toEqual(['Fíškovi']);
 
         // The bridge goes away → "following ended", last state kept, editable again.
         state.down = true;
@@ -326,7 +326,7 @@ test.describe('live research (?live=)', () => {
         await expect(panel).toContainText('Following ended');
         // Who was working is stale once following ended — not shown any more.
         await expect(panel.locator('.live-working')).toHaveCount(0);
-        await expect(panel.locator('.live-changes')).toContainText('New person: Ludmila Víšková');
+        await expect(panel.locator('.live-changes')).toContainText('New person: Ludmila Fíšková');
         await expect(card(page, 'Ludmila')).toBeVisible();
         await expect(page.locator('body')).not.toHaveClass(/tree-locked/);
         await panel.getByRole('button', { name: 'Close' }).click();
@@ -338,7 +338,7 @@ test.describe('live research (?live=)', () => {
             const path = new URL(route.request().url()).pathname;
             if (path.endsWith('/status')) {
                 return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' },
-                    body: JSON.stringify({ tree: { id: UUID, name: 'Víškovi' }, head: 'h1', working: [], waiting: [] }) });
+                    body: JSON.stringify({ tree: { id: UUID, name: 'Fíškovi' }, head: 'h1', working: [], waiting: [] }) });
             }
             if (path.endsWith('/tree.ged')) {
                 return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/plain' }, body: researchGed() });
@@ -358,7 +358,7 @@ test.describe('live research (?live=)', () => {
 
     test('a bridge silent for a moment (a restart): trying again, then following goes on', async ({ page }) => {
         const state = { down: false };
-        const status = { strom: '1.0.0', tree: { id: UUID, name: 'Víškovi', lang: 'cs' }, head: 'h1',
+        const status = { strom: '1.0.0', tree: { id: UUID, name: 'Fíškovi', lang: 'cs' }, head: 'h1',
             researches: [], working: [], open: [], waiting: [] };
         await page.route(`${BRIDGE}/**`, async (route) => {
             if (state.down) return route.abort('connectionrefused');
@@ -401,7 +401,7 @@ test.describe('live research (?live=)', () => {
 });
 
 test.describe('the bridge says it ends (live.end)', () => {
-    const status = { strom: '1.15.0', tree: { id: UUID, name: 'Víškovi', lang: 'cs' }, head: 'h1',
+    const status = { strom: '1.15.0', tree: { id: UUID, name: 'Fíškovi', lang: 'cs' }, head: 'h1',
         features: ['live.end'], researches: [], working: [], open: [], waiting: [] };
     /** A bridge whose next event stream (after `state.end` is set) carries `event: end` with that payload. */
     async function bridgeThatEnds(page: Page) {
@@ -505,7 +505,7 @@ test.describe('live panel layout', () => {
             const path = new URL(route.request().url()).pathname;
             if (path.endsWith('/status')) {
                 return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' },
-                    body: JSON.stringify({ tree: { id: UUID, name: 'Víškovi' }, head: 'h1', working: [],
+                    body: JSON.stringify({ tree: { id: UUID, name: 'Fíškovi' }, head: 'h1', working: [],
                         waiting: [{ id: 'T1', what: 'Confirm the father of Jan', on: 'archive answer' }] }) });
             }
             if (path.endsWith('/tree.ged')) {
@@ -558,7 +558,7 @@ test.describe('live panel layout', () => {
         await expect(toggle).toHaveAttribute('aria-expanded', 'false');
         await expect(panel.locator('.live-panel-summary')).toContainText('read-only');
         // The head names the followed tree ("Live research" stays the panel's label).
-        await expect(toggle).toContainText('Víškovi');
+        await expect(toggle).toContainText('Fíškovi');
         await expect(panel).toHaveAttribute('aria-label', 'Live research from Strom Research');
     });
 });
@@ -571,7 +571,7 @@ test.describe('live research survives a reload', () => {
             const path = new URL(route.request().url()).pathname;
             if (path.endsWith('/status')) {
                 return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' },
-                    body: JSON.stringify({ tree: { id: UUID, name: 'Víškovi' }, head: 'h1', working: [], waiting: [] }) });
+                    body: JSON.stringify({ tree: { id: UUID, name: 'Fíškovi' }, head: 'h1', working: [], waiting: [] }) });
             }
             if (path.endsWith('/tree.ged')) {
                 return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/plain' }, body: researchGed() });
@@ -594,7 +594,7 @@ test.describe('live research survives a reload', () => {
         await expect(page.locator('body')).toHaveClass(/tree-locked/);
         await expect(card(page, 'Jan')).toBeVisible();
         expect(page.url()).not.toContain('live=');
-        expect((await treeNames(page)).filter(n => n === 'Víškovi')).toHaveLength(1);
+        expect((await treeNames(page)).filter(n => n === 'Fíškovi')).toHaveLength(1);
     });
 
     test('after "Stop following" a reload does not follow again', async ({ page }) => {
@@ -662,7 +662,7 @@ test.describe('without the APIs (mobile, other browsers)', () => {
             const path = new URL(route.request().url()).pathname;
             if (path.endsWith('/status')) {
                 return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' },
-                    body: JSON.stringify({ tree: { id: UUID, name: 'Víškovi' }, head: 'h1', working: [], waiting: [] }) });
+                    body: JSON.stringify({ tree: { id: UUID, name: 'Fíškovi' }, head: 'h1', working: [], waiting: [] }) });
             }
             return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/plain' }, body: researchGed() });
         });

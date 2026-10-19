@@ -78,7 +78,7 @@ export interface ResearchSyncBlock {
     title: string;
     sub?: string;
     actions: ResearchSyncBlockAction[];
-    /** A line above the buttons: whom and what "Show" leads to ("Anna Víšková · Birth"). */
+    /** A line above the buttons: whom and what "Show" leads to ("Anna Fíšková · Birth"). */
     lead?: string;
     spinner: boolean;
     /** A send of this tree is on its way (the send buttons wait). */
