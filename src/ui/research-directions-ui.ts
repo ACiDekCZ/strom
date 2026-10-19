@@ -89,6 +89,30 @@ export function setQueueDirectionFilter(id: string): void {
     queueFilterTree = id === 'all' ? null : liveSession()?.treeId ?? null;
 }
 
+/**
+ * A redraw replaces the line controls (a line's row, All directions, a
+ * queue pill): the focused one is focused again afterwards, on the same
+ * direction, so a second Enter drops a selection made from the keyboard.
+ * All directions, gone with the selection, hands focus to the line it
+ * dropped. Returns the step to run after the redraw (focus moved
+ * elsewhere meanwhile is left alone).
+ */
+export function keepLineFocus(): () => void {
+    const a = document.activeElement as HTMLElement | null;
+    const id = a?.dataset.direction;
+    if (!a || !id) return () => {};
+    const sel = a.matches('#live-panel button.live-line, #live-panel .live-lines-all') ? '#live-panel button.live-line'
+        : a.matches('#research-overview .research-overview__queue-filters .research-overview__filter')
+            ? '#research-overview .research-overview__queue-filters .research-overview__filter' : null;
+    if (!sel) return () => {};
+    return () => {
+        const now = document.activeElement;
+        if (now && now !== document.body && now.isConnected) return;
+        const all = [...document.querySelectorAll<HTMLElement>(sel)];
+        (all.find(e => e.dataset.direction === id) ?? all[0])?.focus();
+    };
+}
+
 /** A direction's glyph (↑ ↓ ⌕ ?; "·" for one that does not say its kind). */
 export function directionGlyph(d: LiveDirection | undefined): string {
     return d?.direction ? KIND_GLYPH[d.direction] : '·';

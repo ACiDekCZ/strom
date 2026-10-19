@@ -11369,9 +11369,10 @@
         .research-overview__now-text { flex: 1; min-width: 0; }
         .research-overview__now .live-time { display: block; color: var(--text-faint); font-size: 12px; }
         /* Working lines (two or more at work, spec 011): a row per line, one can be selected. */
-        .live-section__headrow { display: flex; align-items: baseline; gap: 8px; }
-        .live-section__headrow > .live-section__head { flex: 1; min-width: 0; }
-        .live-lines-all { flex: none; padding: 0; font-size: 12px; white-space: nowrap; }
+        /* The heading keeps its whole title; "All directions" goes to a row under it when both do not fit. */
+        .live-section__headrow { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 12px; }
+        .live-section__headrow > .live-section__head { flex: 1 0 auto; width: auto; max-width: 100%; }
+        .live-lines-all { flex: none; margin: 0 0 4px auto; padding: 0; font-size: 12px; white-space: nowrap; }
         .live-panel-list li.live-line-item { padding: 1px 0; border-bottom: 0; }
         .live-line {
             display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 10px; align-items: start;

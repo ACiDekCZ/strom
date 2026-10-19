@@ -43,7 +43,7 @@ import { uiModule } from './module.js';
 import { withAppVersion, researchGedcomTitles, TitlesInGedcom, changeKind, changeAdds, sanitizeLiveLog, textKind, textPersonRefs, textWithoutRefs, LiveChangeKind, LiveLogEntry, LiveCommitAdds, LiveRecent } from '../research-link.js';
 import { AGENT_DONE_MS, AGENT_DONE_FADE_MS, ResearchCardInfo, setResearchCardInfoProvider } from '../card-signals.js';
 import {
-    activeDirections, directionGlyph, directionsMulti, lineGlyphFor, linesMulti, queueDirectionFilter, selectedLine,
+    activeDirections, directionGlyph, directionsMulti, keepLineFocus, lineGlyphFor, linesMulti, queueDirectionFilter, selectedLine,
     taskDirectionName, workingLineCount, workingLineGroups,
 } from './research-directions-ui.js';
 import { iconSvg } from '../icons.js';
@@ -2885,6 +2885,7 @@ export const researchUiMethods = uiModule({
 
     /** Draw the "Research now" panel. Bridge text is set as text, never HTML. */
     renderLivePanel(): void {
+        queueMicrotask(keepLineFocus());
         syncResearchCardInfo();
         // A selected line drops with the tree it was made in or the end of following.
         this.syncLineSelection();
@@ -3022,6 +3023,8 @@ export const researchUiMethods = uiModule({
             if (sel && !workingFold.collapsed) {
                 aside = el('button', 'link-button live-lines-all', o.linesAll);
                 aside.type = 'button';
+                // Focus goes back to the dropped line's row after the redraw.
+                aside.dataset.direction = sel.id;
                 aside.onclick = () => this.setWorkingLine('all');
             }
             const host = liveSection(body, { ...workingFold, title, summary: workingFold.collapsed ? summary : undefined, aside });

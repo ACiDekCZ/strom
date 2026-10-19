@@ -272,3 +272,72 @@ test.describe('working lines in the live panel', () => {
         await expect(card(page, 'Karel')).not.toHaveClass(/evidence-dim/);
     });
 });
+
+test.describe('working lines from the keyboard', () => {
+    test('Space selects a line and focus stays on its row; Enter again drops it', async ({ page }) => {
+        await follow(page);
+        await line(page, 'G0001').focus();
+        await page.keyboard.press('Space');
+        await expect(line(page, 'G0001')).toHaveAttribute('aria-pressed', 'true');
+        await expect(line(page, 'G0001')).toBeFocused();
+        await page.keyboard.press('Enter');
+        await expect(line(page, 'G0001')).toHaveAttribute('aria-pressed', 'false');
+        await expect(line(page, 'G0001')).toBeFocused();
+    });
+
+    test('All directions from the keyboard hands focus to the line it dropped', async ({ page }) => {
+        await follow(page);
+        await line(page, 'G0002').click();
+        const all = panel(page).locator('.live-lines-all');
+        await all.focus();
+        await page.keyboard.press('Enter');
+        await expect(line(page, 'G0002')).toHaveAttribute('aria-pressed', 'false');
+        await expect(all).toHaveCount(0);
+        await expect(line(page, 'G0002')).toBeFocused();
+    });
+
+    test('a queue pill in the overview keeps focus after selecting', async ({ page }) => {
+        await follow(page);
+        await panel(page).locator('.live-panel-expand').click();
+        const ov = page.locator('#research-overview');
+        await expect(ov).toBeVisible();
+        await ov.locator('.live-queue-toggle').click();
+        const pill = (id: string) => ov.locator(`.research-overview__queue-filters .research-overview__filter[data-direction="${id}"]`);
+        await pill('G0002').focus();
+        await page.keyboard.press('Space');
+        await expect(pill('G0002')).toHaveAttribute('aria-checked', 'true');
+        await expect(pill('G0002')).toBeFocused();
+        await pill('all').focus();
+        await page.keyboard.press('Enter');
+        await expect(pill('all')).toHaveAttribute('aria-checked', 'true');
+        await expect(pill('all')).toBeFocused();
+    });
+});
+
+/** The heading "At work · 2 directions" and "All directions" beside it or under it: never over each other, inside the panel. */
+for (const [locale, title] of [['en-US', 'At work · 2 directions'], ['de-DE', 'In Arbeit · 2 Richtungen'], ['cs-CZ', 'Pracuje se · 2 linie']] as const) {
+    test.describe(`the line heading with a selection (${locale})`, () => {
+        test.use({ locale });
+        for (const width of [1024, 1440]) {
+            test(`${width}: the heading and All directions do not overlap or overflow`, async ({ page }) => {
+                await follow(page, [AGENT_UP, AGENT_DOWN], { width, height: 900 });
+                await line(page, 'G0001').click();
+                await expect(line(page, 'G0001')).toHaveAttribute('aria-pressed', 'true');
+                await expect(sectionTitle(page, 'live-sec-working')).toHaveText(title);
+                const box = await page.evaluate(() => {
+                    const r = (e: Element | null) => e!.getBoundingClientRect();
+                    const t = r(document.querySelector('#live-panel [aria-controls="live-sec-working"] .live-section__title'));
+                    const a = r(document.querySelector('#live-panel .live-lines-all'));
+                    const row = document.querySelector('#live-panel .live-section__headrow')!;
+                    const p = r(row);
+                    return {
+                        apart: t.right <= a.left || a.top >= t.bottom - 1,
+                        inside: t.left >= p.left - 0.5 && t.right <= p.right + 0.5 && a.left >= p.left - 0.5 && a.right <= p.right + 0.5,
+                        rowFits: row.scrollWidth <= row.clientWidth,
+                    };
+                });
+                expect(box).toEqual({ apart: true, inside: true, rowFits: true });
+            });
+        }
+    });
+}
