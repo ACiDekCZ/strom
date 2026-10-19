@@ -4,7 +4,7 @@
 
 ## 3.13.1
 
-*Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
+*Vydáno 19. října 2026.*
 
 - **Přehled stromu**: *Narození bez pramene* a *Konce linií* se počítají mezi předky vybrané osoby (*3 z 14 předků*), datum úmrtí má popisek, že se počítá u zemřelých, každý sloupec měsíců narození nese svůj počet (na dotyku se ukáže klepnutím), procenta se píšou podle jazyka aplikace a po změně dat se fokus klávesnice vrátí na stejný prvek.
 - **Přehled stromu, Kvalita dat**: strom, který není otevřený, nabízí *Detaily validace*; nález jmenuje opakujícího se kmotra (*Kmotr: …*) nebo místo zapsané víckrát (*Místo: …*); odkazy v přehledu už nenechávají mezeru před čárkou; úseky jistoty dělí tenká mezera, s novými odstíny v tmavém režimu.

@@ -4,7 +4,7 @@ English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md)
 
 ## 3.13.1
 
-*This version is in preparation; this section grows with every test version.*
+*Released 19 October 2026.*
 
 - **Tree overview**: *Births without a source* and *Line ends* count among the chosen person's ancestors (*3 of 14 ancestors*), the date of death is labelled as counted among the deceased, each birth month column is named with its count (a tap shows it on touch), percentages follow the language of the app, and after a change in the data the keyboard focus returns to the same control.
 - **Tree overview, Data quality**: a tree that is not open offers *Validation details*; a finding names the recurring godparent (*Godparent: …*) or the place written several ways (*Place: …*); links in the overview no longer leave a space before a comma; the certainty segments are separated by a thin gap, with new dark-mode shades.

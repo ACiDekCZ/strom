@@ -4,7 +4,7 @@
 
 ## 3.13.1
 
-*Diese Version ist in Vorbereitung; dieser Abschnitt wächst mit jeder Testversion.*
+*Veröffentlicht am 19. Oktober 2026.*
 
 - **Stammbaum-Überblick**: *Geburten ohne Quelle* und *Linienenden* werden unter den Vorfahren der gewählten Person gezählt (*3 von 14 Vorfahren*), das Sterbedatum ist als bei Verstorbenen gezählt beschriftet, jede Spalte der Geburtsmonate trägt ihre Zahl (auf Touch-Geräten per Tippen), Prozentwerte folgen der Sprache der App, und nach einer Änderung der Daten kehrt der Tastaturfokus zum selben Element zurück.
 - **Stammbaum-Überblick, Datenqualität**: Ein nicht geöffneter Stammbaum bietet *Validierungsdetails*; ein Befund nennt den wiederkehrenden Paten (*Pate: …*) oder den mehrfach geschriebenen Ort (*Ort: …*); Links im Überblick lassen kein Leerzeichen mehr vor einem Komma; die Sicherheitsabschnitte trennt eine schmale Lücke, mit neuen Tönen im dunklen Modus.
