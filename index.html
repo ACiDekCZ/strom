@@ -10839,7 +10839,8 @@
         .phone-expired { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
         .phone-expired strong { font-size: 15px; font-weight: 500; }
         .phone-expired span { font-size: 13px; color: var(--text-light); }
-        .phone-nets { font-size: 13px; color: var(--text-light); }
+        /* Items wrap as a whole with a gap, so no separator is left hanging at a line end. */
+        .phone-nets { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 16px; row-gap: 2px; font-size: 13px; color: var(--text-light); }
         .phone-checklist { border-top: 1px solid var(--divider); padding-top: 10px; font-size: 13px; }
         .phone-checklist strong { font-weight: 600; color: var(--text-light); }
         .phone-checklist ul { margin: 6px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }

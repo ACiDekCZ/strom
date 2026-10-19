@@ -2,6 +2,12 @@
 
 [English](CHANGELOG.md) · Čeština · [Deutsch](CHANGELOG.de.md)
 
+## 3.14.0
+
+*Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
+
+- **Telefon v domácí síti**: když to výzkum nabízí, má nabídka *Výzkum* položku *Připojit telefon…*. Řekne, co se objeví na počítači, zapne propojení přes okno na počítači (nebo uvede příkaz pro terminál) a ukáže QR kód pro jeden telefon s dobou platnosti, a když má počítač dvě sítě, i tu druhou. *Spárované telefony* uvádějí u každého telefonu, kdy byl naposledy vidět, *Odpojit* jde *Vrátit* a telefon spárovaný znovu nabídne odpojit svůj starší záznam. Když se telefon do minuty k počítači nedostane, objeví se krátký seznam, co zkontrolovat; *Vypnout propojení* ho zastaví a nabídka i tečka na tlačítku *Výzkum* ukazují, že je zapnuté.
+
 ## 3.13.1
 
 *Vydáno 19. října 2026.*

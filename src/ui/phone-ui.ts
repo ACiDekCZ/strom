@@ -556,7 +556,7 @@ export const phoneMethods = uiModule({
         const nets = s.addresses.length >= 2 && picked
             ? `<div class="phone-nets">${[`<span>${esc(p.qrNet(phoneIp(picked.url), picked.kind))}</span>`,
                 ...s.addresses.filter(a => a.url !== picked.url).map(a =>
-                    `<button type="button" class="phone-link" data-act="address" data-id="${esc(a.url)}" aria-label="${esc(p.qrOtherSr(phoneIp(a.url)))}"${d.lost ? ' disabled' : ''}>${esc(p.qrOther(phoneIp(a.url), a.kind))}</button>`)].join('<span aria-hidden="true"> · </span>')}</div>`
+                    `<button type="button" class="phone-link" data-act="address" data-id="${esc(a.url)}" aria-label="${esc(p.qrOtherSr(phoneIp(a.url)))}"${d.lost ? ' disabled' : ''}>${esc(p.qrOther(phoneIp(a.url), a.kind))}</button>`)].join('')}</div>`
             : '';
         const image = qr
             ? `<img class="phone-qr-img" src="${esc(qr.blobUrl)}" alt="${esc(p.qrAlt)}" width="216" height="216">`

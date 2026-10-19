@@ -2,6 +2,12 @@
 
 [English](CHANGELOG.md) · [Čeština](CHANGELOG.cs.md) · Deutsch
 
+## 3.14.0
+
+*Diese Version ist in Vorbereitung; dieser Abschnitt wächst mit jeder Testversion.*
+
+- **Telefon im Heimnetz**: Wenn die Forschung es anbietet, hat das Menü *Forschung* den Eintrag *Telefon verbinden…*. Er sagt, was auf dem Computer erscheint, schaltet die Verbindung über ein Fenster auf dem Computer ein (oder nennt den Befehl für das Terminal) und zeigt einen QR-Code für ein Telefon mit seiner Gültigkeit, und wenn der Computer zwei Netze hat, auch das andere. *Gekoppelte Telefone* nennt bei jedem Telefon, wann es zuletzt gesehen wurde, *Trennen* lässt sich *Rückgängig* machen, und ein erneut gekoppeltes Telefon bietet an, seinen älteren Eintrag zu trennen. Erreicht das Telefon den Computer nach einer Minute nicht, erscheint eine kurze Prüfliste; *Verbindung ausschalten* beendet sie, und das Menü und ein Punkt auf der Schaltfläche *Forschung* zeigen, solange sie eingeschaltet ist.
+
 ## 3.13.1
 
 *Veröffentlicht am 19. Oktober 2026.*
