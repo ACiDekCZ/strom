@@ -276,6 +276,10 @@ export const readDocumentMethods = uiModule({
         if (listening) return;
         listening = true;
         onBridgeStatus((researchId, status) => this.onReadStatus(researchId, status));
+        // A status that came before: its readings at once (no notice for what ended before).
+        const link = this.researchOriginalsLink();
+        const known = link ? this.researchStatusOf(link.researchId) : null;
+        if (link && known) this.onReadStatus(link.researchId, known);
     },
 
     /** A status of a research's bridge: its readings, what ended, what to redraw. */

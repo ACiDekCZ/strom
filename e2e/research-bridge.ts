@@ -113,6 +113,45 @@ export interface FakeBridge {
     tokenRefusal?: number;
     /** The phone connection (`/phone*`, spec 012); its summary goes into `/status.phone` when `features` has `phone`. */
     phone?: FakePhone;
+    /** Reading a document (`/read*`, spec 013); its readings go into `/status.reads`. */
+    read?: FakeRead;
+}
+
+/** A reading as `/status.reads` lists it. */
+export interface FakeReading {
+    id: string; state: string; version: number; at: string; since: string; files: number; pages: number;
+    readers: number; done: number; entries: number; name: string; person: string; from: 'app' | 'research';
+}
+
+/** The research's reading of documents, state by state (set `state`/`done` on a reading, then poll). */
+export interface FakeRead {
+    /** Listed in `/status.reads`, newest first. */
+    reads: FakeReading[];
+    /** Every `POST /read` body. */
+    posts: Record<string, unknown>[];
+    /** Every `POST /read/<id>/cancel`. */
+    cancels: string[];
+    /** Every `POST /read/<id>/again`, with its body. */
+    agains: { id: string; body: Record<string, unknown> }[];
+    /** `GET /read/<id>` answers (the raw result); others: 404 read.none. */
+    results: Map<string, unknown>;
+    /** The id the next `POST /read` gives. */
+    nextId: string;
+    /** `POST /read` turned down: this status and body (and `Retry-After`). */
+    startReply?: { status: number; body: unknown; retryAfter?: string };
+    /** `POST /read/<id>/cancel` answers this instead of cancelling. */
+    cancelReply?: { status: number; body: unknown };
+}
+
+export const READ_ID = 'D20261019153012-a1b2';
+
+export function fakeRead(init: Partial<FakeRead> = {}): FakeRead {
+    return { reads: [], posts: [], cancels: [], agains: [], results: new Map(), nextId: READ_ID, ...init };
+}
+
+/** `accepts.read` of a research that reads (its fields as the bridge says them). */
+export function readAccepts(extra: Record<string, unknown> = {}): Record<string, unknown> {
+    return { ready: true, readers: 2, types: ['image/jpeg', 'image/png', 'application/pdf'], max: 20 * 1024 * 1024, pages: 10, langs: ['cs', 'en', 'de'], ...extra };
 }
 
 /** A paired phone as the research lists it. */
@@ -225,6 +264,49 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
             const known = b.mediaKnown.get(sha);
             return known ? json(200, { known }) : json(404, { error: 'unknown' });
         }
+        const rd = b.read;
+        const readPath = /\/read(?:\/([^/]+)(?:\/(cancel|again))?)?$/.exec(url.pathname);
+        if (rd && readPath) {
+            const id = readPath[1] ? decodeURIComponent(readPath[1]) : '';
+            const verb = readPath[2] ?? '';
+            let body: Record<string, unknown> = {};
+            try { body = JSON.parse(route.request().postData() ?? '{}'); } catch { /* keep empty */ }
+            const now = new Date().toISOString();
+            if (method === 'POST' && !id) {
+                rd.posts.push(body);
+                if (rd.startReply) {
+                    return route.fulfill({ status: rd.startReply.status, headers: { ...cors, 'content-type': 'application/json',
+                        ...(rd.startReply.retryAfter ? { 'retry-after': rd.startReply.retryAfter } : {}) }, body: JSON.stringify(rd.startReply.body) });
+                }
+                const files = Array.isArray(body.files) ? body.files.length : 0;
+                const reading: FakeReading = { id: rd.nextId, state: 'queued', version: 1, at: now, since: now, files, pages: files,
+                    readers: body.readers === 2 ? 2 : 1, done: 0, entries: 0, name: 'zapis.jpg', person: typeof body.person === 'string' ? body.person : '', from: 'app' };
+                rd.reads = [reading, ...rd.reads.filter(r => r.id !== reading.id)];
+                return json(202, { read: reading.id, state: 'queued', version: 1 });
+            }
+            const reading = rd.reads.find(r => r.id === id);
+            if (method === 'POST' && verb === 'cancel') {
+                rd.cancels.push(id);
+                if (rd.cancelReply) return json(rd.cancelReply.status, rd.cancelReply.body);
+                if (!reading) return json(404, { error: 'No such reading.', code: 'read.none', text: 'No such reading.' });
+                const was = reading.state;
+                if (was === 'queued' || was === 'reading' || was === 'checking') { reading.state = 'cancelled'; reading.since = now; }
+                return json(200, { read: id, state: reading.state, version: reading.version, cancelled: reading.state === 'cancelled' && was !== 'cancelled' });
+            }
+            if (method === 'POST' && verb === 'again') {
+                rd.agains.push({ id, body });
+                if (!reading) return json(404, { error: 'No such reading.', code: 'read.none', text: 'No such reading.' });
+                reading.state = 'queued';
+                reading.version += 1;
+                reading.since = now;
+                reading.done = 0;
+                return json(202, { read: id, state: 'queued', version: reading.version });
+            }
+            if (method === 'GET' && id && !verb) {
+                const result = rd.results.get(id);
+                return result ? json(200, result) : json(404, { error: 'No such reading.', code: 'read.none', text: 'No such reading.' });
+            }
+        }
         if (url.pathname.endsWith('/status')) {
             if (b.statusHang) return new Promise<void>(() => { /* never answers */ });
             if (b.statusCode) return json(b.statusCode, { error: 'not here' });
@@ -236,6 +318,7 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
                 ...(b.waiting ? { waiting: b.waiting } : {}),
                 ...(b.features ? { features: b.features } : {}),
                 ...(b.accepts ? { sends: b.sends } : {}),
+                ...(b.read ? { reads: b.read.reads } : {}),
                 ...(b.phone ? { phone: { state: b.phone.state === 'on' || b.phone.state === 'error' ? b.phone.state : 'off', phones: b.phone.phones.length } } : {}),
                 ...(b.statusExtra ?? {}),
             });
