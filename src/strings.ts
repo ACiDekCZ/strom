@@ -4229,7 +4229,7 @@ const stringsEN = {
         offReconnect: 'Reconnects when the tree is opened from the research (strom app in the terminal).',
         offReconnectShort: 'reconnect: strom app',
         offPanel: 'Research not running right now. The tree can be edited; edits are sent once the research reconnects.',
-        idlePanel: 'Research connected, nobody at work right now. Edits are sent to it automatically.',
+        idlePanel: (mode: 'auto' | 'manual' | 'off') => 'Research connected, nobody at work right now. ' + (mode === 'auto' ? 'Edits are sent to it automatically.' : mode === 'manual' ? 'Edits go to it when Send is clicked.' : 'Its version is only loaded; edits stay here.'),
         switcherDotSr: (name: string, waiting: number) => `Tree: ${name}. ${waiting > 0 ? `${nEn(waiting, 'item', 'items')} waiting in another tree.` : 'Research running in another tree.'}`,
         otherTreeLabel: 'Elsewhere',
         otherTreeSr: (name: string, state: string) => `Also running in another tree: ${name}, ${state}. Selecting it switches there.`,
@@ -8312,7 +8312,7 @@ const stringsCZ: StringsType = {
         offReconnect: 'Znovu se spojí otevřením stromu z výzkumu (v terminálu strom app).',
         offReconnectShort: 'znovu spojí strom app',
         offPanel: 'Výzkum teď neběží. Strom jde upravovat; úpravy se pošlou, až se výzkum znovu spojí.',
-        idlePanel: 'Výzkum je spojený, nikdo na něm teď nepracuje. Úpravy se do něj posílají samy.',
+        idlePanel: (mode: 'auto' | 'manual' | 'off') => 'Výzkum je spojený, nikdo na něm teď nepracuje. ' + (mode === 'auto' ? 'Úpravy se do něj posílají samy.' : mode === 'manual' ? 'Úpravy do něj pošle tlačítko Poslat.' : 'Z něj se jen načítá, úpravy zůstávají tady.'),
         switcherDotSr: (name: string, waiting: number) => `Strom: ${name}. ${waiting > 0
             ? `V jiném stromu ${plural('cs', waiting, 'čeká', 'čekají', 'čeká')} ${nCs(waiting, 'věc', 'věci', 'věcí')} na vyřízení.`
             : 'V jiném stromu běží výzkum.'}`,
@@ -12321,7 +12321,7 @@ const stringsDE: StringsType = {
         offReconnect: 'Verbindet sich wieder, wenn der Stammbaum aus der Recherche geöffnet wird (strom app im Terminal).',
         offReconnectShort: 'neu verbinden: strom app',
         offPanel: 'Die Recherche läuft gerade nicht. Der Stammbaum ist bearbeitbar; Änderungen werden gesendet, sobald die Recherche wieder verbunden ist.',
-        idlePanel: 'Recherche verbunden, gerade arbeitet niemand daran. Änderungen gehen automatisch hinein.',
+        idlePanel: (mode: 'auto' | 'manual' | 'off') => 'Recherche verbunden, gerade arbeitet niemand daran. ' + (mode === 'auto' ? 'Änderungen gehen automatisch hinein.' : mode === 'manual' ? 'Änderungen gehen hinein nach Klick auf Senden.' : 'Es wird nur daraus geladen; Änderungen bleiben hier.'),
         switcherDotSr: (name: string, waiting: number) => `Stammbaum: ${name}. ${waiting > 0
             ? `In einem anderen Stammbaum ${waiting === 1 ? 'ist' : 'sind'} ${nDe(waiting, 'Punkt', 'Punkte')} offen.`
             : 'In einem anderen Stammbaum läuft eine Recherche.'}`,

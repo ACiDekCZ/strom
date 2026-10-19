@@ -2923,23 +2923,25 @@ export const researchUiMethods = uiModule({
         chevron.innerHTML = iconSvg('chevron-down', { size: 14 });
         toggle.appendChild(chevron);
         head.appendChild(toggle);
+        // The buttons as one group: a name that does not fit beside them puts them all on a row under it.
+        const actions = head.appendChild(el('div', 'live-panel-actions'));
         // Folded: the other trees as one chip (unfolds the panel with them shown; spec 011).
         const otherChip = collapsed && !phone && !s.ended ? this.researchElsewhereChip('collapsed') : null;
-        if (otherChip) head.appendChild(otherChip);
+        if (otherChip) actions.appendChild(otherChip);
         const followBtn = phone ? null : this.liveFollowButton('panel');
-        if (followBtn) head.appendChild(followBtn);
+        if (followBtn) actions.appendChild(followBtn);
         if (this.canOpenResearchOverview()) {
             const expand = el('button', 'live-panel-expand', '⤢');
             expand.type = 'button';
             expand.setAttribute('aria-label', L.openOverview);
             expand.title = L.openOverview;
             expand.onclick = () => this.openResearchOverview();
-            head.appendChild(expand);
+            actions.appendChild(expand);
         }
         const action = el('button', 'live-panel-action', s.ended ? r.close : r.stop);
         action.type = 'button';
         action.onclick = () => (s.ended ? this.closeLivePanel() : this.stopLiveFollow());
-        head.appendChild(action);
+        actions.appendChild(action);
         panel.appendChild(head);
         // Which tree is followed now (after a switch): under the head, above "Elsewhere".
         if (!panel.hidden) appendFollowNote(panel, s);
@@ -3288,7 +3290,7 @@ export const researchUiMethods = uiModule({
             });
             body.appendChild(hint);
         } else {
-            // Connected, nobody at work: edits go by themselves.
+            // Connected, nobody at work: how edits reach it follows the tree's send mode.
             const status = answer?.result === 'up' ? answer.status : null;
             const agentless = this.activeResearchAgentless();
             const working = !!status && !agentless && status.working.some(w => !w.paused);
@@ -3303,7 +3305,12 @@ export const researchUiMethods = uiModule({
                 go.type = 'button';
                 go.onclick = () => this.followResearchHere(researchId);
             }
-            if (connected) body.appendChild(el('p', 'live-panel-state', o.idlePanel));
+            if (connected) {
+                // Back from "only load" with changes meanwhile, the first send goes by hand.
+                const link = treeId ? TreeManager.getTreeMetadata(treeId)?.research : undefined;
+                const mode = researchSendMode(link);
+                body.appendChild(el('p', 'live-panel-state', o.idlePanel(mode === 'auto' && link?.previewDue ? 'manual' : mode)));
+            }
             this.appendWaitingSection(body, state?.items ?? [], false);
             // "As of …, not running" only when it is not known to answer now.
             if (state && !status) {

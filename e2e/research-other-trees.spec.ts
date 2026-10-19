@@ -162,8 +162,8 @@ test.describe('other research trees', () => {
         await page.evaluate(() => window.Strom.UI.showResearchWaiting());
         const panel = page.locator('#live-panel.idle');
         await expect(panel).toBeVisible();
-        // Its own bridge answers, nobody works: edits go by themselves.
-        await expect(panel.locator('.live-panel-state')).toHaveText('Research connected, nobody at work right now. Edits are sent to it automatically.');
+        // Its own bridge answers, nobody works: edits go by the Send button (a new tie's default).
+        await expect(panel.locator('.live-panel-state')).toHaveText('Research connected, nobody at work right now. Edits go to it when Send is clicked.');
         const strip = panel.locator('.rs-elsewhere');
         await expect(strip.locator('.rs-elsewhere__row')).toHaveCount(1);
         const other = strip.locator('.rs-elsewhere__row');

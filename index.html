@@ -10440,6 +10440,16 @@
             transition: background-color 0.3s;
         }
         .live-panel-head .live-panel-title.is-fresh { background: var(--follow-note-bg); }
+        /* A name that does not fit beside the buttons gets the first row to
+           itself (the buttons, one group, wrap under it, right-aligned) and
+           up to two lines there; only a really long name is cut. */
+        .live-panel-head { flex-wrap: wrap; justify-content: flex-end; row-gap: 4px; }
+        .live-panel-head > .live-panel-toggle { flex: 1 0 auto; max-width: calc(100% - 17px); }
+        .live-panel-actions { flex: none; display: flex; align-items: center; gap: 8px; }
+        .live-panel-toggle .live-panel-title {
+            white-space: normal; overflow-wrap: anywhere;
+            display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2;
+        }
         @media (prefers-reduced-motion: reduce) { .live-panel-head .live-panel-title { transition: none; } }
         /* Which tree is followed now: one line under the head, above "Elsewhere" (no toast). */
         .live-follow-note {

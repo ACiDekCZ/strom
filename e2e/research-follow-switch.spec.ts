@@ -239,7 +239,8 @@ test.describe('switching trees follows the research where an agent works', () =>
         const panel = page.locator('#live-panel');
         await expect(panel).toHaveClass(/idle/);
         await expect(panel.locator('.live-panel-title')).toHaveText(N_TREE);
-        await expect(panel.locator('.live-panel-state')).toHaveText('Research connected, nobody at work right now. Edits are sent to it automatically.');
+        // The tree sends by the Send button: the sentence says so (not "automatically").
+        await expect(panel.locator('.live-panel-state')).toHaveText('Research connected, nobody at work right now. Edits go to it when Send is clicked.');
         await expect(panel.locator('.live-panel-follow')).toHaveText('Follow live');
         expect(await liveTree(page)).toBeNull();
         // The agent starts: the open tree's own regular ask finds it; the tree stays editable, the panel says it.
@@ -257,6 +258,55 @@ test.describe('switching trees follows the research where an agent works', () =>
         await expect(panel).not.toHaveClass(/idle/);
         await expect(panel.locator('.live-follow-note')).toHaveText(`Now following “${N_TREE}”.`);
         await expect(page.locator('.modal-overlay.active')).toHaveCount(0);
+    });
+
+    test('nobody at work in a tree that sends by itself: the panel says edits go automatically', async ({ page }) => {
+        const { ids } = await twoTrees(page, { auto: true, novak: { working: [] } });
+        await page.evaluate(() => window.Strom.UI.showResearchWaiting());
+        await pick(page, N_TREE);
+        await expect.poll(() => openTree(page)).toBe(ids[N_TREE]);
+        const panel = page.locator('#live-panel');
+        await expect(panel).toHaveClass(/idle/);
+        await expect(panel.locator('.live-panel-state')).toHaveText('Research connected, nobody at work right now. Edits are sent to it automatically.');
+        // The same in Czech for the tree that sends by the button.
+        await page.evaluate((id) => {
+            window.Strom.TreeManager.patchResearchLink(id as never, { sendMode: 'manual' });
+            window.Strom.UI.setLanguage('cs' as never);
+            window.Strom.UI.renderLivePanel();
+        }, ids[N_TREE]);
+        await expect(panel.locator('.live-panel-state')).toHaveText('Výzkum je spojený, nikdo na něm teď nepracuje. Úpravy do něj pošle tlačítko Poslat.');
+    });
+
+    test('the head shows a usual tree name whole beside its buttons on a computer and a tablet (cs, de); only a really long one is cut', async ({ page }) => {
+        const { ids } = await twoTrees(page);
+        await pick(page, N_TREE);
+        await expect.poll(() => liveTree(page)).toBe(ids[N_TREE]);
+        const panel = page.locator('#live-panel');
+        const title = panel.locator('.live-panel-head .live-panel-title');
+        const fits = () => title.evaluate((t) => t.scrollWidth <= t.clientWidth + 1 && t.scrollHeight <= t.clientHeight + 1);
+        const LONG30 = 'Novákovi a Svobodovi z Kolína';
+        for (const name of [N_TREE, LONG30]) {
+            await page.evaluate(({ id, name }) => window.Strom.TreeManager.renameTree(id as never, name), { id: ids[N_TREE], name });
+            for (const lang of ['cs', 'de']) {
+                for (const width of [1440, 1024]) {
+                    await page.setViewportSize({ width, height: 900 });
+                    await page.evaluate((l) => { window.Strom.UI.setLanguage(l as never); window.Strom.UI.renderLivePanel(); }, lang);
+                    await expect(title).toHaveText(name);
+                    expect(await fits(), `${name} ${lang} ${width}`).toBe(true);
+                    // The buttons stay in the head, inside the panel.
+                    const box = (await panel.boundingBox())!;
+                    for (const b of await panel.locator('.live-panel-head button').all()) {
+                        const bb = (await b.boundingBox())!;
+                        expect(bb.x >= box.x && bb.x + bb.width <= box.x + box.width + 0.5, `${lang} ${width}`).toBe(true);
+                    }
+                }
+            }
+        }
+        // A really long name: cut, the whole name on hover.
+        const LONG = 'Novákovi, Svobodovi, Dvořákovi a Procházkovi z Kolína, Kutné Hory a Čáslavi 1700–1950';
+        await page.evaluate(({ id, name }) => { window.Strom.TreeManager.renameTree(id as never, name); window.Strom.UI.renderLivePanel(); }, { id: ids[N_TREE], name: LONG });
+        expect(await fits()).toBe(false);
+        await expect(title).toHaveAttribute('title', LONG);
     });
 
     test('a bridge that does not answer: passive, the panel says it is not running, no dialog', async ({ page }) => {
