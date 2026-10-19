@@ -13,6 +13,7 @@
 - **Příbuzenské vztahy**: sourozenec s jedním společným rodičem je *polorodý bratr* nebo *polorodá sestra*, v přehledu stromu i v *Zjistit vztah…*.
 - **Živý přehled**: nadpis linií počítá aktivní linie (*Linie · 3 aktivní*) a menu osoby u běžící linie píše *už je aktivní*.
 - **Výzkum v dalších stromech**: přepínač stromů označí každý strom výzkumu na tomto počítači (*živě*, *2 linie*, *čeká 3*, *neběží*) a zavřený nese tečku za ostatní stromy. Panel Výzkum a *Teď* v přehledu výzkumu jmenují jiný strom, kde pracuje agent nebo něco čeká (*Jinde*); výběrem se na něj přepne. Strom, jehož výzkum neodpovídá, píše *Výzkum teď neběží*, co naposledy čekalo a jak se znovu spojí.
+- **Přepnutí na strom, kde pracuje agent**: strom se rovnou sleduje živě, bez dotazu; neodeslané úpravy otevřeného stromu se nejdřív pošlou a opuštěný strom jde znovu upravovat. Panel *Živý výzkum* jmenuje sledovaný strom v hlavičce a krátce řekne, který strom se teď sleduje a který zůstává upravitelný. Strom, na kterém nikdo nepracuje, zůstává upravitelný s nabídkou *Sledovat živě* a jeho panel výzkumu říká, jak se úpravy do výzkumu dostanou: samy, tlačítkem *Poslat*, nebo vůbec, když se verze výzkumu jen načítá.
 - **Opravy**: dvě rychlé změny za sebou už neukážou dvě upozornění Zpět najednou; jména na kartách se po načtení písma karet znovu přizpůsobí, takže dlouhé jméno už není oříznuté.
 
 ## 3.13.0
