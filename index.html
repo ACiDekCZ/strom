@@ -10851,8 +10851,12 @@
         .phone-paired p { margin: 4px 0 0; color: var(--text-light); font-size: 13.5px; }
         .phone-paired strong { font-size: 18px; font-weight: 600; overflow-wrap: anywhere; }
         .phone-paired-mark { flex: none; width: 44px; height: 44px; border-radius: 50%; background: var(--primary-soft); color: var(--primary); font-size: 22px; font-weight: 600; display: flex; align-items: center; justify-content: center; }
-        .phone-replaces { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 10px; background: var(--bg); border: 1px solid var(--divider); font-size: 13px; }
-        .phone-replaces span { flex: 1; min-width: 0; }
+        .phone-replaces { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border-radius: 10px; background: var(--bg); border: 1px solid var(--divider); }
+        .phone-replaces-row { display: flex; align-items: center; gap: 12px; }
+        .phone-replaces-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; font-size: 13.5px; line-height: 1.45; }
+        .phone-replaces-text span { font-weight: 500; }
+        .phone-replaces-text small { color: var(--text-light); font-size: 12.5px; }
+        .phone-replaces-row .btn-sm { flex-shrink: 0; }
         @media (min-width: 641px) and (max-width: 1024px) {
             #phone-modal .phone-dialog { max-height: calc(100vh - 24px); }
         }
@@ -10864,9 +10868,10 @@
             /* The code above its text. */
             .phone-qr { grid-template-columns: minmax(0, 1fr); gap: 14px; justify-items: center; }
             .phone-qr-text { justify-self: stretch; }
-            .phone-bar, .phone-replaces { flex-wrap: wrap; }
+            .phone-bar, .phone-replaces-row { flex-wrap: wrap; }
             .phone-bar .phone-bar-text { flex-basis: calc(100% - 20px); }
             .phone-bar.is-address .phone-bar-text { flex-basis: 100%; }
+            .phone-replaces-text { flex-basis: 100%; }
             .phone-footer { flex-wrap: wrap; }
             .phone-foot-note:empty { display: none; }
             /* The buttons stack bottom-up (primary lowest): the note goes above them. */

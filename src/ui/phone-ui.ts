@@ -22,7 +22,7 @@ const DIALOG_ID = 'phone-modal';
 const POLL_MS = 2000;
 const ASK_TIMEOUT_MS = 5000;
 /** How long an unpaired row stays struck through with "Undo" (the research keeps it 15 s). */
-const UNDO_MS = 8000;
+const UNDO_MS = 15_000;
 /** The research's port when it does not say one. */
 const DEFAULT_PORT = 47800;
 
@@ -474,7 +474,8 @@ export const phoneMethods = uiModule({
         const s = ph?.state ?? null;
         const os = platformHere(s);
         const steps = os === 'win' ? [p.sysStep1, p.sysWin] : [p.sysStep1];
-        const extra = os === 'win' ? p.sysWinAdmin : os === 'mac' ? p.sysMac : p.sysLinux(portOf(s));
+        // macOS: the firewall sentence only while the research does not know the firewall is off.
+        const extra = os === 'win' ? p.sysWinAdmin : os === 'mac' ? (s?.firewall?.on === false ? '' : p.sysMac) : p.sysLinux(portOf(s));
         const sketch = os === 'win' ? `
                         <div class="phone-fw" aria-hidden="true">
                             <div class="phone-fw-title">Windows Defender Firewall</div>
@@ -490,7 +491,7 @@ export const phoneMethods = uiModule({
                         <div class="phone-sys-grid${sketch ? '' : ' is-single'}">
                             <div class="phone-sys-text">
                                 <ol>${steps.map(t => `<li>${esc(t)}</li>`).join('')}</ol>
-                                <p class="phone-quiet">${esc(extra)}</p>
+                                ${extra ? `<p class="phone-quiet">${esc(extra)}</p>` : ''}
                             </div>
                             ${sketch}
                         </div>
@@ -535,7 +536,7 @@ export const phoneMethods = uiModule({
         const s = d.state!;
         const code = s.error?.code ?? 'bind-failed';
         const [title, sub] = code === 'port-busy' ? [p.errPort(phonePort(s.addresses[0]?.url)), p.errRetry]
-            : code === 'no-lan' ? [p.errNet, p.errNetRetry] : [p.errBind, p.errRetry];
+            : code === 'no-lan' ? [p.errNet, p.errNetRetry] : [p.errBind, p.errBindBody];
         return `
                     <div class="phone-bar is-error" role="status">
                         <span class="phone-dot is-error" aria-hidden="true"></span>
@@ -592,7 +593,7 @@ export const phoneMethods = uiModule({
                                 <ul>
                                     <li><span>${esc(p.checkWifi)}</span></li>
                                     <li><span>${esc(fw)} <button type="button" class="phone-link" data-act="how">${esc(p.checkHow)}</button></span></li>
-                                    ${os === 'win' ? `<li><span>${esc(p.checkProfile)}</span></li>` : ''}
+                                    ${os === 'win' && s?.network?.category !== 'private' ? `<li><span>${esc(p.checkProfile)}</span></li>` : ''}
                                 </ul>
                             </div>`;
     },
@@ -605,22 +606,27 @@ export const phoneMethods = uiModule({
         const old = fresh.maybeReplaces
             .map(id => s.phones.find(x => x.id === id))
             .filter((x): x is PhoneEntry => !!x);
-        const replaces = old.map(o => d.replacedDone.has(o.id) ? '' : `
-                        <div class="phone-replaces">
-                            <span>${esc(p.replacesRow(phoneDate(o.pairedAt, getCurrentLanguage())))}</span>
-                            <button type="button" class="secondary btn-sm" data-act="replace" data-id="${esc(o.id)}"${d.lost ? ' disabled' : ''}>${esc(p.replacesBtn)}</button>
-                        </div>`).join('');
-        const doneLine = old.some(o => d.replacedDone.has(o.id)) || fresh.maybeReplaces.some(id => d.replacedDone.has(id))
-            ? `<p class="phone-quiet" role="status">${esc(p.replacesDone)}</p>` : '';
+        // One row per older entry; a removed row goes (no Undo, the entry is dead), an empty box goes too.
+        const rows = old.filter(o => !d.replacedDone.has(o.id)).map(o => `
+                            <div class="phone-replaces-row">
+                                <div class="phone-replaces-text">
+                                    <span>${esc(p.replacesRow(o.name || p.unnamed, phoneDate(o.pairedAt, getCurrentLanguage())))}</span>
+                                    ${o.stale ? `<small>${esc(p.replacesStale)}</small>` : ''}
+                                </div>
+                                <button type="button" class="secondary btn-sm" data-act="replace" data-id="${esc(o.id)}"${d.lost ? ' disabled' : ''}>${esc(p.replacesBtn)}</button>
+                            </div>`).join('');
+        const replaces = rows ? `
+                        <div class="phone-replaces">${rows}
+                        </div>` : '';
         return `
                     <div class="phone-paired" role="status">
                         <span class="phone-paired-mark" aria-hidden="true">✓</span>
                         <div><strong>${esc(p.paired(fresh.name || p.unnamed))}</strong><p>${esc(p.pairedHint)}</p></div>
                     </div>
-                    ${replaces}${doneLine}`;
+                    ${replaces}`;
     },
 
-    /** "Paired phones · N": name, paired / last seen, the old address; "Unpair" (struck through 8 s with "Undo"). */
+    /** "Paired phones · N": name, paired / last seen, the old address; "Unpair" (struck through 15 s with "Undo", as long as the research keeps it). */
     phoneListHtml(): string {
         const p = strings.phone;
         const d = ph!;

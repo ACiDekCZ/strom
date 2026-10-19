@@ -61,6 +61,10 @@ test.describe('Connect phone', () => {
         await expect(dialog.locator('.phone-sys')).toContainText('Allow incoming connections for node?');
         await expect(dialog.locator('.phone-fw')).toHaveCount(0);
         await expect(dialog.locator('.phone-foot-note')).toHaveText('The connection is off');
+        // The research knows the Mac firewall is off: nothing to say about it.
+        ph.firewall = { on: false, checkedAt: new Date().toISOString() };
+        await ask(page);
+        await expect(dialog.locator('.phone-sys')).not.toContainText('Allow incoming connections for node?');
 
         await dialog.getByRole('button', { name: 'Turn connection on' }).click();
         await expect(dialog.locator('.phone-state')).toContainText('Confirm in the window on the computer…');
@@ -141,10 +145,15 @@ test.describe('Connect phone', () => {
         ph.lanSeenAt = new Date().toISOString();
         await ask(page);
         await expect(dialog.locator('.phone-paired')).toContainText('Paired: Pixel 8 (Chrome)');
-        await expect(dialog.locator('.phone-replaces')).toContainText('Older entry of the same phone (paired');
-        await dialog.getByRole('button', { name: 'Unpair old entry' }).click();
-        await expect(dialog).toContainText('Old entry unpaired.');
+        const replaces = dialog.locator('.phone-replaces');
+        await expect(replaces.locator('.phone-replaces-row')).toHaveCount(1);
+        await expect(replaces).toContainText('Older entry for the same phone: Pixel 8 (Chrome), paired 10/12');
+        await expect(replaces).toContainText('No longer works since the computer’s address changed.');
+        await dialog.getByRole('button', { name: 'Remove old entry' }).click();
+        // The dead entry goes without Undo, and the empty box with it.
+        await expect(replaces).toHaveCount(0);
         expect(ph.posts).toContain('remove/ph_old00001');
+        expect(ph.posts).not.toContain('restore/ph_old00001');
         await dialog.getByRole('button', { name: 'Done' }).click();
         await expect(dialog.locator('.phone-list .phone-section-title')).toHaveText('Paired phones · 1');
         await expect(dialog.locator('.phone-row')).toHaveCount(1);
@@ -177,7 +186,10 @@ test.describe('Connect phone', () => {
 
         await dialog.locator('.phone-row', { hasText: 'iPhone' }).getByRole('button', { name: 'Unpair' }).click();
         await expect(dialog.locator('.phone-row.is-removed')).toHaveCount(1);
+        // Undo stays as long as the research keeps the entry (15 s).
         await page.clock.fastForward(9000);
+        await expect(dialog.locator('.phone-row.is-removed')).toHaveCount(1);
+        await page.clock.fastForward(7000);
         await expect(dialog.locator('.phone-row.is-removed')).toHaveCount(0);
         await expect(dialog.locator('.phone-row')).toHaveCount(1);
     });
@@ -209,6 +221,10 @@ test.describe('Connect phone', () => {
         await ask(page);
         await expect(dialog.locator('.phone-bar.is-error')).toContainText('The computer is not on any local network right now.');
         await expect(dialog.locator('.phone-bar.is-error')).toContainText('The connection starts by itself once on Wi-Fi.');
+        b.phone!.error = { code: 'bind-failed', detail: 'EACCES' };
+        await ask(page);
+        await expect(dialog.locator('.phone-bar.is-error')).toContainText('The connection could not be started.');
+        await expect(dialog.locator('.phone-bar.is-error')).toContainText('The system did not allow a network connection to be opened. Retrying every minute.');
     });
 
     test('the computer\'s address changed: the yellow bar with a new code', async ({ page }) => {
@@ -275,6 +291,10 @@ test.describe('Connect phone', () => {
         await expect(dialog.locator('.phone-public')).toContainText('Windows marks this Wi-Fi as Public.');
         await dialog.locator('[data-act="back"]').click();
         await expect(dialog.locator('.phone-qr-img')).toBeVisible();
+        // A private network: the network type is no longer worth checking.
+        b.phone!.network = { category: 'private', checkedAt: new Date().toISOString() };
+        await ask(page);
+        await expect(list).not.toContainText('Windows network type');
         b.phone!.lanSeenAt = new Date(await page.evaluate(() => Date.now())).toISOString();
         await ask(page);
         await expect(dialog.locator('.phone-checklist')).toHaveCount(0);
