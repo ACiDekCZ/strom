@@ -253,6 +253,8 @@
             --gen-track: #ebe4d6;
             --on-warning: #2b2100;    /* mark drawn on a --warning fill */
             --research-waiting-dot: #b5772a; /* amber dot: something waits in another research tree */
+            --follow-note-bg: #e4ede6;   /* the research panel's line about a switch of the followed tree */
+            --follow-note-text: #2d5340;
             --info-soft: #e4ebf1;     /* informational tint backgrounds */
             --pending: #d0a23c;       /* unfinished merge state (dashed) */
             --chart-soft: #c9d8cc;    /* lighter shade for single-hue charts */
@@ -380,6 +382,8 @@
             --dir-icon-fg: #b3aa98;
             --gen-track: #3d3930;
             --research-waiting-dot: #d39a52;
+            --follow-note-bg: #2f3d35;
+            --follow-note-text: #b8d6c2;
             --on-warning: #1f1a10;
             --info-soft: #2a3139;
             --chart-soft: #3a4a3f;
@@ -10429,6 +10433,52 @@
         }
         @media (hover: hover) { .live-panel-open:hover { filter: brightness(1.06); } }
         .live-panel-open:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        /* The followed tree by name in the head; lit for a while after a switch (spec 011). */
+        .live-panel-head .live-panel-title {
+            font-size: 14px; font-weight: 600;
+            padding: 0 3px; margin: 0 -3px; border-radius: 4px;
+            transition: background-color 0.3s;
+        }
+        .live-panel-head .live-panel-title.is-fresh { background: var(--follow-note-bg); }
+        @media (prefers-reduced-motion: reduce) { .live-panel-head .live-panel-title { transition: none; } }
+        /* Which tree is followed now: one line under the head, above "Elsewhere" (no toast). */
+        .live-follow-note {
+            flex: none; margin: 0; padding: 7px 12px;
+            font-size: 13px; line-height: 1.4;
+            background: var(--follow-note-bg); color: var(--follow-note-text);
+            border-bottom: 1px solid var(--divider);
+            overflow-wrap: anywhere;
+        }
+        .research-overview__body > .live-follow-note { margin: 0 0 12px; border-radius: var(--r-md); border-bottom: 0; }
+        /* An agent began while the tree was open: offered, the tree never locked by itself. */
+        .live-agent-started {
+            display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px;
+            margin: 0 0 8px; padding: 7px 10px; border-radius: var(--r-md);
+            background: var(--follow-note-bg); color: var(--follow-note-text); font-size: 13px;
+        }
+        .live-agent-started-follow { font-size: 13px; font-weight: 600; }
+        .live-panel-foot { gap: 8px; }
+        .live-panel-follow {
+            font: inherit; font-size: 13px; font-weight: 500; padding: 6px 12px; cursor: pointer;
+            border: 1px solid var(--border); border-radius: var(--r-md);
+            background: var(--surface-2); color: var(--text);
+        }
+        @media (hover: hover) { .live-panel-follow:hover { background: var(--hover-bg); } }
+        .live-panel-follow:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        @media (pointer: coarse) {
+            .live-panel-follow, .live-agent-started-follow { min-height: 44px; }
+        }
+        @media (max-width: 640px) {
+            .live-follow-note { padding: 6px 10px; }
+            .live-panel-foot { flex-wrap: wrap; }
+        }
+        @media (min-width: 641px) and (max-width: 1024px) {
+            .live-panel-follow { padding: 6px 10px; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .live-follow-note { padding: 4px 10px; font-size: 12px; }
+            .live-agent-started { padding: 5px 8px; margin-bottom: 6px; }
+        }
         /* Tablet: narrower card, same place. */
         @media (min-width: 641px) and (max-width: 1024px) {
             .live-panel { width: 260px; right: 12px; max-height: 50vh; }

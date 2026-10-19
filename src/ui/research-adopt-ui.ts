@@ -123,7 +123,7 @@ export const researchAdoptMethods = uiModule({
     startResearchAdopt(treeId: TreeId): void {
         if (needsTransfer(currentAppBrowser())) {
             void (async () => {
-                if (DataManager.getCurrentTreeId() !== treeId) await this.switchToTree(treeId);
+                if (DataManager.getCurrentTreeId() !== treeId) await this.switchToTree(treeId, { follow: false });
                 this.showResearchInstall('install');
             })();
             return;
@@ -251,7 +251,7 @@ export const researchAdoptMethods = uiModule({
             return;
         }
         // The tree going over is the one on screen behind the dialog.
-        if (DataManager.getCurrentTreeId() !== tree.id) await this.switchToTree(tree.id);
+        if (DataManager.getCurrentTreeId() !== tree.id) await this.switchToTree(tree.id, { follow: false });
         // Nobody in it yet (installed from the welcome screen, a tree from Safari's): an older research
         // refuses it (400 tree.empty) — not offered, the research told, and said how it starts (C1).
         if (!Object.values(data.persons).some(p => !p.isPlaceholder) && !await researchTakesEmpty(bridge.base)) {

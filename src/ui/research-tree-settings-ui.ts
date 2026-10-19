@@ -480,7 +480,7 @@ export const researchTreeSettingsMethods = uiModule({
 
     /** "Older sources with a transcription": the catalog filtered to the unverified ones. */
     async showUnverifiedSources(treeId: TreeId): Promise<void> {
-        if (DataManager.getCurrentTreeId() !== treeId) await this.switchToTree(treeId);
+        if (DataManager.getCurrentTreeId() !== treeId) await this.switchToTree(treeId, { follow: false });
         if (DataManager.getCurrentTreeId() !== treeId) return;
         this.closeTreeManagerDialog();
         this.sourcesFilter = 'unverifiedTranscript';

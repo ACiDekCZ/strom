@@ -1035,6 +1035,35 @@ export const researchSyncMethods = uiModule({
         if (DataManager.getCurrentTreeId() === treeId && this.researchAutoOn(link) && !this.researchHoldsForUndo(link)) this.scheduleResearchAutoSend(treeId);
     },
 
+    /** A send on its way (any tree): resolves once it is answered, or after `maxMs` (true: none on its way any more). */
+    async researchSendSettled(maxMs: number): Promise<boolean> {
+        const until = Date.now() + maxMs;
+        while (sendingTree && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 100));
+        return !sendingTree;
+    },
+
+    /**
+     * Before the open tree is left (spec 011): what it has that the research
+     * lacks goes now, if it goes by itself, and the switch waits for the
+     * answer (at most `maxMs`). A bridge known not to answer is not waited
+     * for: those changes wait for it, kept in the tree.
+     */
+    async researchSendOpenTreeNow(maxMs: number): Promise<void> {
+        const treeId = DataManager.getCurrentTreeId();
+        const link = treeId ? TreeManager.getTreeMetadata(treeId)?.research : undefined;
+        if (!treeId || !link || !this.researchAutoOn(link) || link.refused || this.researchBridgeKnownDown(link.id)) return;
+        const until = Date.now() + maxMs;
+        await this.researchSendSettled(maxMs);
+        if (DataManager.getCurrentTreeId() !== treeId) return;
+        const fps = this.researchSyncFingerprints(treeId, link);
+        if (fps.matchesBase || fps.current === link.sent?.fingerprint) return;
+        if (autoTimerTree === treeId) this.clearResearchAutoTimer();
+        await Promise.race([
+            this.researchAutoSend(treeId, 'switch'),
+            new Promise(resolve => setTimeout(resolve, Math.max(0, until - Date.now()))),
+        ]);
+    },
+
     /** The open tree changed: the one left goes now (its quiet time would never end), the new one is watched. */
     researchNoteTreeSwitch(): void {
         const current = DataManager.getCurrentTreeId();
@@ -1763,7 +1792,7 @@ export const researchSyncMethods = uiModule({
             return;
         }
         if (DataManager.getCurrentTreeId() !== treeId) {
-            await this.switchToTree(treeId);
+            await this.switchToTree(treeId, { follow: false });
             if (DataManager.getCurrentTreeId() !== treeId) return;
         }
         await this.researchSendNow({ ...opts, treeId });

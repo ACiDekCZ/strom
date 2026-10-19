@@ -545,13 +545,21 @@ export const treeManagementMethods = uiModule({
     },
 
     /**
-     * Switch to a different tree
+     * Switch to a different tree. `follow` (default): a switch the user
+     * makes — the open tree's changes go first (when they go by themselves)
+     * and the switch waits; following of the tree left ends quietly; the tree
+     * opened is followed live when an agent works there (spec 011).
+     * `follow: false`: a switch inside a research step (it follows or asks
+     * itself).
      */
-    async switchToTree(treeId: string): Promise<void> {
+    async switchToTree(treeId: string, opts: { follow?: boolean } = {}): Promise<void> {
         const dropdown = document.getElementById('tree-switcher-dropdown');
         dropdown?.classList.remove('active');
+        const from = opts.follow !== false ? await this.researchFollowBeforeSwitch(treeId as TreeId) : null;
 
         if (await DataManager.switchTree(treeId as TreeId)) {
+            // One following at a time: the tree left is editable again (quietly).
+            if (from) this.researchFollowLeft(from.open);
             // Opened again: a question closed unanswered there is asked again.
             this.forgetResearchModeAskLater(treeId as TreeId);
             // The research state shown is this tree's at once (never the last tree's under a dialog, D of rc.34).
@@ -567,6 +575,8 @@ export const treeManagementMethods = uiModule({
 
             // Update URL with tree parameter (enables refresh persistence and bookmarking)
             this.updateUrlTreeParam(treeId);
+            // An agent works there: followed live (after the switch, never holding it up).
+            if (from) void this.researchFollowAfterSwitch(treeId as TreeId, from);
         }
     },
 

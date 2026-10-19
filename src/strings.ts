@@ -1855,7 +1855,6 @@ const stringsEN = {
         notReady: 'The app is still loading. Try again in a moment.',
         panelTitle: 'Live research',
         panelLabel: 'Live research from Strom Research',
-        following: (name: string) => `Following “${name}”. Changes arrive by themselves; the tree is read-only meanwhile.`,
         ended: 'Following ended',
         endedText: 'Strom Research is no longer sending updates. The tree shows the last state and can be edited again.',
         reconnecting: 'The connection to Strom Research dropped. Trying again… The tree stays as it was meanwhile.',
@@ -4238,6 +4237,10 @@ const stringsEN = {
         otherTreesChip: (n: number) => `+${nEn(n, 'tree', 'trees')}`,
         blockedSwitcher: 'Research status not visible: the browser has not allowed access to programs on this computer.',
         blockedHow: 'How to allow',
+        followingTree: (tree: string, research?: string) => `Following the tree “${tree}”${research ? ` (research “${research}”)` : ''}. Changes arrive by themselves; the tree is read-only meanwhile.`,
+        followStarted: (tree: string, prev?: string) => `Now following “${tree}”.${prev ? ` “${prev}” stays editable.` : ''}`,
+        followMoved: (tree: string, prev: string) => `Now following “${tree}”. “${prev}” can be edited again.`,
+        agentStarted: 'The agent has started work.',
     }
 };
 
@@ -5945,7 +5948,6 @@ const stringsCZ: StringsType = {
         notReady: 'Aplikace se ještě načítá. Pomůže to za chvíli zkusit znovu.',
         panelTitle: 'Živý výzkum',
         panelLabel: 'Živý výzkum ze Strom Research',
-        following: (name: string) => `Sleduje se „${name}“. Změny přicházejí samy; rodokmen je mezitím jen pro čtení.`,
         ended: 'Sledování skončilo',
         endedText: 'Strom Research už neposílá změny. Rodokmen ukazuje poslední stav a jde ho znovu upravovat.',
         reconnecting: 'Spojení se Strom Research se přerušilo. Zkouším znovu… Rodokmen mezitím zůstává, jak byl.',
@@ -8320,6 +8322,10 @@ const stringsCZ: StringsType = {
         otherTreesChip: (n: number) => `+${nCs(n, 'strom', 'stromy', 'stromů')}`,
         blockedSwitcher: 'Stav výzkumů není vidět: prohlížeč nedovolil přístup k programům na tomto počítači.',
         blockedHow: 'Jak povolit',
+        followingTree: (tree: string, research?: string) => `Sleduje se strom „${tree}“${research ? ` (výzkum „${research}“)` : ''}. Změny přicházejí samy; strom je mezitím jen pro čtení.`,
+        followStarted: (tree: string, prev?: string) => `Začalo sledování stromu „${tree}“.${prev ? ` Strom „${prev}“ zůstává upravitelný.` : ''}`,
+        followMoved: (tree: string, prev: string) => `Sledování přešlo na „${tree}“. Strom „${prev}“ jde znovu upravovat.`,
+        agentStarted: 'Agent začal pracovat.',
     }
 };
 
@@ -10014,7 +10020,6 @@ const stringsDE: StringsType = {
         notReady: 'Die App lädt noch. Gleich noch einmal versuchen.',
         panelTitle: 'Live-Forschung',
         panelLabel: 'Live-Forschung aus Strom Research',
-        following: (name: string) => `„${name}“ wird verfolgt. Änderungen kommen von selbst; der Stammbaum ist so lange schreibgeschützt.`,
         ended: 'Verfolgung beendet',
         endedText: 'Strom Research sendet keine Änderungen mehr. Der Stammbaum zeigt den letzten Stand und kann wieder bearbeitet werden.',
         reconnecting: 'Die Verbindung zu Strom Research ist unterbrochen. Neuer Versuch… Der Stammbaum bleibt so lange, wie er war.',
@@ -12326,6 +12331,10 @@ const stringsDE: StringsType = {
         otherTreesChip: (n: number) => `+${nDe(n, 'Stammbaum', 'Stammbäume')}`,
         blockedSwitcher: 'Recherchestatus nicht sichtbar: Der Browser hat den Zugriff auf Programme auf diesem Computer nicht erlaubt.',
         blockedHow: 'So wird es erlaubt',
+        followingTree: (tree: string, research?: string) => `Der Stammbaum „${tree}“ wird verfolgt${research ? ` (Recherche „${research}“)` : ''}. Änderungen kommen von selbst; der Stammbaum ist so lange schreibgeschützt.`,
+        followStarted: (tree: string, prev?: string) => `„${tree}“ wird jetzt verfolgt.${prev ? ` „${prev}“ bleibt bearbeitbar.` : ''}`,
+        followMoved: (tree: string, prev: string) => `Jetzt wird „${tree}“ verfolgt. „${prev}“ ist wieder bearbeitbar.`,
+        agentStarted: 'Der Agent hat mit der Arbeit begonnen.',
     }
 };
 

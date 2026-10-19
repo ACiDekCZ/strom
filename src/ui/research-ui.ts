@@ -46,6 +46,7 @@ import { activeDirections, directionsMulti, queueDirectionFilter, setQueueDirect
 import { iconSvg } from '../icons.js';
 import { OTHER_GROUP, panelWaiting, textWithLinks, todoWaiting, waitingSection, waitingTodoCount } from '../research-waiting.js';
 import { agoShort } from '../research-others.js';
+import { followNotice, researchNameBeside, FOLLOW_NOTICE_MS, FOLLOW_HIGHLIGHT_MS, FollowTreeRef } from '../research-follow.js';
 import { SettingsManager } from '../settings.js';
 import { countImages, stripMedia } from '../attachments.js';
 import { exportToGedcom, countFamilies } from '../ged-exporter.js';
@@ -172,6 +173,10 @@ export interface LiveSession {
     chain: Promise<void>;
 }
 
+/** Following started by opening a tree waits this long for its bridge's status (it answered seconds ago). */
+const AUTO_CONNECT_MS = 3000;
+/** Its bridge asked once more after following could not start (as the research's own quick ask). */
+const AUTO_ASK_MS = 1500;
 /** Wait before reconnecting to the bridge's events / between status polls. */
 const RECONNECT_MS = 2000;
 /** Poll interval when the browser has no EventSource. */
@@ -365,6 +370,104 @@ let liveTaskMenuCleanup: (() => void) | null = null;
 let live: LiveSession | null = null;
 /** The "Waiting for you" panel while no research is followed (the research's id). */
 let idlePanel: string | null = null;
+
+/**
+ * The panel's line once following began (spec 011): which tree is followed
+ * now. Its countdown waits while the pointer or focus is in the panel (or the
+ * overview); one node, so a polite live region announces it once.
+ */
+interface FollowNote {
+    treeId: TreeId;
+    text: string;
+    /** Time left (ms) and since when it counts (null: held). */
+    remaining: number;
+    since: number | null;
+    timer: ReturnType<typeof setTimeout> | null;
+    /** Its text was put into the live region already (a redraw only moves it). */
+    said: boolean;
+}
+let followNote: FollowNote | null = null;
+let followNoteNode: HTMLElement | null = null;
+/** What holds the line's countdown: hover / focus in the panel or the overview. */
+const followNoteHolds = new Map<string, HTMLElement>();
+/** The followed tree's name is lit in the head for a while after a switch. */
+let litTree: TreeId | null = null;
+let litTimer: ReturnType<typeof setTimeout> | null = null;
+/** Researches whose open tree's idle panel saw nobody at work: an agent there later "has started work". */
+const idleSeen = new Set<string>();
+
+function followNoteHeld(): boolean {
+    for (const [key, host] of followNoteHolds) if (!host.isConnected) followNoteHolds.delete(key);
+    return followNoteHolds.size > 0;
+}
+
+function runFollowNote(): void {
+    const n = followNote;
+    if (!n || n.timer || followNoteHeld()) return;
+    n.since = Date.now();
+    n.timer = setTimeout(() => {
+        if (followNote !== n) return;
+        followNote = null;
+        followNoteNode?.remove();
+    }, n.remaining);
+}
+
+function holdFollowNote(key: string, host: HTMLElement, on: boolean): void {
+    if (on) followNoteHolds.set(key, host);
+    else followNoteHolds.delete(key);
+    const n = followNote;
+    if (!n) return;
+    if (followNoteHeld()) {
+        if (n.timer) {
+            clearTimeout(n.timer);
+            n.timer = null;
+            n.remaining = Math.max(0, n.remaining - (Date.now() - (n.since ?? Date.now())));
+            n.since = null;
+        }
+    } else runFollowNote();
+}
+
+/** The line about the switch waits while the pointer or focus is in `host` (the panel or the overview). */
+export function holdFollowNoteIn(host: HTMLElement, key: string): void {
+    host.addEventListener('mouseenter', () => holdFollowNote(`${key}:hover`, host, true));
+    host.addEventListener('mouseleave', () => holdFollowNote(`${key}:hover`, host, false));
+    host.addEventListener('focusin', () => holdFollowNote(`${key}:focus`, host, true));
+    host.addEventListener('focusout', (e) => {
+        if (!host.contains(e.relatedTarget as Node | null)) holdFollowNote(`${key}:focus`, host, false);
+    });
+}
+
+function clearFollowNote(): void {
+    if (followNote?.timer) clearTimeout(followNote.timer);
+    followNote = null;
+    followNoteNode?.remove();
+    if (litTimer) clearTimeout(litTimer);
+    litTimer = null;
+    litTree = null;
+    document.querySelectorAll('.live-panel-title.is-fresh').forEach(t => t.classList.remove('is-fresh'));
+}
+
+/** The line about the switch, under the head of the followed tree's panel or overview (nothing when there is none). */
+export function appendFollowNote(host: HTMLElement, s: LiveSession): void {
+    const n = followNote;
+    if (!n || s.ended || n.treeId !== s.treeId) return;
+    if (!followNoteNode) {
+        followNoteNode = el('p', 'live-follow-note');
+        followNoteNode.setAttribute('aria-live', 'polite');
+    }
+    const node = followNoteNode;
+    host.appendChild(node);
+    if (n.said) {
+        node.textContent = n.text;
+        return;
+    }
+    // The region first, then its text: read out once.
+    n.said = true;
+    node.textContent = '';
+    setTimeout(() => {
+        if (followNote === n) node.textContent = n.text;
+    }, 50);
+}
 
 /**
  * The research's word per person REFN for the cards: what waits for the user
@@ -1270,8 +1373,12 @@ export const researchUiMethods = uiModule({
      * `force`: the caller showed what the load changes, or it changes only
      * what a decision of a conflict brings (conflict-decide-ui.ts): loaded
      * over the tree (a backup first), nothing asked.
+     * `noDialog`: following that opening the tree started (spec 011): loaded
+     * only over a tree that is the research's version or holds nothing it
+     * lacks; anything that would ask leaves the tree as it is (null), and
+     * the load says nothing.
      */
-    async applyResearch(data: StromData, source: ResearchSource, opts: { head?: string; quiet?: boolean; afterSend?: TreeId; plainAsk?: boolean; noAsk?: boolean; live?: string; force?: boolean }): Promise<TreeId | null> {
+    async applyResearch(data: StromData, source: ResearchSource, opts: { head?: string; quiet?: boolean; afterSend?: TreeId; plainAsk?: boolean; noAsk?: boolean; live?: string; force?: boolean; noDialog?: boolean }): Promise<TreeId | null> {
         const name = source.name || strings.research.defaultName;
         const dateLabel = researchDateLabel(source.date);
         const existing = source.treeId ? TreeManager.findTreeByResearchId(source.treeId) : null;
@@ -1287,6 +1394,7 @@ export const researchUiMethods = uiModule({
         const research = data;
         const features = source.treeId ? this.researchStatusOf(source.treeId)?.features : null;
         const knowsTitles = !!features?.includes(TITLES_FEATURE);
+        if (opts.noDialog && (!existing || TreeManager.isTreeUnreadable(existing.id))) return null;
         if (existing) {
             const unreadable = TreeManager.isTreeUnreadable(existing.id);
             previous = unreadable ? null : await readTree(existing.id);
@@ -1323,11 +1431,13 @@ export const researchUiMethods = uiModule({
             // written, a conflict left): asked plainly — "send first" would send nothing new (findings 29, 35).
             // (Waiting in its inbox, or taken back: "send, then load" still means something.)
             const plainAsk = !!opts.plainAsk || (sentIsTree && sent?.state === 'written' && (!researchSendVouches(sent) || takesOver));
+            // Nothing asked: changes here the research lacks, or images it would drop, keep the tree as it is.
+            if (opts.noDialog && action === 'ask' && !holdsChanges) return null;
             // The question is about that tree: show it behind the dialog, never
             // whichever tree was open (the user must see what they decide on).
             if (action === 'ask' && previous && !unreadable && !holdsChanges && !opts.force && DataManager.getCurrentTreeId() !== existing.id) {
                 if (existing.isHidden) TreeManager.setTreeVisibility(existing.id, false);
-                await this.switchToTree(existing.id);
+                await this.switchToTree(existing.id, { follow: false });
                 if (DataManager.getCurrentTreeId() !== existing.id) return null;
                 window.dispatchEvent(new CustomEvent('strom:tree-switched'));
             }
@@ -1410,7 +1520,7 @@ export const researchUiMethods = uiModule({
             if (askLoad && previous && !asCopy && !opts.quiet && !opts.afterSend && (!opts.noAsk || (edited && !holdsSent))) {
                 if (DataManager.getCurrentTreeId() !== existing.id) {
                     if (existing.isHidden) TreeManager.setTreeVisibility(existing.id, false);
-                    await this.switchToTree(existing.id);
+                    await this.switchToTree(existing.id, { follow: false });
                     if (DataManager.getCurrentTreeId() !== existing.id) return null;
                 }
                 const st = researchAutoState(existing.id);
@@ -1505,7 +1615,9 @@ export const researchUiMethods = uiModule({
         const restore = backupId
             ? { action: { label: strings.sync.restoreBeforeLoad, run: () => { void this.researchRestoreBeforeLoad(treeId); } } } : {};
         // Loaded over the tree: "Research version loaded · Restore the state before loading" (10 s).
-        if (loadedAfterSend) this.showToast(strings.sync.loadedToast, 10000, restore);
+        if (opts.noDialog) {
+            // Said by the research panel's line (which tree is followed now), never a toast.
+        } else if (loadedAfterSend) this.showToast(strings.sync.loadedToast, 10000, restore);
         else if (!opts.quiet) {
             if (created) this.showToast(strings.research.opened(name, persons, families, dateLabel), 6000);
             else if (backupId) this.showToast(strings.sync.loadedToast, 10000, restore);
@@ -1629,7 +1741,7 @@ export const researchUiMethods = uiModule({
             return;
         }
         // Show the tree being sent behind the dialogs, not whichever was open.
-        if (DataManager.getCurrentTreeId() !== tree.id) await this.switchToTree(tree.id);
+        if (DataManager.getCurrentTreeId() !== tree.id) await this.switchToTree(tree.id, { follow: false });
         const capable = !!status.accepts;
         // Nothing changed since the research sent it (a tree followed live
         // is read-only, so it always lands here).
@@ -1844,6 +1956,79 @@ export const researchUiMethods = uiModule({
         return idlePanel !== null && !!document.getElementById('live-panel');
     },
 
+    /** The research panel of the open tree without following (never over a research followed now). */
+    openResearchIdlePanel(researchId: string): void {
+        if (live && !live.ended) return;
+        if (this.activeResearchId() !== researchId) return;
+        if (live) {
+            // The ended session's panel makes way for the current state.
+            live = null;
+            TreeRenderer.setChangedIds(null);
+        }
+        idlePanel = researchId;
+        this.renderLivePanel();
+    },
+
+    /**
+     * Following that opening a tree started could not begin (its bridge did
+     * not answer in time, a change here the research lacks, another research
+     * at the address): asked once more for the marks, the tree stays as it is
+     * and its research panel says how things are — never a dialog.
+     */
+    async researchFollowFailed(researchId: string, treeId: TreeId): Promise<void> {
+        await this.askResearchBridge(researchId, AUTO_ASK_MS);
+        this.refreshResearchSyncUi();
+        if (DataManager.getCurrentTreeId() !== treeId || (live && !live.ended)) return;
+        this.openResearchIdlePanel(researchId);
+    },
+
+    /** "Follow live" in the idle panel: the open tree's research, through its bridge here (else its link). */
+    followResearchHere(researchId: string): void {
+        const base = storedResearchBridge(researchId)?.base;
+        if (base && parseLiveBridge(base)) {
+            void this.startLiveFollow(base, { follow: true, from: { followed: null, open: null } });
+            return;
+        }
+        const url = this.activeResearchLink('live');
+        if (url) this.launchResearchLink(url);
+    },
+
+    /** Opening the tree found its bridge answering with nobody at work: an agent there later "has started work". */
+    researchNoteIdle(researchId: string): void {
+        idleSeen.add(researchId);
+    },
+
+    /** The tree's name as the panel's head shows it. */
+    liveTreeName(treeId: TreeId, fallback: string): string {
+        return TreeManager.getTreeMetadata(treeId)?.name || fallback;
+    },
+
+    /** Following began: the panel says which tree is followed now (and which stays), and lights its name. */
+    noteLiveFollowStarted(s: LiveSession, from: { followed: TreeId | null; open: TreeId | null }): void {
+        clearFollowNote();
+        const ref = (id: TreeId | null): FollowTreeRef | null => {
+            const meta = id ? TreeManager.getTreeMetadata(id) : null;
+            return meta ? { id: meta.id, name: meta.name } : null;
+        };
+        // The tree open before is named only when it is a research tree (it stays editable beside this one).
+        const open = from.open && TreeManager.getTreeMetadata(from.open)?.research ? ref(from.open) : null;
+        const notice = followNotice({ tree: { id: s.treeId, name: this.liveTreeName(s.treeId, s.name) }, prevFollowed: ref(from.followed), prevOpen: open });
+        if (!notice) return;
+        const o = strings.otherResearch;
+        followNote = {
+            treeId: s.treeId,
+            text: notice.kind === 'moved' ? o.followMoved(notice.tree, notice.prev ?? '') : o.followStarted(notice.tree, notice.prev),
+            remaining: FOLLOW_NOTICE_MS, since: null, timer: null, said: false,
+        };
+        runFollowNote();
+        litTree = s.treeId;
+        litTimer = setTimeout(() => {
+            litTimer = null;
+            litTree = null;
+            document.querySelectorAll('.live-panel-title.is-fresh').forEach(t => t.classList.remove('is-fresh'));
+        }, FOLLOW_HIGHLIGHT_MS);
+    },
+
     /** "Answer ↗" at a waiting task: that task in the research, else the research itself. */
     answerResearchTask(w: LiveWaiting): void {
         // A story's new version: the research shows both and asks (take it is the default).
@@ -1940,7 +2125,7 @@ export const researchUiMethods = uiModule({
         if (researchSendVouches(link.sent) && contentFingerprint(previous) === link.sent!.fingerprint && !held
             && !(nw && nw.fingerprint === link.sent!.fingerprint)) return false;
         if (DataManager.getCurrentTreeId() !== existing.id) {
-            await this.switchToTree(existing.id);
+            await this.switchToTree(existing.id, { follow: false });
             if (DataManager.getCurrentTreeId() !== existing.id) return false;
         }
         rememberBridgeStatus(status.treeId!, status);
@@ -1953,33 +2138,56 @@ export const researchUiMethods = uiModule({
         return true;
     },
 
-    /** ?live=: follow a running research through its bridge on this computer. */
-    async startLiveFollow(raw: string, opts: { resume?: boolean; follow?: boolean } = {}): Promise<void> {
+    /**
+     * ?live=: follow a running research through its bridge on this computer.
+     * `auto`: opening its tree started it (an agent works there, spec 011):
+     * nothing is asked and nothing said when it cannot be followed — the tree
+     * stays as it is, editable, its research panel says how things are.
+     * `from`: the tree followed and the tree open before (the panel's line
+     * says which tree is followed now); by default as they are now.
+     */
+    async startLiveFollow(raw: string, opts: { resume?: boolean; follow?: boolean; auto?: { researchId: string; treeId: TreeId }; from?: { followed: TreeId | null; open: TreeId | null } } = {}): Promise<void> {
         const bridge = parseLiveBridge(raw);
         if (!bridge) {
             if (opts.resume) forgetLiveBridge();
-            else this.showToast(strings.research.notLocal, 6000);
+            else if (!opts.auto) this.showToast(strings.research.notLocal, 6000);
             return;
         }
         if (DataManager.isViewMode()) {
             if (opts.resume) forgetLiveBridge();
-            else this.showToast(strings.research.notInViewMode, 5000);
+            else if (!opts.auto) this.showToast(strings.research.notInViewMode, 5000);
             return;
         }
+        const auto = opts.auto;
+        // Following could not start: passive, the research panel of that tree says how things are (no dialog).
+        const passive = (): void => {
+            if (auto) void this.researchFollowFailed(auto.researchId, auto.treeId);
+        };
         await enqueueOpen(async () => {
-            if (!await this.ensureLocalUnlocked()) {
+            // Opened by a switch: only while that tree is still the one open, and never a password asked.
+            if (auto && (DataManager.getCurrentTreeId() !== auto.treeId || TreeManager.isTreeUnreadable(auto.treeId))) return;
+            if (!auto && !await this.ensureLocalUnlocked()) {
                 if (opts.resume) forgetLiveBridge();
                 return;
             }
+            // Which tree was followed and which was open: the panel's line names them once following began.
+            const from = opts.resume ? null : opts.from ?? {
+                followed: live && !live.ended ? live.treeId : null,
+                open: DataManager.getCurrentTreeId(),
+            };
             this.stopLiveFollow(true);
 
             let status: LiveStatus | null;
             let text: string;
             try {
-                status = opts.resume
-                    ? await fetchStatus(bridge.status)
+                status = opts.resume || auto
+                    ? await fetchStatus(bridge.status, auto ? AUTO_CONNECT_MS : undefined)
                     : await this.connectResearchBridge(() => fetchStatus(bridge.status, CONNECT_TIMEOUT_MS));
                 if (!status) throw new Error('bad status');
+                if (auto && status.treeId !== auto.researchId) {
+                    passive();
+                    return;
+                }
                 if (!status.treeId) {
                     await this.showAlert(strings.research.liveNoTree, 'error');
                     return;
@@ -1987,6 +2195,10 @@ export const researchUiMethods = uiModule({
                 text = await fetchGedcomText(bridge.ged);
             } catch (err) {
                 console.warn('Connecting to the research bridge failed', err);
+                if (auto) {
+                    passive();
+                    return;
+                }
                 if (opts.resume) {
                     // The bridge stopped while the page reloaded (strom ends it
                     // after 2 h idle): nothing to import, just say so briefly.
@@ -1998,30 +2210,32 @@ export const researchUiMethods = uiModule({
                 // never about whichever tree the page started with (rc.27 round).
                 const knownId = researchIdAtBridge(bridge.base);
                 const knownTree = knownId ? TreeManager.findTreeByResearchId(knownId) : null;
-                if (knownTree && DataManager.getCurrentTreeId() !== knownTree.id) await this.switchToTree(knownTree.id);
+                if (knownTree && DataManager.getCurrentTreeId() !== knownTree.id) await this.switchToTree(knownTree.id, { follow: false });
                 if (await this.showResearchConnectFailed(err, { param: 'live', value: raw })) void this.startLiveFollow(raw);
                 return;
             }
             const header = readResearchHeader(text);
             if (header.treeId && header.treeId !== status.treeId) {
-                await this.showAlert(strings.research.liveOtherTree, 'error');
+                if (auto) passive();
+                else await this.showAlert(strings.research.liveOtherTree, 'error');
                 return;
             }
             let data: StromData;
             try {
                 data = convertToStrom(parseGedcom(text)).data;
             } catch {
-                await this.showAlert(strings.gedcom.parseError, 'error');
+                if (auto) passive();
+                else await this.showAlert(strings.gedcom.parseError, 'error');
                 return;
             }
             const name = status.name || header.name || strings.research.defaultName;
             // The research has nothing new beyond what this tree builds on, and the tree has changes it lacks
             // (opened again from it, e.g. its bridge on a new port): connected again, the changes go to it —
             // never asked whether to replace them (B3 of the rc.22 round). `follow`: "Follow live" asked for it.
-            if (!opts.resume && !opts.follow && await this.researchReconnectOnly(status, raw)) return;
+            if (!opts.resume && !opts.follow && !auto && await this.researchReconnectOnly(status, raw)) return;
             // A research still waiting for its tree from here (opened before the hand-over): the hand-over,
             // not a second, empty tree (J7 of the language round).
-            if (!opts.resume && Object.keys(data.persons ?? {}).length === 0 && !TreeManager.findTreeByResearchId(status.treeId)
+            if (!opts.resume && !auto && Object.keys(data.persons ?? {}).length === 0 && !TreeManager.findTreeByResearchId(status.treeId)
                 && await this.researchAwaitsHandOver(bridge.base)) {
                 void this.adoptFromResearch(bridge.base);
                 return;
@@ -2029,16 +2243,18 @@ export const researchUiMethods = uiModule({
             const treeId = await this.applyResearch(
                 data,
                 { treeId: status.treeId, name, date: header.date, mode: header.mode },
-                { head: status.head, quiet: opts.resume, noAsk: true, live: raw }
+                { head: status.head, quiet: opts.resume, noAsk: true, live: raw, ...(auto ? { noDialog: true } : {}) }
             );
             if (!treeId) {
                 if (opts.resume) forgetLiveBridge();
+                passive();
                 return;
             }
             // An archive has no agent to follow: the tree opens for editing, its
             // bridge remembered (the changes go to it by themselves).
             if (status.accepts?.mode === 'archive' || status.accepts?.agentHere === false) {
                 if (opts.resume) forgetLiveBridge();
+                passive();
                 this.refreshResearchSyncUi();
                 void this.pollResearchBridge();
                 return;
@@ -2085,6 +2301,8 @@ export const researchUiMethods = uiModule({
             };
             live.overview = this.researchOverviewRemembered();
             if (live.overview) live.collapsed = false;
+            // Which tree is followed now, said in the panel (never a toast): started, or moved from another tree.
+            if (from) this.noteLiveFollowStarted(live, from);
             DataManager.setLiveTree(treeId);
             TreeRenderer.render();
             this.renderLivePanel();
@@ -2461,6 +2679,7 @@ export const researchUiMethods = uiModule({
         } catch { /* already closed */ }
         s.es = null;
         if (DataManager.getLiveTreeId() === s.treeId) DataManager.setLiveTree(null);
+        if (followNote?.treeId === s.treeId) clearFollowNote();
         if (reason === 'stopped') {
             live = null;
             TreeRenderer.setChangedIds(null);
@@ -2502,6 +2721,7 @@ export const researchUiMethods = uiModule({
             panel = el('aside', 'live-panel');
             panel.id = 'live-panel';
             panel.setAttribute('role', 'region');
+            holdFollowNoteIn(panel, 'panel');
             document.body.appendChild(panel);
         }
         return panel;
@@ -2693,7 +2913,11 @@ export const researchUiMethods = uiModule({
         toggle.setAttribute('aria-expanded', String(!collapsed));
         toggle.title = phone ? L.openOverview : collapsed ? r.show : r.hide;
         toggle.onclick = () => (phone && !s.ended ? this.openResearchOverview() : this.toggleLivePanel());
-        toggle.appendChild(el('span', 'live-panel-title', s.ended ? r.ended : r.panelTitle));
+        // The followed tree by name ("Live research" stays the panel's label); lit for a while after a switch.
+        const treeName = this.liveTreeName(s.treeId, s.name);
+        const title = toggle.appendChild(el('span', 'live-panel-title', s.ended ? r.ended : treeName));
+        if (!s.ended) title.title = treeName;
+        if (!s.ended && litTree === s.treeId) title.classList.add('is-fresh');
         const chevron = el('span', 'live-panel-chevron');
         chevron.setAttribute('aria-hidden', 'true');
         chevron.innerHTML = iconSvg('chevron-down', { size: 14 });
@@ -2717,6 +2941,8 @@ export const researchUiMethods = uiModule({
         action.onclick = () => (s.ended ? this.closeLivePanel() : this.stopLiveFollow());
         head.appendChild(action);
         panel.appendChild(head);
+        // Which tree is followed now (after a switch): under the head, above "Elsewhere".
+        if (!panel.hidden) appendFollowNote(panel, s);
         if (!s.ended && s.update && !phone) this.appendUpdateStrip(panel, s.update.version);
         // Under the head: the other trees where an agent works or something waits (spec 011).
         if (!collapsed && !s.ended) this.appendResearchElsewhere(panel, 'panel');
@@ -2741,7 +2967,8 @@ export const researchUiMethods = uiModule({
         }
 
         const body = el('div', 'live-panel-body');
-        const stateText = s.ended ? r.endedText : s.lostSince !== null ? r.reconnecting : r.following(s.name);
+        const stateText = s.ended ? r.endedText : s.lostSince !== null ? r.reconnecting
+            : strings.otherResearch.followingTree(treeName, researchNameBeside(treeName, s.name));
         const stateLine = body.appendChild(el('p', 'live-panel-state', stateText));
         if (!s.ended && s.lostSince !== null) {
             stateLine.classList.add('is-lost');
@@ -3027,7 +3254,11 @@ export const researchUiMethods = uiModule({
 
         const head = el('div', 'live-panel-head');
         head.appendChild(el('span', 'live-dot'));
-        head.appendChild(el('span', 'live-panel-title live-panel-title--static', r.panelIdle));
+        // The open tree by name ("Research" stays the panel's label).
+        const treeId = DataManager.getCurrentTreeId();
+        const treeName = (treeId ? TreeManager.getTreeMetadata(treeId)?.name : '') || r.panelIdle;
+        const title = head.appendChild(el('span', 'live-panel-title live-panel-title--static', treeName));
+        title.title = treeName;
         const close = el('button', 'live-panel-close');
         close.type = 'button';
         close.innerHTML = '&times;';
@@ -3059,11 +3290,23 @@ export const researchUiMethods = uiModule({
         } else {
             // Connected, nobody at work: edits go by themselves.
             const status = answer?.result === 'up' ? answer.status : null;
-            const connected = !!status && !this.activeResearchAgentless() && !status.working.some(w => !w.paused);
+            const agentless = this.activeResearchAgentless();
+            const working = !!status && !agentless && status.working.some(w => !w.paused);
+            const connected = !!status && !agentless && !working;
+            if (connected && researchId) idleSeen.add(researchId);
+            // An agent began while the tree was open: never locked by itself (an edit may be under way), offered instead.
+            if (working && researchId && idleSeen.has(researchId)) {
+                const row = body.appendChild(el('div', 'live-agent-started'));
+                row.setAttribute('role', 'status');
+                row.appendChild(el('span', 'live-agent-started-text', o.agentStarted));
+                const go = row.appendChild(el('button', 'link-button live-agent-started-follow', r.followLive));
+                go.type = 'button';
+                go.onclick = () => this.followResearchHere(researchId);
+            }
             if (connected) body.appendChild(el('p', 'live-panel-state', o.idlePanel));
             this.appendWaitingSection(body, state?.items ?? [], false);
             // "As of …, not running" only when it is not known to answer now.
-            if (state && !connected) {
+            if (state && !status) {
                 const when = new Date(state.at).toLocaleString(getCurrentLanguage(), {
                     day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit',
                 });
@@ -3073,12 +3316,23 @@ export const researchUiMethods = uiModule({
         panel.appendChild(body);
 
         const open = this.activeResearchLink('open');
-        if (open) {
+        // Its bridge answers and an agent is there: following is the user's choice (by itself only when opening a tree where one works).
+        const upHere = !off && !!researchId && answer?.result === 'up' && !!answer.status && !this.activeResearchAgentless()
+            && !panel.querySelector('.live-agent-started');
+        if (open || upHere) {
             const foot = el('div', 'live-panel-foot');
-            const btn = el('button', 'primary live-panel-open', r.openResearch + ' ↗');
-            btn.type = 'button';
-            btn.onclick = () => this.launchResearchLink(open);
-            foot.appendChild(btn);
+            if (upHere && researchId) {
+                const follow = el('button', 'live-panel-follow', r.followLive);
+                follow.type = 'button';
+                follow.onclick = () => this.followResearchHere(researchId);
+                foot.appendChild(follow);
+            }
+            if (open) {
+                const btn = el('button', 'primary live-panel-open', r.openResearch + ' ↗');
+                btn.type = 'button';
+                btn.onclick = () => this.launchResearchLink(open);
+                foot.appendChild(btn);
+            }
             panel.appendChild(foot);
         }
         placeLivePanel(panel);

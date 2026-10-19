@@ -30,7 +30,7 @@ import { uiModule } from './module.js';
 import {
     LiveChangeItem, LiveSession, appendChangeText, el, ensureLiveTicker, liveDuration, liveSection,
     liveSession, storeLiveSection, storedLiveSections, timeEl,
-    liveState, pausedText, waitsOnUser, appendLinkedText, newWaitingView, waitingKindLabel,
+    liveState, pausedText, waitsOnUser, appendLinkedText, newWaitingView, waitingKindLabel, appendFollowNote, holdFollowNoteIn,
 } from './research-ui.js';
 import { storyWaitingPeople } from './story-compare-ui.js';
 import { taskDirectionName } from './research-directions-ui.js';
@@ -242,6 +242,7 @@ export const researchOverviewMethods = uiModule({
                 hoverCard((row?.dataset.person as PersonId | undefined) ?? null);
             });
             root.addEventListener('mouseleave', () => hoverCard(null));
+            holdFollowNoteIn(root, 'overview');
             document.body.appendChild(root);
         }
         root.className = `research-overview research-overview--${mode}`;
@@ -281,6 +282,8 @@ export const researchOverviewMethods = uiModule({
 
         const body = el('div', 'research-overview__body');
         root.appendChild(body);
+        // Which tree is followed now (after a switch), first.
+        appendFollowNote(body, s);
         this.appendOverviewSummary(body, s, mode);
         if (s.update) this.appendUpdateStrip(body, s.update.version);
 

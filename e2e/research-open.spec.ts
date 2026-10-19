@@ -557,7 +557,9 @@ test.describe('live panel layout', () => {
         await toggle.click();
         await expect(toggle).toHaveAttribute('aria-expanded', 'false');
         await expect(panel.locator('.live-panel-summary')).toContainText('read-only');
-        await expect(toggle).toContainText('Live research');
+        // The head names the followed tree ("Live research" stays the panel's label).
+        await expect(toggle).toContainText('Víškovi');
+        await expect(panel).toHaveAttribute('aria-label', 'Live research from Strom Research');
     });
 });
 
