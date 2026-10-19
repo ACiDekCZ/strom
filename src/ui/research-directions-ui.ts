@@ -11,10 +11,11 @@
 
 import { DataManager } from '../data.js';
 import { strings, getCurrentLanguage } from '../strings.js';
+import { formatLiveClock } from '../live-time.js';
 import { Person, PersonId } from '../types.js';
 import { LiveDirection, LiveDirectionKind, LiveWorker, ResearchDirectionDo } from '../research-link.js';
 import { uiModule } from './module.js';
-import { LiveSession, el, liveSection, liveSession } from './research-ui.js';
+import { LiveSession, el, liveSection, liveSession, pausedText, timeEl } from './research-ui.js';
 import { shownName, fitNameHtml } from '../person-name.js';
 
 type Mode = 'docked' | 'overlay' | 'sheet';
@@ -23,8 +24,18 @@ type Mode = 'docked' | 'overlay' | 'sheet';
 let expanded: string | null = null;
 /** "Paused and ended" unfolded. */
 let inactiveOpen = false;
-/** The queue's direction filter ('all' or a direction id; not remembered). */
+/**
+ * The selected direction ('all' or a direction id; not remembered): the
+ * live panel's working line and the overview's queue filter are one choice.
+ */
 let queueFilter = 'all';
+/** The tree the selection was made in (a switch or the end of following drops it). */
+let queueFilterTree: string | null = null;
+/** The selection lit its people up in the tree (dropping it ends that). */
+let selectionLit = false;
+/** When each direction was last seen at work (ms): a selected one that stopped says since when. */
+const lastAtWork = new Map<string, number>();
+let listening = false;
 
 const KIND_GLYPH: Record<LiveDirectionKind, string> = { ancestors: '↑', descendants: '↓', person: '⌕', question: '?' };
 
@@ -58,15 +69,82 @@ export function taskDirectionName(s: LiveSession | null, research: string | unde
     return s!.researches.find(d => d.id === research)?.name ?? '';
 }
 
-/** The queue filter while two or more run ('all' otherwise). */
+/** The selection still stands: the same tree, still followed, the direction still listed. */
+function selectionHolds(s: LiveSession | null): boolean {
+    return !!s && !s.ended && s.treeId !== null && s.treeId === queueFilterTree
+        && s.treeId === DataManager.getCurrentTreeId() && s.researches.some(d => d.id === queueFilter);
+}
+
+/** The selected direction ('all': none). A selection that no longer stands is dropped. */
 export function queueDirectionFilter(s: LiveSession | null): string {
-    if (!directionsMulti(s)) return 'all';
-    if (queueFilter !== 'all' && !s!.researches.some(d => d.id === queueFilter && d.state === 'active')) queueFilter = 'all';
+    if (queueFilter !== 'all' && !selectionHolds(s)) {
+        queueFilter = 'all';
+        queueFilterTree = null;
+    }
     return queueFilter;
 }
 
 export function setQueueDirectionFilter(id: string): void {
     queueFilter = id;
+    queueFilterTree = id === 'all' ? null : liveSession()?.treeId ?? null;
+}
+
+/** A direction's glyph (↑ ↓ ⌕ ?; "·" for one that does not say its kind). */
+export function directionGlyph(d: LiveDirection | undefined): string {
+    return d?.direction ? KIND_GLYPH[d.direction] : '·';
+}
+
+/** One working line: a direction with its workers, or the work outside the directions (id null). */
+export interface WorkingLine {
+    id: string | null;
+    direction?: LiveDirection;
+    workers: LiveWorker[];
+}
+
+/** The work grouped by direction in the order the bridge sends it; work outside any is one group, last. */
+export function workingLineGroups(s: LiveSession): WorkingLine[] {
+    const out: WorkingLine[] = [];
+    const outside: LiveWorker[] = [];
+    for (const w of s.working) {
+        const d = w.research ? s.researches.find(x => x.id === w.research) : undefined;
+        if (!d) {
+            outside.push(w);
+            continue;
+        }
+        let g = out.find(x => x.id === d.id);
+        if (!g) out.push(g = { id: d.id, direction: d, workers: [] });
+        g.workers.push(w);
+    }
+    if (outside.length > 0) out.push({ id: null, workers: outside });
+    return out;
+}
+
+/** Lines at work now (a paused run does not count). */
+export function workingLineCount(groups: readonly WorkingLine[]): number {
+    return groups.filter(g => g.workers.some(w => !w.paused)).length;
+}
+
+/**
+ * The panel groups the work by direction: two or more lines at work, or a
+ * selection standing (its line stays after it stops). One line: as before.
+ */
+export function linesMulti(s: LiveSession | null): boolean {
+    if (!s || s.ended) return false;
+    return workingLineCount(workingLineGroups(s)) >= 2 || queueDirectionFilter(s) !== 'all';
+}
+
+/** The selected direction while the panel groups by lines (undefined: none). */
+export function selectedLine(s: LiveSession | null): LiveDirection | undefined {
+    if (!linesMulti(s)) return undefined;
+    const sel = queueDirectionFilter(s);
+    return sel === 'all' ? undefined : s!.researches.find(d => d.id === sel);
+}
+
+/** A line's glyph beside a change or task while two or more lines run and none is selected ('' otherwise). */
+export function lineGlyphFor(s: LiveSession | null, research: string | undefined): string {
+    if (!research || !linesMulti(s) || queueDirectionFilter(s) !== 'all') return '';
+    const d = s!.researches.find(x => x.id === research);
+    return d ? directionGlyph(d) : '';
 }
 
 /** Running ones first (the one worked on first, then the newest), then paused and ended. */
@@ -129,6 +207,120 @@ function generationLabel(g: number): string {
 }
 
 export const researchDirectionsMethods = uiModule({
+    /**
+     * "At work" by direction (two or more lines, or a selection standing):
+     * a row per line (glyph, name, task, person · since · how long; the
+     * agents in its tooltip), work outside the directions as one row; a
+     * click selects a line (again: drops it). A selected line that stopped
+     * stays last, saying since when it does not work.
+     */
+    appendWorkingLines(host: HTMLElement, s: LiveSession, groups: readonly WorkingLine[]): void {
+        const o = strings.otherResearch;
+        const sel = queueDirectionFilter(s);
+        const list = el('ul', 'live-panel-list live-lines');
+        host.appendChild(list);
+        const now = Date.now();
+        for (const g of groups) {
+            if (g.id && g.workers.some(w => !w.paused)) lastAtWork.set(g.id, now);
+        }
+        for (const g of groups) list.appendChild(this.workingLineRow(g, sel === g.id));
+        const stopped = sel !== 'all' && !groups.some(g => g.id === sel) ? s.researches.find(d => d.id === sel) : undefined;
+        if (stopped) {
+            const last = lastAtWork.get(stopped.id);
+            const t = last ? formatLiveClock(last, now, getCurrentLanguage()) : '';
+            list.appendChild(this.workingLineRow({ id: stopped.id, direction: stopped, workers: [] }, true, o.lineIdle(t)));
+        }
+    },
+
+    /** One line's row: a toggle (aria-pressed) for a direction, plain text for the work outside them. */
+    workingLineRow(g: WorkingLine, selected: boolean, idle?: string): HTMLElement {
+        const o = strings.otherResearch;
+        const li = el('li', 'live-line-item');
+        const name = g.direction?.name ?? strings.live.dirOutside;
+        const row = g.id ? el('button', 'live-line') : el('div', 'live-line live-line--outside');
+        if (g.id) {
+            const id = g.id;
+            const btn = row as HTMLButtonElement;
+            btn.type = 'button';
+            btn.dataset.direction = id;
+            btn.setAttribute('aria-pressed', String(selected));
+            btn.onclick = () => this.selectWorkingLine(id);
+            const sr = el('span', 'live-line__sr', o.lineSelectSr(name));
+            btn.appendChild(sr);
+        }
+        if (idle) row.classList.add('is-idle');
+        const who = [...new Set(g.workers.map(w => w.who).filter(Boolean))].join(', ');
+        if (who) row.title = who;
+        const glyph = el('span', 'live-line__glyph', g.id ? directionGlyph(g.direction) : '·');
+        glyph.setAttribute('aria-hidden', 'true');
+        row.appendChild(glyph);
+        const main = el('span', 'live-line__main');
+        main.appendChild(el('span', 'live-line__name', name));
+        for (const w of g.workers) {
+            if (w.task) main.appendChild(el('span', 'live-line__task', w.task));
+            const meta = el('span', 'live-line__meta');
+            const person = personByRefn(w.person);
+            const parts: (string | HTMLElement)[] = [];
+            if (person) parts.push(fullName(person));
+            else if (w.person) parts.push(w.person);
+            if (w.paused) parts.push(el('span', 'live-paused', pausedText(w)));
+            else {
+                const since = timeEl(w.since, 'sincefor');
+                if (since) parts.push(since);
+            }
+            parts.forEach((part, i) => meta.append(...(i > 0 ? [' · ', part] : [part])));
+            if (parts.length > 0) main.appendChild(meta);
+        }
+        if (idle) main.appendChild(el('span', 'live-line__meta', idle));
+        row.appendChild(main);
+        li.appendChild(row);
+        return li;
+    },
+
+    /** A click on a line: selected (lit up in the tree, Changes and Up next narrowed), again: all lines. */
+    selectWorkingLine(id: string): void {
+        this.setWorkingLine(queueDirectionFilter(liveSession()) === id ? 'all' : id);
+    },
+
+    /**
+     * Select a direction ('all': none) for the panel and the overview's
+     * queue alike; its people lit up in the tree with the overview's
+     * "Show in tree" (the rest dimmed). Dropping it ends that light.
+     */
+    setWorkingLine(id: string): void {
+        if (!listening) {
+            listening = true;
+            window.addEventListener('strom:tree-switched', () => this.syncLineSelection());
+        }
+        setQueueDirectionFilter(id);
+        const s = liveSession();
+        const d = id === 'all' ? undefined : s?.researches.find(x => x.id === id);
+        const ids = d ? directionPersonIds(d) ?? [] : [];
+        if (d && ids.length > 0) {
+            // Dropped meanwhile (a tree switch): the same people until the light ends with the selection.
+            let lit = ids;
+            this.startPersonHighlight('direction', d.name, ids, () => {
+                if (queueDirectionFilter(liveSession()) === d.id) lit = directionPersonIds(d) ?? [];
+                return lit;
+            });
+            selectionLit = true;
+        } else {
+            this.endLineHighlight();
+        }
+        this.renderLivePanel();
+    },
+
+    /** A selection that no longer stands (another tree, following ended) is dropped with its light. */
+    syncLineSelection(): void {
+        if (queueDirectionFilter(liveSession()) === 'all' && selectionLit) this.endLineHighlight();
+    },
+
+    /** End the tree's light the selection started (another highlight since is left alone). */
+    endLineHighlight(): void {
+        if (selectionLit && this.evidenceHighlightKind() === 'direction') this.endEvidenceHighlight();
+        selectionLit = false;
+    },
+
     /** The Directions section of the overview (two or more directions). */
     appendOverviewDirections(body: HTMLElement, s: LiveSession, fold: { id: string; collapsed: boolean; onToggle: () => void }, mode: Mode): void {
         const outside = outsideWork(s);
@@ -330,6 +522,7 @@ export const researchDirectionsMethods = uiModule({
         const ids = directionPersonIds(d);
         if (!ids) return;
         if (mode === 'sheet') this.closeResearchOverview();
+        selectionLit = false;
         this.startPersonHighlight('direction', d.name, ids, () => directionPersonIds(d) ?? []);
     },
 

@@ -42,7 +42,10 @@ import {
 import { uiModule } from './module.js';
 import { withAppVersion, researchGedcomTitles, TitlesInGedcom, changeKind, changeAdds, sanitizeLiveLog, textKind, textPersonRefs, textWithoutRefs, LiveChangeKind, LiveLogEntry, LiveCommitAdds, LiveRecent } from '../research-link.js';
 import { AGENT_DONE_MS, AGENT_DONE_FADE_MS, ResearchCardInfo, setResearchCardInfoProvider } from '../card-signals.js';
-import { activeDirections, directionsMulti, queueDirectionFilter, setQueueDirectionFilter, taskDirectionName } from './research-directions-ui.js';
+import {
+    activeDirections, directionGlyph, directionsMulti, lineGlyphFor, linesMulti, queueDirectionFilter, selectedLine,
+    taskDirectionName, workingLineCount, workingLineGroups,
+} from './research-directions-ui.js';
 import { iconSvg } from '../icons.js';
 import { OTHER_GROUP, panelWaiting, textWithLinks, todoWaiting, waitingSection, waitingTodoCount } from '../research-waiting.js';
 import { agoShort } from '../research-others.js';
@@ -250,6 +253,8 @@ export function liveDuration(since: number, now = Date.now()): string {
 export function liveSection(host: HTMLElement, o: {
     id: string; title: string; summary?: string; summaryCls?: string;
     collapsed: boolean; headCls?: string; onToggle: () => void;
+    /** A control beside the heading (not inside its button). */
+    aside?: HTMLElement;
 }): HTMLElement {
     const head = el('button', `live-panel-heading live-section__head${o.headCls ? ` ${o.headCls}` : ''}`);
     head.type = 'button';
@@ -263,7 +268,13 @@ export function liveSection(host: HTMLElement, o: {
     const body = el('div', 'live-section__body');
     body.id = o.id;
     body.hidden = o.collapsed;
-    host.append(head, body);
+    if (o.aside) {
+        const row = el('div', 'live-section__headrow');
+        row.append(head, o.aside);
+        host.append(row, body);
+    } else {
+        host.append(head, body);
+    }
     return body;
 }
 
@@ -2849,7 +2860,7 @@ export const researchUiMethods = uiModule({
     },
 
     /** Change rows (text with the people as links, then the time). */
-    appendChangeRows(list: HTMLElement, changes: readonly LiveChangeItem[]): void {
+    appendChangeRows(list: HTMLElement, changes: readonly LiveChangeItem[], glyph?: (c: LiveChangeItem) => string): void {
         const r = strings.research;
         if (changes.length === 0) list.appendChild(el('li', 'live-empty', r.noChanges));
         for (const c of changes) {
@@ -2859,7 +2870,14 @@ export const researchUiMethods = uiModule({
             appendChangeText(text, c, (id) => this.showLivePerson(id));
             row.appendChild(text);
             const at = timeEl(c.at, 'ago');
-            if (at) row.appendChild(at);
+            // Two or more lines at work: the change's line before its time ("↑ · 2 min ago").
+            const g = glyph?.(c) ?? '';
+            if (g) {
+                const meta = el('small', 'live-change-meta');
+                meta.appendChild(el('span', 'live-change-dir', g));
+                if (at) meta.append(' · ', at);
+                row.appendChild(meta);
+            } else if (at) row.appendChild(at);
             li.appendChild(row);
             list.appendChild(li);
         }
@@ -2868,6 +2886,8 @@ export const researchUiMethods = uiModule({
     /** Draw the "Research now" panel. Bridge text is set as text, never HTML. */
     renderLivePanel(): void {
         syncResearchCardInfo();
+        // A selected line drops with the tree it was made in or the end of following.
+        this.syncLineSelection();
         // The switcher's marks follow the live status (in place, after this redraw).
         this.refreshResearchMarks();
         this.noteResearchMarksDrawn();
@@ -2984,7 +3004,29 @@ export const researchUiMethods = uiModule({
 
         // Once following has ended the bridge's "who is working" is stale —
         // show it only while live.
-        if (!s.ended) {
+        const multi = linesMulti(s);
+        const sel = selectedLine(s);
+        if (!s.ended && multi) {
+            // Two or more lines at work: a row each, one can be selected (spec 011).
+            const o = strings.otherResearch;
+            const groups = workingLineGroups(s);
+            const n = workingLineCount(groups);
+            const glyphs = groups.filter(g => g.id).map(g => directionGlyph(g.direction)).join(' ');
+            const summary = sel ? o.lineSelected(directionGlyph(sel), sel.name)
+                : [glyphs, o.linesWorking(n)].filter(Boolean).join(' · ');
+            // Folded, the summary says the lines or the selection; unfolded, the title says the count
+            // and "All directions" drops a selection.
+            const workingFold = fold('working');
+            const title = n >= 2 && !workingFold.collapsed ? o.linesTitle(n) : r.atWork;
+            let aside: HTMLButtonElement | undefined;
+            if (sel && !workingFold.collapsed) {
+                aside = el('button', 'link-button live-lines-all', o.linesAll);
+                aside.type = 'button';
+                aside.onclick = () => this.setWorkingLine('all');
+            }
+            const host = liveSection(body, { ...workingFold, title, summary: workingFold.collapsed ? summary : undefined, aside });
+            this.appendWorkingLines(host, s, groups);
+        } else if (!s.ended) {
             const w = s.working[0];
             const since = w ? Date.parse(w.since) : NaN;
             const summary = w ? [w.who, w.paused ? L.statePaused : Number.isFinite(since) ? liveDuration(since) : ''].filter(Boolean).join(' · ') : L.nobody;
@@ -2998,18 +3040,20 @@ export const researchUiMethods = uiModule({
             if (!s.ended) host.appendChild(el('p', 'live-panel-hint', r.answerWhere));
         }
 
-        // What changed: the last few here, all of them in the overview.
+        // What changed: the last few here, all of them in the overview; a selected line: only its own.
         const changesFold = fold('changes');
         if (!changesFold.collapsed) s.seenInSection = s.changes.length;
         const freshInSection = s.changes.length - s.seenInSection;
+        const shownChanges = sel ? s.changes.filter(c => c.research === sel.id) : s.changes;
         const changesHost = liveSection(body, {
             ...changesFold, title: r.changes,
-            summary: freshInSection > 0 ? L.newChanges(freshInSection) : undefined, summaryCls: 'live-section__sum--new',
+            ...(sel ? { summary: strings.otherResearch.lineOnly(directionGlyph(sel), sel.name) }
+                : { summary: freshInSection > 0 ? L.newChanges(freshInSection) : undefined, summaryCls: 'live-section__sum--new' }),
         });
         const changes = el('ul', 'live-panel-list live-changes');
         changesHost.appendChild(changes);
-        this.appendChangeRows(changes, s.changes.slice(0, PANEL_CHANGES));
-        if (s.changes.length > PANEL_CHANGES && this.canOpenResearchOverview()) {
+        this.appendChangeRows(changes, shownChanges.slice(0, PANEL_CHANGES), multi ? (c) => lineGlyphFor(s, c.research) : undefined);
+        if (shownChanges.length > PANEL_CHANGES && this.canOpenResearchOverview()) {
             const all = el('button', 'link-button live-all-changes', L.allInOverview);
             all.type = 'button';
             all.onclick = () => this.openResearchOverview();
@@ -3062,9 +3106,10 @@ export const researchUiMethods = uiModule({
         directions = false): void {
         const r = strings.research;
         // The overview, two or more directions running: each task names its
-        // direction, and pills filter the queue by one.
-        const multi = directions && directionsMulti(s);
-        const dirFilter = multi ? queueDirectionFilter(s) : 'all';
+        // direction, and pills filter the queue by one. The filter is the
+        // panel's selected line too (one choice), so it narrows both.
+        const dirFilter = queueDirectionFilter(s);
+        const multi = directions && (directionsMulti(s) || dirFilter !== 'all');
         const inFilter = (q: LiveQueueItem): boolean => dirFilter === 'all' || q.research === dirFilter;
         const allNext = s.queue.filter(q => q.state === 'next');
         const next = allNext.filter(inFilter);
@@ -3074,15 +3119,20 @@ export const researchUiMethods = uiModule({
         const shownParked = parked.slice(0, limit);
         const hidden = s.queueMore + (next.length - shownNext.length) + (parked.length - shownParked.length);
 
+        const sel = !directions && dirFilter !== 'all' ? s.researches.find(d => d.id === dirFilter) : undefined;
         const host = liveSection(body, {
             ...fold, title, headCls: 'live-queue-toggle',
-            summary: strings.live.queueCount(allNext.length + s.queueMore),
+            summary: sel ? strings.otherResearch.lineQueueOf(next.length, allNext.length + s.queueMore, directionGlyph(sel))
+                : strings.live.queueCount(allNext.length + s.queueMore),
         });
         if (multi) {
             const pills = el('div', 'research-overview__filters research-overview__queue-filters');
             pills.setAttribute('role', 'radiogroup');
             pills.setAttribute('aria-label', strings.live.dirFilterLabel);
             const active = activeDirections(s);
+            // A selected line no longer running keeps its pill.
+            const picked = s.researches.find(d => d.id === dirFilter);
+            if (picked && !active.includes(picked)) active.push(picked);
             const options: [string, string, number][] = [
                 ['all', strings.live.filterAll, allNext.length],
                 ...active.map(d => [d.id, d.name, allNext.filter(q => q.research === d.id).length] as [string, string, number]),
@@ -3093,10 +3143,7 @@ export const researchUiMethods = uiModule({
                 chip.setAttribute('role', 'radio');
                 chip.setAttribute('aria-checked', String(dirFilter === id));
                 chip.dataset.direction = id;
-                chip.onclick = () => {
-                    setQueueDirectionFilter(id);
-                    this.renderResearchOverview();
-                };
+                chip.onclick = () => this.setWorkingLine(id);
                 pills.appendChild(chip);
             }
             host.appendChild(pills);
@@ -3108,6 +3155,9 @@ export const researchUiMethods = uiModule({
             const li = el('li', 'live-queue-row');
             li.appendChild(el('span', 'live-queue-num', String(i + 1)));
             const text = el('span', 'live-queue-text', q.text);
+            // The panel, two or more lines at work: the task's line first.
+            const glyph = directions ? '' : lineGlyphFor(s, q.research);
+            if (glyph) text.prepend(el('span', 'live-queue-dir', `${glyph} `));
             const dir = multi ? taskDirectionName(s, q.research) : '';
             if (dir) text.appendChild(el('span', 'research-overview__dir', ` · ${dir}`));
             li.appendChild(text);

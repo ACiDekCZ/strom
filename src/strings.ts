@@ -4241,6 +4241,15 @@ const stringsEN = {
         followStarted: (tree: string, prev?: string) => `Now following “${tree}”.${prev ? ` “${prev}” stays editable.` : ''}`,
         followMoved: (tree: string, prev: string) => `Now following “${tree}”. “${prev}” can be edited again.`,
         agentStarted: 'The agent has started work.',
+        linesTitle: (n: number) => `At work · ${nEn(n, 'direction', 'directions')}`,
+        nowLines: (n: number) => `Now · ${nEn(n, 'direction', 'directions')}`,
+        linesWorking: (n: number) => `${nEn(n, 'direction', 'directions')} at work`,
+        linesAll: 'All directions',
+        lineSelected: (glyph: string, name: string) => `selected: ${glyph} ${name}`,
+        lineOnly: (glyph: string, name: string) => `only ${glyph} ${name}`,
+        lineIdle: (t: string) => t ? `Not at work now · last ${t}` : 'Not at work now',
+        lineSelectSr: (name: string) => `Direction ${name}. Selecting highlights it in the tree and shows only its changes and tasks.`,
+        lineQueueOf: (n: number, total: number, glyph: string) => `${n} of ${total} · ${glyph}`,
     }
 };
 
@@ -8326,6 +8335,15 @@ const stringsCZ: StringsType = {
         followStarted: (tree: string, prev?: string) => `Začalo sledování stromu „${tree}“.${prev ? ` Strom „${prev}“ zůstává upravitelný.` : ''}`,
         followMoved: (tree: string, prev: string) => `Sledování přešlo na „${tree}“. Strom „${prev}“ jde znovu upravovat.`,
         agentStarted: 'Agent začal pracovat.',
+        linesTitle: (n: number) => `Pracuje se · ${nCs(n, 'linie', 'linie', 'linií')}`,
+        nowLines: (n: number) => `Teď · ${nCs(n, 'linie', 'linie', 'linií')}`,
+        linesWorking: (n: number) => nCs(n, 'linie pracuje', 'linie pracují', 'linií pracuje'),
+        linesAll: 'Všechny linie',
+        lineSelected: (glyph: string, name: string) => `vybraná ${glyph} ${name}`,
+        lineOnly: (glyph: string, name: string) => `jen ${glyph} ${name}`,
+        lineIdle: (t: string) => t ? `Teď nepracuje · naposledy ${t}` : 'Teď nepracuje',
+        lineSelectSr: (name: string) => `Linie ${name}. Výběr ji zvýrazní ve stromu a ukáže jen její změny a úkoly.`,
+        lineQueueOf: (n: number, total: number, glyph: string) => `${n} z ${total} · ${glyph}`,
     }
 };
 
@@ -12335,6 +12353,15 @@ const stringsDE: StringsType = {
         followStarted: (tree: string, prev?: string) => `„${tree}“ wird jetzt verfolgt.${prev ? ` „${prev}“ bleibt bearbeitbar.` : ''}`,
         followMoved: (tree: string, prev: string) => `Jetzt wird „${tree}“ verfolgt. „${prev}“ ist wieder bearbeitbar.`,
         agentStarted: 'Der Agent hat mit der Arbeit begonnen.',
+        linesTitle: (n: number) => `In Arbeit · ${nDe(n, 'Richtung', 'Richtungen')}`,
+        nowLines: (n: number) => `Jetzt · ${nDe(n, 'Richtung', 'Richtungen')}`,
+        linesWorking: (n: number) => `${nDe(n, 'Richtung', 'Richtungen')} in Arbeit`,
+        linesAll: 'Alle Richtungen',
+        lineSelected: (glyph: string, name: string) => `ausgewählt: ${glyph} ${name}`,
+        lineOnly: (glyph: string, name: string) => `nur ${glyph} ${name}`,
+        lineIdle: (t: string) => t ? `Gerade nicht in Arbeit · zuletzt ${t}` : 'Gerade nicht in Arbeit',
+        lineSelectSr: (name: string) => `Richtung ${name}. Auswahl hebt sie im Stammbaum hervor und zeigt nur ihre Änderungen und Aufgaben.`,
+        lineQueueOf: (n: number, total: number, glyph: string) => `${n} von ${total} · ${glyph}`,
     }
 };
 

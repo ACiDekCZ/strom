@@ -33,7 +33,9 @@ import {
     liveState, pausedText, waitsOnUser, appendLinkedText, newWaitingView, waitingKindLabel, appendFollowNote, holdFollowNoteIn,
 } from './research-ui.js';
 import { storyWaitingPeople } from './story-compare-ui.js';
-import { taskDirectionName } from './research-directions-ui.js';
+import {
+    WorkingLine, directionGlyph, directionPersonIds, linesMulti, queueDirectionFilter, taskDirectionName, workingLineCount, workingLineGroups,
+} from './research-directions-ui.js';
 import { conflictValueSaid, researchValueText } from './person-research-ui.js';
 import { shownName, fitNameHtml } from '../person-name.js';
 import { isOpenHypothesis } from '../view-links.js';
@@ -733,14 +735,26 @@ export const researchOverviewMethods = uiModule({
         const L = strings.live;
         const w0 = s.working[0];
         const since0 = w0 ? Date.parse(w0.since) : NaN;
+        const multi = linesMulti(s);
+        const groups = multi ? workingLineGroups(s) : [];
+        const lines = workingLineCount(groups);
         const host = liveSection(body, {
-            ...fold, title: L.now,
-            summary: w0 ? [w0.who, w0.paused ? L.statePaused : Number.isFinite(since0) ? liveDuration(since0) : ''].filter(Boolean).join(' · ') : L.nobody,
+            ...fold, title: lines >= 2 ? strings.otherResearch.nowLines(lines) : L.now,
+            summary: multi ? undefined
+                : w0 ? [w0.who, w0.paused ? L.statePaused : Number.isFinite(since0) ? liveDuration(since0) : ''].filter(Boolean).join(' · ') : L.nobody,
         });
         // First in Now: the other trees where an agent works or something waits (spec 011).
         this.appendResearchElsewhere(host, 'overview');
         const list = el('ul', 'live-panel-list live-working research-overview__now');
         host.appendChild(list);
+        if (multi) {
+            // Two or more lines at work: a row per line, the selected one marked (spec 011).
+            const sel = queueDirectionFilter(s);
+            for (const g of groups) list.appendChild(this.overviewNowLine(g, sel === g.id, mode));
+            const stopped = sel !== 'all' && !groups.some(g => g.id === sel) ? s.researches.find(d => d.id === sel) : undefined;
+            if (stopped) list.appendChild(this.overviewNowLine({ id: stopped.id, direction: stopped, workers: [] }, true, mode));
+            return;
+        }
         if (s.working.length === 0) list.appendChild(el('li', 'live-empty', L.nobody));
         for (const w of s.working) {
             const li = el('li', 'research-overview__now-row');
@@ -771,6 +785,64 @@ export const researchOverviewMethods = uiModule({
             }
             list.appendChild(li);
         }
+    },
+
+    /**
+     * A line in Now: glyph, "name — task", "agent · person · since · how
+     * long", Show in tree (the line's people lit up; work outside the
+     * directions: its person), Finish and stop ↗ per session.
+     */
+    overviewNowLine(g: WorkingLine, selected: boolean, mode: Mode): HTMLElement {
+        const L = strings.live;
+        const li = el('li', 'research-overview__now-row research-overview__now-row--line');
+        if (g.id) li.dataset.direction = g.id;
+        if (selected) li.classList.add('is-selected');
+        const glyph = el('span', 'live-line__glyph', g.id ? directionGlyph(g.direction) : '·');
+        glyph.setAttribute('aria-hidden', 'true');
+        li.appendChild(glyph);
+        const text = el('div', 'research-overview__now-text');
+        const name = g.direction?.name ?? L.dirOutside;
+        if (g.workers.length === 0) {
+            text.appendChild(el('strong', undefined, name));
+            text.appendChild(el('small', 'research-overview__now-meta', strings.otherResearch.lineIdle('')));
+        }
+        g.workers.forEach((w, i) => {
+            const head = el('div', 'research-overview__now-line');
+            if (i === 0) head.appendChild(el('strong', undefined, name));
+            if (w.task) head.appendChild(el('span', 'live-task', i === 0 ? ` — ${w.task}` : w.task));
+            text.appendChild(head);
+            const meta = el('small', 'research-overview__now-meta');
+            const person = personByRefn(w.person);
+            const parts: (string | HTMLElement)[] = [w.who];
+            if (person) parts.push(fullName(person));
+            else if (w.person) parts.push(w.person);
+            if (w.paused) parts.push(el('span', 'live-paused', pausedText(w)));
+            else {
+                const since = timeEl(w.since, 'sincefor');
+                if (since) parts.push(since);
+            }
+            parts.filter(Boolean).forEach((part, j) => meta.append(...(j > 0 ? [' · ', part] : [part])));
+            text.appendChild(meta);
+        });
+        li.appendChild(text);
+        const d = g.direction;
+        const workerPerson = g.workers.map(w => personByRefn(w.person)).find((p): p is Person => !!p);
+        if (d ? directionPersonIds(d) : workerPerson) {
+            const show = el('button', 'link-button', L.showInTree);
+            show.type = 'button';
+            show.onclick = () => (d ? this.showDirectionInTree(d, mode) : workerPerson && this.overviewShowPerson(workerPerson.id, mode));
+            li.appendChild(show);
+        }
+        for (const w of g.workers) {
+            const finish = mode !== 'sheet' && w.session && !w.paused ? this.activeResearchLink('finish', { session: w.session }) : null;
+            if (!finish) continue;
+            const btn = el('button', 'link-button research-overview__finish', `${L.finishSession} ↗`);
+            btn.type = 'button';
+            btn.title = L.finishHint;
+            btn.onclick = () => this.launchResearchLink(finish);
+            li.appendChild(btn);
+        }
+        return li;
     },
 
     /** Progress: the changes while watching, by task, filtered; hover and click reach the tree. */
