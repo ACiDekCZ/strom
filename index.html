@@ -863,6 +863,11 @@
             .actions-menu-btn .actions-menu-chevron { display: none; }
             .actions-menu-btn .actions-menu-dots { display: inline; margin-left: 0; opacity: 1; }
         }
+        /* A research tree whose search field is still short of room with ＋ alone
+           (measured, src/ui/toolbar-fit.ts): the ⋯-only trigger as well. */
+        .toolbar.toolbar-squeeze .actions-menu-label { display: none; }
+        .toolbar.toolbar-squeeze .actions-menu-btn .actions-menu-chevron { display: none; }
+        .toolbar.toolbar-squeeze .actions-menu-btn .actions-menu-dots { display: inline; margin-left: 0; opacity: 1; }
         /* View mode (an exported page, menu 1020 §10, D1): Anniversaries ·
            For the family › · Tree overview (in place of "Tree ›") · Settings.
            The rows outrank the view-mode rule that hides the editing rows. */
@@ -913,7 +918,8 @@
            (the actions dropdown is right-anchored in the toolbar, so a right
            flyout would leave the viewport — see round 9 notes). */
         .actions-submenu-wrap { position: relative; }
-        .actions-submenu-row { display: flex; align-items: center; gap: 6px; }
+        /* No caret from a click: Chrome drops a cut name's ellipsis while a caret sits in it. */
+        .actions-submenu-row { display: flex; align-items: center; gap: 6px; -webkit-user-select: none; user-select: none; }
         .actions-tree-row { background: var(--hover-bg); }
         .actions-submenu-row:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
         .actions-tree-prefix { color: var(--text-light); flex-shrink: 0; }
@@ -7128,6 +7134,10 @@
            otherwise painted a dark-green fill behind the dark hover text
            (dark-on-dark) — reassert a transparent background here. */
         @media (hover: hover) { .view-mode-segment button:hover { color: var(--text); background: transparent; } }
+        /* A research tree whose search field is short of room with ＋ alone (measured,
+           src/ui/toolbar-fit.ts): tighter tabs and no "/" hint, the field keeps its text. */
+        .toolbar.toolbar-squeeze .view-mode-segment button { padding: 0 9px; }
+        .toolbar.toolbar-squeeze .search-shortcut { display: none; }
         .view-mode-segment button.active {
             color: var(--accent);
             border-bottom-color: var(--accent);
@@ -11762,6 +11772,8 @@
         .research-mode-where .link-button { font-size: inherit; white-space: nowrap; }
         @media (max-width: 640px) { .research-mode-where { font-size: 12px; } }
         .research-tree-settings-buttons { align-items: center; }
+        /* A head of several lines (trial notice, mode): × at its top, beside the title. */
+        .research-tree-settings > .modal-header { align-items: flex-start; }
         .research-tree-settings-buttons .research-settings-in-research { margin-right: auto; }
         /* Source editor: "Transcription verified"; the research's reading. */
         .modal label.source-verified {
@@ -11872,8 +11884,10 @@
         .live-section__sum--new { color: var(--primary); font-weight: 600; }
         .live-section__body[hidden] { display: none; }
         .live-change-text { font-size: 14px; }
+        /* A name or a source title inside a history line reads as a link in
+           the text: a long one starts at the line's left, never centred. */
         .live-person-link {
-            display: inline; padding: 0; margin: 0; border: 0; background: none; font: inherit; color: inherit;
+            display: inline; padding: 0; margin: 0; border: 0; background: none; font: inherit; color: inherit; text-align: start;
             text-decoration: underline; text-decoration-color: var(--primary); text-underline-offset: 2px; cursor: pointer;
         }
         @media (hover: hover) { .live-person-link:hover { color: var(--primary); } }
@@ -11993,15 +12007,16 @@
             border-bottom: 1px solid var(--divider);
         }
         .live-dot--still { box-shadow: none; }
-        .research-overview__titles { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; }
-        .research-overview__title { margin: 0; font-size: 15px; font-weight: 600; white-space: nowrap; }
-        .research-overview__name { min-width: 0; font-size: 13px; color: var(--text-light); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        /* Title on its own line; the research's name and Stop on the line under it. */
+        .research-overview__titles { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+        .research-overview__title { margin: 0; font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .research-overview__sub { display: flex; align-items: center; gap: 8px; min-width: 0; }
+        .research-overview__name { flex: 0 1 auto; min-width: 0; font-size: 13px; color: var(--text-light); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .research-overview__close {
             flex: none; width: 32px; height: 32px; padding: 0; border: 0; border-radius: var(--r-md);
             background: var(--surface-2); color: var(--text-light); font-size: 16px; cursor: pointer;
         }
         .research-overview--sheet .research-overview__close { width: 44px; height: 44px; font-size: 22px; }
-        .research-overview--sheet .research-overview__name { display: none; }
         @media (hover: hover) { .research-overview__close:hover { color: var(--text); background: var(--hover-bg); } }
         .research-overview__close:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
         .research-overview__body { flex: 1; min-height: 0; overflow-y: auto; padding: 0 16px 12px; }
@@ -14343,6 +14358,8 @@
             border: none; background: none; padding: 0; cursor: pointer; font: inherit;
             color: inherit; text-align: left; min-width: 0;
         }
+        /* The title's button outranks the dialog's button padding: its text lines up with the meta and the tags under it. */
+        .source-row .source-row-open { padding-left: 0; padding-right: 0; }
         @media (hover: hover) { .source-row-open:hover .source-title { text-decoration: underline; } }
         .source-picker-item { display: flex; align-items: center; gap: 10px; }
         .source-picker-row { display: flex; align-items: stretch; gap: 6px; }
@@ -14702,10 +14719,12 @@
         .source-row-thumb.is-held::after, .source-picker-thumb.is-held::after, .source-chip-thumb.is-held::after {
             content: ''; width: 12px; height: 9px; border: 1px solid var(--text-faint); border-radius: 2px;
         }
+        /* On its own line at the title's left edge (a long title or meta never moves it). */
         .source-held-tag {
-            display: inline-block; margin-left: 6px; padding: 0 6px; border: 1px solid var(--border); border-radius: 999px;
-            font-size: 11.5px; line-height: 18px; color: var(--text-secondary); white-space: nowrap; vertical-align: 1px;
+            display: block; width: fit-content; margin: 4px 0 0; padding: 0 6px; border: 1px solid var(--border); border-radius: 999px;
+            font-size: 11.5px; line-height: 18px; color: var(--text-secondary); white-space: nowrap;
         }
+        .source-held-tag + .source-count { display: block; margin: 2px 0 0; }
         .sources-bulk[hidden] { display: none; }
         .sources-bulk { margin: 0 0 10px; }
         .sources-bulk-line {
@@ -14736,6 +14755,12 @@
         }
         .research-images-badge-bar > span { display: block; height: 100%; background: var(--primary); }
         @media (max-width: 1179px) { .research-images-badge .research-images-badge-text { font-size: 11px; } }
+        /* A tight toolbar (src/ui/toolbar-fit.ts): the icon and the count alone, the search keeps its room. */
+        .research-images-badge-short { display: none; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
+        .toolbar.toolbar-squeeze .research-images-badge { padding: 0 8px; }
+        .toolbar.toolbar-squeeze .research-images-badge .research-images-badge-text { display: none; }
+        .toolbar.toolbar-squeeze .research-images-badge .research-images-badge-short { display: inline-flex; }
+        .toolbar.toolbar-squeeze .research-images-badge-bar { width: 100%; }
         .research-images-host:empty { display: none; }
         .research-images { margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--divider, var(--border)); }
         .research-images-title { margin: 0 0 8px; font-size: 14px; font-weight: 600; }

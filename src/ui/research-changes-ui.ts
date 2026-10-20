@@ -751,30 +751,39 @@ export const researchChangesMethods = uiModule({
     /**
      * Under the "N ⌄" part of the Send button when shown, else under the Send button, the amber pill's
      * button, the research's mark or the pill (where the research is in the toolbar, R6 of the N1 round
-     * and of beta.56), else under ⋯; within the window.
+     * and of beta.56), else under ⋯; within the window. Only a control with a box counts (a hidden ⋯
+     * below 1025px has none): with no such control the panel opens at the right, under the toolbar.
+     * It never covers the toolbar, whatever its anchor.
      */
     positionResearchChanges(): void {
         const panel = document.getElementById(PANEL_ID);
         if (!panel) return;
-        const shown = (id: string): HTMLElement | null => {
-            const el = document.getElementById(id);
-            return el && el.offsetParent ? el : null;
+        const boxed = (el: HTMLElement | null): HTMLElement | null => {
+            if (!el || !el.offsetParent) return null;
+            const r = el.getBoundingClientRect();
+            return r.width > 0 && r.height > 0 ? el : null;
         };
-        const pillSend = document.querySelector<HTMLElement>('#research-sync-pill .research-sync-pill-send');
+        const shown = (id: string): HTMLElement | null => boxed(document.getElementById(id));
         const anchor = shown('research-sync-send-more') ?? shown('research-sync-send')
-            ?? (pillSend?.offsetParent ? pillSend : null) ?? shown('research-sync-mark') ?? shown('research-sync-pill')
-            ?? document.querySelector<HTMLElement>('.actions-menu-btn');
+            ?? boxed(document.querySelector<HTMLElement>('#research-sync-pill .research-sync-pill-send'))
+            ?? shown('research-sync-mark') ?? shown('research-sync-pill')
+            ?? boxed(document.querySelector<HTMLElement>('.actions-menu-btn'));
         const rect = anchor?.getBoundingClientRect();
         const width = Math.min(panel.offsetWidth || 360, window.innerWidth - 16);
-        const left = rect ? Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8)) : 8;
-        const top = Math.round((rect?.bottom ?? 56) + 6);
+        const right = window.innerWidth - width - 8;
+        const left = rect ? Math.max(8, Math.min(rect.right - width, right)) : Math.max(8, right);
+        const toolbar = document.querySelector<HTMLElement>('.toolbar')?.getBoundingClientRect();
+        const toolbarBottom = toolbar && toolbar.height > 0 ? toolbar.bottom : 56;
+        const top = Math.round(Math.max(rect?.bottom ?? 0, toolbarBottom) + 6);
         panel.style.top = `${top}px`;
         panel.style.left = `${Math.round(left)}px`;
         // At most the window less 72px, and never past its bottom edge: the list between head and foot scrolls.
         // An Undo pill under the panel is a floor too, so Close / Send stay clickable above it.
         let floor = window.innerHeight - 8;
-        const pill = document.querySelector<HTMLElement>('.undo-toast');
-        const pillRect = pill?.getBoundingClientRect();
+        // The current pill: one still fading out (a second change right after the first) is about to go,
+        // and being narrower it could miss the panel while the new one covers Send.
+        const pill = this.undoToastEl ?? null;
+        const pillRect = pill?.isConnected ? pill.getBoundingClientRect() : undefined;
         if (pillRect && pillRect.width && pillRect.left < left + width && pillRect.right > left) {
             // The pill rises 12px as it shows: its resting top, whatever the moment.
             const restTop = pill?.classList.contains('show') ? pillRect.top : pillRect.top - 12;

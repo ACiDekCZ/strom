@@ -260,6 +260,27 @@ test.describe('actions menu "Tree:" submenu', () => {
         expect(fit.chevronIn).toBe(true);
     });
 
+    test('a click on the cut tree name leaves no caret in it: the ellipsis stays while its flyout is open', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await openApp(page);
+        await createFirstPerson(page, 'Jan', 'Novak');
+        await page.evaluate(() => {
+            const tm = window.Strom.TreeManager;
+            tm.renameTree(tm.getActiveTreeId()!, 'Stammbaum der Familie Novák aus Kouřim und Umgebung');
+        });
+        await page.locator('.actions-menu-btn').click();
+        await page.locator('#actions-tree-name').click();
+        await expect(page.locator('#actions-tree-submenu')).toBeVisible();
+        // Chrome drops text-overflow around a collapsed selection placed by the click.
+        const inName = await page.evaluate(() => {
+            const sel = window.getSelection();
+            const row = document.getElementById('actions-tree-row')!;
+            return !!sel && sel.rangeCount > 0 && row.contains(sel.anchorNode);
+        });
+        expect(inName).toBe(false);
+        await expect(page.locator('#actions-tree-row')).toHaveCSS('user-select', 'none');
+    });
+
     test('names the active tree and carries the one list of tree actions in order (menu 1020 §3.1)', async ({ page }) => {
         await openApp(page);
         await createFirstPerson(page, 'Jan', 'Novak');

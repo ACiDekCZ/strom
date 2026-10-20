@@ -9,6 +9,7 @@
  */
 
 import { DataManager } from '../data.js';
+import { iconSvg } from '../icons.js';
 import { TreeManager } from '../tree-manager.js';
 import { Source, SourceExcerpt, StromData, TreeId } from '../types.js';
 import { strings, getCurrentLanguage } from '../strings.js';
@@ -619,8 +620,13 @@ export const researchImagesMethods = uiModule({
         }
         const r = strings.researchImages;
         const pct = s.images ? Math.round((s.imagesDone / s.images) * 100) : 0;
+        const done = queue!.active ? '' : ' ✓';
         badge.title = r.bulkBadgeTitle;
-        badge.innerHTML = `<span class="research-images-badge-text">${esc(r.bulkBadge(s.imagesDone, s.images))}${queue!.active ? '' : ' ✓'}</span>`
+        // A tight toolbar (.toolbar-squeeze, src/ui/toolbar-fit.ts) shows the
+        // icon and the count alone; the name stays the full text.
+        badge.setAttribute('aria-label', `${r.bulkBadge(s.imagesDone, s.images)}${done}`);
+        badge.innerHTML = `<span class="research-images-badge-text" aria-hidden="true">${esc(r.bulkBadge(s.imagesDone, s.images))}${done}</span>`
+            + `<span class="research-images-badge-short" aria-hidden="true">${iconSvg('image', { size: 13 })}${s.imagesDone}/${s.images}${done}</span>`
             + `<span class="research-images-badge-bar" aria-hidden="true"><span style="width:${pct}%"></span></span>`;
     },
 

@@ -20,12 +20,53 @@
  *
  * The fixed 1180–1280 px rule in index.html (a research tree, ＋ alone) stays:
  * measured on top of it, the toolbar fits and this class is not set there.
+ *
+ * A research tree also keeps the search field usable: the Research button and
+ * the source images badge take their room from the search field, so its input
+ * must still hold its placeholder (up to SEARCH_ROOM_CAP_PX). When it does not,
+ * the add button folds first; when that is still not enough,
+ * `.toolbar-squeeze` shortens the images badge to its icon and count and folds
+ * the "Actions" label into ⋯. A tree without a research is measured as before.
  */
 
 import { isDesktop } from '../breakpoints.js';
 
 const COMPACT_CLASS = 'toolbar-add-compact';
+const SQUEEZE_CLASS = 'toolbar-squeeze';
 const HYSTERESIS_PX = 16;
+/** The search input never asks for more room than this (a long placeholder may be cut). */
+export const SEARCH_ROOM_CAP_PX = 120;
+
+let measureCtx: CanvasRenderingContext2D | null | undefined;
+const placeholderWidths = new Map<string, number>();
+
+/** The width the search input's placeholder needs, in its own font. */
+function placeholderWidth(input: HTMLInputElement, cs: CSSStyleDeclaration): number {
+    const font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+    const key = `${font}|${input.placeholder}`;
+    const known = placeholderWidths.get(key);
+    if (known !== undefined) return known;
+    if (measureCtx === undefined) measureCtx = document.createElement('canvas').getContext('2d');
+    if (!measureCtx) return 0;
+    measureCtx.font = font;
+    const width = measureCtx.measureText(input.placeholder).width;
+    placeholderWidths.set(key, width);
+    return width;
+}
+
+/**
+ * The room the search input lacks for its placeholder (0 when it fits), with
+ * `reserve` px held back. Only a research tree is measured this way.
+ */
+export function searchShortfall(toolbar: HTMLElement, reserve = 0): number {
+    if (!document.body.classList.contains('research-actions')) return 0;
+    const input = toolbar.querySelector<HTMLInputElement>('#toolbar-search-picker .person-picker-input');
+    if (!input || !input.placeholder || input.getClientRects().length === 0) return 0;
+    const cs = getComputedStyle(input);
+    const room = input.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0) - reserve;
+    const need = Math.min(placeholderWidth(input, cs), SEARCH_ROOM_CAP_PX);
+    return Math.max(0, Math.ceil(need - room));
+}
 
 /** True when the toolbar, as laid out now, does not hold its content. */
 function tooTight(toolbar: HTMLElement, reserve: number): boolean {
@@ -50,21 +91,25 @@ function tooTight(toolbar: HTMLElement, reserve: number): boolean {
         }
     }
     toolbar.style.paddingRight = previous;
-    return tight;
+    return tight || searchShortfall(toolbar, reserve) > 0;
 }
 
-/** Re-measure the toolbar and set or clear the compact add button. */
+/** Re-measure the toolbar and set or clear the compact add button (and the squeeze). */
 export function updateToolbarFit(): void {
     const toolbar = document.querySelector<HTMLElement>('.toolbar');
     if (!toolbar) return;
     if (!isDesktop()) {
-        toolbar.classList.remove(COMPACT_CLASS);
+        toolbar.classList.remove(COMPACT_CLASS, SQUEEZE_CLASS);
         return;
     }
     const wasCompact = toolbar.classList.contains(COMPACT_CLASS);
-    toolbar.classList.remove(COMPACT_CLASS);
+    const wasSqueezed = toolbar.classList.contains(SQUEEZE_CLASS);
+    toolbar.classList.remove(COMPACT_CLASS, SQUEEZE_CLASS);
     const compact = tooTight(toolbar, wasCompact ? HYSTERESIS_PX : 0);
     toolbar.classList.toggle(COMPACT_CLASS, compact);
+    // The second step, measured with ＋ alone: only the search field's room decides it.
+    const squeeze = compact && searchShortfall(toolbar, wasSqueezed ? HYSTERESIS_PX : 0) > 0;
+    toolbar.classList.toggle(SQUEEZE_CLASS, squeeze);
 }
 
 /**

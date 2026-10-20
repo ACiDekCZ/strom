@@ -1,6 +1,6 @@
 import { test, expect, Page, Route } from '@playwright/test';
 import { readFileSync } from 'fs';
-import { card } from './helpers.js';
+import { card, openApp } from './helpers.js';
 import { BRIDGE, FakeBridge, fakeBridge, openResearch, poll, researchGed } from './research-bridge.js';
 
 /**
@@ -204,5 +204,83 @@ test.describe('source images from the research', () => {
         const without = await exportJson('none');
         const s1none = Object.values(without.sources ?? without.data?.sources ?? {}).find((s: any) => s.refn === 'S0001') as any;
         expect(s1none.excerpts).toBeUndefined();
+    });
+});
+
+/**
+ * The Sources window's "Image in research" tag lines up with the title above
+ * it (the dialog's button padding used to push the title 18px right of it).
+ */
+test('Sources: the tag at the left edge of its title', async ({ page }) => {
+    await setup(page, { auto: false });
+    await page.evaluate(() => window.Strom.UI.showSourcesDialog());
+    const modal = page.locator('#sources-modal');
+    await modal.locator('#sources-filter [data-filter="imageHeld"]').click();
+    const rows = modal.locator('.source-row');
+    await expect(rows).toHaveCount(2);
+    for (let i = 0; i < 2; i++) {
+        const [title, tag] = await Promise.all([rows.nth(i).locator('.source-title').boundingBox(), rows.nth(i).locator('.source-held-tag').boundingBox()]);
+        expect(Math.abs(title!.x - tag!.x), `row ${i}`).toBeLessThanOrEqual(1);
+        expect(tag!.y, `row ${i}: under the title`).toBeGreaterThanOrEqual(title!.y + title!.height - 1);
+    }
+});
+
+/**
+ * The toolbar badge of the bulk load (de, the widest labels, a long tree
+ * name, 1440 px): the search field keeps room for its placeholder. A tree
+ * without a research is measured as before (no squeeze).
+ */
+test.describe('the images badge and the search field (de-DE)', () => {
+    test.use({ locale: 'de-DE' });
+
+    const searchRoom = (page: Page) => page.evaluate(() => {
+        const input = document.querySelector<HTMLInputElement>('.toolbar #toolbar-search-picker .person-picker-input')!;
+        const cs = getComputedStyle(input);
+        const cv = document.createElement('canvas').getContext('2d')!;
+        cv.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+        const tb = document.querySelector<HTMLElement>('.toolbar')!;
+        return {
+            room: input.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight),
+            need: Math.min(cv.measureText(input.placeholder).width, 120),
+            overflow: tb.scrollWidth - tb.clientWidth,
+        };
+    });
+
+    test('1440 px: the placeholder whole beside the badge, while loading and after', async ({ page }) => {
+        const long = heldGed().replace('1 NOTE Fíškovi', '1 NOTE Fíškovi z Čáslavi a Kutné Hory');
+        await page.setViewportSize({ width: 1440, height: 900 });
+        const b = await fakeBridge(page, { features: EXCERPT_FEATURES, treeGed: long });
+        const ex = await serveExcerpts(page, b);
+        await openResearch(page, { ged: long });
+        await page.evaluate(() => {
+            const tm = window.Strom.TreeManager;
+            tm.patchResearchLink(tm.getActiveTreeId()!, { autoLoadImages: false });
+        });
+        await poll(page);
+        await page.evaluate(() => window.Strom.UI.showSourcesDialog());
+        const modal = page.locator('#sources-modal');
+        await modal.locator('#sources-filter [data-filter="imageHeld"]').click();
+        await modal.locator('#sources-bulk-open').click();
+        let release!: () => void;
+        ex.hold = new Promise<void>(r => { release = r; });
+        await modal.locator('#sources-bulk-go').click();
+        const badge = page.locator('#research-images-badge');
+        await expect(badge).toBeVisible();
+        await expect(badge).toHaveAccessibleName(/^Bilder \d+ \/ 3$/);
+        await expect.poll(async () => { const r = await searchRoom(page); return r.room >= r.need && r.overflow <= 0; }).toBe(true);
+        release();
+        ex.hold = undefined;
+        await expect(badge).toHaveAccessibleName('Bilder 3 / 3 ✓');
+        await expect.poll(async () => { const r = await searchRoom(page); return r.room >= r.need && r.overflow <= 0; }).toBe(true);
+    });
+
+    test('a tree without a research: no squeeze, the "/" hint stays', async ({ page }) => {
+        await openApp(page);
+        for (const width of [1100, 1180, 1281, 1440]) {
+            await page.setViewportSize({ width, height: 850 });
+            await page.waitForTimeout(80);
+            await expect(page.locator('.toolbar'), `${width}px`).not.toHaveClass(/toolbar-squeeze/);
+            await expect(page.locator('.toolbar .search-shortcut'), `${width}px`).toBeVisible();
+        }
     });
 });

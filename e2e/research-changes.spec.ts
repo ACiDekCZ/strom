@@ -350,4 +350,51 @@ test.describe('what will be sent beyond the people', () => {
             await expect.poll(async () => (await panel.boundingBox())!.height).toBeGreaterThan(panelBox!.height);
         });
     }
+
+    /**
+     * Where "What will be sent" opens without Send in the toolbar (1024 px: the
+     * bottom-bar regime hides ⋯ too): at the right under the toolbar, never over
+     * it, and its foot above the Undo pill that is showing, also when a second
+     * change came right after the first (the first pill still fading out).
+     */
+    test('1024px: the panel under the toolbar, its foot above the current Undo pill', async ({ page }) => {
+        await page.setViewportSize({ width: 1024, height: 700 });
+        await openResearch(page);
+        await fakeBridge(page);
+        await poll(page);
+        await sample(page, 8);
+        const at = await page.evaluate(() => {
+            window.Strom.UI.showUndoToast('Edited');
+            window.Strom.UI.showUndoToast('Edited Jan Fíšek: birth date, birth place and the occupation');
+            window.Strom.UI.showResearchChanges('send', { confirm: true });
+            const panel = document.getElementById('research-changes-panel')!.getBoundingClientRect();
+            const toolbar = document.querySelector('.toolbar')!.getBoundingClientRect();
+            const pills = Array.from(document.querySelectorAll<HTMLElement>('.undo-toast'));
+            const pill = pills[pills.length - 1];
+            const r = pill.getBoundingClientRect();
+            return {
+                pills: pills.length,
+                panelTop: panel.top, panelBottom: panel.bottom, panelRight: panel.right,
+                toolbarBottom: toolbar.bottom,
+                pillRestTop: pill.classList.contains('show') ? r.top : r.top - 12,
+            };
+        });
+        expect(at.pills).toBeGreaterThanOrEqual(2);
+        expect(at.panelTop).toBeGreaterThanOrEqual(at.toolbarBottom);
+        expect(at.panelRight).toBeGreaterThan(1024 / 2);
+        expect(at.panelBottom).toBeLessThanOrEqual(at.pillRestTop);
+    });
+
+    test('1440px: the panel under its Send, clear of the toolbar', async ({ page }) => {
+        await openResearch(page);
+        await fakeBridge(page);
+        await poll(page);
+        await sample(page);
+        await page.evaluate(() => window.Strom.UI.showResearchChanges('send', { confirm: true }));
+        const at = await page.evaluate(() => ({
+            panelTop: document.getElementById('research-changes-panel')!.getBoundingClientRect().top,
+            toolbarBottom: document.querySelector('.toolbar')!.getBoundingClientRect().bottom,
+        }));
+        expect(at.panelTop).toBeGreaterThanOrEqual(at.toolbarBottom);
+    });
 });

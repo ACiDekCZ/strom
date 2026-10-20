@@ -138,3 +138,45 @@ test.describe('sources in the research history', () => {
         await expect(ov.locator('.live-source-link')).toBeFocused();
     });
 });
+
+/**
+ * The overview's head and the history's links in the narrow forms (de, the
+ * widest title): in the 400px overlay (1024) and the phone's sheet the title
+ * stays whole, Stop sits on the line under it beside the research's name (the
+ * name is seen, never squeezed to nothing), and a source's title in a line
+ * starts at the line's left like a link in the text, never centred.
+ */
+test.describe('the overview head and the history links, narrow (de-DE)', () => {
+    test.use({ locale: 'de-DE' });
+
+    const head = (page: Page) => page.evaluate(() => {
+        const box = (s: string) => document.querySelector(`#research-overview ${s}`)!.getBoundingClientRect();
+        const title = document.querySelector<HTMLElement>('#research-overview .research-overview__title')!;
+        const titles = document.querySelector<HTMLElement>('#research-overview .research-overview__titles')!;
+        const t = box('.research-overview__title'), stop = box('.live-panel-action'), name = box('.research-overview__name');
+        const overlap = Math.min(t.right, stop.right) - Math.max(t.left, stop.left) > 0 && Math.min(t.bottom, stop.bottom) - Math.max(t.top, stop.top) > 0;
+        return {
+            titleWhole: title.scrollWidth <= title.clientWidth + 1,
+            titlesFit: titles.scrollWidth <= titles.clientWidth + 1,
+            stopClearOfTitle: !overlap,
+            nameShown: name.width > 20,
+        };
+    });
+
+    for (const size of [{ width: 1024, height: 768 }, { width: 390, height: 844 }]) {
+        test(`${size.width}px: the title whole, Stop under it, the name seen`, async ({ page }) => {
+            await follow(page, size);
+            await page.evaluate(() => window.Strom.UI.openResearchOverview());
+            await expect(page.locator('#research-overview .research-overview__title')).toHaveText('Forschungsübersicht');
+            expect(await head(page)).toEqual({ titleWhole: true, titlesFit: true, stopClearOfTitle: true, nameShown: true });
+        });
+    }
+
+    test('a source title in a history line starts at the left, not centred', async ({ page }) => {
+        await follow(page, { width: 1024, height: 768 });
+        await page.evaluate(() => window.Strom.UI.openResearchOverview());
+        const link = page.locator('#research-overview .live-source-link').first();
+        await expect(link).toHaveText(TITLE);
+        expect(await link.evaluate(el => getComputedStyle(el).textAlign)).toBe('start');
+    });
+});

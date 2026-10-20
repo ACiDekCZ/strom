@@ -262,11 +262,15 @@ export const researchOverviewMethods = uiModule({
         const scrollTop = scroller?.scrollTop ?? 0;
         root.replaceChildren();
 
-        // Head: state dot, title, the research's name, ⤡ / ×, Stop.
+        // Head: state dot, title over a line with the research's name and
+        // Stop, then the follow switch and ⤡ / ×. Stop on the name's line
+        // keeps the title whole in the 400px overlay and on a phone.
         const head = el('div', 'research-overview__head');
         head.appendChild(el('span', 'live-dot live-dot--still'));
         const titles = el('div', 'research-overview__titles');
-        titles.append(el('h2', 'research-overview__title', L.overviewTitle), el('span', 'research-overview__name', s.name));
+        const sub = el('div', 'research-overview__sub');
+        sub.appendChild(el('span', 'research-overview__name', s.name));
+        titles.append(el('h2', 'research-overview__title', L.overviewTitle), sub);
         head.appendChild(titles);
         const close = el('button', 'research-overview__close', mode === 'sheet' ? '×' : '⤡');
         close.type = 'button';
@@ -278,7 +282,7 @@ export const researchOverviewMethods = uiModule({
         stop.onclick = () => this.stopLiveFollow();
         // The full-screen sheet covers the tree: no follow switch there.
         const follow = mode === 'sheet' ? null : this.liveFollowButton('overview');
-        head.append(stop);
+        sub.append(stop);
         if (follow) head.appendChild(follow);
         head.appendChild(close);
         root.appendChild(head);
