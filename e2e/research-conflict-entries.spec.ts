@@ -366,9 +366,12 @@ test.describe('the Research menu, the ≠ and the dialog at the card', () => {
         await show.click();
         const c = cardOf(page);
         await expect(c).toBeVisible();
+        // The research's version is read once the card is drawn and the card is drawn again with what
+        // Take brings besides the value: the light and the keyboard stay on the card drawn anew.
+        await expect(c.locator('#prc-note-X0007-research')).toHaveText("The value here changes to the research's. The research has 2 more changes; they will be shown for loading.");
         await expect(c).toHaveClass(/prc--highlight/);
         await expect(c.locator('.prc-side[data-side="user"] .prc-choice')).toBeFocused();
-        expect(await c.evaluate(el => getComputedStyle(el).outlineColor)).toBe(await token(page, '--primary', 'color'));
+        await expect(c).toHaveCSS('outline-color', await token(page, '--primary', 'color'));
         await page.clock.fastForward(1600);
         await expect(c).not.toHaveClass(/prc--highlight/);
     });
