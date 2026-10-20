@@ -920,7 +920,6 @@ const stringsEN = {
     // File System Access (work over a file on disk)
     fileAccess: {
         saveToFile: 'Save to file…',
-        saveToFileDesc: 'Link this tree to a file on disk — then just press Ctrl+S to save into it',
         openFromFile: 'Open from file…',
         openFromFileDesc: 'Open a JSON file and keep it linked, so changes save back into it',
         save: 'Save',
@@ -3258,7 +3257,8 @@ const stringsEN = {
         backupViewDesc: 'Only the people shown now, as a JSON file',
         share: 'Send to a relative',
         linkFile: 'Link to a file on disk…',
-        linkFileDesc: 'Keeps this tree in a .json file — then just press Ctrl+S to save into it',
+        linkFileDesc: 'Keeps this tree in a .json file — Save then writes into it',
+        linkFileDescKey: (key: string) => `Keeps this tree in a .json file — then just press ${key} to save into it`,
         app: 'App with data (HTML)',
         appDesc: 'One file that opens in any browser, nothing to install',
         backup: 'Data backup (JSON)',
@@ -5447,7 +5447,6 @@ const stringsCZ: StringsType = {
     // File System Access (práce nad souborem na disku)
     fileAccess: {
         saveToFile: 'Uložit do souboru…',
-        saveToFileDesc: 'Propojí strom se souborem na disku — pak stačí ukládat klávesou Ctrl+S',
         openFromFile: 'Otevřít ze souboru…',
         openFromFileDesc: 'Otevře JSON soubor a nechá ho propojený, změny se ukládají zpět do něj',
         save: 'Uložit',
@@ -7770,7 +7769,8 @@ const stringsCZ: StringsType = {
         backupViewDesc: 'Jen právě zobrazené osoby jako soubor JSON',
         share: 'Poslat příbuznému',
         linkFile: 'Propojit se souborem na disku…',
-        linkFileDesc: 'Strom se ukládá do souboru .json — pak stačí ukládat klávesou Ctrl+S',
+        linkFileDesc: 'Strom se ukládá do souboru .json — pak stačí Uložit',
+        linkFileDescKey: (key: string) => `Strom se ukládá do souboru .json — pak stačí ukládat klávesou ${key}`,
         app: 'Aplikace i s daty (HTML)',
         appDesc: 'Jeden soubor, který se otevře v každém prohlížeči, nic se neinstaluje',
         backup: 'Záloha dat (JSON)',
@@ -9943,7 +9943,6 @@ const stringsDE: StringsType = {
     // File System Access (work over a file on disk)
     fileAccess: {
         saveToFile: 'In Datei speichern…',
-        saveToFileDesc: 'Diesen Stammbaum mit einer Datei auf der Festplatte verknüpfen — dann genügt Strg+S zum Speichern',
         openFromFile: 'Aus Datei öffnen…',
         openFromFileDesc: 'Eine JSON-Datei öffnen und verknüpft halten, damit Änderungen zurück in sie gespeichert werden',
         save: 'Speichern',
@@ -12223,7 +12222,8 @@ const stringsDE: StringsType = {
         backupViewDesc: 'Nur die gerade angezeigten Personen als JSON-Datei',
         share: 'An Verwandte senden',
         linkFile: 'Mit einer Datei auf dem Datenträger verbinden…',
-        linkFileDesc: 'Der Stammbaum wird in einer .json-Datei gehalten — danach genügt Strg+S zum Speichern',
+        linkFileDesc: 'Der Stammbaum wird in einer .json-Datei gehalten — danach genügt Speichern',
+        linkFileDescKey: (key: string) => `Der Stammbaum wird in einer .json-Datei gehalten — danach genügt ${key.replace('Ctrl', 'Strg')} zum Speichern`,
         app: 'App mit den Daten (HTML)',
         appDesc: 'Eine einzige Datei, die sich in jedem Browser öffnet, ohne Installation',
         backup: 'Datensicherung (JSON)',

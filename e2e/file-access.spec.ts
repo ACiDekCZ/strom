@@ -64,3 +64,54 @@ test('mocked handle: save writes JSON, shows the indicator, Ctrl+S re-saves', as
     await page.evaluate(() => window.Strom.UI.unlinkActiveTreeFile());
     await expect(page.locator('#file-link-indicator')).toBeHidden();
 });
+
+test.describe('the link-to-a-file tile names the save key only where a keyboard is the usual input', () => {
+    const fsa = () => {
+        // @ts-ignore
+        window.showSaveFilePicker = async () => null;
+        // @ts-ignore
+        window.isSecureContext = true;
+    };
+    const desc = '#export-link-file-desc';
+
+    test('a computer: Ctrl+S, on a Mac ⌘S, in German Strg+S', async ({ page }) => {
+        await page.addInitScript(fsa);
+        await openApp(page);
+        await createFirstPerson(page, 'Solo', 'Root');
+        await page.evaluate(() => window.Strom.UI.showExportDialog());
+        await expect(page.locator(desc)).toBeVisible();
+        await expect(page.locator(desc)).toHaveText('Keeps this tree in a .json file — then just press Ctrl+S to save into it');
+        await page.evaluate(() => {
+            window.Strom.UI.closeExportDialog();
+            window.Strom.UI.setLanguage('de' as never);
+            window.Strom.UI.showExportDialog();
+        });
+        await expect(page.locator(desc)).toHaveText('Der Stammbaum wird in einer .json-Datei gehalten — danach genügt Strg+S zum Speichern');
+        await page.evaluate(() => {
+            window.Strom.UI.closeExportDialog();
+            Object.defineProperty(navigator, 'platform', { configurable: true, get: () => 'MacIntel' });
+            Object.defineProperty(navigator, 'userAgentData', { configurable: true, get: () => undefined });
+            window.Strom.UI.setLanguage('en' as never);
+            window.Strom.UI.showExportDialog();
+        });
+        await expect(page.locator(desc)).toHaveText('Keeps this tree in a .json file — then just press ⌘S to save into it');
+    });
+
+    test.describe('touch', () => {
+        test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+        test('a phone: no key, Save does it', async ({ page }) => {
+            await page.addInitScript(fsa);
+            await openApp(page);
+            await createFirstPerson(page, 'Solo', 'Root');
+            await page.evaluate(() => window.Strom.UI.showExportDialog());
+            await expect(page.locator(desc)).toBeVisible();
+            await expect(page.locator(desc)).toHaveText('Keeps this tree in a .json file — Save then writes into it');
+            await page.evaluate(() => {
+                window.Strom.UI.closeExportDialog();
+                window.Strom.UI.setLanguage('cs' as never);
+                window.Strom.UI.showExportDialog();
+            });
+            await expect(page.locator(desc)).toHaveText('Strom se ukládá do souboru .json — pak stačí Uložit');
+        });
+    });
+});
