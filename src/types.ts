@@ -913,6 +913,12 @@ export function partnershipParticipants(u: Pick<Partnership, 'participants' | 'e
  * Person.marriedSurname (3.13) likewise came without a bump: an older app keeps
  * it on a re-save and reads the married name as another spelling meanwhile.
  * Person.dismissedMarriedSuggestion (3.13, app-local) the same way.
+ * Source.reading / readingEntry / readingSha (3.14) came without a bump too: an
+ * older app loads sources whole (migrateData) and edits them in place
+ * (updateSource), so it keeps the reading's marks on a re-save. Its merge keeps
+ * them on a source it adds but not when it folds a duplicate into the tree's
+ * own entry, and its GEDCOM export does not write them: the research then takes
+ * that entry as a source of the app's, not as the reading's entry (harmless).
  * v12 (2026-10): Gender 'unknown' (GEDCOM SEX U, or no SEX): a sex the records
  *   do not give, no longer guessed from the family role (or female). Older
  *   data keeps its male/female; a missing or invalid gender reads as unknown
