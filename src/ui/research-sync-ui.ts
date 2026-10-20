@@ -49,7 +49,7 @@ import {
 import {
     ResearchSyncState, ResearchSyncKind, researchSyncState, researchSyncWantsAttention, researchSyncUnsent,
     pendingSendFate, sourceReadings, THEN_LOAD_MAX_AGE_MS, conflictTakeovers, heldConflicts,
-    researchKeepsTakenBack, latestUndone, nextUndone, openUndone, undoneLeftBehind, syncRefusalReason,
+    researchKeepsTakenBack, latestUndone, nextUndone, openUndone, undoneLeftBehind, syncRefusalReason, unloadedWrittenSends,
 } from '../research-sync.js';
 import { setResearchConflictsProvider } from '../card-signals.js';
 import { ConflictDecideMode, conflictDecideMode, DecideKind, DecideBody, DecideResult, postBridgeDecide, canDecideInApp } from '../research-decide.js';
@@ -1030,8 +1030,7 @@ export const researchSyncMethods = uiModule({
         if (!shown) return;
         const rec = status.sends.find(r => r.intake === sent.intake);
         if (!rec || rec.conflicts !== 0) return;
-        const mine = status.sends.filter(r => r.tree === treeId || r.tree === link.id);
-        if (mine.some(r => (r.conflicts ?? 0) > 0)) return;
+        if (this.researchUnloadedSends(treeId, link).some(r => (r.conflicts ?? 0) > 0)) return;
         TreeManager.patchResearchLink(treeId, { sent: { ...sent, conflicts: undefined } });
         // The conflicts it named are decided there: the cards stop showing them until its version is loaded.
         const ids = [...new Set([...(st.lastWritten?.conflictIds ?? []), ...(st.settledConflicts?.base === (link.head ?? '') ? st.settledConflicts.ids : [])])];
@@ -2585,17 +2584,21 @@ export const researchSyncMethods = uiModule({
         const cards = this.researchOpenConflictTotal(treeId);
         if (cards > 0) return cards;
         const link = TreeManager.getTreeMetadata(treeId)?.research;
-        const sends = link ? runtime.get(link.id)?.status?.sends ?? [] : [];
-        const largest = sends.filter(r => link && (r.tree === treeId || r.tree === link.id) && r.state === 'written')
-            .reduce((n, r) => Math.max(n, r.conflicts ?? 0), 0);
+        const largest = link ? this.researchUnloadedSends(treeId, link).reduce((n, r) => Math.max(n, r.conflicts ?? 0), 0) : 0;
         return Math.max(sent?.conflicts ?? 0, researchAutoState(treeId).lastWritten?.conflicts ?? 0, largest);
     },
 
-    /** The conflicts still open in the research from this tree's sends, as its `/status.sends` says (0: none, or not known). */
+    /**
+     * The conflicts still open in the research from this tree's sends written after its version was loaded,
+     * as its `/status.sends` says (0: none, or not known). Those of a send the tree loaded since are here.
+     */
     researchSendsOpenConflicts(treeId: TreeId, link: ResearchLink): number {
-        const sends = runtime.get(link.id)?.status?.sends ?? [];
-        return sends.filter(r => (r.tree === treeId || r.tree === link.id) && r.state === 'written')
-            .reduce((n, r) => n + Math.max(0, r.conflicts ?? 0), 0);
+        return this.researchUnloadedSends(treeId, link).reduce((n, r) => n + Math.max(0, r.conflicts ?? 0), 0);
+    },
+
+    /** This tree's sends the research wrote after the tree last loaded its version (`/status.sends`). */
+    researchUnloadedSends(treeId: TreeId, link: ResearchLink): ResearchSendRecord[] {
+        return unloadedWrittenSends(runtime.get(link.id)?.status?.sends, tree => tree === treeId || tree === link.id, link.syncedAt);
     },
 
     /** The conflicts open in the research for the open tree's people: its unloaded version's where read, else the tree's. */

@@ -8,7 +8,7 @@ import { describe, it, expect } from 'vitest';
 import {
     researchSyncState, researchSyncWantsAttention, pendingSendFate, verifiedOffer, isOlderSource,
     researchReadSource, sourceReadingHash, unverifiedOlderSources, ResearchSyncInput, conflictTakeovers,
-    heldConflicts, researchKeepsTakenBack, latestUndone, undoneLeftBehind, syncRefusalReason,
+    heldConflicts, researchKeepsTakenBack, latestUndone, undoneLeftBehind, syncRefusalReason, unloadedWrittenSends,
 } from '../research-sync.js';
 import { getStringsForLang } from '../strings.js';
 import { sanitizeAccepts, sanitizeInbox, sanitizeLiveStatus, researchHeaderLines, stabilizeIds, sanitizeSyncReply } from '../research-link.js';
@@ -529,6 +529,40 @@ describe('the research\'s conflicts from a version not loaded (finding 40)', () 
         const base = { link: written, matchesBase: false, current: 'fp-sent', remoteHead: 'bbbbbbb' };
         expect(researchSyncState(input(base)).kind).toBe('newer');
         expect(researchSyncState(input({ ...base, heldConflicts: true })).kind).toBe('writtenConflicts');
+    });
+});
+
+describe('conflicts of a send whose write was loaded since (no "Written, N conflicts" after the research moves on)', () => {
+    const rec = (intake: string, decidedAt: string, conflicts: number | null, tree = 'T1') =>
+        ({ intake, at: decidedAt, state: 'written', changes: 11, tries: null, tree, sent: '', decidedAt, reason: '', conflicts, conflictPersons: [] }) as never;
+    const ours = (t: string) => t === 'T1';
+    const open = (sends: never[], since: string) => unloadedWrittenSends(sends, ours, since).reduce((n, r) => n + (r.conflicts ?? 0), 0);
+
+    it('a send written before the tree loaded the research\'s version: its open conflicts are in the tree, not held there', () => {
+        const sends = [rec('R1', '2026-10-19T20:43:38Z', 4)];
+        // Not loaded since the write: the research's version holds its values over the user's.
+        expect(open(sends, '2026-10-19T20:00:00Z')).toBe(4);
+        // Loaded after it (and the research moved on since: an update, its agent's work): nothing held.
+        expect(open(sends, '2026-10-20T08:00:00Z')).toBe(0);
+        // No load known: counted as before.
+        expect(open(sends, '')).toBe(4);
+    });
+
+    it('only written sends of this tree; a later write with conflicts still counts after an older load', () => {
+        const sends = [rec('R1', '2026-10-19T20:43:38Z', 4), rec('R2', '2026-10-21T09:00:00Z', 2),
+            { ...(rec('R3', '2026-10-21T09:05:00Z', 5) as object), state: 'undone' } as never, rec('R4', '2026-10-21T09:10:00Z', 7, 'T2')];
+        expect(unloadedWrittenSends(sends, ours, '2026-10-20T08:00:00Z').map(r => r.intake)).toEqual(['R2']);
+        expect(unloadedWrittenSends(null, ours, '2026-10-20T08:00:00Z')).toEqual([]);
+    });
+
+    it('the state: after the load, the research moving on is a newer version, not the old write\'s conflicts', () => {
+        const loaded = link({ syncedAt: '2026-10-20T08:00:00Z', head: 'bbbbbbb' });
+        const sends = [rec('R1', '2026-10-19T20:43:38Z', 4)];
+        const base = { link: loaded, remoteHead: 'ccccccc', written: { at: '2026-10-19T20:43:34Z', changes: 11, conflicts: 4 } };
+        expect(researchSyncState(input({ ...base, openConflicts: open(sends, loaded.syncedAt) > 0 })).kind).toBe('newer');
+        // Before that load, the same write keeps them in sight.
+        const before = link({ syncedAt: '2026-10-19T20:00:00Z', head: 'bbbbbbb' });
+        expect(researchSyncState(input({ ...base, link: before, openConflicts: open(sends, before.syncedAt) > 0 })).kind).toBe('writtenConflicts');
     });
 });
 

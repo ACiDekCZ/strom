@@ -2170,6 +2170,36 @@ test('R7 of the N1 round: a later send that leaves no conflict keeps "1 conflict
     await expect(pill(page)).toContainText('1 conflict to decide');
 });
 
+test('a write\'s conflicts loaded since: the research moving on (an update, its agent) never brings "Written, N conflicts" back', async ({ page }) => {
+    await page.setViewportSize({ width: 1600, height: 900 });
+    const bridge = await autoTree(page);
+    bridge.syncReply = { status: 200, body: { ...WRITE.body, input: 'I0043', conflicts: [{ id: 'X0002', fact: 'MARR' }] } };
+    bridge.onWrite = () => ({ head: 'd2d2d2d2d2d2', ged: researchGed('d2d2d2d2d2d2') });
+    await renameJan(page, 'Jenda');
+    await page.clock.fastForward(QUIET + 1000);
+    await expect.poll(() => bridge.posts.length).toBe(1);
+    // The research's record of that send: one conflict open (and it stays open there).
+    Object.assign(bridge.sends[0], { conflicts: 1 });
+    await poll(page);
+    await expect(pill(page)).toContainText('1 conflict to decide');
+    // Its version loaded: the write is in the tree now.
+    await openResearchMenu(page);
+    await block(page).getByRole('menuitem', { name: "Load the research's version" }).click();
+    const ask = page.locator('.dialog-confirm', { hasText: 'Changed in the app' });
+    await ask.getByRole('button', { name: 'Update' }).click();
+    await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe('d2d2d2d2d2d2');
+    await page.keyboard.press('Escape');
+    // The research moves on (an update restarts its bridge, its agent works): the old write is not told again.
+    await page.clock.fastForward(60_000);
+    bridge.head = 'e3e3e3e3e3e3';
+    bridge.treeGed = researchGed('e3e3e3e3e3e3');
+    await poll(page);
+    await expect(pill(page)).not.toContainText('conflict');
+    await openResearchMenu(page);
+    await expect(block(page)).not.toHaveAttribute('data-state', 'writtenConflicts');
+    await expect(block(page)).not.toContainText('conflict');
+});
+
 test('B1 of beta.56: a send with a conflict taken back in the research (the conflict closed with it): no "1 conflict to decide" here any more', async ({ page }) => {
     const bridge = await conflictLeft(page);
     Object.assign(bridge.sends[0], { conflicts: 1 });

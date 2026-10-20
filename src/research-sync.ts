@@ -453,6 +453,22 @@ export function openUndone(sends: readonly ResearchSendRecord[] | null | undefin
 }
 
 /**
+ * The written sends of this tree whose write the tree has not loaded yet:
+ * decided after `since` (the tree's last load of the research's version).
+ * A send written before that load is in the tree already, its conflicts with
+ * it ("Waiting for you"): the research's version holds no value of the user's
+ * over them any more (finding 40 is about a version not loaded), so they never
+ * bring "Written, N conflicts" back when the research moves on (an update, its
+ * agent's work) — the conflicts stay where they are, nothing new is told.
+ */
+export function unloadedWrittenSends(sends: readonly ResearchSendRecord[] | null | undefined, ours: (tree: string) => boolean,
+    since = ''): ResearchSendRecord[] {
+    const after = Date.parse(since);
+    return (sends ?? []).filter(r => r.state === 'written' && ours(r.tree)
+        && (!Number.isFinite(after) || !(Date.parse(r.decidedAt || r.at) <= after)));
+}
+
+/**
  * Sends of this tree taken back before one written again (R3 of the rc.49 round keeps them out of
  * Send again: an older state): what they brought is here and not in the research, and a copy sent
  * now never writes it (the research leaves out what was taken back, `takenBack`). Said beside the
