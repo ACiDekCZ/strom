@@ -63,9 +63,10 @@ interface Page {
 /** What stands in place of the dialog's content. */
 type ErrorKind = 'down' | 'not-ready' | 'older' | 'failed' | 'cancelled' | 'busy' | 'limit' | 'unreadable';
 
-type Phase = 'input' | 'progress' | 'result' | 'error';
+/** `propose`: the tree suggestion of the chosen entry; `written`: what the click wrote. */
+export type Phase = 'input' | 'progress' | 'result' | 'error' | 'propose' | 'written';
 
-interface DialogState {
+export interface DialogState {
     phase: Phase;
     pages: Page[];
     personId: string;
@@ -90,12 +91,19 @@ interface DialogState {
     line: number;
     /** The page shown on the scan (`pages[].n`). */
     page: number;
+    /** A second reader started from the suggestion runs: the suggestion stays, the progress shows over it. */
+    second: boolean;
 }
 
 /** A reading the app started: shown as done in the menu and the panel until opened. */
 interface RecentRead { id: string; opened: boolean; research: string }
 
 let st: DialogState | null = null;
+
+/** The open dialog's state (null: closed). For the suggestion's own module. */
+export function readDialogState(): DialogState | null {
+    return st;
+}
 let nextKey = 1;
 /** The readings each research's bridge listed last (by research, then id). */
 const readsByResearch = new Map<string, Map<string, LiveRead>>();
@@ -237,7 +245,7 @@ function segsHtml(segs: readonly LineSeg[]): string {
 }
 
 /** A region (fractions of the page) as absolute position in per cent. */
-function regionStyle(r: ReadRegion): string {
+export function regionStyle(r: ReadRegion): string {
     const pc = (v: number): string => `${Math.round(v * 100000) / 1000}%`;
     return `left:${pc(r[0])};top:${pc(r[1])};width:${pc(r[2])};height:${pc(r[3])}`;
 }
@@ -441,7 +449,8 @@ export const readDocumentMethods = uiModule({
             const l = this.researchOriginalsLink();
             if (!l) { this.watchReads(); return; }
             void this.askResearchBridge(l.researchId, POLL_MS).then(() => {
-                if (st && document.getElementById(DIALOG_ID) && st.phase !== 'progress' && st.phase !== 'result') this.refreshReadGate();
+                if (st && document.getElementById(DIALOG_ID) && (st.phase === 'input' || st.phase === 'error')) this.refreshReadGate();
+                if (st?.phase === 'propose') this.refreshReadProposeFoot();
                 this.watchReads();
             });
         }, POLL_MS);
@@ -547,7 +556,7 @@ export const readDocumentMethods = uiModule({
         st = {
             phase: 'input', pages: [], personId: opts.personId ?? '', note: '', readers: storedReaders(), readId: '',
             sending: null, sawChecking: false, startedAt: Date.now(), error: null, result: results.get(opts.readId ?? '') ?? null,
-            notice: '', picker: null, busy: false, entry: 0, line: -1, page: 1,
+            notice: '', picker: null, busy: false, entry: 0, line: -1, page: 1, second: false,
         };
         const overlay = document.createElement('div');
         overlay.id = DIALOG_ID;
@@ -588,6 +597,7 @@ export const readDocumentMethods = uiModule({
             revoke(st.pages);
         }
         st = null;
+        this.resetReadPropose();
         this.watchReads();
         this.refreshReadSurfaces();
     },
@@ -676,6 +686,7 @@ export const readDocumentMethods = uiModule({
         let body = '';
         let foot = '';
         let wide = false;
+        let headLead = '';
         if (st.phase === 'input') {
             body = this.readInputHtml();
             foot = this.readInputFootHtml();
@@ -685,6 +696,14 @@ export const readDocumentMethods = uiModule({
             sub = t.progressSub(live?.name || st.pages[0]?.file.name || '', live?.pages || st.pages.filter(p => !p.refused).length);
             body = this.readProgressHtml();
             foot = this.readProgressFootHtml();
+        } else if ((st.phase === 'propose' || st.phase === 'written') && st.result) {
+            const view = this.readProposeView(link ? this.readBridgeBase(link.researchId) : '');
+            title = view.title;
+            sub = view.sub;
+            body = view.body;
+            foot = view.foot;
+            wide = view.wide;
+            headLead = view.lead;
         } else if (st.phase === 'result' && st.result) {
             title = this.readResultTitle(st.result);
             subHtml = this.readResultSubtitle(st.result);
@@ -698,7 +717,7 @@ export const readDocumentMethods = uiModule({
         overlay.innerHTML = `
             <div class="modal batch-dialog read-dialog${wide ? ' read-dialog--wide' : ''}" role="dialog" aria-modal="true" aria-labelledby="read-title" data-phase="${st.phase}">
                 <div class="modal-header batch-header">
-                    <div class="audit-log-heading">
+                    ${headLead}<div class="audit-log-heading">
                         <h2 id="read-title">${esc(title)}</h2>
                         <div class="audit-log-subtitle${subHtml ? ' read-result-sub' : ''}">${subHtml || esc(sub)}</div>
                     </div>
@@ -706,7 +725,7 @@ export const readDocumentMethods = uiModule({
                 </div>
                 ${st.notice ? `<p class="read-notice" role="status">${esc(st.notice)}</p>` : ''}
                 <div class="modal-content batch-content read-content${wide ? ' read-content--result' : ''}">${body}</div>
-                <div class="buttons batch-footer read-footer${wide ? ' read-footer--result' : ''}">${foot}</div>
+                <div class="buttons batch-footer read-footer${wide || st.phase === 'written' ? ' read-footer--result' : ''}">${foot}</div>
             </div>`;
         this.wireReadDialog(overlay);
         this.tickReadProgress();
@@ -924,6 +943,21 @@ export const readDocumentMethods = uiModule({
         if (!st) return;
         st.readId = r.id;
         if (r.state === 'checking') st.sawChecking = true;
+        // What was written stays on screen whatever the reading does next.
+        if (st.phase === 'written') return;
+        if (readRunning(r.state) && st.phase === 'propose') {
+            // A second reader from the suggestion: its progress over the suggestion, the choices kept.
+            st.second = true;
+            this.redrawReadPropose();
+            return;
+        }
+        if (st.phase === 'propose' && r.state !== 'done') {
+            // The second reading ended without a result: the first one's suggestion stays.
+            st.second = false;
+            st.notice = r.state === 'cancelled' ? strings.read.againCancelled : strings.read.failed;
+            this.renderReadDialog();
+            return;
+        }
         if (readRunning(r.state)) {
             st.phase = 'progress';
             this.renderReadDialog();
@@ -938,6 +972,7 @@ export const readDocumentMethods = uiModule({
             return;
         }
         if (r.state === 'done') { void this.openReadResult(r.id); return; }
+        st.second = false;
         markOpened(r.id);
         announced.add(r.id);
         st.phase = 'error';
@@ -970,6 +1005,20 @@ export const readDocumentMethods = uiModule({
         } else if (res.state === 'unreadable') {
             st.phase = 'error';
             st.error = { kind: 'unreadable', why: res.doc.why ?? 'other' };
+        } else if (st.phase === 'propose' || st.phase === 'written') {
+            // The suggestion (or what was written) stays; a new result of the same entry refreshes the suggestion.
+            const before = st.result;
+            const entryId = before?.entries[st.entry]?.id;
+            const k = res.entries.findIndex(e => e.id === entryId);
+            const fresh = st.second;
+            st.second = false;
+            if (st.phase === 'propose' && k >= 0) {
+                st.result = res;
+                st.entry = k;
+                st.page = res.entries[k].page;
+                if (fresh && !st.notice) st.notice = strings.read.secondDone;
+                this.refreshReadPropose(before);
+            }
         } else {
             st.result = res;
             st.phase = 'result';
@@ -1033,7 +1082,7 @@ export const readDocumentMethods = uiModule({
         const entries = res.entries;
         const page = this.readShownPage(res);
         const pageN = page?.n ?? s.page;
-        const pills = entries.length >= 2
+        const pills = entries.length >= 2 && s.phase === 'result'
             ? `<div class="read-entries" role="group" aria-label="${esc(t.entriesLabel)}">${entries.map((e, k) => {
                 const name = entryName(e);
                 return `<button type="button" class="read-entry-pill${k === s.entry ? ' is-selected' : ''}" data-act="entry" data-entry="${k}"`
@@ -1050,7 +1099,7 @@ export const readDocumentMethods = uiModule({
             ? `<img class="read-scan-img" src="${esc(url)}" alt="${esc(t.pageAlt(pageN))}" draggable="false">`
             : `<span class="read-scan-noimg">${esc(t.noImage)}</span>`;
         const variants = (entries[s.entry]?.variants.length ?? 0) > 0;
-        const hint = entries.length >= 2 || variants ? `<p class="read-scan-hint">${esc(t.scanHint(variants))}</p>` : '';
+        const hint = s.phase === 'result' && (entries.length >= 2 || variants) ? `<p class="read-scan-hint">${esc(t.scanHint(variants))}</p>` : '';
         return `${pills}${tabs}
                     <div class="read-scan-box">
                         <div class="read-scan-view" id="read-scan-view">
@@ -1180,7 +1229,7 @@ export const readDocumentMethods = uiModule({
     readSelectEntry(i: number): void {
         const s = st;
         const res = s?.result;
-        if (!s || !res || !res.entries[i] || i === s.entry) return;
+        if (!s || !res || !res.entries[i] || i === s.entry || s.phase !== 'result') return;
         s.entry = i;
         s.line = -1;
         s.page = res.entries[i].page;
@@ -1370,7 +1419,8 @@ export const readDocumentMethods = uiModule({
      */
     readDocumentPropose(): void {
         const sel = this.readDocumentSelection();
-        if (!sel || !canPropose(sel.entry)) return;
+        if (!sel || !canPropose(sel.entry) || !st) return;
+        this.openReadPropose();
     },
 
     /** The dialog's result now: the reading, its result and the bridge's address (for the result's own view). */
@@ -1400,6 +1450,17 @@ export const readDocumentMethods = uiModule({
     // ==================== ERRORS ====================
 
     readErrorHtml(): string {
+        const err = st!.error ?? { kind: 'failed' as ErrorKind };
+        const { title, text } = this.readErrorWords();
+        return `
+                <div class="read-error" data-error="${err.kind}" role="alert">
+                    <h3 class="read-error-title">${esc(title)}</h3>
+                    ${text ? `<p class="read-error-text">${esc(text)}</p>` : ''}
+                </div>`;
+    },
+
+    /** The error state's title and explanation. */
+    readErrorWords(): { title: string; text: string } {
         const s = st!;
         const t = strings.read;
         const err = s.error ?? { kind: 'failed' as ErrorKind };
@@ -1431,11 +1492,7 @@ export const readDocumentMethods = uiModule({
                 break;
             }
         }
-        return `
-                <div class="read-error" data-error="${err.kind}" role="alert">
-                    <h3 class="read-error-title">${esc(title)}</h3>
-                    ${text ? `<p class="read-error-text">${esc(text)}</p>` : ''}
-                </div>`;
+        return { title, text };
     },
 
     readErrorFootHtml(): string {
@@ -1559,8 +1616,9 @@ export const readDocumentMethods = uiModule({
                 console.warn('Person picker unavailable', err);
             }
         }
-        if (s.phase === 'result') this.wireReadResult(overlay);
-        if (s.phase === 'error' || s.phase === 'result') overlay.querySelector<HTMLElement>('.read-footer .primary')?.focus();
+        if (s.phase === 'result' || s.phase === 'propose') this.wireReadResult(overlay);
+        if (s.phase === 'propose' || s.phase === 'written') this.wireReadPropose(overlay);
+        if (s.phase === 'error' || s.phase === 'result' || s.phase === 'written') overlay.querySelector<HTMLElement>('.read-footer .primary')?.focus();
     },
 
     /** A click on an element with `data-act` in the dialog. */
@@ -1603,6 +1661,7 @@ export const readDocumentMethods = uiModule({
             case 'copy': void this.copyReadTranscript(); break;
             case 'gloss': this.toggleReadGloss(el); break;
             case 'propose': this.readDocumentPropose(); break;
+            default: this.readProposeAct(el); break;
         }
     },
 
@@ -1752,7 +1811,7 @@ export const readDocumentMethods = uiModule({
         results.delete(id);
         if (s) {
             s.readId = id;
-            s.phase = 'progress';
+            if (s.phase !== 'propose') s.phase = 'progress';
             s.startedAt = Date.now();
             s.sawChecking = false;
             this.renderReadDialog();
@@ -1769,13 +1828,22 @@ export const readDocumentMethods = uiModule({
         if (!s) return;
         s.busy = false;
         s.sending = null;
-        s.phase = 'error';
         const kind: ErrorKind = f.kind === 'down' ? 'down'
             : f.kind === 'not-ready' ? 'not-ready'
             : f.kind === 'read-busy' ? 'busy'
             : f.kind === 'limit' ? 'limit'
             : 'failed';
         s.error = { kind, failure: f };
+        if (s.phase === 'propose') {
+            // A second reader refused: the suggestion of the first stays, the reason above it.
+            const { title, text } = this.readErrorWords();
+            s.error = null;
+            s.second = false;
+            s.notice = [title, text].filter(Boolean).join(' ');
+            this.renderReadDialog();
+            return;
+        }
+        s.phase = 'error';
         this.renderReadDialog();
     },
 
@@ -1802,6 +1870,7 @@ export const readDocumentMethods = uiModule({
         if (reply.value.state === 'done') {
             // A reading again cancelled: the previous version stands.
             results.delete(id);
+            s.second = false;
             s.notice = strings.read.againCancelled;
             await this.openReadResult(id);
         } else if (reply.value.state === 'cancelled' || !reply.value.cancelled) {

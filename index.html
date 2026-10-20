@@ -10967,6 +10967,105 @@
         .read-sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
         .read-crop { position: relative; display: inline-block; overflow: hidden; border-radius: 4px; background: var(--read-scan-bg); vertical-align: middle; }
         .read-crop img { position: absolute; max-width: none; }
+        /* The tree suggestion (§5): person cards, events and relationships, the summary. */
+        .read-back { flex: none; align-self: center; margin-right: 12px; white-space: nowrap; font-size: 13px; }
+        .read-scan-person { position: absolute; pointer-events: none; border: 2px solid var(--primary); background: rgba(63, 107, 79, 0.12); border-radius: 3px; }
+        .read-scan-person[hidden] { display: none; }
+        .read-propose { gap: 14px; }
+        .read-p-heading { margin-top: 4px; }
+        .read-p-progress {
+            display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 10px 12px; border-radius: var(--r-md);
+            background: var(--surface-2); border: 1px solid var(--border);
+        }
+        .read-p-progress-text { flex: 1 1 200px; min-width: 0; font-size: 13.5px; font-weight: 500; }
+        .read-p-progress-sub { display: block; font-weight: 400; font-size: 12.5px; color: var(--text-light); }
+        .read-p-progress .read-bar { flex: 1 1 140px; margin: 0; }
+        .read-p-second {
+            display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: var(--r-md); border: 1px solid var(--border);
+            background: var(--surface); cursor: pointer;
+        }
+        .read-p-second.is-on { border-color: var(--primary); background: var(--primary-soft); }
+        .read-p-second input { flex: none; margin: 2px 0 0; }
+        .read-p-second-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 13.5px; }
+        .read-p-second-text span { font-size: 12.5px; color: var(--text-light); }
+        .read-p-persons { display: flex; flex-direction: column; gap: 8px; }
+        .read-p-card {
+            display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; align-items: start; gap: 6px 12px; padding: 10px 12px;
+            border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface);
+        }
+        .read-p-card.is-skip { background: var(--surface-2); }
+        .read-p-card.is-skip .read-p-crop, .read-p-card.is-skip .read-p-main { opacity: 0.6; }
+        .read-p-crop { line-height: 0; }
+        .read-p-main { min-width: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13.5px; }
+        .read-p-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
+        .read-p-role { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; color: var(--text-light); }
+        .read-p-written { font-family: var(--font-serif); font-style: italic; font-size: 14px; color: var(--text-light); overflow-wrap: anywhere; }
+        .read-p-name { font-weight: 500; }
+        .read-p-muted { font-size: 12.5px; color: var(--text-light); }
+        .read-p-match {
+            display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; padding: 4px 8px; border-radius: var(--r-sm, 6px);
+            background: var(--primary-soft); color: var(--text);
+        }
+        .read-p-match strong { font-weight: 600; overflow-wrap: anywhere; }
+        .read-p-why { font-size: 12.5px; color: var(--text-light); }
+        .read-p-other { margin-left: auto; font-size: 12.5px; }
+        .read-p-adds { font-size: 12.5px; color: var(--text); }
+        .read-p-differs, .read-p-unsure, .read-p-variants { font-size: 12.5px; color: var(--read-amber-text); }
+        .read-p-unsure.is-fresh, .read-p-variants.is-fresh { font-weight: 600; }
+        .read-p-card.has-fresh { border-color: var(--read-amber-dot); }
+        .read-p-fields { display: flex; flex-wrap: wrap; gap: 6px; }
+        .read-p-field { position: relative; display: inline-flex; align-items: center; flex: 1 1 120px; min-width: 0; }
+        .read-p-field input { width: 100%; min-width: 0; box-sizing: border-box; padding: 5px 8px; font-size: 14px; }
+        .read-p-field.is-uncertain input { border-color: var(--read-amber-dot); background: var(--read-amber-bg); padding-right: 64px; }
+        .read-p-tag {
+            position: absolute; right: 6px; padding: 0 6px; border-radius: 999px; background: var(--read-amber-line); color: var(--read-amber-text);
+            font-size: 11px; line-height: 18px; pointer-events: none;
+        }
+        .read-p-unsure { flex-basis: 100%; }
+        .read-p-picker { min-width: 0; }
+        .read-p-seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+        .read-p-seg-btn {
+            padding: 4px 10px !important; border: 0 !important; border-radius: 0 !important; background: var(--surface) !important; color: var(--text-light) !important;
+            font-size: 12.5px; box-shadow: none !important; min-height: 0; white-space: nowrap; cursor: pointer;
+        }
+        .read-p-seg-btn + .read-p-seg-btn { border-left: 1px solid var(--border) !important; }
+        .read-p-seg-btn.is-on { background: var(--primary) !important; color: #fff !important; }
+        .read-p-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+        .read-p-item label { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 5px 4px; font-size: 13.5px; cursor: pointer; }
+        .read-p-item input { flex: none; margin: 0; align-self: center; }
+        .read-p-item-text { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; }
+        .read-p-item-note { font-size: 12.5px; color: var(--text-light); overflow-wrap: anywhere; }
+        .read-p-item.is-off label { cursor: default; color: var(--text-faint); }
+        .read-p-item.is-off .read-p-item-note { color: var(--text-faint); }
+        .read-p-info { margin: 0; padding-top: 10px; border-top: 1px solid var(--border); font-size: 12.5px; color: var(--text-light); }
+        .read-p-foot-note.is-blocked { color: var(--read-amber-text); }
+        .read-p-apply .research-ai-badge { margin-left: 8px; }
+        .read-written { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 14px; overflow-wrap: anywhere; }
+        .read-w-unsure { color: var(--read-amber-text); font-size: 12.5px; }
+        .read-w-sent {
+            margin: 14px 0 0; padding: 8px 12px; border-radius: var(--r-md); background: var(--read-amber-bg); border: 1px solid var(--read-amber-line);
+            color: var(--read-amber-text); font-size: 13px;
+        }
+        @media (hover: hover) {
+            .read-p-card:hover { border-color: var(--primary); }
+            .read-p-seg-btn:not(.is-on):hover { color: var(--text) !important; background: var(--surface-2) !important; }
+            .read-p-second:hover { border-color: var(--primary); }
+        }
+        @media (max-width: 640px) {
+            .read-p-card { grid-template-columns: minmax(0, 1fr); }
+            .read-p-crop { display: none; }
+            .read-p-seg { justify-self: start; }
+            /* The phone's footer of the result and the suggestion: the secondary buttons side by side, the main one across. */
+            #read-document-modal .read-footer--result { flex-direction: row; flex-wrap: wrap; align-items: center; }
+            #read-document-modal .read-footer--result > .batch-foot-note { flex: 1 1 100%; order: 0; }
+            #read-document-modal .read-footer--result > button { width: auto; flex: 1 1 0; min-width: 0; order: 1; }
+            #read-document-modal .read-footer--result > button.primary { flex: 1 1 100%; order: 2; }
+        }
+        @media (pointer: coarse) {
+            .read-p-seg-btn { min-height: 44px !important; padding: 0 14px !important; }
+            .read-p-item label { min-height: 44px; align-items: center; }
+            .read-back, .read-p-other { min-height: 44px; }
+        }
         @media (hover: hover) {
             .read-line[tabindex]:hover { background: var(--read-line-bg); }
             .read-entry-pill:hover, .read-page-tab:hover, .read-copy:hover, .read-scan-open:hover { border-color: var(--primary); }
@@ -11000,9 +11099,6 @@
             .read-transcript { font-size: 17px; }
             .read-gloss { grid-template-columns: minmax(0, 1fr); gap: 2px; }
             .read-gloss dd { margin-bottom: 6px; }
-            /* The phone's footer stacks its buttons (column); the note goes under them. */
-            .read-footer--result { flex-wrap: nowrap; }
-            .read-footer--result .batch-foot-note { flex-basis: auto; text-align: center; }
         }
         @media (pointer: coarse) {
             .read-entry-pill, .read-page-tab, .read-copy { min-height: 44px; }
