@@ -58,3 +58,27 @@ describe('texts never address the user', () => {
         });
     }
 });
+
+/**
+ * German names the people a file goes to or comes from without the generic
+ * masculine ("der Empfänger", "er öffnet sie"): "Verwandte", "beim Öffnen".
+ * A document role of the read results ("addressee" of a letter) is a term.
+ */
+describe('German texts about the people a file goes to are gender-neutral', () => {
+    const MASCULINE = /\b(Empfänger|Empfängers|Absender|Absenders|einen Verwandten|einem Verwandten|Ein Verwandter)\b|\ber (öffnet|ergänzt|weiß|schickt)\b/;
+    const TERMS = new Set(['read.roles.addressee']);
+    it('de', () => {
+        const pack = getStringsForLang('de' as Language) as unknown as Record<string, unknown>;
+        const found: string[] = [];
+        for (const g of Object.keys(pack)) {
+            const all: [string, string][] = [];
+            texts(pack[g], g, all);
+            for (const [path, text] of all) {
+                if (TERMS.has(path)) continue;
+                const m = MASCULINE.exec(text);
+                if (m) found.push(`${path}: …${text.slice(Math.max(0, m.index - 30), m.index + 30)}…`);
+            }
+        }
+        expect(found).toEqual([]);
+    });
+});

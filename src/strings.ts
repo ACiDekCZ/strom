@@ -9864,7 +9864,7 @@ const stringsDE: StringsType = {
         step6: 'Zoom- und Verschiebe-Steuerung — die Arbeitsfläche lässt sich auch mit der Maus ziehen und mit dem Mausrad zoomen; 0 setzt die Ansicht zurück.',
         step6Touch: 'Zoom-Steuerung — die Arbeitsfläche lässt sich auch mit dem Finger verschieben und mit zwei Fingern zoomen.',
         step7: 'Jemanden nach Namen suchen und mit dem Trichter nach Nachname, Ort, Geburtsjahren, Geschlecht oder Lebendstatus filtern.',
-        step8: 'Stammbäume, Export und Teilen sind hier. Strom exportiert sich als eine einzige, in sich geschlossene Datei, die sich einem Verwandten per E-Mail schicken lässt.',
+        step8: 'Stammbäume, Export und Teilen sind hier. Strom exportiert sich als eine einzige, in sich geschlossene Datei, die sich an Verwandte per E-Mail schicken lässt.',
     },
 
     // Anniversaries + "on this day"
@@ -12394,16 +12394,16 @@ const stringsDE: StringsType = {
 
     // Collaboration: send to a relative
     share: {
-        menuItem: '📩 An einen Verwandten senden',
-        menuDesc: 'Eine Datei per E-Mail — er öffnet sie, ergänzt, was er weiß, und schickt sie zurück',
+        menuItem: '📩 An Verwandte senden',
+        menuDesc: 'Eine Datei per E-Mail — zum Öffnen, Ergänzen und Zurückschicken',
         passwordLabel: 'Passwort (optional)',
-        dialogTitle: 'An einen Verwandten senden',
-        dialogIntro: 'Erstellt eine einzelne Datei zum Versenden per E-Mail. Der Empfänger öffnet sie einfach — keine Installation, kein Konto.',
+        dialogTitle: 'An Verwandte senden',
+        dialogIntro: 'Erstellt eine einzelne Datei zum Versenden per E-Mail. Die Datei öffnet sich einfach im Browser — keine Installation, kein Konto.',
         scopeLabel: 'Was gesendet wird',
         scopeWhole: 'Der ganze Stammbaum',
         scopeBranch: 'Die aktuelle Ansicht (sichtbarer Zweig)',
-        senderNameLabel: 'Name des Absenders (dem Empfänger angezeigt)',
-        messageLabel: 'Nachricht für den Empfänger',
+        senderNameLabel: 'Absendername (wird beim Öffnen angezeigt)',
+        messageLabel: 'Nachricht zur Datei',
         messagePlaceholder: 'Hallo! Könntest du ergänzen, was du über deinen Zweig weißt?',
         createFile: 'Datei zum Senden erstellen',
         welcomeTitle: (sender: string) => `${sender} hat einen Stammbaum geschickt`,
@@ -12419,7 +12419,7 @@ const stringsDE: StringsType = {
         replyMerge: 'Prüfen und zusammenführen',
         replyView: 'Erst nur ansehen',
         replyImport: 'Als neuen Stammbaum importieren',
-        unknownSender: 'Ein Verwandter'
+        unknownSender: 'Ein Familienmitglied'
     },
 
     // Change packets (send only changes)
@@ -12429,7 +12429,7 @@ const stringsDE: StringsType = {
         packetSaved: 'Änderungsdatei gespeichert',
         noChanges: 'Seit dem letzten Teilen hat sich nichts geändert',
         baselineMissing: 'Die Ausgangsbasis für diese Änderungen fehlt — stattdessen um die ganze Datei bitten',
-        treeNotFound: 'Kein passender Stammbaum für diese Änderungen — den Absender stattdessen um die ganze Datei bitten',
+        treeNotFound: 'Kein passender Stammbaum für diese Änderungen — stattdessen um die ganze Datei bitten',
         previewTitle: (sender: string) => `${sender} hat Änderungen geschickt`,
         previewIntro: (tree: string) => tree ? `Diese Ergänzungen aktualisieren den Stammbaum „${tree}“.` : 'Diese Ergänzungen aktualisieren den Stammbaum.',
         accept: 'Änderungen übernehmen',
