@@ -140,7 +140,14 @@ test.describe('the bridge of Strom Research 1.11.0', () => {
         await poll(page);
         await openResearchMenu(page);
         const line = page.locator('#research-older-block');
-        await expect(line).toContainText('The research has an older version (1.11.0)');
+        // Title and facts each on one line; what waits for the update is the hint (menu 1020 §2.2).
+        await expect(line.locator('.research-sync-title')).toHaveText('The research has an older version');
+        await expect(line.locator('.research-sync-sub')).toHaveText('version 1.11.0');
+        await expect(line.locator('.research-sync-status')).toHaveAttribute('title', 'sending by itself and originals only after an update');
+        // The first level (design 2g has Waiting · Open · Other actions): Send ↗ and the agent stay, both work
+        // with this version (the send goes through the research's link; the agent opens in it).
+        await expect(page.locator('#research-menu > .research-menu-group > .tree-switcher-action .research-item-label'))
+            .toHaveText(['Continue with the agent', 'Open research', 'Send changes', 'Other actions']);
         await line.getByRole('menuitem', { name: 'How to update…' }).click();
         const dialog = page.locator('#research-update-modal');
         await expect(dialog.locator('.install-line').nth(0)).toHaveText('strom update');

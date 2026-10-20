@@ -951,8 +951,12 @@
            it under the toolbar and lets it scroll on a short window. */
         .actions-tree-submenu { width: 300px; max-width: calc(100vw - 32px); }
         .actions-tree-submenu .tree-switcher-action { min-height: 34px; padding: 6px 14px; box-sizing: border-box; }
+        /* Sentence-case group headings in the tree lists (design 3d), not the
+           uppercase labels of the ⋯ menu's other sections. */
         .actions-tree-submenu .actions-tree-header {
             height: 30px; box-sizing: border-box; padding: 12px 14px 4px;
+            font-size: 11px; font-weight: 700; letter-spacing: normal; text-transform: none;
+            color: var(--text-light);
         }
         .actions-tree-submenu .actions-tree-header:first-child { padding-top: 10px; }
         .actions-tree-action-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -960,8 +964,11 @@
             max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
             color: var(--text-faint); font-size: 12px;
         }
-        .actions-tree-check { flex-shrink: 0; width: 14px; color: var(--primary); visibility: hidden; }
-        .actions-tree-action[aria-checked="true"] .actions-tree-check { visibility: visible; }
+        /* "Open at startup": the sheet's switch, a size smaller for the 34px row. */
+        .actions-tree-submenu .actions-tree-switch { width: 32px; height: 18px; margin-left: auto; }
+        .actions-tree-submenu .actions-tree-switch::after { top: 2px; left: 2px; width: 14px; height: 14px; }
+        .actions-tree-action[aria-checked="true"] .actions-tree-switch { background: var(--primary); }
+        .actions-tree-action[aria-checked="true"] .actions-tree-switch::after { transform: translateX(14px); }
         .tree-switcher-action.danger { color: var(--danger); }
         @media (hover: hover) { .tree-switcher-action.danger:hover { color: var(--danger); } }
         /* "Change structure ⌄": its rows open in place, indented 14px. */
@@ -2521,7 +2528,10 @@
             flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
             padding: 0 0 8px;
         }
-        .tree-actions-list .bottom-sheet-section { padding: 14px 16px 6px; font-size: 12px; letter-spacing: .06em; }
+        .tree-actions-list .bottom-sheet-section {
+            padding: 14px 16px 6px; font-size: 13px; font-weight: 700;
+            letter-spacing: normal; text-transform: none; color: var(--text-light);
+        }
         .bottom-sheet-menu .bottom-sheet-item.tree-actions-row {
             min-height: 48px; padding: 0 16px; gap: 8px; justify-content: flex-start;
             font-size: 16px; border-radius: 0; border-top: 1px solid var(--divider);
@@ -9442,10 +9452,8 @@
         .tree-row-menu-group {
             padding: 8px 12px 4px;
             font-size: 11px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: .06em;
-            color: var(--accent-text, var(--text-light));
+            font-weight: 700;
+            color: var(--text-light);
         }
         .tree-row-menu-group + .tree-row-menu-item { margin-top: 0; }
         .tree-row-menu-group:not(:first-child) {

@@ -333,6 +333,35 @@ test.describe('actions menu "Tree:" submenu', () => {
         await expect(submenu.locator('#actions-tree-structure')).toBeHidden();
     });
 
+    test('the flyout as design 3d: headings in sentence case, Default person with its value (First person when none is set), Open at startup a switch', async ({ page }) => {
+        await openApp(page);
+        await createFirstPerson(page, 'Jan', 'Novak');
+        const submenu = await openTreeActions(page);
+        const headers = submenu.locator('.actions-tree-header');
+        await expect(headers).toHaveText(['Research', 'Tree settings']);
+        for (const style of await headers.evaluateAll(els => els.map(el => getComputedStyle(el)))) {
+            expect([style.textTransform, style.letterSpacing]).toEqual(['none', 'normal']);
+        }
+        await expect(submenu.locator('[data-action="defaultPerson"] .actions-tree-value')).toHaveText('First person');
+        const startup = submenu.locator('[data-action="startup"]');
+        const toggle = startup.locator('.actions-tree-switch');
+        await expect(toggle).toBeVisible();
+        const off = await toggle.evaluate(el => getComputedStyle(el).backgroundColor);
+        const was = await startup.getAttribute('aria-checked');
+        await startup.click();
+        await expect(startup).not.toHaveAttribute('aria-checked', was!);
+        await expect.poll(() => toggle.evaluate(el => getComputedStyle(el).backgroundColor)).not.toBe(off);
+        // A person chosen: its name is the value.
+        await page.evaluate(() => {
+            const dm = window.Strom.DataManager;
+            const jan = Object.values(dm.getData().persons)[0] as { id: string };
+            dm.setDefaultPerson(jan.id as never);
+        });
+        await page.evaluate(() => window.Strom.UI.closeActionsMenu());
+        await openTreeActions(page);
+        await expect(submenu.locator('[data-action="defaultPerson"] .actions-tree-value')).toHaveText('Jan Novak');
+    });
+
     test('every tree action has its place in the flyout (menu 1020 §8 rows 12–29, 32) and runs from there', async ({ page }) => {
         await openApp(page);
         await createFirstPerson(page, 'Jan', 'Novak');

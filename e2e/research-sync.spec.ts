@@ -26,7 +26,7 @@ test.describe('the state of the tree and sending straight', () => {
         await expect(dot(page)).toBeHidden();
         await openResearchMenu(page);
         await expect(block(page)).toHaveAttribute('data-state', 'unsent');
-        await expect(block(page)).toContainText("Changes the research doesn't have");
+        await expect(block(page)).toContainText('Not in the research yet');
         await block(page).getByRole('menuitem', { name: 'Send changes' }).click();
         await expect(page.locator('.toast')).toContainText('Sent to the research, 6 changes. Confirm them in the research.');
         await expect(page.locator('#confirmation-modal')).not.toHaveClass(/active/);
@@ -106,7 +106,10 @@ test.describe('the state of the tree and sending straight', () => {
         await poll(page);
         await openResearchMenu(page);
         await expect(block(page)).toHaveAttribute('data-state', 'unsentBridgeDown');
-        await expect(block(page)).toContainText('The changes will wait, nothing is lost.');
+        // Title and facts on the block's two lines; the sentence is its hint (menu 1020 §2.2).
+        await expect(block(page).locator('.research-sync-title')).toHaveText("The research isn't running");
+        await expect(block(page).locator('.research-sync-sub')).toHaveText(/^1 person changed · /);
+        await expect(block(page).locator('.research-sync-status')).toHaveAttribute('title', /The changes will wait, nothing is lost\./);
         await page.evaluate(() => window.Strom.UI.researchSendNow());
         expect(bridge.posts).toHaveLength(0);
         expect(await links(page)).toContain(`strom-research://send?tree=${UUID}`);

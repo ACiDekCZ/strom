@@ -35,10 +35,10 @@ test.describe('changes per person', () => {
         await page.keyboard.press('Escape');
         await expect(panel).toHaveCount(0);
 
-        // The block in ⋯ → Research: how many people, and the same panel.
-        await openResearchMenu(page);
+        // The block in ⋯ → Research: how many people; the same panel from "Other actions" (Send sends at once here).
+        await openResearchMenu(page, { expandMore: true });
         await expect(block(page)).toContainText('1 person changed');
-        await block(page).getByRole('menuitem', { name: 'What will be sent ›' }).click();
+        await page.locator('#research-item-changes').click();
         await expect(panel).toBeVisible();
         // A name selects the person and closes the panel.
         await panel.locator('.research-changes-name').click();
@@ -115,11 +115,11 @@ test.describe('changes per person after a send the research took nothing from', 
 
         const panel = page.locator('#research-changes-panel');
         const listed = async () => {
-            await openResearchMenu(page);
+            await openResearchMenu(page, { expandMore: true });
             await expect(block(page)).toHaveAttribute('data-state', 'notTaken');
             await expect(block(page)).toContainText('The research took nothing new from the last send.');
             await expect(block(page)).toContainText('1 person changed');
-            await block(page).getByRole('menuitem', { name: 'What will be sent ›' }).click();
+            await page.locator('#research-item-changes').click();
             await expect(panel.locator('.research-changes-title')).toHaveText('What will be sent');
             await expect(panel.locator('.research-changes-row')).toHaveCount(1);
             await expect(panel.locator('.research-changes-name')).toHaveText('Jan Fíšek');

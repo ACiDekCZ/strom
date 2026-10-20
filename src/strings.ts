@@ -943,6 +943,8 @@ const stringsEN = {
         stateInSync: 'In sync with the research',
         sinceTime: (t: string) => `since ${t}`,
         stateUnsent: "Changes the research doesn't have",
+        /** The research menu's state block: one line beside the button (320 px menu). */
+        stateUnsentShort: 'Not in the research yet',
         changedAt: (t: string) => `Changed ${t}`,
         stateSent: (t: string, n: number | null) => n === null ? `Sent ${t}` : `Sent ${t} · ${nEn(n, 'change', 'changes')}`,
         statePendingSub: 'Waiting for confirmation in the research.',
@@ -992,6 +994,9 @@ const stringsEN = {
         cancelLoad: 'Cancel loading',
         startResearch: 'Start the research ↗',
         startAndSend: 'Start and send ↗',
+        /** The state block's one button, short (the menu is 320 px). */
+        sendShort: 'Send',
+        startShort: 'Start ↗',
         retry: 'Try again',
         sendAgain: 'Send again',
         downloadGedcom: 'Download GEDCOM',
@@ -1464,6 +1469,9 @@ const stringsEN = {
         blockTitle: (v: string) => `The research has an older version${v ? ` (${v})` : ''}`,
         blockSub: 'sending by itself and originals only after an update',
         blockTitlesSub: 'it doesn\'t keep titles: they stay in the app only',
+        /** The state block's short second line: the version, and that titles stay here (the sentence above is its tooltip). */
+        blockVersion: (v: string) => `version ${v}`,
+        blockNoTitles: 'no titles',
         intro: (v: string) => `The research on this computer has an older version${v ? ` (${v})` : ''}. The new one sends changes by itself and takes original files.`,
         titlesLine: (v: string) => `The research has an older version${v ? ` (${v})` : ''} that doesn't keep titles. Titles stay in the app only until the research is updated.`,
         titlesIntro: (v: string) => `The research on this computer has an older version${v ? ` (${v})` : ''} that doesn't keep the titles before and after names. Titles stay in the app only; the new version keeps them in the research too.`,
@@ -1716,6 +1724,8 @@ const stringsEN = {
         more: 'Other actions',
         updateRow: 'Update the research',
         footer: '↗ continues in the research',
+        /** The research menu's "Other actions": the preview of what goes (when Send in the state block sends at once). */
+        whatWillBeSentRow: 'What will be sent…',
         loadNewVersion: 'Load new version',
         sendChanges: 'Send changes',
         openResearch: 'Open research',
@@ -5478,6 +5488,7 @@ const stringsCZ: StringsType = {
         stateInSync: 'V souladu s výzkumem',
         sinceTime: (t: string) => `od ${t}`,
         stateUnsent: 'Úpravy, které výzkum nezná',
+        stateUnsentShort: 'Úpravy, které výzkum nezná',
         changedAt: (t: string) => `Změněno ${t}`,
         stateSent: (t: string, n: number | null) => n === null ? `Odesláno ${t}` : `Odesláno ${t} · ${nCs(n, 'změna', 'změny', 'změn')}`,
         statePendingSub: 'Čeká na potvrzení ve výzkumu.',
@@ -5527,6 +5538,9 @@ const stringsCZ: StringsType = {
         cancelLoad: 'Zrušit načtení',
         startResearch: 'Spustit výzkum ↗',
         startAndSend: 'Spustit a poslat ↗',
+        /** The state block's one button, short (the menu is 320 px). */
+        sendShort: 'Poslat',
+        startShort: 'Spustit ↗',
         retry: 'Zkusit znovu',
         sendAgain: 'Poslat znovu',
         downloadGedcom: 'Stáhnout GEDCOM',
@@ -5991,6 +6005,9 @@ const stringsCZ: StringsType = {
         blockTitle: (v: string) => `Výzkum má starší verzi${v ? ` (${v})` : ''}`,
         blockSub: 'automatické posílání a originály až po aktualizaci',
         blockTitlesSub: 'nezná tituly: zůstávají jen v aplikaci',
+        /** The state block's short second line: the version, and that titles stay here (the sentence above is its tooltip). */
+        blockVersion: (v: string) => `verze ${v}`,
+        blockNoTitles: 'bez titulů',
         intro: (v: string) => `Výzkum na tomto počítači má starší verzi${v ? ` (${v})` : ''}. Nová verze posílá změny sama a přijímá originály souborů.`,
         titlesLine: (v: string) => `Výzkum má starší verzi${v ? ` (${v})` : ''}, která nezná tituly. Do aktualizace výzkumu zůstávají tituly jen v aplikaci.`,
         titlesIntro: (v: string) => `Výzkum na tomto počítači má starší verzi${v ? ` (${v})` : ''}, která nezná tituly před jménem a za ním. Tituly zůstávají jen v aplikaci; nová verze je uchová i ve výzkumu.`,
@@ -6241,6 +6258,8 @@ const stringsCZ: StringsType = {
         more: 'Další',
         updateRow: 'Aktualizovat výzkum',
         footer: '↗ pokračuje ve výzkumu',
+        /** The research menu's "Other actions": the preview of what goes (when Send in the state block sends at once). */
+        whatWillBeSentRow: 'Co se pošle…',
         loadNewVersion: 'Načíst novou verzi',
         sendChanges: 'Poslat úpravy',
         openResearch: 'Otevřít výzkum',
@@ -9981,6 +10000,7 @@ const stringsDE: StringsType = {
         stateInSync: 'Mit der Forschung abgeglichen',
         sinceTime: (t: string) => `seit ${t}`,
         stateUnsent: 'Änderungen, die die Forschung nicht kennt',
+        stateUnsentShort: 'Der Forschung unbekannt',
         changedAt: (t: string) => `Geändert ${t}`,
         stateSent: (t: string, n: number | null) => n === null ? `Gesendet ${t}` : `Gesendet ${t} · ${nDe(n, 'Änderung', 'Änderungen')}`,
         statePendingSub: 'Wartet auf Bestätigung in der Forschung.',
@@ -10030,6 +10050,9 @@ const stringsDE: StringsType = {
         cancelLoad: 'Laden abbrechen',
         startResearch: 'Forschung starten ↗',
         startAndSend: 'Starten und senden ↗',
+        /** The state block's one button, short (the menu is 320 px). */
+        sendShort: 'Senden',
+        startShort: 'Starten ↗',
         retry: 'Erneut versuchen',
         sendAgain: 'Erneut senden',
         downloadGedcom: 'GEDCOM herunterladen',
@@ -10494,6 +10517,9 @@ const stringsDE: StringsType = {
         blockTitle: (v: string) => `Die Forschung hat eine ältere Version${v ? ` (${v})` : ''}`,
         blockSub: 'automatisches Senden und Originale erst nach Aktualisierung',
         blockTitlesSub: 'kennt keine Titel: sie bleiben nur in der App',
+        /** The state block's short second line: the version, and that titles stay here (the sentence above is its tooltip). */
+        blockVersion: (v: string) => `Version ${v}`,
+        blockNoTitles: 'ohne Titel',
         intro: (v: string) => `Die Forschung auf diesem Computer hat eine ältere Version${v ? ` (${v})` : ''}. Die neue sendet Änderungen selbst und nimmt Originaldateien an.`,
         titlesLine: (v: string) => `Die Forschung hat eine ältere Version${v ? ` (${v})` : ''}, die keine Titel kennt. Bis zur Aktualisierung der Forschung bleiben Titel nur in der App.`,
         titlesIntro: (v: string) => `Die Forschung auf diesem Computer hat eine ältere Version${v ? ` (${v})` : ''}, die keine Titel vor und nach dem Namen kennt. Titel bleiben nur in der App; die neue Version behält sie auch in der Forschung.`,
@@ -10744,6 +10770,8 @@ const stringsDE: StringsType = {
         more: 'Weitere Aktionen',
         updateRow: 'Forschung aktualisieren',
         footer: '↗ weiter in der Forschung',
+        /** The research menu's "Other actions": the preview of what goes (when Send in the state block sends at once). */
+        whatWillBeSentRow: 'Was gesendet wird…',
         loadNewVersion: 'Neue Version laden',
         sendChanges: 'Änderungen senden',
         openResearch: 'Forschung öffnen',

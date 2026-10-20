@@ -321,6 +321,9 @@ test('the Tree row opens the tree-actions sheet: name, summary, the groups of th
     // Menu 1020 §3.1: no Export, Save to file nor Send changes here (one level up / the manager's ⋯);
     // the structure actions fold under "Change structure ⌄"; Manage trees… last.
     await expect(sheet.locator('.bottom-sheet-section')).toHaveText(TREE_SHEET_HEADERS);
+    // Sentence case as in design 3d (not the uppercase labels of other sheets).
+    expect(await sheet.locator('.bottom-sheet-section').first().evaluate(el => getComputedStyle(el).textTransform)).toBe('none');
+    await expect(sheet.locator('[data-action="defaultPerson"] .tree-actions-value')).toHaveText('First person');
     const keys = () => sheet.locator('.tree-actions-row:visible').evaluateAll(els => els.map(el => (el as HTMLElement).dataset.action));
     expect(await keys()).toEqual(TREE_SHEET_KEYS);
     await openTreeStructure(page, sheet);

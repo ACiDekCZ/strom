@@ -77,6 +77,8 @@ export interface ResearchSyncBlock {
     tone: 'warn' | 'neutral' | 'quiet';
     title: string;
     sub?: string;
+    /** What the short second line leaves out, as a sentence (the status's tooltip and description). */
+    note?: string;
     actions: ResearchSyncBlockAction[];
     /** A line above the buttons: whom and what "Show" leads to ("Anna Fíšková · Birth"). */
     lead?: string;
@@ -2207,7 +2209,7 @@ export const researchSyncMethods = uiModule({
         const auto = researchSendMode(link) === 'auto';
         const autoState = treeId ? researchAutoState(treeId) : {};
         type Action = ResearchSyncBlockAction;
-        type Block = { tone: 'warn' | 'neutral' | 'quiet'; title: string; sub?: string; actions?: Action[]; lead?: string; spinner?: boolean };
+        type Block = { tone: 'warn' | 'neutral' | 'quiet'; title: string; sub?: string; note?: string; actions?: Action[]; lead?: string; spinner?: boolean };
         const changed = treeId ? when(TreeManager.getTreeMetadata(treeId)?.changedAt) : '';
         const edits = Math.max(1, autoState.edits ?? 1);
         const rt = link ? runtime.get(link.id) : undefined;
@@ -2262,8 +2264,8 @@ export const researchSyncMethods = uiModule({
                 return { tone: conn && conn.warn ? 'warn' : 'neutral', title: conflicts > 0 ? s.flyConflict(conflicts) : at,
                     sub: [conn ? `${conn.title}.` : '', conn?.sub ?? '', conflicts > 0 ? at : '', conflicts > 0 ? s.writtenConflictsSub : ''].filter(Boolean).join(' '), actions, lead: show?.lead };
             },
-            unsent: () => ({ tone: 'warn', title: s.stateUnsent, sub: changed ? s.changedAt(changed) : undefined, actions: [{ action: 'send', label: s.send }] }),
-            notTaken: () => ({ tone: 'neutral', title: s.stateUnsent, sub: s.notTakenSub, actions: [{ action: 'send', label: s.send }] }),
+            unsent: () => ({ tone: 'warn', title: s.stateUnsentShort, sub: changed ? s.changedAt(changed) : undefined, actions: [{ action: 'send', label: s.send }] }),
+            notTaken: () => ({ tone: 'neutral', title: s.stateUnsentShort, sub: s.notTakenSub, actions: [{ action: 'send', label: s.send }] }),
             sentPending: () => ({ tone: 'neutral', title: s.stateSent(when(state.sent?.at), state.sent?.changes ?? null),
                 sub: s.statePendingSub, actions: this.researchLinkAvailable('open') ? [{ action: 'openResearch', label: s.openResearch, asLink: true }] : [] }),
             newer: () => {
@@ -2280,7 +2282,7 @@ export const researchSyncMethods = uiModule({
             // Out of "only load": what piled up meanwhile, nothing goes before it is seen.
             piled: () => {
                 const n = this.researchChangesNow()?.length ?? 0;
-                return { tone: 'neutral', title: n ? strings.treeSettings.piled(n) : s.stateUnsent,
+                return { tone: 'neutral', title: n ? strings.treeSettings.piled(n) : s.stateUnsentShort,
                     actions: [{ action: 'showChangesFirst', label: strings.treeSettings.whatWillBeSent }] };
             },
             // The research's version loaded within the hour: the way back in sight (later only the menu row).
@@ -2291,7 +2293,7 @@ export const researchSyncMethods = uiModule({
             // Only loading: a quiet line in place of the state, with the way to change it.
             off: () => ({ tone: 'quiet', title: s.sendOffLine, actions: [{ action: 'changeSendMode', label: s.sendOffChange, asLink: true }] }),
             // Send goes as any send (by hand through "What will be sent"); the newer version loads only when asked (V-I).
-            unsentAndNewer: () => ({ tone: 'warn', title: s.stateUnsent, sub: s.unsentNewerSub, actions: [{ action: 'send', label: s.send }] }),
+            unsentAndNewer: () => ({ tone: 'warn', title: s.stateUnsentShort, sub: s.unsentNewerSub, actions: [{ action: 'send', label: s.send }] }),
             waitThenLoad: () => ({ tone: 'neutral', title: s.stateSent(when(state.sent?.at), state.sent?.changes ?? null),
                 sub: s.waitThenLoadSub, actions: [{ action: 'cancelLoad', label: s.cancelLoad, asLink: true }] }),
             // Stuck or blocked by the browser: the way out first, starting the research always beside it (never neither).
@@ -2302,7 +2304,8 @@ export const researchSyncMethods = uiModule({
                 : rt?.why === 'refused'
                     ? { tone: 'warn', title: s.stateAddressRefused, sub: s.addressRefusedSub, actions: start }
                     : { tone: 'quiet', title: s.stateBridgeDown, sub: s.bridgeDownSub, actions: start.map(a => ({ ...a, asLink: true })) },
-            unsentBridgeDown: () => ({ tone: 'warn', title: s.stateUnsent, sub: s.unsentBridgeDownSub,
+            // The fact first (menu 1020 §2.7, 2b): the research is not running; the changes and when, the sentence in the tooltip.
+            unsentBridgeDown: () => ({ tone: 'warn', title: s.stateBridgeDown, sub: changed ? s.changedAt(changed) : undefined, note: s.unsentBridgeDownSub,
                 actions: this.researchLinkAvailable('send') ? [{ action: 'startAndSend', label: s.startAndSend }] : start }),
             refused: () => ({ tone: 'warn', title: s.stateRefused,
                 sub: [state.reason, s.staysHere].filter(Boolean).join(' '), actions: [{ action: 'retry', label: s.retry }] }),
@@ -2365,7 +2368,9 @@ export const researchSyncMethods = uiModule({
         if (['unsent', 'autoWaiting', 'unsentBridgeDown', 'unsentAndNewer', 'notTaken'].includes(state.kind)) {
             const list = this.researchChangesNow();
             if (list && list.length > 0) {
-                b.sub = [strings.changes.personsChanged(list.length), b.sub].filter(Boolean).join(' · ');
+                // The facts on one line (menu 1020 §2.2): "2 people changed · 14:32", not "… · Changed 14:32".
+                const facts = (state.kind === 'unsent' || state.kind === 'unsentBridgeDown') && b.sub === s.changedAt(changed) ? changed : b.sub;
+                b.sub = [strings.changes.personsChanged(list.length), facts].filter(Boolean).join(' · ');
                 b.actions = [...(b.actions ?? []), { action: 'showChanges', label: strings.changes.whatWillBeSent, asLink: true }];
             }
         } else if (state.kind === 'written' && treeId && researchWrittenList(treeId)?.list.length && researchSendMode(link) !== 'off') {
@@ -2381,15 +2386,32 @@ export const researchSyncMethods = uiModule({
         }
         // ("Only load from the research" is the quiet `off` block; a real state of the research outranks it.
         // "Restore the state before loading" is the `loaded` block for an hour, then a row of the menu.)
-        return { kind: state.kind, tone: b.tone, title: b.title, sub: b.sub, actions: b.actions ?? [], ...(b.lead ? { lead: b.lead } : {}), spinner: !!b.spinner,
+        return { kind: state.kind, tone: b.tone, title: b.title, sub: b.sub, ...(b.note ? { note: b.note } : {}), actions: b.actions ?? [], ...(b.lead ? { lead: b.lead } : {}), spinner: !!b.spinner,
             sendingNow: !!treeId && sendingTree === treeId };
+    },
+
+    /** Send by hand shows "What will be sent" first (not skipped for this tree, or due after "only load"). */
+    researchSendPreviews(): boolean {
+        const ctx = this.researchSyncLink();
+        return !!ctx && researchSendMode(ctx.link) !== 'off' && (!!ctx.link.previewDue || !researchSendPreviewSkipped(ctx.treeId));
+    },
+
+    /**
+     * "What will be sent" of a state block, when its one button does not lead there (menu 1020 §2.2):
+     * a row of "Other actions" then. Send by hand opens it first, so beside Send it is not needed.
+     */
+    researchBlockChangesElsewhere(b: ResearchSyncBlock | null | undefined): boolean {
+        const [first, ...rest] = b?.actions ?? [];
+        if (!rest.some(a => a.action === 'showChanges')) return false;
+        return !(first?.action === 'send' && this.researchSendPreviews());
     },
 
     /**
      * The state block as the research menu draws it ('' when there is none): a dot, the title in bold
-     * (`tag` beside it: the archive), a short second line, and at most one button on the right — the
-     * first action. The others stay as quiet links under the text, except what the first one's window
-     * already holds ("What will be sent" is the preview Send opens). A group named by its title; only
+     * (`tag` beside it: the archive), a short second line (the sentence it leaves out as the tooltip),
+     * and at most one button on the right — the first action, labelled short ("Send…", "Start ↗"). The
+     * others stay as quiet links under the text, except "What will be sent": the preview Send opens,
+     * or a row of "Other actions" (researchBlockChangesElsewhere). A group named by its title; only
      * the text is a live region, the buttons are items of the menu (the first described by the text).
      */
     researchSyncBlockHtml(data?: ResearchSyncBlock | null, opts: { tag?: string } = {}): string {
@@ -2397,22 +2419,29 @@ export const researchSyncMethods = uiModule({
         if (!b) return '';
         const s = strings.sync;
         const sendingNow = b.sendingNow;
-        const ctx = this.researchSyncLink();
-        const previewOnSend = !!ctx && researchSendMode(ctx.link) !== 'off' && (!!ctx.link.previewDue || !researchSendPreviewSkipped(ctx.treeId));
         const [first, ...rest] = b.actions;
-        const others = rest.filter(a => !(a.action === 'showChanges' && first?.action === 'send' && previewOnSend));
+        const others = rest.filter(a => a.action !== 'showChanges');
+        // The one button stays short beside the title (the menu is 320 px wide).
+        const short = (a: ResearchSyncBlockAction): string => a.asLink ? a.label
+            : a.action === 'send' ? (this.researchSendPreviews() ? `${s.sendShort}…` : s.sendShort)
+            : a.action === 'startResearch' ? s.startShort
+            : a.label;
         const button = (a: ResearchSyncBlockAction, main: boolean): string => {
             const describe = main ? ' aria-describedby="research-sync-status"' : '';
             const busy = sendingNow && !a.asLink && ['send', 'sendThenLoad', 'retry', 'sendAgain'].includes(a.action);
             const cls = main ? ' research-sync-main' : '';
+            const label = main ? short(a) : a.label;
+            // The short label is spoken whole ("Send changes"): it starts the same, so voice control finds it.
+            const named = label !== a.label && !busy ? ` aria-label="${esc(a.label)}"` : '';
             return a.asLink
-                ? `<button type="button" class="research-sync-link${cls}" role="menuitem" data-action="${a.action}"${describe} onclick="${call('researchSyncAction', `'${a.action}'`)}">${esc(a.label)}</button>`
-                : `<button type="button" class="primary btn-sm research-sync-btn${cls}" role="menuitem" data-action="${a.action}"${describe}${busy ? ' disabled aria-busy="true"' : ''}`
-                    + ` onclick="${call('researchSyncAction', `'${a.action}'`)}">${busy ? `<span class="research-sync-spinner" aria-hidden="true"></span>${esc(s.sending)}` : esc(a.label)}</button>`;
+                ? `<button type="button" class="research-sync-link${cls}" role="menuitem" data-action="${a.action}"${describe} onclick="${call('researchSyncAction', `'${a.action}'`)}">${esc(label)}</button>`
+                : `<button type="button" class="primary btn-sm research-sync-btn${cls}" role="menuitem" data-action="${a.action}"${named}${describe}${busy ? ' disabled aria-busy="true"' : ''}`
+                    + ` onclick="${call('researchSyncAction', `'${a.action}'`)}">${busy ? `<span class="research-sync-spinner" aria-hidden="true"></span>${esc(s.sending)}` : esc(label)}</button>`;
         };
+        const note = b.note ? ` title="${esc(b.note)}" aria-description="${esc(b.note)}"` : '';
         return `<div class="research-sync-block research-sync-block--${b.tone}" id="research-sync-block" data-state="${b.kind}" role="group" aria-label="${esc(b.title)}">`
             + '<span class="research-sync-dot" aria-hidden="true"></span>'
-            + `<div class="research-sync-status" id="research-sync-status" role="status" aria-live="polite">`
+            + `<div class="research-sync-status" id="research-sync-status" role="status" aria-live="polite"${note}>`
             + `<div class="research-sync-title">${b.spinner ? '<span class="research-sync-spinner" aria-hidden="true"></span>' : ''}<span>${esc(b.title)}</span>`
             + (opts.tag ? `<span class="research-sync-tag" id="research-menu-archive">${esc(opts.tag)}</span>` : '') + '</div>'
             + (b.sub ? `<div class="research-sync-sub">${esc(b.sub)}</div>` : '')

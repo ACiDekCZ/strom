@@ -69,11 +69,14 @@ export const researchUpdateMethods = uiModule({
         const older = this.researchOlderVersion();
         if (!older) return '';
         const u = strings.researchOlder;
-        const title = u.blockTitle(older.version);
+        // Title and facts on one line each (menu 1020 §2.2); the sentence of what waits for the update is the hint.
+        const title = u.blockTitle('');
+        const facts = [older.version ? u.blockVersion(older.version) : '', older.titles ? u.blockNoTitles : ''].filter(Boolean).join(' · ');
+        const note = esc(older.titles ? u.blockTitlesSub : u.blockSub);
         return `<div class="research-sync-block research-sync-block--warn research-older-block" id="research-older-block" role="group" aria-label="${esc(title)}">`
             + '<span class="research-sync-dot is-error" aria-hidden="true"></span>'
-            + `<div class="research-sync-status" id="research-older-status"><div class="research-sync-title">${esc(title)}</div>`
-            + `<div class="research-sync-sub">${esc(older.titles ? u.blockTitlesSub : u.blockSub)}</div></div>`
+            + `<div class="research-sync-status" id="research-older-status" title="${note}" aria-description="${note}"><div class="research-sync-title">${esc(title)}</div>`
+            + (facts ? `<div class="research-sync-sub">${esc(facts)}</div>` : '') + '</div>'
             + `<button type="button" class="research-sync-link research-sync-main research-older-how" role="menuitem" data-research-update="menu"`
             + ` aria-describedby="research-older-status" onclick="window.Strom.UI.showResearchUpdateHelp()">${esc(u.how)}</button>`
             + '</div>';

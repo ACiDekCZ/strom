@@ -444,11 +444,11 @@ export const treeManagementMethods = uiModule({
             }
             if (row.checked !== undefined) {
                 item.setAttribute('aria-checked', String(row.checked));
-                const check = document.createElement('span');
-                check.className = 'actions-tree-check';
-                check.setAttribute('aria-hidden', 'true');
-                check.textContent = '\u2713';
-                item.appendChild(check);
+                // A switch as in the More sheet (menu 1020 §3, 3a): on or off at a glance.
+                const toggle = document.createElement('span');
+                toggle.className = 'tree-actions-switch actions-tree-switch';
+                toggle.setAttribute('aria-hidden', 'true');
+                item.appendChild(toggle);
                 // Toggled in place: the menu stays open.
                 item.addEventListener('click', () => {
                     row.run();

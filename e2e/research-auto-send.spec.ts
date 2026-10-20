@@ -2266,11 +2266,12 @@ test('N38: a send the research took nothing from, the tree still apart from its 
     await expect.poll(() => bridge.posts.length).toBe(1);
     // By itself: the mark says the research lacks the changes, and it does not send the same copy again.
     await expect(mark(page)).toHaveAttribute('aria-label', "Changes the research doesn't have");
-    await openResearchMenu(page);
+    await openResearchMenu(page, { expandMore: true });
     await expect(block(page)).not.toContainText('In sync with the research');
-    await expect(block(page)).toContainText("Changes the research doesn't have");
+    await expect(block(page)).toContainText('Not in the research yet');
     await expect(block(page)).toContainText('The research took nothing new from the last send.');
-    await expect(block(page).getByRole('menuitem', { name: 'What will be sent' })).toBeVisible();
+    // Send sends at once here: "What will be sent" is a row of "Other actions" (menu 1020 §2.2).
+    await expect(page.locator('#research-menu-more #research-item-changes')).toBeVisible();
     await page.clock.fastForward(QUIET * 2);
     expect(bridge.posts).toHaveLength(1);
     // By hand: the Send button, not the quiet mark.
@@ -2286,5 +2287,5 @@ test('N38: a send the research took nothing from, the tree still apart from its 
     await expect.poll(() => bridge.posts.length).toBe(2);
     await expect(page.locator('#research-sync-send')).toHaveCount(0);
     await openResearchMenu(page);
-    await expect(block(page)).not.toContainText("Changes the research doesn't have");
+    await expect(block(page)).not.toContainText('Not in the research yet');
 });

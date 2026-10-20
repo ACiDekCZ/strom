@@ -273,10 +273,15 @@ export const researchActionsMethods = uiModule({
         const sendOff = capable && !!ctx && researchSendMode(ctx.link) === 'off';
         // "Send changes…" opens "What will be sent" first; without the preview it sends at once (no dots).
         const previewFirst = capable && !!ctx && (!!ctx.link.previewDue || !researchSendPreviewSkipped(ctx.treeId));
-        const sendRow: SubmenuItem[] = autoSend || sendOff || blockSends ? [] : [
+        // Following live the tree is locked and is the research's own: nothing of it to send (menu 1020 §2.7, 2d).
+        const following = DataManager.isLiveFollowing();
+        const sendRow: SubmenuItem[] = autoSend || sendOff || blockSends || following ? [] : [
             // Straight to a running bridge (no ↗); else the research starts it in the terminal.
             { id: 'research-item-send', label: previewFirst ? `${r.sendChanges}…` : r.sendChanges, method: 'researchActionSend', ext: !bridgeUp && this.researchLinkAvailable('send') },
         ];
+        // "What will be sent" where the state block's one button does not lead there (Send sends at once, Start).
+        const changesRow: SubmenuItem[] = this.researchBlockChangesElsewhere(block)
+            ? [{ id: 'research-item-changes', label: r.whatWillBeSentRow, method: 'researchSyncAction', args: ['showChanges'] }] : [];
         const hasTreeSettings = this.researchTranscriptsCapable(researchId ?? undefined);
         const treeSettings: SubmenuItem[] = hasTreeSettings
             ? [{ id: 'research-item-tree-settings', label: strings.sync.treeSettings, method: 'researchActionTreeSettings' }] : [];
@@ -312,7 +317,7 @@ export const researchActionsMethods = uiModule({
             const read = noAgent ? null : this.readMenuEntry();
             const readRow: SubmenuItem[] = read ? [{ id: 'research-item-read', method: 'showReadDocumentDialog', ...read, link: undefined }] : [];
             first = [...startRow, ...readRow, ...sendRow.map(i => ({ ...i, ext: false }))];
-            more = [...viewLinks, ...materials, ...phone];
+            more = [...changesRow, ...viewLinks, ...materials, ...phone];
             moreQuiet = [...treeSettings, ...aboutRow];
         } else {
             // First: what waits, the agent, the research itself, the send.
@@ -325,7 +330,7 @@ export const researchActionsMethods = uiModule({
             if (this.researchLinkAvailable('open')) first.push({ id: 'research-item-open', label: r.openResearch, method: 'researchActionOpen', ext: true });
             first.push(...sendRow);
             // Now and then: a version to load, following live, materials, the phone, an update.
-            more = [];
+            more = [...changesRow];
             // The bridge answering: the block above offers a newer version when there is one (never beside "in step").
             if (this.researchLinkAvailable('app') && !bridgeUp && !blockLoads) more.push({ id: 'research-item-version', label: r.loadNewVersion, method: 'researchActionLoadVersion' });
             // Follow live: the research starts (or reuses) its bridge and opens ?live= here (an archive has no agent to follow).
@@ -383,13 +388,13 @@ export const researchActionsMethods = uiModule({
             }
         }
         // Following live (the tree locked meanwhile): a block of its own in place of the state.
-        const following = !syncBlock && DataManager.isLiveFollowing()
+        const followingBlock = !syncBlock && following
             ? `<div class="research-sync-block research-sync-block--live" id="research-menu-following" role="group" aria-label="${esc(r.followingTitle)}">`
                 + '<span class="research-sync-dot" aria-hidden="true"></span>'
                 + `<div class="research-sync-status"><div class="research-sync-title">${esc(r.followingTitle)}</div><div class="research-sync-sub">${esc(r.followingSub)}</div></div></div>`
             : '';
         // An older research (it never said what it takes): a state block of its own, "How to update…".
-        const blocks = (syncBlock || following) + this.researchOlderBlockHtml();
+        const blocks = (syncBlock || followingBlock) + this.researchOlderBlockHtml();
         return { foot: !!ctx, blocks, first, more, moreQuiet, moreAttention, note, waiting };
     },
 

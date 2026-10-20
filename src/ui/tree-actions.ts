@@ -152,6 +152,7 @@ export const treeActionsMethods = uiModule({
 
         const treeData = await TreeManager.getTreeData(id);
         const defaultSetting = treeData?.defaultPersonId;
+        // Nothing set opens the tree on its first person (DataManager.getStartupFocus): the row says so.
         let defaultPerson = '';
         if (defaultSetting === LAST_FOCUSED) {
             defaultPerson = s.defaultPersonLastFocused;
@@ -181,7 +182,7 @@ export const treeActionsMethods = uiModule({
             ] : [] },
             { key: 'settings', header: g.settings, rows: editable ? [
                 { key: 'rename', label: s.rename, editOnly: true, run: () => this.showRenameTreeDialog(id, parent) },
-                { key: 'defaultPerson', label: s.defaultPerson, value: defaultPerson || undefined, editOnly: true, run: () => void this.showDefaultPersonDialog(id, parent) },
+                { key: 'defaultPerson', label: s.defaultPerson, value: defaultPerson || s.defaultPersonFirstPerson, editOnly: true, run: () => void this.showDefaultPersonDialog(id, parent) },
                 { key: 'startup', label: s.openAtStartup, checked: TreeManager.getDefaultTree() === id, editOnly: true, run: () => this.toggleStartupTree(id) },
                 ...(isActive ? [
                     { key: 'places', label: strings.map.placesMenu, editOnly: true, run: () => this.showPlacesManager(undefined, parent) },

@@ -213,6 +213,52 @@ test.describe('the Research button and menu', () => {
     });
 });
 
+test.describe('the state block on two lines (menu 1020 §2.2)', () => {
+    const SEND = { cs: 'Poslat', de: 'Senden', en: 'Send' } as const;
+    /** "What will be sent" first, the default outside these tests (openResearch skips it). */
+    const previewFirst = (page: Page) => page.evaluate(() => {
+        const key = `strom-research-auto:${window.Strom.TreeManager.getActiveTreeId()}`;
+        const state = JSON.parse(localStorage.getItem(key) ?? '{}');
+        delete state.skipPreview;
+        localStorage.setItem(key, JSON.stringify(state));
+    });
+    const lines = (page: Page, sel: string) => block(page).locator(sel).evaluate(el => {
+        const r = el.getBoundingClientRect();
+        return Math.round(r.height / parseFloat(getComputedStyle(el).lineHeight));
+    });
+    for (const lang of ['cs', 'de', 'en'] as const) {
+        test(`${lang}: one short button ("${SEND[lang]}…"), title and facts each on one line, 44–58 px high`, async ({ page }) => {
+            await page.setViewportSize({ width: 1440, height: 900 });
+            await researchTree(page, { edit: true });
+            await previewFirst(page);
+            await page.evaluate((lang) => window.Strom.UI.setLanguage(lang), lang);
+            await button(page).click();
+            await expect(block(page)).toHaveAttribute('data-state', 'unsent');
+            // One button: Send opens what will be sent, so no second link for it.
+            await expect(block(page).locator('button')).toHaveCount(1);
+            await expect(block(page).locator('button')).toHaveText(`${SEND[lang]}…`);
+            await expect(block(page).locator('[data-action="showChanges"]')).toHaveCount(0);
+            await expect(page.locator('#research-item-changes')).toHaveCount(0);
+            expect(await lines(page, '.research-sync-title')).toBe(1);
+            expect(await lines(page, '.research-sync-sub')).toBe(1);
+            const height = (await block(page).boundingBox())!.height;
+            expect(height).toBeGreaterThanOrEqual(44);
+            expect(height).toBeLessThanOrEqual(58);
+        });
+    }
+
+    test('Send that sends at once: "What will be sent…" is a row of "Other actions"', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await researchTree(page, { edit: true });
+        await openResearchMenu(page, { expandMore: true });
+        await expect(block(page).locator('button')).toHaveText(['Send']);
+        const row = page.locator('#research-menu-more #research-item-changes');
+        await expect(row.locator('.research-item-label')).toHaveText('What will be sent…');
+        await row.click();
+        await expect(page.locator('#research-changes-panel')).toBeVisible();
+    });
+});
+
 test.describe('the keyboard', () => {
     test('Enter opens it on the first item (the state block\'s button); arrows go over every shown item, Home / End; Escape back to the button', async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 900 });
@@ -221,8 +267,7 @@ test.describe('the keyboard', () => {
         await page.keyboard.press('Enter');
         await expect(menu(page)).toBeVisible();
         await expect(block(page).locator('[data-action="send"]')).toBeFocused();
-        await page.keyboard.press('ArrowDown');
-        await expect(block(page).locator('[data-action="showChanges"]')).toBeFocused();
+        // The block's one button ("What will be sent" is a row of "Other actions" then).
         await page.keyboard.press('ArrowDown');
         await expect(page.locator('#research-item-chat')).toBeFocused();
         await page.keyboard.press('ArrowDown');
@@ -347,7 +392,7 @@ test.describe('a narrow window with a mouse (≤ 1024 px)', () => {
         await expect(items.locator('.research-sheet-heading')).toHaveCount(1);
         await expect(items.locator('.research-sheet-heading')).toContainText('Research');
         await expect(items.locator('.research-sheet-heading .research-trial-tag')).toHaveCount(0);
-        await expect(page.locator('#research-sheet-state-text')).toHaveText("Changes the research doesn't have");
+        await expect(page.locator('#research-sheet-state-text')).toHaveText('Not in the research yet');
         await expect(page.locator('#research-sheet-state [role="menuitem"]')).toHaveText('Send changes');
         const groupRows = await items.evaluate(el => {
             const out: string[] = [];
