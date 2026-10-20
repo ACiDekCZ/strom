@@ -2370,7 +2370,9 @@ class TreeRendererClass {
             const p = DataManager.getPerson(id);
             const edge = p?.research?.edge;
             if (!p || !edge || p.isPlaceholder || shownParents.has(id)) continue;
-            const parents = p.parentIds.length;
+            // The stand-in partner of a single parent (src/single-parent.ts) is no parent: with the mother
+            // alone in the tree, "father not given" still shows on the father's side.
+            const parents = p.parentIds.filter(pid => !DataManager.getPerson(pid)?.isPlaceholder).length;
             if (edge.missing === 'parents' ? parents > 0 : edge.missing !== 'proof' && parents >= 2) continue;
             const live = p.refn ? ctx.research.get(p.refn) : undefined;
             const view = edgeView(edge, mode, { working: !!live?.agent, waiting: !!live?.waiting, queued: !!live?.queued }, edgeNamedOptions(p));

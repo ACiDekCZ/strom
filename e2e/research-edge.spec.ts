@@ -104,6 +104,56 @@ test.describe('research edge', () => {
         await expect(card(page, 'Matouš').locator('.island-caption')).toHaveText('outside the tree · family of 2 · 1 task waiting');
     });
 
+    test('one parent in the tree: the other side\'s stub shows, closed when nothing is next, open while searched', async ({ page }) => {
+        // Ludmila alone with Kristina: the father is not given and nothing more will be searched.
+        // Bohumil alone with Tereza: the mother is still being searched for. The stand-in partner a
+        // single parent gets in the tree is no parent of the child.
+        const ged = researchGed().replace('0 @F0001@ FAM', [
+            '0 @P0020@ INDI', '1 NAME Ludmila /Malá/', '1 SEX F', '1 REFN P0020', '1 FAMS @F0020@',
+            '0 @P0021@ INDI', '1 NAME Kristina /Malá/', '1 SEX F', '1 BIRT', '2 DATE 1830', '1 REFN P0021', '1 FAMC @F0020@',
+            '1 _STROM_EDGE father', '2 _SCOPE in', '2 _END not-found', '2 _NEXT none',
+            '0 @P0023@ INDI', '1 NAME Bohumil /Hora/', '1 SEX M', '1 REFN P0023', '1 FAMS @F0023@',
+            '0 @P0024@ INDI', '1 NAME Tereza /Horová/', '1 SEX F', '1 BIRT', '2 DATE 1832', '1 REFN P0024', '1 FAMC @F0023@',
+            '1 _STROM_EDGE mother', '2 _SCOPE in', '2 _END unsearched', '2 _NEXT queued',
+            '0 @F0020@ FAM', '1 WIFE @P0020@', '1 CHIL @P0021@',
+            '0 @F0023@ FAM', '1 HUSB @P0023@', '1 CHIL @P0024@',
+            '0 @F0001@ FAM',
+        ].join('\n'));
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await openApp(page);
+        await dropFile(page, ged);
+        await expect(card(page, 'Jan')).toBeVisible();
+        const focus = (name: string) => page.evaluate((n) => {
+            const p = window.Strom.DataManager.getAllPersons().find(x => x.firstName === n)!;
+            window.Strom.TreeRenderer.setFocus(p.id);
+            window.Strom.ZoomPan.reset();
+        }, name);
+        // The child of a single parent has the stand-in among its parents.
+        const placeholders = await page.evaluate(() => {
+            const k = window.Strom.DataManager.getAllPersons().find(x => x.firstName === 'Kristina')!;
+            return k.parentIds.filter(id => window.Strom.DataManager.getPerson(id)?.isPlaceholder).length;
+        });
+        expect(placeholders).toBe(1);
+
+        await focus('Kristina');
+        await expect(stub(page, 'Kristina')).toHaveClass(/edge-closed/);
+        await expect(stub(page, 'Kristina')).toHaveClass(/tone-none/);
+        await expect(stub(page, 'Kristina')).toHaveClass(/side-father/);
+        await expect(stub(page, 'Ludmila')).toHaveCount(0);
+
+        await focus('Tereza');
+        await expect(stub(page, 'Tereza')).toHaveClass(/edge-open/);
+        await expect(stub(page, 'Tereza')).toHaveClass(/tone-searching/);
+        await expect(stub(page, 'Tereza')).toHaveClass(/side-mother/);
+        // Over the mother's side of the card, not its middle.
+        const geo = await card(page, 'Tereza').evaluate((el) => {
+            const c = el.getBoundingClientRect();
+            const s = el.querySelector('.research-edge')!.getBoundingClientRect();
+            return s.left + s.width / 2 - (c.left + c.width / 2);
+        });
+        expect(geo).toBeGreaterThan(10);
+    });
+
     test('a hypothesis joining two families: "+ family" counts the one it goes to', async ({ page }) => {
         // H0001 has a join per version: Matouš's family of 2 first, then Tomáš's family of 3;
         // the research writes the first one's _ISLAND only.
