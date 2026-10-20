@@ -130,6 +130,26 @@ test.describe('Read a document', () => {
         await expect(d.locator('.audit-log-subtitle')).not.toContainText('f8948c91');
     });
 
+    test('the research panel\'s strip: a long file name cut with an ellipsis, the whole name in its tooltip', async ({ page }) => {
+        const b = await setup(page);
+        const long = 'farni-matrika-lhota-krty-1846-strana-12-zapis-jana.jpg';
+        // The strip names the reading as the research lists it.
+        b.read!.readName = long;
+        const d = await openFromMenu(page);
+        await addPages(page, [{ name: long, mimeType: 'image/jpeg', buffer: JPEG }]);
+        await d.locator('[data-act="read"]').click();
+        await expect.poll(() => b.read!.posts.length).toBe(1);
+        await d.locator('.read-footer [data-act="close"]').last().click();
+        await expect(dialog(page)).toHaveCount(0);
+        await page.evaluate(() => window.Strom.UI.showResearchWaiting());
+        const name = page.locator('#live-panel #read-strip .read-strip__name');
+        await expect(name).toHaveText(long);
+        await expect(name).toHaveAttribute('title', long);
+        // Cut, not wrapped or running over the panel.
+        expect(await name.evaluate(el => el.scrollWidth > el.clientWidth)).toBe(true);
+        expect(await page.locator('#live-panel').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    });
+
     test('not ready: shown greyed with the reason and the way to the research; not in the person menu', async ({ page }) => {
         await setup(page, { read: readAccepts({ ready: false, why: 'auth' }) });
         await openResearchMenu(page);
