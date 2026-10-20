@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { openApp, createFirstPerson, addRelation, card } from './helpers.js';
+import { openApp, createFirstPerson, addRelation, card, openTreeStructure } from './helpers.js';
 
 /**
  * Splitting a tree into the families it holds (N3). Only families that nothing
@@ -25,7 +25,8 @@ test('a tree with two unrelated families can be split into two trees, the origin
 
     await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
     await page.locator('.tree-row-menu-btn').first().click();
-    await page.locator('.tree-row-menu-item', { hasText: 'Separate disconnected parts' }).click();
+    const structure = await openTreeStructure(page, page.locator('.tree-row-menu.open'));
+    await structure.locator('.tree-row-menu-item', { hasText: 'Separate disconnected parts' }).click();
     await expect(page.locator('#split-modal')).toBeVisible();
 
     // Both families are listed, biggest first, named after their surname.
@@ -60,7 +61,8 @@ test('a connected tree offers nothing to split', async ({ page }) => {
 
     await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
     await page.locator('.tree-row-menu-btn').first().click();
-    await page.locator('.tree-row-menu-item', { hasText: 'Separate disconnected parts' }).click();
+    const structure = await openTreeStructure(page, page.locator('.tree-row-menu.open'));
+    await structure.locator('.tree-row-menu-item', { hasText: 'Separate disconnected parts' }).click();
 
     // One family: say so plainly rather than showing a pointless list.
     await expect(page.locator('#split-modal')).toContainText('one family here');

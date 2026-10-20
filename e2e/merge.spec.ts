@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, createFirstPerson, card, cardAction, addRelation } from './helpers.js';
+import { openApp, createFirstPerson, card, cardAction, addRelation, openTreeActions, openTreeStructure } from './helpers.js';
 
 function personCount(page: Page): Promise<number> {
     return page.evaluate(() => Object.keys(window.Strom.DataManager.getData().persons).length);
@@ -168,10 +168,9 @@ test('actions menu "Merge view into…" (Tree: → From the current view) opens 
         });
     });
 
-    // ⋯ → Tree: → "Merge view into…" (set apart from "Merge into another tree…").
-    await page.locator('.actions-menu-btn').click();
-    await page.locator('#actions-tree-row').click();
-    const action = page.locator('#actions-tree-submenu .tree-switcher-action').filter({ hasText: 'Merge view into' });
+    // ⋯ → Tree: → Change structure → "Merge view into…" (set apart from "Merge into another tree…").
+    const structure = await openTreeStructure(page, await openTreeActions(page));
+    const action = structure.locator('.tree-switcher-action').filter({ hasText: 'Merge view into' });
     await expect(action).toBeVisible();
     await action.click();
 

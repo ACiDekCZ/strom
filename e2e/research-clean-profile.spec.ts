@@ -1,6 +1,6 @@
 import { test, expect, Page, Request } from '@playwright/test';
 import * as path from 'path';
-import { openApp, createFirstPerson, card, importJsonAsNewTree } from './helpers.js';
+import { openApp, createFirstPerson, card, importJsonAsNewTree, openTreeActions } from './helpers.js';
 
 /**
  * A browser that never met Strom Research — the default for almost every
@@ -96,8 +96,8 @@ test.describe('no Strom Research on this computer: nothing of it shows or runs',
         await page.keyboard.press('Escape');
 
         // The install dialog opened and closed without "Install": nothing asked, nothing kept.
-        await page.locator('.actions-menu-btn').click();
-        await page.locator('#research-menu-row').click();
+        const tree = await openTreeActions(page);
+        await tree.locator('#actions-tree-researchInfo-row').click();
         await expect(page.locator('#research-info-modal .research-install-dialog')).toBeVisible();
         await page.locator('#research-info-modal [data-dismiss]').click();
         await expect(page.locator('#research-info-modal')).toHaveCount(0);

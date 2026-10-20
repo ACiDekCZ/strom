@@ -943,6 +943,30 @@
         @media (hover: hover) { .actions-submenu-wrap:not(.hover-off):hover::before {
             content: ''; position: absolute; top: 0; bottom: 0; right: 100%; width: 16px;
         } }
+        /* "Tree: {name} ›" — the one list of tree actions (menu 1020 §3.2):
+           300px wide, 34px rows, 30px headings; positionActionsSubmenu keeps
+           it under the toolbar and lets it scroll on a short window. */
+        .actions-tree-submenu { width: 300px; max-width: calc(100vw - 32px); }
+        .actions-tree-submenu .tree-switcher-action { min-height: 34px; padding: 6px 14px; box-sizing: border-box; }
+        .actions-tree-submenu .actions-tree-header {
+            height: 30px; box-sizing: border-box; padding: 12px 14px 4px;
+        }
+        .actions-tree-submenu .actions-tree-header:first-child { padding-top: 10px; }
+        .actions-tree-action-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .actions-tree-value {
+            max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+            color: var(--text-faint); font-size: 12px;
+        }
+        .actions-tree-check { flex-shrink: 0; width: 14px; color: var(--primary); visibility: hidden; }
+        .actions-tree-action[aria-checked="true"] .actions-tree-check { visibility: visible; }
+        .tree-switcher-action.danger { color: var(--danger); }
+        @media (hover: hover) { .tree-switcher-action.danger:hover { color: var(--danger); } }
+        /* "Change structure ⌄": its rows open in place, indented 14px. */
+        .actions-tree-structure .tree-switcher-action { padding-left: 28px; }
+        .tree-actions-structure-chevron { flex-shrink: 0; margin-left: auto; color: var(--text-light); transition: transform 0.15s; }
+        .tree-actions-structure-toggle[aria-expanded="true"] .tree-actions-structure-chevron { transform: rotate(180deg); }
+        .actions-tree-submenu .tree-switcher-action:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        @media (prefers-reduced-motion: reduce) { .tree-actions-structure-chevron { transition: none; } }
         /* Shortcut chips in menu rows (Ctrl+S on the storage row, Ctrl+Z on Undo). */
         .menu-kbd {
             margin-left: auto; flex-shrink: 0;
@@ -2517,6 +2541,10 @@
         }
         .tree-actions-row[aria-checked="true"] .tree-actions-switch { background: var(--primary); }
         .tree-actions-row[aria-checked="true"] .tree-actions-switch::after { transform: translateX(16px); }
+        /* A group without a heading (manage, manage trees): a gap and a line. */
+        .tree-actions-divider { height: 8px; }
+        /* "Change structure ⌄" in the sheet: 48px row, its rows open in the sheet, indented. */
+        .tree-actions-structure .bottom-sheet-item.tree-actions-row { padding-left: 30px; }
         .tree-actions-note { margin: 12px 16px 4px; font-size: 13px; line-height: 1.45; color: var(--text-faint); }
         .bottom-sheet-tree-name {
             font-family: var(--font-serif); font-weight: 600; color: var(--text);
@@ -9477,6 +9505,9 @@
             padding-bottom: 4px;
         }
         .tree-row-menu.can-scroll .tree-row-menu-more { display: flex; }
+        .tree-row-menu-divider { height: 1px; background: var(--divider); margin: 4px 0; }
+        /* "Change structure ⌄": its rows open in place, indented 14px. */
+        .tree-row-menu-structure .tree-row-menu-item { padding-left: 26px; }
         /* Read-only: a group whose rows are all edit-only hides with them. */
         body.view-mode .tree-row-menu .edit-only { display: none !important; }
         .tree-manager-item {
@@ -15334,50 +15365,15 @@
                     <span class="research-menu-label" data-i18n="research.menuItem"></span>
                     <span class="research-new-badge" aria-hidden="true" data-i18n="research.newBadge" hidden></span>
                 </div>
-                <!-- "Strom: {name}" — about the tree and its management (all except
-                     Delete, which stays in the tree manager). -->
+                <!-- "Strom: {name}" — the one list of tree actions (treeActionGroups,
+                     menu 1020 §3), rendered whole on opening (renderActionsTreeRows). -->
                 <div class="actions-submenu-wrap actions-tree-wrap" id="actions-tree-wrap">
                     <div class="tree-switcher-action actions-submenu-row actions-tree-row" id="actions-tree-row" role="menuitem" tabindex="0" aria-haspopup="menu" aria-expanded="false" aria-controls="actions-tree-submenu" onclick="window.Strom.UI.toggleActionsSubmenu('tree')">
                         <span class="actions-tree-prefix" data-i18n="menu.treeActions"></span>
                         <span class="actions-tree-name" id="actions-tree-name"></span>
                         <span class="actions-tree-chevron" aria-hidden="true">&rsaquo;</span>
                     </div>
-                    <div class="actions-submenu actions-tree-submenu" id="actions-tree-submenu" role="menu">
-                        <!-- The Overview group of the tree actions (treeActionGroups), rendered on opening. -->
-                        <div id="actions-tree-overview-rows" role="none"></div>
-                        <div class="tree-switcher-divider edit-only"></div>
-                        <div class="tree-switcher-action edit-only" role="menuitem" onclick="window.Strom.UI.treeActionRename()" tabindex="0">
-                            <span data-i18n="treeManager.rename"></span>
-                        </div>
-                        <div class="tree-switcher-action edit-only" role="menuitem" onclick="window.Strom.UI.treeActionDuplicate()" tabindex="0">
-                            <span data-i18n="treeManager.duplicate"></span>
-                        </div>
-                        <div class="tree-switcher-action edit-only" role="menuitem" onclick="window.Strom.UI.treeActionHide()" tabindex="0">
-                            <span data-i18n="treeManager.hide"></span>
-                        </div>
-                        <div class="tree-switcher-divider edit-only"></div>
-                        <div class="menu-section-header edit-only" data-i18n="menu.sectionFromView"></div>
-                        <div class="tree-switcher-action edit-only" role="menuitem" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.makeTreeFromCurrentView()" tabindex="0">
-                            <span data-i18n="menu.makeTree"></span>
-                        </div>
-                        <div class="tree-switcher-action edit-only" role="menuitem" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.mergeViewInto()" tabindex="0">
-                            <span data-i18n="menu.mergeViewInto"></span>
-                        </div>
-                        <div class="tree-switcher-divider edit-only"></div>
-                        <div class="tree-switcher-action edit-only" role="menuitem" onclick="window.Strom.UI.treeActionMergeInto()" tabindex="0">
-                            <span data-i18n="menu.mergeIntoTree"></span>
-                        </div>
-                        <div class="tree-switcher-action edit-only" role="menuitem" onclick="window.Strom.UI.treeActionSplitFamilies()" tabindex="0">
-                            <span data-i18n="menu.splitFamilies"></span>
-                        </div>
-                        <div class="tree-switcher-action fsa-only" role="menuitem" onclick="window.Strom.UI.treeActionSaveToFile()" tabindex="0">
-                            <span data-i18n="fileAccess.saveToFile"></span>
-                        </div>
-                        <div class="tree-switcher-divider"></div>
-                        <div class="tree-switcher-action" role="menuitem" onclick="window.Strom.UI.treeActionManager()" tabindex="0">
-                            <span data-i18n="treeManager.manageTreesTitle"></span>
-                        </div>
-                    </div>
+                    <div class="actions-submenu actions-tree-submenu" id="actions-tree-submenu" role="menu"></div>
                 </div>
                 <div class="tree-switcher-divider" id="actions-settings-divider"></div>
                 <!-- Settings: its one place, the last row at every width (the toolbar ⚙ is gone). -->
@@ -17332,7 +17328,7 @@
     <div class="modal-overlay" id="rename-tree-modal">
         <div class="modal modal--sm" role="dialog" data-dialog-kind="form" aria-modal="true">
             <div class="modal-header">
-                <h2 data-i18n="treeManager.rename">Rename</h2>
+                <h2 data-i18n="treeManager.renameTitle">Rename</h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeRenameTreeDialog()">&times;</button>
             </div>
             <div class="form-group">
@@ -17416,7 +17412,7 @@
     <div class="modal-overlay" id="merge-trees-modal">
         <div class="modal modal--md" role="dialog" data-dialog-kind="form" aria-modal="true">
             <div class="modal-header">
-                <h2 data-i18n="treeManager.mergeInto">Merge into...</h2>
+                <h2 data-i18n="treeManager.mergeIntoTitle">Merge into another tree</h2>
                 <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeMergeTreesDialog()">&times;</button>
             </div>
             <p id="merge-trees-description" class="merge-trees-description"></p>

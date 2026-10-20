@@ -43,7 +43,7 @@ import { validateTreeData, ValidationResult as TreeValidationResult, ValidationI
 import * as CrossTree from '../cross-tree.js';
 import { fitFlyout } from './flyout.js';
 import { uiModule } from './module.js';
-import { treeActionsAsSheet } from './tree-actions.js';
+import { treeActionsAsSheet, collapsedToggle, TreeActionRow, TREE_STRUCTURE_GROUP_SUFFIX } from './tree-actions.js';
 import { isPhoneToolbar } from './search.js';
 
 import { iconSvg } from '../icons.js';
@@ -55,6 +55,17 @@ const TREE_MENU_MIN_ROOM = 240;
 /** The flyouts of the desktop ⋯ menu (`actions-{which}-wrap/-row/-submenu`). */
 export type ActionsSubmenu = 'family' | 'tree';
 const ACTIONS_SUBMENUS: readonly ActionsSubmenu[] = ['family', 'tree'];
+
+/** The tree's flyout never starts higher than this (px from the window's top: under the toolbar). */
+const TREE_FLYOUT_TOP = 62;
+
+/** "Change structure ⌄" in the ⋯ flyout is open (until the menu closes). */
+let actionsStructureOpen = false;
+
+/** The first row "Change structure ⌄" reveals in the ⋯ flyout. */
+function firstStructureItem(): HTMLElement | null {
+    return document.querySelector<HTMLElement>('#actions-tree-structure [role^="menuitem"]');
+}
 
 export const treeManagementMethods = uiModule({
     // ---- TREE SWITCHER ----
@@ -176,7 +187,7 @@ export const treeManagementMethods = uiModule({
                 html += `
                     <div class="tree-switcher-divider"></div>
                     <div class="tree-switcher-action" role="menuitem" tabindex="0" onclick="window.Strom.UI.showTreeManagerDialog()">
-                        ${strings.treeManager.manageTreesTitle}...
+                        ${strings.treeManager.manage}
                     </div>
                 `;
 
@@ -230,7 +241,7 @@ export const treeManagementMethods = uiModule({
                 ${strings.treeSwitcher.import}
             </div>
             <div class="tree-switcher-action" role="menuitem" tabindex="0" onclick="window.Strom.UI.showTreeManagerDialog()">
-                ${strings.treeManager.manageTreesTitle}...
+                ${strings.treeManager.manage}
             </div>
         `;
 
@@ -363,6 +374,7 @@ export const treeManagementMethods = uiModule({
      */
     closeActionsMenu(): void {
         this.closeActionsSubmenu();
+        actionsStructureOpen = false;
         this.closeResearchTrialNote();
         const dropdown = document.getElementById('actions-menu-dropdown');
         if (dropdown?.classList.contains('active')) this.exportReminderClosed();
@@ -387,35 +399,135 @@ export const treeManagementMethods = uiModule({
             row.setAttribute('aria-label', `${strings.menu.treeActions} ${active.name}`);
             row.title = active.name;
         }
-        void this.renderActionsTreeOverviewRows(active.id);
+        void this.renderActionsTreeRows(active.id);
     },
 
     /**
-     * The submenu's Overview rows come from the same list as the tree manager's
-     * ⋯ and the More sheet (treeActionGroups), so they never drift apart. The
-     * previous rows stay until the new ones are ready (no empty flash).
+     * The "Tree: {name} ›" flyout is the one list of tree actions
+     * (treeActionGroups, menu 1020 §3), the same as the tree manager's ⋯ and
+     * the More sheet, so they never drift apart. The previous rows stay until
+     * the new ones are ready (no empty flash). "Change structure ⌄" opens its
+     * rows in place; it starts closed with every opening of the menu.
      */
-    async renderActionsTreeOverviewRows(treeId: TreeId): Promise<void> {
-        const host = document.getElementById('actions-tree-overview-rows');
+    async renderActionsTreeRows(treeId: TreeId): Promise<void> {
+        const host = document.getElementById('actions-tree-submenu');
         if (!host) return;
-        const groups = await this.treeActionGroups(treeId, 'more');
-        const rows = groups.find(g => g.key === 'overview')?.rows ?? [];
-        host.replaceChildren(...rows.map(row => {
+        const groups = await this.treeActionGroups(treeId, 'actions');
+        const name = TreeManager.getTreeMetadata(treeId)?.name ?? '';
+        host.setAttribute('aria-label', `${strings.menu.treeActions} ${name}`);
+        const nodes: HTMLElement[] = [];
+        const rowItem = (row: TreeActionRow): HTMLElement => {
             const item = document.createElement('div');
-            item.className = 'tree-switcher-action' + (row.quiet ? ' is-quiet' : '');
-            item.setAttribute('role', 'menuitem');
+            item.className = 'tree-switcher-action actions-tree-action'
+                + (row.quiet ? ' is-quiet' : '') + (row.danger ? ' danger' : '') + (row.editOnly ? ' edit-only' : '');
+            item.setAttribute('role', row.checked !== undefined ? 'menuitemcheckbox' : 'menuitem');
             item.tabIndex = 0;
             item.dataset.action = row.key;
-            if (row.key === 'audit') item.id = 'actions-tree-audit-row';
+            item.id = `actions-tree-${row.key}-row`;
+            if (row.hint) item.title = row.hint;
             const label = document.createElement('span');
+            label.className = 'actions-tree-action-label';
             label.textContent = row.label;
             item.appendChild(label);
-            item.addEventListener('click', () => {
-                this.closeActionsMenu();
-                row.run();
-            });
+            if (row.value !== undefined) {
+                const value = document.createElement('span');
+                value.className = 'actions-tree-value';
+                value.textContent = row.value;
+                item.appendChild(value);
+            }
+            if (row.key === 'defaultPerson') {
+                const chevron = document.createElement('span');
+                chevron.className = 'actions-tree-chevron';
+                chevron.setAttribute('aria-hidden', 'true');
+                chevron.textContent = '\u203a';
+                item.appendChild(chevron);
+            }
+            if (row.checked !== undefined) {
+                item.setAttribute('aria-checked', String(row.checked));
+                const check = document.createElement('span');
+                check.className = 'actions-tree-check';
+                check.setAttribute('aria-hidden', 'true');
+                check.textContent = '\u2713';
+                item.appendChild(check);
+                // Toggled in place: the menu stays open.
+                item.addEventListener('click', () => {
+                    row.run();
+                    item.setAttribute('aria-checked', String(TreeManager.getDefaultTree() === treeId));
+                });
+            } else {
+                item.addEventListener('click', () => {
+                    this.closeActionsMenu();
+                    row.run();
+                });
+            }
             return item;
-        }));
+        };
+        groups.forEach((group, index) => {
+            if (group.header) {
+                const header = document.createElement('div');
+                header.className = 'menu-section-header actions-tree-header';
+                header.setAttribute('role', 'presentation');
+                header.textContent = group.header;
+                nodes.push(header);
+            } else if (index > 0) {
+                const divider = document.createElement('div');
+                divider.className = 'tree-switcher-divider';
+                divider.setAttribute('role', 'separator');
+                nodes.push(divider);
+            }
+            if (!group.collapsedLabel) {
+                nodes.push(...group.rows.map(rowItem));
+                return;
+            }
+            const groupId = 'actions-tree-structure';
+            const toggle = collapsedToggle(group.collapsedLabel, groupId,
+                'tree-switcher-action actions-tree-action tree-actions-structure-toggle'
+                + (group.rows.every(r => r.editOnly) ? ' edit-only' : ''), 'actions-tree-action-label', 'div');
+            toggle.id = 'actions-tree-structure-toggle';
+            toggle.tabIndex = 0;
+            toggle.setAttribute('aria-expanded', String(actionsStructureOpen));
+            toggle.addEventListener('click', () => this.toggleActionsTreeStructure('row'));
+            toggle.addEventListener('keydown', (e) => {
+                if (e.altKey || e.ctrlKey || e.metaKey) return;
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    this.toggleActionsTreeStructure(actionsStructureOpen ? 'row' : 'first');
+                } else if (e.key === 'ArrowRight') {
+                    e.preventDefault();
+                    if (actionsStructureOpen) firstStructureItem()?.focus();
+                    else this.toggleActionsTreeStructure('first');
+                }
+            });
+            const box = document.createElement('div');
+            box.id = groupId;
+            box.className = 'actions-tree-structure';
+            box.setAttribute('role', 'group');
+            box.setAttribute('aria-label', group.collapsedLabel);
+            box.hidden = !actionsStructureOpen;
+            box.append(...group.rows.map(rowItem));
+            box.addEventListener('keydown', (e) => {
+                if (e.key !== 'ArrowLeft' || e.altKey || e.ctrlKey || e.metaKey) return;
+                e.preventDefault();
+                this.toggleActionsTreeStructure('row');
+            });
+            nodes.push(toggle, box);
+        });
+        host.replaceChildren(...nodes);
+        if (document.getElementById('actions-tree-wrap')?.classList.contains('submenu-open')) {
+            this.positionActionsSubmenu('actions-tree-submenu');
+        }
+    },
+
+    /** "Change structure ⌄" in the ⋯ flyout opened or closed in place; focus on its first row (`first`) or the row. */
+    toggleActionsTreeStructure(focus: 'first' | 'row'): void {
+        actionsStructureOpen = !actionsStructureOpen;
+        const toggle = document.getElementById('actions-tree-structure-toggle');
+        const box = document.getElementById('actions-tree-structure');
+        toggle?.setAttribute('aria-expanded', String(actionsStructureOpen));
+        if (box) box.hidden = !actionsStructureOpen;
+        this.positionActionsSubmenu('actions-tree-submenu');
+        if (focus === 'first' && actionsStructureOpen) firstStructureItem()?.focus();
+        else toggle?.focus();
     },
 
     /**
@@ -449,6 +561,19 @@ export const treeManagementMethods = uiModule({
         if (!sub) return;
         sub.style.top = '';
         const viewport = window.innerHeight;
+        if (id === 'actions-tree-submenu') {
+            // The tree's list (menu 1020 §3.2): level with its row, never over
+            // the toolbar, ending 8px above the window's bottom; on a short
+            // window (or with "Change structure" open) it scrolls inside.
+            sub.style.maxHeight = `${Math.max(120, viewport - TREE_FLYOUT_TOP - 8)}px`;
+            const wrap = sub.parentElement;
+            const rect = sub.getBoundingClientRect();
+            if (!wrap || rect.height === 0) return;
+            const rowTop = wrap.getBoundingClientRect().top;
+            const top = Math.max(TREE_FLYOUT_TOP, Math.min(rowTop - 6, viewport - rect.height - 8));
+            sub.style.top = `${top - rowTop}px`;
+            return;
+        }
         sub.style.maxHeight = `${fitFlyout(0, 0, viewport).maxHeight}px`;
         const rect = sub.getBoundingClientRect();
         if (rect.height === 0 || getComputedStyle(sub).visibility === 'hidden') return;   // not shown (hover already left)
@@ -479,21 +604,6 @@ export const treeManagementMethods = uiModule({
         if (id) void this.researchSendTree(id);
     },
 
-    treeActionRename(): void {
-        const id = TreeManager.getActiveTreeId();
-        this.closeActionsMenu();
-        if (id) this.showRenameTreeDialog(id);
-    },
-    treeActionDuplicate(): void {
-        const id = TreeManager.getActiveTreeId();
-        this.closeActionsMenu();
-        if (id) this.duplicateTree(id);
-    },
-    treeActionMergeInto(): void {
-        const id = TreeManager.getActiveTreeId();
-        this.closeActionsMenu();
-        if (id) this.showMergeTreesDialog(id);
-    },
     /**
      * The source catalog is a research tool: offered when advanced fields are on,
      * or as soon as the tree has a source (imported or cited), so nobody is left
@@ -518,30 +628,9 @@ export const treeManagementMethods = uiModule({
         this.closeActionsMenu();
         this.showExportDialog();
     },
-    treeActionSaveToFile(): void {
-        this.closeActionsMenu();
-        this.attachSaveToFile();
-    },
     treeActionAnniversaries(): void {
         this.closeActionsMenu();
         this.showAnniversariesDialog();
-    },
-    treeActionSplitFamilies(): void {
-        // WYSIWYG: the active tree IS the live view, so no person picker — the
-        // first family is exactly what is on screen (same as before the move).
-        this.closeActionsMenu();
-        this.showSplitFamiliesDialog();
-    },
-    treeActionHide(): void {
-        const id = TreeManager.getActiveTreeId();
-        this.closeActionsMenu();
-        // Hiding the active tree switches to another visible one; the last
-        // visible tree cannot be hidden (handled inside toggleTreeVisibility).
-        if (id) void this.toggleTreeVisibility(id);
-    },
-    treeActionManager(): void {
-        this.closeActionsMenu();
-        this.showTreeManagerDialog();
     },
 
     /**
@@ -887,52 +976,103 @@ export const treeManagementMethods = uiModule({
     async openTreeRowMenu(btn: HTMLElement, menu: HTMLElement, treeId: TreeId): Promise<void> {
         const groups = await this.treeActionGroups(treeId, 'manager');
         menu.replaceChildren();
-        for (const group of groups) {
-            const header = document.createElement('div');
-            header.className = 'tree-row-menu-group';
-            header.setAttribute('role', 'presentation');
-            header.textContent = group.header;
-            // A group of edit-only rows hides with them in read-only mode.
-            if (group.rows.every(row => row.editOnly)) header.classList.add('edit-only');
-            menu.appendChild(header);
-            for (const row of group.rows) {
-                const item = document.createElement('button');
-                item.type = 'button';
-                item.className = 'tree-row-menu-item';
-                item.dataset.action = row.key;
-                if (row.danger) item.classList.add('danger');
-                if (row.quiet) item.classList.add('is-quiet');
-                if (row.editOnly) item.classList.add('edit-only');
-                if (row.hint) item.title = row.hint;
-                const label = document.createElement('span');
-                label.className = 'tree-row-menu-label';
-                label.textContent = row.label;
-                item.appendChild(label);
-                if (row.checked !== undefined) {
-                    item.classList.add('tree-startup-toggle');
-                    item.setAttribute('role', 'menuitemcheckbox');
-                    item.setAttribute('aria-checked', String(row.checked));
-                    const check = document.createElement('span');
-                    check.className = 'tree-row-menu-check';
-                    check.setAttribute('aria-hidden', 'true');
-                    if (row.checked) check.innerHTML = iconSvg('check', { size: 14 });
-                    item.appendChild(check);
-                } else {
-                    item.setAttribute('role', 'menuitem');
-                    if (row.value) {
-                        const value = document.createElement('span');
-                        value.className = 'tree-row-menu-value';
-                        value.textContent = row.value;
-                        item.appendChild(value);
-                    }
+        const rowItem = (row: TreeActionRow): HTMLButtonElement => {
+            const item = document.createElement('button');
+            item.type = 'button';
+            item.className = 'tree-row-menu-item';
+            item.dataset.action = row.key;
+            if (row.danger) item.classList.add('danger');
+            if (row.quiet) item.classList.add('is-quiet');
+            if (row.editOnly) item.classList.add('edit-only');
+            if (row.hint) item.title = row.hint;
+            const label = document.createElement('span');
+            label.className = 'tree-row-menu-label';
+            label.textContent = row.label;
+            item.appendChild(label);
+            if (row.checked !== undefined) {
+                item.classList.add('tree-startup-toggle');
+                item.setAttribute('role', 'menuitemcheckbox');
+                item.setAttribute('aria-checked', String(row.checked));
+                const check = document.createElement('span');
+                check.className = 'tree-row-menu-check';
+                check.setAttribute('aria-hidden', 'true');
+                if (row.checked) check.innerHTML = iconSvg('check', { size: 14 });
+                item.appendChild(check);
+            } else {
+                item.setAttribute('role', 'menuitem');
+                if (row.value) {
+                    const value = document.createElement('span');
+                    value.className = 'tree-row-menu-value';
+                    value.textContent = row.value;
+                    item.appendChild(value);
                 }
-                item.addEventListener('click', () => {
-                    menu.classList.remove('open');
-                    row.run();
-                });
-                menu.appendChild(item);
             }
-        }
+            item.addEventListener('click', () => {
+                menu.classList.remove('open');
+                row.run();
+            });
+            return item;
+        };
+        groups.forEach((group, index) => {
+            // A group of edit-only rows hides with them in read-only mode.
+            const editOnly = group.rows.every(row => row.editOnly);
+            if (group.header) {
+                const header = document.createElement('div');
+                header.className = 'tree-row-menu-group';
+                header.setAttribute('role', 'presentation');
+                header.textContent = group.header;
+                if (editOnly) header.classList.add('edit-only');
+                menu.appendChild(header);
+            } else if (index > 0) {
+                const divider = document.createElement('div');
+                divider.className = 'tree-row-menu-divider';
+                divider.setAttribute('role', 'separator');
+                if (editOnly) divider.classList.add('edit-only');
+                menu.appendChild(divider);
+            }
+            if (!group.collapsedLabel) {
+                for (const row of group.rows) menu.appendChild(rowItem(row));
+                return;
+            }
+            // "Change structure ⌄": its rows open in place (closed again with the menu).
+            const groupId = `tree-row-menu-${treeId}-${TREE_STRUCTURE_GROUP_SUFFIX}`;
+            const toggle = collapsedToggle(group.collapsedLabel, groupId,
+                'tree-row-menu-item tree-actions-structure-toggle' + (editOnly ? ' edit-only' : ''), 'tree-row-menu-label');
+            const box = document.createElement('div');
+            box.id = groupId;
+            box.className = 'tree-row-menu-structure';
+            box.setAttribute('role', 'group');
+            box.setAttribute('aria-label', group.collapsedLabel);
+            box.hidden = true;
+            for (const row of group.rows) box.appendChild(rowItem(row));
+            const setOpen = (open: boolean, focus: 'first' | 'row') => {
+                box.hidden = !open;
+                toggle.setAttribute('aria-expanded', String(open));
+                this.updateTreeRowMenuHint(menu);
+                if (focus === 'first' && open) box.querySelector<HTMLElement>('.tree-row-menu-item')?.focus();
+                else toggle.focus();
+            };
+            toggle.addEventListener('click', (e) => {
+                e.stopPropagation();
+                setOpen(box.hidden, 'row');
+            });
+            toggle.addEventListener('keydown', (e) => {
+                if (e.altKey || e.ctrlKey || e.metaKey) return;
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setOpen(box.hidden, 'first');
+                } else if (e.key === 'ArrowRight') {
+                    e.preventDefault();
+                    setOpen(true, 'first');
+                }
+            });
+            box.addEventListener('keydown', (e) => {
+                if (e.key !== 'ArrowLeft' || e.altKey || e.ctrlKey || e.metaKey) return;
+                e.preventDefault();
+                setOpen(false, 'row');
+            });
+            menu.append(toggle, box);
+        });
         // A tree that is not open: say where the missing actions are.
         if (treeId !== TreeManager.getActiveTreeId()) {
             const note = document.createElement('div');
@@ -1194,7 +1334,7 @@ export const treeManagementMethods = uiModule({
     /**
      * Show duplicate tree dialog
      */
-    duplicateTree(treeId: string): void {
+    duplicateTree(treeId: string, parentDialogId?: string): void {
         const tree = TreeManager.getTreeMetadata(treeId as TreeId);
         if (!tree) return;
 
@@ -1204,10 +1344,12 @@ export const treeManagementMethods = uiModule({
         const modal = document.getElementById('duplicate-tree-modal');
         const input = document.getElementById('duplicate-tree-name') as HTMLInputElement;
 
-        // Handle dialog stack - tree-manager is parent
+        // Dialog stack: Escape returns to the parent (the tree manager) when there is one.
         this.clearDialogStack();
-        this.pushDialog('tree-manager-modal');
-        this.closeDialogById('tree-manager-modal');
+        if (parentDialogId) {
+            this.pushDialog(parentDialogId);
+            this.closeDialogById(parentDialogId);
+        }
         this.pushDialog('duplicate-tree-modal');
 
         if (input) {
@@ -1309,13 +1451,13 @@ export const treeManagementMethods = uiModule({
     /**
      * Confirm delete tree
      */
-    async confirmDeleteTree(treeId: string): Promise<void> {
+    async confirmDeleteTree(treeId: string, parentDialogId?: string): Promise<void> {
         const tree = TreeManager.getTreeMetadata(treeId as TreeId);
         if (!tree) return;
 
-        // Setup dialog stack - tree manager is parent of confirm
+        // Dialog stack: the confirmation returns to its parent (the tree manager) when there is one.
         this.clearDialogStack();
-        this.pushDialog('tree-manager-modal');
+        if (parentDialogId) this.pushDialog(parentDialogId);
 
         const d = strings.danger;
         const confirmed = await this.showConfirm(d.deleteTreeMessage(tree.personCount), d.deleteTreeTitle(tree.name),
@@ -1340,7 +1482,7 @@ export const treeManagementMethods = uiModule({
             this.updateTreeSwitcher();
             TreeRenderer.render();
         }
-        // If not confirmed, tree manager stays open (returnToParentDialog handles it)
+        // If not confirmed, the parent dialog (if any) comes back (returnToParentDialog handles it)
     },
 
     // ---- DEFAULT PERSON DIALOG ----

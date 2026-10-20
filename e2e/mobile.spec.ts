@@ -1,5 +1,11 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, createFirstPerson, card } from './helpers.js';
+import { openApp, createFirstPerson, card, openTreeStructure } from './helpers.js';
+
+/** The open tree's sheet (More → Tree: {name}), menu 1020 §3.1: headings and rows (Change structure folded). */
+const TREE_SHEET_HEADERS = ['Research', 'Tree settings'];
+const TREE_SHEET_KEYS = ['overview', 'overview-quality', 'snapshots', 'researchInfo',
+    'rename', 'defaultPerson', 'startup', 'places', 'surnames', 'structure',
+    'visibility', 'lock', 'delete', 'manageTrees'];
 
 test('the phone search: the magnifier opens the field over the bar; a long name fits the dropdown, on screen', { tag: '@smoke' }, async ({ page }) => {
     await openApp(page);
@@ -180,7 +186,8 @@ test('the "More" sheet (menu 1020 §7): Undo|Redo tiles, content, For the family
     // The rows (no section headers), then the View tiles, then Settings | About (no version: it is in About).
     await expect(sheet.locator('.bottom-sheet-section')).toHaveCount(0);
     const rows = (await sheet.locator('.bottom-sheet-items > .bottom-sheet-item:not(.bottom-sheet-storage-row)').allInnerTexts()).map(t => t.replace(/\s+/g, ' ').trim());
-    expect(rows).toEqual(['Anniversaries', 'Export…', 'For the family ›', 'Ancestor research', 'Tree: My Family Tree ›', 'Add family…']);
+    // "Ancestor research · New" only while it is new (menu 1020 §1.1); seen here: in the tree's sheet.
+    expect(rows).toEqual(['Anniversaries', 'Export…', 'For the family ›', 'Tree: My Family Tree ›', 'Add family…']);
     await expect(pairs.nth(1)).toHaveAttribute('aria-label', 'View');
     await expect(pairs.nth(1).locator('.bottom-sheet-item')).toHaveText(['Fan', 'Map']);
     await expect(pairs.nth(2).locator('.bottom-sheet-item')).toHaveText(['Settings', 'About Strom']);
@@ -280,7 +287,7 @@ test.describe('More on a small phone and held sideways', () => {
     });
 });
 
-test('the Tree row opens the tree-actions sheet: name, summary, the six groups as 48px rows', async ({ page }) => {
+test('the Tree row opens the tree-actions sheet: name, summary, the groups of the one list as 48px rows', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
 
@@ -294,11 +301,16 @@ test('the Tree row opens the tree-actions sheet: name, summary, the six groups a
     await expect(sheet.locator('.tree-actions-summary')).toContainText('1 person');
     await expect(sheet.locator('.tree-actions-summary')).toContainText('edited');
 
-    await expect(sheet.locator('.bottom-sheet-section')).toHaveText(['Overview', 'Outputs', 'Tree settings', 'Structure', 'Manage']);
-    const keys = await sheet.locator('.tree-actions-row').evaluateAll(els => els.map(el => (el as HTMLElement).dataset.action));
-    expect(keys).toEqual(['overview', 'overview-quality', 'export', 'snapshots', 'rename', 'defaultPerson', 'startup', 'places', 'surnames',
-        'makeTree', 'mergeView', 'splitFamilies', 'split', 'mergeInto', 'duplicate', 'visibility', 'lock', 'delete']);
-    for (const box of await sheet.locator('.tree-actions-row').evaluateAll(els => els.map(el => el.getBoundingClientRect().height))) {
+    // Menu 1020 §3.1: no Export, Save to file nor Send changes here (one level up / the manager's ⋯);
+    // the structure actions fold under "Change structure ⌄"; Manage trees… last.
+    await expect(sheet.locator('.bottom-sheet-section')).toHaveText(TREE_SHEET_HEADERS);
+    const keys = () => sheet.locator('.tree-actions-row:visible').evaluateAll(els => els.map(el => (el as HTMLElement).dataset.action));
+    expect(await keys()).toEqual(TREE_SHEET_KEYS);
+    await openTreeStructure(page, sheet);
+    expect(await keys()).toEqual([...TREE_SHEET_KEYS.slice(0, TREE_SHEET_KEYS.indexOf('structure') + 1),
+        'makeTree', 'mergeView', 'splitFamilies', 'split', 'mergeInto', 'duplicate',
+        ...TREE_SHEET_KEYS.slice(TREE_SHEET_KEYS.indexOf('structure') + 1)]);
+    for (const box of await sheet.locator('.tree-actions-row:visible').evaluateAll(els => els.map(el => el.getBoundingClientRect().height))) {
         expect(Math.round(box)).toBeGreaterThanOrEqual(48); // subpixel layout
     }
     await expect(sheet.locator('[data-action="delete"]')).toHaveClass(/danger/);

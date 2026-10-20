@@ -2,7 +2,7 @@ import { test, expect, Page, BrowserContext, TestInfo } from '@playwright/test';
 import { pathToFileURL } from 'url';
 import * as fs from 'fs';
 import * as path from 'path';
-import { openApp, createFirstPerson, card, waitForPersist, exportTreeJson } from './helpers.js';
+import { openApp, createFirstPerson, card, waitForPersist, exportTreeJson, openTreeActions } from './helpers.js';
 
 /**
  * Strom Research in the app (3.0): the welcome-screen offer, the permanent
@@ -379,10 +379,13 @@ test.describe('existing tree on desktop', () => {
         await page.reload();
         await expect(card(page, 'Jan')).toBeVisible();
         await openActionsMenu(page);
-        await expect(menuRow(page)).toBeVisible();
-        await expect(menuRow(page).locator('.research-new-badge')).toBeHidden();
+        // The first-level row is gone with the label; the item lives under "Tree: {name} › Research".
+        await expect(menuRow(page)).toBeHidden();
         await expect(newDot(page)).toBeHidden();
         await expect(page.locator('.actions-menu-btn')).toHaveAttribute('aria-label', 'Actions');
+        await page.keyboard.press('Escape');
+        const tree = await openTreeActions(page);
+        await expect(tree.locator('#actions-tree-researchInfo-row')).toHaveText('Ancestor research');
     });
 
     test('state lives in the browser settings, never in the tree data or its export', async ({ page }) => {

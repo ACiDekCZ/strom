@@ -1,6 +1,6 @@
 import { test, expect, Page, Browser } from '@playwright/test';
 import fs from 'fs';
-import { openApp, card, createFirstPerson, addRelation, waitForPersist, seedResearchPromoSeen, seedSetting, AFTER_HAND_OVER } from './helpers.js';
+import { openApp, card, createFirstPerson, addRelation, waitForPersist, seedResearchPromoSeen, seedSetting, AFTER_HAND_OVER, openTreeActions } from './helpers.js';
 
 /**
  * Installing Strom Research from the app: "What it is" → the line for this
@@ -227,19 +227,19 @@ test.describe('installing the research from the app', () => {
         await expect(d.locator('.install-wait-title')).toHaveText('Waiting for the installation to finish');
         await expect(d.locator('.install-foot-note')).toContainText('Started');
 
-        // Closed: the menu item finishes the installation, without a dot or a toast.
+        // Closed: the tree's list (Tree: {name} › Research) finishes the installation, without a dot or a toast.
         await d.locator('[data-dismiss]').click();
-        await page.locator('.actions-menu-btn').click();
-        await expect(page.locator('#research-menu-row .research-menu-label')).toHaveText('Finish installing the research…');
-        await page.locator('#research-menu-row').click();
+        let tree = await openTreeActions(page);
+        await expect(tree.locator('#actions-tree-researchInstall-row')).toHaveText('Finish installing the research…');
+        await tree.locator('#actions-tree-researchInstall-row').click();
         await expect(d.locator('.install-wait')).toHaveAttribute('data-phase', 'long');
 
         await page.clock.fastForward(24 * 60 * 60 * 1000);
         await expect(d.locator('.install-wait')).toHaveAttribute('data-phase', 'expired');
         await expect(d.locator('.install-wait-title')).toHaveText('The command has expired');
         await d.locator('[data-dismiss]').click();
-        await page.locator('.actions-menu-btn').click();
-        await expect(page.locator('#research-menu-row .research-menu-label')).toHaveText('Ancestor research');
+        tree = await openTreeActions(page);
+        await expect(tree.locator('#actions-tree-researchInfo-row')).toHaveText('Ancestor research');
         expect(local).toEqual([]);
     });
 
@@ -251,10 +251,9 @@ test.describe('installing the research from the app', () => {
         await expect(card(page, 'Jan')).toBeVisible();
         await expect(page.locator('.toast')).toHaveCount(0);
         await expect(dialog(page)).toHaveCount(0);
-        await page.locator('.actions-menu-btn').click();
-        await expect(page.locator('#research-menu-row .research-menu-label')).toHaveText('Finish installing the research…');
-        await expect(page.locator('#research-menu-row .research-new-badge')).toBeHidden();
-        await page.locator('#research-menu-row').click();
+        const tree = await openTreeActions(page);
+        await expect(tree.locator('#actions-tree-researchInstall-row')).toHaveText('Finish installing the research…');
+        await tree.locator('#actions-tree-researchInstall-row').click();
         await expect(dialog(page).locator('.research-install-dialog')).toHaveAttribute('data-step', 'wait');
         await expect(dialog(page).locator('.install-wait')).toHaveAttribute('data-phase', 'long');
     });
@@ -270,8 +269,9 @@ test.describe('installing the research from the app', () => {
             const id = window.Strom.DataManager.getCurrentTreeId();
             window.Strom.TreeManager.setResearchLink(id, { id: '3233420f-b95e-41d3-baf5-60fb5b1ca3e6', fingerprint: '', syncedAt: new Date().toISOString() } as never);
         });
-        await page.locator('.actions-menu-btn').click();
-        await expect(page.locator('#research-menu-row .research-menu-label')).not.toHaveText('Finish installing the research…');
+        const tree = await openTreeActions(page);
+        await expect(tree.locator('[role^="menuitem"]').first()).toBeVisible();
+        await expect(tree.locator('#actions-tree-researchInstall-row')).toHaveCount(0);
         expect(await page.evaluate(() => localStorage.getItem('strom-install'))).toBeNull();
     });
 

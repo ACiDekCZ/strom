@@ -2,7 +2,7 @@ import { test, expect, Page } from '@playwright/test';
 import { readFileSync } from 'fs';
 import {
     openApp, createFirstPerson, card, cardAction, addRelation, fillPerson,
-    exportTreeJson, importJsonAsNewTree, focusViaSearch,
+    exportTreeJson, importJsonAsNewTree, focusViaSearch, openTreeActions, openTreeStructure,
 } from './helpers.js';
 
 /** Build a small couple-with-child tree: Jan + Marie, child Petr. */
@@ -329,10 +329,9 @@ test('make a tree from the current view creates a separate tree of the shown peo
     const treesBefore = await page.evaluate(() => window.Strom.TreeManager.getTrees().length);
     const shown = await page.evaluate(() => window.Strom.TreeRenderer.getVisiblePersonIds().size);
 
-    // ⋯ → Tree: → From the current view → Make a new tree.
-    await page.locator('.actions-menu-btn').click();
-    await page.locator('#actions-tree-row').click();
-    await page.locator('#actions-tree-submenu .tree-switcher-action', { hasText: 'Make a new tree' }).click();
+    // ⋯ → Tree: → Change structure → New tree from view.
+    const structure = await openTreeStructure(page, await openTreeActions(page));
+    await structure.locator('.tree-switcher-action', { hasText: 'New tree from view' }).click();
     const importDialog = page.locator('#import-tree-modal');
     await expect(importDialog).toBeVisible();
     // Name is pre-filled from the focus person.

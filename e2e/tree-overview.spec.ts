@@ -360,7 +360,7 @@ test.describe('tree overview', () => {
         // ⋯ → Tree: the Overview group is the overview, its Data quality shortcut and (when offered) the change history.
         await page.locator('.actions-menu-btn').click();
         await page.locator('#actions-tree-row').hover();
-        const rows = page.locator('#actions-tree-overview-rows .tree-switcher-action');
+        const rows = page.locator('#actions-tree-submenu .tree-switcher-action[data-action^="overview"]');
         await expect(rows).toHaveText(['Tree overview', 'Data quality']);
         await expect(rows.nth(1)).toHaveClass(/is-quiet/);
         await page.keyboard.press('Escape');
@@ -955,7 +955,7 @@ test.describe('tree overview: ask the family, certainty, the Data quality shortc
         const treeId = await setup(page);
         await page.locator('.actions-menu-btn').click();
         await page.locator('#actions-tree-row').hover();
-        await page.locator('#actions-tree-overview-rows .tree-switcher-action', { hasText: 'Data quality' }).click();
+        await page.locator('#actions-tree-submenu .tree-switcher-action', { hasText: 'Data quality' }).click();
         let dialog = page.locator('#tree-overview-modal .modal.tov');
         await expect(section(dialog, 'quality').locator('.tov-sec-head')).toHaveAttribute('aria-expanded', 'true');
         await expect(section(dialog, 'quality').locator('.tov-sec-head')).toBeInViewport();

@@ -22,9 +22,9 @@ test('export menu: groups in order with result-named rows (EN, CS, DE)', async (
     await page.evaluate(() => window.Strom.UI.showExportDialog());
     await expect(page.locator('#export-modal')).toBeVisible();
     const en = await exportMenuStructure(page);
-    // "Link to a file on disk…" exists only where the File System Access API
+    // "Link to a file…" exists only where the File System Access API
     // does; the rest of the structure is fixed.
-    const save = en[1].rows.filter((r) => r !== 'Link to a file on disk…');
+    const save = en[1].rows.filter((r) => r !== 'Link to a file…');
     expect(en.map((g) => g.group.toLowerCase())).toEqual([
         'share', 'save and back up', 'print and image', 'for other programs',
     ]);

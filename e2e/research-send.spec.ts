@@ -1,6 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
-import { openApp, card } from './helpers.js';
+import { openApp, card, openTreeActions } from './helpers.js';
 
 /**
  * Sending the user's changes back to Strom Research (?send=): the app finds
@@ -328,8 +328,8 @@ test.describe('where the tree menu offers it', () => {
             await window.Strom.UI.switchToTree(id);
         });
         await expect(page.locator('#research-menu-btn')).toHaveCount(0);
-        await page.locator('.actions-menu-btn').click();
-        await expect(page.locator('#research-menu-row')).toBeVisible();
+        const tree = await openTreeActions(page);
+        await expect(tree.locator('#actions-tree-researchInfo-row')).toBeVisible();
     });
 
     test('a phone (touch): not offered — the research cannot run there', async ({ browser }) => {

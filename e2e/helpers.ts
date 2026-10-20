@@ -346,3 +346,33 @@ export async function controlCardComesBack(page: Page): Promise<void> {
     await expect(page.locator('.zoom-controls')).toBeVisible();
     await expect(block).toBeVisible();
 }
+
+/**
+ * Desktop ⋯ → "Tree: {name} ›": the Actions menu and the tree's flyout open
+ * (the one list of tree actions, menu 1020 §3). Returns the flyout.
+ */
+export async function openTreeActions(page: Page): Promise<Locator> {
+    const dropdown = page.locator('#actions-menu-dropdown');
+    if (!await dropdown.evaluate(el => el.classList.contains('active'))) await page.locator('.actions-menu-btn').click();
+    await expect(dropdown).toHaveClass(/active/);
+    if (!await page.locator('#actions-tree-wrap').evaluate(el => el.classList.contains('submenu-open'))) {
+        await page.locator('#actions-tree-row').click();
+    }
+    const sub = page.locator('#actions-tree-submenu');
+    await expect(sub.locator('[role^="menuitem"]').first()).toBeVisible();
+    return sub;
+}
+
+/**
+ * "Change structure ⌄" opened in the visible list of tree actions (the ⋯
+ * flyout, the tree sheet, the tree manager's ⋯). Returns its group of rows.
+ */
+export async function openTreeStructure(page: Page, scope?: Locator): Promise<Locator> {
+    const toggle = (scope ?? page.locator('body')).locator('.tree-actions-structure-toggle').filter({ visible: true }).first();
+    await expect(toggle).toBeVisible();
+    if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    const group = page.locator(`[id="${await toggle.getAttribute('aria-controls')}"]`);
+    await expect(group).toBeVisible();
+    return group;
+}

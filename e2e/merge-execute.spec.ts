@@ -1,5 +1,5 @@
 import { test, expect, Page, Locator } from '@playwright/test';
-import { openApp, createFirstPerson, cardAction, focusViaSearch } from './helpers.js';
+import { openApp, createFirstPerson, cardAction, focusViaSearch, openTreeStructure } from './helpers.js';
 
 /**
  * The tree merge driven end to end through the real UI: tree manager row menu
@@ -43,7 +43,7 @@ async function seedTrees(
     }, [target, source] as const);
 }
 
-/** Tree manager → source row "⋯" → "Merge into..." → pick target → Start: the wizard opens. */
+/** Tree manager → source row "⋯" → Change structure → "Merge into another tree…" → pick target → Start: the wizard opens. */
 async function startMergeFromManager(page: Page, sourceName: string, targetName: string): Promise<Locator> {
     await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
     const manager = page.locator('#tree-manager-modal');
@@ -52,7 +52,7 @@ async function startMergeFromManager(page: Page, sourceName: string, targetName:
         has: page.locator('.tree-manager-item-name', { hasText: new RegExp(`^${sourceName}$`) }),
     });
     await row.locator('.tree-row-menu-btn').click();
-    await row.locator('.tree-row-menu-item', { hasText: 'Merge into' }).click();
+    await (await openTreeStructure(page, row)).locator('.tree-row-menu-item', { hasText: 'Merge into' }).click();
 
     const pick = page.locator('#merge-trees-modal');
     await expect(pick).toBeVisible();

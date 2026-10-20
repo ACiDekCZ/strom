@@ -436,7 +436,8 @@ export const bottomSheetMethods = uiModule({
     /** More → "Strom: {name}": the open tree's actions sheet (the shared list, tree-actions.ts). */
     showTreeActionsSheet(): void {
         const id = TreeManager.getActiveTreeId();
-        if (!id || DataManager.isReadOnly()) return;
+        // Locked or followed live, it still opens: the list keeps what reads the tree (menu 1020 §10).
+        if (!id || DataManager.isViewMode()) return;
         void this.presentTreeActionsSheet(id, { source: 'more' });
     },
 

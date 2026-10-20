@@ -23,6 +23,7 @@ import {
     isPromoAvailable,
     isMenuItemVisible,
     isNewMarkerActive,
+    isNewWindowOpen,
     decideWhatsNewCard,
 } from '../research-promo.js';
 import { isTabletOrMobile } from '../breakpoints.js';
@@ -170,6 +171,17 @@ export const researchPromoMethods = uiModule({
         return isNewMarkerActive(SettingsManager.getResearchPromoState(), this.researchPromoContext(), new Date());
     },
 
+    /**
+     * The first-level row of Actions / More: a tree without research during
+     * the 30 days of the "New" marker (the label itself may go out earlier).
+     * Later the way in is the tree's own list (Tree: {name} › Research).
+     */
+    researchMenuRowOffered(): boolean {
+        if (!promoReady || !this.researchMenuItemVisible()) return false;
+        if (TreeManager.getActiveTreeMetadata()?.research || this.researchMenuShown()) return false;
+        return this.isResearchNewActive() || isNewWindowOpen(SettingsManager.getResearchPromoState(), new Date());
+    },
+
     /** Re-evaluate availability + the marker (label, accessible names). */
     refreshResearchPromo(): void {
         try {
@@ -192,7 +204,10 @@ export const researchPromoMethods = uiModule({
         const s = strings.research;
 
         const row = document.getElementById('research-menu-row');
-        const rowVisible = promoReady && this.researchMenuItemVisible();
+        // "Ancestor research · New" on the Actions menu's first level only
+        // while it is new (menu 1020 §1.1); afterwards it lives under
+        // "Tree: {name} › Research" (treeResearchRow).
+        const rowVisible = this.researchMenuRowOffered();
         document.body.classList.toggle('research-menu', rowVisible);
         if (row) {
             const label = this.researchMenuItemLabel();
@@ -231,7 +246,7 @@ export const researchPromoMethods = uiModule({
 
     /** The "More" sheet row (bottom-navigation regime), or null when not offered. */
     researchMenuSheetRow(): { label: string; run: () => void; isNew: boolean; ariaLabel: string } | null {
-        if (!this.researchMenuItemVisible() || DataManager.isReadOnly()) return null;
+        if (!this.researchMenuRowOffered() || DataManager.isReadOnly()) return null;
         const isNew = this.isResearchNewActive();
         const s = strings.research;
         const label = this.researchMenuItemLabel();

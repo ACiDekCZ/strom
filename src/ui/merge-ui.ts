@@ -178,7 +178,7 @@ export const mergeUiMethods = uiModule({
      */
     async renamePendingMergeFromManager(sessionId: string, currentName: string): Promise<void> {
         this.pushDialog('tree-manager-modal');
-        const newName = await this.showPrompt(strings.treeManager.rename, currentName);
+        const newName = await this.showPrompt(strings.treeManager.renameTitle, currentName);
         if (!newName) return;
 
         renameMergeSession(sessionId, newName);

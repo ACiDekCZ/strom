@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { openApp, card } from './helpers.js';
+import { openApp, card, openTreeStructure } from './helpers.js';
 
 /**
  * "Split into families" (N4): break one tree into the families it contains,
@@ -317,7 +317,8 @@ test('tree manager row: split opens the proposals directly; a tree not open offe
     await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
     const active = page.locator('.tree-manager-item.active');
     await active.locator('.tree-row-menu-btn').click();
-    await active.locator('.tree-row-menu-item', { hasText: 'Split into families' }).click();
+    const structure = await openTreeStructure(page, active.locator('.tree-row-menu.open'));
+    await structure.locator('.tree-row-menu-item', { hasText: 'Split into families' }).click();
 
     // No starting-person picker — the partition never depends on one.
     const modal = page.locator('#split-families-modal');

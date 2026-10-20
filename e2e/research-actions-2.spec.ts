@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, card, openPersonSubmenu, AFTER_HAND_OVER } from './helpers.js';
+import { openApp, card, openPersonSubmenu, AFTER_HAND_OVER, openTreeActions } from './helpers.js';
 import { acceptLoad } from './research-bridge.js';
 
 /**
@@ -469,13 +469,13 @@ test.describe('Start research with this tree (G3)', () => {
         await page.keyboard.press('Escape');
 
         await page.evaluate(() => localStorage.setItem('strom-research-links', JSON.stringify({ actions: ['new'], at: new Date().toISOString() })));
-        // `new` announced: the item is back, named for what it does now, and it hands the tree over.
+        // `new` announced: the tree's list hands it over (Tree: {name} › Research, menu 1020 §3.1);
+        // the first level keeps no row for it (nothing new to point at).
         await page.evaluate(() => window.Strom.UI.refreshResearchPromo());
-        await page.locator('.actions-menu-btn').click();
-        await expect(page.locator('#research-menu-row')).toBeVisible();
-        await expect(page.locator('#research-menu-row .research-menu-label')).toHaveText('Start research with this tree');
-        await expect(page.locator('#research-menu-row .research-new-badge')).toBeHidden();
-        await page.keyboard.press('Escape');
+        const tree = await openTreeActions(page);
+        await expect(page.locator('#research-menu-row')).toBeHidden();
+        await expect(tree.locator('#actions-tree-researchAdopt-row')).toHaveText('Start research ↗');
+        await page.evaluate(() => window.Strom.UI.closeActionsMenu());
         await page.evaluate(() => window.Strom.UI.showResearchInfoDialog());
         const dialog = page.locator('#research-info-modal');
         await expect(dialog.locator('.research-info-lead')).toContainText('can take over the tree Dvořákovi');
@@ -839,7 +839,7 @@ test.describe('Start research with this tree (G3)', () => {
         expect(before).toEqual({ empty: true, now: true });
     });
 
-    test('an empty tree, not from the research, the research here: "Start research with this tree" hands it over (never nothing to do)', async ({ page }) => {
+    test('an empty tree, not from the research, the research here: "Start research ↗" hands it over (never nothing to do)', async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 900 });
         await seed(page, ALL);
         await openApp(page);
@@ -848,29 +848,24 @@ test.describe('Start research with this tree (G3)', () => {
         await recordLaunches(page);
         // The research is here: no way to its website on the empty screen.
         await expect(page.locator('#empty-state .research-offer')).toBeHidden();
-        await page.locator('.actions-menu-btn').click();
-        await expect(page.locator('#research-menu-row')).toBeVisible();
-        await expect(page.locator('#research-menu-row .research-menu-label')).toHaveText('Start research with this tree');
-        await page.locator('#research-menu-row').click();
-        const dialog = page.locator('#research-info-modal');
-        await expect(dialog.locator('.research-info-lead')).toContainText('can take over the tree');
-        await dialog.locator('#research-adopt-start').click();
-        await expect(dialog).toHaveCount(0);
-        expect((await launched(page))[0]).toMatch(TOKEN_RE);
+        // Tree: {name} › Research → Start research ↗ (menu 1020 §3.1).
+        const tree = await openTreeActions(page);
+        await tree.locator('#actions-tree-researchAdopt-row').click();
+        await expect.poll(async () => (await launched(page))[0]).toMatch(TOKEN_RE);
         // The tree manager's row menu offers it too.
         await page.locator('.toast-close').click();
         await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
         const row = page.locator('.tree-manager-item').first();
         await row.locator('.tree-row-menu-btn').click();
-        await expect(row.locator('.tree-row-menu-item', { hasText: 'Start research with this tree ↗' })).toHaveCount(1);
+        await expect(row.locator('.tree-row-menu-item', { hasText: 'Start research ↗' })).toHaveCount(1);
     });
 
-    test('tree manager: "Start research with this tree ↗" in the row menu of an app tree', async ({ page }) => {
+    test('tree manager: "Start research ↗" in the row menu of an app tree', async ({ page }) => {
         await appTree(page, ALL);
         await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
         const row = page.locator('.tree-manager-item', { hasText: 'Dvořákovi' });
         await row.locator('.tree-row-menu-btn').click();
-        const item = row.locator('.tree-row-menu-item', { hasText: 'Start research with this tree ↗' });
+        const item = row.locator('.tree-row-menu-item', { hasText: 'Start research ↗' });
         await expect(item).toHaveCount(1);
     });
 });

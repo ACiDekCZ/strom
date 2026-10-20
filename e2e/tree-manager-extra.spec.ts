@@ -1,7 +1,7 @@
 import { test, expect, Page, Locator } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'url';
-import { openApp, createFirstPerson, card, addRelation, fillPerson, waitForPersist, focusViaSearch } from './helpers.js';
+import { openApp, createFirstPerson, card, addRelation, fillPerson, waitForPersist, focusViaSearch, openTreeActions, openTreeStructure } from './helpers.js';
 
 /**
  * Tree manager flows beyond create / rename / delete: duplicating a tree (an
@@ -25,14 +25,19 @@ async function rowAction(page: Page, treeName: string, item: string): Promise<vo
     if (!await manager(page).isVisible()) await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
     const r = row(page, treeName);
     await r.locator('.tree-row-menu-btn').click();
-    await r.locator('.tree-row-menu.open .tree-row-menu-item', { hasText: item }).click();
+    const menu = r.locator('.tree-row-menu.open');
+    const entry = menu.locator('.tree-row-menu-item', { hasText: item }).first();
+    // Structure actions sit under "Change structure ⌄".
+    if (!await entry.isVisible()) await openTreeStructure(page, menu);
+    await entry.click();
 }
 
-/** ⋯ → Tree: → item. */
+/** ⋯ → Tree: → item (a structure action: under Change structure ⌄). */
 async function treeSubmenu(page: Page, item: string): Promise<void> {
-    await page.locator('.actions-menu-btn').click();
-    await page.locator('#actions-tree-row').hover();
-    await page.locator('#actions-tree-submenu .tree-switcher-action', { hasText: item }).click();
+    const sub = await openTreeActions(page);
+    const row = sub.locator('.tree-switcher-action', { hasText: item }).first();
+    if (!await row.isVisible()) await openTreeStructure(page, sub);
+    await row.click();
 }
 
 /** In the open tree overview: expand Data quality and press one of its buttons. */

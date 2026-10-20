@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, card, openPersonSubmenu } from './helpers.js';
+import { openApp, card, openPersonSubmenu, openTreeActions } from './helpers.js';
 
 /**
  * The research's actions from the app (a Strom Research tree, on a computer):
@@ -232,9 +232,10 @@ test.describe('the Research menu', () => {
         await page.setViewportSize({ width: 1440, height: 900 });
         await seed(page, []);
         await openApp(page);
-        await page.locator('.actions-menu-btn').click();
-        await expect(page.locator('#research-menu-row')).toBeVisible();
-        await expect(page.locator('#research-menu-row')).toContainText('Ancestor research');
+        // Not new any more: under "Tree: {name} › Research", not on the first level.
+        const tree = await openTreeActions(page);
+        await expect(page.locator('#research-menu-row')).toBeHidden();
+        await expect(tree.locator('#actions-tree-researchInfo-row')).toHaveText('Ancestor research');
     });
 
     test('a touch device: nothing of the research in the menus', async ({ browser }) => {

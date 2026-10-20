@@ -65,6 +65,14 @@ export function isNewMarkerExpired(state: ResearchPromoState, now: Date): boolea
 }
 
 /**
+ * The 30 days since the "New" marker was first shown are still running
+ * (dismissing the label does not end them).
+ */
+export function isNewWindowOpen(state: ResearchPromoState, now: Date): boolean {
+    return !!state.researchNewFirstSeen && !isNewMarkerExpired(state, now);
+}
+
+/**
  * The "New" label and the trigger dots are lit: the item is offered, the tree
  * is not a research already, and the marker was neither dismissed nor lit
  * for 30 days. (An open from the command line still shows it.)
