@@ -18,7 +18,6 @@ import { isPhoneBar } from '../breakpoints.js';
 import { menuItemBody, menuItemAria, PersonMenuAction } from './context-menu.js';
 import { shownName, shownNameFull, nameHtml } from '../person-name.js';
 import type { ResearchSheetGroup } from './research-actions-ui.js';
-import { researchTrialTagHtml } from './research-tree-settings-ui.js';
 
 /** A row / section in a menu-style bottom sheet (the "More" and "Tree" sheets). */
 interface MenuRow {
@@ -673,6 +672,8 @@ export const bottomSheetMethods = uiModule({
             title.hidden = true;
             list.hidden = true;
             researchPage.hidden = false;
+            // The second level is the whole research menu, "Other actions" open.
+            this.setResearchMoreOpen(true);
             this.refreshResearchMenu();
             this.focusResearchMenuItem('first');
         };
@@ -680,6 +681,7 @@ export const bottomSheetMethods = uiModule({
             if (!researchPage || researchPage.hidden) return;
             this.closeResearchTrialNote();
             researchPage.hidden = true;
+            this.setResearchMoreOpen(false);
             title.hidden = false;
             list.hidden = false;
             const body = researchPage.querySelector<HTMLElement>('#research-sheet-menu');
@@ -695,7 +697,8 @@ export const bottomSheetMethods = uiModule({
             const r = strings.research;
             const head = document.createElement('div');
             head.className = 'bottom-sheet-section research-sheet-heading';
-            head.innerHTML = `<span>${esc(r.menuTitle)}</span>${researchTrialTagHtml(true)}`;
+            // ("trial" is in the second level's footer.)
+            head.innerHTML = `<span>${esc(r.menuTitle)}</span>`;
             list.appendChild(head);
             if (group.state) {
                 const st = group.state;
@@ -746,6 +749,7 @@ export const bottomSheetMethods = uiModule({
             researchPage.className = 'sheet-page-research';
             researchPage.hidden = true;
             researchPage.innerHTML = '<div id="research-sheet-menu" class="research-menu-body research-sheet-body" role="menu" aria-labelledby="research-menu-title"></div>';
+            researchPage.addEventListener('keydown', (e) => this.researchMenuKeydown(e));
             researchPage.addEventListener('click', (e) => {
                 const target = e.target as Element | null;
                 if (target?.closest('.research-menu-back')) {
@@ -754,7 +758,7 @@ export const bottomSheetMethods = uiModule({
                 }
                 // An item done closes the sheet (unless it put another sheet in its place).
                 const item = target?.closest('[role="menuitem"]');
-                if (!item || item.matches('.research-trial-tag, [data-action="cancelLoad"], [data-action="conflicts"]')) return;
+                if (!item || item.matches('.research-trial-tag, .research-item-more, [data-action="cancelLoad"], [data-action="conflicts"]')) return;
                 if (this.bottomSheet === overlay) this.hideBottomSheet();
             });
             sheet.appendChild(researchPage);

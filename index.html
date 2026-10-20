@@ -4729,23 +4729,37 @@
         .research-item-pill.is-error { background: var(--warning-soft); color: var(--warning-text); }
         .research-item-pill-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--primary); }
         .research-item-pill.is-error .research-item-pill-dot { display: none; }
+        /* The menu: the state block, at most six rows (34 px), "Other actions ⌄" opening in place, the footer. */
         .research-menu-dropdown {
-            left: auto; right: 0; width: 340px; max-width: calc(100vw - 16px); box-sizing: border-box;
-            margin-top: 6px; padding: 4px 0 6px; overflow-y: auto;
+            left: auto; right: 0; width: 320px; max-width: calc(100vw - 16px); box-sizing: border-box;
+            margin-top: 6px; padding: 6px 0; overflow-y: auto;
         }
-        .research-menu-body .tree-switcher-action { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 14px; }
-        .research-menu-group.is-quiet .tree-switcher-action { color: var(--text-secondary); padding-top: 8px; padding-bottom: 8px; font-size: 13px; }
+        .research-menu-body .tree-switcher-action {
+            display: flex; align-items: center; gap: 8px; min-height: 34px; box-sizing: border-box;
+            padding-top: 6px; padding-bottom: 6px; color: var(--text); font-size: 14px;
+        }
+        .research-menu-group.is-quiet .tree-switcher-action { color: var(--text-secondary); }
+        /* The More sheet's page: its title with "‹" back. */
         .research-menu-heading { display: flex; align-items: center; gap: 8px; padding: 10px 14px 8px; font-size: 14px; font-weight: 600; color: var(--text); }
-        .research-menu-heading .research-trial-tag { margin-left: 0; }
-        .research-menu-heading .research-sync-tag { align-self: center; }
-        .research-menu-body .research-sync-block { margin: 0 8px 6px; }
-        .research-sync-status { display: flex; flex-direction: column; gap: 4px; }
-        /* Following live (the tree locked meanwhile): one line in place of the state block, not an item. */
-        .research-menu-following {
-            display: flex; align-items: center; gap: 8px; margin: 0 8px 6px; padding: 8px 10px;
-            border-radius: 8px; background: var(--primary-soft); color: var(--text); font-size: 13px;
+        .research-menu-body .research-sync-block { margin: 2px 8px 6px; }
+        .research-sync-status { display: flex; flex-direction: column; gap: 1px; }
+        /* "Other actions": its items under it, indented 14 px (the separator too). */
+        .research-menu-more[hidden] { display: none; }
+        .research-menu-more .tree-switcher-action { padding-left: 28px; }
+        .research-more-divider { height: 1px; margin: 5px 0 5px 28px; background: var(--divider); }
+        .research-more-chevron { flex: none; color: var(--text-light); transition: transform 0.15s; }
+        .research-item-more[aria-expanded="true"] .research-more-chevron { transform: rotate(180deg); }
+        @media (prefers-reduced-motion: reduce) { .research-more-chevron { transition: none; } }
+        /* Something asks for attention (an update): an amber dot at the row's end. */
+        .research-item-attn { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--signal-warn); }
+        .research-item-val { flex: none; margin-left: auto; font-size: 13px; color: var(--text-light); white-space: nowrap; }
+        /* The footer (not an item): "trial" and what ↗ means, the whole sentence in its title. */
+        .research-menu-foot {
+            display: flex; align-items: center; gap: 8px; min-height: 34px; box-sizing: border-box; margin-top: 6px; padding: 6px 14px 0;
+            border-top: 1px solid var(--divider); font-size: 12px; color: var(--text-light);
         }
-        .research-menu-live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--primary); flex-shrink: 0; }
+        .research-menu-foot .research-trial-tag, .toolbar .research-menu-foot button.research-trial-tag { margin: 0; flex: none; }
+        .research-menu-foot-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         /* The More sheet: the research group on top (a narrow window with a mouse) and its page with the whole menu. */
         .research-sheet-heading { display: flex; align-items: center; gap: 8px; }
         .research-sheet-heading .research-trial-tag { margin-left: 0; text-transform: none; letter-spacing: normal; }
@@ -4776,7 +4790,9 @@
         .research-sheet-body .tree-switcher-action { min-height: 44px; box-sizing: border-box; padding: 10px 16px; font-size: 15px; }
         .research-sheet-body .research-sync-block { margin: 0 12px 8px; }
         .research-sheet-body .research-sync-btn, .research-sheet-body .research-sync-link { min-height: 44px; }
-        .research-sheet-body .research-submenu-note { padding: 8px 16px 4px; }
+        .research-sheet-body .research-menu-more .tree-switcher-action { padding-left: 30px; }
+        .research-sheet-body .research-more-divider { margin-left: 30px; }
+        .research-sheet-body .research-menu-foot { min-height: 44px; padding: 6px 16px 0; }
         /* "Export all" now and then: a quiet line with a link under Export… (Actions, More). */
         .export-reminder { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 0 14px 8px; }
         .export-reminder[hidden] { display: none; }
@@ -4798,9 +4814,6 @@
             flex: none; font-size: 11px; font-weight: 600; line-height: 1.4;
             padding: 1px 6px; border-radius: 999px;
             background: var(--warning-soft); color: var(--warning-text);
-        }
-        .research-submenu-note {
-            padding: 6px 14px 8px; font-size: 12px; line-height: 1.45; color: var(--text-light);
         }
         .research-menu-row:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
         /* "New" label — the look of the .beta-badge. */
@@ -10609,21 +10622,31 @@
 
 
         /* ===== Where a research tree stands with its research (research-sync-ui.ts) ===== */
+        /* Compact: a dot, the title in bold over a short line, one button on the right; anything else under the text. */
         .research-sync-block {
-            margin: 0 6px 4px; padding: 10px 12px; border-radius: 8px;
-            display: flex; flex-direction: column; gap: 4px;
+            margin: 0 6px 4px; padding: 8px 10px 8px 12px; border-radius: 8px; min-height: 44px; box-sizing: border-box;
+            display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; column-gap: 10px; row-gap: 2px; align-items: center;
+            background: var(--surface-2); color: var(--text);
         }
-        .research-sync-block--warn { background: var(--warning-soft); color: var(--warning-text); }
-        .research-sync-block--neutral { background: var(--surface-2); color: var(--text); }
-        .research-sync-block--quiet { padding: 8px 8px 4px; background: none; }
-        .research-sync-title { font-size: 13px; font-weight: 600; line-height: 1.35; }
-        .research-sync-block--quiet .research-sync-title { color: var(--text-light); }
+        .research-sync-block > * { grid-column: 2 / -1; min-width: 0; }
+        .research-sync-block > .research-sync-dot { grid-column: 1; grid-row: 1; }
+        .research-sync-block > .research-sync-status { grid-column: 2; grid-row: 1; }
+        .research-sync-block > .research-sync-main { grid-column: 3; grid-row: 1; justify-self: end; white-space: nowrap; }
+        .research-sync-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-faint); }
+        .research-sync-block--warn { background: var(--warning-soft); }
+        .research-sync-block--warn .research-sync-dot { background: var(--signal-warn); }
+        .research-sync-block--neutral .research-sync-dot { background: var(--text-light); }
+        .research-sync-block[data-state="inSync"] .research-sync-dot, .research-sync-block[data-state="written"] .research-sync-dot,
+        .research-sync-block--live .research-sync-dot { background: var(--primary); }
+        .research-sync-dot.is-error { background: var(--danger); }
+        .research-sync-title { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; font-size: 14px; font-weight: 600; line-height: 1.35; }
+        .research-sync-title .research-sync-tag { align-self: center; }
         .research-sync-block--warn .research-sync-title { color: var(--warning-text); }
         .research-sync-sub { font-size: 12px; line-height: 1.4; color: var(--text-light); }
         .research-sync-block--warn .research-sync-sub { color: var(--text-secondary); }
-        .research-sync-actions { display: flex; margin-top: 4px; }
+        .research-sync-actions { display: flex; margin-top: 2px; }
         /* Whom and what "Show" leads to (the one conflict decidable here). */
-        .research-sync-lead { margin-top: 6px; font-size: 12.5px; line-height: 1.4; color: var(--text); overflow-wrap: anywhere; }
+        .research-sync-lead { margin-top: 2px; font-size: 12.5px; line-height: 1.4; color: var(--text); overflow-wrap: anywhere; }
         .research-menu-body .research-sync-btn {
             display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px;
             font-size: 13px; border-radius: var(--r-sm);
@@ -11709,15 +11732,8 @@
         .sources-filter[hidden] { display: none; }
 
         /* ===== Research actions, second wave ===== */
-        /* Research menu: "New Strom Research 1.7 · Update ↗" as one framed line, second line of "Undo last send". */
-        .research-update-block {
-            display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 10px;
-            margin: 0 8px 6px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px;
-        }
-        .research-older-block { display: block; }
-        .research-update-title { font-size: 13px; color: var(--text); }
-        /* An older research: a quiet line with "How to update…" (menu, Research for this tree, Attachments). */
-        .research-older-block, .research-older-line { font-size: 13px; color: var(--text-light); line-height: 1.45; }
+        /* An older research: a quiet line with "How to update…" (Research for this tree, Attachments; the menu: a state block). */
+        .research-older-line { font-size: 13px; color: var(--text-light); line-height: 1.45; }
         .research-older-line { margin: 0 0 12px; }
         /* Also in the research menu, inside .toolbar: scoped under it too, or the ".toolbar button"
            fill and padding win and the link turns into a solid green button. */
@@ -11783,12 +11799,6 @@
             .modal label.release-notes-dont-show { min-height: 44px; }
             .release-notes-dont-show input { width: 20px; height: 20px; }
         }
-        .research-update-action, .toolbar .research-update-action {
-            padding: 0; border: 0; border-radius: 0; background: none; color: var(--primary);
-            font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer;
-        }
-        @media (hover: hover) { .research-update-action:hover, .toolbar .research-update-action:hover { background: none; text-decoration: underline; } }
-        .research-update-action:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
         .research-item-label--two { display: flex; flex-direction: column; gap: 1px; }
         .research-item-sub { font-size: 12px; color: var(--text-light); }
 

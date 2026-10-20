@@ -70,11 +70,15 @@ async function recordLaunches(page: Page): Promise<void> {
 }
 
 const launched = (page: Page) => page.evaluate(() => (window as unknown as { __launched: string[] }).__launched);
-const submenuItems = (page: Page) => page.locator('#research-menu .tree-switcher-action');
+/** The menu's items ("Other actions" itself left out). */
+const submenuItems = (page: Page) => page.locator('#research-menu .tree-switcher-action:not(.research-item-more)');
 
-async function openResearchMenu(page: Page): Promise<void> {
+/** The Research menu open; `expandMore`: "Other actions ⌄" opened too, by a click on it (the now-and-then items). */
+async function openResearchMenu(page: Page, opts: { expandMore?: boolean } = {}): Promise<void> {
     await page.locator('#research-menu-btn').click();
     await expect(page.locator('#research-menu')).toBeVisible();
+    const more = page.locator('#research-item-more[aria-expanded="false"]');
+    if (opts.expandMore && await more.count()) await more.click();
 }
 
 async function personMenu(page: Page, name: string): Promise<string[]> {
@@ -95,7 +99,7 @@ test.describe('the Research menu', () => {
         // Nothing of the research in Actions any more (not even "Ancestor research").
         await expect(page.locator('#research-menu-row')).toBeHidden();
         await expect(page.locator('#actions-menu-dropdown')).not.toContainText('Research');
-        await page.locator('#research-menu-btn').click();
+        await openResearchMenu(page);
         await expect(page.locator('#actions-menu-dropdown')).not.toHaveClass(/active/);
         // Frequent first (waiting, agent, the research, the send), then now and then (a version to load).
         await expect(submenuItems(page).locator('.research-item-label'))
@@ -106,7 +110,8 @@ test.describe('the Research menu', () => {
         await expect(chat).toHaveAttribute('aria-label', 'Continue with the agent, AI, opens in the research');
         await expect(page.locator('#research-item-open .research-item-ext')).toHaveText('↗');
         await expect(page.locator('#research-item-version .research-item-ext')).toHaveCount(0);
-        await expect(page.locator('#research-menu .research-submenu-note')).toContainText('continues in the research on this computer');
+        await expect(page.locator('#research-menu-foot')).toHaveAttribute('title', /^Continues in the research on this computer/);
+        await expect(page.locator('#research-item-open')).toHaveAttribute('aria-description', /^Continues in the research on this computer/);
 
         await page.locator('#research-item-open').click();
         await expect(page.locator('.toast')).toContainText('Opening the research…');
@@ -133,7 +138,7 @@ test.describe('the Research menu', () => {
     test('"Load new version": a spinner until the version comes, else "did not answer" after 20 s', async ({ page }) => {
         await page.clock.install();
         await setup(page);
-        await openResearchMenu(page);
+        await openResearchMenu(page, { expandMore: true });
         await page.locator('#research-item-version').click();
         expect(await launched(page)).toEqual([`strom-research://app?tree=${UUID}`]);
         await expect(page.locator('.toast .toast-spinner')).toBeVisible();
@@ -142,7 +147,7 @@ test.describe('the Research menu', () => {
         await expect(page.locator('.toast')).toHaveText('The research did not answer. Start it and try again.');
 
         // It came in time: the spinner goes, the import takes over.
-        await openResearchMenu(page);
+        await openResearchMenu(page, { expandMore: true });
         await page.locator('#research-item-version').click();
         await expect(page.locator('.toast .toast-spinner')).toBeVisible();
         await page.evaluate(() => window.Strom.UI.openExternalRequest(new URLSearchParams('import-url=https://example.com/x.ged')));
@@ -153,7 +158,7 @@ test.describe('the Research menu', () => {
 
     test('"Load new version": the version opening in another tab (app in a browser) ends the wait here', async ({ page, context }) => {
         await setup(page);
-        await openResearchMenu(page);
+        await openResearchMenu(page, { expandMore: true });
         await page.locator('#research-item-version').click();
         await expect(page.locator('.toast .toast-spinner')).toBeVisible();
         const other = await context.newPage();
@@ -194,7 +199,7 @@ test.describe('the Research menu', () => {
         await expect(submenuItems(page)).toHaveText(['Start the research↗', 'Send changes', 'Not installed? Install…']);
         await page.locator('#research-item-start').click();
         expect(await launched(page)).toEqual([`strom-research://open?tree=${UUID}`]);
-        await openResearchMenu(page);
+        await openResearchMenu(page, { expandMore: true });
         await page.locator('#research-item-install').click();
         await expect(page.locator('#research-info-modal')).toBeVisible();
     });
@@ -292,7 +297,9 @@ test.describe('live research: Awaiting action', () => {
         // Following live: the green dot before the word, the line in place of the state block.
         await expect(page.locator('#research-menu-btn .research-menu-live')).toBeVisible();
         await openResearchMenu(page);
-        await expect(page.locator('#research-menu-following')).toHaveText('Following live · tree is locked');
+        await expect(page.locator('#research-menu-following .research-sync-title')).toHaveText('Following live');
+        await expect(page.locator('#research-menu-following .research-sync-sub')).toHaveText('tree is locked');
+        await expect(page.locator('#research-menu-following')).toHaveAttribute('aria-label', 'Following live');
         await page.locator('#research-item-waiting').click();
         await expect(panel).not.toHaveClass(/collapsed/);
         await expect(panel.locator('.live-panel-heading-waiting')).toBeVisible();

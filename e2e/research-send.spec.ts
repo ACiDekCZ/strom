@@ -307,10 +307,11 @@ test.describe('where the tree menu offers it', () => {
         // The Research button replaces "Ancestor research" for this tree.
         await expect(page.locator('#research-menu-row')).toBeHidden();
         await page.locator('#research-menu-btn').click();
-        const items = page.locator('#research-menu .tree-switcher-action');
-        // The tree came from a research: it can be started (the research not known here: the way to install it too).
+        const items = page.locator('#research-menu .tree-switcher-action:not(.research-item-more)');
+        // The tree came from a research: it can be started (the research not known here: the way to install it too, under "Other actions").
         await expect(items).toHaveText(['Start the research↗', 'Send changes', 'Not installed? Install…']);
-        await expect(page.locator('#research-menu .research-submenu-note')).toHaveCount(0);
+        await expect(page.locator('#research-menu-more #research-item-install')).toBeHidden();
+        await expect(page.locator('#research-menu-foot')).toBeVisible();
         await page.locator('#research-item-send').click();
         // No research links announced here: the way back is explained.
         await expect(dialog(page)).toContainText('Add to the research');

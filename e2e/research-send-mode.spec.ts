@@ -34,13 +34,13 @@ async function openHandOver(page: Page): Promise<void> {
 }
 
 test.describe('the "trial" tag', () => {
-    test('beside the title of the Research menu and in Research for this tree (with the sentence); its note opens by click and Enter, Esc and a click outside close it', async ({ page }) => {
+    test('in the Research menu\'s footer and in Research for this tree (with the sentence); its note opens by click and Enter, Esc and a click outside close it', async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 900 });
         await manualTree(page);
         await openResearchMenu(page);
-        const heading = page.locator('#research-menu .research-menu-heading');
-        await expect(heading).toContainText('Research');
-        const menuTag = heading.locator('.research-trial-tag');
+        const foot = page.locator('#research-menu #research-menu-foot');
+        await expect(foot).toContainText('continues in the research');
+        const menuTag = foot.locator('.research-trial-tag');
         await expect(menuTag).toHaveText('trial');
         await expect(menuTag).toHaveAttribute('aria-expanded', 'false');
         await menuTag.click();

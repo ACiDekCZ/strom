@@ -1,7 +1,7 @@
 /**
  * An older Strom Research (1.11 and before: its bridge says nothing of what it
  * takes; or 1.12, which knows no titles, for a tree that has some): a quiet line "The research has an older version… How to update…"
- * in ⋯ → Research, Research for this tree and by the Attachments heading, and
+ * (the research menu's state block), in Research for this tree and by the Attachments heading, and
  * the dialog with the one command for every install (`strom update`), the npm
  * one, and the install line as the way when that fails. "Check again" asks
  * the bridge; updated, the tree goes on by itself and the line goes.
@@ -51,14 +51,32 @@ export const researchUpdateMethods = uiModule({
     },
 
     /** The quiet line with its "How to update…" link (HTML; '' when the research is not older). */
-    researchOlderLineHtml(where: 'menu' | 'settings' | 'attachments'): string {
+    researchOlderLineHtml(where: 'settings' | 'attachments'): string {
         const older = this.researchOlderVersion();
         // The titles are no matter of the attachments.
         if (!older || (older.titles && where === 'attachments')) return '';
         const u = strings.researchOlder;
         const text = where === 'attachments' ? strings.media.olderResearch : older.titles ? u.titlesLine(older.version) : u.line(older.version);
         return `<span class="research-older-text">${esc(text)}</span> `
-            + `<button type="button" class="link-button research-older-how"${where === 'menu' ? ' role="menuitem"' : ''} data-research-update="${where}" onclick="window.Strom.UI.showResearchUpdateHelp()">${esc(u.how)}</button>`;
+            + `<button type="button" class="link-button research-older-how" data-research-update="${where}" onclick="window.Strom.UI.showResearchUpdateHelp()">${esc(u.how)}</button>`;
+    },
+
+    /**
+     * The research menu's state block for an older research (it stands in the way of the work): a red dot,
+     * the fact and what it means, "How to update…" on the right ('' when the research is not older).
+     */
+    researchOlderBlockHtml(): string {
+        const older = this.researchOlderVersion();
+        if (!older) return '';
+        const u = strings.researchOlder;
+        const title = u.blockTitle(older.version);
+        return `<div class="research-sync-block research-sync-block--warn research-older-block" id="research-older-block" role="group" aria-label="${esc(title)}">`
+            + '<span class="research-sync-dot is-error" aria-hidden="true"></span>'
+            + `<div class="research-sync-status" id="research-older-status"><div class="research-sync-title">${esc(title)}</div>`
+            + `<div class="research-sync-sub">${esc(older.titles ? u.blockTitlesSub : u.blockSub)}</div></div>`
+            + `<button type="button" class="research-sync-link research-sync-main research-older-how" role="menuitem" data-research-update="menu"`
+            + ` aria-describedby="research-older-status" onclick="window.Strom.UI.showResearchUpdateHelp()">${esc(u.how)}</button>`
+            + '</div>';
     },
 
     showResearchUpdateHelp(): void {

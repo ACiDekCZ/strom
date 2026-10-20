@@ -345,7 +345,7 @@ test.describe('after a send the research wrote', () => {
         await page.evaluate(() => localStorage.removeItem('strom-research-links'));
         await fakeBridge(page, { links: [] });
         await poll(page);
-        await openResearchMenu(page);
+        await openResearchMenu(page, { expandMore: true });
         await expect(block(page)).toHaveAttribute('data-state', 'inSync');
         // In step with a running bridge: no "Load new version" row (the block offers loading when there is a newer one).
         await expect(page.locator('#research-item-version')).toHaveCount(0);
@@ -472,7 +472,7 @@ test.describe('Research for this tree and "Transcription verified"', () => {
         await page.evaluate(() => window.Strom.UI.researchSendNow());
         await expect(page.locator('.toast')).toContainText('Sent to the research');
 
-        await openResearchMenu(page);
+        await openResearchMenu(page, { expandMore: true });
         await page.locator('#research-item-tree-settings').click();
         const modal = page.locator('#research-tree-settings-modal');
         await expect(modal).toContainText('My source transcriptions');
@@ -500,7 +500,7 @@ test.describe('Research for this tree and "Transcription verified"', () => {
         await poll(page);
         await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
         await page.locator('.tree-manager-item.active .tree-row-menu-btn').click();
-        await page.locator('.tree-row-menu', { hasText: 'Research…' }).getByText('Research…').click();
+        await page.locator('.tree-row-menu', { hasText: 'Research for this tree…' }).getByText('Research for this tree…').click();
         await expect(page.locator('#research-tree-settings-modal')).toContainText('Research for this tree');
     });
 

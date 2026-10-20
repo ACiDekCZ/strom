@@ -502,11 +502,17 @@ export async function editJan(page: Page, place = 'Praha'): Promise<void> {
 export const poll = (page: Page) => page.evaluate(() => window.Strom.UI.pollResearchBridge());
 export const links = (page: Page) => page.evaluate(() => (window.Strom.UI as unknown as { __links: string[] }).__links);
 
-/** The toolbar's Research menu, open (its button left of Actions; a narrow window: the More sheet's research page). */
-export async function openResearchMenu(page: Page): Promise<void> {
-    await page.evaluate(() => {
-        if (!window.Strom.UI.isResearchMenuOpen()) window.Strom.UI.openResearchMenu();
-    });
+/**
+ * The toolbar's Research menu, open (its button left of Actions; a narrow window: the More sheet's research
+ * page, "Other actions" open there). `expandMore`: "Other actions ⌄" opened too (the now-and-then items).
+ */
+export async function openResearchMenu(page: Page, opts: { expandMore?: boolean } = {}): Promise<void> {
+    await page.evaluate((expandMore) => {
+        const ui = window.Strom.UI as typeof window.Strom.UI & { toggleResearchMore(): void };
+        if (!ui.isResearchMenuOpen()) ui.openResearchMenu();
+        const row = document.querySelector('#research-item-more');
+        if (expandMore && row && row.getAttribute('aria-expanded') !== 'true') ui.toggleResearchMore();
+    }, !!opts.expandMore);
 }
 
 export const block = (page: Page) => page.locator('#research-sync-block');

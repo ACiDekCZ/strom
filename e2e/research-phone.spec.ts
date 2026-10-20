@@ -27,7 +27,7 @@ async function setup(page: Page, phone = fakePhone(), features = ['phone']): Pro
 }
 
 async function openDialog(page: Page) {
-    await openResearchMenu(page);
+    await openResearchMenu(page, { expandMore: true });
     await page.locator('#research-item-phone').click();
     const dialog = page.locator('#phone-modal');
     await expect(dialog.locator('h2')).toHaveText('Connect phone');
@@ -42,7 +42,7 @@ test.describe('Connect phone', () => {
 
     test('an older research (no "phone" in its features): no item', async ({ page }) => {
         await setup(page, fakePhone(), []);
-        await openResearchMenu(page);
+        await openResearchMenu(page, { expandMore: true });
         await expect(page.locator('#research-item-batch, #research-item-version, #research-item-open').first()).toBeAttached();
         await expect(page.locator('#research-item-phone')).toHaveCount(0);
     });
@@ -50,7 +50,7 @@ test.describe('Connect phone', () => {
     test('off: the explanation, turned on in the computer\'s window, straight to the code; the item and the dot follow', { tag: '@smoke' }, async ({ page }) => {
         const b = await setup(page);
         const ph = b.phone!;
-        await openResearchMenu(page);
+        await openResearchMenu(page, { expandMore: true });
         await expect(page.locator('#research-item-phone')).toHaveText('Connect phone…');
         await expect(page.locator('#research-item-phone .research-item-pill')).toHaveCount(0);
         await expect(page.locator('#research-menu-btn .research-menu-phone')).toBeHidden();
@@ -88,7 +88,7 @@ test.describe('Connect phone', () => {
         await expect(page.locator('#research-menu-btn')).toHaveAttribute('aria-label', /phone connection on/);
         await page.keyboard.press('Escape');
         await expect(dialog).toHaveCount(0);
-        await openResearchMenu(page);
+        await openResearchMenu(page, { expandMore: true });
         await expect(page.locator('#research-item-phone .research-item-label')).toHaveText('Phone');
         await expect(page.locator('#research-item-phone .research-item-pill')).toHaveText('on');
     });
@@ -208,7 +208,7 @@ test.describe('Connect phone', () => {
 
     test('problems: the port taken, no local network; the item says so', async ({ page }) => {
         const b = await setup(page, fakePhone({ state: 'error', error: { code: 'port-busy', detail: 'EADDRINUSE' }, phones: [entry('ph_iphone001', 'iPhone (Safari)')] }));
-        await openResearchMenu(page);
+        await openResearchMenu(page, { expandMore: true });
         await expect(page.locator('#research-item-phone .research-item-pill')).toHaveText('connection problem');
         await expect(page.locator('#research-menu-btn .research-menu-phone')).toBeHidden();
         const dialog = await openDialog(page);

@@ -2386,31 +2386,40 @@ export const researchSyncMethods = uiModule({
     },
 
     /**
-     * The state block as the research menu draws it ('' when there is none).
-     * Only its text is a live region; its buttons are items of the menu (the
-     * first one described by the text), not announced again with every change.
+     * The state block as the research menu draws it ('' when there is none): a dot, the title in bold
+     * (`tag` beside it: the archive), a short second line, and at most one button on the right — the
+     * first action. The others stay as quiet links under the text, except what the first one's window
+     * already holds ("What will be sent" is the preview Send opens). A group named by its title; only
+     * the text is a live region, the buttons are items of the menu (the first described by the text).
      */
-    researchSyncBlockHtml(data?: ResearchSyncBlock | null): string {
+    researchSyncBlockHtml(data?: ResearchSyncBlock | null, opts: { tag?: string } = {}): string {
         const b = data === undefined ? this.researchSyncBlockData() : data;
         if (!b) return '';
         const s = strings.sync;
         const sendingNow = b.sendingNow;
-        const buttons = b.actions.map((a, i) => {
-            const describe = i === 0 ? ' aria-describedby="research-sync-status"' : '';
+        const ctx = this.researchSyncLink();
+        const previewOnSend = !!ctx && researchSendMode(ctx.link) !== 'off' && (!!ctx.link.previewDue || !researchSendPreviewSkipped(ctx.treeId));
+        const [first, ...rest] = b.actions;
+        const others = rest.filter(a => !(a.action === 'showChanges' && first?.action === 'send' && previewOnSend));
+        const button = (a: ResearchSyncBlockAction, main: boolean): string => {
+            const describe = main ? ' aria-describedby="research-sync-status"' : '';
             const busy = sendingNow && !a.asLink && ['send', 'sendThenLoad', 'retry', 'sendAgain'].includes(a.action);
+            const cls = main ? ' research-sync-main' : '';
             return a.asLink
-                ? `<button type="button" class="research-sync-link" role="menuitem" data-action="${a.action}"${describe} onclick="${call('researchSyncAction', `'${a.action}'`)}">${esc(a.label)}</button>`
-                : `<button type="button" class="primary btn-sm research-sync-btn" role="menuitem" data-action="${a.action}"${describe}${busy ? ' disabled aria-busy="true"' : ''}`
+                ? `<button type="button" class="research-sync-link${cls}" role="menuitem" data-action="${a.action}"${describe} onclick="${call('researchSyncAction', `'${a.action}'`)}">${esc(a.label)}</button>`
+                : `<button type="button" class="primary btn-sm research-sync-btn${cls}" role="menuitem" data-action="${a.action}"${describe}${busy ? ' disabled aria-busy="true"' : ''}`
                     + ` onclick="${call('researchSyncAction', `'${a.action}'`)}">${busy ? `<span class="research-sync-spinner" aria-hidden="true"></span>${esc(s.sending)}` : esc(a.label)}</button>`;
-        }).join('');
-        // (An archive says so beside the menu's title, not again in the block.)
-        return `<div class="research-sync-block research-sync-block--${b.tone}" id="research-sync-block" data-state="${b.kind}">`
+        };
+        return `<div class="research-sync-block research-sync-block--${b.tone}" id="research-sync-block" data-state="${b.kind}" role="group" aria-label="${esc(b.title)}">`
+            + '<span class="research-sync-dot" aria-hidden="true"></span>'
             + `<div class="research-sync-status" id="research-sync-status" role="status" aria-live="polite">`
-            + `<div class="research-sync-title">${b.spinner ? '<span class="research-sync-spinner" aria-hidden="true"></span>' : ''}${esc(b.title)}</div>`
+            + `<div class="research-sync-title">${b.spinner ? '<span class="research-sync-spinner" aria-hidden="true"></span>' : ''}<span>${esc(b.title)}</span>`
+            + (opts.tag ? `<span class="research-sync-tag" id="research-menu-archive">${esc(opts.tag)}</span>` : '') + '</div>'
             + (b.sub ? `<div class="research-sync-sub">${esc(b.sub)}</div>` : '')
             + '</div>'
+            + (first ? button(first, true) : '')
             + (b.lead ? `<div class="research-sync-lead">${esc(b.lead)}</div>` : '')
-            + (buttons ? `<div class="research-sync-actions">${buttons}</div>` : '')
+            + (others.length ? `<div class="research-sync-actions">${others.map(a => button(a, false)).join('')}</div>` : '')
             + this.originalsQueueLineHtml()
             + this.batchLineHtml()
             + '</div>';

@@ -30,7 +30,7 @@ test.describe('Add materials', () => {
         const b = await fakeBridge(page, { accepts: BATCH_ACCEPTS });
         await openResearch(page, { media: true });
         await poll(page);
-        await openResearchMenu(page);
+        await openResearchMenu(page, { expandMore: true });
         await page.locator('#research-item-batch').click();
         const dialog = page.locator('#batch-modal');
         await expect(dialog.locator('h2')).toHaveText('Add materials to the research');

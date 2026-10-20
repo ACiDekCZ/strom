@@ -83,9 +83,12 @@ async function setup(page: Page, links: string[] = ALL, stored: Record<string, u
     await recordLaunches(page);
 }
 
-async function openResearchMenu(page: Page): Promise<void> {
+/** The Research menu open; `expandMore`: "Other actions ⌄" opened too, by a click on it (the now-and-then items). */
+async function openResearchMenu(page: Page, opts: { expandMore?: boolean } = {}): Promise<void> {
     await page.locator('#research-menu-btn').click();
     await expect(page.locator('#research-menu')).toBeVisible();
+    const more = page.locator('#research-item-more[aria-expanded="false"]');
+    if (opts.expandMore && await more.count()) await more.click();
 }
 
 const personId = (page: Page, refn: string) => page.evaluate((refn) =>
@@ -99,7 +102,7 @@ async function menuActions(page: Page, name: string): Promise<string[]> {
 }
 
 test.describe('Research menu, second wave', () => {
-    test('update line, "Undo last send" with its time, "Research settings"', async ({ page }) => {
+    test('"Update the research 1.7.0 ↗" in Other actions (a dot there and on the button), "Undo last send" with its time, "Research settings"', async ({ page }) => {
         // Earlier today (just after midnight two hours back is yesterday: shown with its date).
         const sentAt = new Date(Math.max(Date.now() - 2 * 3600_000, new Date().setHours(0, 0, 1, 0)));
         const lastIntake = { id: 'I0042', at: sentAt.toISOString() };
@@ -109,10 +112,20 @@ test.describe('Research menu, second wave', () => {
         await setup(page, ALL, { lastIntake }, { base: BRIDGE });
         expect(await page.evaluate(() => window.Strom.UI.pollResearchBridge())).toBe(true);
         expect(await page.evaluate((id) => window.Strom.UI.researchBridgeFresh(id), UUID)).toBe(true);
-        await openResearchMenu(page);
-        const block = page.locator('#research-update-block');
-        await expect(block).toContainText('New Strom Research 1.7.0');
-        await expect(page.locator('#research-item-update')).toHaveText('Update ↗');
+        // Folded, "Other actions" carries the dot and says why; the button asks for attention.
+        await page.locator('#research-menu-btn').click();
+        const more = page.locator('#research-item-more');
+        await expect(more.locator('.research-item-attn')).toBeVisible();
+        await expect(more).toHaveAttribute('aria-label', 'Other actions, New Strom Research 1.7.0');
+        await expect(page.locator('#research-menu-signal')).toHaveAttribute('data-signal', 'attention');
+        await more.click();
+        const update = page.locator('#research-item-update');
+        await expect(update.locator('.research-item-label')).toHaveText('Update the research');
+        await expect(update.locator('.research-item-val')).toHaveText('1.7.0');
+        await expect(update.locator('.research-item-ext')).toHaveText('↗');
+        await expect(update.locator('.research-item-attn')).toBeVisible();
+        await expect(update).toHaveAttribute('aria-label', 'Update the research, 1.7.0, opens in the research');
+        await expect(page.locator('#research-update-block')).toHaveCount(0);
         const hhmm = await page.evaluate((iso) => new Intl.DateTimeFormat('en', { hour: '2-digit', minute: '2-digit' }).format(new Date(iso)), sentAt.toISOString());
         await expect(page.locator('#research-item-undo .research-item-sub')).toHaveText(`sent ${hhmm}`);
         await expect(page.locator('#research-menu .research-item-label'))
@@ -122,9 +135,9 @@ test.describe('Research menu, second wave', () => {
             .toHaveText([/^Undo last send/, 'Research settings']);
 
         await page.locator('#research-item-update').click();
-        await openResearchMenu(page);
+        await openResearchMenu(page, { expandMore: true });
         await page.locator('#research-item-undo').click();
-        await openResearchMenu(page);
+        await openResearchMenu(page, { expandMore: true });
         await page.locator('#research-item-setup').click();
         expect(await launched(page)).toEqual([
             `strom-research://update?tree=${UUID}`,
@@ -141,10 +154,10 @@ test.describe('Research menu, second wave', () => {
             { base: BRIDGE, accepts: { sync: { auto: 'off' }, sources: true, verified: true } });
         expect(await page.evaluate(() => window.Strom.UI.pollResearchBridge())).toBe(false);
         expect(await page.evaluate((id) => window.Strom.UI.researchBridgeKnownDown(id), UUID)).toBe(true);
-        await openResearchMenu(page);
+        await openResearchMenu(page, { expandMore: true });
         await expect(page.locator('#research-item-undo')).toBeVisible();
-        await expect(page.locator('#research-update-block')).toHaveCount(0);
-        await expect(page.locator('#research-menu')).not.toContainText('New Strom Research');
+        await expect(page.locator('#research-item-update')).toHaveCount(0);
+        await expect(page.locator('#research-item-more .research-item-attn')).toHaveCount(0);
     });
 
     test('no intake (or an old one), no setup announced: neither row', async ({ page }) => {
@@ -153,14 +166,14 @@ test.describe('Research menu, second wave', () => {
         await openResearchMenu(page);
         await expect(page.locator('#research-item-undo')).toHaveCount(0);
         await expect(page.locator('#research-item-setup')).toHaveCount(0);
-        await expect(page.locator('#research-update-block')).toHaveCount(0);
+        await expect(page.locator('#research-item-update')).toHaveCount(0);
     });
 });
 
 test.describe('Follow live from the app', () => {
     test('announced: "Follow live ↗" asks the research to open the tree live here', async ({ page }) => {
         await setup(page, [...ALL, 'live']);
-        await openResearchMenu(page);
+        await openResearchMenu(page, { expandMore: true });
         const item = page.locator('#research-item-live');
         await expect(item).toContainText('Follow live');
         await expect(item).toContainText('↗');

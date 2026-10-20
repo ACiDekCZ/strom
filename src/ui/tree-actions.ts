@@ -105,7 +105,7 @@ export const treeActionsMethods = uiModule({
                 ...(this.researchAdoptAvailable(tree)
                     ? [{ key: 'researchAdopt', label: strings.research.adoptTree, editOnly: true, run: () => this.treeActionStartResearch(id) }] : []),
                 ...(tree.research && this.researchTranscriptsCapable(tree.research.id)
-                    ? [{ key: 'researchSettings', label: strings.sync.treeSettingsRow, run: () => void this.showResearchTreeSettings(id) }] : []),
+                    ? [{ key: 'researchSettings', label: strings.sync.treeSettings, run: () => void this.showResearchTreeSettings(id) }] : []),
             ] },
             { key: 'settings', header: g.settings, rows: [
                 { key: 'rename', label: s.rename, editOnly: true, run: () => this.showRenameTreeDialog(id, parent) },

@@ -1359,7 +1359,7 @@ test.describe('the research as an archive', () => {
             lastIntake: { id: 'I0041', at: new Date().toISOString() } });
         await page.evaluate(() => localStorage.setItem('strom-research-auto-intro-seen', '1'));
         await poll(page);
-        await openResearchMenu(page);
+        await openResearchMenu(page, { expandMore: true });
         const sub = page.locator('#research-menu');
         // In step with a running bridge: no "Load new version" row (the block offers one when there is).
         await expect(sub.locator('#research-item-version')).toHaveCount(0);
@@ -1370,9 +1370,11 @@ test.describe('the research as an archive', () => {
         }
         // Taking the last send back stays the user's in an archive.
         await expect(sub.locator('#research-item-undo')).toBeVisible();
-        // "Archive" beside the menu's title, not again in the state block.
-        await expect(sub.locator('.research-menu-heading #research-menu-archive')).toHaveText('Strom archive');
-        await expect(block(page).locator('.research-sync-tag')).toHaveCount(0);
+        // "Archive" beside the state block's title (the menu has no heading of its own), once.
+        await expect(block(page).locator('.research-sync-title #research-menu-archive')).toHaveText('Strom archive');
+        await expect(sub.locator('.research-sync-tag')).toHaveCount(1);
+        // The footer says what ↗ means in an archive.
+        await expect(sub.locator('#research-menu-foot')).toHaveAttribute('title', 'Continues in the Strom archive on this computer; actions are confirmed there.');
         await page.evaluate(() => window.Strom.UI.closeActionsMenu());
         const actions = await page.evaluate(() => {
             const jan = Object.values(window.Strom.DataManager.getData().persons).find((p: any) => p.firstName === 'Jan') as any;
@@ -1388,7 +1390,7 @@ test.describe('the research as an archive', () => {
             links: ['send', 'open', 'live', 'app', 'setup', 'chat', 'review', 'research', 'sync-undo'] });
         await page.evaluate(() => localStorage.setItem('strom-research-auto-intro-seen', '1'));
         await poll(page);
-        await openResearchMenu(page);
+        await openResearchMenu(page, { expandMore: true });
         const sub = page.locator('#research-menu');
         await expect(sub.locator('#research-item-chat')).toBeVisible();
         await expect(sub.locator('#research-item-live')).toBeVisible();
@@ -1669,7 +1671,7 @@ test.describe('a research waiting for its agent (agentHere: false)', () => {
         await poll(page);
         expect(await page.evaluate(() => window.Strom.UI.activeResearchArchive())).toBe(false);
         expect(await page.evaluate(() => window.Strom.UI.activeResearchNoAgent())).toBe(true);
-        await openResearchMenu(page);
+        await openResearchMenu(page, { expandMore: true });
         await expect(sub).toBeVisible();
         for (const id of ['research-item-chat', 'research-item-live', 'research-item-waiting']) await expect(sub.locator(`#${id}`)).toHaveCount(0);
         await expect(sub.locator('#research-item-open')).toBeVisible();
@@ -1678,7 +1680,8 @@ test.describe('a research waiting for its agent (agentHere: false)', () => {
         // Not an archive: no tag, no "switched" said; where to install the agent instead.
         await expect(sub.locator('#research-menu-archive')).toHaveCount(0);
         await expect(block(page)).not.toHaveAttribute('data-state', 'switched');
-        await expect(sub.locator('.research-submenu-note')).toHaveText('↗ continues in the research on this computer. The research waits for an AI agent: the first item of its menu installs one.');
+        await expect(sub.locator('#research-menu-foot')).toHaveAttribute('title', 'Continues in the research on this computer. The research waits for an AI agent: the first item of its menu installs one.');
+        await expect(sub.locator('#research-menu-foot .research-menu-foot-text')).toHaveText('↗ continues in the research');
         await expect(sub).not.toContainText(/Claude Code|USD|\$/);
         await expect(dot(page)).toBeHidden();
         await page.evaluate(() => window.Strom.UI.closeActionsMenu());
@@ -1851,7 +1854,7 @@ test.describe('data protection around the research', () => {
         await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe('fe11fe11fe11');
         // After the hour: no block, the row with when it was loaded.
         await page.clock.fastForward(61 * 60_000);
-        await openResearchMenu(page);
+        await openResearchMenu(page, { expandMore: true });
         await expect(block(page)).not.toHaveAttribute('data-state', 'loaded');
         await expect(page.locator('#research-item-restore')).toContainText('Restore the state before loading');
         await expect(page.locator('#research-item-restore')).toContainText('loaded');

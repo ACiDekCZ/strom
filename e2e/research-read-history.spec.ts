@@ -96,7 +96,7 @@ test.describe('Read a document: the history', () => {
 
     test('"Read documents (N)" in Research for this tree, the list newest first with its tags', { tag: '@smoke' }, async ({ page }) => {
         await setup(page);
-        await openResearchMenu(page);
+        await openResearchMenu(page, { expandMore: true });
         await page.locator('#research-item-tree-settings').click();
         await expect(row(page)).toHaveText('Read documents (3) ›');
         await row(page).click();

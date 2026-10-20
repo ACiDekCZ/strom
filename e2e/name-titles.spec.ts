@@ -313,7 +313,8 @@ test('B-1: a research that knows no titles (1.12.1): three sends and loads never
     // The research menu says the research keeps no titles, with "How to update…".
     await openResearchMenu(page);
     const older = page.locator('#research-older-block');
-    await expect(older).toContainText("The research has an older version (1.12.1) that doesn't keep titles.");
+    await expect(older.locator('.research-sync-title')).toHaveText('The research has an older version (1.12.1)');
+    await expect(older.locator('.research-sync-sub')).toHaveText("it doesn't keep titles: they stay in the app only");
     await older.getByRole('menuitem', { name: 'How to update…' }).click();
     await expect(page.locator('#research-update-modal .research-update-intro')).toContainText("doesn't keep the titles before and after names");
 });

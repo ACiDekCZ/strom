@@ -159,7 +159,7 @@ test.describe('the bridge of Strom Research 1.11.0', () => {
         await expect(page.locator('#research-older-block')).toHaveCount(0);
     });
 
-    test('A3: How to update… in the research menu is a link like any other, not a toolbar fill cut to its glyphs (light, dark, hover)', async ({ page }) => {
+    test('A3: How to update… in the research menu is a link like the other state blocks\' (no toolbar fill cut to its glyphs; light, dark, hover)', async ({ page }) => {
         await page.setViewportSize(DESKTOP);
         await bridge111(page);
         await openResearch(page, { capable: false });
@@ -184,10 +184,12 @@ test.describe('the bridge of Strom Research 1.11.0', () => {
                 b.remove();
                 return r;
             });
-            // The ".toolbar button" fill (the menu lives in the toolbar) must not reach it.
-            expect(await link.evaluate(look)).toEqual(reference);
+            // The ".toolbar button" fill (the menu lives in the toolbar) must not reach it: the link's colour, no fill,
+            // underlined under the pointer (the state block's own link, as in every other state).
+            expect(await link.evaluate(look)).toEqual({ ...reference, decoration: 'none' });
+            await expect(link).toHaveClass(/research-sync-link/);
             await link.hover();
-            expect((await link.evaluate(look)).background).toBe('rgba(0, 0, 0, 0)');
+            expect(await link.evaluate(look)).toEqual({ ...reference, decoration: 'underline' });
             await page.mouse.move(5, 5);
             await page.evaluate(() => window.Strom.UI.closeActionsMenu());
         }

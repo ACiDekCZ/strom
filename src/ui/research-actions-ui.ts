@@ -81,21 +81,28 @@ interface SubmenuItem {
     link?: { label: string; method: string };
     /** Something of it runs now: a green dot with a ring. */
     dot?: boolean;
+    /** A quiet value at the end ("1.7.0"). */
+    val?: string;
+    /** It asks for attention (an update): an amber dot at the end. */
+    attn?: boolean;
 }
 
-/** A group of the research menu; the occasional ones are drawn quieter. */
-interface MenuGroup { items: SubmenuItem[]; quiet?: boolean }
-
-/** The research menu's content: the toolbar dropdown and the More sheet's page draw it alike. */
+/**
+ * The research menu's content: the toolbar dropdown and the More sheet's page draw it alike.
+ * The state block on top, at most six actions, "Other actions ⌄" (the now-and-then items, the
+ * occasional ones quieter, opened in place), and the footer with "trial".
+ */
 interface ResearchMenuModel {
-    /** The tree is tied to a research: the title with "trial" (and "archive"). */
-    heading: boolean;
-    archive: boolean;
-    syncBlock: string;
-    /** Following live: one line in place of the state block (the tree is locked meanwhile). */
-    following: boolean;
-    updateBlock: string;
-    groups: MenuGroup[];
+    /** The tree is tied to a research: the footer with "trial". */
+    foot: boolean;
+    /** The state blocks: the research's state (or following live), an older research. */
+    blocks: string;
+    first: SubmenuItem[];
+    more: SubmenuItem[];
+    moreQuiet: SubmenuItem[];
+    /** Something under "Other actions" asks for attention: said on its row (a dot) and on the button. */
+    moreAttention: string;
+    /** The footer's whole sentence: its title and the description of every ↗ item. */
     note: string;
     waiting: number;
 }
@@ -126,6 +133,9 @@ const UNDO_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 /** Actions of the state block that stand for "Send changes" (the row then goes). */
 const BLOCK_SENDS = ['send', 'startAndSend', 'showChangesFirst'];
 
+/** At most this many actions before "Other actions ⌄" (promoted ones count; "Open research" gives way first). */
+const FIRST_LEVEL_MAX = 6;
+
 const call = (method: string, arg = ''): string => `window.Strom.UI.${method}(${arg})`;
 
 function itemCall(item: SubmenuItem): string {
@@ -136,6 +146,7 @@ function itemCall(item: SubmenuItem): string {
 function itemAria(item: SubmenuItem): string {
     const r = strings.research;
     const aria = [item.count ? r.waitingCountSr(item.count) : item.label];
+    if (item.val) aria.push(item.val);
     if (item.pill) aria.push(item.pill.text);
     if (item.ai) aria.push(r.aiBadge);
     if (item.sub) aria.push(item.sub);
@@ -143,27 +154,48 @@ function itemAria(item: SubmenuItem): string {
     return aria.join(', ');
 }
 
-function submenuItemHtml(item: SubmenuItem): string {
+/** The footer's sentence as a description: without its "↗", from a capital. */
+function noteSentence(note: string): string {
+    const text = note.replace(/^↗\s*/, '');
+    return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** `desc`: the description of an item that continues in the research (↗). */
+function submenuItemHtml(item: SubmenuItem, desc = ''): string {
     const r = strings.research;
+    const described = desc ? ` aria-description="${esc(desc)}"` : '';
     const link = item.link
         ? `<div class="tree-switcher-action research-item-sublink" id="${item.id}-link" role="menuitem" tabindex="0"`
-            + ` aria-label="${esc(item.link.label.replace(' ↗', ''))}, ${esc(r.opensInResearchSr)}" onclick="${call(item.link.method)}">`
+            + ` aria-label="${esc(item.link.label.replace(' ↗', ''))}, ${esc(r.opensInResearchSr)}"${described} onclick="${call(item.link.method)}">`
             + `<span class="research-item-label">${esc(item.link.label)}</span></div>`
         : '';
     return `<div class="tree-switcher-action${item.disabled ? ' is-disabled' : ''}${item.sub ? ' research-item--two' : ''}" id="${item.id}" role="menuitem" tabindex="0"`
-        + ` aria-label="${esc(itemAria(item))}"${item.disabled ? ' aria-disabled="true"' : ` onclick="${itemCall(item)}"`}>`
+        + ` aria-label="${esc(itemAria(item))}"${item.ext ? described : ''}${item.disabled ? ' aria-disabled="true"' : ` onclick="${itemCall(item)}"`}>`
         + (item.dot ? '<span class="research-item-dot" aria-hidden="true"></span>' : '')
         + (item.sub
             ? `<span class="research-item-label research-item-label--two"><span>${esc(item.label)}</span><span class="research-item-sub">${esc(item.sub)}</span></span>`
             : `<span class="research-item-label">${esc(item.label)}</span>`)
         + (item.count ? `<span class="tree-switcher-badge research-count-badge" aria-hidden="true">${item.count}</span>` : '')
+        + (item.val ? `<span class="research-item-val" aria-hidden="true">${esc(item.val)}</span>` : '')
         + (item.pill ? `<span class="research-item-pill is-${item.pill.tone}" aria-hidden="true"><span class="research-item-pill-dot"></span>${esc(item.pill.text)}</span>` : '')
         + (item.ai ? `<span class="research-ai-badge" title="${esc(r.aiCostHint)}" aria-hidden="true">${esc(r.aiBadge)}</span>` : '')
+        + (item.attn ? '<span class="research-item-attn" aria-hidden="true"></span>' : '')
         + (item.ext ? '<span class="research-item-ext" aria-hidden="true">↗</span>' : '')
         + '</div>' + link;
 }
 
-const SEPARATOR = '<div class="tree-switcher-divider" role="separator"></div>';
+/** "Other actions ⌄": opens its items in place, under it (not a submenu). */
+function moreRowHtml(open: boolean, attention: string): string {
+    const r = strings.research;
+    return `<div class="tree-switcher-action research-item-more" id="research-item-more" role="menuitem" tabindex="0"`
+        + ` aria-expanded="${open}" aria-controls="research-menu-more" aria-label="${esc(attention ? `${r.more}, ${attention}` : r.more)}"`
+        + ` onclick="${call('toggleResearchMore')}">`
+        + `<span class="research-item-label">${esc(r.more)}</span>`
+        + (attention ? '<span class="research-item-attn" aria-hidden="true"></span>' : '')
+        + '<svg class="research-more-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+        + ' stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>'
+        + '</div>';
+}
 
 const CHEVRON = '<svg class="research-menu-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
     + ' stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
@@ -176,6 +208,9 @@ let reminderThisOpening = false;
 
 /** Where focus goes back when the research menu closes by Escape: the toolbar pill that opened it, else the button. */
 let menuOpener: HTMLElement | null = null;
+
+/** "Other actions" is open (until the menu closes; the More sheet's page opens with it open). */
+let moreOpen = false;
 
 /** The More sheet's research page is showing (the menu is drawn there, not in the dropdown). */
 function sheetResearchBody(): HTMLElement | null {
@@ -216,8 +251,6 @@ export const researchActionsMethods = uiModule({
         const r = strings.research;
         const waiting = this.researchWaitingCount();
         const block = this.researchSyncBlockData();
-        // A research that tells what it has (1.12+): its state on top, sending straight.
-        const syncBlock = block ? this.researchSyncBlockHtml(block) : '';
         // The block itself offers "Load new version" then: not again as a row under it.
         const blockLoads = block?.kind === 'newer';
         // The block offers the send ("Send", "Start and send", "What will be sent"): no "Send changes" row beside it.
@@ -230,6 +263,8 @@ export const researchActionsMethods = uiModule({
         const autoSend = capable && this.researchAutoOn(ctx?.link);
         // An archive: nothing that leads to an agent.
         const archive = capable && this.activeResearchArchive();
+        // A research that tells what it has (1.12+): its state on top, sending straight; an archive says so beside its title.
+        const syncBlock = block ? this.researchSyncBlockHtml(block, { tag: archive ? strings.sync.archiveTag : undefined }) : '';
         // A research waiting for its agent (none on this computer): as an archive, without the tag.
         const agentAway = capable && this.activeResearchAgentAway();
         // Nothing that leads to an agent in an archive, while waiting for one, nor while the research's mode is not known here.
@@ -242,18 +277,21 @@ export const researchActionsMethods = uiModule({
             // Straight to a running bridge (no ↗); else the research starts it in the terminal.
             { id: 'research-item-send', label: previewFirst ? `${r.sendChanges}…` : r.sendChanges, method: 'researchActionSend', ext: !bridgeUp && this.researchLinkAvailable('send') },
         ];
-        const treeSettings: SubmenuItem[] = this.researchTranscriptsCapable(researchId ?? undefined)
+        const hasTreeSettings = this.researchTranscriptsCapable(researchId ?? undefined);
+        const treeSettings: SubmenuItem[] = hasTreeSettings
             ? [{ id: 'research-item-tree-settings', label: strings.sync.treeSettings, method: 'researchActionTreeSettings' }] : [];
-        const batch: SubmenuItem[] = this.batchAvailable() ? [{ id: 'research-item-batch', label: strings.batch.menu, method: 'showBatchDialog' }] : [];
+        const materials: SubmenuItem[] = this.batchAvailable() ? [{ id: 'research-item-batch', label: strings.batch.menu, method: 'showBatchDialog' }] : [];
         // Connect phone (spec 012): right after the materials, its state in a pill.
         const phoneItem = this.phoneMenuItem();
-        if (phoneItem) batch.push({ id: 'research-item-phone', method: 'showPhoneDialog', ...phoneItem });
+        const phone: SubmenuItem[] = phoneItem ? [{ id: 'research-item-phone', method: 'showPhoneDialog', ...phoneItem }] : [];
         // Linked in the view only: the list, with how many are shown (a tree whose research says what a variant connects).
         const viewLinks: SubmenuItem[] = this.viewLinksListOffered()
             ? [{ id: 'research-item-view-links', label: strings.viewLinks.menuItem(this.viewLinksShownCount()), method: 'researchActionViewLinks' }] : [];
-        let groups: MenuGroup[];
-        let note = '';
-        let updateBlock = '';
+        let first: SubmenuItem[];
+        let more: SubmenuItem[];
+        let moreQuiet: SubmenuItem[];
+        let note = r.footerFull;
+        let moreAttention = '';
         if (!this.researchAnyAnnounced()) {
             // No strom-research:// links here (an older research, none announced, or
             // switched off): the way back, and what it is. A research that says what
@@ -273,94 +311,167 @@ export const researchActionsMethods = uiModule({
             // Read a document goes through the bridge, not a strom-research:// link: offered here too.
             const read = noAgent ? null : this.readMenuEntry();
             const readRow: SubmenuItem[] = read ? [{ id: 'research-item-read', method: 'showReadDocumentDialog', ...read, link: undefined }] : [];
-            groups = [
-                { items: [...startRow, ...readRow, ...sendRow.map(i => ({ ...i, ext: false })), ...viewLinks, ...batch] },
-                { items: [...treeSettings, ...aboutRow], quiet: true },
-            ];
+            first = [...startRow, ...readRow, ...sendRow.map(i => ({ ...i, ext: false }))];
+            more = [...viewLinks, ...materials, ...phone];
+            moreQuiet = [...treeSettings, ...aboutRow];
         } else {
-            // Frequent: what waits, the agent, the research itself, the send.
-            const frequent: SubmenuItem[] = [];
-            if (waiting > 0) frequent.push({ id: 'research-item-waiting', label: r.waiting, method: 'researchActionWaiting', count: waiting });
-            if (!noAgent && this.researchLinkAvailable('chat')) frequent.push({ id: 'research-item-chat', label: r.continueAgent, method: 'researchActionChat', ext: true, ai: true });
+            // First: what waits, the agent, the research itself, the send.
+            first = [];
+            if (waiting > 0) first.push({ id: 'research-item-waiting', label: r.waiting, method: 'researchActionWaiting', count: waiting });
+            if (!noAgent && this.researchLinkAvailable('chat')) first.push({ id: 'research-item-chat', label: r.continueAgent, method: 'researchActionChat', ext: true, ai: true });
             // Read a document (spec 013): right under the agent, above the research itself.
             const read = noAgent ? null : this.readMenuEntry();
-            if (read) frequent.push({ id: 'research-item-read', method: 'showReadDocumentDialog', ...read, link: read.link && this.researchLinkAvailable('open') ? read.link : undefined });
-            if (this.researchLinkAvailable('open')) frequent.push({ id: 'research-item-open', label: r.openResearch, method: 'researchActionOpen', ext: true });
-            frequent.push(...sendRow);
-            // Now and then: a version to load, following live, materials.
-            const middle: SubmenuItem[] = [];
+            if (read) first.push({ id: 'research-item-read', method: 'showReadDocumentDialog', ...read, link: read.link && this.researchLinkAvailable('open') ? read.link : undefined });
+            if (this.researchLinkAvailable('open')) first.push({ id: 'research-item-open', label: r.openResearch, method: 'researchActionOpen', ext: true });
+            first.push(...sendRow);
+            // Now and then: a version to load, following live, materials, the phone, an update.
+            more = [];
             // The bridge answering: the block above offers a newer version when there is one (never beside "in step").
-            if (this.researchLinkAvailable('app') && !bridgeUp && !blockLoads) middle.push({ id: 'research-item-version', label: r.loadNewVersion, method: 'researchActionLoadVersion' });
+            if (this.researchLinkAvailable('app') && !bridgeUp && !blockLoads) more.push({ id: 'research-item-version', label: r.loadNewVersion, method: 'researchActionLoadVersion' });
             // Follow live: the research starts (or reuses) its bridge and opens ?live= here (an archive has no agent to follow).
             if (!noAgent && this.researchLinkAvailable('live') && !this.isFollowingActiveResearch()) {
-                middle.push({ id: 'research-item-live', label: r.followLive, method: 'researchActionLive', ext: true });
+                more.push({ id: 'research-item-live', label: r.followLive, method: 'researchActionLive', ext: true });
             }
-            if (this.isFollowingActiveResearch()) middle.push({ id: 'research-item-overview', label: strings.live.overviewTitle, method: 'researchActionOverview' });
-            middle.push(...viewLinks, ...batch);
+            if (this.isFollowingActiveResearch()) more.push({ id: 'research-item-overview', label: strings.live.overviewTitle, method: 'researchActionOverview' });
+            // An archive has no agent: its materials are what it takes, first.
+            if (archive) first.push(...materials);
+            more.push(...viewLinks, ...(archive ? [] : materials), ...phone);
+            const known = this.researchWaiting();
+            // A newer research: "Update the research 1.7 ↗", a dot on it, on "Other actions" and on the button.
+            if (known?.update) {
+                const version = known.update.version;
+                moreAttention = r.updateAvailable(version);
+                more.push(this.researchLinkAvailable('update')
+                    ? { id: 'research-item-update', label: r.updateRow, val: version, method: 'researchActionUpdate', ext: true, attn: true }
+                    : { id: 'research-item-update', label: r.updateRow, sub: r.updateAvailable(version), method: 'researchActionUpdate', disabled: true, attn: true });
+            }
             // Occasional: the ways back, the settings.
-            const occasional: SubmenuItem[] = [];
+            moreQuiet = [];
             // "Restore the state before loading" until the next edit (or 7 days); its first hour is the block above.
             const loadBackup = ctx ? this.researchLoadBackup(ctx.treeId) : null;
             if (loadBackup && this.currentResearchSyncState().kind !== 'loaded') {
-                occasional.push({ id: 'research-item-restore', label: strings.sync.restoreBeforeLoad, method: 'researchSyncAction', args: ['restoreBeforeLoad'],
+                moreQuiet.push({ id: 'research-item-restore', label: strings.sync.restoreBeforeLoad, method: 'researchSyncAction', args: ['restoreBeforeLoad'],
                     sub: strings.sync.loadedAt(formatLiveClock(Date.parse(loadBackup.at), Date.now(), getCurrentLanguage())) });
             }
-            const known = this.researchWaiting();
             const intake = known?.lastIntake;
             const sentAt = intake ? Date.parse(intake.at) : NaN;
             // Taking the last send back is the user's (an archive too); not while the research's mode is not known here.
             if ((archive || agentAway || !noAgent) && intake && this.researchLinkAvailable('sync-undo') && Number.isFinite(sentAt) && Date.now() - sentAt < UNDO_MAX_AGE_MS) {
-                occasional.push({ id: 'research-item-undo', label: r.undoSend, method: 'researchActionUndoSend', ext: true,
+                moreQuiet.push({ id: 'research-item-undo', label: r.undoSend, method: 'researchActionUndoSend', ext: true,
                     sub: r.sentAt(formatLiveClock(sentAt, Date.now(), getCurrentLanguage())) });
             }
-            occasional.push(...treeSettings);
-            if (this.researchLinkAvailable('setup')) {
-                occasional.push({ id: 'research-item-setup', label: capable ? r.settingsInResearch : r.settings, method: 'researchActionSetup', ext: true });
+            moreQuiet.push(...treeSettings);
+            // "Settings in the research ↗" is a link in Research for this tree; a row only where that dialog is not offered.
+            if (!hasTreeSettings && this.researchLinkAvailable('setup')) {
+                moreQuiet.push({ id: 'research-item-setup', label: capable ? r.settingsInResearch : r.settings, method: 'researchActionSetup', ext: true });
             }
-            groups = [{ items: frequent }, { items: middle }, { items: occasional, quiet: true }];
             // Waiting for an agent: where one is installed (the research's menu, first items).
-            note = archive ? r.submenuNoteArchive : agentAway ? r.submenuNoteWaiting : r.submenuNote;
-            // A newer research: one framed line under the state, "Update ↗" the item in it.
-            if (known?.update) {
-                const canUpdate = this.researchLinkAvailable('update');
-                updateBlock = `<div class="research-update-block" id="research-update-block">`
-                    + `<span class="research-update-title">${esc(r.updateAvailable(known.update.version))}</span>`
-                    + (canUpdate
-                        ? `<button type="button" class="research-update-action" id="research-item-update" role="menuitem"`
-                            + ` aria-label="${esc(`${r.updateAvailable(known.update.version)}, ${r.updateResearch.replace(' ↗', '')}, ${r.opensInResearchSr}`)}"`
-                            + ` onclick="${call('researchActionUpdate')}">${esc(r.updateResearch)}</button>`
-                        : '')
-                    + '</div>';
+            note = archive ? r.footerFullArchive : agentAway ? r.footerFullWaiting : r.footerFull;
+        }
+        // A phone whose connection fails asks for action: up from "Other actions".
+        const phoneError = phone.find(i => i.pill?.tone === 'error');
+        if (phoneError) {
+            more = more.filter(i => i !== phoneError);
+            first.push(phoneError);
+        }
+        // Six at most: "Open research" gives way first (the toolbar's pill leads there too).
+        if (first.length > FIRST_LEVEL_MAX) {
+            const open = first.find(i => i.id === 'research-item-open');
+            if (open) {
+                first = first.filter(i => i !== open);
+                more = [open, ...more];
             }
         }
-        // An older research (it never said what it takes): a quiet line, "How to update…", in the same place.
-        const olderLine = updateBlock ? '' : this.researchOlderLineHtml('menu');
-        if (olderLine) updateBlock = `<div class="research-update-block research-older-block" id="research-older-block">${olderLine}</div>`;
-        return {
-            heading: !!ctx, archive, syncBlock, updateBlock, groups, note, waiting,
-            following: !syncBlock && DataManager.isLiveFollowing(),
-        };
+        // Following live (the tree locked meanwhile): a block of its own in place of the state.
+        const following = !syncBlock && DataManager.isLiveFollowing()
+            ? `<div class="research-sync-block research-sync-block--live" id="research-menu-following" role="group" aria-label="${esc(r.followingTitle)}">`
+                + '<span class="research-sync-dot" aria-hidden="true"></span>'
+                + `<div class="research-sync-status"><div class="research-sync-title">${esc(r.followingTitle)}</div><div class="research-sync-sub">${esc(r.followingSub)}</div></div></div>`
+            : '';
+        // An older research (it never said what it takes): a state block of its own, "How to update…".
+        const blocks = (syncBlock || following) + this.researchOlderBlockHtml();
+        return { foot: !!ctx, blocks, first, more, moreQuiet, moreAttention, note, waiting };
     },
 
-    /** The research menu's HTML; on the More sheet's page its title carries "‹" back. */
+    /** The research menu's HTML; on the More sheet's page a title with "‹" back comes first. */
     researchMenuHtml(model: ResearchMenuModel, opts: { back?: boolean } = {}): string {
         const r = strings.research;
-        const heading = model.heading || opts.back
+        const heading = opts.back
             ? '<div class="research-menu-heading">'
-                + (opts.back ? `<button type="button" class="research-menu-back" role="menuitem" aria-label="${esc(strings.contextMenu.back)}"><span aria-hidden="true">‹</span></button>` : '')
+                + `<button type="button" class="research-menu-back" role="menuitem" aria-label="${esc(strings.contextMenu.back)}"><span aria-hidden="true">‹</span></button>`
                 + `<span class="research-menu-title" id="research-menu-title">${esc(r.menuTitle)}</span>`
-                + (model.heading ? researchTrialTagHtml(true) : '')
-                + (model.archive ? `<span class="research-sync-tag" id="research-menu-archive">${esc(strings.sync.archiveTag)}</span>` : '')
                 + '</div>'
             : '';
-        const following = model.following
-            ? `<div class="research-menu-following" id="research-menu-following"><span class="research-menu-live-dot" aria-hidden="true"></span><span>${esc(r.followingLocked)}</span></div>`
+        const desc = noteSentence(model.note);
+        const items = (list: SubmenuItem[]): string => list.map(i => submenuItemHtml(i, desc)).join('');
+        const hasMore = model.more.length + model.moreQuiet.length > 0;
+        const first = model.first.length || hasMore
+            ? `<div class="research-menu-group" role="group">${items(model.first)}${hasMore ? moreRowHtml(moreOpen, model.moreAttention) : ''}</div>`
             : '';
-        const groups = model.groups.filter(g => g.items.length > 0)
-            .map(g => `<div class="research-menu-group${g.quiet ? ' is-quiet' : ''}" role="group">${g.items.map(submenuItemHtml).join('')}</div>`)
-            .join(SEPARATOR);
-        const note = model.note ? `${SEPARATOR}<div class="research-submenu-note">${esc(model.note)}</div>` : '';
-        return heading + model.syncBlock + following + model.updateBlock + groups + note;
+        const more = hasMore
+            ? `<div class="research-menu-more" id="research-menu-more" role="group" aria-label="${esc(r.more)}"${moreOpen ? '' : ' hidden'}>`
+                + items(model.more)
+                + (model.more.length && model.moreQuiet.length ? '<div class="research-more-divider" role="separator"></div>' : '')
+                + (model.moreQuiet.length ? `<div class="research-menu-group is-quiet" role="group">${items(model.moreQuiet)}</div>` : '')
+                + '</div>'
+            : '';
+        // Not an item: "trial" and what ↗ means (the whole sentence as its title).
+        const foot = model.foot
+            ? `<div class="research-menu-foot" id="research-menu-foot" role="none" title="${esc(desc)}">${researchTrialTagHtml(true)}`
+                + `<span class="research-menu-foot-text">${esc(r.footer)}</span></div>`
+            : '';
+        return heading + model.blocks + first + more + foot;
+    },
+
+    /** "Other actions ⌄" opened or closed in place; focus on its first item (`first`) or back on the row. */
+    toggleResearchMore(focus: 'first' | 'row' = 'row'): void {
+        moreOpen = !moreOpen;
+        const sheet = sheetResearchBody();
+        const menu = sheet ?? document.getElementById('research-menu');
+        const row = menu?.querySelector<HTMLElement>('#research-item-more');
+        const group = menu?.querySelector<HTMLElement>('#research-menu-more');
+        if (menu && row && group) {
+            // In place, not redrawn: the clicked row stays in the page (an outside click otherwise) and keeps focus.
+            row.setAttribute('aria-expanded', String(moreOpen));
+            group.hidden = !moreOpen;
+            if (this.researchMenuShown()) menu.dataset.html = this.researchMenuHtml(this.researchMenuModel(), { back: !!sheet });
+        } else {
+            this.refreshResearchMenu();
+        }
+        const to = focus === 'first' && moreOpen
+            ? menuItems(menu ?? document.body).find(el => !!el.closest('#research-menu-more'))
+            : menu?.querySelector<HTMLElement>('#research-item-more');
+        to?.focus();
+    },
+
+    /** The More sheet's page shows the menu with "Other actions" open; it closes again with the page or the menu. */
+    setResearchMoreOpen(open: boolean): void {
+        moreOpen = open;
+    },
+
+    /**
+     * Keys of the research menu before the shared ones: on "Other actions" Enter / Space open or close it
+     * and → opens it, both with focus on its first item; ← on one of its items closes it, back on the row.
+     */
+    researchMenuKeydown(e: KeyboardEvent): void {
+        if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+        const target = e.target instanceof HTMLElement ? e.target : null;
+        if (!target) return;
+        if (target.id === 'research-item-more') {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                this.toggleResearchMore(moreOpen ? 'row' : 'first');
+            } else if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                if (moreOpen) menuItems(target.closest<HTMLElement>('.research-menu-body') ?? document.body).find(el => !!el.closest('#research-menu-more'))?.focus();
+                else this.toggleResearchMore('first');
+            }
+            return;
+        }
+        if (e.key === 'ArrowLeft' && moreOpen && target.closest('#research-menu-more')) {
+            e.preventDefault();
+            this.toggleResearchMore('row');
+        }
     },
 
     /**
@@ -375,7 +486,7 @@ export const researchActionsMethods = uiModule({
         this.ensureResearchMenuButton(shown);
         if (!shown) return '';
         const model = this.researchMenuModel();
-        const signal = this.paintResearchMenuButton(model.waiting);
+        const signal = this.paintResearchMenuButton(model.waiting, !!model.moreAttention);
         const sheet = sheetResearchBody();
         const dropdown = document.getElementById('research-menu');
         const target = sheet ?? dropdown;
@@ -416,7 +527,7 @@ export const researchActionsMethods = uiModule({
             + '<span class="research-menu-signal" id="research-menu-signal" aria-hidden="true" hidden></span>'
             + '<span class="research-menu-phone" aria-hidden="true" hidden></span>'
             + CHEVRON + '</button>'
-            + '<div id="research-menu" class="tree-switcher-dropdown research-menu-dropdown research-menu-body" role="menu" aria-labelledby="research-menu-title"></div>';
+            + `<div id="research-menu" class="tree-switcher-dropdown research-menu-dropdown research-menu-body" role="menu" aria-label="${esc(strings.research.menuTitle)}"></div>`;
         actions.parentElement.insertBefore(wrap, actions);
         const btn = wrap.querySelector<HTMLButtonElement>('#research-menu-btn')!;
         const menu = wrap.querySelector<HTMLElement>('#research-menu')!;
@@ -433,9 +544,10 @@ export const researchActionsMethods = uiModule({
         // An item done closes the menu (its own action may have opened a dialog already).
         menu.addEventListener('click', (e) => {
             const item = (e.target as Element | null)?.closest('[role="menuitem"]');
-            if (!item || item.matches('.research-trial-tag, [data-action="cancelLoad"], [data-action="conflicts"], [aria-disabled="true"]')) return;
+            if (!item || item.matches('.research-trial-tag, .research-item-more, [data-action="cancelLoad"], [data-action="conflicts"], [aria-disabled="true"]')) return;
             if (this.isResearchMenuOpen()) this.closeResearchMenu();
         });
+        menu.addEventListener('keydown', (e) => this.researchMenuKeydown(e));
         // Tab out of it: the menu closes, focus goes on in the toolbar.
         wrap.addEventListener('focusout', (e) => {
             const next = e.relatedTarget as Node | null;
@@ -444,11 +556,14 @@ export const researchActionsMethods = uiModule({
         });
     },
 
-    /** The button's name and signal: a count, else one dot (attention before changes not sent); a green dot while following live. */
-    paintResearchMenuButton(waiting: number): ResearchMenuSignal {
+    /**
+     * The button's name and signal: a count, else one dot (attention — the state's, or an update under
+     * "Other actions" — before changes not sent); a green dot while following live.
+     */
+    paintResearchMenuButton(waiting: number, moreAttention = false): ResearchMenuSignal {
         const r = strings.research;
         const unsent = this.researchSyncUnsentNow();
-        const signal: ResearchMenuSignal = waiting > 0 ? 'count' : this.researchSyncAttention() ? 'attention' : unsent.dot ? 'unsent' : '';
+        const signal: ResearchMenuSignal = waiting > 0 ? 'count' : this.researchSyncAttention() || moreAttention ? 'attention' : unsent.dot ? 'unsent' : '';
         const btn = document.getElementById('research-menu-btn');
         if (!btn) return signal;
         const sig = document.getElementById('research-menu-signal');
@@ -500,6 +615,7 @@ export const researchActionsMethods = uiModule({
         this.closeAllMenusExcept('research');
         this.hideWhatsNewCard();
         menuOpener = opts.opener ?? null;
+        moreOpen = false;
         menu.classList.add('active');
         btn.setAttribute('aria-expanded', 'true');
         btn.classList.add('is-open');
@@ -516,6 +632,7 @@ export const researchActionsMethods = uiModule({
         const btn = document.getElementById('research-menu-btn');
         const wasOpen = !!menu?.classList.contains('active');
         if (wasOpen) {
+            moreOpen = false;
             menu!.classList.remove('active');
             btn?.setAttribute('aria-expanded', 'false');
             btn?.classList.remove('is-open');
@@ -531,7 +648,7 @@ export const researchActionsMethods = uiModule({
         }
     },
 
-    /** Focus the first item (the state block's button, else the first row) or the last one. */
+    /** Focus the first item (the state block's button, else the first row; not the page's "‹") or the last one. */
     focusResearchMenuItem(which: 'first' | 'last'): void {
         const menu = sheetResearchBody() ?? document.getElementById('research-menu');
         if (!menu) return;
@@ -559,9 +676,10 @@ export const researchActionsMethods = uiModule({
     researchSheetGroup(): ResearchSheetGroup | null {
         if (!this.researchMenuShown()) return null;
         const model = this.researchMenuModel();
-        const frequent = new Set(['research-item-waiting', 'research-item-chat', 'research-item-read', 'research-item-open']);
+        // "Open research" and the rest: on the second level, "All research actions ›".
+        const frequent = new Set(['research-item-waiting', 'research-item-chat', 'research-item-read']);
         const ui = this as unknown as Record<string, (...args: string[]) => void>;
-        const rows: ResearchSheetRow[] = model.groups.flatMap(g => g.items).filter(i => frequent.has(i.id) && !i.disabled).map(i => ({
+        const rows: ResearchSheetRow[] = model.first.filter(i => frequent.has(i.id) && !i.disabled).map(i => ({
             label: i.label, count: i.count, ai: i.ai, ext: i.ext, ariaLabel: itemAria(i),
             run: () => ui[i.method](...(i.args ?? [])),
         }));

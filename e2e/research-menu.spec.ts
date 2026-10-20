@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { FakeBridge, NEW_HEAD, block, fakeBridge, openResearch, poll, researchGed, signal } from './research-bridge.js';
+import { FakeBridge, NEW_HEAD, block, fakeBridge, fakePhone, openResearch, openResearchMenu, poll, researchGed, signal } from './research-bridge.js';
 
 /**
  * The toolbar's Research button and menu (U04): left of Actions, the menu on
@@ -26,14 +26,16 @@ async function researchTree(page: Page, opts: { edit?: boolean; waiting?: unknow
 
 const menu = (page: Page) => page.locator('#research-menu');
 const button = (page: Page) => page.locator('#research-menu-btn');
-const labels = (page: Page) => menu(page).locator('.tree-switcher-action .research-item-label');
+/** The first level: the items above "Other actions" and the row itself. */
+const firstLevel = (page: Page) => page.locator('#research-menu > .research-menu-group > .tree-switcher-action .research-item-label');
+const FOOT_SENTENCE = 'Continues in the research on this computer. Nothing is written or paid without confirmation there.';
 const focusedId = (page: Page) => page.evaluate(() => {
     const el = document.activeElement as HTMLElement | null;
     return el ? el.id || el.dataset.action || el.className : '';
 });
 
 test.describe('the Research button and menu', () => {
-    test('left of Actions; the menu under it (right edges level): title with trial, the state, then frequent | now and then | occasional, the note', { tag: '@smoke' }, async ({ page }) => {
+    test('left of Actions; the menu under it (right edges level): the state block, at most six items and "Other actions", the footer', { tag: '@smoke' }, async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 900 });
         await researchTree(page, { waiting: WAITING });
         const btn = button(page);
@@ -51,22 +53,47 @@ test.describe('the Research button and menu', () => {
         const [b, m] = await Promise.all([btn.boundingBox(), menu(page).boundingBox()]);
         expect(m!.y).toBeGreaterThan(b!.y + b!.height - 1);
         expect(Math.abs((m!.x + m!.width) - (b!.x + b!.width))).toBeLessThan(2);
-        expect(m!.width).toBeCloseTo(340, 0);
-        // Title + trial, then the state block, then the groups.
-        await expect(menu(page).locator('.research-menu-heading #research-menu-title')).toHaveText('Research');
-        await expect(menu(page).locator('.research-menu-heading .research-trial-tag')).toHaveText('trial');
-        await expect(menu(page)).toHaveAttribute('aria-labelledby', 'research-menu-title');
+        expect(m!.width).toBeCloseTo(320, 0);
+        // No heading (the button says "Research"): the state block, the items, "Other actions" folded, the footer.
+        await expect(menu(page).locator('.research-menu-heading')).toHaveCount(0);
+        await expect(menu(page)).toHaveAttribute('aria-label', 'Research');
         expect(await menu(page).evaluate(el => Array.from(el.children).map(c => c.className.split(' ')[0])))
-            .toEqual(['research-menu-heading', 'research-sync-block', 'research-menu-group', 'tree-switcher-divider', 'research-menu-group',
-                'tree-switcher-divider', 'research-menu-group', 'tree-switcher-divider', 'research-submenu-note']);
-        await expect(menu(page).locator('[role="group"]')).toHaveCount(3);
-        await expect(menu(page).locator('[role="separator"]')).toHaveCount(3);
-        await expect(labels(page)).toHaveText(['Awaiting action', 'Continue with the agent', 'Open research', 'Send changes',
-            'Follow live', 'Research for this tree…', 'Settings in the research']);
-        await expect(menu(page).locator('.research-menu-group.is-quiet .research-item-label')).toHaveText(['Research for this tree…', 'Settings in the research']);
-        // The block's text is a live region; its buttons are items outside it.
+            .toEqual(['research-sync-block', 'research-menu-group', 'research-menu-more', 'research-menu-foot']);
+        await expect(firstLevel(page)).toHaveText(['Awaiting action', 'Continue with the agent', 'Open research', 'Send changes', 'Other actions']);
+        expect((await page.locator('#research-item-open').boundingBox())!.height).toBeGreaterThanOrEqual(34);
+        const more = page.locator('#research-item-more');
+        await expect(more).toHaveAttribute('aria-expanded', 'false');
+        await expect(more).toHaveAttribute('aria-controls', 'research-menu-more');
+        await expect(page.locator('#research-menu-more')).toBeHidden();
+        await expect(page.locator('#research-menu-more')).toHaveAttribute('role', 'group');
+        // The block is a group named by its title; its text a live region, its buttons items outside it.
+        await expect(block(page)).toHaveAttribute('role', 'group');
+        expect(await block(page).getAttribute('aria-label')).toBe((await block(page).locator('.research-sync-title').textContent())?.trim());
         await expect(block(page).locator('[role="status"][aria-live="polite"]')).toHaveCount(1);
         await expect(block(page).locator('[role="status"] [role="menuitem"]')).toHaveCount(0);
+        // What continues in the research says so to a screen reader too.
+        await expect(page.locator('#research-item-open')).toHaveAttribute('aria-description', FOOT_SENTENCE);
+        await expect(page.locator('#research-item-waiting')).not.toHaveAttribute('aria-description', /./);
+        // The footer: "trial" and what ↗ means (the whole sentence on hover); not an item itself.
+        const foot = page.locator('#research-menu-foot');
+        await expect(foot).toHaveAttribute('role', 'none');
+        await expect(foot).toHaveAttribute('title', FOOT_SENTENCE);
+        await expect(foot.locator('.research-trial-tag')).toHaveText('trial');
+        await expect(foot.locator('.research-menu-foot-text')).toHaveText('↗ continues in the research');
+        // "Other actions" by mouse: opens in place, the menu stays open; again: folds.
+        await more.click();
+        await expect(menu(page)).toBeVisible();
+        await expect(more).toHaveAttribute('aria-expanded', 'true');
+        await expect(page.locator('#research-menu-more')).toBeVisible();
+        await expect(page.locator('#research-menu-more .research-item-label')).toHaveText(['Follow live', 'Research for this tree…']);
+        await expect(page.locator('#research-menu-more .research-menu-group.is-quiet .research-item-label')).toHaveText(['Research for this tree…']);
+        // Its items stand indented under the row.
+        const [rowBox, liveBox] = await Promise.all([more.locator('.research-item-label').boundingBox(), page.locator('#research-item-live .research-item-label').boundingBox()]);
+        expect(liveBox!.x - rowBox!.x).toBeGreaterThanOrEqual(12);
+        // "Settings in the research ↗" is in the Research for this tree dialog, not a row.
+        await expect(page.locator('#research-item-setup')).toHaveCount(0);
+        await more.click();
+        await expect(page.locator('#research-menu-more')).toBeHidden();
         // A click outside closes it; Actions and Research never open together.
         await page.mouse.click(200, 600);
         await expect(menu(page)).toBeHidden();
@@ -77,9 +104,32 @@ test.describe('the Research button and menu', () => {
         await btn.click();
         await expect(page.locator('#actions-menu-dropdown')).not.toHaveClass(/active/);
         await expect(menu(page)).toBeVisible();
-        // An item done closes the menu.
+        // An item done closes the menu; opened again, "Other actions" is folded.
         await page.locator('#research-item-open').click();
         await expect(menu(page)).toBeHidden();
+        await btn.click();
+        await expect(page.locator('#research-menu-more')).toBeHidden();
+    });
+
+    test('"Research for this tree…" holds "Settings in the research ↗" (no menu row for it)', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await researchTree(page);
+        await openResearchMenu(page, { expandMore: true });
+        await page.locator('#research-item-tree-settings').click();
+        await expect(page.locator('#research-settings-in-research')).toBeVisible();
+        await expect(page.locator('#research-settings-in-research')).toContainText('Settings in the research');
+    });
+
+    test('a phone whose connection fails moves up from "Other actions"', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await openResearch(page);
+        await fakeBridge(page, { accepts: ACCEPTS, links: LINKS, features: ['phone'],
+            phone: fakePhone({ state: 'error', error: { code: 'port-busy', detail: 'EADDRINUSE' } }) });
+        await poll(page);
+        await button(page).click();
+        await expect(firstLevel(page)).toHaveText(['Continue with the agent', 'Open research', 'Send changes', 'Phone', 'Other actions']);
+        await expect(page.locator('#research-menu > .research-menu-group #research-item-phone .research-item-pill')).toHaveText('connection problem');
+        await expect(page.locator('#research-menu-more #research-item-phone')).toHaveCount(0);
     });
 
     test('"Send changes" goes from the rows while the state block offers the send (Send, What will be sent), and is there when it does not', async ({ page }) => {
@@ -164,7 +214,7 @@ test.describe('the Research button and menu', () => {
 });
 
 test.describe('the keyboard', () => {
-    test('Enter opens it on the first item (the state block\'s button); arrows go over every item, Home / End; Escape back to the button', async ({ page }) => {
+    test('Enter opens it on the first item (the state block\'s button); arrows go over every shown item, Home / End; Escape back to the button', async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 900 });
         await researchTree(page, { edit: true });
         await button(page).focus();
@@ -175,15 +225,22 @@ test.describe('the keyboard', () => {
         await expect(block(page).locator('[data-action="showChanges"]')).toBeFocused();
         await page.keyboard.press('ArrowDown');
         await expect(page.locator('#research-item-chat')).toBeFocused();
-        await page.keyboard.press('End');
-        await expect(page.locator('#research-item-setup')).toBeFocused();
         await page.keyboard.press('ArrowDown');
-        // Round: the title's "trial" first.
-        await expect(menu(page).locator('.research-trial-tag')).toBeFocused();
+        await expect(page.locator('#research-item-open')).toBeFocused();
+        // Folded, the items of "Other actions" are skipped: from its row to the footer's "trial".
+        await page.keyboard.press('ArrowDown');
+        await expect(page.locator('#research-item-more')).toBeFocused();
+        await page.keyboard.press('ArrowDown');
+        await expect(menu(page).locator('#research-menu-foot .research-trial-tag')).toBeFocused();
         await page.keyboard.press('Home');
-        await expect(menu(page).locator('.research-trial-tag')).toBeFocused();
+        await expect(block(page).locator('[data-action="send"]')).toBeFocused();
+        await page.keyboard.press('End');
+        await expect(menu(page).locator('#research-menu-foot .research-trial-tag')).toBeFocused();
+        // Round: back on the first one.
+        await page.keyboard.press('ArrowDown');
+        await expect(block(page).locator('[data-action="send"]')).toBeFocused();
         await page.keyboard.press('ArrowUp');
-        await expect(page.locator('#research-item-setup')).toBeFocused();
+        await expect(menu(page).locator('#research-menu-foot .research-trial-tag')).toBeFocused();
         await page.keyboard.press('Escape');
         await expect(menu(page)).toBeHidden();
         await expect(button(page)).toBeFocused();
@@ -195,6 +252,39 @@ test.describe('the keyboard', () => {
         await page.keyboard.press('End');
         await page.keyboard.press('Tab');
         await expect(menu(page)).toBeHidden();
+    });
+
+    test('"Other actions" by keyboard: Enter or → opens it on its first item, ← or Enter on the row folds it back to the row', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await researchTree(page);
+        await button(page).focus();
+        await page.keyboard.press('Enter');
+        const row = page.locator('#research-item-more');
+        await page.keyboard.press('ArrowUp');
+        await page.keyboard.press('ArrowUp');
+        await expect(row).toBeFocused();
+        await page.keyboard.press('Enter');
+        await expect(row).toHaveAttribute('aria-expanded', 'true');
+        await expect(page.locator('#research-item-live')).toBeFocused();
+        // Its items are in the arrow order now.
+        await page.keyboard.press('ArrowDown');
+        await expect(page.locator('#research-item-tree-settings')).toBeFocused();
+        // ← on one of them: folded, focus on the row (the menu stays, not switched to Actions).
+        await page.keyboard.press('ArrowLeft');
+        await expect(row).toHaveAttribute('aria-expanded', 'false');
+        await expect(row).toBeFocused();
+        await expect(menu(page)).toBeVisible();
+        await expect(page.locator('#actions-menu-dropdown')).not.toHaveClass(/active/);
+        // → on the row: open on the first item; Enter on the row again: folded.
+        await page.keyboard.press('ArrowRight');
+        await expect(row).toHaveAttribute('aria-expanded', 'true');
+        await expect(page.locator('#research-item-live')).toBeFocused();
+        await page.keyboard.press('ArrowUp');
+        await expect(row).toBeFocused();
+        await page.keyboard.press('Enter');
+        await expect(row).toHaveAttribute('aria-expanded', 'false');
+        await expect(row).toBeFocused();
+        await expect(page.locator('#research-menu-more')).toBeHidden();
     });
 
     test('← / → switch between Research and Actions, never on the "Tree:" row (its flyout) ', async ({ page }) => {
@@ -236,7 +326,7 @@ test.describe('the keyboard', () => {
 });
 
 test.describe('a narrow window with a mouse (≤ 1024 px)', () => {
-    test('no Research button; More starts with the research group, "All research actions ›" shows the whole menu in the same sheet, Escape back', async ({ page }) => {
+    test('no Research button; More starts with the research group (state, Waiting, Agent, Read), "All research actions ›" shows the whole menu with "Other actions" open, Escape back', async ({ page }) => {
         await page.setViewportSize({ width: 900, height: 900 });
         await researchTree(page, { edit: true, waiting: WAITING });
         await expect(button(page)).toBeHidden();
@@ -247,7 +337,7 @@ test.describe('a narrow window with a mouse (≤ 1024 px)', () => {
         await expect(sheet).toBeVisible();
         const items = sheet.locator('.bottom-sheet-items');
         // After the Undo | Redo tiles (and the storage state when it needs action), the group:
-        // title + trial, the state in one line with its first action, the frequent ones, all of them.
+        // the title, the state in one line with its first action, the frequent ones, all of them.
         expect(await items.evaluate(el => {
             const kids = Array.from(el.children);
             const at = kids.findIndex(c => c.classList.contains('research-sheet-heading'));
@@ -256,7 +346,7 @@ test.describe('a narrow window with a mouse (≤ 1024 px)', () => {
         expect(await items.evaluate(el => (el.firstElementChild as HTMLElement).className)).toContain('bottom-sheet-pair');
         await expect(items.locator('.research-sheet-heading')).toHaveCount(1);
         await expect(items.locator('.research-sheet-heading')).toContainText('Research');
-        await expect(items.locator('.research-sheet-heading .research-trial-tag')).toHaveText('trial');
+        await expect(items.locator('.research-sheet-heading .research-trial-tag')).toHaveCount(0);
         await expect(page.locator('#research-sheet-state-text')).toHaveText("Changes the research doesn't have");
         await expect(page.locator('#research-sheet-state [role="menuitem"]')).toHaveText('Send changes');
         const groupRows = await items.evaluate(el => {
@@ -268,7 +358,8 @@ test.describe('a narrow window with a mouse (≤ 1024 px)', () => {
             }
             return out;
         });
-        expect(groupRows).toEqual(['Awaiting action', 'Continue with the agent', 'Open research', 'All research actions']);
+        // "Open research" waits on the second level (the toolbar's pill leads there too).
+        expect(groupRows).toEqual(['Awaiting action', 'Continue with the agent', 'All research actions']);
         // Not "Ancestor research" beside it: this tree has its research.
         await expect(sheet).not.toContainText('Ancestor research');
         const all = page.locator('#research-sheet-all');
@@ -285,6 +376,11 @@ test.describe('a narrow window with a mouse (≤ 1024 px)', () => {
         await expect(page.locator('#research-menu #research-sync-block')).toHaveCount(0);
         await expect(body.locator('.research-item-label').first()).toHaveText('Awaiting action');
         expect((await body.locator('#research-item-waiting').boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        // Everything at hand there: "Other actions" open, the footer with "trial".
+        await expect(body.locator('#research-item-more')).toHaveAttribute('aria-expanded', 'true');
+        await expect(body.locator('#research-menu-more')).toBeVisible();
+        await expect(body.locator('#research-item-live')).toBeVisible();
+        await expect(body.locator('#research-menu-foot .research-trial-tag')).toHaveText('trial');
         // Escape: back to the list, focus on "All research actions"; a second one closes.
         await page.keyboard.press('Escape');
         await expect(items).toBeVisible();

@@ -418,6 +418,8 @@ test.describe('the entries', () => {
         await setup(page);
         await store(page, [B, MARTIN]);
         await page.locator('#research-menu-btn').click();
+        // Under "Other actions ⌄", opened in place.
+        await page.locator('#research-item-more').click();
         const item = page.locator('#research-item-view-links');
         await expect(item).toHaveText('Linked in the view only (1)');
         await item.click();
