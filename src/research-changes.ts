@@ -6,6 +6,7 @@
  */
 
 import { StromData, Person, Partnership, Source, EventParticipant, PersonId, LifeEvent } from './types.js';
+import { isPurePlaceholder } from './single-parent.js';
 
 export type ChangeKind =
     | 'added' | 'deleted' | 'name' | 'gender' | 'birth' | 'death' | 'marriage' | 'event'
@@ -167,8 +168,14 @@ export function diffByPerson(base: StromData, current: StromData): PersonChange[
         const b = cu[id];
         if (a && b && stable(a) === stable(b)) continue;
         const kinds = new Set<ChangeKind>();
-        if (!a || !b) kinds.add('marriage');
-        else {
+        if (!a || !b) {
+            // A family of one parent and a "?" stand-in with children is no marriage (the GEDCOM
+            // family has one parent): its parent gains a child, told as a couple's new child is (not at all).
+            const u = (b ?? a)!;
+            const d = b ? current : base;
+            const oneParent = u.childIds.length > 0 && (isPurePlaceholder(d, u.person1Id) || isPurePlaceholder(d, u.person2Id));
+            if (!oneParent) kinds.add('marriage');
+        } else {
             if (MARRIAGE_FIELDS.some(f => differs(a[f], b[f]))) kinds.add('marriage');
             participantKinds(a.participants, b.participants).forEach(k => kinds.add(k));
             if (differs(a.events ?? [], b.events ?? [])) kinds.add('event');

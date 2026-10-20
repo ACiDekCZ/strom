@@ -5,6 +5,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { diffByPerson, baseCopy } from '../research-changes.js';
+import { normalizeSingleParents } from '../single-parent.js';
 import { StromData, Person, PersonId, PartnershipId } from '../types.js';
 
 const person = (id: string, first: string, extra: Partial<Person> = {}): Person => ({
@@ -71,6 +72,29 @@ describe('changes per person since the research\'s version', () => {
         const changes = diffByPerson(base, cur);
         expect(changes.find(c => c.personId === 'q')!.kinds).toEqual(['added']);
         expect(changes.find(c => c.personId === 'e')!.kinds).toEqual(['parents']);
+    });
+
+    it('a child given to one parent (a "?" family) is no marriage of that parent; a childless "?" spouse still is', () => {
+        const base = baseCopy(tree());
+        const cur = tree();
+        // As "Read a document" writes a baptism with only the father in the tree: the child, the
+        // parent link made a family with a stand-in, the father citing the source.
+        const jan = cur.persons['p3' as PersonId];
+        cur.persons['k' as PersonId] = person('k', 'Karel', { parentIds: ['p3' as PersonId] });
+        jan.childIds = ['k' as PersonId];
+        jan.sourceIds = ['s1'];
+        normalizeSingleParents(cur);
+        const changes = diffByPerson(base, cur);
+        expect(changes.find(c => c.personId === 'p3')!.kinds).toEqual(['citation']);
+        expect(changes.find(c => c.personId === 'k')!.kinds).toEqual(['added']);
+        expect(changes.some(c => c.personId.startsWith('p_single_'))).toBe(false);
+
+        // Married, the spouse unknown (no child): a marriage.
+        const wed = tree();
+        wed.persons['q' as PersonId] = person('q', '?', { isPlaceholder: true, lastName: '', partnerships: ['u2' as PartnershipId] });
+        wed.persons['p3' as PersonId].partnerships = ['u2' as PartnershipId];
+        wed.partnerships['u2' as PartnershipId] = { id: 'u2' as PartnershipId, person1Id: 'p3' as PersonId, person2Id: 'q' as PersonId, childIds: [], status: 'married' };
+        expect(diffByPerson(base, wed).find(c => c.personId === 'p3')!.kinds).toEqual(['marriage']);
     });
 
     it('a wedding and its witnesses are told at both partners; a new and a deleted person', () => {
