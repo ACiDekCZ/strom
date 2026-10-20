@@ -261,6 +261,17 @@ test.describe('the state block on two lines (menu 1020 §2.2)', () => {
             await expect(page.locator('#research-item-changes')).toHaveCount(0);
             expect(await lines(page, '.research-sync-title')).toBe(1);
             expect(await lines(page, '.research-sync-sub')).toBe(1);
+            // With room to spare: a font drawn a little wider (Linux, Windows) must not wrap the title.
+            const room = await block(page).evaluate(el => {
+                const title = el.querySelector('.research-sync-title') as HTMLElement;
+                const probe = title.cloneNode(true) as HTMLElement;
+                probe.style.cssText = 'position: absolute; white-space: nowrap; width: auto';
+                el.appendChild(probe);
+                const need = probe.getBoundingClientRect().width;
+                probe.remove();
+                return (el.querySelector('.research-sync-status') as HTMLElement).getBoundingClientRect().width - need;
+            });
+            expect(room).toBeGreaterThanOrEqual(16);
             const height = (await block(page).boundingBox())!.height;
             expect(height).toBeGreaterThanOrEqual(44);
             expect(height).toBeLessThanOrEqual(58);

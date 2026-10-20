@@ -550,7 +550,11 @@ export const treeManagementMethods = uiModule({
             });
             nodes.push(toggle, box);
         });
+        // A row focused from the keyboard meanwhile (→ on "Tree:") keeps the focus on its new copy.
+        const focused = document.activeElement instanceof HTMLElement && host.contains(document.activeElement)
+            ? document.activeElement.id : '';
         host.replaceChildren(...nodes);
+        if (focused) document.getElementById(focused)?.focus();
         if (document.getElementById('actions-tree-wrap')?.classList.contains('submenu-open')) {
             this.positionActionsSubmenu('actions-tree-submenu');
         }
