@@ -289,7 +289,8 @@ export const readProposeMethods = uiModule({
                 const sexWord = (g: string): string => strings.gender[g as 'male'] ?? g;
                 main += adds.length > 0
                     ? `<span class="read-p-adds">${esc(t.adds(adds.map(a => t.addWhat[a.kind](a.kind === 'sex' ? sexWord(a.value) : a.value)).join(' · ')))}</span>`
-                    : `<span class="read-p-muted">${esc(t.addNothing)}</span>`;
+                    // Nothing of its own, but every linked person cites the new source (writeReadPropose).
+                    : `<span class="read-p-muted read-p-cites">${esc(t.addCitation)}</span>`;
                 for (const d of diffs) {
                     const tv = d.what === 'sex' ? sexWord(d.tree) : d.tree;
                     const ev = d.what === 'sex' ? sexWord(d.entry) : d.entry;

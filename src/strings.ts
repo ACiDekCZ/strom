@@ -4559,7 +4559,7 @@ const stringsEN = {
         matchReasons: { name: 'name', birth: 'birth', death: 'death', parents: 'parents', partner: 'spouse' } as Record<string, string>,
         matchSpouse: (female: boolean, name: string) => `${female ? 'wife' : 'husband'} ${name}`,
         adds: (what: string) => `To be added: ${what}`,
-        addNothing: 'Nothing new for this person',
+        addCitation: 'A citation is added for this person',
         addWhat: {
             occupation: (v: string) => `occupation ${v}`,
             residence: (v: string) => `residence ${v}`,
@@ -9012,7 +9012,7 @@ const stringsCZ: StringsType = {
         matchReasons: { name: 'jméno', birth: 'narození', death: 'úmrtí', parents: 'rodiče', partner: 'partner' } as Record<string, string>,
         matchSpouse: (female: boolean, name: string) => `${female ? 'manželka' : 'manžel'} ${name}`,
         adds: (what: string) => `Doplní se: ${what}`,
-        addNothing: 'U této osoby nic nového nepřibude',
+        addCitation: 'U této osoby přibude citace',
         addWhat: {
             occupation: (v: string) => `povolání ${v}`,
             residence: (v: string) => `bydliště ${v}`,
@@ -13389,7 +13389,7 @@ const stringsDE: StringsType = {
         matchReasons: { name: 'Name', birth: 'Geburt', death: 'Tod', parents: 'Eltern', partner: 'Partner' } as Record<string, string>,
         matchSpouse: (female: boolean, name: string) => `${female ? 'Ehefrau' : 'Ehemann'} ${name}`,
         adds: (what: string) => `Wird ergänzt: ${what}`,
-        addNothing: 'Für diese Person kommt nichts Neues hinzu',
+        addCitation: 'Für diese Person kommt ein Zitat hinzu',
         addWhat: {
             occupation: (v: string) => `Beruf ${v}`,
             residence: (v: string) => `Wohnort ${v}`,

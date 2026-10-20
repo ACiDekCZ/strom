@@ -103,6 +103,9 @@ test.describe('Read a document: suggest for the tree', () => {
         // The mother: found by name and husband.
         await expect(cardOf(d, 'p3').locator('.read-p-seg-btn.is-on')).toHaveText('Link');
         await expect(cardOf(d, 'p3').locator('.read-p-match')).toContainText('Anna Svobodová');
+        // Nothing of her own is new, but she cites the entry's source.
+        await expect(cardOf(d, 'p3').locator('.read-p-cites')).toHaveText('A citation is added for this person');
+        await expect(cardOf(d, 'p2').locator('.read-p-cites')).toHaveCount(0);
         // The child: nobody similar.
         await expect(cardOf(d, 'p1').locator('.read-p-seg-btn.is-on')).toHaveText('New');
         await expect(cardOf(d, 'p1')).toContainText('no similar one in the tree');
