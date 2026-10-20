@@ -102,6 +102,11 @@ async function expectNewLit(page: Page, lit = true): Promise<void> {
 const moreDot = (page: Page) => page.locator('#bottom-bar-more-dot');
 const menuRow = (page: Page) => page.locator('#research-menu-row');
 const infoDialog = (page: Page) => page.locator('#research-info-modal');
+/** Tree › still leads to the research info, the menu being open (menu 1020 D10). */
+async function expectTreePathToResearch(page: Page): Promise<void> {
+    await page.locator('#actions-tree-row').click();
+    await expect(page.locator('#actions-tree-researchInfo-row')).toBeVisible();
+}
 
 async function openActionsMenu(page: Page): Promise<void> {
     await page.locator('.actions-menu-btn').click();
@@ -213,7 +218,7 @@ test.describe('welcome screen offer', () => {
 test.describe('existing tree on desktop', () => {
     test.use({ viewport: DESKTOP });
 
-    test('the 3.0 card shows once, anchored under Actions; "Learn more" opens the site and puts "New" out', async ({ page, context }) => {
+    test('the 3.0 card shows once, anchored under Actions; "Learn more" opens the site and puts "New" out with its row', async ({ page, context }) => {
         await stubSite(context);
         await existingTreeFirstRun(page);
         const cardEl = whatsNew(page);
@@ -244,11 +249,10 @@ test.describe('existing tree on desktop', () => {
         const s = await readSettings(page);
         expect(s.whatsNew30Shown).toBe(true);
         expect(s.researchNewDismissed).toBe(true);
-        // The item stays, without the label.
+        // With the label out the item leaves the first level; Tree › keeps the way in (menu 1020 D10).
         await openActionsMenu(page);
-        await expect(menuRow(page)).toBeVisible();
-        await expect(menuRow(page).locator('.research-new-badge')).toBeHidden();
-        await expect(menuRow(page)).toHaveAttribute('aria-label', 'Ancestor research');
+        await expect(menuRow(page)).toBeHidden();
+        await expectTreePathToResearch(page);
 
         // Once only: not after a reload.
         await page.reload();
@@ -257,14 +261,15 @@ test.describe('existing tree on desktop', () => {
         await expect(whatsNew(page)).toHaveCount(0);
     });
 
-    test('"Not now" closes the card and puts the label out', async ({ page }) => {
+    test('"Not now" closes the card and puts the label out with its row (D10)', async ({ page }) => {
         await existingTreeFirstRun(page);
         await expect(whatsNew(page)).toBeVisible();
         await whatsNew(page).getByRole('button', { name: 'Not now' }).click();
         await expect(whatsNew(page)).toHaveCount(0);
         await expect(newDot(page)).toBeHidden();
         await openActionsMenu(page);
-        await expect(menuRow(page).locator('.research-new-badge')).toBeHidden();
+        await expect(menuRow(page)).toBeHidden();
+        await expectTreePathToResearch(page);
     });
 
     test('the card counts as shown even when it is just ignored', async ({ page }) => {
@@ -279,7 +284,7 @@ test.describe('existing tree on desktop', () => {
         await expectNewLit(page);
     });
 
-    test('no dot on Actions; the item opens the dialog, which puts "New" out; the item stays', async ({ page, context }) => {
+    test('no dot on Actions; the item opens the dialog, which puts "New" out with its row', async ({ page, context }) => {
         await stubSite(context);
         await existingTreeFirstRun(page);
         await expect(whatsNew(page)).toBeVisible();
@@ -323,11 +328,12 @@ test.describe('existing tree on desktop', () => {
         await dialog.locator('[data-dismiss]').click();
         await expect(dialog).toHaveCount(0);
 
+        // Opened once, the item leaves the first level (menu 1020 D10).
         await openActionsMenu(page);
-        await expect(menuRow(page)).toBeVisible();
-        await expect(menuRow(page).locator('.research-new-badge')).toBeHidden();
+        await expect(menuRow(page)).toBeHidden();
+        await expectTreePathToResearch(page);
         // Close / click outside close the dialog too.
-        await menuRow(page).click();
+        await page.evaluate(() => { window.Strom.UI.closeActionsMenu(); window.Strom.UI.showResearchInfoDialog(); });
         await infoDialog(page).locator('.buttons button.secondary').click();
         await expect(infoDialog(page)).toHaveCount(0);
         await page.evaluate(() => window.Strom.UI.showResearchInfoDialog());
@@ -342,6 +348,10 @@ test.describe('existing tree on desktop', () => {
         await expect(whatsNew(page)).toHaveCount(0);
         expect((await readSettings(page)).researchNewDismissed).toBe(true);
         expect(await page.evaluate(() => document.activeElement?.classList.contains('person-card'))).toBe(true);
+        // The item went with the label (D10): light it again for the keyboard part.
+        await setPromoSettingsForReload(page, { whatsNew30Shown: true });
+        await page.reload();
+        await expect(card(page, 'Jan')).toBeVisible();
 
         // Arrows: from the trigger, ArrowUp lands on the last row — Settings —
         // then "Strom:" and once more on the item above it.
@@ -452,7 +462,7 @@ test.describe('existing tree on desktop', () => {
 test.describe('existing tree on a phone', () => {
     test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
-    test('the card is a bottom sheet with no dot on More; "Not now" closes it; the item stays in the More sheet', async ({ page }) => {
+    test('the card is a bottom sheet with no dot on More; "Not now" closes it and its More sheet row', async ({ page }) => {
         await existingTreeFirstRun(page);
         const sheet = whatsNew(page);
         await expect(sheet).toBeVisible();
@@ -472,10 +482,10 @@ test.describe('existing tree on a phone', () => {
         await expect(moreDot(page)).toBeHidden();
         await expect(page.locator('#bb-view-more')).not.toHaveAttribute('aria-label', /new item/);
 
+        // With the label out, the More sheet has no row for it either (menu 1020 D10).
         await page.locator('#bb-view-more').click();
-        const row = page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: 'Ancestor research' });
-        await expect(row).toBeVisible();
-        await expect(row.locator('.research-new-badge')).toHaveCount(0);
+        await expect(page.locator('.bottom-sheet-menu')).toBeVisible();
+        await expect(page.locator('.bottom-sheet-menu .bottom-sheet-item', { hasText: 'Ancestor research' })).toHaveCount(0);
     });
 
     test('while new: the More sheet row right above the "Strom:" row carries the label; it opens the dialog', async ({ page }) => {

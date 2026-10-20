@@ -100,7 +100,7 @@ interface ResearchMenuModel {
     first: SubmenuItem[];
     more: SubmenuItem[];
     moreQuiet: SubmenuItem[];
-    /** Something under "Other actions" asks for attention: said on its row (a dot) and on the button. */
+    /** Something under "Other actions" asks for attention: said on its row (a dot), not on the button (D7). */
     moreAttention: string;
     /** The footer's whole sentence: its title and the description of every ↗ item. */
     note: string;
@@ -342,7 +342,7 @@ export const researchActionsMethods = uiModule({
             if (archive) first.push(...materials);
             more.push(...viewLinks, ...(archive ? [] : materials), ...phone);
             const known = this.researchWaiting();
-            // A newer research: "Update the research 1.7 ↗", a dot on it, on "Other actions" and on the button.
+            // A newer research: "Update the research 1.7 ↗", a dot on it and on "Other actions" (not on the button: it does not stand in the way).
             if (known?.update) {
                 const version = known.update.version;
                 moreAttention = r.updateAvailable(version);
@@ -420,10 +420,12 @@ export const researchActionsMethods = uiModule({
                 + (model.moreQuiet.length ? `<div class="research-menu-group is-quiet" role="group">${items(model.moreQuiet)}</div>` : '')
                 + '</div>'
             : '';
-        // Not an item: "trial" and what ↗ means (the whole sentence as its title).
+        // Not an item: "trial" and what ↗ means (the whole sentence as its title) — only "trial"
+        // when nothing in the menu carries ↗ (menu 1020 D8).
+        const anyExt = [...model.first, ...model.more, ...model.moreQuiet].some(i => i.ext || !!i.link) || model.blocks.includes('↗');
         const foot = model.foot
-            ? `<div class="research-menu-foot" id="research-menu-foot" role="none" title="${esc(desc)}">${researchTrialTagHtml(true)}`
-                + `<span class="research-menu-foot-text">${esc(r.footer)}</span></div>`
+            ? `<div class="research-menu-foot" id="research-menu-foot" role="none"${anyExt ? ` title="${esc(desc)}"` : ''}>${researchTrialTagHtml(true)}`
+                + (anyExt ? `<span class="research-menu-foot-text">${esc(r.footer)}</span>` : '') + '</div>'
             : '';
         return heading + model.blocks + first + more + foot;
     },
@@ -491,7 +493,7 @@ export const researchActionsMethods = uiModule({
         this.ensureResearchMenuButton(shown);
         if (!shown) return '';
         const model = this.researchMenuModel();
-        const signal = this.paintResearchMenuButton(model.waiting, !!model.moreAttention);
+        const signal = this.paintResearchMenuButton(model.waiting);
         const sheet = sheetResearchBody();
         const dropdown = document.getElementById('research-menu');
         const target = sheet ?? dropdown;
@@ -562,13 +564,16 @@ export const researchActionsMethods = uiModule({
     },
 
     /**
-     * The button's name and signal: a count, else one dot (attention — the state's, or an update under
-     * "Other actions" — before changes not sent); a green dot while following live.
+     * The button's name and signal: a count, else one dot (attention — only a state that asks for
+     * action: the state block's, a phone connection that fails — before changes not sent); a green
+     * dot while following live. A newer research that does not stand in the way is said on
+     * "Other actions" only (menu 1020 D7).
      */
-    paintResearchMenuButton(waiting: number, moreAttention = false): ResearchMenuSignal {
+    paintResearchMenuButton(waiting: number): ResearchMenuSignal {
         const r = strings.research;
         const unsent = this.researchSyncUnsentNow();
-        const signal: ResearchMenuSignal = waiting > 0 ? 'count' : this.researchSyncAttention() || moreAttention ? 'attention' : unsent.dot ? 'unsent' : '';
+        const attention = this.researchSyncAttention() || this.phoneSummaryNow()?.state === 'error';
+        const signal: ResearchMenuSignal = waiting > 0 ? 'count' : attention ? 'attention' : unsent.dot ? 'unsent' : '';
         const btn = document.getElementById('research-menu-btn');
         if (!btn) return signal;
         const sig = document.getElementById('research-menu-signal');

@@ -62,23 +62,23 @@ export const researchUpdateMethods = uiModule({
     },
 
     /**
-     * The research menu's state block for an older research (it stands in the way of the work): a red dot,
-     * the fact and what it means, "How to update…" on the right ('' when the research is not older).
+     * The research menu's state block for an older research: an amber dot (the chat and a send by its
+     * link go on), the fact, what waits for the update, "Update…" on the right; the whole sentence
+     * with the version is its hint ('' when the research is not older; menu 1020 D15).
      */
     researchOlderBlockHtml(): string {
         const older = this.researchOlderVersion();
         if (!older) return '';
         const u = strings.researchOlder;
-        // Title and facts on one line each (menu 1020 §2.2); the sentence of what waits for the update is the hint.
         const title = u.blockTitle('');
-        const facts = [older.version ? u.blockVersion(older.version) : '', older.titles ? u.blockNoTitles : ''].filter(Boolean).join(' · ');
-        const note = esc(older.titles ? u.blockTitlesSub : u.blockSub);
+        const sub = older.titles ? u.blockTitlesSub : u.blockSub;
+        const note = esc(older.titles ? u.titlesLine(older.version) : u.line(older.version));
         return `<div class="research-sync-block research-sync-block--warn research-older-block" id="research-older-block" role="group" aria-label="${esc(title)}">`
-            + '<span class="research-sync-dot is-error" aria-hidden="true"></span>'
+            + '<span class="research-sync-dot" aria-hidden="true"></span>'
             + `<div class="research-sync-status" id="research-older-status" title="${note}" aria-description="${note}"><div class="research-sync-title">${esc(title)}</div>`
-            + (facts ? `<div class="research-sync-sub">${esc(facts)}</div>` : '') + '</div>'
+            + `<div class="research-sync-sub">${esc(sub)}</div></div>`
             + `<button type="button" class="research-sync-link research-sync-main research-older-how" role="menuitem" data-research-update="menu"`
-            + ` aria-describedby="research-older-status" onclick="window.Strom.UI.showResearchUpdateHelp()">${esc(u.how)}</button>`
+            + ` aria-describedby="research-older-status" onclick="window.Strom.UI.showResearchUpdateHelp()">${esc(u.blockHow)}</button>`
             + '</div>';
     },
 

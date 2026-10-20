@@ -67,6 +67,32 @@ function firstStructureItem(): HTMLElement | null {
     return document.querySelector<HTMLElement>('#actions-tree-structure [role^="menuitem"]');
 }
 
+/**
+ * Focus the first item of a ⋯-menu flyout opened from the keyboard. The tree's
+ * list is drawn when the menu opens (renderActionsTreeRows, async): until its
+ * rows are there, try again each frame for a moment, as long as the flyout is
+ * still open and the focus has not moved on from its row.
+ */
+function focusFirstFlyoutItem(subId: string, rowId: string): void {
+    const sub = document.getElementById(subId);
+    if (!sub) return;
+    const tryFocus = (): boolean => {
+        const first = Array.from(sub.querySelectorAll<HTMLElement>('[role^="menuitem"]'))
+            .find(el => el.getClientRects().length > 0);
+        first?.focus();
+        return !!first && document.activeElement === first;
+    };
+    if (tryFocus()) return;
+    const until = performance.now() + 1000;
+    const step = (): void => {
+        if (!sub.parentElement?.classList.contains('submenu-open')) return;
+        if (document.activeElement !== document.getElementById(rowId)) return;
+        if (tryFocus() || performance.now() > until) return;
+        requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+}
+
 export const treeManagementMethods = uiModule({
     // ---- TREE SWITCHER ----
     /**
@@ -122,19 +148,31 @@ export const treeManagementMethods = uiModule({
                 this.positionActionsSubmenu(f.sub);
                 requestAnimationFrame(() => this.positionActionsSubmenu(f.sub));
             });
-            // Keyboard for a submenu row: → opens, ← / Esc closes.
+            // Keyboard for a submenu row (menu 1020 D3): → / Enter / Space open it and
+            // move focus to its first item; ← on the row closes it. ↓ / ↑ on the row stay
+            // in the parent menu (keyboard-access.ts). Hover only opens, focus stays.
             // (Esc still bubbles to the global handler that closes the whole menu.)
             document.getElementById(f.row)?.addEventListener('keydown', (e) => {
                 const ev = e as KeyboardEvent;
+                if (ev.altKey || ev.ctrlKey || ev.metaKey) return;
                 if (ev.key === 'ArrowRight' || ev.key === 'Enter' || ev.key === ' ') {
                     ev.preventDefault();
                     f.open();
                     // Opened from the keyboard: Escape goes back to its row (by the pointer, it closes the menu).
                     document.getElementById(f.wrap)?.setAttribute('data-kbd', '');
+                    focusFirstFlyoutItem(f.sub, f.row);
                 } else if (ev.key === 'ArrowLeft') {
                     ev.preventDefault();
                     f.close();
                 }
+            });
+            // ← in the flyout: it closes, focus back on its row ("Change structure" takes ← first).
+            document.getElementById(f.sub)?.addEventListener('keydown', (e) => {
+                const ev = e as KeyboardEvent;
+                if (ev.key !== 'ArrowLeft' || ev.defaultPrevented || ev.altKey || ev.ctrlKey || ev.metaKey) return;
+                ev.preventDefault();
+                f.close();
+                document.getElementById(f.row)?.focus();
             });
         }
     },

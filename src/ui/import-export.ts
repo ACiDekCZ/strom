@@ -51,7 +51,6 @@ import { validateTreeData, ValidationResult as TreeValidationResult, ValidationI
 import * as CrossTree from '../cross-tree.js';
 import { AuditLogManager } from '../audit-log.js';
 import { uiModule } from './module.js';
-import { isCoarsePointer } from './bottom-sheet.js';
 import { safeFileName } from '../filenames.js';
 import { isMultiTreeBackup, readEmbeddedHtml, readWindowAssignment, BackupTrees, BackupTreeEntry } from '../backup-formats.js';
 import { viewLinksPayload } from '../view-links.js';
@@ -81,13 +80,14 @@ export const importExportMethods = uiModule({
             nameSpan.textContent = name ? `: ${name}` : '';
         }
 
-        // The link-file tile names the save shortcut only where a keyboard is
-        // the usual input (⌘S on a Mac); on touch it says Save does it.
+        // The link-file tile says what linking does (no path in a menu); the save
+        // shortcut follows only with a pointer that hovers (⌘S on a Mac).
         const linkDesc = document.getElementById('export-link-file-desc');
         if (linkDesc) {
-            linkDesc.textContent = isCoarsePointer()
-                ? strings.exportMenu.linkFileDesc
-                : strings.exportMenu.linkFileDescKey(this.shortcutHint('save'));
+            const hover = typeof matchMedia === 'function' && matchMedia('(hover: hover)').matches;
+            linkDesc.textContent = hover
+                ? strings.exportMenu.linkFileDescKey(this.shortcutHint('save'))
+                : strings.exportMenu.linkFileDesc;
         }
 
         // Handle dialog stack for ESC navigation

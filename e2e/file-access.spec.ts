@@ -80,13 +80,13 @@ test.describe('the link-to-a-file tile names the save key only where a keyboard 
         await createFirstPerson(page, 'Solo', 'Root');
         await page.evaluate(() => window.Strom.UI.showExportDialog());
         await expect(page.locator(desc)).toBeVisible();
-        await expect(page.locator(desc)).toHaveText('Keeps this tree in a .json file — then just press Ctrl+S to save into it');
+        await expect(page.locator(desc)).toHaveText('Later saves go straight to this file (Ctrl+S).');
         await page.evaluate(() => {
             window.Strom.UI.closeExportDialog();
             window.Strom.UI.setLanguage('de' as never);
             window.Strom.UI.showExportDialog();
         });
-        await expect(page.locator(desc)).toHaveText('Der Stammbaum wird in einer .json-Datei gehalten — danach genügt Strg+S zum Speichern');
+        await expect(page.locator(desc)).toHaveText('Weitere Speicherungen gehen direkt in diese Datei (Strg+S).');
         await page.evaluate(() => {
             window.Strom.UI.closeExportDialog();
             Object.defineProperty(navigator, 'platform', { configurable: true, get: () => 'MacIntel' });
@@ -94,24 +94,24 @@ test.describe('the link-to-a-file tile names the save key only where a keyboard 
             window.Strom.UI.setLanguage('en' as never);
             window.Strom.UI.showExportDialog();
         });
-        await expect(page.locator(desc)).toHaveText('Keeps this tree in a .json file — then just press ⌘S to save into it');
+        await expect(page.locator(desc)).toHaveText('Later saves go straight to this file (⌘S).');
     });
 
     test.describe('touch', () => {
         test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
-        test('a phone: no key, More → Save does it', async ({ page }) => {
+        test('a phone: no key in the line (menu 1020 D12)', async ({ page }) => {
             await page.addInitScript(fsa);
             await openApp(page);
             await createFirstPerson(page, 'Solo', 'Root');
             await page.evaluate(() => window.Strom.UI.showExportDialog());
             await expect(page.locator(desc)).toBeVisible();
-            await expect(page.locator(desc)).toHaveText('Keeps this tree in a .json file — then More → Save writes into it');
+            await expect(page.locator(desc)).toHaveText('Later saves go straight to this file.');
             await page.evaluate(() => {
                 window.Strom.UI.closeExportDialog();
                 window.Strom.UI.setLanguage('cs' as never);
                 window.Strom.UI.showExportDialog();
             });
-            await expect(page.locator(desc)).toHaveText('Strom se ukládá do souboru .json — pak stačí Více → Uložit');
+            await expect(page.locator(desc)).toHaveText('Další ukládání jde rovnou do tohoto souboru.');
         });
     });
 });

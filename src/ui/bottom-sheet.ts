@@ -18,6 +18,7 @@ import { isPhoneBar } from '../breakpoints.js';
 import { menuItemBody, menuItemAria, PersonMenuAction } from './context-menu.js';
 import { shownName, shownNameFull, nameHtml } from '../person-name.js';
 import type { ResearchSheetGroup } from './research-actions-ui.js';
+import { researchTrialTagHtml } from './research-tree-settings-ui.js';
 
 /** A row / section in a menu-style bottom sheet (the "More" and "Tree" sheets). */
 interface MenuRow {
@@ -376,10 +377,16 @@ export const bottomSheetMethods = uiModule({
         const lastExport = viewMode ? undefined : this.exportReminderLast();
         const reminder = lastExport === undefined ? undefined
             : { id: 'sheet-export-reminder', text: this.exportReminderText(lastExport), link: s.snapshots.exportAll, run: () => this.researchActionExportAll() };
+        // "For the family ›": the book (an exported page has it too), the poster, the fly-through.
+        const familyRow: MenuRow = { label: s.menu.forFamily, id: 'sheet-family', run: () => {}, page: { title: s.menu.forFamily, rows: [
+            ...(active || viewMode ? [bookRow] : []),
+            { label: s.menu.poster, id: 'sheet-poster', run: () => this.showPosterDialog() },
+            slideshowRow,
+        ] } };
         if (viewMode) {
-            // An exported page: For the family unfolds here and the overview takes the place of Tree ›.
+            // An exported page (menu 1020 §10, D1): the overview takes the place of Tree ›.
             blocks.push({ divider: blocks.length > 0, rows: [
-                annRow, bookRow, { label: s.menu.poster, id: 'sheet-poster', run: () => this.showPosterDialog() }, slideshowRow,
+                annRow, familyRow,
                 { label: s.treeOverview.menu, id: 'sheet-overview', run: () => this.showActiveTreeOverview() },
             ] });
         } else {
@@ -391,11 +398,7 @@ export const bottomSheetMethods = uiModule({
                 active
                     ? { label: s.menu.exportAll, id: 'sheet-export', run: () => this.showExportDialog(), after: reminder }
                     : { label: s.menu.exportAll, id: 'sheet-export', run: () => this.exportFocusedJSON(), after: reminder },
-                { label: s.menu.forFamily, id: 'sheet-family', run: () => {}, page: { title: s.menu.forFamily, rows: [
-                    ...(active ? [bookRow] : []),
-                    { label: s.menu.poster, id: 'sheet-poster', run: () => this.showPosterDialog() },
-                    slideshowRow,
-                ] } },
+                familyRow,
             ] });
         }
 
@@ -698,8 +701,8 @@ export const bottomSheetMethods = uiModule({
             const r = strings.research;
             const head = document.createElement('div');
             head.className = 'bottom-sheet-section research-sheet-heading';
-            // ("trial" is in the second level's footer.)
-            head.innerHTML = `<span>${esc(r.menuTitle)}</span>`;
+            // "trial" on the right of the heading's line (it adds no height); the second level's footer has it too.
+            head.innerHTML = `<span>${esc(r.menuTitle)}</span>${researchTrialTagHtml(true)}`;
             list.appendChild(head);
             if (group.state) {
                 const st = group.state;

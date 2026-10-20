@@ -140,15 +140,18 @@ test.describe('the bridge of Strom Research 1.11.0', () => {
         await poll(page);
         await openResearchMenu(page);
         const line = page.locator('#research-older-block');
-        // Title and facts each on one line; what waits for the update is the hint (menu 1020 §2.2).
+        // Title and what waits for the update each on one line, an amber dot (the work goes on); the
+        // whole sentence with the version is the hint (menu 1020 D15).
         await expect(line.locator('.research-sync-title')).toHaveText('The research has an older version');
-        await expect(line.locator('.research-sync-sub')).toHaveText('version 1.11.0');
-        await expect(line.locator('.research-sync-status')).toHaveAttribute('title', 'sending by itself and originals only after an update');
+        await expect(line.locator('.research-sync-sub')).toHaveText('auto-send and originals need the update');
+        await expect(line.locator('.research-sync-status')).toHaveAttribute('title', 'The research has an older version (1.11.0). Update it to send changes by itself and take originals.');
+        await expect(line).toHaveClass(/research-sync-block--warn/);
+        await expect(line.locator('.research-sync-dot.is-error')).toHaveCount(0);
         // The first level (design 2g has Waiting · Open · Other actions): Send ↗ and the agent stay, both work
         // with this version (the send goes through the research's link; the agent opens in it).
         await expect(page.locator('#research-menu > .research-menu-group > .tree-switcher-action .research-item-label'))
             .toHaveText(['Continue with the agent', 'Open research', 'Send changes', 'Other actions']);
-        await line.getByRole('menuitem', { name: 'How to update…' }).click();
+        await line.getByRole('menuitem', { name: 'Update…' }).click();
         const dialog = page.locator('#research-update-modal');
         await expect(dialog.locator('.install-line').nth(0)).toHaveText('strom update');
         await expect(dialog.locator('.install-line').nth(1)).toHaveText('npm install -g strom-research@latest');
@@ -166,7 +169,7 @@ test.describe('the bridge of Strom Research 1.11.0', () => {
         await expect(page.locator('#research-older-block')).toHaveCount(0);
     });
 
-    test('A3: How to update… in the research menu is a link like the other state blocks\' (no toolbar fill cut to its glyphs; light, dark, hover)', async ({ page }) => {
+    test('A3: Update… in the research menu is a link like the other state blocks\' (no toolbar fill cut to its glyphs; light, dark, hover)', async ({ page }) => {
         await page.setViewportSize(DESKTOP);
         await bridge111(page);
         await openResearch(page, { capable: false });
@@ -175,7 +178,7 @@ test.describe('the bridge of Strom Research 1.11.0', () => {
             const cs = getComputedStyle(el);
             return { background: cs.backgroundColor, color: cs.color, decoration: cs.textDecorationLine };
         };
-        const link = page.locator('#research-older-block').getByRole('menuitem', { name: 'How to update…' });
+        const link = page.locator('#research-older-block').getByRole('menuitem', { name: 'Update…' });
         for (const scheme of ['light', 'dark'] as const) {
             await page.emulateMedia({ colorScheme: scheme });
             await expect(page.locator('html')).toHaveAttribute('data-theme', scheme);

@@ -102,7 +102,7 @@ async function menuActions(page: Page, name: string): Promise<string[]> {
 }
 
 test.describe('Research menu, second wave', () => {
-    test('"Update the research 1.7.0 ↗" in Other actions (a dot there and on the button), "Undo last send" with its time, "Research settings"', async ({ page }) => {
+    test('"Update the research 1.7.0 ↗" in Other actions (a dot there, none on the button: D7), "Undo last send" with its time, "Research settings"', async ({ page }) => {
         // Earlier today (just after midnight two hours back is yesterday: shown with its date).
         const sentAt = new Date(Math.max(Date.now() - 2 * 3600_000, new Date().setHours(0, 0, 1, 0)));
         const lastIntake = { id: 'I0042', at: sentAt.toISOString() };
@@ -112,12 +112,12 @@ test.describe('Research menu, second wave', () => {
         await setup(page, ALL, { lastIntake }, { base: BRIDGE });
         expect(await page.evaluate(() => window.Strom.UI.pollResearchBridge())).toBe(true);
         expect(await page.evaluate((id) => window.Strom.UI.researchBridgeFresh(id), UUID)).toBe(true);
-        // Folded, "Other actions" carries the dot and says why; the button asks for attention.
+        // Folded, "Other actions" carries the dot and says why; the button stays quiet (the update does not stand in the way).
         await page.locator('#research-menu-btn').click();
         const more = page.locator('#research-item-more');
         await expect(more.locator('.research-item-attn')).toBeVisible();
         await expect(more).toHaveAttribute('aria-label', 'Other actions, New Strom Research 1.7.0');
-        await expect(page.locator('#research-menu-signal')).toHaveAttribute('data-signal', 'attention');
+        await expect(page.locator('#research-menu-signal')).not.toHaveAttribute('data-signal', 'attention');
         await more.click();
         const update = page.locator('#research-item-update');
         await expect(update.locator('.research-item-label')).toHaveText('Update the research');

@@ -143,32 +143,34 @@ test.describe('view mode: Actions and More carry what an exported page can do', 
             await expect(dropdown).toHaveClass(/active/);
         };
         await open();
-        const rows = (await dropdown.locator(':scope > .tree-switcher-action:visible').allInnerTexts()).map(t => t.replace(/\s+/g, ' ').trim());
-        expect(rows.map(r => r.replace(/\s*\d+$/, ''))).toEqual(
-            ['Anniversaries', 'Family book', 'Poster…', 'Slideshow (TV)', 'Tree overview', 'Settings', 'About Strom']);
+        // The same "For the family ›" as in editing; About is reached through Settings (menu 1020 D1, D18).
+        const rows = (await dropdown.locator(':scope > .tree-switcher-action:visible, :scope > .actions-submenu-wrap:visible > .actions-submenu-row')
+            .allInnerTexts()).map(t => t.replace(/\s+/g, ' ').trim());
+        expect(rows.map(r => r.replace(/\s*\d+$/, ''))).toEqual(['Anniversaries', 'For the family ›', 'Tree overview', 'Settings']);
+        await expect(page.locator('#actions-view-about-row')).toHaveCount(0);
 
-        await page.locator('#actions-view-book-row').click();
+        await page.evaluate(() => window.Strom.UI.closeActionsMenu());
+        const viaFamily = async (row: string) => {
+            await open();
+            await page.locator('#actions-family-row').click();
+            await page.locator(row).click();
+        };
+        await viaFamily('#actions-book-row');
         await expect(page.locator('#book-modal')).toBeVisible();
         await page.evaluate(() => window.Strom.UI.closeBookDialog());
-        await open();
-        await page.locator('#actions-view-poster-row').click();
+        await viaFamily('#actions-poster-row');
         await expect(page.locator('#poster-modal')).toBeVisible();
         await page.evaluate(() => window.Strom.UI.closePosterDialog());
         await open();
         await page.locator('#actions-settings-row').click();
         await expect(page.locator('#settings-modal')).toHaveClass(/active/);
         await page.evaluate(() => window.Strom.UI.closeSettingsDialog());
-        await open();
-        await page.locator('#actions-view-about-row').click();
-        await expect(page.locator('#about-modal')).toHaveClass(/active/);
-        await page.keyboard.press('Escape');
-        await open();
-        await page.locator('#actions-view-slideshow-row').click();
+        await viaFamily('#actions-slideshow-row');
         await expect(page.locator('body')).toHaveClass(/slideshow-mode/);
         await page.evaluate(() => window.Strom.UI.stopSlideshow());
     });
 
-    test('a phone: More has no Undo / Redo, For the family unfolded, Tree overview, View, Settings | About', async ({ page }, testInfo) => {
+    test('a phone: More has no Undo / Redo, For the family ›, Tree overview, View, Settings | About', async ({ page }, testInfo) => {
         await page.setViewportSize({ width: 390, height: 844 });
         await exportedTree(page, testInfo);
         // The view-mode banner sits above the bottom bar, More is not under it.
@@ -180,8 +182,10 @@ test.describe('view mode: Actions and More carry what an exported page can do', 
         await expect(sheet).toBeVisible();
         await expect(page.locator('#sheet-undo')).toHaveCount(0);
         const rows = (await sheet.locator('.bottom-sheet-items > .bottom-sheet-item').allInnerTexts()).map(t => t.replace(/\s+/g, ' ').trim());
-        expect(rows.map(r => r.replace(/\s*\d+$/, ''))).toEqual(['Anniversaries', 'Family book', 'Poster…', 'Slideshow (TV)', 'Tree overview']);
+        // "For the family ›" as in editing (menu 1020 D18).
+        expect(rows.map(r => r.replace(/\s*\d+$/, ''))).toEqual(['Anniversaries', 'For the family ›', 'Tree overview']);
         await expect(sheet.locator('.bottom-sheet-pair').last().locator('.bottom-sheet-item')).toHaveText(['Settings', 'About Strom']);
+        await page.locator('#sheet-family').click();
         await page.locator('#sheet-book').click();
         await expect(page.locator('#book-modal')).toBeVisible();
     });

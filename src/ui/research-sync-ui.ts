@@ -2449,9 +2449,11 @@ export const researchSyncMethods = uiModule({
         return `<div class="research-sync-block research-sync-block--${b.tone}" id="research-sync-block" data-state="${b.kind}" role="group" aria-label="${esc(b.title)}">`
             + '<span class="research-sync-dot" aria-hidden="true"></span>'
             + `<div class="research-sync-status" id="research-sync-status" role="status" aria-live="polite"${note}>`
-            + `<div class="research-sync-title">${b.spinner ? '<span class="research-sync-spinner" aria-hidden="true"></span>' : ''}<span>${esc(b.title)}</span>`
-            + (opts.tag ? `<span class="research-sync-tag" id="research-menu-archive">${esc(opts.tag)}</span>` : '') + '</div>'
-            + (b.sub ? `<div class="research-sync-sub">${esc(b.sub)}</div>` : '')
+            + `<div class="research-sync-title">${b.spinner ? '<span class="research-sync-spinner" aria-hidden="true"></span>' : ''}<span>${esc(b.title)}</span></div>`
+            // A tag ("Strom archive") opens the second line, before the facts: the title stays one line (menu 1020 D17).
+            + (b.sub || opts.tag ? '<div class="research-sync-sub">'
+                + (opts.tag ? `<span class="research-sync-tag" id="research-menu-archive">${esc(opts.tag)}</span>` : '')
+                + (b.sub ? esc(b.sub) : '') + '</div>' : '')
             + '</div>'
             + (first ? button(first, true) : '')
             + (b.lead ? `<div class="research-sync-lead">${esc(b.lead)}</div>` : '')

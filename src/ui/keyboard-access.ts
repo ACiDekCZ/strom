@@ -8,6 +8,8 @@
  *  - Arrow Up / Down move between the items of an open menu (every
  *    role="menuitem" in it, the research menu's block buttons too), and from
  *    the menu's trigger button into it; Home / End go to the first / last;
+ *    inside a flyout of the ⋯ menu they stay in the flyout, on its row in
+ *    the parent menu;
  *  - Arrow Left / Right switch between the neighbouring toolbar menus
  *    (Research and Actions), never on a flyout row ("For the family ›",
  *    "Tree: {name} ›") or in its flyout;
@@ -50,10 +52,19 @@ export function openCardMenuFromKeyboard(card: HTMLElement): void {
     }
 }
 
-function visibleItems(menu: Element): HTMLElement[] {
-    return Array.from(menu.querySelectorAll<HTMLElement>(MENU_ITEM))
+/**
+ * The items arrows walk for `from`: a flyout's own items inside it ("For the
+ * family ›", "Tree: {name} ›"), otherwise the menu's items outside every
+ * flyout — ↓ on a flyout row goes to the next row, never into the flyout
+ * (menu 1020 D3: → opens it and moves focus there).
+ */
+function visibleItems(menu: Element, from: HTMLElement | null = null): HTMLElement[] {
+    const flyout = from?.closest('.actions-submenu') ?? null;
+    const scope = flyout && menu.contains(flyout) ? flyout : menu;
+    return Array.from(scope.querySelectorAll<HTMLElement>(MENU_ITEM))
         .filter(el => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden'
-            && !(el as HTMLButtonElement).disabled);
+            && !(el as HTMLButtonElement).disabled
+            && (scope !== menu || !el.closest('.actions-submenu')));
 }
 
 /** A toolbar menu button that is there (the Research button is hidden in a narrow window). */
@@ -92,9 +103,9 @@ function switchToolbarMenu(e: KeyboardEvent, target: HTMLElement): boolean {
     return false;
 }
 
-/** Move focus by `step` among the visible items of `menu` (wrapping). */
+/** Move focus by `step` among the visible items of `menu` (wrapping; a flyout's within it). */
 function moveInMenu(menu: Element, current: HTMLElement | null, step: 1 | -1): void {
-    const items = visibleItems(menu);
+    const items = visibleItems(menu, current);
     if (items.length === 0) return;
     const idx = current ? items.indexOf(current) : -1;
     const next = idx === -1
@@ -119,7 +130,7 @@ function onKeydown(e: KeyboardEvent): void {
     if (e.key === 'Home' || e.key === 'End') {
         const menu = target.closest(MENU);
         if (menu && target.matches(MENU_ITEM)) {
-            const items = visibleItems(menu);
+            const items = visibleItems(menu, target);
             const to = e.key === 'Home' ? items[0] : items[items.length - 1];
             if (to) {
                 e.preventDefault();
@@ -140,8 +151,7 @@ function onKeydown(e: KeyboardEvent): void {
         const menu = target.closest(MENU);
         if (menu && target.matches(MENU_ITEM)) {
             e.preventDefault();
-            // Items of an open flyout belong to it; the rest to the
-            // top-level list — both are simply the visible ones.
+            // Items of an open flyout belong to it; the rest to the top-level list.
             moveInMenu(menu, target, step);
             return;
         }

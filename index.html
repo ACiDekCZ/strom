@@ -863,15 +863,16 @@
             .actions-menu-btn .actions-menu-chevron { display: none; }
             .actions-menu-btn .actions-menu-dots { display: inline; margin-left: 0; opacity: 1; }
         }
-        /* View mode (an exported page, menu 1020 §10): For the family unfolds
-           into the first level and the overview replaces "Tree ›". The
-           rows outrank the view-mode rule that hides the editing rows. */
+        /* View mode (an exported page, menu 1020 §10, D1): Anniversaries ·
+           For the family › · Tree overview (in place of "Tree ›") · Settings.
+           The rows outrank the view-mode rule that hides the editing rows. */
         .actions-menu-dropdown .view-only-row { display: none; }
         body.view-mode .actions-menu-dropdown .view-only-row,
         body.view-mode .actions-menu-dropdown #actions-ann-row,
+        body.view-mode .actions-menu-dropdown #actions-family-row,
+        body.view-mode .actions-menu-dropdown #actions-family-submenu > .tree-switcher-action,
         body.view-mode .actions-menu-dropdown #actions-settings-row { display: flex !important; }
         body.view-mode .actions-menu-dropdown #actions-settings-divider { display: block !important; }
-        body.view-mode .actions-family-wrap { display: none; }
         /* Small dot on the ⋯ trigger so the anniversaries signal survives the
            move out of the tree switcher. */
         .actions-menu-dot {
@@ -935,8 +936,8 @@
             visibility: hidden; transition: visibility 0s linear 0.25s;
         }
         /* .hover-off: closed (Esc, a click on its row) under the pointer — hidden until the pointer leaves. */
-        /* Its rows show with the flyout (their own `transition: all` would delay the inherited visibility, so ↓ from the row skipped them). */
-        .actions-submenu > .tree-switcher-action { transition-property: background-color, color; }
+        /* Its rows (the Tree list's nested ones too) show with the flyout: their own `transition: all` would delay the inherited visibility, so focus could not land on them. */
+        .actions-submenu .tree-switcher-action { transition-property: background-color, color; }
         .actions-submenu-wrap.submenu-open > .actions-submenu { visibility: visible; transition-delay: 0s; z-index: 211; }
         @media (hover: hover) { .actions-submenu-wrap:not(.hover-off):hover > .actions-submenu { visibility: visible; transition-delay: 0s; z-index: 211; } }
         /* The gap between the row and the flyout still counts as the row. */
@@ -4805,7 +4806,8 @@
         .research-menu-foot-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         /* The More sheet: the research group on top (a narrow window with a mouse) and its page with the whole menu. */
         .research-sheet-heading { display: flex; align-items: center; gap: 8px; }
-        .research-sheet-heading .research-trial-tag { margin-left: 0; text-transform: none; letter-spacing: normal; }
+        /* "trial" on the right of the heading's line; the negative margins keep the line as tall as before. */
+        .research-sheet-heading .research-trial-tag { margin: -4px 0 -4px auto; text-transform: none; letter-spacing: normal; }
         .research-sheet-state {
             display: flex; align-items: center; gap: 8px; margin: 4px 12px 6px; padding: 6px 8px 6px 12px;
             border-radius: 10px; background: var(--surface-2); color: var(--text); font-size: 14px;
@@ -10684,7 +10686,7 @@
         .research-sync-block--live .research-sync-dot { background: var(--primary); }
         .research-sync-dot.is-error { background: var(--danger); }
         .research-sync-title { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; font-size: 14px; font-weight: 600; line-height: 1.35; }
-        .research-sync-title .research-sync-tag { align-self: center; }
+        .research-sync-sub .research-sync-tag { display: inline-block; margin-right: 6px; padding-top: 0; padding-bottom: 0; line-height: 1.3; vertical-align: 1px; }
         .research-sync-block--warn .research-sync-title { color: var(--warning-text); }
         .research-sync-sub { font-size: 12px; line-height: 1.4; color: var(--text-light); }
         .research-sync-block--warn .research-sync-sub { color: var(--text-secondary); }
@@ -15518,18 +15520,8 @@
                         </div>
                     </div>
                 </div>
-                <!-- View mode (an exported page): For the family unfolds here and
-                     the Tree › row gives way to the overview; Settings and About
-                     close the list (menu 1020 §10). -->
-                <div class="tree-switcher-action view-only-row" id="actions-view-book-row" onclick="window.Strom.UI.treeActionBook()" tabindex="0" role="menuitem">
-                    <span data-i18n="book.menu"></span>
-                </div>
-                <div class="tree-switcher-action view-only-row" id="actions-view-poster-row" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.showPosterDialog()" tabindex="0" role="menuitem">
-                    <span data-i18n="menu.poster"></span>
-                </div>
-                <div class="tree-switcher-action view-only-row" id="actions-view-slideshow-row" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.startSlideshow()" tabindex="0" role="menuitem">
-                    <span data-i18n="slideshow.menu"></span>
-                </div>
+                <!-- View mode (an exported page): the overview in place of the
+                     Tree › row (menu 1020 §10, D1). -->
                 <div class="tree-switcher-action view-only-row" id="actions-view-overview-row" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.showActiveTreeOverview()" tabindex="0" role="menuitem">
                     <span data-i18n="treeOverview.menu"></span>
                 </div>
@@ -15556,9 +15548,6 @@
                 <!-- Settings: its one place, the last row at every width (the toolbar ⚙ is gone). -->
                 <div class="tree-switcher-action actions-menu-settings" id="actions-settings-row" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.showSettingsDialog()" tabindex="0" role="menuitem">
                     <span data-i18n="menu.settings"></span>
-                </div>
-                <div class="tree-switcher-action view-only-row" id="actions-view-about-row" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.showAboutDialog()" tabindex="0" role="menuitem">
-                    <span data-i18n="about.title"></span>
                 </div>
             </div>
         </div>

@@ -173,13 +173,16 @@ export const researchPromoMethods = uiModule({
 
     /**
      * The first-level row of Actions / More: a tree without research during
-     * the 30 days of the "New" marker (the label itself may go out earlier).
-     * Later the way in is the tree's own list (Tree: {name} › Research).
+     * the 30 days of the "New" marker, until the label is put out ("Not now",
+     * the dialog opened): then the row goes with it (menu 1020 D10). The way
+     * in stays the tree's own list (Tree: {name} › Research).
      */
     researchMenuRowOffered(): boolean {
         if (!promoReady || !this.researchMenuItemVisible()) return false;
         if (TreeManager.getActiveTreeMetadata()?.research || this.researchMenuShown()) return false;
-        return this.isResearchNewActive() || isNewWindowOpen(SettingsManager.getResearchPromoState(), new Date());
+        const state = SettingsManager.getResearchPromoState();
+        if (state.researchNewDismissed === true) return false;
+        return this.isResearchNewActive() || isNewWindowOpen(state, new Date());
     },
 
     /** Re-evaluate availability + the marker (label, accessible names). */

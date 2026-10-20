@@ -1370,8 +1370,8 @@ test.describe('the research as an archive', () => {
         }
         // Taking the last send back stays the user's in an archive.
         await expect(sub.locator('#research-item-undo')).toBeVisible();
-        // "Archive" beside the state block's title (the menu has no heading of its own), once.
-        await expect(block(page).locator('.research-sync-title #research-menu-archive')).toHaveText('Strom archive');
+        // "Archive" opens the state block's second line (the menu has no heading of its own), once (D17).
+        await expect(block(page).locator('.research-sync-sub #research-menu-archive')).toHaveText('Strom archive');
         await expect(sub.locator('.research-sync-tag')).toHaveCount(1);
         // The footer says what ↗ means in an archive.
         await expect(sub.locator('#research-menu-foot')).toHaveAttribute('title', 'Continues in the Strom archive on this computer; actions are confirmed there.');
@@ -2269,7 +2269,7 @@ test('N38: a send the research took nothing from, the tree still apart from its 
     await openResearchMenu(page, { expandMore: true });
     await expect(block(page)).not.toContainText('In sync with the research');
     await expect(block(page)).toContainText('Not in the research yet');
-    await expect(block(page)).toContainText('The research took nothing new from the last send.');
+    await expect(block(page)).toContainText('nothing new from the last send');
     // Send sends at once here: "What will be sent" is a row of "Other actions" (menu 1020 §2.2).
     await expect(page.locator('#research-menu-more #research-item-changes')).toBeVisible();
     await page.clock.fastForward(QUIET * 2);

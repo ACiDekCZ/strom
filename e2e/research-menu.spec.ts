@@ -111,6 +111,24 @@ test.describe('the Research button and menu', () => {
         await expect(page.locator('#research-menu-more')).toBeHidden();
     });
 
+    test('nothing in the menu continues in the research: the footer has "trial" only, no "↗ continues…" (D8)', async ({ page }) => {
+        await researchTree(page);
+        const foot = await page.evaluate(() => {
+            const host = document.createElement('div');
+            const ui = window.Strom.UI as unknown as { researchMenuHtml(model: unknown): string };
+            const item = (id: string, ext = false) => ({ id, label: id, method: 'researchActionOpen', ext });
+            const model = (ext: boolean) => ({ foot: true, blocks: '', first: [item('a'), item('b', ext)], more: [], moreQuiet: [], moreAttention: '', note: 'Sentence.', waiting: 0 });
+            const read = (ext: boolean) => {
+                host.innerHTML = ui.researchMenuHtml(model(ext));
+                const f = host.querySelector('#research-menu-foot')!;
+                return { tag: f.querySelector('.research-trial-tag')?.textContent, text: f.querySelector('.research-menu-foot-text')?.textContent ?? null, title: f.getAttribute('title') };
+            };
+            return { without: read(false), with: read(true) };
+        });
+        expect(foot.without).toEqual({ tag: 'trial', text: null, title: null });
+        expect(foot.with).toEqual({ tag: 'trial', text: '↗ continues in the research', title: 'Sentence.' });
+    });
+
     test('"Research for this tree…" holds "Settings in the research ↗" (no menu row for it)', async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 900 });
         await researchTree(page);
@@ -120,12 +138,14 @@ test.describe('the Research button and menu', () => {
         await expect(page.locator('#research-settings-in-research')).toContainText('Settings in the research');
     });
 
-    test('a phone whose connection fails moves up from "Other actions"', async ({ page }) => {
+    test('a phone whose connection fails moves up from "Other actions" and lights the button\'s dot (D7)', async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 900 });
         await openResearch(page);
         await fakeBridge(page, { accepts: ACCEPTS, links: LINKS, features: ['phone'],
             phone: fakePhone({ state: 'error', error: { code: 'port-busy', detail: 'EADDRINUSE' } }) });
         await poll(page);
+        await page.evaluate(() => window.Strom.UI.refreshActionMenuBadges());
+        expect(await signal(page)).toBe('attention');
         await button(page).click();
         await expect(firstLevel(page)).toHaveText(['Continue with the agent', 'Open research', 'Send changes', 'Phone', 'Other actions']);
         await expect(page.locator('#research-menu > .research-menu-group #research-item-phone .research-item-pill')).toHaveText('connection problem');
@@ -391,7 +411,13 @@ test.describe('a narrow window with a mouse (≤ 1024 px)', () => {
         expect(await items.evaluate(el => (el.firstElementChild as HTMLElement).className)).toContain('bottom-sheet-pair');
         await expect(items.locator('.research-sheet-heading')).toHaveCount(1);
         await expect(items.locator('.research-sheet-heading')).toContainText('Research');
-        await expect(items.locator('.research-sheet-heading .research-trial-tag')).toHaveCount(0);
+        // "trial" on the right of the heading's line (D6), the line no taller for it.
+        const heading = items.locator('.research-sheet-heading');
+        const tag = heading.locator('.research-trial-tag');
+        await expect(tag).toHaveText('trial');
+        const [hb, tb] = [(await heading.boundingBox())!, (await tag.boundingBox())!];
+        expect(hb.x + hb.width - (tb.x + tb.width)).toBeLessThanOrEqual(17);
+        expect(hb.height).toBeLessThanOrEqual(34);
         await expect(page.locator('#research-sheet-state-text')).toHaveText('Not in the research yet');
         await expect(page.locator('#research-sheet-state [role="menuitem"]')).toHaveText('Send changes');
         const groupRows = await items.evaluate(el => {

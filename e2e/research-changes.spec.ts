@@ -117,7 +117,7 @@ test.describe('changes per person after a send the research took nothing from', 
         const listed = async () => {
             await openResearchMenu(page, { expandMore: true });
             await expect(block(page)).toHaveAttribute('data-state', 'notTaken');
-            await expect(block(page)).toContainText('The research took nothing new from the last send.');
+            await expect(block(page)).toContainText('nothing new from the last send');
             await expect(block(page)).toContainText('1 person changed');
             await page.locator('#research-item-changes').click();
             await expect(panel.locator('.research-changes-title')).toHaveText('What will be sent');
