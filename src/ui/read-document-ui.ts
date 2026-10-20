@@ -1017,7 +1017,8 @@ export const readDocumentMethods = uiModule({
                 st.result = res;
                 st.entry = k;
                 st.page = res.entries[k].page;
-                if (fresh && !st.notice) st.notice = strings.read.secondDone;
+                // Readers that agree on the entry: nothing is highlighted, so the notice says they agree.
+                if (fresh && !st.notice) st.notice = res.entries[k].variants.length ? strings.read.secondDone : strings.read.secondAgree;
                 this.refreshReadPropose(before);
             }
         } else {

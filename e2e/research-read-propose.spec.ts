@@ -331,6 +331,22 @@ test.describe('Read a document: suggest for the tree', () => {
         expect(await page.evaluate(() => localStorage.getItem('read.secondBeforeApply'))).toBe('1');
     });
 
+    test('a second reader that agrees: the notice says the readings agree, nothing marked new', async ({ page }) => {
+        const b = await setup(page, baptism({ readers: { asked: 1, ran: 1, agree: null } }, { variants: [] }));
+        const d = await openPropose(page);
+        await apply(d).click();
+        await expect.poll(() => b.read!.agains.length).toBe(1);
+        const r = b.read!.reads[0];
+        r.state = 'done';
+        r.done = 2;
+        r.readers = 2;
+        r.since = new Date().toISOString();
+        b.read!.results.set(READ_ID, baptism({ readers: { asked: 2, ran: 2, agree: 'same' }, version: 2 }, { variants: [] }));
+        await poll(page);
+        await expect(d.locator('.read-notice')).toHaveText('The second reader is done. Both readings agree.');
+        await expect(d.locator('.read-p-unsure.is-fresh')).toHaveCount(0);
+    });
+
     test('a second reader cancelled: the first reading\'s suggestion stays', async ({ page }) => {
         const b = await setup(page, baptism({ readers: { asked: 1, ran: 1, agree: null } }));
         const d = await openPropose(page);
