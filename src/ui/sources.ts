@@ -221,10 +221,11 @@ export const sourcesMethods = uiModule({
         if (search) search.hidden = all.length <= 10;
         const totalEl = document.getElementById('sources-total');
         if (totalEl) {
-            const bytes = totalExcerptBytes(DataManager.getData());
-            const fromResearch = this.researchImagesSizeSuffix();
-            totalEl.hidden = bytes <= 1024 * 1024 && !fromResearch;
-            totalEl.textContent = strings.sources.excerptsTotal(formatBytes(bytes)) + fromResearch;
+            // The total holds the images loaded from the research too; the suffix says how much of it.
+            const fromResearch = this.researchImagesBytes();
+            const bytes = totalExcerptBytes(DataManager.getData()) + fromResearch;
+            totalEl.hidden = bytes <= 1024 * 1024 && fromResearch === 0;
+            totalEl.textContent = strings.sources.excerptsTotal(formatBytes(bytes)) + this.researchImagesSizeSuffix(fromResearch);
         }
         if (all.length === 0) {
             container.innerHTML = emptyStateHtml({

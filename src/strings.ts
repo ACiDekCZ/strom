@@ -1159,7 +1159,7 @@ const stringsEN = {
         moreOptions: 'More options',
         removeFromApp: 'Remove from the app',
         removeFromAppNote: (n: number, size: string) => `The source’s images (${n}, ${size}) stay in the research and can be loaded again.`,
-        heldBridgeOff: 'The image is in the research. It loads once the research runs on this computer.',
+        heldBridgeOff: (n: number): string => n === 1 ? 'It loads once the research runs on this computer.' : 'They load once the research runs on this computer.',
         heldDevice: 'The image is in the research on the computer. It will be on this device once the tree is transferred with images from the research.',
         held: {
             scope: 'The image is in the research but was not included for the app (research settings).',
@@ -5804,7 +5804,7 @@ const stringsCZ: StringsType = {
         moreOptions: 'Další volby',
         removeFromApp: 'Odebrat z aplikace',
         removeFromAppNote: (n: number, size: string) => `Obrazy pramenu (${n}, ${size}) zůstanou ve výzkumu a jdou načíst znovu.`,
-        heldBridgeOff: 'Obraz je ve výzkumu. Načte se, až výzkum na tomto počítači poběží.',
+        heldBridgeOff: (n: number) => n === 1 ? 'Načte se, až výzkum na tomto počítači poběží.' : 'Načtou se, až výzkum na tomto počítači poběží.',
         heldDevice: 'Obraz je ve výzkumu na počítači. Na tomto zařízení bude, když se strom přenese i s obrazy z výzkumu.',
         held: {
             scope: 'Obraz je ve výzkumu, do aplikace nešel (nastavení výzkumu).',
@@ -10419,7 +10419,7 @@ const stringsDE: StringsType = {
         moreOptions: 'Weitere Optionen',
         removeFromApp: 'Aus der App entfernen',
         removeFromAppNote: (n: number, size: string) => `Die Bilder der Quelle (${n}, ${size}) bleiben in der Forschung und lassen sich erneut laden.`,
-        heldBridgeOff: 'Das Bild ist in der Forschung. Es wird geladen, sobald die Forschung auf diesem Computer läuft.',
+        heldBridgeOff: (n: number) => n === 1 ? 'Es wird geladen, sobald die Forschung auf diesem Computer läuft.' : 'Die Bilder werden geladen, sobald die Forschung auf diesem Computer läuft.',
         heldDevice: 'Das Bild ist in der Forschung auf dem Computer. Auf diesem Gerät ist es, wenn der Stammbaum mit Bildern aus der Forschung übertragen wird.',
         held: {
             scope: 'Das Bild ist in der Forschung, wurde aber nicht in die App übernommen (Einstellungen der Forschung).',

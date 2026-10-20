@@ -102,7 +102,7 @@ test.describe('source images from the research', () => {
         await poll(page);
         await openSource(page, 'S0001');
         await expect(viewer(page).locator('.viewer-image-held-text'))
-            .toHaveText('The image is in the research. It loads once the research runs on this computer.');
+            .toHaveText('2 images are in the research. They load once the research runs on this computer.');
         await expect(viewer(page).locator('.viewer-load-images')).toHaveCount(0);
         expect(ex.asks).toEqual([]);
         // The bridge comes back with the source open: it loads by itself.
@@ -143,6 +143,22 @@ test.describe('source images from the research', () => {
         ex.refuse.clear();
         await viewer(page).getByRole('button', { name: 'Try again' }).click();
         await expect(viewer(page).locator('.viewer-excerpt.is-from-research')).toHaveCount(2);
+    });
+
+    test('Sources: the excerpts total holds the images from the research', async ({ page }) => {
+        await setup(page);
+        await openSource(page, 'S0001');
+        await expect(viewer(page).locator('.viewer-excerpt.is-from-research')).toHaveCount(2);
+        const fromResearch = await page.evaluate(() => window.Strom.UI.researchImagesBytes());
+        expect(fromResearch).toBeGreaterThan(20);
+        // A crop of the tree's own on S0002 just under 1.5 kB: alone it says "1 kB", with the
+        // images from the research the total rounds to "2 kB".
+        await page.evaluate((png) => {
+            const src = Object.values(window.Strom.DataManager.getData().sources ?? {}).find((s: any) => s.refn === 'S0002') as any;
+            src.excerpts = [{ id: 'own1', dataUrl: png, width: 1, height: 1, sizeBytes: 1535 }];
+            window.Strom.UI.showSourcesDialog();
+        }, PNG);
+        await expect(page.locator('#sources-modal #sources-total')).toHaveText('Excerpts: 2 kB · of which from the research 1 kB');
     });
 
     test('Sources: the filter, the warning with counts and space, the bulk load and its summary', async ({ page }) => {

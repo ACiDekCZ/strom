@@ -261,7 +261,7 @@ export const researchImagesMethods = uiModule({
             if (env.mode === 'fetch') {
                 const bytes = this.heldBytesOf(ref);
                 chunks.push(row(esc(text), ` <button type="button" class="secondary viewer-load-images">${esc(n > 1 ? r.loadMany : r.load)}</button>${bytes ? `<span class="muted viewer-load-size"> · ${esc(size(bytes))}</span>` : ''}`));
-            } else if (env.mode === 'bridgeOff') chunks.push(row(esc(r.heldBridgeOff)));
+            } else if (env.mode === 'bridgeOff') chunks.push(row(esc(`${shown > 0 ? r.heldMore(n) : r.heldN(n)} ${r.heldBridgeOff(n)}`)));
             else if (env.mode === 'device') chunks.push(row(esc(r.heldDevice)));
             else chunks.push(row(esc(r.held[heldReasonKey(src.imageHeld)])));
         }
@@ -408,10 +408,14 @@ export const researchImagesMethods = uiModule({
         return `<span class="source-held-tag" title="${esc(strings.researchImages.held[heldReasonKey(src.imageHeld)])}">${esc(strings.researchImages.heldTag)}</span>`;
     },
 
+    /** Size of the images loaded from the research (counted into the Sources window's excerpts total). */
+    researchImagesBytes(): number {
+        return researchImagesTotal(DataManager.getCurrentTreeId()).bytes;
+    },
+
     /** Count line beside the excerpts' size: "of which from the research 3.1 MB". */
-    researchImagesSizeSuffix(): string {
-        const total = researchImagesTotal(DataManager.getCurrentTreeId());
-        return total.bytes > 0 ? ` · ${strings.researchImages.sizeFromResearch(size(total.bytes))}` : '';
+    researchImagesSizeSuffix(bytes: number): string {
+        return bytes > 0 ? ` · ${strings.researchImages.sizeFromResearch(size(bytes))}` : '';
     },
 
     /** Rows of the filtered list: thumbnails filled in place, the filter count updated (no reordering). */
