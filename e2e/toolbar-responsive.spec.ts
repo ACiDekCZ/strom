@@ -376,6 +376,56 @@ for (const locale of ['cs-CZ', 'de-DE', 'en-US']) {
     });
 }
 
+/**
+ * The tree's name in the switcher (de, a research tree: the tightest toolbar).
+ * The search field gives way before the name does, the add button folds to ＋
+ * when the name would still be cut below its own cap, and a renamed tree is
+ * measured again.
+ */
+test.describe('the tree switcher\'s name in a tight toolbar (de-DE)', () => {
+    test.use({ locale: 'de-DE' });
+
+    async function nameFit(page: Page) {
+        return page.evaluate(() => {
+            const tb = document.querySelector('.toolbar') as HTMLElement;
+            const name = document.getElementById('current-tree-name') as HTMLElement;
+            const cap = parseFloat(getComputedStyle(name).maxWidth);
+            return {
+                text: name.textContent ?? '',
+                // Shown whole, or cut only by its own max-width.
+                whole: name.scrollWidth <= name.clientWidth + 1 || (Number.isFinite(cap) && name.getBoundingClientRect().width >= cap - 1),
+                overflow: tb.scrollWidth - tb.clientWidth,
+            };
+        });
+    }
+
+    test('1440 px: the name whole, after a rename too; 1024 and 390 px: nothing runs over', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await openConnectedResearch(page, 'de-DE');
+        await page.waitForTimeout(60);
+        let f = await nameFit(page);
+        expect(f.whole, `"${f.text}" shown whole`).toBe(true);
+        expect(f.overflow).toBeLessThanOrEqual(0);
+
+        // A longer name: the switcher shows it (up to its cap), the toolbar fits again.
+        const long = 'Familie Fischer aus Mähren und Böhmen';
+        await page.evaluate(() => window.Strom.UI.showRenameTreeDialog(window.Strom.TreeManager.getActiveTreeId()!));
+        await page.locator('#rename-tree-name').fill(long);
+        await page.locator('#rename-tree-modal .buttons .primary').click();
+        await expect(page.locator('#current-tree-name')).toHaveText(long);
+        await expect.poll(async () => (await nameFit(page)).whole).toBe(true);
+        expect((await nameFit(page)).overflow).toBeLessThanOrEqual(0);
+
+        for (const width of [1024, 390]) {
+            await page.setViewportSize({ width, height: 850 });
+            await page.waitForTimeout(60);
+            f = await nameFit(page);
+            expect(f.overflow, `@${width}px: the toolbar does not overflow`).toBeLessThanOrEqual(0);
+            expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `@${width}px: no page scroll`).toBe(true);
+        }
+    });
+});
+
 test.describe('the 1280 fold boundary', () => {
     test('at 1281 the standalone ⚙ and Actions label are out; at 1280 they fold in', async ({ page }) => {
         await openApp(page);

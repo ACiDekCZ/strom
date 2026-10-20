@@ -628,6 +628,14 @@
                ellipsize rather than overflow (ZADANI kolo 12 §4.4). */
             min-width: 0;
         }
+        /* Desktop: the search field gives way first (down to its min-width), the tree name
+           last — weighted by their widths alone, a tight toolbar (de with a research) cut the
+           name to its first letter while the search kept most of its width. */
+        @media (min-width: 1025px) {
+            /* A huge factor here, not a small one on the switcher: once the search is at its minimum,
+               a switcher factor below 1 would absorb only that fraction of the rest (the toolbar overflows). */
+            .toolbar .search-container { flex-shrink: 100000; }
+        }
         /* Ghost pill (ZADANI §4): transparent fill, hairline border, --text.
            Scoped under .toolbar so it outranks the generic
            ".toolbar button { background: var(--primary); color: var(--on-primary) }" rule

@@ -5,10 +5,13 @@
  * Fixed widths cannot know the content: a tree tied to a research adds the
  * Research button and the research state beside the logo, and the labels
  * differ by language (de is the widest). So the fit is measured instead. The
- * toolbar overflows (its last button is cut at the window edge) or the tree
+ * toolbar overflows (its last button is cut at the window edge), the tree
  * switcher is squeezed below its own pill, which then slides under the search
- * field: in either case `.toolbar-add-compact` hides the label of the add
- * button (its tooltip and accessible name stay).
+ * field, or the pill keeps its place but its tree name is cut shorter than the
+ * name's own cap (de at 1440 with a research: "F."): in each case
+ * `.toolbar-add-compact` hides the label of the add button (its tooltip and
+ * accessible name stay). A renamed tree is measured again (the name's text is
+ * watched: a name squeezed before and after need not change any size).
  *
  * The measurement is always taken with the full label, so the decision is a
  * function of the width and the content alone and cannot oscillate. Leaving
@@ -37,6 +40,13 @@ function tooTight(toolbar: HTMLElement, reserve: number): boolean {
         const pill = switcher?.querySelector<HTMLElement>('.tree-switcher-btn');
         if (switcher && pill && pill.getClientRects().length > 0) {
             tight = pill.getBoundingClientRect().right > switcher.getBoundingClientRect().right + 0.5;
+            const name = pill.querySelector<HTMLElement>('.tree-name');
+            if (!tight && name) {
+                // Cut by the squeeze, not by its own max-width: shorter than both its text and its cap.
+                const cap = parseFloat(getComputedStyle(name).maxWidth);
+                const wanted = Number.isFinite(cap) ? Math.min(name.scrollWidth, cap) : name.scrollWidth;
+                tight = name.getBoundingClientRect().width + 1 < wanted;
+            }
         }
     }
     toolbar.style.paddingRight = previous;
@@ -82,5 +92,7 @@ export function initToolbarFit(): void {
     };
     observeAll();
     new MutationObserver(() => { observeAll(); schedule(); }).observe(toolbar, { childList: true });
+    const treeName = document.getElementById('current-tree-name');
+    if (treeName) new MutationObserver(schedule).observe(treeName, { childList: true, characterData: true, subtree: true });
     updateToolbarFit();
 }
