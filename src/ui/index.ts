@@ -86,6 +86,7 @@ import { batchMethods } from './batch-ui.js';
 import { phoneMethods } from './phone-ui.js';
 import { readDocumentMethods } from './read-document-ui.js';
 import { readProposeMethods } from './read-propose-ui.js';
+import { researchImagesMethods } from './research-images-ui.js';
 import { readHistoryMethods } from './read-history-ui.js';
 import { evidenceUiMethods } from './evidence-ui.js';
 import { treeOverviewMethods } from './tree-overview.js';
@@ -143,7 +144,7 @@ export class UIClass {
     /** State of the optional checkbox of the last showChoice() dialog. */
     choiceCheckboxChecked = false;
     /** The source catalog's filter ("Transcription not verified" from Research for this tree). */
-    sourcesFilter: 'all' | 'unverifiedTranscript' = 'all';
+    sourcesFilter: 'all' | 'unverifiedTranscript' | 'imageHeld' = 'all';
     saveCurrentCallback: (() => void) | null = null;
     relationPicker: PersonPicker | null = null;
     toolbarSearchPicker: PersonPicker | null = null;
@@ -176,7 +177,7 @@ export class UIClass {
     // Per-category byte sizes of the tree in the open export dialog, measured
     // once when the dialog opens so toggling a content checkbox never
     // re-stringifies the whole tree (see readExportContentSizes).
-    exportContentSizes: { base: number; photos: number; attachments: number; notes: number; sources: number } | null = null;
+    exportContentSizes: { base: number; photos: number; attachments: number; excerpts: number; notes: number; sources: number } | null = null;
     pendingEncryptedData: EncryptedData | null = null;
     pendingEncryptedImport: EncryptedData | null = null;
 
@@ -586,6 +587,10 @@ Object.assign(UIClass.prototype, phoneMethods);
 type ReadDocumentMethods = typeof readDocumentMethods;
 export interface UIClass extends ReadDocumentMethods {}
 Object.assign(UIClass.prototype, readDocumentMethods);
+
+type ResearchImagesMethods = typeof researchImagesMethods;
+export interface UIClass extends ResearchImagesMethods {}
+Object.assign(UIClass.prototype, researchImagesMethods);
 
 type ReadProposeMethods = typeof readProposeMethods;
 export interface UIClass extends ReadProposeMethods {}

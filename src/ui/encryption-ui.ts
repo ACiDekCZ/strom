@@ -24,7 +24,7 @@ import {
 import { strings } from '../strings.js';
 import { PrivacyMode, ContentOptions, ContentPreset, CONTENT_PRESETS, matchContentPreset, applyContentOptions } from '../privacy.js';
 import { totalPhotoBytes } from '../photo.js';
-import { totalAttachmentBytes } from '../attachments.js';
+import { totalAttachmentBytes, totalExcerptBytes } from '../attachments.js';
 import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-parser.js';
 import {
     validateJsonImport,
@@ -720,6 +720,8 @@ export const encryptionUiMethods = uiModule({
             attachments: on('export-content-attachments'),
             notes: on('export-content-notes'),
             sources: on('export-content-sources'),
+            // Source images, when the tree has images from its research (chosen apart from attachments).
+            ...this.exportSourceImagesOption(exportQuick),
         };
     },
 
@@ -763,6 +765,7 @@ export const encryptionUiMethods = uiModule({
             base,
             photos: totalPhotoBytes(data),
             attachments: totalAttachmentBytes(data),
+            excerpts: totalExcerptBytes(data),
             notes: this.byteLength(JSON.stringify(notesSlice)),
             sources: this.byteLength(JSON.stringify(sourcesSlice)),
         };
@@ -774,12 +777,17 @@ export const encryptionUiMethods = uiModule({
         const el = document.getElementById('export-content-size');
         if (!sizes || !el) return;
         const opts = this.readExportContentOptions();
+        // Source images offered apart: attachments count without the file's excerpts, the choice adds its own.
+        const images = this.exportSourceImagesBytes();
         const total = sizes.base
             + (opts.photos ? sizes.photos : 0)
-            + (opts.attachments ? sizes.attachments : 0)
+            + (opts.attachments ? sizes.attachments - (images ? sizes.excerpts : 0) : 0)
+            + (images && opts.sources ? images.bytes : 0)
             + (opts.notes ? sizes.notes : 0)
             + (opts.sources ? sizes.sources : 0);
-        el.textContent = strings.privacy.contentEstimate(TreeManager.formatBytes(total));
+        el.textContent = images?.approx && opts.sources
+            ? strings.researchImages.export.estimateApprox(TreeManager.formatBytes(total))
+            : strings.privacy.contentEstimate(TreeManager.formatBytes(total));
     },
 
     /** Highlight the preset whose checkbox pattern matches the current state (if any). */
@@ -808,6 +816,12 @@ export const encryptionUiMethods = uiModule({
         set('export-content-attachments', p.attachments);
         set('export-content-notes', p.notes);
         set('export-content-sources', p.sources);
+        const images = document.getElementById('export-source-images');
+        if (images && !images.hidden && p.sourceImages) {
+            // "Complete archive" keeps "all from the research" when it was chosen.
+            if (!(preset === 'complete' && images.dataset.choice === 'all')) images.dataset.choice = p.sourceImages;
+            this.renderExportSourceImages();
+        }
         this.updateExportSizeEstimate();
         this.syncExportPresetHighlight();
     },
@@ -831,6 +845,8 @@ export const encryptionUiMethods = uiModule({
              * privacy or content choices.
              */
             quick?: { hint: string };
+            /** The one tree exported (its source images from the research may be offered). */
+            imagesTreeId?: string;
         } = {}
     ): void {
         this.exportPasswordCallback = callback;
@@ -879,6 +895,8 @@ export const encryptionUiMethods = uiModule({
                 if (el) el.checked = true;
             }
         }
+        // Source images from the research: offered for one tree that has any (not for a quick save).
+        this.setupExportSourceImages(showContent ? options.imagesTreeId ?? null : null);
         if (showContent) {
             // Per-category sizes computed once here; toggling never re-stringifies.
             this.readExportContentSizes(DataManager.getData());
@@ -948,6 +966,8 @@ export const encryptionUiMethods = uiModule({
      * Close export password dialog
      */
     closeExportPasswordDialog(): void {
+        // Images loading before the export stop (those loaded stay).
+        this.stopExportImageLoad();
         document.getElementById('export-password-modal')?.classList.remove('active');
         this.clearDialogStack();
         if (this.exportPasswordCallback) {
@@ -1008,7 +1028,9 @@ export const encryptionUiMethods = uiModule({
     },
 
     /** The dialog's one button: encrypted when ticked, else a plain file. */
-    confirmExport(): void {
+    async confirmExport(): Promise<void> {
+        // "All from the research": the rest loads first (the footer shows it); stopped, the dialog stays.
+        if (!(await this.loadImagesBeforeExport())) return;
         const encrypt = (document.getElementById('export-encrypt-toggle') as HTMLInputElement | null)?.checked;
         if (encrypt) this.confirmExportPassword();
         else this.exportWithoutPassword();

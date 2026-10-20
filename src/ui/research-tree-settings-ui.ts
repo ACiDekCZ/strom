@@ -257,6 +257,7 @@ export const researchTreeSettingsMethods = uiModule({
                 <button type="button" class="link-button research-older-sources" id="research-older-sources" hidden></button>`}
                 ${sendingHtml}
                 ${originalsHtml}
+                <div class="research-images-host" id="research-images-host"></div>
                 <button type="button" class="link-button research-read-history" id="research-read-history" hidden></button>
                 ${modeWhereHtml}
                 ${terminalWhereHtml}
@@ -267,6 +268,9 @@ export const researchTreeSettingsMethods = uiModule({
             </div>`;
         document.body.appendChild(overlay);
         this.pushDialog(SETTINGS_ID);
+        // Source images the research left out of its file (filled once the tree's stored images are read).
+        const imagesHost = overlay.querySelector<HTMLElement>('#research-images-host');
+        if (imagesHost) void this.renderResearchImagesSettings(treeId, imagesHost);
         const close = (): void => this.closeResearchTreeSettings();
         overlay.onclick = (e) => { if (e.target === overlay) close(); };
         (overlay.querySelector('#research-tree-settings-x') as HTMLButtonElement).onclick = close;

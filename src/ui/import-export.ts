@@ -191,7 +191,7 @@ export const importExportMethods = uiModule({
         const name = TreeManager.getTreeMetadata(treeId)?.name ?? '';
         this.showExportPasswordDialog(async (password: string | null) => {
             await DataManager.exportTreeJSON(treeId, password, this.readExportPrivacyMode(), this.readExportContentOptions());
-        }, false, quick ? { quick: { hint: strings.fileCopy.quickHint(name) } } : { format: 'json' });
+        }, false, quick ? { quick: { hint: strings.fileCopy.quickHint(name) } } : { format: 'json', imagesTreeId: treeId });
     },
 
     /**
@@ -211,7 +211,7 @@ export const importExportMethods = uiModule({
         this.showExportPasswordDialog(async (password: string | null) => {
             const { AppExporter } = await import('../export.js');
             await AppExporter.exportApp(treeId, password, this.readExportPrivacyMode(), this.readExportContentOptions());
-        }, false, { defaultPrivacy: 'initials', format: 'html' });
+        }, false, { defaultPrivacy: 'initials', format: 'html', imagesTreeId: treeId });
     },
 
     /**
@@ -254,7 +254,7 @@ export const importExportMethods = uiModule({
             a.click();
             URL.revokeObjectURL(url);
             if (this.readExportPrivacyMode() === 'full') TreeManager.noteFileCopy([treeId]);
-        }, false, { defaultPrivacy: 'initials', passwordless: true, content: true, format: 'gedcom' });
+        }, false, { defaultPrivacy: 'initials', passwordless: true, content: true, format: 'gedcom', imagesTreeId: treeId });
     },
 
     /**

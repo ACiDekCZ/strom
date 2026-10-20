@@ -2123,6 +2123,8 @@ export const researchSyncMethods = uiModule({
         this.refreshResearchConflictCards();
         // The switcher's research marks (the open tree's own ask answered; spec 011).
         this.refreshResearchMarks();
+        // Source images left out of the research's file: loadable while its bridge runs.
+        this.researchImagesBridgeChanged();
     },
 
     /**

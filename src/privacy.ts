@@ -8,11 +8,11 @@
  * still renders.
  */
 
-import { StromData, Person, Partnership } from './types.js';
+import { StromData, Person, Partnership, SourceExcerpt } from './types.js';
 import { strings } from './strings.js';
 import { yearOf } from './dates.js';
 import { stripPhotos } from './photo.js';
-import { stripAttachments } from './attachments.js';
+import { stripAttachments, stripExcerpts } from './attachments.js';
 
 export type PrivacyMode = 'full' | 'initials' | 'anonymous' | 'minimal';
 
@@ -29,7 +29,18 @@ export interface ContentOptions {
     attachments: boolean;
     notes: boolean;
     sources: boolean;
+    /**
+     * Source images, when the export offers them apart from attachments (a
+     * tree with images from its research): none, those in the app (the
+     * file's excerpts and the ones loaded from the research), or all — the
+     * rest loaded before the export. Missing: excerpts go with attachments.
+     */
+    sourceImages?: SourceImagesChoice;
+    /** Excerpts loaded from the research, by source id: written as the sources' own (with `sourceImages` app / all). */
+    researchExcerpts?: Record<string, SourceExcerpt[]>;
 }
+
+export type SourceImagesChoice = 'none' | 'app' | 'all';
 
 /** Everything included — the default (Complete archive) and the "all on" preset. */
 export const ALL_CONTENT: ContentOptions = { photos: true, attachments: true, notes: true, sources: true };
@@ -44,17 +55,20 @@ export type ContentPreset = 'complete' | 'small' | 'skeleton';
  * - skeleton: structure and names only (all four off).
  */
 export const CONTENT_PRESETS: Record<ContentPreset, ContentOptions> = {
-    complete: { photos: true, attachments: true, notes: true, sources: true },
-    small: { photos: false, attachments: false, notes: true, sources: true },
-    skeleton: { photos: false, attachments: false, notes: false, sources: false },
+    complete: { photos: true, attachments: true, notes: true, sources: true, sourceImages: 'app' },
+    small: { photos: false, attachments: false, notes: true, sources: true, sourceImages: 'none' },
+    skeleton: { photos: false, attachments: false, notes: false, sources: false, sourceImages: 'none' },
 };
 
 /** The preset whose pattern equals `opts`, or null when the state is custom. */
 export function matchContentPreset(opts: ContentOptions): ContentPreset | null {
     for (const name of Object.keys(CONTENT_PRESETS) as ContentPreset[]) {
         const p = CONTENT_PRESETS[name];
+        // Source images: "complete" takes those in the app or all of them.
+        const images = opts.sourceImages === undefined || opts.sourceImages === p.sourceImages
+            || (name === 'complete' && opts.sourceImages === 'all');
         if (p.photos === opts.photos && p.attachments === opts.attachments
-            && p.notes === opts.notes && p.sources === opts.sources) return name;
+            && p.notes === opts.notes && p.sources === opts.sources && images) return name;
     }
     return null;
 }
@@ -178,7 +192,20 @@ export function applyContentOptions(data: StromData, content: boolean | ContentO
     const opts = resolveContentOptions(content);
     let out = stripResearchWork(structuredClone(data));
     if (!opts.photos) out = stripPhotos(out);
-    if (!opts.attachments) out = stripAttachments(out);
+    if (opts.sourceImages !== undefined) {
+        // Attachments and source images are chosen apart.
+        if (!opts.attachments) for (const person of Object.values(out.persons)) delete person.attachments;
+        if (opts.sourceImages === 'none') out = stripExcerpts(out);
+        else if (opts.researchExcerpts) {
+            for (const [id, extra] of Object.entries(opts.researchExcerpts)) {
+                const src = out.sources?.[id];
+                if (!src || extra.length === 0) continue;
+                const have = new Set((src.excerpts ?? []).map(e => e.clip).filter(Boolean));
+                const add = extra.filter(e => !e.clip || !have.has(e.clip));
+                if (add.length) src.excerpts = [...(src.excerpts ?? []), ...structuredClone(add)];
+            }
+        }
+    } else if (!opts.attachments) out = stripAttachments(out);
     if (!opts.notes) out = stripNotes(out);
     if (!opts.sources) out = stripSources(out);
     return out;

@@ -25,7 +25,7 @@ import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
 import { strings, getCurrentLanguage } from '../strings.js';
-import { StromData, TreeId, PersonId } from '../types.js';
+import { StromData, TreeId, PersonId, SourceExcerpt } from '../types.js';
 import { parseGedcom, convertToStrom, decodeGedcomFile, parseGedcomDate } from '../ged-parser.js';
 import { formatFlexDate } from '../dates.js';
 import { formatLiveTime, formatLiveClock } from '../live-time.js';
@@ -2122,16 +2122,17 @@ export const researchUiMethods = uiModule({
     },
 
     /**
-     * The link opening excerpt `index` (0-based) of a source at full quality in
-     * the research, or null: only crops the research marked (`_STROM_CLIP`)
-     * have an original there.
+     * The link opening an excerpt of a source at full quality in the
+     * research, or null: only crops the research marked (`_STROM_CLIP`) have
+     * an original there. `excerpt` is its index among the file's excerpts or
+     * the excerpt itself (one loaded from the research).
      */
-    excerptResearchUrl(sourceId: string, index: number): string | null {
+    excerptResearchUrl(sourceId: string, excerpt: number | SourceExcerpt): string | null {
         if (!this.researchLinkAvailable('excerpt')) return null;
         const treeId = DataManager.getCurrentTreeId();
         const link = treeId ? TreeManager.getTreeMetadata(treeId)?.research : undefined;
         const source = DataManager.getData().sources?.[sourceId];
-        const clip = source?.excerpts?.[index]?.clip;
+        const clip = typeof excerpt === 'number' ? source?.excerpts?.[excerpt]?.clip : excerpt.clip;
         if (!link || !source?.refn || !clip) return null;
         return researchSchemeUrl('excerpt', { tree: link.id, source: source.refn, clip }, announcedResearchScheme());
     },

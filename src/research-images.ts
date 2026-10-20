@@ -546,6 +546,9 @@ export interface QueueSnapshot {
     failed: Partial<Record<LoadErrorKind, number>>;
     /** Sources with a failure. */
     failedSources: number;
+    /** Images of all sources, and those finished (loaded or failed): the toolbar badge counts these. */
+    images: number;
+    imagesDone: number;
 }
 
 /**
@@ -569,7 +572,10 @@ export class ResearchImageQueue {
         private readonly bridgeUp: () => boolean = () => true,
     ) {
         this.tasks = [...tasks].sort((a, b) => Number(!!b.ready) - Number(!!a.ready));
-        this.state = { phase: 'running', done: 0, loaded: 0, total: this.tasks.length, bytes: 0, failed: {}, failedSources: 0 };
+        this.state = {
+            phase: 'running', done: 0, loaded: 0, total: this.tasks.length, bytes: 0, failed: {}, failedSources: 0,
+            images: this.tasks.reduce((n, t) => n + t.clips.length, 0), imagesDone: 0,
+        };
         this.finished = new Promise(resolve => { this.finish = resolve; });
     }
 
@@ -640,6 +646,8 @@ export class ResearchImageQueue {
                 if (!this.active) return;
                 if (typeof result === 'object' && 'key' in result) {
                     this.state.bytes += result.excerpt.sizeBytes || 0;
+                    this.state.imagesDone++;
+                    this.emit();
                     continue;
                 }
                 if ((result === 'failed' || result === 'timeout') && !this.bridgeUp()) {
@@ -648,6 +656,7 @@ export class ResearchImageQueue {
                     break;
                 }
                 failedHere = true;
+                this.state.imagesDone++;
                 const kind = loadErrorKind(result);
                 this.state.failed[kind] = (this.state.failed[kind] ?? 0) + 1;
                 if (kind === 'revoked' || kind === 'merged') break;

@@ -27,6 +27,7 @@ import { formatFlexDate, normalizeDateInput, formatDateForInput, yearOf } from '
 import { dataUrlByteSize } from '../photo.js';
 import { totalExcerptBytes } from '../attachments.js';
 import { excerptFromDataUrl, excerptImageUrl } from '../excerpts.js';
+import { shownExcerpts } from '../research-images.js';
 import { openCropEditor, compressWholeImage, CropRegion } from './crop-editor.js';
 import { coupleEventLabel } from '../events.js';
 import { eventTypeLabel } from './person-events.js';
@@ -76,13 +77,23 @@ export function qualityLabel(q: number | undefined): string {
 
 /** Thumbnail (or document icon) for a source, in one of the three sizes. */
 export function sourceThumbHtml(src: Source, kind: 'chip' | 'row' | 'picker'): string {
-    const first = src.excerpts?.[0];
+    // Excerpts of the file first, then those loaded from the research.
+    const first = shownExcerpts(DataManager.getCurrentTreeId(), src)[0];
     if (first && kind === 'chip') return `<img class="source-${kind}-thumb" src="${esc(excerptImageUrl(first))}" alt="">`;
     // Lists: the image comes when the row scrolls into view (hydrateThumbs).
     // Putting every excerpt into the markup parsed and escaped ~100 MB of
     // text for a catalog of a few hundred scans.
     if (first) return `<img class="source-${kind}-thumb" data-thumb-source="${esc(src.id)}" alt="">`;
+    // The image is only in the research: a dashed outline in its place.
+    if (src.imageHeld && src.imageHeld !== 'missing') {
+        return `<span class="source-${kind}-thumb is-held" title="${esc(strings.researchImages.held[heldReasonKey(src.imageHeld)])}" aria-hidden="true"></span>`;
+    }
     return `<span class="source-${kind}-icon" aria-hidden="true">${iconSvg('file', { size: kind === 'chip' ? 13 : 16 })}</span>`;
+}
+
+/** The sentence key of a held image's reason (unknown reasons read as "other"). */
+export function heldReasonKey(held: Source['imageHeld']): 'scope' | 'limit' | 'later' | 'other' {
+    return held === 'scope' || held === 'limit' || held === 'later' ? held : 'other';
 }
 
 /** One observer per list, replaced on every render. */
@@ -94,7 +105,8 @@ export function hydrateThumbs(container: HTMLElement): void {
     const imgs = container.querySelectorAll<HTMLImageElement>('img[data-thumb-source]');
     if (imgs.length === 0) return;
     const fill = (img: HTMLImageElement) => {
-        const first = DataManager.getData().sources?.[img.dataset.thumbSource ?? '']?.excerpts?.[0];
+        const src = DataManager.getData().sources?.[img.dataset.thumbSource ?? ''];
+        const first = src ? shownExcerpts(DataManager.getCurrentTreeId(), src)[0] : undefined;
         const url = first ? excerptImageUrl(first) : undefined;
         if (url) img.src = url;
         img.removeAttribute('data-thumb-source');
@@ -160,6 +172,7 @@ export const sourcesMethods = uiModule({
             search.value = '';
             search.oninput = () => this.renderSourcesList();
         }
+        this.researchImagesSourcesOpened();
         this.renderSourcesList();
         document.getElementById('sources-modal')?.classList.add('active');
     },
@@ -195,8 +208,9 @@ export const sourcesMethods = uiModule({
         const totalEl = document.getElementById('sources-total');
         if (totalEl) {
             const bytes = totalExcerptBytes(DataManager.getData());
-            totalEl.hidden = bytes <= 1024 * 1024;
-            totalEl.textContent = strings.sources.excerptsTotal(formatBytes(bytes));
+            const fromResearch = this.researchImagesSizeSuffix();
+            totalEl.hidden = bytes <= 1024 * 1024 && !fromResearch;
+            totalEl.textContent = strings.sources.excerptsTotal(formatBytes(bytes)) + fromResearch;
         }
         if (all.length === 0) {
             container.innerHTML = emptyStateHtml({
@@ -216,9 +230,13 @@ export const sourcesMethods = uiModule({
         const stored = treeId ? TreeManager.getTreeMetadata(treeId)?.research : undefined;
         const link = stored ? this.researchTranscriptsLink(stored) : undefined;
         const unverified = new Set(unverifiedOlderSources(DataManager.getData(), link).map(src => src.id));
-        if (unverified.size === 0) this.sourcesFilter = 'all';
-        this.renderSourcesFilter(unverified.size > 0);
-        const filtered = this.sourcesFilter === 'unverifiedTranscript' ? all.filter(src => unverified.has(src.id)) : all;
+        // "Image in research": sources whose image the research left out and the app can still load.
+        const held = new Set(this.heldSources().map(h => h.src.id));
+        if (this.sourcesFilter === 'unverifiedTranscript' && unverified.size === 0) this.sourcesFilter = 'all';
+        if (this.sourcesFilter === 'imageHeld' && held.size === 0 && !this.researchImagesBulkBusy()) this.sourcesFilter = 'all';
+        this.renderSourcesFilter(unverified.size > 0, held.size);
+        const filtered = this.sourcesFilter === 'unverifiedTranscript' ? all.filter(src => unverified.has(src.id))
+            : this.sourcesFilter === 'imageHeld' ? all.filter(src => held.has(src.id)) : all;
         const sources = filtered.filter(s => this.sourceMatches(s, query)).sort((a, b) => a.title.localeCompare(b.title));
         const counts = DataManager.sourceCitationCounts();
         container.innerHTML = sources.map(src => {
@@ -231,6 +249,7 @@ export const sourcesMethods = uiModule({
                         <button type="button" class="source-row-open" data-source-id="${esc(src.id)}">
                             <span class="source-title">${esc(src.title)}</span></button>
                         ${meta ? `<span class="source-meta"> — ${esc(meta)}</span>` : ''}
+                        ${this.sourceHeldTagHtml(src)}
                         ${count > 0 ? `<span class="source-count">${esc(strings.sources.citations(count))}</span>` : ''}
                     </div>
                     <div class="source-actions">
@@ -253,25 +272,30 @@ export const sourcesMethods = uiModule({
             btn.addEventListener('click', () => { void this.deleteSource(btn.dataset.sourceId ?? ''); });
         });
         hydrateThumbs(container);
+        this.renderResearchImagesBulk();
     },
 
     /** The catalog's two filters (only while an Evidence tree has older unverified sources). */
-    renderSourcesFilter(offered: boolean): void {
+    renderSourcesFilter(offered: boolean, heldCount = 0): void {
         const bar = document.getElementById('sources-filter');
         if (!bar) return;
-        bar.hidden = !offered;
-        if (!offered) {
+        const held = heldCount > 0 || this.sourcesFilter === 'imageHeld';
+        bar.hidden = !offered && !held;
+        if (!offered && !held) {
             bar.innerHTML = '';
             return;
         }
         const s = strings.sources;
-        const chip = (value: 'all' | 'unverifiedTranscript', label: string): string =>
+        const chip = (value: 'all' | 'unverifiedTranscript' | 'imageHeld', label: string): string =>
             `<button type="button" class="segment-btn${this.sourcesFilter === value ? ' active' : ''}" data-filter="${value}"`
             + ` aria-pressed="${this.sourcesFilter === value}">${esc(label)}</button>`;
-        bar.innerHTML = `<div class="segment">${chip('all', s.filterAll) + chip('unverifiedTranscript', s.filterUnverified)}</div>`;
+        bar.innerHTML = `<div class="segment">${chip('all', s.filterAll)
+            + (offered ? chip('unverifiedTranscript', s.filterUnverified) : '')
+            + (held ? chip('imageHeld', strings.researchImages.filter(heldCount)) : '')}</div>`;
         bar.querySelectorAll<HTMLButtonElement>('[data-filter]').forEach(btn => {
             btn.onclick = () => {
-                this.sourcesFilter = btn.dataset.filter === 'unverifiedTranscript' ? 'unverifiedTranscript' : 'all';
+                const f = btn.dataset.filter;
+                this.sourcesFilter = f === 'unverifiedTranscript' || f === 'imageHeld' ? f : 'all';
                 this.renderSourcesList();
             };
         });
@@ -311,12 +335,14 @@ export const sourcesMethods = uiModule({
         if (!src) return;
         this.sourceViewerId = sourceId;
         this.sourceViewerContext = ctx;
+        this.researchImagesViewerOpened(sourceId);
         this.renderSourceViewer();
         document.getElementById('source-viewer-modal')?.classList.add('active');
     },
 
     closeSourceViewer(): void {
         document.getElementById('source-viewer-modal')?.classList.remove('active');
+        this.researchImagesViewerClosed();
         this.sourceViewerId = null;
         this.sourceViewerContext = null;
     },
@@ -345,22 +371,26 @@ export const sourcesMethods = uiModule({
         }
 
         const chunks: string[] = [];
-        const excerpts = src.excerpts ?? [];
+        // The file's excerpts, then those loaded from the research (kept with the tree).
+        const { excerpts, fromResearch } = this.viewerExcerpts(src);
         // The research on this computer keeps the original scan: offer it.
-        const fullUrls = excerpts.map((_, i) => this.excerptResearchUrl(src.id, i));
+        const fullUrls = excerpts.map(exc => this.excerptResearchUrl(src.id, exc));
         excerpts.forEach((exc, i) => {
             const alt = exc.caption || s.excerptAlt(src.title);
             const full = fullUrls[i]
                 ? `<button type="button" class="link-button viewer-full-quality" data-full-quality="${i}"
                     title="${esc(strings.research.fullQualityTitle)}">${esc(strings.research.fullQuality)} ↗</button>` : '';
+            const loaded = fromResearch.has(exc.id);
             chunks.push(`
-                <figure class="viewer-excerpt">
+                <figure class="viewer-excerpt${loaded ? ' is-from-research' : ''}">
                     <img src="${esc(excerptImageUrl(exc))}" alt="${esc(alt)}" data-excerpt-index="${i}">
                     <button type="button" class="viewer-zoom" data-excerpt-index="${i}" aria-label="${esc(s.viewerZoom)}">⤢</button>
-                    ${exc.caption ? `<figcaption>${esc(exc.caption)}</figcaption>` : ''}
+                    ${loaded ? this.researchExcerptExtrasHtml(exc, src) : exc.caption ? `<figcaption>${esc(exc.caption)}</figcaption>` : ''}
                 </figure>${full}`);
         });
-        if (excerpts.length === 0 && editable) {
+        // What is only in the research: loading slots, one line with a button, or why not here.
+        chunks.push(this.researchImagesViewerHtml(src));
+        if (excerpts.length === 0 && editable && !src.imageHeld) {
             chunks.push(`<button type="button" class="secondary viewer-add-excerpt">${esc(s.addExcerpt)}</button>`);
         }
         const pageUrl = safeHttpUrl(excerpts[0]?.pageUrl) ?? safeHttpUrl(src.url);
@@ -424,6 +454,7 @@ export const sourcesMethods = uiModule({
         });
         body.querySelector('.viewer-add-excerpt')?.addEventListener('click', () => this.editFromSourceViewer(true));
         body.querySelector('#source-viewer-reading')?.addEventListener('click', () => this.showReadingOfSource(src.id));
+        this.wireResearchImagesViewer(body, src);
 
         const editBtn = document.getElementById('source-viewer-edit');
         if (editBtn) editBtn.hidden = !editable;

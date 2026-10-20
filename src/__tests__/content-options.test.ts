@@ -207,3 +207,45 @@ describe('content presets', () => {
         expect(matchContentPreset({ photos: false, attachments: true, notes: false, sources: false })).toBeNull();
     });
 });
+
+describe('source images chosen apart from attachments', () => {
+    const PNG = 'data:image/png;base64,iVBORw0KGgo=';
+    function withExcerpt(): StromData {
+        const data = richTree();
+        data.sources!.s1.excerpts = [{ id: 'x1', dataUrl: PNG, sizeBytes: 8, width: 1, height: 1, clip: 'c1' }];
+        return data;
+    }
+    const loaded = { s1: [
+        { id: 'rx-c2', dataUrl: PNG, sizeBytes: 8, width: 1, height: 1, clip: 'c2' },
+        // Already in the file: written once.
+        { id: 'rx-c1', dataUrl: PNG, sizeBytes: 8, width: 1, height: 1, clip: 'c1' },
+    ] };
+
+    it('none drops the excerpts but keeps attachments', () => {
+        const out = applyContentOptions(withExcerpt(), { ...ALL_CONTENT, sourceImages: 'none', researchExcerpts: loaded });
+        expect(out.sources?.s1.excerpts).toBeUndefined();
+        expect(alice(out).attachments).toHaveLength(1);
+    });
+
+    it('app writes the loaded images as the source\'s own, without duplicates', () => {
+        const out = applyContentOptions(withExcerpt(), { ...ALL_CONTENT, attachments: false, sourceImages: 'app', researchExcerpts: loaded });
+        expect(out.sources?.s1.excerpts?.map(e => e.clip)).toEqual(['c1', 'c2']);
+        expect(alice(out).attachments).toBeUndefined();
+    });
+
+    it('without the choice, attachments carry the excerpts as before', () => {
+        const out = applyContentOptions(withExcerpt(), { ...ALL_CONTENT, attachments: false });
+        expect(out.sources?.s1.excerpts).toBeUndefined();
+    });
+
+    it('does not touch the input', () => {
+        const data = withExcerpt();
+        applyContentOptions(data, { ...ALL_CONTENT, sourceImages: 'app', researchExcerpts: loaded });
+        expect(data.sources?.s1.excerpts).toHaveLength(1);
+    });
+
+    it('presets match with the source images choice', () => {
+        expect(matchContentPreset({ ...ALL_CONTENT, sourceImages: 'all' })).toBe('complete');
+        expect(matchContentPreset({ ...CONTENT_PRESETS.small, sourceImages: 'app' })).toBeNull();
+    });
+});
