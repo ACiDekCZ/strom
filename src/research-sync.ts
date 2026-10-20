@@ -469,6 +469,23 @@ export function unloadedWrittenSends(sends: readonly ResearchSendRecord[] | null
 }
 
 /**
+ * "Written, N conflicts": the conflicts the writes not loaded yet (unloadedWrittenSends) left open
+ * in the research, each once — never every conflict open in the tree (those of writes loaded since,
+ * or of the research's own work, wait under "Waiting for you"). By their ids when each record names
+ * all of its own (less those decided here since, `settled`); else the largest single count (a later
+ * send repeats a conflict still open, so a sum overcounts: R1 of the rc.49 round). 0: none open.
+ */
+export function writtenConflictCount(records: readonly ResearchSendRecord[], settled: ReadonlySet<string> | null): number {
+    const open = records.filter(r => (r.conflicts ?? 0) > 0);
+    if (open.length === 0) return 0;
+    if (open.every(r => (r.conflictIds?.length ?? 0) === r.conflicts)) {
+        const ids = new Set(open.flatMap(r => r.conflictIds!));
+        return [...ids].filter(id => !settled?.has(id)).length;
+    }
+    return open.reduce((n, r) => Math.max(n, r.conflicts ?? 0), 0);
+}
+
+/**
  * Sends of this tree taken back before one written again (R3 of the rc.49 round keeps them out of
  * Send again: an older state): what they brought is here and not in the research, and a copy sent
  * now never writes it (the research leaves out what was taken back, `takenBack`). Said beside the

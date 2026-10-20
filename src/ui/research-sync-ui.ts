@@ -49,7 +49,7 @@ import {
 import {
     ResearchSyncState, ResearchSyncKind, researchSyncState, researchSyncWantsAttention, researchSyncUnsent,
     pendingSendFate, sourceReadings, THEN_LOAD_MAX_AGE_MS, conflictTakeovers, heldConflicts,
-    researchKeepsTakenBack, latestUndone, nextUndone, openUndone, undoneLeftBehind, syncRefusalReason, unloadedWrittenSends,
+    researchKeepsTakenBack, latestUndone, nextUndone, openUndone, undoneLeftBehind, syncRefusalReason, unloadedWrittenSends, writtenConflictCount,
 } from '../research-sync.js';
 import { setResearchConflictsProvider } from '../card-signals.js';
 import { ConflictDecideMode, conflictDecideMode, DecideKind, DecideBody, DecideResult, postBridgeDecide, canDecideInApp } from '../research-decide.js';
@@ -2575,17 +2575,25 @@ export const researchSyncMethods = uiModule({
     },
 
     /**
-     * "Written, N conflicts to decide": the conflicts open there, each once —
-     * as the cards count them when known here; else the research's largest
-     * single count (its sends repeat a conflict still open, so their sum
-     * overcounts: R1 of the rc.49 round). 0: none known.
+     * "Written, N conflicts to decide": the conflicts the writes this tree has not loaded left open there,
+     * each once (writtenConflictCount) — never every conflict open in the tree (a write loaded since, the
+     * research's own work: "Waiting for you"). A write the research's records do not list yet: what its
+     * reply said (kept up as conflicts are decided here). Only a version read but not loaded that would
+     * take values over: the open conflicts of those persons. 0: none known.
      */
     researchHeldConflictCount(treeId: TreeId, sent: ResearchSend | undefined): number {
-        const cards = this.researchOpenConflictTotal(treeId);
-        if (cards > 0) return cards;
         const link = TreeManager.getTreeMetadata(treeId)?.research;
-        const largest = link ? this.researchUnloadedSends(treeId, link).reduce((n, r) => Math.max(n, r.conflicts ?? 0), 0) : 0;
-        return Math.max(sent?.conflicts ?? 0, researchAutoState(treeId).lastWritten?.conflicts ?? 0, largest);
+        if (!link) return 0;
+        const records = this.researchUnloadedSends(treeId, link);
+        const listed = (intake: string | undefined): boolean => !!intake && records.some(r => r.intake === intake && r.conflicts !== null);
+        const lw = researchAutoState(treeId).lastWritten;
+        // The last write's own count, while its version is not loaded here (it outlives loading).
+        const lwSaid = lw && !listed(lw.intake) && !(Date.parse(lw.at) <= Date.parse(link.syncedAt)) ? lw.conflicts ?? 0 : 0;
+        const sentSaid = sent && !listed(sent.intake) ? sent.conflicts ?? 0 : 0;
+        const n = Math.max(writtenConflictCount(records, this.researchSettledConflicts(treeId)), sentSaid, lwSaid);
+        if (n > 0) return n;
+        const held = this.researchHeld(treeId);
+        return (held?.takeovers ?? []).reduce((k, id) => k + this.researchConflictsOf(id as PersonId).filter(c => c.status === 'open').length, 0);
     },
 
     /**

@@ -482,6 +482,27 @@ test('finding 40: a write that left a conflict stays in sight after the note goe
     expect(await janFirst(page)).toBe('Jenda');
 });
 
+test('"Written, N conflicts" counts the conflicts the write left, not every conflict open in the tree (1021)', async ({ page }) => {
+    await page.setViewportSize({ width: 1600, height: 900 });
+    const bridge = await autoTree(page);
+    bridge.syncReply = { status: 200, body: { ...WRITE.body, conflicts: [{ id: 'X0001', person: 'P0003', fact: 'NAME' }] } };
+    // Its version: the write's conflict and two more the research opened by itself, all on Jan.
+    bridge.onWrite = () => ({ head: 'c1c1c1c1c1c1', ged: nameConflictGed('c1c1c1c1c1c1', [
+        '1 _STROM_CONFLICT X0007', '2 TYPE BIRT', '2 STAT open', '2 VAL 1865', '2 VAL 1866',
+        '1 _STROM_CONFLICT X0010', '2 TYPE DEAT', '2 STAT open', '2 VAL 1930', '2 VAL 1931']) });
+    await renameJan(page, 'Jenda');
+    await page.clock.fastForward(QUIET + 1000);
+    await expect.poll(() => bridge.posts.length).toBe(1);
+    Object.assign(bridge.sends[0], { conflicts: 1 });
+    await page.clock.fastForward(30_000);
+    await poll(page);
+    await expect(pill(page)).toContainText('Written, 1 conflict to decide');
+    await openResearchMenu(page);
+    await expect(block(page)).toHaveAttribute('data-state', 'writtenConflicts');
+    await expect(block(page)).toContainText('Written, 1 conflict to decide');
+    await expect(block(page)).not.toContainText('3 conflicts');
+});
+
 test('findings 38/39: a copy carrying a send taken back, the next send written with a conflict: the conflict told and kept, the bar names the send taken back at its own time', async ({ page }) => {
     await page.setViewportSize({ width: 1600, height: 900 });
     const bridge = await autoTree(page);
@@ -1179,18 +1200,18 @@ test('the rc.27 round: ?live= with an old token says the research turned it down
     expect(await treeId(page)).toBe(researchTree);
 });
 
-test('the rc.27 round: the pill counts every conflict open there (as the cards do), not only the last write\'s', async ({ page }) => {
+test('1021 (over the rc.27 round): the pill counts the write\'s conflicts; another one open on a card is not the write\'s', async ({ page }) => {
     await conflictLeft(page);
-    // Set on the tree as it is now (a busy run may still be settling the write's state).
-    await expect(async () => {
-        await page.evaluate(() => {
-            const dm = window.Strom.DataManager;
-            const josef = Object.values(dm.getData().persons).find((p: any) => p.firstName === 'Josef') as any;
-            josef.research = { conflicts: [{ id: 'X0009', fact: 'BIRT', status: 'open', values: [{ value: '1840' }, { value: '1841' }] }] };
-            window.Strom.UI.refreshResearchSyncUi();
-        });
-        await expect(pill(page)).toContainText('Written, 2 conflicts to decide', { timeout: 1000 });
-    }).toPass();
+    await expect(pill(page)).toContainText('Written, 1 conflict to decide');
+    // A conflict the research opened by itself (not the write's): on its card and under "Waiting for you", not in the count.
+    await page.evaluate(() => {
+        const dm = window.Strom.DataManager;
+        const josef = Object.values(dm.getData().persons).find((p: any) => p.firstName === 'Josef') as any;
+        josef.research = { conflicts: [{ id: 'X0009', fact: 'BIRT', status: 'open', values: [{ value: '1840' }, { value: '1841' }] }] };
+        window.Strom.UI.refreshResearchSyncUi();
+    });
+    await expect(pill(page)).toContainText('Written, 1 conflict to decide');
+    await expect(pill(page)).not.toContainText('2 conflicts');
 });
 
 test('a write that takes longer (202): "writing" until the status says written; its version is this tree\'s own (not "newer"), loaded only when asked', async ({ page }) => {

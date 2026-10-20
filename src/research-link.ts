@@ -1343,6 +1343,8 @@ export interface ResearchSendRecord {
     conflicts: number | null;
     /** The persons those conflicts are about (research refs). */
     conflictPersons: string[];
+    /** The conflicts themselves (research ids "X0002", at most 20), when it names them. */
+    conflictIds?: string[];
     /** Taken back and written again since (`resent: true`, or `again`: the mark of that send); absent = not. */
     again?: string;
 }
@@ -1373,6 +1375,7 @@ export function sanitizeSends(value: unknown): ResearchSendRecord[] | null {
             reason: cleanText(r.reason, 200),
             conflicts: conflictCount(r.conflicts),
             conflictPersons: conflictPersons(r.conflicts),
+            ...(conflictIds(r.conflicts).length ? { conflictIds: conflictIds(r.conflicts) } : {}),
             // Written again since: `resent: true` (1.12.0-rc.21), or `again` (the mark of that send).
             ...(r.resent === true || r.again === true ? { again: 'yes' } : headerToken(r.again) ? { again: headerToken(r.again)! } : {}),
         });

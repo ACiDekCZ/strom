@@ -8,7 +8,7 @@ import { describe, it, expect } from 'vitest';
 import {
     researchSyncState, researchSyncWantsAttention, pendingSendFate, verifiedOffer, isOlderSource,
     researchReadSource, sourceReadingHash, unverifiedOlderSources, ResearchSyncInput, conflictTakeovers,
-    heldConflicts, researchKeepsTakenBack, latestUndone, undoneLeftBehind, syncRefusalReason, unloadedWrittenSends,
+    heldConflicts, researchKeepsTakenBack, latestUndone, undoneLeftBehind, syncRefusalReason, unloadedWrittenSends, writtenConflictCount,
 } from '../research-sync.js';
 import { getStringsForLang } from '../strings.js';
 import { sanitizeAccepts, sanitizeInbox, sanitizeLiveStatus, researchHeaderLines, stabilizeIds, sanitizeSyncReply } from '../research-link.js';
@@ -357,7 +357,7 @@ describe('what the bridge says', () => {
         ] })?.sends;
         expect(sends).toEqual([{ intake: 'R20261002143205123-a1b2', at: '2026-10-02T14:32:05Z', state: 'discarded', changes: 6, tries: null,
             tree: 'tree_1', sent: 'v2-x', decidedAt: '2026-10-02T15:10:00Z', reason: 'zkouška', conflicts: null, conflictPersons: [] },
-            { intake: 'R3', at: '', state: 'written', changes: null, tries: null, tree: '', sent: '', decidedAt: '', reason: '', conflicts: 2, conflictPersons: ['P0012', 'P0013'] },
+            { intake: 'R3', at: '', state: 'written', changes: null, tries: null, tree: '', sent: '', decidedAt: '', reason: '', conflicts: 2, conflictPersons: ['P0012', 'P0013'], conflictIds: ['X0003', 'X0004'] },
             { intake: 'R4', at: '', state: 'undone', changes: null, tries: null, tree: '', sent: '', decidedAt: '2026-10-03T09:00:00Z', reason: '', conflicts: null, conflictPersons: [] }]);
         expect(sanitizeLiveStatus({ tree: RID })?.sends).toBeNull();
     });
@@ -563,6 +563,31 @@ describe('conflicts of a send whose write was loaded since (no "Written, N confl
         // Before that load, the same write keeps them in sight.
         const before = link({ syncedAt: '2026-10-19T20:00:00Z', head: 'bbbbbbb' });
         expect(researchSyncState(input({ ...base, link: before, openConflicts: open(sends, before.syncedAt) > 0 })).kind).toBe('writtenConflicts');
+    });
+});
+
+describe('"Written, N conflicts": the write\'s conflicts, each once (1021)', () => {
+    const rec = (intake: string, conflicts: number | null, ids?: string[]) =>
+        ({ intake, at: '2026-10-19T20:43:34Z', state: 'written', changes: 11, tries: null, tree: 'T1', sent: '', decidedAt: '2026-10-19T20:43:38Z',
+            reason: '', conflicts, conflictPersons: [], ...(ids ? { conflictIds: ids } : {}) }) as never;
+
+    it('counted by their ids, each once, less those decided here since', () => {
+        const sends = [rec('R2', 2, ['X0004', 'X0002']), rec('R1', 2, ['X0002', 'X0003'])];
+        expect(writtenConflictCount(sends, null)).toBe(3);
+        expect(writtenConflictCount(sends, new Set(['X0003']))).toBe(2);
+    });
+
+    it('without all their ids: the largest single count, never the sum; none open: 0', () => {
+        expect(writtenConflictCount([rec('R2', 4), rec('R1', 2, ['X0002', 'X0003'])], null)).toBe(4);
+        expect(writtenConflictCount([rec('R1', 25, ['X0001'])], null)).toBe(25);
+        expect(writtenConflictCount([rec('R1', 0), rec('R2', null)], null)).toBe(0);
+        expect(writtenConflictCount([], null)).toBe(0);
+    });
+
+    it('the research\'s record names the conflicts\' ids', () => {
+        const status = sanitizeLiveStatus({ tree: { id: RID }, sends: [{ intake: 'R1', state: 'written', conflicts: [{ id: 'X0002', person: 'P0003' }, { id: 'X0005' }] }] });
+        expect(status?.sends?.[0]).toMatchObject({ conflicts: 2, conflictIds: ['X0002', 'X0005'] });
+        expect(sanitizeLiveStatus({ tree: { id: RID }, sends: [{ intake: 'R1', state: 'written', conflicts: 2 }] })?.sends?.[0].conflictIds).toBeUndefined();
     });
 });
 
