@@ -693,7 +693,8 @@ export const readDocumentMethods = uiModule({
         } else if (st.phase === 'progress') {
             const live = this.readLiveOf(st.readId);
             title = t.progressTitle;
-            sub = t.progressSub(live?.name || st.pages[0]?.file.name || '', live?.pages || st.pages.filter(p => !p.refused).length);
+            // The dialog's own files name it first: a page the research already had comes back under its hash.
+            sub = t.progressSub(st.pages.find(p => !p.refused)?.file.name || live?.name || '', live?.pages || st.pages.filter(p => !p.refused).length);
             body = this.readProgressHtml();
             foot = this.readProgressFootHtml();
         } else if ((st.phase === 'propose' || st.phase === 'written') && st.result) {

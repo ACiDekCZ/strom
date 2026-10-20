@@ -1,5 +1,5 @@
 import { test, expect, Page, Locator } from '@playwright/test';
-import { fakeBridge, fakeRead, readAccepts, openResearch, openResearchMenu, poll, FakeBridge, READ_ID } from './research-bridge.js';
+import { fakeBridge, fakeRead, readAccepts, openResearch, openResearchMenu, poll, researchGed, FakeBridge, READ_ID } from './research-bridge.js';
 import { card, cardAction } from './helpers.js';
 
 /**
@@ -100,6 +100,34 @@ test.describe('Read a document', () => {
         await cardAction(page, 'Jan', 'research-read');
         await expect(dialog(page)).toBeVisible();
         await expect(dialog(page).locator('#read-person-picker input')).toHaveValue('Jan Fíšek');
+    });
+
+    test('offered by a research that announces no strom-research:// links: reading goes through the bridge', async ({ page }) => {
+        await fakeBridge(page, {
+            accepts: accepts(readAccepts()), features: ['read.now'], read: fakeRead(), links: [],
+        });
+        await openResearch(page, { media: true, ged: researchGed().replace(/^1 _STROM_LINKS .*\n/m, '') });
+        await poll(page);
+        await openResearchMenu(page);
+        await expect(page.locator('#research-item-open')).toHaveCount(0);
+        await expect(item(page)).toBeVisible();
+        await expect(item(page)).toContainText('Read a document…');
+        await item(page).click();
+        await expect(dialog(page).locator('#read-drop')).toBeVisible();
+    });
+
+    test('progress names the chosen file, not the name the research gives a page it already had', async ({ page }) => {
+        const b = await setup(page);
+        b.read!.readName = `${'f8948c91'.repeat(8)}.jpg`;
+        const d = await openFromMenu(page);
+        await addPages(page, [{ name: 'kostel-lhota.jpg', mimeType: 'image/jpeg', buffer: JPEG }]);
+        await d.locator('[data-act="read"]').click();
+        await expect.poll(() => b.read!.posts.length).toBe(1);
+        await step(page, b, 'reading');
+        await expect(d.locator('.read-step.is-done')).not.toHaveCount(0);
+        await expect(d.locator('#read-title')).toHaveText('Reading a document');
+        await expect(d.locator('.audit-log-subtitle')).toContainText('kostel-lhota.jpg');
+        await expect(d.locator('.audit-log-subtitle')).not.toContainText('f8948c91');
     });
 
     test('not ready: shown greyed with the reason and the way to the research; not in the person menu', async ({ page }) => {

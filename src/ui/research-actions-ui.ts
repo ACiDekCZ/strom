@@ -270,8 +270,11 @@ export const researchActionsMethods = uiModule({
             const aboutRow: SubmenuItem[] = install && !blockInstalls
                 ? [{ id: 'research-item-install', label: r.awaitingNotInstalled, method: 'researchSyncAction', args: ['installResearch'] }]
                 : install ? [] : [{ id: 'research-item-about', label: r.whatIs, method: 'researchActionWhatIs' }];
+            // Read a document goes through the bridge, not a strom-research:// link: offered here too.
+            const read = noAgent ? null : this.readMenuEntry();
+            const readRow: SubmenuItem[] = read ? [{ id: 'research-item-read', method: 'showReadDocumentDialog', ...read, link: undefined }] : [];
             groups = [
-                { items: [...startRow, ...sendRow.map(i => ({ ...i, ext: false })), ...viewLinks, ...batch] },
+                { items: [...startRow, ...readRow, ...sendRow.map(i => ({ ...i, ext: false })), ...viewLinks, ...batch] },
                 { items: [...treeSettings, ...aboutRow], quiet: true },
             ];
         } else {

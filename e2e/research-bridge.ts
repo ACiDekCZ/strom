@@ -143,6 +143,8 @@ export interface FakeRead {
     cancelReply?: { status: number; body: unknown };
     /** Every page image asked for ("<id>/<n>"). */
     pageAsks: string[];
+    /** The name a new reading gets in `/status.reads` (default zapis.jpg; a page the research already had: its hash). */
+    readName?: string;
 }
 
 export const READ_ID = 'D20261019153012-a1b2';
@@ -290,7 +292,7 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
                 }
                 const files = Array.isArray(body.files) ? body.files.length : 0;
                 const reading: FakeReading = { id: rd.nextId, state: 'queued', version: 1, at: now, since: now, files, pages: files,
-                    readers: body.readers === 2 ? 2 : 1, done: 0, entries: 0, name: 'zapis.jpg', person: typeof body.person === 'string' ? body.person : '', from: 'app' };
+                    readers: body.readers === 2 ? 2 : 1, done: 0, entries: 0, name: rd.readName ?? 'zapis.jpg', person: typeof body.person === 'string' ? body.person : '', from: 'app' };
                 rd.reads = [reading, ...rd.reads.filter(r => r.id !== reading.id)];
                 return json(202, { read: reading.id, state: 'queued', version: 1 });
             }
