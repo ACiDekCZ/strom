@@ -127,6 +127,8 @@ export const researchImagesMethods = uiModule({
             else this.renderSourcesList();
         }
         this.refreshCitationChips();
+        // The person's sources panel: its thumbnails too.
+        if (document.getElementById('person-sources-modal')) this.renderPersonSourcesDialog();
     },
 
     /** The research's bridge went up or down (each poll): views that depend on it follow. */
@@ -250,7 +252,9 @@ export const researchImagesMethods = uiModule({
             });
         } else if (open.length > 0) {
             const n = open.length;
-            const text = shown > 0 ? r.heldMore(n) : r.heldN(n);
+            // Why the research left it out (when it said so), after "The image is in the research."
+            const reason = heldReasonKey(src.imageHeld);
+            const text = (shown > 0 ? r.heldMore(n) : r.heldN(n)) + (reason !== 'other' ? ` ${r.heldWhy[reason]}` : '');
             if (env.mode === 'fetch') {
                 const bytes = this.heldBytesOf(ref);
                 chunks.push(row(esc(text), ` <button type="button" class="secondary viewer-load-images">${esc(n > 1 ? r.loadMany : r.load)}</button>${bytes ? `<span class="muted viewer-load-size"> · ${esc(size(bytes))}</span>` : ''}`));

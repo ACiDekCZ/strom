@@ -1994,7 +1994,15 @@ export interface LiveLogEntry {
     kinds?: LiveChangeKind[];
     /** The research direction the commit was for ("G0002"; a newer research). */
     research?: string;
+    /**
+     * The sources each `text` line names ("S0012"), same order; absent when no line names one
+     * (and from an older research).
+     */
+    sources?: string[][];
 }
+
+/** Most sources one history line names. */
+const MAX_LINE_SOURCES = 20;
 
 /** The research's kinds of text lines, as the app's filter kinds. */
 const TEXT_KINDS: Record<string, LiveChangeKind> = { person: 'persons', source: 'sources', story: 'stories', other: 'other' };
@@ -2022,13 +2030,18 @@ export function sanitizeLiveLog(value: unknown): LiveLogEntry[] | null {
         const rawKinds = rawText && Array.isArray(e.kinds) && e.kinds.length === (e.text as unknown[]).length
             && e.kinds.every(k => typeof k === 'string' && k in TEXT_KINDS)
             ? (e.kinds as string[]).map(k => TEXT_KINDS[k]) : null;
-        const lines = rawText ? rawText.map((t, i) => ({ t: cleanText(t), k: rawKinds?.[i] })).filter(l => l.t) : null;
+        // `sources` pairs with `text` the same way: a list of the same length, each line's own source IDs.
+        const rawSources = rawText && Array.isArray(e.sources) && e.sources.length === (e.text as unknown[]).length ? e.sources as unknown[] : null;
+        const lineSources = (v: unknown): string[] => Array.isArray(v)
+            ? [...new Set(v.filter((x): x is string => typeof x === 'string' && /^S\d{1,9}$/.test(x)))].slice(0, MAX_LINE_SOURCES) : [];
+        const lines = rawText ? rawText.map((t, i) => ({ t: cleanText(t), k: rawKinds?.[i], s: lineSources(rawSources?.[i]) })).filter(l => l.t) : null;
         const research = researchDirectionRef(e.research);
         out.push({
             head: cleanText(e.head, 80), at, what, task: cleanText(e.task),
             ...(lines ? { text: lines.map(l => l.t) } : {}),
             ...(lines && rawKinds ? { kinds: lines.map(l => l.k as LiveChangeKind) } : {}),
             ...(research ? { research } : {}),
+            ...(lines && lines.some(l => l.s.length > 0) ? { sources: lines.map(l => l.s) } : {}),
         });
     }
     return out;
@@ -2108,6 +2121,50 @@ export function extractChangedRefs(what: string[]): string[] {
         for (const m of line.matchAll(/(?:^|[^\p{L}\p{N}])([A-Z]\d{2,})(?![\p{L}\p{N}])/gu)) out.add(m[1]);
     }
     return [...out];
+}
+
+/** The sources of `data` by the research's ID (their REFN, "S0012"), cached per sources object. */
+const sourceRefsCache = new WeakMap<object, Map<string, string>>();
+export function sourceIdsByRef(data: StromData): Map<string, string> {
+    const sources = data.sources ?? {};
+    let map = sourceRefsCache.get(sources);
+    if (!map) {
+        map = new Map();
+        for (const [id, src] of Object.entries(sources)) {
+            const refn = src?.refn?.trim();
+            if (refn && !map.has(refn)) map.set(refn, id);
+        }
+        sourceRefsCache.set(sources, map);
+    }
+    return map;
+}
+
+/** A title as the research's history writes it: on one line, a long one cut at 90 characters with "…". */
+export function researchShortTitle(title: string, max = 90): string {
+    const one = title.replace(/\s+/g, ' ').trim();
+    return one.length > max ? `${one.slice(0, max - 1).trimEnd()}…` : one;
+}
+
+/** Where a source's title stands in a history line (as the research shortens it, else whole), or null. */
+export function findSourceTitle(text: string, title: string): { at: number; length: number } | null {
+    const whole = title.replace(/\s+/g, ' ').trim();
+    if (!whole) return null;
+    for (const t of [researchShortTitle(whole), whole]) {
+        const at = text.indexOf(t);
+        if (at >= 0) return { at, length: t.length };
+    }
+    return null;
+}
+
+/**
+ * Is a history line newer than the research version the app has? `heads`: the history's versions, newest first.
+ * The loaded version not among them (or no version on the line): only when a newer version waits.
+ */
+export function lineNewerThanLoaded(head: string, heads: readonly string[], loaded: string | undefined, versionWaits: boolean): boolean {
+    const i = head ? heads.indexOf(head) : -1;
+    const l = loaded ? heads.indexOf(loaded) : -1;
+    if (i >= 0 && l >= 0) return i < l;
+    return versionWaits;
 }
 
 /** People of `data` whose REFN is one of `refs`. */
@@ -2377,6 +2434,10 @@ export interface SyncNotWritten {
     why: 'takenBack' | 'kept' | 'report' | 'pick' | '';
     /** The person's name as the research says it (`child.gone` from rc.41): shown when the tree has no such person. */
     name: string;
+    /** A source's change (1.18): the research's "S0012", or the sent file's "@S12@" of one it does not have; '' none. */
+    source: string;
+    /** A place's coordinates (`place.coords`, 1.18): the place's name as the file has it; '' none. */
+    place: string;
 }
 
 export function sanitizeSyncReply(value: unknown): SyncReply {
@@ -2416,6 +2477,8 @@ export function sanitizeSyncReply(value: unknown): SyncReply {
                 fact: typeof x.fact === 'string' && /^[A-Z_]{2,8}$/.test(x.fact) ? x.fact : '',
                 why: x.why === 'takenBack' || x.why === 'kept' || x.why === 'report' || x.why === 'pick' ? x.why : '',
                 name: cleanText(x.name, 120),
+                source: typeof x.source === 'string' && /^(S\d{1,9}|@[A-Za-z0-9_-]{1,20}@)$/.test(x.source) ? x.source : '',
+                place: cleanText(x.place, 200),
             })),
         ids: Object.keys(idPersons).length || Object.keys(idSources).length ? { persons: idPersons, sources: idSources } : null,
         readings: sanitizeSyncReadings(r.readings),
@@ -2496,6 +2559,12 @@ export const RESEARCH_REFN_TYPE = 'strom-research';
 export interface ExportXrefs {
     persons: ReadonlyMap<string, string>;
     sources: ReadonlyMap<string, string>;
+}
+
+/** The app's source a sent file named by its xref ("@S12@"), or ''. */
+export function sourceIdOfXref(xrefs: ExportXrefs, xref: string): string {
+    for (const [id, x] of xrefs.sources) if (x === xref) return id;
+    return '';
 }
 
 /**

@@ -285,6 +285,8 @@ export class UIClass {
     /** The source shown in the viewer, and the citation chip it was opened from. */
     sourceViewerId: string | null = null;
     sourceViewerContext: CitationContext | null = null;
+    /** The viewer opened from the research's history: only to read (no Edit, no entry from the same book). */
+    sourceViewerReadOnly = false;
     /** "Edit" in the viewer: reopen the viewer once the editor closes. */
     reopenViewerAfterEditor: string | null = null;
     /** The catalog was opened from the picker: go back to it on close. */

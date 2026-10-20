@@ -16,13 +16,15 @@ import { Person, PersonId, StromData, TreeId } from '../types.js';
 import { formatLiveClock } from '../live-time.js';
 import {
     ChangeKind, PersonChange, diffByPerson, baseCopy, diffOther, otherRowCount, previewInexact, OtherChanges, SourceChange, CoupleChange,
-    SourceChangeKind, CoupleChangeKind, PlaceChange, VariantChange,
+    SourceChangeKind, CoupleChangeKind, PlaceChange, VariantChange, SentOtherRow, sentOtherRows, sanitizeSentOtherRow,
+    sourceAppOnly, coupleAppOnly, placesAppOnly, variantsAppOnly, pairNotWritten,
 } from '../research-changes.js';
 import { saveResearchCopy, loadResearchCopy, saveResearchPrevCopy, loadResearchPrevCopy } from '../research-copy.js';
 import { researchAutoState, patchResearchAutoState, noteResearchSendPreviewSkipped } from '../research-device.js';
 import { researchSendMode, personsByResearchRefs } from './research-sync-ui.js';
 import { researchFactLabel } from './person-research-ui.js';
 import { uiModule } from './module.js';
+import { returnFocusAfterViewer } from './sources.js';
 import { shownNameOrEmpty } from '../person-name.js';
 
 const PANEL_ID = 'research-changes-panel';
@@ -60,7 +62,7 @@ const NO_OTHER: OtherChanges = { sources: [], couples: [] };
  * written; `stands`: the fingerprints the kept copy could stand for when it
  * went (the tie's base, the last written send's).
  */
-const pendingSent = new Map<string, { fingerprint: string; data: StromData; list: PersonChange[] | null; stands: string[] }>();
+const pendingSent = new Map<string, { fingerprint: string; data: StromData; list: PersonChange[] | null; other: SentOtherRow[]; stands: string[] }>();
 
 function esc(text: string): string {
     return text
@@ -82,21 +84,26 @@ function sanitizeChange(v: unknown): PersonChange | null {
     };
 }
 
-/** "What was written": the last written send's people (null: none kept). */
-export function researchWrittenList(treeId: string): { at: string; list: PersonChange[] } | null {
+/** "What was written": the last written send's people and its rows beyond them (null: none kept). */
+export function researchWrittenList(treeId: string): { at: string; list: PersonChange[]; other: SentOtherRow[] } | null {
     try {
         const raw = localStorage.getItem(WRITTEN_KEY + treeId);
         if (!raw) return null;
-        const p = JSON.parse(raw) as { at?: unknown; list?: unknown };
+        const p = JSON.parse(raw) as { at?: unknown; list?: unknown; other?: unknown };
         if (typeof p.at !== 'string' || !Array.isArray(p.list)) return null;
-        return { at: p.at, list: p.list.map(sanitizeChange).filter((c): c is PersonChange => !!c) };
+        return {
+            at: p.at, list: p.list.map(sanitizeChange).filter((c): c is PersonChange => !!c),
+            other: Array.isArray(p.other) ? p.other.slice(0, WRITTEN_MAX).map(sanitizeSentOtherRow).filter((r): r is SentOtherRow => !!r) : [],
+        };
     } catch {
         return null;
     }
 }
 
-function storeWritten(treeId: string, at: string, list: PersonChange[]): void {
-    try { localStorage.setItem(WRITTEN_KEY + treeId, JSON.stringify({ at, list: list.slice(0, WRITTEN_MAX) })); } catch { /* not kept */ }
+function storeWritten(treeId: string, at: string, list: PersonChange[], other: SentOtherRow[] = []): void {
+    try {
+        localStorage.setItem(WRITTEN_KEY + treeId, JSON.stringify({ at, list: list.slice(0, WRITTEN_MAX), ...(other.length ? { other: other.slice(0, WRITTEN_MAX) } : {}) }));
+    } catch { /* not kept */ }
 }
 
 /** Forget what this browser keeps of a tree's changes (the tree deleted). */
@@ -172,9 +179,9 @@ function coordText(p: PlaceChange): string {
 }
 
 /** The one row of places / surname variants: a summary and a toggle expanding its list. */
-function summaryRow(key: 'places' | 'variants', labelHtml: string, context: string, toggle: string): string {
+function summaryRow(key: 'places' | 'variants', labelHtml: string, context: string, toggle: string, appOnly = false): string {
     return `<li class="research-changes-row is-summary" data-kind="${key}"><span class="research-changes-icon is-ring" aria-hidden="true"></span>`
-        + `<span class="research-changes-text"><span class="research-changes-name">${labelHtml}</span>`
+        + `<span class="research-changes-text">${rowLine(`<span class="research-changes-name">${labelHtml}</span>`, '', appOnly)}`
         + (context ? `<span class="research-changes-ctx">${esc(context)}</span>` : '')
         + `<button type="button" class="link-button research-changes-toggle" data-toggle="${key}" aria-expanded="false"`
         + ` aria-controls="research-changes-detail-${key}">${esc(toggle)}</button>`
@@ -187,17 +194,63 @@ function coupleFocus(ch: CoupleChange, data: StromData): PersonId | null {
     return ok(ch.p1) ? ch.p1 : ok(ch.p2) ? ch.p2 : null;
 }
 
-/** Once the source viewer opened from a row closes, the focus goes back to that row's button. */
-function returnFocusAfterViewer(btn: HTMLElement): void {
-    const modal = document.getElementById('source-viewer-modal');
-    if (!modal?.classList.contains('active')) return;
-    const watch = new MutationObserver(() => {
-        if (modal.classList.contains('active')) return;
-        watch.disconnect();
-        if (btn.isConnected) btn.focus();
-    });
-    watch.observe(modal, { attributes: true, attributeFilter: ['class'] });
+/** A row's name line: a grey type before it (rows of mixed kinds), the "app only" tag after it. */
+function rowLine(nameHtml: string, type: string, appOnly: boolean): string {
+    if (!type && !appOnly) return nameHtml;
+    const c = strings.changes;
+    return `<span class="research-changes-line">${type ? `<span class="research-changes-type">${esc(type)}</span>` : ''}${nameHtml}`
+        + (appOnly ? `<span class="research-changes-tag" title="${esc(c.appOnlyTitle)}">${esc(c.appOnly)}</span>` : '') + '</span>';
 }
+
+/** A person's row: a ring before a send, a tick once written. */
+function personRowOf(ch: PersonChange, mode: 'send' | 'written'): string {
+    const name = ch.deleted || !DataManager.getPerson(ch.personId)
+        ? `<span class="research-changes-name is-deleted">${esc(ch.name)}</span>`
+        : `<button type="button" class="research-changes-name" data-person="${esc(ch.personId)}">${esc(ch.name)}</button>`;
+    return `<li class="research-changes-row" data-kind="person">`
+        + `<span class="research-changes-icon ${mode === 'written' ? 'is-check' : 'is-ring'}" aria-hidden="true">${mode === 'written' ? '✓' : ''}</span>`
+        + `<span class="research-changes-text">${name}<span class="research-changes-kinds">${esc(changeKindsText(ch.kinds))}</span></span>`
+        + '</li>';
+}
+
+/**
+ * A row beyond the people as a written send carried it: its type, its name (a source or a couple still in the
+ * tree as a link), its kinds. `appOnly`: in the quiet section of what the research does not read (no tick).
+ */
+function otherRowOf(r: SentOtherRow, as: 'written' | 'appOnly', data: StromData): string {
+    const c = strings.changes;
+    let name: string;
+    let type: string;
+    let kinds = '';
+    if (r.type === 'source') {
+        type = c.typeSource;
+        kinds = sourceKindsText(r.kinds as SourceChangeKind[]);
+        name = !r.deleted && data.sources?.[r.id]
+            ? `<button type="button" class="research-changes-name" data-source="${esc(r.id)}">${esc(data.sources[r.id].title?.trim() || r.title)}</button>`
+            : `<span class="research-changes-name${r.deleted ? ' is-deleted' : ''}">${esc(r.title)}</span>`;
+    } else if (r.type === 'couple') {
+        type = c.typeCouple;
+        kinds = coupleKindsText(r.kinds as CoupleChangeKind[]);
+        const label = r.p1 && r.p2 ? c.coupleName(rowPersonName(r.p1, data), rowPersonName(r.p2, data)) : '?';
+        const focus = r.p1 && r.p2 && !r.deleted ? coupleFocus({ partnershipId: r.id, p1: r.p1, p2: r.p2, kinds: [] }, data) : null;
+        name = focus
+            ? `<button type="button" class="research-changes-name" data-couple="${esc(focus)}">${esc(label)}</button>`
+            : `<span class="research-changes-name">${esc(label)}</span>`;
+    } else if (r.type === 'places') {
+        type = c.typePlaces;
+        name = `<span class="research-changes-name">${esc(c.placesRow(r.count ?? 0))}</span>`;
+    } else {
+        type = c.typeVariants;
+        name = `<span class="research-changes-name">${esc(c.variantsRow(r.count ?? 0))}</span>`;
+        kinds = r.surname ? c.variantsOf(r.surname) : '';
+    }
+    const icon = as === 'written'
+        ? '<span class="research-changes-icon is-check" aria-hidden="true">✓</span>'
+        : '<span class="research-changes-icon is-ring" aria-hidden="true"></span>';
+    return `<li class="research-changes-row" data-kind="${r.type}">${icon}`
+        + `<span class="research-changes-text">${rowLine(name, type, false)}${kinds ? `<span class="research-changes-kinds">${esc(kinds)}</span>` : ''}</span></li>`;
+}
+
 
 export const researchChangesMethods = uiModule({
     /**
@@ -326,9 +379,10 @@ export const researchChangesMethods = uiModule({
     /** A send is about to go: what it carries (for "What was written" once written). */
     researchNoteSending(treeId: TreeId, data: StromData, fingerprint: string): void {
         const list = DataManager.getCurrentTreeId() === treeId ? this.researchChangesNow() : null;
+        const other = list ? sentOtherRows(this.researchOtherNow()) : [];
         const link = TreeManager.getTreeMetadata(treeId)?.research;
         const stands = [link?.fingerprint ?? '', link?.sent?.state === 'written' ? link.sent.fingerprint : ''].filter(Boolean);
-        pendingSent.set(treeId, { fingerprint, data: baseCopy(data), list, stands });
+        pendingSent.set(treeId, { fingerprint, data: baseCopy(data), list, other, stands });
     },
 
     /**
@@ -386,7 +440,7 @@ export const researchChangesMethods = uiModule({
         memo = null;
         try { localStorage.setItem(FP_KEY + treeId, fp); } catch { /* not trusted next time */ }
         void saveResearchCopy(treeId, base, fp);
-        if (p.list) storeWritten(treeId, at, p.list);
+        if (p.list) storeWritten(treeId, at, p.list, p.other);
     },
 
     // ==================== THE PANEL ====================
@@ -414,6 +468,9 @@ export const researchChangesMethods = uiModule({
         let notWrittenHtml = '';
         let writtenHead = '';
         let moreWritten = 0;
+        let moreWrittenPeople = true;
+        let writtenRows: string[] = [];
+        let appOnlyRows: string[] = [];
         let other: OtherChanges | null = null;
         let inexact = false;
         if (mode === 'written') {
@@ -421,45 +478,80 @@ export const researchChangesMethods = uiModule({
             const st = researchAutoState(ctx.treeId);
             const lw = st.lastWritten;
             list = w?.list ?? [];
+            const sentOther = w?.other ?? [];
             title = c.writtenTitle(clock(w?.at ?? lw?.at));
             const k = lw?.changes ?? list.length;
             const conflicts = lw?.conflicts ?? 0;
             sub = conflicts ? `${s.changesN(k)} · ${s.conflictsN(conflicts)}` : s.changesN(k);
+            // What the research does not read stays in the app: a quiet section of its own, never "written".
+            const appOnly = sentOther.filter(r => r.appOnly);
+            let written = sentOther.filter(r => !r.appOnly);
             // What the research did not write (its `applied`, not what went, V-J): first, amber, with its reason;
-            // the people it named are not listed as written.
+            // the people, sources and couples it named are not listed as written.
             const nw = st.notWritten && (st.notWritten.fingerprint === ctx.link.sent?.fingerprint || st.notWritten.fingerprint === lw?.fingerprint) ? st.notWritten : null;
+            let quiet = false;
             if (nw) {
                 if (!nw.seen) patchResearchAutoState(ctx.treeId, { notWritten: { ...nw, seen: true } });
+                const paired = pairNotWritten(nw.items, data);
                 const named = new Set<string>();
-                const items = nw.items.map(n => {
-                    const id = n.person ? personsByResearchRefs(data, [n.person])[0] : undefined;
-                    if (id) named.add(id);
-                    const p = id ? data.persons[id] : undefined;
-                    const who = p ? shownNameOrEmpty(p) : n.name || n.person;
-                    const what = n.fact ? researchFactLabel(n.fact) : '';
+                const items = paired.rows.map(row => {
+                    const n = row.item;
                     const why = n.why === 'kept' ? s.notWrittenKept : n.why === 'report' ? s.notWrittenReport : n.why === 'pick' ? s.notWrittenPick : c.noReason;
-                    const name = id && p
-                        ? `<button type="button" class="research-changes-name" data-person="${esc(id)}">${esc(who)}</button>`
-                        : `<span class="research-changes-name">${esc(who || '?')}</span>`;
-                    return `<li class="research-changes-row is-not-written"><span class="research-changes-icon is-warn" aria-hidden="true">!</span>`
-                        + `<span class="research-changes-text">${name}${what ? `<span class="research-changes-kinds">${esc(what)}</span>` : ''}`
+                    let name: string;
+                    let what = '';
+                    let type = '';
+                    if (row.type === 'person') {
+                        const id = row.personId;
+                        if (id) named.add(id);
+                        const p = id ? data.persons[id] : undefined;
+                        const who = p ? shownNameOrEmpty(p) : n.name || n.person;
+                        what = n.fact ? researchFactLabel(n.fact) : '';
+                        name = id && p
+                            ? `<button type="button" class="research-changes-name" data-person="${esc(id)}">${esc(who)}</button>`
+                            : `<span class="research-changes-name">${esc(who || '?')}</span>`;
+                    } else if (row.type === 'source') {
+                        named.add(`source:${row.sourceId}`);
+                        type = c.typeSource;
+                        const sent = sentOther.find(r => r.type === 'source' && r.id === row.sourceId);
+                        what = sent ? sourceKindsText(sent.kinds as SourceChangeKind[]) : '';
+                        name = `<button type="button" class="research-changes-name" data-source="${esc(row.sourceId)}">${esc(row.title)}</button>`;
+                    } else {
+                        type = c.typePlaces;
+                        name = `<span class="research-changes-name">${esc(row.place)}</span>`;
+                    }
+                    return `<li class="research-changes-row is-not-written" data-kind="${row.type}"><span class="research-changes-icon is-warn" aria-hidden="true">!</span>`
+                        + `<span class="research-changes-text">${rowLine(name, type, false)}${what ? `<span class="research-changes-kinds">${esc(what)}</span>` : ''}`
                         + `<span class="research-changes-why">${esc(why)}</span></span></li>`;
                 });
-                if (nw.unexplained > 0) {
+                const unnamed = nw.unexplained + paired.unnamed;
+                if (unnamed > 0) {
                     items.push(`<li class="research-changes-row is-not-written"><span class="research-changes-icon is-warn" aria-hidden="true">!</span>`
-                        + `<span class="research-changes-text"><span class="research-changes-name">${esc(c.unnamed(nw.unexplained))}</span>`
+                        + `<span class="research-changes-text"><span class="research-changes-name">${esc(c.unnamed(unnamed))}</span>`
                         + `<span class="research-changes-why">${esc(c.noReason)}</span></span></li>`);
                 }
                 const m = nw.items.length + nw.unexplained;
                 notWrittenHtml = `<div class="research-changes-section is-warn">${esc(c.notWrittenSection(m))}</div><ul class="research-changes-list">${items.join('')}</ul>`;
                 list = list.filter(ch => !named.has(ch.personId));
+                written = written.filter(r => !(r.type === 'source' && named.has(`source:${r.id}`)));
+                // Places named as not written leave the written summary (its count less those).
+                const placesNot = paired.rows.filter(row => row.type === 'places').length;
+                if (placesNot) {
+                    written = written.flatMap(r => r.type !== 'places' ? [r]
+                        : (r.count ?? 0) > placesNot ? [{ ...r, count: (r.count ?? 0) - placesNot }] : []);
+                }
                 writtenHead = c.writtenSection(nw.written);
                 sub = s.writtenCount(nw.written, m);
-                // Quiet rows: the first three, then "and N more".
-                moreWritten = Math.max(0, list.length - 3);
-                list = list.slice(0, 3);
+                quiet = true;
                 this.refreshResearchSyncUi();
             }
+            writtenRows = [...list.map(ch => personRowOf(ch, 'written')), ...written.map(r => otherRowOf(r, 'written', data))];
+            // Quiet rows after what was not written: the first three, then "and N more".
+            if (quiet) {
+                moreWritten = Math.max(0, writtenRows.length - 3);
+                moreWrittenPeople = written.length === 0;
+                writtenRows = writtenRows.slice(0, 3);
+            }
+            appOnlyRows = appOnly.map(r => otherRowOf(r, 'appOnly', data));
             if (archive) foot = `<span class="research-changes-note">${esc(c.archiveNoConflicts)}</span>`;
             else if (conflicts && this.researchDecideUrl(ctx.treeId)) {
                 foot = `<button type="button" class="research-sync-link" data-act="decide">${esc(s.decideInResearch)}</button>`;
@@ -488,15 +580,7 @@ export const researchChangesMethods = uiModule({
                     + `<button type="button" class="secondary btn-sm" data-act="close">${esc(strings.buttons.close)}</button>`
                     + `<button type="button" class="primary btn-sm" data-act="send">${esc(s.barSend)}</button>`;
         }
-        const personRow = (ch: PersonChange): string => {
-            const name = ch.deleted || !DataManager.getPerson(ch.personId)
-                ? `<span class="research-changes-name is-deleted">${esc(ch.name)}</span>`
-                : `<button type="button" class="research-changes-name" data-person="${esc(ch.personId)}">${esc(ch.name)}</button>`;
-            return `<li class="research-changes-row" data-kind="person">`
-                + `<span class="research-changes-icon ${mode === 'written' ? 'is-check' : 'is-ring'}" aria-hidden="true">${mode === 'written' ? '✓' : ''}</span>`
-                + `<span class="research-changes-text">${name}<span class="research-changes-kinds">${esc(changeKindsText(ch.kinds))}</span></span>`
-                + '</li>';
-        };
+        const personRow = (ch: PersonChange): string => personRowOf(ch, mode);
         // The sections of "What will be sent": the rows of each kind, a long one grouped ("+ N more" adds GROUP_STEP).
         const groups = new Map<string, { rows: (() => string)[]; shown: number }>();
         const section = (key: string, head: string, rows: (() => string)[]): string => {
@@ -519,7 +603,7 @@ export const researchChangesMethods = uiModule({
                     : `<span class="research-changes-name${ch.deleted ? ' is-deleted' : ''}">${esc(ch.title)}</span>`;
                 const context = sourceContext(ch, data);
                 return `<li class="research-changes-row" data-kind="source"><span class="research-changes-icon is-ring" aria-hidden="true"></span>`
-                    + `<span class="research-changes-text">${name}<span class="research-changes-kinds">${esc(sourceKindsText(ch.kinds))}</span>`
+                    + `<span class="research-changes-text">${rowLine(name, '', sourceAppOnly(ch.kinds))}<span class="research-changes-kinds">${esc(sourceKindsText(ch.kinds))}</span>`
                     + (context ? `<span class="research-changes-ctx">${esc(context)}</span>` : '') + '</span></li>';
             });
             const coupleRows = (other?.couples ?? []).map(ch => (): string => {
@@ -529,18 +613,18 @@ export const researchChangesMethods = uiModule({
                     ? `<button type="button" class="research-changes-name" data-couple="${esc(focus)}">${esc(label)}</button>`
                     : `<span class="research-changes-name${ch.deleted ? ' is-deleted' : ''}">${esc(label)}</span>`;
                 return `<li class="research-changes-row" data-kind="couple"><span class="research-changes-icon is-ring" aria-hidden="true"></span>`
-                    + `<span class="research-changes-text">${name}<span class="research-changes-kinds">${esc(coupleKindsText(ch.kinds))}</span></span></li>`;
+                    + `<span class="research-changes-text">${rowLine(name, '', coupleAppOnly(ch.kinds))}<span class="research-changes-kinds">${esc(coupleKindsText(ch.kinds))}</span></span></li>`;
             });
             const places = other?.places?.count ? other.places : null;
             const variants = other?.surnameVariants?.count ? other.surnameVariants : null;
-            const placesRow = places ? [(): string => summaryRow('places', esc(c.placesRow(places.count)), '', c.showPlaces)] : [];
+            const placesRow = places ? [(): string => summaryRow('places', esc(c.placesRow(places.count)), '', c.showPlaces, placesAppOnly(places.items))] : [];
             const variantsRow = variants ? [(): string => {
                 const added = variants.items.filter(v => !v.removed).length;
                 const removed = variants.items.length - added;
                 const label = [added ? c.variantsRow(added) : '', removed ? c.variantsRemovedRow(removed) : ''].filter(Boolean).join(' · ');
                 const surnames = new Set(variants.items.map(v => v.surname));
                 const of = surnames.size === 1 ? c.variantsOf([...surnames][0]) : c.variantsOfN(surnames.size);
-                return summaryRow('variants', esc(label), of, c.show);
+                return summaryRow('variants', esc(label), of, c.show, variantsAppOnly());
             }] : [];
             const others = sourceRows.length + coupleRows.length + placesRow.length + variantsRow.length;
             bodyHtml = (inexact ? `<p class="research-changes-inexact">${esc(c.inexact)}</p>` : '')
@@ -550,11 +634,14 @@ export const researchChangesMethods = uiModule({
                 + section('places', places ? c.sectionPlaces(places.count) : '', placesRow)
                 + section('variants', variants ? c.sectionVariants(variants.count) : '', variantsRow);
         } else {
-            const rows = list.map(personRow).join('');
+            const rows = writtenRows.join('');
             bodyHtml = notWrittenHtml
                 + (writtenHead && (rows || moreWritten) ? `<div class="research-changes-section">${esc(writtenHead)}</div>` : '')
                 + (rows ? `<ul class="research-changes-list${writtenHead ? ' is-quiet' : ''}">${rows}</ul>` : '')
-                + (moreWritten ? `<div class="research-changes-more">${esc(c.andMore(moreWritten))}</div>` : '');
+                + (moreWritten ? `<div class="research-changes-more">${esc(moreWrittenPeople ? c.andMore(moreWritten) : c.more(moreWritten))}</div>` : '')
+                // What the research does not read: quiet, under what was written.
+                + (appOnlyRows.length ? `<div class="research-changes-section" data-section="appOnly">${esc(c.appOnlySection(appOnlyRows.length))}</div>`
+                    + `<ul class="research-changes-list is-quiet" data-group="appOnly">${appOnlyRows.join('')}</ul>` : '');
         }
         const panel = document.createElement('div');
         panel.id = PANEL_ID;

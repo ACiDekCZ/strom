@@ -162,6 +162,20 @@ function imageFromTransfer(dt: DataTransfer | null): File | null {
     return null;
 }
 
+/** Once the source viewer opened from a button closes, the focus goes back to that button. */
+export function returnFocusAfterViewer(btn: HTMLElement, redrawn?: () => HTMLElement | null): void {
+    const modal = document.getElementById('source-viewer-modal');
+    if (!modal?.classList.contains('active')) return;
+    const watch = new MutationObserver(() => {
+        if (modal.classList.contains('active')) return;
+        watch.disconnect();
+        // Its list redrawn meanwhile (a live change): the same link in the new rows.
+        const to = btn.isConnected ? btn : redrawn?.() ?? null;
+        to?.focus();
+    });
+    watch.observe(modal, { attributes: true, attributeFilter: ['class'] });
+}
+
 export const sourcesMethods = uiModule({
     // ==================== SOURCES MANAGER ====================
 
@@ -330,18 +344,23 @@ export const sourcesMethods = uiModule({
      * what it supports. `ctx` is the citation chip it was opened from (a new
      * "entry from the same register" is then cited there too).
      */
-    showSourceViewer(sourceId: string, ctx: CitationContext | null): void {
+    showSourceViewer(sourceId: string, ctx: CitationContext | null, opts: { readOnly?: boolean; overSheet?: boolean } = {}): void {
         const src = DataManager.getData().sources?.[sourceId];
         if (!src) return;
         this.sourceViewerId = sourceId;
         this.sourceViewerContext = ctx;
+        this.sourceViewerReadOnly = !!opts.readOnly;
         this.researchImagesViewerOpened(sourceId);
         this.renderSourceViewer();
-        document.getElementById('source-viewer-modal')?.classList.add('active');
+        const modal = document.getElementById('source-viewer-modal');
+        // Over the research overview's sheet (a phone, a tablet), which stays open under it.
+        modal?.classList.toggle('is-over-sheet', !!opts.overSheet);
+        modal?.classList.add('active');
     },
 
     closeSourceViewer(): void {
-        document.getElementById('source-viewer-modal')?.classList.remove('active');
+        document.getElementById('source-viewer-modal')?.classList.remove('active', 'is-over-sheet');
+        this.sourceViewerReadOnly = false;
         this.researchImagesViewerClosed();
         this.sourceViewerId = null;
         this.sourceViewerContext = null;
@@ -357,7 +376,7 @@ export const sourcesMethods = uiModule({
         const body = document.getElementById('source-viewer-body');
         if (!src || !body) return;
         const s = strings.sources;
-        const editable = this.canEditSources();
+        const editable = this.canEditSources() && !this.sourceViewerReadOnly;
 
         const titleEl = document.getElementById('source-viewer-title');
         if (titleEl) titleEl.textContent = src.title;

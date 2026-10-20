@@ -939,13 +939,14 @@ export const researchOverviewMethods = uiModule({
             host.appendChild(gh);
             if (!open) return;
             const list = el('ul', 'research-overview__rows live-changes');
+            const sources = this.liveSourceLinks(s, mode === 'sheet');
             for (const c of g.items.slice(0, GROUP_ROWS)) {
                 const li = el('li', 'research-overview__row');
                 const ts = Date.parse(c.at);
                 if (Number.isFinite(ts) && ts >= openedAt && Date.now() - ts < 4000) li.classList.add('is-new');
                 li.appendChild(el('span', 'research-overview__row-time', Number.isFinite(ts) ? hhmm(ts) : ''));
                 const text = el('span', 'research-overview__row-text');
-                appendChangeText(text, c, (id) => this.overviewShowPerson(id, mode));
+                if (appendChangeText(text, c, (id) => this.overviewShowPerson(id, mode), sources)) this.appendSourceInNewer(text, s, c, true);
                 li.appendChild(text);
                 const target = c.personIds.find(id => DataManager.getPerson(id));
                 if (target) {

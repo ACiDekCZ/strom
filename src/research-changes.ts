@@ -456,6 +456,179 @@ export function previewInexact(persons: readonly PersonChange[] | null, other: O
     return !!opts.confirm && persons.length === 0 && otherRowCount(other) === 0;
 }
 
+// ==================== WHAT THE RESEARCH DOES NOT READ ====================
+
+/**
+ * Kinds of change the research does not read from the app's file at all
+ * (Strom Research 1.18, its answer 3c): the order of children and of
+ * marriages, the main marriage (no GEDCOM for it), the evidence status of a
+ * wedding (`_STROM_STATUS`), a source's images and attachments (OBJE,
+ * `_STROM_CLIP`), removed coordinates of a place and the groups of surname
+ * variants. Such a change stays in the app only. Empty: the research reads
+ * everything (no "app only" anywhere).
+ */
+export const RESEARCH_UNREAD_KINDS: ReadonlySet<string> = new Set([
+    'source.excerptAdded', 'source.excerptRemoved', 'source.attachment',
+    'couple.childOrder', 'couple.mainMarriage', 'couple.marriageEvidence',
+    'places.removed', 'variants',
+]);
+
+/** Every one of a row's kinds is one the research does not read (a row with none is read). */
+function allUnread(keys: readonly string[], unread: ReadonlySet<string>): boolean {
+    return keys.length > 0 && keys.every(k => unread.has(k));
+}
+
+export function sourceAppOnly(kinds: readonly SourceChangeKind[], unread: ReadonlySet<string> = RESEARCH_UNREAD_KINDS): boolean {
+    return allUnread(kinds.map(k => `source.${k}`), unread);
+}
+
+export function coupleAppOnly(kinds: readonly CoupleChangeKind[], unread: ReadonlySet<string> = RESEARCH_UNREAD_KINDS): boolean {
+    return allUnread(kinds.map(k => `couple.${k}`), unread);
+}
+
+/** The places' row: only removed coordinates (new and changed ones are read). */
+export function placesAppOnly(items: readonly PlaceChange[], unread: ReadonlySet<string> = RESEARCH_UNREAD_KINDS): boolean {
+    return allUnread(items.map(p => (p.lat === undefined || p.lon === undefined ? 'places.removed' : 'places.coords')), unread);
+}
+
+export function variantsAppOnly(unread: ReadonlySet<string> = RESEARCH_UNREAD_KINDS): boolean {
+    return unread.has('variants');
+}
+
+// ==================== WHAT A SEND CARRIED BEYOND THE PEOPLE ====================
+
+/**
+ * One row beyond the people as a send carried it, kept for "What was
+ * written": a source, a couple, the places' or the surname variants' summary
+ * (their count). `appOnly`: the research does not read it.
+ */
+export interface SentOtherRow {
+    type: 'source' | 'couple' | 'places' | 'variants';
+    /** The source's id, the partnership's id; '' for a summary. */
+    id: string;
+    /** The source's title as sent ('' for the others: told from the tree). */
+    title: string;
+    kinds: string[];
+    p1?: PersonId;
+    p2?: PersonId;
+    count?: number;
+    /** The one surname of the variants' row, when there is one. */
+    surname?: string;
+    deleted?: true;
+    appOnly?: true;
+}
+
+/** The rows beyond the people a send carries, in the panel's order. */
+export function sentOtherRows(other: OtherChanges | null, unread: ReadonlySet<string> = RESEARCH_UNREAD_KINDS): SentOtherRow[] {
+    if (!other) return [];
+    const out: SentOtherRow[] = [];
+    for (const s of other.sources) {
+        out.push({ type: 'source', id: s.sourceId, title: s.title, kinds: [...s.kinds],
+            ...(s.deleted || s.attachmentOnly ? { deleted: true as const } : {}), ...(sourceAppOnly(s.kinds, unread) ? { appOnly: true as const } : {}) });
+    }
+    for (const c of other.couples) {
+        out.push({ type: 'couple', id: c.partnershipId, title: '', kinds: [...c.kinds], p1: c.p1, p2: c.p2,
+            ...(c.deleted ? { deleted: true as const } : {}), ...(coupleAppOnly(c.kinds, unread) ? { appOnly: true as const } : {}) });
+    }
+    if (other.places?.count) {
+        out.push({ type: 'places', id: '', title: '', kinds: [], count: other.places.count, ...(placesAppOnly(other.places.items, unread) ? { appOnly: true as const } : {}) });
+    }
+    if (other.surnameVariants?.count) {
+        const v = other.surnameVariants;
+        const surnames = new Set(v.items.map(i => i.surname));
+        out.push({ type: 'variants', id: '', title: '', kinds: [], count: v.count, ...(surnames.size === 1 ? { surname: [...surnames][0] } : {}),
+            ...(variantsAppOnly(unread) ? { appOnly: true as const } : {}) });
+    }
+    return out;
+}
+
+/** A kept row, checked (untrusted: from storage). */
+export function sanitizeSentOtherRow(v: unknown): SentOtherRow | null {
+    const r = v as Record<string, unknown> | null;
+    if (!r || typeof r !== 'object') return null;
+    const type = r.type === 'source' || r.type === 'couple' || r.type === 'places' || r.type === 'variants' ? r.type : null;
+    if (!type) return null;
+    const str = (x: unknown, max: number): string => (typeof x === 'string' ? x.slice(0, max) : '');
+    const count = typeof r.count === 'number' && r.count > 0 ? Math.floor(r.count) : undefined;
+    return {
+        type, id: str(r.id, 80), title: str(r.title, 300),
+        kinds: Array.isArray(r.kinds) ? r.kinds.filter((k): k is string => typeof k === 'string').slice(0, 12) : [],
+        ...(typeof r.p1 === 'string' ? { p1: r.p1 as PersonId } : {}),
+        ...(typeof r.p2 === 'string' ? { p2: r.p2 as PersonId } : {}),
+        ...(count ? { count } : {}),
+        ...(typeof r.surname === 'string' && r.surname ? { surname: r.surname.slice(0, 120) } : {}),
+        ...(r.deleted === true ? { deleted: true as const } : {}),
+        ...(r.appOnly === true ? { appOnly: true as const } : {}),
+    };
+}
+
+// ==================== WHAT THE RESEARCH DID NOT WRITE ====================
+
+/** One change the research named as not written, as kept (research-device `ResearchNotWritten.items`). */
+export interface NotWrittenItem {
+    person: string;
+    fact: string;
+    why: string;
+    name?: string;
+    family?: string;
+    /** The research's source ("S0012") or the sent file's xref of one it does not have ("@S12@"). */
+    source?: string;
+    /** That source in the app, when the send's file told it (its xref). */
+    sourceId?: string;
+    /** A place by its name as the file has it (`place.coords`). */
+    place?: string;
+}
+
+/** A not-written item put to what it is about here. */
+export type PairedNotWritten =
+    | { type: 'person'; item: NotWrittenItem; personId: PersonId | null }
+    | { type: 'source'; item: NotWrittenItem; sourceId: string; title: string }
+    | { type: 'places'; item: NotWrittenItem; place: string };
+
+/**
+ * Put what the research did not write to its rows: a person (as before, also
+ * one the tree no longer has: its name), a source (by the app's id from the
+ * send, else the research's number), a place. What names none of them, or a
+ * source the tree does not have, is counted as not named (`unnamed`): the
+ * app does not know the research's families (a couple's item without a person).
+ */
+export function pairNotWritten(items: readonly NotWrittenItem[], data: StromData): { rows: PairedNotWritten[]; unnamed: number } {
+    const rows: PairedNotWritten[] = [];
+    let unnamed = 0;
+    const sources = (data.sources ?? {}) as Record<string, Source>;
+    let byRefn: Map<string, string> | null = null;
+    const sourceByRef = (ref: string): string | null => {
+        if (!byRefn) {
+            byRefn = new Map();
+            for (const s of Object.values(sources)) if (s?.refn?.trim()) byRefn.set(s.refn.trim(), s.id);
+        }
+        return byRefn.get(ref) ?? null;
+    };
+    for (const item of items) {
+        if (item.person) {
+            const hit = Object.values(data.persons ?? {}).find(p => p?.refn?.trim() === item.person);
+            rows.push({ type: 'person', item, personId: hit ? hit.id : null });
+            continue;
+        }
+        if (item.source) {
+            const id = item.sourceId && sources[item.sourceId] ? item.sourceId : sourceByRef(item.source);
+            if (id && sources[id]) {
+                rows.push({ type: 'source', item, sourceId: id, title: sources[id].title?.trim() || item.source });
+                continue;
+            }
+        } else if (item.place) {
+            rows.push({ type: 'places', item, place: item.place });
+            continue;
+        } else if (item.name) {
+            // A person the research named by name only (`child.gone`): a row as before.
+            rows.push({ type: 'person', item, personId: null });
+            continue;
+        }
+        unnamed++;
+    }
+    return { rows, unnamed };
+}
+
 // ==================== VALUES THE RESEARCH'S VERSION WOULD OVERWRITE ====================
 
 /** Which value a row is about (the UI names it). */

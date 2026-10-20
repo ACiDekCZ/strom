@@ -11547,6 +11547,14 @@
         @media (hover: hover) { button.research-changes-name:hover { color: var(--primary); text-decoration: underline; } }
         .research-changes-name.is-deleted { cursor: default; color: var(--text-light); text-decoration: line-through; }
         .research-changes-kinds { font-size: 12px; color: var(--text-light); }
+        /* A row's name with a grey type before it (mixed kinds) and the "app only" tag after it. */
+        .research-changes-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; min-width: 0; }
+        .research-changes-line > .research-changes-name { align-self: auto; min-width: 0; }
+        .research-changes-type { font-size: 12px; color: var(--text-faint); }
+        .research-changes-tag {
+            padding: 0 6px; border: 1px solid var(--border); border-radius: 999px; font-size: 11px; line-height: 16px;
+            color: var(--text-faint); white-space: nowrap;
+        }
         .research-changes-foot { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px 10px; padding: 8px 14px 2px; border-top: 1px solid var(--border); }
         /* Phone: the checkbox above, Close and Send side by side. */
         @media (max-width: 640px) {
@@ -11869,6 +11877,16 @@
         @media (hover: hover) { .live-person-link:hover { color: var(--primary); } }
         .live-person-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; border-radius: 2px; }
         .live-person-unknown { color: var(--text-light); font-variant-numeric: tabular-nums; cursor: help; }
+        /* A history line's source that the loaded research version does not have yet. */
+        .live-hint { display: block; margin-top: 2px; font-size: 12px; line-height: 1.4; color: var(--text-light); }
+        .live-hint .live-hint__load { padding: 0; font-size: 12px; }
+        @media (pointer: coarse) {
+            /* Links in the history text: a taller target, a tint while pressed. */
+            .live-change-text, .research-overview__row-text { line-height: 1.75; }
+            .live-change-text .live-person-link, .research-overview__row-text .live-person-link { padding: 6px 0; border-radius: 4px; }
+            .live-change-text .live-person-link:active, .research-overview__row-text .live-person-link:active { background: var(--primary-soft); }
+            .live-hint .live-hint__load { min-height: 44px; }
+        }
         .live-all-changes { margin-top: 4px; padding: 0; font-size: 13px; }
         .live-panel-expand {
             flex: none; width: 28px; height: 28px; padding: 0; border: 0; border-radius: var(--r-md);
@@ -14592,6 +14610,8 @@
 
         /* Source viewer */
         #source-viewer-modal { z-index: 250; }
+        /* Opened from the research overview's sheet: above it (the sheet stays where it was). */
+        #source-viewer-modal.is-over-sheet { z-index: 1010; }
         #material-modal { z-index: 260; }
         .source-viewer { max-width: 720px; }
         .source-viewer-header { align-items: flex-start; }

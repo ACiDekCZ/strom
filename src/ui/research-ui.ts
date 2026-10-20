@@ -40,7 +40,8 @@ import {
     LiveQueueItem, LiveSpend, LiveIntake, LiveDirection, ResearchHeaderInfo, ExportXrefs, ResearchAccepts,
 } from '../research-link.js';
 import { uiModule } from './module.js';
-import { withAppVersion, researchGedcomTitles, researchSendsReadings, TitlesInGedcom, changeKind, changeAdds, sanitizeLiveLog, textKind, textPersonRefs, textWithoutRefs, LiveChangeKind, LiveLogEntry, LiveCommitAdds, LiveRecent } from '../research-link.js';
+import { returnFocusAfterViewer } from './sources.js';
+import { withAppVersion, researchGedcomTitles, researchSendsReadings, TitlesInGedcom, changeKind, changeAdds, sanitizeLiveLog, sourceIdsByRef, findSourceTitle, lineNewerThanLoaded, textKind, textPersonRefs, textWithoutRefs, LiveChangeKind, LiveLogEntry, LiveCommitAdds, LiveRecent } from '../research-link.js';
 import { AGENT_DONE_MS, AGENT_DONE_FADE_MS, ResearchCardInfo, setResearchCardInfoProvider } from '../card-signals.js';
 import {
     activeDirections, directionGlyph, directionsMulti, keepLineFocus, lineGlyphFor, linesMulti, queueDirectionFilter, selectedLine,
@@ -90,6 +91,8 @@ export interface LiveChangeItem {
     head: string;
     /** The research direction it was for ("G0002"; a newer research). */
     research?: string;
+    /** The sources the line names, by the research's IDs ("S0012"; a newer research). */
+    sourceRefs?: string[];
 }
 
 /** What one research commit added (the "+N people, +N sources" of the last 24 hours). */
@@ -290,6 +293,7 @@ function entryItems(e: LiveLogEntry, data: StromData | null, nameOf: (ref: strin
     if (e.text) {
         return e.text.map((line, i) => ({
             ...base, text: textWithoutRefs(line), personIds: ids(textPersonRefs(line)), kind: e.kinds?.[i] ?? textKind(line, e.what),
+            ...(e.sources?.[i]?.length ? { sourceRefs: e.sources[i] } : {}),
         })).reverse();
     }
     return [...e.what].reverse().map(line => ({
@@ -312,36 +316,69 @@ function entryAdds(e: LiveLogEntry): LiveAdds {
     return { head: e.head, at: e.at, persons, sources };
 }
 
-export function appendChangeText(host: HTMLElement, c: LiveChangeItem, show: (id: PersonId) => void): void {
-    const names: { id: PersonId; name: string }[] = [];
+/** A history line's sources as links: the followed tree's data (null: another tree is open, no links). */
+export interface ChangeSourceLinks {
+    data: StromData | null;
+    open: (sourceId: string, link: HTMLButtonElement) => void;
+}
+
+/**
+ * A change's text with the people in it as links (a click shows them in the
+ * tree) and, with `sources`, the sources it names (a click opens the source).
+ * Returns whether the line names a source the app's version does not have.
+ */
+export function appendChangeText(host: HTMLElement, c: LiveChangeItem, show: (id: PersonId) => void, sources?: ChangeSourceLinks): boolean {
+    type Mark = { person?: PersonId; source?: string; name: string; at: number; length: number };
+    const marks: Mark[] = [];
     for (const id of c.personIds) {
         const p = DataManager.getPerson(id);
         const name = p ? `${p.firstName ?? ''} ${p.lastName ?? ''}`.trim() : '';
-        if (name && c.text.includes(name)) names.push({ id, name });
+        const at = name ? c.text.indexOf(name) : -1;
+        if (at >= 0) marks.push({ person: id, name, at, length: name.length });
     }
-    let rest = c.text;
-    while (rest) {
-        let first: { id: PersonId; name: string; at: number } | null = null;
-        for (const n of names) {
-            const at = rest.indexOf(n.name);
-            if (at >= 0 && (!first || at < first.at)) first = { ...n, at };
+    let missing = false;
+    if (sources?.data && c.sourceRefs?.length) {
+        const byRef = sourceIdsByRef(sources.data);
+        for (const ref of c.sourceRefs) {
+            const id = byRef.get(ref);
+            const src = id ? sources.data.sources?.[id] : undefined;
+            if (!id || !src) {
+                missing = true;
+                continue;
+            }
+            const hit = findSourceTitle(c.text, src.title ?? '');
+            if (hit) marks.push({ source: id, name: c.text.slice(hit.at, hit.at + hit.length), ...hit });
         }
-        if (!first) {
-            host.appendChild(document.createTextNode(rest));
-            break;
-        }
-        if (first.at > 0) host.appendChild(document.createTextNode(rest.slice(0, first.at)));
-        const link = el('button', 'live-person-link', first.name);
+    }
+    // Left to right; one that overlaps an earlier mark stays text.
+    marks.sort((a, b) => a.at - b.at || b.length - a.length);
+    let pos = 0;
+    for (const m of marks) {
+        if (m.at < pos) continue;
+        if (m.at > pos) host.appendChild(document.createTextNode(c.text.slice(pos, m.at)));
+        const link = el('button', m.source ? 'live-person-link live-source-link' : 'live-person-link', m.name);
         link.type = 'button';
-        link.title = strings.research.showInTree;
-        const id = first.id;
-        link.onclick = (e) => {
-            e.stopPropagation();
-            show(id);
-        };
+        if (m.source) {
+            const id = m.source;
+            link.dataset.source = id;
+            link.title = strings.live.showSource;
+            link.onclick = (e) => {
+                e.stopPropagation();
+                sources?.open(id, link);
+            };
+        } else {
+            const id = m.person!;
+            link.title = strings.research.showInTree;
+            link.onclick = (e) => {
+                e.stopPropagation();
+                show(id);
+            };
+        }
         host.appendChild(link);
-        rest = rest.slice(first.at + first.name.length);
+        pos = m.at + m.length;
     }
+    if (pos < c.text.length) host.appendChild(document.createTextNode(c.text.slice(pos)));
+    return missing;
 }
 
 /**
@@ -2913,15 +2950,59 @@ export const researchUiMethods = uiModule({
         }
     },
 
+    /**
+     * The sources of the research's history as links: the viewer opens over
+     * the panel or the overview (a sheet stays under it), only to read;
+     * following goes on, the focus comes back to the link once it closes.
+     */
+    liveSourceLinks(s: LiveSession, overSheet = false): ChangeSourceLinks {
+        return {
+            data: DataManager.getCurrentTreeId() === s.treeId ? DataManager.getData() : null,
+            open: (id, link) => {
+                this.showSourceViewer(id, null, { readOnly: true, overSheet });
+                const host = link.closest('#research-overview') ? '#research-overview' : '#live-panel';
+                returnFocusAfterViewer(link, () => document.querySelector<HTMLElement>(`${host} .live-source-link[data-source="${CSS.escape(id)}"]`));
+            },
+        };
+    },
+
+    /**
+     * Under a history line naming a source the app's version does not have:
+     * "The source is in a newer research version." — only for a line newer
+     * than that version (an older one: the source was taken back or merged).
+     * `withLoad`: "Load new version" when one waits (the overview; the panel
+     * has it in its bar).
+     */
+    appendSourceInNewer(host: HTMLElement, s: LiveSession, c: LiveChangeItem, withLoad: boolean): void {
+        const link = TreeManager.getTreeMetadata(s.treeId)?.research;
+        const st = DataManager.getCurrentTreeId() === s.treeId ? this.currentResearchSyncState() : null;
+        const waits = !!st && (['newer', 'unsentAndNewer'] as string[]).some(k => k === st.kind || k === st.core);
+        if (!lineNewerThanLoaded(c.head, s.adds.map(a => a.head), link?.head || s.head, waits)) return;
+        const hint = el('div', 'live-hint', strings.live.sourceInNewer);
+        if (withLoad && waits) {
+            const load = el('button', 'link-button live-hint__load', strings.sync.loadNewer);
+            load.type = 'button';
+            load.onclick = (e) => {
+                e.stopPropagation();
+                this.researchSyncAction('loadNewer');
+            };
+            hint.append(' ', load);
+        }
+        host.appendChild(hint);
+    },
+
     /** Change rows (text with the people as links, then the time). */
     appendChangeRows(list: HTMLElement, changes: readonly LiveChangeItem[], glyph?: (c: LiveChangeItem) => string): void {
         const r = strings.research;
         if (changes.length === 0) list.appendChild(el('li', 'live-empty', r.noChanges));
+        const s = live;
+        const sources = s ? this.liveSourceLinks(s) : undefined;
         for (const c of changes) {
             const li = el('li');
             const row = el('div', 'live-change');
             const text = el('span', 'live-change-text');
-            appendChangeText(text, c, (id) => this.showLivePerson(id));
+            const missing = appendChangeText(text, c, (id) => this.showLivePerson(id), sources);
+            if (missing && s) this.appendSourceInNewer(text, s, c, false);
             row.appendChild(text);
             const at = timeEl(c.at, 'ago');
             // Two or more lines at work: the change's line before its time ("↑ · 2 min ago").

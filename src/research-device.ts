@@ -13,6 +13,7 @@ import {
     sanitizeAccepts, parseLiveBridge, isResearchHead, researchLinkScheme, DEFAULT_RESEARCH_SCHEME,
 } from './research-link.js';
 import { ResearchConflict, ResearchSend } from './types.js';
+import type { NotWrittenItem } from './research-changes.js';
 
 const LINKS_KEY = 'strom-research-links';
 const OFF_KEY = 'strom-research-links-off';
@@ -342,8 +343,11 @@ export interface ResearchNotWritten {
     fingerprint: string;
     /** Changes the research wrote (its `applied`). */
     written: number;
-    /** `family`: the research's family ("F0003") the change was about, when it said one. */
-    items: { person: string; fact: string; why: string; name?: string; family?: string }[];
+    /**
+     * `family`: the research's family ("F0003") the change was about, when it said one; `source`: its source
+     * ("S0012", or the sent file's "@S12@"), `sourceId` that source here; `place`: a place by its name.
+     */
+    items: NotWrittenItem[];
     /** Changes it counted but neither wrote nor named. */
     unexplained: number;
     seen?: true;
@@ -484,7 +488,10 @@ export function researchAutoState(treeId: string): ResearchAutoState {
                     .map(i => ({ person: typeof i.person === 'string' ? i.person.slice(0, 12) : '', fact: typeof i.fact === 'string' ? i.fact.slice(0, 8) : '',
                         why: typeof i.why === 'string' ? i.why.slice(0, 12) : '',
                         ...(typeof i.name === 'string' && i.name ? { name: i.name.slice(0, 120) } : {}),
-                        ...(typeof i.family === 'string' && /^F\d{1,9}$/.test(i.family) ? { family: i.family } : {}) })),
+                        ...(typeof i.family === 'string' && /^F\d{1,9}$/.test(i.family) ? { family: i.family } : {}),
+                        ...(typeof i.source === 'string' && /^(S\d{1,9}|@[A-Za-z0-9_-]{1,20}@)$/.test(i.source) ? { source: i.source } : {}),
+                        ...(typeof i.sourceId === 'string' && i.sourceId ? { sourceId: i.sourceId.slice(0, 80) } : {}),
+                        ...(typeof i.place === 'string' && i.place.trim() ? { place: i.place.slice(0, 200) } : {}) })),
                 unexplained: typeof nw.unexplained === 'number' && nw.unexplained > 0 ? Math.floor(nw.unexplained) : 0,
                 ...(nw.seen === true ? { seen: true as const } : {}),
             };

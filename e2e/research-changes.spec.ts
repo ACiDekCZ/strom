@@ -243,6 +243,58 @@ test.describe('what will be sent beyond the people', () => {
         await expect(panel).toHaveCount(0);
     });
 
+    test('what the research does not read is tagged "app only"; after the send: not written by type, written, app only quietly', async ({ page }) => {
+        await openResearch(page);
+        const b = await fakeBridge(page, { syncReply: { status: 200, body: { ok: true, inbox: false, changes: 7, applied: 3, input: 'I0043' } } });
+        await poll(page);
+        await sample(page);
+        await page.locator('#research-sync-send-more').click();
+        const panel = page.locator('#research-changes-panel');
+        // The main marriage and the surname variants stay in the app; sources, places and people are read.
+        await expect(panel.locator('[data-kind="couple"] .research-changes-tag')).toHaveText('app only');
+        await expect(panel.locator('[data-kind="couple"] .research-changes-tag')).toHaveAttribute('title', 'The research does not read this; it stays in the app only.');
+        await expect(panel.locator('[data-kind="variants"] .research-changes-tag')).toHaveText('app only');
+        await expect(panel.locator('[data-kind="source"] .research-changes-tag, [data-kind="places"] .research-changes-tag, [data-kind="person"] .research-changes-tag')).toHaveCount(0);
+        await page.keyboard.press('Escape');
+
+        // The research names a source by its number, one new source by the sent file's xref, a place by its name.
+        b.onWrite = () => ({ head: 'd6d6d6d6d6d6', ged: researchGed('d6d6d6d6d6d6') });
+        b.replyExtra = (posted) => {
+            const xref = /0 (@[^@]+@) SOUR\n1 TITL Pozemková kniha Čáslav/.exec(posted)?.[1] ?? '@X@';
+            return { notWritten: [
+                { kind: 'source.title', source: 'S0001', why: 'report' },
+                { kind: 'source.new', source: xref, why: 'pick' },
+                { kind: 'place.coords', place: 'Kolín' },
+                { kind: 'couple.edit', family: 'F0001' },
+            ] };
+        };
+        await page.evaluate(() => window.Strom.UI.researchSyncAction('send'));
+        await expect.poll(() => b.posts.length).toBe(1);
+        await page.evaluate(() => window.Strom.UI.showResearchChanges('written'));
+        await expect(panel.locator('.research-changes-section.is-warn')).toHaveText('Not written · 4');
+        const not = panel.locator('.research-changes-row.is-not-written');
+        await expect(not).toHaveCount(4);
+        await expect(not.nth(0).locator('.research-changes-type')).toHaveText('source');
+        await expect(not.nth(0).locator('.research-changes-name')).toHaveText('Oddací matrika Čáslav 1880–1890');
+        await expect(not.nth(0).locator('.research-changes-kinds')).toHaveText('title');
+        await expect(not.nth(1).locator('.research-changes-name')).toHaveText('Pozemková kniha Čáslav');
+        await expect(not.nth(1)).toContainText('no common ground: choose in the research');
+        await expect(not.nth(2).locator('.research-changes-type')).toHaveText('places');
+        await expect(not.nth(2).locator('.research-changes-name')).toHaveText('Kolín');
+        // A couple's item: the app has no families of the research — counted, not named.
+        await expect(not.nth(3).locator('.research-changes-name')).toHaveText('1 change the research did not name');
+        // Written: Jan and the census; the sources and the place named above are not claimed.
+        const written = panel.locator('.research-changes-list.is-quiet').first();
+        await expect(written.locator('.research-changes-name')).toHaveText(['Jan Fíšek', 'Sčítání lidu 1921']);
+        // What the research does not read: a quiet section of its own.
+        await expect(panel.locator('[data-section="appOnly"]')).toHaveText('App only · 2');
+        await expect(panel.locator('[data-group="appOnly"] .research-changes-type')).toHaveText(['couple', 'variants']);
+        await expect(panel.locator('[data-group="appOnly"] .research-changes-name')).toHaveText(['Josef Fíšek and Anna Svobodová', '1 new variant']);
+        // A source in the not written list opens its viewer.
+        await not.nth(0).locator('button.research-changes-name').click();
+        await expect(page.locator('#source-viewer-modal')).toHaveClass(/active/);
+    });
+
     test('phone: the checkbox above Close and Send side by side', async ({ page }) => {
         await page.setViewportSize({ width: 390, height: 844 });
         await openResearch(page);

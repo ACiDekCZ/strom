@@ -36,7 +36,7 @@ import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import {
     LiveStatus, contentFingerprint, fingerprintLike, sanitizeLiveStatus, sanitizeSyncReply, isSafariBrowser,
     parseLiveBridge, researchSchemeUrl, readResearchHeader, stabilizeIds, researchPersonRef, ResearchAccepts,
-    researchIdsByContent, holdsResearchIds, ResearchSendRecord, AdoptIds, ExportXrefs, applySyncIds, researchGedcomTitles, researchSendsReadings, SyncReading,
+    researchIdsByContent, holdsResearchIds, ResearchSendRecord, AdoptIds, ExportXrefs, applySyncIds, sourceIdOfXref, researchGedcomTitles, researchSendsReadings, SyncReading,
     researchHasTitles, hasTitles, withoutTitles, TITLES_FEATURE, researchConflictRef,
 } from '../research-link.js';
 import { loadResearchCopy } from '../research-copy.js';
@@ -1503,7 +1503,12 @@ export const researchSyncMethods = uiModule({
             // What it wrote is its `applied`, never what this app sent: the rest is kept as not written (the
             // state, "What was written") until the next send is written (V-J).
             patchResearchAutoState(treeId, { notWritten: { at: now, fingerprint: sentFp, written: Math.max(0, changes ?? 0),
-                items: listed.slice(0, 50).map(n => ({ person: n.person, fact: n.fact, why: n.why, ...(n.name ? { name: n.name } : {}), ...(n.family ? { family: n.family } : {}) })), unexplained: Math.max(0, unexplained) } });
+                items: listed.slice(0, 50).map(n => {
+                    // A source by the sent file's xref: the app's own id is known from that file.
+                    const sourceId = n.source.startsWith('@') && exported ? sourceIdOfXref(exported.xrefs, n.source) : '';
+                    return { person: n.person, fact: n.fact, why: n.why, ...(n.name ? { name: n.name } : {}), ...(n.family ? { family: n.family } : {}),
+                        ...(n.source ? { source: n.source } : {}), ...(sourceId ? { sourceId } : {}), ...(n.place ? { place: n.place } : {}) };
+                }), unexplained: Math.max(0, unexplained) } });
             // "Written N, not written M · Show": by hand and by itself alike (the written count is in it).
             toldNotWritten = sentFp;
             this.showToast(`${s.writtenCount(Math.max(0, changes ?? 0), notWrittenCount)} ${listed.length ? s.notWrittenListed(notWrittenCount) : s.notWrittenToast(notWrittenCount)}`, Infinity, {
@@ -2375,7 +2380,7 @@ export const researchSyncMethods = uiModule({
                 b.sub = [strings.changes.personsChanged(list.length), facts].filter(Boolean).join(' · ');
                 b.actions = [...(b.actions ?? []), { action: 'showChanges', label: strings.changes.whatWillBeSent, asLink: true }];
             }
-        } else if (state.kind === 'written' && treeId && researchWrittenList(treeId)?.list.length && researchSendMode(link) !== 'off') {
+        } else if (state.kind === 'written' && treeId && ((w) => !!w && w.list.length + w.other.length > 0)(researchWrittenList(treeId)) && researchSendMode(link) !== 'off') {
             b.actions = [...(b.actions ?? []), { action: 'showWritten', label: strings.changes.whatWasWritten, asLink: true }];
         }
         // Changes of an older send taken back, left behind by Send again of a later one (R3 keeps them out of

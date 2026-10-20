@@ -123,7 +123,7 @@ test.describe('source images from the research', () => {
     test('automatic loading off: a button loads; Remove from the app takes them away again', async ({ page }) => {
         const { ex } = await setup(page, { auto: false });
         await openSource(page, 'S0001');
-        await expect(viewer(page).locator('.viewer-image-held-text')).toHaveText('2 images are in the research.');
+        await expect(viewer(page).locator('.viewer-image-held-text')).toHaveText('2 images are in the research. Left out by the research settings.');
         expect(ex.asks).toEqual([]);
         await viewer(page).getByRole('button', { name: 'Load images from the research' }).click();
         await expect(viewer(page).locator('.viewer-excerpt.is-from-research')).toHaveCount(2);
@@ -131,7 +131,7 @@ test.describe('source images from the research', () => {
         await viewer(page).locator('.viewer-excerpt-more-btn').first().click();
         await viewer(page).getByRole('menuitem', { name: 'Remove from the app' }).click();
         await expect(viewer(page).locator('.viewer-excerpt.is-from-research')).toHaveCount(0);
-        await expect(viewer(page).locator('.viewer-image-held-text')).toHaveText('2 images are in the research.');
+        await expect(viewer(page).locator('.viewer-image-held-text')).toHaveText('2 images are in the research. Left out by the research settings.');
     });
 
     test('a refusal of the research: the reason in place, a failure can be tried again', async ({ page }) => {

@@ -1168,6 +1168,7 @@ const stringsEN = {
             other: 'The image is in the research but was not included for the app.',
         },
         heldTag: 'image in research',
+        heldWhy: { scope: 'Left out by the research settings.', limit: 'Left out for its size.', later: 'Still being prepared in the research.' },
         filter: (n: number) => `Image in research · ${n}`,
         errMissingScan: 'The scan of this image is missing in the research.',
         errRevoked: 'The source is no longer in the research.',
@@ -1554,6 +1555,13 @@ const stringsEN = {
         citedCouple: (a: string, b: string) => `cited for the marriage of ${a} and ${b}`,
         coupleName: (a: string, b: string) => `${a} and ${b}`,
         unknownParent: 'unknown parent',
+        typeSource: 'source',
+        typeCouple: 'couple',
+        typePlaces: 'places',
+        typeVariants: 'variants',
+        appOnly: 'app only',
+        appOnlyTitle: 'The research does not read this; it stays in the app only.',
+        appOnlySection: (n: number) => `App only · ${n}`,
     },
 
     // An older Strom Research (1.11 and before): how to update it
@@ -3697,6 +3705,8 @@ const stringsEN = {
     },
 
     live: {
+        sourceInNewer: 'The source is in a newer research version.',
+        showSource: 'Show source',
         openOverview: 'Open overview',
         closeOverview: 'Shrink to panel',
         overviewTitle: 'Research overview',
@@ -5804,6 +5814,7 @@ const stringsCZ: StringsType = {
             other: 'Obraz je ve výzkumu, do aplikace nešel.',
         },
         heldTag: 'obraz ve výzkumu',
+        heldWhy: { scope: 'Vynecháno podle nastavení výzkumu.', limit: 'Vynecháno kvůli velikosti.', later: 'Ve výzkumu se ještě připravuje.' },
         filter: (n: number) => `Obraz ve výzkumu · ${n}`,
         errMissingScan: 'Sken tohoto obrazu ve výzkumu chybí.',
         errRevoked: 'Pramen ve výzkumu už není.',
@@ -6187,6 +6198,13 @@ const stringsCZ: StringsType = {
         citedCouple: (a: string, b: string) => `citace u sňatku: ${a} a ${b}`,
         coupleName: (a: string, b: string) => `${a} a ${b}`,
         unknownParent: 'neznámý rodič',
+        typeSource: 'pramen',
+        typeCouple: 'pár',
+        typePlaces: 'místa',
+        typeVariants: 'varianty',
+        appOnly: 'jen v aplikaci',
+        appOnlyTitle: 'Tento údaj výzkum nečte, zůstane jen v aplikaci.',
+        appOnlySection: (n: number) => `Jen v aplikaci · ${n}`,
     },
 
     researchOlder: {
@@ -8320,6 +8338,8 @@ const stringsCZ: StringsType = {
     },
 
     live: {
+        sourceInNewer: 'Pramen je v novější verzi výzkumu.',
+        showSource: 'Ukázat pramen',
         openOverview: 'Otevřít přehled',
         closeOverview: 'Zmenšit na panel',
         overviewTitle: 'Přehled výzkumu',
@@ -10411,6 +10431,7 @@ const stringsDE: StringsType = {
             other: 'Das Bild ist in der Forschung, wurde aber nicht in die App übernommen.',
         },
         heldTag: 'Bild in der Forschung',
+        heldWhy: { scope: 'Nach den Einstellungen der Forschung ausgelassen.', limit: 'Wegen der Größe ausgelassen.', later: 'Wird in der Forschung noch vorbereitet.' },
         filter: (n: number) => `Bild in der Forschung · ${n}`,
         errMissingScan: 'Der Scan zu diesem Bild fehlt in der Forschung.',
         errRevoked: 'Die Quelle ist nicht mehr in der Forschung.',
@@ -10794,6 +10815,13 @@ const stringsDE: StringsType = {
         citedCouple: (a: string, b: string) => `zitiert bei der Heirat von ${a} und ${b}`,
         coupleName: (a: string, b: string) => `${a} und ${b}`,
         unknownParent: 'unbekannter Elternteil',
+        typeSource: 'Quelle',
+        typeCouple: 'Paar',
+        typePlaces: 'Orte',
+        typeVariants: 'Varianten',
+        appOnly: 'nur in der App',
+        appOnlyTitle: 'Die Forschung liest diese Angabe nicht; sie bleibt nur in der App.',
+        appOnlySection: (n: number) => `Nur in der App · ${n}`,
     },
 
     researchOlder: {
@@ -12876,6 +12904,8 @@ const stringsDE: StringsType = {
     },
 
     live: {
+        sourceInNewer: 'Die Quelle ist in einer neueren Version der Forschung.',
+        showSource: 'Quelle anzeigen',
         openOverview: 'Übersicht öffnen',
         closeOverview: 'Auf Panel verkleinern',
         overviewTitle: 'Forschungsübersicht',
