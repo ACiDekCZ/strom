@@ -29,6 +29,9 @@ export const CARD_SIGNAL_KEYS: (keyof CardSignals)[] = ['evidence', 'story', 'wa
 /** Per device, apart from the other settings. */
 const CARD_SIGNALS_KEY = 'strom-card-signals';
 
+/** Fallback sender names that older builds stored as if typed (cs/en/de). */
+const FORMER_SENDER_PLACEHOLDERS = new Set(['Příbuzný', 'A relative', 'Ein Verwandter', 'Ein Familienmitglied']);
+
 class SettingsManagerClass {
     private settings: AppSettings = { theme: 'system', language: 'system', encryption: false, auditLog: false };
 
@@ -445,7 +448,10 @@ class SettingsManagerClass {
 
     /** Collaboration: sender name shown to relatives in shared files. */
     getSenderName(): string {
-        return this.settings.senderName ?? '';
+        const name = this.settings.senderName ?? '';
+        // Older builds remembered the fallback placeholder as the sender's own
+        // name; it is not a name, so it reads as none.
+        return FORMER_SENDER_PLACEHOLDERS.has(name) ? '' : name;
     }
 
     setSenderName(name: string): void {
