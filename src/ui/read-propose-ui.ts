@@ -224,11 +224,13 @@ export const readProposeMethods = uiModule({
         const parts: string[] = [];
         if (s.second) {
             const live = this.readLiveOf(s.readId);
-            const readers = live?.readers || 2;
-            const done = live?.done ?? 0;
-            const what = live?.state === 'checking' ? t.checking : live?.state === 'queued' ? t.queued : t.secondReading;
+            // The second reader makes two (a bridge may still say one before it starts).
+            const readers = Math.max(live?.readers ?? 0, 2);
+            const done = Math.min(live?.done ?? 0, readers);
+            const step = live?.state === 'checking' ? t.checking : live?.state === 'queued' ? t.queued : '';
+            const sub = [step, t.readersDone(done, readers)].filter(Boolean).join(' · ');
             parts.push(`<div class="read-p-progress" role="status">
-                    <span class="read-p-progress-text">${esc(what)}<span class="read-p-progress-sub">${esc(t.readersDone(done, readers))}</span></span>
+                    <span class="read-p-progress-text">${esc(t.secondReading)}<span class="read-p-progress-sub">${esc(sub)}</span></span>
                     <span class="batch-bar read-bar" role="progressbar" aria-valuemin="0" aria-valuemax="${readers}" aria-valuenow="${done}" aria-label="${esc(t.readersDone(done, readers))}"><span style="width:${Math.round(done / readers * 100)}%"></span></span>
                     <button type="button" class="secondary read-cancel" data-act="cancel"${s.busy ? ' disabled' : ''}>${esc(t.cancel)}</button>
                 </div>`);
@@ -277,7 +279,7 @@ export const readProposeMethods = uiModule({
         } else {
             const tree = c.target ? data.persons[c.target] : undefined;
             if (pickingRef === p.ref || !tree) {
-                main = `<div class="read-p-picker" id="read-p-pick-${esc(p.ref)}"><span class="read-sr">${esc(t.pickLabel)}</span></div>`;
+                main = `<div class="read-p-picker"><div id="read-p-pick-${esc(p.ref)}"></div></div>`;
             }
             if (tree) {
                 const why = c.candidate && c.candidate.id === tree.id ? this.readMatchWhy(c.candidate.byResearch, c.candidate.reasons, c.candidate.why, p, entry) : '';
@@ -467,7 +469,7 @@ export const readProposeMethods = uiModule({
         picker?.destroy();
         picker = null;
         const host = pickingRef ? overlay.querySelector<HTMLElement>(`#read-p-pick-${CSS.escape(pickingRef)}`) : null;
-        const noTarget = overlay.querySelector<HTMLElement>('.read-p-card.is-link .read-p-picker');
+        const noTarget = overlay.querySelector<HTMLElement>('.read-p-card.is-link .read-p-picker > div');
         const target = host ?? noTarget;
         if (target) {
             const ref = target.id.replace(/^read-p-pick-/, '');
