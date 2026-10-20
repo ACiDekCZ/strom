@@ -11005,6 +11005,9 @@
         .person-source-item:last-child { border-bottom: none; }
         .person-source-item > .person-source-row { border-bottom: none; }
         .modal .person-source-reading { margin: -6px 0 8px 60px; font-size: 13px; }
+        /* `.modal button` gives every button 18px at its sides: these links stand in running text, flush with it. */
+        .modal .research-read-history, .modal .research-older-sources,
+        .modal .viewer-reading-open, .modal .person-source-reading { padding-left: 0; padding-right: 0; }
         @media (max-width: 640px) {
             .read-history-row { flex-wrap: wrap; }
             .read-history-main { flex-basis: calc(100% - 30px); }

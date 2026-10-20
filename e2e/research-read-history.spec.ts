@@ -186,6 +186,32 @@ test.describe('Read a document: from a source and a person', () => {
         await expect(viewer).toBeVisible();
     });
 
+    test('the links stand flush with the text around them (no button padding at their sides)', async ({ page }) => {
+        await setup(page);
+        const left = (l: Locator) => l.evaluate(el => {
+            const r = document.createRange();
+            r.selectNodeContents(el);
+            return Math.round(r.getBoundingClientRect().left);
+        });
+        // The source's detail: the link under the transcript starts where the transcript does.
+        await page.evaluate((sid) => window.Strom.UI.showSourceViewer(sid, null), await sourceId(page));
+        const viewer = page.locator('#source-viewer-modal');
+        expect(await left(viewer.locator('#source-viewer-reading'))).toBe(await left(viewer.locator('.viewer-transcript')));
+        await page.keyboard.press('Escape');
+        await expect(viewer).toBeHidden();
+        // A person's sources: under the source's title.
+        await cardAction(page, 'Jan', 'sources');
+        const ps = page.locator('#person-sources-modal');
+        const item = ps.locator('.person-source-item');
+        expect(await left(item.locator('.person-source-reading'))).toBe(await left(item.locator('.person-source-title')));
+        await page.keyboard.press('Escape');
+        await expect(ps).toBeHidden();
+        // Research for this tree: the row starts where the dialog's text does.
+        const modal = await openSettings(page);
+        await expect(row(page)).toBeVisible();
+        expect(await left(row(page))).toBe(await left(modal.locator('.research-trial-sentence')));
+    });
+
     test('a person\'s sources: the link under the row of a source from a reading only', async ({ page }) => {
         await setup(page);
         await cardAction(page, 'Jan', 'sources');
