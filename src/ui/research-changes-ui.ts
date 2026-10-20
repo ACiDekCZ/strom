@@ -684,7 +684,16 @@ export const researchChangesMethods = uiModule({
         panel.style.top = `${top}px`;
         panel.style.left = `${Math.round(left)}px`;
         // At most the window less 72px, and never past its bottom edge: the list between head and foot scrolls.
-        panel.style.maxHeight = `${Math.max(160, Math.min(window.innerHeight - 72, window.innerHeight - top - 8))}px`;
+        // An Undo pill under the panel is a floor too, so Close / Send stay clickable above it.
+        let floor = window.innerHeight - 8;
+        const pill = document.querySelector<HTMLElement>('.undo-toast');
+        const pillRect = pill?.getBoundingClientRect();
+        if (pillRect && pillRect.width && pillRect.left < left + width && pillRect.right > left) {
+            // The pill rises 12px as it shows: its resting top, whatever the moment.
+            const restTop = pill?.classList.contains('show') ? pillRect.top : pillRect.top - 12;
+            floor = Math.min(floor, Math.floor(restTop) - 8);
+        }
+        panel.style.maxHeight = `${Math.max(160, Math.min(window.innerHeight - 72, floor - top))}px`;
     },
 
     closeResearchChanges(): void {

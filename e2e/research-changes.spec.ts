@@ -267,4 +267,35 @@ test.describe('what will be sent beyond the people', () => {
         const panelBox = await page.locator('#research-changes-panel').boundingBox();
         expect(panelBox!.width).toBeLessThanOrEqual(390 - 16 + 1);
     });
+
+    for (const viewport of [{ width: 390, height: 844 }, { width: 1024, height: 700 }]) {
+        test(`${viewport.width}px: an Undo pill right after an edit leaves Close and Send clickable`, async ({ page }) => {
+            await page.setViewportSize(viewport);
+            await openResearch(page);
+            await fakeBridge(page);
+            await poll(page);
+            await sample(page, 8);
+            await page.evaluate(() => {
+                window.Strom.UI.showUndoToast('Edited Jan Fíšek: birth date, birth place and the occupation');
+                window.Strom.UI.showResearchChanges('send', { confirm: true });
+            });
+            const pill = page.locator('.undo-toast.show');
+            await expect(pill).toBeVisible();
+            const panel = page.locator('#research-changes-panel');
+            const send = panel.locator('[data-act="send"]');
+            const close = panel.locator('[data-act="close"]');
+            // All eleven sources: a list longer than the window.
+            await panel.locator('[data-more="sources"]').click();
+            await expect(panel.locator('[data-kind="source"]')).toHaveCount(11);
+            // Nothing on top of either button: a trial click reaches it.
+            await send.click({ trial: true, timeout: 2000 });
+            await close.click({ trial: true, timeout: 2000 });
+            const [panelBox, pillBox] = await Promise.all([panel.boundingBox(), pill.boundingBox()]);
+            expect(panelBox!.y + panelBox!.height).toBeLessThanOrEqual(pillBox!.y);
+            // The pill gone, the panel takes the room back.
+            await page.evaluate(() => window.Strom.UI.dismissUndoToast());
+            await expect(page.locator('.undo-toast')).toHaveCount(0);
+            await expect.poll(async () => (await panel.boundingBox())!.height).toBeGreaterThan(panelBox!.height);
+        });
+    }
 });

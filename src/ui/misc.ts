@@ -1643,6 +1643,9 @@ export const miscMethods = uiModule({
         el.addEventListener('mouseleave', () => { arm(); });
         arm();
 
+        // An open "What will be sent" panel ends above the pill.
+        this.positionResearchChanges();
+
         // A toast dismissed before this frame (a second change right after) stays hidden.
         requestAnimationFrame(() => { if (this.undoToastEl === el) el.classList.add('show'); });
     },
@@ -1654,7 +1657,11 @@ export const miscMethods = uiModule({
         this.undoToastEl = null;
         if (!el) return;
         el.classList.remove('show');
-        setTimeout(() => el.remove(), 200);
+        setTimeout(() => {
+            el.remove();
+            // The panel takes the room back.
+            this.positionResearchChanges();
+        }, 200);
     },
 
     // ---- UNDO / REDO ----
