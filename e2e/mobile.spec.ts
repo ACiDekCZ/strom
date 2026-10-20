@@ -266,6 +266,23 @@ test.describe('More on a small phone and held sideways', () => {
         await expect.poll(() => sheet.evaluate(el => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(1);
     });
 
+    test('360 × 640: no row runs past the sheet\'s right edge, the Tree row sits evenly inside', async ({ page }) => {
+        await page.setViewportSize({ width: 360, height: 640 });
+        await openApp(page);
+        await createFirstPerson(page, 'Jan', 'Novak');
+        await page.locator('#bb-view-more').tap();
+        const items = page.locator('.bottom-sheet-menu > .bottom-sheet-items');
+        await expect(items).toBeVisible();
+        const fit = await items.evaluate(el => {
+            const box = el.getBoundingClientRect();
+            const row = el.querySelector('.bottom-sheet-tree-row')!.getBoundingClientRect();
+            return { overflow: el.scrollWidth - el.clientWidth, left: row.left - box.left, right: box.right - row.right };
+        });
+        expect(fit.overflow).toBeLessThanOrEqual(0);
+        expect(fit.right).toBeGreaterThanOrEqual(0);
+        expect(Math.abs(fit.left - fit.right)).toBeLessThanOrEqual(1);
+    });
+
     test('640 × 360 sideways: two columns of 44px rows, no scrolling', async ({ page }) => {
         await page.setViewportSize({ width: 640, height: 360 });
         await openApp(page);

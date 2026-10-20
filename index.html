@@ -891,6 +891,9 @@
                run off screen on 1025-1300px windows, cutting the shortcuts). */
             left: auto;
             right: 0;
+            /* A long tree name is cut in its "Tree: {name} ›" row (card 5c),
+               it does not widen the menu. */
+            max-width: 300px;
         }
         /* Non-interactive section labels in the desktop ⋯ actions menu. */
         .menu-section-header {
@@ -2455,7 +2458,7 @@
             .bottom-sheet-more .bottom-sheet-pair > .bottom-sheet-item {
                 justify-content: flex-start; padding: 10px 16px; background: none; border-radius: 8px;
             }
-            .bottom-sheet-menu.bottom-sheet-more .bottom-sheet-tree-row { margin: 0; min-height: 44px; }
+            .bottom-sheet-menu.bottom-sheet-more .bottom-sheet-tree-row { margin: 0; width: 100%; min-height: 44px; }
             .bottom-sheet-more .bottom-sheet-items > .bottom-sheet-storage-row { min-height: 44px; margin: 2px 0; }
             .bottom-sheet-more .bottom-sheet-handle { margin-top: 2px; margin-bottom: 4px; }
         }
@@ -2465,6 +2468,8 @@
         .bottom-sheet-menu .bottom-sheet-tree-row {
             background: var(--hover-bg); border-radius: var(--r-md, 10px);
             margin: 6px 4px; min-height: 56px; gap: 6px; justify-content: flex-start;
+            /* Its side margins come off the row's width (no overflow to the right). */
+            width: calc(100% - 8px);
         }
         .bottom-sheet-tree-prefix { color: var(--text-light); flex-shrink: 0; }
         /* A quiet value at a More-sheet row's end ("BETA · 3.9.0"). */

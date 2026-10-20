@@ -208,6 +208,28 @@ test.describe('actions menu "Tree:" submenu', () => {
         await expect(modal.locator('.menu-option:visible .option-title')).toContainText(['Import JSON', 'Import GEDCOM']);
     });
 
+    test('a long tree name is cut in its row: the menu stays 300 wide, the chevron stays in view (menu 1020 §5)', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await openApp(page);
+        await createFirstPerson(page, 'Jan', 'Novak');
+        await page.evaluate(() => {
+            const tm = window.Strom.TreeManager;
+            tm.renameTree(tm.getActiveTreeId()!, 'Stammbaum der Familie Novák aus Kouřim und Umgebung');
+        });
+        await page.locator('.actions-menu-btn').click();
+        const menu = page.locator('#actions-menu-dropdown');
+        await expect(menu).toHaveClass(/active/);
+        const fit = await menu.evaluate(el => {
+            const name = el.querySelector('#actions-tree-name') as HTMLElement;
+            const row = el.querySelector('#actions-tree-row')!.getBoundingClientRect();
+            const chevron = el.querySelector('#actions-tree-row .actions-tree-chevron')!.getBoundingClientRect();
+            return { width: el.getBoundingClientRect().width, cut: name.scrollWidth > name.clientWidth, chevronIn: chevron.right <= row.right && chevron.width > 0 };
+        });
+        expect(fit.width).toBeLessThanOrEqual(300);
+        expect(fit.cut, 'the name ends in an ellipsis').toBe(true);
+        expect(fit.chevronIn).toBe(true);
+    });
+
     test('names the active tree and carries the one list of tree actions in order (menu 1020 §3.1)', async ({ page }) => {
         await openApp(page);
         await createFirstPerson(page, 'Jan', 'Novak');
