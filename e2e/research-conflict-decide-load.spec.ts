@@ -82,7 +82,7 @@ test.describe('after deciding a conflict in the app', () => {
         await expect(toast(page)).toHaveText(/^Conflict decided: (?!3 FEB).*1865$/);
         const c = cardOf(page);
         await expect(c).toHaveAttribute('data-state', 'taken');
-        await expect(c.locator('.prc-decided-line')).toHaveText('The value here changed from 1865. A backup was saved first (Research → Restore the state before loading).');
+        await expect(c.locator('.prc-decided-line')).toHaveText('The value here changed from 1865. A backup was saved first (Research → Other actions → Restore the state before loading).');
         expect(await linkHead(page, treeId)).toBe(NEW_HEAD);
         expect(await page.evaluate(id => window.Strom.UI.researchLoadBackup(id), treeId)).not.toBeNull();
         await page.evaluate(id => window.Strom.UI.researchRestoreBeforeLoad(id), treeId);

@@ -87,8 +87,8 @@ npm run build
 - **Edit Person** - Click on any person card to edit details or manage relationships
 - **Navigate** - Drag to pan, scroll to zoom, or use zoom controls
 - **Focus** - Click person → "Focus" to see only their immediate family
-- **Export** - Menu → "Export App" to save your tree as portable HTML file
-- **Import** - Supports JSON, GEDCOM, and Strom HTML files
+- **Export** - Actions → Export… → "App with data (HTML)" saves the tree as a portable HTML file
+- **Import** - the tree switcher → Import…: JSON, GEDCOM and Strom HTML files
 
 ## Technology
 

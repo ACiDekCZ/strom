@@ -692,7 +692,7 @@ test.describe('Start research with this tree (G3)', () => {
                 // The research stops waiting at once (no address to open elsewhere: it would not wait for it).
                 await expect.poll(() => calls.cancel).toEqual([JSON.stringify({ reason: 'cancelled' })]);
                 await expect(d).toContainText('was told it is not handed over');
-                await expect(note).toHaveText('A tree in Safari or on a phone moves over only with the research 1.12.1 or newer, and this one is older. There: Ancestor research, then the installation line into the terminal. The line updates the research and moves the tree.');
+                await expect(note).toHaveText('A tree in Safari or on a phone moves over only with the research 1.12.1 or newer, and this one is older. There: Actions (on a phone More) → Tree → Ancestor research, then the installation line into the terminal. The line updates the research and moves the tree.');
                 await expect(d.locator('.research-elsewhere-address')).toHaveCount(0);
                 await expect(d).not.toContainText('The research waits until');
                 await expect(d.locator('.buttons button')).toHaveText(['Close']);

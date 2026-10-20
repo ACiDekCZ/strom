@@ -88,7 +88,7 @@ test.describe('the hand-over', () => {
             await expect(dialog.locator('input[value="manual"]')).toBeChecked();
             await expect(dialog.locator('label:has(input[value="manual"])')).toContainText('Recommended');
             await expect(dialog.locator('.research-send-principles.is-boxed')).toBeVisible();
-            await expect(dialog).toContainText('Change it any time in the tree’s research settings.');
+            await expect(dialog).toContainText('Change it any time: Research → Other actions → Research for this tree…');
             await expect(dialog.locator('.research-trial-tag')).toBeVisible();
             if (vp.width >= 640) {
                 await expect(dialog.locator('.research-adopt-tiles')).toBeVisible();

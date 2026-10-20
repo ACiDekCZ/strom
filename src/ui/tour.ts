@@ -36,7 +36,8 @@ const TOUR_STEPS: TourStepDef[] = [
     { key: 'step6', selectors: ['.zoom-controls'] },
     // The phone folds the field to its magnifier at rest.
     { key: 'step7', selectors: ['#toolbar-search-picker', '#search-open-btn'] },
-    { key: 'step8', selectors: ['.tree-switcher-btn', '.bottom-bar-more'] },
+    // Anniversaries, export and settings: the Actions menu (More on a phone or tablet).
+    { key: 'step8', selectors: ['.actions-menu-btn', '.bottom-bar-more'] },
 ];
 
 function isCoarse(): boolean {

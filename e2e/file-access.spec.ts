@@ -99,19 +99,19 @@ test.describe('the link-to-a-file tile names the save key only where a keyboard 
 
     test.describe('touch', () => {
         test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
-        test('a phone: no key, Save does it', async ({ page }) => {
+        test('a phone: no key, More → Save does it', async ({ page }) => {
             await page.addInitScript(fsa);
             await openApp(page);
             await createFirstPerson(page, 'Solo', 'Root');
             await page.evaluate(() => window.Strom.UI.showExportDialog());
             await expect(page.locator(desc)).toBeVisible();
-            await expect(page.locator(desc)).toHaveText('Keeps this tree in a .json file — Save then writes into it');
+            await expect(page.locator(desc)).toHaveText('Keeps this tree in a .json file — then More → Save writes into it');
             await page.evaluate(() => {
                 window.Strom.UI.closeExportDialog();
                 window.Strom.UI.setLanguage('cs' as never);
                 window.Strom.UI.showExportDialog();
             });
-            await expect(page.locator(desc)).toHaveText('Strom se ukládá do souboru .json — pak stačí Uložit');
+            await expect(page.locator(desc)).toHaveText('Strom se ukládá do souboru .json — pak stačí Více → Uložit');
         });
     });
 });
