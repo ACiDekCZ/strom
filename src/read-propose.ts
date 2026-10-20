@@ -7,11 +7,11 @@
  * writes); the dialog draws from them and writes on the click.
  */
 
-import type { Gender, LifeEvent, LifeEventType, Person, PersonId, StromData, Partnership, PartnershipId } from './types.js';
+import type { Gender, LifeEvent, LifeEventType, Person, PersonId, StromData, Partnership, PartnershipId, Source } from './types.js';
 import type { ReadEntry, ReadEvent, ReadPerson, ReadVariant } from './research-read.js';
 import { researchPersonRef } from './research-link.js';
 import { gedcomTagEventType, parseGedcomDate } from './ged-parser.js';
-import { quickMatch, QuickMatchReason } from './merge/matching.js';
+import { quickMatch, QuickMatchReason, normalizeName } from './merge/matching.js';
 
 export type ProposeChoice = 'new' | 'link' | 'skip';
 
@@ -189,11 +189,18 @@ function researchCandidate(p: ReadPerson, data: StromData, taken: ReadonlySet<st
 }
 
 /** The research's match first, else the one tree person the app's matching finds above the threshold. */
-export function findCandidate(entry: ReadEntry, p: ReadPerson, data: StromData, draft: StromData, taken: ReadonlySet<string> = new Set()): ProposeCandidate | null {
+export function findCandidate(entry: ReadEntry, p: ReadPerson, data: StromData, draft: StromData, taken: ReadonlySet<string> = new Set(), prior: readonly Person[] = []): ProposeCandidate | null {
     const research = researchCandidate(p, data, taken);
     if (research) return research;
     const me = draft.persons[draftId(p.ref)];
     if (!me || !`${me.firstName}${me.lastName}`.trim()) return null;
+    // Written from this very entry before (they cite its source): the same name is the same person.
+    const name = (x: Pick<Person, 'firstName' | 'lastName'>): string => `${normalizeName(x.firstName ?? '')}|${normalizeName(x.lastName ?? '')}`;
+    const same = prior.filter(o => !taken.has(o.id) && name(o) === name(me));
+    if (same.length === 1) {
+        const q = quickMatch(me, same[0], draft, data);
+        return { id: same[0].id, byResearch: false, score: Math.max(q.score, MATCH_THRESHOLD), reasons: q.reasons, why: '' };
+    }
     let best: ProposeCandidate | null = null;
     let tie = false;
     for (const other of Object.values(data.persons)) {
@@ -207,16 +214,33 @@ export function findCandidate(entry: ReadEntry, p: ReadPerson, data: StromData, 
     return tie ? null : best;
 }
 
+/**
+ * The source an earlier write of this entry made (the same reading and
+ * entry), or null: one entry of a reading is one source in the tree.
+ */
+export function entrySource(data: StromData, readId: string, entryId: string): Source | null {
+    if (!readId || !entryId) return null;
+    return Object.values(data.sources ?? {}).find(s => !!s && s.reading === readId && s.readingEntry === entryId) ?? null;
+}
+
+/** The persons citing a source (written or linked from its entry before). */
+export function personsCiting(data: StromData, sourceId: string): Person[] {
+    return Object.values(data.persons).filter(p => !p.isPlaceholder && (p.sourceIds?.includes(sourceId)
+        || p.birthSourceIds?.includes(sourceId) || p.deathSourceIds?.includes(sourceId)));
+}
+
 /** The suggestion as it opens: a candidate links, no candidate is new, a godparent or witness is not written. */
 export function initialPropose(readId: string, entry: ReadEntry, data: StromData): ProposeState {
     const draft = draftData(entry);
     const taken = new Set<string>();
+    const before = entrySource(data, readId, entry.id);
+    const prior = before ? personsCiting(data, before.id) : [];
     const persons: Record<string, ProposePerson> = {};
     // The entry's own people pick their candidates first; no two persons link to one tree person.
     const order = [...entry.persons].sort((a, b) => Number(SKIP_ROLES.has(a.role)) - Number(SKIP_ROLES.has(b.role)));
     for (const p of order) {
         const skip = SKIP_ROLES.has(p.role);
-        const candidate = skip ? null : findCandidate(entry, p, data, draft, taken);
+        const candidate = skip ? null : findCandidate(entry, p, data, draft, taken, prior);
         if (candidate) taken.add(candidate.id);
         persons[p.ref] = {
             ref: p.ref,

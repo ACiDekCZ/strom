@@ -9,7 +9,7 @@ import { STROM_DATA_VERSION, StromData, Person, PersonId, Partnership, Partnersh
 import type { ReadEntry, ReadPerson } from '../research-read.js';
 import {
     initialPropose, proposeItems, proposeCounts, linkAdditions, carryPropose, readGender, eventPrincipals,
-    personVariants, variantsText,
+    personVariants, variantsText, entrySource,
 } from '../read-propose.js';
 
 function person(id: string, first: string, last: string, gender: Person['gender'], extra: Partial<Person> = {}): Person {
@@ -130,5 +130,34 @@ describe('the suggestion of a read entry', () => {
         const v = personVariants(e.persons[0], e.variants);
         expect(variantsText(v)).toBe('Joannes / Josephus');
         expect(personVariants(e.persons[1], e.variants)).toEqual([]);
+    });
+});
+
+describe('the same entry suggested again', () => {
+    const READ = 'D20261019153012-a1b2';
+    /** Two Jan Nováks; the one written from this very entry before cites its source. */
+    function written(): StromData {
+        const data = tree();
+        data.persons['j1' as PersonId] = person('j1', 'Jan', 'Novák', 'male', { birthDate: '1846' });
+        data.persons['j2' as PersonId] = person('j2', 'Jan', 'Novák', 'male', { birthDate: '1846', sourceIds: ['s9'] });
+        data.sources = { s9: { id: 's9', title: 'Křest, Lhota 1846', reading: READ, readingEntry: 'e1' } };
+        return data;
+    }
+
+    it('the source of that entry is found by the reading and the entry', () => {
+        const data = written();
+        expect(entrySource(data, READ, 'e1')?.id).toBe('s9');
+        expect(entrySource(data, READ, 'e2')).toBeNull();
+        expect(entrySource(data, 'D20261019153012-ffff', 'e1')).toBeNull();
+    });
+
+    it('the person written from it before is the candidate (no second person)', () => {
+        const s = initialPropose(READ, baptism(), written());
+        expect(s.persons.p1).toMatchObject({ choice: 'link', target: 'j2' });
+    });
+
+    it('another reading of the same document: the two equal Jans stay the user\'s choice', () => {
+        const s = initialPropose('D20261019153012-ffff', baptism(), written());
+        expect(s.persons.p1.choice).toBe('new');
     });
 });

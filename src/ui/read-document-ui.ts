@@ -18,7 +18,7 @@ import { PersonPicker } from '../person-picker.js';
 import { sha256OfBlob } from '../sha256.js';
 import { originalTargets } from '../originals.js';
 import { parseLiveBridge, researchSchemeUrl, LiveStatus } from '../research-link.js';
-import { storedResearchBridge, announcedResearchScheme } from '../research-device.js';
+import { storedResearchBridge, announcedResearchScheme, researchLinksEnabled } from '../research-device.js';
 import {
     ReadAccepts, LiveRead, ReadResult, ReadFailure, ReadFileRefusal, ReadState, ReadPage, ReadEntry, ReadRegion,
     readRunning, readFileMime, readFileKind, readFileRefusals, readUsualMinutes, readDocYear, readPageImageUrl,
@@ -61,7 +61,10 @@ interface Page {
 }
 
 /** What stands in place of the dialog's content. */
-type ErrorKind = 'down' | 'not-ready' | 'older' | 'failed' | 'cancelled' | 'busy' | 'limit' | 'unreadable';
+type ErrorKind = 'down' | 'not-ready' | 'older' | 'failed' | 'cancelled' | 'busy' | 'limit' | 'unreadable' | 'source';
+
+/** Why a source's reading cannot be shown (the `source` error: the source's own transcription stands in). */
+export type SourceWhy = 'down' | 'none' | 'archive' | 'unlinked' | 'computer' | 'other';
 
 /** `propose`: the tree suggestion of the chosen entry; `written`: what the click wrote. */
 export type Phase = 'input' | 'progress' | 'result' | 'error' | 'propose' | 'written';
@@ -93,6 +96,10 @@ export interface DialogState {
     page: number;
     /** A second reader started from the suggestion runs: the suggestion stays, the progress shows over it. */
     second: boolean;
+    /** Opened from a source (its reading): when the result cannot be shown, the source's transcription stands in. */
+    sourceId: string;
+    /** The entry to show first (a source's `readingEntry`; '' = the usual choice). */
+    entryId: string;
 }
 
 /** A reading the app started: shown as done in the menu and the panel until opened. */
@@ -109,6 +116,10 @@ let nextKey = 1;
 const readsByResearch = new Map<string, Map<string, LiveRead>>();
 /** Results fetched in this page (for the notice, the menu's second line, the dialog). */
 const results = new Map<string, ReadResult>();
+/** Readings known from the research's history (`GET reads`) only: their origin and state for the dialog. */
+const historyReads = new Map<string, LiveRead>();
+/** Why a reading's result could not be fetched last (by id). */
+const lastFailure = new Map<string, ReadFailure>();
 /** Readings whose end was announced (once). */
 const announced = new Set<string>();
 let listening = false;
@@ -484,7 +495,11 @@ export const readDocumentMethods = uiModule({
         const base = this.readBridgeBase(researchId);
         if (!base) return cached ?? null;
         const reply = await fetchReadResult(base, id);
-        if (!reply.ok) return cached ?? null;
+        if (!reply.ok) {
+            lastFailure.set(id, reply.failure);
+            return cached ?? null;
+        }
+        lastFailure.delete(id);
         results.set(id, reply.value);
         return reply.value;
     },
@@ -537,9 +552,12 @@ export const readDocumentMethods = uiModule({
      * with a reading's id (the notice, the strip) on that reading; else on the
      * running reading, the one read and not opened, or a new input.
      */
-    showReadDocumentDialog(opts: { personId?: string; files?: File[]; readId?: string } = {}): void {
+    showReadDocumentDialog(opts: { personId?: string; files?: File[]; readId?: string; read?: LiveRead; sourceId?: string; entryId?: string } = {}): void {
         const link = this.researchOriginalsLink();
-        if (!link) return;
+        // A source's reading opens without a research too: its transcription then stands in.
+        const source = opts.sourceId ? DataManager.getData().sources?.[opts.sourceId] : undefined;
+        const sourceRead = source?.reading ?? '';
+        if (!link && !sourceRead) return;
         this.closeActionsMenu();
         this.hideContextMenu?.();
         if (this.isResearchMenuOpen?.()) this.closeResearchMenu();
@@ -549,18 +567,26 @@ export const readDocumentMethods = uiModule({
             if (opts.files?.length && st.phase === 'input') this.addReadFiles(opts.files);
             return;
         }
-        const target = opts.readId
-            ? this.readsOfResearch(link.researchId).find(r => r.id === opts.readId) ?? null
+        const readId = sourceRead || opts.readId || '';
+        if (opts.read && opts.read.id === readId) historyReads.set(readId, opts.read);
+        const target = !link ? null : readId
+            // Not listed live any more (an older reading of the history): as the history said it.
+            ? this.readsOfResearch(link.researchId).find(r => r.id === readId) ?? (opts.read?.id === readId ? opts.read : null)
             : opts.files?.length || opts.personId ? null : this.readRunningNow() ?? this.readUnopenedNow();
-        if (!target && !opts.readId && !this.readDocumentAccepts()) return;
+        if (!target && !readId && !this.readDocumentAccepts()) return;
         st = {
             phase: 'input', pages: [], personId: opts.personId ?? '', note: '', readers: storedReaders(), readId: '',
-            sending: null, sawChecking: false, startedAt: Date.now(), error: null, result: results.get(opts.readId ?? '') ?? null,
+            sending: null, sawChecking: false, startedAt: Date.now(), error: null, result: results.get(readId) ?? null,
             notice: '', picker: null, busy: false, entry: 0, line: -1, page: 1, second: false,
+            sourceId: sourceRead ? opts.sourceId ?? '' : '', entryId: sourceRead ? source?.readingEntry ?? '' : opts.entryId ?? '',
         };
         const overlay = document.createElement('div');
         overlay.id = DIALOG_ID;
         overlay.className = 'modal-overlay active';
+        // Opened over a dialog that stands higher than the usual (a source's detail): above it.
+        const under = Array.from(document.querySelectorAll<HTMLElement>('.modal-overlay.active'))
+            .reduce((max, el) => Math.max(max, Number(getComputedStyle(el).zIndex) || 0), 0);
+        if (under > 200) overlay.style.zIndex = String(under + 1);
         document.body.appendChild(overlay);
         this.pushDialog(DIALOG_ID);
         pasteHandler = (e: ClipboardEvent) => {
@@ -571,8 +597,14 @@ export const readDocumentMethods = uiModule({
             this.addReadFiles(files);
         };
         document.addEventListener('paste', pasteHandler);
-        if (target || opts.readId) {
-            st.readId = target?.id ?? opts.readId ?? '';
+        const blocked = sourceRead ? this.readSourceBlocked() : null;
+        if (blocked) {
+            st.readId = readId;
+            st.phase = 'error';
+            st.error = { kind: 'source', why: blocked };
+            this.renderReadDialog();
+        } else if (target || readId) {
+            st.readId = target?.id ?? readId;
             st.phase = 'progress';
             if (target) this.followReadInDialog(target);
             else void this.openReadResult(st.readId);
@@ -581,6 +613,20 @@ export const readDocumentMethods = uiModule({
             this.renderReadDialog();
         }
         this.watchReads();
+    },
+
+    /** A source's reading result (its link in the source's detail and a person's sources). */
+    showReadingOfSource(sourceId: string): void {
+        this.showReadDocumentDialog({ sourceId });
+    },
+
+    /** Why a source's reading cannot be fetched now at all (null: ask the research). */
+    readSourceBlocked(): SourceWhy | null {
+        const link = this.researchOriginalsLink();
+        if (!link) return this.researchSyncLink() && researchLinksEnabled() && !onComputer() ? 'computer' : 'unlinked';
+        if (this.activeResearchArchive()) return 'archive';
+        if (!this.researchBridgeUp(link.researchId) || !this.readBridgeBase(link.researchId)) return 'down';
+        return null;
     },
 
     /** Close the dialog (a running reading goes on). */
@@ -646,6 +692,14 @@ export const readDocumentMethods = uiModule({
     /** After a status with the input or an error shown: its gate again (a bridge back, a research updated). */
     refreshReadGate(): void {
         if (!st) return;
+        if (st.phase === 'error' && st.error?.kind === 'source' && st.error.why === 'down') {
+            if (!this.readSourceBlocked()) {
+                st.phase = 'progress';
+                st.error = null;
+                void this.openReadResult(st.readId);
+            }
+            return;
+        }
         if (st.phase === 'error' && st.error && ['down', 'not-ready', 'older'].includes(st.error.kind)) {
             if (!this.readInputGate()) {
                 st.phase = 'input';
@@ -714,6 +768,11 @@ export const readDocumentMethods = uiModule({
         } else {
             body = this.readErrorHtml();
             foot = this.readErrorFootHtml();
+            if (st.error?.kind === 'source') {
+                const src = DataManager.getData().sources?.[st.sourceId];
+                title = src?.title || t.sourceLink.replace(/…$/, '');
+                sub = tree;
+            }
         }
         overlay.innerHTML = `
             <div class="modal batch-dialog read-dialog${wide ? ' read-dialog--wide' : ''}" role="dialog" aria-modal="true" aria-labelledby="read-title" data-phase="${st.phase}">
@@ -855,7 +914,7 @@ export const readDocumentMethods = uiModule({
     readLiveOf(id: string): LiveRead | null {
         const link = this.researchOriginalsLink();
         if (!link || !id) return null;
-        return readsByResearch.get(link.researchId)?.get(id) ?? null;
+        return readsByResearch.get(link.researchId)?.get(id) ?? historyReads.get(id) ?? null;
     },
 
     readProgressHtml(): string {
@@ -1000,9 +1059,19 @@ export const readDocumentMethods = uiModule({
         if (!st || st.readId !== id) return;
         markOpened(id);
         announced.add(id);
-        if (!res) {
+        const failure = lastFailure.get(id);
+        if (!res && st.sourceId) {
+            // The source's own transcription stands in for what the research cannot give.
             st.phase = 'error';
-            st.error = { kind: this.researchBridgeUp(link.researchId) ? 'failed' : 'down' };
+            const why: SourceWhy = failure?.kind === 'none' ? (this.activeResearchArchive() ? 'archive' : 'none')
+                : failure?.kind === 'down' || !this.researchBridgeUp(link.researchId) ? 'down' : 'other';
+            st.error = { kind: 'source', why, ...(failure ? { failure } : {}) };
+        } else if (!res) {
+            st.phase = 'error';
+            st.error = { kind: this.researchBridgeUp(link.researchId) ? 'failed' : 'down', ...(failure ? { failure } : {}) };
+        } else if ((res.state === 'failed' || res.state === 'cancelled') && st.phase !== 'propose' && st.phase !== 'written') {
+            st.phase = 'error';
+            st.error = st.sourceId ? { kind: 'source', why: 'other' } : { kind: res.state };
         } else if (res.state === 'unreadable') {
             st.phase = 'error';
             st.error = { kind: 'unreadable', why: res.doc.why ?? 'other' };
@@ -1026,7 +1095,8 @@ export const readDocumentMethods = uiModule({
             st.phase = 'result';
             const refn = this.readLiveOf(id)?.person
                 || (st.personId ? originalTargets({ personId: st.personId as PersonId }, DataManager.getData()).person ?? '' : '');
-            st.entry = defaultEntryIndex(res.entries, refn);
+            const chosen = st.entryId ? res.entries.findIndex(e => e.id === st!.entryId) : -1;
+            st.entry = chosen >= 0 ? chosen : defaultEntryIndex(res.entries, refn);
             st.line = -1;
             st.page = res.entries[st.entry]?.page ?? res.pages[0]?.n ?? 1;
         }
@@ -1394,6 +1464,18 @@ export const readDocumentMethods = uiModule({
         }
     },
 
+    /** The source's own transcription (when its reading cannot be shown). */
+    async copySourceTranscript(): Promise<void> {
+        const text = st ? DataManager.getData().sources?.[st.sourceId]?.transcript ?? '' : '';
+        if (!text) return;
+        try {
+            await navigator.clipboard.writeText(text);
+            this.showToast(strings.read.copied);
+        } catch {
+            this.showToast(strings.read.copyFailed);
+        }
+    },
+
     /** Fold or unfold the explanation (remembered). */
     toggleReadGloss(btn: HTMLElement): void {
         const open = btn.getAttribute('aria-expanded') !== 'true';
@@ -1453,12 +1535,33 @@ export const readDocumentMethods = uiModule({
 
     readErrorHtml(): string {
         const err = st!.error ?? { kind: 'failed' as ErrorKind };
+        if (err.kind === 'source') return this.readSourceBlockHtml();
         const { title, text } = this.readErrorWords();
         return `
                 <div class="read-error" data-error="${err.kind}" role="alert">
                     <h3 class="read-error-title">${esc(title)}</h3>
                     ${text ? `<p class="read-error-text">${esc(text)}</p>` : ''}
                 </div>`;
+    },
+
+    /** A source's reading that cannot be shown: why, then the transcription the source carries (with its marks). */
+    readSourceBlockHtml(): string {
+        const s = st!;
+        const t = strings.read;
+        const why = s.error?.why ?? 'other';
+        const transcript = DataManager.getData().sources?.[s.sourceId]?.transcript?.trim() ?? '';
+        const lines = transcript
+            ? parseBlock(transcript).map(segs => `<div class="read-source-line">${segsHtml(segs) || '&nbsp;'}</div>`).join('')
+            : `<p class="read-source-none">${esc(t.sourceNoTranscript)}</p>`;
+        return `
+                <div class="read-error read-source-block" data-error="source" data-why="${esc(why)}" role="alert">
+                    <h3 class="read-error-title">${esc(t.sourceBlockTitle)}</h3>
+                    <p class="read-error-text">${esc(t.sourceWhy[why] ?? t.sourceWhy.other)}</p>
+                </div>
+                <section class="read-source-transcript" aria-labelledby="read-source-title">
+                    <h3 class="read-section-title" id="read-source-title">${esc(t.sourceTranscript)}</h3>
+                    <div class="read-source-lines">${lines}</div>
+                </section>`;
     },
 
     /** The error state's title and explanation. */
@@ -1504,14 +1607,22 @@ export const readDocumentMethods = uiModule({
         const btn = (act: string, label: string, primary = false): string =>
             `<button type="button" class="${primary ? 'primary' : 'secondary'}" data-act="${act}">${esc(label)}</button>`;
         const close = btn('close', t.close, kind === 'limit' || kind === 'cancelled');
+        // A reading started in the research is not read again from here.
+        const own = this.readLiveOf(s.readId)?.from !== 'research';
         switch (kind) {
+            case 'source': {
+                const hasText = !!DataManager.getData().sources?.[s.sourceId]?.transcript?.trim();
+                const open = s.error?.why === 'down' && !!this.researchOriginalsLink();
+                return `<span class="batch-foot-note"></span>${hasText ? btn('copy-source', t.copy) : ''}`
+                    + btn('close', t.close, !open) + (open ? btn('open-research', t.openResearch, true) : '');
+            }
             case 'down':
                 return `<span class="batch-foot-note"></span>${this.batchAvailable() && s.pages.length ? btn('as-material', t.addMaterials) : ''}`
                     + btn('close', t.close) + btn('open-research', t.openResearch, true);
             case 'not-ready': return `<span class="batch-foot-note"></span>${btn('close', t.close)}${btn('open-research', t.openResearch, true)}`;
             case 'older': return `<span class="batch-foot-note"></span>${btn('close', t.close)}${btn('update-research', t.updateResearch, true)}`;
-            case 'failed': return `<span class="batch-foot-note"></span>${btn('close', t.close)}${btn('retry', t.retry, true)}`;
-            case 'cancelled': return `<span class="batch-foot-note"></span>${s.readId ? btn('again', t.readAgain) : ''}${close}`;
+            case 'failed': return `<span class="batch-foot-note"></span>${own ? `${btn('close', t.close)}${btn('retry', t.retry, true)}` : btn('close', t.close, true)}`;
+            case 'cancelled': return `<span class="batch-foot-note"></span>${s.readId && own ? btn('again', t.readAgain) : ''}${close}`;
             case 'busy': return `<span class="batch-foot-note"></span>${btn('close', t.close)}${btn('show-running', t.showRunning, true)}`;
             case 'unreadable': return `<span class="batch-foot-note"></span>${btn('close', t.close)}${btn('insert-other', t.insertOther, true)}`;
             default: return `<span class="batch-foot-note"></span>${close}`;
@@ -1661,6 +1772,7 @@ export const readDocumentMethods = uiModule({
             case 'page': this.readSelectPage(Number(el.dataset.page)); break;
             case 'open-page': this.openReadPage(); break;
             case 'copy': void this.copyReadTranscript(); break;
+            case 'copy-source': void this.copySourceTranscript(); break;
             case 'gloss': this.toggleReadGloss(el); break;
             case 'propose': this.readDocumentPropose(); break;
             default: this.readProposeAct(el); break;

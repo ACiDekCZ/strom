@@ -257,6 +257,7 @@ export const researchTreeSettingsMethods = uiModule({
                 <button type="button" class="link-button research-older-sources" id="research-older-sources" hidden></button>`}
                 ${sendingHtml}
                 ${originalsHtml}
+                <button type="button" class="link-button research-read-history" id="research-read-history" hidden></button>
                 ${modeWhereHtml}
                 ${terminalWhereHtml}
                 <div class="buttons research-tree-settings-buttons">
@@ -373,6 +374,8 @@ export const researchTreeSettingsMethods = uiModule({
             this.showOriginalsQueue();
         });
         normalizeModal(overlay.querySelector('.modal') as HTMLElement);
+        const historyBtn = overlay.querySelector<HTMLButtonElement>('#research-read-history');
+        if (historyBtn) void this.fillReadHistoryRow(historyBtn, treeId);
         await renderOlder();
         overlay.querySelector<HTMLInputElement>('input[name="research-transcripts"]:checked')?.focus();
     },

@@ -12,7 +12,7 @@ import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings, getCurrentLanguage } from '../strings.js';
-import { Person, PersonId, PartnershipId, SourceExcerpt } from '../types.js';
+import { Person, PersonId, PartnershipId, Source, SourceExcerpt } from '../types.js';
 import { PersonPicker } from '../person-picker.js';
 import { shownName } from '../person-name.js';
 import { displayYear, formatFlexDate } from '../dates.js';
@@ -23,7 +23,7 @@ import { ReadEntry, ReadPerson, ReadResult, ReadPage, ReadRegion, readDocYear } 
 import { entryName } from '../read-result.js';
 import {
     ProposeState, ProposeChoice, ProposeItem, initialPropose, carryPropose, proposeItems, proposeCounts, linkAdditions,
-    linkedPerson, readGender, readEventDate, personVariants, variantsText, variantKey, LinkAddition,
+    linkedPerson, readGender, readEventDate, personVariants, variantsText, variantKey, LinkAddition, entrySource,
 } from '../read-propose.js';
 import { researchSendMode } from './research-sync-ui.js';
 import { readDialogState, readCropHtml, regionStyle } from './read-document-ui.js';
@@ -605,7 +605,16 @@ export const readProposeMethods = uiModule({
         const data = DataManager.getData();
         const items = proposeItems(entry, state, data);
         const sha = cleanSha(page?.sha);
-        const source = DataManager.addSource({
+        // The same entry written again: its source stays the one source (it gains only what it lacks).
+        const before = entrySource(data, res.id, entry.id);
+        if (before) {
+            const fill: Partial<Source> = {};
+            if (!before.transcript?.trim() && entry.transcript) fill.transcript = entry.transcript;
+            if (!before.readingSha && sha) fill.readingSha = sha;
+            if (!before.excerpts?.length && excerpt) fill.excerpts = [excerpt];
+            if (Object.keys(fill).length > 0) DataManager.updateSource(before.id, fill);
+        }
+        const source = before ?? DataManager.addSource({
             title, transcript: entry.transcript, reading: res.id, readingEntry: entry.id,
             ...(sha ? { readingSha: sha } : {}), ...(excerpt ? { excerpts: [excerpt] } : {}),
         });
@@ -681,6 +690,12 @@ export const readProposeMethods = uiModule({
                 const type = gedcomTagEventType(tag);
                 if (type) {
                     for (const id of who) {
+                        // Already there (the entry written before): cited, not added again.
+                        const same = DataManager.getPerson(id)?.events?.find(e => e.type === type && (e.date ?? '') === date && (e.place ?? '') === place);
+                        if (same) {
+                            if (!same.sourceIds?.includes(source.id)) DataManager.updateLifeEvent(id, same.id, { sourceIds: [...(same.sourceIds ?? []), source.id] });
+                            continue;
+                        }
                         const added = DataManager.addLifeEvent(id, { type, ...(date ? { date } : {}), ...(place ? { place } : {}), sourceIds: [source.id] });
                         if (added) done = true;
                     }

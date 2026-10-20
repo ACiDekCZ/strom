@@ -170,6 +170,36 @@ export function sanitizeReads(value: unknown): LiveRead[] | null {
     return out;
 }
 
+// ==================== The history (GET reads) ====================
+
+/** One reading in `GET reads`: a `/status.reads` entry plus whether a source of the tree carries it. */
+export interface ReadHistoryItem extends LiveRead {
+    inSource: boolean;
+}
+
+const HISTORY_MAX = 200;
+
+/**
+ * `GET reads` (`{reads: [...]}`), newest first by `at`, without duplicates and
+ * capped; null when the answer is not a history. Untrusted.
+ */
+export function sanitizeReadHistory(value: unknown): ReadHistoryItem[] | null {
+    const b = asRecord(value);
+    const list = Array.isArray(value) ? value : b && Array.isArray(b.reads) ? b.reads : null;
+    if (!list) return null;
+    const out: ReadHistoryItem[] = [];
+    const seen = new Set<string>();
+    for (const item of list.slice(0, HISTORY_MAX * 4)) {
+        const read = sanitizeLiveRead(item);
+        if (!read || seen.has(read.id)) continue;
+        seen.add(read.id);
+        out.push({ ...read, inSource: asRecord(item)?.inSource === true });
+        if (out.length >= HISTORY_MAX) break;
+    }
+    // Newest first: by `at`, then by the id (which carries the time it was asked for).
+    return out.sort((a, b) => (b.at || '').localeCompare(a.at || '') || b.id.localeCompare(a.id));
+}
+
 // ==================== The result (GET read/<id>) ====================
 
 /** `[x, y, w, h]` as fractions of the page from its top left corner. */
@@ -674,6 +704,16 @@ export async function fetchReadResult(base: string, id: string): Promise<ReadRep
     const r = await call(`${base}/read/${encodeURIComponent(id)}`, { method: 'GET' }, JSON_TIMEOUT_MS);
     const res = ok(r.status) ? sanitizeReadResult(r.body) : null;
     return res ? { ok: true, value: res } : { ok: false, failure: readFailure(ok(r.status) ? 500 : r.status, r.body, r.retry) };
+}
+
+/**
+ * The readings of the research (`GET reads`). A research without a history
+ * (an older one: 404 without a code) answers `down`; an archive `none`.
+ */
+export async function fetchReads(base: string): Promise<ReadReply<ReadHistoryItem[]>> {
+    const r = await call(`${base}/reads`, { method: 'GET' }, JSON_TIMEOUT_MS);
+    const list = ok(r.status) ? sanitizeReadHistory(r.body) : null;
+    return list ? { ok: true, value: list } : { ok: false, failure: readFailure(ok(r.status) ? 500 : r.status, r.body, r.retry) };
 }
 
 /** Read the same pages again, blind (`POST read/<id>/again`). */

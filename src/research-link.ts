@@ -986,6 +986,8 @@ export interface MediaCarryOver {
  * - excerpts without a `clip` (clipped ones belong to the research) to the
  *   source with the same id: all when the research has none for it, else
  *   only those cut here from an attachment.
+ * - a source's reading marks (`reading`, `readingEntry`, `readingSha`) when
+ *   the research's source with the same id has none.
  * What belongs to a person or source missing from `next` is counted as lost.
  * Returns a new object; neither input is changed.
  */
@@ -1033,6 +1035,17 @@ export function carryOverMedia(next: StromData, previous: StromData): MediaCarry
     }
 
     for (const [id, old] of Object.entries(previous.sources ?? {})) {
+        // A research that does not write the reading marks back (older, or
+        // not for this app) would cut the source off from its reading.
+        const was = sources?.[id];
+        if (old?.reading && was && sources && !was.reading) {
+            sources[id] = {
+                ...was,
+                reading: old.reading,
+                ...(old.readingEntry ? { readingEntry: old.readingEntry } : {}),
+                ...(old.readingSha ? { readingSha: old.readingSha } : {}),
+            };
+        }
         const own = (old?.excerpts ?? []).filter(e => !e.clip);
         if (!own.length) continue;
         const cur = sources?.[id];

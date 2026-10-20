@@ -145,6 +145,12 @@ export interface FakeRead {
     pageAsks: string[];
     /** The name a new reading gets in `/status.reads` (default zapis.jpg; a page the research already had: its hash). */
     readName?: string;
+    /** `GET /reads` (the history, P2): its readings; absent = an older research without it (falls through, 404). */
+    history?: (FakeReading & { inSource?: boolean })[];
+    /** `GET /reads` answers this instead (an archive: 404 read.none). */
+    historyReply?: { status: number; body: unknown };
+    /** Every `GET /reads`. */
+    historyAsks?: number;
 }
 
 export const READ_ID = 'D20261019153012-a1b2';
@@ -276,6 +282,11 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
             const lines = Array.from({ length: 24 }, (_, i) => `<line x1="40" x2="560" y1="${60 + i * 30}" y2="${60 + i * 30}" stroke="#c9bfa8" stroke-width="2"/>`).join('');
             const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800" viewBox="0 0 600 800"><rect width="600" height="800" fill="#f6efe0"/>${lines}</svg>`;
             return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'image/svg+xml' }, body: svg });
+        }
+        if (rd && method === 'GET' && /\/reads$/.test(url.pathname) && (rd.history || rd.historyReply)) {
+            rd.historyAsks = (rd.historyAsks ?? 0) + 1;
+            if (rd.historyReply) return json(rd.historyReply.status, rd.historyReply.body);
+            return json(200, { reads: rd.history });
         }
         const readPath = /\/read(?:\/([^/]+)(?:\/(cancel|again))?)?$/.exec(url.pathname);
         if (rd && readPath) {

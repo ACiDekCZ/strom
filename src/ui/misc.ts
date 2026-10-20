@@ -918,6 +918,10 @@ export const miscMethods = uiModule({
                         this.closeReadDocumentDialog();
                         return;
                     }
+                    if (currentDialog === 'read-history-modal') {
+                        this.closeReadHistoryDialog();
+                        return;
+                    }
                     if (currentDialog === 'phone-modal') {
                         this.closePhoneDialog();
                         return;

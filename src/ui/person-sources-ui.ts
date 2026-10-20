@@ -219,7 +219,7 @@ export const personSourcesMethods = uiModule({
             const labels = r.cites.map(c => c.title
                 ? `<span title="${esc(c.title)}">${esc(c.label)}</span>` : esc(c.label)).join(' · ');
             const cls = before !== null && !before.has(key(r)) ? 'person-source-row is-new' : 'person-source-row';
-            return `
+            const row = `
                 <button type="button" class="${cls}" data-row="${i}">
                     ${sourceThumbHtml(r.source, 'picker')}
                     <span class="person-source-text">
@@ -227,11 +227,21 @@ export const personSourcesMethods = uiModule({
                         <span class="person-source-meta">${labels}${q ? ` <span class="source-quality-tag">${esc(q)}</span>` : ''}</span>
                     </span>
                 </button>`;
+            // A source written from a reading: its whole result beside the row (a button cannot hold another).
+            return r.source.reading
+                ? `<div class="person-source-item">${row}<button type="button" class="link-button person-source-reading" data-reading="${i}">${esc(strings.read.sourceLink)}</button></div>`
+                : row;
         }).join('');
         list.querySelectorAll<HTMLElement>('.person-source-row').forEach(btn => {
             btn.addEventListener('click', () => {
                 const r = rows[Number(btn.dataset.row)];
                 if (r) this.showSourceViewer(r.source.id, r.cites[0].ctx);
+            });
+        });
+        list.querySelectorAll<HTMLElement>('.person-source-reading').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const r = rows[Number(btn.dataset.reading)];
+                if (r) this.showReadingOfSource(r.source.id);
             });
         });
         hydrateThumbs(list);

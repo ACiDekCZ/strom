@@ -367,11 +367,16 @@ export const sourcesMethods = uiModule({
         if (pageUrl) {
             chunks.push(`<a class="viewer-open-page" href="${esc(pageUrl)}" target="_blank" rel="noopener noreferrer">${esc(s.viewerOpenPage)} ↗</a>`);
         }
+        // Written from a reading ("Read a document"): its whole result is a click away, beside the transcript.
+        const reading = src.reading
+            ? `<p class="viewer-reading"><button type="button" class="link-button viewer-reading-open" id="source-viewer-reading">${esc(strings.read.sourceLink)}</button></p>` : '';
         if (src.transcript) {
             // Who read the entry, as the research says (nothing when it does not).
             const readBy = src.readBy === 'user' || src.readBy === 'research' || src.readBy === 'both' ? s.readBy[src.readBy] : '';
             chunks.push(`<section><h3 class="viewer-section-title">${esc(s.viewerTranscript)}</h3>
-                <p class="viewer-transcript">${esc(src.transcript)}</p>${readBy ? `<p class="viewer-read-by">${esc(readBy)}</p>` : ''}</section>`);
+                <p class="viewer-transcript">${esc(src.transcript)}</p>${readBy ? `<p class="viewer-read-by">${esc(readBy)}</p>` : ''}${reading}</section>`);
+        } else if (reading) {
+            chunks.push(reading);
         }
         const cites = DataManager.listSourceCitations(src.id).map(ref => {
             if (ref.kind === 'partnership') {
@@ -418,6 +423,7 @@ export const sourcesMethods = uiModule({
             });
         });
         body.querySelector('.viewer-add-excerpt')?.addEventListener('click', () => this.editFromSourceViewer(true));
+        body.querySelector('#source-viewer-reading')?.addEventListener('click', () => this.showReadingOfSource(src.id));
 
         const editBtn = document.getElementById('source-viewer-edit');
         if (editBtn) editBtn.hidden = !editable;
