@@ -14752,24 +14752,6 @@
         .sources-bulk-bar > span { display: block; height: 100%; background: var(--primary); transition: width 0.3s; }
         .sources-bulk-panel.is-paused .sources-bulk-bar > span { background: var(--text-faint); }
         .sources-bulk-buttons { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 10px; }
-        .research-images-badge {
-            display: inline-flex; flex-direction: column; justify-content: center; gap: 3px; height: 32px; margin-left: 6px;
-            padding: 0 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface);
-            color: var(--text-secondary); font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap;
-        }
-        @media (hover: hover) { .research-images-badge:hover { border-color: var(--primary); } }
-        .research-images-badge-bar {
-            display: block; width: 44px; height: 3px; border-radius: 2px; overflow: hidden;
-            background: color-mix(in srgb, var(--primary) 18%, transparent);
-        }
-        .research-images-badge-bar > span { display: block; height: 100%; background: var(--primary); }
-        @media (max-width: 1179px) { .research-images-badge .research-images-badge-text { font-size: 11px; } }
-        /* A tight toolbar (src/ui/toolbar-fit.ts): the icon and the count alone, the search keeps its room. */
-        .research-images-badge-short { display: none; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
-        .toolbar.toolbar-squeeze .research-images-badge { padding: 0 8px; }
-        .toolbar.toolbar-squeeze .research-images-badge .research-images-badge-text { display: none; }
-        .toolbar.toolbar-squeeze .research-images-badge .research-images-badge-short { display: inline-flex; }
-        .toolbar.toolbar-squeeze .research-images-badge-bar { width: 100%; }
         .research-images-host:empty { display: none; }
         .research-images { margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--divider, var(--border)); }
         .research-images-title { margin: 0 0 8px; font-size: 14px; font-weight: 600; }

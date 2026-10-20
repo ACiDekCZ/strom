@@ -1,7 +1,7 @@
 import { test, expect, Page, Route } from '@playwright/test';
 import { readFileSync } from 'fs';
 import { card, openApp } from './helpers.js';
-import { BRIDGE, FakeBridge, fakeBridge, openResearch, poll, researchGed } from './research-bridge.js';
+import { BRIDGE, FakeBridge, fakeBridge, openResearch, poll, researchGed, signal } from './research-bridge.js';
 
 /**
  * Source images the research left out of its file (`_STROM_IMG_OMITTED`):
@@ -160,8 +160,9 @@ test.describe('source images from the research', () => {
         await modal.locator('#sources-bulk-go').click();
         await expect(modal.locator('.sources-bulk-panel')).toContainText('Loaded 2 sources');
         expect(ex.asks.sort()).toEqual(['S0001/C0001', 'S0001/C0002', 'S0002/C0003']);
-        // The badge says it ended until Sources opens again.
-        await expect(page.locator('#research-images-badge')).toContainText('images 3 / 3');
+        // No badge in the toolbar: the Research menu's row says it ended (until Sources opens again).
+        await expect(page.locator('#research-images-badge, .research-images-badge')).toHaveCount(0);
+        await expect(page.locator('#research-item-images')).toHaveAttribute('aria-label', 'Images in the research · 2 / 2 ✓');
         await modal.locator('#sources-bulk-done').click();
         await expect(modal.locator('.source-row-thumb:not(.is-held)')).toHaveCount(2);
     });
@@ -226,11 +227,103 @@ test('Sources: the tag at the left edge of its title', async ({ page }) => {
 });
 
 /**
- * The toolbar badge of the bulk load (de, the widest labels, a long tree
- * name, 1440 px): the search field keeps room for its placeholder. A tree
- * without a research is measured as before (no squeeze).
+ * The Research menu's row "Images in the research · N" (in place of the
+ * toolbar badge the bulk load had): N sources whose image is only in the
+ * research, offered while the research hands images out; the click opens
+ * Sources on the "Image in research" filter; during the bulk load its
+ * progress, ✓ at its end until Sources opens. It never lights the Research
+ * button's dot (D7).
  */
-test.describe('the images badge and the search field (de-DE)', () => {
+test.describe('the Research menu: Images in the research', () => {
+    const row = (page: Page) => page.locator('#research-menu #research-item-images');
+    const openMenu = async (page: Page) => {
+        await page.locator('#research-menu-btn').click();
+        await expect(page.locator('#research-menu')).toBeVisible();
+    };
+
+    test('the count on the first level, the click opens Sources on the filter; the progress, ✓, gone once all are loaded', async ({ page }) => {
+        const { ex } = await setup(page, { auto: false });
+        const before = await signal(page);
+        await openMenu(page);
+        await expect(row(page)).toHaveText('Images in the research · 2');
+        // Six at most on the first level, the row among them (above "Other actions").
+        const first = page.locator('#research-menu > .research-menu-group > .tree-switcher-action:not(#research-item-more)');
+        expect(await first.count()).toBeLessThanOrEqual(6);
+        await expect(page.locator('#research-menu > .research-menu-group > #research-item-images')).toHaveCount(1);
+        expect(await signal(page)).toBe(before);
+        await row(page).click();
+        await expect(page.locator('#research-menu')).toBeHidden();
+        const modal = page.locator('#sources-modal');
+        await expect(modal).toBeVisible();
+        await expect(modal.locator('#sources-filter [data-filter="imageHeld"]')).toHaveAttribute('aria-pressed', 'true');
+        await expect(modal.locator('.source-row')).toHaveCount(2);
+
+        // The bulk load: its progress on the row while the window is closed.
+        await modal.locator('#sources-bulk-open').click();
+        let release!: () => void;
+        ex.hold = new Promise<void>(r => { release = r; });
+        await modal.locator('#sources-bulk-go').click();
+        await page.evaluate(() => window.Strom.UI.closeSourcesDialog());
+        await openMenu(page);
+        await expect(row(page)).toHaveText(/^Images in the research · [01] \/ 2$/);
+        release();
+        ex.hold = undefined;
+        await expect(row(page)).toHaveText('Images in the research · 2 / 2 ✓');
+        expect(await signal(page)).toBe(before);
+        // Sources opens from it; the finished row goes (nothing is left to load).
+        await row(page).click();
+        await expect(modal).toBeVisible();
+        await page.evaluate(() => window.Strom.UI.closeSourcesDialog());
+        await openMenu(page);
+        await expect(row(page)).toHaveCount(0);
+        await expect(page.locator('#research-images-badge, .research-images-badge')).toHaveCount(0);
+    });
+
+    test('no row while the research is not running; back once it runs', async ({ page }) => {
+        const { b } = await setup(page, { auto: false });
+        b.down = true;
+        await poll(page);
+        await openMenu(page);
+        await expect(row(page)).toHaveCount(0);
+        await page.keyboard.press('Escape');
+        b.down = false;
+        await poll(page);
+        await openMenu(page);
+        await expect(row(page)).toHaveText('Images in the research · 2');
+    });
+
+    test('an older research without excerpt.get: no row', async ({ page }) => {
+        await setup(page, { features: [], auto: false });
+        await openMenu(page);
+        await expect(page.locator('#research-menu .research-menu-group').first()).toBeVisible();
+        await expect(row(page)).toHaveCount(0);
+    });
+
+    test('a narrow window with a mouse: the row in the research group of More and on its research page', async ({ page }) => {
+        await setup(page, { auto: false });
+        await page.setViewportSize({ width: 900, height: 900 });
+        await page.locator('#bb-view-more').click();
+        const sheet = page.locator('.bottom-sheet-menu');
+        await expect(sheet).toBeVisible();
+        await expect(sheet.locator('.bottom-sheet-items')).toContainText('Images in the research · 2');
+        await page.locator('#research-sheet-all').click();
+        const body = page.locator('#research-sheet-menu');
+        await expect(body.locator('#research-item-images')).toHaveText('Images in the research · 2');
+        await body.locator('#research-item-images').click();
+        await expect(sheet).toHaveCount(0);
+        await expect(page.locator('#sources-modal')).toBeVisible();
+        await expect(page.locator('#sources-modal #sources-filter [data-filter="imageHeld"]')).toHaveAttribute('aria-pressed', 'true');
+    });
+});
+
+/**
+ * The bulk load in the widest labels (de, a long tree name): no toolbar badge
+ * takes the search field's room any more, so at 1440 px the placeholder stays
+ * whole without the squeeze (Actions keeps its word) while loading and after;
+ * at 1024 px the search keeps its width. A tree without a research is measured
+ * as before (no squeeze).
+ */
+test.describe('the bulk load and the search field (de-DE)', () => {
     test.use({ locale: 'de-DE' });
 
     const searchRoom = (page: Page) => page.evaluate(() => {
@@ -240,39 +333,47 @@ test.describe('the images badge and the search field (de-DE)', () => {
         cv.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
         const tb = document.querySelector<HTMLElement>('.toolbar')!;
         return {
+            width: input.clientWidth,
             room: input.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight),
             need: Math.min(cv.measureText(input.placeholder).width, 120),
             overflow: tb.scrollWidth - tb.clientWidth,
         };
     });
 
-    test('1440 px: the placeholder whole beside the badge, while loading and after', async ({ page }) => {
-        const long = heldGed().replace('1 NOTE Fíškovi', '1 NOTE Fíškovi z Čáslavi a Kutné Hory');
-        await page.setViewportSize({ width: 1440, height: 900 });
-        const b = await fakeBridge(page, { features: EXCERPT_FEATURES, treeGed: long });
-        const ex = await serveExcerpts(page, b);
-        await openResearch(page, { ged: long });
-        await page.evaluate(() => {
-            const tm = window.Strom.TreeManager;
-            tm.patchResearchLink(tm.getActiveTreeId()!, { autoLoadImages: false });
+    for (const width of [1440, 1024]) {
+        test(`${width} px: the placeholder whole and the search as wide while loading and after as before it`, async ({ page }) => {
+            const long = heldGed().replace('1 NOTE Fíškovi', '1 NOTE Fíškovi z Čáslavi a Kutné Hory');
+            await page.setViewportSize({ width, height: 900 });
+            const b = await fakeBridge(page, { features: EXCERPT_FEATURES, treeGed: long });
+            const ex = await serveExcerpts(page, b);
+            await openResearch(page, { ged: long });
+            await page.evaluate(() => {
+                const tm = window.Strom.TreeManager;
+                tm.patchResearchLink(tm.getActiveTreeId()!, { autoLoadImages: false });
+            });
+            await poll(page);
+            const fits = async () => { const r = await searchRoom(page); return r.room >= r.need && r.overflow <= 0; };
+            await expect.poll(fits).toBe(true);
+            const idle = (await searchRoom(page)).width;
+            let release!: () => void;
+            ex.hold = new Promise<void>(r => { release = r; });
+            await page.evaluate(() => { window.Strom.UI.startBulkImageLoad(); });
+            await expect(page.locator('#research-images-badge, .research-images-badge')).toHaveCount(0);
+            await expect.poll(fits).toBe(true);
+            expect((await searchRoom(page)).width).toBe(idle);
+            if (width === 1440) {
+                await expect(page.locator('.toolbar')).not.toHaveClass(/toolbar-squeeze/);
+                await page.locator('#research-menu-btn').click();
+                await expect(page.locator('#research-item-images')).toHaveText(/^Bilder in der Forschung · [01] \/ 2$/);
+            }
+            release();
+            ex.hold = undefined;
+            if (width === 1440) await expect(page.locator('#research-item-images')).toHaveText('Bilder in der Forschung · 2 / 2 ✓');
+            else await expect.poll(() => page.evaluate(() => window.Strom.UI.researchImagesMenuItem()?.label)).toBe('Bilder in der Forschung · 2 / 2 ✓');
+            await expect.poll(fits).toBe(true);
+            expect((await searchRoom(page)).width).toBe(idle);
         });
-        await poll(page);
-        await page.evaluate(() => window.Strom.UI.showSourcesDialog());
-        const modal = page.locator('#sources-modal');
-        await modal.locator('#sources-filter [data-filter="imageHeld"]').click();
-        await modal.locator('#sources-bulk-open').click();
-        let release!: () => void;
-        ex.hold = new Promise<void>(r => { release = r; });
-        await modal.locator('#sources-bulk-go').click();
-        const badge = page.locator('#research-images-badge');
-        await expect(badge).toBeVisible();
-        await expect(badge).toHaveAccessibleName(/^Bilder \d+ \/ 3$/);
-        await expect.poll(async () => { const r = await searchRoom(page); return r.room >= r.need && r.overflow <= 0; }).toBe(true);
-        release();
-        ex.hold = undefined;
-        await expect(badge).toHaveAccessibleName('Bilder 3 / 3 ✓');
-        await expect.poll(async () => { const r = await searchRoom(page); return r.room >= r.need && r.overflow <= 0; }).toBe(true);
-    });
+    }
 
     test('a tree without a research: no squeeze, the "/" hint stays', async ({ page }) => {
         await openApp(page);

@@ -21,12 +21,11 @@
  * The fixed 1180–1280 px rule in index.html (a research tree, ＋ alone) stays:
  * measured on top of it, the toolbar fits and this class is not set there.
  *
- * A research tree also keeps the search field usable: the Research button and
- * the source images badge take their room from the search field, so its input
- * must still hold its placeholder (up to SEARCH_ROOM_CAP_PX). When it does not,
- * the add button folds first; when that is still not enough,
- * `.toolbar-squeeze` shortens the images badge to its icon and count and folds
- * the "Actions" label into ⋯. A tree without a research is measured as before.
+ * A research tree also keeps the search field usable: the Research button
+ * takes its room from the search field, so its input must still hold its
+ * placeholder (up to SEARCH_ROOM_CAP_PX). When it does not, the add button
+ * folds first; when that is still not enough, `.toolbar-squeeze` folds the
+ * "Actions" label into ⋯. A tree without a research is measured as before.
  */
 
 import { isDesktop } from '../breakpoints.js';

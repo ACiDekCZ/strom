@@ -387,6 +387,14 @@ export const researchActionsMethods = uiModule({
                 more = [open, ...more];
             }
         }
+        // Source images only in the research (or their bulk load): last on the first level while
+        // there is room, else first under "Other actions". No dot on the button for it (D7).
+        const images = this.researchImagesMenuItem();
+        if (images) {
+            const row: SubmenuItem = { id: 'research-item-images', label: images.label, method: 'researchActionHeldImages' };
+            if (first.length < FIRST_LEVEL_MAX) first.push(row);
+            else more = [row, ...more];
+        }
         // Following live (the tree locked meanwhile): a block of its own in place of the state.
         const followingBlock = !syncBlock && following
             ? `<div class="research-sync-block research-sync-block--live" id="research-menu-following" role="group" aria-label="${esc(r.followingTitle)}">`
@@ -687,7 +695,7 @@ export const researchActionsMethods = uiModule({
         if (!this.researchMenuShown()) return null;
         const model = this.researchMenuModel();
         // "Open research" and the rest: on the second level, "All research actions ›".
-        const frequent = new Set(['research-item-waiting', 'research-item-chat', 'research-item-read']);
+        const frequent = new Set(['research-item-waiting', 'research-item-chat', 'research-item-read', 'research-item-images']);
         const ui = this as unknown as Record<string, (...args: string[]) => void>;
         const rows: ResearchSheetRow[] = model.first.filter(i => frequent.has(i.id) && !i.disabled).map(i => ({
             label: i.label, count: i.count, ai: i.ai, ext: i.ext, ariaLabel: itemAria(i),

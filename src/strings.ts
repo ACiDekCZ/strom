@@ -1196,8 +1196,8 @@ const stringsEN = {
         resume: 'Resume',
         stop: 'Stop',
         bulkCanClose: 'The window can be closed; loading continues.',
-        bulkBadge: (done: number, total: number) => `images ${done} / ${total}`,
-        bulkBadgeTitle: 'Loading source images from the research',
+        menuRow: (n: number) => `Images in the research · ${n}`,
+        menuRowProgress: (done: number, total: number) => `Images in the research · ${done} / ${total}`,
         bulkDone: (n: number, size: string) => `Loaded ${n} ${n === 1 ? 'source' : 'sources'} (${size}).`,
         bulkFailed: (n: number, reasons: string) => `${n} did not load: ${reasons}.`,
         reasons: {
@@ -5841,8 +5841,8 @@ const stringsCZ: StringsType = {
         resume: 'Pokračovat',
         stop: 'Zastavit',
         bulkCanClose: 'Okno jde zavřít, načítání poběží dál.',
-        bulkBadge: (done: number, total: number) => `obrazy ${done} / ${total}`,
-        bulkBadgeTitle: 'Načítají se obrazy pramenů z výzkumu',
+        menuRow: (n: number) => `Obrazy ve výzkumu · ${n}`,
+        menuRowProgress: (done: number, total: number) => `Obrazy ve výzkumu · ${done} / ${total}`,
         bulkDone: (n: number, size: string) => `${plural('cs', n, 'Načten', 'Načteny', 'Načteno')} ${nCs(n, 'pramen', 'prameny', 'pramenů')} (${size}).`,
         bulkFailed: (n: number, reasons: string) => `${n} ${plural('cs', n, 'se nenačetl', 'se nenačetly', 'se nenačetlo')}: ${reasons}.`,
         reasons: {
@@ -10456,8 +10456,8 @@ const stringsDE: StringsType = {
         resume: 'Fortsetzen',
         stop: 'Anhalten',
         bulkCanClose: 'Das Fenster lässt sich schließen, das Laden läuft weiter.',
-        bulkBadge: (done: number, total: number) => `Bilder ${done} / ${total}`,
-        bulkBadgeTitle: 'Quellenbilder werden aus der Forschung geladen',
+        menuRow: (n: number) => `Bilder in der Forschung · ${n}`,
+        menuRowProgress: (done: number, total: number) => `Bilder in der Forschung · ${done} / ${total}`,
         bulkDone: (n: number, size: string) => `${n} ${n === 1 ? 'Quelle' : 'Quellen'} geladen (${size}).`,
         bulkFailed: (n: number, reasons: string) => `${n} nicht geladen: ${reasons}.`,
         reasons: {

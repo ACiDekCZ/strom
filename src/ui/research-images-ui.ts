@@ -1,7 +1,7 @@
 /**
  * Source images the research left out of its file (spec 014 U7): loading
  * them in the source viewer, the "Image in research" filter with the bulk
- * load in the Sources window, the toolbar badge while it runs, the section in
+ * load in the Sources window, the Research menu's row while it runs, the section in
  * the research tree settings and the choice in the export dialog.
  *
  * Loaded images are kept with the tree in this browser (src/research-images.ts),
@@ -9,7 +9,6 @@
  */
 
 import { DataManager } from '../data.js';
-import { iconSvg } from '../icons.js';
 import { TreeManager } from '../tree-manager.js';
 import { Source, SourceExcerpt, StromData, TreeId } from '../types.js';
 import { strings, getCurrentLanguage } from '../strings.js';
@@ -60,12 +59,11 @@ let lastModeKey = '';
 /** The bulk load (one per tab). */
 let queue: ResearchImageQueue | null = null;
 let queueTreeId: string | null = null;
-let queueTotalImages = 0;
 let bulkView: 'line' | 'warn' | 'progress' | 'summary' = 'line';
 let bulkPlan: { list: MissingList | null; free: number | null; images: number; sources: number; bytes: number; ready: number } | null = null;
 let lastSummary: QueueSnapshot | null = null;
-/** The badge shows the finished state until the Sources window opens. */
-let badgeFinished = false;
+/** The Research menu's images row shows the finished load until the Sources window opens. */
+let rowFinished = false;
 /** A load before an export: the dialog's footer shows it. */
 let exportLoad: { stop: () => void } | null = null;
 let exportMissing: { treeId: string; list: MissingList | null; loading: boolean } | null = null;
@@ -130,6 +128,8 @@ export const researchImagesMethods = uiModule({
         this.refreshCitationChips();
         // The person's sources panel: its thumbnails too.
         if (document.getElementById('person-sources-modal')) this.renderPersonSourcesDialog();
+        // The Research menu's images row counts the sources still held.
+        this.refreshResearchMenu();
     },
 
     /** The research's bridge went up or down (each poll): views that depend on it follow. */
@@ -141,6 +141,8 @@ export const researchImagesMethods = uiModule({
         const sameTree = lastModeKey.split('|')[0] === String(env.treeId);
         const headChanged = sameTree && lastModeKey.split('|')[2] !== (env.head ?? '');
         lastModeKey = key;
+        // The Research menu's images row needs a research that hands images out.
+        this.refreshResearchMenu();
         // A new research version may bring loaded images in its file: the stored copies go.
         if (headChanged && env.treeId && researchImagesPrimed(env.treeId)) {
             void pruneDeliveredImages(env.treeId, DataManager.getData());
@@ -577,65 +579,55 @@ export const researchImagesMethods = uiModule({
             });
         queue = q;
         queueTreeId = treeId;
-        queueTotalImages = tasks.reduce((n, t) => n + t.clips.length, 0);
         lastSummary = null;
-        badgeFinished = false;
+        rowFinished = false;
         bulkView = 'progress';
         q.subscribe(() => {
-            this.renderResearchImagesBadge();
+            this.refreshResearchMenu();
             if (document.getElementById('sources-modal')?.classList.contains('active')) this.renderResearchImagesBulk();
         });
         void q.start().then(end => {
             lastSummary = end;
-            badgeFinished = true;
+            rowFinished = true;
             bulkView = 'summary';
-            this.renderResearchImagesBadge();
+            this.refreshResearchMenu();
             if (document.getElementById('sources-modal')?.classList.contains('active')) this.renderSourcesList();
         });
         this.renderResearchImagesBulk();
         return q;
     },
 
-    /** The toolbar badge "images 52 / 128" while the bulk load runs (and its end, until Sources opens). */
-    renderResearchImagesBadge(): void {
-        let badge = document.getElementById('research-images-badge') as HTMLButtonElement | null;
-        const show = !!queue && (queue.active || badgeFinished) && queueTreeId === DataManager.getCurrentTreeId();
-        if (!show) {
-            badge?.remove();
-            return;
-        }
-        const s = queue!.snapshot;
-        if (!badge) {
-            const anchor = document.getElementById('research-menu-wrap') ?? document.querySelector('.toolbar .actions-menu');
-            if (!anchor?.parentElement) return;
-            badge = document.createElement('button');
-            badge.type = 'button';
-            badge.id = 'research-images-badge';
-            badge.className = 'research-images-badge desktop-only';
-            badge.addEventListener('click', () => {
-                this.sourcesFilter = 'imageHeld';
-                this.showSourcesDialog();
-            });
-            anchor.parentElement.insertBefore(badge, anchor.id === 'research-menu-wrap' ? anchor.nextSibling : anchor);
-        }
+    /**
+     * The Research menu's row "Images in the research · N": N sources whose image is only in the
+     * research, offered while the research hands images out; during the bulk load its progress
+     * (sources done / all), with ✓ at its end until the Sources window opens. Null: no row.
+     * It never lights the Research button's dot (only a state that needs action does, D7).
+     */
+    researchImagesMenuItem(): { label: string } | null {
         const r = strings.researchImages;
-        const pct = s.images ? Math.round((s.imagesDone / s.images) * 100) : 0;
-        const done = queue!.active ? '' : ' ✓';
-        badge.title = r.bulkBadgeTitle;
-        // A tight toolbar (.toolbar-squeeze, src/ui/toolbar-fit.ts) shows the
-        // icon and the count alone; the name stays the full text.
-        badge.setAttribute('aria-label', `${r.bulkBadge(s.imagesDone, s.images)}${done}`);
-        badge.innerHTML = `<span class="research-images-badge-text" aria-hidden="true">${esc(r.bulkBadge(s.imagesDone, s.images))}${done}</span>`
-            + `<span class="research-images-badge-short" aria-hidden="true">${iconSvg('image', { size: 13 })}${s.imagesDone}/${s.images}${done}</span>`
-            + `<span class="research-images-badge-bar" aria-hidden="true"><span style="width:${pct}%"></span></span>`;
+        const treeId = DataManager.getCurrentTreeId();
+        if (queue && queueTreeId === treeId && (queue.active || rowFinished)) {
+            const s = queue.snapshot;
+            return { label: `${r.menuRowProgress(s.done, s.total)}${queue.active ? '' : ' ✓'}` };
+        }
+        if (this.researchImagesEnv().mode !== 'fetch') return null;
+        const n = this.heldSources().length;
+        return n > 0 ? { label: r.menuRow(n) } : null;
     },
 
-    /** The Sources window opened: a finished badge goes, the filter shows the bulk line. */
+    /** The images row: the Sources window with the "Image in research" filter. */
+    researchActionHeldImages(): void {
+        this.closeActionsMenu();
+        this.sourcesFilter = 'imageHeld';
+        this.showSourcesDialog();
+    },
+
+    /** The Sources window opened: a finished load leaves the menu row, the filter shows the bulk line. */
     researchImagesSourcesOpened(): void {
         this.ensureResearchImages();
-        if (badgeFinished && !queue?.active) {
-            badgeFinished = false;
-            this.renderResearchImagesBadge();
+        if (rowFinished && !queue?.active) {
+            rowFinished = false;
+            this.refreshResearchMenu();
         }
     },
 
@@ -865,10 +857,5 @@ export const researchImagesMethods = uiModule({
     /** Was the export loading images (the footer shows it)? Esc / Cancel stops it. */
     stopExportImageLoad(): void {
         exportLoad?.stop();
-    },
-
-    /** Images in the bulk queue (for tests and the badge's total). */
-    researchImagesQueueTotal(): number {
-        return queueTotalImages;
     },
 });
