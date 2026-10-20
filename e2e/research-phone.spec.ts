@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { fakeBridge, fakePhone, openResearch, openResearchMenu, poll, FakeBridge, FakePhoneEntry } from './research-bridge.js';
+import { fakeBridge, fakePhone, links, openResearch, openResearchMenu, poll, signal, FakeBridge, FakePhoneEntry } from './research-bridge.js';
 
 /**
  * "Connect phone" (spec 012): the Research menu's item and the button's dot,
@@ -45,6 +45,61 @@ test.describe('Connect phone', () => {
         await openResearchMenu(page, { expandMore: true });
         await expect(page.locator('#research-item-batch, #research-item-version, #research-item-open').first()).toBeAttached();
         await expect(page.locator('#research-item-phone')).toHaveCount(0);
+    });
+
+    test('the research not running: "Connect phone…" without a pill or dot; the dialog offers to start it and goes on by itself once it answers', async ({ page }) => {
+        const b = await setup(page);
+        b.down = true;
+        await poll(page);
+        await page.evaluate(() => window.Strom.UI.refreshActionMenuBadges());
+        await openResearchMenu(page, { expandMore: true });
+        await expect(page.locator('#research-menu-more #research-item-phone')).toHaveText('Connect phone…');
+        await expect(page.locator('#research-item-phone .research-item-pill')).toHaveCount(0);
+        await expect(page.locator('#research-menu-btn .research-menu-phone')).toBeHidden();
+        expect(await signal(page)).not.toBe('attention');
+        const dialog = await openDialog(page);
+        const content = dialog.locator('.phone-content');
+        await expect(content).toHaveAttribute('data-view', 'down');
+        await expect(content).toContainText('A phone connects through the running research.');
+        await expect(dialog.locator('.phone-dialog')).not.toHaveClass(/phone-dialog--wide/);
+        await expect(dialog.getByRole('button', { name: 'Turn connection on' })).toHaveCount(0);
+        // Started from here as from the state block: the research's link handed over, the dialog waits.
+        await dialog.getByRole('button', { name: 'Start the research ↗' }).click();
+        await expect(dialog).toBeVisible();
+        expect(await links(page)).toEqual([expect.stringMatching(/open\?tree=/)]);
+        await expect(content).toContainText('Waiting for the research to start…');
+        // The research answers with its phone connection: the dialog as it is when running.
+        b.down = false;
+        await page.evaluate(() => (window.Strom.UI as any).phonePoll());
+        await expect(dialog.locator('.phone-intro li')).toHaveCount(3);
+        await expect(dialog.getByRole('button', { name: 'Turn connection on' })).toBeVisible();
+    });
+
+    test('the research not running, then answering without the phone connection (an older version): said in one line, the item goes', async ({ page }) => {
+        const b = await setup(page, fakePhone(), []);
+        b.down = true;
+        await poll(page);
+        const dialog = await openDialog(page);
+        await expect(dialog.locator('.phone-content')).toHaveAttribute('data-view', 'down');
+        b.down = false;
+        await page.evaluate(() => (window.Strom.UI as any).phonePoll());
+        await expect(dialog.locator('.phone-content')).toHaveAttribute('data-view', 'older');
+        await expect(dialog.locator('.phone-content')).toHaveText('This version of the research does not connect a phone.');
+        await expect(dialog.getByRole('button', { name: /Start the research/ })).toHaveCount(0);
+        await dialog.locator('.phone-footer [data-act="close"]').click();
+        await expect(dialog).toHaveCount(0);
+        await openResearchMenu(page, { expandMore: true });
+        await expect(page.locator('#research-item-phone')).toHaveCount(0);
+    });
+
+    test('the research not running and nothing here starts it: the sentence and Close only', async ({ page }) => {
+        const b = await setup(page);
+        b.down = true;
+        await poll(page);
+        await page.evaluate(() => { (window.Strom.UI as any).researchStartUrl = () => null; });
+        const dialog = await openDialog(page);
+        await expect(dialog.locator('.phone-content')).toContainText('A phone connects through the running research.');
+        await expect(dialog.locator('.phone-footer button')).toHaveText(['Close']);
     });
 
     test('off: the explanation, turned on in the computer\'s window, straight to the code; the item and the dot follow', { tag: '@smoke' }, async ({ page }) => {

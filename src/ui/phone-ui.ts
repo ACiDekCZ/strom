@@ -48,6 +48,16 @@ interface Removed {
 
 interface PhoneDialog {
     researchId: string;
+    /**
+     * The research behind it: `running` — its bridge has the phone connection (the dialog as it is);
+     * `down` — not running or not answering (yet): it is watched until it answers; `older` — it
+     * answered without the phone connection (a version that has none).
+     */
+    research: 'running' | 'down' | 'older';
+    /** "Start the research" pressed: waiting for it to answer. */
+    starting: boolean;
+    /** Its bridge being asked (in the `down` state). */
+    watching: boolean;
     state: PhoneState | null;
     /** The bridge did not answer the last ask: the last state stays, greyed. */
     lost: boolean;
@@ -131,18 +141,28 @@ function seenText(iso: string, now: number): string {
 }
 
 export const phoneMethods = uiModule({
-    /** "Connect phone" is offered: the Research menu shows, the research's bridge has `phone`, not Safari. */
+    /**
+     * "Connect phone" is offered: the Research menu shows, not Safari. Its research's bridge has
+     * `phone`, or it is not known to run now (the dialog offers to start it); not for a research
+     * whose bridge answers without `phone` (a version that has none).
+     */
     phoneAvailable(): boolean {
         if (!this.researchMenuShown() || !onComputer() || bridgeFailure(null) === 'safari') return false;
         const id = this.activeResearchId();
-        return !!id && !!this.researchStatusOf(id)?.phone && !!bridgeBase(id);
+        if (!id) return false;
+        return this.phoneResearchReady(id) || !this.researchBridgeFresh(id);
     },
 
-    /** The connection as the last status said it (null: not offered). */
+    /** The research's last status has the phone connection, its bridge is known: the dialog talks to it. */
+    phoneResearchReady(researchId: string): boolean {
+        return !!this.researchStatusOf(researchId)?.phone && !!bridgeBase(researchId);
+    },
+
+    /** The connection as the last status said it (null: not offered, or the research not running — no pill, no dot). */
     phoneSummaryNow(): { state: 'off' | 'on' | 'error'; phones: number } | null {
         if (!this.phoneAvailable()) return null;
         const id = this.activeResearchId();
-        return id ? this.researchStatusOf(id)?.phone ?? null : null;
+        return id && this.phoneResearchReady(id) ? this.researchStatusOf(id)?.phone ?? null : null;
     },
 
     /** Open the dialog (the Research menu's item). */
@@ -152,8 +172,9 @@ export const phoneMethods = uiModule({
         this.closeActionsMenu();
         this.hideContextMenu?.();
         if (ph && document.getElementById(DIALOG_ID)) return;
+        const ready = this.phoneResearchReady(researchId);
         ph = {
-            researchId, state: null, lost: false, enabling: false, noDialog: false, refused: false, wantQr: false, paired: null,
+            researchId, research: ready ? 'running' : 'down', starting: false, watching: false, state: null, lost: false, enabling: false, noDialog: false, refused: false, wantQr: false, paired: null,
             explain: false, how: false, qr: null, qrLoading: false, note: '', removed: new Map(), replacedDone: new Set(), asking: false, html: '',
         };
         let overlay = document.getElementById(DIALOG_ID);
@@ -167,11 +188,11 @@ export const phoneMethods = uiModule({
         overlay.addEventListener('click', (e) => this.phoneDialogClick(e));
         this.renderPhoneDialog();
         overlay.querySelector<HTMLElement>('[data-act="close"]')?.focus();
-        void this.askPhone();
+        void this.phonePoll();
         if (pollTimer) clearInterval(pollTimer);
         pollTimer = setInterval(() => {
             if (typeof document !== 'undefined' && document.hidden) return;
-            void this.askPhone();
+            void this.phonePoll();
         }, POLL_MS);
         if (tickTimer) clearInterval(tickTimer);
         tickKey = '';
@@ -194,10 +215,58 @@ export const phoneMethods = uiModule({
         this.refreshResearchMenu();
     },
 
+    /** The dialog's ask every 2 s: the phone connection, or — the research not running — whether it runs now. */
+    async phonePoll(): Promise<void> {
+        const d = ph;
+        if (!d) return;
+        if (d.research === 'running') await this.askPhone();
+        else if (d.research === 'down') await this.phoneWatchResearch();
+    },
+
+    /**
+     * The research not running (or not answering yet): its bridge asked as the status poll does;
+     * answering with `phone`, the dialog goes on to the connection; without it, says so.
+     */
+    async phoneWatchResearch(): Promise<void> {
+        const d = ph;
+        if (!d || d.research !== 'down' || d.watching) return;
+        d.watching = true;
+        try {
+            await this.pollResearchBridge({ reschedule: false });
+        } catch {
+            /* asked again at the next tick */
+        } finally {
+            d.watching = false;
+        }
+        if (ph !== d || d.research !== 'down' || !this.researchBridgeFresh(d.researchId)) return;
+        if (this.phoneResearchReady(d.researchId)) {
+            d.research = 'running';
+            d.starting = false;
+            this.renderPhoneDialog();
+            void this.askPhone();
+            return;
+        }
+        // An older research: nothing to connect (its menu item goes).
+        d.research = 'older';
+        d.starting = false;
+        this.renderPhoneDialog();
+        this.refreshResearchMenu();
+    },
+
+    /** "Start the research ↗" (as the state block's): the dialog waits for it to answer. */
+    phoneStartResearch(): void {
+        const d = ph;
+        if (!d || d.research !== 'down') return;
+        d.starting = true;
+        this.researchSyncAction('startResearch');
+        this.renderPhoneDialog();
+        void this.phoneWatchResearch();
+    },
+
     /** `GET phone`: take the state in, move the dialog on, redraw. Never throws. */
     async askPhone(): Promise<void> {
         const d = ph;
-        if (!d || d.asking) return;
+        if (!d || d.asking || d.research !== 'running') return;
         const base = bridgeBase(d.researchId);
         if (!base) { d.lost = true; this.renderPhoneDialog(); return; }
         d.asking = true;
@@ -357,8 +426,9 @@ export const phoneMethods = uiModule({
         const d = ph!;
         // Back: from "How to" to the code, from the code to the list it was chosen from.
         const back = view === 'qr' && (d.how || (d.state?.phones.length ?? 0) > 0);
-        const narrow = view === null || view === 'intro' || view === 'wait' || view === 'refused' || view === 'noGui';
-        const body = view === null ? this.phoneLoadingHtml() : this.phoneBodyHtml(view);
+        const narrow = d.research !== 'running' || view === null || view === 'intro' || view === 'wait' || view === 'refused' || view === 'noGui';
+        const body = d.research !== 'running' ? this.phoneResearchDownHtml()
+            : view === null ? this.phoneLoadingHtml() : this.phoneBodyHtml(view);
         return `
             <div class="modal phone-dialog${narrow ? '' : ' phone-dialog--wide'}" role="dialog" aria-modal="true" aria-labelledby="phone-title">
                 <div class="modal-header phone-header">
@@ -368,6 +438,34 @@ export const phoneMethods = uiModule({
                 </div>
                 ${body}
             </div>`;
+    },
+
+    /** The research not running: the phone connects through it, "Start the research ↗"; or a version without the phone. */
+    phoneResearchDownHtml(): string {
+        const p = strings.phone;
+        const d = ph!;
+        const close = `<button type="button" class="${d.research === 'older' ? 'primary' : 'secondary'}" data-act="close">${esc(p.close)}</button>`;
+        if (d.research === 'older') {
+            return `
+                <div class="modal-content phone-content" data-view="older">
+                    <div class="phone-body"><div class="phone-state">
+                        <span class="phone-dot is-ring" aria-hidden="true"></span>
+                        <div class="phone-state-text" role="status"><strong>${esc(p.older)}</strong></div>
+                    </div></div>
+                </div>
+                <div class="buttons phone-footer"><span class="phone-foot-note"></span>${close}</div>`;
+        }
+        const start = this.researchStartUrl()
+            ? `<button type="button" class="primary" data-act="start">${esc(strings.sync.startResearch)}</button>` : '';
+        return `
+                <div class="modal-content phone-content" data-view="down">
+                    <div class="phone-body"><div class="phone-state">
+                        <span class="phone-dot is-ring" aria-hidden="true"></span>
+                        <div class="phone-state-text"><strong>${esc(p.downTitle)}</strong>
+                        <p>${esc(p.downBody)}</p>${d.starting ? `<p class="phone-quiet" role="status">${esc(p.downStarting)}</p>` : ''}</div>
+                    </div></div>
+                </div>
+                <div class="buttons phone-footer"><span class="phone-foot-note"></span>${close}${start}</div>`;
     },
 
     phoneLoadingHtml(): string {
@@ -672,6 +770,7 @@ export const phoneMethods = uiModule({
         d.note = '';
         switch (el.dataset.act) {
             case 'close': this.closePhoneDialog(); break;
+            case 'start': this.phoneStartResearch(); break;
             case 'enable': void this.phoneEnable(); break;
             case 'disable': void this.phoneDisable(); break;
             case 'explain': d.explain = !d.explain; this.renderPhoneDialog(); break;
@@ -807,11 +906,12 @@ export const phoneMethods = uiModule({
         void this.askPhone();
     },
 
-    /** The Research menu's item: "Connect phone…" off; "Phone" with a pill when on or failing. */
+    /** The Research menu's item: "Connect phone…" off or the research not running; "Phone" with a pill when on or failing. */
     phoneMenuItem(): { label: string; pill?: { text: string; tone: 'on' | 'error' } } | null {
+        if (!this.phoneAvailable()) return null;
         const sum = this.phoneSummaryNow();
-        if (!sum) return null;
         const p = strings.phone;
+        if (!sum) return { label: p.menuConnect };
         if (sum.state === 'on') return { label: p.menuItem, pill: { text: p.menuOn(sum.phones), tone: 'on' } };
         if (sum.state === 'error') return { label: p.menuItem, pill: { text: p.menuError, tone: 'error' } };
         return { label: p.menuConnect };
