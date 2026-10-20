@@ -318,7 +318,7 @@ test.describe('What the research knows', () => {
         await page.evaluate((id) => window.Strom.UI.runPersonMenuAction(id, 'research-knows'), jan);
         const dialog = page.locator('#person-research-modal');
         await expect(dialog).toBeVisible();
-        await expect(dialog.locator('.audit-log-subtitle')).toHaveText(/^Jan Fíšek · 1865–1932 · as of \S*2026$/);
+        await expect(dialog.locator('.audit-log-subtitle')).toHaveText(/^Jan Fíšek · 1865–1932 · as of 20 Sep 2026$/);
         await expect(dialog.locator('.menu-section-header')).toHaveText(['Conflicts', 'Hypotheses', 'Searched']);
         const conflict = dialog.locator('.person-research-conflict');
         await expect(conflict.locator('.person-research-fact')).toHaveText(['Birth', 'Rok sňatku rodičů']);

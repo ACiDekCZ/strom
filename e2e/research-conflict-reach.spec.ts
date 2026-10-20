@@ -267,7 +267,7 @@ test.describe('a reader and the keyboard', () => {
               - text: From the app 1865
               - button "Keep the value from the app": Keep
               - paragraph: The research writes the value from the app; the record's value stays in its history with the reason.
-              - text: /^In the research \\S*1865$/
+              - text: In the research 3 Feb 1865
               - button "Oddací matrika Čáslav"
               - button "Take the research's value": Take
               - paragraph: The value here changes to the research's. A backup is saved first.
@@ -291,7 +291,7 @@ test.describe('a reader and the keyboard', () => {
             - text: Birth Open From the app 1865 edit in the app
             - button "Keep the value from the app"
             - paragraph: The research writes the value from the app; the record's value stays in its history with the reason.
-            - text: /^In the research \\S*1865$/
+            - text: In the research 3 Feb 1865
             - button "Oddací matrika Čáslav"
             - button "Take the research's value"
             - paragraph: The value here changes to the research's. A backup is saved first.
