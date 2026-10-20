@@ -301,9 +301,9 @@ test.describe('live research: Awaiting action', () => {
         await expect(page.locator('#research-menu-following .research-sync-title')).toHaveText('Following live');
         await expect(page.locator('#research-menu-following .research-sync-sub')).toHaveText('tree is locked');
         await expect(page.locator('#research-menu-following')).toHaveAttribute('aria-label', 'Following live');
-        // The first level as design 2d: the tree is the research's own, nothing of it to send (menu 1020 §2.7).
+        // The first level as design 2d with the overview under the agent: the tree is the research's own, nothing of it to send (menu 1020 §2.7).
         await expect(page.locator('#research-menu > .research-menu-group > .tree-switcher-action .research-item-label'))
-            .toHaveText(['Awaiting action', 'Continue with the agent', 'Open research', 'Other actions']);
+            .toHaveText(['Awaiting action', 'Continue with the agent', 'Research overview', 'Open research', 'Other actions']);
         await expect(page.locator('#research-item-send')).toHaveCount(0);
         await page.locator('#research-item-waiting').click();
         await expect(panel).not.toHaveClass(/collapsed/);

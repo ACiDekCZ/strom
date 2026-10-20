@@ -150,7 +150,7 @@ test.describe('the bridge of Strom Research 1.11.0', () => {
         // The first level (design 2g has Waiting · Open · Other actions): Send ↗ and the agent stay, both work
         // with this version (the send goes through the research's link; the agent opens in it).
         await expect(page.locator('#research-menu > .research-menu-group > .tree-switcher-action .research-item-label'))
-            .toHaveText(['Continue with the agent', 'Open research', 'Send changes', 'Other actions']);
+            .toHaveText(['Continue with the agent', 'Follow live', 'Open research', 'Send changes', 'Other actions']);
         await line.getByRole('menuitem', { name: 'Update…' }).click();
         const dialog = page.locator('#research-update-modal');
         await expect(dialog.locator('.install-line').nth(0)).toHaveText('strom update');

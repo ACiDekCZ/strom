@@ -320,24 +320,23 @@ export const researchActionsMethods = uiModule({
             more = [...changesRow, ...viewLinks, ...materials, ...phone];
             moreQuiet = [...treeSettings, ...aboutRow];
         } else {
-            // First: what waits, the agent, the research itself, the send.
+            // First: what waits, the agent, following live, the research itself, the send.
             first = [];
             if (waiting > 0) first.push({ id: 'research-item-waiting', label: r.waiting, method: 'researchActionWaiting', count: waiting });
             if (!noAgent && this.researchLinkAvailable('chat')) first.push({ id: 'research-item-chat', label: r.continueAgent, method: 'researchActionChat', ext: true, ai: true });
+            // Right under the agent: following live, its overview; else "Follow live" — the research starts
+            // (or reuses) its bridge and opens ?live= here (an archive has no agent to follow).
+            if (this.isFollowingActiveResearch()) first.push({ id: 'research-item-overview', label: strings.live.overviewTitle, method: 'researchActionOverview' });
+            else if (!noAgent && this.researchLinkAvailable('live')) first.push({ id: 'research-item-live', label: r.followLive, method: 'researchActionLive', ext: true });
             // Read a document (spec 013): right under the agent, above the research itself.
             const read = noAgent ? null : this.readMenuEntry();
             if (read) first.push({ id: 'research-item-read', method: 'showReadDocumentDialog', ...read, link: read.link && this.researchLinkAvailable('open') ? read.link : undefined });
             if (this.researchLinkAvailable('open')) first.push({ id: 'research-item-open', label: r.openResearch, method: 'researchActionOpen', ext: true });
             first.push(...sendRow);
-            // Now and then: a version to load, following live, materials, the phone, an update.
+            // Now and then: a version to load, materials, the phone, an update.
             more = [...changesRow];
             // The bridge answering: the block above offers a newer version when there is one (never beside "in step").
             if (this.researchLinkAvailable('app') && !bridgeUp && !blockLoads) more.push({ id: 'research-item-version', label: r.loadNewVersion, method: 'researchActionLoadVersion' });
-            // Follow live: the research starts (or reuses) its bridge and opens ?live= here (an archive has no agent to follow).
-            if (!noAgent && this.researchLinkAvailable('live') && !this.isFollowingActiveResearch()) {
-                more.push({ id: 'research-item-live', label: r.followLive, method: 'researchActionLive', ext: true });
-            }
-            if (this.isFollowingActiveResearch()) more.push({ id: 'research-item-overview', label: strings.live.overviewTitle, method: 'researchActionOverview' });
             // An archive has no agent: its materials are what it takes, first.
             if (archive) first.push(...materials);
             more.push(...viewLinks, ...(archive ? [] : materials), ...phone);
