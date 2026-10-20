@@ -4557,6 +4557,7 @@ const stringsEN = {
         sourceBlockTitle: 'The whole reading result can’t be opened right now.',
         sourceWhy: {
             down: 'Research isn’t running right now.',
+            older: 'This research version doesn’t give reading results; a newer one does.',
             none: 'The research doesn’t have this reading.',
             archive: 'A research archive keeps no reading results.',
             unlinked: 'This tree isn’t linked to the research that read the document.',
@@ -9034,6 +9035,7 @@ const stringsCZ: StringsType = {
         sourceBlockTitle: 'Celý výsledek čtení teď nejde otevřít.',
         sourceWhy: {
             down: 'Výzkum teď neběží.',
+            older: 'Tato verze výzkumu výsledky čtení nevydává, novější ano.',
             none: 'Výzkum toto čtení nemá.',
             archive: 'Archiv výzkumu výsledky čtení neuchovává.',
             unlinked: 'Strom není propojený s výzkumem, který dokument četl.',
@@ -13435,6 +13437,7 @@ const stringsDE: StringsType = {
         sourceBlockTitle: 'Das ganze Leseergebnis lässt sich gerade nicht öffnen.',
         sourceWhy: {
             down: 'Die Forschung läuft gerade nicht.',
+            older: 'Diese Forschungsversion liefert keine Leseergebnisse, eine neuere schon.',
             none: 'Die Forschung hat dieses Lesen nicht.',
             archive: 'Ein Forschungsarchiv bewahrt keine Leseergebnisse auf.',
             unlinked: 'Dieser Stammbaum ist nicht mit der Forschung verbunden, die das Dokument gelesen hat.',

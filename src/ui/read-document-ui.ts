@@ -22,7 +22,7 @@ import { storedResearchBridge, announcedResearchScheme, researchLinksEnabled } f
 import {
     ReadAccepts, LiveRead, ReadResult, ReadFailure, ReadFileRefusal, ReadState, ReadPage, ReadEntry, ReadRegion,
     readRunning, readFileMime, readFileKind, readFileRefusals, readUsualMinutes, readDocYear, readPageImageUrl,
-    putReadPage, startRead, fetchReadResult, readAgain, cancelRead, sanitizeLiveRead,
+    putReadPage, startRead, fetchReadResult, readAgain, cancelRead, sanitizeLiveRead, READ_FEATURE,
 } from '../research-read.js';
 import {
     LineSeg, parseTranscript, parseBlock, lineRegion, lineAt, defaultEntryIndex, canPropose, resultSections, glossFlavor,
@@ -64,7 +64,7 @@ interface Page {
 type ErrorKind = 'down' | 'not-ready' | 'older' | 'failed' | 'cancelled' | 'busy' | 'limit' | 'unreadable' | 'source';
 
 /** Why a source's reading cannot be shown (the `source` error: the source's own transcription stands in). */
-export type SourceWhy = 'down' | 'none' | 'archive' | 'unlinked' | 'computer' | 'other';
+export type SourceWhy = 'down' | 'older' | 'none' | 'archive' | 'unlinked' | 'computer' | 'other';
 
 /** `propose`: the tree suggestion of the chosen entry; `written`: what the click wrote. */
 export type Phase = 'input' | 'progress' | 'result' | 'error' | 'propose' | 'written';
@@ -626,6 +626,9 @@ export const readDocumentMethods = uiModule({
         if (!link) return this.researchSyncLink() && researchLinksEnabled() && !onComputer() ? 'computer' : 'unlinked';
         if (this.activeResearchArchive()) return 'archive';
         if (!this.researchBridgeUp(link.researchId) || !this.readBridgeBase(link.researchId)) return 'down';
+        // An older research has no reading results to give (`GET read/<id>` is an unknown path there).
+        const status = this.researchStatusOf(link.researchId);
+        if (status && !status.features?.includes(READ_FEATURE) && !status.accepts?.read) return 'older';
         return null;
     },
 
@@ -692,11 +695,15 @@ export const readDocumentMethods = uiModule({
     /** After a status with the input or an error shown: its gate again (a bridge back, a research updated). */
     refreshReadGate(): void {
         if (!st) return;
-        if (st.phase === 'error' && st.error?.kind === 'source' && st.error.why === 'down') {
-            if (!this.readSourceBlocked()) {
+        if (st.phase === 'error' && st.error?.kind === 'source' && (st.error.why === 'down' || st.error.why === 'older')) {
+            const why = this.readSourceBlocked();
+            if (!why) {
                 st.phase = 'progress';
                 st.error = null;
                 void this.openReadResult(st.readId);
+            } else if ((why === 'down' || why === 'older') && why !== st.error.why) {
+                st.error = { kind: 'source', why };
+                this.renderReadDialog();
             }
             return;
         }
@@ -1064,7 +1071,7 @@ export const readDocumentMethods = uiModule({
             // The source's own transcription stands in for what the research cannot give.
             st.phase = 'error';
             const why: SourceWhy = failure?.kind === 'none' ? (this.activeResearchArchive() ? 'archive' : 'none')
-                : failure?.kind === 'down' || !this.researchBridgeUp(link.researchId) ? 'down' : 'other';
+                : !this.researchBridgeUp(link.researchId) ? 'down' : 'other';
             st.error = { kind: 'source', why, ...(failure ? { failure } : {}) };
         } else if (!res) {
             st.phase = 'error';
@@ -1613,8 +1620,10 @@ export const readDocumentMethods = uiModule({
             case 'source': {
                 const hasText = !!DataManager.getData().sources?.[s.sourceId]?.transcript?.trim();
                 const open = s.error?.why === 'down' && !!this.researchOriginalsLink();
+                const update = s.error?.why === 'older';
                 return `<span class="batch-foot-note"></span>${hasText ? btn('copy-source', t.copy) : ''}`
-                    + btn('close', t.close, !open) + (open ? btn('open-research', t.openResearch, true) : '');
+                    + btn('close', t.close, !open && !update) + (open ? btn('open-research', t.openResearch, true) : '')
+                    + (update ? btn('update-research', t.updateResearch, true) : '');
             }
             case 'down':
                 return `<span class="batch-foot-note"></span>${this.batchAvailable() && s.pages.length ? btn('as-material', t.addMaterials) : ''}`

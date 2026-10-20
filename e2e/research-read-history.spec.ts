@@ -256,6 +256,29 @@ test.describe('Read a document: from a source and a person', () => {
         await expect(d.locator('#read-result')).toBeVisible();
     });
 
+    test('an older research that does not read (running, read/<id> a bare 404): the block says so, Update, no asking again', async ({ page }) => {
+        await fakeBridge(page, { accepts: { sync: { auto: 'off' }, sources: true, verified: true, media: { max: 500 * 1024 * 1024, region: true } } });
+        await openResearch(page, { media: true, ged: ged() });
+        await poll(page);
+        const asks: string[] = [];
+        page.on('request', r => { if (/\/read\//.test(new URL(r.url()).pathname)) asks.push(r.url()); });
+        await page.evaluate((sid) => window.Strom.UI.showReadingOfSource(sid), await sourceId(page));
+        const d = dialog(page);
+        const block = d.locator('.read-source-block');
+        await expect(block).toHaveAttribute('data-why', 'older');
+        await expect(block.locator('.read-error-text')).toHaveText('This research version doesn’t give reading results; a newer one does.');
+        await expect(d.locator('.read-footer .primary')).toHaveAttribute('data-act', 'update-research');
+        await expect(d.locator('[data-act="open-research"]')).toHaveCount(0);
+        await expect(d.locator('.read-source-line')).toHaveCount(2);
+        // Statuses come and go: the block stays and the research is not asked for the reading.
+        for (let i = 0; i < 3; i++) {
+            await poll(page);
+            await page.evaluate(() => window.Strom.UI.refreshReadGate());
+        }
+        await expect(block).toHaveAttribute('data-why', 'older');
+        expect(asks).toEqual([]);
+    });
+
     test('the research does not have the reading (404 read.none): the block says so, Close is the main button', async ({ page }) => {
         const b = await setup(page);
         b.read!.results.delete(READ_ID);
@@ -317,6 +340,17 @@ for (const viewport of [DESKTOP, { width: 1024, height: 768 }, { width: 390, hei
             await page.evaluate((sid) => window.Strom.UI.showReadingOfSource(sid), await sourceId(page));
             const d = dialog(page);
             await expect(d.locator('.read-error-title')).toHaveText('Das ganze Leseergebnis lässt sich gerade nicht öffnen.');
+            await noOverflow(d.locator('.read-dialog'));
+            await noOverflow(d.locator('.read-footer'));
+            // An older research (running, does not read): its own words and Update in the footer.
+            await d.locator('.read-footer [data-act="close"]').click();
+            b.down = false;
+            b.features = [];
+            delete (b.accepts as { read?: unknown }).read;
+            await poll(page);
+            await page.evaluate((sid) => window.Strom.UI.showReadingOfSource(sid), await sourceId(page));
+            await expect(d.locator('.read-source-block')).toHaveAttribute('data-why', 'older');
+            await expect(d.locator('[data-act="update-research"]')).toBeVisible();
             await noOverflow(d.locator('.read-dialog'));
             await noOverflow(d.locator('.read-footer'));
         });
