@@ -164,7 +164,11 @@ test.describe('view mode: Actions and More carry what an exported page can do', 
         await open();
         await page.locator('#actions-settings-row').click();
         await expect(page.locator('#settings-modal')).toHaveClass(/active/);
-        await page.evaluate(() => window.Strom.UI.closeSettingsDialog());
+        // About is reachable from the Settings footer in the view mode too.
+        await page.locator('#settings-about').click();
+        await expect(page.locator('#settings-modal')).not.toHaveClass(/active/);
+        await expect(page.locator('#about-modal')).toBeVisible();
+        await page.evaluate(() => window.Strom.UI.closeAboutDialog());
         await viaFamily('#actions-slideshow-row');
         await expect(page.locator('body')).toHaveClass(/slideshow-mode/);
         await page.evaluate(() => window.Strom.UI.stopSlideshow());

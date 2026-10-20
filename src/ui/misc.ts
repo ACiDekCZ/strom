@@ -414,6 +414,12 @@ export const miscMethods = uiModule({
         forgetCardTypeCopy();
     },
 
+    /** "About Strom" in the Settings footer: Settings close, About opens. */
+    openAboutFromSettings(): void {
+        this.closeSettingsDialog();
+        this.showAboutDialog();
+    },
+
     setTheme(theme: ThemeMode): void {
         SettingsManager.setTheme(theme);
     },

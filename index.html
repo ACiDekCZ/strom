@@ -12657,6 +12657,15 @@
         .research-info-buttons { flex-wrap: wrap; }
         .research-info-buttons button { white-space: nowrap; }
         .research-info-buttons .research-info-about { margin-right: auto; padding: 6px 0; font-size: 13px; }
+        /* Settings footer: "About Strom" as a quiet text link on the left. */
+        .modal .settings-footer .settings-about-link {
+            padding: 6px 0; font-size: 13px; color: var(--text-light);
+            text-decoration: none; background: none;
+        }
+        @media (hover: hover) {
+            .modal .settings-footer .settings-about-link:hover { color: var(--primary); text-decoration: underline; }
+        }
+        @media (pointer: coarse) { .modal .settings-footer .settings-about-link { min-height: 44px; } }
         .modal label.research-adopt-images { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 12px; font-size: 14px; color: var(--text); cursor: pointer; }
         .research-adopt-images input { margin-top: 3px; }
         .research-adopt-size { color: var(--text-light); font-size: 13px; }
@@ -16785,7 +16794,10 @@
                     </label>
                 </div>
             </section>
-            <div class="buttons">
+            <!-- About sits in the footer as a quiet text link on the left; the
+                 logo and the More tile stay the other ways in. -->
+            <div class="buttons settings-footer">
+                <button type="button" class="link-button settings-about-link" id="settings-about" onclick="window.Strom.UI.openAboutFromSettings()" data-i18n="about.title"></button>
                 <button class="secondary" data-dismiss onclick="window.Strom.UI.closeSettingsDialog()" data-i18n="buttons.close"></button>
             </div>
         </div>

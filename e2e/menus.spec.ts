@@ -214,6 +214,16 @@ test.describe('actions menu "Tree:" submenu', () => {
             await page.keyboard.press('Escape');
             await expect(page.locator('#settings-modal')).not.toHaveClass(/active/);
         }
+        // About Strom from the Settings footer: Settings close, About opens.
+        await page.locator('.actions-menu-btn').click();
+        await page.locator('#actions-settings-row').click();
+        await expect(page.locator('#settings-modal')).toHaveClass(/active/);
+        const aboutLink = page.locator('#settings-modal #settings-about');
+        await expect(aboutLink).toHaveText('About Strom');
+        await aboutLink.click();
+        await expect(page.locator('#settings-modal')).not.toHaveClass(/active/);
+        await expect(page.locator('#about-modal')).toBeVisible();
+        await page.evaluate(() => window.Strom.UI.closeAboutDialog());
         // Last: the fly-through asks for full screen.
         await viaFamily('#actions-slideshow-row');
         await expect(page.locator('body')).toHaveClass(/slideshow-mode/);
