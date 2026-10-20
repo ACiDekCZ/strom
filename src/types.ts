@@ -320,7 +320,26 @@ export interface Source {
      * (`excerpts[].originalSha`). GEDCOM `1 _STROM_SHA` on the record.
      */
     readingSha?: string;
+    /**
+     * The research left this source's image out of its file (GEDCOM
+     * `1 _STROM_IMG_OMITTED <why>` on the record): `scope` (outside the
+     * research's excerpt scope), `limit` (over its file size limit), `later`
+     * (not made in time), `missing` (the scan is not on the research's
+     * computer, nothing to load), `other` (a reason this app does not know).
+     * scope / limit / later hold the whole source (it has no excerpt in the
+     * file); `missing` can be a part (the excerpts with a scan came).
+     * Read from the research's file only; never written back.
+     */
+    imageHeld?: SourceImageHeld;
+    /**
+     * The left-out excerpts' marks (`2 _STROM_CLIP` under the marker, the same
+     * mark as an excerpt's `clip`; `input` = the whole input of a document).
+     */
+    heldClips?: string[];
 }
+
+/** Why the research left a source's image out of its file (see Source.imageHeld). */
+export type SourceImageHeld = 'scope' | 'limit' | 'later' | 'missing' | 'other';
 
 /** Who read a source's entry (see Source.readBy). */
 export type SourceReadBy = 'user' | 'research' | 'both';
@@ -1421,6 +1440,12 @@ export interface ResearchLink {
      * turns it off for this tree. Missing = on. Survives updates from the research.
      */
     sendMedia?: boolean;
+    /**
+     * Load a source's image the research left out of its file when the source
+     * is opened (while its bridge runs here); false turns it off for this
+     * tree. Missing = on. Survives updates from the research.
+     */
+    autoLoadImages?: boolean;
     /**
      * The research works without an agent (an archive of the user's data), as
      * the file it came from said (`_STROM_MODE archive`); a running bridge's

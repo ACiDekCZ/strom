@@ -59,6 +59,7 @@ import {
     ResearchVariantLink,
     ResearchIsland,
     YearSpan,
+    SourceImageHeld,
     uniqueIdSuffix,
 } from './types';
 import { dateSortKey, formatFlexDate, normalizeDateInput } from './dates';
@@ -855,6 +856,10 @@ interface RawSource {
     recordDate?: string;
     /** OBJE on the record: crops of the entry (Strom: _STROM_KIND excerpt). */
     media: RawSourceMedia[];
+    /** 1 _STROM_IMG_OMITTED: why the research left the image out of the file. */
+    imageHeld?: SourceImageHeld;
+    /** Its 2 _STROM_CLIP lines: the left-out excerpts. */
+    heldClips?: string[];
 }
 
 /** Raw OBJE under a source record. */
@@ -1519,6 +1524,12 @@ const KNOWN_RECORD_TYPES = new Set(['INDI', 'FAM', 'SOUR', 'REPO', 'HEAD', 'TRLR
  * per person and the "1079 unsupported records" number needlessly scared
  * migrating users even though no user data was involved.
  */
+/** A `_STROM_IMG_OMITTED` value: the research's reason, or `other` for one this app does not know. */
+export function imageHeldReason(value: string): SourceImageHeld {
+    const why = value.trim().toLowerCase();
+    return why === 'scope' || why === 'limit' || why === 'later' || why === 'missing' ? why : 'other';
+}
+
 const IGNORED_BOOKKEEPING_TAGS = new Set(['_UPD', 'RIN', '_UID', 'CHAN', '_PROJECT_GUID', '_EXPORTED_FROM_SITE_ID']);
 
 /** Attach a DATE to the MARR/DIV it sits under — the most recent one seen. */
@@ -2082,6 +2093,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                 else if (tag === '_STROM_READING') { if (/^D\d{14}-[0-9a-f]{4}$/.test(value.trim())) src.reading = value.trim(); }
                 else if (tag === '_STROM_SHA') src.readingSha = normalizeSha256(value) ?? undefined;
                 else if (tag === 'OBJE') src.media.push({ title: '', file: '' });
+                else if (tag === '_STROM_IMG_OMITTED') src.imageHeld = imageHeldReason(value);
                 else if (tag === 'QUAY') { const q = parseInt(value, 10); if (q >= 0 && q <= 3) src.quality = q; }
                 else if (tag === 'WWW' || tag === 'URL') src.url = value;
                 // Separate notes stay separate: a blank line between them. A
@@ -2106,6 +2118,11 @@ export function parseGedcom(content: string): ParsedGedcom {
                     || currentSubTag === 'PUBL' || currentSubTag === 'AUTH') {
                     if (tag === 'CONT') src.note += (src.note ? '\n' : '') + plain(value);
                     else if (tag === 'CONC') src.note += plain(value);
+                } else if (currentSubTag === '_STROM_IMG_OMITTED' && tag === '_STROM_CLIP') {
+                    const mark = value.trim();
+                    if (/^[A-Za-z0-9-]{1,32}$/.test(mark) && !src.heldClips?.includes(mark)) {
+                        (src.heldClips ??= []).push(mark);
+                    }
                 } else if (currentSubTag === '_STROM_READING' && tag === '_STROM_ENTRY') {
                     if (src.reading && /^[A-Za-z][A-Za-z0-9_-]{0,20}$/.test(value.trim())) src.readingEntry = value.trim();
                 } else if (currentSubTag === 'REPO' && tag === 'CALN' && value) {
@@ -2976,6 +2993,10 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
             if (raw.readingEntry) src.readingEntry = raw.readingEntry;
         }
         if (raw.readingSha) src.readingSha = raw.readingSha;
+        if (raw.imageHeld) {
+            src.imageHeld = raw.imageHeld;
+            if (raw.heldClips?.length) src.heldClips = raw.heldClips;
+        }
         if (raw.recordDate) src.recordDate = raw.recordDate;
         // Images on a source record are crops of its entry. Only embedded
         // raster images come in; a path or URL (another program's media
