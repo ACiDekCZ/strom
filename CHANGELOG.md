@@ -6,8 +6,10 @@ English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md)
 
 *This version is in preparation; this section grows with every test version.*
 
+- **Read a document**: the *Research* menu has *Read a document…*, and the person menu *Read a document for this person…*. The research agent reads a photo, scan or PDF (several files are pages of one document) and gives a transcription, a translation and an explanation, with the entries framed on the page and illegible spots marked. One reader is faster and cheaper; two independent readers are more reliable and show where they differ. The window can be closed while reading continues, and the result is announced. Reading needs research 1.18.0 or newer (test version 1.18.0-beta.4) with the Claude agent, and runs on the agent's own subscription.
+- **Suggest for the tree**: from a reading, each person can be added as new, linked to a person in the tree, or left out; a linked person gains only what is new, and a differing value is kept as another form. Events and relationships can be ticked, and a second reader can read the document before anything is written. Nothing is added without confirmation, and one Undo step takes back the people, the source with the transcription, the crop of the entry and the citations.
 - **Phone on the home network**: when the research offers it, the *Research* menu has *Connect phone…*. It says what appears on the computer, turns the connection on through a window on the computer (or names the terminal command) and shows a QR code for one phone with how long it is valid, and the other network when the computer has two. *Paired phones* lists each phone with when it was last seen, *Unpair* has *Undo*, and a phone paired again offers to unpair its older entry. When the phone has not reached the computer after a minute, a short checklist appears; *Turn connection off* stops it, and the menu and a dot on the *Research* button show while it is on.
-- **Fixes**: switching to *Descendants* right after zooming in with + no longer leaves the tree off-screen.
+- **Fixes**: switching to *Descendants* right after zooming in with + no longer leaves the tree off-screen. In a tight toolbar the tree name gives way after the search field, so it is no longer cut to its first letter, and a renamed tree shows its new name at once.
 
 ## 3.13.1
 

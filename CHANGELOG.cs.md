@@ -6,8 +6,10 @@
 
 *Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
 
+- **Přečíst dokument**: nabídka *Výzkum* má položku *Přečíst dokument…* a nabídka osoby *Přečíst dokument k této osobě…*. Agent výzkumu přečte fotku, sken nebo PDF (víc souborů jsou stránky jednoho dokumentu) a dá přepis, překlad a výklad, se záznamy orámovanými na stránce a vyznačenými nečitelnými místy. Jeden čtenář je rychlejší a levnější, dva nezávislí čtenáři jsou spolehlivější a ukážou, kde se liší. Okno jde zavřít, čtení pokračuje a výsledek se ohlásí. Čtení potřebuje výzkum 1.18.0 nebo novější (testovací verze 1.18.0-beta.4) s agentem Claude a běží na vlastním předplatném agenta.
+- **Navrhnout do stromu**: z přečteného dokumentu jde každou osobu přidat jako novou, propojit s osobou ve stromu, nebo vynechat; propojená osoba dostane jen to, co je nové, a odlišný údaj zůstane jako další podoba. Události a vztahy jdou zaškrtnout a před zápisem může dokument přečíst ještě druhý čtenář. Bez potvrzení se nic nezapíše a jeden krok *Zpět* vrátí osoby, pramen s přepisem, výřez záznamu i citace.
 - **Telefon v domácí síti**: když to výzkum nabízí, má nabídka *Výzkum* položku *Připojit telefon…*. Řekne, co se objeví na počítači, zapne propojení přes okno na počítači (nebo uvede příkaz pro terminál) a ukáže QR kód pro jeden telefon s dobou platnosti, a když má počítač dvě sítě, i tu druhou. *Spárované telefony* uvádějí u každého telefonu, kdy byl naposledy vidět, *Odpojit* jde *Vrátit* a telefon spárovaný znovu nabídne odpojit svůj starší záznam. Když se telefon do minuty k počítači nedostane, objeví se krátký seznam, co zkontrolovat; *Vypnout propojení* ho zastaví a nabídka i tečka na tlačítku *Výzkum* ukazují, že je zapnuté.
-- **Opravy**: přepnutí na *Potomky* hned po přiblížení tlačítkem + už nenechá strom mimo obrazovku.
+- **Opravy**: přepnutí na *Potomky* hned po přiblížení tlačítkem + už nenechá strom mimo obrazovku. V úzké liště ustupuje název stromu až po vyhledávání, takže už se nezkrátí na první písmeno, a přejmenovaný strom ukáže nový název hned.
 
 ## 3.13.1
 
