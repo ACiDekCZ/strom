@@ -294,6 +294,8 @@ export const researchActionsMethods = uiModule({
             ? [{ id: 'research-item-view-links', label: strings.viewLinks.menuItem(this.viewLinksShownCount()), method: 'researchActionViewLinks' }] : [];
         let first: SubmenuItem[];
         let more: SubmenuItem[];
+        // Read a document (spec 013): now and then, the first item of "Other actions" (its link and badge as they are).
+        let readRow: SubmenuItem[] = [];
         let moreQuiet: SubmenuItem[];
         let note = r.footerFull;
         let moreAttention = '';
@@ -315,8 +317,8 @@ export const researchActionsMethods = uiModule({
                 : install ? [] : [{ id: 'research-item-about', label: r.whatIs, method: 'researchActionWhatIs' }];
             // Read a document goes through the bridge, not a strom-research:// link: offered here too.
             const read = noAgent ? null : this.readMenuEntry();
-            const readRow: SubmenuItem[] = read ? [{ id: 'research-item-read', method: 'showReadDocumentDialog', ...read, link: undefined }] : [];
-            first = [...startRow, ...readRow, ...sendRow.map(i => ({ ...i, ext: false }))];
+            if (read) readRow = [{ id: 'research-item-read', method: 'showReadDocumentDialog', ...read, link: undefined }];
+            first = [...startRow, ...sendRow.map(i => ({ ...i, ext: false }))];
             more = [...changesRow, ...viewLinks, ...materials, ...phone];
             moreQuiet = [...treeSettings, ...aboutRow];
         } else {
@@ -328,9 +330,8 @@ export const researchActionsMethods = uiModule({
             // (or reuses) its bridge and opens ?live= here (an archive has no agent to follow).
             if (this.isFollowingActiveResearch()) first.push({ id: 'research-item-overview', label: strings.live.overviewTitle, method: 'researchActionOverview' });
             else if (!noAgent && this.researchLinkAvailable('live')) first.push({ id: 'research-item-live', label: r.followLive, method: 'researchActionLive', ext: true });
-            // Read a document (spec 013): right under the agent, above the research itself.
             const read = noAgent ? null : this.readMenuEntry();
-            if (read) first.push({ id: 'research-item-read', method: 'showReadDocumentDialog', ...read, link: read.link && this.researchLinkAvailable('open') ? read.link : undefined });
+            if (read) readRow = [{ id: 'research-item-read', method: 'showReadDocumentDialog', ...read, link: read.link && this.researchLinkAvailable('open') ? read.link : undefined }];
             if (this.researchLinkAvailable('open')) first.push({ id: 'research-item-open', label: r.openResearch, method: 'researchActionOpen', ext: true });
             first.push(...sendRow);
             // Now and then: a version to load, materials, the phone, an update.
@@ -394,6 +395,7 @@ export const researchActionsMethods = uiModule({
             if (first.length < FIRST_LEVEL_MAX) first.push(row);
             else more = [row, ...more];
         }
+        more = [...readRow, ...more];
         // Following live (the tree locked meanwhile): a block of its own in place of the state.
         const followingBlock = !syncBlock && following
             ? `<div class="research-sync-block research-sync-block--live" id="research-menu-following" role="group" aria-label="${esc(r.followingTitle)}">`
@@ -693,8 +695,8 @@ export const researchActionsMethods = uiModule({
     researchSheetGroup(): ResearchSheetGroup | null {
         if (!this.researchMenuShown()) return null;
         const model = this.researchMenuModel();
-        // "Open research" and the rest: on the second level, "All research actions ›".
-        const frequent = new Set(['research-item-waiting', 'research-item-chat', 'research-item-read', 'research-item-images']);
+        // "Open research", "Read a document" and the rest: on the second level, "All research actions ›".
+        const frequent = new Set(['research-item-waiting', 'research-item-chat', 'research-item-images']);
         const ui = this as unknown as Record<string, (...args: string[]) => void>;
         const rows: ResearchSheetRow[] = model.first.filter(i => frequent.has(i.id) && !i.disabled).map(i => ({
             label: i.label, count: i.count, ai: i.ai, ext: i.ext, ariaLabel: itemAria(i),

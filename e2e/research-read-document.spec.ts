@@ -36,8 +36,14 @@ async function setup(page: Page, opts: { read?: Record<string, unknown> | null; 
 const item = (page: Page) => page.locator('#research-item-read');
 const dialog = (page: Page) => page.locator('#read-document-modal');
 
+/** Now and then: the first item of "Other actions", never on the menu's first level. */
+async function expectFirstOfMore(page: Page): Promise<void> {
+    await expect(page.locator('#research-menu > .research-menu-group > #research-item-read')).toHaveCount(0);
+    await expect(page.locator('#research-menu-more [role="menuitem"]').first()).toHaveId('research-item-read');
+}
+
 async function openFromMenu(page: Page): Promise<Locator> {
-    await openResearchMenu(page);
+    await openResearchMenu(page, { expandMore: true });
     await item(page).click();
     await expect(dialog(page)).toBeVisible();
     return dialog(page);
@@ -85,8 +91,9 @@ test.describe('Read a document', () => {
 
     test('ready: the Research menu offers it with the AI badge; the person menu too', { tag: '@smoke' }, async ({ page }) => {
         await setup(page);
-        await openResearchMenu(page);
+        await openResearchMenu(page, { expandMore: true });
         await expect(item(page)).toBeVisible();
+        await expectFirstOfMore(page);
         await expect(item(page)).toContainText('Read a document…');
         await expect(item(page)).toContainText('starts the research agent');
         await expect(item(page)).not.toHaveAttribute('aria-disabled', 'true');
@@ -108,9 +115,10 @@ test.describe('Read a document', () => {
         });
         await openResearch(page, { media: true, ged: researchGed().replace(/^1 _STROM_LINKS .*\n/m, '') });
         await poll(page);
-        await openResearchMenu(page);
+        await openResearchMenu(page, { expandMore: true });
         await expect(page.locator('#research-item-open')).toHaveCount(0);
         await expect(item(page)).toBeVisible();
+        await expectFirstOfMore(page);
         await expect(item(page)).toContainText('Read a document…');
         await item(page).click();
         await expect(dialog(page).locator('#read-drop')).toBeVisible();
@@ -152,7 +160,7 @@ test.describe('Read a document', () => {
 
     test('not ready: shown greyed with the reason and the way to the research; not in the person menu', async ({ page }) => {
         await setup(page, { read: readAccepts({ ready: false, why: 'auth' }) });
-        await openResearchMenu(page);
+        await openResearchMenu(page, { expandMore: true });
         await expect(item(page)).toHaveAttribute('aria-disabled', 'true');
         await expect(item(page)).toContainText('not possible now: the research agent is not signed in');
         await expect(page.locator('#research-item-read-link')).toBeVisible();
@@ -174,14 +182,14 @@ test.describe('Read a document', () => {
     test('absent for an archive and for a research that cannot read', async ({ page }) => {
         // An archive: no agent.
         await setup(page, { extra: { mode: 'archive', sync: { auto: 'mirror' } } });
-        await openResearchMenu(page);
+        await openResearchMenu(page, { expandMore: true });
         await expect(page.locator('#research-sync-block, .research-menu').first()).toBeVisible();
         await expect(item(page)).toHaveCount(0);
     });
 
     test('absent for an older research (no read.now)', async ({ page }) => {
         await setup(page, { features: [] });
-        await openResearchMenu(page);
+        await openResearchMenu(page, { expandMore: true });
         await expect(page.locator('#research-item-open')).toBeVisible();
         await expect(item(page)).toHaveCount(0);
     });
@@ -239,7 +247,7 @@ test.describe('Read a document', () => {
         await expect(d.locator('.read-transcript').first()).toContainText('Antonii Novák, Lhota');
         // Opened here: the menu offers reading again.
         await page.keyboard.press('Escape');
-        await openResearchMenu(page);
+        await openResearchMenu(page, { expandMore: true });
         await expect(item(page)).toContainText('Read a document…');
     });
 
@@ -248,7 +256,7 @@ test.describe('Read a document', () => {
         const d = await startReading(page, b);
         await d.locator('.read-footer [data-act="close"]').last().click();
         await expect(dialog(page)).toHaveCount(0);
-        await openResearchMenu(page);
+        await openResearchMenu(page, { expandMore: true });
         await expect(item(page)).toContainText('Reading a document…');
         await page.keyboard.press('Escape');
 
@@ -256,7 +264,7 @@ test.describe('Read a document', () => {
         const toast = page.locator('.toast', { hasText: 'Document read' });
         await expect(toast).toBeVisible();
         await expect(toast).toContainText('baptism');
-        await openResearchMenu(page);
+        await openResearchMenu(page, { expandMore: true });
         await expect(item(page)).toContainText('Document read');
         await page.keyboard.press('Escape');
         await toast.locator('.toast-action').click();
@@ -307,7 +315,7 @@ for (const viewport of [DESKTOP, PHONE]) {
 
         test('the menu item, the dialog with pages and readers, the progress: nothing runs over', async ({ page }) => {
             const b = await setup(page);
-            await openResearchMenu(page);
+            await openResearchMenu(page, { expandMore: true });
             await expect(item(page)).toContainText('Dokument lesen…');
             await noOverflow(item(page));
             await item(page).click();

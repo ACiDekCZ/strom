@@ -432,7 +432,7 @@ test.describe('the keyboard', () => {
 });
 
 test.describe('a narrow window with a mouse (≤ 1024 px)', () => {
-    test('no Research button; More starts with the research group (state, Waiting, Agent, Read), "All research actions ›" shows the whole menu with "Other actions" open, Escape back', async ({ page }) => {
+    test('no Research button; More starts with the research group (state, Waiting, Agent), "All research actions ›" shows the whole menu with "Other actions" open, Escape back', async ({ page }) => {
         await page.setViewportSize({ width: 900, height: 900 });
         await researchTree(page, { edit: true, waiting: WAITING });
         await expect(button(page)).toBeHidden();
