@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, fillPerson, exportTreeJson, createFirstPerson, cardAction, personModal, card, waitForPersist } from './helpers.js';
+import { openApp, fillPerson, exportTreeJson, createFirstPerson, cardAction, personModal, card, waitForPersist, stubPersistence } from './helpers.js';
 
 /** Import the 53-person fixture as a new tree (it has no version: no warning, straight to the dialog). */
 async function importBigTree(page: Page, name: string): Promise<void> {
@@ -10,21 +10,6 @@ async function importBigTree(page: Page, name: string): Promise<void> {
     await dialog.locator('#import-tree-name').fill(name);
     await dialog.getByRole('button', { name: 'Import' }).click();
     await expect(dialog).toBeHidden();
-}
-
-/** Make the browser keep storage best-effort (refuse persistence) or grant it. */
-async function stubPersistence(page: Page, granted: boolean): Promise<void> {
-    await page.addInitScript((ok) => {
-        let persistent = false;
-        Object.defineProperty(navigator, 'storage', {
-            configurable: true,
-            value: {
-                ...(navigator.storage ? { estimate: navigator.storage.estimate.bind(navigator.storage), getDirectory: navigator.storage.getDirectory?.bind(navigator.storage) } : {}),
-                persisted: async () => persistent,
-                persist: async () => { persistent = ok; (window as unknown as { __persistAsked: number }).__persistAsked = ((window as unknown as { __persistAsked?: number }).__persistAsked ?? 0) + 1; return ok; },
-            },
-        });
-    }, granted);
 }
 
 /** A user edit: add an unconnected person from the toolbar. */

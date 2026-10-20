@@ -57,6 +57,26 @@ export async function seedSetting(page: Page, name: string, value: unknown): Pro
 }
 
 /**
+ * Make the browser keep storage best-effort (refuse persistence) or grant it.
+ * Without it the answer is the browser's own (Chromium decides by heuristics:
+ * granted on one machine, refused on another), and so is whether the "only in
+ * the browser" state shows.
+ */
+export async function stubPersistence(page: Page, granted: boolean): Promise<void> {
+    await page.addInitScript((ok) => {
+        let persistent = false;
+        Object.defineProperty(navigator, 'storage', {
+            configurable: true,
+            value: {
+                ...(navigator.storage ? { estimate: navigator.storage.estimate.bind(navigator.storage), getDirectory: navigator.storage.getDirectory?.bind(navigator.storage) } : {}),
+                persisted: async () => persistent,
+                persist: async () => { persistent = ok; (window as unknown as { __persistAsked: number }).__persistAsked = ((window as unknown as { __persistAsked?: number }).__persistAsked ?? 0) + 1; return ok; },
+            },
+        });
+    }, granted);
+}
+
+/**
  * Load the app and wait until the toolbar is interactive. By default the
  * Strom Research promotion counts as already seen (see seedResearchPromoSeen);
  * `{ researchPromo: true }` keeps the first-run state for suites testing it;

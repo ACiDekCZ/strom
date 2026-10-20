@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, createFirstPerson } from './helpers.js';
+import { openApp, createFirstPerson, stubPersistence } from './helpers.js';
 
 /**
  * The phone top bar (≤640px, ZADANI_DEV_mobil_ovladani 1.1–1.5): the tree
@@ -53,17 +53,28 @@ test('at rest: the tree icon, the name with all the room, the magnifier — 52px
     await expect(page.locator('#about-modal')).toHaveClass(/active/);
 });
 
-test('one dot before the name: only in the browser, or offline (More says it)', async ({ page, context }) => {
+test('one dot before the name: edits only in the browser', async ({ page }) => {
+    await stubPersistence(page, false);
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novák');
+    await expect(page.locator('body')).toHaveClass(/storage-unsaved/);
+    await expect(page.locator('.toolbar-state-dot')).toBeVisible();
+});
+
+test('one dot before the name: offline (More says it), gone when back online', async ({ page, context }) => {
+    // Storage kept for good: nothing is "only in the browser", the dot is the offline one alone.
+    await stubPersistence(page, true);
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novák');
     const dot = page.locator('.toolbar-state-dot');
-    await page.evaluate(() => document.body.classList.remove('storage-unsaved'));
+    await expect(page.locator('body')).not.toHaveClass(/storage-unsaved/);
     await expect(dot).toBeHidden();
     await context.setOffline(true);
     await expect(dot).toBeVisible();
     await page.locator('#bb-view-more').tap();
     await expect(page.locator('.bottom-sheet-menu .bottom-sheet-note')).toHaveText('Offline');
     await context.setOffline(false);
+    await expect(page.locator('body')).not.toHaveClass(/is-offline/);
     await expect(dot).toBeHidden();
 });
 
