@@ -103,8 +103,11 @@ export const shareUiMethods = uiModule({
         if (!treeId) return;
 
         const val = (id: string) => (document.getElementById(id) as HTMLInputElement | HTMLTextAreaElement | null)?.value ?? '';
-        const senderName = val('share-sender-name').trim() || strings.share.unknownSender;
-        SettingsManager.setSenderName(senderName);
+        const typedName = val('share-sender-name').trim();
+        // Remember only a typed name: the fallback is a placeholder, not the
+        // sender's own name, and must not prefill the field next time.
+        SettingsManager.setSenderName(typedName);
+        const senderName = typedName || strings.share.unknownSender;
         const senderMessage = val('share-message').trim().slice(0, 500) || undefined;
         const password = val('share-password') || null;
         const privacyMode = ((document.getElementById('share-privacy-mode') as HTMLSelectElement | null)?.value || 'initials') as PrivacyMode;

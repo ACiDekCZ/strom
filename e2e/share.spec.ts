@@ -95,3 +95,28 @@ test('a plain (non-shared) export shows no welcome screen', async ({ page, brows
     await expect(viewer.locator('#share-welcome-modal')).toBeHidden();
     await ctx.close();
 });
+
+test('a share without a name: the recipient sees the unknown sender, the field stays empty next time', async ({ page, browser }, testInfo) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    await page.evaluate(() => window.Strom.UI.showShareDialog());
+    const share = page.locator('#share-modal');
+    await share.locator('#share-sender-name').fill('');
+    const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        share.getByRole('button', { name: 'Create file to send' }).click(),
+    ]);
+    const out = testInfo.outputPath('unnamed.html');
+    await download.saveAs(out);
+
+    // The fallback is not the sender's own name: nothing remembered, empty field.
+    expect(await page.evaluate(() => window.Strom.SettingsManager.getSenderName())).toBe('');
+    await page.evaluate(() => window.Strom.UI.showShareDialog());
+    await expect(share.locator('#share-sender-name')).toHaveValue('');
+
+    const ctx = await browser.newContext();
+    const viewer = await ctx.newPage();
+    await viewer.goto(pathToFileURL(out).href);
+    await expect(viewer.locator('#share-welcome-title')).toHaveText('A relative sent a family tree');
+    await ctx.close();
+});

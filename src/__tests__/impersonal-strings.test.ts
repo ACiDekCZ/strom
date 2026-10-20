@@ -82,3 +82,48 @@ describe('German texts about the people a file goes to are gender-neutral', () =
         expect(found).toEqual([]);
     });
 });
+
+/**
+ * Czech names the people a file goes to or comes from without the generic
+ * masculine ("příbuznému", "příjemce", "odesílatele"): "rodině", "při otevření",
+ * "Někdo z rodiny". A document role of the read results is a term; a godparent
+ * who "bývá příbuzný" is a person in a record, not the reader.
+ */
+describe('Czech texts about the people a file goes to are gender-neutral', () => {
+    const MASCULINE = /(?<![\p{L}])(příbuznému|Příbuzný|[Pp]říjemce|příjemci|[Oo]desílatel|odesílatele|odesílateli)(?![\p{L}])/u;
+    it('cs', () => {
+        const pack = getStringsForLang('cs' as Language) as unknown as Record<string, unknown>;
+        const found: string[] = [];
+        for (const g of Object.keys(pack)) {
+            const all: [string, string][] = [];
+            texts(pack[g], g, all);
+            for (const [path, text] of all) {
+                if (path.startsWith('read.roles.')) continue;
+                const m = MASCULINE.exec(text);
+                if (m) found.push(`${path}: …${text.slice(Math.max(0, m.index - 30), m.index + 30)}…`);
+            }
+        }
+        expect(found).toEqual([]);
+    });
+});
+
+/**
+ * The unknown-sender fallback ("Někdo z rodiny", "A relative", "Ein
+ * Familienmitglied") is a whole phrase that cannot be declined or lowercased:
+ * every sentence with the sender's name starts with it or quotes it after a
+ * colon or in parentheses (a real name is not declined there either).
+ */
+describe('Sentences with the sender name read well with the unknown sender', () => {
+    for (const lang of ['en', 'cs', 'de'] as const) {
+        it(lang, () => {
+            const s = getStringsForLang(lang as Language);
+            const who = s.share.unknownSender;
+            const sentences = [
+                s.share.welcomeTitle(who), s.share.collabBar(who), s.share.replyTitle(who),
+                s.shareDiff.previewTitle(who), s.auditLog.appliedChanges(who), s.undo.applyChanges(who),
+            ];
+            const bad = sentences.filter(t => !(t.startsWith(who) || t.includes(`: ${who}`) || t.includes(`(${who})`)));
+            expect(bad).toEqual([]);
+        });
+    }
+});

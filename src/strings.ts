@@ -3450,11 +3450,11 @@ const stringsEN = {
         messageLabel: 'Message for the recipient',
         messagePlaceholder: 'Hi! Could you fill in what you know about your branch?',
         createFile: 'Create file to send',
-        welcomeTitle: (sender: string) => `A family tree from ${sender}`,
+        welcomeTitle: (sender: string) => `${sender} sent a family tree`,
         welcomeCounts: (tree: string, persons: number) => `“${tree}” · ${nEn(persons, 'person', 'people')}`,
         welcomeView: 'Just look around',
         welcomeEdit: 'Add what I know',
-        collabBar: (sender: string) => `Filling in a tree for ${sender}.`,
+        collabBar: (sender: string) => `Filling in a tree for: ${sender}.`,
         collabSend: 'Send the file back',
         collabHide: 'Hide',
         collabBadgeTitle: 'Collaboration in progress',
@@ -3475,7 +3475,7 @@ const stringsEN = {
         baselineMissing: 'The baseline for these changes is missing — ask for the whole file instead',
         treeNotFound: 'No matching tree for these changes — ask the sender for the whole file instead',
         // Recipient preview of an opened change packet.
-        previewTitle: (sender: string) => `Changes from ${sender}`,
+        previewTitle: (sender: string) => `${sender} sent changes`,
         previewIntro: (tree: string) => tree ? `These additions update the tree “${tree}”.` : 'These additions update the tree.',
         accept: 'Accept changes',
         reviewDetail: 'Review in detail',
@@ -4062,7 +4062,7 @@ const stringsEN = {
         // Tree merge
         treeMerge: (merged: number, added: number, source: string) => `Tree merge from "${source}": ${merged} merged, ${added} added`,
         // Change packet accepted (collaboration)
-        appliedChanges: (sender: string) => `Applied changes from ${sender}`,
+        appliedChanges: (sender: string) => `Applied changes (${sender})`,
         // Split into families
         splitFamilies: (trees: number, persons: number) => `Split into ${nEn(trees, 'family tree', 'family trees')} (${nEn(persons, 'person', 'people')})`,
         // Auto-repair
@@ -4123,7 +4123,7 @@ const stringsEN = {
         removeAttachment: (name: string) => `removing attachment from ${name}`,
         editAttachment: (name: string) => `editing attachment of ${name}`,
         setParentRelType: (child: string) => `relationship type of ${child}`,
-        applyChanges: (sender: string) => `applying changes from ${sender}`,
+        applyChanges: (sender: string) => `applying changes (${sender})`,
         undone: (desc: string) => `Undone: ${desc}`,
         redone: (desc: string) => `Redone: ${desc}`,
     },
@@ -5367,7 +5367,7 @@ const stringsCZ: StringsType = {
         step6: 'Ovládání přiblížení a posunu — plátno jde také táhnout myší a přibližovat kolečkem; 0 vrátí výchozí pohled.',
         step6Touch: 'Ovládání přiblížení — plátno jde také posouvat prstem a přibližovat roztažením dvou prstů.',
         step7: 'Hledání kohokoli podle jména; trychtýř filtruje podle příjmení, místa, let narození, pohlaví nebo žijící/zemřelí.',
-        step8: 'Stromy, export a sdílení jsou tady. Strom se exportuje jako jeden samostatný soubor, který jde poslat příbuznému.',
+        step8: 'Stromy, export a sdílení jsou tady. Strom se exportuje jako jeden samostatný soubor, který jde poslat rodině.',
     },
 
     // Anniversaries + "on this day"
@@ -7767,7 +7767,7 @@ const stringsCZ: StringsType = {
         scopeView: (n: number) => `Jen aktuální pohled (${n} ${n === 1 ? 'osoba' : n >= 2 && n <= 4 ? 'osoby' : 'osob'})`,
         scopeWholeOnly: 'Tento formát exportuje celý strom',
         backupViewDesc: 'Jen právě zobrazené osoby jako soubor JSON',
-        share: 'Poslat příbuznému',
+        share: 'Poslat rodině',
         linkFile: 'Propojit se souborem na disku…',
         linkFileDesc: 'Strom se ukládá do souboru .json — pak stačí Uložit',
         linkFileDescKey: (key: string) => `Strom se ukládá do souboru .json — pak stačí ukládat klávesou ${key}`,
@@ -7950,16 +7950,16 @@ const stringsCZ: StringsType = {
 
     // Collaboration: send to a relative
     share: {
-        menuItem: '📩 Poslat příbuznému',
-        menuDesc: 'Jeden soubor e-mailem — příjemce ho otevře, doplní a pošle zpět',
+        menuItem: '📩 Poslat rodině',
+        menuDesc: 'Jeden soubor e-mailem — k otevření, doplnění a poslání zpět',
         passwordLabel: 'Heslo (volitelné)',
-        dialogTitle: 'Poslat příbuznému',
-        dialogIntro: 'Vytvoří jeden soubor k poslání e-mailem. Příjemce ho jen otevře — bez instalace a bez účtu.',
+        dialogTitle: 'Poslat rodině',
+        dialogIntro: 'Vytvoří jeden soubor k poslání e-mailem. Soubor se jen otevře v prohlížeči — bez instalace a bez účtu.',
         scopeLabel: 'Co poslat',
         scopeWhole: 'Celý strom',
         scopeBranch: 'Aktuální pohled (viditelná větev)',
-        senderNameLabel: 'Jméno odesílatele (uvidí ho příjemce)',
-        messageLabel: 'Vzkaz pro příjemce',
+        senderNameLabel: 'Podpis jménem (ukáže se při otevření)',
+        messageLabel: 'Vzkaz k souboru',
         messagePlaceholder: 'Ahoj! Doplníš prosím, co víš o vaší větvi?',
         createFile: 'Vytvořit soubor k poslání',
         welcomeTitle: (sender: string) => `${sender} posílá rodinný strom`,
@@ -7975,7 +7975,7 @@ const stringsCZ: StringsType = {
         replyMerge: 'Prohlédnout a sloučit',
         replyView: 'Nejdřív se podívat',
         replyImport: 'Importovat jako nový strom',
-        unknownSender: 'Příbuzný'
+        unknownSender: 'Někdo z rodiny'
     },
 
     // Change packets (send only changes)
@@ -7985,7 +7985,7 @@ const stringsCZ: StringsType = {
         packetSaved: 'Soubor se změnami uložen',
         noChanges: 'Od posledního sdílení se nic nezměnilo',
         baselineMissing: 'Chybí baseline pro tyto změny — je lepší vyžádat si celý soubor',
-        treeNotFound: 'Žádný odpovídající strom pro tyto změny — je potřeba vyžádat si od odesílatele celý soubor',
+        treeNotFound: 'Žádný odpovídající strom pro tyto změny — je potřeba vyžádat si celý soubor',
         // Náhled otevřeného souboru se změnami u příjemce.
         previewTitle: (sender: string) => `${sender} posílá změny`,
         previewIntro: (tree: string) => tree ? `Tato doplnění upraví strom „${tree}“.` : 'Tato doplnění upraví strom.',
@@ -8575,7 +8575,7 @@ const stringsCZ: StringsType = {
         addedPartner: (person: string, partner: string) => `Přidán partner: ${person} & ${partner}`,
         // Tree merge
         treeMerge: (merged: number, added: number, source: string) => `Sloučení stromů z „${source}“: ${merged} sloučeno, ${added} přidáno`,
-        appliedChanges: (sender: string) => `Přijaty změny od ${sender}`,
+        appliedChanges: (sender: string) => `Přijaty změny (${sender})`,
         // Split into families
         splitFamilies: (trees: number, persons: number) => `Rozděleno na ${nCs(trees, 'rodinný strom', 'rodinné stromy', 'rodinných stromů')} (${nCs(persons, 'osoba', 'osoby', 'osob')})`,
         // Auto-repair
@@ -8636,7 +8636,7 @@ const stringsCZ: StringsType = {
         removeAttachment: (name: string) => `odebrání přílohy u ${name}`,
         editAttachment: (name: string) => `úprava přílohy u ${name}`,
         setParentRelType: (child: string) => `typ vztahu u ${child}`,
-        applyChanges: (sender: string) => `přijetí změn od ${sender}`,
+        applyChanges: (sender: string) => `přijetí změn (${sender})`,
         undone: (desc: string) => `Vráceno: ${desc}`,
         redone: (desc: string) => `Znovu provedeno: ${desc}`,
     },
@@ -12410,7 +12410,7 @@ const stringsDE: StringsType = {
         welcomeCounts: (tree: string, persons: number) => `„${tree}“ · ${nDe(persons, 'Person', 'Personen')}`,
         welcomeView: 'Nur umsehen',
         welcomeEdit: 'Ergänzen, was ich weiß',
-        collabBar: (sender: string) => `Hier wird ein Stammbaum für ${sender} ergänzt.`,
+        collabBar: (sender: string) => `Ein Stammbaum wird ergänzt für: ${sender}.`,
         collabSend: 'Die Datei zurücksenden',
         collabHide: 'Ausblenden',
         collabBadgeTitle: 'Zusammenarbeit läuft',
@@ -13013,7 +13013,7 @@ const stringsDE: StringsType = {
         addedSibling: (person: string, sibling: string) => `Geschwister hinzugefügt: ${person} + ${sibling}`,
         addedPartner: (person: string, partner: string) => `Partner hinzugefügt: ${person} & ${partner}`,
         treeMerge: (merged: number, added: number, source: string) => `Stammbaum-Zusammenführung aus „${source}“: ${merged} zusammengeführt, ${added} hinzugefügt`,
-        appliedChanges: (sender: string) => `Änderungen von ${sender} übernommen`,
+        appliedChanges: (sender: string) => `Änderungen übernommen (${sender})`,
         splitFamilies: (trees: number, persons: number) => `In ${nDe(trees, 'Familienstammbaum', 'Familienstammbäume')} aufgeteilt (${nDe(persons, 'Person', 'Personen')})`,
         repairedIssue: (desc: string) => `Automatische Reparatur: ${desc}`,
         restoredBackup: 'Eine Sicherung wiederhergestellt',
@@ -13070,7 +13070,7 @@ const stringsDE: StringsType = {
         removeAttachment: (name: string) => `Anhang von ${name} entfernen`,
         editAttachment: (name: string) => `Anhang von ${name} bearbeiten`,
         setParentRelType: (child: string) => `Beziehungstyp von ${child}`,
-        applyChanges: (sender: string) => `Änderungen von ${sender} übernehmen`,
+        applyChanges: (sender: string) => `Änderungen übernehmen (${sender})`,
         undone: (desc: string) => `Rückgängig gemacht: ${desc}`,
         redone: (desc: string) => `Wiederholt: ${desc}`,
     },

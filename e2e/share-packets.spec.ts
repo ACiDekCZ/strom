@@ -58,13 +58,13 @@ async function openAsRecipient(browser: Browser, sharedPath: string): Promise<Pa
     await openFileAsApp(uncle, sharedPath);
     const welcome = uncle.locator('#share-welcome-modal');
     await expect(welcome).toBeVisible();
-    await expect(uncle.locator('#share-welcome-title')).toHaveText('A family tree from Milan');
+    await expect(uncle.locator('#share-welcome-title')).toHaveText('Milan sent a family tree');
     await expect(uncle.locator('#share-welcome-counts')).toContainText('2 people');
     await expect(uncle.locator('#share-welcome-message')).toHaveText('Please fill in what you know');
     await welcome.getByRole('button', { name: 'Add what I know' }).click();
     // The bar appears once the baseline of the received state is saved.
     await expect(uncle.locator('#collab-bar')).toBeVisible();
-    await expect(uncle.locator('#collab-bar-text')).toHaveText('Filling in a tree for Milan.');
+    await expect(uncle.locator('#collab-bar-text')).toHaveText('Filling in a tree for: Milan.');
     await expect(uncle.locator('body')).not.toHaveClass(/view-mode/);
     return uncle;
 }
@@ -157,7 +157,7 @@ test('change packet with edits on both sides: preview names the fields, Accept k
     await page.locator('#file-input').setInputFiles(packetPath);
     const preview = page.locator('#share-packet-modal');
     await expect(preview).toBeVisible();
-    await expect(page.locator('#share-packet-title')).toHaveText('Changes from Strejda');
+    await expect(page.locator('#share-packet-title')).toHaveText('Strejda sent changes');
     await expect(page.locator('#share-packet-intro')).toContainText('These additions update the tree');
     const body = page.locator('#share-packet-body');
     await expect(body.locator('.share-packet-chip', { hasText: '1 new person' })).toBeVisible();
