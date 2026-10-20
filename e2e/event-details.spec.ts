@@ -168,7 +168,7 @@ test.describe('event details', () => {
         await expect(card(page, 'Jan').locator('.card-tooltip .tt-warn')).toHaveText('recorded as 54 years');
         await expect(card(page, 'Anna').locator('.card-tooltip .tt-warn')).toHaveCount(0);
         // Marie: no birth, her baptism instead.
-        await expect(card(page, 'Marie').locator('.card-tooltip .tt-line').first()).toHaveText('≈ baptized 2/2/1869, Dolní Lhota');
+        await expect(card(page, 'Marie').locator('.card-tooltip .tt-line').first()).toHaveText('≈ baptized 2 Feb 1869, Dolní Lhota');
     });
 
     test('search finds a cause of death and says where it matched', async ({ page }) => {
@@ -252,9 +252,9 @@ test.describe('the custom card', () => {
         await expect(row('death').locator('.card-field-up')).toBeDisabled();
         await page.keyboard.press('Escape');
 
-        await expect(lines(page, 'Jan')).toHaveText(['†3/12/1919 Horní Lhota', '*1862 Horní Lhota', 'age 56', 'mlynář', '⚭2/14/1888 Dolní Lhota']);
+        await expect(lines(page, 'Jan')).toHaveText(['†12 Mar 1919 Horní Lhota', '*1862 Horní Lhota', 'age 56', 'mlynář', '⚭14 Feb 1888 Dolní Lhota']);
         await expect(lines(page, 'Anna').first()).toHaveText('†1912 Horní Lhota · cholera');
-        await expect(lines(page, 'Marie')).toHaveText(['†after 1919', '≈2/2/1869 Dolní Lhota', '⚭2/14/1888 Dolní Lhota']);
+        await expect(lines(page, 'Marie')).toHaveText(['†after 1919', '≈2 Feb 1869 Dolní Lhota', '⚭14 Feb 1888 Dolní Lhota']);
         expect(await card(page, 'Marie').evaluate(el => (el as HTMLElement).offsetHeight)).toBe(56 + 6 * 17);
     });
 

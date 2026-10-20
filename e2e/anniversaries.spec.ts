@@ -172,3 +172,15 @@ test('phone: the More sheet\'s anniversaries row names what its count covers (T3
     await expect(row).toHaveAttribute('aria-label', 'Anniversaries: 1 anniversary in the next 7 days');
     await expect(row.locator('.tree-switcher-badge')).toHaveAttribute('title', '1 anniversary in the next 7 days');
 });
+
+test('the tree overview writes an anniversary day first in English ("15 May")', async ({ page }) => {
+    const now = new Date();
+    const birthDate = `1950-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    await openApp(page);
+    await createFirstPerson(page, 'Vera', 'Old', { gender: 'female', birthDate });
+    await waitForPersist(page, 'Vera');
+    await page.evaluate(() => window.Strom.UI.showTreeOverview(window.Strom.DataManager.getCurrentTreeId(), { section: 'highlights' }));
+    const date = page.locator('#tree-overview-modal .tov-anni-date').first();
+    const month = now.toLocaleDateString('en-GB', { month: 'long' });
+    await expect(date).toHaveText(`${now.getDate()} ${month}`);
+});

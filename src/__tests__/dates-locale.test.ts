@@ -12,11 +12,18 @@ import { normalizeDateInput, formatDateForInput, formatFlexDate, toCanonical, Da
 afterEach(() => initLanguage('en'));
 
 describe('numeric day/month order by language', () => {
-    it('English reads slashes month-first, like it displays them', () => {
+    it('English reads slashes month-first and shows the month by name', () => {
         initLanguage('en');
         expect(normalizeDateInput('3/4/1880')).toBe('1880-03-04');
         expect(normalizeDateInput('5/15/1880')).toBe('1880-05-15');
-        expect(formatFlexDate(normalizeDateInput('3/4/1880')!)).toBe('3/4/1880');
+        expect(formatFlexDate(normalizeDateInput('3/4/1880')!)).toBe('4 Mar 1880');
+    });
+
+    it('every English display form reads back to the same date', () => {
+        initLanguage('en');
+        for (const v of ['1880-05-15', '1880-09', '1880', '~1880-05-15', '<1880-03', '>1880', '1880-05-15..1885-12', '1850..1855']) {
+            expect(normalizeDateInput(formatFlexDate(v)), v).toBe(v);
+        }
     });
 
     it('English: a first number above 12 can only be the day', () => {

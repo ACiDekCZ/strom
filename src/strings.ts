@@ -2262,7 +2262,7 @@ const stringsEN = {
         completeTitle: 'Complete person',
         enterName: 'Please enter first name or last name',
         unsavedMessage: 'Person details have unsaved changes.',
-        invalidDate: 'Invalid date. Use e.g. 5/15/1880, 5/1880, 1880 or "about 1880".',
+        invalidDate: 'Invalid date. Use e.g. 15 May 1880, May 1880, 1880 or "about 1880".',
         photoError: 'Could not process the image.',
         // Header + section labels (Letopis redesign)
         newPersonName: 'New person',
@@ -2298,7 +2298,7 @@ const stringsEN = {
             death: 'death', burial: 'burial', marriage: 'marriage', divorce: 'divorce',
             relationEnded: 'relationship ended',
         },
-        dateHint: 'Exact, year or estimate: 5/15/1880 · 5/1880 · about 1880 · before 1900',
+        dateHint: 'Exact, year or estimate: 15 May 1880 · May 1880 · about 1880 · before 1900',
         deletePerson: 'Delete person…',
         // Live summaries shown next to each section header
         sumParents: 'parents',

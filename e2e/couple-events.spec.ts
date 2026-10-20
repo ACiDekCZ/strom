@@ -96,7 +96,7 @@ test.describe("couple's events", () => {
         await expect(coupleEvents(page).locator('.couple-events-title')).toHaveText("Couple's events");
         await expect(rows(page)).toHaveCount(4);
         await expect(rows(page).locator('.couple-event-type')).toHaveText(['Banns', 'Residence', 'Census', 'Křest dítěte manželů']);
-        await expect(rows(page).nth(0).locator('.couple-event-meta')).toHaveText('1/22/1888 · Dolní Lhota');
+        await expect(rows(page).nth(0).locator('.couple-event-meta')).toHaveText('22 Jan 1888 · Dolní Lhota');
         await expect(rows(page).nth(0).locator('.couple-event-sub')).toHaveText('witnesses Josef Kříž, Václav Dvořák · 1 source');
         await expect(rows(page).nth(1).locator('.couple-event-meta')).toHaveText(/1890.*1900 · Horní Lhota/);
         await expect(rows(page).nth(1).locator('.couple-event-sub')).toHaveText('čp. 13');

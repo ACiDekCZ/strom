@@ -104,8 +104,8 @@ export function toCanonical(date: FlexDate): string {
  *
  * All-numeric day/month order follows the UI language, the same way
  * formatFlexDate displays it: dotted input ('15.5.1880') is always day-first;
- * slash input is month-first in English ('5/15/1880', matching the M/D/Y
- * display) and day-first in Czech and German. An English slash date whose
+ * slash input is month-first in English ('5/15/1880', the US habit; the
+ * display names the month, '15 May 1880') and day-first in Czech and German. An English slash date whose
  * first number cannot be a month ('15/5/1880') is read day-first, since that
  * is the only valid reading. `lang` defaults to the current UI language;
  * importers (GEDCOM etc.) never go through here.
@@ -248,11 +248,16 @@ const QUALIFIER_TEXT: Record<'cs' | 'en' | 'de', Record<Exclude<DateQualifier, '
     de: { '~': 'um', '<': 'vor', '>': 'nach' },
 };
 
+/** English month abbreviations for display, as GEDCOM writes them ('15 MAY 1880'). */
+const MONTH_ABBR_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
 /**
  * Human-readable form for tooltips/details:
  *   cs: '15. 5. 1880', '5/1880', 'kolem 1880'
- *   en: '5/15/1880', '5/1880', 'about 1880'
+ *   en: '15 May 1880', 'May 1880', 'about 1880'
  *   de: '15.5.1880', '5/1880', 'um 1880'
+ * English names the month: an all-numeric '3/4/1850' reads differently in the
+ * US and in Britain. Every English form parses back through normalizeDateInput.
  */
 export function formatFlexDate(value?: string, lang?: 'cs' | 'en' | 'de'): string {
     const d = parseFlexDate(value);
@@ -266,9 +271,9 @@ export function formatFlexDate(value?: string, lang?: 'cs' | 'en' | 'de'): strin
             ? `${d.day}. ${d.month}. ${d.year}`
             : locale === 'de'
                 ? `${d.day}.${d.month}.${d.year}`
-                : `${d.month}/${d.day}/${d.year}`;
+                : `${d.day} ${MONTH_ABBR_EN[d.month - 1]} ${d.year}`;
     } else if (d.month !== undefined) {
-        core = `${d.month}/${d.year}`;
+        core = locale === 'en' ? `${MONTH_ABBR_EN[d.month - 1]} ${d.year}` : `${d.month}/${d.year}`;
     } else {
         core = `${d.year}`;
     }

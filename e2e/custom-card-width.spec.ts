@@ -597,7 +597,7 @@ function gedLongDate(place: string): string {
     ].join('\n');
 }
 
-const RANGE_DATE = '11/22/1868–12/28/1869';
+const RANGE_DATE = '22 Nov 1868–28 Dec 1869';
 
 /**
  * The widest of the ordinary dates (English, whole dates: src/card-fields.ts
@@ -619,9 +619,10 @@ async function referenceWidth(page: Page): Promise<number> {
         const digit = [...'0123456789'].reduce((a, b) => width(b) > width(a) ? b : a);
         const y = digit.repeat(4);
         const refs = ['c. Y', 'before Y', 'after Y', 'Y–Y', 'Y'];
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
         for (let m = 1; m <= 12; m++) {
-            refs.push(`${m}/Y`);
-            for (let d = 1; d <= new Date(Date.UTC(1888, m, 0)).getUTCDate(); d++) refs.push(`${m}/${d}/Y`);
+            refs.push(`${months[m - 1]} Y`);
+            for (let d = 1; d <= new Date(Date.UTC(1888, m, 0)).getUTCDate(); d++) refs.push(`${d} ${months[m - 1]} Y`);
         }
         return Math.max(...refs.map(t => Math.ceil(width(t.split('Y').join(y)))));
     });
@@ -851,8 +852,8 @@ test.describe('"about / before / after" a whole date is a long date (N25)', () =
             const lines = await viewLines(page);
             const dated = lines.filter(l => l.date);
             expect(dated).toHaveLength(10);
-            // A qualifier and a whole date (a day, a month, a year): long. An estimate of a year: ordinary.
-            const qualifiedWhole = (t: string) => words[lang].some(w => t.startsWith(w + ' ')) && /\d+\D+\d+\D+\d{4}$/.test(t);
+            // A qualifier and a whole date (a day, a month, a year; English names the month): long. An estimate of a year: ordinary.
+            const qualifiedWhole = (t: string) => words[lang].some(w => t.startsWith(w + ' ')) && /\d+\D+(\d+|[A-Z][a-z]{2})\D+\d{4}$/.test(t);
             const expectedLong = dated.filter(l => qualifiedWhole(l.date!.text)).map(l => l.date!.text);
             expect(expectedLong, lang).toHaveLength(4);
             expect(dated.filter(l => l.long).map(l => l.date!.text).sort(), lang).toEqual([...expectedLong].sort());

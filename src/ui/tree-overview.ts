@@ -1498,7 +1498,8 @@ export const treeOverviewMethods = uiModule({
                 const p = st.data.persons[id as PersonId];
                 return p ? shownName(p) : '';
             });
-            const date = item.date.toLocaleDateString(lang, { day: 'numeric', month: 'long' });
+            // English day first, as every date of the app ('15 May'), not the US 'May 15'.
+            const date = item.date.toLocaleDateString(lang === 'en' ? 'en-GB' : lang, { day: 'numeric', month: 'long' });
             const label = this.anniversaryLabel(item, names);
             // Within a week also "in 3 days" / "tomorrow" / "today" on the right; later ones only the date.
             const a = strings.anniversaries;

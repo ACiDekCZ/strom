@@ -174,9 +174,16 @@ describe('formatFlexDate', () => {
     });
 
     it('formats English', () => {
-        expect(formatFlexDate('1880-05-15', 'en')).toBe('5/15/1880');
+        // The month by name: '3/4/1850' reads differently in the US and in Britain.
+        expect(formatFlexDate('1880-05-15', 'en')).toBe('15 May 1880');
+        expect(formatFlexDate('1850-03-04', 'en')).toBe('4 Mar 1850');
+        expect(formatFlexDate('1880-09', 'en')).toBe('Sep 1880');
         expect(formatFlexDate('~1880', 'en')).toBe('about 1880');
-        expect(formatFlexDate('>1880-05', 'en')).toBe('after 5/1880');
+        expect(formatFlexDate('>1880-05', 'en')).toBe('after May 1880');
+        expect(formatFlexDate('1880-05-15..1885-12', 'en')).toBe('between 15 May 1880 and Dec 1885');
+        // Czech and German keep their numbers.
+        expect(formatFlexDate('1880-05', 'cs')).toBe('5/1880');
+        expect(formatFlexDate('1880-05', 'de')).toBe('5/1880');
     });
 
     it('passes through unparseable legacy values', () => {

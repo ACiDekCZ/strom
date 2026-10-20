@@ -159,7 +159,7 @@ describe('S33 family book shows how unions ended and non-biological children', (
             p('s', 'Ota', 'Kovář', 'male', { parentIds: ['h', 'w'], birthDate: '1927-01-01', deathDate: '1995-01-01', parentRelTypes: { h: 'step' } }),
         ], [u('u', 'h', 'w', { status: 'divorced', startDate: '1924-05-01', endDate: '1940', childIds: ['c', 's'] })]);
         const html = buildFamilyBook(d, { lang: 'en', privacyMode: 'full' });
-        expect(html).toContain('⚭ 5/1/1924 · divorced 1940');
+        expect(html).toContain('⚭ 1 May 1924 · divorced 1940');
         expect(html).toContain('— adopted');
         expect(html).toContain('stepchild of Jan Kovář');
     });

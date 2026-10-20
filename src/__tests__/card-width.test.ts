@@ -549,7 +549,7 @@ describe('a long date does not widen the date column (U02)', () => {
         expect(cs.some(d => /\b0\d/.test(d))).toBe(false);
         setLanguage('en');
         expect(cardDateReferences(false)).toEqual(['c. 1888', 'before 1888', 'after 1888', '1888–1888', '1888']);
-        expect(cardDateReferences(true)).toEqual(expect.arrayContaining(['1/1/1888', '12/28/1888', '12/31/1888', 'c. 1888']));
+        expect(cardDateReferences(true)).toEqual(expect.arrayContaining(['1 Jan 1888', '28 Dec 1888', '31 Dec 1888', 'Dec 1888', 'c. 1888']));
         setLanguage('de');
         expect(cardDateReferences(false)).toEqual(['um 1888', 'vor 1888', 'nach 1888', '1888–1888', '1888']);
         expect(cardDateReferences(true)).toEqual(expect.arrayContaining(['1.1.1888', '28.12.1888', '31.12.1888', 'um 1888']));
@@ -633,8 +633,8 @@ describe('a long date does not widen the date column (U02)', () => {
             return { lines, metrics, rows: customCardRows(entries, metrics, uneven, 0).rows };
         };
         // The cap: the widest real date with its year in "0000", never "00. 00. 0000" (cs 80, en 68, de 68).
-        // cs "20. 10. 0000" 76; en "before 0000" 70 ("10/30/0000" 64); de "30.10.0000" 64.
-        const expected = { cs: 76, en: 70, de: 64 };
+        // cs "20. 10. 0000" 76; en "20 Sep 0000" 71 ("before 0000" 70); de "30.10.0000" 64.
+        const expected = { cs: 76, en: 71, de: 64 };
         for (const lang of ['cs', 'en', 'de'] as const) {
             setLanguage(lang);
             expect(customCardDateCap(cardDateReferences(true), uneven), lang).toBe(expected[lang]);
@@ -642,8 +642,8 @@ describe('a long date does not widen the date column (U02)', () => {
         setLanguage('cs');
         expect(customCardDateCap(cardDateReferences(false), uneven)).toBe(64);   // "kolem 0000"
         expect(customCardDateCap([], uneven)).toBe(Infinity);
-        // "po 1. 1. 1811" (cs 68px), "c. 1/1/1811" (en 56), "um 1.1.1811" (de 56), "vor …" (de 62): under the cap
-        // and under the view's ordinary date, still long by their kind; the column stays the ordinary date's.
+        // "po 1. 1. 1811" (cs 68px), "c. 1 Jan 1811" (en 70), "um 1.1.1811" (de 56), "vor …" (de 62): under the cap
+        // (in English above the view's ordinary "20 Oct 1800", 67), still long by their kind; the column stays the ordinary date's.
         for (const [lang, q] of [['cs', '>'], ['cs', '<'], ['cs', '~'], ['en', '~'], ['en', '<'], ['de', '~'], ['de', '<'], ['de', '>']] as const) {
             setLanguage(lang);
             const { lines, metrics, rows } = run('1800-10-20', `${q}1811-01-01`);
