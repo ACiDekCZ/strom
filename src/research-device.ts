@@ -342,7 +342,8 @@ export interface ResearchNotWritten {
     fingerprint: string;
     /** Changes the research wrote (its `applied`). */
     written: number;
-    items: { person: string; fact: string; why: string; name?: string }[];
+    /** `family`: the research's family ("F0003") the change was about, when it said one. */
+    items: { person: string; fact: string; why: string; name?: string; family?: string }[];
     /** Changes it counted but neither wrote nor named. */
     unexplained: number;
     seen?: true;
@@ -481,7 +482,9 @@ export function researchAutoState(treeId: string): ResearchAutoState {
                 written: typeof nw.written === 'number' && nw.written >= 0 ? Math.floor(nw.written) : 0,
                 items: nw.items.slice(0, 50).map(i => i as Record<string, unknown>).filter(i => !!i && typeof i === 'object')
                     .map(i => ({ person: typeof i.person === 'string' ? i.person.slice(0, 12) : '', fact: typeof i.fact === 'string' ? i.fact.slice(0, 8) : '',
-                        why: typeof i.why === 'string' ? i.why.slice(0, 12) : '' })),
+                        why: typeof i.why === 'string' ? i.why.slice(0, 12) : '',
+                        ...(typeof i.name === 'string' && i.name ? { name: i.name.slice(0, 120) } : {}),
+                        ...(typeof i.family === 'string' && /^F\d{1,9}$/.test(i.family) ? { family: i.family } : {}) })),
                 unexplained: typeof nw.unexplained === 'number' && nw.unexplained > 0 ? Math.floor(nw.unexplained) : 0,
                 ...(nw.seen === true ? { seen: true as const } : {}),
             };

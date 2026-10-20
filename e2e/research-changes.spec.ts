@@ -147,3 +147,124 @@ test.describe('changes per person after a send the research took nothing from', 
         await expect(panel.locator('.research-changes-kinds')).toHaveText('birth');
     });
 });
+
+test.describe('what will be sent beyond the people', () => {
+    test.use({ viewport: DESKTOP });
+
+    /** Jan's birth in Kolín, two new sources and the register retitled, the main marriage, Kolín's coordinates, a variant. */
+    async function sample(page: import('@playwright/test').Page, extraSources = 0): Promise<void> {
+        await editJan(page, 'Kolín');
+        await page.evaluate((extra) => {
+            const dm = window.Strom.DataManager;
+            dm.addSource({ title: 'Sčítání lidu 1921' });
+            dm.addSource({ title: 'Pozemková kniha Čáslav', transcript: 'Josef Fíšek, chalupník' });
+            for (let i = 1; i <= extra; i++) dm.addSource({ title: `Urbář ${String(i).padStart(2, '0')}` });
+            const s1 = Object.values(dm.getData().sources ?? {}).find((s: any) => s.title === 'Oddací matrika Čáslav') as any;
+            dm.updateSource(s1.id, { title: 'Oddací matrika Čáslav 1880–1890' });
+            const u = Object.values(dm.getData().partnerships)[0] as any;
+            dm.updatePartnership(u.id, { isPrimary: true });
+            dm.setPlaceGeos(new Map([['kolin', { lat: 50.0281, lon: 15.2006 }]]));
+            dm.addSurnameGroup(['Fíšek', 'Fischek']);
+            window.Strom.UI.refreshResearchSyncUi();
+        }, extraSources);
+    }
+
+    test('sections in order, the count beyond the people, the context of a source, places expanded', async ({ page }) => {
+        await openResearch(page);
+        await fakeBridge(page);
+        await poll(page);
+        await sample(page);
+        const more = page.locator('#research-sync-send-more');
+        await expect(more).toHaveText(/7/);
+        await expect(more).toHaveAttribute('aria-label', 'Show what will be sent (1 person · 6 other changes)');
+        await more.click();
+        const panel = page.locator('#research-changes-panel');
+        await expect(panel.locator('.research-changes-sub')).toContainText('1 person · 6 other changes');
+        await expect(panel.locator('.research-changes-inexact')).toHaveCount(0);
+        await expect(panel.locator('.research-changes-section')).toHaveText(['People · 1', 'Sources · 3', 'Couples · 1', 'Places · 1', 'Surname variants · 1']);
+        const sources = panel.locator('[data-kind="source"]');
+        await expect(sources).toHaveCount(3);
+        await expect(sources.nth(0)).toContainText('Oddací matrika Čáslav 1880–1890');
+        await expect(sources.nth(0).locator('.research-changes-kinds')).toHaveText('title');
+        await expect(sources.nth(0).locator('.research-changes-ctx')).toHaveText('not cited');
+        await expect(sources.nth(1).locator('.research-changes-kinds')).toHaveText('new · transcript');
+        await expect(panel.locator('[data-kind="couple"] .research-changes-name')).toHaveText('Josef Fíšek and Anna Svobodová');
+        await expect(panel.locator('[data-kind="couple"] .research-changes-kinds')).toHaveText('main marriage');
+        await expect(panel.locator('[data-kind="variants"]')).toContainText('for the surname Fíšek');
+        // Places: one summary row, its list on demand.
+        const toggle = panel.locator('[data-toggle="places"]');
+        await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        await expect(panel.locator('#research-changes-detail-places')).toBeHidden();
+        await toggle.click();
+        await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        await expect(panel.locator('#research-changes-detail-places .research-changes-detail-row')).toHaveText(['Kolín50.028, 15.201']);
+        await expect(panel).toBeVisible();
+    });
+
+    test('a long section shows three, "+ N more" adds the rest', async ({ page }) => {
+        await openResearch(page);
+        await fakeBridge(page);
+        await poll(page);
+        await sample(page, 8);
+        await page.locator('#research-sync-send-more').click();
+        const panel = page.locator('#research-changes-panel');
+        await expect(panel.locator('[data-section="sources"]')).toHaveText('Sources · 11');
+        await expect(panel.locator('[data-kind="source"]')).toHaveCount(3);
+        const moreBtn = panel.locator('[data-more="sources"]');
+        await expect(moreBtn).toHaveText('+ 8 more');
+        await moreBtn.click();
+        await expect(panel.locator('[data-kind="source"]')).toHaveCount(11);
+        await expect(moreBtn).toHaveCount(0);
+        // The people's section of one: no grouping.
+        await expect(panel.locator('[data-kind="person"]')).toHaveCount(1);
+    });
+
+    test('a source opens its viewer over the panel; Esc closes the viewer first; a couple centres the tree and closes the panel', async ({ page }) => {
+        await openResearch(page);
+        await fakeBridge(page);
+        await poll(page);
+        await sample(page);
+        await page.locator('#research-sync-send-more').click();
+        const panel = page.locator('#research-changes-panel');
+        const viewer = page.locator('#source-viewer-modal');
+        const row = panel.locator('[data-kind="source"] button.research-changes-name').first();
+        await row.click();
+        await expect(viewer).toHaveClass(/active/);
+        await expect(panel).toBeVisible();
+        // A click inside the viewer leaves the panel.
+        await viewer.locator('.modal').click({ position: { x: 20, y: 20 } });
+        await expect(panel).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(viewer).not.toHaveClass(/active/);
+        await expect(panel).toBeVisible();
+        await expect(row).toBeFocused();
+        // A couple: the tree centred on its first partner, the panel closed.
+        await panel.locator('[data-kind="couple"] button.research-changes-name').click();
+        await expect(panel).toHaveCount(0);
+    });
+
+    test('phone: the checkbox above Close and Send side by side', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await openResearch(page);
+        await fakeBridge(page);
+        await poll(page);
+        await sample(page);
+        await page.evaluate(() => {
+            const id = window.Strom.TreeManager.getActiveTreeId()!;
+            const k = `strom-research-auto:${id}`;
+            const v = JSON.parse(localStorage.getItem(k) ?? '{}');
+            delete v.skipPreview;
+            localStorage.setItem(k, JSON.stringify(v));
+            window.Strom.UI.showResearchChanges('send', { confirm: true });
+        });
+        const foot = page.locator('#research-changes-panel .research-changes-foot');
+        await expect(foot).toHaveCSS('display', 'grid');
+        const [skip, close, send] = await Promise.all([
+            foot.locator('.research-changes-skip').boundingBox(), foot.locator('[data-act="close"]').boundingBox(), foot.locator('[data-act="send"]').boundingBox(),
+        ]);
+        expect(skip!.y + skip!.height).toBeLessThanOrEqual(close!.y + 1);
+        expect(Math.abs(close!.y - send!.y)).toBeLessThan(2);
+        const panelBox = await page.locator('#research-changes-panel').boundingBox();
+        expect(panelBox!.width).toBeLessThanOrEqual(390 - 16 + 1);
+    });
+});

@@ -120,12 +120,12 @@ describe('changes per person since the research\'s version', () => {
         expect(diffByPerson(base, tree())).toEqual([]);
     });
 
-    it('a changed source is told at the people citing it', () => {
+    it('a changed source is told at the source, not at the people citing it', () => {
         const t = tree();
         t.persons['p2' as PersonId].sourceIds = ['s1'];
         const base = baseCopy(t);
         const cur = JSON.parse(JSON.stringify(t)) as StromData;
         cur.sources!.s1.transcript = 'Anna, dcera…';
-        expect(diffByPerson(base, cur)).toEqual([{ personId: 'p2', name: 'Anna Fíšek', kinds: ['source'] }]);
+        expect(diffByPerson(base, cur)).toEqual([]);
     });
 });

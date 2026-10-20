@@ -12,9 +12,12 @@ import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
 import { strings, getCurrentLanguage } from '../strings.js';
-import { PersonId, StromData, TreeId } from '../types.js';
+import { Person, PersonId, StromData, TreeId } from '../types.js';
 import { formatLiveClock } from '../live-time.js';
-import { ChangeKind, PersonChange, diffByPerson, baseCopy } from '../research-changes.js';
+import {
+    ChangeKind, PersonChange, diffByPerson, baseCopy, diffOther, otherRowCount, previewInexact, OtherChanges, SourceChange, CoupleChange,
+    SourceChangeKind, CoupleChangeKind, PlaceChange, VariantChange,
+} from '../research-changes.js';
 import { saveResearchCopy, loadResearchCopy, saveResearchPrevCopy, loadResearchPrevCopy } from '../research-copy.js';
 import { researchAutoState, patchResearchAutoState, noteResearchSendPreviewSkipped } from '../research-device.js';
 import { researchSendMode, personsByResearchRefs } from './research-sync-ui.js';
@@ -33,6 +36,13 @@ const WRITTEN_KEY = 'strom-research-written:';
 const KINDS_SHOWN = 3;
 /** At most this many people kept for "What was written". */
 const WRITTEN_MAX = 200;
+/** A section of "What will be sent" up to this many rows shows them all; a longer one its first GROUP_HEAD, then "+ N more". */
+const GROUP_ALL = 5;
+const GROUP_HEAD = 3;
+/** "+ N more" adds this many rows (a section's, an expanded list's). */
+const GROUP_STEP = 50;
+/** An expanded list of places or surname variants shows this many first. */
+const DETAIL_HEAD = 20;
 
 /** The copy of the open tree's research version, as loaded (base null: none kept). */
 let copy: { treeId: string; base: StromData | null; fp: string } | null = null;
@@ -41,6 +51,10 @@ let prevCopy: { treeId: string; base: StromData | null; fp: string } | null = nu
 let loading: string | null = null;
 let loadingDone: Promise<void> | null = null;
 let memo: { treeId: string; key: string; list: PersonChange[] } | null = null;
+/** The changes beyond the people, against the base they were told from. */
+let otherMemo: { base: StromData; key: string; other: OtherChanges } | null = null;
+/** The changes beyond the people when the open tree is in step with the research: none. */
+const NO_OTHER: OtherChanges = { sources: [], couples: [] };
 /**
  * A send still pending in the research: its data and list, kept until it is
  * written; `stands`: the fingerprints the kept copy could stand for when it
@@ -106,8 +120,83 @@ export function changeKindsText(kinds: readonly ChangeKind[]): string {
         citation: c.kindCitation, source: c.kindSource, attachment: c.kindAttachment,
         attachmentRemoved: c.kindAttachmentRemoved, note: c.kindNote, parents: c.kindParents, other: c.kindOther,
     };
-    const shown = kinds.slice(0, KINDS_SHOWN).map(k => label[k]);
-    return [...shown, ...(kinds.length > KINDS_SHOWN ? [c.more(kinds.length - KINDS_SHOWN)] : [])].join(' · ');
+    return kindsLine(kinds.map(k => label[k]));
+}
+
+/** At most three labels, then "+ N more". */
+function kindsLine(labels: readonly string[]): string {
+    const c = strings.changes;
+    const shown = labels.slice(0, KINDS_SHOWN);
+    return [...shown, ...(labels.length > KINDS_SHOWN ? [c.more(labels.length - KINDS_SHOWN)] : [])].join(' · ');
+}
+
+/** The labels of a source row's kinds. */
+export function sourceKindsText(kinds: readonly SourceChangeKind[]): string {
+    const c = strings.changes;
+    const label: Record<SourceChangeKind, string> = {
+        added: c.kindSourceAdded, deleted: c.kindSourceDeleted, title: c.kindTitle, transcript: c.kindTranscript, page: c.kindPage,
+        excerptAdded: c.kindExcerptAdded, excerptRemoved: c.kindExcerptRemoved, attachment: c.kindSourceAttachment, other: c.kindOther,
+    };
+    return kindsLine(kinds.map(k => label[k]));
+}
+
+/** The labels of a couple row's kinds. */
+export function coupleKindsText(kinds: readonly CoupleChangeKind[]): string {
+    const c = strings.changes;
+    const label: Record<CoupleChangeKind, string> = {
+        childOrder: c.kindChildOrder, mainMarriage: c.kindMainMarriage, marriageEvidence: c.kindMarriageEvidence, singleParent: c.kindSingleParent,
+    };
+    return kindsLine(kinds.map(k => label[k]));
+}
+
+/** A person's name for a row beyond the people ("?" stand-in: "unknown parent"); `data` first, then `base`. */
+function rowPersonName(id: PersonId, data: StromData, base?: StromData | null): string {
+    const p: Person | undefined = data.persons[id] ?? base?.persons[id];
+    if (!p) return '?';
+    if (p.isPlaceholder) return strings.changes.unknownParent;
+    return shownNameOrEmpty(p) || `${p.firstName} ${p.lastName}`.trim() || '?';
+}
+
+/** The context line of a source row: who cites it. */
+function sourceContext(ch: SourceChange, data: StromData): string {
+    const c = strings.changes;
+    if (ch.deleted || ch.attachmentOnly) return '';
+    if (ch.citedBy.persons > 0) return c.citedPersons(ch.citedBy.persons);
+    if (ch.citedBy.couple) return c.citedCouple(rowPersonName(ch.citedBy.couple[0], data), rowPersonName(ch.citedBy.couple[1], data));
+    return c.citedNone;
+}
+
+/** Coordinates as a row shows them ("50.071, 15.208"; none: "–"). */
+function coordText(p: PlaceChange): string {
+    return p.lat === undefined || p.lon === undefined ? '–' : `${p.lat.toFixed(3)}, ${p.lon.toFixed(3)}`;
+}
+
+/** The one row of places / surname variants: a summary and a toggle expanding its list. */
+function summaryRow(key: 'places' | 'variants', labelHtml: string, context: string, toggle: string): string {
+    return `<li class="research-changes-row is-summary" data-kind="${key}"><span class="research-changes-icon is-ring" aria-hidden="true"></span>`
+        + `<span class="research-changes-text"><span class="research-changes-name">${labelHtml}</span>`
+        + (context ? `<span class="research-changes-ctx">${esc(context)}</span>` : '')
+        + `<button type="button" class="link-button research-changes-toggle" data-toggle="${key}" aria-expanded="false"`
+        + ` aria-controls="research-changes-detail-${key}">${esc(toggle)}</button>`
+        + `<ul class="research-changes-detail" id="research-changes-detail-${key}" hidden></ul></span></li>`;
+}
+
+/** The person a couple row centres the tree on: its first partner (the other when the first is gone or a stand-in). */
+function coupleFocus(ch: CoupleChange, data: StromData): PersonId | null {
+    const ok = (id: PersonId): boolean => !!data.persons[id] && !data.persons[id].isPlaceholder;
+    return ok(ch.p1) ? ch.p1 : ok(ch.p2) ? ch.p2 : null;
+}
+
+/** Once the source viewer opened from a row closes, the focus goes back to that row's button. */
+function returnFocusAfterViewer(btn: HTMLElement): void {
+    const modal = document.getElementById('source-viewer-modal');
+    if (!modal?.classList.contains('active')) return;
+    const watch = new MutationObserver(() => {
+        if (modal.classList.contains('active')) return;
+        watch.disconnect();
+        if (btn.isConnected) btn.focus();
+    });
+    watch.observe(modal, { attributes: true, attributeFilter: ['class'] });
 }
 
 export const researchChangesMethods = uiModule({
@@ -143,6 +232,28 @@ export const researchChangesMethods = uiModule({
         const list = diffByPerson(base, DataManager.getData());
         memo = { treeId, key, list };
         return list;
+    },
+
+    /**
+     * What changed in the open tree beyond the people (sources, couples,
+     * places, surname variants) since the same base as researchChangesNow;
+     * null when that is not known. Cached until the next edit.
+     */
+    researchOtherNow(): OtherChanges | null {
+        const b = this.researchChangesBase();
+        if (!b) return null;
+        if (b === 'same') return NO_OTHER;
+        if (otherMemo && otherMemo.base === b.base && otherMemo.key === b.key) return otherMemo.other;
+        const other = diffOther(b.base, DataManager.getData()) ?? NO_OTHER;
+        otherMemo = { base: b.base, key: b.key, other };
+        return other;
+    },
+
+    /** Rows "What will be sent" lists (people, and the rest: places and surname variants one each); null: not known. */
+    researchChangesCount(): { persons: number; other: number } | null {
+        const list = this.researchChangesNow();
+        if (!list) return null;
+        return { persons: list.length, other: otherRowCount(this.researchOtherNow()) };
     },
 
     /**
@@ -294,13 +405,17 @@ export const researchChangesMethods = uiModule({
         };
         const archive = this.researchModeOf(ctx.link.id, ctx.link) === 'archive';
         const auto = researchSendMode(ctx.link) === 'auto';
+        const data = DataManager.getData();
         let list: PersonChange[];
         let title: string;
         let sub: string;
         let foot = '';
+        let footPair = false;
         let notWrittenHtml = '';
         let writtenHead = '';
         let moreWritten = 0;
+        let other: OtherChanges | null = null;
+        let inexact = false;
         if (mode === 'written') {
             const w = researchWrittenList(ctx.treeId);
             const st = researchAutoState(ctx.treeId);
@@ -315,7 +430,6 @@ export const researchChangesMethods = uiModule({
             const nw = st.notWritten && (st.notWritten.fingerprint === ctx.link.sent?.fingerprint || st.notWritten.fingerprint === lw?.fingerprint) ? st.notWritten : null;
             if (nw) {
                 if (!nw.seen) patchResearchAutoState(ctx.treeId, { notWritten: { ...nw, seen: true } });
-                const data = DataManager.getData();
                 const named = new Set<string>();
                 const items = nw.items.map(n => {
                     const id = n.person ? personsByResearchRefs(data, [n.person])[0] : undefined;
@@ -352,6 +466,7 @@ export const researchChangesMethods = uiModule({
             }
         } else {
             const now = this.researchChangesNow();
+            other = now === null ? null : this.researchOtherNow();
             list = now ?? [];
             title = c.willSendTitle;
             // Changed since the research last had the tree: its version loaded, or the last send it wrote
@@ -359,9 +474,13 @@ export const researchChangesMethods = uiModule({
             const lastSent = ctx.link.sent?.state === 'written' ? ctx.link.sent.closedAt ?? ctx.link.sent.at : '';
             const since = [lastSent, researchAutoState(ctx.treeId).lastWritten?.at ?? '', ctx.link.syncedAt]
                 .filter(t => Number.isFinite(Date.parse(t))).sort((a, b) => Date.parse(b) - Date.parse(a))[0];
-            // No count when the exact list cannot be told ("0 people" would say nothing changed).
-            const inexact = now === null || !!opts.inexact;
-            sub = inexact ? c.changedSince(clock(since)) : auto ? c.willSendAutoSub(list.length) : c.willSendSub(list.length, clock(since));
+            const o = otherRowCount(other);
+            // No count when the exact list cannot be told: no base to compare with (a restore before loading, a send
+            // taken back with no copy before it, the copy not read yet) — or, about to send, nothing it could
+            // name although the tree is not where the research's version is ("0 people" would say nothing changed).
+            inexact = previewInexact(now, other, opts);
+            sub = inexact ? c.changedSince(clock(since)) : auto ? c.willSendAutoSub(list.length, o) : c.willSendSub(list.length, o, clock(since));
+            footPair = !(auto && !opts.confirm);
             foot = auto && !opts.confirm
                 ? `<button type="button" class="research-sync-link" data-act="send">${esc(s.sendNow)}</button>`
                 : (opts.confirm && !ctx.link.previewDue
@@ -369,15 +488,74 @@ export const researchChangesMethods = uiModule({
                     + `<button type="button" class="secondary btn-sm" data-act="close">${esc(strings.buttons.close)}</button>`
                     + `<button type="button" class="primary btn-sm" data-act="send">${esc(s.barSend)}</button>`;
         }
-        const rows = list.map(ch => {
+        const personRow = (ch: PersonChange): string => {
             const name = ch.deleted || !DataManager.getPerson(ch.personId)
                 ? `<span class="research-changes-name is-deleted">${esc(ch.name)}</span>`
                 : `<button type="button" class="research-changes-name" data-person="${esc(ch.personId)}">${esc(ch.name)}</button>`;
-            return `<li class="research-changes-row">`
+            return `<li class="research-changes-row" data-kind="person">`
                 + `<span class="research-changes-icon ${mode === 'written' ? 'is-check' : 'is-ring'}" aria-hidden="true">${mode === 'written' ? '✓' : ''}</span>`
                 + `<span class="research-changes-text">${name}<span class="research-changes-kinds">${esc(changeKindsText(ch.kinds))}</span></span>`
                 + '</li>';
-        }).join('');
+        };
+        // The sections of "What will be sent": the rows of each kind, a long one grouped ("+ N more" adds GROUP_STEP).
+        const groups = new Map<string, { rows: (() => string)[]; shown: number }>();
+        const section = (key: string, head: string, rows: (() => string)[]): string => {
+            if (!rows.length) return '';
+            const shown = rows.length <= GROUP_ALL ? rows.length : GROUP_HEAD;
+            groups.set(key, { rows, shown });
+            const rest = rows.length - shown;
+            return (head ? `<div class="research-changes-section" data-section="${key}">${esc(head)}</div>` : '')
+                + `<ul class="research-changes-list" data-group="${key}">${rows.slice(0, shown).map(r => r()).join('')}</ul>`
+                + (rest > 0 ? `<button type="button" class="link-button research-changes-more-btn" data-more="${key}">${esc(c.more(rest))}</button>` : '');
+        };
+        let bodyHtml: string;
+        if (mode === 'send') {
+            const base = this.researchChangesBase();
+            const baseData = base && base !== 'same' ? base.base : null;
+            const sourceRows = (other?.sources ?? []).map(ch => (): string => {
+                const linked = !ch.deleted && !ch.attachmentOnly && !!data.sources?.[ch.sourceId];
+                const name = linked
+                    ? `<button type="button" class="research-changes-name" data-source="${esc(ch.sourceId)}">${esc(ch.title)}</button>`
+                    : `<span class="research-changes-name${ch.deleted ? ' is-deleted' : ''}">${esc(ch.title)}</span>`;
+                const context = sourceContext(ch, data);
+                return `<li class="research-changes-row" data-kind="source"><span class="research-changes-icon is-ring" aria-hidden="true"></span>`
+                    + `<span class="research-changes-text">${name}<span class="research-changes-kinds">${esc(sourceKindsText(ch.kinds))}</span>`
+                    + (context ? `<span class="research-changes-ctx">${esc(context)}</span>` : '') + '</span></li>';
+            });
+            const coupleRows = (other?.couples ?? []).map(ch => (): string => {
+                const label = c.coupleName(rowPersonName(ch.p1, data, baseData), rowPersonName(ch.p2, data, baseData));
+                const focus = coupleFocus(ch, data);
+                const name = focus
+                    ? `<button type="button" class="research-changes-name" data-couple="${esc(focus)}">${esc(label)}</button>`
+                    : `<span class="research-changes-name${ch.deleted ? ' is-deleted' : ''}">${esc(label)}</span>`;
+                return `<li class="research-changes-row" data-kind="couple"><span class="research-changes-icon is-ring" aria-hidden="true"></span>`
+                    + `<span class="research-changes-text">${name}<span class="research-changes-kinds">${esc(coupleKindsText(ch.kinds))}</span></span></li>`;
+            });
+            const places = other?.places?.count ? other.places : null;
+            const variants = other?.surnameVariants?.count ? other.surnameVariants : null;
+            const placesRow = places ? [(): string => summaryRow('places', esc(c.placesRow(places.count)), '', c.showPlaces)] : [];
+            const variantsRow = variants ? [(): string => {
+                const added = variants.items.filter(v => !v.removed).length;
+                const removed = variants.items.length - added;
+                const label = [added ? c.variantsRow(added) : '', removed ? c.variantsRemovedRow(removed) : ''].filter(Boolean).join(' · ');
+                const surnames = new Set(variants.items.map(v => v.surname));
+                const of = surnames.size === 1 ? c.variantsOf([...surnames][0]) : c.variantsOfN(surnames.size);
+                return summaryRow('variants', esc(label), of, c.show);
+            }] : [];
+            const others = sourceRows.length + coupleRows.length + placesRow.length + variantsRow.length;
+            bodyHtml = (inexact ? `<p class="research-changes-inexact">${esc(c.inexact)}</p>` : '')
+                + section('persons', others ? c.sectionPersons(list.length) : '', list.map(ch => () => personRow(ch)))
+                + section('sources', c.sectionSources(sourceRows.length), sourceRows)
+                + section('couples', c.sectionCouples(coupleRows.length), coupleRows)
+                + section('places', places ? c.sectionPlaces(places.count) : '', placesRow)
+                + section('variants', variants ? c.sectionVariants(variants.count) : '', variantsRow);
+        } else {
+            const rows = list.map(personRow).join('');
+            bodyHtml = notWrittenHtml
+                + (writtenHead && (rows || moreWritten) ? `<div class="research-changes-section">${esc(writtenHead)}</div>` : '')
+                + (rows ? `<ul class="research-changes-list${writtenHead ? ' is-quiet' : ''}">${rows}</ul>` : '')
+                + (moreWritten ? `<div class="research-changes-more">${esc(c.andMore(moreWritten))}</div>` : '');
+        }
         const panel = document.createElement('div');
         panel.id = PANEL_ID;
         panel.className = 'research-changes-panel';
@@ -389,20 +567,69 @@ export const researchChangesMethods = uiModule({
                 <div class="research-changes-title">${esc(title)}</div>
                 <div class="research-changes-sub">${esc(sub)}</div>
             </div>
-            ${mode === 'send' && (opts.inexact || (rows === '' && opts.confirm)) ? `<p class="research-changes-inexact">${esc(c.inexact)}</p>` : ''}
-            ${notWrittenHtml}
-            ${writtenHead && (rows || moreWritten) ? `<div class="research-changes-section">${esc(writtenHead)}</div>` : ''}
-            ${rows ? `<ul class="research-changes-list${writtenHead ? ' is-quiet' : ''}">${rows}</ul>` : ''}
-            ${moreWritten ? `<div class="research-changes-more">${esc(c.andMore(moreWritten))}</div>` : ''}
-            ${foot ? `<div class="research-changes-foot">${foot}</div>` : ''}`;
+            <div class="research-changes-body">${bodyHtml}</div>
+            ${foot ? `<div class="research-changes-foot${footPair ? ' is-pair' : ''}">${foot}</div>` : ''}`;
         document.body.appendChild(panel);
         this.positionResearchChanges();
-        panel.querySelectorAll<HTMLButtonElement>('[data-person]').forEach(btn => btn.addEventListener('click', () => {
-            const id = btn.dataset.person as PersonId;
-            this.closeResearchChanges();
-            TreeRenderer.setFocus(id);
-            ZoomPan.centerOnPerson(id);
-        }));
+        // The expanded list of places / surname variants: its first DETAIL_HEAD, then "+ N more" adds GROUP_STEP.
+        const detailShown = new Map<string, number>();
+        const detailItems = (key: string): { a: string; b: string; removed?: boolean }[] => key === 'places'
+            ? (other?.places?.items ?? []).map(p => ({ a: p.name, b: coordText(p) }))
+            : (other?.surnameVariants?.items ?? []).map((v: VariantChange) => ({ a: v.surname, b: v.variant, removed: v.removed }));
+        const renderDetail = (key: string, ul: HTMLElement): void => {
+            const items = detailItems(key);
+            const shown = Math.min(items.length, detailShown.get(key) ?? DETAIL_HEAD);
+            detailShown.set(key, shown);
+            const rest = items.length - shown;
+            ul.innerHTML = items.slice(0, shown).map(it => `<li class="research-changes-detail-row"><span>${esc(it.a)}</span>`
+                + `<span class="research-changes-detail-value${it.removed ? ' is-removed' : ''}">${esc(it.b)}</span></li>`).join('')
+                + (rest > 0 ? `<li><button type="button" class="link-button research-changes-more-btn" data-detail-more="${key}">${esc(c.more(rest))}</button></li>` : '');
+        };
+        panel.addEventListener('click', (e) => {
+            const btn = (e.target as Element | null)?.closest<HTMLButtonElement>('button');
+            if (!btn || !panel.contains(btn)) return;
+            const d = btn.dataset;
+            if (d.person || d.couple) {
+                // A person or a couple: the tree centred on it (a couple on its first partner), the panel closed.
+                const id = (d.person ?? d.couple) as PersonId;
+                this.closeResearchChanges();
+                TreeRenderer.setFocus(id);
+                ZoomPan.centerOnPerson(id);
+            } else if (d.source) {
+                // A source: its viewer over the panel, which stays; focus back on the row once the viewer closes.
+                this.showSourceViewer(d.source, null);
+                returnFocusAfterViewer(btn);
+            } else if (d.more) {
+                const g = groups.get(d.more);
+                const ul = panel.querySelector<HTMLElement>(`ul[data-group="${d.more}"]`);
+                if (!g || !ul) return;
+                const next = Math.min(g.rows.length, g.shown + GROUP_STEP);
+                ul.insertAdjacentHTML('beforeend', g.rows.slice(g.shown, next).map(r => r()).join(''));
+                g.shown = next;
+                const rest = g.rows.length - next;
+                if (rest > 0) btn.textContent = c.more(rest);
+                else {
+                    // The next row takes the focus the button had.
+                    (ul.lastElementChild?.querySelector<HTMLElement>('button') ?? ul.lastElementChild as HTMLElement | null)?.focus?.();
+                    btn.remove();
+                }
+            } else if (d.toggle) {
+                const ul = panel.querySelector<HTMLElement>(`#research-changes-detail-${d.toggle}`);
+                if (!ul) return;
+                const open = btn.getAttribute('aria-expanded') !== 'true';
+                if (open && !ul.childElementCount) renderDetail(d.toggle, ul);
+                ul.hidden = !open;
+                btn.setAttribute('aria-expanded', String(open));
+                btn.textContent = d.toggle === 'places' ? (open ? c.hidePlaces : c.showPlaces) : (open ? c.hide : c.show);
+            } else if (d.detailMore) {
+                const ul = panel.querySelector<HTMLElement>(`#research-changes-detail-${d.detailMore}`);
+                if (!ul) return;
+                const before = detailShown.get(d.detailMore) ?? DETAIL_HEAD;
+                detailShown.set(d.detailMore, before + GROUP_STEP);
+                renderDetail(d.detailMore, ul);
+                (ul.children[before]?.querySelector<HTMLElement>('button') ?? ul.querySelector<HTMLElement>('[data-detail-more]'))?.focus?.();
+            }
+        });
         panel.querySelector('[data-act="close"]')?.addEventListener('click', () => this.closeResearchChanges());
         panel.querySelector<HTMLButtonElement>('[data-act="send"]')?.addEventListener('click', (e) => {
             const btn = e.currentTarget as HTMLButtonElement;
@@ -451,10 +678,13 @@ export const researchChangesMethods = uiModule({
             ?? (pillSend?.offsetParent ? pillSend : null) ?? shown('research-sync-mark') ?? shown('research-sync-pill')
             ?? document.querySelector<HTMLElement>('.actions-menu-btn');
         const rect = anchor?.getBoundingClientRect();
-        const width = Math.min(panel.offsetWidth || 380, window.innerWidth - 16);
+        const width = Math.min(panel.offsetWidth || 360, window.innerWidth - 16);
         const left = rect ? Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8)) : 8;
-        panel.style.top = `${Math.round((rect?.bottom ?? 56) + 6)}px`;
+        const top = Math.round((rect?.bottom ?? 56) + 6);
+        panel.style.top = `${top}px`;
         panel.style.left = `${Math.round(left)}px`;
+        // At most the window less 72px, and never past its bottom edge: the list between head and foot scrolls.
+        panel.style.maxHeight = `${Math.max(160, Math.min(window.innerHeight - 72, window.innerHeight - top - 8))}px`;
     },
 
     closeResearchChanges(): void {
@@ -470,14 +700,15 @@ export const researchChangesMethods = uiModule({
      * toolbar does not move when it comes.
      */
     researchSendMoreHtml(reserve = false): string {
-        const list = reserve ? null : this.researchChangesNow();
-        if (!list || list.length === 0) {
+        const n = reserve ? null : this.researchChangesCount();
+        const total = n ? n.persons + n.other : 0;
+        if (!n || total === 0) {
             return '<span class="research-sync-send-more research-sync-send-more--placeholder" aria-hidden="true">0 <span>⌄</span></span>';
         }
         const open = !!document.getElementById(PANEL_ID);
         return `<button type="button" class="research-sync-send-more" id="research-sync-send-more" aria-haspopup="dialog" aria-expanded="${open}"`
-            + ` aria-label="${esc(strings.changes.showWhat(list.length))}" onclick="event.stopPropagation(); window.Strom.UI.toggleResearchChanges()">`
-            + `${list.length > 99 ? '99+' : list.length} <span aria-hidden="true">⌄</span></button>`;
+            + ` aria-label="${esc(strings.changes.showWhat(n.persons, n.other))}" onclick="event.stopPropagation(); window.Strom.UI.toggleResearchChanges()">`
+            + `${total > 99 ? '99+' : total} <span aria-hidden="true">⌄</span></button>`;
     },
 
     toggleResearchChanges(): void {
@@ -500,11 +731,15 @@ function closeOnOutside(e: Event): void {
     const panel = document.getElementById(PANEL_ID);
     const target = e.target as Node | null;
     if (!panel || (target && (panel.contains(target) || document.getElementById('research-sync-send-more')?.contains(target)))) return;
+    // A dialog over the panel (a source's viewer opened from a row): its clicks are its own, the panel stays.
+    if (target instanceof Element && target.closest('.modal-overlay.active')) return;
     window.Strom?.UI?.closeResearchChanges();
 }
 
 function closeOnEsc(e: KeyboardEvent): void {
     if (e.key !== 'Escape' || !document.getElementById(PANEL_ID)) return;
+    // A dialog over the panel (a source's viewer opened from a row) closes first, the panel stays.
+    if (document.querySelector('.modal-overlay.active')) return;
     e.stopPropagation();
     e.preventDefault();
     window.Strom?.UI?.closeResearchChanges();

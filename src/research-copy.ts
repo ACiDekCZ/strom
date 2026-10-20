@@ -9,7 +9,7 @@
 import { StromData } from './types.js';
 import { normalizeSingleParents } from './single-parent.js';
 import { saveBaseline, loadBaseline, deleteBaselinesForTree } from './share-baselines.js';
-import { baseCopy } from './research-changes.js';
+import { baseCopy, markOlderCopy } from './research-changes.js';
 import { unknownSexFromTie } from './research-link.js';
 
 const key = (treeId: string): string => `research-base:${treeId}`;
@@ -46,7 +46,7 @@ export async function loadResearchCopy(treeId: string, fp?: string): Promise<Str
         const base = standsFor(await loadBaseline(key(treeId)) as KeptCopy | null, fp);
         // Kept before a child with one known parent got its "?" family: the same conversion as the tree
         // had on load (same ids), so the changes per person do not show those families as weddings.
-        if (base) normalizeSingleParents(base);
+        if (base) normalizeSingleParents(markOlderCopy(base));
         return base;
     } catch {
         return null;
@@ -66,7 +66,7 @@ export async function saveResearchPrevCopy(treeId: string, data: StromData, fp: 
 export async function loadResearchPrevCopy(treeId: string, fp: string): Promise<StromData | null> {
     try {
         const base = standsFor(await loadBaseline(prevKey(treeId)) as KeptCopy | null, fp);
-        if (base) normalizeSingleParents(base);
+        if (base) normalizeSingleParents(markOlderCopy(base));
         return base;
     } catch {
         return null;

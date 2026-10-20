@@ -1266,8 +1266,11 @@ export const researchSyncMethods = uiModule({
             const list = await this.researchChangesReady();
             const fps = this.researchSyncFingerprints(treeId, link);
             const waiting = !fps.matchesBase && fps.current !== link.sent?.fingerprint;
-            if ((list && list.length > 0) || waiting) {
-                this.showResearchChanges('send', { confirm: true, inexact: !list || list.length === 0 });
+            const n = list ? this.researchChangesCount() : null;
+            if ((n && n.persons + n.other > 0) || waiting) {
+                // "Cannot be told exactly" only without a base to compare with; rows of sources, couples,
+                // places or surname variants are rows too.
+                this.showResearchChanges('send', { confirm: true, inexact: list === null });
                 return;
             }
         }
@@ -1498,7 +1501,7 @@ export const researchSyncMethods = uiModule({
             // What it wrote is its `applied`, never what this app sent: the rest is kept as not written (the
             // state, "What was written") until the next send is written (V-J).
             patchResearchAutoState(treeId, { notWritten: { at: now, fingerprint: sentFp, written: Math.max(0, changes ?? 0),
-                items: listed.slice(0, 50).map(n => ({ person: n.person, fact: n.fact, why: n.why, ...(n.name ? { name: n.name } : {}) })), unexplained: Math.max(0, unexplained) } });
+                items: listed.slice(0, 50).map(n => ({ person: n.person, fact: n.fact, why: n.why, ...(n.name ? { name: n.name } : {}), ...(n.family ? { family: n.family } : {}) })), unexplained: Math.max(0, unexplained) } });
             // "Written N, not written M · Show": by hand and by itself alike (the written count is in it).
             toldNotWritten = sentFp;
             this.showToast(`${s.writtenCount(Math.max(0, changes ?? 0), notWrittenCount)} ${listed.length ? s.notWrittenListed(notWrittenCount) : s.notWrittenToast(notWrittenCount)}`, Infinity, {

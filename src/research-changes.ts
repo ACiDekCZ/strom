@@ -5,8 +5,9 @@
  * Pure: no DOM, no storage.
  */
 
-import { StromData, Person, Partnership, Source, EventParticipant, PersonId, LifeEvent } from './types.js';
+import { StromData, Person, Partnership, Source, EventParticipant, PersonId, LifeEvent, Attachment, PlaceGeo } from './types.js';
 import { isPurePlaceholder } from './single-parent.js';
+import { collectPlaces } from './places.js';
 
 export type ChangeKind =
     | 'added' | 'deleted' | 'name' | 'gender' | 'birth' | 'death' | 'marriage' | 'event'
@@ -55,8 +56,28 @@ const titledName = (p: Person): string => [p.titleBefore, p.firstName, p.lastNam
  * — small enough to keep beside the tree.
  */
 export function baseCopy(data: StromData): StromData {
-    return JSON.parse(JSON.stringify({ persons: data.persons, partnerships: data.partnerships, sources: data.sources ?? {} },
+    // A copy kept before places and surname variants were kept stays without them (not known in it), also
+    // when it is kept again (retagged, taken back): an empty list there would read as all of them changed.
+    const older = (data as BaseCopy).olderCopy === true;
+    const kept = older
+        ? { persons: data.persons, partnerships: data.partnerships, sources: data.sources ?? {}, olderCopy: true }
+        : { persons: data.persons, partnerships: data.partnerships, sources: data.sources ?? {},
+            places: data.places ?? {}, surnameVariants: data.surnameVariants ?? [] };
+    return JSON.parse(JSON.stringify(kept,
         (_k, v) => typeof v === 'string' && v.length >= 256 && v.startsWith('data:') ? `img:${v.length}` : v)) as StromData;
+}
+
+/**
+ * A kept copy. `olderCopy`: kept before 3.14 (no places, no surname
+ * variants in it) — set when such a copy is read, so it is never taken for
+ * a tree without places.
+ */
+export type BaseCopy = StromData & { olderCopy?: true };
+
+/** Mark a copy read from storage that was kept before places and surname variants were (see BaseCopy). */
+export function markOlderCopy(copy: StromData): StromData {
+    if (!('places' in copy) && !('surnameVariants' in copy)) (copy as BaseCopy).olderCopy = true;
+    return copy;
 }
 
 /** Participants added or changed at an event: godparents apart from everyone else. */
@@ -73,7 +94,7 @@ function participantKinds(before: EventParticipant[] | undefined, after: EventPa
     return [...out];
 }
 
-function personKinds(before: Person, after: Person, sourcesChanged: Set<string>): Set<ChangeKind> {
+function personKinds(before: Person, after: Person): Set<ChangeKind> {
     const kinds = new Set<ChangeKind>();
     if (NAME_FIELDS.some(f => differs(before[f], after[f]))) kinds.add('name');
     if (before.gender !== after.gender) kinds.add('gender');
@@ -94,14 +115,15 @@ function personKinds(before: Person, after: Person, sourcesChanged: Set<string>)
         participantKinds(pa, pb).forEach(k => kinds.add(k));
         if (differs(sa ?? [], sb ?? [])) kinds.add('citation');
     }
-    // Attachments: added, removed (by id); a changed note or crop is "other".
-    const attBefore = new Set((before.attachments ?? []).map(a => a.id));
-    const attAfter = new Set((after.attachments ?? []).map(a => a.id));
+    // Attachments: added, removed (by id); a changed note or crop is "other". One that belongs to a
+    // source (here or in the research's version) is the source's change, told there (diffOther).
+    const ofSource = new Set([...(before.attachments ?? []), ...(after.attachments ?? [])].filter(a => a.sourceId).map(a => a.id));
+    const ownAtts = (p: Person): Attachment[] => (p.attachments ?? []).filter(a => !ofSource.has(a.id));
+    const attBefore = new Set(ownAtts(before).map(a => a.id));
+    const attAfter = new Set(ownAtts(after).map(a => a.id));
     if ([...attAfter].some(id => !attBefore.has(id))) kinds.add('attachment');
     if ([...attBefore].some(id => !attAfter.has(id))) kinds.add('attachmentRemoved');
-    // A source this person cites, changed (its transcript, its page…).
-    if ([...(after.sourceIds ?? []), ...(after.birthSourceIds ?? []), ...(after.deathSourceIds ?? []),
-        ...(after.events ?? []).flatMap(e => e.sourceIds ?? [])].some(id => sourcesChanged.has(id))) kinds.add('source');
+    // A changed source this person cites is the source's change (diffOther), not the person's: told once.
     // Anything else of the person (gender, the number, the question, the story, parents…).
     const known = new Set<string>([...NAME_FIELDS, ...BIRTH_FIELDS, ...DEATH_FIELDS, ...CITATION_FIELDS, 'gender', 'notes', 'events', 'attachments', 'id']);
     const rest = (p: Person): Record<string, unknown> => {
@@ -110,16 +132,9 @@ function personKinds(before: Person, after: Person, sourcesChanged: Set<string>)
         return o;
     };
     if (differs(rest(before), rest(after))) kinds.add('other');
-    if (differs((before.attachments ?? []).map(a => ({ ...a, dataUrl: undefined })), (after.attachments ?? []).map(a => ({ ...a, dataUrl: undefined })))
+    if (differs(ownAtts(before).map(a => ({ ...a, dataUrl: undefined })), ownAtts(after).map(a => ({ ...a, dataUrl: undefined })))
         && !kinds.has('attachment') && !kinds.has('attachmentRemoved')) kinds.add('other');
     return kinds;
-}
-
-/** A source this person cites changed. */
-function citesChanged(p: Person, sourcesChanged: Set<string>): boolean {
-    if (sourcesChanged.size === 0) return false;
-    return [...(p.sourceIds ?? []), ...(p.birthSourceIds ?? []), ...(p.deathSourceIds ?? []),
-        ...(p.events ?? []).flatMap(e => e.sourceIds ?? [])].some(id => sourcesChanged.has(id));
 }
 
 /** What changed for each person since `base` (an empty list: nothing). Sorted by name. */
@@ -132,9 +147,6 @@ export function diffByPerson(base: StromData, current: StromData): PersonChange[
     };
     const bp = base.persons as Record<string, Person>;
     const cp = current.persons as Record<string, Person>;
-    const bs = (base.sources ?? {}) as Record<string, Source>;
-    const cs = (current.sources ?? {}) as Record<string, Source>;
-    const sourcesChanged = new Set(Object.keys(cs).filter(id => bs[id] && differs(bs[id], cs[id])));
 
     for (const p of Object.values(cp)) {
         const before = bp[p.id];
@@ -150,8 +162,8 @@ export function diffByPerson(base: StromData, current: StromData): PersonChange[
             continue;
         }
         // Most people did not change: one comparison of the whole record, not one per field.
-        if (stable(before) === stable(p) && !citesChanged(p, sourcesChanged)) continue;
-        const kinds = personKinds(before, p, sourcesChanged);
+        if (stable(before) === stable(p)) continue;
+        const kinds = personKinds(before, p);
         if (kinds.size) kinds.forEach(k => touch(p.id, fullName(p)).add(k));
     }
     for (const p of Object.values(bp)) {
@@ -200,6 +212,248 @@ export function diffByPerson(base: StromData, current: StromData): PersonChange[
             ...(e.deleted ? { deleted: true } : {}),
         }))
         .sort((x, y) => x.name.localeCompare(y.name));
+}
+
+// ==================== CHANGES BEYOND PEOPLE ====================
+
+export type SourceChangeKind = 'added' | 'deleted' | 'title' | 'transcript' | 'page' | 'excerptAdded' | 'excerptRemoved' | 'attachment' | 'other';
+export type CoupleChangeKind = 'childOrder' | 'mainMarriage' | 'marriageEvidence' | 'singleParent';
+
+const SOURCE_KIND_ORDER: SourceChangeKind[] = ['added', 'deleted', 'title', 'transcript', 'page', 'excerptAdded', 'excerptRemoved', 'attachment', 'other'];
+const COUPLE_KIND_ORDER: CoupleChangeKind[] = ['childOrder', 'mainMarriage', 'marriageEvidence', 'singleParent'];
+
+/** A source (or an attachment of one) changed since the research's version. */
+export interface SourceChange {
+    sourceId: string;
+    /** The source's title (a deleted one: as the research's version has it; a lone attachment: its file name). */
+    title: string;
+    kinds: SourceChangeKind[];
+    /** Who cites it now: how many people, else a couple (for the row's context line). */
+    citedBy: { persons: number; couple?: [PersonId, PersonId] };
+    /** Gone from the tree (no link to it). */
+    deleted?: boolean;
+    /** An attachment whose source is in neither version: the row stands for the attachment alone (no link). */
+    attachmentOnly?: boolean;
+}
+
+/** A couple's change that the people's rows do not tell. */
+export interface CoupleChange {
+    partnershipId: string;
+    p1: PersonId;
+    p2: PersonId;
+    kinds: CoupleChangeKind[];
+    /** Gone from the tree (no link to it). */
+    deleted?: boolean;
+}
+
+/** One place whose coordinates changed (lat/lon undefined: none now). */
+export interface PlaceChange { key: string; name: string; lat?: number; lon?: number }
+
+/** One surname variant added (or removed) since the research's version. */
+export interface VariantChange { surname: string; variant: string; removed?: boolean }
+
+/** What changed beyond the people, against the same copy as diffByPerson. */
+export interface OtherChanges {
+    sources: SourceChange[];
+    couples: CoupleChange[];
+    /** undefined: the copy has no places (kept before they were). */
+    places?: { count: number; items: PlaceChange[] };
+    /** undefined: the copy has no surname variants (kept before they were). */
+    surnameVariants?: { count: number; items: VariantChange[] };
+}
+
+/** Every source a person cites (the person, the birth, the death, the events). */
+function personCites(p: Person): string[] {
+    return [...(p.sourceIds ?? []), ...(p.birthSourceIds ?? []), ...(p.deathSourceIds ?? []), ...(p.events ?? []).flatMap(e => e.sourceIds ?? [])];
+}
+
+/** Every source a couple cites (the couple, its events). */
+function coupleCites(u: Partnership): string[] {
+    return [...(u.sourceIds ?? []), ...(u.events ?? []).flatMap(e => e.sourceIds ?? [])];
+}
+
+/**
+ * Surname variants added and removed: each group now matched to the group
+ * of the copy it shares most names with. The surname a variant belongs to is
+ * a name of the group the copy already had (a new group: a surname someone in
+ * the tree has, else its first).
+ */
+function variantChanges(before: string[][], after: string[][], known: ReadonlySet<string> = new Set()): VariantChange[] {
+    const out: VariantChange[] = [];
+    const clean = (g: unknown): string[] => Array.isArray(g) ? g.filter((n): n is string => typeof n === 'string' && !!n.trim()) : [];
+    const was = before.map(clean);
+    const now = after.map(clean);
+    const covered = new Map<number, Set<string>>();
+    for (const g of now) {
+        let best = -1;
+        let bestShared = 0;
+        was.forEach((b, i) => {
+            const shared = g.filter(n => b.includes(n)).length;
+            if (shared > bestShared) { best = i; bestShared = shared; }
+        });
+        if (best < 0) {
+            const surname = g.find(n => known.has(n)) ?? g[0];
+            for (const v of g) if (v !== surname) out.push({ surname, variant: v });
+            continue;
+        }
+        const b = was[best];
+        const set = covered.get(best) ?? new Set<string>();
+        g.forEach(n => set.add(n));
+        covered.set(best, set);
+        const surname = g.find(n => b.includes(n)) ?? g[0];
+        for (const v of g) if (!b.includes(v)) out.push({ surname, variant: v });
+    }
+    was.forEach((b, i) => {
+        const set = covered.get(i);
+        const surname = set ? b.find(n => set.has(n)) ?? b[0] : b[0];
+        for (const v of b) if (v !== surname && !set?.has(v)) out.push({ surname, variant: v, removed: true });
+    });
+    return out;
+}
+
+/**
+ * What changed beyond the people since `base` (the copy of the research's
+ * version): sources (with the attachments that belong to one), couples
+ * (their children's order, the main marriage, the wedding's evidence, a
+ * family of one parent), places' coordinates and surname variants. null: no
+ * base. A source's change is told here only — the people citing it keep
+ * just their own citations (diffByPerson). Pure.
+ */
+export function diffOther(base: StromData | null, current: StromData): OtherChanges | null {
+    if (!base) return null;
+    const bp = base.persons as Record<string, Person>;
+    const cp = current.persons as Record<string, Person>;
+    const bs = (base.sources ?? {}) as Record<string, Source>;
+    const cs = (current.sources ?? {}) as Record<string, Source>;
+    const bu = base.partnerships as Record<string, Partnership>;
+    const cu = current.partnerships as Record<string, Partnership>;
+
+    // Attachments that belong to a source, of the people in both versions (a new or deleted person's
+    // attachments are that person's), by source: added, removed or changed.
+    const attChanged = new Map<string, Attachment>();
+    for (const id of Object.keys(cp)) {
+        const before = bp[id];
+        if (!before) continue;
+        const a = new Map((before.attachments ?? []).map(x => [x.id, x]));
+        const b = new Map((cp[id].attachments ?? []).map(x => [x.id, x]));
+        for (const attId of new Set([...a.keys(), ...b.keys()])) {
+            const x = a.get(attId);
+            const y = b.get(attId);
+            if (x && y && !differs(x, y)) continue;
+            for (const att of [x, y]) if (att?.sourceId && !attChanged.has(att.sourceId)) attChanged.set(att.sourceId, att);
+        }
+    }
+
+    const sources: SourceChange[] = [];
+    const citedBy = (sid: string): SourceChange['citedBy'] => {
+        const persons = Object.values(cp).filter(p => !p.isPlaceholder && personCites(p).includes(sid)).length;
+        if (persons > 0) return { persons };
+        const u = Object.values(cu).find(x => coupleCites(x).includes(sid));
+        return u ? { persons: 0, couple: [u.person1Id, u.person2Id] } : { persons: 0 };
+    };
+    for (const sid of new Set([...Object.keys(bs), ...Object.keys(cs)])) {
+        const a = bs[sid];
+        const b = cs[sid];
+        const kinds = new Set<SourceChangeKind>();
+        if (!b) {
+            sources.push({ sourceId: sid, title: a.title?.trim() || sid, kinds: ['deleted'], citedBy: { persons: 0 }, deleted: true });
+            continue;
+        }
+        if (!a) {
+            kinds.add('added');
+            if (b.transcript?.trim()) kinds.add('transcript');
+            if (b.excerpts?.length) kinds.add('excerptAdded');
+        } else if (differs(a, b)) {
+            if (differs(a.title ?? '', b.title ?? '')) kinds.add('title');
+            if (differs(a.transcript ?? '', b.transcript ?? '')) kinds.add('transcript');
+            if (differs(a.reference ?? '', b.reference ?? '')) kinds.add('page');
+            const ea = new Map((a.excerpts ?? []).map(e => [e.id, e]));
+            const eb = new Map((b.excerpts ?? []).map(e => [e.id, e]));
+            if ([...eb.keys()].some(id => !ea.has(id))) kinds.add('excerptAdded');
+            if ([...ea.keys()].some(id => !eb.has(id))) kinds.add('excerptRemoved');
+            // Anything else of the entry (the archive, the date, a re-cropped excerpt, the reading…).
+            const { title: _t1, transcript: _r1, reference: _p1, excerpts: ex1, ...restA } = a;
+            const { title: _t2, transcript: _r2, reference: _p2, excerpts: ex2, ...restB } = b;
+            const sameExcerpts = (ex1 ?? []).filter(e => eb.has(e.id)).every(e => !differs(e, eb.get(e.id)));
+            if (differs(restA, restB) || !sameExcerpts) kinds.add('other');
+        }
+        if (attChanged.has(sid)) kinds.add('attachment');
+        if (!kinds.size) continue;
+        sources.push({ sourceId: sid, title: b.title?.trim() || sid, kinds: SOURCE_KIND_ORDER.filter(k => kinds.has(k)), citedBy: citedBy(sid) });
+    }
+    // An attachment naming a source that is in neither version: a row of its own, named by its file.
+    for (const [sid, att] of attChanged) {
+        if (bs[sid] || cs[sid]) continue;
+        sources.push({ sourceId: sid, title: att.name || sid, kinds: ['attachment'], citedBy: { persons: 0 }, attachmentOnly: true });
+    }
+    sources.sort((x, y) => x.title.localeCompare(y.title));
+
+    // Couples: what the people's rows do not tell.
+    const couples: CoupleChange[] = [];
+    for (const id of new Set([...Object.keys(bu), ...Object.keys(cu)])) {
+        const a = bu[id];
+        const b = cu[id];
+        const kinds = new Set<CoupleChangeKind>();
+        if (!a || !b) {
+            // A family of one parent and a "?" stand-in (diffByPerson tells it at nobody).
+            const u = (b ?? a)!;
+            const d = b ? current : base;
+            if (u.childIds.length > 0 && (isPurePlaceholder(d, u.person1Id) || isPurePlaceholder(d, u.person2Id))) kinds.add('singleParent');
+        } else if (stable(a) !== stable(b)) {
+            const sameSet = a.childIds.length === b.childIds.length && a.childIds.every(c => b.childIds.includes(c));
+            if (sameSet && a.childIds.some((c, i) => b.childIds[i] !== c)) kinds.add('childOrder');
+            if (!!a.isPrimary !== !!b.isPrimary) kinds.add('mainMarriage');
+            if ((a.startStatus ?? '') !== (b.startStatus ?? '') || (a.endStatus ?? '') !== (b.endStatus ?? '')) kinds.add('marriageEvidence');
+        }
+        if (!kinds.size) continue;
+        const u = (b ?? a)!;
+        couples.push({ partnershipId: id, p1: u.person1Id, p2: u.person2Id, kinds: COUPLE_KIND_ORDER.filter(k => kinds.has(k)), ...(b ? {} : { deleted: true }) });
+    }
+    const coupleKey = (c: CoupleChange): string => [c.p1, c.p2].map(pid => cp[pid] ?? bp[pid]).filter(p => p && !p.isPlaceholder).map(p => fullName(p!)).join(' ');
+    couples.sort((x, y) => coupleKey(x).localeCompare(coupleKey(y)));
+
+    // Places: coordinates only (a renamed place moves its key, the names are the people's change).
+    let places: OtherChanges['places'];
+    if (base.places !== undefined) {
+        const pa = (base.places ?? {}) as Record<string, PlaceGeo>;
+        const pb = (current.places ?? {}) as Record<string, PlaceGeo>;
+        const names = collectPlaces(current);
+        const items: PlaceChange[] = [];
+        for (const key of new Set([...Object.keys(pa), ...Object.keys(pb)])) {
+            const x = pa[key];
+            const y = pb[key];
+            if (x && y && x.lat === y.lat && x.lon === y.lon) continue;
+            items.push({ key, name: names.get(key)?.display ?? (y ?? x)?.label?.split(',')[0]?.trim() ?? key, ...(y ? { lat: y.lat, lon: y.lon } : {}) });
+        }
+        items.sort((x, y) => x.name.localeCompare(y.name));
+        places = { count: items.length, items };
+    }
+
+    let surnameVariants: OtherChanges['surnameVariants'];
+    if (base.surnameVariants !== undefined) {
+        const known = new Set(Object.values(cp).flatMap(p => [p.lastName, p.marriedSurname ?? ''].map(n => n.trim()).filter(Boolean)));
+        const items = variantChanges(base.surnameVariants ?? [], current.surnameVariants ?? [], known);
+        surnameVariants = { count: items.length, items };
+    }
+
+    return { sources, couples, ...(places ? { places } : {}), ...(surnameVariants ? { surnameVariants } : {}) };
+}
+
+/** Rows beyond the people (the places and the surname variants are one row each). */
+export function otherRowCount(o: OtherChanges | null): number {
+    if (!o) return 0;
+    return o.sources.length + o.couples.length + (o.places?.count ? 1 : 0) + (o.surnameVariants?.count ? 1 : 0);
+}
+
+/**
+ * "What will be sent" cannot tell its list exactly: there is no base to compare with (`persons` null — the copy
+ * not read yet, a restore before loading, a send taken back with no copy before it), the caller knows the base
+ * moved (`opts.inexact`), or, about to send, nothing it could name although the tree is not where the
+ * research's version is. An empty list of people with other rows is exact.
+ */
+export function previewInexact(persons: readonly PersonChange[] | null, other: OtherChanges | null, opts: { confirm?: boolean; inexact?: boolean } = {}): boolean {
+    if (persons === null || opts.inexact) return true;
+    return !!opts.confirm && persons.length === 0 && otherRowCount(other) === 0;
 }
 
 // ==================== VALUES THE RESEARCH'S VERSION WOULD OVERWRITE ====================
