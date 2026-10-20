@@ -9,7 +9,8 @@
  *    role="menuitem" in it, the research menu's block buttons too), and from
  *    the menu's trigger button into it; Home / End go to the first / last;
  *  - Arrow Left / Right switch between the neighbouring toolbar menus
- *    (Research and Actions), never on the "Strom: {name} ›" row or its flyout;
+ *    (Research and Actions), never on a flyout row ("For the family ›",
+ *    "Tree: {name} ›") or in its flyout;
  *  - after Escape closes a menu, focus goes back to its trigger button.
  */
 
@@ -73,8 +74,8 @@ function switchToolbarMenu(e: KeyboardEvent, target: HTMLElement): boolean {
         if (actions?.classList.contains('active')) moveInMenu(actions, null, 1);
         return true;
     }
-    // In Actions, ← goes to Research (on its left) — not from the "Strom:" row or its flyout (→ / ← open and close it).
-    if (e.key === 'ArrowLeft' && actions?.classList.contains('active') && actions.contains(target) && !target.closest('.actions-tree-wrap')) {
+    // In Actions, ← goes to Research (on its left) — not from a flyout row or its flyout (→ / ← open and close it).
+    if (e.key === 'ArrowLeft' && actions?.classList.contains('active') && actions.contains(target) && !target.closest('.actions-submenu-wrap')) {
         const btn = shownButton('#research-menu-btn');
         if (!btn) return false;
         e.preventDefault();
@@ -139,7 +140,7 @@ function onKeydown(e: KeyboardEvent): void {
         const menu = target.closest(MENU);
         if (menu && target.matches(MENU_ITEM)) {
             e.preventDefault();
-            // Items of an open "Strom:" submenu belong to it; the rest to the
+            // Items of an open flyout belong to it; the rest to the
             // top-level list — both are simply the visible ones.
             moveInMenu(menu, target, step);
             return;
@@ -172,9 +173,9 @@ function onKeydown(e: KeyboardEvent): void {
             if (!dropdown?.contains(target)) continue;
             setTimeout(() => {
                 if (dropdown.classList.contains('active')) {
-                    // Only a submenu ("Strom:", "Research") closed: back to its row.
-                    if (target.getClientRects().length === 0) {
-                        target.closest('.actions-tree-wrap')?.querySelector<HTMLElement>('.actions-tree-row')?.focus();
+                    // Only a submenu ("For the family", "Tree") closed: back to its row.
+                    if (target.getClientRects().length === 0 || target.closest('.actions-submenu-wrap:not(.submenu-open) .actions-submenu')) {
+                        target.closest('.actions-submenu-wrap')?.querySelector<HTMLElement>('.actions-submenu-row')?.focus();
                     }
                     return;
                 }

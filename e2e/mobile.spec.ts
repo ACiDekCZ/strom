@@ -156,57 +156,128 @@ test('a bottom-bar tab switches the view and lights up copper', async ({ page })
     await expect(page.locator('#timeline-container')).toBeVisible();
 });
 
-test('the "More" sheet mirrors the desktop actions menu: Undo/Redo pair, content, outputs, one Export…, the views, the Tree row', async ({ page }) => {
+test('the "More" sheet (menu 1020 §7): Undo|Redo tiles, content, For the family ›, View tiles, the Tree row, Settings|About tiles', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
 
     await page.locator('#bb-view-more').tap();
     const sheet = page.locator('.bottom-sheet-menu');
     await expect(sheet).toBeVisible();
+    // The title stays for assistive technology only.
+    await expect(sheet).toHaveAttribute('aria-label', 'More');
+    await expect(sheet.locator('.bottom-sheet-menu-title')).toBeHidden();
 
-    // The Undo/Redo pair is the compact first group (no section header above it).
-    const pair = sheet.locator('.bottom-sheet-pair').first();
-    await expect(pair).toBeVisible();
-    await expect(pair.locator('.bottom-sheet-item', { hasText: 'Undo' })).toBeVisible();
-    await expect(pair.locator('.bottom-sheet-item', { hasText: 'Redo' })).toBeVisible();
+    // The Undo/Redo tiles come first; no shortcut chip on a touch screen.
+    const pairs = sheet.locator('.bottom-sheet-pair');
+    await expect(pairs).toHaveCount(3);
+    await expect(pairs.nth(0).locator('.bottom-sheet-item')).toHaveText([/^↶ Undo/, /^↷ Redo/]);
+    await expect(page.locator('#sheet-undo')).toHaveAttribute('aria-label', 'Undo');
+    await expect(page.locator('#sheet-undo .menu-kbd')).toBeHidden();
+    for (const tile of await sheet.locator('.bottom-sheet-pair .bottom-sheet-item').all()) {
+        expect((await tile.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    }
 
-    // One section header only: the views.
-    expect(await sheet.locator('.bottom-sheet-section').allTextContents()).toEqual(['View']);
+    // The rows (no section headers), then the View tiles, then Settings | About (no version: it is in About).
+    await expect(sheet.locator('.bottom-sheet-section')).toHaveCount(0);
     const rows = (await sheet.locator('.bottom-sheet-items > .bottom-sheet-item:not(.bottom-sheet-storage-row)').allInnerTexts()).map(t => t.replace(/\s+/g, ' ').trim());
-    expect(rows.slice(0, 6)).toEqual(['Family book', 'Anniversaries', 'Export… whole tree or current view', 'Poster…', 'Slideshow (TV mode)', 'Ancestor research']);
-    expect(rows.slice(-3, -1)).toEqual(['Add family…', 'Settings']);
-    // About carries the version (BETA · version on the beta site): no badge room in the phone toolbar.
-    expect(rows[rows.length - 1]).toMatch(/^About Strom \d+\.\d+\.\d+/);
+    expect(rows).toEqual(['Anniversaries', 'Export…', 'For the family ›', 'Ancestor research', 'Tree: My Family Tree ›', 'Add family…']);
+    await expect(pairs.nth(1)).toHaveAttribute('aria-label', 'View');
+    await expect(pairs.nth(1).locator('.bottom-sheet-item')).toHaveText(['Fan', 'Map']);
+    await expect(pairs.nth(2).locator('.bottom-sheet-item')).toHaveText(['Settings', 'About Strom']);
+    // Tree management left the first level (Tree › and the tree switcher carry it).
+    await expect(sheet.locator('.bottom-sheet-item', { hasText: 'Manage trees' })).toHaveCount(0);
 
-    // The prominent "Tree: {name}" row carries the active tree's name and a
-    // trailing chevron (a submenu opener).
+    // The prominent "Tree: {name}" row carries the active tree's name and a chevron.
     const treeRow = sheet.locator('.bottom-sheet-tree-row');
-    await expect(treeRow).toBeVisible();
     await expect(treeRow.locator('.bottom-sheet-tree-name')).toHaveText('My Family Tree');
     await expect(treeRow.locator('.bottom-sheet-tree-chevron')).toBeVisible();
 
-    // "Manage trees" right under the Tree row (its actions sheet no longer lists it).
-    const manage = sheet.locator('.bottom-sheet-item', { hasText: 'Manage trees' });
-    await expect(manage).toHaveCount(1);
-    expect(await manage.evaluate(el => {
-        const items = [...document.querySelectorAll('.bottom-sheet-menu .bottom-sheet-item')];
-        return items.indexOf(el) - items.indexOf(document.querySelector('.bottom-sheet-tree-row')!);
-    })).toBe(1);
-
-    // Fan / Map side by side under "View"; one Export… with its second line.
-    await expect(sheet.locator('.bottom-sheet-section', { hasText: /^View$/ })).toBeVisible();
-    const views = sheet.locator('.bottom-sheet-pair').last();
-    await expect(views.locator('.bottom-sheet-item')).toHaveText(['Fan', 'Map']);
-    const fan = (await views.locator('.bottom-sheet-item').first().boundingBox())!;
-    expect(fan.height).toBeGreaterThanOrEqual(44);
-    const exports = sheet.locator('.bottom-sheet-item', { hasText: 'Export' });
-    await expect(exports).toHaveCount(1);
-    await expect(exports).toHaveText('Export…whole tree or current view');
+    // For the family › opens a second level in the same sheet; ‹ Back returns.
+    await page.locator('#sheet-family').tap();
+    const sub = sheet.locator('.bottom-sheet-subpage');
+    await expect(sub).toBeVisible();
+    await expect(sub.locator('.sheet-subhead-title')).toHaveText('For the family');
+    await expect(sub.locator('.bottom-sheet-items .bottom-sheet-item')).toHaveText(['Family book', 'Poster…', 'Slideshow (TV)']);
+    await expect(sheet.locator(':scope > .bottom-sheet-items')).toBeHidden();
+    await sub.locator('.sheet-back').tap();
+    await expect(sub).toHaveCount(0);
+    await expect(page.locator('#sheet-family')).toBeVisible();
 
     // Poster… opens the view-aware poster dialog and closes the sheet.
-    await sheet.locator('.bottom-sheet-item', { hasText: 'Poster' }).click();
+    await page.locator('#sheet-family').tap();
+    await page.locator('#sheet-poster').tap();
     await expect(page.locator('#poster-modal')).toBeVisible();
     await expect(page.locator('.bottom-sheet-menu')).toHaveCount(0);
+});
+
+test('More: Family book, Poster…, Slideshow, Settings and Import… are all within reach on a phone', async ({ page }) => {
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(page.locator('.person-card').first()).toBeVisible();
+    const more = async () => {
+        await page.locator('#bb-view-more').tap();
+        await expect(page.locator('.bottom-sheet-menu')).toBeVisible();
+    };
+    const viaFamily = async (id: string) => {
+        await more();
+        await page.locator('#sheet-family').tap();
+        await page.locator(id).tap();
+        await expect(page.locator('.bottom-sheet-menu')).toHaveCount(0);
+    };
+    await viaFamily('#sheet-book');
+    await expect(page.locator('#book-modal')).toBeVisible();
+    await page.evaluate(() => window.Strom.UI.closeBookDialog());
+    await viaFamily('#sheet-poster');
+    await expect(page.locator('#poster-modal')).toBeVisible();
+    await page.evaluate(() => window.Strom.UI.closePosterDialog());
+    await more();
+    await page.locator('#sheet-settings').tap();
+    await expect(page.locator('#settings-modal')).toHaveClass(/active/);
+    await page.evaluate(() => window.Strom.UI.closeSettingsDialog());
+    // Import… is in the tree switcher (a new tree), not in More.
+    await more();
+    await expect(page.locator('.bottom-sheet-menu')).not.toContainText('Import');
+    await page.evaluate(() => window.Strom.UI.hideBottomSheet());
+    await page.locator('.tree-switcher-btn').tap();
+    await page.locator('#tree-sheet-import').tap();
+    await expect(page.locator('#import-modal')).toHaveClass(/active/);
+    await page.evaluate(() => window.Strom.UI.closeImportDialog());
+    // Last: the fly-through.
+    await viaFamily('#sheet-slideshow');
+    await expect(page.locator('body')).toHaveClass(/slideshow-mode/);
+    await page.evaluate(() => window.Strom.UI.stopSlideshow());
+});
+
+test.describe('More on a small phone and held sideways', () => {
+    test('360 × 640: the whole first level without scrolling', async ({ page }) => {
+        await page.setViewportSize({ width: 360, height: 640 });
+        await openApp(page);
+        await createFirstPerson(page, 'Jan', 'Novak');
+        await page.locator('#bb-view-more').tap();
+        const sheet = page.locator('.bottom-sheet-menu');
+        await expect(sheet).toBeVisible();
+        await expect.poll(() => sheet.evaluate(el => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(1);
+    });
+
+    test('640 × 360 sideways: two columns of 44px rows, no scrolling', async ({ page }) => {
+        await page.setViewportSize({ width: 640, height: 360 });
+        await openApp(page);
+        await createFirstPerson(page, 'Jan', 'Novak');
+        await page.locator('#bb-view-more').tap();
+        const sheet = page.locator('.bottom-sheet-menu');
+        await expect(sheet).toBeVisible();
+        await expect(sheet.locator(':scope > .bottom-sheet-items')).toHaveCSS('display', 'grid');
+        // Measured once the sheet has slid in.
+        await expect.poll(() => sheet.evaluate(el => getComputedStyle(el).transform)).toMatch(/^(none|matrix\(1, 0, 0, 1, 0, 0\))$/);
+        const undo = (await page.locator('#sheet-undo').boundingBox())!;
+        const redo = (await page.locator('#sheet-redo').boundingBox())!;
+        expect(Math.abs(undo.y - redo.y)).toBeLessThan(2);
+        expect(redo.x).toBeGreaterThan(undo.x + undo.width - 1);
+        expect(undo.height).toBeGreaterThanOrEqual(44);
+        const tree = (await sheet.locator('.bottom-sheet-tree-row').boundingBox())!;
+        expect(tree.height).toBeLessThan(46);
+        await expect.poll(() => sheet.evaluate(el => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(1);
+    });
 });
 
 test('the Tree row opens the tree-actions sheet: name, summary, the six groups as 48px rows', async ({ page }) => {

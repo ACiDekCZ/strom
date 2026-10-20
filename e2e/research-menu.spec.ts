@@ -205,7 +205,7 @@ test.describe('the keyboard', () => {
         await page.keyboard.press('ArrowRight');
         await expect(menu(page)).toBeHidden();
         await expect(page.locator('#actions-menu-dropdown')).toHaveClass(/active/);
-        await expect(page.locator('#actions-book-row')).toBeFocused();
+        await expect(page.locator('#actions-ann-row')).toBeFocused();
         await page.keyboard.press('ArrowLeft');
         await expect(page.locator('#actions-menu-dropdown')).not.toHaveClass(/active/);
         await expect(menu(page)).toBeVisible();
@@ -246,15 +246,23 @@ test.describe('a narrow window with a mouse (≤ 1024 px)', () => {
         const sheet = page.locator('.bottom-sheet-menu');
         await expect(sheet).toBeVisible();
         const items = sheet.locator('.bottom-sheet-items');
-        // First the group: title + trial, the state in one line with its first action, the frequent ones, all of them.
-        expect(await items.evaluate(el => (el.firstElementChild as HTMLElement).className)).toContain('research-sheet-heading');
+        // After the Undo | Redo tiles (and the storage state when it needs action), the group:
+        // title + trial, the state in one line with its first action, the frequent ones, all of them.
+        expect(await items.evaluate(el => {
+            const kids = Array.from(el.children);
+            const at = kids.findIndex(c => c.classList.contains('research-sheet-heading'));
+            return kids.slice(0, at).map(c => c.className.split(' ').pop());
+        })).toEqual(expect.arrayContaining(['bottom-sheet-pair']));
+        expect(await items.evaluate(el => (el.firstElementChild as HTMLElement).className)).toContain('bottom-sheet-pair');
+        await expect(items.locator('.research-sheet-heading')).toHaveCount(1);
         await expect(items.locator('.research-sheet-heading')).toContainText('Research');
         await expect(items.locator('.research-sheet-heading .research-trial-tag')).toHaveText('trial');
         await expect(page.locator('#research-sheet-state-text')).toHaveText("Changes the research doesn't have");
         await expect(page.locator('#research-sheet-state [role="menuitem"]')).toHaveText('Send changes');
         const groupRows = await items.evaluate(el => {
             const out: string[] = [];
-            for (const c of Array.from(el.children)) {
+            const kids = Array.from(el.children);
+            for (const c of kids.slice(kids.findIndex(k => k.classList.contains('research-sheet-heading')))) {
                 if (c.classList.contains('bottom-sheet-divider')) break;
                 if (c.matches('button.bottom-sheet-item')) out.push((c.querySelector('.bottom-sheet-label')?.textContent ?? '').trim());
             }

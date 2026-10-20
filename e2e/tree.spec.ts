@@ -257,11 +257,11 @@ test('cancelling the file picker returns to the New Tree menu, not to nowhere', 
     await expect(page.locator('#tree-manager-modal')).toBeHidden();
 });
 
-test('actions menu: poster and the one Export… live in the ⋯ menu', async ({ page }) => {
+test('actions menu: the one Export… in the ⋯ menu, the poster under For the family ›', async ({ page }) => {
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
 
-    // The tree switcher is trees only now — no action items, just Manage trees.
+    // The tree switcher is trees only — no view actions: Import… (a new tree) and Manage trees.
     await page.locator('.tree-switcher-btn').click();
     const switcher = page.locator('#tree-switcher-dropdown');
     await expect(switcher).toHaveClass(/active/);
@@ -271,18 +271,20 @@ test('actions menu: poster and the one Export… live in the ⋯ menu', async ({
     await expect(switcher.locator('.tree-switcher-action', { hasText: 'Manage trees' })).toBeVisible();
     await page.keyboard.press('Escape');
 
-    // Actions live in the desktop ⋯ menu, by intent: content, outputs, the tree.
+    // Actions live in the desktop ⋯ menu: content, outputs, the tree.
     await page.locator('.actions-menu-btn').click();
     const dropdown = page.locator('#actions-menu-dropdown');
     await expect(dropdown).toHaveClass(/active/);
     await expect(dropdown.locator(':scope > .menu-section-header')).toHaveCount(0);
     await expect(page.locator('#actions-tree-row')).toBeVisible();
-    await expect(dropdown.locator(':scope > .tree-switcher-action', { hasText: 'Poster' })).toBeVisible();
+    await expect(dropdown.locator(':scope > .tree-switcher-action:visible', { hasText: 'Poster' })).toHaveCount(0);
+    await page.locator('#actions-family-row').hover();
+    await expect(page.locator('#actions-poster-row')).toBeVisible();
     // One Export…: the whole tree or the current view, chosen in its dialog.
     await expect(page.locator('#actions-menu-dropdown > .tree-switcher-action', { hasText: 'Export' })).toHaveCount(1);
 
     // Poster… opens the view-aware poster dialog with its "prints the current view" label.
-    await dropdown.locator('.tree-switcher-action', { hasText: 'Poster' }).click();
+    await page.locator('#actions-poster-row').click();
     await expect(dropdown).not.toHaveClass(/active/);   // item click closes the menu
     await expect(page.locator('#poster-modal')).toBeVisible();
     await expect(page.locator('#poster-view-label')).not.toBeEmpty();

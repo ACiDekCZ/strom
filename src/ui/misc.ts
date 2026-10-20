@@ -729,12 +729,12 @@ export const miscMethods = uiModule({
                 }
                 const actionsMenu = document.getElementById('actions-menu-dropdown');
                 if (actionsMenu?.classList.contains('active')) {
-                    // The "Strom:" submenu (a flyout) opened from the keyboard closes
+                    // A flyout ("For the family ›", "Tree ›") opened from the keyboard closes
                     // first; the next Escape closes the whole actions menu. Opened by the pointer,
                     // one Escape closes it all (J6 of the language round).
-                    const treeWrap = document.getElementById('actions-tree-wrap');
-                    if (treeWrap?.classList.contains('submenu-open') && treeWrap.hasAttribute('data-kbd')) {
-                        this.closeActionsTreeSubmenu();
+                    const kbdWrap = actionsMenu.querySelector<HTMLElement>('.actions-submenu-wrap.submenu-open[data-kbd]');
+                    if (kbdWrap) {
+                        this.closeActionsSubmenu(kbdWrap.id === 'actions-family-wrap' ? 'family' : 'tree');
                         return;
                     }
                     this.closeActionsMenu();

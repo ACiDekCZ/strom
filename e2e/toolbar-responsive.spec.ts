@@ -22,7 +22,7 @@ import { fakeBridge, openResearch, poll } from './research-bridge.js';
  *
  * Invariants asserted at every probed width:
  *   1. exactly one view surface — segment XOR bottom-bar tabs,
- *   2. exactly one Settings entry point (standalone ⚙ / folded ⋯ / More sheet),
+ *   2. exactly one Settings entry point (the last ⋯ Actions row / More sheet),
  *   3. exactly one generation-depth control surface (never zero),
  *   4. no toolbar child clips past the toolbar's left/right edge — stressed
  *      with a long tree name and the opt-in family-wizard button enabled.
@@ -47,14 +47,13 @@ async function probe(page: Page) {
         // The bottom bar replaces the old hamburger across the ≤1024 regime.
         const bottomBarTabs = shown(document.getElementById('bb-view-family'));
 
-        // Settings entry points (exactly one must be active):
-        //  - standalone ⚙ (> 1280)
-        //  - the ⚙ item folded into the ⋯ actions menu (1024 < w ≤ 1280)
+        // Settings entry points (exactly one must be active; no toolbar ⚙ at any width):
+        //  - the last row of the ⋯ actions menu (> 1024)
         //  - the bottom-bar "More" tab → the More sheet, which carries Settings (≤ 1024)
-        const standaloneSettings = displayed(document.querySelector('.actions-toolbar-settings'));
+        const standaloneSettings = !!document.querySelector('.actions-toolbar-settings');
         const actionsMenuPresent = displayed(document.querySelector('.actions-menu'));
         const foldedSettings = actionsMenuPresent
-            && displayed(document.querySelector('.actions-menu-settings'));
+            && displayed(document.querySelector('#actions-settings-row'));
         const moreSheetHome = shown(document.getElementById('bb-view-more'));
         const settingsSurfaces =
             (standaloneSettings ? 1 : 0) + (foldedSettings ? 1 : 0) + (moreSheetHome ? 1 : 0);
@@ -427,20 +426,20 @@ test.describe('the tree switcher\'s name in a tight toolbar (de-DE)', () => {
 });
 
 test.describe('the 1280 fold boundary', () => {
-    test('at 1281 the standalone ⚙ and Actions label are out; at 1280 they fold in', async ({ page }) => {
+    test('no toolbar ⚙ at any width: Settings is the last ⋯ Actions row on both sides of 1280; the Actions label folds at 1280', async ({ page }) => {
         await openApp(page);
         await createFirstPerson(page, 'Jan', 'Novak');
+        await expect(page.locator('.actions-toolbar-settings')).toHaveCount(0);
 
-        await page.setViewportSize({ width: 1281, height: 850 });
-        await page.waitForTimeout(60);
-        expect(await page.locator('.actions-toolbar-settings').evaluate((e) => getComputedStyle(e).display)).not.toBe('none');
-        expect(await page.locator('.actions-menu-label').evaluate((e) => getComputedStyle(e).display)).not.toBe('none');
-        expect(await page.locator('.actions-menu-settings').first().evaluate((e) => getComputedStyle(e).display)).toBe('none');
-
-        await page.setViewportSize({ width: 1280, height: 850 });
-        await page.waitForTimeout(60);
-        expect(await page.locator('.actions-toolbar-settings').evaluate((e) => getComputedStyle(e).display)).toBe('none');
-        expect(await page.locator('.actions-menu-label').evaluate((e) => getComputedStyle(e).display)).toBe('none');
-        expect(await page.locator('.actions-menu-settings').first().evaluate((e) => getComputedStyle(e).display)).not.toBe('none');
+        for (const [width, label] of [[1281, true], [1280, false]] as const) {
+            await page.setViewportSize({ width, height: 850 });
+            await page.waitForTimeout(60);
+            expect(await page.locator('.actions-menu-label').evaluate((e) => getComputedStyle(e).display) !== 'none', `@${width}`).toBe(label);
+            await page.locator('.actions-menu-btn').click();
+            const last = page.locator('#actions-menu-dropdown > .tree-switcher-action:visible').last();
+            await expect(last).toHaveId('actions-settings-row');
+            await expect(last).toHaveText('Settings');
+            await page.keyboard.press('Escape');
+        }
     });
 });

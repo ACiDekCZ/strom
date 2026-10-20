@@ -355,7 +355,14 @@ export const importExportMethods = uiModule({
         this.showImportTreeDialog(subtree, suggested, false, true);
     },
 
+    /**
+     * Import… (the tree switcher): a file becomes a NEW tree — JSON, open a
+     * file (File System Access) or GEDCOM. No earlier intent (the tree
+     * manager's, the empty state's) may leak into it.
+     */
     showImportDialog(): void {
+        this.importFromTreeManager = false;
+        this.importToCurrentTree = false;
         document.getElementById('import-modal')?.classList.add('active');
     },
 

@@ -6,7 +6,7 @@
  */
 
 import { iconSvg } from '../icons.js';
-import { PersonId, APP_VERSION } from '../types.js';
+import { PersonId } from '../types.js';
 import { uiModule } from './module.js';
 import { strings } from '../strings.js';
 import { SettingsManager } from '../settings.js';
@@ -43,6 +43,12 @@ interface MenuRow {
     after?: { id: string; text: string; link: string; run: () => void };
     /** The tree the row opens (its research marks update in place). */
     treeId?: string;
+    /** A shortcut chip (shown only with a mouse): Ctrl+Z, Ctrl+⇧+Z, Ctrl+S. */
+    kbd?: 'undo' | 'redo' | 'save';
+    /** A second level in the same sheet ("For the family ›"): its title and rows, ‹ Back returns. */
+    page?: { title: string; rows: MenuRow[] };
+    /** A stable id for the row (tests, focus). */
+    id?: string;
     /** A second line of the row's own (the tree's research marks). */
     extra?: HTMLElement;
 }
@@ -50,9 +56,11 @@ interface MenuRow {
  *  (serif name + chevron + tinted background — mirrors the desktop submenu row). */
 interface TreeRow { prefix: string; name: string; run: () => void; }
 /** The "Only in browser" state row on top of the "More" sheet. */
-interface StorageRow { title: string; sub: string; run: () => void; }
+interface StorageRow { title: string; sub?: string; run: () => void; }
 interface MenuBlock {
     header?: string; rows: MenuRow[]; pair?: MenuRow[]; treeRow?: TreeRow; divider?: boolean; storageRow?: StorageRow; note?: string;
+    /** A quiet label at the start of the pair's line ("View:"). */
+    pairLabel?: string;
     /** The research group (a narrow window with a mouse): title, state, frequent actions, "All research actions ›". */
     research?: ResearchSheetGroup;
     /** A quiet line with its link before the block (the research programs out of the browser's reach); hidden until it applies. */
@@ -301,16 +309,17 @@ export const bottomSheetMethods = uiModule({
     },
 
     /**
-     * The mobile "More" (Více) navigation sheet — the successor to the removed
-     * hamburger menu. It MIRRORS the desktop ⋯ actions menu (index.html
-     * #actions-menu-dropdown), ordered by what the user wants to do: the
-     * tree's content (book, sources, anniversaries), the outputs (one Export…,
-     * poster, fly-through), then the "Strom: {name}" row that opens the
-     * second-level tree sheet (the counterpart of the desktop submenu). Mobile
-     * only: the Undo/Redo pair on top (desktop has it in the toolbar), the
-     * extra views (Fan/Map — no bottom-bar tab) and Add family (no toolbar
-     * button on the bar). Opened from the bottom-bar "More" tab and the top
-     * bar's ⋯ button. Edit-only rows drop in read-only view.
+     * The mobile "More" (Více) navigation sheet. It MIRRORS the desktop ⋯
+     * actions menu (index.html #actions-menu-dropdown), ordered by how often
+     * each is used (menu 1020 §7): Undo | Redo tiles on top (desktop has them
+     * in the toolbar), the storage state when it needs action, the research
+     * group (a narrow window with a mouse), Anniversaries · Sources ·
+     * Export… · "For the family ›" (a second level in this sheet), the extra
+     * views (Fan | Map — no bottom-bar tab), "Tree: {name} ›" and Add family,
+     * Settings | About tiles last. Opened from the bottom-bar "More" tab and
+     * the top bar's ⋯ button. The tree manager is reached from the tree
+     * switcher (the tree's name in the top bar) and the last row of Tree ›.
+     * View mode (an exported page, §10): only what reads the tree.
      */
     showMoreMenuSheet(opts: { research?: boolean } = {}): void {
         this.noteBottomSheetTrigger();
@@ -321,20 +330,29 @@ export const bottomSheetMethods = uiModule({
         const s = strings;
         // Read-only: an embedded file's view mode or locked local data.
         const isView = DataManager.isReadOnly();
+        const viewMode = DataManager.isViewMode();
         const mode = TreeRenderer.getViewMode();
+        const active = isView ? null : TreeManager.getActiveTreeMetadata();
 
         const blocks: MenuBlock[] = [];
 
-        // 0) Edits only in the browser: the state first, one tap from the dialog.
+        // 1) Undo / Redo tiles — the mobile home for these beyond the toast.
+        if (!isView) {
+            blocks.push({ rows: [], pair: [
+                { label: `↶ ${s.undo.undo}`, ariaLabel: s.undo.undo, kbd: 'undo', id: 'sheet-undo', run: () => this.performUndo() },
+                { label: `↷ ${s.undo.redo}`, ariaLabel: s.undo.redo, kbd: 'redo', id: 'sheet-redo', run: () => this.performRedo() },
+            ] });
+        }
+
+        // 2) The storage state, only when it needs action: edits only in the
+        //    browser, a linked file to save into, offline.
         if (!isView && this.isUnsavedInBrowser()) {
+            // (A storage row comes before its block's divider: the next block separates it.)
             blocks.push({ rows: [], storageRow: {
                 title: s.fileCopy.menuUnsaved,
-                sub: s.fileCopy.moreRowSub,
                 run: () => { void this.showStorageStatusDialog(); },
             } });
         }
-
-        // The phone bar's state dot explained: a linked file to save into, offline.
         if (!isView && this.activeFileHandleName) {
             blocks.push({ rows: [{ label: s.fileAccess.save, sub: s.fileAccess.linkedTo(this.activeFileHandleName), run: () => void this.saveActiveTreeToFile() }] });
         }
@@ -342,55 +360,53 @@ export const bottomSheetMethods = uiModule({
             blocks.push({ rows: [], note: s.pwa.offline });
         }
 
-        // The research group first (a research tree on a computer whose window has no room for the
-        // Research button): its state, the frequent actions and the way to all of them.
+        // 3) The research group (a research tree on a computer whose window has no room for the
+        //    Research button): its state, the frequent actions and the way to all of them.
         const researchGroup = this.researchSheetGroup();
-        if (researchGroup) blocks.push({ rows: [], research: researchGroup });
+        if (researchGroup) blocks.push({ divider: blocks.length > 0, rows: [], research: researchGroup });
 
-        // 1) Undo / Redo — the mobile home for these beyond the toast.
-        if (!isView) {
-            blocks.push({ divider: !!researchGroup, rows: [], pair: [
-                { label: s.undo.undo, run: () => this.performUndo() },
-                { label: s.undo.redo, run: () => this.performRedo() },
-            ] });
-        }
-
-        // 2) The tree's content (a manageable tree only, like the desktop menu).
-        const active = isView ? null : TreeManager.getActiveTreeMetadata();
-        if (active) {
-            // The count's meaning (the next days, T33): the badge's tooltip and the row's spoken name.
-            const annCount = this.anniversaryBadgeCount();
-            const annHint = annCount > 0 ? this.anniversaryBadgeHint(annCount) : undefined;
-            blocks.push({ divider: blocks.length > 0, rows: [
-                { label: s.book.menu, run: () => this.showBookDialog() },
-                ...(this.isSourcesMenuOffered() ? [{ label: s.sources.menu, run: () => this.showSourcesDialog() }] : []),
-                { label: s.anniversaries.menu, run: () => this.showAnniversariesDialog(), badge: annCount,
-                    badgeTitle: annHint, ariaLabel: annHint ? `${s.anniversaries.menu}: ${annHint}` : undefined },
-            ] });
-        }
-
-        // 3) Outputs: one Export… (whole tree or the current view, chosen in
-        //    its dialog; a read-only view exports what it shows), poster, fly-through.
-        //    Under Export…, now and then, "Export all" (not backed up; once a day at most).
-        const lastExport = this.exportReminderLast();
+        // 4) Anniversaries · Sources · Export… · For the family ›.
+        // The count's meaning (the next days, T33): the badge's tooltip and the row's spoken name.
+        const annCount = this.anniversaryBadgeCount();
+        const annHint = annCount > 0 ? this.anniversaryBadgeHint(annCount) : undefined;
+        const annRow: MenuRow = { label: s.anniversaries.menu, id: 'sheet-ann', run: () => this.showAnniversariesDialog(), badge: annCount,
+            badgeTitle: annHint, ariaLabel: annHint ? `${s.anniversaries.menu}: ${annHint}` : undefined };
+        const bookRow: MenuRow = { label: s.book.menu, id: 'sheet-book', run: () => this.showBookDialog() };
+        const slideshowRow: MenuRow = { label: s.slideshow.menu, id: 'sheet-slideshow', run: () => this.startSlideshow() };
+        // Under Export…, now and then, "Export all" (not backed up; once a day at most).
+        const lastExport = viewMode ? undefined : this.exportReminderLast();
         const reminder = lastExport === undefined ? undefined
             : { id: 'sheet-export-reminder', text: this.exportReminderText(lastExport), link: s.snapshots.exportAll, run: () => this.researchActionExportAll() };
-        blocks.push({ divider: blocks.length > 0, rows: [
-            active
-                ? { label: s.menu.exportAll, sub: s.menu.exportAllSub, run: () => this.showExportDialog(), after: reminder }
-                : { label: s.menu.exportAll, run: () => this.exportFocusedJSON(), after: reminder },
-            { label: s.menu.poster, run: () => this.showPosterDialog() },
-            { label: s.slideshow.menu, run: () => this.startSlideshow() },
-        ] });
+        if (viewMode) {
+            // An exported page: For the family unfolds here and the overview takes the place of Tree ›.
+            blocks.push({ divider: blocks.length > 0, rows: [
+                annRow, bookRow, { label: s.menu.poster, id: 'sheet-poster', run: () => this.showPosterDialog() }, slideshowRow,
+                { label: s.treeOverview.menu, id: 'sheet-overview', run: () => this.showActiveTreeOverview() },
+            ] });
+        } else {
+            blocks.push({ divider: blocks.length > 0, rows: [
+                ...(active ? [annRow] : []),
+                ...(active && this.isSourcesMenuOffered() ? [{ label: s.sources.menu, run: () => this.showSourcesDialog() }] : []),
+                // One Export…: the whole tree or the current view, chosen in its dialog
+                // (locked data exports what it shows).
+                active
+                    ? { label: s.menu.exportAll, id: 'sheet-export', run: () => this.showExportDialog(), after: reminder }
+                    : { label: s.menu.exportAll, id: 'sheet-export', run: () => this.exportFocusedJSON(), after: reminder },
+                { label: s.menu.forFamily, id: 'sheet-family', run: () => {}, page: { title: s.menu.forFamily, rows: [
+                    ...(active ? [bookRow] : []),
+                    { label: s.menu.poster, id: 'sheet-poster', run: () => this.showPosterDialog() },
+                    slideshowRow,
+                ] } },
+            ] });
+        }
 
-        // 4) Extra views (Fan/Map — no bottom-bar tab of their own), side by side.
-        blocks.push({ divider: true, header: s.menu.sectionView, rows: [], pair: [
+        // 5) View: Fan | Map tiles (no bottom-bar tab of their own).
+        blocks.push({ divider: true, rows: [], pairLabel: s.menu.sectionView, pair: [
             { label: s.viewModeSwitch.fan, run: () => this.setDisplayViewMode('fan'), active: mode === 'fan' },
             { label: s.viewModeSwitch.map, run: () => this.setDisplayViewMode('map'), active: mode === 'map' },
         ] });
 
-        // 5) Strom Research, then the "Strom: {name}" row — every whole-tree
-        //    action lives behind it (never in read-only views).
+        // 6) [Ancestor research · New] · "Tree: {name} ›" (every whole-tree action) · Add family.
         // ("AI ancestor research" only where the research group is not: it is this tree's research.)
         const research = researchGroup ? null : this.researchMenuSheetRow();
         const managed: MenuBlock = { divider: true, rows: research ? [research] : [] };
@@ -402,19 +418,19 @@ export const bottomSheetMethods = uiModule({
             };
         }
         if (managed.rows.length > 0 || managed.treeRow) blocks.push(managed);
-        // The tree manager right under the tree row (its actions sheet no longer lists it).
-        if (active) blocks.push({ rows: [{ label: s.treeManager.manageTreesTitle, run: () => this.showTreeManagerDialog() }] });
+        if (!isView) {
+            blocks.push({ divider: !managed.treeRow && managed.rows.length === 0, rows: [
+                { label: s.familyWizard.menu, run: () => this.startFamilyWizardFromToolbar() },
+            ] });
+        }
 
-        // 6) Add family (no bottom-bar home; edit-only) and the settings.
-        blocks.push({ divider: true, rows: [
-            ...(isView ? [] : [{ label: s.familyWizard.menu, run: () => this.startFamilyWizardFromToolbar() }]),
-            { label: s.settings.title, run: () => this.showSettingsDialog() },
-            // The version here (the toolbar's BETA badge has no room on a phone).
-            { label: s.about.title, run: () => this.showAboutDialog(),
-                value: document.body.classList.contains('beta-build') ? s.about.betaValue(APP_VERSION) : APP_VERSION },
+        // 7) Settings | About tiles (the version is in About).
+        blocks.push({ divider: true, rows: [], pair: [
+            { label: s.menu.settings, id: 'sheet-settings', run: () => this.showSettingsDialog() },
+            { label: s.about.title, id: 'sheet-about', run: () => this.showAboutDialog() },
         ] });
 
-        this.presentMenuSheet(s.mobileMenu.more, blocks, { research: opts.research });
+        this.presentMenuSheet(s.mobileMenu.more, blocks, { research: opts.research, more: true });
         if (reminder) this.exportReminderOpened();
     },
 
@@ -430,12 +446,14 @@ export const bottomSheetMethods = uiModule({
      * headers, flat action rows (no emoji), optional side-by-side "pair" row,
      * overlay + swipe-to-dismiss chrome. Shared by the "More" and "Tree" sheets.
      */
-    presentMenuSheet(titleText: string, blocks: MenuBlock[], opts: { research?: boolean } = {}): void {
+    presentMenuSheet(titleText: string, blocks: MenuBlock[], opts: { research?: boolean; more?: boolean } = {}): void {
         const overlay = document.createElement('div');
         overlay.className = 'bottom-sheet-overlay';
         const sheet = document.createElement('div');
-        sheet.className = 'bottom-sheet bottom-sheet-menu';
+        // More: no visible title (its name stays for assistive technology), the window's height when needed.
+        sheet.className = 'bottom-sheet bottom-sheet-menu' + (opts.more ? ' bottom-sheet-more' : '');
         sheet.setAttribute('role', 'menu');
+        sheet.setAttribute('aria-label', titleText);
 
         const handle = document.createElement('div');
         handle.className = 'bottom-sheet-handle';
@@ -454,6 +472,7 @@ export const bottomSheetMethods = uiModule({
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'bottom-sheet-item' + (row.danger ? ' danger' : '') + (row.active ? ' active' : '');
+            if (row.id) btn.id = row.id;
             const label = document.createElement('span');
             label.className = 'bottom-sheet-label';
             label.textContent = row.label;
@@ -501,14 +520,70 @@ export const bottomSheetMethods = uiModule({
                 ext.textContent = '↗';
                 btn.appendChild(ext);
             }
+            if (row.kbd) {
+                const kbd = document.createElement('kbd');
+                kbd.className = 'menu-kbd';
+                kbd.dataset.shortcut = row.kbd;
+                btn.appendChild(kbd);
+            }
             if (row.warnBadge) btn.querySelector('.tree-switcher-badge')?.classList.add('research-count-badge');
             if (row.ariaLabel) btn.setAttribute('aria-label', row.ariaLabel);
             btn.setAttribute('role', 'menuitem');
+            if (row.page) {
+                // A second level in this sheet ("For the family ›").
+                const page = row.page;
+                btn.setAttribute('aria-haspopup', 'menu');
+                const chevron = document.createElement('span');
+                chevron.className = 'bottom-sheet-tree-chevron';
+                chevron.setAttribute('aria-hidden', 'true');
+                chevron.textContent = '›';
+                btn.appendChild(chevron);
+                btn.addEventListener('click', () => showSubPage(btn, page));
+                return btn;
+            }
             btn.addEventListener('click', () => {
                 this.hideBottomSheet();
                 row.run();
             });
             return btn;
+        };
+
+        // A second level ("For the family ›") replaces the list in this same sheet: ‹ Back returns.
+        let subPage: HTMLElement | null = null;
+        let subOpener: HTMLElement | null = null;
+        const showSubPage = (opener: HTMLElement, page: NonNullable<MenuRow['page']>): void => {
+            subOpener = opener;
+            subPage?.remove();
+            subPage = document.createElement('div');
+            subPage.className = 'sheet-page bottom-sheet-subpage';
+            const head = document.createElement('div');
+            head.className = 'sheet-subhead';
+            const backBtn = document.createElement('button');
+            backBtn.type = 'button';
+            backBtn.className = 'sheet-back';
+            backBtn.setAttribute('role', 'menuitem');
+            backBtn.textContent = `‹ ${strings.contextMenu.back}`;
+            backBtn.addEventListener('click', hideSubPage);
+            const subTitle = document.createElement('span');
+            subTitle.className = 'sheet-subhead-title';
+            subTitle.textContent = page.title;
+            head.append(backBtn, subTitle);
+            const items = document.createElement('div');
+            items.className = 'bottom-sheet-items';
+            for (const row of page.rows) items.appendChild(makeButton(row));
+            subPage.append(head, items);
+            sheet.appendChild(subPage);
+            title.hidden = true;
+            list.hidden = true;
+            items.querySelector<HTMLElement>('.bottom-sheet-item')?.focus({ preventScroll: true });
+        };
+        const hideSubPage = (): void => {
+            if (!subPage) return;
+            subPage.remove();
+            subPage = null;
+            title.hidden = false;
+            list.hidden = false;
+            subOpener?.focus({ preventScroll: true });
         };
         /** The quiet line with its link under a row ("Export all"). */
         const makeAfter = (after: NonNullable<MenuRow['after']>): HTMLElement => {
@@ -566,15 +641,23 @@ export const bottomSheetMethods = uiModule({
             const title = document.createElement('span');
             title.className = 'bottom-sheet-storage-title';
             title.textContent = row.title;
-            const sub = document.createElement('span');
-            sub.className = 'bottom-sheet-storage-sub';
-            sub.textContent = row.sub;
-            text.append(title, sub);
+            text.append(title);
+            if (row.sub) {
+                const sub = document.createElement('span');
+                sub.className = 'bottom-sheet-storage-sub';
+                sub.textContent = row.sub;
+                text.append(sub);
+            }
+            // Ctrl+S / ⌘S saves the copy (shown with a mouse only).
+            const kbd = document.createElement('kbd');
+            kbd.className = 'menu-kbd';
+            kbd.dataset.shortcut = 'save';
             const chevron = document.createElement('span');
             chevron.className = 'bottom-sheet-storage-chevron';
             chevron.setAttribute('aria-hidden', 'true');
             chevron.textContent = '\u203a';
-            btn.append(text, chevron);
+            btn.append(text, kbd, chevron);
+            btn.setAttribute('role', 'menuitem');
             btn.addEventListener('click', () => {
                 this.hideBottomSheet();
                 row.run();
@@ -712,6 +795,14 @@ export const bottomSheetMethods = uiModule({
             if (block.pair) {
                 const pairRow = document.createElement('div');
                 pairRow.className = 'bottom-sheet-pair';
+                if (block.pairLabel) {
+                    const label = document.createElement('span');
+                    label.className = 'bottom-sheet-pair-label';
+                    label.textContent = block.pairLabel;
+                    pairRow.appendChild(label);
+                    pairRow.setAttribute('role', 'group');
+                    pairRow.setAttribute('aria-label', block.pairLabel);
+                }
                 for (const row of block.pair) pairRow.appendChild(makeButton(row));
                 list.appendChild(pairRow);
             }
@@ -727,8 +818,16 @@ export const bottomSheetMethods = uiModule({
                 e.preventDefault();
                 e.stopPropagation();
                 hideResearchPage();
+                return;
+            }
+            // Esc / ← on a second level: back to the list (a second Esc closes).
+            if ((e.key === 'Escape' || e.key === 'ArrowLeft') && subPage) {
+                e.preventDefault();
+                e.stopPropagation();
+                hideSubPage();
             }
         });
+        this.fillMenuShortcuts(sheet);
 
         // Swipe-down to dismiss (mirrors the person sheet).
         let dragStartY = 0;

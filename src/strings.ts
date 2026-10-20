@@ -155,6 +155,10 @@ const stringsEN = {
     },
 
     // Menu dialogs
+    // Tree switcher (toolbar tree name)
+    treeSwitcher: {
+        import: 'Import…',
+    },
     menu: {
         export: 'Export',
         import: 'Import',
@@ -170,7 +174,8 @@ const stringsEN = {
         mergeViewInto: 'Merge view into…',
         mergeIntoTree: 'Merge into another tree…',
         exportAll: 'Export…',
-        exportAllSub: 'whole tree or current view',
+        forFamily: 'For the family',
+        settings: 'Settings',
         sectionFromView: 'From the current view',
         actions: 'Actions',
         treeActions: 'Tree:',
@@ -341,7 +346,7 @@ const stringsEN = {
         installing: 'Strom is being installed as an app. Open it from there and import the tree if it is not there yet.',
         details: 'Where is my data?',
         saveShortcut: (keys: string) => `Save to a file: ${keys}`,
-        menuUnsaved: 'Only in browser – not saved',
+        menuUnsaved: 'Only in browser',
         notice: (name: string) => `Changes to “${name}” are only in this browser, which may clear them. Save the tree to a file now and then.`,
         noticeInstall: (name: string) => `Changes to “${name}” are only in this browser, which may clear them. Save the tree to a file now and then — and install Strom as an app, so the browser keeps its data.`,
         noticeInstallMenu: (name: string) => `Changes to “${name}” are only in this browser tab, which may clear them. Save the tree to a file now and then — and install Strom as an app (install icon in the address bar, or the browser menu), so the browser keeps its data.`,
@@ -391,7 +396,7 @@ const stringsEN = {
             'closed-tab': 'Backup copy from a closed tab',
         },
         exportLast: (d: string) => `Last export of all trees: ${d}`,
-        exportNever: 'Not all trees have been exported yet',
+        exportNever: 'Not all trees exported yet',
         exportAll: 'Export all',
     },
 
@@ -3569,7 +3574,7 @@ const stringsEN = {
 
     // Cross-tree links
     slideshow: {
-        menu: 'Slideshow (TV mode)',
+        menu: 'Slideshow (TV)',
         menuDesc: 'A hands-off flight through the tree — for the family screen',
         needMore: 'Show more people before starting the slideshow.',
         runsInFamily: 'Slideshow runs in the Family view',
@@ -4690,6 +4695,9 @@ const stringsCZ: StringsType = {
     },
 
     // Menu dialogs
+    treeSwitcher: {
+        import: 'Importovat…',
+    },
     menu: {
         export: 'Export',
         import: 'Import',
@@ -4705,7 +4713,8 @@ const stringsCZ: StringsType = {
         mergeViewInto: 'Sloučit pohled do…',
         mergeIntoTree: 'Sloučit do jiného stromu…',
         exportAll: 'Export…',
-        exportAllSub: 'celý strom nebo aktuální pohled',
+        forFamily: 'Pro rodinu',
+        settings: 'Nastavení',
         sectionFromView: 'Z aktuálního pohledu',
         actions: 'Akce',
         treeActions: 'Strom:',
@@ -4872,7 +4881,7 @@ const stringsCZ: StringsType = {
         installing: 'Strom se instaluje jako aplikace. Pokud v ní po otevření strom ještě není, stačí ho naimportovat.',
         details: 'Kde jsou moje data?',
         saveShortcut: (keys: string) => `Uložit do souboru: ${keys}`,
-        menuUnsaved: 'Jen v prohlížeči – neuloženo',
+        menuUnsaved: 'Jen v prohlížeči',
         notice: (name: string) => `Změny ve stromu „${name}“ jsou jen v tomto prohlížeči, který je může smazat. Je dobré strom průběžně ukládat do souboru.`,
         noticeInstall: (name: string) => `Změny ve stromu „${name}“ jsou jen v tomto prohlížeči, který je může smazat. Je dobré strom průběžně ukládat do souboru — a nainstalovat Strom jako aplikaci, aby prohlížeč data držel.`,
         noticeInstallMenu: (name: string) => `Změny ve stromu „${name}“ jsou jen v této kartě prohlížeče, který je může smazat. Je dobré strom průběžně ukládat do souboru — a nainstalovat Strom jako aplikaci (ikona v adresním řádku nebo menu prohlížeče), aby prohlížeč data držel.`,
@@ -4922,7 +4931,7 @@ const stringsCZ: StringsType = {
             'closed-tab': 'Záložní kopie ze zavřené záložky',
         },
         exportLast: (d: string) => `Poslední export všech stromů: ${d}`,
-        exportNever: 'Všechny stromy zatím nebyly exportovány',
+        exportNever: 'Ne všechny stromy jsou exportované',
         exportAll: 'Exportovat vše',
     },
 
@@ -8081,7 +8090,7 @@ const stringsCZ: StringsType = {
 
     // Cross-tree links
     slideshow: {
-        menu: 'Průlet stromem (TV režim)',
+        menu: 'Průlet stromem (TV)',
         menuDesc: 'Automatický průlet rodokmenem — pro promítání rodině',
         needMore: 'Nejdřív je potřeba zobrazit více osob, pak spustit průlet.',
         runsInFamily: 'Průlet běží v pohledu Rodina',
@@ -9197,6 +9206,9 @@ const stringsDE: StringsType = {
     },
 
     // Menu dialogs
+    treeSwitcher: {
+        import: 'Importieren…',
+    },
     menu: {
         export: 'Export',
         import: 'Import',
@@ -9212,7 +9224,8 @@ const stringsDE: StringsType = {
         mergeViewInto: 'Ansicht zusammenführen mit…',
         mergeIntoTree: 'In anderen Stammbaum zusammenführen…',
         exportAll: 'Export…',
-        exportAllSub: 'ganzer Stammbaum oder aktuelle Ansicht',
+        forFamily: 'Für die Familie',
+        settings: 'Einstellungen',
         sectionFromView: 'Aus der aktuellen Ansicht',
         actions: 'Aktionen',
         treeActions: 'Stammbaum:',
@@ -9377,7 +9390,7 @@ const stringsDE: StringsType = {
         installing: 'Strom wird als App installiert. Danach die App öffnen und den Stammbaum importieren, falls er dort noch fehlt.',
         details: 'Wo sind meine Daten?',
         saveShortcut: (keys: string) => `In Datei speichern: ${keys}`,
-        menuUnsaved: 'Nur im Browser – nicht gespeichert',
+        menuUnsaved: 'Nur im Browser',
         notice: (name: string) => `Änderungen an „${name}“ gibt es nur in diesem Browser, der sie löschen kann. Den Stammbaum regelmäßig in eine Datei speichern.`,
         noticeInstall: (name: string) => `Änderungen an „${name}“ gibt es nur in diesem Browser, der sie löschen kann. Den Stammbaum regelmäßig in eine Datei speichern — und Strom als App installieren, damit der Browser die Daten behält.`,
         noticeInstallMenu: (name: string) => `Änderungen an „${name}“ gibt es nur in diesem Browser-Tab, der sie löschen kann. Den Stammbaum regelmäßig in eine Datei speichern — und Strom als App installieren (Symbol in der Adressleiste oder Browsermenü), damit der Browser die Daten behält.`,
@@ -9427,7 +9440,7 @@ const stringsDE: StringsType = {
             'closed-tab': 'Sicherungskopie aus einem geschlossenen Tab',
         },
         exportLast: (d: string) => `Letzter Export aller Stammbäume: ${d}`,
-        exportNever: 'Noch nicht alle Stammbäume exportiert',
+        exportNever: 'Noch nicht alle exportiert',
         exportAll: 'Alles exportieren',
     },
 

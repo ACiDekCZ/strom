@@ -120,7 +120,7 @@ test('bottom-bar regime: the state rides the More tab as a warning triangle and 
     await page.locator('#bb-view-more').click();
     const row = page.locator('.bottom-sheet-storage-row');
     await expect(row).toContainText('Only in browser');
-    await expect(page.locator('.bottom-sheet-storage-title')).toHaveText('Only in browser – not saved');
+    await expect(page.locator('.bottom-sheet-storage-title')).toHaveText('Only in browser');
     await row.click();
     await expect(page.locator('#storage-status-modal')).toBeVisible();
     await expect(page.locator('#storage-status-modal .storage-pill')).toHaveClass(/is-unsaved/);

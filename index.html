@@ -843,8 +843,7 @@
         }
         /* A word beats three dots where there is room: show the "Actions"
            label on wide toolbars, fall back to ⋯ alone when space is tight.
-           The standalone ⚙ follows the same budget — on narrow toolbars it
-           folds into the actions menu (divider + Settings at the bottom). */
+           Settings is the menu's last row at every width (no toolbar ⚙). */
         .actions-menu-label { display: inline; }
         /* Wide toolbars (>1280px): the word carries its own menu affordance —
            the same small chevron the tree-switcher pill uses — and the ⋯ dots
@@ -854,19 +853,25 @@
             flex-shrink: 0; vertical-align: middle; display: inline-block;
         }
         .actions-menu-btn .actions-menu-dots { display: none; }
-        .actions-menu-settings { display: none; }
         /* Breakpoint exception (content-driven, desktop chrome fit): the full
-           desktop toolbar needs ~1280px; below that the "Actions" label and the
-           standalone ⚙ fold into the ⋯ trigger. See the breakpoint map at the
-           top of the stylesheet. */
+           desktop toolbar needs ~1280px; below that the "Actions" label folds
+           into the ⋯ trigger. See the breakpoint map at the top of the
+           stylesheet. */
         @media (max-width: 1280px) {
             /* Tight toolbars: fall back to the ⋯-only trigger. */
             .actions-menu-label { display: none; }
             .actions-menu-btn .actions-menu-chevron { display: none; }
             .actions-menu-btn .actions-menu-dots { display: inline; margin-left: 0; opacity: 1; }
-            .actions-toolbar-settings { display: none !important; }
-            .actions-menu-settings { display: block; }
         }
+        /* View mode (an exported page, menu 1020 §10): For the family unfolds
+           into the first level and the overview replaces "Tree ›". The
+           rows outrank the view-mode rule that hides the editing rows. */
+        .actions-menu-dropdown .view-only-row { display: none; }
+        body.view-mode .actions-menu-dropdown .view-only-row,
+        body.view-mode .actions-menu-dropdown #actions-ann-row,
+        body.view-mode .actions-menu-dropdown #actions-settings-row { display: flex !important; }
+        body.view-mode .actions-menu-dropdown #actions-settings-divider { display: block !important; }
+        body.view-mode .actions-family-wrap { display: none; }
         /* Small dot on the ⋯ trigger so the anniversaries signal survives the
            move out of the tree switcher. */
         .actions-menu-dot {
@@ -903,41 +908,49 @@
            row carries a faint tinted background; the flyout opens to the LEFT
            (the actions dropdown is right-anchored in the toolbar, so a right
            flyout would leave the viewport — see round 9 notes). */
-        .actions-tree-wrap { position: relative; }
-        .actions-tree-row {
-            display: flex; align-items: center; gap: 6px;
-            background: var(--hover-bg);
-        }
-        .actions-tree-row:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        .actions-submenu-wrap { position: relative; }
+        .actions-submenu-row { display: flex; align-items: center; gap: 6px; }
+        .actions-tree-row { background: var(--hover-bg); }
+        .actions-submenu-row:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
         .actions-tree-prefix { color: var(--text-light); flex-shrink: 0; }
         .actions-tree-name {
             font-family: var(--font-serif); font-weight: 600; color: var(--text);
             overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
         }
         .actions-tree-chevron { margin-left: auto; color: var(--text-light); flex-shrink: 0; font-size: 15px; }
-        .actions-tree-submenu {
+        .actions-submenu {
             position: absolute; top: -4px; right: 100%; margin-right: 3px;
             min-width: 200px;
             background: var(--surface); border: 1px solid var(--border);
             border-radius: 10px; box-shadow: var(--shadow-lg);
             padding: 4px 0; z-index: 210;
-            /* The submenu carries every whole-tree action — kept on-screen by
-               positionActionsTreeSubmenu() (shifted up, scrolls when needed). */
+            /* Kept on-screen by positionActionsSubmenu() (shifted up, scrolls
+               when needed); only one flyout is open at a time. */
             max-height: calc(100vh - 16px); overflow-y: auto;
             /* Hidden a moment late: a pointer on its way from the row to the
                flyout may cross the gap (or clip a corner) without losing it. */
             visibility: hidden; transition: visibility 0s linear 0.25s;
         }
         /* .hover-off: closed (Esc, a click on its row) under the pointer — hidden until the pointer leaves. */
-        .actions-tree-wrap.submenu-open > .actions-tree-submenu { visibility: visible; transition-delay: 0s; z-index: 211; }
-        @media (hover: hover) { .actions-tree-wrap:not(.hover-off):hover > .actions-tree-submenu { visibility: visible; transition-delay: 0s; z-index: 211; } }
+        /* Its rows show with the flyout (their own `transition: all` would delay the inherited visibility, so ↓ from the row skipped them). */
+        .actions-submenu > .tree-switcher-action { transition-property: background-color, color; }
+        .actions-submenu-wrap.submenu-open > .actions-submenu { visibility: visible; transition-delay: 0s; z-index: 211; }
+        @media (hover: hover) { .actions-submenu-wrap:not(.hover-off):hover > .actions-submenu { visibility: visible; transition-delay: 0s; z-index: 211; } }
         /* The gap between the row and the flyout still counts as the row. */
-        .actions-tree-wrap.submenu-open::before {
+        .actions-submenu-wrap.submenu-open::before {
             content: ''; position: absolute; top: 0; bottom: 0; right: 100%; width: 16px;
         }
-        @media (hover: hover) { .actions-tree-wrap:not(.hover-off):hover::before {
+        @media (hover: hover) { .actions-submenu-wrap:not(.hover-off):hover::before {
             content: ''; position: absolute; top: 0; bottom: 0; right: 100%; width: 16px;
         } }
+        /* Shortcut chips in menu rows (Ctrl+S on the storage row, Ctrl+Z on Undo). */
+        .menu-kbd {
+            margin-left: auto; flex-shrink: 0;
+            font: 11px/1.3 var(--font-sans, inherit); color: var(--text-light);
+            border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px;
+            white-space: nowrap; background: none;
+        }
+        .menu-kbd:empty { display: none; }
 
 
         /* ==================== SEARCH ==================== */
@@ -2385,6 +2398,42 @@
         .bottom-sheet-pair .bottom-sheet-item {
             flex: 1; justify-content: center;
             background: var(--surface-2); border-radius: var(--r-md);
+        }
+        /* More (menu 1020 §7): no visible title (the name stays for assistive
+           technology), 44px tiles (Undo | Redo, View: Fan | Map, Settings |
+           About), 48px rows; on a 360×640 phone it fits without scrolling. */
+        .bottom-sheet.bottom-sheet-more { max-height: calc(100dvh - 16px); }
+        .bottom-sheet-more > .bottom-sheet-menu-title { display: none; }
+        .bottom-sheet-more .bottom-sheet-handle { margin-bottom: 6px; }
+        .bottom-sheet-more .bottom-sheet-pair { align-items: center; padding: 2px 8px; }
+        .bottom-sheet-more .bottom-sheet-pair .bottom-sheet-item {
+            min-height: 44px; min-width: 0; padding: 0 8px; gap: 8px; white-space: nowrap;
+        }
+        .bottom-sheet-menu.bottom-sheet-more .bottom-sheet-tree-row { min-height: 48px; margin: 2px 4px; }
+        .bottom-sheet-pair-label { flex: none; font-size: 13px; color: var(--text-light); padding: 0 4px 0 8px; }
+        /* Shortcut chips only with a mouse (a touch screen has no keyboard to hint at). */
+        .bottom-sheet .menu-kbd { display: none; margin-left: 0; }
+        @media (hover: hover) { .bottom-sheet .menu-kbd:not(:empty) { display: inline-block; } }
+        /* Phone held sideways: two columns of 44px rows, the reminder (and
+           every line that is not a row) across both; tiles become rows. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .bottom-sheet-more .bottom-sheet-items:not([hidden]) {
+                display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+                grid-auto-flow: row dense; column-gap: 4px;
+            }
+            .bottom-sheet-more .bottom-sheet-items > * { grid-column: 1 / -1; }
+            .bottom-sheet-more .bottom-sheet-items > .bottom-sheet-item:not(.bottom-sheet-storage-row),
+            .bottom-sheet-more .bottom-sheet-pair > .bottom-sheet-item { grid-column: auto; }
+            .bottom-sheet-more .bottom-sheet-pair { display: contents; }
+            .bottom-sheet-more .bottom-sheet-pair-label,
+            .bottom-sheet-more .bottom-sheet-items > .bottom-sheet-divider { display: none; }
+            .bottom-sheet-more .bottom-sheet-item { min-height: 44px; }
+            .bottom-sheet-more .bottom-sheet-pair > .bottom-sheet-item {
+                justify-content: flex-start; padding: 10px 16px; background: none; border-radius: 8px;
+            }
+            .bottom-sheet-menu.bottom-sheet-more .bottom-sheet-tree-row { margin: 0; min-height: 44px; }
+            .bottom-sheet-more .bottom-sheet-items > .bottom-sheet-storage-row { min-height: 44px; margin: 2px 0; }
+            .bottom-sheet-more .bottom-sheet-handle { margin-top: 2px; margin-bottom: 4px; }
         }
         /* The prominent "Strom: {name}" row — mirrors the desktop .actions-tree-row:
            tinted background, text-light prefix, serif 600 name, trailing chevron.
@@ -5726,13 +5775,11 @@
         }
         @media (hover: hover) { .actions-storage-row:hover { background: color-mix(in srgb, var(--warning) 22%, var(--warning-soft)); } }
         .actions-storage-icon svg { width: 16px; height: 16px; display: block; }
-        .actions-storage-text { display: flex; flex-direction: column; gap: 1px; }
         .actions-storage-title { font-size: 13px; font-weight: 600; color: var(--warning-text); }
         .actions-storage-icon { color: var(--warning-text); }
-        .actions-storage-sub { font-size: 12px; color: var(--text-secondary); }
-        /* Export… with its quiet second line ("whole tree or current view"). */
-        .actions-row-text { display: flex; flex-direction: column; gap: 1px; }
-        .actions-row-sub { font-size: 11px; color: var(--text-faint); }
+        /* Its divider comes and goes with the row. */
+        .actions-storage-divider { display: none; }
+        @media (max-width: 1179px) { body.storage-unsaved .actions-storage-divider { display: block; } }
         @media (max-width: 1280px) {
             .toolbar .storage-pill .storage-pill-label { display: none; }
         }
@@ -13309,6 +13356,8 @@
             .bottom-bar { display: flex; }
             /* Back / forward over the bar, never under it (an empty circle's edge showed above it). */
             .focus-nav-btn { bottom: calc(var(--bottom-bar-h) + 16px); }
+            /* An exported page's banner sits above the bar: More (its menu) stays within reach. */
+            .view-mode-banner { bottom: var(--bottom-bar-h); }
             /* No ⋯ in the top bar: More is the bottom bar's (one place only). */
             /* Canvas ends above the bar so nothing hides behind it. */
             #tree-container { bottom: var(--bottom-bar-h); }
@@ -13560,6 +13609,7 @@
                 --bottom-bar-h: 0px;
             }
             .embedded-mode-banner { top: var(--toolbar-h); left: var(--side-bar-w); }
+            .view-mode-banner { left: var(--side-bar-w); }
             .focus-back-btn { left: calc(var(--side-bar-w) + 16px); }
             .focus-forward-btn { left: calc(var(--side-bar-w) + 68px); }
             /* The legend pill beside the side bar, not under it. */
@@ -15210,34 +15260,60 @@
             <div id="actions-menu-dropdown" class="tree-switcher-dropdown actions-menu-dropdown" role="menu">
                 <div id="actions-storage-row" class="tree-switcher-action actions-storage-row storage-dot" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.showStorageStatusDialog()" tabindex="0" role="menuitem">
                     <span class="actions-storage-icon" aria-hidden="true"></span>
-                    <span class="actions-storage-text"><span class="actions-storage-title" data-i18n="fileCopy.menuUnsaved"></span><span class="actions-storage-sub" data-i18n="fileCopy.moreRowSub"></span></span>
+                    <span class="actions-storage-title" data-i18n="fileCopy.menuUnsaved"></span>
+                    <kbd class="menu-kbd" data-shortcut="save"></kbd>
                 </div>
-                <!-- Ordered by what the user wants to do: the tree's content, the
-                     outputs, then the research and the tree itself. Undo / Redo
-                     live in the toolbar (#toolbar-undo-group). -->
-                <div class="tree-switcher-action" id="actions-book-row" onclick="window.Strom.UI.treeActionBook()" tabindex="0" role="menuitem">
-                    <span data-i18n="book.menu"></span>
+                <div class="tree-switcher-divider actions-storage-divider"></div>
+                <!-- Ordered by how often each is used (menu 1020): the tree's
+                     dates and sources, the outputs, the tree itself, Settings
+                     last. Undo / Redo live in the toolbar (#toolbar-undo-group). -->
+                <div class="tree-switcher-action" id="actions-ann-row" onclick="window.Strom.UI.treeActionAnniversaries()" tabindex="0" role="menuitem">
+                    <span data-i18n="anniversaries.menu"></span>
+                    <span id="actions-ann-badge" class="tree-switcher-badge" style="display:none;"></span>
                 </div>
                 <!-- Source catalog: shown with advanced fields on, or once the tree has a source. -->
                 <div class="tree-switcher-action edit-only" id="actions-sources-row" style="display:none;" onclick="window.Strom.UI.treeActionSources()" tabindex="0" role="menuitem">
                     <span data-i18n="sources.menu"></span>
                 </div>
-                <div class="tree-switcher-action" id="actions-ann-row" onclick="window.Strom.UI.treeActionAnniversaries()" tabindex="0" role="menuitem">
-                    <span data-i18n="anniversaries.menu"></span>
-                    <span id="actions-ann-badge" class="tree-switcher-badge" style="display:none;"></span>
-                </div>
                 <div class="tree-switcher-divider"></div>
                 <!-- One Export…: the whole tree or the current view, chosen in its dialog. -->
                 <div class="tree-switcher-action actions-export-row" id="actions-export-row" onclick="window.Strom.UI.treeActionExport()" tabindex="0" role="menuitem">
-                    <span class="actions-row-text"><span data-i18n="menu.exportAll"></span><span class="actions-row-sub" data-i18n="menu.exportAllSub"></span></span>
+                    <span data-i18n="menu.exportAll"></span>
                 </div>
                 <!-- "Export all" now and then (a research tree, not backed up; research-actions-ui.ts). -->
                 <div class="export-reminder" id="actions-export-reminder" hidden></div>
-                <div class="tree-switcher-action" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.showPosterDialog()" tabindex="0" role="menuitem">
+                <!-- "For the family ›": what is made for the relatives (book, poster, TV slideshow). -->
+                <div class="actions-submenu-wrap actions-family-wrap" id="actions-family-wrap">
+                    <div class="tree-switcher-action actions-submenu-row actions-family-row" id="actions-family-row" role="menuitem" tabindex="0" aria-haspopup="menu" aria-expanded="false" aria-controls="actions-family-submenu" onclick="window.Strom.UI.toggleActionsSubmenu('family')">
+                        <span data-i18n="menu.forFamily"></span>
+                        <span class="actions-tree-chevron" aria-hidden="true">&rsaquo;</span>
+                    </div>
+                    <div class="actions-submenu actions-family-submenu" id="actions-family-submenu" role="menu" data-i18n-aria-label="menu.forFamily">
+                        <div class="tree-switcher-action" id="actions-book-row" onclick="window.Strom.UI.treeActionBook()" tabindex="0" role="menuitem">
+                            <span data-i18n="book.menu"></span>
+                        </div>
+                        <div class="tree-switcher-action" id="actions-poster-row" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.showPosterDialog()" tabindex="0" role="menuitem">
+                            <span data-i18n="menu.poster"></span>
+                        </div>
+                        <div class="tree-switcher-action" id="actions-slideshow-row" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.startSlideshow()" tabindex="0" role="menuitem">
+                            <span data-i18n="slideshow.menu"></span>
+                        </div>
+                    </div>
+                </div>
+                <!-- View mode (an exported page): For the family unfolds here and
+                     the Tree › row gives way to the overview; Settings and About
+                     close the list (menu 1020 §10). -->
+                <div class="tree-switcher-action view-only-row" id="actions-view-book-row" onclick="window.Strom.UI.treeActionBook()" tabindex="0" role="menuitem">
+                    <span data-i18n="book.menu"></span>
+                </div>
+                <div class="tree-switcher-action view-only-row" id="actions-view-poster-row" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.showPosterDialog()" tabindex="0" role="menuitem">
                     <span data-i18n="menu.poster"></span>
                 </div>
-                <div class="tree-switcher-action" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.startSlideshow()" tabindex="0" role="menuitem">
+                <div class="tree-switcher-action view-only-row" id="actions-view-slideshow-row" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.startSlideshow()" tabindex="0" role="menuitem">
                     <span data-i18n="slideshow.menu"></span>
+                </div>
+                <div class="tree-switcher-action view-only-row" id="actions-view-overview-row" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.showActiveTreeOverview()" tabindex="0" role="menuitem">
+                    <span data-i18n="treeOverview.menu"></span>
                 </div>
                 <div class="tree-switcher-divider"></div>
                 <!-- Strom Research (3.0): permanent entry; "New" label while it is new.
@@ -15250,13 +15326,13 @@
                 </div>
                 <!-- "Strom: {name}" — about the tree and its management (all except
                      Delete, which stays in the tree manager). -->
-                <div class="actions-tree-wrap" id="actions-tree-wrap">
-                    <div class="tree-switcher-action actions-tree-row" id="actions-tree-row" role="menuitem" tabindex="0" aria-haspopup="menu" aria-expanded="false" onclick="window.Strom.UI.toggleActionsTreeSubmenu()">
+                <div class="actions-submenu-wrap actions-tree-wrap" id="actions-tree-wrap">
+                    <div class="tree-switcher-action actions-submenu-row actions-tree-row" id="actions-tree-row" role="menuitem" tabindex="0" aria-haspopup="menu" aria-expanded="false" aria-controls="actions-tree-submenu" onclick="window.Strom.UI.toggleActionsSubmenu('tree')">
                         <span class="actions-tree-prefix" data-i18n="menu.treeActions"></span>
                         <span class="actions-tree-name" id="actions-tree-name"></span>
                         <span class="actions-tree-chevron" aria-hidden="true">&rsaquo;</span>
                     </div>
-                    <div class="actions-tree-submenu" id="actions-tree-submenu" role="menu">
+                    <div class="actions-submenu actions-tree-submenu" id="actions-tree-submenu" role="menu">
                         <!-- The Overview group of the tree actions (treeActionGroups), rendered on opening. -->
                         <div id="actions-tree-overview-rows" role="none"></div>
                         <div class="tree-switcher-divider edit-only"></div>
@@ -15293,13 +15369,16 @@
                         </div>
                     </div>
                 </div>
-                <div class="tree-switcher-divider actions-menu-settings"></div>
-                <div class="tree-switcher-action actions-menu-settings" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.showSettingsDialog()" tabindex="0" role="menuitem">
-                    <span data-i18n="settings.title"></span>
+                <div class="tree-switcher-divider" id="actions-settings-divider"></div>
+                <!-- Settings: its one place, the last row at every width (the toolbar ⚙ is gone). -->
+                <div class="tree-switcher-action actions-menu-settings" id="actions-settings-row" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.showSettingsDialog()" tabindex="0" role="menuitem">
+                    <span data-i18n="menu.settings"></span>
+                </div>
+                <div class="tree-switcher-action view-only-row" id="actions-view-about-row" onclick="window.Strom.UI.closeActionsMenu(); window.Strom.UI.showAboutDialog()" tabindex="0" role="menuitem">
+                    <span data-i18n="about.title"></span>
                 </div>
             </div>
         </div>
-        <button class="secondary desktop-only actions-toolbar-settings" onclick="window.Strom.UI.showSettingsDialog()" data-i18n-title="settings.title" data-i18n-aria-label="settings.title"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
 
         <!-- Add-person (desktop primary) + family wizard, rightmost -->
         <div class="toolbar-buttons desktop-only">

@@ -216,7 +216,7 @@ test.describe('"Export all" now and then (only with a research)', () => {
         await manualTree(page, new Date(2026, 9, 8, 9, 0));
         await page.evaluate(() => window.Strom.UI.showSnapshotsDialog());
         const box = page.locator('#snapshots-export');
-        await expect(box).toContainText('Not all trees have been exported yet');
+        await expect(box).toContainText('Not all trees exported yet');
         await expect(box.getByRole('button', { name: 'Export all' })).toBeVisible();
         await page.evaluate(() => window.Strom.UI.closeSnapshotsDialog());
         // Never exported: under Export… in Actions (not in the Research menu any more).
@@ -225,7 +225,7 @@ test.describe('"Export all" now and then (only with a research)', () => {
         await expect(page.locator('#research-menu')).not.toContainText('Export all');
         await page.evaluate(() => window.Strom.UI.closeResearchMenu());
         await openActions(page);
-        await expect(reminder(page)).toContainText('Not all trees have been exported yet');
+        await expect(reminder(page)).toContainText('Not all trees exported yet');
         await expect(page.locator('#actions-export-row + #actions-export-reminder')).toBeVisible();
         // It stays while this opening lasts, a refresh does not take it away.
         await page.evaluate(() => window.Strom.UI.refreshActionMenuBadges());
@@ -277,7 +277,7 @@ test.describe('"Export all" now and then (only with a research)', () => {
         await manualTree(page);
         const sheetReminder = page.locator('#sheet-export-reminder');
         await page.evaluate(() => window.Strom.UI.showMoreMenuSheet());
-        await expect(sheetReminder).toContainText('Not all trees have been exported yet');
+        await expect(sheetReminder).toContainText('Not all trees exported yet');
         // Right under Export… (its row, then the reminder).
         expect(await sheetReminder.evaluate(el => el.previousElementSibling?.textContent ?? '')).toContain('Export…');
         const link = sheetReminder.getByRole('menuitem', { name: 'Export all' });

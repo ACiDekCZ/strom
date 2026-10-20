@@ -52,6 +52,10 @@ import { shownNameOrEmpty } from '../person-name.js';
 /** Room (px) a row menu needs beside ⋯ to show a useful part of its rows. */
 const TREE_MENU_MIN_ROOM = 240;
 
+/** The flyouts of the desktop ⋯ menu (`actions-{which}-wrap/-row/-submenu`). */
+export type ActionsSubmenu = 'family' | 'tree';
+const ACTIONS_SUBMENUS: readonly ActionsSubmenu[] = ['family', 'tree'];
+
 export const treeManagementMethods = uiModule({
     // ---- TREE SWITCHER ----
     /**
@@ -90,12 +94,12 @@ export const treeManagementMethods = uiModule({
             }
         });
 
-        // The "Tree:" flyout opens on hover too (CSS): fit it into the window
-        // under the pointer.
-        const flyouts: Array<{ wrap: string; row: string; sub: string; open: () => void; close: () => void }> = [
-            { wrap: 'actions-tree-wrap', row: 'actions-tree-row', sub: 'actions-tree-submenu',
-                open: () => this.openActionsTreeSubmenu(), close: () => this.closeActionsTreeSubmenu() },
-        ];
+        // The "For the family ›" and "Tree ›" flyouts open on hover too (CSS):
+        // fit them into the window under the pointer; one is open at a time.
+        const flyouts = ACTIONS_SUBMENUS.map(which => ({
+            wrap: `actions-${which}-wrap`, row: `actions-${which}-row`, sub: `actions-${which}-submenu`,
+            open: () => this.openActionsSubmenu(which), close: () => this.closeActionsSubmenu(which),
+        }));
         for (const f of flyouts) {
             // A flyout closed under the pointer stays hidden until the pointer leaves (.hover-off).
             document.getElementById(f.wrap)?.addEventListener('mouseleave', () => {
@@ -217,10 +221,14 @@ export const treeManagementMethods = uiModule({
         if (this.otherResearchEnabled()) html += this.treeSwitcherBlockedHtml();
         dropdown.classList.toggle('with-research', this.treeSwitcherMarksShown());
 
-        // The switcher is trees only now: view/tree actions moved to the ⋯
-        // actions menu (desktop) and the mobile "More" sheet (≤1024px).
+        // The switcher is trees only: view/tree actions live in the ⋯ actions
+        // menu (desktop) and the mobile "More" sheet (≤1024px). Import… makes a
+        // new tree, so it belongs here, not with the open tree's actions.
         html += `
             <div class="tree-switcher-divider"></div>
+            <div class="tree-switcher-action edit-only" id="tree-switcher-import" role="menuitem" tabindex="0" onclick="window.Strom.UI.treeSwitcherImport()">
+                ${strings.treeSwitcher.import}
+            </div>
             <div class="tree-switcher-action" role="menuitem" tabindex="0" onclick="window.Strom.UI.showTreeManagerDialog()">
                 ${strings.treeManager.manageTreesTitle}...
             </div>
@@ -295,6 +303,12 @@ export const treeManagementMethods = uiModule({
         }
     },
 
+    /** Tree switcher → Import…: close the switcher, open the import dialog. */
+    treeSwitcherImport(): void {
+        document.getElementById('tree-switcher-dropdown')?.classList.remove('active');
+        this.showImportDialog();
+    },
+
     /** Toggle the desktop ⋯ actions menu (mirrors the tree switcher dropdown). */
     toggleActionsMenu(): void {
         const dropdown = document.getElementById('actions-menu-dropdown');
@@ -308,9 +322,39 @@ export const treeManagementMethods = uiModule({
         dropdown.classList.add('active');
         this.refreshActionMenuBadges();
         this.updateActionsTreeRow();
-        this.closeActionsTreeSubmenu();
+        this.closeActionsSubmenu();
+        this.fillMenuShortcuts(dropdown);
+        // Never an empty menu (menu 1020 §10): with nothing to offer, it stays shut.
+        const offered = Array.from(dropdown.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+            .some(el => !el.closest('.actions-submenu') && el.getClientRects().length > 0);
+        if (!offered) {
+            dropdown.classList.remove('active');
+            return;
+        }
         // "Export all" under Export…: this opening shows it (at most the first one of a day).
         if (this.renderActionsExportReminder()) this.exportReminderOpened();
+    },
+
+    /**
+     * The shortcut chips (`<kbd data-shortcut>`) of a menu: the platform's
+     * text, and the same keys for assistive technology (aria-keyshortcuts on
+     * the row).
+     */
+    fillMenuShortcuts(root: ParentNode): void {
+        for (const kbd of Array.from(root.querySelectorAll<HTMLElement>('kbd[data-shortcut]'))) {
+            const action = kbd.dataset.shortcut as 'undo' | 'redo' | 'save';
+            const { text, aria } = this.menuShortcut(action);
+            kbd.textContent = text;
+            kbd.closest('[role="menuitem"], button')?.setAttribute('aria-keyshortcuts', aria);
+        }
+    },
+
+    /** A menu row's shortcut: shown text and its aria-keyshortcuts value. */
+    menuShortcut(action: 'undo' | 'redo' | 'save'): { text: string; aria: string } {
+        const mac = this.isMacPlatform();
+        if (action === 'save') return mac ? { text: '⌘S', aria: 'Meta+S' } : { text: 'Ctrl+S', aria: 'Control+S' };
+        if (action === 'undo') return mac ? { text: '⌘Z', aria: 'Meta+Z' } : { text: 'Ctrl+Z', aria: 'Control+Z' };
+        return mac ? { text: '⇧⌘Z', aria: 'Meta+Shift+Z' } : { text: 'Ctrl+⇧+Z', aria: 'Control+Shift+Z' };
     },
 
     /**
@@ -318,7 +362,7 @@ export const treeManagementMethods = uiModule({
      * menu closes too: its items end by this call like the menu's own.
      */
     closeActionsMenu(): void {
-        this.closeActionsTreeSubmenu();
+        this.closeActionsSubmenu();
         this.closeResearchTrialNote();
         const dropdown = document.getElementById('actions-menu-dropdown');
         if (dropdown?.classList.contains('active')) this.exportReminderClosed();
@@ -337,6 +381,12 @@ export const treeManagementMethods = uiModule({
         wrap.style.display = '';
         nameEl.textContent = active.name;
         nameEl.title = active.name;
+        // A long name is cut short in the row: its spoken name and tooltip carry all of it.
+        const row = document.getElementById('actions-tree-row');
+        if (row) {
+            row.setAttribute('aria-label', `${strings.menu.treeActions} ${active.name}`);
+            row.title = active.name;
+        }
         void this.renderActionsTreeOverviewRows(active.id);
     },
 
@@ -368,34 +418,32 @@ export const treeManagementMethods = uiModule({
         }));
     },
 
-    /** The "Tree:" submenu opens on hover; click / →  toggles it for keyboard. */
-    toggleActionsTreeSubmenu(): void {
-        const wrap = document.getElementById('actions-tree-wrap');
+    /**
+     * A flyout of the ⋯ menu ("For the family ›", "Tree ›") opens on hover;
+     * a click, Enter or → toggles it. Only one is open at a time.
+     */
+    toggleActionsSubmenu(which: ActionsSubmenu): void {
+        const wrap = document.getElementById(`actions-${which}-wrap`);
         if (!wrap) return;
-        if (wrap.classList.contains('submenu-open')) this.closeActionsTreeSubmenu();
-        else this.openActionsTreeSubmenu();
+        if (wrap.classList.contains('submenu-open')) this.closeActionsSubmenu(which);
+        else this.openActionsSubmenu(which);
     },
 
-    openActionsTreeSubmenu(): void {
-        const wrap = document.getElementById('actions-tree-wrap');
+    openActionsSubmenu(which: ActionsSubmenu): void {
+        const wrap = document.getElementById(`actions-${which}-wrap`);
         if (!wrap) return;
+        for (const other of ACTIONS_SUBMENUS) if (other !== which) this.closeActionsSubmenu(other);
         wrap.classList.add('submenu-open');
-        document.getElementById('actions-tree-row')?.setAttribute('aria-expanded', 'true');
-        this.positionActionsTreeSubmenu();
+        document.getElementById(`actions-${which}-row`)?.setAttribute('aria-expanded', 'true');
+        this.positionActionsSubmenu(`actions-${which}-submenu`);
     },
 
     /**
-     * Keep the "Tree:" flyout inside the window. It starts level with its row
-     * at the bottom of the ⋯ menu, so on a short window (or a zoomed page) it
-     * used to run off the bottom with its last items unreachable: shift it up
-     * as far as needed, and let it scroll when even the whole window height
-     * is not enough.
+     * Keep a ⋯-menu flyout inside the window. It starts level with its row,
+     * so on a short window (or a zoomed page) it used to run off the bottom
+     * with its last items unreachable: shift it up as far as needed, and let
+     * it scroll when even the whole window height is not enough.
      */
-    positionActionsTreeSubmenu(): void {
-        this.positionActionsSubmenu('actions-tree-submenu');
-    },
-
-    /** Keep a ⋯-menu flyout ("Tree:") inside the window. */
     positionActionsSubmenu(id: string): void {
         const sub = document.getElementById(id);
         if (!sub) return;
@@ -410,14 +458,17 @@ export const treeManagementMethods = uiModule({
         sub.style.top = `${baseTop - shift}px`;
     },
 
-    closeActionsTreeSubmenu(): void {
-        const wrap = document.getElementById('actions-tree-wrap');
-        if (!wrap) return;
-        // Closed under the pointer, it must not stay open by hover.
-        if (wrap.classList.contains('submenu-open') && wrap.matches(':hover')) wrap.classList.add('hover-off');
-        wrap.classList.remove('submenu-open');
-        wrap.removeAttribute('data-kbd');
-        document.getElementById('actions-tree-row')?.setAttribute('aria-expanded', 'false');
+    /** Close one flyout of the ⋯ menu, or both. */
+    closeActionsSubmenu(which?: ActionsSubmenu): void {
+        for (const w of which ? [which] : ACTIONS_SUBMENUS) {
+            const wrap = document.getElementById(`actions-${w}-wrap`);
+            if (!wrap) continue;
+            // Closed under the pointer, it must not stay open by hover.
+            if (wrap.classList.contains('submenu-open') && wrap.matches(':hover')) wrap.classList.add('hover-off');
+            wrap.classList.remove('submenu-open');
+            wrap.removeAttribute('data-kbd');
+            document.getElementById(`actions-${w}-row`)?.setAttribute('aria-expanded', 'false');
+        }
     },
 
     // The "Tree:" submenu actions reuse the app's own functions (no duplicated
@@ -537,6 +588,7 @@ export const treeManagementMethods = uiModule({
                 };
             }) },
             { divider: true, lead: blocked, rows: [
+                ...(DataManager.isReadOnly() ? [] : [{ label: strings.treeSwitcher.import, id: 'tree-sheet-import', run: () => this.showImportDialog() }]),
                 { label: strings.treeManager.manageTreesTitle, value: '\u203a', run: () => this.showTreeManagerDialog() },
             ] },
         ]);

@@ -58,15 +58,20 @@ test.describe('menus are mutually exclusive', () => {
 });
 
 /**
- * The ⋯ actions menu, ordered by what the user wants to do: the tree's content
- * (book, sources, anniversaries), the outputs (one Export…, poster, the
- * fly-through), the research and "Tree: {name}" — about the tree and its
- * management (all except Delete, which stays in the tree manager).
+ * The ⋯ actions menu, ordered by how often each is used (menu 1020 §1):
+ * Anniversaries · Sources · Export… · "For the family ›" (book, poster, the
+ * fly-through) · the research · "Tree: {name} ›" · Settings — the last row at
+ * every width (no toolbar ⚙).
  */
 test.describe('actions menu "Tree:" submenu', () => {
     test.use({ viewport: { width: 1280, height: 800 } });
 
-    test('the first level by intent: no Undo / Redo, one Export…, the anniversaries count on its row', async ({ page }) => {
+    /** The first-level rows as shown (flyout contents left out). */
+    const firstLevel = (page: Page) => page.locator('#actions-menu-dropdown').locator(
+        ':scope > .tree-switcher-action:visible, :scope > .actions-submenu-wrap:visible > .actions-submenu-row')
+        .evaluateAll(els => els.map(el => (el as HTMLElement).innerText.replace(/\s+/g, ' ').trim()));
+
+    test('the first level by frequency: no Undo / Redo, one Export… without a subtitle, Settings last', async ({ page }) => {
         await openApp(page);
         await createFirstPerson(page, 'Jan', 'Novak');
         await page.evaluate(() => window.Strom.UI.toggleAdvancedFields(true));
@@ -74,24 +79,128 @@ test.describe('actions menu "Tree:" submenu', () => {
         await page.locator('.actions-menu-btn').click();
         const dropdown = page.locator('#actions-menu-dropdown');
         await expect(dropdown).toHaveClass(/active/);
-        const rows = await dropdown.locator(':scope > .tree-switcher-action:visible, :scope > .actions-tree-wrap:visible > .actions-tree-row')
-            .evaluateAll(els => els.map(el => (el as HTMLElement).innerText.replace(/\s+/g, ' ').trim()));
-        expect(rows[0]).toBe('Family book');
+        const rows = await firstLevel(page);
+        expect(rows[0]).toMatch(/^Anniversaries/);
         expect(rows[1]).toBe('Sources');
-        expect(rows[2]).toMatch(/^Anniversaries/);
-        expect(rows[3]).toBe('Export… whole tree or current view');
-        expect(rows.slice(4, 6)).toEqual(['Poster…', 'Slideshow (TV mode)']);
-        expect(rows[6]).toMatch(/^(Research|Ancestor research)/);
-        expect(rows[7]).toMatch(/^Tree:/);
-        expect(rows[8]).toBe('Settings');
-        expect(rows).toHaveLength(9);
-        // Undo / Redo are in the toolbar, not here.
+        expect(rows[2]).toBe('Export…');
+        expect(rows[3]).toBe('For the family ›');
+        expect(rows[4]).toMatch(/^(Research|Ancestor research)/);
+        expect(rows[5]).toMatch(/^Tree:/);
+        expect(rows[6]).toBe('Settings');
+        expect(rows).toHaveLength(7);
+        // Undo / Redo are in the toolbar, not here; no ⚙ in the toolbar.
         await expect(dropdown.locator('#actions-undo-row, #actions-redo-row')).toHaveCount(0);
+        await expect(page.locator('.actions-toolbar-settings')).toHaveCount(0);
         // Exactly one "Export", and no two "Merge into…" with the same text.
         const all = await dropdown.locator('.tree-switcher-action').evaluateAll(els => els.map(el => (el as HTMLElement).textContent!.replace(/\s+/g, ' ').trim()));
         expect(all.filter(t => t.includes('Export'))).toHaveLength(1);
         const merges = all.filter(t => t.startsWith('Merge'));
         expect(new Set(merges).size).toBe(merges.length);
+    });
+
+    test('For the family ›: Family book, Poster…, Slideshow (TV); hover opens it, one flyout at a time', async ({ page }) => {
+        await openApp(page);
+        await createFirstPerson(page, 'Jan', 'Novak');
+        await page.locator('.actions-menu-btn').click();
+
+        const family = page.locator('#actions-family-submenu');
+        const tree = page.locator('#actions-tree-submenu');
+        await expect(family).toBeHidden();
+        await page.locator('#actions-family-row').hover();
+        await expect(family).toBeVisible();
+        await expect(family).toHaveAttribute('role', 'menu');
+        expect((await family.locator('[role="menuitem"]').allInnerTexts()).map(t => t.trim()))
+            .toEqual(['Family book', 'Poster…', 'Slideshow (TV)']);
+        // Opened by a click, then the other flyout: only one is open.
+        await page.locator('#actions-family-row').click();
+        await expect(page.locator('#actions-family-wrap')).toHaveClass(/submenu-open/);
+        await expect(page.locator('#actions-family-row')).toHaveAttribute('aria-expanded', 'true');
+        await page.evaluate(() => window.Strom.UI.toggleActionsSubmenu('tree'));
+        await expect(page.locator('#actions-tree-wrap')).toHaveClass(/submenu-open/);
+        await expect(page.locator('#actions-family-wrap')).not.toHaveClass(/submenu-open/);
+        await expect(page.locator('#actions-family-row')).toHaveAttribute('aria-expanded', 'false');
+        await page.locator('#actions-tree-row').hover();
+        await expect(tree).toBeVisible();
+        await expect(family).toBeHidden();
+    });
+
+    test('For the family ›: → opens it, ← closes it, Escape closes it first and returns to its row', async ({ page }) => {
+        await openApp(page);
+        await createFirstPerson(page, 'Jan', 'Novak');
+        await page.locator('.actions-menu-btn').click();
+        const dropdown = page.locator('#actions-menu-dropdown');
+        const wrap = page.locator('#actions-family-wrap');
+        const row = page.locator('#actions-family-row');
+        await row.focus();
+        await row.press('ArrowRight');
+        await expect(wrap).toHaveClass(/submenu-open/);
+        await row.press('ArrowLeft');
+        await expect(wrap).not.toHaveClass(/submenu-open/);
+        // ↓ from the open row walks into the flyout: Family book first.
+        await row.press('ArrowRight');
+        await page.keyboard.press('ArrowDown');
+        await expect(page.locator('#actions-book-row')).toBeFocused();
+        // Escape: the flyout closes first, focus back on its row; a second one closes the menu.
+        await page.keyboard.press('Escape');
+        await expect(wrap).not.toHaveClass(/submenu-open/);
+        await expect(dropdown).toHaveClass(/active/);
+        await expect(row).toBeFocused();
+        await page.keyboard.press('Escape');
+        await expect(dropdown).not.toHaveClass(/active/);
+    });
+
+    test('Family book, Poster…, Slideshow and Settings open from their new places', async ({ page }) => {
+        await openApp(page);
+        // The fly-through needs at least two people.
+        await page.getByRole('button', { name: 'Try a sample tree' }).click();
+        await expect(page.locator('.person-card').first()).toBeVisible();
+        const dropdown = page.locator('#actions-menu-dropdown');
+        const viaFamily = async (id: string) => {
+            await page.locator('.actions-menu-btn').click();
+            await page.locator('#actions-family-row').hover();
+            await page.locator(id).click();
+            await expect(dropdown).not.toHaveClass(/active/);
+        };
+        await viaFamily('#actions-book-row');
+        await expect(page.locator('#book-modal')).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#book-modal')).toBeHidden();
+        await viaFamily('#actions-poster-row');
+        await expect(page.locator('#poster-modal')).toBeVisible();
+        await page.evaluate(() => window.Strom.UI.closePosterDialog());
+        // Settings: the last row at 1440 and at 1100 alike.
+        for (const width of [1440, 1100]) {
+            await page.setViewportSize({ width, height: 800 });
+            await page.locator('.actions-menu-btn').click();
+            const rows = await firstLevel(page);
+            expect(rows[rows.length - 1]).toBe('Settings');
+            await page.locator('#actions-settings-row').click();
+            await expect(page.locator('#settings-modal')).toHaveClass(/active/);
+            await page.keyboard.press('Escape');
+            await expect(page.locator('#settings-modal')).not.toHaveClass(/active/);
+        }
+        // Last: the fly-through asks for full screen.
+        await viaFamily('#actions-slideshow-row');
+        await expect(page.locator('body')).toHaveClass(/slideshow-mode/);
+        await page.evaluate(() => window.Strom.UI.stopSlideshow());
+    });
+
+    test('Import… is in the tree switcher (it makes a new tree), not in Actions', async ({ page }) => {
+        await openApp(page);
+        await createFirstPerson(page, 'Jan', 'Novak');
+        await page.locator('.actions-menu-btn').click();
+        await expect(page.locator('#actions-menu-dropdown')).not.toContainText('Import');
+        await page.keyboard.press('Escape');
+
+        await page.locator('.tree-switcher-btn').click();
+        const switcher = page.locator('#tree-switcher-dropdown');
+        const actions = await switcher.locator('.tree-switcher-action:visible').allInnerTexts();
+        expect(actions.map(t => t.trim())).toEqual(['Import…', 'Manage trees...']);
+        await page.locator('#tree-switcher-import').click();
+        await expect(switcher).not.toHaveClass(/active/);
+        const modal = page.locator('#import-modal');
+        await expect(modal).toHaveClass(/active/);
+        await expect(modal.locator('.menu-option:visible .option-title')).toContainText(['Import JSON', 'Import GEDCOM']);
     });
 
     test('names the active tree and carries the tree\'s actions in order; Delete is absent', async ({ page }) => {
@@ -508,5 +617,34 @@ test.describe('tree manager ⋯ menu on desktop: the tree-action groups', () => 
         await menu.evaluate(el => { el.scrollTop = el.scrollHeight; el.dispatchEvent(new Event('scroll')); });
         await expect(menu).not.toHaveClass(/can-scroll/);
         await expect(menu.locator('.tree-row-menu-more')).toBeHidden();
+    });
+});
+
+/** Menu 1020 §9: the shortcuts shown next to their rows (no new shortcuts). */
+test.describe('shortcut chips', () => {
+    test('Actions: Ctrl+S / ⌘S on the storage row, in aria-keyshortcuts too', async ({ page }) => {
+        await page.setViewportSize({ width: 1100, height: 800 });
+        await openApp(page);
+        await createFirstPerson(page, 'Jan', 'Novak');
+        await expect(page.locator('body')).toHaveClass(/storage-unsaved/);
+        await page.locator('.actions-menu-btn').click();
+        const row = page.locator('#actions-storage-row');
+        await expect(row).toBeVisible();
+        await expect(row.locator('kbd.menu-kbd')).toHaveText(/^(Ctrl\+S|⌘S)$/);
+        await expect(row).toHaveAttribute('aria-keyshortcuts', /^(Control|Meta)\+S$/);
+        // No subtitle under the state any more.
+        await expect(row.locator('.actions-storage-title')).toHaveText('Only in browser');
+        await expect(row.locator('.actions-storage-sub')).toHaveCount(0);
+    });
+
+    test('More with a mouse: Ctrl+Z / Ctrl+⇧+Z on the Undo | Redo tiles', async ({ page }) => {
+        await page.setViewportSize({ width: 900, height: 800 });
+        await openApp(page);
+        await createFirstPerson(page, 'Jan', 'Novak');
+        await page.locator('#bb-view-more').click();
+        await expect(page.locator('#sheet-undo .menu-kbd')).toBeVisible();
+        await expect(page.locator('#sheet-undo .menu-kbd')).toHaveText(/^(Ctrl\+Z|⌘Z)$/);
+        await expect(page.locator('#sheet-redo .menu-kbd')).toHaveText(/^(Ctrl\+⇧\+Z|⇧⌘Z)$/);
+        await expect(page.locator('#sheet-redo')).toHaveAttribute('aria-keyshortcuts', /^(Control|Meta)\+Shift\+Z$/);
     });
 });

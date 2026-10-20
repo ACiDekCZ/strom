@@ -343,12 +343,14 @@ test.describe('existing tree on desktop', () => {
         expect((await readSettings(page)).researchNewDismissed).toBe(true);
         expect(await page.evaluate(() => document.activeElement?.classList.contains('person-card'))).toBe(true);
 
-        // Arrows: from the trigger, ArrowUp lands on the last row — "Strom:" (1440px:
-        // no Settings row) — and once more on the item above it.
+        // Arrows: from the trigger, ArrowUp lands on the last row — Settings —
+        // then "Strom:" and once more on the item above it.
         const trigger = page.locator('.actions-menu-btn');
         await trigger.focus();
         await page.keyboard.press('Enter');
         await expect(page.locator('#actions-menu-dropdown')).toHaveClass(/active/);
+        await page.keyboard.press('ArrowUp');
+        await expect(page.locator('#actions-settings-row')).toBeFocused();
         await page.keyboard.press('ArrowUp');
         await expect(page.locator('#actions-tree-row')).toBeFocused();
         await page.keyboard.press('ArrowUp');
