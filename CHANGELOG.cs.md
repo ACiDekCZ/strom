@@ -4,7 +4,7 @@
 
 ## 3.14.0
 
-*Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
+*Vydáno 21. října 2026.*
 
 - **Přečíst dokument**: nabídka *Výzkum* má položku *Přečíst dokument…* a nabídka osoby *Přečíst dokument k této osobě…*. Agent výzkumu přečte fotku, sken nebo PDF (víc souborů jsou stránky jednoho dokumentu) a dá přepis, překlad a výklad, se záznamy orámovanými na stránce a vyznačenými nečitelnými místy. Jeden čtenář je rychlejší a levnější, dva nezávislí čtenáři jsou spolehlivější a ukážou, kde se liší. Okno jde zavřít, čtení pokračuje a výsledek se ohlásí. Čtení potřebuje výzkum 1.18.0 nebo novější s agentem Claude a běží na vlastním předplatném agenta.
 - **Navrhnout do stromu**: z přečteného dokumentu jde každou osobu přidat jako novou, propojit s osobou ve stromu, nebo vynechat; propojená osoba dostane jen to, co je nové, a odlišný údaj zůstane jako další podoba. Události a vztahy jdou zaškrtnout a před zápisem může dokument přečíst ještě druhý čtenář. Bez potvrzení se nic nezapíše a jeden krok *Zpět* vrátí osoby, pramen s přepisem, výřez záznamu i citace. Propojit jde i prarodiče, kmotry a další příbuzné z dokumentu: u každého je předvybraná nejpravděpodobnější osoba ve stromu, nalezená i přes příbuzné propojené vedle něj; kdo ve stromu zemřel před narozením, křtem nebo sňatkem čtené osoby, se nenabízí. Propojení bez vybrané osoby to řekne na své kartě s *Vybrat…* a nic nezapíše, dokud osoba není vybraná.

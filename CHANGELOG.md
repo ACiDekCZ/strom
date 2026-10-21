@@ -4,7 +4,7 @@ English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md)
 
 ## 3.14.0
 
-*This version is in preparation; this section grows with every test version.*
+*Released 21 October 2026.*
 
 - **Read a document**: the *Research* menu has *Read a document…*, and the person menu *Read a document for this person…*. The research agent reads a photo, scan or PDF (several files are pages of one document) and gives a transcription, a translation and an explanation, with the entries framed on the page and illegible spots marked. One reader is faster and cheaper; two independent readers are more reliable and show where they differ. The window can be closed while reading continues, and the result is announced. Reading needs research 1.18.0 or newer with the Claude agent, and runs on the agent's own subscription.
 - **Suggest for the tree**: from a reading, each person can be added as new, linked to a person in the tree, or left out; a linked person gains only what is new, and a differing value is kept as another form. Events and relationships can be ticked, and a second reader can read the document before anything is written. Nothing is added without confirmation, and one Undo step takes back the people, the source with the transcription, the crop of the entry and the citations. Grandparents, godparents and other relatives named in the document can be linked too, each with the likeliest person in the tree already picked, found also through the relatives linked beside them; someone in the tree who died before the person was born, baptised or married is not picked. A link with nobody chosen says so on its card with *Choose…* and writes nothing until a person is chosen.
