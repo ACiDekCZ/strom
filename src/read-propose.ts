@@ -13,6 +13,7 @@ import type { ReadEntry, ReadEvent, ReadPerson, ReadVariant } from './research-r
 import { researchPersonRef } from './research-link.js';
 import { gedcomTagEventType, parseGedcomDate } from './ged-parser.js';
 import { quickMatch, QuickMatchReason, normalizeName, stringSimilarity, compareEventDates } from './merge/matching.js';
+import { parseFlexDate } from './dates.js';
 import { sameSurname } from './surnames.js';
 
 export type ProposeChoice = 'new' | 'link' | 'skip';
@@ -38,6 +39,8 @@ export interface ProposeCandidate {
     reasons: ProposeReason[];
     /** The research's words why ('' = none). */
     why: string;
+    /** Found through relatives by the surname alone (no given name, no date): a candidate on Link, not the default. */
+    tentative?: boolean;
 }
 
 /** One person's choice in the suggestion. */
@@ -213,11 +216,11 @@ export function findCandidate(entry: ReadEntry, p: ReadPerson, data: StromData, 
     const hits = researchHits(p, data).filter(h => !taken.has(h.id));
     const research = hits.length > 0 ? strictlyBest(hits) : null;
     if (research) return asResearch(research);
-    return hits.length > 0 ? null : appCandidate(p, data, draft, taken, prior);
+    return hits.length > 0 ? null : appCandidate(entry, p, data, draft, taken, prior);
 }
 
 /** The app's own matching: a person written from this entry before, else the one tree person above the threshold. */
-function appCandidate(p: ReadPerson, data: StromData, draft: StromData, taken: ReadonlySet<string>, prior: readonly Person[]): ProposeCandidate | null {
+function appCandidate(entry: ReadEntry, p: ReadPerson, data: StromData, draft: StromData, taken: ReadonlySet<string>, prior: readonly Person[]): ProposeCandidate | null {
     const me = draft.persons[draftId(p.ref)];
     if (!me || !`${me.firstName}${me.lastName}`.trim()) return null;
     // Written from this very entry before (they cite its source): the same name is the same person.
@@ -227,10 +230,11 @@ function appCandidate(p: ReadPerson, data: StromData, draft: StromData, taken: R
         const q = quickMatch(me, same[0], draft, data);
         return { id: same[0].id, byResearch: false, score: Math.max(q.score, MATCH_THRESHOLD), reasons: q.reasons, why: '' };
     }
+    const alive = aliveDates(entry, p.ref);
     let best: ProposeCandidate | null = null;
     let tie = false;
     for (const other of Object.values(data.persons)) {
-        if (other.isPlaceholder || taken.has(other.id)) continue;
+        if (other.isPlaceholder || taken.has(other.id) || diedBefore(other, alive)) continue;
         const q = quickMatch(me, other, draft, data);
         if (q.score < MATCH_THRESHOLD) continue;
         if (!best || q.score > best.score) { best = { id: other.id, byResearch: false, score: q.score, reasons: q.reasons, why: '' }; tie = false; }
@@ -238,7 +242,7 @@ function appCandidate(p: ReadPerson, data: StromData, draft: StromData, taken: R
     }
     // Two tree persons fit equally: the choice is the user's.
     if (tie) return null;
-    return best ?? givenOnlyCandidate(me, data, draft, taken);
+    return best ?? givenOnlyCandidate(me, alive, data, draft, taken);
 }
 
 /**
@@ -246,10 +250,10 @@ function appCandidate(p: ReadPerson, data: StromData, draft: StromData, taken: R
  * of a similar given name born on the same day (the quick match wants a
  * surname as well).
  */
-function givenOnlyCandidate(me: Person, data: StromData, draft: StromData, taken: ReadonlySet<string>): ProposeCandidate | null {
+function givenOnlyCandidate(me: Person, alive: readonly string[], data: StromData, draft: StromData, taken: ReadonlySet<string>): ProposeCandidate | null {
     if ((me.lastName ?? '').trim() || !(me.firstName ?? '').trim() || !me.birthDate) return null;
     const fits = Object.values(data.persons).filter(other => !other.isPlaceholder && !taken.has(other.id)
-        && compareEventDates(me.birthDate, other.birthDate) === 'day' && relativeSupport(me, other, data)?.name);
+        && compareEventDates(me.birthDate, other.birthDate) === 'day' && relativeSupport(me, other, alive, data)?.name);
     if (fits.length !== 1) return null;
     const score = Math.max(quickMatch(me, fits[0], draft, data).score, MATCH_THRESHOLD);
     return { id: fits[0].id, byResearch: false, score, reasons: ['name', 'birth'], why: '' };
@@ -302,14 +306,40 @@ function treeNameForms(x: Person): { given: string[]; surnames: string[] } {
 
 const NAME_SIMILAR = 0.8;
 
+/** The dates the entry has a person alive on: its own events (birth, baptism, marriage…), not its death or burial. */
+function aliveDates(entry: Pick<ReadEntry, 'persons' | 'events'>, ref: string): string[] {
+    return entry.events.filter(ev => !['DEAT', 'BURI', 'CREM', 'PROB'].includes(ev.type.toUpperCase()) && eventPrincipals(entry, ev).includes(ref))
+        .map(readEventDate).filter(Boolean);
+}
+
+/**
+ * The tree person died before a day the read person was alive on (a child
+ * who died young and whose name the next one was given): never the same.
+ * Plain dates only, compared to the precision both give.
+ */
+function diedBefore(other: Person, alive: readonly string[]): boolean {
+    const death = parseFlexDate(other.deathDate);
+    if (!death || death.end || death.qualifier === '~' || death.qualifier === '>') return false;
+    return alive.some(date => {
+        const at = parseFlexDate(date);
+        if (!at || at.end || at.qualifier === '~' || at.qualifier === '<') return false;
+        if (death.year !== at.year) return death.year < at.year;
+        if (death.month === undefined || at.month === undefined || death.month !== at.month) {
+            return death.month !== undefined && at.month !== undefined && death.month < at.month;
+        }
+        return death.day !== undefined && at.day !== undefined && death.day < at.day;
+    });
+}
+
 /**
  * What beyond the family structure says a tree relative is the read person:
  * the given name (whole, or one name of several), the birth to the day or
  * month, a surname when the given names do not disagree; null when nothing
- * does or a date rules it out.
+ * does or a date rules it out (a birth or death that differs, a death before
+ * the read person's own events).
  */
-function relativeSupport(me: Person, other: Person, data: StromData): { name: boolean; birth: boolean } | null {
-    if (!gendersCompatible(me.gender, other.gender)) return null;
+function relativeSupport(me: Person, other: Person, alive: readonly string[], data: StromData): { name: boolean; given: boolean; birth: boolean } | null {
+    if (!gendersCompatible(me.gender, other.gender) || diedBefore(other, alive)) return null;
     const birth = compareEventDates(me.birthDate, other.birthDate);
     if (birth === 'conflict' || compareEventDates(me.deathDate, other.deathDate) === 'conflict') return null;
     const forms = treeNameForms(other);
@@ -323,7 +353,7 @@ function relativeSupport(me: Person, other: Person, data: StromData): { name: bo
     const givenDiffers = !!given && forms.given.length > 0 && !givenFits;
     const birthFits = birth === 'day' || birth === 'month';
     const name = givenFits || (surnameFits && !givenDiffers);
-    return name || birthFits ? { name, birth: birthFits } : null;
+    return name || birthFits ? { name, given: givenFits, birth: birthFits } : null;
 }
 
 /**
@@ -359,19 +389,22 @@ function treeRelatives(x: Person, role: 'parent' | 'child' | 'partner', data: St
  * The tree person a read person is through the entry's relatives already
  * matched: the father's child, the child's mother, the husband's wife, when
  * exactly one such relative fits by name or birth (two or more: the user's
- * choice). Works without a surname (a mother read by her given name only).
+ * choice). Works without a surname (a mother read by her given name only);
+ * a fit by the surname alone is tentative (offered on Link, not linked).
  */
 function relativeCandidate(entry: ReadEntry, p: ReadPerson, data: StromData, draft: StromData, found: ReadonlyMap<string, ProposeCandidate>, taken: ReadonlySet<string>): ProposeCandidate | null {
     const me = draft.persons[draftId(p.ref)];
     if (!me) return null;
     // Tree person → the entry relations that lead to it.
-    const hits = new Map<PersonId, { rels: Set<number>; reasons: Set<ProposeReason> }>();
+    const alive = aliveDates(entry, p.ref);
+    const hits = new Map<PersonId, { rels: Set<number>; reasons: Set<ProposeReason>; sure: boolean }>();
     linkedRelatives(entry, p.ref, data, found).forEach(({ index: i, relatives, reason }) => {
         for (const other of relatives) {
             if (taken.has(other.id)) continue;
-            const support = relativeSupport(me, other, data);
+            const support = relativeSupport(me, other, alive, data);
             if (!support) continue;
-            const hit = hits.get(other.id) ?? { rels: new Set<number>(), reasons: new Set<ProposeReason>() };
+            const hit = hits.get(other.id) ?? { rels: new Set<number>(), reasons: new Set<ProposeReason>(), sure: false };
+            if (support.given || support.birth) hit.sure = true;
             hit.rels.add(i);
             hit.reasons.add(reason);
             if (support.name) hit.reasons.add('name');
@@ -387,7 +420,8 @@ function relativeCandidate(entry: ReadEntry, p: ReadPerson, data: StromData, dra
     const [id, hit] = best[0];
     const order: ProposeReason[] = ['name', 'birth', 'parents', 'child', 'partner'];
     const score = Math.max(quickMatch(me, data.persons[id], draft, data).score, MATCH_THRESHOLD);
-    return { id, byResearch: false, score, reasons: order.filter(r => hit.reasons.has(r)), why: '' };
+    const c: ProposeCandidate = { id, byResearch: false, score, reasons: order.filter(r => hit.reasons.has(r)), why: '' };
+    return hit.sure ? c : { ...c, tentative: true };
 }
 
 /**
@@ -404,6 +438,8 @@ export function initialPropose(readId: string, entry: ReadEntry, data: StromData
     const family = entryFamily(entry);
     const found = new Map<string, ProposeCandidate>();
     const take = (ref: string, c: ProposeCandidate): void => { taken.add(c.id); found.set(ref, c); };
+    // Tentative fits (the surname alone): kept for Link, but no one is found through them.
+    const tentative = new Map<string, ProposeCandidate>();
     // The entry's own people pick their candidates first; no two persons link to one tree person.
     const order = [...entry.persons].sort((a, b) => Number(!family.has(a.ref)) - Number(!family.has(b.ref)));
     const hitsOf = new Map(order.map(p => [p.ref, researchHits(p, data)]));
@@ -415,7 +451,7 @@ export function initialPropose(readId: string, entry: ReadEntry, data: StromData
     }
     for (const p of order) {
         if (found.has(p.ref) || open(p.ref).length > 0) continue;
-        const c = appCandidate(p, data, draft, taken, prior);
+        const c = appCandidate(entry, p, data, draft, taken, prior);
         if (c) take(p.ref, c);
     }
     for (let more = true; more;) {
@@ -431,7 +467,8 @@ export function initialPropose(readId: string, entry: ReadEntry, data: StromData
                 c = hits.length === 1 ? hits[0] : fit.length === 1 ? fit[0] : null;
                 if (c) c = asResearch(c);
             } else c = relativeCandidate(entry, p, data, draft, found, taken);
-            if (c) { take(p.ref, c); more = true; }
+            if (c?.tentative) { tentative.set(p.ref, c); c = null; }
+            if (c) { take(p.ref, c); tentative.delete(p.ref); more = true; }
         }
         if (more) continue;
         // Nothing else decides: a strictly best research score, one person at a time (the others may follow it).
@@ -445,9 +482,12 @@ export function initialPropose(readId: string, entry: ReadEntry, data: StromData
         }
     }
     const persons: Record<string, ProposePerson> = {};
+    for (const [ref, c] of tentative) {
+        if (!found.has(ref) && !taken.has(c.id)) take(ref, c);
+    }
     for (const p of entry.persons) {
         const candidate = found.get(p.ref) ?? null;
-        const choice: ProposeChoice = !family.has(p.ref) && !candidate?.byResearch ? 'skip' : candidate ? 'link' : 'new';
+        const choice: ProposeChoice = !family.has(p.ref) && !candidate?.byResearch ? 'skip' : candidate && !candidate.tentative ? 'link' : 'new';
         persons[p.ref] = {
             ref: p.ref,
             choice,

@@ -340,6 +340,40 @@ describe('family the research gives as "other", and persons found through relati
         });
     });
 
+    it('the father\'s child of the read name who died before the read child was born or baptised: not that child', () => {
+        const build = (death: string): StromData => {
+            const data = withPersons(person('v', 'Václav', 'Novák', 'male', { refn: 'P0001' }), person('a', 'Anna', 'Dvořáková', 'female'),
+                person('j', 'Jan', 'Novák', 'male', { deathDate: death }));
+            spouses(data, 'u1', 'v', 'a', ['j']);
+            return data;
+        };
+        const entry: ReadEntry = { ...baptism(), persons: baptism().persons.slice(0, 2), events: [birth('p1', '10 MAR 1846')], relations: [{ type: 'parent', parent: 'p2', child: 'p1' }] };
+        const s = initialPropose(READ, entry, build('1844-05-01'));
+        expect(s.persons.p2.target).toBe('v');
+        expect(s.persons.p1).toMatchObject({ choice: 'new', target: '', candidate: null });
+        // The baptism's date counts as well; a death year alone before it rules out too.
+        const baptised: ReadEntry = { ...entry, events: baptism().events };
+        expect(initialPropose(READ, baptised, build('1845')).persons.p1).toMatchObject({ choice: 'new', candidate: null });
+        // A death after the birth, or one the dates cannot place before it: still the child.
+        expect(initialPropose(READ, entry, build('1846-07-01')).persons.p1).toMatchObject({ choice: 'link', target: 'j' });
+        expect(initialPropose(READ, entry, build('1846')).persons.p1).toMatchObject({ choice: 'link', target: 'j' });
+    });
+
+    it('a child read without a given name: the father\'s only child by the surname alone is offered on Link, not linked', () => {
+        const data = withPersons(person('v', 'Václav', 'Novák', 'male', { refn: 'P0001' }), person('a', 'Anna', 'Dvořáková', 'female'),
+            person('j', 'Jan', 'Novák', 'male', { birthDate: '1846-03-10' }));
+        spouses(data, 'u1', 'v', 'a', ['j']);
+        const entry: ReadEntry = { ...baptism(), persons: [rp('p1', 'child', '', 'Novák'), baptism().persons[1]], events: [], relations: [{ type: 'parent', parent: 'p2', child: 'p1' }] };
+        const s = initialPropose(READ, entry, data);
+        expect(s.persons.p2.target).toBe('v');
+        expect(s.persons.p1).toMatchObject({ choice: 'new', target: '', candidate: { id: 'j', tentative: true } });
+        // The given name or the birth day as well: linked.
+        const named: ReadEntry = { ...entry, persons: [rp('p1', 'child', 'Jan', 'Novák'), baptism().persons[1]] };
+        expect(initialPropose(READ, named, data).persons.p1).toMatchObject({ choice: 'link', target: 'j' });
+        const dated: ReadEntry = { ...entry, events: [birth('p1', '10 MAR 1846')] };
+        expect(initialPropose(READ, dated, data).persons.p1).toMatchObject({ choice: 'link', target: 'j' });
+    });
+
     it('a person read by the given name only: the one tree person of that name born the same day', () => {
         const data = withPersons(person('x', 'Barbora', 'Kubátová', 'female', { birthDate: '1873-04-19' }), person('y', 'Barbora', 'Malá', 'female', { birthDate: '1873' }));
         const entry: ReadEntry = { ...baptism(), persons: [rp('p1', 'child', 'Barbora', '')], events: [birth('p1', '19 APR 1873')], relations: [] };
