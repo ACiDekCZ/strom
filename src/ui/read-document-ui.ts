@@ -295,10 +295,6 @@ function whyReason(accepts: ReadAccepts): string {
     return reason;
 }
 
-const QR_GLYPH = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">'
-    + '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>'
-    + '<path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/></svg>';
-
 export const readDocumentMethods = uiModule({
     // ==================== WHEN IT IS OFFERED ====================
 
@@ -814,8 +810,7 @@ export const readDocumentMethods = uiModule({
                     <div class="read-drop-sub">${esc(t.dropSub)}</div>
                     <button type="button" class="secondary read-pick" data-act="pick">${esc(t.pick)}</button>
                     ${limits ? `<div class="read-limits">${esc(limits)}</div>` : ''}
-                </div>
-                <div class="read-phone" aria-disabled="true">${QR_GLYPH}<span>${esc(t.phone)}</span></div>`;
+                </div>`;
         } else {
             const refusals = this.readPageRefusals();
             const taken = s.pages.filter((_, i) => !refusals[i]);

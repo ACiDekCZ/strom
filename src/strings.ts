@@ -4543,6 +4543,7 @@ const stringsEN = {
         drop: 'Drop a photo, scan or PDF here',
         dropSub: 'Several files = pages of one document',
         pick: 'Choose files…',
+        /** Not shown until taking a photo with the phone exists. */
         phone: 'Take a photo with the phone · coming',
         limits: (types: string, pages: number, mb: number) => `${types} · at most ${pages} pages · up to ${mb} MB per file`,
         nothingYet: 'Nothing added yet',
@@ -9182,6 +9183,7 @@ const stringsCZ: StringsType = {
         drop: 'Přetáhnout sem fotku, sken nebo PDF',
         dropSub: 'Víc souborů = strany jednoho dokumentu',
         pick: 'Vybrat soubory…',
+        /** Not shown until taking a photo with the phone exists. */
         phone: 'Vyfotit telefonem · připravuje se',
         limits: (types: string, pages: number, mb: number) => `${types} · nejvýš ${pages} stran · do ${mb} MB na soubor`,
         nothingYet: 'Zatím nic vloženo',
@@ -13747,6 +13749,7 @@ const stringsDE: StringsType = {
         drop: 'Foto, Scan oder PDF hierher ziehen',
         dropSub: 'Mehrere Dateien = Seiten eines Dokuments',
         pick: 'Dateien wählen…',
+        /** Not shown until taking a photo with the phone exists. */
         phone: 'Mit dem Telefon fotografieren · in Vorbereitung',
         limits: (types: string, pages: number, mb: number) => `${types} · höchstens ${pages} Seiten · bis ${mb} MB pro Datei`,
         nothingYet: 'Noch nichts eingefügt',

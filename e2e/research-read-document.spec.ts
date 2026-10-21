@@ -100,6 +100,8 @@ test.describe('Read a document', () => {
         await item(page).click();
         await expect(dialog(page).locator('#read-title')).toHaveText('Read a document');
         await expect(dialog(page).locator('#read-drop')).toBeVisible();
+        // Taking a photo with the phone does not exist yet: no row promises it.
+        await expect(dialog(page)).not.toContainText('Take a photo with the phone');
         await page.keyboard.press('Escape');
         await expect(dialog(page)).toHaveCount(0);
 
