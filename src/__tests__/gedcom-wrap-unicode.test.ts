@@ -95,6 +95,88 @@ describe('GEDCOM CONC wrapping keeps characters whole', () => {
     });
 });
 
+/**
+ * The research's reader (strom-research src/gedcom/parse.ts): a line's value is
+ * everything after the one delimiter, CONC appends it as it is.
+ */
+function researchConcat(ged: string, tag: string): string[] {
+    const LINE = /^\s*(\d{1,2})\s+(?:(@[^@\s]+@)\s+)?([A-Za-z0-9_]+)(?:\s(.*))?$/;
+    const out: string[] = [];
+    let open = -1;
+    let level = -1;
+    for (const raw of ged.split('\n')) {
+        const m = LINE.exec(raw);
+        if (!m) continue;
+        const lvl = Number(m[1]);
+        const value = (m[4] ?? '').replace(/@@/g, '@');
+        if (open >= 0 && lvl === level + 1 && (m[3] === 'CONC' || m[3] === 'CONT')) {
+            out[open] += (m[3] === 'CONT' ? '\n' : '') + value;
+            continue;
+        }
+        open = -1;
+        if (m[3] === tag) { open = out.push(value) - 1; level = lvl; }
+    }
+    return out;
+}
+
+/** Values where every cut that fits sits beside a space. */
+const SPACED = [
+    'ř'.repeat(150) + ' ' + '🔴 '.repeat(100) + 'z',
+    'a '.repeat(150) + 'z',
+    'a '.repeat(400) + 'z',
+    '🔴 '.repeat(120) + '🟢',
+    '👨‍👩‍👧 '.repeat(60) + 'end',
+    'x' + ' é'.repeat(200),
+    '@ '.repeat(150) + '@',
+    'a  '.repeat(150) + 'z',
+];
+
+describe('GEDCOM CONC wrapping keeps every space', () => {
+    it('a run where every cut is beside a space round-trips exactly (app and research readers)', () => {
+        const base = importGed(GED);
+        const person = Object.values(base.persons)[0];
+        const source = Object.values(base.sources ?? {})[0];
+        for (const value of SPACED) {
+            person.notes = value + '\n' + value;
+            person.birthPlace = value;
+            source.title = value;
+            for (const ged of [
+                exportToGedcom(base).content,
+                exportToGedcom(base, 'T', { research: { id: '0b4c7a52-1c1f-4d7e-9a53-2f4a3c1e8b10' } }).content,
+            ]) {
+                expect(ged).toContain(' CONC ');
+                expectWholeLines(ged);
+                // A space never ends a line: both readers would drop it.
+                for (const line of ged.split('\n')) expect(line).not.toMatch(/ $/);
+                const back = importGed(ged);
+                const p = Object.values(back.persons)[0];
+                expect(p.notes).toBe(person.notes);
+                expect(p.birthPlace).toBe(value);
+                expect(Object.values(back.sources ?? {})[0].title).toBe(value);
+                expect(researchConcat(ged, 'TITL')).toContain(value);
+                expect(researchConcat(ged, 'PLAC')).toContain(value);
+                expect(researchConcat(ged, 'NOTE')).toContain(person.notes);
+            }
+        }
+    });
+
+    it('ordinary text still never puts a space at either end of a line', () => {
+        const base = importGed(GED);
+        const person = Object.values(base.persons)[0];
+        person.notes = 'Lorem ipsum dolor sit amet, 🔴 consectetur 🟢 adipiscing elit. '.repeat(12).trim();
+        const ged = exportToGedcom(base).content;
+        const conc = ged.split('\n').filter(l => / CONC /.test(l));
+        expect(conc.length).toBeGreaterThan(1);
+        for (const line of conc) expect(line).not.toMatch(/ CONC  | $/);
+        expect(Object.values(importGed(ged).persons)[0].notes).toBe(person.notes);
+    });
+
+    it('reads a leading space on a CONC line written by another program', () => {
+        const ged = GED.replace('2 PLAC Somewhere', '2 PLAC Some\n3 CONC  where');
+        expect(Object.values(importGed(ged).persons)[0].birthPlace).toBe('Some where');
+    });
+});
+
 describe('clipText', () => {
     it('never ends on half of a surrogate pair', () => {
         expect(clipText('ab🔴cd', 3)).toBe('ab');

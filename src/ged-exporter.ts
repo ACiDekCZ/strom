@@ -310,10 +310,13 @@ function isClusterBoundary(text: string, i: number): boolean {
 }
 
 /**
- * Split a value into byte-bounded chunks. A cut NEVER sits next to a space:
- * a chunk that ended (or started) with one would lose it in any parser that
- * trims line values — ours included — and two words would run together.
- * Nor does it tear a character apart (isClusterBoundary).
+ * Split a value into byte-bounded chunks. A cut sits next to a space only when
+ * nothing else fits: a chunk that ends (or starts) with one loses it in any
+ * parser that trims line values, and two words run together. When every cut
+ * is beside a space ("a a a …", "🔴 🔴 …"), the space starts the next CONC
+ * line: readers that take the value after the one delimiter (ours, the
+ * research's) keep it, a trailing space would be lost by both.
+ * Nor does a cut tear a character apart (isClusterBoundary).
  */
 function chunkValue(text: string): string[] {
     if (byteLen(text) <= MAX_VALUE_BYTES) return [text];
@@ -337,18 +340,21 @@ function chunkValue(text: string): string[] {
             break;
         }
         // Back off to a cut beside no space and inside no character; failing
-        // that (a run of spaces), inside no character; failing that (one
-        // character longer than a line), at least between whole code points.
+        // that, right before a space that follows no space (it leads the next
+        // line); failing that (a run of spaces), inside no character; failing
+        // that (one character longer than a line), between whole code points.
         // An escaped '@@' stays on one line: readers unescape line by line.
         const besideSpace = (i: number): boolean => text[i] === ' ' || text[i - 1] === ' ';
+        const spaceLeads = (i: number): boolean => text[i] === ' ' && text[i - 1] !== ' ';
         const whole = (i: number): boolean => isClusterBoundary(text, i) && !(text[i] === '@' && text[i - 1] === '@');
-        let cut = end;
-        while (cut > start + 1 && (besideSpace(cut) || !whole(cut))) cut--;
-        if (besideSpace(cut) || !whole(cut)) {
-            cut = end;
-            while (cut > start + 1 && !whole(cut)) cut--;
-            if (!whole(cut)) cut = end;
-        }
+        const backOff = (ok: (i: number) => boolean): number | undefined => {
+            for (let i = end; i > start; i--) if (ok(i)) return i;
+            return undefined;
+        };
+        const cut = backOff(i => !besideSpace(i) && whole(i))
+            ?? backOff(i => spaceLeads(i) && whole(i))
+            ?? backOff(whole)
+            ?? end;
         chunks.push(text.slice(start, cut));
         start = cut;
     }

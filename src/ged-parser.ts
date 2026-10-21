@@ -493,7 +493,7 @@ export function researchEdgeFromLines(block: RawResearchBlock): ResearchEdge | n
             if (level === 3 && tag === 'TITL') book.title = v;
             else if (level === 3 && tag === 'DATE') Object.assign(book, researchYears(v));
             else if (level === 3 && tag === '_ACCESS') { const w = researchWord(v); if (w) book.access = w; }
-            else if (level === 4 && sub === 'TITL' && (tag === 'CONC' || tag === 'CONT')) book.title += (tag === 'CONT' ? ' ' : '') + v;
+            else if (level === 4 && sub === 'TITL' && (tag === 'CONC' || tag === 'CONT')) book.title += tag === 'CONT' ? ' ' + v : value;
         } else if (item.tag === '_TASK') {
             const task = target as ResearchEdgeTask;
             if (level === 3) {
@@ -505,8 +505,8 @@ export function researchEdgeFromLines(block: RawResearchBlock): ResearchEdge | n
                 else if (tag === '_UNTIL' && v) task.until = researchIsoDate(v) || v;
                 else if (tag === 'NOTE') task.note = v;
             } else if (level === 4 && (tag === 'CONC' || tag === 'CONT')) {
-                if (sub === 'TITL') task.title += (tag === 'CONT' ? ' ' : '') + v;
-                else if (sub === 'NOTE') task.note = (task.note ?? '') + (tag === 'CONT' ? '\n' : '') + v;
+                if (sub === 'TITL') task.title += tag === 'CONT' ? ' ' + v : value;
+                else if (sub === 'NOTE') task.note = (task.note ?? '') + (tag === 'CONT' ? '\n' + v : value);
             }
         } else if (item.tag === '_SESSIONS' && level === 3) {
             const sessions = target as NonNullable<ResearchEdge['sessions']>;
@@ -1392,8 +1392,12 @@ function preprocessGedcomLines(lines: string[]): {
         const match = line.match(/^(\d+)\s+(@[^@\s]+@|\w+)\s*(.*)?$/);
         if (!match) continue;
         let tag = match[2];
+        // A CONC line continues its value mid-text: what follows the one
+        // delimiter is the text, a leading space included (a writer with no
+        // other place to cut puts it there; trimming glued two words together).
+        const conc = tag === 'CONC' ? /^\d+\s+CONC (.*)$/.exec(line) : null;
         // GEDCOM escapes a literal '@' as '@@' (pointers never contain it).
-        const value = (match[3] || '').trim().replace(/@@/g, '@');
+        const value = (conc ? conc[1].trimEnd() : (match[3] || '').trim()).replace(/@@/g, '@');
         // GEDCOM 7 shared-note pointer: the same thing as a NOTE pointer.
         if (tag === 'SNOTE' && GED_POINTER.test(value)) tag = 'NOTE';
         parsed.push({ level: parseInt(match[1]), tag, value });
