@@ -302,6 +302,63 @@ test.describe('Read a document: suggest for the tree', () => {
         await expect(apply(d)).toHaveText('Add to tree (0 new people, 3 facts)');
     });
 
+    test('Link with nobody chosen: each such card says so, the button waits; chosen or New, it writes; a grandparent given as "other" is New', async ({ page }) => {
+        const base = baptism();
+        const e = (base.entries as Record<string, unknown>[])[0];
+        await setup(page, baptism({}, {
+            persons: [...(e.persons as unknown[]),
+                { ref: 'p5', role: 'other', roleText: 'father\'s father', given: 'Bohumil', surname: 'Fíšek', written: 'Bohumili Fíšek', sex: 'M' }],
+            relations: [...(e.relations as unknown[]), { type: 'parent', parent: 'p5', child: 'p2' }],
+        }));
+        const d = await openPropose(page);
+        // The research's match, the app's match, nobody similar, the grandfather (family, not a witness).
+        await expect(cardOf(d, 'p2').locator('.read-p-match')).toContainText('per the research');
+        await expect(cardOf(d, 'p3').locator('.read-p-match')).toContainText('Anna Svobodová');
+        await expect(cardOf(d, 'p1').locator('.read-p-seg-btn.is-on')).toHaveText('New');
+        await expect(cardOf(d, 'p5').locator('.read-p-seg-btn.is-on')).toHaveText('New');
+        await expect(cardOf(d, 'p4').locator('.read-p-seg-btn.is-on')).toHaveText('No');
+        await expect(apply(d)).toHaveText('Add to tree (2 new people, 5 facts)');
+
+        await cardOf(d, 'p1').locator('[data-choice="link"]').click();
+        await cardOf(d, 'p5').locator('[data-choice="link"]').click();
+        for (const ref of ['p1', 'p5']) {
+            await expect(cardOf(d, ref).locator('.read-p-unchosen')).toContainText('No person in the tree chosen yet');
+            await expect(cardOf(d, ref).locator('.read-p-unchosen [data-act="p-other"]')).toHaveText('Choose…');
+        }
+        // One picker at a time: on the card asked last.
+        await expect(d.locator('.read-p-picker')).toHaveCount(1);
+        await expect(cardOf(d, 'p5').locator('.read-p-picker input')).toBeVisible();
+        await expect(apply(d)).toBeDisabled();
+        await expect(d.locator('.read-p-foot-note')).toHaveText('2 people set to “Link” have no person in the tree chosen yet');
+        // Nothing of theirs counts: Josef's occupation only.
+        await expect(apply(d)).toHaveText('Add to tree (0 new people, 1 fact)');
+        await expect(itemOf(d, 'rel:3')).toContainText('no person in the tree chosen');
+        await expect(itemOf(d, 'rel:3').locator('input')).not.toBeChecked();
+
+        await cardOf(d, 'p1').locator('.read-p-unchosen [data-act="p-other"]').click();
+        const picker = cardOf(d, 'p1').locator('.read-p-picker input');
+        await expect(picker).toBeVisible();
+        await picker.fill('Jan');
+        await cardOf(d, 'p1').locator('.person-picker-item').filter({ hasText: 'Jan' }).first().click();
+        await expect(cardOf(d, 'p1').locator('.read-p-match')).toContainText('Jan Fíšek');
+        await expect(cardOf(d, 'p1').locator('.read-p-unchosen')).toHaveCount(0);
+        await expect(cardOf(d, 'p5').locator('.read-p-picker input')).toBeVisible();
+        await expect(d.locator('.read-p-foot-note')).toHaveText('One person set to “Link” has no person in the tree chosen yet');
+        await expect(apply(d)).toBeDisabled();
+
+        await cardOf(d, 'p5').locator('[data-choice="new"]').click();
+        await expect(d.locator('.read-p-foot-note')).toHaveText('Nothing is added without the button');
+        // Bohumil new; the baptism, Bohumil → Josef, Josef's occupation, Marie as a name form of Jan.
+        await expect(apply(d)).toHaveText('Add to tree (1 new person, 4 facts)');
+        await expect(apply(d)).toBeEnabled();
+        await apply(d).click();
+        await expect(d.locator('#read-title')).toHaveText('Added to the tree');
+        const ps = await persons(page);
+        const josef = ps.find(p => p.name === 'Josef Fíšek')!;
+        const bohumil = ps.find(p => p.name === 'Bohumil Fíšek')!;
+        expect(josef.parentIds).toContain(bohumil.id);
+    });
+
     test('a second reader first: progress over the suggestion, choices kept, new variants marked; cancelled keeps the first', async ({ page }) => {
         const b = await setup(page, baptism({ readers: { asked: 1, ran: 1, agree: null } }, { variants: [] }));
         const d = await openPropose(page);

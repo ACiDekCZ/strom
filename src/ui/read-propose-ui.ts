@@ -23,7 +23,7 @@ import { ReadEntry, ReadPerson, ReadResult, ReadPage, ReadRegion, readDocYear } 
 import { entryName } from '../read-result.js';
 import {
     ProposeState, ProposeChoice, ProposeItem, initialPropose, carryPropose, proposeItems, proposeCounts, linkAdditions,
-    linkedPerson, readGender, readEventDate, personVariants, variantsText, variantKey, LinkAddition, entrySource,
+    linkedPerson, proposeUnchosen, readGender, readEventDate, personVariants, variantsText, variantKey, LinkAddition, entrySource,
 } from '../read-propose.js';
 import { researchSendMode } from './research-sync-ui.js';
 import { readDialogState, readCropHtml, regionStyle } from './read-document-ui.js';
@@ -278,13 +278,16 @@ export const readProposeMethods = uiModule({
                 + `<span class="read-p-muted">${esc(c.candidate ? t.newPicked : t.newNoMatch)}</span>`;
         } else {
             const tree = c.target ? data.persons[c.target] : undefined;
-            if (pickingRef === p.ref || !tree) {
-                main = `<div class="read-p-picker"><div id="read-p-pick-${esc(p.ref)}"></div></div>`;
-            }
-            if (tree) {
+            const picker = this.readProposePickerRef() === p.ref
+                ? `<div class="read-p-picker"><div id="read-p-pick-${esc(p.ref)}"></div></div>` : '';
+            if (!tree) {
+                // Link with nobody chosen: said, with the way to choose (the picker under it on one card at a time).
+                main = `<span class="read-p-unchosen"><span class="read-p-muted">${esc(t.notChosen)}</span>`
+                    + `<button type="button" class="link-button read-p-other" data-act="p-other" data-ref="${esc(p.ref)}">${esc(t.choosePerson)}</button></span>${picker}`;
+            } else {
                 const why = c.candidate && c.candidate.id === tree.id ? this.readMatchWhy(c.candidate.byResearch, c.candidate.reasons, c.candidate.why, p, entry) : '';
                 main = `<span class="read-p-match"><strong>${esc(treeLabel(tree))}</strong>${why ? `<span class="read-p-why">${esc(why)}</span>` : ''}`
-                    + `<button type="button" class="link-button read-p-other" data-act="p-other" data-ref="${esc(p.ref)}">${esc(t.pickOther)}</button></span>` + (pickingRef === p.ref ? main : '');
+                    + `<button type="button" class="link-button read-p-other" data-act="p-other" data-ref="${esc(p.ref)}">${esc(t.pickOther)}</button></span>` + picker;
                 const { adds, diffs } = linkAdditions(p, tree);
                 const sexWord = (g: string): string => strings.gender[g as 'male'] ?? g;
                 main += adds.length > 0
@@ -316,11 +319,28 @@ export const readProposeMethods = uiModule({
                 </div>`;
     },
 
+    /**
+     * The card that shows the tree person picker: the one asked (Choose…, Other…),
+     * else the first set to Link with nobody chosen ('' = none). One picker at a time.
+     */
+    readProposePickerRef(): string {
+        const sel = this.readDocumentSelection();
+        if (!ps || !sel) return '';
+        if (pickingRef && ps.persons[pickingRef]?.choice === 'link') return pickingRef;
+        const unchosen = new Set(proposeUnchosen(ps, DataManager.getData()));
+        return sel.entry.persons.find(p => unchosen.has(p.ref))?.ref ?? '';
+    },
+
     /** "matching name, birth, wife Anna" / "per the research · name, place". */
     readMatchWhy(byResearch: boolean, reasons: readonly string[], why: string, p: ReadPerson, entry: ReadEntry): string {
         const t = strings.read;
         if (byResearch) return why ? `${t.matchByResearch} · ${why}` : t.matchByResearch;
         const words = reasons.map(r => {
+            if (r === 'child') {
+                const rel = entry.relations.find(x => x.type === 'parent' && x.parent === p.ref);
+                const child = rel && rel.type === 'parent' ? entry.persons.find(x => x.ref === rel.child) : undefined;
+                return child?.given ? t.matchChild(readGender(child), child.given) : t.matchReasons.child;
+            }
             if (r !== 'partner') return t.matchReasons[r] ?? r;
             const rel = entry.relations.find(x => x.type === 'spouse' && (x.a === p.ref || x.b === p.ref));
             const other = rel && rel.type === 'spouse' ? entry.persons.find(x => x.ref === (rel.a === p.ref ? rel.b : rel.a)) : undefined;
@@ -365,6 +385,7 @@ export const readProposeMethods = uiModule({
         }
         if (item.inTree) note = t.inTree;
         else if (item.skipped) note = t.personSkipped;
+        else if (item.unchosen) note = t.personUnchosen;
         else if (item.differs) {
             const what = item.differs.what === 'marriage' ? t.marriage : t.diffWhat[item.differs.what] ?? item.differs.what;
             note = t.differs(what, formatFlexDate(item.differs.tree, lang), item.differs.entry ? formatFlexDate(item.differs.entry, lang) : t.notSaid);
@@ -384,16 +405,20 @@ export const readProposeMethods = uiModule({
         if (!s || !sel || !ps) return '';
         const blocked = this.readProposeBlocked();
         const second = this.readSecondOffered() && secondOn && !s.second;
-        const { n, m } = proposeCounts(sel.entry, ps, DataManager.getData());
+        const data = DataManager.getData();
+        const { n, m } = proposeCounts(sel.entry, ps, data);
         const nothing = n === 0 && m === 0;
-        const disabled = s.second || writing || s.busy || (!second && (blocked !== '' || nothing));
+        // Link with nobody chosen: the write waits (the second reader does not write, it may go).
+        const unchosen = second ? 0 : proposeUnchosen(ps, data).length;
+        const disabled = s.second || writing || s.busy || (!second && (blocked !== '' || nothing || unchosen > 0));
         const label = second
             ? `${esc(t.secondButton)}<span class="research-ai-badge" aria-hidden="true">${esc(strings.research.aiBadge)}</span>`
             : esc(t.apply(n, m));
-        const note = blocked === 'live' && !second ? t.watched : blocked === 'locked' && !second ? t.locked : t.noButton;
+        const note = blocked === 'live' && !second ? t.watched : blocked === 'locked' && !second ? t.locked
+            : unchosen > 0 ? t.unchosen(unchosen) : t.noButton;
         const stop = blocked === 'live' && !second
             ? `<button type="button" class="secondary" data-act="p-stop-live">${esc(strings.research.stop)}</button>` : '';
-        return `<span class="batch-foot-note read-p-foot-note${blocked && !second ? ' is-blocked' : ''}">${esc(note)}</span>${stop}
+        return `<span class="batch-foot-note read-p-foot-note${(blocked || unchosen > 0) && !second ? ' is-blocked' : ''}">${esc(note)}</span>${stop}
                 <button type="button" class="secondary" data-act="propose-back">${esc(t.proposeBackButton)}</button>
                 <button type="button" class="primary read-p-apply" data-act="p-apply"${disabled ? ' disabled' : ''}>${label}</button>`;
     },
@@ -469,9 +494,8 @@ export const readProposeMethods = uiModule({
         }
         picker?.destroy();
         picker = null;
-        const host = pickingRef ? overlay.querySelector<HTMLElement>(`#read-p-pick-${CSS.escape(pickingRef)}`) : null;
-        const noTarget = overlay.querySelector<HTMLElement>('.read-p-card.is-link .read-p-picker > div');
-        const target = host ?? noTarget;
+        const target = overlay.querySelector<HTMLElement>('.read-p-card.is-link .read-p-picker > div');
+        const asked = !!pickingRef && target?.id === `read-p-pick-${pickingRef}`;
         if (target) {
             const ref = target.id.replace(/^read-p-pick-/, '');
             try {
@@ -491,7 +515,7 @@ export const readProposeMethods = uiModule({
                     showBirthYear: true,
                 });
                 target.querySelector('input')?.setAttribute('aria-label', strings.read.pickLabel);
-                if (host) target.querySelector<HTMLInputElement>('input')?.focus();
+                if (asked) target.querySelector<HTMLInputElement>('input')?.focus();
             } catch (err) {
                 console.warn('Person picker unavailable', err);
             }
@@ -572,14 +596,14 @@ export const readProposeMethods = uiModule({
                 return;
             }
         }
-        if (this.readProposeBlocked()) { this.refreshReadProposeFoot(); return; }
+        if (this.readProposeBlocked() || proposeUnchosen(ps, DataManager.getData()).length > 0) { this.refreshReadProposeFoot(); return; }
         writing = true;
         this.refreshReadProposeFoot();
         const title = readSourceTitle(sel.result, sel.entry);
         const excerpt = await entryExcerpt(sel.imageUrl, sel.page, sel.entry.region, title);
         writing = false;
         if (readDialogState() !== s || s.phase !== 'propose' || !ps) return;
-        if (this.readProposeBlocked()) { this.refreshReadProposeFoot(); return; }
+        if (this.readProposeBlocked() || proposeUnchosen(ps, DataManager.getData()).length > 0) { this.refreshReadProposeFoot(); return; }
         let result: Written | null = null;
         try {
             result = DataManager.runBatch(strings.read.undoApply, () => this.writeReadPropose(sel.result, sel.entry, sel.page, title, excerpt));
@@ -603,7 +627,9 @@ export const readProposeMethods = uiModule({
         const state = ps!;
         const t = strings.read;
         const data = DataManager.getData();
-        const items = proposeItems(entry, state, data);
+        // A Link with nobody chosen writes nothing of its own (the button waits for it; this is the last guard).
+        const unchosen = new Set(proposeUnchosen(state, data));
+        const items = proposeItems(entry, state, data).filter(i => !i.refs.some(r => unchosen.has(r)));
         const sha = cleanSha(page?.sha);
         // The same entry written again: its source stays the one source (it gains only what it lacks).
         const before = entrySource(data, res.id, entry.id);

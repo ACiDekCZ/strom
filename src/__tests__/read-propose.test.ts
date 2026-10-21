@@ -9,7 +9,7 @@ import { STROM_DATA_VERSION, StromData, Person, PersonId, Partnership, Partnersh
 import type { ReadEntry, ReadPerson } from '../research-read.js';
 import {
     initialPropose, proposeItems, proposeCounts, linkAdditions, carryPropose, readGender, eventPrincipals,
-    personVariants, variantsText, entrySource,
+    personVariants, variantsText, entrySource, proposeUnchosen,
 } from '../read-propose.js';
 
 function person(id: string, first: string, last: string, gender: Person['gender'], extra: Partial<Person> = {}): Person {
@@ -45,7 +45,6 @@ function baptism(): ReadEntry {
             { type: 'parent', parent: 'p2', child: 'p1' },
             { type: 'parent', parent: 'p3', child: 'p1' },
             { type: 'spouse', a: 'p2', b: 'p3' },
-            { type: 'parent', parent: 'p4', child: 'p1' },
         ],
     };
 }
@@ -69,7 +68,6 @@ describe('the suggestion of a read entry', () => {
         const by = (k: string) => items.find(i => i.key === k)!;
         expect(by('rel:2')).toMatchObject({ inTree: true, checked: false, enabled: false });
         expect(by('rel:0')).toMatchObject({ inTree: false, checked: true });
-        expect(by('rel:3')).toMatchObject({ skipped: true, checked: false, enabled: false });
         expect(by('ev:0')).toMatchObject({ refs: ['p1'], checked: true });
         s.persons.p1.choice = 'skip';
         const after = proposeItems(baptism(), s, data);
@@ -159,5 +157,215 @@ describe('the same entry suggested again', () => {
     it('another reading of the same document: the two equal Jans stay the user\'s choice', () => {
         const s = initialPropose('D20261019153012-ffff', baptism(), written());
         expect(s.persons.p1.choice).toBe('new');
+    });
+});
+
+describe('family the research gives as "other", and persons found through relatives', () => {
+    const READ = 'D20261019153012-a1b2';
+    const birth = (ref: string, gedcom: string): ReadEntry['events'][number] =>
+        ({ type: 'BIRT', date: { text: gedcom, gedcom }, place: null, persons: [{ ref, role: 'principal' }], region: null });
+    const spouses = (data: StromData, id: string, a: string, b: string, children: string[] = []): void => {
+        data.partnerships[id as PartnershipId] = { id, person1Id: a, person2Id: b, childIds: children, status: 'married' } as unknown as Partnership;
+        data.persons[a as PersonId].partnerships.push(id as PartnershipId);
+        data.persons[b as PersonId].partnerships.push(id as PartnershipId);
+        for (const c of children) {
+            data.persons[c as PersonId].parentIds.push(a as PersonId, b as PersonId);
+            data.persons[a as PersonId].childIds.push(c as PersonId);
+            data.persons[b as PersonId].childIds.push(c as PersonId);
+        }
+    };
+    const withPersons = (...list: Person[]): StromData => {
+        const data = { version: STROM_DATA_VERSION, persons: {}, partnerships: {} } as unknown as StromData;
+        for (const p of list) data.persons[p.id] = p;
+        return data;
+    };
+
+    it('a grandparent given as "other" with the research\'s match links; one without a match is new, not left out', () => {
+        const data = tree();
+        data.persons['g' as PersonId] = person('g', 'Matěj', 'Novák', 'male', { refn: 'P0007' });
+        const entry: ReadEntry = {
+            ...baptism(),
+            persons: [...baptism().persons,
+                rp('p5', 'other', 'Matěj', 'Novák', { roleText: 'father\'s father', match: [{ person: 'P0007', why: 'name', score: 0.9 }] }),
+                rp('p6', 'other', 'Ludmila', '', { roleText: 'father\'s mother' })],
+            relations: [...baptism().relations, { type: 'parent', parent: 'p5', child: 'p2' }, { type: 'parent', parent: 'p6', child: 'p2' }],
+        };
+        const s = initialPropose(READ, entry, data);
+        expect(s.persons.p5).toMatchObject({ choice: 'link', target: 'g' });
+        expect(s.persons.p5.candidate?.byResearch).toBe(true);
+        expect(s.persons.p6).toMatchObject({ choice: 'new', target: '' });
+        expect(s.persons.p4.choice).toBe('skip');
+    });
+
+    it('a godparent without relations: the research\'s match links it; the app\'s guess alone keeps No, carried for Link', () => {
+        const data = tree();
+        data.persons['k' as PersonId] = person('k', 'Jan', 'Král', 'male', { refn: 'P0009', birthDate: '1801' });
+        const byResearch: ReadEntry = {
+            ...baptism(),
+            persons: baptism().persons.map(p => p.ref === 'p4' ? { ...p, match: [{ person: 'P0009', why: 'name', score: 0.8 }] } : p),
+        };
+        expect(initialPropose(READ, byResearch, data).persons.p4).toMatchObject({ choice: 'link', target: 'k' });
+        const byApp: ReadEntry = { ...baptism(), events: [...baptism().events, birth('p4', '1801')] };
+        const s = initialPropose(READ, byApp, data);
+        expect(s.persons.p4).toMatchObject({ choice: 'skip', target: '' });
+        expect(s.persons.p4.candidate?.id).toBe('k');
+    });
+
+    it('three research matches of a grandfather: the one that is the linked mother\'s parent; equal and unrelated: none', () => {
+        const build = (related: boolean): StromData => {
+            const data = withPersons(
+                person('f', 'Karel', 'Šimek', 'male', { refn: 'P0300' }),
+                person('m', 'Johanna', 'Rybářová', 'female', { marriedSurname: 'Šimková' }),
+                person('r1', 'Vojtěch', 'Rybář', 'male', { refn: 'P0301' }),
+                person('r2', 'Vojtěch', 'Rybář', 'male', { refn: 'P0302' }),
+                person('r3', 'Vojtěch', 'Rybář', 'male', { refn: 'P0303' }),
+                person('gm', 'Marie', 'Rybářová', 'female'),
+            );
+            spouses(data, 'u1', 'f', 'm');
+            spouses(data, 'u2', 'r2', 'gm', related ? ['m'] : []);
+            return data;
+        };
+        const three = ['P0301', 'P0302', 'P0303'].map(person => ({ person, why: 'name', score: 0.8 }));
+        const entry: ReadEntry = {
+            id: 'e1', page: 1, region: null, transcript: '', variants: [], translation: '', glossary: [],
+            persons: [
+                rp('p1', 'child', 'Petr', 'Šimek'),
+                rp('p2', 'father', 'Karel', 'Šimek', { match: [{ person: 'P0300', why: 'name', score: 0.9 }] }),
+                rp('p3', 'mother', 'Johana', 'Šimková'),
+                rp('p4', 'other', 'Vojtěch', 'Rybář', { roleText: 'mother\'s father', match: three }),
+                rp('p5', 'other', 'Marie', '', { roleText: 'mother\'s mother' }),
+            ],
+            events: [],
+            relations: [
+                { type: 'parent', parent: 'p2', child: 'p1' }, { type: 'parent', parent: 'p3', child: 'p1' }, { type: 'spouse', a: 'p2', b: 'p3' },
+                { type: 'parent', parent: 'p4', child: 'p3' }, { type: 'parent', parent: 'p5', child: 'p3' },
+            ],
+        };
+        const s = initialPropose(READ, entry, build(true));
+        const targets = Object.fromEntries(Object.values(s.persons).map(p => [p.ref, `${p.choice}:${p.target}`]));
+        expect(targets).toEqual({ p1: 'new:', p2: 'link:f', p3: 'link:m', p4: 'link:r2', p5: 'link:gm' });
+        expect(s.persons.p4.candidate?.byResearch).toBe(true);
+        // None of the three is her parent and the scores are equal: the user's choice.
+        expect(initialPropose(READ, entry, build(false)).persons.p4).toMatchObject({ choice: 'new', target: '', candidate: null });
+        // One strictly best score decides when the relations do not.
+        const best: ReadEntry = { ...entry, persons: entry.persons.map(p => p.ref === 'p4' ? { ...p, match: three.map((m, i) => i === 2 ? { ...m, score: 0.9 } : m) } : p) };
+        expect(initialPropose(READ, best, build(false)).persons.p4).toMatchObject({ choice: 'link', target: 'r3' });
+    });
+
+    it('a mother read without a surname: the linked father\'s wife born on the read day', () => {
+        const v = person('v', 'Václav', 'Novák', 'male', { refn: 'P0001' });
+        const w = person('w', 'Leontýna Amálie', 'Šrámková', 'female', { birthDate: '1817-09-21' });
+        const other = person('o', 'Málinka', 'Vrbická', 'female', { birthDate: '1817' });
+        const data = withPersons(v, w, other);
+        spouses(data, 'u1', 'v', 'w');
+        const entry: ReadEntry = {
+            ...baptism(),
+            persons: [rp('p1', 'child', 'Jan', 'Novák'), baptism().persons[1], rp('p3', 'mother', 'Málinka', '')],
+            events: [birth('p3', '21 SEP 1817')],
+        };
+        const s = initialPropose(READ, entry, data);
+        expect(s.persons.p3).toMatchObject({ choice: 'link', target: 'w' });
+        expect(s.persons.p3.candidate?.reasons).toEqual(expect.arrayContaining(['birth', 'partner']));
+    });
+
+    it('two relatives that fit equally: no candidate, the choice is the user\'s', () => {
+        const v = person('v', 'Václav', 'Novák', 'male', { refn: 'P0001' });
+        const a = person('a', 'Anna', 'Dvořáková', 'female');
+        const data = withPersons(v, a, person('j1', 'Jan', 'Novák', 'male'), person('j2', 'Jan', 'Novák', 'male'));
+        spouses(data, 'u1', 'v', 'a', ['j1', 'j2']);
+        const entry: ReadEntry = { ...baptism(), persons: baptism().persons.slice(0, 2).map(p => p.ref === 'p1' ? { ...p, surname: '' } : p), events: [] };
+        const s = initialPropose(READ, entry, data);
+        expect(s.persons.p2.target).toBe('v');
+        expect(s.persons.p1).toMatchObject({ choice: 'new', candidate: null });
+    });
+
+    it('a child and a mother in other name forms: the father\'s child born that day, then that child\'s mother', () => {
+        const father = person('f', 'Bořivoj', 'Krumpholc', 'male', { refn: 'P0100' });
+        const child = person('c', 'Bořivoj', 'Krumpholz', 'male', { birthDate: '1931-11-17', nameVariants: ['Ctibor Krumpholz', 'Bořivoj Krumphólc'] });
+        const mother = person('m', 'Hermína Leontýna', 'Štěpánková', 'female', { birthDate: '1898-02-14', marriedSurname: 'Krumpholc' });
+        const data = withPersons(father, child, mother);
+        spouses(data, 'u1', 'f', 'm', ['c']);
+        const entry: ReadEntry = {
+            id: 'e1', page: 1, region: null, transcript: '', variants: [], translation: '', glossary: [],
+            persons: [
+                rp('p1', 'child', 'Ctibor Bořivoj', 'Krumpholc'),
+                rp('p2', 'father', 'Bořivoj', 'Krumpholc', { match: [{ person: 'P0100', why: 'name', score: 0.9 }] }),
+                rp('p3', 'mother', 'Hermina Leontýna', 'Krumpholc'),
+            ],
+            events: [birth('p1', '17 NOV 1931')],
+            relations: [{ type: 'parent', parent: 'p2', child: 'p1' }, { type: 'parent', parent: 'p3', child: 'p1' }],
+        };
+        const s = initialPropose(READ, entry, data);
+        expect(s.persons.p2).toMatchObject({ choice: 'link', target: 'f' });
+        expect(s.persons.p1).toMatchObject({ choice: 'link', target: 'c' });
+        expect(s.persons.p1.candidate?.reasons).toEqual(expect.arrayContaining(['name', 'birth', 'parents']));
+        expect(s.persons.p3).toMatchObject({ choice: 'link', target: 'm' });
+        expect(s.persons.p3.candidate?.reasons).toEqual(expect.arrayContaining(['name', 'child']));
+    });
+
+    it('a family of seven read mostly by given names: the research\'s two grandfathers lead to everyone', () => {
+        const gf1 = person('gf1', 'Jakub', 'Hořejší', 'male', { refn: 'P0201' });
+        const gm1 = person('gm1', 'Lidmila', 'Hořejší', 'female');
+        const gf2 = person('gf2', 'Matěj', 'Kolář', 'male', { refn: 'P0202' });
+        const gm2 = person('gm2', 'Katarina', 'Kolářová', 'female');
+        const father = person('t2', 'Tomáš', 'Hořejší', 'male', { birthDate: '1860-02-04' });
+        const mother = person('t5', 'Rosalia', 'Kolářová', 'female', { birthDate: '1863-09-09' });
+        const child = person('t1', 'Marta', 'Hořejší', 'female', { birthDate: '1890-03-12' });
+        const data = withPersons(gf1, gm1, gf2, gm2, father, mother, child);
+        spouses(data, 'u1', 'gf1', 'gm1', ['t2']);
+        spouses(data, 'u2', 'gf2', 'gm2', ['t5']);
+        spouses(data, 'u3', 't2', 't5', ['t1']);
+        const entry: ReadEntry = {
+            id: 'e1', page: 1, region: null, transcript: '', variants: [], translation: '', glossary: [],
+            persons: [
+                rp('p1', 'child', 'Marta', ''),
+                rp('p2', 'father', 'Tomáš', ''),
+                rp('p3', 'other', 'Jakub', 'Hořejší', { roleText: 'father\'s father', match: [{ person: 'P0201', why: 'name', score: 0.9 }] }),
+                rp('p4', 'other', 'Ludmila', '', { roleText: 'father\'s mother' }),
+                rp('p5', 'mother', 'Rozálie', ''),
+                rp('p6', 'other', 'Matěj', 'Kolář', { roleText: 'mother\'s father', match: [{ person: 'P0202', why: 'name', score: 0.9 }] }),
+                rp('p7', 'other', 'Kateřina', '', { roleText: 'mother\'s mother' }),
+            ],
+            events: [birth('p1', '12 MAR 1890'), birth('p2', '4 FEB 1860'), birth('p5', '9 SEP 1863')],
+            relations: [
+                { type: 'parent', parent: 'p2', child: 'p1' }, { type: 'parent', parent: 'p5', child: 'p1' }, { type: 'spouse', a: 'p2', b: 'p5' },
+                { type: 'parent', parent: 'p3', child: 'p2' }, { type: 'parent', parent: 'p4', child: 'p2' },
+                { type: 'parent', parent: 'p6', child: 'p5' }, { type: 'parent', parent: 'p7', child: 'p5' },
+            ],
+        };
+        const s = initialPropose(READ, entry, data);
+        const targets = Object.fromEntries(Object.values(s.persons).map(p => [p.ref, `${p.choice}:${p.target}`]));
+        expect(targets).toEqual({
+            p1: 'link:t1', p2: 'link:t2', p3: 'link:gf1', p4: 'link:gm1', p5: 'link:t5', p6: 'link:gf2', p7: 'link:gm2',
+        });
+    });
+
+    it('a person read by the given name only: the one tree person of that name born the same day', () => {
+        const data = withPersons(person('x', 'Barbora', 'Kubátová', 'female', { birthDate: '1873-04-19' }), person('y', 'Barbora', 'Malá', 'female', { birthDate: '1873' }));
+        const entry: ReadEntry = { ...baptism(), persons: [rp('p1', 'child', 'Barbora', '')], events: [birth('p1', '19 APR 1873')], relations: [] };
+        expect(initialPropose(READ, entry, data).persons.p1).toMatchObject({ choice: 'link', target: 'x' });
+        const undated: ReadEntry = { ...entry, events: [] };
+        expect(initialPropose(READ, undated, data).persons.p1).toMatchObject({ choice: 'new', target: '' });
+    });
+
+    it('Link with nobody chosen: its events and relationships off, not counted, listed until chosen or set to New', () => {
+        const data = tree();
+        const s = initialPropose(READ, baptism(), data);
+        expect(proposeUnchosen(s, data)).toEqual([]);
+        s.persons.p1.choice = 'link';
+        expect(proposeUnchosen(s, data)).toEqual(['p1']);
+        const items = proposeItems(baptism(), s, data);
+        for (const key of ['ev:0', 'rel:0', 'rel:1']) {
+            expect(items.find(i => i.key === key)).toMatchObject({ unchosen: true, checked: false, enabled: false });
+        }
+        // Only Václav's occupation and residence.
+        expect(proposeCounts(baptism(), s, data)).toEqual({ n: 0, m: 2 });
+        s.persons.p1.choice = 'new';
+        expect(proposeUnchosen(s, data)).toEqual([]);
+        expect(proposeCounts(baptism(), s, data)).toEqual({ n: 1, m: 5 });
+        // A tree person deleted since: no target again, not a link to nobody.
+        s.persons.p1 = { ...s.persons.p1, choice: 'link', target: 'gone' as PersonId };
+        expect(proposeUnchosen(s, data)).toEqual(['p1']);
+        expect(carryPropose(s, READ, baptism(), data).persons.p1).toMatchObject({ choice: 'link', target: '' });
     });
 });

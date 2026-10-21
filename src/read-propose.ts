@@ -7,11 +7,13 @@
  * writes); the dialog draws from them and writes on the click.
  */
 
+import { gendersCompatible } from './types.js';
 import type { Gender, LifeEvent, LifeEventType, Person, PersonId, StromData, Partnership, PartnershipId, Source } from './types.js';
 import type { ReadEntry, ReadEvent, ReadPerson, ReadVariant } from './research-read.js';
 import { researchPersonRef } from './research-link.js';
 import { gedcomTagEventType, parseGedcomDate } from './ged-parser.js';
-import { quickMatch, QuickMatchReason, normalizeName } from './merge/matching.js';
+import { quickMatch, QuickMatchReason, normalizeName, stringSimilarity, compareEventDates } from './merge/matching.js';
+import { sameSurname } from './surnames.js';
 
 export type ProposeChoice = 'new' | 'link' | 'skip';
 
@@ -24,13 +26,16 @@ const PRINCIPAL_ROLES: ReadonlySet<string> = new Set(['principal', 'child', 'gro
 /** A quick match from this score on is a candidate (as on a card's "Also in"). */
 export const MATCH_THRESHOLD = 50;
 
+/** Why a candidate fits: the quick match's reasons, and a child of the person linked ('child'). */
+export type ProposeReason = QuickMatchReason | 'child';
+
 /** A tree person an entry's person may be. */
 export interface ProposeCandidate {
     id: PersonId;
     /** Found by the research's own match (its REFN), not by the app's matching. */
     byResearch: boolean;
     score: number;
-    reasons: QuickMatchReason[];
+    reasons: ProposeReason[];
     /** The research's words why ('' = none). */
     why: string;
 }
@@ -70,6 +75,8 @@ export interface ProposeItem {
     inTree: boolean;
     /** A person of it is not written. */
     skipped: boolean;
+    /** A person of it is set to Link with no tree person chosen yet. */
+    unchosen: boolean;
     /** The tree says otherwise (a date): not overwritten. */
     differs: { what: string; tree: string; entry: string } | null;
     /** Written on the click. */
@@ -177,21 +184,40 @@ export function draftData(entry: ReadEntry): StromData {
     return { persons, partnerships } as unknown as StromData;
 }
 
-/** The tree person a research's match names (its REFN "P0042"), or null. */
-function researchCandidate(p: ReadPerson, data: StromData, taken: ReadonlySet<string>): ProposeCandidate | null {
+/** The tree persons the research's matches name (their REFNs "P0042"), each once, with the research's score. */
+function researchHits(p: ReadPerson, data: StromData): ProposeCandidate[] {
+    const hits: ProposeCandidate[] = [];
     for (const m of p.match) {
         const ref = researchPersonRef(m.person);
         if (!ref) continue;
         const hit = Object.values(data.persons).find(x => !x.isPlaceholder && x.refn?.trim() === ref);
-        if (hit && !taken.has(hit.id)) return { id: hit.id, byResearch: true, score: 100, reasons: ['name'], why: m.why };
+        if (hit && !hits.some(h => h.id === hit.id)) hits.push({ id: hit.id, byResearch: true, score: m.score, reasons: ['name'], why: m.why });
     }
-    return null;
+    return hits;
 }
 
-/** The research's match first, else the one tree person the app's matching finds above the threshold. */
+/** The one strictly best of the research's matches (equal scores: none, the user chooses). */
+function strictlyBest(hits: readonly ProposeCandidate[]): ProposeCandidate | null {
+    const top = Math.max(...hits.map(h => h.score));
+    const best = hits.filter(h => h.score === top);
+    return best.length === 1 ? best[0] : null;
+}
+
+/** A research match as the suggestion's candidate (the research's word: full score). */
+function asResearch(hit: ProposeCandidate): ProposeCandidate {
+    return { ...hit, score: 100 };
+}
+
+/** The research's match first (its strictly best), else the one tree person the app's matching finds above the threshold. */
 export function findCandidate(entry: ReadEntry, p: ReadPerson, data: StromData, draft: StromData, taken: ReadonlySet<string> = new Set(), prior: readonly Person[] = []): ProposeCandidate | null {
-    const research = researchCandidate(p, data, taken);
-    if (research) return research;
+    const hits = researchHits(p, data).filter(h => !taken.has(h.id));
+    const research = hits.length > 0 ? strictlyBest(hits) : null;
+    if (research) return asResearch(research);
+    return hits.length > 0 ? null : appCandidate(p, data, draft, taken, prior);
+}
+
+/** The app's own matching: a person written from this entry before, else the one tree person above the threshold. */
+function appCandidate(p: ReadPerson, data: StromData, draft: StromData, taken: ReadonlySet<string>, prior: readonly Person[]): ProposeCandidate | null {
     const me = draft.persons[draftId(p.ref)];
     if (!me || !`${me.firstName}${me.lastName}`.trim()) return null;
     // Written from this very entry before (they cite its source): the same name is the same person.
@@ -211,7 +237,22 @@ export function findCandidate(entry: ReadEntry, p: ReadPerson, data: StromData, 
         else if (q.score === best.score) tie = true;
     }
     // Two tree persons fit equally: the choice is the user's.
-    return tie ? null : best;
+    if (tie) return null;
+    return best ?? givenOnlyCandidate(me, data, draft, taken);
+}
+
+/**
+ * A person read by the given name only (no surname): the one tree person
+ * of a similar given name born on the same day (the quick match wants a
+ * surname as well).
+ */
+function givenOnlyCandidate(me: Person, data: StromData, draft: StromData, taken: ReadonlySet<string>): ProposeCandidate | null {
+    if ((me.lastName ?? '').trim() || !(me.firstName ?? '').trim() || !me.birthDate) return null;
+    const fits = Object.values(data.persons).filter(other => !other.isPlaceholder && !taken.has(other.id)
+        && compareEventDates(me.birthDate, other.birthDate) === 'day' && relativeSupport(me, other, data)?.name);
+    if (fits.length !== 1) return null;
+    const score = Math.max(quickMatch(me, fits[0], draft, data).score, MATCH_THRESHOLD);
+    return { id: fits[0].id, byResearch: false, score, reasons: ['name', 'birth'], why: '' };
 }
 
 /**
@@ -229,23 +270,188 @@ export function personsCiting(data: StromData, sourceId: string): Person[] {
         || p.birthSourceIds?.includes(sourceId) || p.deathSourceIds?.includes(sourceId)));
 }
 
-/** The suggestion as it opens: a candidate links, no candidate is new, a godparent or witness is not written. */
+/**
+ * The entry's family: its own people (roles not skipped) and, through the
+ * entry's parent and spouse relations, everyone tied to them (a grandparent
+ * the research gives as "other"). A godparent or a witness stays outside.
+ */
+export function entryFamily(entry: Pick<ReadEntry, 'persons' | 'relations'>): Set<string> {
+    const family = new Set(entry.persons.filter(p => !SKIP_ROLES.has(p.role)).map(p => p.ref));
+    for (let grew = true; grew;) {
+        grew = false;
+        for (const r of entry.relations) {
+            const [a, b] = r.type === 'parent' ? [r.parent, r.child] : r.type === 'spouse' ? [r.a, r.b] : ['', ''];
+            if (!a || !b) continue;
+            if (family.has(a) !== family.has(b)) { family.add(family.has(a) ? b : a); grew = true; }
+        }
+    }
+    return family;
+}
+
+/** A tree person's given-name forms and surname forms (its name, married surname, written variants). */
+function treeNameForms(x: Person): { given: string[]; surnames: string[] } {
+    const given = [x.firstName ?? ''];
+    const surnames = [x.lastName ?? '', x.marriedSurname ?? ''];
+    for (const v of x.nameVariants ?? []) {
+        const words = v.trim().split(/\s+/);
+        if (words.length > 1) { given.push(words.slice(0, -1).join(' ')); surnames.push(words[words.length - 1]); }
+        else given.push(words[0] ?? '');
+    }
+    return { given: given.filter(g => g.trim()), surnames: surnames.filter(n => n.trim()) };
+}
+
+const NAME_SIMILAR = 0.8;
+
+/**
+ * What beyond the family structure says a tree relative is the read person:
+ * the given name (whole, or one name of several), the birth to the day or
+ * month, a surname when the given names do not disagree; null when nothing
+ * does or a date rules it out.
+ */
+function relativeSupport(me: Person, other: Person, data: StromData): { name: boolean; birth: boolean } | null {
+    if (!gendersCompatible(me.gender, other.gender)) return null;
+    const birth = compareEventDates(me.birthDate, other.birthDate);
+    if (birth === 'conflict' || compareEventDates(me.deathDate, other.deathDate) === 'conflict') return null;
+    const forms = treeNameForms(other);
+    const given = (me.firstName ?? '').trim();
+    const words = (text: string): string[] => normalizeName(text).split(' ').filter(w => w.length > 1);
+    const givenFits = !!given && forms.given.some(g => stringSimilarity(given, g) >= NAME_SIMILAR
+        || words(given).some(a => words(g).some(b => stringSimilarity(a, b) >= NAME_SIMILAR)));
+    const surname = (me.lastName ?? '').trim();
+    const surnameFits = !!surname && forms.surnames.some(n => stringSimilarity(surname, n) >= NAME_SIMILAR || sameSurname(surname, n, data));
+    // Two given names that differ: a shared family surname alone is not the person.
+    const givenDiffers = !!given && forms.given.length > 0 && !givenFits;
+    const birthFits = birth === 'day' || birth === 'month';
+    const name = givenFits || (surnameFits && !givenDiffers);
+    return name || birthFits ? { name, birth: birthFits } : null;
+}
+
+/**
+ * Per entry relation of a person to someone already matched: the matched
+ * one's tree relatives in that role (the linked child's parents, the linked
+ * parent's children, the linked spouse's partners) and the reason it gives.
+ */
+function linkedRelatives(entry: ReadEntry, ref: string, data: StromData, found: ReadonlyMap<string, ProposeCandidate>): { index: number; relatives: Person[]; reason: ProposeReason }[] {
+    const out: { index: number; relatives: Person[]; reason: ProposeReason }[] = [];
+    entry.relations.forEach((r, index) => {
+        let q = '';
+        let role: 'parent' | 'child' | 'partner' | '' = '';
+        let reason: ProposeReason = 'name';
+        if (r.type === 'parent' && r.parent === ref) { q = r.child; role = 'parent'; reason = 'child'; }
+        else if (r.type === 'parent' && r.child === ref) { q = r.parent; role = 'child'; reason = 'parents'; }
+        else if (r.type === 'spouse' && (r.a === ref || r.b === ref)) { q = r.a === ref ? r.b : r.a; role = 'partner'; reason = 'partner'; }
+        const at = q && q !== ref ? found.get(q) : undefined;
+        const tree = at ? data.persons[at.id] : undefined;
+        if (role && tree) out.push({ index, relatives: treeRelatives(tree, role, data), reason });
+    });
+    return out;
+}
+
+/** A tree person's relatives in a role: parents, children or partners. */
+function treeRelatives(x: Person, role: 'parent' | 'child' | 'partner', data: StromData): Person[] {
+    const ids = role === 'parent' ? x.parentIds
+        : role === 'child' ? x.childIds
+            : x.partnerships.map(id => data.partnerships[id]).filter(Boolean).map(u => u.person1Id === x.id ? u.person2Id : u.person1Id);
+    return [...new Set(ids)].map(id => data.persons[id]).filter((p): p is Person => !!p && !p.isPlaceholder);
+}
+
+/**
+ * The tree person a read person is through the entry's relatives already
+ * matched: the father's child, the child's mother, the husband's wife, when
+ * exactly one such relative fits by name or birth (two or more: the user's
+ * choice). Works without a surname (a mother read by her given name only).
+ */
+function relativeCandidate(entry: ReadEntry, p: ReadPerson, data: StromData, draft: StromData, found: ReadonlyMap<string, ProposeCandidate>, taken: ReadonlySet<string>): ProposeCandidate | null {
+    const me = draft.persons[draftId(p.ref)];
+    if (!me) return null;
+    // Tree person → the entry relations that lead to it.
+    const hits = new Map<PersonId, { rels: Set<number>; reasons: Set<ProposeReason> }>();
+    linkedRelatives(entry, p.ref, data, found).forEach(({ index: i, relatives, reason }) => {
+        for (const other of relatives) {
+            if (taken.has(other.id)) continue;
+            const support = relativeSupport(me, other, data);
+            if (!support) continue;
+            const hit = hits.get(other.id) ?? { rels: new Set<number>(), reasons: new Set<ProposeReason>() };
+            hit.rels.add(i);
+            hit.reasons.add(reason);
+            if (support.name) hit.reasons.add('name');
+            if (support.birth) hit.reasons.add('birth');
+            hits.set(other.id, hit);
+        }
+    });
+    if (hits.size === 0) return null;
+    // Several fit: the one every relation leads to (the father's and the mother's child), else none.
+    const most = Math.max(...[...hits.values()].map(h => h.rels.size));
+    const best = [...hits].filter(([, h]) => h.rels.size === most);
+    if (best.length !== 1) return null;
+    const [id, hit] = best[0];
+    const order: ProposeReason[] = ['name', 'birth', 'parents', 'child', 'partner'];
+    const score = Math.max(quickMatch(me, data.persons[id], draft, data).score, MATCH_THRESHOLD);
+    return { id, byResearch: false, score, reasons: order.filter(r => hit.reasons.has(r)), why: '' };
+}
+
+/**
+ * The suggestion as it opens: a candidate links, no candidate is new, a
+ * godparent or witness is not written unless the research says who it is
+ * (an app's guess is kept for Link). The family picks first; relatives of
+ * persons already matched follow them, round by round.
+ */
 export function initialPropose(readId: string, entry: ReadEntry, data: StromData): ProposeState {
     const draft = draftData(entry);
     const taken = new Set<string>();
     const before = entrySource(data, readId, entry.id);
     const prior = before ? personsCiting(data, before.id) : [];
-    const persons: Record<string, ProposePerson> = {};
+    const family = entryFamily(entry);
+    const found = new Map<string, ProposeCandidate>();
+    const take = (ref: string, c: ProposeCandidate): void => { taken.add(c.id); found.set(ref, c); };
     // The entry's own people pick their candidates first; no two persons link to one tree person.
-    const order = [...entry.persons].sort((a, b) => Number(SKIP_ROLES.has(a.role)) - Number(SKIP_ROLES.has(b.role)));
+    const order = [...entry.persons].sort((a, b) => Number(!family.has(a.ref)) - Number(!family.has(b.ref)));
+    const hitsOf = new Map(order.map(p => [p.ref, researchHits(p, data)]));
+    const open = (ref: string): ProposeCandidate[] => (hitsOf.get(ref) ?? []).filter(h => !taken.has(h.id));
+    // The research's single matches, then the app's matching for the persons it did not match.
     for (const p of order) {
-        const skip = SKIP_ROLES.has(p.role);
-        const candidate = skip ? null : findCandidate(entry, p, data, draft, taken, prior);
-        if (candidate) taken.add(candidate.id);
+        const hits = open(p.ref);
+        if (hits.length === 1) take(p.ref, asResearch(hits[0]));
+    }
+    for (const p of order) {
+        if (found.has(p.ref) || open(p.ref).length > 0) continue;
+        const c = appCandidate(p, data, draft, taken, prior);
+        if (c) take(p.ref, c);
+    }
+    for (let more = true; more;) {
+        more = false;
+        // Round by round: of several research matches the one the matched relatives point to; through relatives the rest.
+        for (const p of order) {
+            if (found.has(p.ref)) continue;
+            const hits = open(p.ref);
+            let c: ProposeCandidate | null = null;
+            if (hits.length > 0) {
+                const near = new Set(linkedRelatives(entry, p.ref, data, found).flatMap(l => l.relatives.map(x => x.id)));
+                const fit = hits.filter(h => near.has(h.id));
+                c = hits.length === 1 ? hits[0] : fit.length === 1 ? fit[0] : null;
+                if (c) c = asResearch(c);
+            } else c = relativeCandidate(entry, p, data, draft, found, taken);
+            if (c) { take(p.ref, c); more = true; }
+        }
+        if (more) continue;
+        // Nothing else decides: a strictly best research score, one person at a time (the others may follow it).
+        for (const p of order) {
+            const hits = open(p.ref);
+            if (found.has(p.ref) || hits.length < 2) continue;
+            const near = new Set(linkedRelatives(entry, p.ref, data, found).flatMap(l => l.relatives.map(x => x.id)));
+            const fit = hits.filter(h => near.has(h.id));
+            const best = strictlyBest(fit.length > 1 ? fit : hits);
+            if (best) { take(p.ref, asResearch(best)); more = true; break; }
+        }
+    }
+    const persons: Record<string, ProposePerson> = {};
+    for (const p of entry.persons) {
+        const candidate = found.get(p.ref) ?? null;
+        const choice: ProposeChoice = !family.has(p.ref) && !candidate?.byResearch ? 'skip' : candidate ? 'link' : 'new';
         persons[p.ref] = {
             ref: p.ref,
-            choice: skip ? 'skip' : candidate ? 'link' : 'new',
-            target: candidate?.id ?? '',
+            choice,
+            target: choice === 'link' && candidate ? candidate.id : '',
             candidate,
             given: p.given, surname: p.surname,
             edited: { given: false, surname: false },
@@ -266,7 +472,8 @@ export function carryPropose(prev: ProposeState, readId: string, entry: ReadEntr
         fresh.persons[ref] = {
             ...p,
             choice: old.choice,
-            target: old.target,
+            // A tree person deleted since: no target again (the user chooses), never a link to nobody.
+            target: old.target && data.persons[old.target] ? old.target : '',
             given: old.edited.given ? old.given : p.given,
             surname: old.edited.surname ? old.surname : p.surname,
             edited: { ...old.edited },
@@ -274,6 +481,16 @@ export function carryPropose(prev: ProposeState, readId: string, entry: ReadEntr
     }
     fresh.ticks = { ...prev.ticks };
     return fresh;
+}
+
+/**
+ * The persons set to Link with no tree person chosen (or one deleted since):
+ * nothing of theirs is written, and the button waits until they are chosen.
+ */
+export function proposeUnchosen(state: ProposeState, data?: StromData): string[] {
+    return Object.values(state.persons)
+        .filter(p => p.choice === 'link' && (!p.target || (!!data && !data.persons[p.target])))
+        .map(p => p.ref);
 }
 
 /** The tree person a person is linked to (null: not linked, or gone). */
@@ -319,8 +536,10 @@ function partnershipOf(a: Person, b: Person, data: StromData): Partnership | nul
 export function proposeItems(entry: ReadEntry, state: ProposeState, data: StromData): ProposeItem[] {
     const items: ProposeItem[] = [];
     const skipOf = (refs: string[]): boolean => refs.some(r => state.persons[r]?.choice === 'skip');
+    const unchosen = new Set(proposeUnchosen(state, data));
+    const unchosenOf = (refs: string[]): boolean => refs.some(r => unchosen.has(r));
     const finish = (item: Omit<ProposeItem, 'checked' | 'enabled'>): ProposeItem => {
-        const enabled = !item.inTree && !item.skipped && !item.differs;
+        const enabled = !item.inTree && !item.skipped && !item.unchosen && !item.differs;
         const checked = enabled && (state.ticks[item.key] ?? true);
         return { ...item, checked, enabled };
     };
@@ -350,7 +569,7 @@ export function proposeItems(entry: ReadEntry, state: ProposeState, data: StromD
                 if (d) differs = { what: d.what, tree: d.tree, entry: date };
             }
         }
-        items.push(finish({ key: `ev:${i}`, kind: 'event', index: i, refs, inTree, skipped: skipOf(refs), differs }));
+        items.push(finish({ key: `ev:${i}`, kind: 'event', index: i, refs, inTree, skipped: skipOf(refs), unchosen: unchosenOf(refs), differs }));
     });
     entry.relations.forEach((r, i) => {
         const refs = r.type === 'parent' ? [r.parent, r.child] : [r.a, r.b];
@@ -359,7 +578,7 @@ export function proposeItems(entry: ReadEntry, state: ProposeState, data: StromD
         const b = linkedPerson(state, refs[1], data);
         let inTree = false;
         if (a && b) inTree = r.type === 'parent' ? b.parentIds.includes(a.id) : !!partnershipOf(a, b, data);
-        items.push(finish({ key: `rel:${i}`, kind: 'relation', index: i, refs, inTree, skipped: skipOf(refs), differs: null }));
+        items.push(finish({ key: `rel:${i}`, kind: 'relation', index: i, refs, inTree, skipped: skipOf(refs), unchosen: unchosenOf(refs), differs: null }));
     });
     return items;
 }

@@ -1245,7 +1245,7 @@ const QUICK_MAX_YEAR_GAP = 5;
  * - 'none': nothing to say (a date missing, or years 2–5 apart, or
  *   before/after/range dates that cannot be compared).
  */
-function compareEventDates(
+export function compareEventDates(
     d1: string | undefined,
     d2: string | undefined
 ): 'conflict' | 'day' | 'month' | 'year' | 'near' | 'none' {
