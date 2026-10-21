@@ -2,6 +2,12 @@
 
 [English](CHANGELOG.md) · [Čeština](CHANGELOG.cs.md) · Deutsch
 
+## 3.15.0
+
+*Diese Version ist in Vorbereitung; dieser Abschnitt wächst mit jeder Testversion.*
+
+- **Dokument lesen**: Gibt die Forschung an, dass ihr Agent für ein Lesen meist mehrere Minuten braucht, sagen das Fenster und der Fortschritt es, und die übliche Dauer richtet sich nach diesem Agenten.
+
 ## 3.14.0
 
 *Veröffentlicht am 21. Oktober 2026.*

@@ -2,6 +2,12 @@
 
 English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md)
 
+## 3.15.0
+
+*This version is in preparation; this section grows with every test version.*
+
+- **Read a document**: when the research says its agent usually takes several minutes for one reading, the window and the progress say so, and the usual time follows that agent.
+
 ## 3.14.0
 
 *Released 21 October 2026.*

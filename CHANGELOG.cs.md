@@ -2,6 +2,12 @@
 
 [English](CHANGELOG.md) · Čeština · [Deutsch](CHANGELOG.de.md)
 
+## 3.15.0
+
+*Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
+
+- **Přečíst dokument**: když výzkum uvede, že jedno čtení jeho agentovi obvykle trvá několik minut, okno i průběh to řeknou a obvyklá doba se řídí tímto agentem.
+
 ## 3.14.0
 
 *Vydáno 21. října 2026.*
