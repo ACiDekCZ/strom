@@ -43,6 +43,8 @@ export interface ReadAccepts {
     pages: number;
     /** The languages it translates and explains into. */
     langs: string[];
+    /** How long one reading of one document usually takes here, in seconds (only when ready; absent: an older research). */
+    expectSecs?: number;
 }
 
 /** Defaults when the research leaves a limit out (the bridge's own: 50 MB, 10 pages). */
@@ -99,7 +101,22 @@ export function sanitizeReadAccepts(value: unknown): ReadAccepts | null {
         max: asCount(r.max) || DEFAULT_MAX,
         pages: Math.min(50, asCount(r.pages) || DEFAULT_PAGES),
         langs,
+        ...(ready && expectSecs(r.expectSecs) ? { expectSecs: expectSecs(r.expectSecs)! } : {}),
     };
+}
+
+/** `expectSecs`: whole seconds, at least 1 (at most a day), or null. */
+function expectSecs(v: unknown): number | null {
+    const n = asCount(v);
+    return n && n >= 1 ? Math.min(n, 86_400) : null;
+}
+
+/** From this many expected seconds a reader counts as slow: the dialog says reading takes several minutes. */
+export const READ_SLOW_SECS = 120;
+
+/** A slow reader: `expectSecs` at or above the threshold; an older research (no field) is not. */
+export function readSlow(expect: number | null | undefined): boolean {
+    return !!expect && expect >= READ_SLOW_SECS;
 }
 
 /** One reading in `/status.reads` (or an SSE `read` event). */
@@ -125,6 +142,8 @@ export interface LiveRead {
     person: string;
     /** Started by the app, or in the research (an agent, the terminal: no again/cancel from the app). */
     from: 'app' | 'research';
+    /** How long it takes from its start, in seconds (only while running; absent: not said). */
+    expectSecs?: number;
 }
 
 /** A reading's id, or null. */
@@ -153,6 +172,7 @@ export function sanitizeLiveRead(value: unknown): LiveRead | null {
         name: cleanText(r.name, 200),
         person: researchPersonRef(r.person) ?? '',
         from: r.from === 'research' ? 'research' : 'app',
+        ...(readRunning(state) && expectSecs(r.expectSecs) ? { expectSecs: expectSecs(r.expectSecs)! } : {}),
     };
 }
 
@@ -774,6 +794,8 @@ export function readFileRefusals(files: { type: string; name: string; size: numb
 }
 
 /** The usual time a reading takes (minutes): 3 for one reader, 4 for two. */
-export function readUsualMinutes(readers: number): number {
-    return readers >= 2 ? 4 : 3;
+export function readUsualMinutes(readers: number, expect?: number | null): number {
+    const usual = readers >= 2 ? 4 : 3;
+    // A slower reader than usual: its own expected time, rounded up to whole minutes.
+    return expect ? Math.max(usual, Math.ceil(expect / 60)) : usual;
 }

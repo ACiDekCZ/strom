@@ -121,6 +121,8 @@ export interface FakeBridge {
 export interface FakeReading {
     id: string; state: string; version: number; at: string; since: string; files: number; pages: number;
     readers: number; done: number; entries: number; name: string; person: string; from: 'app' | 'research';
+    /** How long it takes from its start, in seconds (only while running). */
+    expectSecs?: number;
 }
 
 /** The research's reading of documents, state by state (set `state`/`done` on a reading, then poll). */

@@ -21,7 +21,7 @@ import { parseLiveBridge, researchSchemeUrl, LiveStatus } from '../research-link
 import { storedResearchBridge, announcedResearchScheme, researchLinksEnabled } from '../research-device.js';
 import {
     ReadAccepts, LiveRead, ReadResult, ReadFailure, ReadFileRefusal, ReadState, ReadPage, ReadEntry, ReadRegion,
-    readRunning, readFileMime, readFileKind, readFileRefusals, readUsualMinutes, readDocYear, readPageImageUrl,
+    readRunning, readSlow, readFileMime, readFileKind, readFileRefusals, readUsualMinutes, readDocYear, readPageImageUrl,
     putReadPage, startRead, fetchReadResult, readAgain, cancelRead, sanitizeLiveRead, READ_FEATURE,
 } from '../research-read.js';
 import {
@@ -403,7 +403,9 @@ export const readDocumentMethods = uiModule({
         if (!read) return;
         const prev = readsByResearch.get(researchId) ?? new Map<string, LiveRead>();
         const next = new Map(prev);
-        next.set(read.id, read);
+        // The event does not carry the expected time: the last one the status gave stays while it runs.
+        const expect = prev.get(read.id)?.expectSecs;
+        next.set(read.id, expect && read.expectSecs === undefined && readRunning(read.state) ? { ...read, expectSecs: expect } : read);
         readsByResearch.set(researchId, next);
         this.readsChanged(researchId, prev);
     },
@@ -836,8 +838,10 @@ export const readDocumentMethods = uiModule({
                         <span class="read-reader-text"><strong>${esc(n === 1 ? t.r1 : t.r2)}</strong><span>${esc(n === 1 ? t.r1Sub : t.r2Sub)}</span></span>
                     </label>`).join('')}
                 </fieldset>` : '';
+        const slow = readSlow(accepts?.expectSecs) ? `<p class="read-slow-note">${esc(t.slowReader)}</p>` : '';
         return `
                 ${top}
+                ${slow}
                 <input type="file" id="read-input" multiple accept="${esc(accept)}" hidden>
                 <div class="read-fields">
                     <div class="batch-field"><span id="read-person-label">${esc(t.person)} <span class="batch-optional">${esc(t.optional)}</span></span>
@@ -904,7 +908,7 @@ export const readDocumentMethods = uiModule({
         const taken = s.pages.filter((_, i) => !refusals[i]).length;
         const refused = s.pages.length - taken;
         const note = taken > 0
-            ? `<strong>${esc(t.footSum(taken, s.readers))}</strong> ${esc(t.usual(readUsualMinutes(s.readers)))}${refused ? ` · ${esc(t.refusedNotSent)}` : ''}`
+            ? `<strong>${esc(t.footSum(taken, s.readers))}</strong> ${esc(t.usual(readUsualMinutes(s.readers, this.researchReadAcceptsAny()?.expectSecs)))}${refused ? ` · ${esc(t.refusedNotSent)}` : ''}`
             : '';
         return `
                 <div class="batch-foot-note" id="read-foot-note">${note}</div>
@@ -917,6 +921,11 @@ export const readDocumentMethods = uiModule({
         const link = this.researchOriginalsLink();
         if (!link || !id) return null;
         return readsByResearch.get(link.researchId)?.get(id) ?? historyReads.get(id) ?? null;
+    },
+
+    /** How long a reading takes (seconds): the bridge's word for it, else what the research said before it started. */
+    readExpectSecs(live: LiveRead | null): number | undefined {
+        return live?.expectSecs ?? this.researchReadAcceptsAny()?.expectSecs;
     },
 
     readProgressHtml(): string {
@@ -952,6 +961,7 @@ export const readDocumentMethods = uiModule({
                     <ol class="read-steps">${steps}</ol>
                 </div>
                 <p class="read-progress-time" id="read-progress-time"></p>
+                ${readSlow(this.readExpectSecs(live)) ? `<p class="read-progress-expect">${esc(t.slowReader)}</p>` : ''}
                 <p class="read-progress-slow" id="read-progress-slow" hidden>${esc(t.slow)}</p>
                 <p class="read-progress-note">${esc(t.closeNote)}</p>
                 ${this.readSoFarHtml()}`;
@@ -991,7 +1001,7 @@ export const readDocumentMethods = uiModule({
             const live = this.readLiveOf(s.readId);
             const since = Date.parse(live?.since ?? '') || s.startedAt;
             const secs = Math.max(0, Math.floor((Date.now() - since) / 1000));
-            const usual = readUsualMinutes(live?.readers || s.readers);
+            const usual = readUsualMinutes(live?.readers || s.readers, this.readExpectSecs(live));
             time.textContent = strings.read.running(usual, strings.read.elapsed(Math.floor(secs / 60), secs % 60));
             const slow = document.getElementById('read-progress-slow');
             if (slow) slow.hidden = secs < usual * 60 * 2;
@@ -1924,6 +1934,7 @@ export const readDocumentMethods = uiModule({
         reads.set(id, {
             id, state, version: (prev?.version ?? 0) + 1, at: now, since: now, files: pages, pages, readers: s?.readers ?? 1,
             done: 0, entries: 0, name: prev?.name ?? name, person: prev?.person ?? '', from: 'app',
+            ...(this.researchReadAcceptsAny()?.expectSecs ? { expectSecs: this.researchReadAcceptsAny()!.expectSecs } : {}),
         });
         readsByResearch.set(researchId, reads);
         results.delete(id);

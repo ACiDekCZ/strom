@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     sanitizeReadAccepts, sanitizeReads, sanitizeLiveRead, sanitizeReadResult, readFailure, retryAfter,
-    readFileRefusals, readFileMime, readFileKind, readPageImageUrl, readDocYear, readUsualMinutes, readRunning, cleanBlock,
+    readFileRefusals, readFileMime, readFileKind, readPageImageUrl, readDocYear, readUsualMinutes, readRunning, readSlow, cleanBlock,
 } from '../research-read.js';
 import { sanitizeLiveStatus, sanitizeAccepts } from '../research-link.js';
 
@@ -38,6 +38,19 @@ describe('accepts.read', () => {
         expect(a.langs).toEqual(['cs']);
         expect(sanitizeReadAccepts(null)).toBeNull();
         expect(sanitizeReadAccepts([1])).toBeNull();
+    });
+
+    it('takes how long a reading usually takes, only when ready', () => {
+        const base = { readers: 1, types: ['image/jpeg'], max: 1000, pages: 3 };
+        expect(sanitizeReadAccepts({ ...base, ready: true, expectSecs: 240 })?.expectSecs).toBe(240);
+        expect(sanitizeReadAccepts({ ...base, ready: true, expectSecs: 61.7 })?.expectSecs).toBe(61);
+        // An older research says nothing: no field, as before.
+        expect(sanitizeReadAccepts({ ...base, ready: true })).not.toHaveProperty('expectSecs');
+        expect(sanitizeReadAccepts({ ...base, ready: false, why: 'limit', expectSecs: 240 })).not.toHaveProperty('expectSecs');
+        for (const bad of [0, -5, '240', null, Infinity]) {
+            expect(sanitizeReadAccepts({ ...base, ready: true, expectSecs: bad })).not.toHaveProperty('expectSecs');
+        }
+        expect(sanitizeReadAccepts({ ...base, ready: true, expectSecs: 10 ** 9 })?.expectSecs).toBe(86_400);
     });
 
     it('stays in /status only with read.now among the features', () => {
@@ -71,6 +84,13 @@ describe('/status.reads', () => {
         const s = (features: string[]) => sanitizeLiveStatus({ tree: { id: '3f2c9a10-7b1e-4c55-9d2a-0e8f6b4a1c77', name: 'N' }, head: 'abc1234', features, reads: [entry] });
         expect(s(['read.now'])?.reads?.length).toBe(1);
         expect(s([])?.reads).toBeUndefined();
+    });
+
+    it('how long it takes, only while it runs', () => {
+        expect(sanitizeLiveRead({ ...entry, expectSecs: 480 })?.expectSecs).toBe(480);
+        expect(sanitizeLiveRead({ ...entry, state: 'queued', expectSecs: 240 })?.expectSecs).toBe(240);
+        expect(sanitizeLiveRead({ ...entry, state: 'done', expectSecs: 240 })).not.toHaveProperty('expectSecs');
+        expect(sanitizeLiveRead({ ...entry, expectSecs: 'soon' })).not.toHaveProperty('expectSecs');
     });
 
     it('which states still run', () => {
@@ -235,5 +255,16 @@ describe('the files a reading takes', () => {
     it('usual time: 3 minutes for one reader, 4 for two', () => {
         expect(readUsualMinutes(1)).toBe(3);
         expect(readUsualMinutes(2)).toBe(4);
+    });
+
+    it('a slow reader: its own time, and the several-minutes line from 120 s', () => {
+        expect(readUsualMinutes(1, 60)).toBe(3);
+        expect(readUsualMinutes(1, 240)).toBe(4);
+        expect(readUsualMinutes(2, 241)).toBe(5);
+        expect(readSlow(undefined)).toBe(false);
+        expect(readSlow(60)).toBe(false);
+        expect(readSlow(119)).toBe(false);
+        expect(readSlow(120)).toBe(true);
+        expect(readSlow(240)).toBe(true);
     });
 });

@@ -242,6 +242,8 @@ test.describe('Read a document', () => {
         const d = await startReading(page, b);
         await expect(d.locator('.read-step.is-now')).toHaveCount(1);
         await expect(d.locator('#read-progress-time')).toContainText('Usually within');
+        // An older research says nothing of its reader's pace: no several-minutes line.
+        await expect(d.locator('.read-progress-expect')).toHaveCount(0);
         await step(page, b, 'reading');
         await expect(d.locator('.read-step.is-done')).not.toHaveCount(0);
         await step(page, b, 'done', 1);
@@ -251,6 +253,35 @@ test.describe('Read a document', () => {
         await page.keyboard.press('Escape');
         await openResearchMenu(page, { expandMore: true });
         await expect(item(page)).toContainText('Read a document…');
+    });
+
+    test('a slow reader: the dialog and the progress say reading takes several minutes', async ({ page }) => {
+        const b = await setup(page, { read: readAccepts({ expectSecs: 300 }) });
+        const d = await openFromMenu(page);
+        await expect(d.locator('.read-slow-note')).toHaveText('Reading with this agent takes several minutes.');
+        await addPages(page, [{ name: 'zapis.jpg', mimeType: 'image/jpeg', buffer: JPEG }]);
+        await expect(d.locator('#read-foot-note')).toContainText('usually within 5 minutes');
+        await d.locator('[data-act="read"]').click();
+        await expect.poll(() => b.read!.posts.length).toBe(1);
+        await expect(d.locator('.read-progress-expect')).toHaveText('Reading with this agent takes several minutes.');
+        await expect(d.locator('#read-progress-time')).toContainText('Usually within 5 minutes');
+        // The bridge's own time for the running reading wins.
+        b.read!.reads[0].expectSecs = 480;
+        await step(page, b, 'reading');
+        await expect(d.locator('#read-progress-time')).toContainText('Usually within 8 minutes');
+        await expect(d.locator('.read-progress-expect')).toBeVisible();
+    });
+
+    test('a usual reader (under two minutes): no several-minutes line', async ({ page }) => {
+        const b = await setup(page, { read: readAccepts({ expectSecs: 60 }) });
+        const d = await openFromMenu(page);
+        await expect(d.locator('.read-drop')).toBeVisible();
+        await expect(d.locator('.read-slow-note')).toHaveCount(0);
+        await addPages(page, [{ name: 'zapis.jpg', mimeType: 'image/jpeg', buffer: JPEG }]);
+        await d.locator('[data-act="read"]').click();
+        await expect.poll(() => b.read!.posts.length).toBe(1);
+        await expect(d.locator('#read-progress-time')).toContainText('Usually within');
+        await expect(d.locator('.read-progress-expect')).toHaveCount(0);
     });
 
     test('dialog closed: the menu says it reads, then the notice when it ends; Show opens the result', async ({ page }) => {
@@ -316,7 +347,8 @@ for (const viewport of [DESKTOP, PHONE]) {
         test.use({ viewport, locale: 'de-DE' });
 
         test('the menu item, the dialog with pages and readers, the progress: nothing runs over', async ({ page }) => {
-            const b = await setup(page);
+            // A slow reader: its several-minutes line is on screen too.
+            const b = await setup(page, { read: readAccepts({ expectSecs: 240 }) });
             await openResearchMenu(page, { expandMore: true });
             await expect(item(page)).toContainText('Dokument lesen…');
             await noOverflow(item(page));
@@ -332,6 +364,7 @@ for (const viewport of [DESKTOP, PHONE]) {
             await d.locator('[data-act="read"]').click();
             await expect.poll(() => b.read!.posts.length).toBe(1);
             await expect(d.locator('.read-steps')).toBeVisible();
+            await expect(d.locator('.read-progress-expect')).toBeVisible();
             await noOverflow(d.locator('.modal'));
         });
     });
