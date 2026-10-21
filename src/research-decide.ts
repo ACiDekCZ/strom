@@ -10,6 +10,7 @@
  * only comes with loading its version.
  */
 
+import { clipText } from './text-clip.js';
 import { Person, ResearchConflict } from './types.js';
 import {
     ResearchConflictTake, researchConflictRef, researchPersonRef, isResearchHead, cleanText, withAppVersion,
@@ -186,7 +187,7 @@ function variantOf(v: unknown): string | undefined {
 export function decideRequestBody(kind: DecideKind, body: ConflictDecideBody | HypothesisDecideBody): Record<string, string> | null {
     const rec = asRecord(body);
     if (!rec || rec.do !== 'decide') return null;
-    const note = typeof rec.note === 'string' ? rec.note.trim().slice(0, NOTE_MAX) : '';
+    const note = typeof rec.note === 'string' ? clipText(rec.note.trim(), NOTE_MAX) : '';
     const withNote: Record<string, string> = note ? { note } : {};
     if (kind === 'conflict') {
         const take = takeOf(rec.take);

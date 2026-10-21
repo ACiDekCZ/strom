@@ -11,6 +11,7 @@
  */
 
 import { cleanText, researchPersonRef, withAppVersion } from './research-link.js';
+import { clipText } from './text-clip.js';
 
 /** `/status.features`: the research reads a document for the app now (`POST read`). */
 export const READ_FEATURE = 'read.now';
@@ -692,7 +693,7 @@ const postJson = (body: unknown): RequestInit => ({ method: 'POST', headers: { '
 export async function startRead(base: string, req: ReadRequest): Promise<ReadReply<ReadStarted>> {
     const body: Record<string, unknown> = { files: req.files, readers: req.readers, lang: req.lang };
     if (req.person && researchPersonRef(req.person)) body.person = req.person;
-    const note = req.note?.trim().slice(0, 500);
+    const note = req.note === undefined ? undefined : clipText(req.note.trim(), 500);
     if (note) body.note = note;
     const r = await call(`${base}/read`, postJson(body), JSON_TIMEOUT_MS);
     const s = ok(r.status) ? started(r.body) : null;

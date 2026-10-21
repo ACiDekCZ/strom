@@ -282,10 +282,38 @@ function byteLen(text: string): number {
     return n;
 }
 
+/** Marks, joiners and modifiers that belong to the character before them. */
+const CLUSTER_EXTEND = /^[\p{M}\u200D\u{1F3FB}-\u{1F3FF}\u{E0020}-\u{E007F}]/u;
+const isRegionalIndicator = (cp: number): boolean => cp >= 0x1f1e6 && cp <= 0x1f1ff;
+
+/**
+ * May a line end at `i` without tearing a character apart? Not inside a
+ * surrogate pair (an emoji outside the BMP: each half alone is written as
+ * U+FFFD), not before a combining mark, variation selector, skin tone or tag,
+ * not around a zero-width joiner (👨‍👩‍👧) and not inside a flag's pair of
+ * regional indicators. Some readers decode each physical line on its own.
+ */
+function isClusterBoundary(text: string, i: number): boolean {
+    const unit = text.charCodeAt(i);
+    if (unit >= 0xdc00 && unit <= 0xdfff) return false;
+    if (unit < 0x80 && text.charCodeAt(i - 1) < 0x80) return true;
+    if (CLUSTER_EXTEND.test(text.slice(i, i + 2))) return false;
+    const before = text.codePointAt(i - 1 - (text.charCodeAt(i - 1) >= 0xdc00 && text.charCodeAt(i - 1) <= 0xdfff ? 1 : 0))!;
+    if (before === 0x200d) return false;
+    if (isRegionalIndicator(text.codePointAt(i)!) && isRegionalIndicator(before)) {
+        // Flags pair up from the left: a cut after an odd run splits one.
+        let run = 0;
+        for (let j = i; j >= 2 && isRegionalIndicator(text.codePointAt(j - 2)!); j -= 2) run++;
+        return run % 2 === 0;
+    }
+    return true;
+}
+
 /**
  * Split a value into byte-bounded chunks. A cut NEVER sits next to a space:
  * a chunk that ended (or started) with one would lose it in any parser that
  * trims line values — ours included — and two words would run together.
+ * Nor does it tear a character apart (isClusterBoundary).
  */
 function chunkValue(text: string): string[] {
     if (byteLen(text) <= MAX_VALUE_BYTES) return [text];
@@ -308,8 +336,19 @@ function chunkValue(text: string): string[] {
             chunks.push(text.slice(start));
             break;
         }
+        // Back off to a cut beside no space and inside no character; failing
+        // that (a run of spaces), inside no character; failing that (one
+        // character longer than a line), at least between whole code points.
+        // An escaped '@@' stays on one line: readers unescape line by line.
+        const besideSpace = (i: number): boolean => text[i] === ' ' || text[i - 1] === ' ';
+        const whole = (i: number): boolean => isClusterBoundary(text, i) && !(text[i] === '@' && text[i - 1] === '@');
         let cut = end;
-        while (cut > start + 1 && (text[cut] === ' ' || text[cut - 1] === ' ')) cut--;
+        while (cut > start + 1 && (besideSpace(cut) || !whole(cut))) cut--;
+        if (besideSpace(cut) || !whole(cut)) {
+            cut = end;
+            while (cut > start + 1 && !whole(cut)) cut--;
+            if (!whole(cut)) cut = end;
+        }
         chunks.push(text.slice(start, cut));
         start = cut;
     }
