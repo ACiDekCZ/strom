@@ -83,6 +83,21 @@ async function setPlaces(page: Page, places: Record<string, string>): Promise<vo
     await clearToasts(page);
 }
 
+/**
+ * Coordinates put on the tree's places directly, keyed as the tree keys them
+ * (placeKey: lowercase, no accents), for tests where the lookup is only the way
+ * to get markers. The lookup itself (consent, what is sent, one request a
+ * second) is the first lookup test's subject.
+ */
+async function seedCoords(page: Page, coords: Record<string, [number, number]>): Promise<void> {
+    await page.evaluate((wanted) => {
+        const data = window.Strom.DataManager.getData();
+        data.places = { ...(data.places ?? {}) };
+        for (const [key, [lat, lon]] of Object.entries(wanted)) data.places[key] = { lat, lon };
+        window.Strom.TreeRenderer.render();
+    }, coords);
+}
+
 /** The usual two: Johan in Greenwich, his father Peter in Pembroke. */
 async function seedPlaces(page: Page): Promise<void> {
     await setPlaces(page, { 'Johan': 'Greenwich', 'Peter': 'Pembroke' });
@@ -226,18 +241,20 @@ test('coordinates survive a reload — they are part of the tree', async ({ page
 
 test('a marker tells you who belongs to the place and takes you to them', async ({ page }) => {
     await stubTiles(page);
-    await stubGeocoder(page, { Greenwich: [51.48, 0.0], Pembroke: [51.67, -4.91] });
+    const asked = await stubGeocoder(page, {});
 
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
     await seedPlaces(page);
+    await seedCoords(page, { greenwich: [51.48, 0.0], pembroke: [51.67, -4.91] });
 
     await page.getByRole('button', { name: 'Map', exact: true }).click();
     await clearToasts(page);
-    await page.getByRole('button', { name: /Look up \d+ places?/ }).click();
-    await page.getByRole('button', { name: 'Look them up' }).click();
-    await expect(page.locator('.map-marker')).toHaveCount(2, { timeout: 15000 });
+    await expect(page.locator('.map-marker')).toHaveCount(2);
+    // Known coordinates: nothing to look up, nothing asked.
+    await expect(page.getByRole('button', { name: /Look up \d+ places?/ })).toBeHidden();
+    expect(asked).toEqual([]);
 
     await page.locator('.map-marker[data-key="greenwich"] .map-marker-dot').click();
     await expect(page.locator('.map-popup')).toBeVisible();
@@ -253,18 +270,20 @@ test('two places close together stay separately clickable', async ({ page }) => 
     await stubTiles(page);
     // Greenwich and Westminster are a few km apart: at any sensible zoom their
     // labels overlap. The label of one must never swallow the other's dot.
-    await stubGeocoder(page, { Greenwich: [51.4826, -0.0077], Westminster: [51.4994, -0.1273] });
+    const asked = await stubGeocoder(page, {});
 
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
     await setPlaces(page, { 'Johan': 'Greenwich', 'Peter': 'Westminster' });
+    await seedCoords(page, { greenwich: [51.4826, -0.0077], westminster: [51.4994, -0.1273] });
 
     await page.getByRole('button', { name: 'Map', exact: true }).click();
     await clearToasts(page);
-    await page.getByRole('button', { name: /Look up \d+ places?/ }).click();
-    await page.getByRole('button', { name: 'Look them up' }).click();
-    await expect(page.locator('.map-marker')).toHaveCount(2, { timeout: 15000 });
+    await expect(page.locator('.map-marker')).toHaveCount(2);
+    // Known coordinates: nothing to look up, nothing asked.
+    await expect(page.getByRole('button', { name: /Look up \d+ places?/ })).toBeHidden();
+    expect(asked).toEqual([]);
 
     for (const key of ['greenwich', 'westminster']) {
         await page.locator(`.map-marker[data-key="${key}"] .map-marker-dot`).click();
@@ -335,18 +354,20 @@ test('a two-finger pinch steps the map zoom in', async ({ page }) => {
 
 test('offline, the map says so instead of showing a blank canvas', async ({ page, context }) => {
     await stubTiles(page);
-    await stubGeocoder(page, { Greenwich: [51.48, 0.0], Pembroke: [51.67, -4.91] });
+    const asked = await stubGeocoder(page, {});
 
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
     await seedPlaces(page);
+    await seedCoords(page, { greenwich: [51.48, 0.0], pembroke: [51.67, -4.91] });
 
     await page.getByRole('button', { name: 'Map', exact: true }).click();
     await clearToasts(page);
-    await page.getByRole('button', { name: /Look up \d+ places?/ }).click();
-    await page.getByRole('button', { name: 'Look them up' }).click();
-    await expect(page.locator('.map-marker')).toHaveCount(2, { timeout: 15000 });
+    await expect(page.locator('.map-marker')).toHaveCount(2);
+    // Known coordinates: nothing to look up, nothing asked.
+    await expect(page.getByRole('button', { name: /Look up \d+ places?/ })).toBeHidden();
+    expect(asked).toEqual([]);
 
     await context.setOffline(true);
     await page.getByRole('button', { name: 'Whole tree' }).click();
@@ -384,15 +405,18 @@ test('a place the map cannot find can be matched by hand', async ({ page }) => {
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
     await setPlaces(page, { 'Johan': 'Praha', 'Peter': 'Kravaře u Č. Lípy' });
+    // Praha is placed already: the automatic run asks for the odd one alone.
+    await seedCoords(page, { praha: [50.0755, 14.4378] });
 
     await page.getByRole('button', { name: 'Map', exact: true }).click();
     await clearToasts(page);
-    await page.getByRole('button', { name: /Look up \d+ places?/ }).click();
+    await page.getByRole('button', { name: 'Look up 1 place', exact: true }).click();
     await page.getByRole('button', { name: 'Look them up' }).click();
 
-    // The automatic run places Praha and leaves the odd one behind.
-    await expect(page.locator('.map-marker')).toHaveCount(1, { timeout: 15000 });
-    expect(asked).toContain('Kravaře u Č. Lípy');
+    // The automatic run cannot find it and leaves it behind.
+    await expect(page.locator('.toast', { hasText: '1 could not be found' })).toBeVisible();
+    await expect(page.locator('.map-marker')).toHaveCount(1);
+    expect(asked).toEqual(['Kravaře u Č. Lípy']);
 
     await clearToasts(page);
     await page.getByRole('button', { name: 'Places', exact: true }).click();
@@ -523,18 +547,20 @@ test('places can be fixed without going to the map', async ({ page }) => {
 
 test('a pin can be removed, and the place stays', async ({ page }) => {
     await stubTiles(page);
-    await stubGeocoder(page, { Greenwich: [51.48, 0.0], Pembroke: [51.67, -4.91] });
+    const asked = await stubGeocoder(page, {});
 
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
     await seedPlaces(page);
+    await seedCoords(page, { greenwich: [51.48, 0.0], pembroke: [51.67, -4.91] });
 
     await page.getByRole('button', { name: 'Map', exact: true }).click();
     await clearToasts(page);
-    await page.getByRole('button', { name: /Look up \d+ places?/ }).click();
-    await page.getByRole('button', { name: 'Look them up' }).click();
-    await expect(page.locator('.map-marker')).toHaveCount(2, { timeout: 15000 });
+    await expect(page.locator('.map-marker')).toHaveCount(2);
+    // Known coordinates: nothing to look up, nothing asked.
+    await expect(page.getByRole('button', { name: /Look up \d+ places?/ })).toBeHidden();
+    expect(asked).toEqual([]);
 
     await clearToasts(page);
     await page.getByRole('button', { name: 'Places', exact: true }).click();
