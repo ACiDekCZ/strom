@@ -15,6 +15,7 @@ import { gedcomTagEventType, parseGedcomDate } from './ged-parser.js';
 import { quickMatch, QuickMatchReason, normalizeName, stringSimilarity, compareEventDates } from './merge/matching.js';
 import { parseFlexDate } from './dates.js';
 import { sameSurname } from './surnames.js';
+import { sameGivenName } from './given-names.js';
 
 export type ProposeChoice = 'new' | 'link' | 'skip';
 
@@ -345,7 +346,7 @@ function relativeSupport(me: Person, other: Person, alive: readonly string[], da
     const forms = treeNameForms(other);
     const given = (me.firstName ?? '').trim();
     const words = (text: string): string[] => normalizeName(text).split(' ').filter(w => w.length > 1);
-    const givenFits = !!given && forms.given.some(g => stringSimilarity(given, g) >= NAME_SIMILAR
+    const givenFits = !!given && forms.given.some(g => sameGivenName(given, g) || stringSimilarity(given, g) >= NAME_SIMILAR
         || words(given).some(a => words(g).some(b => stringSimilarity(a, b) >= NAME_SIMILAR)));
     const surname = (me.lastName ?? '').trim();
     const surnameFits = !!surname && forms.surnames.some(n => stringSimilarity(surname, n) >= NAME_SIMILAR || sameSurname(surname, n, data));
@@ -633,7 +634,8 @@ export function linkAdditions(p: ReadPerson, tree: Person): { adds: LinkAddition
     ].filter(Boolean).map(fold);
     const read = [p.given, p.surname].filter(Boolean).join(' ');
     if (read && !known.includes(fold(read))) {
-        if (p.given && tree.firstName && fold(p.given) !== fold(tree.firstName)) diffs.push({ what: 'given', tree: tree.firstName, entry: p.given });
+        // A register's Latin or German form (Wenceslaus, Wenzel for Václav) is the same name.
+        if (p.given && tree.firstName && !sameGivenName(p.given, tree.firstName)) diffs.push({ what: 'given', tree: tree.firstName, entry: p.given });
         const surnames = [tree.lastName, tree.marriedSurname ?? ''].filter(Boolean).map(fold);
         if (p.surname && tree.lastName && !surnames.includes(fold(p.surname))) diffs.push({ what: 'surname', tree: tree.lastName, entry: p.surname });
         // Another written form of the name: kept beside the tree's (Person.nameVariants).

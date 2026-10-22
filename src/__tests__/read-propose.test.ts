@@ -87,9 +87,15 @@ describe('the suggestion of a read entry', () => {
     it('a linked person: only what is new, a differing value said and kept as another form', () => {
         const v = tree().persons['v' as PersonId];
         expect(linkAdditions(rp('x', 'father', 'Václav', 'Novák', { occupation: 'domkář' }), v).adds).toEqual([{ kind: 'occupation', value: 'domkář' }]);
-        const other = linkAdditions(rp('x', 'father', 'Wenzel', 'Novák', { sex: 'M' }), v);
-        expect(other.diffs).toEqual([{ what: 'given', tree: 'Václav', entry: 'Wenzel' }]);
-        expect(other.adds).toEqual([{ kind: 'variant', value: 'Wenzel Novák' }]);
+        const other = linkAdditions(rp('x', 'father', 'Vojtěch', 'Novák', { sex: 'M' }), v);
+        expect(other.diffs).toEqual([{ what: 'given', tree: 'Václav', entry: 'Vojtěch' }]);
+        expect(other.adds).toEqual([{ kind: 'variant', value: 'Vojtěch Novák' }]);
+        // The register's German or Latin form of the same name: not a difference, kept as another form.
+        for (const form of ['Wenzel', 'Wenceslaus']) {
+            const same = linkAdditions(rp('x', 'father', form, 'Novák', { sex: 'M' }), v);
+            expect(same.diffs, form).toEqual([]);
+            expect(same.adds, form).toEqual([{ kind: 'variant', value: `${form} Novák` }]);
+        }
         // Already a known form, the occupation already there: nothing.
         const known = { ...v, nameVariants: ['Wenzel Novák'], events: [{ id: 'o', type: 'occupation' as const, note: 'Domkář' }] };
         expect(linkAdditions(rp('x', 'father', 'Wenzel', 'Novák', { occupation: 'domkář' }), known).adds).toEqual([]);

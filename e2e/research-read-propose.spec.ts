@@ -271,18 +271,31 @@ test.describe('Read a document: suggest for the tree', () => {
         await setup(page, baptism({}, {
             persons: [
                 { ref: 'p1', role: 'child', given: 'Marie', surname: 'Fíšková', sex: 'F' },
+                { ref: 'p2', role: 'father', given: 'Jacobus', surname: 'Fíšek', match: [{ person: 'P0001', why: 'place', score: 0.9 }] },
+            ],
+            relations: [{ type: 'parent', parent: 'p2', child: 'p1' }],
+        }));
+        const d = await openPropose(page);
+        await expect(cardOf(d, 'p2').locator('.read-p-differs')).toHaveText('Given name differs: tree Josef, entry Jacobus');
+        await expect(cardOf(d, 'p2').locator('.read-p-adds')).toContainText('name form Jacobus Fíšek');
+        await apply(d).click();
+        await expect(d.locator('#read-title')).toHaveText('Added to the tree');
+        const josef = await page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons) as any[]).find(p => p.refn === 'P0001'));
+        expect(josef.firstName).toBe('Josef');
+        expect(josef.nameVariants).toContain('Jacobus Fíšek');
+    });
+
+    test('a linked person read in the register\'s Latin form of the same name: no difference said, the form added', async ({ page }) => {
+        await setup(page, baptism({}, {
+            persons: [
+                { ref: 'p1', role: 'child', given: 'Marie', surname: 'Fíšková', sex: 'F' },
                 { ref: 'p2', role: 'father', given: 'Josephus', surname: 'Fíšek', match: [{ person: 'P0001', why: 'place', score: 0.9 }] },
             ],
             relations: [{ type: 'parent', parent: 'p2', child: 'p1' }],
         }));
         const d = await openPropose(page);
-        await expect(cardOf(d, 'p2').locator('.read-p-differs')).toHaveText('Given name differs: tree Josef, entry Josephus');
         await expect(cardOf(d, 'p2').locator('.read-p-adds')).toContainText('name form Josephus Fíšek');
-        await apply(d).click();
-        await expect(d.locator('#read-title')).toHaveText('Added to the tree');
-        const josef = await page.evaluate(() => (Object.values(window.Strom.DataManager.getData().persons) as any[]).find(p => p.refn === 'P0001'));
-        expect(josef.firstName).toBe('Josef');
-        expect(josef.nameVariants).toContain('Josephus Fíšek');
+        await expect(cardOf(d, 'p2').locator('.read-p-differs')).toHaveCount(0);
     });
 
     test('Other… links a person picked in the tree', async ({ page }) => {
