@@ -62,7 +62,11 @@ interface Bridge {
     note?: Record<string, unknown>;
     /** A place's Sent answers without naming the tasks it marked. */
     groupSentSilent?: boolean;
-    /** An item's write answers so (the task's phase as the research has it), changing nothing. */
+    /**
+     * An item's write answers so (the task's phase as the research has it), changing nothing;
+     * with phase 'sent' the task is sent in the bridge's status from then on (the research marked it
+     * meanwhile, after the status the app last read).
+     */
     itemReply?: Record<string, unknown>;
 }
 
@@ -141,7 +145,10 @@ async function follow(page: Page, size: { width: number; height: number } = { wi
             if (write[1].startsWith('waiting/')) {
                 const w = bridge.waiting.find(x => x.id === write[1].slice('waiting/'.length));
                 if (!w) return route.fulfill(json(404, { error: 'not waiting', code: 'waiting.none' }));
-                if (bridge.itemReply) return route.fulfill(json(200, { ...bridge.itemReply, task: w.id }));
+                if (bridge.itemReply) {
+                    if (bridge.itemReply.phase === 'sent' && w.phase !== 'sent') Object.assign(w, { phase: 'sent', sentAt: at });
+                    return route.fulfill(json(200, { ...bridge.itemReply, task: w.id }));
+                }
                 if (what === 'sent') {
                     Object.assign(w, { phase: 'sent', sentAt: at });
                     return route.fulfill(json(200, { sent: [w.id] }));
@@ -1177,8 +1184,8 @@ test.describe('Awaiting action written through the bridge', () => {
         const bridge = await follow(page, { width: 1440, height: 900 }, writable(['waiting.sent']));
         await openOverview(page);
         const letter = await openLetter(page);
-        // The research marked it sent meanwhile; its status here is not yet asked again.
-        Object.assign(bridge.waiting.find(w => w.id === 'T0018')!, { phase: 'sent', sentAt: new Date().toISOString() });
+        // The research marked it sent meanwhile, after the status the app last read: the bridge has it
+        // sent from the write on (changed before the click, the fast reconnect could move the row first).
         bridge.itemReply = { sent: [], phase: 'sent' };
         await letter.locator('.research-overview__waiting-action[data-action="sent"]').click();
         await expect(todoHead(page)).toHaveText(/To do · 29/);
