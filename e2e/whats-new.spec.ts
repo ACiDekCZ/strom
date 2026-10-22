@@ -9,7 +9,12 @@ import { openApp, createFirstPerson, waitForPersist, PACKAGE_VERSION } from './h
  */
 
 const SEEN_KEY = 'strom-whats-new-seen';
-/** The first look comes 1.2 s after the first render; this is well past it. */
+/**
+ * The first look comes 1.2 s after the first render (FIRST_CHECK_MS in
+ * src/ui/release-notes-ui.ts), then every 1 s while busy; this is well past
+ * it. Run on Playwright's clock (installed before the page loads, otherwise
+ * running as usual), so "nothing comes" costs no real time.
+ */
 const PAST_FIRST_CHECK_MS = 2500;
 const OLDER = '3.0.0';
 
@@ -33,6 +38,7 @@ async function existingUser(page: Page): Promise<void> {
 }
 
 test('a new version shows What\'s new once; the next start does not', { tag: '@smoke' }, async ({ page }) => {
+    await page.clock.install();
     await existingUser(page);
     await setSeen(page, OLDER);
     await reload(page);
@@ -59,11 +65,12 @@ test('a new version shows What\'s new once; the next start does not', { tag: '@s
     expect(await seen(page)).toBe(PACKAGE_VERSION);
 
     await reload(page);
-    await page.waitForTimeout(PAST_FIRST_CHECK_MS);
+    await page.clock.runFor(PAST_FIRST_CHECK_MS);
     await expect(d).toHaveCount(0);
 });
 
 test('"Don\'t show next time" keeps it away after later updates; Settings turns it back on', async ({ page }) => {
+    await page.clock.install();
     await existingUser(page);
     await setSeen(page, OLDER);
     await reload(page);
@@ -78,7 +85,7 @@ test('"Don\'t show next time" keeps it away after later updates; Settings turns 
     // The next update: nothing.
     await setSeen(page, OLDER);
     await reload(page);
-    await page.waitForTimeout(PAST_FIRST_CHECK_MS);
+    await page.clock.runFor(PAST_FIRST_CHECK_MS);
     await expect(d).toHaveCount(0);
 
     // Settings → Language and appearance says it is off; turned on, the next update shows it again.
@@ -94,9 +101,10 @@ test('"Don\'t show next time" keeps it away after later updates; Settings turns 
 });
 
 test('a first start with no trees shows nothing and stores the version', async ({ page }) => {
+    await page.clock.install();
     await openApp(page, { whatsNew: true });
     await expect(page.locator('#empty-state')).toBeVisible();
-    await page.waitForTimeout(PAST_FIRST_CHECK_MS);
+    await page.clock.runFor(PAST_FIRST_CHECK_MS);
     await expect(dialog(page)).toHaveCount(0);
     expect(await seen(page)).toBe(PACKAGE_VERSION);
 });
@@ -109,6 +117,7 @@ test('an existing user from a version before the dialog (trees, no stored versio
 });
 
 test('it waits while something is in the way (the "new version available" toast) and comes once the app is free', async ({ page }) => {
+    await page.clock.install();
     await existingUser(page);
     await setSeen(page, OLDER);
     // The update toast is on screen from the start.
@@ -120,7 +129,7 @@ test('it waits while something is in the way (the "new version available" toast)
         });
     });
     await reload(page);
-    await page.waitForTimeout(PAST_FIRST_CHECK_MS);
+    await page.clock.runFor(PAST_FIRST_CHECK_MS);
     await expect(dialog(page)).toHaveCount(0);
     expect(await seen(page)).toBe(OLDER);
 

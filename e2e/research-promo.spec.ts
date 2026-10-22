@@ -90,6 +90,13 @@ async function existingTreeFirstRun(page: Page): Promise<void> {
 
 const whatsNew = (page: Page) => page.locator('.whats-new[role="dialog"]');
 /**
+ * The card comes 0.7 s after the first render (CARD_DELAY_MS in
+ * src/ui/research-promo-ui.ts); this is well past it. Run on Playwright's
+ * clock (installed before the page loads, otherwise running as usual), so
+ * "no card" costs no real time.
+ */
+const PAST_CARD_DELAY_MS = 1200;
+/**
  * The promotion lights only the "New" label on its menu row: a dot on ⋯ or on
  * "More" means something needs attention, and a promotion does not (Milan,
  * 3 Oct 2026). `newDot` stays to prove there is none.
@@ -219,6 +226,7 @@ test.describe('existing tree on desktop', () => {
     test.use({ viewport: DESKTOP });
 
     test('the 3.0 card shows once, anchored under Actions; "Learn more" opens the site and puts "New" out with its row', async ({ page, context }) => {
+        await page.clock.install();
         await stubSite(context);
         await existingTreeFirstRun(page);
         const cardEl = whatsNew(page);
@@ -257,7 +265,7 @@ test.describe('existing tree on desktop', () => {
         // Once only: not after a reload.
         await page.reload();
         await expect(card(page, 'Jan')).toBeVisible();
-        await page.waitForTimeout(1200);
+        await page.clock.fastForward(PAST_CARD_DELAY_MS);
         await expect(whatsNew(page)).toHaveCount(0);
     });
 
@@ -273,12 +281,13 @@ test.describe('existing tree on desktop', () => {
     });
 
     test('the card counts as shown even when it is just ignored', async ({ page }) => {
+        await page.clock.install();
         await existingTreeFirstRun(page);
         await expect(whatsNew(page)).toBeVisible();
         // Ignored (no button pressed): still counted as shown.
         await page.reload();
         await expect(card(page, 'Jan')).toBeVisible();
-        await page.waitForTimeout(1200);
+        await page.clock.fastForward(PAST_CARD_DELAY_MS);
         await expect(whatsNew(page)).toHaveCount(0);
         // … and the "New" marker is still lit (only the buttons put it out).
         await expectNewLit(page);
@@ -545,6 +554,7 @@ test.describe('hidden', () => {
     test.use({ viewport: DESKTOP });
 
     test('view mode / exported strom.html from disk: no offer, no item, no card, no dots', async ({ page }, testInfo) => {
+        await page.clock.install();
         await openApp(page, { researchPromo: true });
         await createFirstPerson(page, 'Jan', 'Novak');
         await page.evaluate(() => window.Strom.UI.showExportDialog());
@@ -561,7 +571,7 @@ test.describe('hidden', () => {
         await page.goto(pathToFileURL(out).href);
         await expect(card(page, 'Jan')).toBeVisible();
         await expect(page.locator('body')).toHaveClass(/view-mode/);
-        await page.waitForTimeout(1200);
+        await page.clock.fastForward(PAST_CARD_DELAY_MS);
         await expect(whatsNew(page)).toHaveCount(0);
         await expect(page.locator('body')).not.toHaveClass(/research-promo/);
         await expect(newDot(page)).toBeHidden();
@@ -586,6 +596,7 @@ test.describe('hidden', () => {
     });
 
     test('locked data / password prompt: no card, no item, no dots, no offer', async ({ page }) => {
+        await page.clock.install();
         const PASSWORD = 'linden-tree-42';
         await openApp(page, { researchPromo: true });
         await createFirstPerson(page, 'Jan', 'Novak');
@@ -605,11 +616,13 @@ test.describe('hidden', () => {
         await page.reload();
         const prompt = page.locator('#password-prompt-modal');
         await expect(prompt).toBeVisible();
-        await page.waitForTimeout(1200);
+        await page.clock.fastForward(PAST_CARD_DELAY_MS);
         await expect(whatsNew(page)).toHaveCount(0);
         await prompt.getByRole('button', { name: 'Cancel' }).click();
         await expect(page.locator('body')).toHaveClass(/\bdata-locked\b/);
-        await page.waitForTimeout(1200);
+        // The start goes on (its first render, the card's timer) once the prompt is answered.
+        await expect(page.locator('html')).not.toHaveClass(/app-loading/);
+        await page.clock.fastForward(PAST_CARD_DELAY_MS);
         await expect(whatsNew(page)).toHaveCount(0);
         await expect(page.locator('#empty-state .research-offer')).toBeHidden();
         await expect(newDot(page)).toBeHidden();
@@ -619,6 +632,7 @@ test.describe('hidden', () => {
     });
 
     test('a tree from Strom Research: no card, no "New" — its "Research" submenu instead of the item', async ({ page }) => {
+        await page.clock.install();
         await openApp(page, { researchPromo: true });
         const ged = [
             '0 HEAD', '1 SOUR STROM_RESEARCH', '2 NAME Strom Research', '1 DATE 23 SEP 2026',
@@ -639,7 +653,7 @@ test.describe('hidden', () => {
         await setPromoSettings(page, {});
         await page.reload();
         await expect(card(page, 'Josef')).toBeVisible();
-        await page.waitForTimeout(1200);
+        await page.clock.fastForward(PAST_CARD_DELAY_MS);
         await expect(whatsNew(page)).toHaveCount(0);
         await expect(newDot(page)).toBeHidden();
         await openActionsMenu(page);
@@ -649,13 +663,14 @@ test.describe('hidden', () => {
     });
 
     test('an open from the command line: no card, but the "New" marker', async ({ page }) => {
+        await page.clock.install();
         await existingTreeFirstRun(page);
         await expect(whatsNew(page)).toBeVisible();
         await setPromoSettings(page, {});
         // The installed app's file handler start (?open=file) — a Strom Research open.
         await page.goto('/strom.html?open=file');
         await expect(card(page, 'Jan')).toBeVisible();
-        await page.waitForTimeout(1200);
+        await page.clock.fastForward(PAST_CARD_DELAY_MS);
         await expect(whatsNew(page)).toHaveCount(0);
         await expectNewLit(page);
         expect((await readSettings(page)).whatsNew30Shown).toBeUndefined();

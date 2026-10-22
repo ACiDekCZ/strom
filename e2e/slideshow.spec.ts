@@ -1,8 +1,15 @@
 import { test, expect } from '@playwright/test';
 import { openApp, card } from './helpers.js';
 
+/**
+ * The longest stop: a story's 8 s plus the 1.7 s flight (STOP_STORY, FLIGHT_MS
+ * in src/ui/slideshow.ts), and a little more. Run on Playwright's clock.
+ */
+const PAST_ONE_STOP_MS = 10_000;
+
 /** Slideshow / TV mode: hands-off flight through the tree. */
 test('slideshow spotlights each stop, hides the chrome and is keyboard driven', async ({ page }) => {
+    await page.clock.install();
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
@@ -24,11 +31,15 @@ test('slideshow spotlights each stop, hides the chrome and is keyboard driven', 
     await page.keyboard.press('ArrowLeft');
     await expect.poll(() => page.locator('#slideshow-caption .slideshow-name').textContent()).toBe(first);
 
-    // Space pauses (no auto-advance while paused).
+    // Playing, a stop's time moves the show on by itself.
+    await page.clock.fastForward(PAST_ONE_STOP_MS);
+    await expect.poll(() => page.locator('#slideshow-caption .slideshow-name').textContent()).not.toBe(first);
+
+    // Space pauses (no auto-advance while paused, for longer than any stop).
     await page.keyboard.press(' ');
     await expect(page.locator('body')).toHaveClass(/slideshow-paused/);
     const held = await page.locator('#slideshow-caption .slideshow-name').textContent();
-    await page.waitForTimeout(1500);
+    await page.clock.fastForward(PAST_ONE_STOP_MS);
     await expect(page.locator('#slideshow-caption .slideshow-name')).toHaveText(held!);
 
     // Esc leaves and restores the app; the spotlight is cleaned up.

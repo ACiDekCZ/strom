@@ -251,6 +251,8 @@ test.describe('the state of the tree and sending straight', () => {
 
 test.describe('after a send the research wrote', () => {
     test('the window coming back asks at once; the write is told, its version is not loaded (only when the user asks)', async ({ page }) => {
+        // The "just asked" window (RECHECK_MS, src/ui/research-sync-ui.ts) is skipped on Playwright's clock.
+        await page.clock.install();
         await openResearch(page, { edit: true });
         const bridge = await fakeBridge(page);
         await poll(page);
@@ -262,7 +264,7 @@ test.describe('after a send the research wrote', () => {
         bridge.lastIntake = { id: 'I0001', at: new Date(Date.now() + 1000).toISOString() };
         bridge.head = 'aa11bb22cc33';
         bridge.treeGed = researchGed('aa11bb22cc33').replace('1 NAME Jan /Fíšek/', '1 NAME Jan /Fíšek/\n1 BIRT\n2 PLAC Praha');
-        await page.waitForTimeout(5100);   // past the "just asked" window
+        await page.clock.fastForward(5100);   // past the "just asked" window
         await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
         await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sent?.replyHead)).toBe('aa11bb22cc33');
         expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).not.toBe('aa11bb22cc33');

@@ -145,10 +145,13 @@ test('Firefox\'s storage prompt left unanswered: the notice comes after a few se
             },
         });
     });
+    // The few seconds the app waits for the answer (PERSISTENCE_SETTLE_MS, 3 s) are skipped on Playwright's clock.
+    await page.clock.install();
     await openApp(page, { fileCopyReminders: true });
     await importBigTree(page, 'Unanswered');
     await page.waitForFunction(() => (window as unknown as { __persistAsked?: number }).__persistAsked === 1);
     await addPerson(page, 'First');
+    await page.clock.runFor(3_000);
     await expect(page.locator('#file-copy-notice')).toBeVisible({ timeout: 8000 });
     await expect(page.locator('#file-copy-notice')).toContainText('Unanswered');
 });
@@ -180,6 +183,8 @@ test('persistent storage: no notice, no icon, and the backups dialog says so', a
 test('wide screens: a labelled pill, "Saved to file" after an export; reminders off: no notice', async ({ page }) => {
     await stubPersistence(page, false);
     await page.setViewportSize({ width: 1440, height: 800 });
+    // The "Saved to file" flash (4 s, then a 0.3 s fade) is skipped on Playwright's clock.
+    await page.clock.install();
     // openApp turns the file-copy reminders off by default.
     await openApp(page);
     await importBigTree(page, 'Wide');
@@ -191,7 +196,8 @@ test('wide screens: a labelled pill, "Saved to file" after an export; reminders 
     await expect(pill.locator('.storage-pill-label')).toHaveText('Only in browser');
     await exportTreeJson(page);
     await expect(pill.locator('.storage-pill-label')).toHaveText('Saved to file');
-    await expect(pill).toBeHidden({ timeout: 6000 });
+    await page.clock.runFor(4_500);
+    await expect(pill).toBeHidden();
 });
 
 test('reduced motion: the first-edit highlight does not animate', async ({ page }) => {

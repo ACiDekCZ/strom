@@ -1,6 +1,6 @@
 import { test, expect, Page, Route } from '@playwright/test';
 import { openApp, waitForPersist, PACKAGE_VERSION } from './helpers.js';
-import { openResearch, fakeBridge, poll, FakeBridge, BRIDGE } from './research-bridge.js';
+import { openResearch, fakeBridge, poll, FakeBridge, BRIDGE, UUID } from './research-bridge.js';
 
 /**
  * "What's new" of Strom Research in the app: when the bridge of the linked
@@ -20,7 +20,14 @@ const OLDER_APP = '3.0.0';
 const SEEN = '1.14.0';
 const NEW = '1.15.0-beta.6';
 const URL = 'https://github.com/ACiDekCZ/strom-research/blob/beta/CHANGELOG.md#1150';
-/** The first look comes 1.2 s after the first render, waiting up to 1.5 s for the research; this is well past it. */
+/**
+ * The first look comes 1.2 s after the first render, waiting up to 1.5 s for
+ * the research (FIRST_CHECK_MS, RESEARCH_WAIT_MS in src/ui/release-notes-ui.ts);
+ * this is well past it. Run on Playwright's clock (installed before the page
+ * loads, otherwise running as usual), so "nothing comes" costs no real time.
+ * Before it, what the bridge says has been taken in: its fetch timeouts would
+ * otherwise fire in the skipped time as if it did not answer.
+ */
 const PAST_FIRST_CHECK_MS = 3500;
 
 const dialog = (page: Page) => page.locator('#release-notes-modal');
@@ -60,10 +67,14 @@ async function reload(page: Page): Promise<void> {
     await expect(page.locator('html')).not.toHaveClass(/app-loading/);
 }
 
+/** The bridge's status taken in by this page. */
+const bridgeAnswered = (page: Page) => expect.poll(() => page.evaluate((id) => window.Strom.UI.researchBridgeUp(id), UUID)).toBe(true);
+
 test.describe('Strom Research in "What\'s new" (computer)', () => {
     test.use({ viewport: { width: 1440, height: 900 } });
 
     test('a newer research: a dialog with its section only; points as text; seen once closed', { tag: '@smoke' }, async ({ page }) => {
+        await page.clock.install();
         const { w } = await linked(page, {
             seen: SEEN,
             points: ['**New**: after `strom update` a link.', '<img src=x onerror="window.__xss=1"> and <b>bold</b>'],
@@ -99,7 +110,8 @@ test.describe('Strom Research in "What\'s new" (computer)', () => {
         expect(await getKey(page, APP_SEEN_KEY)).toBe(PACKAGE_VERSION);
 
         await reload(page);
-        await page.waitForTimeout(PAST_FIRST_CHECK_MS);
+        await bridgeAnswered(page);
+        await page.clock.runFor(PAST_FIRST_CHECK_MS);
         await expect(d).toHaveCount(0);
         expect(w.asks).toHaveLength(1);
     });
@@ -141,6 +153,7 @@ test.describe('Strom Research in "What\'s new" (computer)', () => {
     });
 
     test('the app\'s dialog already closed in this page: the research\'s section waits for the next start', async ({ page }) => {
+        await page.clock.install();
         const { b, w } = await linked(page, { seen: SEEN, down: true });
         await setKey(page, APP_SEEN_KEY, OLDER_APP);
         await reload(page);
@@ -152,7 +165,9 @@ test.describe('Strom Research in "What\'s new" (computer)', () => {
         b.down = false;
         await poll(page);
         await expect.poll(() => w.asks.length).toBe(1);
-        await page.waitForTimeout(PAST_FIRST_CHECK_MS);
+        // Its answer taken in (the link it gives is kept for About).
+        await expect.poll(() => getKey(page, 'strom-research-whats-new')).toContain(URL);
+        await page.clock.runFor(PAST_FIRST_CHECK_MS);
         await expect(d).toHaveCount(0);
         expect(await getKey(page, SEEN_KEY)).toBe(SEEN);
 
@@ -161,10 +176,11 @@ test.describe('Strom Research in "What\'s new" (computer)', () => {
     });
 
     test('the first link to a research, made in this page: no dialog, no question, its version recorded', async ({ page }) => {
+        await page.clock.install();
         const { w } = await linked(page, { seen: null });
         await poll(page);
         await expect.poll(() => getKey(page, SEEN_KEY)).toBe(NEW);
-        await page.waitForTimeout(PAST_FIRST_CHECK_MS);
+        await page.clock.runFor(PAST_FIRST_CHECK_MS);
         await expect(dialog(page)).toHaveCount(0);
         expect(w.asks).toHaveLength(0);
     });
@@ -182,6 +198,7 @@ test.describe('Strom Research in "What\'s new" (computer)', () => {
     });
 
     test('an open from the research (?live=) with the app and the research both new: the research\'s section alone, the app\'s at the next usual start', async ({ page }) => {
+        await page.clock.install();
         const { w } = await linked(page, { seen: SEEN });
         await setKey(page, APP_SEEN_KEY, OLDER_APP);
         await page.goto(`/strom.html?live=${encodeURIComponent(BRIDGE)}`);
@@ -197,7 +214,7 @@ test.describe('Strom Research in "What\'s new" (computer)', () => {
         expect(await getKey(page, SEEN_KEY)).toBe(NEW);
         // The app's version stays unrecorded: nothing more in this page.
         expect(await getKey(page, APP_SEEN_KEY)).toBe(OLDER_APP);
-        await page.waitForTimeout(PAST_FIRST_CHECK_MS);
+        await page.clock.runFor(PAST_FIRST_CHECK_MS);
         await expect(d).toHaveCount(0);
 
         // The next usual start: not the same tab resuming the live follow.
@@ -211,10 +228,11 @@ test.describe('Strom Research in "What\'s new" (computer)', () => {
     });
 
     test('a bridge without "whats.new": never asked, no dialog; About shows its version without a link', async ({ page }) => {
+        await page.clock.install();
         const { w } = await linked(page, { seen: SEEN, strom: '1.15.0-beta.5', features: [] });
         await reload(page);
         await expect.poll(() => getKey(page, SEEN_KEY)).toBe('1.15.0-beta.5');
-        await page.waitForTimeout(PAST_FIRST_CHECK_MS);
+        await page.clock.runFor(PAST_FIRST_CHECK_MS);
         await expect(dialog(page)).toHaveCount(0);
 
         await page.evaluate(() => window.Strom.UI.showAboutDialog());
@@ -259,10 +277,11 @@ test.describe('Strom Research in "What\'s new" (phone)', () => {
     test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
     test('a phone asks nothing and shows nothing of the research', async ({ page }) => {
+        await page.clock.install();
         const { w } = await linked(page, { seen: SEEN });
         await setKey(page, 'strom-research-whats-new', JSON.stringify({ version: NEW, url: URL }));
         await reload(page);
-        await page.waitForTimeout(PAST_FIRST_CHECK_MS);
+        await page.clock.runFor(PAST_FIRST_CHECK_MS);
         await expect(dialog(page)).toHaveCount(0);
         expect(w.asks).toHaveLength(0);
         expect(await getKey(page, SEEN_KEY)).toBe(SEEN);
