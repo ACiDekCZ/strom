@@ -7,6 +7,7 @@ English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md)
 *This version is in preparation; this section grows with every test version.*
 
 - **Read a document**: when the research says its agent usually takes several minutes for one reading, the window and the progress say so, and the usual time follows that agent.
+- **Fixes**: in *Relationships*, a partnership date keeps the form it was typed in (*15.5.1880* in Czech and German) when the panel redraws, instead of turning into *1880-05-15*. *Suggest for the tree* takes the Latin, German and Czech forms of a given name in the registers (*Wenceslaus*, *Wenzel*, *Václav*; *Catharina*, *Katharina*, *Kateřina*; *Joannes*, *Johann*, *Jan*) as one name and no longer reports them as a difference; the form read is still kept beside the tree's. The line that reading with the agent takes several minutes appears as soon as the research says so, and a reading waiting in the queue no longer makes the agent count as slow. In a source's detail, *Close* and *Edit* stay side by side next to long links, and under *Other trees* a long tree name stays whole while its marks move to a second line.
 
 ## 3.14.0
 

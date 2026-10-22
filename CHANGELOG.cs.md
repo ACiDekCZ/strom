@@ -7,6 +7,7 @@
 *Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
 
 - **Přečíst dokument**: když výzkum uvede, že jedno čtení jeho agentovi obvykle trvá několik minut, okno i průběh to řeknou a obvyklá doba se řídí tímto agentem.
+- **Opravy**: datum partnerství ve *Vztazích* zůstane při překreslení panelu ve tvaru, v jakém bylo zadané (*15.5.1880*), a nezmění se na *1880-05-15*. *Navrhnout do stromu* bere latinskou, německou a českou podobu křestního jména z matrik (*Wenceslaus*, *Wenzel*, *Václav*; *Catharina*, *Katharina*, *Kateřina*; *Joannes*, *Johann*, *Jan*) jako jedno jméno a už je nehlásí jako rozdíl; přečtená podoba se dál uloží vedle jména ve stromu. Věta, že čtení s agentem trvá několik minut, se ukáže hned, jak to výzkum řekne, a čtení čekající ve frontě už agenta nedělá pomalým. V detailu pramene zůstanou *Zavřít* a *Upravit* vedle sebe i u dlouhých odkazů a v *Dalších stromech* zůstane dlouhý název stromu celý, značky se posunou na druhý řádek.
 
 ## 3.14.0
 
