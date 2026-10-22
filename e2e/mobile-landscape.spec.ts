@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp } from './helpers.js';
+import { openApp, createFirstPerson } from './helpers.js';
 
 /**
  * A phone held sideways (ZADANI_DEV_mobil_ovladani 4a, ≤1024 × ≤500
@@ -173,3 +173,26 @@ test('the legend stands beside the side bar and above back, never under the bar 
     expect(l.y + l.height).toBeLessThanOrEqual(b.y);
     expect(l.y).toBeGreaterThanOrEqual(44);
 });
+
+for (const size of [{ width: 640, height: 360 }, { width: 844, height: 390 }]) {
+    test(`${size.width} × ${size.height}: the undo toast and a message beside the side bar, More taps at once`, async ({ page }) => {
+        await page.setViewportSize(size);
+        await openApp(page);
+        await createFirstPerson(page, 'Jan', 'Novak');
+        await page.evaluate(() => window.Strom.UI.showToast('Sent to the research with a longer message', 6000));
+        const undo = page.locator('.undo-toast.show');
+        const toast = page.locator('.toast.show');
+        await expect(undo).toBeVisible();
+        await expect(toast).toBeVisible();
+        const bar = (await page.locator('#bottom-bar').boundingBox())!;
+        for (const el of [undo, toast]) {
+            // Measured once it has slid in.
+            await expect.poll(() => el.evaluate(e => e.getBoundingClientRect().x)).toBeGreaterThanOrEqual(bar.x + bar.width);
+            const r = (await el.boundingBox())!;
+            expect(r.x + r.width).toBeLessThanOrEqual(size.width);
+        }
+        // No wait for the toast to go: the tab is free.
+        await page.locator('#bb-view-more').tap({ timeout: 1000 });
+        await expect(page.locator('.bottom-sheet-menu')).toBeVisible();
+    });
+}

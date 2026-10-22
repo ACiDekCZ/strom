@@ -13264,6 +13264,17 @@
             }
             .undo-toast.show { transform: translateY(0); }
         }
+        /* Phone held sideways: the bar is a side bar on the left, so both
+           toasts centre in the room beside it and never cover its tabs. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .undo-toast, .toast {
+                left: calc(var(--side-bar-w) + (100vw - var(--side-bar-w)) / 2);
+                max-width: min(calc(100vw - var(--side-bar-w) - 24px), 420px);
+                box-sizing: border-box;
+            }
+            .undo-toast { right: auto; width: auto; transform: translateX(-50%) translateY(12px); }
+            .undo-toast.show { transform: translateX(-50%) translateY(0); }
+        }
 
         /* Pending merge dialog */
         .pending-merge-message {
