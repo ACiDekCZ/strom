@@ -351,4 +351,54 @@ test.describe('other research trees', () => {
             }
         });
     }
+    // A long tree name beside "running" and "1 waiting": the marks move to a second line before the name shortens.
+    for (const width of [1440, 1024]) {
+        test(`followed live (en ${width}): a long name in "Other trees" stays whole, its marks below`, async ({ page }) => {
+            await page.setViewportSize({ width, height: 900 });
+            await fastRounds(page);
+            await page.addInitScript((links) => {
+                if (sessionStorage.getItem('seeded')) return;
+                sessionStorage.setItem('seeded', '1');
+                localStorage.setItem('strom-research-links', JSON.stringify({ actions: links, at: new Date().toISOString() }));
+                localStorage.setItem('strom-other-trees-open', '1');
+            }, LINKS);
+            const GED = [
+                '0 HEAD', '1 SOUR STROM_RESEARCH', '1 DATE 30 SEP 2026', `1 _STROM_TREE ${HORAK}`, '1 CHAR UTF-8', '1 NOTE Hartley family',
+                '0 @P0001@ INDI', '1 NAME Josef /Horák/', '1 SEX M', '1 REFN P0001',
+                '0 TRLR',
+            ].join('\n');
+            const live = () => status(HORAK, 'Hartley family', { working: [worker('G0001', 'Křest')] });
+            await page.route(`${B_HORAK}/**`, async (route) => {
+                const path = new URL(route.request().url()).pathname;
+                if (path.endsWith('/status')) return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(live()) });
+                if (path.endsWith('/tree.ged')) return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/plain; charset=utf-8' }, body: GED });
+                if (path.endsWith('/events')) return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/event-stream' }, body: `event: hello\ndata: ${JSON.stringify(live())}\n\n` });
+                return route.fulfill({ status: 404, headers: cors, body: '' });
+            });
+            await page.goto(`/strom.html?live=${encodeURIComponent(B_HORAK)}`);
+            const panel = page.locator('#live-panel');
+            await expect(panel).toBeVisible();
+            const NAME = 'The Coopers of Thornbury';
+            await bridges(page, {
+                [B_NOVAK]: { id: NOVAK, name: NAME, answer: () => ({ working: [worker('G0001', 'Baptism')], waiting: [item('T1')] }) },
+                [B_DVORAK]: { id: DVORAK, name: 'Yorkshire', answer: () => ({ waiting: [item('T1'), item('T2')] }) },
+            });
+            await addTrees(page, [{ name: NAME, id: NOVAK, base: B_NOVAK }, { name: 'The Fletchers (Yorkshire)', id: DVORAK, base: B_DVORAK }]);
+            await settled(page, [NOVAK, DVORAK]);
+            const rows = panel.locator('.rs-elsewhere__rows');
+            await expect(rows).toBeVisible();
+            const name = rows.locator('.rs-elsewhere__name', { hasText: NAME });
+            await expect(name).toBeVisible();
+            const fits = await name.evaluate(el => el.scrollWidth <= el.clientWidth);
+            expect(fits).toBe(true);
+            // The marks and the chevron stay inside the row.
+            const row = rows.locator('.rs-elsewhere__row', { hasText: NAME });
+            const rb = (await row.boundingBox())!;
+            for (const part of [row.locator('.rs-marks'), row.locator('.rs-elsewhere__chev')]) {
+                const b = (await part.boundingBox())!;
+                expect(b.x + b.width).toBeLessThanOrEqual(rb.x + rb.width + 0.5);
+            }
+            expect(await row.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+        });
+    }
 });

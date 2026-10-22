@@ -721,3 +721,33 @@ test.describe('attachments beyond one image', () => {
         expect(await page.evaluate(() => (window as any).__opened.length)).toBe(0);
     });
 });
+
+// German links beside the buttons: Close and Edit stay together, the links take a row of their own.
+for (const width of [1400, 1024, 390]) {
+    test(`viewer footer in German (${width}): Close and Edit stay together`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 900 });
+        await openApp(page);
+        await page.evaluate(() => window.Strom.UI.setLanguage('de'));
+        const id = await page.evaluate(() => window.Strom.DataManager.addSource({ title: 'Taufe von Johann Weber 1898', transcript: 'Joannes, natus 3. Martii 1898' }).id);
+        // "Send material for this source…" shows with a research that takes material.
+        await page.evaluate(() => { (window.Strom.UI as { materialAvailable: () => boolean }).materialAvailable = () => true; });
+        await page.evaluate((id) => window.Strom.UI.showSourceViewer(id, null), id);
+        const foot = viewer(page).locator('.source-viewer-footer');
+        const close = foot.locator('[data-dismiss]');
+        const edit = foot.locator('#source-viewer-edit');
+        await expect(foot.locator('#source-viewer-material')).toBeVisible();
+        await expect(edit).toHaveText('Bearbeiten');
+        const c = (await close.boundingBox())!;
+        const e = (await edit.boundingBox())!;
+        if (width > 640) {
+            await expect(foot.locator('#source-viewer-same-book')).toBeVisible();
+            expect(Math.abs(c.y - e.y)).toBeLessThan(1);
+            expect(e.x).toBeGreaterThan(c.x + c.width);
+        } else {
+            // Phone: one button per row, Edit on top, Close under it.
+            expect(e.y + e.height).toBeLessThanOrEqual(c.y);
+            expect(Math.abs(c.width - e.width)).toBeLessThan(1);
+        }
+        expect(await foot.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    });
+}

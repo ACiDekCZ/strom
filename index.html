@@ -11963,6 +11963,8 @@
         .rs-elsewhere__label { flex: none; color: var(--text-faint); }
         .rs-elsewhere__name { flex: 0 1 auto; min-width: 0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .rs-elsewhere__row .rs-marks { margin-left: auto; }
+        /* A long name keeps its whole width: the marks move to a second line, the name shortens only when it alone does not fit. */
+        .rs-elsewhere__row { flex-wrap: wrap; row-gap: 2px; }
         .rs-elsewhere__chev { flex: none; color: var(--text-faint); font-size: 16px; line-height: 1; }
         .rs-elsewhere__caret { flex: none; width: 12px; color: var(--text-faint); font-size: 11px; }
         .rs-elsewhere__sumtext { flex: 1 1 auto; min-width: 0; }
@@ -14397,6 +14399,8 @@
         .source-picker-footer .link-button,
         .source-editor-buttons .link-button,
         .source-viewer-footer .link-button { margin-right: auto; }
+        .source-viewer-actions { display: flex; gap: 10px; margin-left: auto; }
+        .source-viewer-actions > [hidden] { display: none !important; }
         .link-button[hidden], .sources-total[hidden], #sources-search[hidden],
         .source-excerpt-group [hidden] { display: none !important; }
         .form-label { display: block; margin-bottom: 6px; color: var(--text-light); font-size: 12px; font-weight: 500; }
@@ -14906,6 +14910,9 @@
                 position: sticky; bottom: 0; padding: 10px 12px; background: var(--surface);
                 border-top: 1px solid var(--border); margin: 0;
             }
+            /* One button per row as in every phone footer: Edit on top, Close under it. */
+            #source-viewer-modal .source-viewer-actions { display: contents; }
+            #source-viewer-modal .source-viewer-actions > [data-dismiss] { order: -1; }
             #source-viewer-modal .source-viewer-footer button:not(.link-button) { flex: 1; min-height: 48px; }
             #source-viewer-modal .source-viewer-footer .source-same-book { display: none; }
         }
@@ -16306,8 +16313,11 @@
                     onclick="window.Strom.UI.materialForViewedSource()" data-i18n="material.sendToSource"></button>
                 <button type="button" class="link-button source-same-book" id="source-viewer-same-book"
                     onclick="window.Strom.UI.startSameBookEntry()" data-i18n="sources.sameBook"></button>
-                <button type="button" class="secondary" data-dismiss onclick="window.Strom.UI.closeSourceViewer()" data-i18n="buttons.close"></button>
-                <button type="button" class="primary" id="source-viewer-edit" onclick="window.Strom.UI.editFromSourceViewer()" data-i18n="sources.edit"></button>
+                <!-- Close and Edit stay side by side: long links wrap to a row of their own. -->
+                <span class="source-viewer-actions">
+                    <button type="button" class="secondary" data-dismiss onclick="window.Strom.UI.closeSourceViewer()" data-i18n="buttons.close"></button>
+                    <button type="button" class="primary" id="source-viewer-edit" onclick="window.Strom.UI.editFromSourceViewer()" data-i18n="sources.edit"></button>
+                </span>
             </div>
         </div>
     </div>
