@@ -301,7 +301,9 @@ test.describe('switching trees follows the research where an agent works', () =>
                         const box = await panel.boundingBox();
                         if (!box) return 'no panel box';
                         for (const b of await buttons.all()) {
-                            const bb = await b.boundingBox();
+                            // A button replaced or hidden meanwhile: asked again on the next round, never waited on.
+                            if (!await b.isVisible()) return 'button not shown';
+                            const bb = await b.boundingBox({ timeout: 1_000 }).catch(() => null);
                             if (!bb) return 'no button box';
                             if (!(bb.x >= box.x && bb.x + bb.width <= box.x + box.width + 0.5)) return 'outside';
                         }
