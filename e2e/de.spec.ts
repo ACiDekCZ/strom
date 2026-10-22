@@ -172,6 +172,11 @@ test('German UI: About names the license and links the source code in German', a
         .toHaveAttribute('href', 'https://github.com/ACiDekCZ/strom');
     // The Czech users' group is offered in the Czech UI only.
     await expect(about.locator('a[href*="facebook.com"], .about-users-group')).toHaveCount(0);
+    // What's new links the German changelog (branch and anchor per version:
+    // about.spec.ts, src/__tests__/about-changelog.test.ts).
+    const changelog = about.getByRole('link', { name: 'Was ist neu ↗' });
+    await expect(changelog).toBeVisible();
+    await expect(changelog).toHaveAttribute('href', /\/blob\/(main|beta)\/CHANGELOG\.de\.md#\d+$/);
 });
 
 test('German UI: the research — its menu, the states of the block, Research for this tree, the person, materials, installing', async ({ page }) => {

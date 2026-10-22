@@ -400,6 +400,9 @@ test.describe('tree overview', () => {
         await expect(section(dialog, 'quality').locator('.tov-sum .tov-sum-err')).toHaveText('2 chyby');
         await section(dialog, 'quality').locator('.tov-sec-head').click();
         await expect(section(dialog, 'quality').locator('[data-block="structure"] .tov-struct-line')).toHaveText('4 svazky. Všechny osoby jsou propojeny do jedné rodiny.');
+        // Percentages in the language's format (percentNumber, its cases in tree-overview.test.ts): no ",0".
+        await expect(dialog.locator('.tov-nums')).toContainText('13\u00a0% s pramenem');
+        await expect(dialog).not.toContainText(',0\u00a0%');
         await page.keyboard.press('Escape');
         await expect(page.locator('#toolbar-focus-count:visible, #focus-person-count:visible').first()).toHaveAttribute('title', 'Zobrazit přehled stromu');
 
@@ -802,26 +805,6 @@ test.describe('tree overview: ask the family, certainty, the Data quality shortc
         await expect(dialog.locator('.tov-nums')).toContainText('8 people');
         await expect(birthPlace).toHaveText('0%');
         await expect(dialog.locator('.tov-root-btn')).toHaveText(/Anders Lindqvist/);
-    });
-
-    test('percentages have no ",0": whole numbers, one decimal under 10 % only where it is not zero', async ({ page }) => {
-        await page.setViewportSize({ width: 1440, height: 900 });
-        await openApp(page);
-        // 20 unrelated people, one with a source and a birthplace: 5 %.
-        const persons: Record<string, P> = {};
-        for (let i = 0; i < 20; i++) {
-            persons[`p${i}`] = {
-                id: `p${i}`, firstName: `N${i}`, lastName: 'Ek', gender: i % 2 ? 'female' : 'male', isPlaceholder: false,
-                partnerships: [], parentIds: [], childIds: [], birthDate: String(1900 + i),
-                ...(i === 0 ? { birthSourceIds: ['s1'], birthPlace: 'Ystad' } : {}),
-            };
-        }
-        const treeId = await importTree(page, { persons, partnerships: {} }, 'Ek', 'p0');
-        await page.evaluate(() => window.Strom.UI.setLanguage('cs' as never));
-        const dialog = await openOverview(page, treeId, { section: 'quality' });
-        await expect(dialog.locator('.tov-nums')).toContainText('5\u00a0% s pramenem');
-        await expect(section(dialog, 'quality').locator('.tov-comp-row[data-field="birthPlace"] .tov-comp-pct')).toHaveText('5\u00a0%');
-        await expect(dialog).not.toContainText(',0\u00a0%');
     });
 
     test('Certainty of research facts: bars in a research tree, none in a plain one', async ({ page }) => {

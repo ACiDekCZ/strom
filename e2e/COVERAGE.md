@@ -133,7 +133,7 @@ the table honest.
 | Demo tree loads | `demo.spec.ts` | covered | focus + hint toast |
 | Interactive tour (offer / steps / Escape / mobile) | `tour.spec.ts` | covered | offered once after demo; steps advance; Escape ends; second demo load doesn't re-offer; bubble fits mobile |
 | Backups: create / restore / undo restore | `backups.spec.ts` | covered | manual snapshot survives a delete; restore is undoable |
-| About dialog version | `about.spec.ts`, `cs.spec.ts` | covered | matches `package.json` |
+| About dialog version | `about.spec.ts`, `cs.spec.ts` | covered | matches `package.json`; What's new links the changelog of the UI language (en in `about.spec.ts`, cs / de in `cs.spec.ts` / `de.spec.ts`, every language × branch in `about-changelog.test.ts`) |
 | PWA offline indicator | `pwa.spec.ts` | covered | toolbar badge toggles with `context.setOffline` |
 | PWA service-worker registration | — (`pwa.test.ts` unit) | partial | registration gate is unit-tested per AppMode; the SW is only served on the PWA host (`stromapp.info/run/`), which the localhost e2e server cannot emulate, so live register/offline-serve is not driven end-to-end |
 | Search filter panel position + Escape close | `search-filter.spec.ts` | covered | regression: panel used to overflow above the viewport |
@@ -249,8 +249,8 @@ settings (`seedResearchPromoSeen`); `research-promo.spec.ts` opts out with
 | XSS via GEDCOM import (markup in NAME/PLAC/NOTE, attribute-breaking MARR PLAC) | `security-privacy.spec.ts` | covered | import result dialog, card + tooltip, edit dialog, relationships panel |
 | HTML export carries only the exported tree | `security-privacy.spec.ts` | covered | tree A on screen, tree B exported from the tree manager (anonymous + full): none of A's names in the file |
 | HTML export: `</script>` / `$'` in a note | `security-privacy.spec.ts` | covered | exported file opened via `file://` loads B in view mode, no script runs, note round-trips byte-for-byte |
-| GEDCOM export living privacy (initials, anonymous) | `security-privacy.spec.ts` | covered | living person's name variant, note, birth place, wedding date/place, witness, couple note dropped (initials keeps the wedding year by design); deceased couple keeps all of it |
-| CSV formula injection | `security-privacy.spec.ts` | covered | `=cmd…` name written as `'=cmd…` |
+| GEDCOM export living privacy (initials, anonymous) | `security-privacy.spec.ts` (anonymous, through the export dialog) + `gedcom-living-privacy.test.ts` (unit, both modes) | covered | living person's name variant, note, birth place, wedding date/place, witness, couple note dropped (initials keeps the wedding year by design); deceased couple keeps all of it |
+| CSV formula injection | `review-security.test.ts` (unit: `csvField`, `buildPersonsCsv`); the download path in `data-import-export.spec.ts` | covered | `=cmd…` name written as `'=cmd…`, no cell starts with `=cmd` |
 
 ## Responsive layout
 

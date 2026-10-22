@@ -10,6 +10,7 @@ describe('sameGivenName', () => {
         expect(sameGivenName('Joannes', 'Jan')).toBe(true);
         expect(sameGivenName('Johann', 'Jan')).toBe(true);
         expect(sameGivenName('Matthäus', 'Matouš')).toBe(true);
+        expect(sameGivenName('Josephus', 'Josef')).toBe(true);
     });
 
     it('compares without accents and case, several names word by word', () => {

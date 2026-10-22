@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
     cardLines, cardDate, normalizeCardFields, customCardSize, DEFAULT_CARD_FIELDS, CardFieldSettings,
     CARD_FIELD_KEYS, cardPreset, matchCardPreset, effectiveCardFields, normalizeCardDensity, isFieldCardDensity, CARD_PRESET_KEYS,
-    presetAsCustom, cardTypeForKey,
+    presetAsCustom, cardTypeForKey, cardLineHtml,
 } from '../card-fields.js';
 import { setLanguage } from '../strings.js';
 import { Person, PersonId, Partnership, PartnershipId, StromData } from '../types.js';
@@ -88,7 +88,12 @@ describe('the custom card', () => {
         expect(age('~1798', '>1850')).toEqual([]);
         setLanguage('en');
         expect(age('1888-11-11', '>1950')).toEqual(['age at least 61']);
+        expect(age('1800-03-01', '<1850')).toEqual(['age at most 50']);
         expect(age('~1880', '1950-05-15')).toEqual(['age about 69']);
+        expect(age('1802..1804', '1860-05-01')).toEqual(['age 55–58']);
+        expect(age('~1798', '>1850')).toEqual([]);
+        // Plain dates stay exact, a year-only date too.
+        expect(age('1862', '1919-03-12')).toEqual(['age 56']);
         setLanguage('de');
         expect(age('1888-11-11', '>1950')).toEqual(['Alter mindestens 61']);
         expect(age('1800-03-01', '<1850')).toEqual(['Alter höchstens 50']);
@@ -214,7 +219,11 @@ describe('the age line (U03a)', () => {
         const [line] = cardLines(tree().persons[JAN], tree(), ageOnly({ style: 'labels' }));
         expect(line).toMatchObject({ label: 'Věk', rest: '56', text: '56', spoken: 'věk 56' });
         setLanguage('en');
-        expect(cardLines(tree().persons[JAN], tree(), ageOnly({ style: 'labels' }))[0].label).toBe('Age');
+        const [en] = cardLines(tree().persons[JAN], tree(), ageOnly({ style: 'labels' }));
+        expect(en.label).toBe('Age');
+        // Drawn: the word in the label column, the number as the value.
+        expect(cardLineHtml(en, (t: string) => t, false, undefined, 'labels'))
+            .toBe('<div class="card-line card-line--label card-line--age"><span class="card-line-label">Age</span><span class="card-line-value"><span class="card-line-rest">56</span></span></div>');
         setLanguage('de');
         expect(cardLines(tree().persons[JAN], tree(), ageOnly())[0].text).toBe('Alter 56');
     });

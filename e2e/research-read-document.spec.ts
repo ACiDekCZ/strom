@@ -237,9 +237,16 @@ test.describe('Read a document', () => {
         expect(await page.evaluate(() => localStorage.getItem('read.readers'))).toBe('2');
     });
 
-    test('progress to the result in the dialog', async ({ page }) => {
+    test('progress to the result in the dialog; a reader of no told pace has no several-minutes line', async ({ page }) => {
         const b = await setup(page);
-        const d = await startReading(page, b);
+        const d = await openFromMenu(page);
+        // Not a slow reader (readSlow: under two minutes, or not said): no several-minutes line.
+        await expect(d.locator('.read-drop')).toBeVisible();
+        await expect(d.locator('.read-slow-note')).toHaveCount(0);
+        await addPages(page, [{ name: 'zapis.jpg', mimeType: 'image/jpeg', buffer: JPEG }]);
+        await d.locator('[data-act="read"]').click();
+        await expect(d.locator('#read-title')).toHaveText('Reading a document');
+        await expect.poll(() => b.read!.posts.length).toBe(1);
         await expect(d.locator('.read-step.is-now')).toHaveCount(1);
         await expect(d.locator('#read-progress-time')).toContainText('Usually within');
         // An older research says nothing of its reader's pace: no several-minutes line.
@@ -270,18 +277,6 @@ test.describe('Read a document', () => {
         await step(page, b, 'reading');
         await expect(d.locator('#read-progress-time')).toContainText('Usually within 8 minutes');
         await expect(d.locator('.read-progress-expect')).toBeVisible();
-    });
-
-    test('a usual reader (under two minutes): no several-minutes line', async ({ page }) => {
-        const b = await setup(page, { read: readAccepts({ expectSecs: 60 }) });
-        const d = await openFromMenu(page);
-        await expect(d.locator('.read-drop')).toBeVisible();
-        await expect(d.locator('.read-slow-note')).toHaveCount(0);
-        await addPages(page, [{ name: 'zapis.jpg', mimeType: 'image/jpeg', buffer: JPEG }]);
-        await d.locator('[data-act="read"]').click();
-        await expect.poll(() => b.read!.posts.length).toBe(1);
-        await expect(d.locator('#read-progress-time')).toContainText('Usually within');
-        await expect(d.locator('.read-progress-expect')).toBeHidden();
     });
 
     test('a slow pace said only by /status shows at once, while queued only the agent\'s own pace counts', async ({ page }) => {

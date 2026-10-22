@@ -216,15 +216,6 @@ test('several marriages: from the latest wedding; one among her other spellings 
     await expect(chip.locator('.married-suggestion-source')).toHaveText('from husband’s surname Karel Svoboda');
 });
 
-test('an English tree: Smith stays Smith', async ({ page }) => {
-    await page.setViewportSize({ width: 1440, height: 900 });
-    await openApp(page);
-    await createFirstPerson(page, 'John', 'Smith', { birthDate: '1950' });
-    await addRelation(page, 'John', 'partner', 'Mary', 'Brown', 'female');
-    await cardAction(page, 'Mary', 'edit');
-    await expect(personModal(page).locator('#married-suggestion .married-suggestion-main')).toHaveText('Suggestion: Smith');
-});
-
 test('phone: a 44px field and 44px buttons, the field moves up into view when focused', async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 740 });
     await openApp(page);

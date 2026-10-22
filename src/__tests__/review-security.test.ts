@@ -294,6 +294,8 @@ describe('CSV formula injection', () => {
         };
         const row = buildPersonsCsv(data).split('\r\n')[1];
         expect(row.startsWith("'=cmd")).toBe(true);
+        // No cell of the row (first name, any name column) starts with the formula.
+        expect(row).not.toMatch(/(^|;|")=cmd/);
         expect(row).toContain(";'@evil");
     });
 });

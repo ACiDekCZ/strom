@@ -44,4 +44,9 @@ test('Czech UI: about dialog shows the version and Czech labels', async ({ page 
     await expect(group).toHaveAttribute('target', '_blank');
     await expect(group).toHaveAttribute('rel', /noopener/);
     await expect(about.locator('a[href*="facebook.com"]')).toHaveCount(1);
+    // What's new links the Czech changelog (branch and anchor per version:
+    // about.spec.ts, src/__tests__/about-changelog.test.ts).
+    const changelog = about.getByRole('link', { name: 'Co je nového ↗' });
+    await expect(changelog).toBeVisible();
+    await expect(changelog).toHaveAttribute('href', /\/blob\/(main|beta)\/CHANGELOG\.cs\.md#\d+$/);
 });

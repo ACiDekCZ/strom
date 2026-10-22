@@ -285,19 +285,6 @@ test.describe('Read a document: suggest for the tree', () => {
         expect(josef.nameVariants).toContain('Jacobus Fíšek');
     });
 
-    test('a linked person read in the register\'s Latin form of the same name: no difference said, the form added', async ({ page }) => {
-        await setup(page, baptism({}, {
-            persons: [
-                { ref: 'p1', role: 'child', given: 'Marie', surname: 'Fíšková', sex: 'F' },
-                { ref: 'p2', role: 'father', given: 'Josephus', surname: 'Fíšek', match: [{ person: 'P0001', why: 'place', score: 0.9 }] },
-            ],
-            relations: [{ type: 'parent', parent: 'p2', child: 'p1' }],
-        }));
-        const d = await openPropose(page);
-        await expect(cardOf(d, 'p2').locator('.read-p-adds')).toContainText('name form Josephus Fíšek');
-        await expect(cardOf(d, 'p2').locator('.read-p-differs')).toHaveCount(0);
-    });
-
     test('Other… links a person picked in the tree', async ({ page }) => {
         await setup(page, baptism());
         const d = await openPropose(page);

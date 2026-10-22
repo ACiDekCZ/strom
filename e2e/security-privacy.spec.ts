@@ -449,50 +449,37 @@ function privacyTree(): object {
     };
 }
 
-for (const privacy of ['initials', 'anonymous'] as const) {
-    test(`GEDCOM export (${privacy}) drops living details, keeps the deceased`, async ({ page }, testInfo) => {
-        await openApp(page);
-        await createFirstPerson(page, 'Seed', 'Person');
-        await importJsonAsNewTree(page, writeJson(testInfo, 'privacy.json', privacyTree()), 'Privacy');
-        await expect(card(page, 'Livia')).toBeVisible();
-
-        await page.evaluate(() => window.Strom.UI.showExportDialog());
-        await page.locator('#export-modal .menu-option[onclick*="exportTargetTreeGedcom"]').click();
-        const ged = readFileSync(await confirmPlainExport(page, privacy), 'utf-8');
-
-        // Living person and her marriage: no variant, note, date, place, witness.
-        for (const secret of [
-            'Liviana', 'Secretvariant', 'Living secret note', 'Livingtown', 'APR 1965',
-            '22 AUG 1994', 'AUG 1994', 'Secretchapel', 'Theodora', 'Hiddenwitness', 'Living wedding secret note',
-        ]) {
-            expect(ged, `leaked "${secret}"`).not.toContain(secret);
-        }
-        if (privacy === 'anonymous') {
-            expect(ged).not.toContain('Livia');
-            expect(ged).not.toContain('Lucius');
-            // Anonymous drops the wedding year too ('initials' keeps the
-            // year, mirroring the birth year it keeps on the person).
-            expect(ged).not.toContain('1994');
-        }
-
-        // Deceased ancestors keep their data.
-        for (const kept of [
-            'Ambrose', 'Ambrosius Eichrucken', 'Deceased note kept', '1935', '2010',
-            'Oldchapel', '11 JUN 1958', 'Cornelius Oldwitness', 'Old wedding note kept',
-        ]) {
-            expect(ged, `lost "${kept}"`).toContain(kept);
-        }
-    });
-}
-
-test('CSV export neutralizes a formula-looking name', async ({ page }) => {
+// The export dialog's wiring of the privacy choice; what each mode keeps and
+// drops (initials too) is src/__tests__/gedcom-living-privacy.test.ts.
+test('GEDCOM export (anonymous) drops living details, keeps the deceased', async ({ page }, testInfo) => {
     await openApp(page);
-    await createFirstPerson(page, '=cmd|calc', 'Formula', { birthDate: '1900' });
-    await expect(card(page, '=cmd')).toBeVisible();
+    await createFirstPerson(page, 'Seed', 'Person');
+    await importJsonAsNewTree(page, writeJson(testInfo, 'privacy.json', privacyTree()), 'Privacy');
+    await expect(card(page, 'Livia')).toBeVisible();
 
     await page.evaluate(() => window.Strom.UI.showExportDialog());
-    await page.locator('#export-modal .menu-option[onclick*="exportTargetTreeCsv"]').click();
-    const csv = readFileSync(await confirmPlainExport(page, 'full'), 'utf-8');
-    expect(csv).toContain("'=cmd|calc");
-    expect(csv).not.toMatch(/(^|;|")=cmd/m);
+    await page.locator('#export-modal .menu-option[onclick*="exportTargetTreeGedcom"]').click();
+    const ged = readFileSync(await confirmPlainExport(page, 'anonymous'), 'utf-8');
+
+    // Living person and her marriage: no variant, note, date, place, witness.
+    for (const secret of [
+        'Liviana', 'Secretvariant', 'Living secret note', 'Livingtown', 'APR 1965',
+        '22 AUG 1994', 'AUG 1994', 'Secretchapel', 'Theodora', 'Hiddenwitness', 'Living wedding secret note',
+    ]) {
+        expect(ged, `leaked "${secret}"`).not.toContain(secret);
+    }
+    expect(ged).not.toContain('Livia');
+    expect(ged).not.toContain('Lucius');
+    // Anonymous drops the wedding year too ('initials' keeps the
+    // year, mirroring the birth year it keeps on the person).
+    expect(ged).not.toContain('1994');
+
+    // Deceased ancestors keep their data.
+    for (const kept of [
+        'Ambrose', 'Ambrosius Eichrucken', 'Deceased note kept', '1935', '2010',
+        'Oldchapel', '11 JUN 1958', 'Cornelius Oldwitness', 'Old wedding note kept',
+    ]) {
+        expect(ged, `lost "${kept}"`).toContain(kept);
+    }
 });
+

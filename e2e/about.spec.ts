@@ -36,27 +36,20 @@ const CHANGELOG_ANCHOR = APP_VERSION.split('-')[0].replace(/\./g, '');
 const changelogHref = (file: string) =>
     `https://github.com/ACiDekCZ/strom/blob/${CHANGELOG_BRANCH}/${file}#${CHANGELOG_ANCHOR}`;
 
-for (const { locale, label, file } of [
-    { locale: 'en-US', label: "What's new ↗", file: 'CHANGELOG.md' },
-    { locale: 'cs-CZ', label: 'Co je nového ↗', file: 'CHANGELOG.cs.md' },
-    { locale: 'de-DE', label: 'Was ist neu ↗', file: 'CHANGELOG.de.md' },
-]) {
-    test.describe(`What's new (${locale})`, () => {
-        test.use({ locale });
-        test(`About links the changelog in the UI language at this version (${locale})`, async ({ page }) => {
-            await openApp(page);
-            await page.locator('.app-logo').click();
-            const about = page.locator('#about-modal');
-            await expect(about).toBeVisible();
-            const link = about.getByRole('link', { name: label });
-            await expect(link).toBeVisible();
-            await expect(link).toHaveAttribute('href', changelogHref(file));
-            await expect(link).toHaveAttribute('target', '_blank');
-            await expect(link).toHaveAttribute('rel', /noopener/);
-            await expect(link).toHaveAttribute('rel', /noreferrer/);
-        });
-    });
-}
+// The Czech and German links (file per language) are checked in cs.spec.ts
+// and de.spec.ts; every language × branch × version in about-changelog.test.ts.
+test('About links the changelog in the UI language at this version', async ({ page }) => {
+    await openApp(page);
+    await page.locator('.app-logo').click();
+    const about = page.locator('#about-modal');
+    await expect(about).toBeVisible();
+    const link = about.getByRole('link', { name: "What's new ↗" });
+    await expect(link).toBeVisible();
+    await expect(link).toHaveAttribute('href', changelogHref('CHANGELOG.md'));
+    await expect(link).toHaveAttribute('target', '_blank');
+    await expect(link).toHaveAttribute('rel', /noopener/);
+    await expect(link).toHaveAttribute('rel', /noreferrer/);
+});
 
 /**
  * License: AGPL-3.0-or-later. The app runs over the network, so (AGPL

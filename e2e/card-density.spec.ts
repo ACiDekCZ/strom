@@ -147,30 +147,7 @@ test('B16-1: Detailed says an age from imprecise dates as such, never as if exac
     await set('Johan', '1888-11-11', '>1950');
     await expect(age('Johan')).toHaveText('age at least 61');
     expect(await card(page, 'Johan').getAttribute('aria-label')).toContain(', age at least 61');
-    // Died "before 1850": an upper bound.
-    await set('Johan', '1800-03-01', '<1850');
-    await expect(age('Johan')).toHaveText('age at most 50');
-    // Born "about 1880": an estimate.
-    await set('Johan', '~1880', '1950-05-15');
-    await expect(age('Johan')).toHaveText('age about 69');
-    // Born within a range: the span of possible ages.
-    await set('Johan', '1802..1804', '1860-05-01');
-    await expect(age('Johan')).toHaveText('age 55–58');
-    // An estimate with a bound says too little: no line.
-    await set('Johan', '~1798', '>1850');
-    await expect(age('Johan')).toHaveCount(0);
-    // Plain dates stay exact, a year-only date too.
-    await set('Johan', '1862', '1919-03-12');
-    await expect(age('Johan')).toHaveText('age 56');
-});
-
-test('the labels style: the age under the word "Age", the number as its value', async ({ page }) => {
-    await seedSetting(page, 'cardFields', { on: ['birth', 'age'], style: 'labels' });
-    await sampleTree(page);
-    await page.evaluate(() => window.Strom.UI.setCardDensity('custom'));
-    const age = card(page, 'Johan').locator('.card-line--age');
-    await expect(age.locator('.card-line-label')).toHaveText('Age');
-    await expect(age.locator('.card-line-value')).toHaveText(/^\d+$/);
+    // The other imprecise cases (at most, about, a span, none): card-fields.test.ts (B16-1).
 });
 
 test('a new user gets the Normal card; a stored type this version does not know is Normal too', async ({ page }) => {
