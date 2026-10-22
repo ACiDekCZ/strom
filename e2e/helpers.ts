@@ -165,6 +165,47 @@ export async function createFirstPerson(
     await fillPerson(page, firstName, lastName, opts);
 }
 
+/** A person for seedTree: parents and partners by key; any other field goes on the person as it is. */
+export interface SeedPerson {
+    firstName: string;
+    lastName: string;
+    gender?: 'male' | 'female';
+    parents?: string[];
+    partners?: string[];
+    [field: string]: unknown;
+}
+
+/**
+ * Seed a tree as data, without clicking it together, for tests whose subject
+ * is not building the tree: imported as a new tree, focused on `focus` (the
+ * first person by default). One married union per partner pair; a child of
+ * both partners belongs to their union.
+ */
+export async function seedTree(page: Page, people: Record<string, SeedPerson>, name = 'Novak', focus?: string): Promise<void> {
+    const persons: Record<string, Record<string, unknown> & { partnerships: string[]; parentIds: string[]; childIds: string[] }> = {};
+    for (const [id, { parents, partners: _partners, ...rest }] of Object.entries(people)) {
+        persons[id] = { id, gender: 'male', isPlaceholder: false, ...rest, partnerships: [], parentIds: [...(parents ?? [])], childIds: [] };
+    }
+    for (const [id, p] of Object.entries(persons)) for (const parent of p.parentIds) persons[parent].childIds.push(id);
+    const partnerships: Record<string, { id: string; person1Id: string; person2Id: string; childIds: string[]; status: string }> = {};
+    for (const [id, { partners }] of Object.entries(people)) {
+        for (const other of partners ?? []) {
+            const uid = `u_${[id, other].sort().join('_')}`;
+            if (partnerships[uid]) continue;
+            const childIds = Object.keys(persons).filter(c => persons[c].parentIds.includes(id) && persons[c].parentIds.includes(other));
+            partnerships[uid] = { id: uid, person1Id: id, person2Id: other, childIds, status: 'married' };
+            persons[id].partnerships.push(uid);
+            persons[other].partnerships.push(uid);
+        }
+    }
+    const focusId = focus ?? Object.keys(people)[0];
+    await page.evaluate(async ({ persons, partnerships, name, focusId }) => {
+        await window.Strom.DataManager.importAsNewTree({ persons, partnerships } as never, name);
+        await window.Strom.TreeRenderer.setFocus(focusId as never);
+    }, { persons, partnerships, name, focusId });
+    await expect(card(page, people[focusId].firstName)).toBeVisible();
+}
+
 /**
  * A person card by displayed first name. Matches the name element only — the
  * card's hover tooltip also contains partner/child names, so a plain hasText on

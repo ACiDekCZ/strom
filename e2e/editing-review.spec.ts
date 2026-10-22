@@ -1,6 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import {
-    openApp, createFirstPerson, card, cardAction, personModal, addRelation, fillPerson,
+    openApp, createFirstPerson, card, cardAction, personModal, addRelation, fillPerson, seedTree,
 } from './helpers.js';
 
 /**
@@ -266,14 +266,13 @@ test.describe('no third parent, no ancestry cycle (V10)', () => {
     /** Otto → Jan (+Marie) → Petr; Karel is unrelated. */
     async function setup(page: Page) {
         await openApp(page);
-        await createFirstPerson(page, 'Jan', 'Novak');
-        await dismissFamilyOffer(page);
-        await addRelation(page, 'Jan', 'partner', 'Marie', 'Novak', 'female');
-        await addRelation(page, 'Jan', 'child', 'Petr', 'Novak');
-        await addRelation(page, 'Jan', 'parent', 'Otto', 'Novak');
-        await page.evaluate(() => window.Strom.UI.showAddPersonModal());
-        await fillPerson(page, 'Karel', 'Svoboda');
-        await expect(personModal(page)).toBeHidden();
+        await seedTree(page, {
+            jan: { firstName: 'Jan', lastName: 'Novak', parents: ['otto'], partners: ['marie'] },
+            marie: { firstName: 'Marie', lastName: 'Novak', gender: 'female', partners: ['jan'] },
+            petr: { firstName: 'Petr', lastName: 'Novak', parents: ['jan', 'marie'] },
+            otto: { firstName: 'Otto', lastName: 'Novak' },
+            karel: { firstName: 'Karel', lastName: 'Svoboda' },
+        });
     }
 
     async function pickerNames(page: Page, query: string): Promise<string[]> {

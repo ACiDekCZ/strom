@@ -1,13 +1,13 @@
 import { test, expect } from '@playwright/test';
-import { openApp, createFirstPerson, card, cardAction, addRelation } from './helpers.js';
+import { openApp, createFirstPerson, card, seedTree } from './helpers.js';
 
 test('search filter highlights matching cards and dims the rest; clear resets', { tag: '@smoke' }, async ({ page }) => {
     await openApp(page);
-    await createFirstPerson(page, 'Jan', 'Novak');
-    await addRelation(page, 'Jan', 'partner', 'Marie', 'Novak', 'female');
-    await cardAction(page, 'Jan', 'focus');
-    await addRelation(page, 'Jan', 'parent', 'Josef', 'Stary');
-    await cardAction(page, 'Jan', 'focus');
+    await seedTree(page, {
+        jan: { firstName: 'Jan', lastName: 'Novak', parents: ['josef'], partners: ['marie'] },
+        marie: { firstName: 'Marie', lastName: 'Novak', gender: 'female', partners: ['jan'] },
+        josef: { firstName: 'Josef', lastName: 'Stary' },
+    });
 
     // Open the filter panel and filter by last name.
     await page.locator('#search-filter-toggle').click();
@@ -29,15 +29,10 @@ test('search filter highlights matching cards and dims the rest; clear resets', 
 
 test('filter by birth-year range highlights only in-range persons', async ({ page }) => {
     await openApp(page);
-    await createFirstPerson(page, 'Old', 'Person', { birthDate: '1850' });
-    await addRelation(page, 'Old', 'child', 'Young', 'Person');
-    await cardAction(page, 'Old', 'focus');
-    // Give the child a modern birth year via the edit modal.
-    await cardAction(page, 'Young', 'edit');
-    await page.locator('#person-modal #input-birthdate').fill('1990');
-    await page.locator('#person-modal').getByRole('button', { name: 'Save' }).click();
-
-    await cardAction(page, 'Old', 'focus');
+    await seedTree(page, {
+        old: { firstName: 'Old', lastName: 'Person', birthDate: '1850' },
+        young: { firstName: 'Young', lastName: 'Person', birthDate: '1990', parents: ['old'] },
+    });
     await page.locator('#search-filter-toggle').click();
     await page.locator('#filter-year-from').fill('1800');
     await page.locator('#filter-year-to').fill('1900');

@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, card, createFirstPerson, addRelation } from './helpers.js';
+import { openApp, seedTree } from './helpers.js';
 
 /**
  * Migration over time (P5): the map's time slider. Like the rest of the map
@@ -33,17 +33,14 @@ async function stubTiles(page: Page): Promise<void> {
  */
 async function seedTimeTree(page: Page): Promise<void> {
     await openApp(page);
-    await createFirstPerson(page, 'Bela', 'Novak', { birthDate: '1880' });
-    await addRelation(page, 'Bela', 'parent', 'Adam', 'Novak');
-    await addRelation(page, 'Bela', 'sibling', 'Cyril', 'Novak');
+    await seedTree(page, {
+        bela: { firstName: 'Bela', lastName: 'Novak', birthDate: '1880', birthPlace: 'Beta', parents: ['adam'] },
+        adam: { firstName: 'Adam', lastName: 'Novak', birthDate: '1850', birthPlace: 'Alpha', deathDate: '1900', deathPlace: 'Alpha' },
+        cyril: { firstName: 'Cyril', lastName: 'Novak', birthPlace: 'Gamma', parents: ['adam'] },  // no date on purpose
+    });
 
     await page.evaluate(() => {
-        const dm = window.Strom.DataManager;
-        const byName = (n: string) => dm.getAllPersons().find((p: { firstName: string }) => p.firstName === n)!;
-        dm.updatePerson(byName('Adam').id, { birthDate: '1850', birthPlace: 'Alpha', deathDate: '1900', deathPlace: 'Alpha' });
-        dm.updatePerson(byName('Bela').id, { birthDate: '1880', birthPlace: 'Beta' });
-        dm.updatePerson(byName('Cyril').id, { birthPlace: 'Gamma' });  // no date on purpose
-        dm.getData().places = {
+        window.Strom.DataManager.getData().places = {
             alpha: { lat: 50.0, lon: 14.0 },
             beta: { lat: 49.0, lon: 16.0 },
             gamma: { lat: 48.5, lon: 15.0 },
