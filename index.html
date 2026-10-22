@@ -488,6 +488,10 @@
             gap: 8px;
             z-index: 100;
         }
+        /* An open menu of the toolbar (tree switcher, Actions with its
+           flyouts, Research) stays above the floating notes (the family
+           offer, the toasts), which would otherwise cover its rows. */
+        .toolbar:has(.tree-switcher-dropdown.active) { z-index: 270; }
 
         /* Wordmark: serif "Strom" + a copper dot (replaces the tree emoji). */
         .toolbar h1.app-wordmark {

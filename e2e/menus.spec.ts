@@ -489,6 +489,24 @@ test.describe('actions menu "Tree:" submenu', () => {
         await expect(submenu.locator('[data-action="visibility"]')).toHaveText('Hide tree');
     });
 
+    test('an open menu stays above the family offer and the toasts: every row of the menu and its flyout is its own under the pointer', async ({ page }) => {
+        await openApp(page);
+        await createFirstPerson(page, 'Jan', 'Novak');
+        await expect(page.locator('.family-offer.show')).toBeVisible();
+        await page.evaluate(() => window.Strom.UI.showToast('Sent to the research', 6000));
+        const submenu = await openTreeActions(page);
+        const rows = page.locator('#actions-menu-dropdown [role="menuitem"]:visible');
+        const covered = await rows.evaluateAll(els => els.filter(el => {
+            const r = el.getBoundingClientRect();
+            const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+            return !hit || !el.contains(hit);
+        }).map(el => (el as HTMLElement).dataset.action ?? el.id));
+        expect(covered).toEqual([]);
+        // No wait for the offer to go: Delete takes the click at once.
+        await submenu.locator('[data-action="delete"]').click({ timeout: 1000 });
+        await expect(page.locator('#confirmation-modal')).toHaveClass(/active/);
+    });
+
     test('Link to a file… lives in the Export dialog (menu 1020 §8 row 30)', async ({ page }) => {
         await openApp(page);
         await createFirstPerson(page, 'Jan', 'Novak');
