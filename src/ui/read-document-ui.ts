@@ -928,6 +928,15 @@ export const readDocumentMethods = uiModule({
         return live?.expectSecs ?? this.researchReadAcceptsAny()?.expectSecs;
     },
 
+    /**
+     * Whether the agent itself is slow (the several-minutes line). While queued
+     * the bridge's time includes the wait for the readings before it, so only
+     * the research's word for one reading counts there.
+     */
+    readSlowNow(live: LiveRead | null): boolean {
+        return readSlow(live?.state === 'queued' ? this.researchReadAcceptsAny()?.expectSecs : this.readExpectSecs(live));
+    },
+
     readProgressHtml(): string {
         const s = st!;
         const t = strings.read;
@@ -961,7 +970,7 @@ export const readDocumentMethods = uiModule({
                     <ol class="read-steps">${steps}</ol>
                 </div>
                 <p class="read-progress-time" id="read-progress-time"></p>
-                ${readSlow(this.readExpectSecs(live)) ? `<p class="read-progress-expect">${esc(t.slowReader)}</p>` : ''}
+                <p class="read-progress-expect" id="read-progress-expect"${this.readSlowNow(live) ? '' : ' hidden'}>${esc(t.slowReader)}</p>
                 <p class="read-progress-slow" id="read-progress-slow" hidden>${esc(t.slow)}</p>
                 <p class="read-progress-note">${esc(t.closeNote)}</p>
                 ${this.readSoFarHtml()}`;
@@ -1005,6 +1014,9 @@ export const readDocumentMethods = uiModule({
             time.textContent = strings.read.running(usual, strings.read.elapsed(Math.floor(secs / 60), secs % 60));
             const slow = document.getElementById('read-progress-slow');
             if (slow) slow.hidden = secs < usual * 60 * 2;
+            // A new expected time from /status shows at once, not only at the next state.
+            const expect = document.getElementById('read-progress-expect');
+            if (expect) expect.hidden = !this.readSlowNow(live);
         };
         paint();
         if (!tickTimer) tickTimer = setInterval(paint, 1000);

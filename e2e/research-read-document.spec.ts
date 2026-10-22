@@ -243,7 +243,7 @@ test.describe('Read a document', () => {
         await expect(d.locator('.read-step.is-now')).toHaveCount(1);
         await expect(d.locator('#read-progress-time')).toContainText('Usually within');
         // An older research says nothing of its reader's pace: no several-minutes line.
-        await expect(d.locator('.read-progress-expect')).toHaveCount(0);
+        await expect(d.locator('.read-progress-expect')).toBeHidden();
         await step(page, b, 'reading');
         await expect(d.locator('.read-step.is-done')).not.toHaveCount(0);
         await step(page, b, 'done', 1);
@@ -281,7 +281,30 @@ test.describe('Read a document', () => {
         await d.locator('[data-act="read"]').click();
         await expect.poll(() => b.read!.posts.length).toBe(1);
         await expect(d.locator('#read-progress-time')).toContainText('Usually within');
-        await expect(d.locator('.read-progress-expect')).toHaveCount(0);
+        await expect(d.locator('.read-progress-expect')).toBeHidden();
+    });
+
+    test('a slow pace said only by /status shows at once, while queued only the agent\'s own pace counts', async ({ page }) => {
+        const b = await setup(page);
+        const d = await startReading(page, b);
+        await expect(d.locator('#read-progress-time')).toContainText('Usually within 3 minutes');
+        await expect(d.locator('.read-progress-expect')).toBeHidden();
+        // Queued behind other readings: the time grows, the agent is not slow.
+        b.read!.reads[0].state = 'queued';
+        b.read!.reads[0].expectSecs = 300;
+        await poll(page);
+        await expect(d.locator('#read-progress-time')).toContainText('Usually within 5 minutes');
+        await expect(d.locator('.read-progress-expect')).toBeHidden();
+        // Running: a new expected time alone (same state) brings the line.
+        b.read!.reads[0].state = 'reading';
+        delete b.read!.reads[0].expectSecs;
+        await poll(page);
+        await expect(d.locator('#read-progress-time')).toContainText('Usually within 3 minutes');
+        await expect(d.locator('.read-progress-expect')).toBeHidden();
+        b.read!.reads[0].expectSecs = 240;
+        await poll(page);
+        await expect(d.locator('#read-progress-time')).toContainText('Usually within 4 minutes');
+        await expect(d.locator('.read-progress-expect')).toBeVisible();
     });
 
     test('dialog closed: the menu says it reads, then the notice when it ends; Show opens the result', async ({ page }) => {
