@@ -83,3 +83,31 @@ test('partnership status and note can be changed and a partnership removed', asy
     const partnerships = await page.evaluate(() => Object.keys(window.Strom.DataManager.getData().partnerships).length);
     expect(partnerships).toBe(0);
 });
+
+test('a partnership date typed in cs keeps the locale form after the panel refreshes and saves as ISO', async ({ page }) => {
+    await openApp(page);
+    await createFirstPerson(page, 'Jan', 'Novak');
+    await addRelation(page, 'Jan', 'partner', 'Marie', 'Novak', 'female');
+    await page.evaluate(() => window.Strom.UI.setLanguage('cs'));
+
+    const id = await janId(page);
+    await page.evaluate((pid) => window.Strom.UI.showRelationshipsPanel(pid), id);
+    const panel = page.locator('#relationships-modal');
+    await expect(panel).toBeVisible();
+    await panel.locator('.partnership-start-date').first().fill('15.5.1880');
+    await panel.locator('.partnership-start-date').first().dispatchEvent('change');
+    await panel.locator('.rel-status-select').first().selectOption('divorced');
+    await panel.locator('.partnership-end-date').first().fill('3.2.1901');
+    await panel.locator('.partnership-end-date').first().dispatchEvent('change');
+
+    // A structural change rebuilds the panel and puts the pending values back.
+    await page.evaluate(() => window.Strom.UI.refreshRelationshipsPanel());
+    await expect(panel.locator('.partnership-start-date').first()).toHaveValue('15.5.1880');
+    await expect(panel.locator('.partnership-end-date').first()).toHaveValue('3.2.1901');
+
+    await page.evaluate(() => window.Strom.UI.saveRelationships());
+    await expect(panel).toBeHidden();
+    const p = await page.evaluate(() => Object.values(window.Strom.DataManager.getData().partnerships)[0]);
+    expect(p.startDate).toBe('1880-05-15');
+    expect(p.endDate).toBe('1901-02-03');
+});

@@ -1001,7 +1001,7 @@ export const relationshipsPanelMethods = uiModule({
         }
         if (changes.startDate !== undefined) {
             const input = content.querySelector(`.partnership-start-date[data-partnership-id="${partnershipId}"]`) as HTMLInputElement;
-            if (input) input.value = changes.startDate;
+            if (input) input.value = formatDateForInput(changes.startDate);
         }
         if (changes.startPlace !== undefined) {
             const input = content.querySelector(`.partnership-start-place[data-partnership-id="${partnershipId}"]`) as HTMLInputElement;
@@ -1009,7 +1009,7 @@ export const relationshipsPanelMethods = uiModule({
         }
         if (changes.endDate !== undefined) {
             const input = content.querySelector(`.partnership-end-date[data-partnership-id="${partnershipId}"]`) as HTMLInputElement;
-            if (input) input.value = changes.endDate;
+            if (input) input.value = formatDateForInput(changes.endDate);
         }
         if (changes.note !== undefined) {
             const textarea = content.querySelector(`.partnership-note[data-partnership-id="${partnershipId}"]`) as HTMLTextAreaElement;
