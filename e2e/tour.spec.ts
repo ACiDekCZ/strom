@@ -105,8 +105,11 @@ async function tourGeometry(page: import('@playwright/test').Page) {
     });
 }
 
+// The last step's target: the Actions menu on desktop, More on the phone.
+const LAST_TARGET: Record<number, string> = { 1440: '.actions-menu-btn', 390: '#bb-view-more' };
+
 for (const [w, h] of [[1440, 900], [1024, 768], [550, 900], [390, 844]] as const) {
-    test(`every step at ${w}px spotlights a real target and the bubble never covers it`, async ({ page }) => {
+    test(`every step at ${w}px spotlights a real target and the bubble never covers it; the last one points at anniversaries, export and settings`, async ({ page }) => {
         await page.setViewportSize({ width: w, height: h });
         await openApp(page, { tourOffer: true });
         await page.getByRole('button', { name: 'Try a sample tree' }).click();
@@ -133,6 +136,18 @@ for (const [w, h] of [[1440, 900], [1024, 768], [550, 900], [390, 844]] as const
             const overlaps = g.bubble.left < g.hole.right && g.bubble.right > g.hole.left
                 && g.bubble.top < g.hole.bottom && g.bubble.bottom > g.hole.top;
             expect(overlaps, `bubble covers the spotlight at ${g.step}`).toBe(false);
+            if (i === total - 1) {
+                await expect(page.locator('#tour-text')).toHaveText(/^Anniversaries, export and settings are here\./);
+                // The spotlight sits on the menu that holds them (not on the tree switcher).
+                const target = LAST_TARGET[w];
+                if (target) {
+                    await expect.poll(() => page.evaluate((sel) => {
+                        const hole = document.getElementById('tour-hole')!.getBoundingClientRect();
+                        const t = document.querySelector(sel)!.getBoundingClientRect();
+                        return hole.left <= t.left && hole.right >= t.right && hole.top <= t.top && hole.bottom >= t.bottom;
+                    }, target)).toBe(true);
+                }
+            }
             await page.locator('#tour-next').click();
         }
         await expect(overlay).toBeHidden();
@@ -162,23 +177,3 @@ test('the spotlight follows its card when the canvas is panned or zoomed', async
     await page.mouse.wheel(0, -300);
     await expect.poll(offset).toBe(0);
 });
-
-for (const [w, h, target] of [[1440, 900, '.actions-menu-btn'], [390, 844, '#bb-view-more']] as const) {
-    test(`the last step at ${w}px points at ${target === '.actions-menu-btn' ? 'Actions' : 'More'}: anniversaries, export and settings`, async ({ page }) => {
-        await page.setViewportSize({ width: w, height: h });
-        await openApp(page, { tourOffer: true });
-        await page.getByRole('button', { name: 'Try a sample tree' }).click();
-        await page.locator('.tour-offer .tour-offer-btn').click();
-        await expect(page.locator('#tour-overlay')).toHaveClass(/active/);
-        const total = Number((await page.locator('#tour-step').textContent())!.split('/')[1]);
-        for (let i = 1; i < total; i++) await page.locator('#tour-next').click();
-        await expect(page.locator('#tour-step')).toHaveText(`${total}/${total}`);
-        await expect(page.locator('#tour-text')).toHaveText(/^Anniversaries, export and settings are here\./);
-        // The spotlight sits on the menu that holds them (not on the tree switcher).
-        await expect.poll(() => page.evaluate((sel) => {
-            const hole = document.getElementById('tour-hole')!.getBoundingClientRect();
-            const t = document.querySelector(sel)!.getBoundingClientRect();
-            return hole.left <= t.left && hole.right >= t.right && hole.top <= t.top && hole.bottom >= t.bottom;
-        }, target)).toBe(true);
-    });
-}

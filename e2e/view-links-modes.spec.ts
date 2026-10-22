@@ -88,12 +88,14 @@ for (const [name, viewport] of [
             await setup(page);
             await store(page, [B]);
             const label = page.locator('.view-link-label');
+            await expect(label).toHaveCount(1);
             await expect(label).toBeVisible();
             // At 100 % (the target scales with the tree), the label in the middle of the window.
             await page.evaluate(() => window.Strom.ZoomPan.reset());
             await expect.poll(() => page.evaluate(() => window.Strom.ZoomPan.getScale())).toBe(1);
             await label.evaluate((el) => window.Strom.ZoomPan.centerOnWorldPoint(parseFloat(el.style.left), parseFloat(el.style.top)));
             await expect(label).toHaveCSS('height', '28px');
+            expect(await label.evaluate((el) => parseFloat(getComputedStyle(el, '::before').height))).toBe(44);
             const b = (await label.boundingBox())!;
             expect(inside(b, viewport.width, viewport.height)).toBe(true);
             for (const dy of [-21, 21]) expect(await hitAt(page, b.x + b.width / 2, b.y + b.height / 2 + dy, '.view-link-label, .person-card')).toBe('view-link-label');

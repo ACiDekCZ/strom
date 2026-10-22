@@ -65,7 +65,7 @@ async function setYear(page: Page, year: number): Promise<void> {
     }, year);
 }
 
-test('the time toggle reveals the slider and starts at the earliest year', async ({ page }) => {
+test('the time toggle reveals the slider and starts at the earliest year; the last year reveals every dated place, undated ones stay hidden', async ({ page }) => {
     await stubTiles(page);
     await seedTimeTree(page);
 
@@ -81,12 +81,6 @@ test('the time toggle reveals the slider and starts at the earliest year', async
     await expect(page.locator('.map-time-year')).toHaveText('1850');
     await expect(page.locator('.map-marker')).toHaveCount(1);
     await expect(page.locator('.map-marker[data-key="alpha"]')).toBeVisible();
-});
-
-test('sliding to the last year reveals every dated place, and undated ones stay hidden', async ({ page }) => {
-    await stubTiles(page);
-    await seedTimeTree(page);
-    await page.getByRole('button', { name: 'Migration over time' }).click();
 
     await setYear(page, 1900);
     // Alpha and Beta are dated and now in the past; Gamma has no date, so it is
@@ -96,26 +90,16 @@ test('sliding to the last year reveals every dated place, and undated ones stay 
     await expect(page.getByText(/without a date/i)).toBeVisible();
 });
 
-test('a parent→child birthplace line appears once the child is born', async ({ page }) => {
-    await stubTiles(page);
-    await seedTimeTree(page);
-    await page.getByRole('button', { name: 'Migration over time' }).click();
-
-    // Bela is born in 1880: before that there is no route to draw.
-    await setYear(page, 1870);
-    await expect(page.locator('.map-lines line')).toHaveCount(0);
-
-    // Past 1880 the family's move Alpha→Beta is drawn as one line.
-    await setYear(page, 1885);
-    await expect(page.locator('.map-lines line')).toHaveCount(1);
-});
-
-test('turning the mode off brings the ordinary map back', async ({ page }) => {
+test('a parent→child birthplace line appears once the child is born; turning the mode off brings the ordinary map back', async ({ page }) => {
     await stubTiles(page);
     await seedTimeTree(page);
     const toggle = page.getByRole('button', { name: 'Migration over time' });
 
     await toggle.click();
+    // Bela is born in 1880: before that there is no route to draw.
+    await setYear(page, 1870);
+    await expect(page.locator('.map-lines line')).toHaveCount(0);
+    // Past 1880 the family's move Alpha→Beta is drawn as one line.
     await setYear(page, 1885);
     await expect(page.locator('.map-lines line')).toHaveCount(1);
 

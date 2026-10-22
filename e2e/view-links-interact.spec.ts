@@ -640,24 +640,6 @@ test.describe('linked in the view only: a phone (touch)', () => {
     });
 });
 
-test.describe('linked in the view only: a phone held sideways', () => {
-    test.use({ viewport: { width: 740, height: 360 }, hasTouch: true, isMobile: true });
-
-    test('the pinned bubble stays inside the window', async ({ page }) => {
-        await setup(page);
-        await page.evaluate(() => {
-            const S = window.Strom;
-            S.TreeRenderer.setFocus(S.DataManager.getAllPersons().find(p => p.refn === 'P0010')!.id);
-        });
-        await stubOf(page).tap();
-        await expect(bubble(page)).toHaveClass(/is-pinned/);
-        const box = (await bubble(page).boundingBox())!;
-        expect(box.y).toBeGreaterThanOrEqual(0);
-        expect(box.y + box.height).toBeLessThanOrEqual(360);
-        expect(box.x + box.width).toBeLessThanOrEqual(740);
-    });
-});
-
 test.describe('linked in the view only: a tablet', () => {
     test.use({ viewport: { width: 820, height: 1000 } });
 

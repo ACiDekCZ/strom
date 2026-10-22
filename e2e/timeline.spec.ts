@@ -1,14 +1,15 @@
 import { test, expect } from '@playwright/test';
-import { openApp, card, createFirstPerson } from './helpers.js';
+import { openApp, card } from './helpers.js';
 
 /**
  * Timeline view: a third display mode showing people as life-bars on a year
  * axis. Switching in shows the bars; switching back restores the family tree.
  */
-test('timeline view shows life-bars and switches back to the family tree', async ({ page }) => {
+test('timeline view: life-bars from the gender tokens, no zoom controls, the wheel scrolls it (no tree zoom), a bar refocuses, back to the family tree', async ({ page }) => {
     await openApp(page);
     await page.getByRole('button', { name: 'Try a sample tree' }).click();
     await expect(card(page, 'Johan')).toBeVisible();
+    await expect(page.locator('.zoom-controls')).toBeVisible();
 
     // Switch to the timeline segment.
     await page.locator('#view-mode-timeline').click();
@@ -19,22 +20,8 @@ test('timeline view shows life-bars and switches back to the family tree', async
     await expect(page.locator('.tl-name', { hasText: 'Johan' })).toBeVisible();
     // The family canvas is hidden while the timeline is up.
     await expect(page.locator('#tree-canvas')).toBeHidden();
-
-    // Clicking a bar re-focuses that person (still in timeline).
-    await page.locator('.timeline-bar', { hasText: 'Hanna' }).click();
-    await expect(container).toBeVisible();
-
-    // Back to the family view: cards return, timeline hidden.
-    await page.locator('#view-mode-family').click();
-    await expect(container).toBeHidden();
-    await expect(card(page, 'Johan')).toBeVisible();
-});
-
-test('timeline life-bars fill from the gender tokens (--male / --female), not old pastels', async ({ page }) => {
-    await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await page.locator('#view-mode-timeline').click();
-    await expect(page.locator('.timeline-bar').first()).toBeVisible();
+    // The timeline scrolls natively: no floating zoom controls.
+    await expect(page.locator('.zoom-controls')).toBeHidden();
 
     // The on-screen bars carry the CSS token in their fill attribute — so they
     // follow the theme — and never the retired pastel hexes.
@@ -44,35 +31,25 @@ test('timeline life-bars fill from the gender tokens (--male / --female), not ol
     for (const f of fills) {
         expect(f === 'var(--male)' || f === 'var(--female)').toBeTruthy();
     }
-
-    // Bars resolve to a non-empty, non-transparent colour in both themes.
+    // Bars resolve to a non-empty colour.
     const resolved = await page.locator('.tl-bar-rect').first().evaluate(
         el => getComputedStyle(el).fill);
     expect(resolved).not.toBe('');
-});
 
-test('timeline hides the floating zoom controls (it scrolls natively)', async ({ page }) => {
-    await openApp(page);
-    await createFirstPerson(page, 'Jan', 'Novak', { birthDate: '1950' });
-    await expect(page.locator('.zoom-controls')).toBeVisible();
-
-    await page.locator('#view-mode-timeline').click();
-    await expect(page.locator('.zoom-controls')).toBeHidden();
-
-    await page.locator('#view-mode-family').click();
-    await expect(page.locator('.zoom-controls')).toBeVisible();
-});
-
-test('mouse wheel over the timeline scrolls it instead of zooming the tree', async ({ page }) => {
-    await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await page.locator('#view-mode-timeline').click();
-    await expect(page.locator('#timeline-container')).toBeVisible();
-
+    // The mouse wheel over the timeline must NOT be hijacked by the canvas zoom.
     const before = await page.evaluate(() => window.Strom.ZoomPan.getScale());
-    await page.locator('#timeline-container').hover();
+    await container.hover();
     await page.mouse.wheel(0, 240);
-    // The wheel must NOT be hijacked by the canvas zoom.
     const after = await page.evaluate(() => window.Strom.ZoomPan.getScale());
     expect(after).toBe(before);
+
+    // Clicking a bar re-focuses that person (still in timeline).
+    await page.locator('.timeline-bar', { hasText: 'Hanna' }).click();
+    await expect(container).toBeVisible();
+
+    // Back to the family view: cards and zoom controls return, timeline hidden.
+    await page.locator('#view-mode-family').click();
+    await expect(container).toBeHidden();
+    await expect(card(page, 'Johan')).toBeVisible();
+    await expect(page.locator('.zoom-controls')).toBeVisible();
 });

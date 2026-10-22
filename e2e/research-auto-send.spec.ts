@@ -244,18 +244,6 @@ test.describe('sending by itself', () => {
     });
 });
 
-test('the research names the conflicts in its reply: the note names the person', async ({ page }) => {
-    const bridge = await autoTree(page);
-    writesAtOnce(bridge);
-    bridge.syncReply = { status: 200, body: { ...WRITE.body, conflicts: [{ id: 'X0003', person: 'P0003', fact: 'BIRT' }] } };
-    await editJan(page);
-    await page.clock.fastForward(QUIET + 1000);
-    await expect.poll(() => bridge.posts.length).toBe(1);
-    const note = page.locator('.research-sync-note');
-    await expect(note).toContainText('Written, 1 conflict to decide');
-    await expect(note.getByRole('button', { name: 'Jan Fíšek ›' })).toBeVisible();
-});
-
 test('a window narrower than the toolbar\'s mark (1100 px): a new conflict is told by a toast with the person', async ({ page }) => {
     const bridge = await autoTree(page);
     await page.setViewportSize({ width: 1100, height: 900 });

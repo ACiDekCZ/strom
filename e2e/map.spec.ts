@@ -137,7 +137,7 @@ test('first open shows the tiles notice and fetches nothing until it is read', a
     await expect(page.locator('.map-tiles-notice')).toHaveCount(0);
 });
 
-test('the map offers to look up places, then plots them', async ({ page }) => {
+test('the map offers to look up places after consent, plots them, never scrolls under its controls; the coordinates are stored in the tree, so no second lookup', async ({ page }) => {
     await stubTiles(page);
     const asked = await stubGeocoder(page, { Greenwich: [51.48, 0.0], Pembroke: [51.67, -4.91] });
 
@@ -148,42 +148,36 @@ test('the map offers to look up places, then plots them', async ({ page }) => {
 
     await page.getByRole('button', { name: 'Map', exact: true }).click();
     await expect(page.locator('#map-container')).toBeVisible();
-
+    await clearToasts(page);
     // Nothing has coordinates yet, so the map says so and offers the lookup.
     const lookUp = page.getByRole('button', { name: /Look up \d+ places?/ });
     await expect(lookUp).toBeVisible();
     await lookUp.click();
-
     // Consent is asked for before anything is sent.
     await expect(page.getByText(/place names.*will be sent/i)).toBeVisible();
+    expect(asked).toEqual([]);
     await page.getByRole('button', { name: 'Look them up' }).click();
-
     // Markers appear for both places.
     await expect(page.locator('.map-marker')).toHaveCount(2, { timeout: 15000 });
-    expect(asked.sort()).toEqual(['Greenwich', 'Pembroke']);
-
+    expect([...asked].sort()).toEqual(['Greenwich', 'Pembroke']);
     // Only place names left the app — no family data rode along.
     expect(asked.join(' ')).not.toMatch(/Johan|Berg|1825/);
-
     // Tiles are drawn under the markers.
     expect(await page.locator('.map-tile').count()).toBeGreaterThan(0);
-});
-
-test('coordinates are stored in the tree, so the map needs no second lookup', async ({ page }) => {
-    await stubTiles(page);
-    const asked = await stubGeocoder(page, { Greenwich: [51.48, 0.0], Pembroke: [51.67, -4.91] });
-
-    await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Johan')).toBeVisible();
-    await seedPlaces(page);
-
-    await page.getByRole('button', { name: 'Map', exact: true }).click();
-    await clearToasts(page);
-    await page.getByRole('button', { name: /Look up \d+ places?/ }).click();
-    await page.getByRole('button', { name: 'Look them up' }).click();
-    await expect(page.locator('.map-marker')).toHaveCount(2, { timeout: 15000 });
     const firstRound = asked.length;
+
+    // Tiles and markers overflow the container by design. If it were ever a
+    // scroll container, focus landing on a marker would scroll the whole map
+    // sideways and leave the controls half off-screen.
+    const scrolled = await page.evaluate(() => {
+        const c = document.getElementById('map-container') as HTMLElement;
+        c.scrollLeft = 200;  // even asked directly, it must not move
+        c.scrollTop = 200;
+        return { left: c.scrollLeft, top: c.scrollTop };
+    });
+    expect(scrolled).toEqual({ left: 0, top: 0 });
+    const scope = await page.locator('.map-scope').boundingBox();
+    expect(scope?.x).toBeGreaterThanOrEqual(0);
 
     // The coordinates live in the tree's own data...
     expect(await page.evaluate(() => Object.keys(window.Strom.DataManager.getData().places ?? {}).sort()))
@@ -196,36 +190,6 @@ test('coordinates are stored in the tree, so the map needs no second lookup', as
     await expect(page.locator('.map-marker')).toHaveCount(2);
     expect(asked.length).toBe(firstRound);
     await expect(page.getByRole('button', { name: /Look up \d+ places?/ })).toBeHidden();
-});
-
-test('the map never scrolls out from under its own controls', async ({ page }) => {
-    await stubTiles(page);
-    await stubGeocoder(page, { Greenwich: [51.48, 0.0], Pembroke: [51.67, -4.91] });
-
-    await openApp(page);
-    await page.getByRole('button', { name: 'Try a sample tree' }).click();
-    await expect(card(page, 'Johan')).toBeVisible();
-    await seedPlaces(page);
-
-    await page.getByRole('button', { name: 'Map', exact: true }).click();
-    await clearToasts(page);
-    await page.getByRole('button', { name: /Look up \d+ places?/ }).click();
-    await page.getByRole('button', { name: 'Look them up' }).click();
-    await expect(page.locator('.map-marker')).toHaveCount(2, { timeout: 15000 });
-
-    // Tiles and markers overflow the container by design. If it were ever a
-    // scroll container, focus landing on a marker would scroll the whole map
-    // sideways and leave the controls half off-screen.
-    const scrolled = await page.evaluate(() => {
-        const c = document.getElementById('map-container') as HTMLElement;
-        c.scrollLeft = 200;  // even asked directly, it must not move
-        c.scrollTop = 200;
-        return { left: c.scrollLeft, top: c.scrollTop };
-    });
-    expect(scrolled).toEqual({ left: 0, top: 0 });
-
-    const scope = await page.locator('.map-scope').boundingBox();
-    expect(scope?.x).toBeGreaterThanOrEqual(0);
 });
 
 test('coordinates survive a reload — they are part of the tree', async ({ page }) => {

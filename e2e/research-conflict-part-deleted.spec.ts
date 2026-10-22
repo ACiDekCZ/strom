@@ -47,8 +47,10 @@ const setJan = (page: Page, over: Record<string, string>) => page.evaluate(over 
 test.describe('a part of a documented fact deleted in the app', () => {
     test.use({ locale: 'en-US', viewport: { width: 1280, height: 900 } });
 
-    test('the death date deleted, the place kept: both sides readable; Keep decides it and nothing changes here', async ({ page }) => {
+    test('the death date deleted, the place kept: both sides readable; typed again after the send it asks to send first over the whole fact, deleted again not; Keep decides it and nothing changes here', async ({ page }) => {
         const { decide } = await setupConflict(page, { opened: DATE_OPENED });
+        // The tree as the research had it is kept (what "sending comes first" compares with).
+        await page.evaluate(() => window.Strom.UI.researchChangesReady());
         await openKnows(page);
         const c = cardOf(page, 'X0011');
         await expect(c).toHaveAttribute('data-state', 'open');
@@ -56,6 +58,20 @@ test.describe('a part of a documented fact deleted in the app', () => {
         await expect(value(page, 'research', 'X0011')).toHaveText('23. 10. 1865, Lipnice');
         await expect(side(page, 'user', 'X0011').locator('.prc-choice')).toBeEnabled();
         await expect(side(page, 'research', 'X0011').locator('.prc-choice')).toBeEnabled();
+
+        // Sending first over the whole fact: the deleted date typed again after the send.
+        await setJan(page, { deathDate: '1865-10-23' });
+        await expect(c).toHaveAttribute('data-state', 'sendFirst');
+        await expect(side(page, 'user', 'X0011').locator('.prc-choice')).toBeDisabled();
+        // The value here now: the whole fact, as the research says its side.
+        await expect(value(page, 'user', 'X0011')).toHaveText(/1865.*, Lipnice$/);
+        await expect(side(page, 'user', 'X0011').locator('.prc-knows')).toHaveText('the research has Lipnice');
+        // Deleted again: as sent, nothing to send first.
+        await setJan(page, { deathDate: '' });
+        await expect(c).toHaveAttribute('data-state', 'open');
+        await expect(value(page, 'user', 'X0011')).toHaveText('Lipnice');
+        await expect(side(page, 'user', 'X0011').locator('.prc-choice')).toBeEnabled();
+
         decide.replies.push(reply('X0011', 'user', { janDeath: '', janDeathPlace: 'Lipnice', janConflicts: DATE_GONE('decided') }));
         await side(page, 'user', 'X0011').locator('.prc-choice').click();
         await expect(c).toHaveAttribute('data-state', 'kept');
@@ -76,24 +92,6 @@ test.describe('a part of a documented fact deleted in the app', () => {
         await expect(c).toHaveAttribute('data-state', 'taken');
         await expect(c.locator('.prc-decided-line')).toHaveText(/^The value here changed from Lipnice\. /);
         expect(decide.asks).toEqual([{ id: 'X0011', body: { do: 'decide', take: 'research' } }]);
-    });
-
-    test('sending first over the whole fact: the deleted date typed again after the send asks to send first; deleted again it does not', async ({ page }) => {
-        await setupConflict(page, { opened: DATE_OPENED });
-        await page.evaluate(() => window.Strom.UI.researchChangesReady());
-        await openKnows(page);
-        const c = cardOf(page, 'X0011');
-        await expect(c).toHaveAttribute('data-state', 'open');
-        await setJan(page, { deathDate: '1865-10-23' });
-        await expect(c).toHaveAttribute('data-state', 'sendFirst');
-        await expect(side(page, 'user', 'X0011').locator('.prc-choice')).toBeDisabled();
-        // The value here now: the whole fact, as the research says its side.
-        await expect(value(page, 'user', 'X0011')).toHaveText(/1865.*, Lipnice$/);
-        await expect(side(page, 'user', 'X0011').locator('.prc-knows')).toHaveText('the research has Lipnice');
-        await setJan(page, { deathDate: '' });
-        await expect(c).toHaveAttribute('data-state', 'open');
-        await expect(value(page, 'user', 'X0011')).toHaveText('Lipnice');
-        await expect(side(page, 'user', 'X0011').locator('.prc-choice')).toBeEnabled();
     });
 
     test('the edit form: "conflict ›" at the death date (the part deleted); Take in the panel brings the date into the open form', async ({ page }) => {

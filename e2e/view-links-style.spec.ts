@@ -383,18 +383,3 @@ test.describe('linked in the view only: the look', () => {
         expect(px.realCenter).toBe(px.male);
     });
 });
-
-test.describe('linked in the view only: the label on touch', () => {
-    test.use({ viewport: { width: 800, height: 1000 }, hasTouch: true, isMobile: true });
-
-    test('28px high on a touch screen', async ({ page }) => {
-        await openApp(page);
-        await dropFile(page, GED);
-        await expect(card(page, 'Karel').first()).toBeVisible();
-        await show(page, [B]);
-        const label = page.locator('.view-link-label');
-        await expect(label).toHaveCount(1);
-        await expect(label).toHaveCSS('height', '28px');
-        expect(await label.evaluate((el) => parseFloat(getComputedStyle(el, '::before').height))).toBe(44);
-    });
-});

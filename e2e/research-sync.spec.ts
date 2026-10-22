@@ -158,11 +158,15 @@ test.describe('the state of the tree and sending straight', () => {
     });
 
     test('a stuck bridge (no answer in time): the way out, and "Start the research" beside it', async ({ page }) => {
+        // The time an ask may take runs on the page clock (research-auto-send.spec.ts does the same).
+        await page.clock.install();
         await openResearch(page);
         const bridge = await fakeBridge(page);
         await poll(page);
         bridge.statusHang = true;
-        await poll(page);
+        const asked = poll(page);
+        await page.clock.fastForward(4000);
+        await asked;
         await openResearchMenu(page);
         await expect(block(page)).toHaveAttribute('data-state', 'bridgeDown');
         await expect(block(page)).toContainText('strom live stop');

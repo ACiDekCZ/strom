@@ -26,8 +26,10 @@ const userValue = (page: Page) => side(page, 'user', 'X0013').locator('.prc-valu
 test.describe('a value deleted on one side: still decidable', () => {
     test.use({ locale: 'en-US', viewport: { width: 1280, height: 900 } });
 
-    test('the card: the app\'s side "(empty)", muted; Keep decides it, nothing changes here', async ({ page }) => {
+    test('the card: the app\'s side "(empty)", muted; empty as sent is no move, a title typed after the send asks to send first, deleted again not; Keep decides it, nothing changes here', async ({ page }) => {
         const { decide } = await setupConflict(page, { opened: OPENED });
+        // The tree as the research had it is kept (what "sending comes first" compares with).
+        await page.evaluate(() => window.Strom.UI.researchChangesReady());
         await editJosef(page);
         await openKnows(page);
         const c = cardOf(page, 'X0013');
@@ -37,6 +39,23 @@ test.describe('a value deleted on one side: still decidable', () => {
         expect(await userValue(page).locator('.prc-empty').evaluate(el => getComputedStyle(el).fontWeight)).toBe('400');
         await expect(side(page, 'research', 'X0013').locator('.prc-value')).toHaveText('MUDr.');
         await expect(side(page, 'user', 'X0013').locator('.prc-choice')).toBeEnabled();
+
+        // Sending first: a title typed after the send is a move; deleted again it is not.
+        const setTitle = (v: string) => page.evaluate(v => {
+            const dm = window.Strom.DataManager;
+            dm.updatePerson(dm.getAllPersons().find(p => p.firstName === 'Jan')!.id, { titleBefore: v });
+            window.Strom.UI.refreshResearchSyncUi();
+        }, v);
+        await setTitle('Ing.');
+        await expect(c).toHaveAttribute('data-state', 'sendFirst');
+        await expect(userValue(page)).toHaveText('Ing.');
+        await expect(side(page, 'user', 'X0013').locator('.prc-knows')).toHaveText('the research has (empty)');
+        await expect(side(page, 'user', 'X0013').locator('.prc-choice')).toBeDisabled();
+        await setTitle('');
+        await expect(c).toHaveAttribute('data-state', 'open');
+        await expect(userValue(page).locator('.prc-empty')).toHaveText('(empty)');
+        await expect(side(page, 'user', 'X0013').locator('.prc-choice')).toBeEnabled();
+
         decide.replies.push(reply('user', { janConflicts: deleted('decided') }));
         await side(page, 'user', 'X0013').locator('.prc-choice').click();
         await expect(c).toHaveAttribute('data-state', 'kept');
@@ -64,28 +83,6 @@ test.describe('a value deleted on one side: still decidable', () => {
         expect(await page.evaluate(() => window.Strom.UI.hasPersonModalChanges())).toBe(false);
         await expect(page.locator('.toast').filter({ hasText: 'Conflict decided' })).toHaveText('Conflict decided: MUDr.');
         expect(decide.asks).toEqual([{ id: 'X0013', body: { do: 'decide', take: 'research' } }]);
-    });
-
-    test('sending first: the field empty as sent is no move; a title typed after the send is, and deleted again it is not', async ({ page }) => {
-        await setupConflict(page, { opened: OPENED });
-        await page.evaluate(() => window.Strom.UI.researchChangesReady());
-        await openKnows(page);
-        const c = cardOf(page, 'X0013');
-        await expect(c).toHaveAttribute('data-state', 'open');
-        const setTitle = (v: string) => page.evaluate(v => {
-            const dm = window.Strom.DataManager;
-            dm.updatePerson(dm.getAllPersons().find(p => p.firstName === 'Jan')!.id, { titleBefore: v });
-            window.Strom.UI.refreshResearchSyncUi();
-        }, v);
-        await setTitle('Ing.');
-        await expect(c).toHaveAttribute('data-state', 'sendFirst');
-        await expect(userValue(page)).toHaveText('Ing.');
-        await expect(side(page, 'user', 'X0013').locator('.prc-knows')).toHaveText('the research has (empty)');
-        await expect(side(page, 'user', 'X0013').locator('.prc-choice')).toBeDisabled();
-        await setTitle('');
-        await expect(c).toHaveAttribute('data-state', 'open');
-        await expect(userValue(page).locator('.prc-empty')).toHaveText('(empty)');
-        await expect(side(page, 'user', 'X0013').locator('.prc-choice')).toBeEnabled();
     });
 });
 
