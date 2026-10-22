@@ -187,6 +187,7 @@ test.describe('couldn\'t connect to the research', () => {
             window.Strom.TreeManager.setResearchAdoptToken(window.Strom.DataManager.getCurrentTreeId()!, { token: t, at: new Date().toISOString() });
         }, token);
         const cors = { 'access-control-allow-origin': '*' };
+        const RESEARCH = '3f2c9a10-7b1e-4c55-9d2a-0e8f6b4a1c77';
         let blocked = true;
         const posted: string[] = [];
         await page.unroute(`${BRIDGE}/**`);
@@ -204,7 +205,13 @@ test.describe('couldn\'t connect to the research', () => {
                     return route.abort('accessdenied');
                 }
                 posted.push(req.postData() ?? '');
-                return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify({ tree: '3f2c9a10-7b1e-4c55-9d2a-0e8f6b4a1c77', head: 'abc1234' }) });
+                return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify({ tree: RESEARCH, head: 'abc1234' }) });
+            }
+            // The research's version of what it took: loaded at the first try (no waits for a later one).
+            if (path.endsWith('/tree.ged')) {
+                return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/plain; charset=utf-8' }, body: [
+                    '0 HEAD', '1 SOUR STROM_RESEARCH', '1 DATE 5 OCT 2026', `1 _STROM_TREE ${RESEARCH}`, '1 CHAR UTF-8', '1 NOTE Novákovi',
+                    '0 @P0001@ INDI', '1 NAME Jan /Novak/', '1 SEX M', '1 REFN P0001', '0 TRLR'].join('\n') });
             }
             return route.fulfill({ status: 404, headers: cors, body: '' });
         });

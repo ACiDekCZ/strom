@@ -86,9 +86,16 @@ async function routeBridge(page: Page, token: string, init: Partial<Bridge> = {}
     return b;
 }
 
-/** A new tree with "1", "2" and their child "3" (no dates), handed to the research; sending by hand. */
-async function handOver(page: Page, init: Partial<Bridge> = {}, pick?: (page: Page) => Promise<void>): Promise<Bridge> {
+/**
+ * A new tree with "1", "2" and their child "3" (no dates), handed to the research; sending by hand.
+ * Without a version to read (`treeGed: null`) the app tries it 0, 1 and 3 s after the hand-over
+ * (ADOPT_LOAD_WAITS, src/ui/research-adopt-ui.ts): the waits run on Playwright's clock, unless
+ * `realWaits` walks them in real time.
+ */
+async function handOver(page: Page, init: Partial<Bridge> = {}, pick?: (page: Page) => Promise<void>, realWaits = false): Promise<Bridge> {
     await page.setViewportSize({ width: 1440, height: 900 });
+    const onClock = init.treeGed === null && !realWaits;
+    if (onClock) await page.clock.install();
     await page.addInitScript(() => {
         if (sessionStorage.getItem('seeded')) return;
         sessionStorage.setItem('seeded', '1');
@@ -118,6 +125,11 @@ async function handOver(page: Page, init: Partial<Bridge> = {}, pick?: (page: Pa
     await page.evaluate((base) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: base })), BRIDGE);
     if (pick) await pick(page);
     await page.locator('#research-adopt-confirm').click();
+    if (onClock) {
+        // The first try asks at once; each later one after its wait, run forward here.
+        await expect.poll(() => b.gedAsks).toBeGreaterThan(0);
+        await expect.poll(async () => { await page.clock.fastForward(1000); return b.gedAsks; }).toBe(ADOPT_TRIES);
+    }
     await expect(page.locator('.toast')).toContainText('Test Win4 is now linked to the research.', AFTER_HAND_OVER);
     // Sending by hand goes at once in these tests ("What will be sent" first: research-auto-send.spec.ts).
     await page.evaluate(() => {
@@ -145,6 +157,9 @@ async function renameOne(page: Page): Promise<void> {
 }
 
 const send = (page: Page) => page.evaluate(() => window.Strom.UI.researchSendNow());
+
+/** The tries at the research's version after a hand-over (ADOPT_LOAD_WAITS). */
+const ADOPT_TRIES = 3;
 
 const SENT_WITH_IDS = [{ name: 'jedna', refn: 'P0001' }, { name: '2', refn: 'P0002' }, { name: '3', refn: 'P0003' }];
 
@@ -201,7 +216,9 @@ test.describe('the research\'s numbers after a hand-over', () => {
     });
 
     test('neither its version nor ids: nothing is sent, said why; "Load the research\'s version" numbers them, the rename kept, then it goes', async ({ page }) => {
-        const b = await handOver(page, { treeGed: null });
+        // The one hand-over here that walks the tries at the research's version in real time.
+        const b = await handOver(page, { treeGed: null }, undefined, true);
+        expect(b.gedAsks).toBe(ADOPT_TRIES);
         expect(await refns(page)).toEqual(['1:', '2:', '3:']);
         expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.awaitingIds)).toBe(true);
         await renameOne(page);
@@ -305,6 +322,8 @@ test.describe('the research\'s numbers after a hand-over', () => {
 test.describe('a tree from older data, handed over by hand', () => {
     test('a parent alone with a child (made a "?" family on load): right after the hand-over nothing waits to be sent', async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 900 });
+        // "Nothing comes later" is waited out on Playwright's clock.
+        await page.clock.install();
         await openApp(page);
         await page.evaluate(async () => {
             const launched: string[] = [];
@@ -333,7 +352,7 @@ test.describe('a tree from older data, handed over by hand', () => {
         await page.locator('#research-adopt-confirm').click();
         await expect(page.locator('.toast')).toContainText('Test Win4 is now linked to the research.', AFTER_HAND_OVER);
         await page.evaluate(() => window.Strom.UI.pollResearchBridge());
-        await page.waitForTimeout(1500);
+        await page.clock.fastForward(1500);
         const state = await page.evaluate(() => window.Strom.UI.currentResearchSyncState());
         expect(state.core).not.toBe('unsent');
         await expect(page.locator('#research-sync-send')).toHaveCount(0);
@@ -343,6 +362,8 @@ test.describe('a tree from older data, handed over by hand', () => {
 test.describe('"married, the spouse unknown" through a hand-over', () => {
     test('the family goes in the hand-over; a research version without it leaves it in the tree, nothing to send', async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 900 });
+        // "Nothing comes later" is waited out on Playwright's clock.
+        await page.clock.install();
         await openApp(page);
         await page.evaluate(async () => {
             const launched: string[] = [];
@@ -377,14 +398,14 @@ test.describe('"married, the spouse unknown" through a hand-over', () => {
         expect(bridge.adopted[0]).not.toContain('1 NAME //');
         await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe('abc1234');
         await expect.poll(() => bridge.gedAsks).toBeGreaterThan(0);
-        await page.waitForTimeout(500);
+        await page.clock.fastForward(500);
         const after = await page.evaluate(() => {
             const d = window.Strom.DataManager.getData();
             return Object.values(d.partnerships).map((u: any) => ({ status: u.status, people: [u.person1Id, u.person2Id].map((id: string) => d.persons[id as never]?.isPlaceholder ? '?' : d.persons[id as never]?.firstName).sort() }));
         });
         expect(after).toEqual([{ status: 'married', people: ['1', '?'] }]);
         await page.evaluate(() => window.Strom.UI.pollResearchBridge());
-        await page.waitForTimeout(1000);
+        await page.clock.fastForward(1000);
         expect((await page.evaluate(() => window.Strom.UI.currentResearchSyncState())).core).not.toBe('unsent');
     });
 });

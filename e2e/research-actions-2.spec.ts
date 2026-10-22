@@ -496,8 +496,18 @@ test.describe('Start research with this tree (G3)', () => {
         expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.researchAdoptToken?.token)).toBe(stored);
     });
 
+    /** The research's next version of the adopted tree: its own numbers, no images. */
+    const adoptedGed = (extra = false): string => [
+        '0 HEAD', '1 SOUR STROM_RESEARCH', '1 DATE 3 OCT 2026', `1 _STROM_TREE ${UUID}`, '1 CHAR UTF-8', '1 NOTE Dvořákovi',
+        '0 @P0001@ INDI', '1 NAME Karel /Dvořák/', '1 SEX M', '1 REFN P0001', '1 FAMS @F0001@',
+        '0 @P0002@ INDI', '1 NAME Petr /Dvořák/', '1 SEX M', '1 REFN P0002', '1 FAMC @F0001@',
+        ...(extra ? ['0 @P0003@ INDI', '1 NAME Marie /Dvořáková/', '1 SEX F', '1 REFN P0003', '1 FAMS @F0001@'] : []),
+        '0 @F0001@ FAM', '1 HUSB @P0001@', ...(extra ? ['1 WIFE @P0003@'] : []), '1 CHIL @P0002@',
+        '0 TRLR',
+    ].join('\n');
+
     async function routeBridge(page: Page, token: string, calls: { cancel: string[]; posted: string[] },
-        extra: { offer?: Record<string, unknown>; transfer?: string; status?: Record<string, unknown>; adoptReply?: { status: number; body: Record<string, unknown> } } = {}): Promise<void> {
+        extra: { offer?: Record<string, unknown>; transfer?: string; status?: Record<string, unknown>; adoptReply?: { status: number; body: Record<string, unknown> }; ged?: string } = {}): Promise<void> {
         await page.route(`${BRIDGE}/**`, async (route) => {
             const req = route.request();
             const path = new URL(req.url()).pathname;
@@ -522,6 +532,11 @@ test.describe('Start research with this tree (G3)', () => {
                 calls.cancel.push(req.postData() ?? '');
                 return route.fulfill({ status: 200, headers: cors, body: '{}' });
             }
+            // The research's version of what it took: loaded at the first try after the hand-over
+            // (without it the app tries 0, 1 and 3 s after it: ADOPT_LOAD_WAITS).
+            if (path.endsWith('/tree.ged') && extra.ged !== undefined) {
+                return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/plain; charset=utf-8' }, body: extra.ged });
+            }
             return route.fulfill({ status: 404, headers: cors, body: '' });
         });
     }
@@ -531,7 +546,7 @@ test.describe('Start research with this tree (G3)', () => {
         await page.evaluate(() => window.Strom.UI.startResearchAdopt(window.Strom.DataManager.getCurrentTreeId()));
         const token = (await launched(page))[0].match(TOKEN_RE)![1];
         const calls = { cancel: [] as string[], posted: [] as string[] };
-        await routeBridge(page, token, calls);
+        await routeBridge(page, token, calls, { ged: adoptedGed() });
         await page.evaluate((b) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: b })), BRIDGE);
         const dialog = page.locator('#research-adopt-modal');
         await expect(dialog).toBeVisible();
@@ -577,7 +592,7 @@ test.describe('Start research with this tree (G3)', () => {
         await page.evaluate(() => window.Strom.UI.startResearchAdopt(window.Strom.DataManager.getCurrentTreeId()));
         const token = (await launched(page))[0].match(TOKEN_RE)![1];
         const calls = { cancel: [] as string[], posted: [] as string[] };
-        await routeBridge(page, token, calls);
+        await routeBridge(page, token, calls, { ged: adoptedGed() });
         await page.evaluate((b) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: b })), BRIDGE);
         await page.locator('#research-adopt-confirm').click();
         await expect(page.locator('.toast')).toContainText('Dvořákovi is now linked to the research.', AFTER_HAND_OVER);
@@ -585,16 +600,6 @@ test.describe('Start research with this tree (G3)', () => {
         expect(calls.posted[0]).not.toContain('AAAA');
         return { img, att };
     }
-
-    /** The research's next version of the adopted tree: its own numbers, no images. */
-    const adoptedGed = (extra = false): string => [
-        '0 HEAD', '1 SOUR STROM_RESEARCH', '1 DATE 3 OCT 2026', `1 _STROM_TREE ${UUID}`, '1 CHAR UTF-8', '1 NOTE Dvořákovi',
-        '0 @P0001@ INDI', '1 NAME Karel /Dvořák/', '1 SEX M', '1 REFN P0001', '1 FAMS @F0001@',
-        '0 @P0002@ INDI', '1 NAME Petr /Dvořák/', '1 SEX M', '1 REFN P0002', '1 FAMC @F0001@',
-        ...(extra ? ['0 @P0003@ INDI', '1 NAME Marie /Dvořáková/', '1 SEX F', '1 REFN P0003', '1 FAMS @F0001@'] : []),
-        '0 @F0001@ FAM', '1 HUSB @P0001@', ...(extra ? ['1 WIFE @P0003@'] : []), '1 CHIL @P0002@',
-        '0 TRLR',
-    ].join('\n');
 
     const media = (page: Page) => page.evaluate(() => {
         const persons = Object.values(window.Strom.DataManager.getData().persons) as any[];
@@ -767,10 +772,13 @@ test.describe('Start research with this tree (G3)', () => {
             partnerships: {},
         };
         const file = JSON.stringify({ stromTransfer: { v: 1, token, from: 'safari', tree: 'Safárovi', persons: 1, at: '2026-10-05T18:00:00.000Z' }, ...tree });
+        // The research's version of the moved tree (its number, no image).
+        const movedGed = ['0 HEAD', '1 SOUR STROM_RESEARCH', '1 DATE 5 OCT 2026', `1 _STROM_TREE ${UUID}`, '1 CHAR UTF-8', '1 NOTE Safárovi',
+            '0 @P0001@ INDI', '1 NAME Marie /Safárová/', '1 SEX F', '1 REFN P0001', '0 TRLR'].join('\n');
         for (const decline of [true, false]) {
             const calls = { cancel: [] as string[], posted: [] as string[] };
             await page.unrouteAll({ behavior: 'ignoreErrors' });
-            await routeBridge(page, token, calls, { offer: { transfer: true }, transfer: file });
+            await routeBridge(page, token, calls, { offer: { transfer: true }, transfer: file, ged: movedGed });
             const before = await page.evaluate(() => window.Strom.TreeManager.getTrees().length);
             await page.evaluate((b) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: b })), BRIDGE);
             const dialog = page.locator('#research-adopt-modal');

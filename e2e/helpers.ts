@@ -114,6 +114,9 @@ export async function openApp(
  * src/ui/research-adopt-ui.ts). A research without a version yet takes all
  * three tries, 4 s of the default 5 s expect timeout: too little on a loaded
  * machine. Expectations right after a hand-over wait those 4 s more.
+ * A test that needs the hand-over only as a step serves the research's
+ * version (its /tree.ged, the tree's people under the research's id), which
+ * loads at the first try; research-adopt-ids walks the tries.
  */
 export const AFTER_HAND_OVER = { timeout: 4_000 + 5_000 };
 

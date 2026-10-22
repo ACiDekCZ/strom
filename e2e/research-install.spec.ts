@@ -15,6 +15,14 @@ const UUID = '3f2c9a10-7b1e-4c55-9d2a-0e8f6b4a1c77';
 const cors = { 'access-control-allow-origin': '*' };
 const TOKEN_IN_LINE = /STROM_FROM[ =]'1\|([A-Za-z0-9_-]{22,43})\|/;
 
+/**
+ * The research's version of the tree it took (Jan Novak), as its /tree.ged: loaded at the first
+ * try after the hand-over (else the app tries 0, 1 and 3 s after it: ADOPT_LOAD_WAITS).
+ */
+const RESEARCH_VERSION = ['0 HEAD', '1 SOUR STROM_RESEARCH', '1 DATE 5 OCT 2026', `1 _STROM_TREE ${UUID}`, '1 CHAR UTF-8', '1 NOTE Novákovi',
+    '0 @P0001@ INDI', '1 NAME Jan /Novak/', '1 SEX M', '1 REFN P0001', '0 TRLR'].join('\n');
+const servedVersion = { status: 200, headers: { ...cors, 'content-type': 'text/plain; charset=utf-8' }, body: RESEARCH_VERSION };
+
 const dialog = (page: Page) => page.locator('#research-info-modal');
 /** This copy's address as the line names it (origin + path, no query). */
 const appUrlOf = (page: Page): string => { const u = new URL(page.url()); return `${u.origin}${u.pathname}`; };
@@ -82,6 +90,7 @@ async function handOverInChrome(browser: Browser, token: string, file: string): 
             posted.push(req.postData() ?? '');
             return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify({ tree: UUID, head: 'abc1234' }) });
         }
+        if (path.endsWith('/tree.ged')) return route.fulfill(servedVersion);
         return route.fulfill({ status: 404, headers: cors, body: '' });
     });
     await openApp(other);
@@ -306,6 +315,7 @@ test.describe('installing the research from the app', () => {
                 return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' },
                     body: JSON.stringify({ tree: { id: UUID, name: 'Novákovi', lang: 'cs' }, path: '/Users/jan/Strom/Novakovi', accepts: { mode: 'archive' } }) });
             }
+            if (path.endsWith('/tree.ged')) return route.fulfill(servedVersion);
             return route.fulfill({ status: 404, headers: cors, body: '' });
         });
         await page.evaluate((b) => window.Strom.UI.openExternalRequest(new URLSearchParams({ adopt: b })), BRIDGE);
