@@ -1486,6 +1486,10 @@
         @media (max-width: 640px) {
             .tour-bubble { max-width: calc(100vw - 24px); }
         }
+        /* Reduced motion: the spotlight and its bubble jump to the next step, no glide. */
+        @media (prefers-reduced-motion: reduce) {
+            .tour-hole, .tour-bubble { transition: none; }
+        }
 
         /* Tour offer (non-blocking, same shape as the family offer) */
         .tour-offer {
