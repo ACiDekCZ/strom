@@ -26,18 +26,27 @@ const GED = [
     '0 TRLR',
 ].join('\n');
 
-interface Bridge { person: string; paused: boolean }
+interface Bridge {
+    person: string; paused: boolean;
+    /** The asks of the reconnect chain so far (/events, /status): each comes after the one before it was read. */
+    chain: number;
+}
 
-async function follow(page: Page, o: { size?: { width: number; height: number }; gap?: number; idle?: number; on?: boolean } = {}): Promise<Bridge> {
+/**
+ * Follow the bridge. `quick`: the app reconnects every 250 ms instead of 2 s
+ * (__LIVE_RECONNECT_MS), so its next status comes soon (nextStatus).
+ */
+async function follow(page: Page, o: { size?: { width: number; height: number }; gap?: number; idle?: number; on?: boolean; quick?: boolean } = {}): Promise<Bridge> {
     await page.setViewportSize(o.size ?? { width: 1440, height: 900 });
-    await page.addInitScript(([links, gap, idle, on]) => {
+    await page.addInitScript(([links, gap, idle, on, quick]) => {
         (globalThis as { __LIVE_FOLLOW_MS?: unknown }).__LIVE_FOLLOW_MS = { gap, idle, retry: 150 };
+        if (quick) (globalThis as { __LIVE_RECONNECT_MS?: number }).__LIVE_RECONNECT_MS = 250;
         if (sessionStorage.getItem('seeded')) return;
         sessionStorage.setItem('seeded', '1');
         localStorage.setItem('strom-research-links', JSON.stringify({ actions: links, at: new Date().toISOString() }));
         if (on) localStorage.setItem('strom-live-follow', '1');
-    }, [LINKS, o.gap ?? 1200, o.idle ?? 2500, !!o.on] as const);
-    const bridge: Bridge = { person: 'P0012', paused: false };
+    }, [LINKS, o.gap ?? 1200, o.idle ?? 2500, !!o.on, !!o.quick] as const);
+    const bridge: Bridge = { person: 'P0012', paused: false, chain: 0 };
     const status = () => ({
         tree: { id: UUID, name: 'Fíškovi' }, head: 'h1', persons: 5,
         working: [{ who: 'agent-matriky', since: new Date(Date.now() - 60_000).toISOString(), task: 'T0101 Matriky',
@@ -47,6 +56,7 @@ async function follow(page: Page, o: { size?: { width: number; height: number };
     });
     await page.route(`${BRIDGE}/**`, async (route) => {
         const path = new URL(route.request().url()).pathname;
+        if (path.endsWith('/status') || path.endsWith('/events')) bridge.chain++;
         if (path.endsWith('/status')) return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(status()) });
         if (path.endsWith('/tree.ged')) return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/plain; charset=utf-8' }, body: GED });
         if (path.endsWith('/events')) {
@@ -57,6 +67,16 @@ async function follow(page: Page, o: { size?: { width: number; height: number };
     await page.goto(`/strom.html?live=${encodeURIComponent(BRIDGE)}`);
     await expect(page.locator('#live-panel')).toBeVisible();
     return bridge;
+}
+
+/**
+ * The bridge's next status, read by the app: two asks of the reconnect chain
+ * after now (the first answers with what the bridge has now, the second is
+ * asked only after the app read it).
+ */
+async function nextStatus(bridge: Bridge): Promise<void> {
+    const n = bridge.chain;
+    await expect.poll(() => bridge.chain, { timeout: 10000 }).toBeGreaterThanOrEqual(n + 2);
 }
 
 const idOf = (page: Page, refn: string) => page.evaluate((r) => Object.values(window.Strom.DataManager.getData().persons).find(p => p.refn === r)!.id, refn);
@@ -117,7 +137,7 @@ test.describe('follow the agent in the tree', () => {
     });
 
     test('a new target: one jump after the brake, to the latest one', async ({ page }) => {
-        const bridge = await follow(page, { gap: 6000, on: true });
+        const bridge = await follow(page, { gap: 6000, on: true, quick: true });
         await expect.poll(() => focusRefn(page)).toBe('P0012');
         await page.evaluate(() => {
             const r = window.Strom.TreeRenderer as unknown as { setFocus: (...a: unknown[]) => void; __calls: number };
@@ -126,7 +146,8 @@ test.describe('follow the agent in the tree', () => {
             r.setFocus = (...a: unknown[]) => { r.__calls++; orig(...a); };
         });
         bridge.person = 'P0001';
-        await page.waitForTimeout(2500);
+        // Read within the brake, then the next one comes.
+        await nextStatus(bridge);
         bridge.person = 'P0002';
         await expect.poll(() => focusRefn(page), { timeout: 10000 }).toBe('P0002');
         expect(await page.evaluate(() => (window.Strom.TreeRenderer as unknown as { __calls: number }).__calls)).toBe(1);
@@ -152,7 +173,8 @@ test.describe('follow the agent in the tree', () => {
     });
 
     test('a drag that starts on a card pauses like one from the canvas (T38)', async ({ page }) => {
-        const bridge = await follow(page, { idle: 60_000, on: true });
+        // No brake (gap 0): only the pause can hold the jump.
+        const bridge = await follow(page, { idle: 60_000, on: true, gap: 0, quick: true });
         await expect.poll(() => focusRefn(page)).toBe('P0012');
         await expect.poll(() => offCentre(page, 'P0012')).toBeLessThan(3);
         const id = await idOf(page, 'P0012');
@@ -166,16 +188,17 @@ test.describe('follow the agent in the tree', () => {
         await expect(btn(page)).toHaveClass(/is-paused/);
         // Paused: a new target does not move the tree.
         bridge.person = 'P0001';
-        await page.waitForTimeout(2500);
+        await nextStatus(bridge);
         expect(await focusRefn(page)).toBe('P0012');
     });
 
     test('Back to the agent: at once; ×: off', async ({ page }) => {
-        const bridge = await follow(page, { idle: 60_000, on: true });
+        // No brake (gap 0): only the pause can hold the jump.
+        const bridge = await follow(page, { idle: 60_000, on: true, gap: 0, quick: true });
         await expect.poll(() => focusRefn(page)).toBe('P0012');
         await dragTree(page);
         bridge.person = 'P0013';
-        await page.waitForTimeout(2500);
+        await nextStatus(bridge);
         expect(await focusRefn(page)).toBe('P0012');
         await page.locator('#live-follow-pill .live-follow-back').click();
         await expect.poll(() => focusRefn(page)).toBe('P0013');
@@ -194,27 +217,28 @@ test.describe('follow the agent in the tree', () => {
     });
 
     test('an open dialog holds the jump until it closes', async ({ page }) => {
-        const bridge = await follow(page, { on: true });
+        // No brake (gap 0): only the dialog can hold the jump.
+        const bridge = await follow(page, { on: true, gap: 0, quick: true });
         await expect.poll(() => focusRefn(page)).toBe('P0012');
         await page.evaluate(() => window.Strom.UI.showSettingsDialog());
         await expect(page.locator('#settings-modal.active')).toBeVisible();
         bridge.person = 'P0001';
-        await page.waitForTimeout(3500);
+        await nextStatus(bridge);
         expect(await focusRefn(page)).toBe('P0012');
         await page.evaluate(() => window.Strom.UI.closeSettingsDialog());
         await expect.poll(() => focusRefn(page)).toBe('P0001');
     });
 
     test('a run without a person, or paused: the tree stays where it is', async ({ page }) => {
-        const bridge = await follow(page);
+        const bridge = await follow(page, { quick: true });
         bridge.person = '';
-        await page.waitForTimeout(2500);
+        await nextStatus(bridge);
         const before = await focusRefn(page);
         await btn(page).click();
         await expect(btn(page)).toHaveAttribute('title', 'Stop following · waiting for the agent to work on someone');
         bridge.person = 'P0013';
         bridge.paused = true;
-        await page.waitForTimeout(3000);
+        await nextStatus(bridge);
         expect(await focusRefn(page)).toBe(before);
     });
 

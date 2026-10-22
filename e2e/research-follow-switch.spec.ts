@@ -160,6 +160,8 @@ test.describe('switching trees follows the research where an agent works', () =>
     });
 
     test('a tree where an agent works is followed at once; the head names it, a line says so, the switcher marks both', { tag: '@smoke' }, async ({ page }) => {
+        // The line's time (FOLLOW_NOTICE_MS) is skipped on Playwright's clock.
+        await page.clock.install();
         const { ids } = await twoTrees(page);
         expect(await liveTree(page)).toBeNull();
         await pick(page, N_TREE);
@@ -191,11 +193,14 @@ test.describe('switching trees follows the research where an agent works', () =>
         await expect(row(page, D_TREE).locator('.rs-mark--waiting')).toHaveText('3 waiting');
         await page.locator('.tree-switcher-btn').click();
         // The line goes after a while; the name is no longer lit.
-        await expect(note).toHaveCount(0, { timeout: 9000 });
+        await page.clock.fastForward(6100);
+        await expect(note).toHaveCount(0);
         await expect(panel.locator('.live-panel-title.is-fresh')).toHaveCount(0);
     });
 
     test('leaving a followed tree ends following quietly, coming back follows again; moving between two working trees says so', async ({ page }) => {
+        // The line's time (FOLLOW_NOTICE_MS) is skipped on Playwright's clock.
+        await page.clock.install();
         const { ids, dvorak } = await twoTrees(page);
         await pick(page, N_TREE);
         await expect.poll(() => liveTree(page)).toBe(ids[N_TREE]);
@@ -216,10 +221,15 @@ test.describe('switching trees follows the research where an agent works', () =>
         await expect(panel.locator('.live-follow-note')).toHaveText(`Now following “${N_TREE}”. “${D_TREE}” stays editable.`);
         // The pointer in the panel holds the line; it goes once the pointer leaves.
         await panel.locator('.live-panel-state').hover();
-        await page.waitForTimeout(7000);
+        await page.clock.fastForward(7000);
         await expect(panel.locator('.live-follow-note')).toHaveCount(1);
+        // After the skipped time the browser's hover lags behind (a move straight
+        // out fired a second mouseenter, no mouseleave): a move inside it first,
+        // so leaving is seen as leaving.
+        await panel.locator('.live-panel-state').hover({ position: { x: 5, y: 5 } });
         await page.mouse.move(10, 600);
-        await expect(panel.locator('.live-follow-note')).toHaveCount(0, { timeout: 9000 });
+        await page.clock.fastForward(6100);
+        await expect(panel.locator('.live-follow-note')).toHaveCount(0);
         // Now an agent works on the Dvořáks too: the switch moves following there.
         dvorak.working = [worker('G0007', 'Matrika Brno')];
         await page.evaluate(() => (window.Strom.UI as unknown as { kickOtherResearch(): void }).kickOtherResearch());

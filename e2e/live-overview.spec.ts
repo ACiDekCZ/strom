@@ -54,6 +54,8 @@ interface Bridge {
     spend?: Record<string, unknown>; accepts?: Record<string, unknown>;
     /** Every write it got (POST waiting / group, GET group note, PUT media). */
     writes: Write[];
+    /** The asks of the reconnect chain so far (/events, /status without ?poll): each comes after the one before it was read. */
+    chain: number;
     /** Refuse the writes so (a status and its code), or 'abort': no answer. */
     refuse?: { status: number; code: string } | 'abort';
     /** The text of a place's queries. */
@@ -86,6 +88,7 @@ async function follow(page: Page, size: { width: number; height: number } = { wi
         workDone: false,
         changeEntries: null,
         writes: [],
+        chain: 0,
     };
     setup(bridge);
     const status = () => ({
@@ -102,7 +105,9 @@ async function follow(page: Page, size: { width: number; height: number } = { wi
     const json = (status: number, body: unknown) => ({ status, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(body) });
     const sendable = (w: Record<string, unknown>) => w.phase !== 'sent' && ['letter', 'family', 'other'].includes(String(w.kind));
     await page.route(`${BRIDGE}/**`, async (route) => {
-        const path = new URL(route.request().url()).pathname;
+        const url = new URL(route.request().url());
+        const path = url.pathname;
+        if (path.endsWith('/events') || (path.endsWith('/status') && !url.searchParams.has('poll'))) bridge.chain++;
         if (path.endsWith('/status')) {
             return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(status()) });
         }
@@ -427,6 +432,9 @@ test.describe('the agent at work', () => {
     });
 
     test('done: a check for a few seconds, then gone; none after a reload', async ({ page }) => {
+        // The check's few seconds (AGENT_DONE_MS + its fade) are run forward on Playwright's clock.
+        await page.clock.install();
+        await fastReconnect(page);
         const bridge = await follow(page, { width: 1440, height: 900 }, (b) => { b.waiting = []; b.workPerson = 'P0002'; });
         const anna = card(page, 'Anna');
         await expect(anna.locator('.card-agent')).toHaveCount(1);
@@ -434,11 +442,13 @@ test.describe('the agent at work', () => {
         const check = anna.locator('.card-signal.card-done');
         await expect(check).toHaveText('✓', { timeout: 6000 });
         await expect(anna.locator('.card-agent')).toHaveCount(0);
-        await expect(check).toHaveCount(0, { timeout: 7000 });
+        await page.clock.fastForward(4400);
+        await expect(check).toHaveCount(0);
         await page.reload();
         await expect(page.locator('#live-panel')).toBeVisible();
         await expect(card(page, 'Anna')).toBeVisible();
-        await page.waitForTimeout(500);
+        // A status read after the reload: still no check.
+        await nextStatus(bridge);
         await expect(page.locator('.card-done')).toHaveCount(0);
     });
 
@@ -922,6 +932,24 @@ const writable = (features: string[], accepts?: Record<string, unknown>) => (b: 
     };
 };
 
+/**
+ * The bridge's next status, read by the app: two asks of the reconnect chain
+ * after now (the first answers with what the bridge has now, the second is
+ * asked only after the app read it).
+ */
+async function nextStatus(bridge: Bridge): Promise<void> {
+    const n = bridge.chain;
+    await expect.poll(() => bridge.chain, { timeout: 10000 }).toBeGreaterThanOrEqual(n + 2);
+}
+
+/**
+ * The waits between reconnects to the bridge shortened for a test that waits
+ * for its next status (2 s in use: reconnectMs in src/ui/research-ui.ts).
+ */
+async function fastReconnect(page: Page): Promise<void> {
+    await page.addInitScript(() => { (globalThis as { __LIVE_RECONNECT_MS?: number }).__LIVE_RECONNECT_MS = 250; });
+}
+
 async function openOverview(page: Page) {
     await page.locator('#live-panel .live-panel-expand').click();
     const ov = page.locator('#research-overview');
@@ -945,6 +973,7 @@ async function openLetter(page: Page, text = 'Napsat matrice o zápis 1') {
 
 test.describe('Awaiting action written through the bridge', () => {
     test('Sent at an item: one write, the row in Awaiting a reply at once, Undo; Back to To do at a sent one', async ({ page }) => {
+        await fastReconnect(page);
         const bridge = await follow(page, { width: 1440, height: 900 }, writable(['waiting.sent']));
         const ov = await openOverview(page);
         const letter = await openLetter(page);
@@ -982,7 +1011,7 @@ test.describe('Awaiting action written through the bridge', () => {
         await expect(todoHead(page)).toHaveText(/To do · 31/);
         expect(bridge.writes.at(-1)).toMatchObject({ path: 'waiting/T0031', body: '{"do":"unsent"}' });
         // The bridge's next status agrees: the row stays where it went.
-        await page.waitForTimeout(2500);
+        await nextStatus(bridge);
         await expect(todoHead(page)).toHaveText(/To do · 31/);
     });
 
@@ -1034,6 +1063,7 @@ test.describe('Awaiting action written through the bridge', () => {
     });
 
     test('a place\'s Sent offers Undo: exactly the tasks it marked go back to To do', async ({ page }) => {
+        await fastReconnect(page);
         const bridge = await follow(page, { width: 1440, height: 900 }, writable(['waiting.sent']));
         await openOverview(page);
         await placeHead(page, 'todo', 'MěÚ Vzorov').locator('.research-overview__waiting-groupwrite[data-action="group-sent"]').click();
@@ -1054,11 +1084,12 @@ test.describe('Awaiting action written through the bridge', () => {
         // No lasting place-level Undo among the replies awaited.
         await expect(page.locator('#research-overview .research-overview__phase[data-phase="sent"] .research-overview__waiting-groupwrite')).toHaveCount(0);
         // The bridge's next status agrees: the rows stay in To do.
-        await page.waitForTimeout(2500);
+        await nextStatus(bridge);
         await expect(todoHead(page)).toHaveText(/To do · 30/);
     });
 
     test('Undo of a place\'s Sent leaves a letter sent earlier in the same place in Awaiting a reply', async ({ page }) => {
+        await fastReconnect(page);
         const bridge = await follow(page, { width: 1440, height: 900 }, writable(['waiting.sent']));
         const ov = await openOverview(page);
         await placeHead(page, 'todo', 'MěÚ Vzorov').locator('.research-overview__waiting-groupwrite[data-action="group-sent"]').click();
@@ -1074,7 +1105,7 @@ test.describe('Awaiting action written through the bridge', () => {
         const sentRows = ov.locator('.research-overview__phase[data-phase="sent"] .research-overview__waiting-item');
         for (const n of [1, 2, 3]) await expect(sentRows.filter({ hasText: `Odeslaný dopis ${n}` })).toHaveCount(1);
         await expect(placeHead(page, 'sent', 'MěÚ Vzorov').locator('.research-overview__group-span')).toHaveText('3');
-        await page.waitForTimeout(2500);
+        await nextStatus(bridge);
         await expect(sentRows.filter({ hasText: 'Odeslaný dopis 1' })).toHaveCount(1);
     });
 
@@ -1142,6 +1173,7 @@ test.describe('Awaiting action written through the bridge', () => {
     });
 
     test('Sent at an item the research already has sent (sent: [], phase sent): it stays in Awaiting a reply, no error', async ({ page }) => {
+        await fastReconnect(page);
         const bridge = await follow(page, { width: 1440, height: 900 }, writable(['waiting.sent']));
         await openOverview(page);
         const letter = await openLetter(page);
@@ -1151,7 +1183,7 @@ test.describe('Awaiting action written through the bridge', () => {
         await letter.locator('.research-overview__waiting-action[data-action="sent"]').click();
         await expect(todoHead(page)).toHaveText(/To do · 29/);
         await expect(sentHead(page)).toHaveText(/Awaiting a reply · 6/);
-        await page.waitForTimeout(2500);
+        await nextStatus(bridge);
         await expect(sentHead(page)).toHaveText(/Awaiting a reply · 6/);
         await expect(page.locator('.toast[data-kind="waiting-failed"]')).toHaveCount(0);
         expect(bridge.writes.map(w => [w.path, w.body])).toEqual([['waiting/T0018', '{"do":"sent"}']]);

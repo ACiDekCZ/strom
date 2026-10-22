@@ -39,6 +39,14 @@ const PLAIN_GED = [
     '0 TRLR',
 ].join('\n');
 
+/**
+ * The waits between reconnects to the bridge, and the step of the backoff while it is silent,
+ * shortened for a test (2 s in use: reconnectMs in src/ui/research-ui.ts).
+ */
+async function fastReconnect(page: Page): Promise<void> {
+    await page.addInitScript(() => { (globalThis as { __LIVE_RECONNECT_MS?: number }).__LIVE_RECONNECT_MS = 250; });
+}
+
 /** Drop a file onto the tree canvas the way a browser would. */
 async function dropFile(page: Page, name: string, content: string): Promise<void> {
     const dataTransfer = await page.evaluateHandle(({ name, content }) => {
@@ -290,6 +298,7 @@ test.describe('live research (?live=)', () => {
 
         // The bridge may stay silent this long before following ends (60 s in use).
         await page.addInitScript(() => { (globalThis as { __LIVE_GRACE_MS?: number }).__LIVE_GRACE_MS = 3000; });
+        await fastReconnect(page);
         await page.goto(`/strom.html?live=${encodeURIComponent(BRIDGE)}`);
         const panel = page.locator('#live-panel');
         await expect(panel).toBeVisible();
@@ -376,6 +385,7 @@ test.describe('live research (?live=)', () => {
             }
             return route.fulfill({ status: 404, headers: cors, body: '' });
         });
+        await fastReconnect(page);
         await page.goto(`/strom.html?live=${encodeURIComponent(BRIDGE)}`);
         const panel = page.locator('#live-panel');
         await expect(panel).toBeVisible();
@@ -405,9 +415,13 @@ test.describe('the bridge says it ends (live.end)', () => {
         features: ['live.end'], researches: [], working: [], open: [], waiting: [] };
     /** A bridge whose next event stream (after `state.end` is set) carries `event: end` with that payload. */
     async function bridgeThatEnds(page: Page) {
-        const state = { down: false, end: null as Record<string, unknown> | null, endSentAt: 0, eventCalls: 0 };
+        const state = { down: false, end: null as Record<string, unknown> | null, endSentAt: 0, eventCalls: 0, refused: 0 };
+        await fastReconnect(page);
         await page.route(`${BRIDGE}/**`, async (route) => {
-            if (state.down) return route.abort('connectionrefused');
+            if (state.down) {
+                state.refused++;
+                return route.abort('connectionrefused');
+            }
             const path = new URL(route.request().url()).pathname;
             if (path.endsWith('/status')) {
                 return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(status) });
@@ -462,7 +476,7 @@ test.describe('the bridge says it ends (live.end)', () => {
 
     test('back:true (a newer bridge on the same address): reconnects quietly, no loss, no end', async ({ page }) => {
         // Without the announcement this silence would end following.
-        await page.addInitScript(() => { (globalThis as { __LIVE_GRACE_MS?: number }).__LIVE_GRACE_MS = 1500; });
+        await page.addInitScript(() => { (globalThis as { __LIVE_GRACE_MS?: number }).__LIVE_GRACE_MS = 600; });
         const state = await bridgeThatEnds(page);
         await page.goto(`/strom.html?live=${encodeURIComponent(BRIDGE)}`);
         const panel = page.locator('#live-panel');
@@ -474,7 +488,10 @@ test.describe('the bridge says it ends (live.end)', () => {
         // The old bridge is gone, the new one takes a few seconds to start.
         state.end = null;
         state.down = true;
-        await page.waitForTimeout(3000);
+        // Silent past the grace: three asks refused (0.5 s, then the backoff), each one that would end it unannounced.
+        const downAt = Date.now();
+        await expect.poll(() => state.refused, { timeout: 10000 }).toBeGreaterThanOrEqual(3);
+        await expect.poll(() => Date.now() - downAt).toBeGreaterThan(1200);
         const callsBefore = state.eventCalls;
         state.down = false;
         await expect.poll(() => state.eventCalls, { timeout: 10000 }).toBeGreaterThan(callsBefore);

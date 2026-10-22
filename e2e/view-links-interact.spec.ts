@@ -323,13 +323,15 @@ test.describe('linked in the view only: the named stub and its bubble', () => {
     });
 
     test('the notice’s action is reached with the keyboard and the notice waits while it has it', async ({ page }) => {
+        // The notice's time (TOAST_MS) is run forward on Playwright's clock.
+        await page.clock.install();
         await setup(page);
         await stubOf(page).click();
         await bubble(page).locator('.reb-variant[data-variant="B"] .reb-show').click();
         const action = page.locator('.toast .toast-action');
         await expect(action).toHaveText('Unlink');
         await action.focus();
-        await page.waitForTimeout(6500);
+        await page.clock.fastForward(6500);
         await expect(action).toBeVisible();
         await page.keyboard.press('Enter');
         await expect(page.locator('.person-card.view-ghost')).toHaveCount(0);

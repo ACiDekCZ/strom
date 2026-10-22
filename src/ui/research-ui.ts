@@ -183,8 +183,14 @@ export interface LiveSession {
 const AUTO_CONNECT_MS = 3000;
 /** Its bridge asked once more after following could not start (as the research's own quick ask). */
 const AUTO_ASK_MS = 1500;
-/** Wait before reconnecting to the bridge's events / between status polls. */
-const RECONNECT_MS = 2000;
+/**
+ * Wait before reconnecting to the bridge's events / between status polls
+ * (also the step of the backoff while the bridge is silent). A test may
+ * shorten it through `__LIVE_RECONNECT_MS`; nothing else sets it.
+ */
+function reconnectMs(): number {
+    return (globalThis as { __LIVE_RECONNECT_MS?: number }).__LIVE_RECONNECT_MS ?? 2000;
+}
 /** Poll interval when the browser has no EventSource. */
 const POLL_MS = 10000;
 /** After someone starts or stops working: the status is asked this much later (the events settle)... */
@@ -2485,14 +2491,14 @@ export const researchUiMethods = uiModule({
             this.liveBridgeBack(s);
             this.onLiveStatus(s, status);
             if (s.ended) return;
-            if (typeof EventSource === 'function') this.scheduleLive(s, () => this.connectLiveEvents(s), RECONNECT_MS);
+            if (typeof EventSource === 'function') this.scheduleLive(s, () => this.connectLiveEvents(s), reconnectMs());
             else this.scheduleLive(s, () => this.probeLive(s), POLL_MS);
         } catch {
             s.failures++;
             const now = Date.now();
             if (s.backBy && now < s.backBy) {
                 // A new bridge is starting on this address: no loss yet.
-                this.scheduleLive(s, () => this.probeLive(s), Math.min(RECONNECT_MS * s.failures, RETRY_MAX_MS));
+                this.scheduleLive(s, () => this.probeLive(s), Math.min(reconnectMs() * s.failures, RETRY_MAX_MS));
                 return;
             }
             s.backBy = null;
@@ -2501,7 +2507,7 @@ export const researchUiMethods = uiModule({
                 this.renderLivePanel();
             }
             if (now - s.lostSince >= lostGraceMs()) this.endLiveFollow(s, 'ended');
-            else this.scheduleLive(s, () => this.probeLive(s), Math.min(RECONNECT_MS * s.failures, RETRY_MAX_MS));
+            else this.scheduleLive(s, () => this.probeLive(s), Math.min(reconnectMs() * s.failures, RETRY_MAX_MS));
         }
     },
 
