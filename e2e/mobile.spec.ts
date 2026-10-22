@@ -44,7 +44,8 @@ async function longPress(page: Page, selector: string): Promise<void> {
         const t = new Touch({ identifier: 1, target: el, clientX: r.x + r.width / 2, clientY: r.y + r.height / 2 });
         el.dispatchEvent(new TouchEvent('touchstart', { touches: [t], targetTouches: [t], changedTouches: [t], bubbles: true }));
     });
-    await page.waitForTimeout(600); // longer than the 500 ms long-press threshold
+    // Held until the long-press (500 ms) has opened the sheet, then lifted.
+    await expect(page.locator('.bottom-sheet')).toBeVisible();
     await page.locator(selector).evaluate((el: HTMLElement) => {
         const r = el.getBoundingClientRect();
         const t = new Touch({ identifier: 1, target: el, clientX: r.x + r.width / 2, clientY: r.y + r.height / 2 });
@@ -99,6 +100,8 @@ async function fingerDrag(page: Page, x: number, y: number, dx: number, dy: numb
 }
 
 test('a finger dragged from a card pans the canvas and opens no sheet; a tap still opens it (T38)', async ({ page }) => {
+    // The long-press time is run past on Playwright's clock.
+    await page.clock.install();
     await openApp(page);
     await createFirstPerson(page, 'Jan', 'Novak');
     const transform = () => page.locator('#tree-canvas').evaluate((el) => (el as HTMLElement).style.transform);
@@ -109,7 +112,7 @@ test('a finger dragged from a card pans the canvas and opens no sheet; a tap sti
     const before = await transform();
     await fingerDrag(page, cx, cy, -80, 60);
     await expect.poll(transform).not.toBe(before);
-    await page.waitForTimeout(700);   // past the long-press time too
+    await page.clock.fastForward(700);   // past the long-press time too
     await expect(sheet).toHaveCount(0);
 
     // A tap (a finger that barely moves) is still the card's: the sheet opens, nothing pans.

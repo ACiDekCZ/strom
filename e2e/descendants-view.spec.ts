@@ -75,7 +75,8 @@ test('descendants view recenters — cards stay visible after prior pan/zoom', a
     // And it stays there once the + zoom (200 ms) is over: the zoom still
     // running used to put its own transform back on its next frame, so a
     // check made quickly passed and a later one (a loaded machine) failed.
-    await page.waitForTimeout(400);
+    // The canvas drops its moving hint when the zoom has ended.
+    await expect(page.locator('#tree-canvas')).not.toHaveClass(/is-moving/);
     expect(await visibleCards()).toBeGreaterThan(0);
 });
 
@@ -96,7 +97,11 @@ test('a recenter while a button zoom runs is not undone by the zoom', async ({ p
         const before = Z.getScale();
         Z.zoomIn();                              // the zoom starts...
         window.Strom.TreeRenderer.centerForViewMode(); // ...and the switch's recenter lands meanwhile
-        await new Promise(r => setTimeout(r, 400));     // the zoom would have finished by now
+        // Until the zoom has ended (the canvas drops its moving hint), then one frame more.
+        const canvas = document.getElementById('tree-canvas')!;
+        for (let i = 0; i < 120 && canvas.classList.contains('is-moving'); i++) {
+            await new Promise(r => requestAnimationFrame(() => r(null)));
+        }
         await new Promise(r => requestAnimationFrame(() => r(null)));
         const cont = document.getElementById('tree-container')!.getBoundingClientRect();
         let visible = 0;

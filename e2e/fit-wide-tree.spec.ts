@@ -65,14 +65,15 @@ test('fit to screen shows a tree of wide custom cards whole on a phone, and manu
     // …and every card is on screen.
     expect(await overflow(page)).toBe(0);
 
-    // The − button at the fit view does not jump back in.
+    // The − button at the fit view does not jump back in: no zoom starts
+    // (a zoom marks the canvas as moving from its first frame on).
     await page.evaluate(() => window.Strom.ZoomPan.zoomOut());
-    await page.waitForTimeout(300);
+    await expect(page.locator('#tree-canvas')).not.toHaveClass(/is-moving/);
     expect(await scale(page)).toBeCloseTo(fitScale, 5);
 
     // Zooming in from there works.
     await page.evaluate(() => window.Strom.ZoomPan.zoomIn());
-    await page.waitForTimeout(300);
+    await expect(page.locator('#tree-canvas')).not.toHaveClass(/is-moving/);
     expect(await scale(page)).toBeGreaterThan(fitScale * 1.2);
 
     // Zooming out by hand (wheel) from a close view reaches the fit view, not only the old floor.
@@ -95,10 +96,12 @@ test('fit to screen of a tree that fits keeps its scale and the zoom floor stays
     const fitScale = await scale(page);
     expect(fitScale).toBeGreaterThan(0.15);
     expect(await overflow(page)).toBe(0);
-    // Manual zoom out stops at the usual floor.
-    for (let i = 0; i < 12; i++) {
-        await page.evaluate(() => window.Strom.ZoomPan.zoomOut());
-        await page.waitForTimeout(240);
-    }
+    // Manual zoom out stops at the usual floor: twelve presses (they add up),
+    // the zoom lands there, and one more press from the floor stays put.
+    await page.evaluate(() => { for (let i = 0; i < 12; i++) window.Strom.ZoomPan.zoomOut(); });
+    await expect(page.locator('#tree-canvas')).not.toHaveClass(/is-moving/);
+    expect(await scale(page)).toBeCloseTo(0.15, 5);
+    await page.evaluate(() => window.Strom.ZoomPan.zoomOut());
+    await expect(page.locator('#tree-canvas')).not.toHaveClass(/is-moving/);
     expect(await scale(page)).toBeCloseTo(0.15, 5);
 });

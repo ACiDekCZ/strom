@@ -128,6 +128,11 @@ test('a tree with one family and a few strays is not offered a split', async ({ 
         window.Strom.UI.showImportTreeDialog(JSON.parse(json), 'Imported');
     }, file);
     await page.getByRole('button', { name: /Import|Create/ }).first().click();
-    await page.waitForTimeout(1000);
+    // The import has finished: its dialog is closed and the new tree drawn. The
+    // questions after an import are asked in the same turn (no data issue here,
+    // so the split offer would be the first one).
+    await expect(page.locator('#import-tree-modal')).not.toHaveClass(/active/);
+    await expect(card(page, 'Josef')).toBeVisible();
+    await expect(page.locator('#confirmation-modal')).not.toHaveClass(/active/);
     await expect(page.getByText(/families that nothing connects/i)).toHaveCount(0);
 });

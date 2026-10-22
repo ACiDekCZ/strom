@@ -43,6 +43,24 @@ async function dropFile(page: Page, content: string): Promise<void> {
 }
 
 /** The research tree; the research last said a task about Eva waits (before the app starts). */
+/**
+ * Zoom far out (below 0.55) with the − button's steps: the presses add up
+ * (each builds on the scale the running zoom heads for), so they go at once,
+ * then the zoom is waited for until it lands. The steps stop at the first
+ * scale below 0.55, as pressing − by hand until the dots come would.
+ */
+async function zoomOutFar(page: Page): Promise<void> {
+    const steps = await page.evaluate(() => {
+        const zoom = window.Strom.ZoomPan;
+        let n = 0;
+        for (let s = zoom.getScale(); s >= 0.55; s /= 1.3) { zoom.zoomOut(); n++; }
+        return n;
+    });
+    expect(steps).toBeGreaterThan(0);
+    await expect(page.locator('#tree-canvas')).not.toHaveClass(/is-moving/);
+    expect(await page.evaluate(() => window.Strom.ZoomPan.getScale())).toBeLessThan(0.55);
+}
+
 async function setup(page: Page, width = 1440): Promise<void> {
     await page.setViewportSize({ width, height: 900 });
     await page.addInitScript((uuid) => {
@@ -180,11 +198,7 @@ test.describe('card signals', () => {
         }
         // Custom, zoomed far out: the dot stands for the badge as on the other cards.
         await page.evaluate(() => window.Strom.UI.setCardDensity('custom'));
-        await expect.poll(async () => {
-            await page.evaluate(() => window.Strom.ZoomPan.zoomOut());
-            await page.waitForTimeout(260);
-            return page.evaluate(() => window.Strom.ZoomPan.getScale());
-        }, { timeout: 10000 }).toBeLessThan(0.55);
+        await zoomOutFar(page);
         await expect(jan.locator('.card-signal')).toBeHidden();
         await expect(jan.locator(':scope > .card-signal-dot')).toBeVisible();
     });
@@ -281,11 +295,7 @@ test.describe('card signals', () => {
             expect(await anna.getAttribute('aria-label'), why('aria-label')).toContain('open question');
         }
         // Zoomed far out (below 0.55): the badges give way to dots on every type.
-        await expect.poll(async () => {
-            await page.evaluate(() => window.Strom.ZoomPan.zoomOut());
-            await page.waitForTimeout(260);
-            return page.evaluate(() => window.Strom.ZoomPan.getScale());
-        }, { timeout: 10000 }).toBeLessThan(0.55);
+        await zoomOutFar(page);
         for (const density of ['compact', 'normal', 'detailed', 'register', 'custom']) {
             await page.evaluate((d) => window.Strom.UI.setCardDensity(d as never), density);
             await expect(page.locator('body')).toHaveAttribute('data-card-density', density);
@@ -333,11 +343,7 @@ test.describe('card signals', () => {
         await expect(card(page, 'Jan').locator('.card-signal-dot')).toBeHidden();
 
         // Zoom out step by step (each step is animated) until below 55 %.
-        await expect.poll(async () => {
-            await page.evaluate(() => window.Strom.ZoomPan.zoomOut());
-            await page.waitForTimeout(260);
-            return page.evaluate(() => window.Strom.ZoomPan.getScale());
-        }, { timeout: 10000 }).toBeLessThan(0.55);
+        await zoomOutFar(page);
         await expect(page.locator('#tree-canvas')).toHaveClass(/zoom-far/);
         await expect(card(page, 'Jan').locator('.card-signal')).toBeHidden();
         await expect(card(page, 'Jan').locator(':scope > .card-state')).toBeHidden();

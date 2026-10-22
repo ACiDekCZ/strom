@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { openApp, card } from './helpers.js';
+import { openApp, card, settleLayout } from './helpers.js';
 
 /**
  * Overview minimap: appears when the tree overflows the viewport, navigates the
@@ -111,10 +111,12 @@ test.describe('Minimap', () => {
         await page.getByRole('button', { name: 'Try a sample tree' }).click();
         await expect(card(page, 'Johan')).toBeVisible();
         for (let i = 0; i < 6; i++) await page.evaluate(() => window.Strom.ZoomPan.zoomIn());
+        // The zoom has landed (the canvas drops its moving hint at the end).
+        await expect(page.locator('#tree-canvas')).not.toHaveClass(/is-moving/);
 
         for (const w of [1200, 900, 700, 641, 640, 620, 601, 600, 560, 520, 500, 499, 420]) {
             await page.setViewportSize({ width: w, height: 850 });
-            await page.waitForTimeout(120);
+            await settleLayout(page, '#minimap-panel', '.control-block');
             const s = await page.evaluate(() => {
                 const box = (el: Element | null) => {
                     if (!el) return null;

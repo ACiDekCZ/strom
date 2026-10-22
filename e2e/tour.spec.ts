@@ -44,8 +44,9 @@ test('tour is offered, walks through steps, and Escape ends it', async ({ page }
     await page.reload();
     await expect(page.locator('.toolbar')).toBeVisible();
     // Load the demo via a new tree; the offer must stay away.
+    // (loadDemoTree resolves after it has offered the tour, or not.)
     await page.evaluate(() => window.Strom.UI.loadDemoTree());
-    await page.waitForTimeout(300);
+    await expect(card(page, 'Johan')).toBeVisible();
     await expect(page.locator('.tour-offer')).toHaveCount(0);
 });
 
@@ -88,9 +89,23 @@ test('tour reveals the hover-only card buttons during the card-buttons step', as
     await expect(page.locator('.person-card.tour-reveal')).toHaveCount(0);
 });
 
-/** Geometry of the current step: spotlight hole, bubble and viewport. */
+/**
+ * Geometry of the current step: spotlight hole, bubble and viewport, read once
+ * the hole and the bubble have glided to the new target (their CSS transitions
+ * are over and both boxes read the same across two frames).
+ */
 async function tourGeometry(page: import('@playwright/test').Page) {
-    return page.evaluate(() => {
+    return page.evaluate(async () => {
+        const frame = () => new Promise<void>((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+        const moving = ['tour-hole', 'tour-bubble'].map((id) => document.getElementById(id)!);
+        const where = () => moving.map((el) => JSON.stringify(el.getBoundingClientRect())).join();
+        for (let i = 0; i < 60; i++) {
+            const before = where();
+            await Promise.all(moving.flatMap((el) => el.getAnimations().map((a) => a.finished.catch(() => undefined))));
+            await frame();
+            await frame();
+            if (where() === before && moving.every((el) => el.getAnimations().length === 0)) break;
+        }
         const box = (id: string) => {
             const r = document.getElementById(id)!.getBoundingClientRect();
             return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height };
@@ -124,8 +139,6 @@ for (const [w, h] of [[1440, 900], [1024, 768], [550, 900], [390, 844]] as const
 
         for (let i = 0; i < total; i++) {
             await expect(page.locator('#tour-step')).toHaveText(`${i + 1}/${total}`);
-            // Let the hole glide to the new target.
-            await page.waitForTimeout(300);
             const g = await tourGeometry(page);
             expect(g.hole.width, g.step).toBeGreaterThanOrEqual(24);
             expect(g.hole.height, g.step).toBeGreaterThanOrEqual(12);

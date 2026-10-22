@@ -185,17 +185,25 @@ test('holding a card to pan hides its hover card until the pointer leaves the ca
     await page.mouse.move(cx, cy);
     await expect.poll(shown).toBe(true);
 
-    // The press turns into a pan: the hint goes at once and stays away while held.
+    // Hidden, and no reveal on its way: the hint comes through a delayed CSS
+    // transition (the 500 ms dwell), which a pending transition would show.
+    const quiet = () => tip(page, 'Jan').evaluate(el =>
+        getComputedStyle(el).visibility !== 'visible' && el.getAnimations().length === 0);
+
+    // The press turns into a pan: the hint goes at once and stays away while held
+    // (the drag marks the container; the hiding rule holds while it lasts).
     await page.mouse.down();
     await page.mouse.move(cx - 60, cy + 40, { steps: 6 });
     await expect.poll(shown).toBe(false);
-    await page.waitForTimeout(700);
-    expect(await shown()).toBe(false);
+    await expect(page.locator('#tree-container')).toHaveClass(/is-card-panning/);
+    expect(await quiet()).toBe(true);
 
-    // Let go over the same card (it moved with the pointer): still no hint.
+    // Let go over the same card (it moved with the pointer): still no hint
+    // (the card stays quiet until the pointer leaves it).
     await page.mouse.up();
-    await page.waitForTimeout(700);
-    expect(await shown()).toBe(false);
+    await expect(page.locator('#tree-container')).not.toHaveClass(/is-card-panning/);
+    await expect(card(page, 'Jan')).toHaveClass(/tooltip-quiet/);
+    expect(await quiet()).toBe(true);
 
     // Leave the card and point at it again: the hint is back as usual.
     await page.mouse.move(cx - 60, cy + 40 + 300, { steps: 3 });

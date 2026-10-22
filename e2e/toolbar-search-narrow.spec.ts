@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { openApp, createFirstPerson, cardAction } from './helpers.js';
+import { openApp, createFirstPerson, cardAction, settleLayout } from './helpers.js';
 
 /**
  * ZADANI kolo 12 §4.2 — the toolbar search stays usable as it narrows.
@@ -32,13 +32,13 @@ test('search: "/" chip hidden ≤1024px and the input keeps a usable width in th
 
     // Desktop: the chip is present.
     await page.setViewportSize({ width: 1200, height: 850 });
-    await page.waitForTimeout(60);
+    await settleLayout(page, '#toolbar-search-picker .person-picker-input');
     expect((await probe()).chipHidden, '@1200: chip present on desktop').toBe(false);
 
     // Tablet band and down: chip dropped, funnel kept, input ≥80px in the band.
     for (const w of [700, 768, 900, 1024]) {
         await page.setViewportSize({ width: w, height: 850 });
-        await page.waitForTimeout(60);
+        await settleLayout(page, '#toolbar-search-picker .person-picker-input');
         const s = await probe();
         expect(s.chipHidden, `@${w}px: "/" chip hidden`).toBe(true);
         expect(s.funnelShown, `@${w}px: funnel filter kept`).toBe(true);

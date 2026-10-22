@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, createFirstPerson } from './helpers.js';
+import { openApp, createFirstPerson, settleLayout } from './helpers.js';
 import { fakeBridge, openResearch, poll } from './research-bridge.js';
 
 /**
@@ -102,7 +102,7 @@ test('toolbar regimes have no duplicated or missing controls at any width', { ta
 
     for (const w of WIDTHS) {
         await page.setViewportSize({ width: w, height: 850 });
-        await page.waitForTimeout(60);
+        await settleLayout(page);
         const s = await probe(page);
         const at = `@${w}px`;
 
@@ -223,7 +223,7 @@ test.describe('view switcher — monotonic, in-viewport, ghost ⋯ (cs-CZ, stres
 
         for (let w = 1600; w >= 360; w -= 40) {
             await page.setViewportSize({ width: w, height: 850 });
-            await page.waitForTimeout(50);
+            await settleLayout(page);
             const s = await probeView(page);
             const at = `@${w}px`;
 
@@ -330,7 +330,7 @@ for (const locale of ['cs-CZ', 'de-DE', 'en-US']) {
             // Shrinking and growing again: the result depends on the width alone.
             for (const w of [...widths].reverse().concat(widths)) {
                 await page.setViewportSize({ width: w, height: 850 });
-                await page.waitForTimeout(60);
+                await settleLayout(page);
                 const s = await probe(page);
                 expect(s.clipped, `@${w}px: no clipped toolbar children`).toEqual([]);
                 const f = await probeFit(page);
@@ -346,7 +346,7 @@ for (const locale of ['cs-CZ', 'de-DE', 'en-US']) {
             await openConnectedResearch(page, locale);
             for (let w = 1280; w >= 1025; w -= 15) {
                 await page.setViewportSize({ width: w, height: 850 });
-                await page.waitForTimeout(40);
+                await settleLayout(page);
                 const s = await probe(page);
                 expect(s.clipped, `@${w}px: no clipped toolbar children`).toEqual([]);
                 const hit = await page.evaluate(() => {
@@ -401,7 +401,7 @@ test.describe('the tree switcher\'s name in a tight toolbar (de-DE)', () => {
     test('1440 px: the name whole, after a rename too; 1024 and 390 px: nothing runs over', async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 900 });
         await openConnectedResearch(page, 'de-DE');
-        await page.waitForTimeout(60);
+        await settleLayout(page);
         let f = await nameFit(page);
         expect(f.whole, `"${f.text}" shown whole`).toBe(true);
         expect(f.overflow).toBeLessThanOrEqual(0);
@@ -417,7 +417,7 @@ test.describe('the tree switcher\'s name in a tight toolbar (de-DE)', () => {
 
         for (const width of [1024, 390]) {
             await page.setViewportSize({ width, height: 850 });
-            await page.waitForTimeout(60);
+            await settleLayout(page);
             f = await nameFit(page);
             expect(f.overflow, `@${width}px: the toolbar does not overflow`).toBeLessThanOrEqual(0);
             expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `@${width}px: no page scroll`).toBe(true);
@@ -433,7 +433,7 @@ test.describe('the 1280 fold boundary', () => {
 
         for (const [width, label] of [[1281, true], [1280, false]] as const) {
             await page.setViewportSize({ width, height: 850 });
-            await page.waitForTimeout(60);
+            await settleLayout(page);
             expect(await page.locator('.actions-menu-label').evaluate((e) => getComputedStyle(e).display) !== 'none', `@${width}`).toBe(label);
             await page.locator('.actions-menu-btn').click();
             const last = page.locator('#actions-menu-dropdown > .tree-switcher-action:visible').last();

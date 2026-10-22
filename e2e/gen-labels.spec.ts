@@ -13,12 +13,10 @@ test('generation labels survive zooming out a step or two', async ({ page }) => 
     await page.evaluate(() => { window.Strom.ZoomPan.zoomOut(); window.Strom.ZoomPan.zoomOut(); });
     await expect(page.locator('#gen-labels')).toBeVisible();
 
-    // Zoom far out until the pitch collapses: labels hide. zoomOut animates,
-    // so step with waits — synchronous calls would all target the same scale.
-    for (let i = 0; i < 10; i++) {
-        await page.evaluate(() => window.Strom.ZoomPan.zoomOut());
-        await page.waitForTimeout(140);
-    }
+    // Zoom far out until the pitch collapses: labels hide. Presses made while
+    // a zoom runs build on the scale it heads for, so ten go at once.
+    await page.evaluate(() => { for (let i = 0; i < 10; i++) window.Strom.ZoomPan.zoomOut(); });
+    await expect(page.locator('#tree-canvas')).not.toHaveClass(/is-moving/);
     await expect(page.locator('#gen-labels')).toBeHidden();
 });
 
@@ -167,7 +165,8 @@ test('a band name lies over a connector line with a halo, beneath the cards: the
     await expect(card(page, 'Sabina')).toBeVisible();
     await expect(card(page, 'Pavla')).toBeVisible();
     await page.evaluate(() => window.Strom.ZoomPan.fitToScreen());
-    await page.waitForTimeout(600);
+    // The names brighten again once the view stops moving (150 ms after the jump).
+    await expect(page.locator('#gen-labels')).not.toHaveClass(/panning/);
 
     const probe = await page.evaluate(() => {
         const centreX = (first: string) => {

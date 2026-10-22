@@ -241,6 +241,39 @@ export async function waitForPersist(page: Page, needle: string): Promise<void> 
     }), needle);
 }
 
+/**
+ * Wait until the layout has settled after a resize (or another change that
+ * re-measures in later frames): the window size, the toolbar's classes and
+ * widths, the body's classes and the boxes of `selectors` read the same before
+ * and after two whole frames. ResizeObserver callbacks and the measurements
+ * they schedule for the next frame (toolbar-fit) have run by then. Each read
+ * is taken after a frame has finished (rAF, then a task), not inside one.
+ */
+export async function settleLayout(page: Page, ...selectors: string[]): Promise<void> {
+    await page.evaluate(async (sels) => {
+        const frame = () => new Promise<void>((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+        const snap = () => {
+            const tb = document.querySelector('.toolbar') as HTMLElement | null;
+            const boxes = sels.map((s) => {
+                const el = document.querySelector(s);
+                if (!el) return '-';
+                const r = el.getBoundingClientRect();
+                return `${r.x},${r.y},${r.width},${r.height},${getComputedStyle(el).display}`;
+            });
+            return [window.innerWidth, window.innerHeight, document.body.className,
+                tb?.className, tb?.scrollWidth, tb?.clientWidth, document.documentElement.scrollWidth, ...boxes].join('|');
+        };
+        let prev = snap();
+        for (let i = 0; i < 30; i++) {
+            await frame();
+            await frame();
+            const cur = snap();
+            if (cur === prev) return;
+            prev = cur;
+        }
+    }, selectors);
+}
+
 /** Focus a person through the toolbar search (works even if the card is off-screen). */
 export async function focusViaSearch(page: Page, firstName: string): Promise<void> {
     const input = page.locator('#toolbar-search-picker .person-picker-input');
