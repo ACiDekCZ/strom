@@ -113,6 +113,9 @@ describe('the answers, typed', () => {
     it('200: what it wrote and its version', () => {
         expect(waitingSentReply(200, { sent: ['T0001', 'T0002', 'bad', 'T0001'], head: HEAD })).toEqual({ ok: true, sent: ['T0001', 'T0002'], head: HEAD });
         expect(waitingSentReply(200, { sent: 'T0001', head: 'nope' })).toEqual({ ok: true, sent: [], head: '' });
+        // The version the write was made on, when said (the tree takes the head only on its own).
+        expect(waitingSentReply(200, { sent: ['T0001'], head: HEAD, parent: 'BBBB222' })).toEqual({ ok: true, sent: ['T0001'], head: HEAD, parent: 'bbbb222' });
+        expect(waitingSentReply(200, { sent: ['T0001'], head: HEAD, parent: 'nope' })).toEqual({ ok: true, sent: ['T0001'], head: HEAD });
         expect(waitingSentReply(200, null)).toMatchObject({ ok: false, code: 'unknown' });
     });
 
@@ -185,6 +188,7 @@ describe('the answers, typed', () => {
     it('a file: its id, or why not', () => {
         expect(waitingFileReply(200, { input: 'I0042' })).toEqual({ ok: true, input: 'I0042' });
         expect(waitingFileReply(201, {})).toEqual({ ok: true, input: '' });
+        expect(waitingFileReply(200, { input: 'I0042', head: 'cccc333', parent: 'bbbb222' })).toEqual({ ok: true, input: 'I0042', head: 'cccc333', parent: 'bbbb222' });
         expect(waitingFileReply(413, null)).toMatchObject({ ok: false, code: 'too-large' });
         expect(waitingFileReply(415, null)).toMatchObject({ ok: false, code: 'type' });
         expect(waitingFileReply(507, null)).toMatchObject({ ok: false, code: 'full' });

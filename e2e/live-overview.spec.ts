@@ -68,6 +68,14 @@ interface Bridge {
      * meanwhile, after the status the app last read).
      */
     itemReply?: Record<string, unknown>;
+    /** The heads of the research before and after its one change (default h1, h2). */
+    heads?: [string, string];
+    /** A write of "Awaiting action" commits: its answer says this head (and parent); the research is at that head from then on. */
+    writeHead?: { head: string; parent?: string };
+    /** The head the research is at after such a write. */
+    committed?: string;
+    /** Every /status asked (the stream's chain and the regular ask). */
+    statusCalls?: number;
 }
 
 /** A bridge that sends one change of six lines, then keeps quiet. */
@@ -96,7 +104,7 @@ async function follow(page: Page, size: { width: number; height: number } = { wi
     };
     setup(bridge);
     const status = () => ({
-        tree: { id: UUID, name: 'Fíškovi' }, head: bridge.gedCalls > 1 ? 'h2' : 'h1', persons: 3,
+        tree: { id: UUID, name: 'Fíškovi' }, head: bridge.committed ?? (bridge.heads ?? ['h1', 'h2'])[bridge.gedCalls > 1 ? 1 : 0], persons: 3,
         working: bridge.workDone ? [] : [{ who: 'agent-matriky', since: new Date(Date.now() - 16 * 60_000).toISOString(), ...(bridge.paused ? { paused: bridge.paused } : { task: 'Sčítání 1921', person: bridge.workPerson }) }],
         waiting: bridge.waiting, links: ALL,
         queue: [{ id: 'T0101', text: 'Matriky Chlumy', state: 'next', person: 'P0001' }, { id: 'T0102', text: 'Pozemková kniha', state: 'next' }],
@@ -113,6 +121,7 @@ async function follow(page: Page, size: { width: number; height: number } = { wi
         const path = url.pathname;
         if (path.endsWith('/events') || (path.endsWith('/status') && !url.searchParams.has('poll'))) bridge.chain++;
         if (path.endsWith('/status')) {
+            bridge.statusCalls = (bridge.statusCalls ?? 0) + 1;
             return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(status()) });
         }
         if (path.endsWith('/tree.ged')) {
@@ -125,7 +134,7 @@ async function follow(page: Page, size: { width: number; height: number } = { wi
         if (path.endsWith('/events')) {
             if (!bridge.events) return new Promise(() => {});
             const body = `event: hello\ndata: ${JSON.stringify(status())}\n\n`
-                + `event: change\ndata: ${JSON.stringify({ head: 'h2', what: CHANGE, at: new Date().toISOString(), ...(bridge.changeEntries ? { entries: bridge.changeEntries } : {}) })}\n\n`;
+                + `event: change\ndata: ${JSON.stringify({ head: bridge.committed ?? (bridge.heads ?? ['h1', 'h2'])[1], what: CHANGE, at: new Date().toISOString(), ...(bridge.changeEntries ? { entries: bridge.changeEntries } : {}) })}\n\n`;
             return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/event-stream' }, body });
         }
         // "Awaiting action" written through the bridge (variant B): what came is kept, the list follows.
@@ -138,37 +147,41 @@ async function follow(page: Page, size: { width: number; height: number } = { wi
             bridge.writes.push({ method: req.method(), path: write[1], body: req.postData() ?? '', headers: req.headers() });
             if (bridge.refuse === 'abort') return route.abort('connectionrefused');
             if (bridge.refuse) return route.fulfill(json(bridge.refuse.status, { error: 'refused', code: bridge.refuse.code }));
-            if (write[1].startsWith('media/')) return route.fulfill(json(200, { input: 'I0042' }));
-            if (write[1].endsWith('/note')) return route.fulfill(json(200, bridge.note ?? { text: '' }));
+            // A write the research commits: it is at the new head from now on, each answer says it.
+            const commit = req.method() !== 'GET' ? bridge.writeHead : undefined;
+            if (commit) bridge.committed = commit.head;
+            const reply = (status: number, body: unknown) => json(status, commit ? { ...(body as Record<string, unknown>), ...commit } : body);
+            if (write[1].startsWith('media/')) return route.fulfill(reply(200, { input: 'I0042' }));
+            if (write[1].endsWith('/note')) return route.fulfill(reply(200, bridge.note ?? { text: '' }));
             const what = (JSON.parse(req.postData() || '{}') as { do?: string }).do;
             const at = new Date().toISOString();
             if (write[1].startsWith('waiting/')) {
                 const w = bridge.waiting.find(x => x.id === write[1].slice('waiting/'.length));
-                if (!w) return route.fulfill(json(404, { error: 'not waiting', code: 'waiting.none' }));
+                if (!w) return route.fulfill(reply(404, { error: 'not waiting', code: 'waiting.none' }));
                 if (bridge.itemReply) {
                     if (bridge.itemReply.phase === 'sent' && w.phase !== 'sent') Object.assign(w, { phase: 'sent', sentAt: at });
-                    return route.fulfill(json(200, { ...bridge.itemReply, task: w.id }));
+                    return route.fulfill(reply(200, { ...bridge.itemReply, task: w.id }));
                 }
                 if (what === 'sent') {
                     Object.assign(w, { phase: 'sent', sentAt: at });
-                    return route.fulfill(json(200, { sent: [w.id] }));
+                    return route.fulfill(reply(200, { sent: [w.id] }));
                 }
                 delete w.phase; delete w.sentAt;
-                return route.fulfill(json(200, { unsent: [w.id] }));
+                return route.fulfill(reply(200, { unsent: [w.id] }));
             }
             const key = decodeURIComponent(write[1].slice('group/'.length));
             const inPlace = (w: Record<string, unknown>) => (w.group as { key?: string } | undefined)?.key === key;
             if (what === 'unsent') {
                 // Back to do: only the tasks named, of them those in the place and sent; none named: 400.
                 const tasks = (JSON.parse(req.postData() || '{}') as { tasks?: unknown }).tasks;
-                if (!Array.isArray(tasks) || tasks.length === 0) return route.fulfill(json(400, { error: 'tasks missing', code: 'waiting.bad-body' }));
+                if (!Array.isArray(tasks) || tasks.length === 0) return route.fulfill(reply(400, { error: 'tasks missing', code: 'waiting.bad-body' }));
                 const back = bridge.waiting.filter(w => tasks.includes(w.id) && inPlace(w) && w.phase === 'sent');
                 for (const w of back) { delete w.phase; delete w.sentAt; }
-                return route.fulfill(json(200, { unsent: back.map(w => w.id) }));
+                return route.fulfill(reply(200, { unsent: back.map(w => w.id) }));
             }
             const marked = bridge.waiting.filter(w => inPlace(w) && sendable(w));
             for (const w of marked) Object.assign(w, { phase: 'sent', sentAt: at });
-            return route.fulfill(json(200, bridge.groupSentSilent ? {} : { sent: marked.map(w => w.id) }));
+            return route.fulfill(reply(200, bridge.groupSentSilent ? {} : { sent: marked.map(w => w.id) }));
         }
         return route.fulfill({ status: 404, headers: cors, body: '' });
     });
@@ -1208,6 +1221,40 @@ test.describe('Awaiting action written through the bridge', () => {
         await expect(page.locator('.toast[data-kind="waiting-failed"]')).toHaveCount(0);
         await expect(page.locator('.toast[data-kind="waiting-sent"]')).toHaveCount(0);
     });
+
+    // The research commits a write of "Awaiting action" (its answer's head): the tree, unchanged by it,
+    // takes that head as its version by the rule of the family's material; a commit of its agent meanwhile is loaded.
+    const H1 = 'aaaa111', H2 = 'bbbb222', H3 = 'cccc333';
+    const linkHead = (page: Page) => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head ?? '');
+    for (const c of [
+        { name: 'its parent the tree\'s head', reply: { head: H3, parent: H2 }, taken: true },
+        { name: 'no parent said, no commit of the agent since the last one following heard of', reply: { head: H3 }, taken: true },
+        { name: 'its parent a commit of the agent after the tree\'s head', reply: { head: H3, parent: 'dddd444' }, taken: false },
+    ]) {
+        test(`Sent committed by the research (${c.name}): ${c.taken ? 'the head is taken, nothing loaded again' : 'not taken, the newer tree is loaded'}`, async ({ page }) => {
+            await fastReconnect(page);
+            const bridge = await follow(page, { width: 1440, height: 900 }, (b) => { writable(['waiting.sent'])(b); b.heads = [H1, H2]; });
+            await expect.poll(() => linkHead(page)).toBe(H2);
+            expect(bridge.gedCalls).toBe(2);
+            await openOverview(page);
+            const letter = await openLetter(page);
+            bridge.writeHead = c.reply;
+            await letter.locator('.research-overview__waiting-action[data-action="sent"]').click();
+            await expect.poll(() => bridge.writes.length).toBe(1);
+            await expect(page.locator('.toast[data-kind="waiting-sent"]')).toBeVisible();
+            if (c.taken) {
+                await expect.poll(() => linkHead(page)).toBe(H3);
+                // The research says the new head in its next statuses: following loads nothing for it.
+                await nextStatus(bridge);
+                await nextStatus(bridge);
+                expect(bridge.gedCalls).toBe(2);
+            } else {
+                await expect.poll(() => bridge.gedCalls).toBe(3);
+                await expect.poll(() => linkHead(page)).toBe(H3);
+            }
+            await expect(page.locator('.toast[data-kind="waiting-failed"]')).toHaveCount(0);
+        });
+    }
 
     test('a check with file in its actions: no Add a file through the bridge, the task link stays', async ({ page }) => {
         const bridge = await follow(page, { width: 1440, height: 900 }, (b) => {

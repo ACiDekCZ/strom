@@ -336,6 +336,27 @@ test.describe('Add material… (Strom archive)', () => {
         await expect(block(page)).toHaveAttribute('data-state', 'inSync');
     });
 
+    test('files that waited for the research go when it runs: each new head is the tree\'s own, no "newer version"', async ({ page }) => {
+        const { bridge, material } = await setup(page, { archive: true });
+        material.writeParent = true;
+        bridge.down = true;
+        await poll(page);
+        const dialog = await open(page);
+        await dialog.locator('#material-input').setInputFiles([AVATAR, 'e2e/fixtures/asymmetric.png']);
+        await dialog.locator('#material-attach').uncheck();
+        await dialog.getByRole('button', { name: /Send when the research runs/ }).click();
+        await expect(dialog).toHaveCount(0);
+        expect(bridge.mediaPuts).toHaveLength(0);
+        bridge.down = false;
+        await poll(page);
+        await expect.poll(() => bridge.mediaPuts.length).toBe(2);
+        await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe(bridge.head);
+        await page.keyboard.press('Escape');
+        await poll(page);
+        await openResearchMenu(page);
+        await expect(block(page)).toHaveAttribute('data-state', 'inSync');
+    });
+
     test('its agent committed after the last ask: the new file\'s head is not taken, the newer version is offered', async ({ page }) => {
         const { bridge } = await setup(page, { archive: true });
         foreignCommit(bridge);

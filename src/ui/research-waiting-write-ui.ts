@@ -14,7 +14,7 @@
 import { strings, getCurrentLanguage } from '../strings.js';
 import { LiveWaiting, researchTaskRef } from '../research-link.js';
 import {
-    WaitingWrites, WaitingPending, WaitingSentResult, WaitingWriteRefused, GroupNoteDone, NO_WAITING_WRITES, WAITING_SETTLE_MS, WAITING_FILE_ACCEPT,
+    WaitingWrites, WaitingPending, WaitingSentResult, WaitingFileResult, WaitingWriteRefused, GroupNoteDone, NO_WAITING_WRITES, WAITING_SETTLE_MS, WAITING_FILE_ACCEPT,
     waitingWrites, waitingGroupSendable, waitingTaskIds, waitingFileWritable, waitingWrittenPhase, applyWaitingPending, settleWaitingPending, waitingSentDay, waitingFileTaken,
     postWaitingSent, postGroupSent, postGroupUnsent, getGroupNote, putWaitingFile,
 } from '../research-waiting-write.js';
@@ -22,6 +22,7 @@ import { WaitingPhase, waitingPhase } from '../research-waiting.js';
 import { uiModule } from './module.js';
 import { el, liveSession, LiveSession } from './research-ui.js';
 import { normalizeModal } from './modal-skeleton.js';
+import { TreeManager } from '../tree-manager.js';
 
 const NOTE_ID = 'waiting-note-modal';
 
@@ -74,6 +75,21 @@ export const researchWaitingWriteMethods = uiModule({
             kind: 'waiting-failed',
             ...(seal ? { action: { label: seal.label, run: () => this.researchSyncAction(seal.action) } } : {}),
         });
+    },
+
+    /**
+     * A write of "Awaiting action" is committed by the research but leaves the
+     * tree as it is: the tree in step before it takes the new head as its
+     * version, by the rule of the family's material (researchTakeOwnWriteHead:
+     * its `parent` the tree's head; not said, `before`: the head following
+     * knew right before the write, from the research's own stream), and
+     * following loads nothing again for it. A commit of its agent meanwhile:
+     * nothing taken, the newer version comes as ever.
+     */
+    takeWaitingWriteHead(s: LiveSession, before: string, result: WaitingSentResult | WaitingFileResult): void {
+        if (!result.ok || !result.head) return;
+        this.researchTakeOwnWriteHead(s.researchId, before, result.head, result.parent);
+        if (!s.ended && TreeManager.getTreeMetadata(s.treeId)?.research?.head === result.head) s.head = result.head;
     },
 
     /** What the followed research's bridge takes from "Awaiting action". */
@@ -151,7 +167,9 @@ export const researchWaitingWriteMethods = uiModule({
         const now = Date.now();
         st.pending.set(w.id, { phase: 'sent', sentAt: new Date(now).toISOString(), until: Infinity });
         this.reshowLiveWaiting(s);
+        const before = s.head;
         const result = await postWaitingSent(s.bridge.base, task, 'sent');
+        this.takeWaitingWriteHead(s, before, result);
         // The answer says where the task is now (already sent: `sent: []`, phase sent): the row follows it.
         const phase = waitingWrittenPhase(result, task, 'sent');
         if (phase !== 'sent') st.pending.set(w.id, { phase, until: Infinity });
@@ -177,7 +195,9 @@ export const researchWaitingWriteMethods = uiModule({
         const back = new Map([[id, st.pending.get(id)]]);
         st.pending.set(id, { phase: 'todo', until: Infinity });
         this.reshowLiveWaiting(s);
+        const before = s.head;
         const result = await postWaitingSent(s.bridge.base, task, 'unsent');
+        this.takeWaitingWriteHead(s, before, result);
         const phase = waitingWrittenPhase(result, task, 'todo');
         if (phase !== 'todo') st.pending.set(id, { phase, until: Infinity });
         const ok = this.settleWaitingWrite(s, [id], phase, result, back);
@@ -201,7 +221,9 @@ export const researchWaitingWriteMethods = uiModule({
         this.reshowLiveWaiting(s);
         let result: WaitingSentResult;
         try {
+            const before = s.head;
             result = await postGroupSent(s.bridge.base, key);
+            this.takeWaitingWriteHead(s, before, result);
         } finally {
             st.groups.delete(key);
         }
@@ -240,7 +262,9 @@ export const researchWaitingWriteMethods = uiModule({
         this.reshowLiveWaiting(s);
         let result: WaitingSentResult;
         try {
+            const before = s.head;
             result = await postGroupUnsent(s.bridge.base, key, tasks);
+            this.takeWaitingWriteHead(s, before, result);
         } finally {
             st.groups.delete(key);
         }
@@ -361,7 +385,9 @@ export const researchWaitingWriteMethods = uiModule({
             return;
         }
         this.showToast(W.fileSending(file.name), Infinity, { spinner: true, kind: 'waiting-file' });
+        const before = s.head;
         const result = await putWaitingFile(s.bridge.base, task, file, { maxBytes: s.accepts?.mediaMaxBytes });
+        this.takeWaitingWriteHead(s, before, result);
         if (result.ok) {
             this.showToast(W.fileSent, 4000, { kind: 'waiting-file-sent' });
             if (stillFollowing(s)) this.liveStatusSoon(s);

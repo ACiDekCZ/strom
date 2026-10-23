@@ -134,6 +134,8 @@ export interface WaitingSentDone {
     sent: string[];
     /** The research's version after the write ('' = not said). */
     head: string;
+    /** The version the write was made on (said by a newer research; absent: not said). */
+    parent?: string;
     /** An item's answer: the task, and the phase it is in now (both or neither). */
     task?: string;
     phase?: WaitingPhase;
@@ -157,6 +159,9 @@ export interface WaitingFileDone {
     ok: true;
     /** The research's id for the file ("I0042"; '' = not said). */
     input: string;
+    /** The research's version after the write, and the one it was made on (absent: not said). */
+    head?: string;
+    parent?: string;
 }
 
 export type WaitingFileResult = WaitingFileDone | WaitingWriteRefused;
@@ -224,7 +229,8 @@ export function waitingSentReply(status: number, body: unknown, retryAfter?: str
         const moved = list === 'sent' ? r.sent : list === 'unsent' ? r.unsent : Array.isArray(r.unsent) ? r.unsent : r.sent;
         const task = researchTaskRef(r.task);
         const phase = r.phase === 'todo' || r.phase === 'sent' ? r.phase : null;
-        return { ok: true, sent: taskList(moved), head: isResearchHead(r.head) ?? '', ...(task && phase ? { task, phase } : {}) };
+        const parent = isResearchHead(r.parent);
+        return { ok: true, sent: taskList(moved), head: isResearchHead(r.head) ?? '', ...(parent ? { parent } : {}), ...(task && phase ? { task, phase } : {}) };
     }
     return refusal(status, body, retryAfter);
 }
@@ -258,7 +264,12 @@ export function groupNoteReply(status: number, body: unknown, retryAfter?: strin
 
 /** The bridge's answer to a task's file, typed. */
 export function waitingFileReply(status: number, body: unknown, retryAfter?: string | null): WaitingFileResult {
-    if (status >= 200 && status < 300) return { ok: true, input: mediaReplyId(body) ?? '' };
+    if (status >= 200 && status < 300) {
+        const r = asRecord(body);
+        const head = isResearchHead(r?.head);
+        const parent = isResearchHead(r?.parent);
+        return { ok: true, input: mediaReplyId(body) ?? '', ...(head ? { head } : {}), ...(parent ? { parent } : {}) };
+    }
     return refusal(status, body, retryAfter);
 }
 
