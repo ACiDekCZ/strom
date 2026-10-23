@@ -211,6 +211,19 @@ const DIVIDER_BEFORE: MaterialActionId[] = ['openSystem', 'deleteFromTree'];
 
 /** The person's items as drawn in the section (by key), for the ⋯ menu and opening. */
 let sectionItems = new Map<string, MaterialItem>();
+/** Which attachments the tree holds and on whom: a change redraws what shows them (window, section, viewer). */
+export function treeAttachmentsKey(): string {
+    const parts: string[] = [];
+    for (const p of DataManager.getAllPersons()) {
+        if (!p.attachments?.length) continue;
+        parts.push(`${p.id}|${p.refn ?? ''}|${p.attachments.map(a => a.id).join(',')}`);
+    }
+    return parts.join(';');
+}
+
+/** The attachments the open person's section and list were drawn with (ids). */
+let sectionAttachments = '';
+const personAttachmentIds = (p: Person): string => (p.attachments ?? []).map(a => a.id).join(',');
 /** People whose `?person=` is being asked now (REFN). */
 const personLoading = new Set<string>();
 /** Trees whose whole list was asked in this page (once per page; later answers come per person). */
@@ -410,6 +423,7 @@ export const materialsMethods = uiModule({
         const locked = DataManager.isPersonLocked(this.currentId);
         const refn = researchPersonRef(person.refn);
         const rec = cachedMaterials(ctx.treeId);
+        sectionAttachments = personAttachmentIds(person);
         const items = this.personMaterialItems(this.currentId);
         const shown = items.slice(0, PERSON_SECTION_ROWS);
         sectionItems = new Map(shown.map(i => [i.key, i]));
@@ -831,6 +845,22 @@ export const materialsMethods = uiModule({
             drawnSignature = signature;
             if (had && DataManager.getCurrentTreeId()) TreeRenderer.render();
         }
+    },
+
+    /**
+     * A commit or an undo: when the tree's attachments changed (deleted with a
+     * hidden file, brought back by Undo, added or removed anywhere), the open
+     * Materials window, the person's section and the viewer follow at once.
+     */
+    materialsTreeChanged(): void {
+        this.refreshMaterialsWindow();
+        const person = this.currentId ? DataManager.getPerson(this.currentId) : null;
+        if (person && document.getElementById('person-modal')?.classList.contains('active')
+            && personAttachmentIds(person) !== sectionAttachments) {
+            this.renderAttachmentsList();
+            this.renderMaterialsSection();
+        }
+        this.materialViewerTreeChanged();
     },
 
     /** The remembered list changed (an answer, a save): redraw the section and the counts. */

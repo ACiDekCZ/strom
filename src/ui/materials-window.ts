@@ -39,7 +39,7 @@ import {
 import { materialThumbs, ThumbSnapshot } from '../material-thumbs.js';
 import { formatBytesShort } from './originals-ui.js';
 import {
-    MaterialsOpenOptions, MaterialActionCtx, materialShortDate, materialStaleTime, materialTileLetters, materialItemSha,
+    MaterialsOpenOptions, MaterialActionCtx, materialShortDate, materialStaleTime, materialTileLetters, materialItemSha, treeAttachmentsKey,
 } from './materials-ui.js';
 import { uiModule } from './module.js';
 
@@ -152,6 +152,8 @@ interface Win {
     bridgeUp: boolean;
     /** The gates the window was drawn with (a poll that changes nothing redraws nothing). */
     drawnCaps: string;
+    /** The tree's attachments its items were built from (see treeAttachmentsKey). */
+    drawnAttachments: string;
 }
 
 function capsKey(caps: { list: boolean; assign: boolean; thumb: boolean; bridgeUp: boolean; links?: boolean }, base: string | null): string {
@@ -256,6 +258,7 @@ export const materialsWindowMethods = uiModule({
             width: 0,
             bridgeUp: ctx.caps.bridgeUp,
             drawnCaps: '',
+            drawnAttachments: '',
         };
         win = w;
         const thumbs = materialThumbs();
@@ -334,12 +337,13 @@ export const materialsWindowMethods = uiModule({
         if (!ctx || ctx.treeId !== w.treeId) return;
         const cameUp = ctx.caps.bridgeUp && !w.bridgeUp;
         w.bridgeUp = ctx.caps.bridgeUp;
-        const changed = capsKey(ctx.caps, ctx.base) !== w.drawnCaps || (cachedMaterials(w.treeId)?.list ?? null) !== w.list;
+        const changed = capsKey(ctx.caps, ctx.base) !== w.drawnCaps || (cachedMaterials(w.treeId)?.list ?? null) !== w.list
+            || treeAttachmentsKey() !== w.drawnAttachments;
         if (changed && !w.raf) {
             w.raf = requestAnimationFrame(() => {
                 w.raf = 0;
                 if (!alive(w.gen)) return;
-                this.mwRebuild();
+                this.mwRebuild({ items: treeAttachmentsKey() !== w.drawnAttachments });
             });
         }
         if (cameUp) {
@@ -465,6 +469,7 @@ export const materialsWindowMethods = uiModule({
         const list = rec?.list ?? null;
         if (opts.items || list !== w.list) {
             w.list = list;
+            w.drawnAttachments = treeAttachmentsKey();
             w.items = overviewItems(list, treeAttachments());
             w.names = namesOf(list);
             const keys = new Set(w.items.map(i => i.key));

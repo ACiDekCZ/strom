@@ -624,6 +624,9 @@ export const miscMethods = uiModule({
             this.refreshUndoRedoToolbar();
             // Every commit and undo: "Show in tree" recounts who is still missing evidence.
             this.refreshEvidenceHighlight();
+            // ... and what shows the tree's attachments follows them (Materials window, section, viewer;
+            // undo and redo call it themselves).
+            this.materialsTreeChanged();
         };
 
         // Backdrop click: info, choice and picker dialogs close through their
@@ -1692,6 +1695,7 @@ export const miscMethods = uiModule({
         // Undo can add/remove/rename people — the picker's cached list too.
         this.refreshSearch();
         this.refreshUndoRedoToolbar();  // R3
+        this.materialsTreeChanged();    // attachments brought back or gone again
         this.showToast(strings.undo.undone(result.description));
     },
 
@@ -1707,6 +1711,7 @@ export const miscMethods = uiModule({
         void TreeRenderer.renderAsync();
         this.refreshSearch();
         this.refreshUndoRedoToolbar();  // R3
+        this.materialsTreeChanged();
         this.showToast(strings.undo.redone(result.description));
     },
 

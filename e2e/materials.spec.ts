@@ -400,3 +400,34 @@ test.describe('Removing a linked tree', () => {
     });
 });
 
+
+test.describe('Materials follow the tree\'s attachments', () => {
+    test.use({ viewport: DESKTOP });
+
+    test('an attachment removed or brought back by Undo: the person\'s section and the Materials window at once', async ({ page }) => {
+        await setup(page, { files: [materialFile(1, { persons: ['P0003'], title: 'Křestní list' })],
+            before: page => attach(page, [{ name: 'a.png' }, { name: 'b.png' }]) });
+        await editJanModal(page);
+        await expect(rows(page)).toHaveCount(3);
+        await page.evaluate(() => (window.Strom.UI as unknown as { openMaterials(o: unknown): void }).openMaterials({}));
+        const win = page.locator('#materials-modal');
+        const treeCount = win.locator('.mw-canvas .mw-group', { has: page.locator('.mw-group-name', { hasText: 'In the tree' }) })
+            .locator('.mw-group-count');
+        await expect(treeCount).toHaveText('2');
+        // From now on the research's list does not change (no answers): only the tree does.
+        await page.route(url => url.href.startsWith(`${BRIDGE}/material`), () => { /* never answered */ });
+        // Removed elsewhere: both follow.
+        const id = await janId(page);
+        await page.evaluate((id) => {
+            const dm = window.Strom.DataManager;
+            const att = dm.getPerson(id as never)!.attachments!.find(a => a.name === 'b.png')!;
+            dm.removeAttachment(id as never, att.id);
+        }, id);
+        await expect(treeCount).toHaveText('1');
+        await expect(rows(page)).toHaveCount(2);
+        // Undo brings it back into both.
+        await page.evaluate(() => (window.Strom.UI as unknown as { performUndo(): void }).performUndo());
+        await expect(treeCount).toHaveText('2');
+        await expect(rows(page)).toHaveCount(3);
+    });
+});

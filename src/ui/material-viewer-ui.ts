@@ -28,7 +28,7 @@ import { parseGedcomDate } from '../ged-parser.js';
 import { pdfBlobFromDataUrl } from '../attachments.js';
 import { formatBytesShort } from './originals-ui.js';
 import { openViewerList, closeImageViewer, viewerListOpen, redrawViewerList, relayoutViewer, ViewerSlots } from './image-viewer.js';
-import { MaterialOpenCtx, MaterialsContext, materialItemSha, materialTileLetters } from './materials-ui.js';
+import { MaterialOpenCtx, MaterialsContext, materialItemSha, materialTileLetters, treeAttachmentsKey } from './materials-ui.js';
 import { uiModule } from './module.js';
 
 /** Images the browser shows itself. */
@@ -47,6 +47,8 @@ interface ViewerState {
     urls: string[];
     /** The phone's sheet pulled up (kept while going through the list). */
     expanded: boolean;
+    /** The tree's attachments when it was last drawn (a commit that changed them redraws). */
+    drawnAttachments: string;
 }
 
 let viewer: ViewerState | null = null;
@@ -189,7 +191,7 @@ export const materialViewerMethods = uiModule({
     openMaterialViewer(items: MaterialItem[], index: number, ctx: MaterialOpenCtx): void {
         if (!items[index]) return;
         this.closeMaterialsItemMenu();
-        const state: ViewerState = { items: [...items], ctx, urls: [], expanded: false };
+        const state: ViewerState = { items: [...items], ctx, urls: [], expanded: false, drawnAttachments: treeAttachmentsKey() };
         viewer = state;
         openViewerList(
             { count: state.items.length, index, show: (i, slots) => this.drawMaterialInViewer(i, slots) },
@@ -203,6 +205,15 @@ export const materialViewerMethods = uiModule({
     /** The remembered list changed: the shown item's details again (its image stays). */
     materialViewerListChanged(): void {
         if (viewer && viewerListOpen()) redrawViewerList();
+    },
+
+    /** A commit or an undo: the details again when the tree's attachments changed. */
+    materialViewerTreeChanged(): void {
+        if (!viewer || !viewerListOpen()) return;
+        const key = treeAttachmentsKey();
+        if (key === viewer.drawnAttachments) return;
+        viewer.drawnAttachments = key;
+        redrawViewerList();
     },
 
     /** The item as it is now (the remembered list changed after an action; an attachment may be gone). */
