@@ -176,10 +176,25 @@ test.describe('Materials window: loading, grouping and views', () => {
         await expect(toggles.first()).toHaveAttribute('aria-expanded', 'true');
         await expect(win(page).locator('.mw-tile', { hasText: 'sken-6.jpg' })).toBeVisible();
         await toggles.first().click();
-        await expect(win(page).locator('.mw-canvas .mw-folder-name')).toHaveText(['Dopisy', 'Fotky / 1930', 'Fotky / 1950', 'Fotky / Svatby', 'Listiny', 'Pohlednice']);
-        await expect(toggles.nth(1)).toHaveAttribute('aria-expanded', 'false');
-        await toggles.nth(1).click();
-        await expect(toggles.nth(1)).toHaveAttribute('aria-expanded', 'true');
+        // The folder tree (as in the batch guide): a closed folder hides its subfolders.
+        const names = win(page).locator('.mw-canvas .mw-folder-name');
+        await expect(names).toHaveText(['Dopisy', 'Fotky', 'Listiny', 'Pohlednice']);
+        const fotky = win(page).locator('.mw-canvas .mw-folder', { has: page.locator('.mw-folder-name', { hasText: /^Fotky$/ }) });
+        await expect(fotky.locator('.mw-folder-count')).toHaveText(/\d+/);
+        await expect(fotky.locator('.mw-folder-toggle')).toHaveAttribute('aria-expanded', 'false');
+        await fotky.locator('.mw-folder-toggle').click();
+        await expect(names).toHaveText(['Dopisy', 'Fotky', '1930', '1950', 'Svatby', 'Listiny', 'Pohlednice']);
+        // A subfolder a level further in, its whole path in the tooltip.
+        const y1930 = win(page).locator('.mw-canvas .mw-folder[data-depth="1"]').first();
+        await expect(y1930.locator('.mw-folder-name')).toHaveAttribute('title', 'Fotky / 1930');
+        const indent = async (loc: typeof fotky) => loc.evaluate(el => parseFloat(getComputedStyle(el).paddingLeft));
+        expect(await indent(y1930)).toBeGreaterThan(await indent(fotky));
+        // Fotky counts its subfolders' files.
+        const count = (loc: typeof fotky) => loc.locator('.mw-folder-count').textContent().then(t => Number((t ?? '').replace(/\D/g, '')));
+        const subs = await Promise.all([0, 1, 2].map(i => count(win(page).locator('.mw-canvas .mw-folder[data-depth="1"]').nth(i))));
+        expect(await count(fotky)).toBe(subs.reduce((a, b) => a + b, 0));
+        await y1930.locator('.mw-folder-toggle').click();
+        await expect(y1930.locator('.mw-folder-toggle')).toHaveAttribute('aria-expanded', 'true');
         await expect(win(page).locator('.mw-tile', { hasText: 'sken-8.jpg' })).toBeVisible();
         // Closing the batch leaves only its header.
         await head.locator('.mw-group-toggle').click();
@@ -439,6 +454,50 @@ test.describe('Materials window: sizes', () => {
         await page.keyboard.press('Escape');
         await expect(sheet).toHaveCount(0);
         await expect(win(page)).toBeVisible();
+    });
+
+    /** The toolbar as laid out: the search's width, the header's height, every shown control inside the window. */
+    const toolbar = (page: Page) => win(page).evaluate((overlay) => {
+        const box = overlay.querySelector('.materials-window')!.getBoundingClientRect();
+        const bar = overlay.querySelector<HTMLElement>('.mw-toolbar')!;
+        const tools = overlay.querySelector<HTMLElement>('.mw-tools')!;
+        const search = overlay.querySelector('.mw-search')!.getBoundingClientRect();
+        const shown = [...bar.querySelectorAll<HTMLElement>('button, .mw-chip, .mw-seg')].filter(el => el.offsetParent !== null);
+        const outside = shown.filter(el => {
+            const r = el.getBoundingClientRect();
+            return r.width < 16 || r.left < box.left - 0.5 || r.right > box.right + 0.5;
+        }).map(el => el.textContent?.trim() || el.className);
+        return {
+            search: Math.round(search.width), head: Math.round(overlay.querySelector('.mw-head')!.getBoundingClientRect().height),
+            shown: shown.length, outside,
+            overflow: bar.scrollWidth > bar.clientWidth + 1 || tools.scrollWidth > tools.clientWidth + 1,
+        };
+    });
+
+    test('the toolbar at every size: the search its width, the tools beside it inside the window (dc.html 3a, 10a, 10c)', async ({ page }) => {
+        await page.setViewportSize(DESKTOP);
+        await setup(page, { files });
+        await openWindow(page);
+        let t = await toolbar(page);
+        expect(t.search).toBeGreaterThanOrEqual(205);
+        expect(t.search).toBeLessThanOrEqual(225);
+        expect(t.head).toBeLessThan(140);
+        expect(t.shown).toBeGreaterThanOrEqual(6);
+        expect(t.outside).toEqual([]);
+        expect(t.overflow).toBe(false);
+        await expect(win(page).locator('[data-mw="noperson"]')).toBeInViewport();
+
+        for (const size of [{ width: 1024, height: 768 }, { width: 390, height: 844 }, { width: 844, height: 390 }]) {
+            await page.setViewportSize(size);
+            await page.waitForTimeout(100);
+            t = await toolbar(page);
+            expect(t.search, `${size.width}`).toBeGreaterThanOrEqual(100);
+            expect(t.outside, `${size.width}`).toEqual([]);
+            expect(t.overflow, `${size.width}`).toBe(false);
+            await expect(win(page).locator('.mw-filters-btn')).toBeInViewport();
+        }
+        // The phone held sideways: one header row.
+        expect(t.head).toBeLessThan(70);
     });
 
     test('1440: the toolbar with all chips, tiles with names', async ({ page }) => {

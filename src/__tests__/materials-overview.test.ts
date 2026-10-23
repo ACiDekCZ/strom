@@ -11,7 +11,7 @@ import { MaterialFile, MaterialList, MaterialResult, ThumbSize } from '../materi
 import {
     overviewItems, overviewGroups, overviewRows, overviewSummary, emptyFilters, passesFilters, activeFilterCount,
     rowsInView, stickyGroupAt, gridColumns, rangeKeys, nameWithoutYears, personsShort, parseViewPrefs, localDay,
-    fromKey, OverviewFilters, RowMetrics,
+    fromKey, OverviewFilters, RowMetrics, firstFolderLine, inMaterialFolder,
 } from '../materials-overview.js';
 import { MaterialThumbQueue, ThumbDeps, thumbSource } from '../material-thumbs.js';
 
@@ -126,12 +126,29 @@ describe('groups by batch', () => {
         expect(groups().map(g => g.key)).toEqual(['b:b-box', 'b:b-old', 'loose', 'tree']);
     });
 
-    it('a batch: files outside folders first, then folders from the path', () => {
+    it('a batch: files outside folders first, then the folder tree from the paths', () => {
         const box = groups({ showHidden: true })[0];
         expect(box.root.map(i => i.key)).toEqual(['m:I0004']);
-        expect(box.folders.map(f => [f.label, f.items.length])).toEqual([['Letters', 1], ['Photos / 1930', 2]]);
+        // Each folder after its parent, its own name indented one level in; counts with the subfolders.
+        expect(box.folders.map(f => [f.label, f.name, f.depth, f.items.length, f.files.length])).toEqual([
+            ['Letters', 'Letters', 0, 1, 1], ['Photos', 'Photos', 0, 2, 0], ['Photos / 1930', '1930', 1, 2, 2],
+        ]);
+        expect(box.folders[2].parent).toBe('f:b-box/Photos');
+        expect(firstFolderLine(box)).toEqual(['f:b-box/Letters']);
         expect(box.items.map(i => i.key)).toEqual(['m:I0004', 'm:I0003', 'm:I0001', 'm:I0002']);
         expect(groups()[0].total).toBe(3);
+    });
+
+    it('a folder holds its subfolders\' files; the first folder line opens down to files', () => {
+        expect(inMaterialFolder('Photos/1930/a.jpg', 'Photos')).toBe(true);
+        expect(inMaterialFolder('Photos/1930/a.jpg', 'Photos / 1930')).toBe(true);
+        expect(inMaterialFolder('Photos 2/a.jpg', 'Photos')).toBe(false);
+        expect(inMaterialFolder('a.jpg', 'Photos')).toBe(false);
+        const deep = list([file(1, { batch: 'b-box', path: 'Box/Attic/1930/a.jpg' }), file(2, { batch: 'b-box', path: 'Box/Attic/1950/b.jpg' })], { batches: [BOX] });
+        const g = overviewGroups({ items: overviewItems(deep, []), list: deep, filters: filters(), mode: 'batch', batchLoaded: () => true })[0];
+        expect(g.folders.map(f => `${'-'.repeat(f.depth)}${f.name} ${f.items.length}`)).toEqual(['Box 2', '-Attic 2', '--1930 1', '--1950 1']);
+        expect(firstFolderLine(g)).toEqual(['f:b-box/Box', 'f:b-box/Box / Attic', 'f:b-box/Box / Attic / 1930']);
+        expect(g.items.map(i => i.key)).toEqual(['m:I0001', 'm:I0002']);
     });
 
     it('with a filter: groups without a match go, counts say k of n', () => {
@@ -196,14 +213,17 @@ describe('rows of the virtual list', () => {
     });
 
     it('an open batch: root tiles, folder headers, open folders’ tiles in rows of `cols`', () => {
-        const open = new Set(['b:b-box', 'f:b-box/Photos / 1930']);
+        const open = new Set(['b:b-box', 'f:b-box/Photos', 'f:b-box/Photos / 1930']);
         const layout = overviewRows(groups, k => open.has(k), METRICS);
-        expect(layout.rows.map(r => r.type)).toEqual(['group', 'tiles', 'folder', 'folder', 'tiles', 'end', 'group', 'group']);
+        expect(layout.rows.map(r => r.type)).toEqual(['group', 'tiles', 'folder', 'folder', 'folder', 'tiles', 'end', 'group', 'group']);
+        // A closed parent hides its subfolders.
+        const shut = overviewRows(groups, k => k === 'b:b-box' || k === 'f:b-box/Photos / 1930', METRICS);
+        expect(shut.rows.filter(r => r.type === 'folder').map(r => r.key)).toEqual(['f:b-box/Letters', 'f:b-box/Photos']);
         // The row with the hidden file has room for "Restore".
         expect(layout.rows[1].height).toBe(120);
         expect(layout.order.map(i => i.key)).toEqual(['m:I0004', 'm:I0001', 'm:I0002']);
-        expect(layout.rowOf.get('m:I0002')).toBe(4);
-        expect(layout.rows[4].top).toBe(60 + 120 + 30 + 30);
+        expect(layout.rowOf.get('m:I0002')).toBe(5);
+        expect(layout.rows[5].top).toBe(60 + 120 + 30 + 30 + 30);
     });
 
     it('a list: one row per item', () => {

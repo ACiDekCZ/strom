@@ -150,11 +150,32 @@ export function overviewSummary(items: readonly MaterialItem[], list: MaterialLi
 export interface OverviewFolder {
     /** `f:<batch id>/<folder path>` */
     key: string;
-    /** "Photos / 1930" */
+    /** The whole path inside the batch: "Photos / 1930" */
     label: string;
+    /** Its own name, shown indented under its parent: "1930" */
+    name: string;
+    /** 0: right in the batch; 1: in a folder of it; … */
+    depth: number;
+    /** The folder it is in (its key); none right in the batch. */
+    parent?: string;
+    /** Matching items in it and in its subfolders (display order). */
     items: MaterialItem[];
-    /** Items in the folder without the narrowing filters. */
+    /** Matching items right in it (under its header, before its subfolders). */
+    files: MaterialItem[];
+    /** Items in it and in its subfolders without the narrowing filters. */
     total: number;
+}
+
+/** Is a file at `path` in the folder `label` (or in one of its subfolders)? */
+export function inMaterialFolder(path: string | undefined, label: string): boolean {
+    const folder = materialFolder(path);
+    return folder === label || folder.startsWith(`${label} / `);
+}
+
+/** "A / B / C" → ["A", "A / B", "A / B / C"]. */
+function folderChain(label: string): string[] {
+    const parts = label.split(' / ');
+    return parts.map((_, i) => parts.slice(0, i + 1).join(' / '));
 }
 
 export type OverviewGroupKind = 'batch' | 'loose' | 'tree' | 'day' | 'earlier';
@@ -170,6 +191,7 @@ export interface OverviewGroup {
     items: MaterialItem[];
     /** A batch's files outside folders (shown before its folders). */
     root: MaterialItem[];
+    /** A batch's folder tree, flat: each folder after its parent (`depth`, `parent`). */
     folders: OverviewFolder[];
     /** Items of the group without the narrowing filters (hidden ones only with "Show hidden"). */
     total: number;
@@ -231,30 +253,67 @@ export function fromKey(from: string | undefined): 'app' | 'batch' | 'phone' | '
     return 'app';
 }
 
-/** A batch's items: files outside folders first, then the folders (each sorted by name). */
+/**
+ * A batch's items: files outside folders first, then its folder tree (as in
+ * the batch guide): every folder after its parent, siblings by name; a
+ * folder's own files under its header, before its subfolders.
+ */
 function batchContent(items: MaterialItem[], all: MaterialItem[], batchId: string): { root: MaterialItem[]; folders: OverviewFolder[] } {
     const byName = (a: MaterialItem, b: MaterialItem) => compareText(a.path ?? a.title, b.path ?? b.title);
     const root: MaterialItem[] = [];
-    const folders = new Map<string, OverviewFolder>();
+    const nodes = new Map<string, OverviewFolder>();
+    const children = new Map<string, OverviewFolder[]>();
     const totals = new Map<string, number>();
     for (const item of all) {
         const label = materialFolder(item.path);
-        if (label) totals.set(label, (totals.get(label) ?? 0) + 1);
+        if (label) for (const l of folderChain(label)) totals.set(l, (totals.get(l) ?? 0) + 1);
     }
+    const node = (label: string): OverviewFolder => {
+        let folder = nodes.get(label);
+        if (folder) return folder;
+        const chain = folderChain(label);
+        const parentLabel = chain.length > 1 ? chain[chain.length - 2] : '';
+        const parent = parentLabel ? node(parentLabel) : null;
+        folder = {
+            key: `f:${batchId}/${label}`, label, name: label.split(' / ').pop() ?? label, depth: chain.length - 1,
+            ...(parent ? { parent: parent.key } : {}), items: [], files: [], total: totals.get(label) ?? 0,
+        };
+        nodes.set(label, folder);
+        children.set(parentLabel, [...(children.get(parentLabel) ?? []), folder]);
+        return folder;
+    };
     for (const item of items) {
         const label = materialFolder(item.path);
-        if (!label) { root.push(item); continue; }
-        let folder = folders.get(label);
-        if (!folder) {
-            folder = { key: `f:${batchId}/${label}`, label, items: [], total: totals.get(label) ?? 0 };
-            folders.set(label, folder);
-        }
-        folder.items.push(item);
+        if (!label) root.push(item);
+        else node(label).files.push(item);
     }
     root.sort(byName);
-    const sorted = [...folders.values()].sort((a, b) => compareText(a.label, b.label));
-    sorted.forEach(f => f.items.sort(byName));
-    return { root, folders: sorted };
+    const folders: OverviewFolder[] = [];
+    const walk = (parentLabel: string): MaterialItem[] => {
+        const out: MaterialItem[] = [];
+        for (const folder of (children.get(parentLabel) ?? []).sort((a, b) => compareText(a.name, b.name))) {
+            folders.push(folder);
+            folder.files.sort(byName);
+            folder.items = [...folder.files, ...walk(folder.label)];
+            out.push(...folder.items);
+        }
+        return out;
+    };
+    walk('');
+    return { root, folders };
+}
+
+/** The folders open at first: the first one, and down its line while a folder has only subfolders. */
+export function firstFolderLine(group: OverviewGroup): string[] {
+    const keys: string[] = [];
+    let folder: OverviewFolder | undefined = group.folders[0];
+    while (folder) {
+        keys.push(folder.key);
+        if (folder.files.length) break;
+        const parent: string = folder.key;
+        folder = group.folders.find(f => f.parent === parent);
+    }
+    return keys;
 }
 
 function emptyGroup(key: string, kind: OverviewGroupKind): OverviewGroup {
@@ -310,7 +369,7 @@ export function overviewGroups(input: OverviewInput): OverviewGroup[] {
         const { root, folders } = batchContent(matching, all, batch.id);
         g.root = root;
         g.folders = folders;
-        g.items = [...root, ...folders.flatMap(f => f.items)];
+        g.items = [...root, ...folders.flatMap(f => f.files)];
         g.total = all.length;
         groups.push(g);
     }
@@ -457,10 +516,14 @@ export function overviewRows(groups: readonly OverviewGroup[], isOpen: (key: str
             push({ type: 'skeleton', key: `s:${group.key}`, top, height: m.skeleton, group });
         } else {
             content(group, group.root);
+            // The folder tree: a folder under a closed one is not shown.
+            const closed = new Set<string>();
             for (const folder of group.folders) {
+                if (folder.parent && closed.has(folder.parent)) { closed.add(folder.key); continue; }
                 const fOpen = isOpen(folder.key);
                 push({ type: 'folder', key: folder.key, top, height: m.folder, group, folder, open: fOpen });
-                if (fOpen) content(group, folder.items, folder);
+                if (fOpen) content(group, folder.files, folder);
+                else closed.add(folder.key);
             }
         }
         push({ type: 'end', key: `e:${group.key}`, top, height: m.groupEnd, group });

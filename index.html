@@ -15184,11 +15184,11 @@
         .mw-selhead-count { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .materials-window .mw-head .close-btn { order: 2; }
         .mw-toolbar { order: 3; flex-basis: 100%; display: flex; align-items: center; gap: 8px; min-width: 0; }
-        .materials-window .mw-search {
-            width: 220px; flex-shrink: 0; height: 32px; box-sizing: border-box; padding: 0 10px; font: inherit; font-size: 13px;
+        #materials-modal .mw-search {
+            width: 210px; flex-shrink: 0; height: 32px; box-sizing: border-box; padding: 0 10px; font: inherit; font-size: 13px;
             border: 1px solid var(--border); border-radius: var(--r-pill); background: var(--surface); color: var(--text);
         }
-        .materials-window .mw-search:focus-visible { outline: none; box-shadow: var(--shadow-focus); border-color: var(--primary); }
+        #materials-modal .mw-search:focus-visible { outline: none; box-shadow: var(--shadow-focus); border-color: var(--primary); }
         .mw-tools { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
         .mw-chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
         .mw-gap { flex: 1; }
@@ -15246,7 +15246,8 @@
         .mw-group-name { font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .mw-group-meta { font-size: 12px; color: var(--text-light); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .mw-group-count, .mw-folder-count { flex-shrink: 0; font-size: 13px; color: var(--text-light); font-variant-numeric: tabular-nums; }
-        .mw-folder { padding-left: 20px; }
+        /* The folder tree: each level a step further in. */
+        .mw-folder { padding-left: calc(20px + min(var(--mw-depth, 0), 6) * 20px); }
         .mw-folder-name { min-width: 0; flex: 0 1 auto; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .materials-window .mw-more {
             width: 32px; height: 32px; flex-shrink: 0; padding: 0; border: none; border-radius: var(--r-sm);
@@ -15359,7 +15360,7 @@
             .mw-check-row:hover { background: var(--hover-bg); }
         }
         @media (pointer: coarse) {
-            .materials-window .mw-chip, .materials-window .mw-search { height: 40px; }
+            .materials-window .mw-chip, #materials-modal .mw-search { height: 40px; }
             .materials-window .mw-seg button { height: 38px; }
             .materials-window .mw-more { width: 44px; height: 44px; }
             .mw-check-row { min-height: 44px; }
@@ -15369,7 +15370,7 @@
             .materials-window .mw-filters-btn { display: inline-flex; }
             .mw-chips > :not(.is-active) { display: none; }
             .mw-seg-group { display: none; }
-            .materials-window .mw-search { flex: 1; width: auto; min-width: 120px; }
+            #materials-modal .mw-search { flex: 1; width: auto; min-width: 120px; }
             .mw-tools { flex: 0 1 auto; flex-wrap: nowrap; }
             .mw-tools .mw-gap { display: none; }
             .mw-toolbar { flex-wrap: wrap; }
@@ -15389,9 +15390,10 @@
             #materials-modal.is-selecting .mw-titles { display: none; }
             #materials-modal.is-selecting .mw-selhead { display: flex; }
             .mw-toolbar { flex-wrap: wrap; }
-            .materials-window .mw-search { flex-basis: 100%; }
+            #materials-modal .mw-search { flex-basis: 100%; }
             .mw-tools { flex: 1; flex-wrap: wrap; }
             .mw-scroll { padding: 0 16px; }
+            .mw-folder { padding-left: calc(12px + min(var(--mw-depth, 0), 4) * 14px); }
             .mw-status, .mw-skipped, .mw-thumbs { padding-left: 16px; padding-right: 16px; }
             .mw-r-tiles, .mw-r-skeleton { column-gap: 6px; }
             .mw-tile-title, .mw-tile-persons { display: none; }
@@ -15418,7 +15420,7 @@
             .mw-titles { flex: 0 0 auto; }
             .mw-summary { display: none; }
             .mw-toolbar { order: 0; flex: 1; flex-basis: auto; flex-wrap: nowrap; }
-            .materials-window .mw-search { flex-basis: auto; min-width: 100px; }
+            #materials-modal .mw-search { flex-basis: auto; min-width: 100px; }
             .mw-tools { flex-wrap: nowrap; }
             .mw-scroll { padding: 0 16px; }
             .mw-r-tiles, .mw-r-skeleton { column-gap: 8px; }

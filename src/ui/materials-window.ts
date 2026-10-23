@@ -27,14 +27,14 @@ import { MQ_MOBILE, MQ_PHONE_LANDSCAPE } from '../breakpoints.js';
 import {
     MaterialItem, MaterialList, MaterialBatch, MaterialError, MaterialActionId,
     cachedMaterials, primeMaterials, fetchMaterial, saveMaterialList, materialKindLabel, materialErrorText,
-    materialType, materialFolder,
+    materialType,
 } from '../materials.js';
 import {
     OverviewFilters, OverviewGroupMode, OverviewView, OverviewGroup, OverviewFolder, OverviewLayout, OverviewRow,
     RowMetrics, KindFilter, KIND_FILTERS, TreeAttachments,
     emptyFilters, activeFilterCount, narrowing, overviewItems, overviewSummary, overviewGroups, overviewRows,
     rowsInView, stickyGroupAt, gridColumns, rangeKeys, personsShort, nameWithoutYears, parseViewPrefs,
-    itemWithoutPerson, OverviewSummary,
+    itemWithoutPerson, OverviewSummary, inMaterialFolder, firstFolderLine,
 } from '../materials-overview.js';
 import { materialThumbs, ThumbSnapshot } from '../material-thumbs.js';
 import { formatBytesShort } from './originals-ui.js';
@@ -421,11 +421,12 @@ export const materialsWindowMethods = uiModule({
         const set = w.open.get(key);
         if (set !== undefined) return set;
         if (narrowing(w.filters) || w.group === 'date') return true;
-        // The batch it was opened for, else the first group; a batch's first folder with it.
+        // The batch it was opened for, else the first group; a batch's first folder with it
+        // (and down its line while a folder holds only folders).
         const first = w.groups.find(g => w.focusBatch ? g.batch?.id === w.focusBatch : true) ?? w.groups[0];
         if (!first) return false;
         if (key === first.key) return true;
-        return first.folders.length > 0 && key === first.folders[0].key;
+        return firstFolderLine(first).includes(key);
     },
 
     mwMetrics(): RowMetrics {
@@ -748,10 +749,10 @@ export const materialsWindowMethods = uiModule({
         const more = this.mwBatchActions(group, folder).length > 0
             ? `<button type="button" class="mw-more" data-mw="folder-menu" data-group="${esc(group.key)}" data-folder="${esc(folder.key)}" aria-haspopup="menu" aria-label="${esc(`${strings.materials.moreActions}: ${folder.label}`)}">⋯</button>`
             : '';
-        return `<div class="mw-folder" role="gridcell" aria-colspan="${win!.metrics.cols}">
+        return `<div class="mw-folder" role="gridcell" aria-colspan="${win!.metrics.cols}" data-depth="${folder.depth}" style="--mw-depth: ${folder.depth}">
             <button type="button" class="mw-folder-toggle" data-mw="toggle-folder" data-folder="${esc(folder.key)}" aria-expanded="${open}">
                 <span class="mw-caret" aria-hidden="true">${open ? '▾' : '›'}</span>
-                <span class="mw-folder-name" title="${esc(folder.label)}">${esc(folder.label)}</span>
+                <span class="mw-folder-name" title="${esc(folder.label)}">${esc(folder.name)}</span>
                 <span class="mw-folder-count">${esc(this.mwCountLabel(folder.items.length, folder.total))}</span>
             </button>
             ${more}
@@ -970,7 +971,7 @@ export const materialsWindowMethods = uiModule({
         if (w.lastPick.folder) {
             const folder = group.folders.find(f => f.key === w.lastPick!.folder);
             if (!folder) return null;
-            const keys = ofBatch.filter(i => materialFolder(i.path) === folder.label).map(i => i.key);
+            const keys = ofBatch.filter(i => inMaterialFolder(i.path, folder.label)).map(i => i.key);
             return { label: strings.materials.selectFolder, keys };
         }
         return { label: strings.materials.selectBatch(ofBatch.length), keys: ofBatch.map(i => i.key) };
@@ -1061,7 +1062,7 @@ export const materialsWindowMethods = uiModule({
         if (!w) return [];
         this.mwRebuild();
         return w.items.filter(i => i.batch?.id === batch.id && !i.hidden
-            && (folderLabel === undefined || materialFolder(i.path) === folderLabel));
+            && (folderLabel === undefined || inMaterialFolder(i.path, folderLabel)));
     },
 
     async mwBatchAction(id: string, group: OverviewGroup, folder: OverviewFolder | undefined): Promise<void> {
