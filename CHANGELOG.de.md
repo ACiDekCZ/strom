@@ -6,6 +6,12 @@
 
 *Diese Version ist in Vorbereitung; dieser Abschnitt wächst mit jeder Testversion.*
 
+- **Materialien**: die Familiendateien im Strom-Archiv oder in der Forschung erscheinen neben den Anhängen des Stammbaums: ein Abschnitt *Materialien* im Personeneditor, *Materialien von …* im Kartenmenü und ein Fenster aller Materialien und Stapel, mit Betrachter, Zuordnung zu Personen, Ausblenden und Wiederherstellen.
+- **Kinder an Ort und Stelle**: der Kinder-Reiter einer Karte und *Kinder hier zeigen* zeigen die Kinder einer Person direkt bei der Karte, ein zweiter Klick blendet sie wieder aus; die Ansicht bleibt. Der Reiter wird nur angeboten, wo das Zeigen der Kinder jemand Neues zeichnet, auch über Partnerketten mehrerer Personen.
+- **Strom-Archiv**: die Baumauswahl unterscheidet *Archiv* und *Forschung*, Änderungen gehen von selbst ins Archiv (dort die empfohlene Wahl), und eine Forschung, die auf ihren Agenten wartet, wird als Archiv gezeigt, bis der Agent startet.
+- **Zurückgehaltene Schreibvorgänge**: kann die Forschung noch nicht schreiben (*Auf einem anderen Computer versiegelt*, *Dateien noch nicht heruntergeladen*, *Kein Platz mehr auf dem Datenträger*), wird ihr eigener Satz gezeigt, die Änderungen warten hier ungesendet und nichts wird von selbst erneut gesendet; sobald die Forschung meldet, dass es erledigt ist, verschwindet der Block.
+- **Anderes Fenster**: eine durch das Senden aus einem anderen Fenster entfernte Person wird als *In einem anderen Fenster entfernt* gezeigt, mit der Version der Forschung zum Laden; ob die Person zurückkommt oder geht, wird einmal gefragt.
+- **Senden**: von selbst gehende Änderungen werden auch beim Verlassen der Seite gesendet, und Änderungen, die warten, solange die Forschung nicht läuft, werden gezählt.
 - **Fehlerbehebungen**: Hinweis und Beispiel bei *Andere Schreibweisen des Namens* verwenden neutrale Beispielschreibweisen (*Brauschek*, *Prousek*), und das englische Beispiel nennt einen englischen statt eines tschechischen Hofnamens.
 
 ## 3.15.0

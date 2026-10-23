@@ -6,6 +6,12 @@
 
 *Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
 
+- **Materiály**: rodinné soubory uložené v Archivu Stromu nebo ve výzkumu se ukazují vedle příloh stromu: oddíl *Materiály* v editoru osoby, *Materiály osoby …* v nabídce karty a okno všech materiálů a dávek s prohlížečem, přiřazením k osobám, skrytím a obnovením.
+- **Děti na místě**: záložka dětí na kartě a *Ukázat děti tady* ukážou děti osoby přímo u karty a druhé kliknutí je zase skryje; pohled zůstane. Záložka se nabízí jen tam, kde ukázání dětí přidá někoho nového, i přes řetězce partnerů několika osob.
+- **Archiv Stromu**: přepínač stromů rozliší *Archiv* od *Výzkumu*, do archivu jdou změny samy (tam doporučená volba) a výzkum, který čeká na svého agenta, se ukazuje jako archiv, dokud agent nezačne.
+- **Zadržené zápisy**: když výzkum zatím nemůže zapisovat (*Zapečetěno na jiném počítači*, *Soubory ještě nejsou stažené*, *Na disku není místo*), ukáže se jeho vlastní věta, změny tu čekají neodeslané a nic se samo znovu neposílá; jakmile výzkum hlásí, že je to vyřešené, blok zmizí.
+- **Jiné okno**: osoba odebraná posláním z jiného okna se ukáže jako *Odebráno v jiném okně* s nabídkou verze výzkumu; zda se osoba vrátí, nebo odejde, se rozhoduje jednou.
+- **Posílání**: změny, které jdou samy, se pošlou i při opuštění stránky, a změny čekající, dokud výzkum neběží, se počítají.
 - **Opravy**: nápověda a příklad u *Dalších tvarů jména* používají neutrální ukázkové tvary (*Brauschek*, *Prousek*) a anglický příklad uvádí anglické jméno statku místo českého.
 
 ## 3.15.0
