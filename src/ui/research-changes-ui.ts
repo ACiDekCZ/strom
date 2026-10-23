@@ -798,8 +798,11 @@ export const researchChangesMethods = uiModule({
         const pill = this.undoToastEl ?? null;
         const pillRect = pill?.isConnected ? pill.getBoundingClientRect() : undefined;
         if (pillRect && pillRect.width && pillRect.left < left + width && pillRect.right > left) {
-            // The pill rises 12px as it shows: its resting top, whatever the moment.
-            const restTop = pill?.classList.contains('show') ? pillRect.top : pillRect.top - 12;
+            // The pill rises 12px as it shows and sinks as it goes: its resting top is the box less the lift
+            // still to come, read from the running transform (the show class is set before the rise ends).
+            const t = getComputedStyle(pill!).transform;
+            const lift = t && t !== 'none' ? new DOMMatrix(t).m42 : 0;
+            const restTop = pillRect.top - lift;
             floor = Math.min(floor, Math.floor(restTop) - 8);
         }
         panel.style.maxHeight = `${Math.max(160, Math.min(window.innerHeight - 72, floor - top))}px`;

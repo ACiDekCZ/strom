@@ -387,6 +387,44 @@ test.describe('what will be sent beyond the people', () => {
         expect(at.panelBottom).toBeLessThanOrEqual(at.pillRestTop);
     });
 
+    /**
+     * The panel placed while a new Undo pill is still rising (it has its show
+     * class, but sits up to 12px low): the foot still keeps clear of where the
+     * pill comes to rest. A slowed rise holds that moment for the test.
+     */
+    test('1024px: the panel placed mid-rise of the Undo pill keeps clear of its resting place', async ({ page }) => {
+        await page.setViewportSize({ width: 1024, height: 700 });
+        await openResearch(page);
+        await fakeBridge(page);
+        await poll(page);
+        await sample(page, 8);
+        await page.addStyleTag({ content: '.undo-toast { transition-duration: 6s !important; }' });
+        await page.evaluate(() => window.Strom.UI.showResearchChanges('send', { confirm: true }));
+        const panel = page.locator('#research-changes-panel');
+        await panel.locator('[data-more="sources"]').click();
+        await expect(panel.locator('[data-kind="source"]')).toHaveCount(11);
+        await page.evaluate(() => window.Strom.UI.showUndoToast('Edited Jan Fíšek: birth date, birth place and the occupation'));
+        const lift = () => page.evaluate(() => {
+            const pill = document.querySelector<HTMLElement>('.undo-toast.show');
+            const t = pill ? getComputedStyle(pill).transform : 'none';
+            return t === 'none' ? 0 : new DOMMatrix(t).m42;
+        });
+        // Shown and on its way up, still well below its resting place.
+        await expect.poll(lift).toBeGreaterThan(4);
+        const at = await page.evaluate(() => {
+            window.Strom.UI.positionResearchChanges();
+            const pill = document.querySelector<HTMLElement>('.undo-toast.show')!;
+            const m42 = new DOMMatrix(getComputedStyle(pill).transform).m42;
+            return {
+                lift: m42,
+                panelBottom: document.getElementById('research-changes-panel')!.getBoundingClientRect().bottom,
+                pillRestTop: pill.getBoundingClientRect().top - m42,
+            };
+        });
+        expect(at.lift).toBeGreaterThan(2);
+        expect(at.panelBottom).toBeLessThanOrEqual(at.pillRestTop);
+    });
+
     test('1440px: the panel under its Send, clear of the toolbar', async ({ page }) => {
         await openResearch(page);
         await fakeBridge(page);
