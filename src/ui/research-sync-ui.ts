@@ -533,15 +533,17 @@ export const researchSyncMethods = uiModule({
      * say their `parent` needs no asking (the answer is sure); one that does
      * not is asked its `/status` now, never the last poll's — a commit of its
      * agent since then would otherwise be taken in as the tree's own. '' (it
-     * does not answer): nothing will be taken.
+     * does not answer): nothing will be taken. `ask`: asked even before it
+     * said a head (a write it may commit, "Awaiting action"); `base`: at the
+     * address the write goes to (the followed bridge), not the one kept.
      */
-    async researchHeadBeforeWrite(researchId: string): Promise<string> {
+    async researchHeadBeforeWrite(researchId: string, opts: { ask?: boolean; base?: string } = {}): Promise<string> {
         const id = researchId.toLowerCase();
         if (parentSaid.has(id)) return this.researchHeadNow(researchId);
         // A research that commits none of the app's writes (no `material.assign`, never a head in an answer): nothing asked.
-        if (!headSaid.has(id) && !rememberedMaterialFeatures(researchId)?.includes(MATERIAL_ASSIGN_FEATURE)) return '';
+        if (!opts.ask && !headSaid.has(id) && !rememberedMaterialFeatures(researchId)?.includes(MATERIAL_ASSIGN_FEATURE)) return '';
         try {
-            return (await this.askResearchBridge(researchId, POLL_TIMEOUT_MS))?.head ?? '';
+            return (await this.askResearchBridge(researchId, POLL_TIMEOUT_MS, opts.base))?.head ?? '';
         } catch {
             return '';
         }
@@ -846,9 +848,12 @@ export const researchSyncMethods = uiModule({
 
     // ==================== ASKING THE BRIDGE ====================
 
-    /** Ask a research's bridge for its status (short timeout); takes in what it says. Null: it does not answer. */
-    async askResearchBridge(researchId: string, timeout: number): Promise<LiveStatus | null> {
-        const bridge = parseLiveBridge(storedResearchBridge(researchId)?.base);
+    /**
+     * Ask a research's bridge for its status (short timeout); takes in what it says. Null: it does not answer.
+     * `base`: at that address (the followed bridge) instead of the one kept.
+     */
+    async askResearchBridge(researchId: string, timeout: number, base?: string): Promise<LiveStatus | null> {
+        const bridge = parseLiveBridge(base ?? storedResearchBridge(researchId)?.base);
         if (!bridge) return null;
         let status: LiveStatus | null = null;
         let blocked = false;

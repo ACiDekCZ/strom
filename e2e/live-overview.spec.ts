@@ -76,6 +76,8 @@ interface Bridge {
     committed?: string;
     /** Every /status asked (the stream's chain and the regular ask). */
     statusCalls?: number;
+    /** Streams (/events) left unanswered while `events` is off. */
+    eventsHeld?: number;
 }
 
 /** A bridge that sends one change of six lines, then keeps quiet. */
@@ -132,7 +134,7 @@ async function follow(page: Page, size: { width: number; height: number } = { wi
             return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'application/json' }, body: JSON.stringify(bridge.log) });
         }
         if (path.endsWith('/events')) {
-            if (!bridge.events) return new Promise(() => {});
+            if (!bridge.events) { bridge.eventsHeld = (bridge.eventsHeld ?? 0) + 1; return new Promise(() => {}); }
             const body = `event: hello\ndata: ${JSON.stringify(status())}\n\n`
                 + `event: change\ndata: ${JSON.stringify({ head: bridge.committed ?? (bridge.heads ?? ['h1', 'h2'])[1], what: CHANGE, at: new Date().toISOString(), ...(bridge.changeEntries ? { entries: bridge.changeEntries } : {}) })}\n\n`;
             return route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/event-stream' }, body });
@@ -1029,6 +1031,8 @@ test.describe('Awaiting action written through the bridge', () => {
         await expect(sentItem.locator('.research-overview__waiting-action')).toHaveText(['Answer ↗', 'Chat ↗', 'Add a file ↗', 'Back to To do']);
         await sentItem.locator('.research-overview__waiting-action[data-action="unsent"]').click();
         await expect(todoHead(page)).toHaveText(/To do · 31/);
+        // The row moves at once; the write goes once the research's head right before it is asked.
+        await expect.poll(() => bridge.writes.length).toBe(3);
         expect(bridge.writes.at(-1)).toMatchObject({ path: 'waiting/T0031', body: '{"do":"unsent"}' });
         // The bridge's next status agrees: the row stays where it went.
         await nextStatus(bridge);
@@ -1116,6 +1120,7 @@ test.describe('Awaiting action written through the bridge', () => {
         await expect(sentHead(page)).toHaveText(/Awaiting a reply · 11/);
         await page.locator('.toast[data-kind="waiting-sent"] .toast-action').click();
         await expect(todoHead(page)).toHaveText(/To do · 30/);
+        await expect.poll(() => bridge.writes.length).toBe(2);
         // The tasks named are those the Sent marked, never the older letters of the place (T0031–T0033).
         const tasks = (JSON.parse(bridge.writes.at(-1)!.body) as { tasks: string[] }).tasks;
         expect(tasks).not.toContain('T0031');
@@ -1134,6 +1139,8 @@ test.describe('Awaiting action written through the bridge', () => {
         await openOverview(page);
         await placeHead(page, 'todo', 'MěÚ Vzorov').locator('.research-overview__waiting-groupwrite[data-action="group-sent"]').click();
         await expect(todoHead(page)).toHaveText(/To do · 24/);
+        // The Sent itself is written (after the research's head is asked), only then the bridge refuses.
+        await expect.poll(() => bridge.writes.length).toBe(1);
         bridge.refuse = { status: 400, code: 'waiting.bad-body' };
         await page.locator('.toast[data-kind="waiting-sent"] .toast-action').click();
         await expect(page.locator('.toast[data-kind="waiting-failed"]')).toHaveText('Not recorded: the research did not take the request.');
@@ -1256,6 +1263,34 @@ test.describe('Awaiting action written through the bridge', () => {
         });
     }
 
+    // No parent said and its agent committed after the last status following read (the stream has not told it yet):
+    // the head right before the write is asked fresh, so the research's new head is not taken as the tree's own.
+    test('Sent committed by the research (no parent said, a commit of the agent after the last status): not taken, the newer tree is loaded', async ({ page }) => {
+        await fastReconnect(page);
+        const bridge = await follow(page, { width: 1440, height: 900 }, (b) => { writable(['waiting.sent'])(b); b.heads = [H1, H2]; });
+        await expect.poll(() => linkHead(page)).toBe(H2);
+        expect(bridge.gedCalls).toBe(2);
+        await openOverview(page);
+        const letter = await openLetter(page);
+        // The stream goes quiet (its next /events never answers): following hears nothing more by itself.
+        bridge.events = false;
+        await expect.poll(() => bridge.eventsHeld ?? 0, { timeout: 10000 }).toBe(1);
+        const chain = bridge.chain;
+        // The agent commits H2 → Hx; only a status asked now says it.
+        bridge.committed = 'eeee555';
+        bridge.writeHead = { head: H3 };
+        const asked = bridge.statusCalls ?? 0;
+        await letter.locator('.research-overview__waiting-action[data-action="sent"]').click();
+        await expect.poll(() => bridge.writes.length).toBe(1);
+        await expect(page.locator('.toast[data-kind="waiting-sent"]')).toBeVisible();
+        expect(bridge.statusCalls ?? 0).toBeGreaterThan(asked);
+        // Not taken: the research's new version (with the agent's commit) is loaded.
+        await expect.poll(() => bridge.gedCalls).toBe(3);
+        await expect.poll(() => linkHead(page)).toBe(H3);
+        expect(bridge.chain).toBe(chain);
+        await expect(page.locator('.toast[data-kind="waiting-failed"]')).toHaveCount(0);
+    });
+
     test('a check with file in its actions: no Add a file through the bridge, the task link stays', async ({ page }) => {
         const bridge = await follow(page, { width: 1440, height: 900 }, (b) => {
             writable([], { media: { task: true } })(b);
@@ -1316,7 +1351,7 @@ test.describe('Awaiting action written through the bridge', () => {
         await expect(ov).toBeVisible();
         await letter.locator('.research-overview__waiting-action[data-action="sent"]').click();
         await expect(todoHead(page)).toHaveText(/To do · 29/);
-        expect(bridge.writes.map(w => [w.method, w.path])).toEqual([
+        await expect.poll(() => bridge.writes.map(w => [w.method, w.path])).toEqual([
             ['GET', `group/${encodeURIComponent('to:MěÚ Vzorov')}/note`], ['POST', 'waiting/T0018'],
         ]);
         expect(await launched(page)).toEqual([]);
