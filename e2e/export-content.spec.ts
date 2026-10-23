@@ -172,3 +172,56 @@ test.describe('export with privacy of living people: sources and attachments', (
         await expect(pwd.locator('#export-content-sources')).toBeEnabled();
     });
 });
+
+/**
+ * The export dialog opened from the tree manager for a tree that is not the
+ * open one: the estimate and the privacy note are the exported tree's, not
+ * the open tree's (audit 017 follow-up). Invented data.
+ */
+test('export of another tree from the tree manager: the estimate and the note are that tree\'s', async ({ page }) => {
+    await openApp(page);
+    // Tree B: small, with a cited source. Measured first while it is open.
+    const treeB = await page.evaluate(async () => {
+        const persons = {
+            b1: {
+                id: 'b1', firstName: 'Orvald', lastName: 'Tarnweck', gender: 'male', isPlaceholder: false,
+                birthDate: '1801', deathDate: '1870', partnerships: [], parentIds: [], childIds: [], sourceIds: ['s1'],
+            },
+        };
+        const sources = { s1: { id: 's1', title: 'Baptism of Orvald 1801', reference: 'fol. 3' } };
+        return window.Strom.DataManager.importAsNewTree({ persons, partnerships: {}, sources } as never, 'Tarnweck');
+    });
+    await page.evaluate(() => window.Strom.UI.showExportDialog());
+    await page.evaluate(() => window.Strom.UI.exportTargetTreeGedcom());
+    const pwd = page.locator('#export-password-modal');
+    await expect(pwd).toBeVisible();
+    const size = pwd.locator('#export-content-size');
+    await expect(size).not.toBeEmpty();
+    const ownInitials = (await size.textContent())?.trim();
+    await pwd.locator('#export-privacy-mode').selectOption('full');
+    const ownFull = (await size.textContent())?.trim();
+    await page.evaluate(() => window.Strom.UI.closeExportPasswordDialog());
+    await expect(pwd).toBeHidden();
+
+    // Tree A: open now, a large photo, no sources.
+    await page.evaluate(async () => {
+        const persons = {
+            a1: {
+                id: 'a1', firstName: 'Bedrich', lastName: 'Sliva', gender: 'male', isPlaceholder: false,
+                birthDate: '1950', partnerships: [], parentIds: [], childIds: [],
+                photo: 'data:image/jpeg;base64,' + 'C'.repeat(90000),
+            },
+        };
+        await window.Strom.DataManager.importAsNewTree({ persons, partnerships: {} } as never, 'Sliva');
+    });
+
+    // From the tree manager, B's GEDCOM export: B's note and B's estimate.
+    await page.evaluate((id) => window.Strom.UI.showExportDialogFromManager(id as never), treeB);
+    await page.evaluate(() => window.Strom.UI.exportTargetTreeGedcom());
+    await expect(pwd).toBeVisible();
+    await expect(pwd.locator('#export-privacy-mode')).toHaveValue('initials');
+    await expect(pwd.locator('#export-privacy-drops')).toBeVisible();
+    await expect(size).toHaveText(ownInitials!);
+    await pwd.locator('#export-privacy-mode').selectOption('full');
+    await expect(size).toHaveText(ownFull!);
+});

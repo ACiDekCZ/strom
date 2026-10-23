@@ -3,7 +3,7 @@
  * see src/ui/module.ts for the composition pattern.
  */
 
-import { DataManager, auditPersonName } from '../data.js';
+import { DataManager, auditPersonName, storedTreeForExport } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
@@ -55,6 +55,12 @@ export type ExportFormat = 'json' | 'html' | 'gedcom' | 'csv' | 'all';
 let exportQuick = false;
 /** The export takes every tree (only the current one is measured; the others may hold sources). */
 let exportAllTrees = false;
+/**
+ * The one tree exported when it is not the open one (the tree manager's export
+ * of another tree): the estimate and the privacy note are its own, read from
+ * storage. `data` stays null until it is read; null id: the open tree.
+ */
+let exportOtherTree: { id: TreeId; data: StromData | null } | null = null;
 /** The encryption block while taken out of the dialog (GEDCOM, CSV). */
 let detachedEncryptBlock: HTMLElement | null = null;
 
@@ -845,10 +851,11 @@ export const encryptionUiMethods = uiModule({
      */
     syncExportPrivacyEffects(): void {
         const mode = this.readExportPrivacyMode();
-        const data = DataManager.getData();
+        // The exported tree: another than the open one is measured once it is read.
+        const data = exportOtherTree ? exportOtherTree.data : DataManager.getData();
         const section = document.getElementById('export-content-section');
         const showContent = !!section && section.style.display !== 'none';
-        const drops = mode !== 'full' && showContent && (exportAllTrees || hasSourcesOrAttachments(data));
+        const drops = mode !== 'full' && showContent && (exportAllTrees || (!!data && hasSourcesOrAttachments(data)));
         const p = strings.privacy;
         const privacyNote = document.getElementById('export-privacy-drops');
         if (privacyNote) {
@@ -871,11 +878,32 @@ export const encryptionUiMethods = uiModule({
         }
         const images = document.getElementById('export-source-images') as HTMLFieldSetElement | null;
         if (images) images.disabled = drops;
-        if (showContent) {
+        if (showContent && data) {
             // Per-category sizes computed here (open, privacy change); toggling never re-stringifies.
             this.readExportContentSizes(mode === 'full' ? data : applyLivingPrivacy(data, mode));
             this.updateExportSizeEstimate();
+        } else if (showContent) {
+            // Another tree not read yet: no estimate rather than the open tree's.
+            this.exportContentSizes = null;
+            const el = document.getElementById('export-content-size');
+            if (el) el.textContent = '';
         }
+    },
+
+    /**
+     * The tree the dialog sizes: the one exported. Another than the open tree
+     * is read from storage, and the note and estimate follow once it is in.
+     */
+    async setExportMeasuredTree(treeId: TreeId | null): Promise<void> {
+        const other = treeId && treeId !== DataManager.getCurrentTreeId() ? treeId : null;
+        const target = other ? { id: other, data: null as StromData | null } : null;
+        exportOtherTree = target;
+        if (!target) return;
+        const data = await storedTreeForExport(target.id).catch(() => null);
+        // A dialog opened meanwhile for another tree keeps its own.
+        if (exportOtherTree !== target) return;
+        target.data = data;
+        this.syncExportPrivacyEffects();
     },
 
     /** A single content checkbox changed: refresh the estimate and preset highlight. */
@@ -897,8 +925,12 @@ export const encryptionUiMethods = uiModule({
              * privacy or content choices.
              */
             quick?: { hint: string };
-            /** The one tree exported (its source images from the research may be offered). */
-            imagesTreeId?: string;
+            /**
+             * The one tree exported: it sizes the estimate and the privacy note
+             * (the open tree when not given); its source images from the
+             * research may be offered (the open tree only).
+             */
+            treeId?: TreeId;
             /** Every tree goes into the file (not only the current one). */
             allTrees?: boolean;
         } = {}
@@ -951,8 +983,9 @@ export const encryptionUiMethods = uiModule({
             }
         }
         // Source images from the research: offered for one tree that has any (not for a quick save).
-        this.setupExportSourceImages(showContent ? options.imagesTreeId ?? null : null);
-        // What the chosen privacy leaves out, and the estimate on what remains.
+        this.setupExportSourceImages(showContent ? options.treeId ?? null : null);
+        // What the chosen privacy leaves out, and the estimate on what remains: the exported tree's.
+        void this.setExportMeasuredTree(exportAllTrees ? null : options.treeId ?? null);
         this.syncExportPrivacyEffects();
         if (showContent) this.syncExportPresetHighlight();
 
