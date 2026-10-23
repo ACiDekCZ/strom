@@ -6,13 +6,13 @@
 
 *Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
 
-- **Materiály**: rodinné soubory uložené v Archivu Stromu nebo ve výzkumu se ukazují vedle příloh stromu: oddíl *Materiály* v editoru osoby, *Materiály osoby …* v nabídce karty a okno všech materiálů a dávek s prohlížečem, přiřazením k osobám, skrytím a obnovením.
+- **Materiály**: rodinné soubory uložené v Archivu Stromu nebo ve výzkumu se ukazují vedle příloh stromu: oddíl *Materiály* v editoru osoby, *Materiály osoby …* v nabídce karty a okno všech materiálů a dávek s prohlížečem, přiřazením k osobám, skrytím a obnovením; *Stáhnout* uloží soubor výzkumu pod jeho jménem, skrytí jednoho souboru ho jmenuje a dlouhé názvy souborů se lámou mezi svými částmi.
 - **Děti na místě**: záložka dětí na kartě a *Ukázat děti tady* ukážou děti osoby přímo u karty a druhé kliknutí je zase skryje; pohled zůstane. Ostatní karty se plynule odsunou, děti vyrostou z čáry svých rodičů a karty ukázaných dětí jsou zvýrazněné. Záložka se nabízí jen tam, kde ukázání dětí přidá někoho nového, i přes řetězce partnerů několika osob. Děti předka stojí vedle svého sourozence z přímé linie, pod rodiči, a žádná karta nezakrývá jinou; předkové, kteří by překáželi, se na chvíli složí pod přerušovanou značku *▸ rodiče*, jejíž kliknutí děti skryje a předky vrátí. Dítě nakreslené jinde ve stromu je u karty jmenované a dá se k němu přejít. *Skrýt ukázané děti* skryje všechna rozbalení najednou a vrátí pohled, jak byl.
 - **Archiv Stromu**: přepínač stromů rozliší *Archiv* od *Výzkumu*, do archivu jdou změny samy (tam doporučená volba) a výzkum, který čeká na svého agenta, se ukazuje jako archiv, dokud agent nezačne.
 - **Zadržené zápisy**: když výzkum zatím nemůže zapisovat (*Zapečetěno na jiném počítači*, *Soubory ještě nejsou stažené*, *Na disku není místo*), ukáže se jeho vlastní věta, změny tu čekají neodeslané a nic se samo znovu neposílá; jakmile výzkum hlásí, že je to vyřešené, blok zmizí.
 - **Jiné okno**: osoba odebraná posláním z jiného okna se ukáže jako *Odebráno v jiném okně* s nabídkou verze výzkumu; zda se osoba vrátí, nebo odejde, se rozhoduje jednou, a po rozhodnutí se verze výzkumu načte bez ptaní, když tu nic nečeká na poslání.
-- **Posílání**: změny, které jdou samy, se pošlou i při opuštění stránky, a změny čekající, dokud výzkum neběží, se počítají.
-- **Na telefonu** mají zprávy šířku telefonu, dlouhou větu zalomí a akci dají celou pod ni; nezakrývají tlačítka zpět a vpřed, tlačítka zoomu ani spodní lištu, ani když přijíždějí a odjíždějí; na tabletu už nepřejíždějí přes spodní lištu.
+- **Posílání**: změny, které jdou samy, se pošlou i při opuštění stránky, a změny čekající, dokud výzkum neběží, se počítají; zápis, který výzkum sám provede při sledování, už nepřinese nabídku zbytečně novější verze a změna jeho agenta se neztratí.
+- **Na telefonu** mají zprávy šířku telefonu, dlouhou větu zalomí a akci dají celou pod ni; nezakrývají tlačítka zpět a vpřed, tlačítka zoomu ani spodní lištu, ani když přijíždějí a odjíždějí; na tabletu už nepřejíždějí přes spodní lištu. Nabídka prohlídky ustoupí, dokud je zpráva vidět.
 - **Opravy**: nápověda a příklad u *Dalších tvarů jména* používají neutrální ukázkové tvary (*Brauschek*, *Prousek*) a anglický příklad uvádí anglické jméno statku místo českého.
 
 ## 3.15.0
