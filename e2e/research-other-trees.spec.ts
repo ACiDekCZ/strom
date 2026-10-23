@@ -343,12 +343,21 @@ test.describe('other research trees', () => {
             await expect(panel).toHaveClass(/collapsed/);
             const chip = panel.locator('.live-panel-head .rs-elsewhere-chip');
             await expect(chip).toHaveText(chipText);
-            const box = (await panel.boundingBox())!;
-            for (const part of [chip, panel.locator('.live-follow-btn'), panel.locator('.live-panel-expand'), panel.locator('.live-panel-action')]) {
-                const b = (await part.boundingBox())!;
-                expect(b.x).toBeGreaterThanOrEqual(box.x);
-                expect(b.x + b.width).toBeLessThanOrEqual(box.x + box.width);
-            }
+            // Measured in one step inside the page: the rounds re-render the panel, so a part replaced
+            // meanwhile is measured on the next round, never waited on.
+            await expect.poll(() => page.evaluate(() => {
+                const panel = document.querySelector('#live-panel');
+                if (!panel) return 'no panel';
+                const box = panel.getBoundingClientRect();
+                for (const sel of ['.live-panel-head .rs-elsewhere-chip', '.live-follow-btn', '.live-panel-expand', '.live-panel-action']) {
+                    const el = panel.querySelector(sel);
+                    if (!el) return `no ${sel}`;
+                    const b = el.getBoundingClientRect();
+                    if (!b.width) return `${sel} not shown`;
+                    if (b.left < box.left || b.right > box.right) return `${sel} outside`;
+                }
+                return 'inside';
+            })).toBe('inside');
         });
     }
     // A long tree name beside "running" and "1 waiting": the marks move to a second line before the name shortens.
@@ -389,16 +398,25 @@ test.describe('other research trees', () => {
             await expect(rows).toBeVisible();
             const name = rows.locator('.rs-elsewhere__name', { hasText: NAME });
             await expect(name).toBeVisible();
-            const fits = await name.evaluate(el => el.scrollWidth <= el.clientWidth);
-            expect(fits).toBe(true);
-            // The marks and the chevron stay inside the row.
-            const row = rows.locator('.rs-elsewhere__row', { hasText: NAME });
-            const rb = (await row.boundingBox())!;
-            for (const part of [row.locator('.rs-marks'), row.locator('.rs-elsewhere__chev')]) {
-                const b = (await part.boundingBox())!;
-                expect(b.x + b.width).toBeLessThanOrEqual(rb.x + rb.width + 0.5);
-            }
-            expect(await row.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+            // The name stays whole; the marks and the chevron stay inside the row. Measured in one step
+            // inside the page: a row re-rendered meanwhile is measured on the next round, never waited on.
+            await expect.poll(() => page.evaluate((n) => {
+                const row = [...document.querySelectorAll('#live-panel .rs-elsewhere__rows .rs-elsewhere__row')]
+                    .find(r => r.querySelector('.rs-elsewhere__name')?.textContent?.includes(n));
+                if (!row) return 'no row';
+                const nameEl = row.querySelector('.rs-elsewhere__name')!;
+                if (nameEl.scrollWidth > nameEl.clientWidth) return 'name cut';
+                if (row.scrollWidth > row.clientWidth) return 'row overflows';
+                const rb = row.getBoundingClientRect();
+                for (const sel of ['.rs-marks', '.rs-elsewhere__chev']) {
+                    const el = row.querySelector(sel);
+                    if (!el) return `no ${sel}`;
+                    const b = el.getBoundingClientRect();
+                    if (!b.width) return `${sel} not shown`;
+                    if (b.right > rb.right + 0.5) return `${sel} outside`;
+                }
+                return 'inside';
+            }, NAME)).toBe('inside');
         });
     }
 });

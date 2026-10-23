@@ -76,10 +76,23 @@ async function follow(page: Page, size = { width: 1440, height: 900 }): Promise<
 
 const viewer = (page: Page) => page.locator('#source-viewer-modal');
 
+/**
+ * Open the overview once the following is ready for it: under load the
+ * sources can be in the data before the live session takes the tree, and an
+ * open asked that early does nothing. Asked again on the next round, never
+ * waited on once.
+ */
+async function openOverview(page: Page): Promise<void> {
+    await expect.poll(() => page.evaluate(() => {
+        if (!window.Strom.UI.isResearchOverviewOpen()) window.Strom.UI.openResearchOverview();
+        return window.Strom.UI.isResearchOverviewOpen();
+    })).toBe(true);
+}
+
 test.describe('sources in the research history', () => {
     test('the overview links a source to its viewer, read only, following goes on, focus back; newer, taken back, without sources', async ({ page }) => {
         await follow(page);
-        await page.evaluate(() => window.Strom.UI.openResearchOverview());
+        await openOverview(page);
         const ov = page.locator('#research-overview');
         const rows = ov.locator('.research-overview__row');
         await expect(rows).toHaveCount(4);
@@ -126,7 +139,7 @@ test.describe('sources in the research history', () => {
 
     test('phone: the viewer opens above the overview sheet, which stays under it', async ({ page }) => {
         await follow(page, { width: 390, height: 844 });
-        await page.evaluate(() => window.Strom.UI.openResearchOverview());
+        await openOverview(page);
         const ov = page.locator('#research-overview');
         await expect(ov).toHaveClass(/research-overview--sheet/);
         await ov.locator('.live-source-link').click();
@@ -166,7 +179,7 @@ test.describe('the overview head and the history links, narrow (de-DE)', () => {
     for (const size of [{ width: 1024, height: 768 }, { width: 390, height: 844 }]) {
         test(`${size.width}px: the title whole, Stop under it, the name seen`, async ({ page }) => {
             await follow(page, size);
-            await page.evaluate(() => window.Strom.UI.openResearchOverview());
+            await openOverview(page);
             await expect(page.locator('#research-overview .research-overview__title')).toHaveText('Forschungsübersicht');
             expect(await head(page)).toEqual({ titleWhole: true, titlesFit: true, stopClearOfTitle: true, nameShown: true });
         });
@@ -174,7 +187,7 @@ test.describe('the overview head and the history links, narrow (de-DE)', () => {
 
     test('a source title in a history line starts at the left, not centred', async ({ page }) => {
         await follow(page, { width: 1024, height: 768 });
-        await page.evaluate(() => window.Strom.UI.openResearchOverview());
+        await openOverview(page);
         const link = page.locator('#research-overview .live-source-link').first();
         await expect(link).toHaveText(TITLE);
         expect(await link.evaluate(el => getComputedStyle(el).textAlign)).toBe('start');
