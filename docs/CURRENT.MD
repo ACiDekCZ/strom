@@ -50,6 +50,17 @@ unions' children are added; for `DisplayPolicy.appendagePersonIds` (deep
 direct-line ancestors) only the partner + partnership are added — the extra
 union's children are deliberately NOT pulled in (see Partner Chains below).
 
+Children shown in place (`PipelineInput.expandChildrenOf`, the card's
+"children" tab): after `expandSelectionForDisplay`, `expandChildrenInSelection`
+adds, for every listed person already in the selection, each of their unions
+with children — the partner, the partnership and the children (not the
+children's partners or descendants) — and lifts the person's depth limit.
+`withChildrenShown` (pipeline orchestrator) then puts a listed person with more
+than one partnership in the selection into `expandedPersonIds` (out of the
+appendage set), so each union is a chain slot and its children hang under
+their own couple, in the standard display too. The rest of the pipeline is
+unchanged; hiding the children again gives the original input and layout.
+
 ---
 
 ### Step 2: buildLayoutModel
@@ -238,7 +249,8 @@ resolveAncestorTreeOverlap(hTree, wTree)
 transferAncestorTreeToBlocks(hTree)
 transferAncestorTreeToBlocks(wTree)
 
-// 8. Handle collateral ancestors
+// 8. Handle collateral ancestors (passes until nothing moves, at most 20;
+//    ancestors' children shown in place can need more than a few)
 resolveOverlapsOutward()
 
 // 9. Verify locked positions unchanged

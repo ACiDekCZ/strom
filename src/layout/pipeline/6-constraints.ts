@@ -1316,8 +1316,9 @@ export function applyConstraints(input: ConstraintsInput): ConstrainedModel {
         // The independent tree placement handles DIRECT ancestors.
         // For collateral ancestors (siblings of ancestors, their spouses, etc.)
         // that weren't placed by the independent trees, we need overlap resolution.
-        // Use a limited number of passes to avoid disrupting the compact placement.
-        for (let pass = 0; pass < 3; pass++) {
+        // Passes stop once nothing moves; ancestors' children shown in place
+        // (PipelineInput.expandChildrenOf) can need more than a few.
+        for (let pass = 0; pass < 20; pass++) {
             const delta = resolveOverlapsOutward(blocks, model, fbm.unionToBlock, config);
             if (delta < 0.5) break;
         }

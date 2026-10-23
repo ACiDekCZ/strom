@@ -226,19 +226,26 @@ export function unionOrderBadges(
 
 // ============= Hidden-relatives tabs =============
 
-/** A hidden-relatives tab on a card's top edge ("◂ parents", "◆ siblings", "▸ family"). */
-export type HiddenRelativesTab = 'parents' | 'siblings' | 'children';
+/**
+ * A hidden-relatives tab on a card's top edge ("◂ parents", "◆ siblings",
+ * "▸ children"); "▾ children" (childrenShown) is the children tab while the
+ * view shows the person's children in place.
+ */
+export type HiddenRelativesTab = 'parents' | 'siblings' | 'children' | 'childrenShown';
 
 /**
- * The hidden-relatives tabs of a card, in the order the card shows them: a
- * direction gets one when the person has relatives there and none of them is
- * in view. Siblings count only as children of a union (as the layout does).
+ * The hidden-relatives tabs of a card, in the order the card shows them:
+ * parents and siblings get one when the person has relatives there and none
+ * of them is in view (siblings count only as children of a union, as the
+ * layout does). Children get one when any child (not a "?" stand-in) is out
+ * of view, or as "childrenShown" while `childrenShown` holds the person.
  */
 export function hiddenRelativesTabs(
     data: StromData,
     personId: PersonId,
     inView: (id: PersonId) => boolean,
-    unionChildIds: ReadonlySet<PersonId>
+    unionChildIds: ReadonlySet<PersonId>,
+    childrenShown: ReadonlySet<PersonId> = new Set()
 ): HiddenRelativesTab[] {
     const person = data.persons[personId];
     if (!person) return [];
@@ -251,8 +258,17 @@ export function hiddenRelativesTabs(
         }
     }
     if (siblings.size > 0 && ![...siblings].some(inView)) out.push('siblings');
-    if (person.childIds.length > 0 && !person.childIds.some(inView)) out.push('children');
+    if (childrenShown.has(personId)) out.push('childrenShown');
+    else if (hiddenChildIds(data, personId, inView).length > 0) out.push('children');
     return out;
+}
+
+/** The person's children out of view, in data order ("?" stand-ins never count). */
+export function hiddenChildIds(data: StromData, personId: PersonId, inView: (id: PersonId) => boolean): PersonId[] {
+    return (data.persons[personId]?.childIds ?? []).filter(id => {
+        const child = data.persons[id];
+        return !!child && !child.isPlaceholder && !inView(id);
+    });
 }
 
 /**

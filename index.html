@@ -3102,6 +3102,19 @@
         /* The action badge on the avatar's corner stays whole above a left pill. */
         .person-card:has(.edge-top-left .union-order-pill) .card-avatar-wrap { z-index: 7; }
 
+        /* A card whose tabs do not fit with their words (three tabs, long
+           words; tabsGlyphsOnly in src/union-order-measure.ts): the glyphs
+           alone, the words kept for screen readers; the bubble names them. */
+        .tabs-glyph > .branch-tab > .pill-text {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            overflow: hidden;
+            clip-path: inset(50%);
+            white-space: nowrap;
+        }
+        .tabs-glyph > .branch-tab { padding: 0 6px; gap: 0; }
+
         /* Active branch tab: a filled primary pill, no copper glyph. */
         .branch-tab.active {
             background: var(--primary);
@@ -3156,8 +3169,10 @@
         } }
         /* A line link (a line the layout left out, src/renderer.ts lineLinkTabsHtml):
            the branch tab; from the keyboard it shows its bubble too. */
-        .branch-tab.line-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-        .branch-tab.line-link:focus-visible .badge-tooltip { display: block; }
+        .branch-tab.line-link:focus-visible,
+        .branch-tab.children-tab:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .branch-tab.line-link:focus-visible .badge-tooltip,
+        .branch-tab.children-tab:focus-visible .badge-tooltip { display: block; }
         .badge-tooltip-header {
             font-weight: 600;
             font-size: 10.5px;
@@ -3184,6 +3199,13 @@
             color: var(--text-faint);
             font-size: 11px;
             font-variant-numeric: tabular-nums;
+        }
+        /* What a click on the tab does (the children tab: shown here, hidden again). */
+        .badge-tooltip-hint {
+            padding-top: 6px;
+            color: var(--text-faint);
+            font-size: 11px;
+            line-height: 1.4;
         }
 
         /* ==================== CROSS-TREE BADGE ==================== */

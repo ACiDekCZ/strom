@@ -987,6 +987,18 @@ class ZoomPanClass {
         this.changeListeners.push(cb);
     }
 
+    /**
+     * Pan so that what stood at a world point now stands where the point
+     * moved by (dx, dy): a card the layout moved keeps its place on the screen.
+     */
+    shiftWorld(dx: number, dy: number): void {
+        if (!dx && !dy) return;
+        this.settleAnimation();
+        this.tx -= dx * this.scale;
+        this.ty -= dy * this.scale;
+        this.apply();
+    }
+
     /** Center the viewport on a world-space point, keeping the current scale. */
     centerOnWorldPoint(worldX: number, worldY: number): void {
         this.settleAnimation();

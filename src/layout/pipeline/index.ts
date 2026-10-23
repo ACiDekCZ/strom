@@ -19,7 +19,7 @@ export * from './types.js';
 export * from './debug-types.js';
 
 // Re-export individual steps
-export { selectSubgraph, expandSelectionForDisplay } from './1-select-subgraph.js';
+export { selectSubgraph, expandSelectionForDisplay, expandChildrenInSelection } from './1-select-subgraph.js';
 export { buildLayoutModel, getChildUnions } from './2-build-model.js';
 export { assignGenerations, validateGenerations } from './3-assign-generations.js';
 export { measureSubtrees, getTotalWidth } from './4-measure.js';
@@ -51,7 +51,7 @@ import {
     DEBUG_STEP_NAMES
 } from './debug-types.js';
 
-import { selectSubgraph, expandSelectionForDisplay } from './1-select-subgraph.js';
+import { selectSubgraph, expandSelectionForDisplay, expandChildrenInSelection } from './1-select-subgraph.js';
 import { buildLayoutModel } from './2-build-model.js';
 import { assignGenerations } from './3-assign-generations.js';
 import { measureSubtrees } from './4-measure.js';
@@ -370,6 +370,31 @@ export function collectBloodRelatives(data: StromData, personId: PersonId): Set<
 }
 
 /**
+ * Show the children of the given persons in place (the card's "children"
+ * tab, PipelineInput.expandChildrenOf), after the display expansion has
+ * pulled in everyone it adds. A person who now stands in more than one
+ * union is laid out as a partner chain (each union's children under
+ * that union), as the expanded mode does: the standard mode draws one union
+ * per person and would leave the others' children out.
+ */
+function withChildrenShown(
+    data: StromData,
+    selection: GraphSelection,
+    policy: DisplayPolicy,
+    personIds: readonly PersonId[] | undefined
+): DisplayPolicy {
+    if (!personIds?.length) return policy;
+    expandChildrenInSelection(data, selection, personIds);
+    const chained = personIds.filter(id => selection.persons.has(id)
+        && (data.persons[id]?.partnerships ?? []).filter(pid => selection.partnerships.has(pid)).length > 1);
+    if (chained.length === 0) return policy;
+    const expanded = new Set(policy.expandedPersonIds ?? []);
+    for (const id of chained) expanded.add(id);
+    const appendage = policy.appendagePersonIds && new Set([...policy.appendagePersonIds].filter(id => !expanded.has(id)));
+    return { ...policy, mode: 'expanded', expandedPersonIds: expanded, ...(appendage ? { appendagePersonIds: appendage } : {}) };
+}
+
+/**
  * Run the complete layout pipeline.
  */
 export function runLayoutPipeline(input: PipelineInput): LayoutResult {
@@ -442,6 +467,8 @@ export function runLayoutPipeline(input: PipelineInput): LayoutResult {
 
     // Expand selection for expanded persons (add missing partners/children)
     expandSelectionForDisplay(data, selection, effectivePolicy);
+    // Children shown in place (the card's "children" tab)
+    effectivePolicy = withChildrenShown(data, selection, effectivePolicy, input.expandChildrenOf);
 
     // Empty "?" stand-ins are not drawn (T11)
     const hiddenPersonIds = hidePlaceholders(data, selection, focusPersonId);
@@ -625,6 +652,7 @@ export function runLayoutPipelineWithDebug(
 
     // Expand selection for expanded persons (add missing partners/children)
     expandSelectionForDisplay(data, selection, effectivePolicyDebug);
+    effectivePolicyDebug = withChildrenShown(data, selection, effectivePolicyDebug, input.expandChildrenOf);
     const hiddenPersonIdsDebug = hidePlaceholders(data, selection, focusPersonId);
 
     snapshots.push(createSnapshot(1, { selection }));
@@ -768,7 +796,8 @@ export class StromLayoutEngine implements LayoutEngine {
             includeParentSiblingDescendants: request.policy.includeCousins,
             displayPolicy: request.displayPolicy,
             viewLinks: request.viewLinks,
-            includeView: request.includeView
+            includeView: request.includeView,
+            expandChildrenOf: request.expandChildrenOf
         });
     }
 }

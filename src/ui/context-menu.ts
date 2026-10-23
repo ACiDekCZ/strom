@@ -155,9 +155,15 @@ export const contextMenuMethods = uiModule({
 
         // Linked in the view only: never a change of the data, so offered in every variant.
         const vl = this.personViewLinkMenu(personId);
+        // The children in place (the card's children tab), by "Focus" in every variant (the view only).
+        const children: PersonMenuAction[] = TreeRenderer.canToggleChildren(personId) ? [{
+            action: 'toggle-children', sheetTop: true,
+            label: TreeRenderer.isChildrenShown(personId) ? c.hideChildrenHere : c.showChildrenHere,
+        }] : [];
         if (isViewMode) {
             return withViewLinkRows([
                 { action: 'focus', label: c.focus },
+                ...children,
                 ...readItems(false),
                 ...group([
                     { action: 'relationship', label: c.relationship },
@@ -169,6 +175,7 @@ export const contextMenuMethods = uiModule({
         if (isPersonLocked) {
             return withViewLinkRows([
                 { action: 'focus', label: c.focus },
+                ...children,
                 // Read-only look at the record (the edit form in its locked mode).
                 { action: 'view', label: c.view },
                 ...readItems(false),
@@ -181,6 +188,7 @@ export const contextMenuMethods = uiModule({
         const chip = (action: string, label: string, ariaLabel: string): PersonMenuAction => ({ action, label, ariaLabel });
         return withViewLinkRows([
             { action: 'focus', label: c.focus },
+            ...children,
             { action: 'edit', label: c.edit },
             ...readItems(true),
             { action: 'descendants', label: c.showDescendants },
@@ -229,6 +237,9 @@ export const contextMenuMethods = uiModule({
                     TreeRenderer.presetViewMode('family');
                 }
                 TreeRenderer.setFocus(personId);
+                break;
+            case 'toggle-children':
+                void TreeRenderer.toggleChildrenShown(personId);
                 break;
             case 'sources':
                 this.clearDialogStack();

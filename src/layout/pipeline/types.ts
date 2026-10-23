@@ -572,6 +572,12 @@ export interface PipelineInput {
     viewLinks?: readonly ViewLink[];
     /** false: lay out without the view links even when given (the outputs' switch). Default true. */
     includeView?: boolean;
+    /**
+     * Persons whose children the view shows in place (the card's "children"
+     * tab): every union of a person in the selection adds its partner and its
+     * children (without the children's own partners or descendants).
+     */
+    expandChildrenOf?: readonly PersonId[];
 }
 
 // ==================== ANCESTOR CLUSTER ====================
@@ -637,4 +643,6 @@ export interface LayoutRequest {
     viewLinks?: readonly ViewLink[];
     /** See PipelineInput.includeView. */
     includeView?: boolean;
+    /** See PipelineInput.expandChildrenOf. */
+    expandChildrenOf?: readonly PersonId[];
 }

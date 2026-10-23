@@ -64,10 +64,10 @@ import { isMobile as isMobileViewport } from './breakpoints.js';
 import { parentRelKind, parentRelDash, connectionDash } from './parent-rel-style.js';
 import { isDiagramStandIn } from './layout/pipeline/placeholders.js';
 import {
-    unionOrderBadges, UnionOrderBadge, hiddenRelativesTabs, BranchTab, lineLinksOf, lineLinkTabs, LineLinks, placeUnionOrderPill, PillPlacement, REL_LINK_ICON_WIDTH,
+    unionOrderBadges, UnionOrderBadge, hiddenRelativesTabs, hiddenChildIds, BranchTab, lineLinksOf, lineLinkTabs, LineLinks, placeUnionOrderPill, PillPlacement, REL_LINK_ICON_WIDTH,
     viewLineSegments, segmentsNearCard, EDGE_INSET, PillLabel, pillLabelForms, pillLabelWidths, unionSummaries,
 } from './marriage-order.js';
-import { measureUnionOrderPills, measureTabRows, rowKey, unionOrderPillKey, unionOrderPillPartsHtml, pillFontsPending, branchTabRestHtml } from './union-order-measure.js';
+import { measureUnionOrderPills, measureTabRows, rowKey, unionOrderPillKey, unionOrderPillPartsHtml, pillFontsPending, branchTabRestHtml, tabsGlyphsOnly } from './union-order-measure.js';
 import { openCardMenuFromKeyboard } from './ui/keyboard-access.js';
 import { syncDepthStepper } from './ui/depth-stepper.js';
 import {
@@ -268,6 +268,12 @@ class TreeRendererClass {
 
     /** Blood descendants of the focus (incl. focus) — filled in descendants view. */
     private bloodDescendantIds: Set<PersonId> | null = null;
+    /**
+     * Persons whose children the family view shows in place (the card's
+     * children tab, PipelineInput.expandChildrenOf), in the order shown.
+     * A view of its own: cleared with a new focus, view mode or tree.
+     */
+    private childrenShownIds: PersonId[] = [];
     /** Incremented per render; stale async renders bail out (see renderInternal). */
     private renderSeq = 0;
     /** Signature of the last places datalist, to skip rebuilding it unchanged. */
@@ -505,6 +511,7 @@ class TreeRendererClass {
                 expandLineageOnly: descendantsOnly && !this.isDescendantsFullFamilies()
             },
             ...(viewLinks.length > 0 ? { viewLinks } : {}),
+            ...(!descendantsOnly && this.childrenShownIds.length > 0 ? { expandChildrenOf: this.childrenShownIds } : {}),
         };
 
         // Use debug pipeline if debug mode is enabled
@@ -519,7 +526,8 @@ class TreeRendererClass {
                     includeSpouseAncestors: false,
                     includeParentSiblings: request.policy.includeAuntsUncles,
                     includeParentSiblingDescendants: request.policy.includeCousins,
-                    viewLinks: request.viewLinks
+                    viewLinks: request.viewLinks,
+                    expandChildrenOf: request.expandChildrenOf
                 },
                 this.debugOptions
             );
@@ -894,6 +902,7 @@ class TreeRendererClass {
         // Tree load/switch/startup: the focus that follows is programmatic,
         // not user navigation, so history starts empty for the new tree.
         this.resetFocusHistory();
+        this.childrenShownIds = [];
         // Restore the per-tree display view mode on tree switch / startup.
         this.loadViewModeForCurrentTree();
 
@@ -958,6 +967,8 @@ class TreeRendererClass {
             this.focusForward = [];
         }
 
+        // Children shown in place belong to the view they were shown in
+        if (this.focusPersonId !== personId) this.childrenShownIds = [];
         this.focusPersonId = personId;
 
         // Set default depth to max available when focusing on a new person
@@ -985,6 +996,43 @@ class TreeRendererClass {
                 ZoomPan.centerOnPerson(focusId);
             }
         });
+    }
+
+    // ==================== CHILDREN SHOWN IN PLACE ====================
+
+    private childrenShownSet(): ReadonlySet<PersonId> {
+        return new Set(this.childrenShownIds);
+    }
+
+    /** Whether the family view shows the person's children in place (the children tab). */
+    isChildrenShown(personId: PersonId): boolean {
+        return this.childrenShownIds.includes(personId);
+    }
+
+    /**
+     * Whether the person's card offers the children tab: the family view,
+     * the person drawn, their children shown in place or any of them out of
+     * view.
+     */
+    canToggleChildren(personId: PersonId): boolean {
+        if (this.viewMode !== 'family' || !this.positions.has(personId)) return false;
+        return this.isChildrenShown(personId)
+            || hiddenChildIds(DataManager.getData(), personId, id => this.positions.has(id)).length > 0;
+    }
+
+    /**
+     * Show the person's children in place, or hide the shown ones again. The
+     * focus, depth and zoom stay; the person's card keeps its place on the
+     * screen. Hiding lays the view out as it was before.
+     */
+    async toggleChildrenShown(personId: PersonId): Promise<void> {
+        const before = this.positions.get(personId);
+        this.childrenShownIds = this.isChildrenShown(personId)
+            ? this.childrenShownIds.filter(id => id !== personId)
+            : [...this.childrenShownIds, personId];
+        await this.renderInternal();
+        const after = this.positions.get(personId);
+        if (before && after) ZoomPan.shiftWorld(after.x - before.x, after.y - before.y);
     }
 
     setFocusDepth(up: number, down: number): void {
@@ -1030,6 +1078,7 @@ class TreeRendererClass {
     presetViewMode(mode: ViewMode): void {
         if (this.viewMode === mode) return;
         this.viewMode = mode;
+        this.childrenShownIds = [];
         this.persistViewMode();
     }
 
@@ -1037,6 +1086,7 @@ class TreeRendererClass {
     setViewMode(mode: ViewMode): void {
         if (this.viewMode === mode) return;
         this.viewMode = mode;
+        this.childrenShownIds = [];
         this.persistViewMode();
         // The modes lay the tree out in different coordinate frames — the
         // pan/zoom state from the previous mode can leave every card outside
@@ -1707,9 +1757,10 @@ class TreeRendererClass {
             // Hidden parents, siblings (children of a union, as the layout
             // counts them) or children: a branch tab each (one rule with the
             // marriage-order pill's layout, src/marriage-order.ts).
-            const hiddenTabs = hiddenRelativesTabs(DataManager.getData(), id, pid => this.positions.has(pid), partnershipChildIds);
+            const hiddenTabs = hiddenRelativesTabs(DataManager.getData(), id, pid => this.positions.has(pid), partnershipChildIds, this.childrenShownSet());
             const hasHiddenParents = hiddenTabs.includes('parents');
             const hasHiddenChildren = hiddenTabs.includes('children');
+            const childrenShown = hiddenTabs.includes('childrenShown');
             const hasHiddenSiblings = hiddenTabs.includes('siblings');
             const siblings = hasHiddenSiblings ? DataManager.getSiblings(id).filter(s => partnershipChildIds.has(s.id)) : [];
 
@@ -1723,7 +1774,7 @@ class TreeRendererClass {
             // Branch tabs (top-right edge slot): one pill per hidden direction.
             // Built into a string here; assembled into the edge container below.
             let branchTabsHtml = '';
-            if (showHiddenBadges && (hasHiddenParents || hasHiddenChildren || hasHiddenSiblings)) {
+            if (showHiddenBadges && (hasHiddenParents || hasHiddenChildren || childrenShown || hasHiddenSiblings)) {
                 if (hasHiddenParents) {
                     const hiddenParents = person.parentIds
                         .filter(pid => !this.positions.has(pid))
@@ -1745,17 +1796,25 @@ class TreeRendererClass {
                     }).join('');
                     branchTabsHtml += `<button class="branch-tab" data-action="focus-sibling"><span class="pill-glyph">◆</span><span class="pill-text">${strings.focus.branchTabSiblings}</span><div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenSiblingsTooltip}</div>${siblingItems}</div></button>`;
                 }
-                if (hasHiddenChildren) {
-                    const hiddenChildren = person.childIds
-                        .filter(cid => !this.positions.has(cid))
+                // Children: shown in place and hidden again (the view stays)
+                if (hasHiddenChildren || childrenShown) {
+                    const ids = childrenShown
+                        ? person.childIds.filter(cid => this.positions.has(cid))
+                        : hiddenChildIds(DataManager.getData(), id, cid => this.positions.has(cid));
+                    const childItems = ids
                         .map(cid => DataManager.getPerson(cid))
-                        .filter((c): c is Person => c !== null);
-                    const childItems = hiddenChildren.map(c => {
-                        const name = shownName(c, '?');
-                        const year = displayYear(c.birthDate);
-                        return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(name)}</span>${year ? `<span class="badge-tooltip-detail"> *${this.escapeHtml(year)}</span>` : ''}</div>`;
-                    }).join('');
-                    branchTabsHtml += `<button class="branch-tab" data-action="focus-child"><span class="pill-glyph">▸</span><span class="pill-text">${strings.focus.branchTabChildren}</span><div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenChildrenTooltip}</div>${childItems}</div></button>`;
+                        .filter((c): c is Person => c !== null)
+                        .map(c => {
+                            const name = shownName(c, '?');
+                            const year = displayYear(c.birthDate);
+                            return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(name)}</span>${year ? `<span class="badge-tooltip-detail"> *${this.escapeHtml(year)}</span>` : ''}</div>`;
+                        }).join('');
+                    const header = childrenShown ? strings.focus.childrenShownTooltip : strings.focus.hiddenChildrenTooltip;
+                    const hint = childrenShown ? strings.focus.childrenTabHideHint : strings.focus.childrenTabShowHint;
+                    const aria = (childrenShown ? strings.focus.childrenTabHideAria : strings.focus.childrenTabShowAria)(fullTitle);
+                    branchTabsHtml += `<button type="button" class="branch-tab children-tab${childrenShown ? ' active' : ''}" data-action="toggle-children" aria-pressed="${childrenShown}" aria-label="${this.escapeHtml(aria)}">`
+                        + `<span class="pill-glyph">${childrenShown ? '▾' : '▸'}</span><span class="pill-text">${strings.focus.branchTabChildren}</span>`
+                        + `<div class="badge-tooltip"><div class="badge-tooltip-header">${header}</div>${childItems}<div class="badge-tooltip-hint">${hint}</div></div></button>`;
                 }
             }
 
@@ -1964,7 +2023,10 @@ class TreeRendererClass {
             // pointer-events:none (children re-enable auto) so the gaps between
             // pills never steal a click meant for the card.
             if (leftOrderHtml || parentAddHtml) html += `<div class="card-edge edge-top-left">${leftOrderHtml}${parentAddHtml}</div>`;
-            if (chainHtml || rightOrderHtml || branchTabsHtml) html += `<div class="card-edge edge-top-right">${chainHtml}${rightOrderHtml}${branchTabsHtml}</div>`;
+            // Tabs too wide for the card (three of them, long words): the glyphs alone
+            const tabKinds = [...(showHiddenBadges ? hiddenTabs : []), ...lineLinkTabs(this.lineLinks.get(id))];
+            const tabsGlyph = tabsGlyphsOnly(tabKinds, this.tabRoom(id, card.classList.contains('has-signal')));
+            if (chainHtml || rightOrderHtml || branchTabsHtml) html += `<div class="card-edge edge-top-right${tabsGlyph ? ' tabs-glyph' : ''}">${chainHtml}${rightOrderHtml}${branchTabsHtml}</div>`;
             // Above the tabs: placed from the card's padding edge (the border inside the box).
             if (orderSlot?.row === 'above') html += `<div class="card-edge edge-top-above" style="left:${(orderSlot.x - orderSlot.border).toFixed(2)}px">${orderHtml}</div>`;
             if (hiddenIndicatorsHtml) {
@@ -2108,8 +2170,13 @@ class TreeRendererClass {
                 });
             }
 
-            // Attach event listeners for branch tabs - all focus on this person
-            const branchTabs = card.querySelectorAll('.branch-tab:not(.line-link)');
+            // The children tab shows (hides) the children in place
+            card.querySelector('.branch-tab.children-tab')?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                void this.toggleChildrenShown(id);
+            });
+            // The other branch tabs focus on this person
+            const branchTabs = card.querySelectorAll('.branch-tab:not(.line-link):not(.children-tab)');
             branchTabs.forEach(tab => {
                 tab.addEventListener('click', (e) => {
                     e.stopPropagation();
@@ -3310,10 +3377,16 @@ class TreeRendererClass {
         const tabsOf = new Map<PersonId, BranchTab[]>();
         for (const id of badges.keys()) {
             // The line links show in every view (the descendants chart too)
-            const hidden = showTabs ? hiddenRelativesTabs(data, id, pid => this.positions.has(pid), unionChildIds) : [];
+            const hidden = showTabs ? hiddenRelativesTabs(data, id, pid => this.positions.has(pid), unionChildIds, this.childrenShownSet()) : [];
             tabsOf.set(id, [...hidden, ...lineLinkTabs(this.lineLinks.get(id))]);
         }
-        const tabRows = measureTabRows(tabsOf.values());
+        const glyphsOf = new Map([...tabsOf].map(([id, kinds]) => {
+            const person = DataManager.getPerson(id);
+            const signals = person ? cardSignalInfo(person, signalCtx) : null;
+            return [id, tabsGlyphsOnly(kinds, this.tabRoom(id, !!signals && (!!signals.action || signals.showAgent || signals.doneSince !== null)))];
+        }));
+        const tabRows = measureTabRows([...tabsOf].filter(([id]) => !glyphsOf.get(id)).map(([, kinds]) => kinds));
+        const glyphRows = measureTabRows([...tabsOf].filter(([id]) => glyphsOf.get(id)).map(([, kinds]) => kinds), true);
         const segments = viewLineSegments({ connections: this.connections, spouseLines: this.spouseLines });
         const compact = SettingsManager.getCardDensity() === 'compact';
         const W = this.config.cardWidth;
@@ -3333,7 +3406,7 @@ class TreeRendererClass {
                 side: b.side,
                 ...pillLabelWidths(forms, forms.map(f => pills.get(unionOrderPillKey(f.ordinal, f.year, f.glyph))!.width)),
                 leftTabs: 0,
-                rightTabs: tabRows.get(rowKey(tabsOf.get(id)!)) ?? 0,
+                rightTabs: (glyphsOf.get(id) ? glyphRows.get(rowKey(tabsOf.get(id)!, true)) : tabRows.get(rowKey(tabsOf.get(id)!))) ?? 0,
                 leftInset: border + EDGE_INSET,
                 rightInset: border + EDGE_INSET + (signal ? 8 : 0),
                 rightHover: DataManager.isPersonLocked(id) ? 0 : hoverIcon,
@@ -3345,6 +3418,16 @@ class TreeRendererClass {
         const seq = this.renderSeq;
         pillFontsPending()?.then(() => { if (seq === this.renderSeq) this.render(); });
         return out;
+    }
+
+    /**
+     * The room of a card's top-edge tabs (tabsGlyphsOnly): the card's width
+     * less both corner insets, the compact card's 8px beside a status badge.
+     */
+    private tabRoom(id: PersonId, signal: boolean): number {
+        const border = id === this.focusPersonId ? 2 : 1;
+        const badge = signal && SettingsManager.getCardDensity() === 'compact' ? 8 : 0;
+        return this.config.cardWidth - 2 * (border + EDGE_INSET) - badge;
     }
 
     /**

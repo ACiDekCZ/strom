@@ -53,7 +53,7 @@ export function unionOrderPillPartsHtml(ordinal: string, year: string, glyph = t
 }
 
 const TAB_GLYPH: Record<BranchTab, string> = {
-    parents: '◂', siblings: '◆', children: '▸', linkParents: '◂', linkChild: '▸', linkChildren: '▸',
+    parents: '◂', siblings: '◆', children: '▸', childrenShown: '▾', linkParents: '◂', linkChild: '▸', linkChildren: '▸',
 };
 
 /** The word of a card's top-edge tab (a hidden-relatives tab or a line link). */
@@ -61,7 +61,8 @@ export function tabLabel(kind: BranchTab): string {
     switch (kind) {
         case 'parents': return strings.focus.branchTabParents;
         case 'siblings': return strings.focus.branchTabSiblings;
-        case 'children': return strings.focus.branchTabChildren;
+        case 'children':
+        case 'childrenShown': return strings.focus.branchTabChildren;
         case 'linkParents': return strings.focus.linkTabParents;
         case 'linkChild': return strings.focus.linkTabChild;
         case 'linkChildren': return strings.focus.linkTabChildren;
@@ -136,27 +137,28 @@ export function measureUnionOrderPill(ordinal: string, year: string, glyph = tru
 /** The key of a pill in measureUnionOrderPills' result. */
 export { pillKey as unionOrderPillKey };
 
-/** The key of a row of tabs in measureTabRows' result (its words: the language's). */
-export function rowKey(kinds: readonly BranchTab[]): string {
-    return kinds.map(k => `${k}:${tabLabel(k)}`).join(',');
+/** The key of a row of tabs in measureTabRows' result (its words: the language's; `glyphs`: the glyphs alone). */
+export function rowKey(kinds: readonly BranchTab[], glyphs = false): string {
+    return kinds.map(k => `${k}:${tabLabel(k)}`).join(',') + (glyphs ? '|glyphs' : '');
 }
 
 /**
  * Widths of rows of resting top-edge tabs (hidden relatives, line links; 4px apart, as on the card's
- * top edge), one per distinct row; 0 for an empty row.
+ * top edge), one per distinct row; 0 for an empty row. `glyphs`: the rows of a card whose tabs show
+ * their glyphs alone (.tabs-glyph, see tabsGlyphsOnly).
  */
-export function measureTabRows(rows: Iterable<readonly BranchTab[]>): Map<string, number> {
+export function measureTabRows(rows: Iterable<readonly BranchTab[]>, glyphs = false): Map<string, number> {
     const out = new Map<string, number>();
     const todo: Array<{ key: string; kinds: readonly BranchTab[] }> = [];
     for (const kinds of rows) {
-        const key = rowKey(kinds);
+        const key = rowKey(kinds, glyphs);
         if (out.has(key)) continue;
         if (kinds.length === 0) { out.set(key, 0); continue; }
         const hit = tabCache.get(key);
         if (hit !== undefined) out.set(key, hit);
         else {
             // Estimate: 7px padding and a 1px border a side, the glyph and the word.
-            out.set(key, kinds.reduce((w, k) => w + 16 + 11 + 3 + tabLabel(k).length * 5.6, 0) + 4 * (kinds.length - 1));
+            out.set(key, kinds.reduce((w, k) => w + 16 + 11 + (glyphs ? 0 : 3 + tabLabel(k).length * 5.6), 0) + 4 * (kinds.length - 1));
             todo.push({ key, kinds });
         }
     }
@@ -165,6 +167,7 @@ export function measureTabRows(rows: Iterable<readonly BranchTab[]>): Map<string
     const els = todo.map(t => {
         const row = document.createElement('div');
         row.style.cssText = 'display:flex;align-items:center;gap:4px;width:max-content;height:18px;';
+        if (glyphs) row.className = 'tabs-glyph';
         row.innerHTML = t.kinds.map(k => `<button class="branch-tab" type="button">${branchTabRestHtml(k)}</button>`).join('');
         host.appendChild(row);
         return row;
@@ -179,4 +182,14 @@ export function measureTabRows(rows: Iterable<readonly BranchTab[]>): Map<string
     });
     host.remove();
     return out;
+}
+
+/**
+ * Whether a card's top-edge tabs show their glyphs alone: with their words the
+ * row would reach past the card's left inset (`room`: the card's width less
+ * both corner insets) into the tabs of the next card (three tabs, long words).
+ * The words stay for screen readers and the bubbles name the relatives.
+ */
+export function tabsGlyphsOnly(kinds: readonly BranchTab[], room: number): boolean {
+    return kinds.length > 1 && (measureTabRows([kinds]).get(rowKey(kinds)) ?? 0) > room;
 }

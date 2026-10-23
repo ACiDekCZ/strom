@@ -358,6 +358,36 @@ function collectPartnerships(
 }
 
 /**
+ * Show the children of the given persons in place (the card's "children"
+ * tab): for every union of a person already in the selection, the partner,
+ * the partnership and the union's children join it. The children come
+ * without their partners or descendants (their own tabs lead on). Persons
+ * not in the selection are skipped.
+ */
+export function expandChildrenInSelection(
+    data: StromData,
+    selection: GraphSelection,
+    personIds: readonly PersonId[]
+): void {
+    for (const personId of personIds) {
+        const person = data.persons[personId];
+        if (!person || !selection.persons.has(personId)) continue;
+        for (const partnershipId of person.partnerships) {
+            const partnership = data.partnerships[partnershipId];
+            if (!partnership || partnership.childIds.length === 0) continue;
+            selection.persons.add(partnership.person1Id);
+            selection.persons.add(partnership.person2Id);
+            selection.partnerships.add(partnershipId);
+            for (const childId of partnership.childIds) {
+                if (data.persons[childId]) selection.persons.add(childId);
+            }
+        }
+        // The person's children now stand in the view: no longer the deepest generation
+        selection.depthLimitPersons?.delete(personId);
+    }
+}
+
+/**
  * Expand selection for expanded persons (display policy).
  * Adds missing partners, partnerships, and children for persons
  * whose all partnerships should be shown inline.
