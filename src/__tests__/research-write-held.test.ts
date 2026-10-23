@@ -168,16 +168,16 @@ describe('a write held back by the research', () => {
         expect(m.kind).toBe('held');
         expect(materialErrorAction(m)).toBeNull();
         expect(materialErrorText(m, false)).toBe(SEAL_SAID);
-        expect(materialErrorOf(507, { error: 'Plno.', code: 'disk.full' }).kind).toBe('held');
+        expect(materialErrorOf(507, { error: 'No room.', code: 'disk.full' }).kind).toBe('held');
         // Another 409: busy as before.
         expect(materialErrorOf(409, { error: 'x', code: 'other' }).kind).toBe('busy');
-        const r = readFailure(409, { error: 'Stahuje se.', code: 'tree.not-downloaded', params: { n: 2 } });
+        const r = readFailure(409, { error: 'Not downloaded yet.', code: 'tree.not-downloaded', params: { n: 2 } });
         expect(r.kind).toBe('held');
-        expect(r.held).toEqual({ kind: 'cloud', said: 'Stahuje se.', n: 2 });
-        const w = waitingSentReply(507, { error: 'Plno.', text: 'Full.', code: 'disk.full' });
+        expect(r.held).toEqual({ kind: 'cloud', said: 'Not downloaded yet.', n: 2 });
+        const w = waitingSentReply(507, { error: 'No room.', text: 'Full.', code: 'disk.full' });
         expect(w.ok).toBe(false);
         expect(!w.ok && w.code).toBe('held');
-        expect(!w.ok && w.held?.said).toBe('Plno.');
+        expect(!w.ok && w.held?.said).toBe('No room.');
     });
 });
 
