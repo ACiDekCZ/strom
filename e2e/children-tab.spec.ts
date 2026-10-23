@@ -47,6 +47,18 @@ async function screenPositions(page: Page): Promise<Record<string, [number, numb
     });
 }
 
+/** Every drawn card's centre on the screen, by id (to a pixel). */
+async function screenCenters(page: Page): Promise<Record<string, [number, number]>> {
+    return page.evaluate(() => {
+        const out: Record<string, [number, number]> = {};
+        for (const c of document.querySelectorAll<HTMLElement>('#tree-canvas .person-card[data-id]')) {
+            const r = c.getBoundingClientRect();
+            out[c.dataset.id!] = [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)];
+        }
+        return out;
+    });
+}
+
 test('a direct-line ancestor: children shown in place, the card stays, a second click returns the view', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await setup(page);
@@ -228,11 +240,12 @@ test('a great-great-grandfather with twelve hidden children: shown beside his di
     const gf = 'f_m_f_m_f_f';
     await setupFixture(page, 'edge-ancestor-children', 'focus');
     await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), gf);
-    const before = await screenPositions(page);
+    const before = await screenCenters(page);
     await tabOf(page, gf).click();
     for (let i = 0; i < 12; i++) await expect(cardOf(page, `f_m_f_m_f_sib${i}`)).toHaveCount(1);
     await page.mouse.move(5, 500);
-    await expect.poll(async () => (await screenPositions(page))[gf]).toEqual(before[gf]);
+    // The card keeps its place (its centre: the view may zoom out around it, §5)
+    await expect.poll(async () => (await screenCenters(page))[gf]).toEqual(before[gf]);
     // No two drawn cards cover each other
     const overlaps = await page.evaluate(() => {
         const rects = [...document.querySelectorAll<HTMLElement>('#tree-canvas .person-card[data-id]')]
@@ -430,5 +443,266 @@ test.describe('phone 390 × 844', () => {
         await chip.tap();
         for (const id of SIBLINGS) await expect(cardOf(page, id)).toHaveCount(0);
         await expect(chip).toBeHidden();
+    });
+});
+
+/** The animations running on cards (and what is in them), the ghost of the lines, the layer of leaving cards. */
+async function cardMotion(page: Page): Promise<{ cards: number; ghost: number; leaving: number }> {
+    return page.evaluate(() => ({
+        cards: document.getAnimations().filter(a => {
+            const t = (a.effect as KeyframeEffect | null)?.target;
+            return t instanceof Element && !!t.closest('.person-card');
+        }).length,
+        ghost: document.querySelectorAll('.tree-lines-ghost').length,
+        leaving: document.querySelectorAll('.children-leaving').length,
+    }));
+}
+
+test.describe('the transition (§1)', () => {
+    test('the cards move from where they stood: the clicked card stays at the start and the end, a second click returns every card', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await page.emulateMedia({ reducedMotion: 'no-preference' });
+        await setup(page);
+        await page.mouse.move(5, 500);
+        const before = await screenCenters(page);
+        const scale = await page.evaluate(() => window.Strom.ZoomPan.getScale());
+        // Right after the click: the transition runs, every card that stayed still stands where it stood
+        const start = await page.evaluate(async id => {
+            await window.Strom.TreeRenderer.toggleChildrenShown(id as never);
+            const out: Record<string, [number, number]> = {};
+            for (const c of document.querySelectorAll<HTMLElement>('#tree-canvas .person-card[data-id]')) {
+                const r = c.getBoundingClientRect();
+                out[c.dataset.id!] = [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)];
+            }
+            const running = document.getAnimations().filter(a => (a.effect as KeyframeEffect | null)?.target instanceof Element).length;
+            return { out, running, ghost: document.querySelectorAll('.tree-lines-ghost').length };
+        }, ANCESTOR);
+        expect(start.running).toBeGreaterThan(0);
+        expect(start.ghost).toBe(1);
+        for (const [id, [x, y]] of Object.entries(before)) {
+            if (!start.out[id]) continue;
+            expect(Math.abs(start.out[id][0] - x), id).toBeLessThanOrEqual(1);
+            expect(Math.abs(start.out[id][1] - y), id).toBeLessThanOrEqual(1);
+        }
+        // The new children start at their parents' stem, small and transparent
+        const child = await cardOf(page, SIBLINGS[0]).evaluate(el => Number(getComputedStyle(el).opacity));
+        expect(child).toBeLessThan(1);
+        // At the end: nothing runs, the ghost is gone, the clicked card where it stood
+        await expect.poll(() => cardMotion(page)).toEqual({ cards: 0, ghost: 0, leaving: 0 });
+        const end = await screenCenters(page);
+        expect(Math.abs(end[ANCESTOR][0] - before[ANCESTOR][0])).toBeLessThanOrEqual(1);
+        expect(Math.abs(end[ANCESTOR][1] - before[ANCESTOR][1])).toBeLessThanOrEqual(1);
+        // Once the cards stand the children glow (§6)
+        await expect(cardOf(page, SIBLINGS[0])).toHaveClass(/children-glow/);
+
+        // Back: the children shrink into the stem in a layer of their own, then every card where it stood
+        const back = await page.evaluate(async id => {
+            await window.Strom.TreeRenderer.toggleChildrenShown(id as never);
+            return document.querySelectorAll('.children-leaving .person-card').length;
+        }, ANCESTOR);
+        expect(back).toBeGreaterThanOrEqual(SIBLINGS.length);
+        for (const id of SIBLINGS) await expect(cardOf(page, id)).toHaveCount(0);
+        await expect.poll(() => cardMotion(page)).toEqual({ cards: 0, ghost: 0, leaving: 0 });
+        expect(await screenCenters(page)).toEqual(before);
+        expect(await page.evaluate(() => window.Strom.ZoomPan.getScale())).toBe(scale);
+    });
+
+    test('a click during the transition ends it at once and starts the next', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await page.emulateMedia({ reducedMotion: 'no-preference' });
+        await setup(page);
+        await page.mouse.move(5, 500);
+        const before = await screenCenters(page);
+        await page.evaluate(async id => {
+            await window.Strom.TreeRenderer.toggleChildrenShown(id as never);
+            await window.Strom.TreeRenderer.toggleChildrenShown(id as never);
+        }, ANCESTOR);
+        // One transition at a time: one ghost, one layer of leaving cards
+        expect((await cardMotion(page)).ghost).toBeLessThanOrEqual(1);
+        await expect.poll(() => cardMotion(page)).toEqual({ cards: 0, ghost: 0, leaving: 0 });
+        expect(await screenCenters(page)).toEqual(before);
+    });
+
+    test('reduced motion: the new view in one frame, no animation on any card', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await setup(page);
+        await page.mouse.move(5, 500);
+        const motion = await page.evaluate(async id => {
+            await window.Strom.TreeRenderer.toggleChildrenShown(id as never);
+            const open = document.getAnimations().filter(a => {
+                const t = (a.effect as KeyframeEffect | null)?.target;
+                return t instanceof Element && !!t.closest('.person-card');
+            }).length;
+            const layers = document.querySelectorAll('.tree-lines-ghost, .children-leaving').length;
+            await window.Strom.TreeRenderer.toggleChildrenShown(id as never);
+            const close = document.getAnimations().filter(a => {
+                const t = (a.effect as KeyframeEffect | null)?.target;
+                return t instanceof Element && !!t.closest('.person-card');
+            }).length;
+            return { open, close, layers: layers + document.querySelectorAll('.tree-lines-ghost, .children-leaving').length };
+        }, ANCESTOR);
+        expect(motion).toEqual({ open: 0, close: 0, layers: 0 });
+    });
+
+    test.describe('phone 390 × 844', () => {
+        test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+        test('shorter, and no zoom', async ({ page }) => {
+            await page.emulateMedia({ reducedMotion: 'no-preference' });
+            await setup(page);
+            const scale = await page.evaluate(() => window.Strom.ZoomPan.getScale());
+            const longest = await page.evaluate(async id => {
+                await window.Strom.TreeRenderer.toggleChildrenShown(id as never);
+                return Math.max(...document.getAnimations()
+                    .filter(a => (a.effect as KeyframeEffect | null)?.target instanceof Element && !!((a.effect as KeyframeEffect).target as Element).closest('.person-card'))
+                    .map(a => Number((a.effect as KeyframeEffect).getTiming().duration)));
+            }, ANCESTOR);
+            expect(longest).toBe(280);
+            await expect.poll(() => cardMotion(page)).toEqual({ cards: 0, ghost: 0, leaving: 0 });
+            expect(await page.evaluate(() => window.Strom.ZoomPan.getScale())).toBe(scale);
+        });
+    });
+});
+
+test.describe('ancestors folded for the children (§2)', () => {
+    test('the partner\'s parents fold: a dashed "▸ parents" on the partner, a line in the bubble, a click on it returns the view', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        // Invented: Horace's (f_m_f) children belong on the inner side; his son-in-law's (f_f) parents fold
+        await setupFixture(page, 'edge-ancestor-inner-siblings', 'focus');
+        await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), 'f_m_f');
+        await page.mouse.move(5, 500);
+        const before = await screenPositions(page);
+        await expect(cardOf(page, 'f_f_f')).toBeVisible();
+        await tabOf(page, 'f_m_f').click();
+        await page.mouse.move(5, 500);
+        await expect(cardOf(page, 'f_m_s1')).toBeVisible();
+        await expect(cardOf(page, 'f_f_f')).toHaveCount(0);
+        await expect(cardOf(page, 'f_f_m')).toHaveCount(0);
+        const folded = cardOf(page, 'f_f').locator('.edge-top-right .branch-tab.folded');
+        await expect(folded).toHaveCount(1);
+        await expect(folded.locator('.pill-glyph')).toHaveText('▸');
+        const shownName = await page.evaluate(() => {
+            const p = window.Strom.DataManager.getPerson('f_m_f' as never)!;
+            return `${p.firstName} ${p.lastName}`;
+        });
+        await expect(folded).toHaveAttribute('aria-label', `Hide the children of ${shownName} and bring the parents back`);
+        await expect(folded.locator('.badge-tooltip-header')).toHaveText('Parents hidden for now');
+        await expect(folded.locator('.badge-tooltip-body')).toHaveText(`They make room for the children of ${shownName}.`);
+        await expect(folded.locator('.badge-tooltip-hint')).toHaveText('A click hides the children and brings the parents back.');
+        // The dashed look
+        expect(await folded.evaluate(el => getComputedStyle(el).borderTopStyle)).toBe('dashed');
+        // The "▾ children" bubble names whose ancestors are folded
+        const qName = await page.evaluate(() => {
+            const p = window.Strom.DataManager.getPerson('f_f' as never)!;
+            return `${p.firstName} ${p.lastName}`;
+        });
+        await expect(cardOf(page, 'f_m_f').locator('.children-bubble .badge-tooltip-folded')).toHaveText(`The ancestors of ${qName} are hidden for now.`);
+        // Every card keeps its tabs within its width
+        const outside = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('#tree-canvas .person-card')].filter(card => {
+            const c = card.getBoundingClientRect();
+            return [...card.querySelectorAll(':scope > .edge-top-right > .branch-tab')].some(t => t.getBoundingClientRect().left < c.left);
+        }).map(c => c.dataset.id));
+        expect(outside).toEqual([]);
+
+        // A click on the dashed tab hides the children: the parents back, the view as it was
+        await folded.click();
+        await page.mouse.move(5, 500);
+        await expect(cardOf(page, 'f_f_f')).toBeVisible();
+        await expect(cardOf(page, 'f_m_s1')).toHaveCount(0);
+        await expect(page.locator('#tree-canvas .branch-tab.folded')).toHaveCount(0);
+        expect(await page.evaluate(() => window.Strom.TreeRenderer.shownChildrenCount())).toBe(0);
+        await expect.poll(() => screenPositions(page)).toEqual(before);
+    });
+
+    test('the clicked card with its own parents folded: "▸ parents" left of "▾ children", both within the card in every card type', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        // Invented: a great-grandmother whose line comes down far from her children
+        await setupFixture(page, 'edge-ancestor-span', 'focus');
+        const id = 'p_ffm';
+        for (const density of ['normal', 'compact', 'detailed', 'register'] as const) {
+            await page.evaluate(d => window.Strom.UI.setCardDensity(d as never), density);
+            await page.evaluate(p => window.Strom.ZoomPan.centerOnPerson(p as never), id);
+            if (!(await page.evaluate(p => window.Strom.TreeRenderer.isChildrenShown(p as never), id))) await tabOf(page, id).click();
+            const row = cardOf(page, id).locator(':scope > .edge-top-right');
+            await expect(row.locator(':scope > .branch-tab.folded')).toHaveCount(1);
+            const tabs = await row.evaluate(r => {
+                const card = r.closest<HTMLElement>('.person-card')!.getBoundingClientRect();
+                return [...r.querySelectorAll<HTMLElement>(':scope > .branch-tab')].map(t => {
+                    const b = t.getBoundingClientRect();
+                    return { cls: t.className, left: b.left, right: b.right, inside: b.left >= card.left && b.right <= card.right };
+                });
+            });
+            const folded = tabs.findIndex(t => t.cls.includes('folded'));
+            const children = tabs.findIndex(t => t.cls.includes('children-tab'));
+            expect(folded, density).toBeGreaterThanOrEqual(0);
+            expect(folded, density).toBeLessThan(children);
+            expect(tabs[folded].right, density).toBeLessThanOrEqual(tabs[children].left);
+            expect(tabs.every(t => t.inside), `${density}: ${JSON.stringify(tabs)}`).toBe(true);
+        }
+    });
+});
+
+test.describe('zoom out for many children (§5)', () => {
+    test('thirteen children: in view or zoomed to 0.6 × the scale before, around the clicked card; hiding them brings the scale back', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await setupFixture(page, 'edge-ancestor-children', 'focus');
+        const gf = 'f_m_f_m_f_f';
+        await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), gf);
+        await page.mouse.move(5, 500);
+        const scaleBefore = await page.evaluate(() => window.Strom.ZoomPan.getScale());
+        const before = await screenCenters(page);
+        await tabOf(page, gf).click();
+        await page.mouse.move(5, 500);
+        await expect(cardOf(page, 'f_m_f_m_f_sib11')).toHaveCount(1);
+        const scale = await page.evaluate(() => window.Strom.ZoomPan.getScale());
+        expect(scale).toBeLessThan(scaleBefore);
+        const kids = ['f_m_f_m_f', ...Array.from({ length: 12 }, (_, i) => `f_m_f_m_f_sib${i}`)];
+        const allIn = await page.evaluate(ids => {
+            const t = document.getElementById('tree-container')!.getBoundingClientRect();
+            return ids.every(id => {
+                const r = document.querySelector(`#tree-canvas .person-card[data-id="${id}"]`)!.getBoundingClientRect();
+                return r.left >= t.left && r.right <= t.right && r.top >= t.top && r.bottom <= t.bottom;
+            });
+        }, kids);
+        expect(allIn || Math.abs(scale - 0.6 * scaleBefore) < 1e-9).toBe(true);
+        // The clicked card stays on its point
+        const mid = (await screenCenters(page))[gf];
+        expect(Math.abs(mid[0] - before[gf][0])).toBeLessThanOrEqual(1);
+        expect(Math.abs(mid[1] - before[gf][1])).toBeLessThanOrEqual(1);
+
+        await tabOf(page, gf).click();
+        await page.mouse.move(5, 500);
+        await expect(cardOf(page, 'f_m_f_m_f_sib11')).toHaveCount(0);
+        expect(await page.evaluate(() => window.Strom.ZoomPan.getScale())).toBe(scaleBefore);
+        await expect.poll(() => screenCenters(page)).toEqual(before);
+    });
+
+    test('a zoom by hand meanwhile: hiding the children keeps the scale', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await setupFixture(page, 'edge-ancestor-children', 'focus');
+        const gf = 'f_m_f_m_f_f';
+        await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), gf);
+        await tabOf(page, gf).click();
+        await expect(cardOf(page, 'f_m_f_m_f_sib11')).toHaveCount(1);
+        await page.evaluate(() => window.Strom.ZoomPan.zoomIn());
+        await page.waitForTimeout(400);
+        const scale = await page.evaluate(() => window.Strom.ZoomPan.getScale());
+        await page.evaluate(() => window.Strom.TreeRenderer.hideAllShownChildren());
+        await expect(cardOf(page, 'f_m_f_m_f_sib11')).toHaveCount(0);
+        expect(await page.evaluate(() => window.Strom.ZoomPan.getScale())).toBe(scale);
+    });
+
+    test.describe('tablet 820 × 1180', () => {
+        test.use({ viewport: { width: 820, height: 1180 } });
+
+        test('no zoom below the desktop', async ({ page }) => {
+            await setupFixture(page, 'edge-ancestor-children', 'focus');
+            const gf = 'f_m_f_m_f_f';
+            await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), gf);
+            const scale = await page.evaluate(() => window.Strom.ZoomPan.getScale());
+            await page.evaluate(id => window.Strom.TreeRenderer.toggleChildrenShown(id as never), gf);
+            await expect(cardOf(page, 'f_m_f_m_f_sib11')).toHaveCount(1);
+            expect(await page.evaluate(() => window.Strom.ZoomPan.getScale())).toBe(scale);
+        });
     });
 });

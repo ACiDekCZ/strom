@@ -118,6 +118,11 @@ class ZoomPanClass {
      * instead of restarting from the scale reached so far.
      */
     private zoomTarget: number | null = null;
+    /**
+     * The running zoom around a world point (zoomAroundWorldPoint): where it
+     * heads, so a settle lands on it with that point kept on the screen.
+     */
+    private zoomAround: { wx: number; wy: number; target: number } | null = null;
 
     // Wheel zoom idle timer (the layer hint stays on until it fires)
     private wheelIdleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -438,6 +443,9 @@ class ZoomPanClass {
         this.animationFrame = null;
         if (this.zoomTarget !== null) this.scale = this.zoomTarget;
         this.zoomTarget = null;
+        const around = this.zoomAround;
+        this.zoomAround = null;
+        if (around) this.setScaleAround(around.wx, around.wy, around.target);
         this.endMotion();
     }
 
@@ -510,6 +518,7 @@ class ZoomPanClass {
         if (this.animationFrame) {
             cancelAnimationFrame(this.animationFrame);
         }
+        this.zoomAround = null;
         this.zoomTarget = targetScale;
 
         const startScale = this.scale;
@@ -803,6 +812,7 @@ class ZoomPanClass {
         const endTy = container.clientHeight / 2 - cardCenterY * endScale;
 
         if (this.animationFrame) cancelAnimationFrame(this.animationFrame);
+        this.zoomAround = null;
         this.zoomTarget = null;
         const startScale = this.scale, startTx = this.tx, startTy = this.ty;
         const startTime = performance.now();
@@ -840,6 +850,7 @@ class ZoomPanClass {
         const endTx = container.clientWidth / 2 - cx * endScale;
         const endTy = container.clientHeight / 2 - cy * endScale;
         if (this.animationFrame) cancelAnimationFrame(this.animationFrame);
+        this.zoomAround = null;
         this.animationFrame = null;
         this.zoomTarget = null;
         if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches || duration <= 0) {
@@ -997,6 +1008,61 @@ class ZoomPanClass {
         this.tx -= dx * this.scale;
         this.ty -= dy * this.scale;
         this.apply();
+    }
+
+    /** The lowest scale a zoom may go to (MIN_SCALE, lower for a tree too big to fit at it). */
+    zoomFloor(): number {
+        return this.minScale();
+    }
+
+    /** Set the scale, keeping what stands at a world point where it stands on the screen. */
+    private setScaleAround(wx: number, wy: number, s: number): void {
+        const px = wx * this.scale + this.tx, py = wy * this.scale + this.ty;
+        this.scale = s;
+        this.tx = px - wx * s;
+        this.ty = py - wy * s;
+        this.apply();
+    }
+
+    /**
+     * Zoom to `targetScale` around a world point (it keeps its place on the
+     * screen), over `duration` ms with `ease` (0 or less: at once). A pan
+     * meanwhile moves the point along; a zoom by hand stops it where it is.
+     * A settle (settleAnimation, finishAnimation) lands on the target.
+     */
+    zoomAroundWorldPoint(wx: number, wy: number, targetScale: number, duration: number, ease: (t: number) => number): void {
+        this.settleAnimation();
+        if (targetScale === this.scale) return;
+        if (duration <= 0) {
+            this.setScaleAround(wx, wy, targetScale);
+            return;
+        }
+        const state = { wx, wy, target: targetScale };
+        this.zoomAround = state;
+        const startScale = this.scale;
+        const startTime = performance.now();
+        let last = startScale;
+        const stop = () => {
+            this.animationFrame = null;
+            this.zoomAround = null;
+            this.endMotion();
+        };
+        const step = (now: number) => {
+            if (this.zoomAround !== state) return;
+            if (this.scale !== last) { stop(); return; }   // zoomed by hand
+            const progress = Math.min((now - startTime) / duration, 1);
+            this.setScaleAround(wx, wy, progress >= 1 ? targetScale : startScale + (targetScale - startScale) * ease(progress));
+            last = this.scale;
+            if (progress < 1) this.animationFrame = requestAnimationFrame(step);
+            else stop();
+        };
+        this.beginMotion();
+        this.animationFrame = requestAnimationFrame(step);
+    }
+
+    /** End a running zoom or glide on its target at once. */
+    finishAnimation(): void {
+        this.settleAnimation();
     }
 
     /** Center the viewport on a world-space point, keeping the current scale. */

@@ -1276,19 +1276,34 @@
            kept for good is drawn once and then scaled, which blurs the cards. */
         #tree-canvas.is-moving { will-change: transform; }
 
-        #tree-lines {
+        #tree-lines,
+        .tree-lines-ghost {
             position: absolute;
             top: 0; left: 0;
             pointer-events: none;
             overflow: visible;
         }
         #tree-lines line,
-        #tree-lines path {
+        #tree-lines path,
+        .tree-lines-ghost line,
+        .tree-lines-ghost path {
             stroke: var(--line-color);
             stroke-width: 1.5;
         }
+        /* Children shown in place (src/children-transition.ts): while the cards
+           move, the lines the view had are a ghost fading out over the new
+           ones, and the cards that leave shrink into their parents' stem in a
+           layer of their own (no clicks, above the cards). */
+        .children-leaving {
+            position: absolute;
+            top: 0; left: 0;
+            pointer-events: none;
+            z-index: 150;
+        }
+        .children-leaving .person-card { pointer-events: none; }
         /* Generation guide rules + small-caps band labels (behind the tree). */
-        #tree-lines line.gen-guide-line {
+        #tree-lines line.gen-guide-line,
+        .tree-lines-ghost line.gen-guide-line {
             stroke: var(--gen-rule);
             stroke-width: 1;
         }
@@ -3128,6 +3143,30 @@
         .branch-tab.active .pill-glyph,
         .branch-tab.active .pill-text {
             color: var(--on-primary);
+        }
+
+        /* "▸ parents" dashed: the parents folded away while children are shown
+           in place (§2, src/renderer.ts foldedFor); a click hides those
+           children and brings the parents back. */
+        .branch-tab.folded {
+            border: 1px dashed var(--text-faint);
+            background: var(--bg);
+            box-shadow: none;
+        }
+        .branch-tab.folded:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .branch-tab.folded:focus-visible .badge-tooltip { display: block; }
+        .badge-tooltip-body {
+            padding-top: 4px;
+            color: var(--text-light);
+            font-size: 12px;
+            line-height: 1.4;
+        }
+        /* In the "▾ children" bubble: whose ancestors are folded for these children. */
+        .badge-tooltip-folded {
+            padding-top: 6px;
+            color: var(--text-faint);
+            font-size: 11px;
+            line-height: 1.4;
         }
 
         /* Shared badge tooltip (used by hidden-partners, hidden-families, branch-tab ◆) */
@@ -7842,10 +7881,10 @@
         /* Lines: inside a shown family the tree's own shape (an adoptive or
            step dash stays) in the ghost's tone; the linking line hollow — a
            5px stroke under a 2px one in the canvas colour, round joins, no dash. */
-        #tree-lines line.view-ghost { stroke: var(--ghost-line); stroke-width: 1.5; }
-        #tree-lines path.view-virtual { fill: none; stroke-linejoin: round; stroke-dasharray: none; }
-        #tree-lines path.view-virtual-outer { stroke: var(--ghost-line); stroke-width: 5; }
-        #tree-lines path.view-virtual-inner { stroke: var(--bg); stroke-width: 2; }
+        #tree-lines line.view-ghost, .tree-lines-ghost line.view-ghost { stroke: var(--ghost-line); stroke-width: 1.5; }
+        #tree-lines path.view-virtual, .tree-lines-ghost path.view-virtual { fill: none; stroke-linejoin: round; stroke-dasharray: none; }
+        #tree-lines path.view-virtual-outer, .tree-lines-ghost path.view-virtual-outer { stroke: var(--ghost-line); stroke-width: 5; }
+        #tree-lines path.view-virtual-inner, .tree-lines-ghost path.view-virtual-inner { stroke: var(--bg); stroke-width: 2; }
         /* "unproven · H0022 B" on the linking line: opens the hypothesis in
            the person's research. A 44px target beyond its visible height. */
         .view-link-label {

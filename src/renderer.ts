@@ -39,6 +39,8 @@ import {
     OmittedEdge,
     DisplayPolicy,
     runLayoutPipelineWithDebug,
+    planShownChildrenFolding,
+    pipelineInputFromRequest,
     collectBloodDescendants,
     DebugOptions,
     DebugSnapshot,
@@ -60,7 +62,7 @@ import { shownName, shownNameParts, shownNameFull, birthNoteText } from './perso
 import { extractSubtree } from './subtree.js';
 import { buildFanModel, buildFanSvg } from './fan-chart.js';
 import { computeIndirectIds } from './indirect.js';
-import { isMobile as isMobileViewport } from './breakpoints.js';
+import { isMobile as isMobileViewport, TABLET_MAX } from './breakpoints.js';
 import { parentRelKind, parentRelDash, connectionDash } from './parent-rel-style.js';
 import { isDiagramStandIn } from './layout/pipeline/placeholders.js';
 import {
@@ -76,6 +78,10 @@ import {
 } from './view-links.js';
 import { LineSegment, chainSegments, labelSpot, polylinePath, splitBus } from './view-link-lines.js';
 import { maxGenerationsWithSiblings } from './focus-depth.js';
+import {
+    CHILDREN_EASE, childrenEase, ChildrenTransitionDir, childrenTransitionTiming, isCompactMotion, pickAnimated, Rect as ChildrenRect,
+    rectsOverlap, STEM_SCALE, staggerDelay, widenedView, Window, zoomOutScale,
+} from './children-transition.js';
 import type { LayoutViewLayer, ViewLineFlag } from './layout/index.js';
 import { buildViewLayer } from './layout/index.js';
 
@@ -147,6 +153,18 @@ const VIEW_LABEL_LINE_ENDS = 24;
 const CHILDREN_GLOW_MS = 1600;
 /** The "▾ children" bubble stays this long after the pointer left it (ms), so the pointer can reach its rows. */
 const CHILDREN_BUBBLE_CLOSE_MS = 150;
+/** §5: the margin the new children keep from the tree's edges and from the controls over it. */
+const ZOOM_FIT_MARGIN = 24;
+
+/** The view before a change of the children shown (TreeRenderer.captureChildrenScene). */
+interface ChildrenScene {
+    positions: Map<PersonId, Position>;
+    connections: Connection[];
+    /** The cards' elements (a card that leaves moves into the transition's layer). */
+    cards: Map<PersonId, HTMLElement>;
+    /** A copy of the lines, for the ghost. */
+    lines: SVGSVGElement;
+}
 /** Room the sibling-order pill ("3 of 5") takes on a card's bottom-right edge, with its inset (px). */
 const SIBLING_ORDER_PILL_RIGHT = 60;
 
@@ -298,6 +316,20 @@ class TreeRendererClass {
      * expansion's card back where it stood, so the view returns as it was.
      */
     private childrenShownDrift = new Map<PersonId, { x: number; y: number }>();
+    /**
+     * The ancestors folded away while children are shown (§2, from
+     * planShownChildrenFolding, per screen layout): each person whose
+     * ancestors are folded → the shown person whose children folded them,
+     * and the reverse lists. Empty without children shown.
+     */
+    private foldedFor = new Map<PersonId, PersonId>();
+    private foldedAncestorsOf = new Map<PersonId, PersonId[]>();
+    /** Per shown person whose click zoomed the view out (§5): the scale before and the scale it left. */
+    private childrenZoom = new Map<PersonId, { before: number; after: number }>();
+    /** Where each shown person's card centre stood on the screen (container px) before its click: hide all brings it back there with the scale (§5). */
+    private childrenAnchorScreen = new Map<PersonId, { x: number; y: number }>();
+    /** The running transition of children shown or hidden (§1): finish() ends it at once. */
+    private childrenTransition: { finish: () => void } | null = null;
     /** The children hanging on a drawn parent line (drops of the drawn connections), per drawn view. */
     private dropIdsCache: { connections: unknown; ids: Set<PersonId> } | null = null;
     /** Incremented per render; stale async renders bail out (see renderInternal). */
@@ -334,6 +366,8 @@ class TreeRendererClass {
         // Sequence token: a newer render started while this one awaited must
         // win, or both append their cards to the same canvas (duplicates).
         const seq = ++this.renderSeq;
+        // A transition of children shown in place ends with any new drawing
+        this.finishChildrenTransition();
         const canvas = document.getElementById('tree-canvas');
         const svg = document.getElementById('tree-lines') as SVGSVGElement | null;
         const empty = document.getElementById('empty-state');
@@ -553,7 +587,8 @@ class TreeRendererClass {
                     includeParentSiblings: request.policy.includeAuntsUncles,
                     includeParentSiblingDescendants: request.policy.includeCousins,
                     viewLinks: request.viewLinks,
-                    expandChildrenOf: request.expandChildrenOf
+                    expandChildrenOf: request.expandChildrenOf,
+                    ...(request.expandChildrenOf && this.foldedFor.size > 0 ? { foldAncestorsOf: [...this.foldedFor.keys()] } : {}),
                 },
                 this.debugOptions
             );
@@ -573,9 +608,23 @@ class TreeRendererClass {
             window.__LAYOUT_DEBUG__ = debugContext;
             return debugResult.result;
         }
-        const engine = new StromLayoutEngine();
         if (debug) this.currentDebugSnapshot = null;
-        return computeLayout(engine, request);
+        // Children shown in place: the planner folds the ancestors in their
+        // way (§2, planShownChildrenFolding); the screen keeps which folded
+        // for whom (the dashed "▸ parents" tab, the "▾ children" bubble).
+        if (request.expandChildrenOf) {
+            const plan = planShownChildrenFolding(pipelineInputFromRequest(request));
+            if (debug) {
+                this.foldedFor = plan.foldedFor;
+                this.foldedAncestorsOf = plan.foldedAncestorsOf;
+            }
+            return plan.result;
+        }
+        if (debug) {
+            this.foldedFor = new Map();
+            this.foldedAncestorsOf = new Map();
+        }
+        return computeLayout(new StromLayoutEngine(), request);
     }
 
     // ==================== LINKED IN THE VIEW ONLY ====================
@@ -1039,6 +1088,8 @@ class TreeRendererClass {
         this.childrenUnshowable.clear();
         this.childrenBroughtIn.clear();
         this.childrenShownDrift.clear();
+        this.childrenZoom.clear();
+        this.childrenAnchorScreen.clear();
     }
 
     /** Whether the family view shows the person's children in place (the children tab). */
@@ -1072,8 +1123,11 @@ class TreeRendererClass {
             await this.closeChildrenShown([personId], personId);
             return;
         }
+        this.finishChildrenTransition();
+        const scene = this.captureChildrenScene();
         const data = DataManager.getData();
         const beforeAll = new Map(this.positions);
+        const screenBefore = this.cardScreenCenter(personId);
         const inView = (id: PersonId) => this.positions.has(id);
         const promised = hiddenChildIds(data, personId, inView);
         const visible = new Set((data.persons[personId]?.childIds ?? []).filter(inView));
@@ -1088,10 +1142,17 @@ class TreeRendererClass {
             this.keepCardInPlace(personId, beforeAll, false);
             return;
         }
-        this.childrenBroughtIn.set(personId, new Set([...this.positions.keys()].filter(id => !beforeAll.has(id))));
-        this.keepCardInPlace(personId, beforeAll, false);
-        // The person's children in view, of every marriage (§6)
-        this.highlightCards((data.persons[personId]?.childIds ?? []).filter(inView), CHILDREN_GLOW_MS);
+        const broughtIn = new Set([...this.positions.keys()].filter(id => !beforeAll.has(id)));
+        this.childrenBroughtIn.set(personId, broughtIn);
+        if (screenBefore) this.childrenAnchorScreen.set(personId, screenBefore);
+        const shift = this.keepCardInPlace(personId, beforeAll, false);
+        // §5: zoom out around the card as far as the new children need (desktop)
+        const scaleBefore = ZoomPan.getScale();
+        const zoomTo = this.childrenZoomOut(personId, newlyShownChildIds(data, personId, inView, visible));
+        if (zoomTo !== null) this.childrenZoom.set(personId, { before: scaleBefore, after: zoomTo });
+        // §6: the person's children in view, of every marriage, glow once the cards stand
+        const glow = () => this.highlightCards((data.persons[personId]?.childIds ?? []).filter(inView), CHILDREN_GLOW_MS);
+        this.playChildrenTransition(scene, 'open', personId, shift, new Map([[personId, broughtIn]]), zoomTo, glow);
     }
 
     /**
@@ -1099,19 +1160,35 @@ class TreeRendererClass {
      * expansions of the persons those brought into view (childrenShownClosing:
      * a child's own shown children would stand without their parent's line).
      * The anchor's card keeps its place on the screen; with `restoreView` it
-     * goes back where it stood before the first expansion (hide all).
+     * goes back where it stood before the first expansion (hide all). The
+     * scale a click zoomed out from comes back unless it was changed since
+     * (§5). Every way of hiding comes here: the tab, the menu, the dashed
+     * "▸ parents", "Hide shown children".
      */
     async closeChildrenShown(ids: readonly PersonId[], anchorId: PersonId, restoreView = false): Promise<void> {
         const closing = childrenShownClosing(ids, this.childrenShownIds, id => this.childrenBroughtIn.get(id));
         if (closing.size === 0) return;
+        this.finishChildrenTransition();
+        const scene = this.captureChildrenScene();
         const beforeAll = new Map(this.positions);
+        const zooms = this.childrenShownIds.filter(id => closing.has(id)).map(id => this.childrenZoom.get(id)).filter(z => !!z);
+        const involved = new Map([...closing].map(id => [id, this.childrenBroughtIn.get(id) ?? new Set<PersonId>()] as const));
         this.childrenShownIds = this.childrenShownIds.filter(id => !closing.has(id));
         for (const id of closing) {
             this.childrenVisibleBefore.delete(id);
             this.childrenBroughtIn.delete(id);
+            this.childrenZoom.delete(id);
         }
+        const anchorScreen = this.childrenAnchorScreen.get(anchorId);
+        for (const id of closing) this.childrenAnchorScreen.delete(id);
         await this.renderInternal();
-        this.keepCardInPlace(anchorId, beforeAll, restoreView);
+        const shift = this.keepCardInPlace(anchorId, beforeAll, restoreView);
+        // §5: the scale before the first of these clicks, when the last one's zoom still stands
+        const zoomTo = zooms.length > 0 && ZoomPan.getScale() === zooms[zooms.length - 1].after ? zooms[0].before : null;
+        // Hide all with that scale back: the anchor's card goes where it stood before its click
+        // (zooms around other cards moved it on the screen; the pivot that lands it there)
+        const pivot = restoreView && zoomTo !== null && anchorScreen ? this.landingPivot(anchorId, anchorScreen, zoomTo) : null;
+        this.playChildrenTransition(scene, 'close', anchorId, shift, involved, zoomTo, undefined, pivot);
     }
 
     /**
@@ -1150,9 +1227,10 @@ class TreeRendererClass {
      * After a render that showed or hid children: shift the view so the
      * anchor's card stays where it stood on the screen (ZoomPan.shiftWorld),
      * or with `restore` where it stood before the first expansion, and keep
-     * every card's drift on the screen for that.
+     * every card's drift on the screen for that. Returns the shift (world
+     * units: what stood at a world point now stands at the point plus it).
      */
-    private keepCardInPlace(anchorId: PersonId, beforeAll: ReadonlyMap<PersonId, Position>, restore: boolean): void {
+    private keepCardInPlace(anchorId: PersonId, beforeAll: ReadonlyMap<PersonId, Position>, restore: boolean): { x: number; y: number } {
         const before = beforeAll.get(anchorId), after = this.positions.get(anchorId);
         let sx = 0, sy = 0;
         if (before && after) {
@@ -1173,8 +1251,290 @@ class TreeRendererClass {
             this.childrenShownDrift = next;
         }
         if (sx || sy) ZoomPan.shiftWorld(sx, sy);
+        return { x: sx, y: sy };
     }
 
+    // ---------- §1 the transition, §5 the zoom ----------
+
+    /** A card's centre on the screen (container px), or null when it is not drawn. */
+    private cardScreenCenter(id: PersonId): { x: number; y: number } | null {
+        const box = this.cardBox(id);
+        if (!box) return null;
+        const { scale, tx, ty } = ZoomPan.getTransform();
+        return { x: (box.left + box.right) / 2 * scale + tx, y: (box.top + box.bottom) / 2 * scale + ty };
+    }
+
+    /**
+     * The world point to zoom around from the current scale to `scale` so
+     * the card's centre lands on `screen` (null: the scales are equal, or
+     * the card is not drawn).
+     */
+    private landingPivot(id: PersonId, screen: { x: number; y: number }, scale: number): { x: number; y: number } | null {
+        const box = this.cardBox(id);
+        const { scale: s, tx, ty } = ZoomPan.getTransform();
+        if (!box || s === scale) return null;
+        const wx = (box.left + box.right) / 2, wy = (box.top + box.bottom) / 2;
+        return { x: (screen.x - tx - scale * wx) / (s - scale), y: (screen.y - ty - scale * wy) / (s - scale) };
+    }
+
+    /** The motion is reduced (the OS setting): every change in one frame. */
+    private reducedMotion(): boolean {
+        return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
+    }
+
+    /**
+     * What the view looks like before a change of the children shown, for
+     * the transition (null: none — reduced motion, another view): the
+     * cards' places and elements, the lines (a copy, for the ghost) and the
+     * parent lines' stems.
+     */
+    private captureChildrenScene(): ChildrenScene | null {
+        if (this.reducedMotion() || this.viewMode !== 'family' || typeof Element.prototype.animate !== 'function') return null;
+        const canvas = document.getElementById('tree-canvas');
+        const svg = document.getElementById('tree-lines');
+        if (!canvas || !svg) return null;
+        const cards = new Map<PersonId, HTMLElement>();
+        canvas.querySelectorAll<HTMLElement>('.person-card[data-id]').forEach(c => cards.set(c.dataset.id as PersonId, c));
+        return {
+            positions: new Map(this.positions), connections: this.connections, cards,
+            lines: svg.cloneNode(true) as SVGSVGElement,
+        };
+    }
+
+    /**
+     * §5: the scale a click that shows children zooms out to (around the
+     * clicked card) so the new children stand within the tree's area, or
+     * null when they do already or the device is not a desktop. The motion
+     * runs with the transition (playChildrenTransition).
+     */
+    private childrenZoomOut(personId: PersonId, kids: readonly PersonId[]): number | null {
+        if (window.innerWidth <= TABLET_MAX || window.matchMedia?.('(pointer: coarse)').matches) return null;
+        const container = document.getElementById('tree-container');
+        const anchor = this.cardBox(personId);
+        if (!container || !anchor || kids.length === 0) return null;
+        let target: ChildrenRect | null = null;
+        for (const id of kids) {
+            const box = this.cardBox(id);
+            if (!box) continue;
+            target = target
+                ? { left: Math.min(target.left, box.left), top: Math.min(target.top, box.top), right: Math.max(target.right, box.right), bottom: Math.max(target.bottom, box.bottom) }
+                : box;
+        }
+        if (!target) return null;
+        const { scale, tx, ty } = ZoomPan.getTransform();
+        const c = container.getBoundingClientRect();
+        const pivotWorld = { x: (anchor.left + anchor.right) / 2, y: (anchor.top + anchor.bottom) / 2 };
+        const avoid: ChildrenRect[] = [];
+        for (const el of document.querySelectorAll<HTMLElement>('.control-block, #focus-back-btn, #focus-forward-btn')) {
+            const r = el.getBoundingClientRect();
+            if (r.width === 0 || r.height === 0 || getComputedStyle(el).visibility === 'hidden') continue;
+            avoid.push({ left: r.left - c.left - ZOOM_FIT_MARGIN, top: r.top - c.top - ZOOM_FIT_MARGIN, right: r.right - c.left + ZOOM_FIT_MARGIN, bottom: r.bottom - c.top + ZOOM_FIT_MARGIN });
+        }
+        const s = zoomOutScale({
+            scale, minScale: ZoomPan.zoomFloor(),
+            pivotScreen: { x: pivotWorld.x * scale + tx, y: pivotWorld.y * scale + ty }, pivotWorld, target,
+            area: { left: ZOOM_FIT_MARGIN, top: ZOOM_FIT_MARGIN, right: c.width - ZOOM_FIT_MARGIN, bottom: c.height - ZOOM_FIT_MARGIN },
+            avoid,
+        });
+        return s < scale ? s : null;
+    }
+
+    /** A drawn card's box in the world (its element's size), or null. */
+    private cardBox(id: PersonId): ChildrenRect | null {
+        const pos = this.positions.get(id);
+        const el = this.cardElement(id);
+        if (!pos) return null;
+        const w = el?.offsetWidth || this.config.cardWidth;
+        const h = el?.offsetHeight || this.config.cardHeight;
+        return { left: pos.x, top: pos.y, right: pos.x + w, bottom: pos.y + h };
+    }
+
+    private cardElement(id: PersonId): HTMLElement | null {
+        return document.querySelector<HTMLElement>(`#tree-canvas .person-card[data-id="${CSS.escape(id)}"]`);
+    }
+
+    /**
+     * Where a card a click brings in grows from (or a card it hides shrinks
+     * into): for a child of a person in `involved`, the stem of the line down
+     * to it at the top of its row; for another card that click brought in (a
+     * child's partner), the stem of that person's line at the card's row;
+     * null for any other card (it fades).
+     */
+    private stemOf(id: PersonId, connections: readonly Connection[], positions: ReadonlyMap<PersonId, Position>,
+        involved: ReadonlyMap<PersonId, ReadonlySet<PersonId>>): { x: number; y: number } | null {
+        const data = DataManager.getData();
+        const pos = positions.get(id);
+        if (!pos) return null;
+        const parents = data.persons[id]?.parentIds ?? [];
+        for (const [shownId, broughtIn] of involved) {
+            const kids = new Set(data.persons[shownId]?.childIds ?? []);
+            if (parents.includes(shownId)) {
+                for (const c of connections) {
+                    const drop = c.drops.find(d => d.personId === id);
+                    if (drop) return { x: c.stemX, y: drop.bottomY };
+                }
+            }
+            if (parents.includes(shownId) || broughtIn.has(id)) {
+                const line = connections.find(c => c.drops.some(d => kids.has(d.personId)));
+                if (line) return { x: line.stemX, y: pos.y };
+            }
+        }
+        return null;
+    }
+
+    /** End the running transition at once: every card on its new place, the zoom on its target. */
+    private finishChildrenTransition(): void {
+        this.childrenTransition?.finish();
+    }
+
+    /**
+     * §1: animate from the scene before (captureChildrenScene) to the view
+     * just drawn. The cards that stay move from where they stood on the
+     * screen (the view was shifted by `shift` to keep the anchor's card in
+     * place); the cards the expansion brought in grow out of its stem, the
+     * ones it takes away shrink into it in a layer of their own, other cards
+     * fade; the old lines fade out over the new ones. Only cards near the
+     * view move, at most the timing's cap (the nearest to the anchor); the
+     * rest stand at once. The zoom of §5 (`zoomTo`) runs along. Without a
+     * scene (reduced motion) the new view stands at once, the zoom too.
+     * `onDone` runs once the cards stand (not when another change cuts in).
+     */
+    private playChildrenTransition(scene: ChildrenScene | null, dir: ChildrenTransitionDir, anchorId: PersonId,
+        shift: { x: number; y: number }, involved: ReadonlyMap<PersonId, ReadonlySet<PersonId>>,
+        zoomTo: number | null, onDone?: () => void, zoomPivot: { x: number; y: number } | null = null): void {
+        const canvas = document.getElementById('tree-canvas');
+        const svg = document.getElementById('tree-lines');
+        const container = document.getElementById('tree-container');
+        const anchor = this.cardBox(anchorId);
+        const mid = anchor ? { x: (anchor.left + anchor.right) / 2, y: (anchor.top + anchor.bottom) / 2 } : null;
+        const pivot = zoomPivot ?? mid;
+        if (!scene || !canvas || !svg || !container || !pivot) {
+            if (zoomTo !== null && pivot) ZoomPan.zoomAroundWorldPoint(pivot.x, pivot.y, zoomTo, 0, childrenEase);
+            onDone?.();
+            return;
+        }
+        const timing = childrenTransitionTiming(dir, isCompactMotion(window.innerWidth, window.matchMedia?.('(pointer: coarse)').matches === true));
+        const { duration } = timing;
+        const t0 = ZoomPan.getTransform();
+        const s1 = zoomTo ?? t0.scale;
+        // The transform at the end: zoomed around the anchor's centre
+        const t1 = { scale: s1, tx: pivot.x * t0.scale + t0.tx - pivot.x * s1, ty: pivot.y * t0.scale + t0.ty - pivot.y * s1 };
+        const view = widenedView(container.clientWidth, container.clientHeight);
+        const onScreen = (x: number, y: number, w: number, h: number, t: { scale: number; tx: number; ty: number }) =>
+            rectsOverlap({ left: x * t.scale + t.tx, top: y * t.scale + t.ty, right: (x + w) * t.scale + t.tx, bottom: (y + h) * t.scale + t.ty }, view);
+
+        type Item = { dist: number; near: boolean; run: () => Animation[] };
+        const items: Item[] = [];
+        const ease = { duration, easing: CHILDREN_EASE };
+        const fade = (el: Element, from: number, to: number, [a, b]: Window, delay = 0, fill: FillMode = 'none'): Animation => {
+            const end = Math.max(b, 1);
+            return el.animate([
+                { opacity: from, offset: 0 }, { opacity: from, offset: Math.min(a / end, 1) }, { opacity: to, offset: 1 },
+            ], { duration: end, delay, easing: 'linear', fill });
+        };
+        const grow: Array<{ el: HTMLElement; stem: { x: number; y: number }; pos: Position; dist: number; near: boolean }> = [];
+        for (const [id, pos] of this.positions) {
+            const el = this.cardElement(id);
+            if (!el) continue;
+            const w = el.offsetWidth, h = el.offsetHeight;
+            const dist = Math.hypot(pos.x - (mid ?? pivot).x, pos.y - (mid ?? pivot).y);
+            const was = scene.positions.get(id);
+            if (was) {
+                const dx = was.x + shift.x - pos.x, dy = was.y + shift.y - pos.y;
+                if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) continue;
+                const near = onScreen(was.x + shift.x, was.y + shift.y, w, h, t0) || onScreen(pos.x, pos.y, w, h, t1);
+                items.push({ dist, near, run: () => [el.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }], ease)] });
+                continue;
+            }
+            const near = onScreen(pos.x, pos.y, w, h, t1);
+            const stem = this.stemOf(id, this.connections, this.positions, involved);
+            if (stem) grow.push({ el, stem, pos, dist, near });
+            else items.push({ dist, near, run: () => [fade(el, 0, 1, timing.fadeIn, 0, 'backwards')] });
+        }
+        // New cards out of the stem, the nearest first (+20 ms each, none with many)
+        grow.sort((a, b) => Math.hypot(a.pos.x - a.stem.x, a.pos.y - a.stem.y) - Math.hypot(b.pos.x - b.stem.x, b.pos.y - b.stem.y));
+        grow.forEach((g, rank) => {
+            const delay = staggerDelay(rank, grow.length);
+            const from = `translate(${g.stem.x - g.el.offsetWidth / 2 - g.pos.x}px, ${g.stem.y - g.pos.y}px) scale(${STEM_SCALE})`;
+            items.push({
+                dist: g.dist, near: g.near, run: () => [
+                    g.el.animate([{ transform: from, transformOrigin: '50% 0' }, { transform: 'none', transformOrigin: '50% 0' }], { ...ease, delay, fill: 'backwards' }),
+                    fade(g.el, 0, 1, timing.fadeIn, delay, 'backwards'),
+                ],
+            });
+        });
+        // Cards that leave: into a layer over the cards, in the old places (shifted with the view)
+        const layer = document.createElement('div');
+        layer.className = 'children-leaving';
+        layer.style.transform = `translate(${shift.x}px, ${shift.y}px)`;
+        for (const [id, was] of scene.positions) {
+            if (this.positions.has(id)) continue;
+            const el = scene.cards.get(id);
+            if (!el) continue;
+            const dist = Math.hypot(was.x + shift.x - (mid ?? pivot).x, was.y + shift.y - (mid ?? pivot).y);
+            const w = this.config.cardWidth, h = this.config.cardHeight;
+            const near = onScreen(was.x + shift.x, was.y + shift.y, w, h, t0);
+            const stem = this.stemOf(id, scene.connections, scene.positions, involved);
+            items.push({
+                dist, near, run: () => {
+                    el.removeAttribute('data-id');
+                    el.classList.remove('children-glow', 'children-glow-anim');
+                    layer.appendChild(el);
+                    if (!stem) return [fade(el, 1, 0, timing.fadeOut, 0, 'forwards')];
+                    const to = `translate(${stem.x - el.offsetWidth / 2 - was.x}px, ${stem.y - was.y}px) scale(${STEM_SCALE})`;
+                    return [
+                        el.animate([{ transform: 'none', transformOrigin: '50% 0' }, { transform: to, transformOrigin: '50% 0' }], { ...ease, fill: 'forwards' }),
+                        fade(el, 1, 0, timing.fadeOut, 0, 'forwards'),
+                    ];
+                },
+            });
+        }
+        const animated = pickAnimated(items, timing.cap);
+        if (animated.size > 0 || zoomTo !== null) canvas.appendChild(layer);
+        const animations: Animation[] = [];
+        const moving: HTMLElement[] = [];
+        for (const item of animated) {
+            for (const a of item.run()) {
+                animations.push(a);
+                const target = (a.effect as KeyframeEffect | null)?.target;
+                if (target instanceof HTMLElement && !moving.includes(target)) {
+                    target.style.willChange = 'transform';
+                    moving.push(target);
+                }
+            }
+        }
+        // The lines: the old drawing a ghost over the new one, never recomputed per frame
+        const ghost = scene.lines;
+        ghost.removeAttribute('id');
+        ghost.setAttribute('class', 'tree-lines-ghost');
+        ghost.setAttribute('aria-hidden', 'true');
+        ghost.style.transform = `translate(${shift.x}px, ${shift.y}px)`;
+        svg.after(ghost);
+        animations.push(fade(ghost, 1, 0, timing.ghostOut, 0, 'forwards'), fade(svg, 0, 1, timing.linesIn));
+        if (zoomTo !== null) ZoomPan.zoomAroundWorldPoint(pivot.x, pivot.y, zoomTo, duration, childrenEase);
+
+        let ended = false;
+        const end = (finished: boolean): void => {
+            if (ended) return;
+            ended = true;
+            if (this.childrenTransition === transition) this.childrenTransition = null;
+            for (const el of moving) el.style.willChange = '';
+            ghost.remove();
+            layer.remove();
+            if (finished) onDone?.();
+        };
+        const transition = {
+            finish: (): void => {
+                for (const a of animations) {
+                    try { a.finish(); } catch { /* an animation without an end */ }
+                }
+                if (zoomTo !== null) ZoomPan.finishAnimation();
+                end(false);
+            },
+        };
+        this.childrenTransition = transition;
+        void Promise.all(animations.map(a => a.finished.catch(() => undefined))).then(() => end(true));
+    }
     /** The children hanging on a drawn parent line in the drawn view. */
     private dropIds(): Set<PersonId> {
         if (this.dropIdsCache?.connections !== this.connections) {
@@ -2057,7 +2417,18 @@ class TreeRendererClass {
             // Built into a string here; assembled into the edge container below.
             let branchTabsHtml = '';
             if (showHiddenBadges && (hasHiddenParents || hasHiddenChildren || childrenShown || hasHiddenSiblings)) {
-                if (hasHiddenParents) {
+                // Parents folded away for children shown in place (§2): the dashed
+                // tab hides those children again and brings the parents back
+                const foldedBy = hasHiddenParents ? this.foldedFor.get(id) : undefined;
+                const foldedByPerson = foldedBy ? DataManager.getPerson(foldedBy) : null;
+                if (foldedBy && foldedByPerson) {
+                    const byName = shownNameFull(foldedByPerson, '?');
+                    branchTabsHtml += `<button type="button" class="branch-tab folded" data-action="unfold-parents" data-shown-id="${this.escapeHtml(foldedBy)}" aria-label="${this.escapeHtml(strings.focus.parentsFoldedAria(byName))}">`
+                        + `<span class="pill-glyph">▸</span><span class="pill-text">${strings.focus.branchTabParents}</span>`
+                        + `<div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.parentsFoldedHeader}</div>`
+                        + `<div class="badge-tooltip-body">${this.escapeHtml(strings.focus.parentsFoldedBody(byName))}</div>`
+                        + `<div class="badge-tooltip-hint">${strings.focus.parentsFoldedHint}</div></div></button>`;
+                } else if (hasHiddenParents) {
                     const hiddenParents = person.parentIds
                         .filter(pid => !this.positions.has(pid))
                         .map(pid => DataManager.getPerson(pid))
@@ -2118,7 +2489,13 @@ class TreeRendererClass {
                         const elsewhereHtml = rows
                             ? `<div class="children-elsewhere"><div class="badge-tooltip-header">${strings.focus.childrenElsewhereHeader}</div>${rows}<div class="badge-tooltip-hint">${strings.focus.childrenElsewhereHint}</div></div>`
                             : '';
-                        branchTabsHtml += `${tabHtml}</button><div class="badge-tooltip children-bubble"><div class="badge-tooltip-header">${header}</div>${childItems}${elsewhereHtml}<div class="badge-tooltip-hint">${hint}</div></div>`;
+                        // The ancestors folded away for these children (§2)
+                        const foldedHtml = (this.foldedAncestorsOf.get(id) ?? [])
+                            .map(qid => DataManager.getPerson(qid))
+                            .filter((q): q is Person => q !== null)
+                            .map(q => `<div class="badge-tooltip-folded">${this.escapeHtml(strings.focus.childrenShownFoldedLine(shownNameFull(q, '?')))}</div>`)
+                            .join('');
+                        branchTabsHtml += `${tabHtml}</button><div class="badge-tooltip children-bubble"><div class="badge-tooltip-header">${header}</div>${childItems}${foldedHtml}${elsewhereHtml}<div class="badge-tooltip-hint">${hint}</div></div>`;
                     }
                 }
             }
@@ -2498,8 +2875,14 @@ class TreeRendererClass {
             });
             const childrenBubble = card.querySelector<HTMLElement>('.children-bubble');
             if (childrenTab && childrenBubble) this.bindChildrenBubble(id, childrenTab, childrenBubble);
+            // The dashed "▸ parents" (§2): hide the children that folded the parents away
+            card.querySelector<HTMLElement>('.branch-tab.folded')?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const shownId = (e.currentTarget as HTMLElement).dataset.shownId as PersonId | undefined;
+                if (shownId && this.isChildrenShown(shownId)) void this.closeChildrenShown([shownId], shownId);
+            });
             // The other branch tabs focus on this person
-            const branchTabs = card.querySelectorAll('.branch-tab:not(.line-link):not(.children-tab)');
+            const branchTabs = card.querySelectorAll('.branch-tab:not(.line-link):not(.children-tab):not(.folded)');
             branchTabs.forEach(tab => {
                 tab.addEventListener('click', (e) => {
                     e.stopPropagation();
