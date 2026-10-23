@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { fakeBridge, fakePhone, links, openResearch, openResearchMenu, poll, signal, FakeBridge, FakePhoneEntry } from './research-bridge.js';
+import { UUID, fakeBridge, fakePhone, links, openResearch, openResearchMenu, poll, signal, FakeBridge, FakePhoneEntry } from './research-bridge.js';
 
 /**
  * "Connect phone" (spec 012): the Research menu's item and the button's dot,
@@ -175,6 +175,23 @@ test.describe('Connect phone', () => {
         await expect(dialog).toHaveCount(0);
         // The agent started: the bridge says research, the agent here.
         b.accepts = { ...ACCEPTS, mode: 'research' };
+        await poll(page);
+        dialog = await openDialog(page);
+        await expect(dialog.locator('.phone-intro')).toContainText('what is happening, what is waiting');
+    });
+
+    test('an archive by tree.kind, whatever accepts says (spec 017 U7): the archive\'s intro; research by tree.kind: the research\'s', async ({ page }) => {
+        const b = await setup(page, fakePhone(), ['phone', 'tree.kind']);
+        b.accepts = { ...ACCEPTS, mode: 'research' };
+        b.statusExtra = { tree: { id: UUID, name: 'Fíškovi', kind: 'archive' } };
+        await poll(page);
+        let dialog = await openDialog(page);
+        await expect(dialog.locator('.phone-intro')).toContainText('A phone on the same Wi-Fi sees the Strom archive: the latest changes to the tree.');
+        await expect(dialog.locator('.phone-intro')).not.toContainText(/happening|waiting|progress|agent/);
+        await page.keyboard.press('Escape');
+        await expect(dialog).toHaveCount(0);
+        b.accepts = { ...ACCEPTS, mode: 'archive', sync: { auto: 'mirror' } };
+        b.statusExtra = { tree: { id: UUID, name: 'Fíškovi', kind: 'research' } };
         await poll(page);
         dialog = await openDialog(page);
         await expect(dialog.locator('.phone-intro')).toContainText('what is happening, what is waiting');
