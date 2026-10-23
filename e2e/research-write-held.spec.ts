@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { UUID, block, editJan, fakeBridge, links, openResearch, openResearchMenu, poll, FakeBridge } from './research-bridge.js';
+import { partBoxes } from './research-conflict.js';
 
 /**
  * Writes the research holds back until something there is settled (spec 017
@@ -116,6 +117,68 @@ test.describe('a send the research holds back', () => {
         expect(bridge.posts).toHaveLength(1);
         await expect(page.locator('.toast', { hasText: SEAL })).toHaveCount(0);
     });
+});
+
+test.describe('a long sentence of the research (German, a long path)', () => {
+    test.use({ locale: 'de-DE' });
+    const NAME = 'Familienchronik Großeltern Müll';
+    const PATH = '/Users/familie/Library/Mobile_Documents/com~apple~CloudDocs/Strom/familienchronik-grosseltern-muell';
+    const SEAL_DE = `„${NAME}“ wurde auf einem anderen Computer versiegelt: Nichts wurde geschrieben — sobald er auf diesem übernommen ist (Terminal: strom seal adopt), erneut senden`;
+    const DISK_DE = `Auf dem Datenträger der Forschung ist kein Platz mehr (${PATH}): Nichts wurde geschrieben — Platz freigeben und erneut senden`;
+    const fits = (l: ReturnType<Page['locator']>) => l.evaluate(el => el.scrollWidth <= el.clientWidth + 1);
+    const box = async (l: ReturnType<Page['locator']>) => (await l.boundingBox())!;
+
+    for (const width of [1440, 390]) {
+        test(`${width} px: the block keeps the sentence's width, Take over under it; nothing past the menu`, async ({ page }) => {
+            await page.setViewportSize({ width, height: width > 640 ? 900 : 844 });
+            await openResearch(page, { edit: true });
+            await fakeBridge(page, { features: ['seal.foreign'], links: LINKS,
+                syncReply: { status: 409, body: { error: SEAL_DE, code: 'seal.foreign', text: 'sealed', params: { name: NAME, set: 'strom seal adopt' } } } });
+            await poll(page);
+            void page.evaluate(() => window.Strom.UI.researchSendNow()).catch(() => {});
+            await expect(dialog(page)).toHaveClass(/active/);
+            await page.locator('#confirm-cancel-btn').click();
+            await openResearchMenu(page);
+            await expect(block(page)).toHaveAttribute('data-state', 'writeHeld');
+            // Read in one go: the phone's sheet may still be gliding up.
+            const [whole, status, take] = await partBoxes(block(page), [':scope', '.research-sync-status', '.research-sync-main']);
+            expect(status.width).toBeGreaterThan(whole.width * 0.6);
+            expect(take.y).toBeGreaterThanOrEqual(status.y + status.height - 1);
+            expect(take.x + take.width).toBeLessThanOrEqual(whole.x + whole.width + 0.5);
+            expect(await fits(block(page))).toBe(true);
+        });
+
+        test(`${width} px: a long path wraps in the dialog, the block and the toast`, async ({ page }) => {
+            await page.setViewportSize({ width, height: width > 640 ? 900 : 844 });
+            await page.clock.install();
+            await openResearch(page, { auto: true });
+            const bridge = await fakeBridge(page, { features: ['disk.full'], links: LINKS,
+                accepts: { mode: 'research', sync: { auto: 'write' }, sources: true, verified: true, media: null },
+                syncReply: { status: 507, body: { error: DISK_DE, code: 'disk.full', text: 'disk full', params: { where: PATH } } } });
+            await page.evaluate(() => localStorage.setItem('strom-research-auto-intro-seen', '1'));
+            await poll(page);
+            await editJan(page);
+            await page.clock.fastForward(QUIET + 1000);
+            await expect.poll(() => bridge.posts.length).toBe(1);
+            const toast = page.locator('.toast', { hasText: PATH.slice(0, 20) });
+            await expect(toast).toHaveClass(/show/);
+            const t = await box(toast);
+            expect(t.x).toBeGreaterThanOrEqual(-0.5);
+            expect(t.x + t.width).toBeLessThanOrEqual(width + 0.5);
+            await openResearchMenu(page);
+            await expect(block(page)).toHaveAttribute('data-state', 'writeHeld');
+            expect(await fits(block(page))).toBe(true);
+            expect(await fits(block(page).locator('.research-sync-sub'))).toBe(true);
+            const [sub, main] = await partBoxes(block(page), ['.research-sync-sub', '.research-sync-main']);
+            expect(main.y).toBeGreaterThanOrEqual(sub.y + sub.height - 1);
+            // Sent by hand: the dialog says it, wrapped.
+            await page.evaluate(() => window.Strom.UI.closeActionsMenu());
+            void page.evaluate(() => window.Strom.UI.researchSendNow()).catch(() => {});
+            await expect(dialog(page)).toContainText(PATH);
+            expect(await fits(page.locator('#confirmation-modal .modal-content'))).toBe(true);
+            expect(await fits(page.locator('#confirm-message'))).toBe(true);
+        });
+    }
 });
 
 test.describe('said ahead by /status', () => {
