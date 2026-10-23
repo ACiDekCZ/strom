@@ -730,7 +730,7 @@ export const bottomSheetMethods = uiModule({
                 list.appendChild(line);
             }
             for (const row of group.rows) {
-                list.appendChild(makeButton({ label: row.label, run: row.run, badge: row.count, warnBadge: true, ai: row.ai, ext: row.ext, ariaLabel: row.ariaLabel }));
+                list.appendChild(makeButton({ label: row.label, run: row.run, badge: row.count, warnBadge: true, ai: row.ai, ext: row.ext, ariaLabel: row.ariaLabel, value: row.value, id: row.id }));
             }
             allRow = document.createElement('button');
             allRow.type = 'button';

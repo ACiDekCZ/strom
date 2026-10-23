@@ -194,6 +194,9 @@ describe('labels', () => {
         expect(batchFolderLabel({ batch: { id: 'b', name: 'Box' }, path: 'Letters/a.jpg' })).toBe('Box › Letters');
         expect(batchFolderLabel({ batch: { id: 'b', name: 'Box' }, path: 'a.jpg' })).toBe('Box');
         expect(batchFolderLabel({})).toBe(strings.materials.loose);
+        // A tree attachment without its original in the research: "In the tree", batch or not.
+        expect(batchFolderLabel({ origin: 'tree' })).toBe(strings.materials.inTreeGroup);
+        expect(batchFolderLabel({ origin: 'archive' })).toBe(strings.materials.loose);
     });
 });
 
@@ -339,7 +342,7 @@ describe('bridge client', () => {
             [404, 'material.batch', strings.materials.errGeneric, strings.materials.errGeneric],
             [400, 'material.body', strings.materials.errGeneric, strings.materials.errGeneric],
             [400, 'material.query', strings.materials.errGeneric, strings.materials.errGeneric],
-            [410, 'media.gone', strings.materials.notHere, strings.materials.notHere],
+            [410, 'media.gone', strings.materials.notHere, strings.materials.notHereResearch],
         ];
         for (const [status, code, archive, research] of cases) {
             const f = fakeFetch([[status, { error: 'x', code, text: 'x', params: { id: 'P0001' } }]]);

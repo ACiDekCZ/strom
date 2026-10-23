@@ -433,6 +433,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         UI.initOtherResearch();
         // Originals waiting for a research (their state lines).
         void UI.initOriginalsQueue();
+        // The family's materials from the research (cards' counts, the person's section).
+        UI.initMaterials();
         // A tree downloaded in Safari to move to another browser for the research: its banner.
         UI.initResearchTransferBanner();
         // A private window: its trees go when it closes (said once).

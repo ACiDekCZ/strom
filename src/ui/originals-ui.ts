@@ -115,6 +115,13 @@ export function researchRefusalOf(sha: string): unknown {
     return refusedReplies.get(sha);
 }
 
+/** The research's id of a file it took or had (`I…`), by its SHA-256, as its bridge answered in this page. */
+const replyIds = new Map<string, string>();
+
+export function researchReplyId(sha: string): string | null {
+    return replyIds.get(sha) ?? null;
+}
+
 /** What the research says it added to a file it had: a person, the note (none: nothing new). */
 export function researchKnownAdded(sha: string): { person: boolean; note: boolean } | null {
     return knownAdded.get(sha) ?? null;
@@ -841,7 +848,9 @@ export const originalsMethods = uiModule({
                     const note = added?.note === true;
                     if (person || note) knownAdded.set(rec.sha256, { person, note });
                 }
-                return mediaReplyId(body) ?? 'ok';
+                const replyId = mediaReplyId(body);
+                if (replyId) replyIds.set(rec.sha256, replyId);
+                return replyId ?? 'ok';
             }
             // Too large / a kind it does not take: never. Out of disk space: stop for now.
             if (res.status === 413 || res.status === 415) {

@@ -1654,6 +1654,8 @@ const stringsEN = {
     // Materials: the family's files kept in the Strom archive / the research, beside the tree's attachments (spec 017)
     materials: {
         title: 'Materials',
+        show: 'Show',
+        batchLink: 'Materials ›',
         menu: 'Materials',
         allForPerson: (n: number) => `All materials of this person (${n}) ›`,
         all: 'All materials ›',
@@ -1661,7 +1663,6 @@ const stringsEN = {
         loose: 'Single files',
         looseSub: 'not in a batch',
         inTreeGroup: 'In the tree',
-        importGedcom: 'GEDCOM import',
         kind: { photo: 'Photo', document: 'Document', record: 'Record', other: 'Other' } as Record<string, string>,
         kindNone: 'No type',
         type: { image: 'Image', pdf: 'PDF', audio: 'Audio', file: 'File' } as Record<string, string>,
@@ -1707,6 +1708,7 @@ const stringsEN = {
         download: 'Download',
         deleteFromTree: 'Delete from the tree…',
         notHere: 'The file is not on this computer. The record stays in the archive.',
+        notHereResearch: 'The file is not on this computer. The record stays in the research.',
         viewerPos: (i: number, n: number, c: string) => `${i} / ${n}${c ? ` · ${c}` : ''}`,
         ctxPerson: (name: string) => `Materials of ${name}`,
         f: {
@@ -2746,6 +2748,7 @@ const stringsEN = {
         ttStory: 'Story',
         ttStoryDraft: 'Story (draft)',
         ttAttachments: (n: number) => nEn(n, 'attachment', 'attachments'),
+        ttMaterials: (n: number) => `Materials ${n}`,
         ttWaiting: (t: string) => `Awaiting action: ${t}`,
         ttQuestion: (t: string) => `Question: ${t}`,
         ttAgent: (t: string) => `Research working: ${t}`,
@@ -6483,6 +6486,8 @@ const stringsCZ: StringsType = {
     // Materials: the family's files kept in the Strom archive / the research, beside the tree's attachments (spec 017)
     materials: {
         title: 'Materiály',
+        show: 'Zobrazit',
+        batchLink: 'Materiály ›',
         menu: 'Materiály',
         allForPerson: (n: number) => `Všechny materiály osoby (${n}) ›`,
         all: 'Všechny materiály ›',
@@ -6490,7 +6495,6 @@ const stringsCZ: StringsType = {
         loose: 'Jednotlivě',
         looseSub: 'bez dávky',
         inTreeGroup: 'Ve stromu',
-        importGedcom: 'Import GEDCOM',
         kind: { photo: 'Fotka', document: 'Dokument', record: 'Listina', other: 'Jiné' } as Record<string, string>,
         kindNone: 'Bez druhu',
         type: { image: 'Obrázek', pdf: 'PDF', audio: 'Zvuk', file: 'Soubor' } as Record<string, string>,
@@ -6536,6 +6540,7 @@ const stringsCZ: StringsType = {
         download: 'Stáhnout',
         deleteFromTree: 'Smazat ze stromu…',
         notHere: 'Soubor na tomto počítači není. Záznam v archivu zůstává.',
+        notHereResearch: 'Soubor na tomto počítači není. Záznam ve výzkumu zůstává.',
         viewerPos: (i: number, n: number, c: string) => `${i} / ${n}${c ? ` · ${c}` : ''}`,
         ctxPerson: (name: string) => `Materiály osoby ${name}`,
         f: {
@@ -7574,6 +7579,7 @@ const stringsCZ: StringsType = {
         ttStory: 'Vyprávění',
         ttStoryDraft: 'Vyprávění (návrh)',
         ttAttachments: (n: number) => nCs(n, 'příloha', 'přílohy', 'příloh'),
+        ttMaterials: (n: number) => `Materiály ${n}`,
         ttWaiting: (t: string) => `Čeká na vyřízení: ${t}`,
         ttQuestion: (t: string) => `Otázka: ${t}`,
         ttAgent: (t: string) => `Výzkum pracuje: ${t}`,
@@ -11283,6 +11289,8 @@ const stringsDE: StringsType = {
     // Materials: the family's files kept in the Strom archive / the research, beside the tree's attachments (spec 017)
     materials: {
         title: 'Materialien',
+        show: 'Anzeigen',
+        batchLink: 'Materialien ›',
         menu: 'Materialien',
         allForPerson: (n: number) => `Alle Materialien der Person (${n}) ›`,
         all: 'Alle Materialien ›',
@@ -11290,7 +11298,6 @@ const stringsDE: StringsType = {
         loose: 'Einzeln',
         looseSub: 'ohne Stapel',
         inTreeGroup: 'Im Stammbaum',
-        importGedcom: 'GEDCOM-Import',
         kind: { photo: 'Foto', document: 'Dokument', record: 'Urkunde', other: 'Sonstiges' } as Record<string, string>,
         kindNone: 'Ohne Art',
         type: { image: 'Bild', pdf: 'PDF', audio: 'Audio', file: 'Datei' } as Record<string, string>,
@@ -11336,6 +11343,7 @@ const stringsDE: StringsType = {
         download: 'Herunterladen',
         deleteFromTree: 'Aus dem Stammbaum löschen…',
         notHere: 'Die Datei ist nicht auf diesem Computer. Der Eintrag bleibt im Archiv.',
+        notHereResearch: 'Die Datei ist nicht auf diesem Computer. Der Eintrag bleibt in der Forschung.',
         viewerPos: (i: number, n: number, c: string) => `${i} / ${n}${c ? ` · ${c}` : ''}`,
         ctxPerson: (name: string) => `Materialien von ${name}`,
         f: {
@@ -12360,6 +12368,7 @@ const stringsDE: StringsType = {
         ttStory: 'Erzählung',
         ttStoryDraft: 'Erzählung (Entwurf)',
         ttAttachments: (n: number) => nDe(n, 'Anhang', 'Anhänge'),
+        ttMaterials: (n: number) => `Materialien ${n}`,
         ttWaiting: (t: string) => `Wartet auf Bearbeitung: ${t}`,
         ttQuestion: (t: string) => `Frage: ${t}`,
         ttAgent: (t: string) => `Forschung arbeitet: ${t}`,

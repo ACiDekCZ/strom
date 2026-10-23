@@ -170,6 +170,8 @@ export const attachmentsMethods = uiModule({
             if (html) older.innerHTML = html;
             else older.textContent = strings.media.olderResearch;
         }
+        // The materials show the same attachments (with the research's files) where they are on.
+        this.renderMaterialsSection();
     },
 
     /** Handle a picked file: compress images, size-check PDFs, then attach. */

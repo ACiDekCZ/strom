@@ -2231,6 +2231,8 @@ export const researchSyncMethods = uiModule({
         this.refreshResearchMarks();
         // Source images left out of the research's file: loadable while its bridge runs.
         this.researchImagesBridgeChanged();
+        // Materials: the research's capabilities remembered, the person's section and the cards' counts.
+        this.materialsBridgeChanged();
     },
 
     /**

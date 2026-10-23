@@ -2734,10 +2734,12 @@ class TreeRendererClass {
             if (ev.sources > 0 && ev.hasDeath && !ev.deathCited) bits.push(c.ttDeathMissing);
             rows.push(`<div class="tt-line tt-ev">${stateStripesHtml(ev.level, null, true)}${this.escapeHtml(bits.join(' · '))}</div>`);
         }
-        if (s.story || s.attachments > 0) {
+        // A linked tree that shows materials: "Materials N" in place of the attachments.
+        const files = s.materials ?? s.attachments;
+        if (s.story || files > 0) {
             const bits: string[] = [];
             if (s.story) bits.push(s.story === 'draft' ? c.ttStoryDraft : s.storyNew ? c.ttStoryNew : c.ttStory);
-            if (s.attachments > 0) bits.push(c.ttAttachments(s.attachments));
+            if (files > 0) bits.push(s.materials !== null ? c.ttMaterials(files) : c.ttAttachments(files));
             rows.push(`<div class="tt-line tt-story">${stateStripesHtml(null, s.story, true)}${this.escapeHtml(bits.join(' · '))}</div>`);
         }
         const action = (text: string): string => `<div class="tt-line tt-action">${this.escapeHtml(text)}</div>`;

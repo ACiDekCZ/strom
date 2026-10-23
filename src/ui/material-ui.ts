@@ -20,7 +20,7 @@ import { exifOrientation, originalTargets } from '../originals.js';
 import { dataUrlByteSize } from '../photo.js';
 import { compressImageAttachment, readFileAsDataUrl, MAX_PDF_BYTES, ATTACHMENT_IMAGE_TYPES } from '../attachments.js';
 import { personSubtitle } from './person-sources-ui.js';
-import { formatBytesShort, QueueOutcome, researchKnownAdded, researchRefusalOf } from './originals-ui.js';
+import { formatBytesShort, QueueOutcome, researchKnownAdded, researchRefusalOf, researchReplyId } from './originals-ui.js';
 import { mediaCodesOn, mediaRefusalText } from '../media-refusal.js';
 import { bridgeFailure } from './research-ui.js';
 import { uiModule } from './module.js';
@@ -46,6 +46,13 @@ export function materialAccepted(name: string, type: string, accepted: { mime: s
 let picked: File[] = [];
 let rejected = 0;
 let busy = false;
+/** "Also save to the tree" (an archive whose materials are shown): ticked on every opening, kept only for this save. */
+let alsoTree = true;
+
+/** A file "Also save to the tree" takes: an image or a PDF up to 2 MB (larger and other kinds stay in the archive only). */
+export function alsoTreeEligible(file: Pick<File, 'type' | 'size'>): boolean {
+    return (ATTACHMENT_IMAGE_TYPES.includes(file.type) || file.type === 'application/pdf') && file.size <= MAX_PDF_BYTES;
+}
 
 function esc(text: string): string {
     return text
@@ -74,6 +81,7 @@ export const materialMethods = uiModule({
         picked = [];
         rejected = 0;
         busy = false;
+        alsoTree = true;
         const overlay = document.createElement('div');
         overlay.id = DIALOG_ID;
         overlay.className = 'modal-overlay active';
@@ -103,37 +111,50 @@ export const materialMethods = uiModule({
             : m.toSource(data.sources?.[target.sourceId]?.title ?? '');
         // An archive, or a research waiting for its agent: it saves as an archive.
         const archive = this.researchAgentlessFor(link.researchId);
+        // An archive whose materials the app shows: "Save material", saved also to the tree by default (§2.6).
+        const kept = archive && this.materialsListOn();
         const up = this.researchBridgeUp(link.researchId);
         const ready = originalTargets(isPerson ? { personId: target.personId } : { sourceId: target.sourceId }, data).ready;
         const bytes = picked.reduce((sum, f) => sum + f.size, 0);
         const cantWait = !up && (SettingsManager.isEncryptionEnabled() || bridgeFailure(null) === 'safari');
         let box: string;
         let primary: { label: string; act: string };
+        const saveLabel = kept && picked.length ? m.saveN(picked.length) : m.saveArchive;
         if (archive && up && ready) {
             box = m.infoArchive;
-            primary = { label: m.saveArchive, act: 'send' };
+            primary = { label: saveLabel, act: 'send' };
         } else if (cantWait) {
             box = m.cantWait(formatBytesShort(bytes));
             primary = { label: strings.sync.startResearch, act: 'start' };
         } else if (!ready) {
             // A person the research does not know yet: the files wait in the browser (also in an archive).
             box = archive ? m.infoNoIdArchive : m.infoNoId;
-            primary = archive ? { label: m.saveArchive, act: 'send' }
+            primary = archive ? { label: saveLabel, act: 'send' }
                 : { label: picked.length ? m.sendN(picked.length) : m.sendFiles, act: 'send' };
         } else if (!up) {
             box = m.infoQueue;
             primary = { label: m.sendLater, act: 'send' };
         } else {
             box = archive ? m.infoArchive : isPerson ? m.infoAgent : m.infoAgentSource;
-            primary = { label: archive ? m.saveArchive : picked.length ? m.sendN(picked.length) : m.sendFiles, act: 'send' };
+            primary = { label: archive ? saveLabel : picked.length ? m.sendN(picked.length) : m.sendFiles, act: 'send' };
         }
         const note = (overlay.querySelector('#material-note') as HTMLTextAreaElement | null)?.value ?? '';
         const attach = (overlay.querySelector('#material-attach') as HTMLInputElement | null)?.checked ?? false;
+        const eligible = picked.filter(alsoTreeEligible).length;
+        const attachBox = !isPerson ? '' : kept ? `
+                    <label class="confirm-check material-attach${eligible === 0 ? ' is-disabled' : ''}">
+                        <input type="checkbox" id="material-attach"${alsoTree && eligible > 0 ? ' checked' : ''}${eligible === 0 ? ' disabled' : ''}>
+                        <span><span class="confirm-check-label">${esc(m.alsoTree)}</span><span class="confirm-check-hint">${esc(m.alsoTreeHint(eligible, picked.length))}</span></span>
+                    </label>` : `
+                    <label class="confirm-check material-attach">
+                        <input type="checkbox" id="material-attach"${attach ? ' checked' : ''}>
+                        <span><span class="confirm-check-label">${esc(m.alsoAttach)}</span><span class="confirm-check-hint">${esc(m.alsoAttachHint)}</span></span>
+                    </label>`;
         overlay.innerHTML = `
             <div class="modal modal--md material-dialog" role="dialog" data-dialog-kind="form" aria-modal="true" aria-labelledby="material-title">
                 <div class="modal-header">
                     <div class="audit-log-heading">
-                        <h2 id="material-title">${esc(m.title)}</h2>
+                        <h2 id="material-title">${esc(kept ? m.titleArchive : m.title)}</h2>
                         <div class="audit-log-subtitle">${esc(subtitle)}</div>
                     </div>
                     <button type="button" class="close-btn" aria-label="${esc(strings.buttons.close)}">&times;</button>
@@ -153,14 +174,10 @@ export const materialMethods = uiModule({
                         </li>`).join('')}</ul>` : ''}
                     ${rejected ? `<p class="material-rejected">${esc(m.rejectedTypes(rejected))}</p>` : ''}
                     ${this.batchAvailable() ? `<button type="button" class="research-sync-link material-big-batch">${esc(m.bigBatch)}</button>` : ''}
-                    <label class="material-note-label" for="material-note">${esc(m.note)}</label>
+                    <label class="material-note-label" for="material-note">${esc(kept ? m.noteArchive : m.note)}</label>
                     <textarea id="material-note" rows="2" maxlength="${MATERIAL_NOTE_MAX}">${esc(note)}</textarea>
                     <div class="material-note-count">${note.length} / ${MATERIAL_NOTE_MAX}</div>
-                    ${isPerson ? `
-                    <label class="confirm-check material-attach">
-                        <input type="checkbox" id="material-attach"${attach ? ' checked' : ''}>
-                        <span><span class="confirm-check-label">${esc(m.alsoAttach)}</span><span class="confirm-check-hint">${esc(m.alsoAttachHint)}</span></span>
-                    </label>` : ''}
+                    ${attachBox}
                     <p class="material-box${cantWait ? ' is-warn' : ''}"><span class="research-not-retroactive-icon" aria-hidden="true">i</span><span>${esc(box)}</span></p>
                 </div>
                 <div class="buttons">
@@ -191,6 +208,10 @@ export const materialMethods = uiModule({
             picked.splice(Number(btn.dataset.index), 1);
             this.renderMaterialDialog();
         }));
+        // Unticking holds for this save only (the next opening is ticked again).
+        overlay.querySelector<HTMLInputElement>('#material-attach')?.addEventListener('change', (e) => {
+            if (kept && !(e.currentTarget as HTMLInputElement).disabled) alsoTree = (e.currentTarget as HTMLInputElement).checked;
+        });
         const noteEl = overlay.querySelector<HTMLTextAreaElement>('#material-note');
         noteEl?.addEventListener('input', () => {
             const count = overlay.querySelector('.material-note-count');
@@ -241,6 +262,9 @@ export const materialMethods = uiModule({
         const failed: { name: string; why: string }[] = [];
         // An archive, or a research waiting for its agent: "saved into the archive".
         const archive = this.researchAgentlessFor(link.researchId);
+        const kept = archive && this.materialsListOn();
+        /** What the research took (its id known): into the remembered list at once. */
+        const saved: { id: string; name: string; sha: string; mime: string; bytes: number; note: string }[] = [];
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
             if (go) { go.disabled = true; go.textContent = m.sendingK(i + 1, files.length); }
@@ -254,8 +278,11 @@ export const materialMethods = uiModule({
                 failed.push({ name: file.name, why: m.whyUnreadable });
                 continue;
             }
-            if (attach && 'personId' in target) await this.attachMaterialFile(target.personId, file, original);
+            // An archive whose materials are shown: only images and PDFs up to 2 MB go into the tree too.
+            if (attach && 'personId' in target && (!kept || alsoTreeEligible(file))) await this.attachMaterialFile(target.personId, file, original);
             const outcome = await this.queueOriginal(original, file, { ...target, note, material: true });
+            const replyId = outcome === 'sent' || outcome === 'known' || outcome === 'knownFilled' ? researchReplyId(original.sha256) : null;
+            if (replyId) saved.push({ id: replyId, name: file.name, sha: original.sha256, mime: original.mimeType, bytes: file.size, note });
             if (outcome === 'queued') queuedShas.push(original.sha256);
             else if (outcome === 'known') known++;
             else if (outcome === 'knownFilled') {
@@ -273,6 +300,8 @@ export const materialMethods = uiModule({
         busy = false;
         this.closeMaterialDialog();
         this.renderAttachmentsList();
+        // The person's materials show what was saved at once, then the research's own answer.
+        if ('personId' in target) void this.materialsSaved(target.personId, saved);
         const name = 'personId' in target ? personSubtitle(target.personId).split(' · ')[0]
             : DataManager.getData().sources?.[target.sourceId]?.title ?? '';
         const ready = originalTargets('personId' in target ? { personId: target.personId } : { sourceId: target.sourceId }, DataManager.getData()).ready;
@@ -290,7 +319,10 @@ export const materialMethods = uiModule({
                 ? m.alreadyHadFilledToast(known, filled.person && filled.note ? m.filledBoth : filled.person ? m.filledPerson : m.filledNote)
                 : m.alreadyHadToast(known), 6000, { closable: true });
         } else {
-            this.showToast((archive ? m.savedArchiveToast(sent, name) : m.sentToast(sent, name)) + knownPart, 6000, { closable: true });
+            // "Show": the person's materials (a source: the materials window).
+            const show = this.materialsListOn() ? { action: { label: strings.materials.show,
+                run: () => ('personId' in target ? this.showPersonMaterials(target.personId) : this.openMaterials()) } } : {};
+            this.showToast((archive ? m.savedArchiveToast(sent, name) : m.sentToast(sent, name)) + knownPart, 6000, { closable: true, ...show });
         }
     },
 

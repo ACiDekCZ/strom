@@ -132,6 +132,9 @@ export const contextMenuMethods = uiModule({
                     ariaLabel: sourceCount > 0 ? strings.personSources.countSr(sourceCount) : undefined,
                 });
             }
+            // The person's materials (attachments and the research's files), right under Sources.
+            const materials = this.personMaterialsCount(personId);
+            if (materials > 0) out.push({ action: 'materials', label: strings.materials.menu, meta: String(materials) });
             if (hasStory) out.push({ action: 'story', label: c.showStory });
             return out;
         };
@@ -141,8 +144,10 @@ export const contextMenuMethods = uiModule({
         const knows = this.personResearchKnows(personId);
         const researchActions = this.personResearchActions(personId);
         // Files about the person, to the research (right after what it knows).
+        // In an archive whose materials are shown: "Add material…" (it is kept, not sent to an agent).
+        const addsMaterial = this.materialsListOn() && !!this.materialsContext() && !this.materialsContext()?.agent;
         const material: PersonMenuAction[] = !isViewMode && this.materialAvailable()
-            ? [{ action: 'research-material', label: strings.material.send }] : [];
+            ? [{ action: 'research-material', label: addsMaterial ? strings.material.add : strings.material.send }] : [];
         // Read a document about the person: right under the material, only when reading can start now.
         if (!isViewMode && this.readDocumentReady()) {
             material.push({ action: 'research-read', label: strings.read.menuPerson, note: strings.read.menuSub, badge: 'ai' });
@@ -240,6 +245,9 @@ export const contextMenuMethods = uiModule({
                 break;
             case 'toggle-children':
                 void TreeRenderer.toggleChildrenShown(personId);
+                break;
+            case 'materials':
+                this.showPersonMaterials(personId);
                 break;
             case 'sources':
                 this.clearDialogStack();

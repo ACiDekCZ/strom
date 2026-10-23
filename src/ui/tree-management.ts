@@ -48,6 +48,7 @@ import { isPhoneToolbar } from './search.js';
 
 import { iconSvg } from '../icons.js';
 import { shownNameOrEmpty } from '../person-name.js';
+import { forgetTreeMaterials } from './materials-ui.js';
 
 /** Room (px) a row menu needs beside ⋯ to show a useful part of its rows. */
 const TREE_MENU_MIN_ROOM = 240;
@@ -1519,6 +1520,8 @@ export const treeManagementMethods = uiModule({
         if (confirmed) {
             const wasActive = TreeManager.getActiveTreeId() === treeId;
             await TreeManager.deleteTree(treeId as TreeId);
+            // The research's files stay in the research; only this browser's copy of their list goes.
+            void forgetTreeMaterials(treeId);
 
             // If no trees left, create a new empty one
             if (!TreeManager.hasTrees()) {

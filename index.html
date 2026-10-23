@@ -15096,6 +15096,104 @@
             background: var(--surface-2); border: 1px solid var(--border); color: var(--text-light);
             font-size: 10px; font-weight: 700; letter-spacing: 0.02em;
         }
+        /* Materials at the person (materials-ui.ts, spec 017): attachments and the research's files in one list. */
+        .materials-section[hidden] { display: none; }
+        .materials-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+        .materials-title { font-weight: 600; font-size: 14px; color: var(--text); }
+        .materials-count { font-size: 13px; color: var(--text-light); font-variant-numeric: tabular-nums; }
+        .materials-head-gap { flex: 1; }
+        .materials-note { margin: 0 0 8px; font-size: 13px; line-height: 1.45; color: var(--text-light); }
+        .materials-note[hidden] { display: none; }
+        .materials-bar {
+            display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; margin: 0 0 8px; padding: 8px 10px;
+            border-radius: var(--r-md); background: var(--surface-2); font-size: 13px; line-height: 1.4; color: var(--text-light);
+        }
+        .materials-bar > span { flex: 1 1 220px; min-width: 0; }
+        .materials-start { font-size: 13px; font-weight: 600; color: var(--primary); padding: 0; }
+        .materials-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 6px; }
+        .material-row {
+            display: flex; align-items: flex-start; gap: 10px; min-height: 56px; box-sizing: border-box;
+            padding: 6px 8px 6px 6px; border: 1px solid var(--border); border-radius: var(--r-md);
+            background: var(--surface); font-size: 14px; cursor: pointer;
+        }
+        .material-row:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
+        .material-thumb {
+            width: 48px; height: 48px; flex-shrink: 0; border-radius: var(--r-sm); overflow: hidden;
+            display: flex; align-items: center; justify-content: center; background: var(--surface-2);
+        }
+        .material-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .material-row-tile { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 10px; font-weight: 600; color: var(--text-light); letter-spacing: 0.02em; }
+        .material-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+        .material-title {
+            font-weight: 600; color: var(--text); line-height: 1.3; overflow-wrap: anywhere;
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+        }
+        .material-meta, .material-line3 { font-size: 12px; color: var(--text-light); line-height: 1.35; }
+        .material-line3 { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; }
+        .material-where { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+        .material-via {
+            font-size: 11px; padding: 0 6px; border-radius: var(--r-pill); border: 1px solid var(--border);
+            color: var(--text-light); white-space: nowrap;
+        }
+        .material-note { font-size: 12px; font-style: italic; color: var(--text-light); overflow-wrap: anywhere; }
+        .material-note-input { margin-top: 2px; }
+        .material-side { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0; }
+        .material-at { font-size: 12px; color: var(--text-faint); white-space: nowrap; font-variant-numeric: tabular-nums; min-height: 16px; }
+        .material-more {
+            width: 32px; height: 28px; border: none; border-radius: var(--r-sm); background: none; color: var(--text-light);
+            font-size: 18px; line-height: 1; cursor: pointer; padding: 0;
+        }
+        .material-more:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
+        .material-row.is-skeleton { cursor: default; align-items: center; }
+        .material-row.is-skeleton .material-thumb { background: var(--surface-2); }
+        .material-skel-lines { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+        .material-skel-lines span { display: block; height: 10px; border-radius: 4px; background: var(--surface-2); }
+        .material-skel-lines span:first-child { width: 60%; }
+        .material-skel-lines span:last-child { width: 35%; }
+        .materials-empty {
+            display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 14px;
+            border: 1px dashed var(--border); border-radius: var(--r-md); margin-bottom: 6px;
+        }
+        .materials-empty p { margin: 0; font-size: 13px; line-height: 1.45; color: var(--text-light); }
+        .materials-all { font-size: 13px; font-weight: 600; color: var(--primary); padding: 4px 0; }
+        .materials-item-menu {
+            position: fixed; z-index: 10050; min-width: 200px; max-width: calc(100vw - 16px); padding: 4px;
+            background: var(--surface-modal, var(--surface)); border: 1px solid var(--border); border-radius: var(--r-md);
+            box-shadow: var(--shadow-lg); display: flex; flex-direction: column;
+        }
+        .materials-item-menu-row {
+            display: block; width: 100%; text-align: left; border: none; background: none; color: var(--text);
+            font: inherit; font-size: 14px; padding: 8px 10px; border-radius: var(--r-sm); cursor: pointer;
+        }
+        .materials-item-menu-row:focus-visible { outline: none; background: var(--hover-bg); }
+        .materials-item-menu-row.is-danger { color: var(--danger); }
+        .materials-item-menu-row[aria-disabled="true"] { color: var(--text-faint); cursor: default; }
+        .materials-item-menu-divider { height: 1px; margin: 4px 6px; background: var(--divider); }
+        .materials-window { width: 1200px; max-width: calc(100vw - 32px); height: 88vh; display: flex; flex-direction: column; }
+        .materials-window-body { flex: 1; min-height: 0; overflow: auto; }
+        @media (hover: hover) {
+            .material-row:hover { background: var(--hover-bg); }
+            .material-more { opacity: 0; }
+            .material-row:hover .material-more, .material-row:focus-within .material-more, .material-more[aria-expanded="true"] { opacity: 1; }
+            .material-more:hover { background: var(--surface-2); color: var(--text); }
+            .materials-item-menu-row:not([aria-disabled="true"]):hover { background: var(--hover-bg); }
+        }
+        @media (pointer: coarse) {
+            .material-row { min-height: 64px; }
+            .material-more { width: 44px; height: 44px; opacity: 1; }
+            .materials-item-menu-row { min-height: 44px; }
+        }
+        @media (max-width: 640px) {
+            .material-row { gap: 8px; }
+            .materials-window { max-width: 100vw; width: 100vw; height: 100vh; height: 100dvh; border-radius: 0; }
+        }
+        @media (min-width: 641px) and (max-width: 1024px) {
+            .materials-window { width: 100vw; max-width: 100vw; height: 100vh; height: 100dvh; border-radius: 0; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .material-row { min-height: 56px; }
+            .materials-window { height: 100vh; height: 100dvh; }
+        }
         .attachment-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
         .attachment-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .attachment-size { color: var(--text-secondary, #777); font-size: 12px; }
@@ -16160,6 +16258,7 @@
                         <input type="file" id="input-attachment" accept="image/jpeg,image/png,application/pdf" style="display:none" onchange="window.Strom.UI.handleAttachmentInput(event)">
                         <button type="button" class="secondary" id="btn-add-attachment" onclick="document.getElementById('input-attachment').click()" data-i18n="attachments.add"></button>
                     </div>
+                    <div class="form-group materials-section" id="materials-section" hidden></div>
                 </div>
 
                 <div class="pm-section" id="pm-story-section">

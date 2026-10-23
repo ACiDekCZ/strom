@@ -337,7 +337,9 @@ export function materialFolder(path: string | undefined): string {
 }
 
 /** "batch › folder"; a file outside a batch: "Single files". */
-export function batchFolderLabel(item: Pick<MaterialItem, 'batch' | 'path'>): string {
+export function batchFolderLabel(item: Pick<MaterialItem, 'batch' | 'path'> & { origin?: MaterialItem['origin'] }): string {
+    // An attachment without its original in the research: "In the tree" (where it came from is not told apart).
+    if (item.origin === 'tree') return strings.materials.inTreeGroup;
     if (!item.batch) return strings.materials.loose;
     const folder = materialFolder(item.path);
     return folder ? `${item.batch.name} › ${folder}` : item.batch.name;
@@ -594,6 +596,43 @@ export function personMaterialCount(person: Pick<Person, 'refn' | 'attachments'>
     return personMaterials(person, list).length;
 }
 
+/**
+ * Counts for many people at once (card tooltips): the same number as
+ * `personMaterials(person, list).length`, with the list indexed once.
+ */
+export function materialCounter(list: MaterialList | null | undefined): (person: Pick<Person, 'refn' | 'attachments'>) => number {
+    if (!list) return person => person.attachments?.length ?? 0;
+    const batches = batchMap(list);
+    const bySha = new Map<string, MaterialFile>();
+    const byRefn = new Map<string, MaterialFile[]>();
+    for (const f of list.files) {
+        if (!bySha.has(f.sha)) bySha.set(f.sha, f);
+        const refs = new Set([...f.persons, ...(f.sorted?.persons ?? []), ...((f.batch ? batches.get(f.batch)?.persons : undefined) ?? [])]);
+        for (const r of refs) {
+            const files = byRefn.get(r);
+            if (files) files.push(f); else byRefn.set(r, [f]);
+        }
+    }
+    return person => {
+        const refn = researchPersonRef(person.refn);
+        const attachments = person.attachments ?? [];
+        if (!refn) return attachments.length;
+        const used = new Set<string>();
+        let n = 0;
+        for (const att of attachments) {
+            const file = att.original?.sha256 ? bySha.get(att.original.sha256.toLowerCase()) : undefined;
+            if (file && !used.has(file.id)) {
+                used.add(file.id);
+                if (!file.hidden) n++;
+            } else {
+                n++;
+            }
+        }
+        for (const f of byRefn.get(refn) ?? []) if (!used.has(f.id) && !f.hidden) n++;
+        return n;
+    };
+}
+
 // ==================== BRIDGE CLIENT ====================
 
 export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
@@ -673,7 +712,7 @@ export function materialErrorText(err: MaterialError, agent: boolean): string {
         case 'file': return agent ? m.errFileResearch : m.errFile;
         case 'readonly': return agent ? m.errReadonlyResearch : m.errReadonly;
         case 'busy': return agent ? m.errBusyResearch : m.errBusy;
-        case 'gone': return m.notHere;
+        case 'gone': return agent ? m.notHereResearch : m.notHere;
         default: return m.errGeneric;
     }
 }

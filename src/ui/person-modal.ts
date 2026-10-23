@@ -569,9 +569,11 @@ export const personModalMethods = uiModule({
             const el = document.getElementById(id);
             if (el) el.style.display = (advanced || hasValue) ? '' : 'none';
         }
+        // Materials from the research (or a linked tree on touch): always shown, even empty.
+        const materials = this.applyMaterialsSection(person);
         // Hide the whole "Sources and attachments" section when nothing in it is
         // shown, so the copper header never sits above an empty block.
-        const anyResearch = advanced || Object.values(filled).some(Boolean);
+        const anyResearch = advanced || materials || Object.values(filled).some(Boolean);
         const research = document.getElementById('pm-section-research');
         if (research) research.style.display = anyResearch ? '' : 'none';
         this.updateFactSourceRows(person);
@@ -811,6 +813,8 @@ export const personModalMethods = uiModule({
         // LAST: the lines above switch sources/attachments on for edit mode, so
         // deciding what a research field should do has to come after them.
         this.applyAdvancedFieldVisibility(person);
+        // The person's files from the research, asked again quietly (the section shows the remembered ones first).
+        void this.refreshPersonMaterials(id);
 
         // Live section summaries (— rodiče, 1 partnerka, 2 děti …).
         this.updatePersonSummaries(person);

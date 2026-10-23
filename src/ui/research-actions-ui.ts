@@ -115,6 +115,9 @@ export interface ResearchSheetRow {
     ai?: boolean;
     ext?: boolean;
     ariaLabel: string;
+    /** A quiet value at the end ("1 284"). */
+    value?: string;
+    id?: string;
 }
 
 /** The More sheet's research group (a narrow window with a mouse): the state in one line and the frequent actions. */
@@ -286,6 +289,11 @@ export const researchActionsMethods = uiModule({
         const treeSettings: SubmenuItem[] = hasTreeSettings
             ? [{ id: 'research-item-tree-settings', label: strings.sync.treeSettings, method: 'researchActionTreeSettings' }] : [];
         const materials: SubmenuItem[] = this.batchAvailable() ? [{ id: 'research-item-batch', label: strings.batch.menu, method: 'showBatchDialog' }] : [];
+        // The materials window, right under "Add materials…" (its count from the remembered list; none without it).
+        if (this.materialsListOn()) {
+            const total = this.materialsTotalCount();
+            materials.push({ id: 'research-item-materials', label: strings.materials.menu, method: 'openMaterials', ...(total !== null ? { val: total.toLocaleString(getCurrentLanguage()) } : {}) });
+        }
         // Connect phone (spec 012): right after the materials, its state in a pill.
         const phoneItem = this.phoneMenuItem();
         const phone: SubmenuItem[] = phoneItem ? [{ id: 'research-item-phone', method: 'showPhoneDialog', ...phoneItem }] : [];
@@ -696,10 +704,10 @@ export const researchActionsMethods = uiModule({
         if (!this.researchMenuShown()) return null;
         const model = this.researchMenuModel();
         // "Open research", "Read a document" and the rest: on the second level, "All research actions ›".
-        const frequent = new Set(['research-item-waiting', 'research-item-chat', 'research-item-images']);
+        const frequent = new Set(['research-item-waiting', 'research-item-chat', 'research-item-images', 'research-item-materials']);
         const ui = this as unknown as Record<string, (...args: string[]) => void>;
-        const rows: ResearchSheetRow[] = model.first.filter(i => frequent.has(i.id) && !i.disabled).map(i => ({
-            label: i.label, count: i.count, ai: i.ai, ext: i.ext, ariaLabel: itemAria(i),
+        const rows: ResearchSheetRow[] = [...model.first, ...model.more].filter(i => frequent.has(i.id) && !i.disabled).map(i => ({
+            label: i.label, count: i.count, ai: i.ai, ext: i.ext, ariaLabel: itemAria(i), value: i.val, id: `sheet-${i.id}`,
             run: () => ui[i.method](...(i.args ?? [])),
         }));
         const block = this.researchSyncBlockData();

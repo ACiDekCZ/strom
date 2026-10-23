@@ -916,6 +916,10 @@ export const miscMethods = uiModule({
                         this.closeMaterialDialog();
                         return;
                     }
+                    if (currentDialog === 'materials-modal') {
+                        this.closeMaterials();
+                        return;
+                    }
                     if (currentDialog === 'batch-modal') {
                         void this.cancelBatchDialog();
                         return;

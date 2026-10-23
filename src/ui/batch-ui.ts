@@ -87,6 +87,8 @@ let st: {
     resume: UnfinishedBatch | null;
 } | null = null;
 let run: Run | null = null;
+/** A batch id safe inside the line's inline handler (the bridge's ids are UUIDs or `b-…`). */
+const BATCH_LINK_ID = /^[A-Za-z0-9_.-]{1,120}$/;
 let downTimer: ReturnType<typeof setInterval> | null = null;
 
 function esc(text: string): string {
@@ -504,6 +506,8 @@ export const batchMethods = uiModule({
             : r.refused.length > 1 ? `<details class="batch-refused"><summary>${esc(b.refused)} · ${r.refused.length}</summary><ul>${r.refused.slice(0, 200)
                 .map(x => `<li>${esc(`${x.path}: ${x.why}`)}</li>`).join('')}</ul></details>` : '';
         const open = link && this.researchLinkAvailable('open') ? researchSchemeUrl('open', { tree: link.researchId }, announcedResearchScheme()) : null;
+        // Materials shown in the app: the batch opens there; the research's own overview stays a link on the left.
+        const materials = this.materialsListOn();
         return `
                 <div class="modal-content batch-content batch-done">
                     <h3 class="batch-confirm-title">✓ ${esc(archive ? b.doneTitleArchive(r.name) : b.doneTitle(r.name))}</h3>
@@ -511,12 +515,16 @@ export const batchMethods = uiModule({
                     ${known ? `<div class="batch-done-row"><span>${esc(archive ? b.alreadyHadArchive : b.alreadyHad)}</span><strong>${known}</strong></div>` : ''}
                     ${refusedRow}
                     ${!stored && r.result?.tasks ? `<div class="batch-done-row"><span>${esc(b.tasks)}</span><strong>${r.result.tasks}</strong></div>` : ''}
-                    <p class="batch-done-text">${esc(archive ? b.doneTextArchive : stored ? b.doneTextStored : b.doneText)}</p>
-                    ${open ? `<button type="button" class="research-sync-link" data-act="open-research">${esc(b.openInResearch)}</button>` : ''}
+                    <p class="batch-done-text">${esc(materials && stored ? b.doneTextMaterials : archive ? b.doneTextArchive : stored ? b.doneTextStored : b.doneText)}</p>
+                    ${open && !materials ? `<button type="button" class="research-sync-link" data-act="open-research">${esc(b.openInResearch)}</button>` : ''}
                 </div>
-                <div class="buttons batch-footer">
+                <div class="buttons batch-footer">${materials ? `
+                    ${open ? `<button type="button" class="research-sync-link batch-foot-link" data-act="open-research">${esc(b.openInResearch)}</button>` : ''}
                     <span class="batch-foot-note"></span>
-                    <button type="button" class="primary" data-act="close">${esc(strings.batch.done)}</button>
+                    <button type="button" class="secondary" data-act="close">${esc(strings.buttons.close)}</button>
+                    <button type="button" class="primary" data-act="open-materials">${esc(b.openInMaterials)}</button>` : `
+                    <span class="batch-foot-note"></span>
+                    <button type="button" class="primary" data-act="close">${esc(strings.batch.done)}</button>`}
                 </div>`;
     },
 
@@ -566,6 +574,12 @@ export const batchMethods = uiModule({
                 case 'resume': this.resumeBatchRun(); break;
                 case 'hide': this.hideBatchDialog(); break;
                 case 'cancel-run': void this.cancelBatchRun(); break;
+                case 'open-materials': {
+                    const id = run?.id;
+                    this.closeBatchDialog();
+                    this.openMaterials(id ? { batch: id } : {});
+                    break;
+                }
                 case 'open-research': {
                     const link = this.researchOriginalsLink();
                     const url = link ? researchSchemeUrl('open', { tree: link.researchId }, announcedResearchScheme()) : null;
@@ -951,7 +965,9 @@ export const batchMethods = uiModule({
         const keptByMode = !status?.features?.includes(BATCH_KEPT_FEATURE) && this.researchModeOf(link.researchId) === 'archive';
         const batch = (status?.batches ?? []).find(x => x.state === 'closed' && (x.kept || keptByMode || x.sorted < x.files));
         if (!batch) return '';
-        const open = this.researchLinkAvailable('open') ? btn(b.overview, 'researchSyncAction(\'openResearch\')') : '';
+        // Materials shown in the app: the batch opens in the materials window, else the research's overview.
+        const open = this.materialsListOn() && BATCH_LINK_ID.test(batch.id) ? btn(strings.materials.batchLink, `openMaterials({ batch: '${batch.id}' })`)
+            : this.researchLinkAvailable('open') ? btn(b.overview, 'researchSyncAction(\'openResearch\')') : '';
         return line(batch.kept || keptByMode ? b.keptLine(batch.name, batch.files) : b.sortedLine(batch.name, batch.sorted, batch.files), open);
     },
 

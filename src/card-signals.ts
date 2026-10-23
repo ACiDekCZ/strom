@@ -62,6 +62,16 @@ export function setResearchConflictsProvider(provider: ((id: PersonId) => Resear
     researchConflictsProvider = provider;
 }
 
+/**
+ * Materials of a person in a tree linked to a research that lists them (spec 017):
+ * the tooltip says "Materials N" instead of attachments. Null: not offered here.
+ */
+let materialsCountProvider: ((p: Person) => number | null) | null = null;
+
+export function setMaterialsCountProvider(provider: ((p: Person) => number | null) | null): void {
+    materialsCountProvider = provider;
+}
+
 /** Everything evaluated once per render and shared by all cards. */
 export interface CardSignalContext {
     data: StromData;
@@ -80,6 +90,8 @@ export interface CardSignalInfo {
     /** The approved story has a new version waiting beside it (Story.draft). */
     storyNew: boolean;
     attachments: number;
+    /** Materials (attachments and the research's files) when the tree shows them; null: attachments only. */
+    materials: number | null;
     waiting: string | null;
     /** The waiting item is a story's new version: the badge opens the comparison. */
     waitingStory: boolean;
@@ -111,6 +123,7 @@ export function cardSignalInfo(p: Person, ctx: CardSignalContext): CardSignalInf
         story,
         storyNew: story === 'final' && !!p.story?.draft?.text?.trim(),
         attachments: p.attachments?.length ?? 0,
+        materials: materialsCountProvider?.(p) ?? null,
         waiting: research?.waiting ?? null,
         waitingStory: !!research?.waitingStory,
         conflicts,
