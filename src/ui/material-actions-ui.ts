@@ -23,7 +23,7 @@ import {
 } from '../materials.js';
 import { MultiPersonPicker } from '../person-picker.js';
 import { nameWithoutYears } from '../materials-overview.js';
-import { MaterialActionCtx, MaterialsContext } from './materials-ui.js';
+import { MaterialActionCtx, MaterialsContext, appendBreakable } from './materials-ui.js';
 import { uiModule } from './module.js';
 
 const TOAST_MS = 8000;
@@ -526,10 +526,16 @@ export const materialActionsMethods = uiModule({
         const dialog = materialDialog({ title: m.hideTitle(files.length) });
         // One file: the sentence names it; several: the general sentence.
         const one = files.length === 1 ? files[0] : null;
-        const text = one
-            ? (mc.agent ? m.hideTextOneResearch(one.title) : m.hideTextOne(one.title))
-            : (mc.agent ? m.hideTextResearch : m.hideText);
-        dialog.body.appendChild(h('p', 'mdlg-text', text));
+        const textEl = h('p', 'mdlg-text', one ? undefined : (mc.agent ? m.hideTextResearch : m.hideText));
+        if (one) {
+            // The name wraps between its parts (as in the viewer's title), not inside a word.
+            const mark = '\u0000';
+            const [before, after = ''] = (mc.agent ? m.hideTextOneResearch(mark) : m.hideTextOne(mark)).split(mark);
+            textEl.append(before);
+            appendBreakable(textEl, one.title);
+            textEl.append(after);
+        }
+        dialog.body.appendChild(textEl);
         const set = h('fieldset', 'mdlg-radios');
         set.appendChild(h('legend', '', m.reasonLabel));
         for (const reason of ['unrelated', 'duplicate', 'none']) {

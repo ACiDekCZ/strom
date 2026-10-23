@@ -39,7 +39,7 @@ import {
 import { materialThumbs, ThumbSnapshot } from '../material-thumbs.js';
 import { formatBytesShort } from './originals-ui.js';
 import {
-    MaterialsOpenOptions, MaterialActionCtx, materialShortDate, materialStaleTime, materialTileLetters, materialItemSha, treeAttachmentsKey,
+    MaterialsOpenOptions, MaterialActionCtx, fileNameBreakParts, materialShortDate, materialStaleTime, materialTileLetters, materialItemSha, treeAttachmentsKey,
 } from './materials-ui.js';
 import { uiModule } from './module.js';
 
@@ -810,7 +810,7 @@ export const materialsWindowMethods = uiModule({
         const selected = w.selected.has(item.key);
         return `<div class="mw-tile${selected ? ' is-selected' : ''}${item.hidden ? ' is-hidden' : ''}" role="gridcell" tabindex="-1" data-key="${esc(item.key)}" aria-label="${esc(this.mwAriaLabel(item))}"${w.selecting ? ` aria-selected="${selected}"` : ''}>
             ${this.mwThumbHtml(item, group, false)}
-            <span class="mw-tile-title" title="${esc(item.title)}">${esc(item.title)}</span>
+            <span class="mw-tile-title" title="${esc(item.title)}">${fileNameBreakParts(item.title).map(esc).join('<wbr>')}</span>
             <span class="mw-tile-persons${persons.none ? ' is-none' : ''}">${esc(persons.text)}</span>
             ${this.mwRestoreHtml(item)}
         </div>`;

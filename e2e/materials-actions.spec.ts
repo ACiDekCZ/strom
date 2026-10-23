@@ -1,4 +1,4 @@
-import { test, expect, Page } from '@playwright/test';
+import { test, expect, Page, Locator } from '@playwright/test';
 import {
     fakeBridge, fakeMaterial, materialFile, materialSha, MATERIAL_FEATURES, openResearch, poll, links,
     researchGed, UUID, BRIDGE, FakeBridge, FakeMaterial, FakeMaterialFile, FakeMaterialBatch,
@@ -93,6 +93,24 @@ async function view(page: Page, text: string): Promise<void> {
 }
 
 /** Tick people in the assign dialog's picker. */
+/** The characters the element's lines end with (the one before each wrap). */
+const lineEnds = (el: Locator) => el.evaluate((el) => {
+    const range = document.createRange();
+    const out: string[] = [];
+    let prev: { ch: string; top: number } | null = null;
+    const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+        for (let i = 0; i < n.textContent!.length; i++) {
+            range.setStart(n, i);
+            range.setEnd(n, i + 1);
+            const top = Math.round(range.getBoundingClientRect().top);
+            if (prev && top > prev.top + 2) out.push(prev.ch);
+            prev = { ch: n.textContent![i], top };
+        }
+    }
+    return out;
+});
+
 async function pick(page: Page, names: string[]): Promise<void> {
     for (const name of names) await dialog(page).locator('.ppm-row', { hasText: name }).click();
 }
@@ -131,22 +149,7 @@ test.describe('Materials viewer', () => {
         const title = panel(page).locator('.mv-title');
         await expect(title).toHaveText(long);
         // The characters a line ends with (the one before each wrap).
-        const ends = await title.evaluate((el) => {
-            const range = document.createRange();
-            const out: string[] = [];
-            let prev: { ch: string; top: number } | null = null;
-            const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-            for (let n = walk.nextNode(); n; n = walk.nextNode()) {
-                for (let i = 0; i < n.textContent!.length; i++) {
-                    range.setStart(n, i);
-                    range.setEnd(n, i + 1);
-                    const top = Math.round(range.getBoundingClientRect().top);
-                    if (prev && top > prev.top + 2) out.push(prev.ch);
-                    prev = { ch: n.textContent![i], top };
-                }
-            }
-            return out;
-        });
+        const ends = await lineEnds(title);
         expect(ends.length).toBeGreaterThan(0);
         expect(ends.filter(ch => !'_-.'.includes(ch))).toEqual([]);
         const scroll = await title.evaluate(el => el.scrollWidth - el.clientWidth);
@@ -523,6 +526,23 @@ test.describe('Hide and Restore', () => {
             return { body: body.scrollWidth - body.clientWidth, text: text.scrollWidth - text.clientWidth };
         });
         expect(m).toEqual({ body: 0, text: 0 });
+        // The name wraps after "_", "-" or "." (the sentence at its spaces), not inside a word.
+        await expect(dialog(page).locator('.mdlg-text')).toHaveText(`${long} stays in the research. It leaves the materials and can be found with “Show hidden”.`);
+        const ends = await lineEnds(dialog(page).locator('.mdlg-text'));
+        expect(ends.length).toBeGreaterThan(1);
+        expect(ends.filter(ch => !'_-. '.includes(ch))).toEqual([]);
+    });
+
+    test('a long file name in a tile of the window wraps after "_", "-" or ".", not inside a word', async ({ page }) => {
+        const long = 'Vymyslov_matriky_narozeni_1850_1870_folio_0123_skenovano_vysoke_rozliseni.jpg';
+        await setup(page, { files: [materialFile(1, { persons: ['P0003'], title: long })] });
+        await openWindow(page);
+        const title = tile(page, long).locator('.mw-tile-title');
+        await expect(title).toHaveText(long);
+        // The tile wraps once the grid has its columns (it is drawn before).
+        await expect.poll(() => lineEnds(title)).not.toEqual([]);
+        const ends = await lineEnds(title);
+        expect(ends.filter(ch => !'_-.'.includes(ch))).toEqual([]);
     });
 });
 

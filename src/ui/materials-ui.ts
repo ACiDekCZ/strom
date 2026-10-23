@@ -174,6 +174,26 @@ export function materialTileLetters(item: MaterialItem): string {
     return type === 'pdf' ? 'PDF' : (strings.materials.type[type] ?? '?').slice(0, 4).toUpperCase();
 }
 
+/**
+ * A file name cut after each "_", "-" and "." (each part keeps its separator),
+ * the places where a long name may wrap rather than inside a word.
+ */
+export function fileNameBreakParts(text: string): string[] {
+    // No lookbehind: older Safari cannot parse it.
+    return text.match(/[^_.-]*[_.-]|[^_.-]+$/g) ?? [text];
+}
+
+/**
+ * A file name as text with a break chance (<wbr>) between its parts. <wbr>
+ * adds nothing to the text (copied, it is the name as it is).
+ */
+export function appendBreakable(el: HTMLElement, text: string): void {
+    fileNameBreakParts(text).forEach((part, i) => {
+        if (i) el.appendChild(document.createElement('wbr'));
+        el.appendChild(document.createTextNode(part));
+    });
+}
+
 /** The SHA-256 of the item's file (for its preview from the bridge). */
 export function materialItemSha(item: MaterialItem): string | null {
     return item.file?.sha ?? item.attachment?.original?.sha256 ?? null;

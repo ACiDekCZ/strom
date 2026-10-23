@@ -26,7 +26,7 @@ import {
 import { pdfBlobFromDataUrl } from '../attachments.js';
 import { formatBytesShort } from './originals-ui.js';
 import { openViewerList, closeImageViewer, viewerListOpen, redrawViewerList, relayoutViewer, ViewerSlots } from './image-viewer.js';
-import { MaterialOpenCtx, MaterialsContext, materialItemSha, materialTileLetters, treeAttachmentsKey } from './materials-ui.js';
+import { MaterialOpenCtx, MaterialsContext, appendBreakable, materialItemSha, materialTileLetters, treeAttachmentsKey } from './materials-ui.js';
 import { uiModule } from './module.js';
 
 /** Images the browser shows itself. */
@@ -56,20 +56,6 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: s
     if (cls) el.className = cls;
     if (text !== undefined) el.textContent = text;
     return el;
-}
-
-/**
- * A file name as text with a break chance after each "_", "-" and ".", so a
- * long name wraps between its parts rather than inside a word. <wbr> adds
- * nothing to the text (copied, it is the name as it is).
- */
-function appendBreakable(el: HTMLElement, text: string): void {
-    // Each part ends with its separator (no lookbehind: older Safari cannot parse it).
-    const parts = text.match(/[^_.-]*[_.-]|[^_.-]+$/g) ?? [text];
-    parts.forEach((part, i) => {
-        el.appendChild(document.createTextNode(part));
-        if (i < parts.length - 1) el.appendChild(document.createElement('wbr'));
-    });
 }
 
 function fullName(p: Person): string {
