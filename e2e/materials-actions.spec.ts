@@ -370,6 +370,36 @@ test.describe('Removing a person', () => {
     });
 });
 
+test.describe('Download from the research', () => {
+    test.use({ viewport: DESKTOP });
+
+    test('the file of another origin is saved under its name, not just opened', async ({ page }) => {
+        await setup(page, { files: [materialFile(1, { persons: ['P0003'], title: 'Matrika Chlumy', name: 'matrika-chlumy.jpg' })] });
+        await view(page, 'Matrika Chlumy');
+        const link = act(page, 'download');
+        await expect(link).toHaveAttribute('href', /\/media\/[0-9a-f]{64}\?file=1/);
+        const download = page.waitForEvent('download');
+        await link.click();
+        const saved = await download;
+        expect(saved.suggestedFilename()).toBe('matrika-chlumy.jpg');
+        expect(saved.url()).toMatch(/^blob:/);
+        // Saved, nothing opened beside the app.
+        expect(page.context().pages()).toHaveLength(1);
+    });
+
+    test('the bridge does not let the page read it (CORS, network): it opens in a new tab as before', async ({ page }) => {
+        await setup(page, { files: [materialFile(1, { persons: ['P0003'], title: 'Matrika Chlumy', name: 'matrika-chlumy.jpg' })] });
+        // The page's own read fails (as with no CORS headers or no network); a tab opened on it gets the file.
+        const fileUrl = /\/media\/[0-9a-f]{64}\?(?:.*&)?file=1/;
+        await page.route(fileUrl, route => route.abort('failed'));
+        await page.context().route(fileUrl, route => route.fulfill({ status: 200, headers: { 'content-type': 'image/jpeg' }, body: 'fake file' }));
+        await view(page, 'Matrika Chlumy');
+        const popup = page.waitForEvent('popup');
+        await act(page, 'download').click();
+        expect((await popup).url()).toMatch(fileUrl);
+    });
+});
+
 test.describe('Hide and Restore', () => {
     test.use({ viewport: DESKTOP });
 

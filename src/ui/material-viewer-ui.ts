@@ -125,6 +125,42 @@ function releaseUrls(state: ViewerState | null): void {
 interface CardButton { label: string; run: () => void; primary?: boolean }
 
 /** The card in place of an image: the type's tile (or a preview), a sentence and its buttons. */
+/** An object URL of a downloaded file is let go this long after its click (the save has started by then). */
+const DOWNLOAD_URL_LIFETIME_MS = 10_000;
+
+function clickLink(href: string, file: string, newTab: boolean): void {
+    const a = document.createElement('a');
+    a.href = href;
+    a.download = file;
+    if (newTab) { a.target = '_blank'; a.rel = 'noopener'; }
+    a.hidden = true;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+}
+
+/**
+ * Save a file of another origin (the research's bridge) under its name: a
+ * browser ignores `download` on such a link and only opens the file, so it is
+ * fetched and saved from a blob. A fetch that fails (CORS, network, the
+ * bridge gone): the file opens in a new tab, as the link alone does.
+ */
+export async function downloadFromBridge(href: string, file: string, fetcher: typeof fetch = fetch): Promise<boolean> {
+    let blob: Blob;
+    try {
+        const res = await fetcher(href, { method: 'GET', mode: 'cors', credentials: 'omit' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        blob = await res.blob();
+    } catch {
+        clickLink(href, file, true);
+        return false;
+    }
+    const url = URL.createObjectURL(blob);
+    clickLink(url, file, false);
+    setTimeout(() => URL.revokeObjectURL(url), DOWNLOAD_URL_LIFETIME_MS);
+    return true;
+}
+
 function viewerCard(letters: string, text: string, buttons: CardButton[], preview?: string | null): HTMLElement {
     const card = h('div', 'mv-card');
     const tile = h('div', 'mv-card-tile');
@@ -469,7 +505,18 @@ export const materialViewerMethods = uiModule({
             a.href = href;
             a.download = file;
             a.dataset.action = 'download';
-            if (!href.startsWith('data:')) { a.target = '_blank'; a.rel = 'noopener'; }
+            if (!href.startsWith('data:')) {
+                a.target = '_blank';
+                a.rel = 'noopener';
+                // Another origin: the link alone would only open it (it stays for a middle click or a copy).
+                a.addEventListener('click', (e) => {
+                    if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+                    e.preventDefault();
+                    if (a.getAttribute('aria-busy') === 'true') return;
+                    a.setAttribute('aria-busy', 'true');
+                    void downloadFromBridge(href, file).finally(() => a.removeAttribute('aria-busy'));
+                });
+            }
             actions.appendChild(a);
         };
         if (inArchive) {
