@@ -14,7 +14,7 @@
  */
 
 import {
-    MaterialResult, ThumbSize, MaterialType, materialType,
+    MaterialResult, ThumbSize, MaterialType, materialType, researchMakesThumb,
     fetchThumb, fileUrl, getCachedThumb, putCachedThumb, MAX_RETRY_WAIT_MS,
 } from './materials.js';
 
@@ -80,7 +80,9 @@ const key = (sha: string, px: number) => `${sha}@${px}`;
 export function thumbSource(task: Pick<ThumbTask, 'mime' | 'name' | 'bytes'>, env: Pick<ThumbEnv, 'thumb' | 'bridgeUp' | 'base'>): 'research' | 'local' | null {
     if (!env.bridgeUp || !env.base) return null;
     const type: MaterialType = materialType(task.mime, task.name);
-    if (env.thumb) return type === 'image' || type === 'pdf' ? 'research' : null;
+    // The research's previews; TIFF / GIF / WebP it does not make (415): those as without them.
+    if (env.thumb && researchMakesThumb(task.mime, task.name)) return 'research';
+    if (env.thumb && type !== 'image') return null;
     const mime = (task.mime ?? '').toLowerCase();
     if (!LOCAL_THUMB_TYPES.includes(mime)) return null;
     if (task.bytes !== undefined && task.bytes > LOCAL_THUMB_MAX_BYTES) return null;

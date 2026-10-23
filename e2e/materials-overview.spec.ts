@@ -390,18 +390,22 @@ test.describe('Materials window: the research not running', () => {
 test.describe('Materials window: previews', () => {
     test.use({ viewport: DESKTOP });
 
-    test('a type without previews (415) keeps its icon and is not asked again', async ({ page }) => {
-        const tif = materialFile(1, { name: 'sken.tif', mime: 'image/tiff', at: '2026-10-20T10:00:00.000Z' });
-        const { material } = await setup(page, { files: [tif, materialFile(2), materialFile(3)] });
+    test('a type without previews (415) keeps its icon and is not asked again; TIFF and GIF are not asked at all', async ({ page }) => {
+        const bmp = materialFile(1, { name: 'sken.bmp', mime: 'image/bmp', at: '2026-10-20T10:00:00.000Z' });
+        const tif = materialFile(4, { name: 'sken.tif', mime: 'image/tiff', at: '2026-10-20T09:00:00.000Z' });
+        const gif = materialFile(5, { name: 'anim.gif', mime: 'image/gif', at: '2026-10-20T08:00:00.000Z' });
+        const { material } = await setup(page, { files: [bmp, tif, gif, materialFile(2), materialFile(3)] });
         await openWindow(page);
-        const tile = win(page).locator('.mw-tile', { hasText: 'sken.tif' });
+        const tile = win(page).locator('.mw-tile', { hasText: 'sken.bmp' });
         await expect(win(page).locator('.mw-tile img')).toHaveCount(2);
         await expect(tile.locator('img')).toHaveCount(0);
-        await expect(tile.locator('.mw-type')).toHaveText('TIF');
+        await expect(tile.locator('.mw-type')).toHaveText('BMP');
+        await expect(win(page).locator('.mw-tile', { hasText: 'sken.tif' }).locator('.mw-type')).toHaveText('TIF');
         await win(page).locator('[data-mw="view-list"]').click();
         await win(page).locator('[data-mw="view-grid"]').click();
         await expect(win(page).locator('.mw-tile img')).toHaveCount(2);
-        expect(material.thumbAsks.filter(a => a.startsWith(tif.sha))).toEqual([`${tif.sha}@256`]);
+        expect(material.thumbAsks.filter(a => a.startsWith(bmp.sha))).toEqual([`${bmp.sha}@256`]);
+        expect(material.thumbAsks.filter(a => a.startsWith(tif.sha) || a.startsWith(gif.sha))).toEqual([]);
     });
 
     test('a busy research: the strip with Pause / Resume', async ({ page }) => {

@@ -308,6 +308,20 @@ export function materialType(mime: string | undefined, name?: string): MaterialT
     return 'file';
 }
 
+/** Images the research makes no preview of (`?thumb=` answers 415 `thumb.type`). */
+const NO_RESEARCH_THUMB_MIME = new Set(['image/tiff', 'image/gif', 'image/webp']);
+const NO_RESEARCH_THUMB_EXT = new Set(['tif', 'tiff', 'gif', 'webp']);
+
+/** Does the research make a preview of this file (`?thumb=`)? Images but TIFF / GIF / WebP, and PDFs. */
+export function researchMakesThumb(mime: string | undefined, name?: string): boolean {
+    const type = materialType(mime, name);
+    if (type === 'pdf') return true;
+    if (type !== 'image') return false;
+    const m = (mime ?? '').toLowerCase();
+    // An image by its type, else (no type given) by its name's extension.
+    return m.startsWith('image/') ? !NO_RESEARCH_THUMB_MIME.has(m) : !NO_RESEARCH_THUMB_EXT.has(fileExt(name));
+}
+
 /** The item's name for its file type ("TIFF"), shown beside an image the app cannot show. */
 function rawImageSuffix(mime: string | undefined, name: string | undefined): string {
     const m = (mime ?? '').toLowerCase();

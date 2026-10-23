@@ -20,7 +20,7 @@ import { researchPersonRef } from '../research-link.js';
 import { announcedResearchScheme } from '../research-device.js';
 import {
     MaterialItem, cachedMaterialList, materialFileItem, materialType, materialKindLabel, materialFolder,
-    materialFromKey, fileExt, fileUrl, thumbUrl, materialSystemLink, getCachedThumb,
+    materialFromKey, fileExt, fileUrl, thumbUrl, materialSystemLink, getCachedThumb, researchMakesThumb,
     batchFolderLabel,
 } from '../materials.js';
 import { formatFlexDate, parseFlexDate } from '../dates.js';
@@ -297,7 +297,8 @@ export const materialViewerMethods = uiModule({
             slots.card(viewerCard(letters, m.opensWhenRunning, [...start, ...openSystem]));
             return;
         }
-        const preview = ctx!.caps.thumb && sha && type === 'image' ? thumbUrl(ctx!.base!, sha, 256) : null;
+        // (No preview asked of what the research does not preview: TIFF, GIF, WebP — 415.)
+        const preview = ctx!.caps.thumb && sha && type === 'image' && researchMakesThumb(item.mime, itemName(item)) ? thumbUrl(ctx!.base!, sha, 256) : null;
         slots.card(viewerCard(letters, m.openSystemText(ext), openSystem, preview));
     },
 

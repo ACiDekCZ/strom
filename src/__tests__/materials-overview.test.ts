@@ -7,7 +7,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { Attachment } from '../types.js';
-import { MaterialFile, MaterialList, MaterialResult, ThumbSize } from '../materials.js';
+import { MaterialFile, MaterialList, MaterialResult, ThumbSize, researchMakesThumb } from '../materials.js';
 import {
     overviewItems, overviewGroups, overviewRows, overviewSummary, emptyFilters, passesFilters, activeFilterCount,
     rowsInView, stickyGroupAt, gridColumns, rangeKeys, nameWithoutYears, personsShort, parseViewPrefs, localDay,
@@ -343,14 +343,14 @@ describe('preview queue', () => {
         const q = new MaterialThumbQueue(deps);
         q.setEnv(ENV);
         const got: (string | null)[] = [];
-        q.want({ sha: sha(1), px: 256, mime: 'image/tiff' }, url => got.push(url));
+        q.want({ sha: sha(1), px: 256, mime: 'image/bmp' }, url => got.push(url));
         await tick(); await tick();
         expect(got).toEqual([null]);
         expect(q.hasFailed(sha(1), 256)).toBe(true);
-        q.want({ sha: sha(1), px: 256, mime: 'image/tiff' }, url => got.push(url));
+        q.want({ sha: sha(1), px: 256, mime: 'image/bmp' }, url => got.push(url));
         expect(asked).toHaveLength(1);
         q.resetFailures();
-        q.want({ sha: sha(1), px: 256, mime: 'image/tiff' }, url => got.push(url));
+        q.want({ sha: sha(1), px: 256, mime: 'image/bmp' }, url => got.push(url));
         await tick(); await tick();
         expect(asked).toHaveLength(2);
     });
@@ -392,6 +392,21 @@ describe('preview queue', () => {
         q.resume();
         await tick(); await tick();
         expect(asked).toHaveLength(1);
+    });
+
+    it('TIFF, GIF and WebP are never asked of the research (it answers 415): WebP made here, others the icon', () => {
+        expect(thumbSource({ mime: 'image/tiff' }, ENV)).toBeNull();
+        expect(thumbSource({ mime: 'image/gif' }, ENV)).toBeNull();
+        expect(thumbSource({ mime: 'image/webp', bytes: 1000 }, ENV)).toBe('local');
+        expect(thumbSource({ mime: 'image/webp', bytes: 9 * 1024 * 1024 }, ENV)).toBeNull();
+        expect(thumbSource({ name: 'scan.TIF' }, ENV)).toBeNull();
+        expect(thumbSource({ mime: 'application/octet-stream', name: 'a.gif' }, ENV)).toBeNull();
+        expect(thumbSource({ mime: 'image/jpeg' }, ENV)).toBe('research');
+        expect(thumbSource({ name: 'scan.png' }, ENV)).toBe('research');
+        expect(researchMakesThumb('image/tiff', 'x.tif')).toBe(false);
+        expect(researchMakesThumb('image/png', 'x.png')).toBe(true);
+        expect(researchMakesThumb('application/pdf', 'x.pdf')).toBe(true);
+        expect(researchMakesThumb('audio/mpeg', 'x.mp3')).toBe(false);
     });
 
     it('without the research’s previews: JPEG/PNG/WebP up to 8 MB made here, others the icon', async () => {

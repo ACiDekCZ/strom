@@ -125,7 +125,7 @@ test.describe('Materials viewer', () => {
     });
 
     test('a PDF: a new tab from the list, a card in the viewer; TIFF: "Open in the system"; a file not here: the record only', async ({ page }) => {
-        await setup(page, { files: [
+        const { material } = await setup(page, { files: [
             materialFile(1, { name: 'list.pdf', mime: 'application/pdf', title: 'Výpis' }),
             materialFile(2, { name: 'scan.tif', mime: 'image/tiff', title: 'Sken TIFF', at: '2026-09-30T08:00:00.000Z' }),
             materialFile(3, { title: 'Ztracená fotka', here: false, at: '2026-09-29T08:00:00.000Z' }),
@@ -148,6 +148,8 @@ test.describe('Materials viewer', () => {
         await expect(card(page).locator('.mv-card-text')).toHaveText('This app cannot show TIF. A program on the computer opens it.');
         await card(page).getByRole('button', { name: 'Open in system ↗' }).click();
         expect((await links(page)).some(l => l.includes(`sha=${materialSha('I0002')}`))).toBe(true);
+        // No preview asked of the research for a TIFF (it answers 415).
+        expect(material.thumbAsks.filter(a => a.startsWith(materialSha('I0002')))).toEqual([]);
         // ‹ goes to the PDF: its card.
         await page.keyboard.press('ArrowLeft');
         await expect(card(page).locator('.mv-card-text')).toHaveText('The PDF opens in a new tab.');
