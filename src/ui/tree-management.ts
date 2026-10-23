@@ -301,8 +301,17 @@ export const treeManagementMethods = uiModule({
         const dot = document.getElementById('actions-menu-dot');
         if (dot) dot.style.display = count > 0 ? 'block' : 'none';
         // The "More" tab carries both: there the research group sits in its sheet (a narrow window with a mouse).
+        // Changes waiting for a research that is not running: their number on the tab, in place of the dot (audit 017 a-D6).
+        const resting = this.researchRestingWaitingCount();
+        const moreCount = document.getElementById('bottom-bar-more-count');
+        if (moreCount) {
+            moreCount.hidden = resting === 0;
+            moreCount.textContent = resting > 99 ? '99+' : resting > 0 ? String(resting) : '';
+            if (resting > 0) moreCount.title = `${strings.sync.stateBridgeDown} · ${strings.sync.waitingN(resting)}`;
+            else moreCount.removeAttribute('title');
+        }
         const moreDot = document.getElementById('bottom-bar-more-dot');
-        if (moreDot) moreDot.style.display = count > 0 || researchSignal !== '' ? 'block' : 'none';
+        if (moreDot) moreDot.style.display = resting === 0 && (count > 0 || researchSignal !== '') ? 'block' : 'none';
         this.renderActionsExportReminder();
         // Count badge on the Anniversaries row; its tooltip and the row's
         // spoken name say what the number counts (the next days, T33).

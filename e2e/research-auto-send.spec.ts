@@ -2369,3 +2369,50 @@ test.describe('the research not running, at rest (audit 017 a-D6)', () => {
         await expect(mark(page).locator('.research-sync-mark-count')).toHaveCount(0);
     });
 });
+
+test.describe('the research not running, on tablet and phone (audit 017 a-D6)', () => {
+    const moreCount = (page: Page) => page.locator('#bottom-bar-more-count');
+    const moreDot = (page: Page) => page.locator('#bottom-bar-more-dot');
+    for (const [name, size] of [['tablet', { width: 1024, height: 768 }], ['phone', { width: 390, height: 844 }], ['phone sideways', { width: 844, height: 390 }]] as const) {
+        test(`${name}, sent by hand: the More tab carries the number of changes waiting, in place of its dot`, async ({ page }) => {
+            await page.setViewportSize(size);
+            await page.clock.install();
+            await openResearch(page);
+            const bridge = await fakeBridge(page, { accepts: { mode: 'research', sync: { auto: 'write' }, sources: true, verified: true, media: null } });
+            await poll(page);
+            await editJan(page);
+            await expect(moreCount(page)).toBeHidden();
+            bridge.down = true;
+            await poll(page);
+            await expect(moreCount(page)).toBeVisible();
+            await expect(moreCount(page)).toHaveText('1');
+            await expect(moreCount(page)).toHaveAttribute('title', "The research isn't running · 1 change waiting");
+            await expect(moreDot(page)).toBeHidden();
+            // Inside the tab, never over the tree or off the screen.
+            const box = (await moreCount(page).boundingBox())!;
+            expect(box.x).toBeGreaterThanOrEqual(0);
+            expect(box.x + box.width).toBeLessThanOrEqual(size.width);
+            expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(size.width);
+            bridge.down = false;
+            await poll(page);
+            await expect(moreCount(page)).toBeHidden();
+        });
+    }
+
+    test('phone, sent by itself, started again with the research not running: the number is on the More tab', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        const bridge = await autoTree(page);
+        await editJan(page);
+        await editJan(page, 'Brno');
+        await page.evaluate(() => window.Strom.TreeManager.flush());
+        bridge.down = true;
+        await page.reload();
+        await expect(card(page, 'Jan')).toBeVisible();
+        await poll(page);
+        await expect(moreCount(page)).toHaveText('1');
+        await expect(moreDot(page)).toBeHidden();
+        bridge.down = false;
+        await poll(page);
+        await expect(moreCount(page)).toBeHidden();
+    });
+});

@@ -1177,6 +1177,21 @@ export const researchSyncMethods = uiModule({
         return (n ? n.persons + n.other : 0) || (researchAutoState(treeId).edits ?? 0);
     },
 
+    /**
+     * Changes waiting for a research that is not running (or not confirmed running since the start):
+     * how many, as the quiet mark shows them beside it and the More tab on narrow windows (audit 017 a-D6).
+     * 0 when the state is any other.
+     */
+    researchRestingWaitingCount(): number {
+        const ctx = this.researchSyncLink();
+        if (!ctx || safariBrowser()) return 0;
+        const core = this.currentResearchSyncState().core;
+        const resting = this.researchAutoOn(ctx.link)
+            ? core === 'autoWaiting' && !runtime.get(ctx.link.id)?.up
+            : core === 'unsentBridgeDown' && researchSendMode(ctx.link) !== 'off';
+        return resting ? this.researchChangesWaitingCount(ctx.treeId) : 0;
+    },
+
     /** "16:57": when the open tree's quiet time ends and its changes go ('' = no timer runs for it). */
     researchAutoDueClock(treeId: TreeId | null | undefined): string {
         return treeId && autoTimerTree === treeId && autoDueAt > 0 ? when(new Date(autoDueAt).toISOString()) : '';
@@ -2917,7 +2932,7 @@ export const researchSyncMethods = uiModule({
                 // In its place the quiet mark (in step, or the research not running), at the end next to the tree switcher.
                 const down = kind === 'bridgeDown' || kind === 'unsentBridgeDown';
                 // Changes waiting for a research that is not running: their number stays in sight beside the mark (audit 017 a-D6).
-                const waiting = kind === 'unsentBridgeDown' ? this.researchChangesWaitingCount(ctx.treeId) : 0;
+                const waiting = kind === 'unsentBridgeDown' ? this.researchRestingWaitingCount() : 0;
                 const lwm = researchAutoState(ctx.treeId).lastWritten;
                 const label = waiting ? `${s.stateBridgeDown} · ${s.waitingN(waiting)}`
                     : down ? (lwm ? s.markBridgeDown(when(lwm.at)) : s.stateBridgeDown) : lwm ? s.writtenAt(when(lwm.at)) : s.stateInSync;
@@ -2957,7 +2972,7 @@ export const researchSyncMethods = uiModule({
             // the changes wait, with their number in sight (audit 017 a-D6).
             const known = runtime.has(ctx.link.id);
             look = known ? 'ghost' : 'ring';
-            count = this.researchChangesWaitingCount(ctx.treeId);
+            count = this.researchRestingWaitingCount();
             const waiting = count ? s.waitingN(count) : s.stateUnsentShort;
             label = known ? `${s.stateBridgeDown} · ${waiting}` : waiting;
         } else if (kind === 'autoWaiting') {
