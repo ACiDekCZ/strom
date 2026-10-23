@@ -358,11 +358,29 @@ function collectPartnerships(
 }
 
 /**
+ * The children a "show children in place" brings into the view: the
+ * children of the person's unions, union by union. A parent link without a
+ * union (a child whose only parent is a "?" stand-in, single-parent.ts) is
+ * never drawn, so its child is not among them. The card's children tab
+ * promises only these (hiddenChildIds), the layout shows exactly these
+ * (expandChildrenInSelection).
+ */
+export function childIdsShownInPlace(data: StromData, personId: PersonId): PersonId[] {
+    const out: PersonId[] = [];
+    for (const partnershipId of data.persons[personId]?.partnerships ?? []) {
+        for (const childId of data.partnerships[partnershipId]?.childIds ?? []) {
+            if (data.persons[childId] && !out.includes(childId)) out.push(childId);
+        }
+    }
+    return out;
+}
+
+/**
  * Show the children of the given persons in place (the card's "children"
  * tab): for every union of a person already in the selection, the partner,
- * the partnership and the union's children join it. The children come
- * without their partners or descendants (their own tabs lead on). Persons
- * not in the selection are skipped.
+ * the partnership and the union's children (childIdsShownInPlace) join it.
+ * The children come without their partners or descendants (their own tabs
+ * lead on). Persons not in the selection are skipped.
  */
 export function expandChildrenInSelection(
     data: StromData,
@@ -378,10 +396,8 @@ export function expandChildrenInSelection(
             selection.persons.add(partnership.person1Id);
             selection.persons.add(partnership.person2Id);
             selection.partnerships.add(partnershipId);
-            for (const childId of partnership.childIds) {
-                if (data.persons[childId]) selection.persons.add(childId);
-            }
         }
+        for (const childId of childIdsShownInPlace(data, personId)) selection.persons.add(childId);
         // The person's children now stand in the view: no longer the deepest generation
         selection.depthLimitPersons?.delete(personId);
     }

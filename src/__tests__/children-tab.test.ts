@@ -7,6 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import { hiddenRelativesTabs, hiddenChildIds, newlyShownChildIds } from '../marriage-order.js';
 import { tabsGlyphsOnly } from '../union-order-measure.js';
+import { childIdsShownInPlace } from '../layout/pipeline/1-select-subgraph.js';
 import { PersonId, PartnershipId, Person, StromData } from '../types.js';
 
 function tree(): StromData {
@@ -76,6 +77,20 @@ describe('children tab', () => {
         expect(hiddenRelativesTabs(d, P('gf'), inView, kids, new Set(), new Set([P('gf')]))).toEqual([]);
         // Another person keeps theirs
         expect(hiddenRelativesTabs(d, P('gm'), inView, kids, new Set(), new Set([P('gf')]))).toEqual(['children']);
+    });
+
+    it('a child linked without a union (its only parent a "?" stand-in) is never promised: the layout never draws it below', () => {
+        // comprehensive's "Unknown Parent": one child by a parent link alone, no family
+        const t = tree();
+        const unknown = 'unknown' as PersonId, child = 'loose_child' as PersonId;
+        t.persons[unknown] = { id: unknown, firstName: 'Unknown', lastName: 'Parent', gender: 'male', isPlaceholder: true, partnerships: [], parentIds: [], childIds: [child] } as Person;
+        t.persons[child] = { id: child, firstName: 'Loose', lastName: 'X', gender: 'female', partnerships: [], parentIds: [unknown], childIds: [] } as unknown as Person;
+        const inView = (id: PersonId) => id === unknown;
+        expect(hiddenChildIds(t, unknown, inView)).toEqual([]);
+        expect(hiddenRelativesTabs(t, unknown, inView, kids)).toEqual([]);
+        expect(childIdsShownInPlace(t, unknown)).toEqual([]);
+        // A union's children are what a click shows, union by union
+        expect(childIdsShownInPlace(t, P('gf'))).toEqual([P('father'), P('aunt'), P('uncle')]);
     });
 
     it('keeps the order parents, siblings, children', () => {

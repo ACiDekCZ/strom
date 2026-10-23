@@ -60,11 +60,14 @@ than one partnership in the selection into `expandedPersonIds` (out of the
 appendage set), so each union is a chain slot and its children hang under
 their own couple, in the standard display too. The rest of the pipeline is
 unchanged; hiding the children again gives the original input and layout.
-The children tab is offered for the children out of view
-(`hiddenRelativesTabs`/`hiddenChildIds`, src/marriage-order.ts) and the
+The children tab is offered for the children out of view that showing would
+draw (`hiddenRelativesTabs`/`hiddenChildIds`, src/marriage-order.ts): the same
+`childIdsShownInPlace` (children of the person's unions) the selection takes
+them from, so a child linked by a parent link alone (its only parent a "?"
+stand-in, never drawn below it) is not promised. The
 "▾ children" bubble names only the children the click brought into view
 (`newlyShownChildIds`). `childrenShownFull.test.ts` checks, on every fixture
-card the tab is offered on, that showing draws every promised child. As a
+card the tab is offered on (a fixture's own "?" stand-ins as focus too), that showing draws every promised child. As a
 safety net the renderer gives the view back when a click draws none of them
 and offers no tab or menu row for that person in that view.
 

@@ -57,20 +57,24 @@ describe('Children shown in place: full pipeline invariants', () => {
         for (const mode of MODES) {
             it(`${fixture} [${mode.name}]`, () => {
                 const data = loadFixture(fixture);
+                // The fixture's own "?" stand-ins are foci too (their card is drawn then)
+                const standIns = (Object.keys(data.persons) as PersonId[]).filter(id => data.persons[id].isPlaceholder);
                 normalizeSingleParents(data);
                 const before = JSON.stringify(data);
                 const ids = (Object.keys(data.persons) as PersonId[]).filter(id => !data.persons[id].isPlaceholder);
+                const foci = [...ids, ...standIns.filter(id => data.persons[id])];
                 const config: LayoutConfig = mode.heights
                     ? { ...DEFAULT_LAYOUT_CONFIG, spouseLineY: 25, personHeights: syntheticPersonHeights(ids) }
                     : DEFAULT_LAYOUT_CONFIG;
                 const failures: string[] = [];
                 const noSiblings = new Set<PersonId>();
-                for (const depth of DEPTHS) for (const focus of ids) {
+                for (const depth of DEPTHS) for (const focus of foci) {
                     const base = layout(data, focus, config, depth, mode.autoExpand);
                     const inBase = (id: PersonId) => base.positions.has(id);
+                    // Every drawn card, a "?" stand-in's too: the renderer offers the tab on any
                     for (const pid of base.positions.keys()) {
                         const person = data.persons[pid];
-                        if (!person || person.isPlaceholder) continue;
+                        if (!person) continue;
                         // The renderer's decision: the tab is offered, these children promised
                         if (!hiddenRelativesTabs(data, pid, inBase, noSiblings).includes('children')) continue;
                         const promised = hiddenChildIds(data, pid, inBase);

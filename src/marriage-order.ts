@@ -26,6 +26,7 @@ import { PartnershipId, PersonId, Position, StromData, Partnership } from './typ
 import type { Connection, SpouseLine, OmittedEdge } from './layout/pipeline/types.js';
 import { parseFlexDate, displayYear } from './dates.js';
 import { isDiagramStandIn } from './layout/pipeline/placeholders.js';
+import { childIdsShownInPlace } from './layout/pipeline/1-select-subgraph.js';
 
 /** Chronological key of a wedding date; Infinity when there is none (after every dated union). */
 function weddingKey(date: string | undefined): number {
@@ -283,11 +284,17 @@ export function newlyShownChildIds(
     });
 }
 
-/** The person's children out of view, in data order ("?" stand-ins never count). */
+/**
+ * The person's children out of view that showing them in place would draw
+ * (the layout's own rule, childIdsShownInPlace: children of the person's
+ * unions), in data order ("?" stand-ins never count). A child linked to the
+ * person without a union is never drawn below them, so it is not promised.
+ */
 export function hiddenChildIds(data: StromData, personId: PersonId, inView: (id: PersonId) => boolean): PersonId[] {
+    const showable = new Set(childIdsShownInPlace(data, personId));
     return (data.persons[personId]?.childIds ?? []).filter(id => {
         const child = data.persons[id];
-        return !!child && !child.isPlaceholder && !inView(id);
+        return !!child && !child.isPlaceholder && showable.has(id) && !inView(id);
     });
 }
 

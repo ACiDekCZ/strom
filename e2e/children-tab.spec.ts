@@ -209,6 +209,17 @@ async function setupFixture(page: Page, fixture: string, focus: string): Promise
     await expect(cardOf(page, focus)).toBeVisible();
 }
 
+test('a "?" parent whose child hangs on a parent link alone: no children tab, no menu row', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    // comprehensive's "Unknown Parent": the child has no family with it, the layout never draws it below
+    await setupFixture(page, 'comprehensive', 'placeholder_h_1');
+    await expect(tabOf(page, 'placeholder_h_1')).toHaveCount(0);
+    expect(await page.evaluate(() => window.Strom.TreeRenderer.canToggleChildren('placeholder_h_1' as never))).toBe(false);
+    await cardOf(page, 'placeholder_h_1').click({ position: { x: 60, y: 40 } });
+    await expect(page.locator('.context-menu')).toBeVisible();
+    await expect(page.locator('.context-menu .context-menu-item[data-action="toggle-children"]')).toHaveCount(0);
+});
+
 test.describe('partner chains through several people', () => {
     test('a widow remarried twice: her other families stand in view already, her card promises nothing', async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 900 });
