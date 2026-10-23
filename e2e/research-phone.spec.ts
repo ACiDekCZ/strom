@@ -148,6 +148,22 @@ test.describe('Connect phone', () => {
         await expect(page.locator('#research-item-phone .research-item-pill')).toHaveText('on');
     });
 
+    test('an archive: the intro says what the phone shows there (the archive, its changes, photos), nothing of work going on (audit 017 c-D5)', async ({ page }) => {
+        // With an agent: what is happening, what is waiting.
+        const b = await setup(page);
+        let dialog = await openDialog(page);
+        await expect(dialog.locator('.phone-intro')).toContainText('what is happening, what is waiting');
+        await page.keyboard.press('Escape');
+        await expect(dialog).toHaveCount(0);
+        b.accepts = { ...ACCEPTS, mode: 'archive', sync: { auto: 'mirror' } };
+        await poll(page);
+        dialog = await openDialog(page);
+        await expect(dialog.locator('.phone-intro li')).toHaveCount(3);
+        await expect(dialog.locator('.phone-intro')).toContainText('A phone on the same Wi-Fi sees the Strom archive: the latest changes to the tree.');
+        await expect(dialog.locator('.phone-intro')).toContainText('Photos from the phone go straight into the Strom archive.');
+        await expect(dialog.locator('.phone-intro')).not.toContainText(/happening|waiting|progress/);
+    });
+
     test('turned down in the computer\'s window: stays off, can be tried again', async ({ page }) => {
         const b = await setup(page);
         const dialog = await openDialog(page);

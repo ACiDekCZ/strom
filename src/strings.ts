@@ -4437,6 +4437,12 @@ const stringsEN = {
             'Photos from the phone go straight into the research, like “Add materials”.',
             'Nothing leaves the home network. The connection can be turned off at any time.',
         ],
+        /** The same for an archive (no agent): what the phone shows there, nothing of work going on. */
+        introArchive: [
+            'A phone on the same Wi-Fi sees the Strom archive: the latest changes to the tree.',
+            'Photos from the phone go straight into the Strom archive.',
+            'Nothing leaves the home network. The connection can be turned off at any time.',
+        ],
         sysTitle: 'What appears on the computer',
         sysStep1: 'A Strom window asking whether to turn the connection on.',
         sysWin: 'A Windows Defender Firewall window for node.exe: tick Private networks and choose Allow access. It may ask for an administrator password.',
@@ -9085,6 +9091,11 @@ const stringsCZ: StringsType = {
             'Fotky z telefonu půjdou rovnou do výzkumu, jako „Přidat materiály“.',
             'Nic neodchází mimo domácí síť. Propojení jde kdykoli vypnout.',
         ],
+        introArchive: [
+            'Telefon ve stejné Wi-Fi uvidí Archiv Stromu: poslední změny ve stromu.',
+            'Fotky z telefonu půjdou rovnou do Archivu Stromu.',
+            'Nic neodchází mimo domácí síť. Propojení jde kdykoli vypnout.',
+        ],
         sysTitle: 'Co se ukáže na počítači',
         sysStep1: 'Okno Stromu s otázkou, jestli propojení zapnout.',
         sysWin: 'Okno Windows Defender Firewall pro program node.exe: zaškrtnout Soukromé sítě a zvolit Povolit přístup. Může chtít heslo správce počítače.',
@@ -13657,6 +13668,11 @@ const stringsDE: StringsType = {
         intro: [
             'Ein Telefon im selben WLAN sieht die Forschung: was gerade läuft, was wartet und den Verlauf.',
             'Fotos vom Telefon gehen direkt in die Forschung, wie bei „Materialien hinzufügen“.',
+            'Nichts verlässt das Heimnetz. Die Verbindung lässt sich jederzeit ausschalten.',
+        ],
+        introArchive: [
+            'Ein Telefon im selben WLAN sieht das Strom-Archiv: die letzten Änderungen am Stammbaum.',
+            'Fotos vom Telefon gehen direkt ins Strom-Archiv.',
             'Nichts verlässt das Heimnetz. Die Verbindung lässt sich jederzeit ausschalten.',
         ],
         sysTitle: 'Was auf dem Computer erscheint',
