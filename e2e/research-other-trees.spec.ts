@@ -16,6 +16,8 @@ import { openApp } from './helpers.js';
 const NOVAK = '6a1d2c3e-4f50-4a61-8b72-9c83d4e5f601';
 const DVORAK = '7b2e3d4f-5061-4b72-9c83-ad94e5f60712';
 const SVOBODA = '8c3f4e50-6172-4c83-ad94-be05f6071823';
+/** A research waiting for its agent (invented). */
+const WAITING = '9d405f61-7283-4d94-be05-cf1607182934';
 const HORAK = '9d405f61-7283-4d94-be05-cf1607182934';
 const B_NOVAK = 'http://127.0.0.1:5991/11111111111111111111111111111111';
 const B_DVORAK = 'http://127.0.0.1:5992/22222222222222222222222222222222';
@@ -422,19 +424,25 @@ test.describe('other research trees', () => {
 });
 
 test.describe('the switcher tells an archive from a research (audit 017 b-D5)', () => {
-    /** Archivovi: the file said archive; Výzkumníci: the bridge said research (kept); Neznámí: nothing said; a copy; a tree of the app's own. */
+    /**
+     * Archivovi: the file said archive; Výzkumníci: the bridge said research, its agent here (kept);
+     * Čekající: a research waiting for its agent, shown as an archive until it starts (spec 017 e);
+     * Neznámí: nothing said; a copy; a tree of the app's own.
+     */
     async function kinds(page: Page): Promise<void> {
-        await page.evaluate(({ a, r, u }) => {
+        await page.evaluate(({ a, r, u, w }) => {
             const tm = window.Strom.TreeManager as unknown as { createTree(name: string): string; setResearchLink(id: string, link: unknown): void };
             const at = new Date().toISOString();
             tm.setResearchLink(tm.createTree('Archivovi z Horní Smyšlené u Vymyšlova'), { id: a, fingerprint: 'fp0', syncedAt: at, mode: 'archive' });
             tm.setResearchLink(tm.createTree('Výzkumníci'), { id: r, fingerprint: 'fp0', syncedAt: at });
-            localStorage.setItem(`strom-research-bridge:${r}`, JSON.stringify({ accepts: { mode: 'research', agentHere: false } }));
+            localStorage.setItem(`strom-research-bridge:${r}`, JSON.stringify({ accepts: { mode: 'research' } }));
+            tm.setResearchLink(tm.createTree('Čekající na agenta'), { id: w, fingerprint: 'fp0', syncedAt: at });
+            localStorage.setItem(`strom-research-bridge:${w}`, JSON.stringify({ accepts: { mode: 'research', agentHere: false } }));
             tm.setResearchLink(tm.createTree('Neznámí'), { id: u, fingerprint: 'fp0', syncedAt: at });
             tm.setResearchLink(tm.createTree('Archivovi (kopie)'), { id: a, fingerprint: 'fp0', syncedAt: at, mode: 'archive', copy: true });
             tm.createTree('Jen v aplikaci');
             window.Strom.UI.updateTreeSwitcher();
-        }, { a: NOVAK, r: DVORAK, u: SVOBODA });
+        }, { a: NOVAK, r: DVORAK, u: SVOBODA, w: WAITING });
     }
 
     test('a quiet "Archive" or "Research" after the name as its kind is known; none when not known, for a copy or a tree of the app', async ({ page }) => {
@@ -446,6 +454,8 @@ test.describe('the switcher tells an archive from a research (audit 017 b-D5)', 
         await expect(kindOf('Archivovi z Horní Smyšlené u Vymyšlova')).toHaveText('Archive');
         await expect(kindOf('Archivovi z Horní Smyšlené u Vymyšlova')).toHaveAttribute('data-kind', 'archive');
         await expect(kindOf('Výzkumníci')).toHaveText('Research');
+        await expect(kindOf('Čekající na agenta')).toHaveText('Archive');
+        await expect(kindOf('Čekající na agenta')).toHaveAttribute('data-kind', 'archive');
         await expect(kindOf('Neznámí')).toHaveCount(0);
         await expect(kindOf('Archivovi (kopie)')).toHaveCount(0);
         await expect(kindOf('Jen v aplikaci')).toHaveCount(0);
@@ -467,6 +477,7 @@ test.describe('the switcher tells an archive from a research (audit 017 b-D5)', 
         const sheetRow = (name: string) => page.locator('.bottom-sheet-item[data-tree-id]', { hasText: name });
         await expect(sheetRow('Archivovi z Horní Smyšlené u Vymyšlova').locator('.bottom-sheet-sub')).toHaveText('Archive');
         await expect(sheetRow('Výzkumníci').locator('.bottom-sheet-sub')).toHaveText('Research');
+        await expect(sheetRow('Čekající na agenta').locator('.bottom-sheet-sub')).toHaveText('Archive');
         await expect(sheetRow('Neznámí').locator('.bottom-sheet-sub')).toHaveCount(0);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     });

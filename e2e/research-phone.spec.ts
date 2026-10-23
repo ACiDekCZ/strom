@@ -164,6 +164,22 @@ test.describe('Connect phone', () => {
         await expect(dialog.locator('.phone-intro')).not.toContainText(/happening|waiting|progress/);
     });
 
+    test('a research waiting for its agent: the archive\'s intro until the agent starts (spec 017 e)', async ({ page }) => {
+        const b = await setup(page);
+        b.accepts = { ...ACCEPTS, mode: 'research', agentHere: false };
+        await poll(page);
+        let dialog = await openDialog(page);
+        await expect(dialog.locator('.phone-intro')).toContainText('A phone on the same Wi-Fi sees the Strom archive: the latest changes to the tree.');
+        await expect(dialog.locator('.phone-intro')).not.toContainText(/happening|waiting|progress/);
+        await page.keyboard.press('Escape');
+        await expect(dialog).toHaveCount(0);
+        // The agent started: the bridge says research, the agent here.
+        b.accepts = { ...ACCEPTS, mode: 'research' };
+        await poll(page);
+        dialog = await openDialog(page);
+        await expect(dialog.locator('.phone-intro')).toContainText('what is happening, what is waiting');
+    });
+
     test('turned down in the computer\'s window: stays off, can be tried again', async ({ page }) => {
         const b = await setup(page);
         const dialog = await openDialog(page);

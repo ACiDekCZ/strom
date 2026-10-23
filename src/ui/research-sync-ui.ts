@@ -536,11 +536,13 @@ export const researchSyncMethods = uiModule({
     /**
      * Archive or research as this browser knows it — the bridge's word (now or
      * kept) or the file's archive; null when nothing says it (no label then).
+     * A research waiting for its agent saves as an archive does and is shown
+     * as one until the bridge says the agent is here (spec 017 decision e).
      */
     researchKindOf(link: Pick<ResearchLink, 'id' | 'mode'>): 'agent' | 'archive' | null {
         const accepts = runtime.get(link.id)?.status?.accepts ?? storedResearchBridge(link.id)?.accepts;
         if (!accepts && link.mode !== 'archive') return null;
-        return this.researchModeOf(link.id, link);
+        return this.researchAgentlessFor(link.id, link) ? 'archive' : 'agent';
     },
 
     /**
@@ -577,7 +579,8 @@ export const researchSyncMethods = uiModule({
      * A research (not an archive) whose agent is not on this computer
      * (`accepts.agentHere: false`): it waits for one, takes the app's data as
      * an archive does, and the app offers nothing of the agent's. Its mode
-     * stays research (no "Archive" tag, no switch said).
+     * stays research (no switch said), but it is shown as an archive until
+     * the agent starts (researchKindOf, the archive tag and texts).
      */
     researchAgentAway(researchId: string, link?: Pick<ResearchLink, 'mode'>): boolean {
         const accepts = runtime.get(researchId)?.status?.accepts ?? storedResearchBridge(researchId)?.accepts;
@@ -2311,6 +2314,8 @@ export const researchSyncMethods = uiModule({
         const link = ctx?.link;
         const treeId = ctx?.treeId;
         const archive = !!link && this.researchModeOf(link.id, link) === 'archive';
+        // Shown as an archive: one, or a research waiting for its agent (a switch of mode is the real one's).
+        const shownArchive = archive || (!!link && this.researchAgentAway(link.id, link));
         const auto = researchSendMode(link) === 'auto';
         const autoState = treeId ? researchAutoState(treeId) : {};
         type Action = ResearchSyncBlockAction;
@@ -2332,7 +2337,7 @@ export const researchSyncMethods = uiModule({
                 const persons = treeId ? this.researchWrittenConflictPersons(treeId) : [];
                 // Known persons: while one of them still has an open conflict; unknown ones: the research's count.
                 const conflicts = persons.length > 0 || !lw?.persons?.length ? lw?.conflicts ?? 0 : 0;
-                const parts = [archive ? '' : lw?.changes ? s.changesN(lw.changes) : '', conflicts > 0 ? s.conflictsN(conflicts) : ''].filter(Boolean);
+                const parts = [shownArchive ? '' : lw?.changes ? s.changesN(lw.changes) : '', conflicts > 0 ? s.conflictsN(conflicts) : ''].filter(Boolean);
                 const actions: Action[] = [];
                 // The one conflict decidable here: "Show" at its card, whom and what said above it (DEV §6.2).
                 const show = conflicts > 0 && treeId ? this.researchShowConflictTarget(treeId) : null;
@@ -2434,8 +2439,8 @@ export const researchSyncMethods = uiModule({
                 sub: [changed ? s.changedAt(changed) : '', rt?.up && this.researchAutoDueClock(treeId) ? s.autoSendsAt(this.researchAutoDueClock(treeId)) : ''].filter(Boolean).join(' · ') || undefined,
                 actions: [{ action: 'send', label: s.sendNow, asLink: true }] }),
             // An archive, or a research waiting for its agent: a send is written at once.
-            sending: () => ({ tone: 'quiet', title: archive || (!!link && this.researchAgentAway(link.id, link)) ? s.markWriting : s.markSending, spinner: true }),
-            autoBridgeDown: () => archive
+            sending: () => ({ tone: 'quiet', title: shownArchive ? s.markWriting : s.markSending, spinner: true }),
+            autoBridgeDown: () => shownArchive
                 ? { tone: 'warn', title: s.archiveBridgeDownSince(whenMs(rt?.downSince ?? 0) || changed), sub: s.archiveBridgeDownSub(edits), actions: start }
                 : { tone: 'warn', title: s.stateBridgeDown, sub: s.autoBridgeDownSub(changed), actions: start },
             autoPaused: () => ({ tone: 'warn', title: s.stateRefused,
@@ -2848,7 +2853,8 @@ export const researchSyncMethods = uiModule({
         const ctx = this.researchSyncLink();
         const link = ctx?.link;
         const auto = this.researchAutoOn(link);
-        const archive = !!link && this.researchModeOf(link.id, link) === 'archive';
+        // An archive, or a research waiting for its agent: shown as an archive.
+        const archive = !!link && this.researchAgentlessFor(link.id, link);
         const hide = (): void => {
             pill.style.display = 'none';
             pill.innerHTML = '';
@@ -3112,7 +3118,8 @@ export const researchSyncMethods = uiModule({
         if (!link) return null;
         if (safariBrowser()) return { text: t.statusSafari, warn: true };
         const auto = researchSendMode(link) === 'auto';
-        const archive = this.researchModeOf(link.id, link) === 'archive';
+        // An archive, or a research waiting for its agent: shown as an archive.
+        const archive = this.researchAgentlessFor(link.id, link);
         const st = researchAutoState(treeId);
         const lastLine = st.lastWritten ? { text: t.statusLast(when(st.lastWritten.at), st.lastWritten.changes ?? 0), warn: false } : null;
         if (link.awaitingIds) return { text: t.statusNoIds, warn: true, action: 'loadVersion' };

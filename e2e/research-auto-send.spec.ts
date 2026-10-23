@@ -1701,11 +1701,12 @@ test.describe('the research as an archive', () => {
 });
 
 test.describe('a research waiting for its agent (agentHere: false)', () => {
-    // No agent on this computer: still a research (no Archive tag), writing as an archive does.
+    // No agent on this computer: it writes as an archive does and is shown as one (the Archive tag)
+    // until the agent starts (spec 017 decision e); nothing is said to have switched.
     const WAITING = { mode: 'research', agentHere: false, sync: { auto: 'mirror' }, sources: true, verified: true, media: null };
     const ALL = ['send', 'open', 'live', 'app', 'setup', 'chat', 'review', 'research', 'sync-undo', 'conflict', 'direction'];
 
-    test('nothing of the agent: no agent rows, queue, spend or "Claude Code"; no Archive tag, no switch said; installing the agent offered (K5.1)', async ({ page }) => {
+    test('nothing of the agent: no agent rows, queue, spend or "Claude Code"; the Archive tag until the agent starts, no switch said; installing the agent offered (K5.1, spec 017 e)', async ({ page }) => {
         await page.clock.install();
         await openResearch(page, { auto: true });
         const bridge = await fakeBridge(page, { accepts: { mode: 'research', sync: { auto: 'write' }, sources: true, verified: true, media: null }, links: ALL,
@@ -1732,8 +1733,8 @@ test.describe('a research waiting for its agent (agentHere: false)', () => {
         await expect(sub.locator('#research-item-open')).toBeVisible();
         // Taking the last send back stays the user's.
         await expect(sub.locator('#research-item-undo')).toBeVisible();
-        // Not an archive: no tag, no "switched" said; where to install the agent instead.
-        await expect(sub.locator('#research-menu-archive')).toHaveCount(0);
+        // Shown as an archive (the tag), not switched to one: no "switched" said; where to install the agent instead.
+        await expect(sub.locator('#research-menu-archive')).toHaveCount(1);
         await expect(block(page)).not.toHaveAttribute('data-state', 'switched');
         await expect(sub.locator('#research-menu-foot')).toHaveAttribute('title', 'Continues in the research on this computer. The research waits for an AI agent: the first item of its menu installs one.');
         await expect(sub.locator('#research-menu-foot .research-menu-foot-text')).toHaveText('↗ continues in the research');
@@ -1748,10 +1749,10 @@ test.describe('a research waiting for its agent (agentHere: false)', () => {
         });
         for (const a of ['research-review', 'research-ancestors', 'research-descendants', 'research-ask']) expect(actions).not.toContain(a);
 
-        // Research for this tree: no tag, a send written at once, the way to install the agent, Open the research.
+        // Research for this tree: the Archive tag, a send written at once, the way to install the agent, Open the research.
         await page.evaluate(() => window.Strom.UI.researchActionTreeSettings());
         const dialog = page.locator('#research-tree-settings-modal');
-        await expect(dialog.locator('h2 .research-sync-tag')).toHaveCount(0);
+        await expect(dialog.locator('h2 .research-sync-tag')).toHaveCount(1);
         await expect(dialog).not.toContainText('has been a Strom archive since');
         await expect(dialog).not.toContainText('worked with an agent since');
         await expect(dialog).toContainText('The research writes every send straight away.');
@@ -1768,6 +1769,7 @@ test.describe('a research waiting for its agent (agentHere: false)', () => {
         await poll(page);
         await openResearchMenu(page);
         await expect(sub.locator('#research-item-chat')).toBeVisible();
+        await expect(sub.locator('#research-menu-archive')).toHaveCount(0);
         await expect(block(page)).not.toHaveAttribute('data-state', 'switched');
         await page.evaluate(() => window.Strom.UI.closeActionsMenu());
         // With its agent: the transcriptions setting is offered again.

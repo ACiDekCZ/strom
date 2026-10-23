@@ -101,7 +101,8 @@ export const materialMethods = uiModule({
         const subtitle = isPerson
             ? m.toPerson(personSubtitle(target.personId), '')
             : m.toSource(data.sources?.[target.sourceId]?.title ?? '');
-        const archive = this.researchModeOf(link.researchId) === 'archive';
+        // An archive, or a research waiting for its agent: it saves as an archive.
+        const archive = this.researchAgentlessFor(link.researchId);
         const up = this.researchBridgeUp(link.researchId);
         const ready = originalTargets(isPerson ? { personId: target.personId } : { sourceId: target.sourceId }, data).ready;
         const bytes = picked.reduce((sum, f) => sum + f.size, 0);
@@ -236,7 +237,8 @@ export const materialMethods = uiModule({
         let filledN = 0;
         /** Files not sent nor waiting, with why (the first one is named). */
         const failed: { name: string; why: string }[] = [];
-        const archive = this.researchModeOf(link.researchId) === 'archive';
+        // An archive, or a research waiting for its agent: "saved into the archive".
+        const archive = this.researchAgentlessFor(link.researchId);
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
             if (go) { go.disabled = true; go.textContent = m.sendingK(i + 1, files.length); }

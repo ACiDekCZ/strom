@@ -263,10 +263,10 @@ export const researchActionsMethods = uiModule({
         const autoSend = capable && this.researchAutoOn(ctx?.link);
         // An archive: nothing that leads to an agent.
         const archive = capable && this.activeResearchArchive();
-        // A research that tells what it has (1.12+): its state on top, sending straight; an archive says so beside its title.
-        const syncBlock = block ? this.researchSyncBlockHtml(block, { tag: archive ? strings.sync.archiveTag : undefined }) : '';
-        // A research waiting for its agent (none on this computer): as an archive, without the tag.
+        // A research waiting for its agent (none on this computer): as an archive, the tag too, until the agent starts.
         const agentAway = capable && this.activeResearchAgentAway();
+        // A research that tells what it has (1.12+): its state on top, sending straight; an archive says so beside its title.
+        const syncBlock = block ? this.researchSyncBlockHtml(block, { tag: archive || agentAway ? strings.sync.archiveTag : undefined }) : '';
         // Nothing that leads to an agent in an archive, while waiting for one, nor while the research's mode is not known here.
         const noAgent = archive || agentAway || !this.activeResearchModeKnown();
         // Only loading from the research: nothing to send, no row for it.

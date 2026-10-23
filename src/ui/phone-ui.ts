@@ -480,6 +480,14 @@ export const phoneMethods = uiModule({
                 </div>`;
     },
 
+    /**
+     * The intro's promises: an archive's (what a phone sees there), also for a
+     * research waiting for its agent until the agent starts; else the research's.
+     */
+    phoneIntroLines(): readonly string[] {
+        return this.activeResearchAgentless() ? strings.phone.introArchive : strings.phone.intro;
+    },
+
     phoneBodyHtml(view: PhoneView): string {
         const p = strings.phone;
         const d = ph!;
@@ -494,7 +502,7 @@ export const phoneMethods = uiModule({
         switch (view) {
             case 'intro':
                 content = `
-                    <ul class="phone-intro">${(this.activeResearchArchive() ? p.introArchive : p.intro).map(t => `<li><span class="phone-check" aria-hidden="true">✓</span><span>${esc(t)}</span></li>`).join('')}</ul>
+                    <ul class="phone-intro">${this.phoneIntroLines().map(t => `<li><span class="phone-check" aria-hidden="true">✓</span><span>${esc(t)}</span></li>`).join('')}</ul>
                     ${this.phoneSystemHtml()}`;
                 footer = `<span class="phone-foot-note"><span class="phone-dot is-ring" aria-hidden="true"></span>${esc(p.off)}</span>${close}${enable('primary')}`;
                 break;

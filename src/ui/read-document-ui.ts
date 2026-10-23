@@ -622,7 +622,7 @@ export const readDocumentMethods = uiModule({
     readSourceBlocked(): SourceWhy | null {
         const link = this.researchOriginalsLink();
         if (!link) return this.researchSyncLink() && researchLinksEnabled() && !onComputer() ? 'computer' : 'unlinked';
-        if (this.activeResearchArchive()) return 'archive';
+        if (this.activeResearchAgentless()) return 'archive';
         if (!this.researchBridgeUp(link.researchId) || !this.readBridgeBase(link.researchId)) return 'down';
         // An older research has no reading results to give (`GET read/<id>` is an unknown path there).
         const status = this.researchStatusOf(link.researchId);
@@ -1087,7 +1087,7 @@ export const readDocumentMethods = uiModule({
         if (!res && st.sourceId) {
             // The source's own transcription stands in for what the research cannot give.
             st.phase = 'error';
-            const why: SourceWhy = failure?.kind === 'none' ? (this.activeResearchArchive() ? 'archive' : 'none')
+            const why: SourceWhy = failure?.kind === 'none' ? (this.activeResearchAgentless() ? 'archive' : 'none')
                 : !this.researchBridgeUp(link.researchId) ? 'down' : 'other';
             st.error = { kind: 'source', why, ...(failure ? { failure } : {}) };
         } else if (!res) {
