@@ -6211,6 +6211,12 @@
         body:has(.modal-overlay.active) .file-copy-notice { display: none; }
         /* The tour offer (after the sample tree) waits too: it covered a form opened meanwhile. */
         body:has(.modal-overlay.active) .tour-offer { display: none; }
+        /* It steps aside while a message toast shows: both sit bottom-centre and the offer, above it, covered
+           the toast's action (a phone's wrapped toast entirely). It is back once the toast goes. */
+        body:has(.toast.show) .tour-offer { opacity: 0; visibility: hidden; pointer-events: none; }
+        @supports not (selector(:has(*))) {
+            body.has-toast .tour-offer { opacity: 0; visibility: hidden; pointer-events: none; }
+        }
         /* Small text links and chips are big enough to hit with a finger (44 px,
            the label unchanged): "+ cause, age, house", the card-field chips, the
            × of the new-version prompt and of the notices. */

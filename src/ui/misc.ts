@@ -585,8 +585,8 @@ export const miscMethods = uiModule({
     // ---- KEYBOARD SHORTCUTS ----
     /**
      * Older Safari (before 15.4) lacks CSS :has(). A handful of toast-stacking
-     * rules use body:has(.modal-overlay.active) / body:has(.undo-toast); their
-     * @supports fallbacks lean on two body classes. On browsers that DO support
+     * rules use body:has(.modal-overlay.active) / body:has(.undo-toast) /
+     * body:has(.toast.show); their @supports fallbacks lean on three body classes. On browsers that DO support
      * :has() this is a no-op — the classes are never touched and the :has()
      * rules run unchanged (identical behaviour in Chromium). On the rest, a
      * MutationObserver keeps the classes in sync with the DOM the same rules
@@ -599,6 +599,7 @@ export const miscMethods = uiModule({
             const undo = document.querySelector('.undo-toast') !== null;
             document.body.classList.toggle('has-active-modal', modal);
             document.body.classList.toggle('has-undo-toast', undo);
+            document.body.classList.toggle('has-toast', document.querySelector('.toast.show') !== null);
         };
         new MutationObserver(sync).observe(document.body, {
             childList: true, subtree: true, attributes: true, attributeFilter: ['class'],

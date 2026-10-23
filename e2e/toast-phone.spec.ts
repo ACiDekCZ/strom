@@ -167,3 +167,52 @@ test.describe('desktop', () => {
         expect(await toast.evaluate(e => getComputedStyle(e).paddingLeft)).toBe('24px');
     });
 });
+
+/**
+ * The tour offer after the sample tree and a long toast with an action (both bottom-centre, the offer
+ * above): the offer steps aside while the toast shows, so the toast's action is the one under a tap
+ * at its centre; once the toast is gone the offer is back.
+ */
+async function offerAndToast(page: Page): Promise<void> {
+    await openApp(page, { tourOffer: true });
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    const offer = page.locator('.tour-offer');
+    await expect(offer).toBeVisible();
+    const toast = await longToast(page);
+    const action = toast.locator('.toast-action');
+    await expect.poll(() => action.evaluate((a) => {
+        const r = a.getBoundingClientRect();
+        return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) === a;
+    })).toBe(true);
+    // Nothing of the offer over the toast (it may stay only where it leaves the toast free).
+    await expect.poll(async () => {
+        if (!await offer.isVisible()) return false;
+        return overlaps((await offer.boundingBox())!, (await toast.boundingBox())!);
+    }).toBe(false);
+    await toast.locator('.toast-close').click();
+    await expect(page.locator('.toast')).toHaveCount(0);
+    await expect(offer).toBeVisible();
+    await expect(offer.locator('.tour-offer-btn')).toBeEnabled();
+    await offer.locator('.tour-offer-btn').click();
+    await expect(page.locator('#tour-overlay')).toHaveClass(/active/);
+}
+
+test.describe('tour offer and a toast, phone', () => {
+    test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+    test('390 touch: the tour offer leaves the toast and its action free', async ({ page }) => { await offerAndToast(page); });
+});
+
+test.describe('tour offer and a toast, phone-narrow window with a mouse', () => {
+    test.use({ viewport: { width: 390, height: 844 } });
+    test('390 mouse: the tour offer leaves the toast and its action free', async ({ page }) => { await offerAndToast(page); });
+});
+
+test.describe('tour offer and a toast, tablet', () => {
+    test.use({ viewport: { width: 1024, height: 768 } });
+    test('1024: the tour offer leaves the toast and its action free', async ({ page }) => { await offerAndToast(page); });
+});
+
+test.describe('tour offer and a toast, desktop', () => {
+    test.use({ viewport: { width: 1440, height: 900 } });
+    test('1440: the tour offer leaves the toast and its action free', async ({ page }) => { await offerAndToast(page); });
+});
