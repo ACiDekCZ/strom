@@ -2155,6 +2155,8 @@ test.describe('"What will be sent" before sending by hand', () => {
         await expect(panel(page).locator('#research-changes-skip')).toBeChecked();
         await panel(page).locator('[data-act="send"]').click();
         await expect.poll(() => bridge.posts.length).toBe(1);
+        // Its answer taken first: "Send now" while a send is out does nothing (the post is counted when it goes).
+        await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sent?.state)).toBe('written');
         // Next time at once (this tree).
         await editJan(page, 'Brno');
         await page.evaluate(() => window.Strom.UI.researchSendNow());
