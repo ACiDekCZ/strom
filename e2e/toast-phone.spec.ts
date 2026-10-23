@@ -49,6 +49,14 @@ async function coversNothing(page: Page, toast: Locator): Promise<void> {
     expect(await toast.evaluate(e => e.scrollWidth <= e.clientWidth)).toBe(true);
 }
 
+/** The action whole on one line under the sentence, the × beside the sentence. */
+async function actionWhole(toast: Locator): Promise<void> {
+    const a = (await toast.locator('.toast-action').boundingBox())!;
+    const x = (await toast.locator('.toast-close').boundingBox())!;
+    expect(a.height).toBeLessThan(30);
+    expect(a.y).toBeGreaterThan(x.y + x.height);
+}
+
 test.describe('phone', () => {
     test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
@@ -60,6 +68,7 @@ test.describe('phone', () => {
         expect(Math.round(t.width)).toBe(390 - 32);
         // Wrapped onto several lines (one line is about 20px).
         expect(t.height).toBeGreaterThan(60);
+        await actionWhole(toast);
         await coversNothing(page, toast);
     });
 
@@ -85,6 +94,7 @@ test.describe('phone held sideways', () => {
         const bar = (await page.locator('#bottom-bar').boundingBox())!;
         expect(t.x).toBeGreaterThanOrEqual(bar.x + bar.width);
         expect(t.x + t.width).toBeLessThanOrEqual(844);
+        await actionWhole(toast);
         await coversNothing(page, toast);
     });
 });

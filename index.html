@@ -12778,6 +12778,13 @@
         }
         @media (hover: hover) { .toast-close:hover { opacity: 1; background: color-mix(in srgb, var(--surface) 15%, transparent); } }
         .toast-close:focus-visible { outline: 2px solid var(--surface); outline-offset: 1px; }
+        /* Bottom-bar regime (≤1024px): the narrower toast keeps its sentence and × on one row and its action
+           whole under the sentence, never broken word by word beside it (017 j). */
+        @media (max-width: 1024px) {
+            .toast--closable:not(.toast--rich) { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 10px; align-items: start; }
+            .toast--closable:not(.toast--rich) > .toast-action { grid-column: 1; grid-row: 2; justify-self: start; margin: 8px 0 0; }
+            .toast--closable:not(.toast--rich) > .toast-close { grid-column: 2; grid-row: 1; }
+        }
 
         /* "Show in tree": the others dim, those found get a dashed frame; lines stay. */
         .person-card.evidence-dim { opacity: 0.45; }
