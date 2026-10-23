@@ -771,7 +771,8 @@ export const researchInstallMethods = uiModule({
      * A research already on this computer (an archive too): it opens the app
      * with its tree by `strom app` in a terminal — the app cannot open it by a
      * link, it does not know the tree's id (a cleared browser). Nothing is
-     * made, stored or started here.
+     * made, stored or started here. From the beta app: the command opens the
+     * app of the research's channel, the public one for a stable research.
      */
     researchInstallExistingHtml(): string {
         const s = strings.install;
@@ -790,6 +791,7 @@ export const researchInstallMethods = uiModule({
                     <button type="button" class="install-copy" data-act="copy-existing">${esc(s.copy)}</button>
                 </div>
                 <p class="install-after install-existing-which">${which}</p>
+                ${isBetaBuildHere() ? `<p class="install-after install-existing-channel">${esc(s.existingChannel)}</p>` : ''}
                 ${needsTransfer(currentAppBrowser()) ? `<p class="install-note install-existing-safari">${esc(s.existingSafari(noConnectLead()))}</p>` : ''}
             </div>
             <div class="buttons">

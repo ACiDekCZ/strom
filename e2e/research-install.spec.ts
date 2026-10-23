@@ -1025,6 +1025,10 @@ test.describe('the research\'s beta channel: only the beta app\'s lines', () => 
             await expect(release).toHaveAttribute('href', RELEASES);
         }
         expect(win.length).toBeLessThanOrEqual(259);
+        // `strom app` from the beta: it opens the app of the research's channel, said so.
+        await dialog(page).locator('.install-have-row [data-act="existing"]').click();
+        await expect(dialog(page).locator('.install-existing-channel')).toHaveText('A research of the stable channel opens its tree in the public app (stromapp.info/run), one of the beta channel in this beta.');
+        await dialog(page).locator('[data-act="existing-back"]').click();
         // A long tree name: shortened so the Windows line still fits.
         await page.evaluate(() => window.Strom.UI.closeResearchInstall());
         await page.evaluate(() => {
@@ -1051,6 +1055,11 @@ test.describe('the research\'s beta channel: only the beta app\'s lines', () => 
         await expect(dialog(page).locator('.install-release')).toHaveAttribute('href', RELEASES);
         // Nothing in the dialog (texts, lines, links) speaks of a beta.
         expect(await dialog(page).evaluate(e => e.innerHTML)).not.toMatch(/beta|STROM_CHANNEL/i);
+        // `strom app` there: no word of channels either.
+        await dialog(page).locator('.install-have-row [data-act="existing"]').click();
+        await expect(dialog(page).locator('.install-existing-line')).toHaveText('strom app');
+        await expect(dialog(page).locator('.install-existing-channel')).toHaveCount(0);
+        expect(await dialog(page).evaluate(e => e.innerHTML)).not.toMatch(/beta/i);
         await page.context().close();
     });
 });
