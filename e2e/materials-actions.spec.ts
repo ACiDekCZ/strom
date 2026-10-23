@@ -480,6 +480,21 @@ test.describe('Hide and Restore', () => {
         await expect(win(page).locator('.mw-selbar')).toBeHidden();
         await expect(win(page).locator('.mw-canvas .mw-tile')).toHaveCount(1);
     });
+
+    test('a phone: a long name without a break point wraps in the dialog, the body does not scroll sideways', async ({ page }) => {
+        const long = 'Vymyslov_matriky_narozeni_1850_1870_folio_0123_skenovano_vysoke_rozliseni.jpg';
+        await page.setViewportSize({ width: 390, height: 844 });
+        await setup(page, { files: [materialFile(1, { persons: ['P0003'], title: long })] });
+        await view(page, long.slice(0, 20));
+        await act(page, 'hide').click();
+        await expect(dialog(page).locator('.mdlg-text')).toContainText('stays in the research');
+        const m = await dialog(page).evaluate(d => {
+            const body = d.querySelector('.mdlg-body') as HTMLElement;
+            const text = d.querySelector('.mdlg-text') as HTMLElement;
+            return { body: body.scrollWidth - body.clientWidth, text: text.scrollWidth - text.clientWidth };
+        });
+        expect(m).toEqual({ body: 0, text: 0 });
+    });
 });
 
 test.describe('The research\'s own commits', () => {
