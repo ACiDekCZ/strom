@@ -703,12 +703,14 @@ test.describe('installing the research from the app', () => {
         const page = await ctx.newPage();
         await page.goto('https://beta.stromapp.info/run/');
         await page.waitForFunction(() => !!window.Strom?.UI);
-        await page.evaluate(() => {
+        // The app keeps the offer only once its start got that far (window.Strom comes before the storage
+        // is opened): offered until it is kept (the app's listener cancels the event).
+        await expect.poll(() => page.evaluate(() => {
             const e = new Event('beforeinstallprompt', { cancelable: true }) as Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
             e.prompt = () => { (window as unknown as { __prompted: boolean }).__prompted = true; return Promise.resolve(); };
             e.userChoice = Promise.resolve({ outcome: 'accepted' });
-            window.dispatchEvent(e);
-        });
+            return !window.dispatchEvent(e);
+        })).toBe(true);
         await page.evaluate((b) => window.Strom.UI.showResearchReady(b, '00000000-0000-4000-8000-000000000001', 'Novákovi', true, 'safari'), BRIDGE);
         const ready = page.locator('.research-ready-modal');
         await expect(ready.locator('.install-ready-moved')).toContainText('A copy of the tree stayed in Safari.');
