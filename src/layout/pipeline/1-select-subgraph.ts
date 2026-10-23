@@ -404,6 +404,82 @@ export function expandChildrenInSelection(
 }
 
 /**
+ * Leave the ancestors of the given persons out of the view for now
+ * (PipelineInput.foldAncestorsOf, to make room for children shown in place):
+ * the line from each person up to their parents is cut and everyone the view
+ * then no longer reaches from the focus goes — the parents, their ancestors,
+ * their other children and those children's families.
+ *
+ * A person is drawn once, so an ancestor the view also reaches another way
+ * stays (a pedigree collapse: the same couple above the other half of the
+ * pedigree), with everything hanging on them; and when one of the person's
+ * parents stays that way, the person keeps the line to their parents. The
+ * view stays one connected tree around the focus: nobody who stays loses a
+ * partner or a child, only the cut lines go.
+ */
+export function foldAncestorsInSelection(
+    data: StromData,
+    selection: GraphSelection,
+    personIds: readonly PersonId[],
+    focusPersonId: PersonId
+): void {
+    const folded = new Set(personIds.filter(id => selection.persons.has(id) && id !== focusPersonId));
+    if (folded.size === 0) return;
+    const isCut = (childId: PersonId, parentId: PersonId): boolean =>
+        folded.has(childId) && (data.persons[childId]?.parentIds ?? []).includes(parentId);
+
+    // Who stays connected to whom inside the selection: parent and child,
+    // partner and partner (as buildLayoutModel links them)
+    const neighbours = (id: PersonId): PersonId[] => {
+        const person = data.persons[id];
+        if (!person) return [];
+        const out: PersonId[] = [];
+        for (const parentId of person.parentIds) {
+            if (selection.persons.has(parentId) && !isCut(id, parentId)) out.push(parentId);
+        }
+        for (const childId of person.childIds) {
+            if (selection.persons.has(childId) && !isCut(childId, id)) out.push(childId);
+        }
+        for (const partnershipId of person.partnerships) {
+            const partnership = data.partnerships[partnershipId];
+            if (!partnership) continue;
+            const other = partnership.person1Id === id ? partnership.person2Id : partnership.person1Id;
+            if (selection.persons.has(other)) out.push(other);
+        }
+        return out;
+    };
+    const reach = (start: PersonId, into: Set<PersonId>): void => {
+        const stack = [start];
+        while (stack.length > 0) {
+            const id = stack.pop()!;
+            if (into.has(id)) continue;
+            into.add(id);
+            for (const next of neighbours(id)) if (!into.has(next)) stack.push(next);
+        }
+    };
+
+    const kept = new Set<PersonId>();
+    reach(focusPersonId, kept);
+    const gone = new Set<PersonId>();
+    for (const id of folded) {
+        for (const parentId of data.persons[id]?.parentIds ?? []) {
+            if (selection.persons.has(parentId) && !kept.has(parentId)) reach(parentId, gone);
+        }
+    }
+    if (gone.size === 0) return;
+    for (const id of gone) {
+        selection.persons.delete(id);
+        selection.depthLimitPersons?.delete(id);
+    }
+    for (const partnershipId of [...selection.partnerships]) {
+        const partnership = data.partnerships[partnershipId];
+        if (partnership && (gone.has(partnership.person1Id) || gone.has(partnership.person2Id))) {
+            selection.partnerships.delete(partnershipId);
+        }
+    }
+}
+
+/**
  * Expand selection for expanded persons (display policy).
  * Adds missing partners, partnerships, and children for persons
  * whose all partnerships should be shown inline.

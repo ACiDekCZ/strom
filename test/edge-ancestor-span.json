@@ -1,0 +1,1387 @@
+{
+  "persons": {
+    "focus": {
+      "id": "focus",
+      "firstName": "Focus",
+      "lastName": "Span",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "p_f",
+        "p_m"
+      ],
+      "childIds": [],
+      "birthDate": "1990-01-01"
+    },
+    "p_f": {
+      "id": "p_f",
+      "firstName": "F",
+      "lastName": "Span",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_f_p_m"
+      ],
+      "parentIds": [
+        "p_ff",
+        "p_fm"
+      ],
+      "childIds": [
+        "focus"
+      ],
+      "birthDate": "1960-03-01"
+    },
+    "p_m": {
+      "id": "p_m",
+      "firstName": "M",
+      "lastName": "Span",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_f_p_m"
+      ],
+      "parentIds": [
+        "p_mf",
+        "p_mm"
+      ],
+      "childIds": [
+        "focus"
+      ],
+      "birthDate": "1962-05-01"
+    },
+    "p_ff": {
+      "id": "p_ff",
+      "firstName": "FF",
+      "lastName": "Span",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_ff_p_fm"
+      ],
+      "parentIds": [
+        "p_fff",
+        "p_ffm"
+      ],
+      "childIds": [
+        "p_f"
+      ],
+      "birthDate": "1930-03-01"
+    },
+    "p_fm": {
+      "id": "p_fm",
+      "firstName": "FM",
+      "lastName": "Span",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_ff_p_fm"
+      ],
+      "parentIds": [
+        "p_fmf",
+        "p_fmm"
+      ],
+      "childIds": [
+        "p_f"
+      ],
+      "birthDate": "1932-05-01"
+    },
+    "p_fff": {
+      "id": "p_fff",
+      "firstName": "FFF",
+      "lastName": "Span",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_fff_p_ffm"
+      ],
+      "parentIds": [
+        "p_ffff",
+        "p_fffm"
+      ],
+      "childIds": [
+        "p_ff",
+        "p_ff_s"
+      ],
+      "birthDate": "1900-03-01"
+    },
+    "p_ffm": {
+      "id": "p_ffm",
+      "firstName": "FFM",
+      "lastName": "Span",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_fff_p_ffm"
+      ],
+      "parentIds": [
+        "p_ffmf",
+        "p_ffmm"
+      ],
+      "childIds": [
+        "p_ff",
+        "p_ff_s"
+      ],
+      "birthDate": "1902-05-01"
+    },
+    "p_ff_s": {
+      "id": "p_ff_s",
+      "firstName": "FF_S",
+      "lastName": "Span",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "p_fff",
+        "p_ffm"
+      ],
+      "childIds": [],
+      "birthDate": "1933-07-01"
+    },
+    "p_ffff": {
+      "id": "p_ffff",
+      "firstName": "FFFF",
+      "lastName": "Span",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_ffff_p_fffm"
+      ],
+      "parentIds": [
+        "p_fffff",
+        "p_ffffm"
+      ],
+      "childIds": [
+        "p_fff"
+      ],
+      "birthDate": "1870-03-01"
+    },
+    "p_fffm": {
+      "id": "p_fffm",
+      "firstName": "FFFM",
+      "lastName": "Span",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_ffff_p_fffm"
+      ],
+      "parentIds": [
+        "p_fffmf",
+        "p_fffmm"
+      ],
+      "childIds": [
+        "p_fff"
+      ],
+      "birthDate": "1872-05-01"
+    },
+    "p_fffff": {
+      "id": "p_fffff",
+      "firstName": "FFFFF",
+      "lastName": "Span",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_fffff_p_ffffm"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_ffff"
+      ],
+      "birthDate": "1840-03-01"
+    },
+    "p_ffffm": {
+      "id": "p_ffffm",
+      "firstName": "FFFFM",
+      "lastName": "Span",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_fffff_p_ffffm"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_ffff"
+      ],
+      "birthDate": "1842-05-01"
+    },
+    "p_fffmf": {
+      "id": "p_fffmf",
+      "firstName": "FFFMF",
+      "lastName": "Span",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_fffmf_p_fffmm"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_fffm"
+      ],
+      "birthDate": "1842-03-01"
+    },
+    "p_fffmm": {
+      "id": "p_fffmm",
+      "firstName": "FFFMM",
+      "lastName": "Span",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_fffmf_p_fffmm"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_fffm"
+      ],
+      "birthDate": "1844-05-01"
+    },
+    "p_ffmf": {
+      "id": "p_ffmf",
+      "firstName": "FFMF",
+      "lastName": "Span",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_ffmf_p_ffmm"
+      ],
+      "parentIds": [
+        "p_ffmff",
+        "p_ffmfm"
+      ],
+      "childIds": [
+        "p_ffm"
+      ],
+      "birthDate": "1872-03-01"
+    },
+    "p_ffmm": {
+      "id": "p_ffmm",
+      "firstName": "FFMM",
+      "lastName": "Span",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_ffmf_p_ffmm"
+      ],
+      "parentIds": [
+        "p_ffmmf",
+        "p_ffmmm"
+      ],
+      "childIds": [
+        "p_ffm"
+      ],
+      "birthDate": "1874-05-01"
+    },
+    "p_ffmff": {
+      "id": "p_ffmff",
+      "firstName": "FFMFF",
+      "lastName": "Span",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_ffmff_p_ffmfm"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_ffmf"
+      ],
+      "birthDate": "1842-03-01"
+    },
+    "p_ffmfm": {
+      "id": "p_ffmfm",
+      "firstName": "FFMFM",
+      "lastName": "Span",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_ffmff_p_ffmfm"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_ffmf"
+      ],
+      "birthDate": "1844-05-01"
+    },
+    "p_ffmmf": {
+      "id": "p_ffmmf",
+      "firstName": "FFMMF",
+      "lastName": "Span",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_ffmmf_p_ffmmm"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_ffmm"
+      ],
+      "birthDate": "1844-03-01"
+    },
+    "p_ffmmm": {
+      "id": "p_ffmmm",
+      "firstName": "FFMMM",
+      "lastName": "Span",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_ffmmf_p_ffmmm"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_ffmm"
+      ],
+      "birthDate": "1846-05-01"
+    },
+    "p_fmf": {
+      "id": "p_fmf",
+      "firstName": "FMF",
+      "lastName": "Span",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_fmf_p_fmm"
+      ],
+      "parentIds": [
+        "p_fmff",
+        "p_fmfm"
+      ],
+      "childIds": [
+        "p_fm",
+        "p_fm_s"
+      ],
+      "birthDate": "1902-03-01"
+    },
+    "p_fmm": {
+      "id": "p_fmm",
+      "firstName": "FMM",
+      "lastName": "Span",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_fmf_p_fmm"
+      ],
+      "parentIds": [
+        "p_fmmf",
+        "p_fmmm"
+      ],
+      "childIds": [
+        "p_fm",
+        "p_fm_s"
+      ],
+      "birthDate": "1904-05-01"
+    },
+    "p_fm_s": {
+      "id": "p_fm_s",
+      "firstName": "FM_S",
+      "lastName": "Span",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "p_fmf",
+        "p_fmm"
+      ],
+      "childIds": [],
+      "birthDate": "1935-07-01"
+    },
+    "p_fmff": {
+      "id": "p_fmff",
+      "firstName": "FMFF",
+      "lastName": "Span",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_fmff_p_fmfm"
+      ],
+      "parentIds": [
+        "p_fmfff",
+        "p_fmffm"
+      ],
+      "childIds": [
+        "p_fmf"
+      ],
+      "birthDate": "1872-03-01"
+    },
+    "p_fmfm": {
+      "id": "p_fmfm",
+      "firstName": "FMFM",
+      "lastName": "Span",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_fmff_p_fmfm"
+      ],
+      "parentIds": [
+        "p_fmfmf",
+        "p_fmfmm"
+      ],
+      "childIds": [
+        "p_fmf"
+      ],
+      "birthDate": "1874-05-01"
+    },
+    "p_fmfff": {
+      "id": "p_fmfff",
+      "firstName": "FMFFF",
+      "lastName": "Span",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_fmfff_p_fmffm"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_fmff"
+      ],
+      "birthDate": "1842-03-01"
+    },
+    "p_fmffm": {
+      "id": "p_fmffm",
+      "firstName": "FMFFM",
+      "lastName": "Span",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_fmfff_p_fmffm"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_fmff"
+      ],
+      "birthDate": "1844-05-01"
+    },
+    "p_fmfmf": {
+      "id": "p_fmfmf",
+      "firstName": "FMFMF",
+      "lastName": "Span",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_fmfmf_p_fmfmm"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_fmfm"
+      ],
+      "birthDate": "1844-03-01"
+    },
+    "p_fmfmm": {
+      "id": "p_fmfmm",
+      "firstName": "FMFMM",
+      "lastName": "Span",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_fmfmf_p_fmfmm"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_fmfm"
+      ],
+      "birthDate": "1846-05-01"
+    },
+    "p_fmmf": {
+      "id": "p_fmmf",
+      "firstName": "FMMF",
+      "lastName": "Span",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_fmmf_p_fmmm"
+      ],
+      "parentIds": [
+        "p_fmmff",
+        "p_fmmfm"
+      ],
+      "childIds": [
+        "p_fmm"
+      ],
+      "birthDate": "1874-03-01"
+    },
+    "p_fmmm": {
+      "id": "p_fmmm",
+      "firstName": "FMMM",
+      "lastName": "Span",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_fmmf_p_fmmm"
+      ],
+      "parentIds": [
+        "p_fmmmf",
+        "p_fmmmm"
+      ],
+      "childIds": [
+        "p_fmm"
+      ],
+      "birthDate": "1876-05-01"
+    },
+    "p_fmmff": {
+      "id": "p_fmmff",
+      "firstName": "FMMFF",
+      "lastName": "Span",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_fmmff_p_fmmfm"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_fmmf"
+      ],
+      "birthDate": "1844-03-01"
+    },
+    "p_fmmfm": {
+      "id": "p_fmmfm",
+      "firstName": "FMMFM",
+      "lastName": "Span",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_fmmff_p_fmmfm"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_fmmf"
+      ],
+      "birthDate": "1846-05-01"
+    },
+    "p_fmmmf": {
+      "id": "p_fmmmf",
+      "firstName": "FMMMF",
+      "lastName": "Span",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_fmmmf_p_fmmmm"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_fmmm"
+      ],
+      "birthDate": "1846-03-01"
+    },
+    "p_fmmmm": {
+      "id": "p_fmmmm",
+      "firstName": "FMMMM",
+      "lastName": "Span",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_fmmmf_p_fmmmm"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_fmmm"
+      ],
+      "birthDate": "1848-05-01"
+    },
+    "p_mf": {
+      "id": "p_mf",
+      "firstName": "MF",
+      "lastName": "Span",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_mf_p_mm"
+      ],
+      "parentIds": [
+        "p_mff",
+        "p_mfm"
+      ],
+      "childIds": [
+        "p_m"
+      ],
+      "birthDate": "1932-03-01"
+    },
+    "p_mm": {
+      "id": "p_mm",
+      "firstName": "MM",
+      "lastName": "Span",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_mf_p_mm"
+      ],
+      "parentIds": [
+        "p_mmf",
+        "p_mmm"
+      ],
+      "childIds": [
+        "p_m"
+      ],
+      "birthDate": "1934-05-01"
+    },
+    "p_mff": {
+      "id": "p_mff",
+      "firstName": "MFF",
+      "lastName": "Span",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_mff_p_mfm"
+      ],
+      "parentIds": [
+        "p_mfff",
+        "p_mffm"
+      ],
+      "childIds": [
+        "p_mf",
+        "p_mf_s"
+      ],
+      "birthDate": "1902-03-01"
+    },
+    "p_mfm": {
+      "id": "p_mfm",
+      "firstName": "MFM",
+      "lastName": "Span",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_mff_p_mfm"
+      ],
+      "parentIds": [
+        "p_mfmf",
+        "p_mfmm"
+      ],
+      "childIds": [
+        "p_mf",
+        "p_mf_s"
+      ],
+      "birthDate": "1904-05-01"
+    },
+    "p_mf_s": {
+      "id": "p_mf_s",
+      "firstName": "MF_S",
+      "lastName": "Span",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "p_mff",
+        "p_mfm"
+      ],
+      "childIds": [],
+      "birthDate": "1935-07-01"
+    },
+    "p_mfff": {
+      "id": "p_mfff",
+      "firstName": "MFFF",
+      "lastName": "Span",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_mfff_p_mffm"
+      ],
+      "parentIds": [
+        "p_mffff",
+        "p_mfffm"
+      ],
+      "childIds": [
+        "p_mff"
+      ],
+      "birthDate": "1872-03-01"
+    },
+    "p_mffm": {
+      "id": "p_mffm",
+      "firstName": "MFFM",
+      "lastName": "Span",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_mfff_p_mffm"
+      ],
+      "parentIds": [
+        "p_mffmf",
+        "p_mffmm"
+      ],
+      "childIds": [
+        "p_mff"
+      ],
+      "birthDate": "1874-05-01"
+    },
+    "p_mffff": {
+      "id": "p_mffff",
+      "firstName": "MFFFF",
+      "lastName": "Span",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_mffff_p_mfffm"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_mfff"
+      ],
+      "birthDate": "1842-03-01"
+    },
+    "p_mfffm": {
+      "id": "p_mfffm",
+      "firstName": "MFFFM",
+      "lastName": "Span",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_mffff_p_mfffm"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_mfff"
+      ],
+      "birthDate": "1844-05-01"
+    },
+    "p_mffmf": {
+      "id": "p_mffmf",
+      "firstName": "MFFMF",
+      "lastName": "Span",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_mffmf_p_mffmm"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_mffm"
+      ],
+      "birthDate": "1844-03-01"
+    },
+    "p_mffmm": {
+      "id": "p_mffmm",
+      "firstName": "MFFMM",
+      "lastName": "Span",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_mffmf_p_mffmm"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_mffm"
+      ],
+      "birthDate": "1846-05-01"
+    },
+    "p_mfmf": {
+      "id": "p_mfmf",
+      "firstName": "MFMF",
+      "lastName": "Span",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_mfmf_p_mfmm"
+      ],
+      "parentIds": [
+        "p_mfmff",
+        "p_mfmfm"
+      ],
+      "childIds": [
+        "p_mfm"
+      ],
+      "birthDate": "1874-03-01"
+    },
+    "p_mfmm": {
+      "id": "p_mfmm",
+      "firstName": "MFMM",
+      "lastName": "Span",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_mfmf_p_mfmm"
+      ],
+      "parentIds": [
+        "p_mfmmf",
+        "p_mfmmm"
+      ],
+      "childIds": [
+        "p_mfm"
+      ],
+      "birthDate": "1876-05-01"
+    },
+    "p_mfmff": {
+      "id": "p_mfmff",
+      "firstName": "MFMFF",
+      "lastName": "Span",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_mfmff_p_mfmfm"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_mfmf"
+      ],
+      "birthDate": "1844-03-01"
+    },
+    "p_mfmfm": {
+      "id": "p_mfmfm",
+      "firstName": "MFMFM",
+      "lastName": "Span",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_mfmff_p_mfmfm"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_mfmf"
+      ],
+      "birthDate": "1846-05-01"
+    },
+    "p_mfmmf": {
+      "id": "p_mfmmf",
+      "firstName": "MFMMF",
+      "lastName": "Span",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_mfmmf_p_mfmmm"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_mfmm"
+      ],
+      "birthDate": "1846-03-01"
+    },
+    "p_mfmmm": {
+      "id": "p_mfmmm",
+      "firstName": "MFMMM",
+      "lastName": "Span",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_mfmmf_p_mfmmm"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_mfmm"
+      ],
+      "birthDate": "1848-05-01"
+    },
+    "p_mmf": {
+      "id": "p_mmf",
+      "firstName": "MMF",
+      "lastName": "Span",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_mmf_p_mmm"
+      ],
+      "parentIds": [
+        "p_mmff",
+        "p_mmfm"
+      ],
+      "childIds": [
+        "p_mm",
+        "p_mm_s"
+      ],
+      "birthDate": "1904-03-01"
+    },
+    "p_mmm": {
+      "id": "p_mmm",
+      "firstName": "MMM",
+      "lastName": "Span",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_mmf_p_mmm"
+      ],
+      "parentIds": [
+        "p_mmmf",
+        "p_mmmm"
+      ],
+      "childIds": [
+        "p_mm",
+        "p_mm_s"
+      ],
+      "birthDate": "1906-05-01"
+    },
+    "p_mm_s": {
+      "id": "p_mm_s",
+      "firstName": "MM_S",
+      "lastName": "Span",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "p_mmf",
+        "p_mmm"
+      ],
+      "childIds": [],
+      "birthDate": "1937-07-01"
+    },
+    "p_mmff": {
+      "id": "p_mmff",
+      "firstName": "MMFF",
+      "lastName": "Span",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_mmff_p_mmfm"
+      ],
+      "parentIds": [
+        "p_mmfff",
+        "p_mmffm"
+      ],
+      "childIds": [
+        "p_mmf"
+      ],
+      "birthDate": "1874-03-01"
+    },
+    "p_mmfm": {
+      "id": "p_mmfm",
+      "firstName": "MMFM",
+      "lastName": "Span",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_mmff_p_mmfm"
+      ],
+      "parentIds": [
+        "p_mmfmf",
+        "p_mmfmm"
+      ],
+      "childIds": [
+        "p_mmf"
+      ],
+      "birthDate": "1876-05-01"
+    },
+    "p_mmfff": {
+      "id": "p_mmfff",
+      "firstName": "MMFFF",
+      "lastName": "Span",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_mmfff_p_mmffm"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_mmff"
+      ],
+      "birthDate": "1844-03-01"
+    },
+    "p_mmffm": {
+      "id": "p_mmffm",
+      "firstName": "MMFFM",
+      "lastName": "Span",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_mmfff_p_mmffm"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_mmff"
+      ],
+      "birthDate": "1846-05-01"
+    },
+    "p_mmfmf": {
+      "id": "p_mmfmf",
+      "firstName": "MMFMF",
+      "lastName": "Span",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_mmfmf_p_mmfmm"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_mmfm"
+      ],
+      "birthDate": "1846-03-01"
+    },
+    "p_mmfmm": {
+      "id": "p_mmfmm",
+      "firstName": "MMFMM",
+      "lastName": "Span",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_mmfmf_p_mmfmm"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_mmfm"
+      ],
+      "birthDate": "1848-05-01"
+    },
+    "p_mmmf": {
+      "id": "p_mmmf",
+      "firstName": "MMMF",
+      "lastName": "Span",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_mmmf_p_mmmm"
+      ],
+      "parentIds": [
+        "p_mmmff",
+        "p_mmmfm"
+      ],
+      "childIds": [
+        "p_mmm"
+      ],
+      "birthDate": "1876-03-01"
+    },
+    "p_mmmm": {
+      "id": "p_mmmm",
+      "firstName": "MMMM",
+      "lastName": "Span",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_mmmf_p_mmmm"
+      ],
+      "parentIds": [
+        "p_mmmmf",
+        "p_mmmmm"
+      ],
+      "childIds": [
+        "p_mmm"
+      ],
+      "birthDate": "1878-05-01"
+    },
+    "p_mmmff": {
+      "id": "p_mmmff",
+      "firstName": "MMMFF",
+      "lastName": "Span",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_mmmff_p_mmmfm"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_mmmf"
+      ],
+      "birthDate": "1846-03-01"
+    },
+    "p_mmmfm": {
+      "id": "p_mmmfm",
+      "firstName": "MMMFM",
+      "lastName": "Span",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_mmmff_p_mmmfm"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_mmmf"
+      ],
+      "birthDate": "1848-05-01"
+    },
+    "p_mmmmf": {
+      "id": "p_mmmmf",
+      "firstName": "MMMMF",
+      "lastName": "Span",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_mmmmf_p_mmmmm"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_mmmm"
+      ],
+      "birthDate": "1848-03-01"
+    },
+    "p_mmmmm": {
+      "id": "p_mmmmm",
+      "firstName": "MMMMM",
+      "lastName": "Span",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p_mmmmf_p_mmmmm"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "p_mmmm"
+      ],
+      "birthDate": "1850-05-01"
+    }
+  },
+  "partnerships": {
+    "u_p_f_p_m": {
+      "id": "u_p_f_p_m",
+      "person1Id": "p_f",
+      "person2Id": "p_m",
+      "childIds": [
+        "focus"
+      ],
+      "status": "married"
+    },
+    "u_p_ff_p_fm": {
+      "id": "u_p_ff_p_fm",
+      "person1Id": "p_ff",
+      "person2Id": "p_fm",
+      "childIds": [
+        "p_f"
+      ],
+      "status": "married"
+    },
+    "u_p_fff_p_ffm": {
+      "id": "u_p_fff_p_ffm",
+      "person1Id": "p_fff",
+      "person2Id": "p_ffm",
+      "childIds": [
+        "p_ff",
+        "p_ff_s"
+      ],
+      "status": "married"
+    },
+    "u_p_ffff_p_fffm": {
+      "id": "u_p_ffff_p_fffm",
+      "person1Id": "p_ffff",
+      "person2Id": "p_fffm",
+      "childIds": [
+        "p_fff"
+      ],
+      "status": "married"
+    },
+    "u_p_fffff_p_ffffm": {
+      "id": "u_p_fffff_p_ffffm",
+      "person1Id": "p_fffff",
+      "person2Id": "p_ffffm",
+      "childIds": [
+        "p_ffff"
+      ],
+      "status": "married"
+    },
+    "u_p_fffmf_p_fffmm": {
+      "id": "u_p_fffmf_p_fffmm",
+      "person1Id": "p_fffmf",
+      "person2Id": "p_fffmm",
+      "childIds": [
+        "p_fffm"
+      ],
+      "status": "married"
+    },
+    "u_p_ffmf_p_ffmm": {
+      "id": "u_p_ffmf_p_ffmm",
+      "person1Id": "p_ffmf",
+      "person2Id": "p_ffmm",
+      "childIds": [
+        "p_ffm"
+      ],
+      "status": "married"
+    },
+    "u_p_ffmff_p_ffmfm": {
+      "id": "u_p_ffmff_p_ffmfm",
+      "person1Id": "p_ffmff",
+      "person2Id": "p_ffmfm",
+      "childIds": [
+        "p_ffmf"
+      ],
+      "status": "married"
+    },
+    "u_p_ffmmf_p_ffmmm": {
+      "id": "u_p_ffmmf_p_ffmmm",
+      "person1Id": "p_ffmmf",
+      "person2Id": "p_ffmmm",
+      "childIds": [
+        "p_ffmm"
+      ],
+      "status": "married"
+    },
+    "u_p_fmf_p_fmm": {
+      "id": "u_p_fmf_p_fmm",
+      "person1Id": "p_fmf",
+      "person2Id": "p_fmm",
+      "childIds": [
+        "p_fm",
+        "p_fm_s"
+      ],
+      "status": "married"
+    },
+    "u_p_fmff_p_fmfm": {
+      "id": "u_p_fmff_p_fmfm",
+      "person1Id": "p_fmff",
+      "person2Id": "p_fmfm",
+      "childIds": [
+        "p_fmf"
+      ],
+      "status": "married"
+    },
+    "u_p_fmfff_p_fmffm": {
+      "id": "u_p_fmfff_p_fmffm",
+      "person1Id": "p_fmfff",
+      "person2Id": "p_fmffm",
+      "childIds": [
+        "p_fmff"
+      ],
+      "status": "married"
+    },
+    "u_p_fmfmf_p_fmfmm": {
+      "id": "u_p_fmfmf_p_fmfmm",
+      "person1Id": "p_fmfmf",
+      "person2Id": "p_fmfmm",
+      "childIds": [
+        "p_fmfm"
+      ],
+      "status": "married"
+    },
+    "u_p_fmmf_p_fmmm": {
+      "id": "u_p_fmmf_p_fmmm",
+      "person1Id": "p_fmmf",
+      "person2Id": "p_fmmm",
+      "childIds": [
+        "p_fmm"
+      ],
+      "status": "married"
+    },
+    "u_p_fmmff_p_fmmfm": {
+      "id": "u_p_fmmff_p_fmmfm",
+      "person1Id": "p_fmmff",
+      "person2Id": "p_fmmfm",
+      "childIds": [
+        "p_fmmf"
+      ],
+      "status": "married"
+    },
+    "u_p_fmmmf_p_fmmmm": {
+      "id": "u_p_fmmmf_p_fmmmm",
+      "person1Id": "p_fmmmf",
+      "person2Id": "p_fmmmm",
+      "childIds": [
+        "p_fmmm"
+      ],
+      "status": "married"
+    },
+    "u_p_mf_p_mm": {
+      "id": "u_p_mf_p_mm",
+      "person1Id": "p_mf",
+      "person2Id": "p_mm",
+      "childIds": [
+        "p_m"
+      ],
+      "status": "married"
+    },
+    "u_p_mff_p_mfm": {
+      "id": "u_p_mff_p_mfm",
+      "person1Id": "p_mff",
+      "person2Id": "p_mfm",
+      "childIds": [
+        "p_mf",
+        "p_mf_s"
+      ],
+      "status": "married"
+    },
+    "u_p_mfff_p_mffm": {
+      "id": "u_p_mfff_p_mffm",
+      "person1Id": "p_mfff",
+      "person2Id": "p_mffm",
+      "childIds": [
+        "p_mff"
+      ],
+      "status": "married"
+    },
+    "u_p_mffff_p_mfffm": {
+      "id": "u_p_mffff_p_mfffm",
+      "person1Id": "p_mffff",
+      "person2Id": "p_mfffm",
+      "childIds": [
+        "p_mfff"
+      ],
+      "status": "married"
+    },
+    "u_p_mffmf_p_mffmm": {
+      "id": "u_p_mffmf_p_mffmm",
+      "person1Id": "p_mffmf",
+      "person2Id": "p_mffmm",
+      "childIds": [
+        "p_mffm"
+      ],
+      "status": "married"
+    },
+    "u_p_mfmf_p_mfmm": {
+      "id": "u_p_mfmf_p_mfmm",
+      "person1Id": "p_mfmf",
+      "person2Id": "p_mfmm",
+      "childIds": [
+        "p_mfm"
+      ],
+      "status": "married"
+    },
+    "u_p_mfmff_p_mfmfm": {
+      "id": "u_p_mfmff_p_mfmfm",
+      "person1Id": "p_mfmff",
+      "person2Id": "p_mfmfm",
+      "childIds": [
+        "p_mfmf"
+      ],
+      "status": "married"
+    },
+    "u_p_mfmmf_p_mfmmm": {
+      "id": "u_p_mfmmf_p_mfmmm",
+      "person1Id": "p_mfmmf",
+      "person2Id": "p_mfmmm",
+      "childIds": [
+        "p_mfmm"
+      ],
+      "status": "married"
+    },
+    "u_p_mmf_p_mmm": {
+      "id": "u_p_mmf_p_mmm",
+      "person1Id": "p_mmf",
+      "person2Id": "p_mmm",
+      "childIds": [
+        "p_mm",
+        "p_mm_s"
+      ],
+      "status": "married"
+    },
+    "u_p_mmff_p_mmfm": {
+      "id": "u_p_mmff_p_mmfm",
+      "person1Id": "p_mmff",
+      "person2Id": "p_mmfm",
+      "childIds": [
+        "p_mmf"
+      ],
+      "status": "married"
+    },
+    "u_p_mmfff_p_mmffm": {
+      "id": "u_p_mmfff_p_mmffm",
+      "person1Id": "p_mmfff",
+      "person2Id": "p_mmffm",
+      "childIds": [
+        "p_mmff"
+      ],
+      "status": "married"
+    },
+    "u_p_mmfmf_p_mmfmm": {
+      "id": "u_p_mmfmf_p_mmfmm",
+      "person1Id": "p_mmfmf",
+      "person2Id": "p_mmfmm",
+      "childIds": [
+        "p_mmfm"
+      ],
+      "status": "married"
+    },
+    "u_p_mmmf_p_mmmm": {
+      "id": "u_p_mmmf_p_mmmm",
+      "person1Id": "p_mmmf",
+      "person2Id": "p_mmmm",
+      "childIds": [
+        "p_mmm"
+      ],
+      "status": "married"
+    },
+    "u_p_mmmff_p_mmmfm": {
+      "id": "u_p_mmmff_p_mmmfm",
+      "person1Id": "p_mmmff",
+      "person2Id": "p_mmmfm",
+      "childIds": [
+        "p_mmmf"
+      ],
+      "status": "married"
+    },
+    "u_p_mmmmf_p_mmmmm": {
+      "id": "u_p_mmmmf_p_mmmmm",
+      "person1Id": "p_mmmmf",
+      "person2Id": "p_mmmmm",
+      "childIds": [
+        "p_mmmm"
+      ],
+      "status": "married"
+    }
+  }
+}

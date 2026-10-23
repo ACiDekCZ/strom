@@ -150,6 +150,32 @@ export interface LayoutModel {
     /** "?" stand-ins laid out as a slot of a partner chain but not emitted:
      *  their children's line starts at the known parent's card (T11). */
     hiddenPersonIds?: Set<PersonId>;
+    /**
+     * Ancestors' siblings shown in place that belong on the inner side of
+     * the pedigree (set by Phase B of step 6; see InnerSiblingRun).
+     */
+    innerSiblingRuns?: InnerSiblingRun[];
+}
+
+/**
+ * Siblings of an ancestor (gen <= -2, shown in place with a parent's
+ * children tab) that would stand on the inner side of the pedigree: the
+ * person is a man on the female side of their child (the child is the wife
+ * of their couple) or a woman on the male side. With the partner's parents
+ * out of view the row reads person, partner, siblings (mirrored for a
+ * woman) and the parents' line runs over the partner's card
+ * (`besidePartner`); with the partner's parents in view the siblings keep
+ * the place beside the person, between the couple and the rest of the
+ * pedigree, and the line to the couple's child grows long — folding the
+ * partner's ancestors (PipelineInput.foldAncestorsOf) frees the place.
+ */
+export interface InnerSiblingRun {
+    /** The ancestor whose siblings are shown. */
+    personId: PersonId;
+    /** Their partner in the direct-line couple. */
+    partnerId: PersonId;
+    /** true: laid out beyond the partner; false: the partner's parents are in view. */
+    besidePartner: boolean;
 }
 
 // ==================== STEP 3: ASSIGN GENERATIONS ====================
@@ -514,6 +540,8 @@ export interface LayoutResult {
     viewLayer?: LayoutViewLayer;
     /** Parent-child lines not drawn (see OmittedEdge); absent when every line was drawn. */
     omittedEdges?: OmittedEdge[];
+    /** See InnerSiblingRun; absent when no ancestor's siblings belong on the inner side. */
+    innerSiblingRuns?: InnerSiblingRun[];
 }
 
 /**
@@ -578,6 +606,13 @@ export interface PipelineInput {
      * children (without the children's own partners or descendants).
      */
     expandChildrenOf?: readonly PersonId[];
+    /**
+     * Persons whose ancestors are not drawn for now, to make room for
+     * children shown in place (planShownChildrenFolding): their parents and
+     * everyone the view reaches only through them. Applied only together
+     * with expandChildrenOf (foldAncestorsInSelection).
+     */
+    foldAncestorsOf?: readonly PersonId[];
 }
 
 // ==================== ANCESTOR CLUSTER ====================
@@ -645,4 +680,6 @@ export interface LayoutRequest {
     includeView?: boolean;
     /** See PipelineInput.expandChildrenOf. */
     expandChildrenOf?: readonly PersonId[];
+    /** See PipelineInput.foldAncestorsOf. */
+    foldAncestorsOf?: readonly PersonId[];
 }

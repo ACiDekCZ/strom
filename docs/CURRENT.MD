@@ -65,6 +65,47 @@ parents centred over all their children; before, they kept their step-5 place
 far from the parents and the outward overlap passes could end with cards over
 each other. The rest of the pipeline is
 unchanged; hiding the children again gives the original input and layout.
+
+Siblings on the inner side. A node that stands for the parents of a husband
+keeps the wife's siblings on its inner side (towards the other half of the
+pedigree), the parents of a wife the husband's; left there they stand between
+the halves of the pedigree, far from the couple (A). When the partner in the
+direct-line couple has no parents in view, Phase B puts the run beyond the
+partner instead (C): the row reads person, partner, siblings (mirrored for a
+husband's siblings), the couple stays over its child and the parents' line
+passes over the partner to the person and the siblings. Every such run is
+reported in `LayoutResult.innerSiblingRuns` (`InnerSiblingRun`: `personId`,
+`partnerId`, `besidePartner` — false when the partner's parents keep the run
+on the inner side). Chain couples and lone parents keep A.
+
+Folded ancestors (`PipelineInput.foldAncestorsOf`, applied only together with
+`expandChildrenOf`): after `withChildrenShown`, `foldAncestorsInSelection`
+cuts the child→parent links of the listed persons and removes from the
+selection every person no longer reachable from the focus through parent,
+child and partner links. Ancestors the view reaches another way (pedigree
+collapse, a parent also drawn through another child) stay, drawn once; a fold
+then removes nothing.
+
+`planShownChildrenFolding(input)` (src/layout/pipeline/shown-children-folding.ts)
+decides the folds for the children shown and returns
+`{ result, foldedAncestorsOf, foldedFor }`: `foldedAncestorsOf` maps each
+person of `expandChildrenOf` to the persons whose ancestors fold for it,
+`foldedFor` each folded person to that shown person (hiding the children
+brings the ancestors back). Rules:
+- B: for every inner run with `besidePartner` false whose siblings a parent of
+  the person shows, the partner's ancestors fold, so C applies; a fold that
+  does not free the place (the parents stay in view another way) is dropped.
+- B2 (span): when the line of the clicked person's union comes down more than
+  two card widths from the nearest of its children, the ancestors of the
+  couple member whose ancestors take most room between the stem and the
+  children fold first, then the other's; it stops as soon as the gap is at
+  most two card widths. If no member's ancestors stand in the gap or even both
+  folds do not help, nothing folds for the span.
+Without `expandChildrenOf` the plan is exactly `runLayoutPipeline(input)`;
+the input's own `foldAncestorsOf` is ignored (the plan decides the folds).
+`pipelineInputFromRequest(request)` builds the `PipelineInput` the engine
+uses from a `LayoutRequest` (which carries `foldAncestorsOf` too), so the
+renderer can call the planner with the engine's input.
 The children tab is offered for the children out of view that showing would
 draw (`hiddenRelativesTabs`/`hiddenChildIds`, src/marriage-order.ts): the same
 `childIdsShownInPlace` (children of the person's unions) the selection takes
@@ -240,8 +281,12 @@ wTree = buildAncestorTree(wifeId, gen=-2)     // W-tree: wife's ancestors
 //     a run of its person's sibling blocks — the husband's on the left, the
 //     wife's on the right (a lone parent's on the tree's outward side); blocks
 //     of the tree union innermost, other chain unions further out by stem
-//     distance. extLeft/extRight widen the node (attachSiblingRuns)
-attachSiblingRuns(hTree, 'LEFT'); attachSiblingRuns(wTree, 'RIGHT')
+//     distance. extLeft/extRight widen the node (attachSiblingRuns).
+//     A run on the inner side (the wife's siblings in a node of a husband's
+//     parents, the husband's in a node of a wife's parents) goes beyond the
+//     partner when the partner has no parents in view (husbandBeyondWife /
+//     wifeBeyondHusband; C), and is recorded in model.innerSiblingRuns
+attachSiblingRuns(hTree, 'LEFT', 'H'); attachSiblingRuns(wTree, 'RIGHT', 'W')
 
 // 3. Compute tree widths (bottom-up; the runs count into a node's width)
 hWidth = computeAncestorTreeWidth(hTree)

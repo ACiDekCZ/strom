@@ -1,0 +1,354 @@
+{
+  "persons": {
+    "focus": {
+      "id": "focus",
+      "firstName": "Theo",
+      "lastName": "Quill",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "f",
+        "m"
+      ],
+      "childIds": [],
+      "birthDate": "1990-04-02"
+    },
+    "f": {
+      "id": "f",
+      "firstName": "Karl",
+      "lastName": "Quill",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_f_m"
+      ],
+      "parentIds": [
+        "f_f",
+        "f_m"
+      ],
+      "childIds": [
+        "focus"
+      ],
+      "birthDate": "1960-02-11"
+    },
+    "m": {
+      "id": "m",
+      "firstName": "Jane",
+      "lastName": "Quill",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_f_m"
+      ],
+      "parentIds": [
+        "m_f",
+        "m_m"
+      ],
+      "childIds": [
+        "focus"
+      ],
+      "birthDate": "1962-06-20"
+    },
+    "f_f": {
+      "id": "f_f",
+      "firstName": "Percival",
+      "lastName": "Quill",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_f_f_f_m"
+      ],
+      "parentIds": [
+        "f_f_f",
+        "f_f_m"
+      ],
+      "childIds": [
+        "f"
+      ],
+      "birthDate": "1931-03-05"
+    },
+    "f_m": {
+      "id": "f_m",
+      "firstName": "Ann",
+      "lastName": "Quill",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_f_f_f_m"
+      ],
+      "parentIds": [
+        "f_m_f",
+        "f_m_m"
+      ],
+      "childIds": [
+        "f"
+      ],
+      "birthDate": "1933-09-14"
+    },
+    "f_f_f": {
+      "id": "f_f_f",
+      "firstName": "Jasper",
+      "lastName": "Quill",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_f_f_f_f_f_m"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "f_f"
+      ],
+      "birthDate": "1900-01-10"
+    },
+    "f_f_m": {
+      "id": "f_f_m",
+      "firstName": "Emmeline",
+      "lastName": "Quill",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_f_f_f_f_f_m"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "f_f"
+      ],
+      "birthDate": "1903-05-22"
+    },
+    "f_m_f": {
+      "id": "f_m_f",
+      "firstName": "Horace",
+      "lastName": "Hale",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_f_m_f_f_m_m"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "f_m_s1",
+        "f_m",
+        "f_m_s2"
+      ],
+      "birthDate": "1899-07-01"
+    },
+    "f_m_m": {
+      "id": "f_m_m",
+      "firstName": "Rosalind",
+      "lastName": "Hale",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_f_m_f_f_m_m"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "f_m_s1",
+        "f_m",
+        "f_m_s2"
+      ],
+      "birthDate": "1902-11-30"
+    },
+    "f_m_s1": {
+      "id": "f_m_s1",
+      "firstName": "Agnes",
+      "lastName": "Hale",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "f_m_f",
+        "f_m_m"
+      ],
+      "childIds": [],
+      "birthDate": "1928-02-02"
+    },
+    "f_m_s2": {
+      "id": "f_m_s2",
+      "firstName": "Bruno",
+      "lastName": "Hale",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "f_m_f",
+        "f_m_m"
+      ],
+      "childIds": [],
+      "birthDate": "1936-08-08"
+    },
+    "m_f": {
+      "id": "m_f",
+      "firstName": "Adrian",
+      "lastName": "Moss",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_m_f_m_m"
+      ],
+      "parentIds": [
+        "m_f_f",
+        "m_f_m"
+      ],
+      "childIds": [
+        "m"
+      ],
+      "birthDate": "1931-12-01"
+    },
+    "m_m": {
+      "id": "m_m",
+      "firstName": "Evelyn",
+      "lastName": "Moss",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_m_f_m_m"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "m"
+      ],
+      "birthDate": "1934-04-04"
+    },
+    "m_f_f": {
+      "id": "m_f_f",
+      "firstName": "Josiah",
+      "lastName": "Moss",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_m_f_f_m_f_m"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "m_f_s1",
+        "m_f_s2",
+        "m_f",
+        "m_f_s3"
+      ],
+      "birthDate": "1898-03-03"
+    },
+    "m_f_m": {
+      "id": "m_f_m",
+      "firstName": "Marigold",
+      "lastName": "Moss",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_m_f_f_m_f_m"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "m_f_s1",
+        "m_f_s2",
+        "m_f",
+        "m_f_s3"
+      ],
+      "birthDate": "1901-10-10"
+    },
+    "m_f_s1": {
+      "id": "m_f_s1",
+      "firstName": "Thaddeus",
+      "lastName": "Moss",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "m_f_f",
+        "m_f_m"
+      ],
+      "childIds": [],
+      "birthDate": "1925-01-15"
+    },
+    "m_f_s2": {
+      "id": "m_f_s2",
+      "firstName": "Elspeth",
+      "lastName": "Moss",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "m_f_f",
+        "m_f_m"
+      ],
+      "childIds": [],
+      "birthDate": "1928-06-06"
+    },
+    "m_f_s3": {
+      "id": "m_f_s3",
+      "firstName": "Gideon",
+      "lastName": "Moss",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "m_f_f",
+        "m_f_m"
+      ],
+      "childIds": [],
+      "birthDate": "1937-09-09"
+    }
+  },
+  "partnerships": {
+    "u_f_m": {
+      "id": "u_f_m",
+      "person1Id": "f",
+      "person2Id": "m",
+      "childIds": [
+        "focus"
+      ],
+      "status": "married"
+    },
+    "u_f_f_f_m": {
+      "id": "u_f_f_f_m",
+      "person1Id": "f_f",
+      "person2Id": "f_m",
+      "childIds": [
+        "f"
+      ],
+      "status": "married"
+    },
+    "u_m_f_m_m": {
+      "id": "u_m_f_m_m",
+      "person1Id": "m_f",
+      "person2Id": "m_m",
+      "childIds": [
+        "m"
+      ],
+      "status": "married"
+    },
+    "u_f_f_f_f_f_m": {
+      "id": "u_f_f_f_f_f_m",
+      "person1Id": "f_f_f",
+      "person2Id": "f_f_m",
+      "childIds": [
+        "f_f"
+      ],
+      "status": "married"
+    },
+    "u_f_m_f_f_m_m": {
+      "id": "u_f_m_f_f_m_m",
+      "person1Id": "f_m_f",
+      "person2Id": "f_m_m",
+      "childIds": [
+        "f_m_s1",
+        "f_m",
+        "f_m_s2"
+      ],
+      "status": "married"
+    },
+    "u_m_f_f_m_f_m": {
+      "id": "u_m_f_f_m_f_m",
+      "person1Id": "m_f_f",
+      "person2Id": "m_f_m",
+      "childIds": [
+        "m_f_s1",
+        "m_f_s2",
+        "m_f",
+        "m_f_s3"
+      ],
+      "status": "married"
+    }
+  }
+}

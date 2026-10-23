@@ -19,7 +19,7 @@ export * from './types.js';
 export * from './debug-types.js';
 
 // Re-export individual steps
-export { selectSubgraph, expandSelectionForDisplay, expandChildrenInSelection } from './1-select-subgraph.js';
+export { selectSubgraph, expandSelectionForDisplay, expandChildrenInSelection, foldAncestorsInSelection } from './1-select-subgraph.js';
 export { buildLayoutModel, getChildUnions } from './2-build-model.js';
 export { assignGenerations, validateGenerations } from './3-assign-generations.js';
 export { measureSubtrees, getTotalWidth } from './4-measure.js';
@@ -31,6 +31,7 @@ export { validateLayout } from './validation.js';
 export { computeDebugValidation } from './debug-validation.js';
 export { computeDebugGeometry } from './debug-geometry.js';
 export { buildViewLayer, flagViewLayer, type ViewLayer } from './view-layer.js';
+export { planShownChildrenFolding, type ShownChildrenFolding } from './shown-children-folding.js';
 
 import { PersonId, PartnershipId, StromData } from '../../types.js';
 import {
@@ -51,7 +52,7 @@ import {
     DEBUG_STEP_NAMES
 } from './debug-types.js';
 
-import { selectSubgraph, expandSelectionForDisplay, expandChildrenInSelection } from './1-select-subgraph.js';
+import { selectSubgraph, expandSelectionForDisplay, expandChildrenInSelection, foldAncestorsInSelection } from './1-select-subgraph.js';
 import { buildLayoutModel } from './2-build-model.js';
 import { assignGenerations } from './3-assign-generations.js';
 import { measureSubtrees } from './4-measure.js';
@@ -469,6 +470,10 @@ export function runLayoutPipeline(input: PipelineInput): LayoutResult {
     expandSelectionForDisplay(data, selection, effectivePolicy);
     // Children shown in place (the card's "children" tab)
     effectivePolicy = withChildrenShown(data, selection, effectivePolicy, input.expandChildrenOf);
+    // Ancestors folded for now to make room for the children shown
+    if (input.expandChildrenOf?.length && input.foldAncestorsOf?.length) {
+        foldAncestorsInSelection(data, selection, input.foldAncestorsOf, focusPersonId);
+    }
 
     // Empty "?" stand-ins are not drawn (T11)
     const hiddenPersonIds = hidePlaceholders(data, selection, focusPersonId);
@@ -529,6 +534,7 @@ export function runLayoutPipeline(input: PipelineInput): LayoutResult {
     result.diagnostics.errors = validation.errors;
 
     if (viewLayer) flagViewLayer(result, model, viewLayer);
+    if (model.innerSiblingRuns?.length) result.innerSiblingRuns = model.innerSiblingRuns;
 
     return result;
 }
@@ -653,6 +659,9 @@ export function runLayoutPipelineWithDebug(
     // Expand selection for expanded persons (add missing partners/children)
     expandSelectionForDisplay(data, selection, effectivePolicyDebug);
     effectivePolicyDebug = withChildrenShown(data, selection, effectivePolicyDebug, input.expandChildrenOf);
+    if (input.expandChildrenOf?.length && input.foldAncestorsOf?.length) {
+        foldAncestorsInSelection(data, selection, input.foldAncestorsOf, focusPersonId);
+    }
     const hiddenPersonIdsDebug = hidePlaceholders(data, selection, focusPersonId);
 
     snapshots.push(createSnapshot(1, { selection }));
@@ -773,6 +782,7 @@ export function runLayoutPipelineWithDebug(
     result.diagnostics.validationPassed = validation.passed;
     result.diagnostics.errors = validation.errors;
     if (viewLayer) flagViewLayer(result, model, viewLayer);
+    if (model.innerSiblingRuns?.length) result.innerSiblingRuns = model.innerSiblingRuns;
 
     snapshots.push(createSnapshot(8, { selection, model, genModel, measured, placed: constrained.placed, constrained, routed, result }));
 
@@ -785,21 +795,30 @@ export function runLayoutPipelineWithDebug(
  */
 export class StromLayoutEngine implements LayoutEngine {
     layout(request: LayoutRequest): LayoutResult {
-        return runLayoutPipeline({
-            data: request.data,
-            focusPersonId: request.focusPersonId,
-            config: request.config,
-            ancestorDepth: request.policy.ancestorDepth,
-            descendantDepth: request.policy.descendantDepth,
-            includeSpouseAncestors: false,  // Only show focus person's ancestors
-            includeParentSiblings: request.policy.includeAuntsUncles,
-            includeParentSiblingDescendants: request.policy.includeCousins,
-            displayPolicy: request.displayPolicy,
-            viewLinks: request.viewLinks,
-            includeView: request.includeView,
-            expandChildrenOf: request.expandChildrenOf
-        });
+        return runLayoutPipeline(pipelineInputFromRequest(request));
     }
+}
+
+/**
+ * The pipeline input of a layout request (StromLayoutEngine), e.g. for
+ * planShownChildrenFolding.
+ */
+export function pipelineInputFromRequest(request: LayoutRequest): PipelineInput {
+    return {
+        data: request.data,
+        focusPersonId: request.focusPersonId,
+        config: request.config,
+        ancestorDepth: request.policy.ancestorDepth,
+        descendantDepth: request.policy.descendantDepth,
+        includeSpouseAncestors: false,  // Only show focus person's ancestors
+        includeParentSiblings: request.policy.includeAuntsUncles,
+        includeParentSiblingDescendants: request.policy.includeCousins,
+        displayPolicy: request.displayPolicy,
+        viewLinks: request.viewLinks,
+        includeView: request.includeView,
+        expandChildrenOf: request.expandChildrenOf,
+        foldAncestorsOf: request.foldAncestorsOf
+    };
 }
 
 /**
