@@ -378,7 +378,7 @@ test.describe('Hide and Restore', () => {
         await view(page, 'Cizí fotka');
         await act(page, 'hide').click();
         await expect(dialog(page).locator('.mdlg-title')).toHaveText('Hide the file?');
-        await expect(dialog(page).locator('.mdlg-text')).toHaveText('The files stay in the research. They leave the lists, can be found with “Show hidden” and restored.');
+        await expect(dialog(page).locator('.mdlg-text')).toHaveText('Cizí fotka stays in the research. It leaves the materials and can be found with “Show hidden”.');
         await expect(dialog(page).locator('input[value="unrelated"]')).toBeChecked();
         await expect(dialog(page).locator('.mdlg-check')).toHaveCount(0);
         await dialog(page).locator('.mdlg-radio', { hasText: 'Duplicate' }).click();
@@ -443,6 +443,7 @@ test.describe('Hide and Restore', () => {
         await tile(page, 'Sken 2').click();
         await win(page).locator('[data-mw="sel-hide"]').click();
         await expect(dialog(page).locator('.mdlg-title')).toHaveText('Hide 2 files?');
+        await expect(dialog(page).locator('.mdlg-text')).toHaveText('The files stay in the research. They leave the lists, can be found with “Show hidden” and restored.');
         await dialog(page).getByRole('button', { name: 'Hide', exact: true }).click();
         await expect(toast(page)).toHaveText(/Hidden: 2 files\./);
         expect((material.hides[0].files as string[]).sort()).toEqual(['I0001', 'I0002']);

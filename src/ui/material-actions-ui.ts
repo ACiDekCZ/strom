@@ -524,7 +524,12 @@ export const materialActionsMethods = uiModule({
         const m = strings.materials;
         if (!files.length) return;
         const dialog = materialDialog({ title: m.hideTitle(files.length) });
-        dialog.body.appendChild(h('p', 'mdlg-text', mc.agent ? m.hideTextResearch : m.hideText));
+        // One file: the sentence names it; several: the general sentence.
+        const one = files.length === 1 ? files[0] : null;
+        const text = one
+            ? (mc.agent ? m.hideTextOneResearch(one.title) : m.hideTextOne(one.title))
+            : (mc.agent ? m.hideTextResearch : m.hideText);
+        dialog.body.appendChild(h('p', 'mdlg-text', text));
         const set = h('fieldset', 'mdlg-radios');
         set.appendChild(h('legend', '', m.reasonLabel));
         for (const reason of ['unrelated', 'duplicate', 'none']) {
