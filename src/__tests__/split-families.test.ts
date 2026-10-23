@@ -378,7 +378,8 @@ for (const fixture of ['devel-demo.json', 'comprehensive.json']) {
     describe(`decomposeIntoFamilies — ${fixture}`, () => {
         const data = loadFixture(fixture);
         const maybe = data ? it : it.skip;
-        maybe('is focus-invariant', () => expectFocusInvariant(data!));
+        // Every person as the focus, in every mode: ~0.2 s alone, past the default 5 s under a loaded machine.
+        maybe('is focus-invariant', () => expectFocusInvariant(data!), 60_000);
         maybe('covers 100% with no placeholder-only family, deterministically', () => {
             for (const mode of MODES) expectCleanPartition(data!, firstFocus(data!), mode);
         });
