@@ -23,6 +23,8 @@ export interface PersonChange {
     kinds: ChangeKind[];
     /** Removed in the app: no longer in the tree (no link to it). */
     deleted?: boolean;
+    /** A removed person's number in the research (its REFN in the base), to pair what the research did not write. */
+    refn?: string;
 }
 
 const NAME_FIELDS: (keyof Person)[] = ['firstName', 'lastName', 'titleBefore', 'titleAfter', 'marriedSurname', 'nameVariants'];
@@ -139,7 +141,7 @@ function personKinds(before: Person, after: Person): Set<ChangeKind> {
 
 /** What changed for each person since `base` (an empty list: nothing). Sorted by name. */
 export function diffByPerson(base: StromData, current: StromData): PersonChange[] {
-    const out = new Map<string, { name: string; kinds: Set<ChangeKind>; deleted?: boolean }>();
+    const out = new Map<string, { name: string; kinds: Set<ChangeKind>; deleted?: boolean; refn?: string }>();
     const touch = (id: string, name: string): Set<ChangeKind> => {
         let e = out.get(id);
         if (!e) { e = { name, kinds: new Set() }; out.set(id, e); }
@@ -169,7 +171,9 @@ export function diffByPerson(base: StromData, current: StromData): PersonChange[
     for (const p of Object.values(bp)) {
         if (cp[p.id] || p.isPlaceholder) continue;
         touch(p.id, fullName(p)).add('deleted');
-        out.get(p.id)!.deleted = true;
+        const e = out.get(p.id)!;
+        e.deleted = true;
+        if (p.refn?.trim()) e.refn = p.refn.trim();
     }
 
     // Couples: the wedding and divorce, the witnesses, the couple's events and citations — told at both partners.
@@ -210,6 +214,7 @@ export function diffByPerson(base: StromData, current: StromData): PersonChange[
             name: e.name,
             kinds: KIND_ORDER.filter(k => e.kinds.has(k)),
             ...(e.deleted ? { deleted: true } : {}),
+            ...(e.deleted && e.refn ? { refn: e.refn } : {}),
         }))
         .sort((x, y) => x.name.localeCompare(y.name));
 }
@@ -581,7 +586,8 @@ export interface NotWrittenItem {
 
 /** A not-written item put to what it is about here. */
 export type PairedNotWritten =
-    | { type: 'person'; item: NotWrittenItem; personId: PersonId | null }
+    /** `deleted`: a person this send removed here (by its number in the research), named as it was. */
+    | { type: 'person'; item: NotWrittenItem; personId: PersonId | null; deleted?: { name: string } }
     | { type: 'source'; item: NotWrittenItem; sourceId: string; title: string }
     | { type: 'places'; item: NotWrittenItem; place: string };
 
@@ -591,8 +597,10 @@ export type PairedNotWritten =
  * send, else the research's number), a place. What names none of them, or a
  * source the tree does not have, is counted as not named (`unnamed`): the
  * app does not know the research's families (a couple's item without a person).
+ * A person the tree no longer has is paired with the send's removal of it
+ * (`sent`, by its number in the research): the window had that person.
  */
-export function pairNotWritten(items: readonly NotWrittenItem[], data: StromData): { rows: PairedNotWritten[]; unnamed: number } {
+export function pairNotWritten(items: readonly NotWrittenItem[], data: StromData, sent: readonly PersonChange[] = []): { rows: PairedNotWritten[]; unnamed: number } {
     const rows: PairedNotWritten[] = [];
     let unnamed = 0;
     const sources = (data.sources ?? {}) as Record<string, Source>;
@@ -607,7 +615,10 @@ export function pairNotWritten(items: readonly NotWrittenItem[], data: StromData
     for (const item of items) {
         if (item.person) {
             const hit = Object.values(data.persons ?? {}).find(p => p?.refn?.trim() === item.person);
-            rows.push({ type: 'person', item, personId: hit ? hit.id : null });
+            const removed = hit ? undefined : sent.find(ch => ch.deleted && ch.refn === item.person);
+            rows.push(removed
+                ? { type: 'person', item, personId: removed.personId, deleted: { name: removed.name } }
+                : { type: 'person', item, personId: hit ? hit.id : null });
             continue;
         }
         if (item.source) {

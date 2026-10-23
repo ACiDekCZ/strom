@@ -2366,8 +2366,11 @@ export const researchSyncMethods = uiModule({
             notWritten: () => {
                 const nw = autoState.notWritten;
                 const m = (nw?.items.length ?? 0) + (nw?.unexplained ?? 0);
+                // The archive still holds what was not written (a removal taken back there, audit 017 a-D2): its version at once.
+                const kept = !!nw?.items.some(i => i.why === 'kept');
                 return { tone: nw?.seen ? 'neutral' : 'warn', title: s.writtenCount(nw?.written ?? 0, m).replace(/\.$/, ''),
-                    sub: s.notWrittenSub(when(nw?.at)), actions: [{ action: 'showWritten', label: s.showConflicts, asLink: true }] };
+                    sub: s.notWrittenSub(when(nw?.at)), actions: [{ action: 'showWritten', label: s.showConflicts, asLink: true },
+                        ...(kept ? [{ action: 'loadNewer' as const, label: s.loadVersion, asLink: true }] : [])] };
             },
             // Out of "only load": what piled up meanwhile, nothing goes before it is seen.
             piled: () => {

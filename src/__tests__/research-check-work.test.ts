@@ -129,6 +129,19 @@ describe('what the research did not write, paired', () => {
         expect(rows).toEqual([{ type: 'person', item: expect.objectContaining({ person: 'P0404' }), personId: null }]);
     });
 
+    it('a person this send deleted (the archive kept it): paired with the deletion, by its number (audit 017 a-D2)', () => {
+        const sent = [
+            { personId: P('p9'), name: 'Petr Dvořák', kinds: ['deleted' as const], deleted: true as const, refn: 'P0009' },
+            { personId: P('p1'), name: 'Karel Dvořák', kinds: ['name' as const] },
+        ];
+        const { rows } = pairNotWritten([item({ person: 'P0009', why: 'kept' })], tree(), sent);
+        expect(rows).toEqual([{
+            type: 'person', item: expect.objectContaining({ person: 'P0009' }), personId: 'p9', deleted: { name: 'Petr Dvořák' },
+        }]);
+        // A deletion with another number is not this item.
+        expect(pairNotWritten([item({ person: 'P0010' })], tree(), sent).rows[0]).toMatchObject({ personId: null });
+    });
+
     it('the reply carries the source and the place; a bad value is dropped', () => {
         const r = sanitizeSyncReply({ ok: true, notWritten: [
             { kind: 'source.transcript', source: 'S0012', why: 'report' },

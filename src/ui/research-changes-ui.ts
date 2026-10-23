@@ -81,6 +81,7 @@ function sanitizeChange(v: unknown): PersonChange | null {
         personId: r.personId as PersonId, name: r.name.slice(0, 200),
         kinds: r.kinds.filter((k): k is ChangeKind => typeof k === 'string').slice(0, 20),
         ...(r.deleted === true ? { deleted: true } : {}),
+        ...(r.deleted === true && typeof r.refn === 'string' && /^P\d{1,9}$/.test(r.refn) ? { refn: r.refn } : {}),
     };
 }
 
@@ -457,7 +458,6 @@ export const researchChangesMethods = uiModule({
             const t = iso ? Date.parse(iso) : NaN;
             return Number.isFinite(t) ? formatLiveClock(t, Date.now(), getCurrentLanguage()) : '';
         };
-        const archive = this.researchModeOf(ctx.link.id, ctx.link) === 'archive';
         const auto = researchSendMode(ctx.link) === 'auto';
         const data = DataManager.getData();
         let list: PersonChange[];
@@ -490,13 +490,19 @@ export const researchChangesMethods = uiModule({
             // the people, sources and couples it named are not listed as written.
             const nw = st.notWritten && (st.notWritten.fingerprint === ctx.link.sent?.fingerprint || st.notWritten.fingerprint === lw?.fingerprint) ? st.notWritten : null;
             let quiet = false;
+            // The archive still holds what this send did not write: its version can be loaded at once.
+            let keptHere = false;
             if (nw) {
                 if (!nw.seen) patchResearchAutoState(ctx.treeId, { notWritten: { ...nw, seen: true } });
-                const paired = pairNotWritten(nw.items, data);
+                // A person this send removed here is paired by its number there: the window had it.
+                const paired = pairNotWritten(nw.items, data, list);
                 const named = new Set<string>();
                 const items = paired.rows.map(row => {
                     const n = row.item;
-                    const why = n.why === 'kept' ? s.notWrittenKept : n.why === 'report' ? s.notWrittenReport : n.why === 'pick' ? s.notWrittenPick : c.noReason;
+                    const removed = row.type === 'person' && !!row.deleted;
+                    const why = n.why === 'kept' ? (removed ? s.notWrittenKeptUndone : s.notWrittenKept)
+                        : n.why === 'report' ? s.notWrittenReport : n.why === 'pick' ? s.notWrittenPick : c.noReason;
+                    if (n.why === 'kept') keptHere = true;
                     let name: string;
                     let what = '';
                     let type = '';
@@ -504,7 +510,7 @@ export const researchChangesMethods = uiModule({
                         const id = row.personId;
                         if (id) named.add(id);
                         const p = id ? data.persons[id] : undefined;
-                        const who = p ? shownNameOrEmpty(p) : n.name || n.person;
+                        const who = p ? shownNameOrEmpty(p) : row.deleted?.name || n.name || n.person;
                         what = n.fact ? researchFactLabel(n.fact) : '';
                         name = id && p
                             ? `<button type="button" class="research-changes-name" data-person="${esc(id)}">${esc(who)}</button>`
@@ -552,10 +558,11 @@ export const researchChangesMethods = uiModule({
                 writtenRows = writtenRows.slice(0, 3);
             }
             appOnlyRows = appOnly.map(r => otherRowOf(r, 'appOnly', data));
-            if (archive) foot = `<span class="research-changes-note">${esc(c.archiveNoConflicts)}</span>`;
-            else if (conflicts && this.researchDecideUrl(ctx.treeId)) {
+            // Conflicts the same in an archive as in a research: a fact changed in both copies is one (F40).
+            if (conflicts && this.researchDecideUrl(ctx.treeId)) {
                 foot = `<button type="button" class="research-sync-link" data-act="decide">${esc(s.decideInResearch)}</button>`;
             }
+            if (keptHere) foot += `<button type="button" class="research-sync-link" data-act="loadNewer">${esc(s.loadVersion)}</button>`;
         } else {
             const now = this.researchChangesNow();
             other = now === null ? null : this.researchOtherNow();
@@ -733,6 +740,10 @@ export const researchChangesMethods = uiModule({
             }
             this.closeResearchChanges();
             void this.researchSendNow({ previewed: true });
+        });
+        panel.querySelector('[data-act="loadNewer"]')?.addEventListener('click', () => {
+            this.closeResearchChanges();
+            void this.researchLoadNewer();
         });
         panel.querySelector('[data-act="decide"]')?.addEventListener('click', () => {
             this.closeResearchChanges();

@@ -1652,6 +1652,52 @@ test.describe('the research as an archive', () => {
         bridge.accepts = RESEARCH;
         expect(await batchLine()).toBe('Matriky: 0 of 5 sorted');
     });
+    test('a deletion the archive kept (undone there): named as the deletion it was, not as written, its version offered at once (audit 017 a-D2)', async ({ page }) => {
+        await page.clock.install();
+        await openResearch(page, { auto: true });
+        const bridge = await fakeBridge(page, { accepts: ARCHIVE });
+        await page.evaluate(() => localStorage.setItem('strom-research-auto-intro-seen', '1'));
+        await poll(page);
+        // The archive keeps Jan: his deletion there was undone, what this window sent last had no Jan.
+        bridge.syncReply = { status: 200, body: { ok: true, inbox: false, changes: 1, applied: 0, input: 'I0074',
+            notWritten: [{ kind: 'person.delete', person: 'P0003', why: 'kept' }] } };
+        bridge.onWrite = () => ({ head: 'd6d6d6d6d6d6', ged: researchGed('d6d6d6d6d6d6') });
+        await page.evaluate(() => {
+            const dm = window.Strom.DataManager;
+            const jan = Object.values(dm.getData().persons).find((p: any) => p.firstName === 'Jan') as any;
+            dm.deletePerson(jan.id);
+        });
+        await page.evaluate(() => window.Strom.UI.researchSendNow());
+        await expect.poll(() => bridge.posts.length).toBe(1);
+        await openResearchMenu(page);
+        await expect(block(page)).toHaveAttribute('data-state', 'notWritten');
+        // The archive's version (with Jan) at once, beside Show.
+        await expect(block(page).getByRole('menuitem', { name: "Load the research's version" })).toBeVisible();
+        await block(page).getByRole('menuitem', { name: 'Show' }).click();
+        const panel = page.locator('#research-changes-panel');
+        const row = panel.locator('.research-changes-row.is-not-written');
+        await expect(row).toHaveCount(1);
+        await expect(row).toContainText('Jan Fíšek');
+        await expect(row).toContainText('the Strom archive still keeps it: the deletion was undone there');
+        await expect(panel).not.toContainText('never had');
+        // Not written, so not "written" too.
+        await expect(panel.locator('.research-changes-row:not(.is-not-written)', { hasText: 'Jan Fíšek' })).toHaveCount(0);
+        await panel.locator('[data-act="loadNewer"]').click();
+        await expect(panel).toHaveCount(0);
+        // Asked first, as any load over changes made here.
+        await page.locator('.dialog-confirm', { hasText: 'Changed in the app' }).getByRole('button', { name: 'Update' }).click();
+        await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe('d6d6d6d6d6d6');
+        await expect(card(page, 'Jan')).toBeVisible();
+    });
+
+    test('conflicts in an archive as in a research: counted in "What was written", decided there; no note that it has none (audit 017 c-D3)', async ({ page }) => {
+        await conflictLeft(page, { accepts: ARCHIVE, links: ['send', 'open', 'live', 'app', 'setup', 'conflict'] });
+        await page.evaluate(() => window.Strom.UI.showResearchChanges('written'));
+        const panel = page.locator('#research-changes-panel');
+        await expect(panel).toContainText('1 conflict');
+        await expect(panel).not.toContainText(/doesn't create conflicts/);
+        await expect(panel.locator('[data-act="decide"]')).toHaveText('Decide in the research ↗');
+    });
 });
 
 test.describe('a research waiting for its agent (agentHere: false)', () => {

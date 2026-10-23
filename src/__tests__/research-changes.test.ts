@@ -111,6 +111,17 @@ describe('changes per person since the research\'s version', () => {
         expect(changes.find(c => c.personId === 'p3')).toMatchObject({ kinds: ['deleted'], deleted: true, name: 'Jan Fíšek' });
     });
 
+    it('a deleted person keeps its number in the research (audit 017 a-D2: the archive may keep it)', () => {
+        const withRefn = (): StromData => { const t = tree(); t.persons['p3' as PersonId].refn = 'P0003'; return t; };
+        const base = baseCopy(withRefn());
+        const cur = withRefn();
+        delete cur.persons['p3' as PersonId];
+        cur.persons['p1' as PersonId].refn = 'P0001';
+        const changes = diffByPerson(base, cur);
+        expect(changes.find(c => c.personId === 'p3')).toMatchObject({ deleted: true, refn: 'P0003' });
+        expect(changes.find(c => c.personId === 'p1')!.refn).toBeUndefined();
+    });
+
     it('a photo is compared by its size, not kept in the base', () => {
         const base = baseCopy(tree());
         expect(JSON.stringify(base)).not.toContain('AAAAAAAA');
