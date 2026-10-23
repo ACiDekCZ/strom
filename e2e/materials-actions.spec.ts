@@ -124,6 +124,35 @@ test.describe('Materials viewer', () => {
         await expect(page.locator('#person-modal')).toBeVisible();
     });
 
+    test('a long file name as the title breaks after "_", "-" or ".", not inside a word; copied it is the name', async ({ page }) => {
+        const long = 'Vymyslov_matriky_narozeni_1850_1870_folio_0123_skenovano_vysoke_rozliseni.jpg';
+        await setup(page, { files: [materialFile(1, { persons: ['P0003'], title: long })] });
+        await view(page, long.slice(0, 20));
+        const title = panel(page).locator('.mv-title');
+        await expect(title).toHaveText(long);
+        // The characters a line ends with (the one before each wrap).
+        const ends = await title.evaluate((el) => {
+            const range = document.createRange();
+            const out: string[] = [];
+            let prev: { ch: string; top: number } | null = null;
+            const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+            for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+                for (let i = 0; i < n.textContent!.length; i++) {
+                    range.setStart(n, i);
+                    range.setEnd(n, i + 1);
+                    const top = Math.round(range.getBoundingClientRect().top);
+                    if (prev && top > prev.top + 2) out.push(prev.ch);
+                    prev = { ch: n.textContent![i], top };
+                }
+            }
+            return out;
+        });
+        expect(ends.length).toBeGreaterThan(0);
+        expect(ends.filter(ch => !'_-.'.includes(ch))).toEqual([]);
+        const scroll = await title.evaluate(el => el.scrollWidth - el.clientWidth);
+        expect(scroll).toBe(0);
+    });
+
     test('a PDF: a new tab from the list, a card in the viewer; TIFF: "Open in the system"; a file not here: the record only', async ({ page }) => {
         const { material } = await setup(page, { files: [
             materialFile(1, { name: 'list.pdf', mime: 'application/pdf', title: 'Výpis' }),

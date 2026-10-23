@@ -58,6 +58,20 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: s
     return el;
 }
 
+/**
+ * A file name as text with a break chance after each "_", "-" and ".", so a
+ * long name wraps between its parts rather than inside a word. <wbr> adds
+ * nothing to the text (copied, it is the name as it is).
+ */
+function appendBreakable(el: HTMLElement, text: string): void {
+    // Each part ends with its separator (no lookbehind: older Safari cannot parse it).
+    const parts = text.match(/[^_.-]*[_.-]|[^_.-]+$/g) ?? [text];
+    parts.forEach((part, i) => {
+        el.appendChild(document.createTextNode(part));
+        if (i < parts.length - 1) el.appendChild(document.createElement('wbr'));
+    });
+}
+
 function fullName(p: Person): string {
     return `${p.firstName} ${p.lastName}`.trim();
 }
@@ -362,7 +376,8 @@ export const materialViewerMethods = uiModule({
 
         // Title, the file's name (when it differs), the phone's one line.
         const head = h('div', 'mv-head');
-        const title = h('h2', 'mv-title', item.title);
+        const title = h('h2', 'mv-title');
+        appendBreakable(title, item.title);
         title.id = 'mv-title';
         head.appendChild(title);
         const name = itemName(item);
