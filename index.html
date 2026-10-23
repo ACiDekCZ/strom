@@ -10789,6 +10789,11 @@
         }
         .research-sync-mark-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--primary); }
         .research-sync-mark-ghost { width: 8px; height: 8px; border-radius: 50%; background: var(--text-ghost); }
+        /* Changes waiting for a research that is not running: their number, small and quiet, beside the mark. */
+        .research-sync-mark.research-sync-mark--count, .toolbar .research-sync-mark.research-sync-mark--count {
+            width: auto; min-width: 26px; padding: 0 8px; gap: 5px; border-radius: 999px;
+        }
+        .research-sync-mark-count { font-family: var(--font-sans); font-size: 12px; font-weight: 600; line-height: 1; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
         .research-sync-mark-check { font-size: 14px; font-weight: 700; line-height: 1; color: var(--primary); animation: research-mark-in 0.2s ease-out; }
         .research-sync-mark .research-sync-spinner { width: 12px; height: 12px; box-sizing: border-box; color: var(--primary); }
         @keyframes research-mark-in { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: none; } }

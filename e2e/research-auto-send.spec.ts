@@ -2328,3 +2328,44 @@ test('N38: a send the research took nothing from, the tree still apart from its 
     await openResearchMenu(page);
     await expect(block(page)).not.toContainText('Not in the research yet');
 });
+
+test.describe('the research not running, at rest (audit 017 a-D6)', () => {
+    test('sent by hand: the quiet mark keeps the number of changes waiting in sight, its title says the research is not running', async ({ page }) => {
+        await page.clock.install();
+        await openResearch(page);
+        const bridge = await fakeBridge(page, { accepts: { mode: 'research', sync: { auto: 'write' }, sources: true, verified: true, media: null } });
+        await poll(page);
+        await editJan(page);
+        await expect(page.locator('#research-sync-send')).toBeVisible();
+        bridge.down = true;
+        await poll(page);
+        await expect(page.locator('#research-sync-send')).toHaveCount(0);
+        await expect(mark(page)).toHaveAttribute('data-look', 'ghost');
+        await expect(mark(page).locator('.research-sync-mark-count')).toHaveText('1');
+        await expect(mark(page)).toHaveAttribute('title', "The research isn't running · 1 change waiting");
+    });
+
+    test('sent by itself, the browser started again with the research not running: never "will be sent at" — the changes wait, said with their number', async ({ page }) => {
+        const bridge = await autoTree(page);
+        await editJan(page);
+        await expect(mark(page)).toHaveAttribute('title', /^Changes will be sent at \d{1,2}:\d{2}/);
+        await page.evaluate(() => window.Strom.TreeManager.flush());
+        bridge.down = true;
+        await page.reload();
+        await expect(card(page, 'Jan')).toBeVisible();
+        // Before the bridge answers (it is not confirmed yet), and after it did not: no time promised.
+        await expect(mark(page)).not.toHaveAttribute('title', /will be sent/);
+        await poll(page);
+        await expect(mark(page)).toHaveAttribute('data-look', 'ghost');
+        await expect(mark(page)).toHaveAttribute('title', "The research isn't running · 1 change waiting");
+        await expect(mark(page).locator('.research-sync-mark-count')).toHaveText('1');
+        await openResearchMenu(page);
+        await expect(block(page)).not.toContainText(/sent at \d/);
+        await page.evaluate(() => window.Strom.UI.closeActionsMenu());
+        // Running again: the time it goes is said once more.
+        bridge.down = false;
+        await poll(page);
+        await expect(mark(page)).toHaveAttribute('title', /^Changes will be sent at \d{1,2}:\d{2}/);
+        await expect(mark(page).locator('.research-sync-mark-count')).toHaveCount(0);
+    });
+});

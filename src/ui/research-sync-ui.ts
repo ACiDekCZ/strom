@@ -216,6 +216,11 @@ function esc(text: string): string {
 
 const call = (method: string, arg = ''): string => `window.Strom.UI.${method}(${arg})`;
 
+/** The number of changes waiting, small beside the quiet mark ('' for none; the mark's label says it in words). */
+function markCount(n: number): string {
+    return n > 0 ? `<span class="research-sync-mark-count" aria-hidden="true">${n > 99 ? '99+' : n}</span>` : '';
+}
+
 /** "Research version loaded" stands as a block this long after a load (then only the menu row, O2). */
 const LOADED_BLOCK_MS = 60 * 60 * 1000;
 
@@ -1164,6 +1169,12 @@ export const researchSyncMethods = uiModule({
             autoDueAt = 0;
             void this.researchAutoSend(treeId, 'quiet');
         }, delay);
+    },
+
+    /** How many changes of the open tree wait (as its Send button counts them; 0 = not known). */
+    researchChangesWaitingCount(treeId: TreeId): number {
+        const n = this.researchChangesCount();
+        return (n ? n.persons + n.other : 0) || (researchAutoState(treeId).edits ?? 0);
     },
 
     /** "16:57": when the open tree's quiet time ends and its changes go ('' = no timer runs for it). */
@@ -2386,7 +2397,8 @@ export const researchSyncMethods = uiModule({
             stale: () => ({ tone: 'warn', title: s.stateStale, sub: s.staleSub, actions: [{ action: 'reload', label: strings.storageSafety.reload }] }),
             safari: () => ({ tone: 'neutral', title: s.stateSafari, sub: s.safariSub, actions: [{ action: 'downloadGedcom', label: s.downloadGedcom, asLink: true }] }),
             autoWaiting: () => ({ tone: 'quiet', title: s.autoWaitingTitle,
-                sub: [changed ? s.changedAt(changed) : '', this.researchAutoDueClock(treeId) ? s.autoSendsAt(this.researchAutoDueClock(treeId)) : ''].filter(Boolean).join(' · ') || undefined,
+                // When they go only while the bridge is confirmed running (audit 017 a-D6).
+                sub: [changed ? s.changedAt(changed) : '', rt?.up && this.researchAutoDueClock(treeId) ? s.autoSendsAt(this.researchAutoDueClock(treeId)) : ''].filter(Boolean).join(' · ') || undefined,
                 actions: [{ action: 'send', label: s.sendNow, asLink: true }] }),
             // An archive, or a research waiting for its agent: a send is written at once.
             sending: () => ({ tone: 'quiet', title: archive || (!!link && this.researchAgentAway(link.id, link)) ? s.markWriting : s.markSending, spinner: true }),
@@ -2904,11 +2916,14 @@ export const researchSyncMethods = uiModule({
             if (kind !== 'unsent' && kind !== 'notTaken') {
                 // In its place the quiet mark (in step, or the research not running), at the end next to the tree switcher.
                 const down = kind === 'bridgeDown' || kind === 'unsentBridgeDown';
+                // Changes waiting for a research that is not running: their number stays in sight beside the mark (audit 017 a-D6).
+                const waiting = kind === 'unsentBridgeDown' ? this.researchChangesWaitingCount(ctx.treeId) : 0;
                 const lwm = researchAutoState(ctx.treeId).lastWritten;
-                const label = down ? (lwm ? s.markBridgeDown(when(lwm.at)) : s.stateBridgeDown) : lwm ? s.writtenAt(when(lwm.at)) : s.stateInSync;
-                set('is-send is-reserved', `<button type="button" class="research-sync-mark research-sync-mark--reserved" id="research-sync-mark" data-look="${down ? 'ghost' : 'dot'}"`
+                const label = waiting ? `${s.stateBridgeDown} · ${s.waitingN(waiting)}`
+                    : down ? (lwm ? s.markBridgeDown(when(lwm.at)) : s.stateBridgeDown) : lwm ? s.writtenAt(when(lwm.at)) : s.stateInSync;
+                set('is-send is-reserved', `<button type="button" class="research-sync-mark research-sync-mark--reserved${waiting ? ' research-sync-mark--count' : ''}" id="research-sync-mark" data-look="${down ? 'ghost' : 'dot'}"`
                     + ` title="${esc(label)}" aria-label="${esc(label)}" onclick="${call('openResearchSyncMenu')}">`
-                    + `<span class="research-sync-mark-${down ? 'ghost' : 'dot'}" aria-hidden="true"></span></button>`
+                    + `<span class="research-sync-mark-${down ? 'ghost' : 'dot'}" aria-hidden="true"></span>${markCount(waiting)}</button>`
                     + `<span class="research-sync-send research-sync-send--placeholder" aria-hidden="true">`
                     + `<span class="research-sync-send-long">${esc(s.sendButton)}</span><span class="research-sync-send-short">${esc(s.barSend)}</span></span>`
                     + this.researchSendMoreHtml(true));
@@ -2930,12 +2945,21 @@ export const researchSyncMethods = uiModule({
         const writtenAt = lw ? s.writtenAt(when(lw.at)) : s.stateInSync;
         let look: 'ring' | 'spin' | 'check' | 'dot' | 'ghost';
         let label: string;
+        let count = 0;
         if (justWritten && justWritten.treeId === ctx.treeId && Date.now() < justWritten.until) {
             look = 'check';
             label = [writtenAt, lw?.changes ? s.changesN(lw.changes) : ''].filter(Boolean).join(' · ');
         } else if (kind === 'sending') {
             look = 'spin';
             label = archive ? s.markWriting : s.markSending;
+        } else if (kind === 'autoWaiting' && !runtime.get(ctx.link.id)?.up) {
+            // The bridge not confirmed (not asked yet since the start, or not running): no time promised —
+            // the changes wait, with their number in sight (audit 017 a-D6).
+            const known = runtime.has(ctx.link.id);
+            look = known ? 'ghost' : 'ring';
+            count = this.researchChangesWaitingCount(ctx.treeId);
+            const waiting = count ? s.waitingN(count) : s.stateUnsentShort;
+            label = known ? `${s.stateBridgeDown} · ${waiting}` : waiting;
         } else if (kind === 'autoWaiting') {
             look = 'ring';
             label = s.markWaiting(this.researchAutoDueClock(ctx.treeId));
@@ -2952,12 +2976,12 @@ export const researchSyncMethods = uiModule({
             look = 'dot';
             label = writtenAt;
         }
-        set('is-mark', `<button type="button" class="research-sync-mark" id="research-sync-mark" data-look="${look}"`
+        set('is-mark', `<button type="button" class="research-sync-mark${count ? ' research-sync-mark--count' : ''}" id="research-sync-mark" data-look="${look}"`
             + ` title="${esc(label)}" aria-label="${esc(label)}" onclick="${call('openResearchSyncMenu')}">`
             + (look === 'spin' ? '<span class="research-sync-spinner" aria-hidden="true"></span>'
                 : look === 'check' ? '<span class="research-sync-mark-check" aria-hidden="true">✓</span>'
                 : `<span class="research-sync-mark-${look}" aria-hidden="true"></span>`)
-            + '</button>');
+            + markCount(count) + '</button>');
         // The first time the mark shows on this install: say once that changes now go by themselves.
         if (!note && toolbarWide() && !researchAutoIntroSeen()) this.showResearchIntroNote();
     },
