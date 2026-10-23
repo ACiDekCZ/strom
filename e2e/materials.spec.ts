@@ -238,6 +238,8 @@ test.describe('Materials at the person', () => {
             files: [materialFile(1, { persons: ['P0003'] }), materialFile(2), materialFile(3, { hidden: { by: 'app' } })],
             statusBatches: [{ id: 'b-12345678', name: 'Matriky', state: 'closed', kept: true, at: new Date().toISOString(), files: 5, known: 0, refused: 0, sorted: 0 }],
         });
+        // The poll asks for the list without waiting for it; the menu counts what has come (an open menu is not redrawn).
+        await expect.poll(() => page.evaluate(() => (window.Strom.UI as unknown as { materialsTotalCount(): number | null }).materialsTotalCount())).toBe(2);
         await openResearchMenu(page, { expandMore: true });
         const item = page.locator('#research-item-materials');
         await expect(item).toContainText('2');
