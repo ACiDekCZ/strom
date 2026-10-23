@@ -8,7 +8,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { sanitizeLiveStatus, statusAgentless, researchSchemeUrl, sanitizeResearchLinks } from '../research-link.js';
-import { writeHeldOfRefusal, writeHeldOfCode, writeHeldOfStatus, joinSaid, isWriteHeldCode } from '../research-write-held.js';
+import { writeHeldOfRefusal, writeHeldOfCode, writeHeldOfStatus, writeHeldSettled, joinSaid, isWriteHeldCode } from '../research-write-held.js';
 import { researchSyncState, researchSyncWantsAttention, ResearchSyncInput } from '../research-sync.js';
 import { noteResearchBridgeStatus, researchTreeOfStatus, storedResearchBridge } from '../research-device.js';
 import { researchTreeState } from '../research-others.js';
@@ -155,6 +155,20 @@ describe('a write held back by the research', () => {
         // An older research saying it without the capability: writes go as before.
         expect(writeHeldOfStatus(status({ seal: 'elsewhere', notDownloaded: 2 }))).toBeNull();
         expect(writeHeldOfStatus(null)).toBeNull();
+    });
+
+    it('a refused write settled by the status: only said outright, by a bridge with the capability', () => {
+        const seal = { kind: 'seal' as const, said: 'x' };
+        const cloud = { kind: 'cloud' as const, said: 'x', n: 2 };
+        expect(writeHeldSettled(seal, status({ features: ALL, seal: 'here' }))).toBe(true);
+        expect(writeHeldSettled(seal, status({ features: ALL, seal: 'elsewhere' }))).toBe(false);
+        expect(writeHeldSettled(seal, status({ features: ALL }))).toBe(false);
+        expect(writeHeldSettled(seal, status({ seal: 'here' }))).toBe(false);
+        expect(writeHeldSettled(cloud, status({ features: ALL, notDownloaded: 0 }))).toBe(true);
+        expect(writeHeldSettled(cloud, status({ features: ALL, notDownloaded: 1 }))).toBe(false);
+        expect(writeHeldSettled(cloud, status({ features: ALL }))).toBe(false);
+        expect(writeHeldSettled({ kind: 'disk', said: 'x' }, status({ features: ALL, seal: 'here', notDownloaded: 0 }))).toBe(false);
+        expect(writeHeldSettled(seal, null)).toBe(false);
     });
 
     it('two sentences as one', () => {

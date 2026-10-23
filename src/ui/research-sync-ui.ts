@@ -40,7 +40,7 @@ import {
     researchHasTitles, hasTitles, withoutTitles, TITLES_FEATURE, researchConflictRef, isResearchHead, SYNC_REMOVED_FEATURE, SyncPersonConflict,
 } from '../research-link.js';
 import { loadResearchCopy } from '../research-copy.js';
-import { ResearchWriteHeld, joinSaid, writeHeldOfRefusal, writeHeldOfStatus } from '../research-write-held.js';
+import { ResearchWriteHeld, joinSaid, writeHeldOfRefusal, writeHeldOfStatus, writeHeldSettled } from '../research-write-held.js';
 import { forgetOriginalsHeld } from './originals-ui.js';
 import {
     noteResearchLinks, noteResearchWaiting, noteResearchBridgeStatus, researchTreeOfStatus, storedResearchBridge, researchLinksEnabled,
@@ -919,6 +919,7 @@ export const researchSyncMethods = uiModule({
         // The next ask by what this one found (down with changes waiting: soon).
         if (opts.reschedule !== false) this.scheduleResearchPoll();
         if (status) {
+            this.researchNoteHeldSettled(researchId, status);
             this.researchSettleLeftSend(ctx.treeId, status);
             await this.settleResearchSend(ctx.treeId, status);
             this.researchNoteUndone(ctx.treeId, status);
@@ -937,6 +938,24 @@ export const researchSyncMethods = uiModule({
         // Originals waiting for it go while it answers.
         if (status) void this.researchOriginalsKick();
         return !!status;
+    },
+
+    /**
+     * A send refused for what the research had to settle first (sealed on
+     * another computer, files not downloaded; 017 U7) and its status now says
+     * it is settled: the refusal is over for every tree of that research, so
+     * the block no longer says it holds. The edits show as unsent; with
+     * sending by itself on they go once, as after a seal known from the status.
+     */
+    researchNoteHeldSettled(researchId: string, status: LiveStatus): void {
+        if (status.treeId !== researchId) return;
+        for (const tree of TreeManager.getTrees()) {
+            const link = tree.research;
+            if (link?.id !== researchId || !link.refused?.held || !writeHeldSettled(link.refused.held, status)) continue;
+            TreeManager.patchResearchLink(tree.id, { refused: undefined });
+            patchResearchAutoState(tree.id, { toldRefused: undefined });
+            if (this.researchAutoOn(link)) autoDue.add(tree.id);
+        }
     },
 
     /**

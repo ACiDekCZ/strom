@@ -69,6 +69,20 @@ export function writeHeldOfStatus(status: Pick<LiveStatus, 'seal' | 'notDownload
     return null;
 }
 
+/**
+ * The research's status now says what held a refused write is settled (the
+ * tree's seal taken over on this computer, its files downloaded): only from a
+ * bridge that names the capability and says so outright. A full disk is never said by the status,
+ * so it stays held until a send goes through.
+ */
+export function writeHeldSettled(held: ResearchWriteHeld, status: Pick<LiveStatus, 'seal' | 'notDownloaded' | 'features'> | null | undefined): boolean {
+    if (!status?.features?.includes(heldFeature(held.kind))) return false;
+    // Said outright: a status that is silent about it settles nothing.
+    if (held.kind === 'seal') return status.seal === 'here';
+    if (held.kind === 'cloud') return status.notDownloaded === 0;
+    return false;
+}
+
 /** Two sentences as one text (a full stop between them unless the first has one). */
 export function joinSaid(first: string, second: string): string {
     const a = first.trim();

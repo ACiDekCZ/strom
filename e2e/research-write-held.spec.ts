@@ -117,6 +117,53 @@ test.describe('a send the research holds back', () => {
         expect(bridge.posts).toHaveLength(1);
         await expect(page.locator('.toast', { hasText: SEAL })).toHaveCount(0);
     });
+
+    test('seal.foreign sent by hand, then taken over: the block goes with the status, the edits wait unsent, nothing goes by itself', async ({ page }) => {
+        await openResearch(page, { edit: true });
+        const bridge = await fakeBridge(page, { features: ['seal.foreign'], links: LINKS,
+            syncReply: { status: 409, body: { error: SEAL, code: 'seal.foreign', text: 'sealed elsewhere', params: { name: 'Fíškovi', set: 'strom seal adopt' } } } });
+        await poll(page);
+        void page.evaluate(() => window.Strom.UI.researchSendNow());
+        await expect(dialog(page)).toContainText(SEAL);
+        await dialog(page).getByRole('button', { name: 'Close' }).click();
+        await openResearchMenu(page);
+        await expect(block(page)).toHaveAttribute('data-state', 'writeHeld');
+        await page.evaluate(() => window.Strom.UI.closeActionsMenu());
+        // Taken over there: the next answer says the seal is here.
+        bridge.statusExtra = { seal: 'here' };
+        bridge.syncReply = { status: 200, body: { ok: true, input: 'I0042', changes: 6, inbox: true } };
+        await poll(page);
+        await openResearchMenu(page);
+        await expect(block(page)).toHaveAttribute('data-state', 'unsent');
+        await expect(block(page)).not.toContainText('Sealed on another computer');
+        await expect(block(page).getByRole('menuitem', { name: 'Take over on this computer ↗' })).toHaveCount(0);
+        await page.evaluate(() => window.Strom.UI.closeActionsMenu());
+        await poll(page);
+        expect(bridge.posts).toHaveLength(1);
+        await page.evaluate(() => window.Strom.UI.researchSendNow());
+        await expect(page.locator('.toast')).toContainText('Sent to the research');
+        expect(bridge.posts).toHaveLength(2);
+    });
+
+    test('seal.foreign while sending by itself, then taken over: the status says so, the edits go once', async ({ page }) => {
+        const bridge = await autoTree(page, { features: ['seal.foreign'],
+            syncReply: { status: 409, body: { error: SEAL, code: 'seal.foreign', text: 'sealed elsewhere', params: { name: 'Fíškovi', set: 'strom seal adopt' } } } });
+        await editJan(page);
+        await page.clock.fastForward(QUIET + 1000);
+        await expect.poll(() => bridge.posts.length).toBe(1);
+        await expect(pill(page)).toContainText('Sealed on another computer');
+        await poll(page);
+        expect(bridge.posts).toHaveLength(1);
+        bridge.statusExtra = { seal: 'here' };
+        bridge.syncReply = { status: 200, body: { ok: true, inbox: false, changes: 6, applied: 6, input: 'I0042' } };
+        await poll(page);
+        await expect(pill(page)).not.toContainText('Sealed on another computer');
+        await page.clock.fastForward(QUIET + 1000);
+        await expect.poll(() => bridge.posts.length).toBe(2);
+        await page.clock.fastForward(QUIET * 3);
+        await poll(page);
+        expect(bridge.posts).toHaveLength(2);
+    });
 });
 
 test.describe('a long sentence of the research (German, a long path)', () => {
