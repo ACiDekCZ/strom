@@ -504,6 +504,64 @@ test.describe('Materials window: sizes', () => {
         expect(t.head).toBeLessThan(70);
     });
 
+    test.describe('in German with long names (dc.html 10c)', () => {
+        test.use({ locale: 'de-DE' });
+
+        const long = [
+            materialFile(1, { batch: 'b-long', name: 'Auswanderungsakte_Hamburg_Bremerhaven_1882_Passagierliste_Seite_14.jpg', path: 'Auswanderungsakte_Hamburg_Bremerhaven_1882_Passagierliste_Seite_14.jpg' }),
+            materialFile(2, { batch: 'b-long', name: 'brief-2.jpg', path: 'brief-2.jpg' }),
+            materialFile(3, { batch: 'b-long', name: 'doppelt-3.jpg', path: 'doppelt-3.jpg', state: 'skipped',
+                hidden: { at: '2026-10-11T08:00:00.000Z', by: 'app', reason: 'unrelated' } }),
+        ];
+        const longBatch = [{ id: 'b-long', name: 'Schachtel von Großmutter vom Dachboden 1950–1980', at: '2026-10-10T10:00:00.000Z' }];
+
+        /** What sticks out: wider content than its box, or a control outside the window. */
+        const sticksOut = (page: Page, sel: string) => win(page).evaluate((overlay, sel) => {
+            const box = overlay.querySelector('.materials-window')!.getBoundingClientRect();
+            return [...overlay.querySelectorAll<HTMLElement>(sel)].filter(el => el.offsetParent !== null).flatMap(el => {
+                const r = el.getBoundingClientRect();
+                const out: string[] = [];
+                if (el.scrollWidth > el.clientWidth + 1 && getComputedStyle(el).textOverflow !== 'ellipsis') out.push(`wide ${el.className}`);
+                if (r.left < box.left - 0.5 || r.right > box.right + 0.5) out.push(`outside ${el.className}`);
+                return out;
+            });
+        }, sel);
+
+        test('740×360: an active filter only in "Filter · 1", the selection bar one row, Restore inside its tile', async ({ page }) => {
+            await page.setViewportSize({ width: 740, height: 360 });
+            await setup(page, { files: long, batches: longBatch });
+            await openWindow(page);
+            await win(page).locator('.mw-filters-btn').click();
+            await page.locator('.mw-pop-sheet [data-pop="hidden"]').click();
+            await page.keyboard.press('Escape');
+            await expect(win(page).locator('.mw-filters-btn')).toHaveText('Filter · 1');
+            // The header stays one row: the active chip is counted in the button, not drawn beside it.
+            await expect(win(page).locator('.mw-chips')).toBeHidden();
+            expect((await win(page).locator('.mw-head').boundingBox())!.height).toBeLessThan(70);
+            const hidden = win(page).locator('.mw-tile.is-hidden');
+            await expect(hidden).toHaveCount(1);
+            expect(await sticksOut(page, '.mw-tile, .mw-restore, .mw-toolbar, .mw-tools')).toEqual([]);
+
+            await win(page).locator('[data-mw="select"]').click();
+            await win(page).locator('.mw-tile').first().click();
+            const bar = win(page).locator('.mw-selbar');
+            await expect(bar).toBeVisible();
+            const barBox = (await bar.boundingBox())!;
+            expect(barBox.height).toBeLessThanOrEqual(49);
+            // Every control of the bar inside the bar (no button grown into two lines over the tiles).
+            const inBar = await bar.evaluate((el) => {
+                const b = el.getBoundingClientRect();
+                return [...el.querySelectorAll<HTMLElement>('button')].filter(x => x.offsetParent !== null).map(x => {
+                    const r = x.getBoundingClientRect();
+                    return r.top >= b.top - 0.5 && r.bottom <= b.bottom + 0.5 && r.right <= b.right + 0.5;
+                });
+            });
+            expect(inBar.length).toBeGreaterThanOrEqual(3);
+            expect(inBar.every(Boolean)).toBe(true);
+            expect(await sticksOut(page, '.mw-selbar, .mw-selbtn')).toEqual([]);
+        });
+    });
+
     test('1440: the toolbar with all chips, tiles with names', async ({ page }) => {
         await page.setViewportSize(DESKTOP);
         await setup(page, { files });

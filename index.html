@@ -4931,6 +4931,7 @@
         .material-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
         .material-size { color: var(--text-light); font-size: 12px; }
         .material-remove { border: none; background: none; font-size: 18px; color: var(--text-light); cursor: pointer; }
+        .material-item .material-remove { width: 28px; height: 28px; padding: 0; border-radius: var(--r-sm); }
         .material-rejected { margin: 6px 0 0; font-size: 12px; color: var(--warning-text); }
         .material-note-label { display: block; margin: 12px 0 4px; font-size: 13px; font-weight: 600; color: var(--text); }
         .material-dialog textarea { width: 100%; box-sizing: border-box; }
@@ -15282,7 +15283,7 @@
         }
         .mw-tile-persons, .mw-li-persons { font-size: 11.5px; line-height: 15px; color: var(--text-light); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .mw-tile-persons.is-none, .mw-li-persons.is-none { color: var(--text-faint); font-style: italic; }
-        .materials-window .mw-restore { align-self: flex-start; font-size: 12px; padding: 2px 0; }
+        .materials-window .mw-restore { align-self: flex-start; max-width: 100%; font-size: 12px; padding: 2px 0; white-space: normal; text-align: left; overflow-wrap: anywhere; }
         .materials-window .mw-restore[aria-disabled="true"] { color: var(--text-faint); cursor: default; }
         .mw-li {
             display: grid; grid-template-columns: auto 40px minmax(0, 2.2fr) minmax(0, 1fr) minmax(0, 1.4fr) 64px 84px;
@@ -15323,11 +15324,11 @@
             display: flex; align-items: center; gap: 12px; height: 52px; box-sizing: border-box; padding: 0 24px;
             background: var(--text); color: var(--bg); font-size: 14px;
         }
-        .mw-selcount { font-weight: 600; white-space: nowrap; }
-        .mw-selacts { display: flex; gap: 8px; }
-        .materials-window .mw-selbtn { padding: 7px 16px; }
+        .mw-selcount { font-weight: 600; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+        .mw-selacts { display: flex; gap: 8px; flex-shrink: 0; }
+        .materials-window .mw-selbtn { padding: 7px 16px; white-space: nowrap; }
         .materials-window .mw-selbar button.secondary { background: transparent; color: var(--bg); border: 1px solid var(--text-light); }
-        .materials-window .mw-selbar .link-button { color: var(--bg); font-size: 13px; padding: 4px 0; white-space: nowrap; }
+        .materials-window .mw-selbar .link-button { color: var(--bg); font-size: 13px; padding: 4px 0; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
         .materials-window .mw-selbar [aria-disabled="true"] { opacity: 0.5; cursor: default; }
         .mw-pop {
             position: fixed; z-index: 210; min-width: 220px; max-width: calc(100vw - 16px); max-height: min(70vh, 480px); overflow: auto;
@@ -15420,6 +15421,7 @@
             .mw-titles { flex: 0 0 auto; }
             .mw-summary { display: none; }
             .mw-toolbar { order: 0; flex: 1; flex-basis: auto; flex-wrap: nowrap; }
+            .mw-chips { display: none; }
             #materials-modal .mw-search { flex-basis: auto; min-width: 100px; }
             .mw-tools { flex-wrap: nowrap; }
             .mw-scroll { padding: 0 16px; }

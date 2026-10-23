@@ -353,6 +353,24 @@ test.describe('Add material… (Strom archive)', () => {
         await expect(block(page)).toHaveAttribute('data-state', 'newer');
     });
 
+    test('a long file name: one row with an ellipsis, the remove button inside the row (390 and 1440)', async ({ page }) => {
+        await setup(page, { archive: true });
+        const dialog = await open(page);
+        const name = 'Auswanderungsakte_Hamburg_Bremerhaven_1882_Passagierliste_Seite_14_Rueckseite.png';
+        await dialog.locator('#material-input').setInputFiles({ name, mimeType: 'image/png', buffer: readFileSync(AVATAR) });
+        const row = dialog.locator('.material-item');
+        await expect(row.locator('.material-name')).toHaveText(name);
+        for (const size of [DESKTOP, { width: 390, height: 844 }]) {
+            await page.setViewportSize(size);
+            const fit = await row.evaluate((li) => {
+                const r = li.getBoundingClientRect();
+                const x = li.querySelector('.material-remove')!.getBoundingClientRect();
+                return { wide: li.scrollWidth > li.clientWidth + 1, removeIn: x.left >= r.left - 0.5 && x.right <= r.right + 0.5 };
+            });
+            expect(fit, `${size.width}`).toEqual({ wide: false, removeIn: true });
+        }
+    });
+
     test('a file over 2 MB: "Also save to the tree" is off and cannot be ticked', async ({ page }) => {
         await setup(page, { archive: true });
         const dialog = await open(page);
