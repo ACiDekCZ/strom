@@ -124,6 +124,9 @@ test.describe('installing the research from the app', () => {
         await expect(d.locator('.install-step')).toHaveText(['What it is', 'Install', 'Waiting']);
         await expect(d.locator('.install-intro')).toContainText('takes the tree');
         await expect(d.locator('.install-card-archive')).toContainText('Free');
+        // The archive promises no backup of its own: the folder is backed up as a whole (audit 017 b-D9).
+        await expect(d.locator('.install-card-archive')).toContainText('Nothing backs it up by itself: a backup takes the whole Documents/Strom folder');
+        await expect(d.locator('.install-card-archive')).not.toContainText(/a backup and|full-quality/);
         await expect(d.locator('.install-card-agent')).toContainText('Recommended · uses an AI subscription');
         // The agent first: recommended and the default; the archive free, without AI.
         await expect(d.locator('.install-card').first()).toHaveClass(/install-card-agent/);
