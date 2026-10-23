@@ -5044,6 +5044,32 @@
             border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
         }
         .install-wait-links { display: flex; gap: 16px; flex-wrap: wrap; }
+        /* A research already on this computer opens its tree by `strom app` (audit 017 b-D4):
+           an empty app says it first, in a box above the cards; a tree with people, a link below them. */
+        .install-existing-ask {
+            display: flex; align-items: center; gap: 10px 12px; flex-wrap: wrap; margin: 0 0 12px; padding: 10px 12px;
+            border-radius: var(--r-md); background: var(--surface-2); border: 1px solid var(--border);
+        }
+        .install-existing-ask-text { flex: 1 1 240px; min-width: 0; font-size: 13px; line-height: 1.45; color: var(--text); }
+        .install-existing-ask-text span { color: var(--text-light); }
+        .install-existing-ask .secondary { flex: 0 1 auto; white-space: normal; text-align: center; }
+        .install-body .install-existing-link { margin: -4px 0 12px; }
+        .install-body .install-have-row {
+            display: flex; align-items: center; gap: 4px 16px; flex-wrap: wrap; margin: 12px 0 0;
+            padding-top: 10px; border-top: 1px solid var(--divider); font-size: 13px;
+        }
+        .install-have-lead { color: var(--text-light); }
+        .install-have-row .link-button, .install-existing-link .link-button, .install-wait-links .link-button { white-space: normal; text-align: left; }
+        .install-existing-which code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.95em;
+            background: var(--surface-2); border-radius: 3px; padding: 0 4px; white-space: nowrap;
+        }
+        @media (pointer: coarse) {
+            .install-have-row .link-button, .install-existing-link .link-button, .install-existing-ask .secondary { min-height: 44px; }
+        }
+        @media (max-width: 640px) {
+            .install-existing-ask .secondary { flex: 1 1 100%; }
+        }
         .install-dots { display: flex; gap: 6px; margin: 4px 0 8px; }
         .install-dots span {
             width: 8px; height: 8px; border-radius: 50%; background: var(--primary);

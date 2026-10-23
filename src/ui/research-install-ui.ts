@@ -50,10 +50,21 @@ const CHROME_DOWNLOAD_URL = 'https://www.google.com/chrome/';
 /** The channel the tab the research opens tells the others on. */
 const INSTALL_CHANNEL = 'strom-install';
 
-type InstallStep = 'what' | 'install' | 'wait';
+/** 'existing': off the three steps — a research already on this computer opens the app with its tree (`strom app`). */
+type InstallStep = 'what' | 'install' | 'wait' | 'existing';
 
-/** The step on screen and the Install step's own state while the dialog is open. */
-let current: { step: InstallStep; os: InstallOs; copied: boolean; otherOpen: boolean; resumed: boolean } | null = null;
+/** The command that has a research already on this computer open the app with its tree. */
+const EXISTING_COMMAND = 'strom app';
+
+/**
+ * The step on screen and the Install step's own state while the dialog is open.
+ * `back`: where the Existing step goes back to; `have`: the wait is for a research
+ * started by its link ("New research from this tree"), not for an installation.
+ */
+let current: {
+    step: InstallStep; os: InstallOs; copied: boolean; otherOpen: boolean; resumed: boolean;
+    back?: InstallStep; have?: boolean;
+} | null = null;
 let phaseTimer: ReturnType<typeof setInterval> | null = null;
 let channel: BroadcastChannel | null = null;
 let storageWatched = false;
@@ -209,6 +220,8 @@ export const researchInstallMethods = uiModule({
     goResearchInstallStep(step: InstallStep): void {
         if (!current) return;
         if (step === 'install') this.ensureInstallRecord();
+        // The Existing step goes back where it came from; it makes no token and starts nothing.
+        if (step === 'existing' && current.step !== 'existing') current.back = current.step;
         current.step = step;
         current.otherOpen = false;
         this.renderResearchInstall();
@@ -228,7 +241,7 @@ export const researchInstallMethods = uiModule({
         }
         const touch = !onComputer();
         const step = current.step;
-        const pills = touch ? '' : `
+        const pills = touch || step === 'existing' ? '' : `
             <ol class="install-steps" aria-label="${esc(s.title)}">
                 ${(['what', 'install', 'wait'] as InstallStep[]).map((k, i, all) => {
                     const done = all.indexOf(step) > i;
@@ -239,11 +252,12 @@ export const researchInstallMethods = uiModule({
         const body = touch ? this.researchInstallMobileHtml()
             : step === 'what' ? this.researchInstallWhatHtml()
             : step === 'install' ? this.researchInstallLineHtml()
+            : step === 'existing' ? this.researchInstallExistingHtml()
             : this.researchInstallWaitHtml();
         overlay.innerHTML = `
             <div class="modal research-install-dialog${touch ? ' research-install-touch' : ''}" role="dialog" data-dialog-kind="info" aria-modal="true" aria-labelledby="research-install-title" data-step="${touch ? 'touch' : step}">
                 <div class="modal-header">
-                    <h2 id="research-install-title">${esc(step === 'install' && !touch ? s.installTitle : s.title)}</h2>
+                    <h2 id="research-install-title">${esc(touch ? s.title : step === 'install' ? s.installTitle : step === 'existing' ? s.existingTitle : s.title)}</h2>
                     <button type="button" class="close-btn" aria-label="${esc(strings.buttons.close)}">&times;</button>
                 </div>
                 ${pills}
@@ -263,9 +277,18 @@ export const researchInstallMethods = uiModule({
         const moving = needsTransfer(currentAppBrowser()) || !onComputer();
         const mobile = !onComputer();
         const intro = tree && people ? (moving ? s.introMove(tree.name, mobile) : s.intro(tree.name)) : moving ? s.introMoveEmpty(mobile) : s.introEmpty;
+        // An empty app (the browser's data cleared, most likely): a research already on this
+        // computer is the first way, said before the installation; with people, a link below.
+        const existing = people
+            ? `<p class="install-existing-link"><button type="button" class="link-button" data-act="existing">${esc(s.existingLink)}</button></p>`
+            : `<div class="install-existing-ask">
+                    <div class="install-existing-ask-text"><strong>${esc(s.existingAsk)}</strong> <span>${esc(s.existingAskText)}</span></div>
+                    <button type="button" class="secondary" data-act="existing">${esc(s.existingLink)}</button>
+                </div>`;
         return `
             <div class="modal-content install-body">
                 <p class="install-intro">${esc(intro)}</p>
+                ${people ? '' : existing}
                 <div class="install-cards">
                     <div class="install-card install-card-agent">
                         <div class="install-card-head"><h3>${esc(s.agent)}</h3><span class="install-tag install-tag-agent">${esc(s.agentTag)}</span></div>
@@ -279,6 +302,7 @@ export const researchInstallMethods = uiModule({
                     </div>
                 </div>
                 <p class="install-later">${esc(s.choiceLater)}</p>
+                ${people ? existing : ''}
                 ${this.browserNoticeApplies() ? this.browserNoticeHtml({ stay: false, install: false }) : ''}
             </div>
             <div class="buttons">
@@ -338,9 +362,13 @@ export const researchInstallMethods = uiModule({
                     </div>
                     <a class="install-release" href="${esc(releases)}" target="_blank" rel="noopener">${esc(releases.replace(/^https:\/\//, ''))} ↗</a>
                 </details>` : ''}
+                <p class="install-have-row">
+                    <span class="install-have-lead">${esc(s.haveLead)}</span>
+                    <button type="button" class="link-button" data-act="have">${esc(this.researchHaveItLabel())}</button>
+                    <button type="button" class="link-button" data-act="existing">${esc(s.existingLink)}</button>
+                </p>
             </div>
             <div class="buttons">
-                <button type="button" class="link-button" data-act="have">${esc(this.researchHaveItLabel())}</button>
                 <button type="button" class="link-button" data-act="back">${esc(s.back)}</button>
                 <button type="button" class="secondary" data-dismiss>${esc(strings.buttons.close)}</button>
                 <button type="button" class="primary" data-act="pasted"${lineShown ? '' : ' disabled'}>${esc(s.pasted)}</button>
@@ -727,6 +755,49 @@ export const researchInstallMethods = uiModule({
     },
 
     /** 4a–4c: waiting (no time limit here), waiting long, the command expired. */
+    /**
+     * The waiting step's sentence: an installation in the terminal, or — the
+     * research started by its link — a research that starts and sets up a new
+     * one (never "the installation is running" when nothing is installed).
+     */
+    researchInstallWaitText(long: boolean): string {
+        const s = strings.install;
+        const transfer = needsTransfer(currentAppBrowser());
+        if (current?.have) return transfer ? s.waitTextHaveTransfer : s.waitTextHave;
+        return long ? s.waitLongText : transfer ? s.waitTextTransfer : s.waitText;
+    },
+
+    /**
+     * A research already on this computer (an archive too): it opens the app
+     * with its tree by `strom app` in a terminal — the app cannot open it by a
+     * link, it does not know the tree's id (a cleared browser). Nothing is
+     * made, stored or started here.
+     */
+    researchInstallExistingHtml(): string {
+        const s = strings.install;
+        const os = current?.os ?? detectedOs();
+        const steps = os === 'mac' ? s.existingStepsMac : os === 'win' ? s.existingStepsWin : s.existingStepsLinux;
+        const code = (t: string) => `<code>${esc(t)}</code>`;
+        const which = esc(s.existingWhich('\u0001', '\u0002'))
+            .replace('\u0001', code(`${EXISTING_COMMAND} --tree "${s.existingTreeName}"`))
+            .replace('\u0002', code('strom trees'));
+        return `
+            <div class="modal-content install-body install-existing">
+                <p class="install-intro">${esc(s.existingText)}</p>
+                <ol class="install-howto">${steps.map((t, i) => `<li><span class="install-num" aria-hidden="true">${i + 1}</span><span>${esc(t)}</span></li>`).join('')}</ol>
+                <div class="install-line-row">
+                    <code class="install-line install-existing-line" tabindex="0" data-line="${esc(EXISTING_COMMAND)}">${esc(EXISTING_COMMAND)}</code>
+                    <button type="button" class="install-copy" data-act="copy-existing">${esc(s.copy)}</button>
+                </div>
+                <p class="install-after install-existing-which">${which}</p>
+                ${needsTransfer(currentAppBrowser()) ? `<p class="install-note install-existing-safari">${esc(s.existingSafari(noConnectLead()))}</p>` : ''}
+            </div>
+            <div class="buttons">
+                <button type="button" class="link-button" data-act="existing-back">${esc(s.back)}</button>
+                <button type="button" class="secondary" data-dismiss>${esc(strings.buttons.close)}</button>
+            </div>`;
+    },
+
     researchInstallWaitHtml(): string {
         const s = strings.install;
         const record = readInstallRecord();
@@ -739,7 +810,10 @@ export const researchInstallMethods = uiModule({
                 <div class="modal-content install-body install-wait" data-phase="expired">
                     <h3 class="install-wait-title">${esc(s.expiredTitle)}</h3>
                     <p>${esc(s.expiredText)}</p>
-                    <p class="install-wait-links"><button type="button" class="link-button" data-act="have">${esc(this.researchHaveItLabel())}</button></p>
+                    <p class="install-wait-links">
+                        <button type="button" class="link-button" data-act="have">${esc(this.researchHaveItLabel())}</button>
+                        <button type="button" class="link-button" data-act="existing">${esc(s.existingLink)}</button>
+                    </p>
                 </div>
                 <div class="buttons">
                     <button type="button" class="secondary" data-dismiss>${esc(strings.buttons.close)}</button>
@@ -751,11 +825,12 @@ export const researchInstallMethods = uiModule({
             <div class="modal-content install-body install-wait" data-phase="${phase}">
                 <div class="install-dots" aria-hidden="true"><span></span><span></span><span></span></div>
                 <h3 class="install-wait-title" role="status">${esc(long ? s.waitLongTitle : s.waitTitle)}</h3>
-                <p>${esc(long ? s.waitLongText : needsTransfer(currentAppBrowser()) ? s.waitTextTransfer : s.waitText)}</p>
+                <p>${esc(this.researchInstallWaitText(long))}</p>
                 ${isChromium() ? `<p class="install-note">${esc(s.waitLna)}</p>` : ''}
                 <p class="install-wait-links">
                     <button type="button" class="link-button" data-act="again">${esc(s.showAgain)}</button>
                     <button type="button" class="link-button" data-act="have">${esc(this.researchHaveItLabel())}</button>
+                    <button type="button" class="link-button" data-act="existing">${esc(s.existingLink)}</button>
                 </p>
             </div>
             <div class="buttons">
@@ -884,7 +959,11 @@ export const researchInstallMethods = uiModule({
             const act = el.dataset.act;
             if (act === 'install') this.goResearchInstallStep('install');
             else if (act === 'back') this.goResearchInstallStep('what');
-            else if (act === 'pasted' || act === 'wait') this.goResearchInstallStep('wait');
+            else if (act === 'pasted' || act === 'wait') {
+                if (current) current.have = false;
+                this.goResearchInstallStep('wait');
+            } else if (act === 'existing') this.goResearchInstallStep('existing');
+            else if (act === 'existing-back') this.goResearchInstallStep(current?.back ?? 'what');
             else if (act === 'again') this.goResearchInstallStep('install');
             else if (act === 'new') {
                 clearInstallRecord();
@@ -892,7 +971,7 @@ export const researchInstallMethods = uiModule({
                 this.goResearchInstallStep('install');
             } else if (act === 'web') this.openResearchSite();
             else if (act === 'have') void this.researchInstallHaveIt();
-            else if (act === 'copy' || act === 'copy-npm') {
+            else if (act === 'copy' || act === 'copy-npm' || act === 'copy-existing') {
                 const code = el.parentElement?.querySelector<HTMLElement>('.install-line');
                 void this.copyResearchInstallLine(code, act === 'copy');
             } else if (act === 'send-link') void this.sendResearchInstallLink();
@@ -929,17 +1008,19 @@ export const researchInstallMethods = uiModule({
     },
 
     /**
-     * "I already have it, start": the research takes the tree over by the
-     * same token (strom-research://new). From a browser that cannot reach it,
-     * the tree goes as a file first — an installed research takes it as well.
+     * "New research from this tree": an installed research makes a new one
+     * from it by the same token (strom-research://new). From a browser that
+     * cannot reach it, the tree goes as a file first. A research already
+     * holding the tree is the Existing step's (`strom app`), not this.
      */
-    /** "I already have it, start ↗", or — the tree downloaded for a move — that it is, and the start. */
+    /** "New research from this tree ↗", or — the tree downloaded for a move — that it is, and the start. */
     researchHaveItLabel(): string {
         const s = strings.install;
-        if (!needsTransfer(currentAppBrowser())) return s.haveIt;
+        const plain = hasPeople() ? s.haveIt : s.haveItEmpty;
+        if (!needsTransfer(currentAppBrowser())) return plain;
         const record = readInstallRecord();
         const active = DataManager.getCurrentTreeId() ?? TreeManager.getActiveTreeId();
-        return record?.file && record.treeId === active && installPhase(record) !== 'expired' ? s.haveItDownloaded : s.haveIt;
+        return record?.file && record.treeId === active && installPhase(record) !== 'expired' ? s.haveItDownloaded : plain;
     },
 
     async researchInstallHaveIt(): Promise<void> {
@@ -954,6 +1035,7 @@ export const researchInstallMethods = uiModule({
         const record = this.ensureInstallRecord();
         const url = researchNewUrl(record.token, currentAppBrowser(), record.file, announcedResearchScheme());
         if (url) this.handOverResearchLink(url);
+        if (current) current.have = true;
         this.goResearchInstallStep('wait');
     },
 

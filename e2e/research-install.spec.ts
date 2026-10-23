@@ -881,6 +881,77 @@ const lineOf = async (page: Page, os: 'mac' | 'win' | 'linux'): Promise<string> 
     return (await dialog(page).locator('.install-line').first().getAttribute('data-line'))!;
 };
 
+test.describe('a research already on this computer: `strom app`, not a new research (audit 017 b-D4)', () => {
+    test('an empty app (the browser\'s data cleared): the archive\'s way is said first and shows `strom app`; nothing launched or stored', async ({ page, context }) => {
+        await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+        await page.setViewportSize({ width: 1280, height: 900 });
+        await asPlatform(page, 'macOS');
+        await openApp(page);
+        await catchLinks(page);
+        await page.locator('#empty-state .research-offer').click();
+        const d = dialog(page);
+        await expect(d.locator('.research-install-dialog')).toHaveAttribute('data-step', 'what');
+        // Before the cards, plainly: a research or archive already here.
+        const ask = d.locator('.install-existing-ask');
+        await expect(ask).toContainText('An archive or research already on this computer?');
+        expect(await ask.evaluate(e => !!(e.compareDocumentPosition(document.querySelector('.install-cards')!) & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
+        await ask.locator('[data-act="existing"]').click();
+        await expect(d.locator('.research-install-dialog')).toHaveAttribute('data-step', 'existing');
+        await expect(d.locator('h2')).toHaveText('A tree from an archive or research');
+        await expect(d.locator('.install-step')).toHaveCount(0);
+        await expect(d.locator('.install-existing-line')).toHaveText('strom app');
+        await expect(d.locator('.install-howto li')).toHaveText(['1Open Terminal (⌘ + Space, type “Terminal”).', '2Paste the command (⌘ V) and press Enter.']);
+        await expect(d.locator('.install-existing-which')).toHaveText('It opens the tree worked on last, or the only one. Another tree: strom app --tree "name" (the list: strom trees).');
+        await expect(d).not.toContainText(/agent|install|queue|price|cost/i);
+        await d.locator('[data-act="copy-existing"]').click();
+        await expect(d.locator('[data-act="copy-existing"]')).toHaveText('✓ Copied');
+        expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('strom app');
+        // Nothing launched (never strom-research://new), no token, no installation record.
+        expect(await launched(page)).toEqual([]);
+        expect(await installRecord(page)).toBeNull();
+        await d.locator('[data-act="existing-back"]').click();
+        await expect(d.locator('.research-install-dialog')).toHaveAttribute('data-step', 'what');
+    });
+
+    test('the Install step parts the two ways: "New research" launches strom-research://new as before, its wait says no installation runs', async ({ page }) => {
+        await setup(page);
+        await catchLinks(page);
+        await toInstallStep(page);
+        const d = dialog(page);
+        const row = d.locator('.install-have-row');
+        await expect(row).toHaveText(/Strom Research already on this computer:\s*New research from this tree ↗\s*Open a tree from its archive or research/);
+        // The existing way from here: back returns to the Install step, nothing launched.
+        await row.locator('[data-act="existing"]').click();
+        await expect(d.locator('.install-existing-line')).toHaveText('strom app');
+        await d.locator('[data-act="existing-back"]').click();
+        await expect(d.locator('.research-install-dialog')).toHaveAttribute('data-step', 'install');
+        expect(await launched(page)).toEqual([]);
+        // The new research: the same link as before, the token of the record.
+        await row.locator('[data-act="have"]').click();
+        const rec = (await installRecord(page))!;
+        const links = await launched(page);
+        expect(links).toHaveLength(1);
+        expect(links[0]).toMatch(/^strom-research:\/\/new\?/);
+        expect(links[0]).toContain(rec.token);
+        await expect(d.locator('.research-install-dialog')).toHaveAttribute('data-step', 'wait');
+        await expect(d.locator('.install-wait p').first()).toHaveText('Strom Research starts in a terminal and sets up a new research. At the end, it opens Strom by itself in this browser.');
+        await expect(d.locator('.install-wait')).not.toContainText('installation is running');
+        await expect(d.locator('.install-wait-links [data-act="existing"]')).toBeVisible();
+        // The line pasted: the installation's text again.
+        await d.locator('[data-act="again"]').click();
+        await d.locator('[data-act="pasted"]').click();
+        await expect(d.locator('.install-wait p').first()).toHaveText('The installation is running in the terminal. At the end, the research opens Strom by itself in this browser.');
+    });
+
+    test('a tree with people: the existing way is a link under the cards, not the box', async ({ page }) => {
+        await setup(page);
+        await page.evaluate(() => window.Strom.UI.showResearchInstall());
+        const d = dialog(page);
+        await expect(d.locator('.install-existing-ask')).toHaveCount(0);
+        await expect(d.locator('.install-existing-link [data-act="existing"]')).toHaveText('Open a tree from its archive or research');
+    });
+});
+
 test.describe('"The research is ready" by the research\'s mode', () => {
     const ready = (page: Page) => page.locator('#research-ready-modal');
     async function showReady(page: Page, accepts: Record<string, unknown>, hasPeople: boolean, extra: Record<string, unknown> = {}): Promise<void> {
