@@ -220,6 +220,40 @@ test('a "?" parent whose child hangs on a parent link alone: no children tab, no
     await expect(page.locator('.context-menu .context-menu-item[data-action="toggle-children"]')).toHaveCount(0);
 });
 
+test('a great-great-grandfather with twelve hidden children: shown beside his direct-line child, no card over another', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    // Six generations up the father's line (invented data)
+    const gf = 'f_m_f_m_f_f';
+    await setupFixture(page, 'edge-ancestor-children', 'focus');
+    await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), gf);
+    const before = await screenPositions(page);
+    await tabOf(page, gf).click();
+    for (let i = 0; i < 12; i++) await expect(cardOf(page, `f_m_f_m_f_sib${i}`)).toHaveCount(1);
+    await page.mouse.move(5, 500);
+    await expect.poll(async () => (await screenPositions(page))[gf]).toEqual(before[gf]);
+    // No two drawn cards cover each other
+    const overlaps = await page.evaluate(() => {
+        const rects = [...document.querySelectorAll<HTMLElement>('#tree-canvas .person-card[data-id]')]
+            .map(c => ({ id: c.dataset.id!, r: c.getBoundingClientRect() }));
+        const out: string[] = [];
+        for (let i = 0; i < rects.length; i++) for (let j = i + 1; j < rects.length; j++) {
+            const a = rects[i].r, b = rects[j].r;
+            if (a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1) out.push(`${rects[i].id}/${rects[j].id}`);
+        }
+        return out;
+    });
+    expect(overlaps).toEqual([]);
+    // The siblings stand in one row with the direct-line child
+    const pos = await screenPositions(page);
+    const kids = ['f_m_f_m_f', ...Array.from({ length: 12 }, (_, i) => `f_m_f_m_f_sib${i}`)];
+    for (const k of kids) expect(pos[k][1]).toBe(pos.f_m_f_m_f[1]);
+    // ... beside each other: no foreign card between them (a sibling's spouses may stand by)
+    const lo = Math.min(...kids.map(k => pos[k][0])), hi = Math.max(...kids.map(k => pos[k][0]));
+    const own = new Set([...kids, 'f_m_f_m_f_sib1_sp0', 'f_m_f_m_f_sib1_sp1', 'f_m_f_m_m']);
+    const between = Object.entries(pos).filter(([id, [x, y]]) => !own.has(id) && y === pos.f_m_f_m_f[1] && x > lo && x < hi);
+    expect(between.map(([id]) => id)).toEqual([]);
+});
+
 test.describe('partner chains through several people', () => {
     test('a widow remarried twice: her other families stand in view already, her card promises nothing', async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 900 });

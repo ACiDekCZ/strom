@@ -102,6 +102,17 @@ interface AncestorNode {
     coupleWidth: number;
     /** Center X position (computed top-down) */
     xCenter: number;
+    /**
+     * Siblings of the husband shown beside him (children of his parents'
+     * union, e.g. an ancestor's children shown in place), outermost first.
+     * They stand in this couple's row LEFT of the husband; extLeft is the
+     * room they take including the gap to the couple.
+     */
+    runLeft: FamilyBlockId[];
+    extLeft: number;
+    /** Siblings of the wife shown beside her, RIGHT of the couple. */
+    runRight: FamilyBlockId[];
+    extRight: number;
 }
 
 // ==================== BLOCK CARD EXTENT HELPER ====================
@@ -378,7 +389,11 @@ function buildAncestorTree(
         wSubtree: wifeId && shouldRecurse ? buildAncestorTree(wifeId, gen - 1, model, minGen) : null,
         width: 0,
         coupleWidth: 0,
-        xCenter: 0
+        xCenter: 0,
+        runLeft: [],
+        extLeft: 0,
+        runRight: [],
+        extRight: 0
     };
 }
 
@@ -437,8 +452,8 @@ function computeAncestorTreeWidth(
     const ancestorsWidth = hWidth + wWidth +
         (hWidth > 0 && wWidth > 0 ? config.horizontalGap : 0);
 
-    // Tree width is the maximum of couple and ancestors
-    node.width = Math.max(node.coupleWidth, ancestorsWidth);
+    // Tree width is the maximum of couple (with the siblings beside it) and ancestors
+    node.width = Math.max(node.coupleWidth + node.extLeft + node.extRight, ancestorsWidth);
 
     return node.width;
 }
@@ -485,18 +500,23 @@ function placeAncestorTree(
     const husbandRightEdge = husbandCenterX + config.cardWidth / 2;
     const wifeLeftEdge = wifeCenterX - config.cardWidth / 2;
 
+    // Parents stand above all their children in view: the person and the
+    // siblings shown beside them (attachSiblingRuns)
+    const husbandRunShift = node.wifeId || node.extRight === 0 ? -node.extLeft / 2 : node.extRight / 2;
+    const wifeRunShift = node.wifeId ? node.extRight / 2 : 0;
+
     // Place H-subtree: it must stay LEFT of husband's RIGHT EDGE — but only
     // while there is a W-subtree on the other side to keep clear of
     if (node.hSubtree && hWidth > 0) {
         placeSubtreeAgainstBoundary(
-            node.hSubtree, husbandCenterX,
+            node.hSubtree, husbandCenterX + husbandRunShift,
             wWidth > 0 ? husbandRightEdge : null, 'LEFT', config);
     }
 
     // Place W-subtree: mirror of the above
     if (node.wSubtree && wWidth > 0) {
         placeSubtreeAgainstBoundary(
-            node.wSubtree, wifeCenterX,
+            node.wSubtree, wifeCenterX + wifeRunShift,
             hWidth > 0 ? wifeLeftEdge : null, 'RIGHT', config);
     }
 
@@ -589,8 +609,8 @@ function resolveAncestorTreeOverlap(
 function findTreeMaxX(node: AncestorNode | null, config: LayoutConfig): number {
     if (!node) return -Infinity;
 
-    // This node's right edge
-    const nodeRight = node.xCenter + node.coupleWidth / 2;
+    // This node's right edge (the wife's siblings beside her included)
+    const nodeRight = node.xCenter + node.coupleWidth / 2 + node.extRight;
 
     // Check subtrees
     const hMax = findTreeMaxX(node.hSubtree, config);
@@ -605,8 +625,8 @@ function findTreeMaxX(node: AncestorNode | null, config: LayoutConfig): number {
 function findTreeMinX(node: AncestorNode | null, config: LayoutConfig): number {
     if (!node) return Infinity;
 
-    // This node's left edge
-    const nodeLeft = node.xCenter - node.coupleWidth / 2;
+    // This node's left edge (the husband's siblings beside him included)
+    const nodeLeft = node.xCenter - node.coupleWidth / 2 - node.extLeft;
 
     // Check subtrees
     const hMin = findTreeMinX(node.hSubtree, config);
@@ -770,6 +790,155 @@ function transferAncestorTreeToBlocks(
     // Recurse to subtrees
     transferAncestorTreeToBlocks(node.hSubtree, blocks, unionToBlock, config, claimed, transferred);
     transferAncestorTreeToBlocks(node.wSubtree, blocks, unionToBlock, config, claimed, transferred);
+}
+
+/**
+ * Siblings of an ancestor shown in place (an ancestor's children shown with
+ * the card's children tab): they stand in the ancestor's row next to them,
+ * the husband's on his outer (left) side and the wife's on hers (right) — a
+ * lone ancestor's on the side of the tree they belong to. Each node of the
+ * compact tree reserves that room (extLeft/extRight), so the tree is laid out
+ * around the siblings instead of the siblings being pushed in afterwards
+ * wherever there happens to be space, a row away from their parents.
+ *
+ * A sibling takes part only when its block hangs under the parents' block in
+ * the same row, is not a tree node itself and has no block in the locked rows
+ * (gen >= -1) below it; anything else stays to the generic overlap passes.
+ */
+function attachSiblingRuns(
+    node: AncestorNode | null,
+    outward: 'LEFT' | 'RIGHT',
+    model: LayoutModel,
+    unionToBlock: Map<UnionId, FamilyBlockId>,
+    blocks: Map<FamilyBlockId, FamilyBlock>,
+    config: LayoutConfig,
+    taken: Set<FamilyBlockId>
+): void {
+    if (!node) return;
+    const runOf = (parents: AncestorNode | null, personId: PersonId): FamilyBlockId[][] => {
+        if (!parents) return [];
+        const parentBlockId = unionToBlock.get(parents.unionId);
+        const parentBlock = parentBlockId ? blocks.get(parentBlockId) : undefined;
+        if (!parentBlock) return [];
+        const ownBlockId = model.personToUnion.has(personId)
+            ? unionToBlock.get(model.personToUnion.get(personId)!)
+            : undefined;
+        // Children of the parents' other unions (a chain) stand further out
+        // than the person's full siblings, the nearer union's nearer: each
+        // union's children stay together under their own line
+        const chain = parentBlock.chainInfo;
+        const stemX = (unionId: UnionId): number => {
+            const union = model.unions.get(unionId);
+            const extra = union && chain ? findChainExtraPartner(union, chain, model) : null;
+            return extra ? chain!.personPositions.get(extra) ?? 0 : 0;
+        };
+        const ownStemX = chain ? stemX(parents.unionId) : 0;
+        const groups = new Map<UnionId, FamilyBlockId[]>();
+        for (const id of parentBlock.childBlockIds) {
+            if (id === ownBlockId || taken.has(id)) continue;
+            const block = blocks.get(id);
+            if (!block || block.parentBlockId !== parentBlock.id || block.generation !== node.generation) continue;
+            const subtree = collectBlockSubtree(id, blocks);
+            if (subtree.some(b => b.generation >= -1 || (b.id !== id && taken.has(b.id)))) continue;
+            const union = model.unions.get(block.rootUnionId);
+            const parentUnionId = [union?.partnerA, union?.partnerB]
+                .map(pid => pid ? model.childToParentUnion.get(pid) : undefined)
+                .find(uid => uid !== undefined && (uid === parents.unionId || !!chain?.unionIds.includes(uid)))
+                ?? parents.unionId;
+            if (!groups.has(parentUnionId)) groups.set(parentUnionId, []);
+            groups.get(parentUnionId)!.push(id);
+        }
+        const ordered = [...groups.entries()].sort((a, b) =>
+            (a[0] === parents.unionId ? -1 : Math.abs(stemX(a[0]) - ownStemX))
+            - (b[0] === parents.unionId ? -1 : Math.abs(stemX(b[0]) - ownStemX)));
+        for (const [, ids] of ordered) for (const id of ids) for (const b of collectBlockSubtree(id, blocks)) taken.add(b.id);
+        return ordered.map(([, ids]) => ids);
+    };
+    // Innermost group beside the couple: a left run lists the outermost first
+    const leftRun = (groups: FamilyBlockId[][]): FamilyBlockId[] => [...groups].reverse().flat();
+    const rightRun = (groups: FamilyBlockId[][]): FamilyBlockId[] => groups.flat();
+    const runWidth = (run: FamilyBlockId[]): number =>
+        run.reduce((sum, id) => sum + (blocks.get(id)?.width ?? 0) + config.horizontalGap, 0);
+
+    const husbandRun = runOf(node.hSubtree, node.husbandId);
+    const husbandSide = node.wifeId ? 'LEFT' : outward;
+    const wifeRun = node.wifeId ? runOf(node.wSubtree, node.wifeId) : [];
+    if (husbandSide === 'LEFT') {
+        node.runLeft = leftRun(husbandRun);
+        node.runRight = rightRun(wifeRun);
+    } else {
+        node.runRight = rightRun(husbandRun);
+    }
+    node.extLeft = runWidth(node.runLeft);
+    node.extRight = runWidth(node.runRight);
+
+    attachSiblingRuns(node.hSubtree, outward, model, unionToBlock, blocks, config, taken);
+    attachSiblingRuns(node.wSubtree, outward, model, unionToBlock, blocks, config, taken);
+}
+
+/** A block and every block below it (its children's blocks, recursively). */
+function collectBlockSubtree(blockId: FamilyBlockId, blocks: Map<FamilyBlockId, FamilyBlock>): FamilyBlock[] {
+    const out: FamilyBlock[] = [];
+    const seen = new Set<FamilyBlockId>();
+    const stack = [blockId];
+    while (stack.length > 0) {
+        const id = stack.pop()!;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        const block = blocks.get(id);
+        if (!block) continue;
+        out.push(block);
+        stack.push(...block.childBlockIds);
+    }
+    return out;
+}
+
+/**
+ * Put each node's sibling runs (attachSiblingRuns) into the room the tree kept
+ * beside the couple, in sibling order, each with its own blocks below it.
+ */
+function placeSiblingRuns(
+    node: AncestorNode | null,
+    blocks: Map<FamilyBlockId, FamilyBlock>,
+    model: LayoutModel,
+    unionToBlock: Map<UnionId, FamilyBlockId>,
+    config: LayoutConfig,
+    claimed?: Set<FamilyBlockId>,
+    transferred?: Set<FamilyBlockId>
+): void {
+    if (!node) return;
+    const ownBlockId = unionToBlock.get(node.unionId);
+    const ownBlock = ownBlockId ? blocks.get(ownBlockId) : undefined;
+    const cards = ownBlock
+        ? getBlockCardExtent(ownBlock, model, config)
+        : { left: node.xCenter - node.coupleWidth / 2, right: node.xCenter + node.coupleWidth / 2 };
+    const moveTo = (id: FamilyBlockId, left: number): void => {
+        const block = blocks.get(id);
+        if (!block) return;
+        const delta = left - block.xLeft;
+        for (const b of collectBlockSubtree(id, blocks)) {
+            if (!guardAncestorOnly(b, 'placeSiblingRuns')) continue;
+            shiftBlock(b, delta);
+            claimed?.add(b.id);
+            transferred?.add(b.id);
+        }
+    };
+    let cursor = cards.left - config.horizontalGap;
+    for (let i = node.runLeft.length - 1; i >= 0; i--) {
+        const block = blocks.get(node.runLeft[i]);
+        if (!block) continue;
+        moveTo(block.id, cursor - block.width);
+        cursor -= block.width + config.horizontalGap;
+    }
+    cursor = cards.right + config.horizontalGap;
+    for (const id of node.runRight) {
+        const block = blocks.get(id);
+        if (!block) continue;
+        moveTo(id, cursor);
+        cursor += block.width + config.horizontalGap;
+    }
+    placeSiblingRuns(node.hSubtree, blocks, model, unionToBlock, config, claimed, transferred);
+    placeSiblingRuns(node.wSubtree, blocks, model, unionToBlock, config, claimed, transferred);
 }
 
 /**
@@ -1023,6 +1192,12 @@ function runPhaseBIndependentTrees(
             : null;
         if (!hTree && !wTree) continue;
 
+        // Siblings of ancestors shown beside them get their room in the tree
+        const taken = new Set(hClaims);
+        collectTreeBlockIds(wTree, unionToBlock, taken);
+        attachSiblingRuns(hTree, 'LEFT', model, unionToBlock, blocks, config, taken);
+        attachSiblingRuns(wTree, 'RIGHT', model, unionToBlock, blocks, config, taken);
+
         // Compute widths (bottom-up)
         const hWidth = computeAncestorTreeWidth(hTree, config, blocks, unionToBlock);
         const wWidth = computeAncestorTreeWidth(wTree, config, blocks, unionToBlock);
@@ -1107,6 +1282,8 @@ function runPhaseBIndependentTrees(
         const transferred = new Set<FamilyBlockId>();
         transferAncestorTreeToBlocks(hTree, blocks, unionToBlock, config, claimed, transferred);
         transferAncestorTreeToBlocks(wTree, blocks, unionToBlock, config, claimed, transferred);
+        placeSiblingRuns(hTree, blocks, model, unionToBlock, config, claimed, transferred);
+        placeSiblingRuns(wTree, blocks, model, unionToBlock, config, claimed, transferred);
 
         if ((globalThis as unknown as { __PHB_DEBUG?: boolean }).__PHB_DEBUG) {
             console.log(`[PHB] anchor=${anchorBlock.id} x=${anchorBlock.xCenter.toFixed(0)} hTree=${!!hTree} wTree=${!!wTree} transferred=${transferred.size}`);

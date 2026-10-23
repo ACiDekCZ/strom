@@ -52,6 +52,33 @@ function layout(data: StromData, focus: PersonId, config: LayoutConfig, depth: n
     });
 }
 
+/**
+ * Cards standing between the children of one of the person's unions in their
+ * row that are neither such a child nor a child's partner: the children were
+ * not shown together (invariant 5).
+ */
+function foreignBetweenChildren(data: StromData, pid: PersonId, positions: Map<PersonId, { x: number; y: number }>): string[] {
+    const out: string[] = [];
+    for (const uid of data.persons[pid]?.partnerships ?? []) {
+        const kids = (data.partnerships[uid]?.childIds ?? []).filter(c => positions.has(c));
+        if (kids.length < 2) continue;
+        const own = new Set<PersonId>(kids);
+        for (const k of kids) for (const ku of data.persons[k]?.partnerships ?? []) {
+            const u = data.partnerships[ku];
+            if (u) { own.add(u.person1Id); own.add(u.person2Id); }
+        }
+        const y = positions.get(kids[0])!.y;
+        if (kids.some(k => Math.abs(positions.get(k)!.y - y) > 1)) continue;
+        const xs = kids.map(k => positions.get(k)!.x);
+        const lo = Math.min(...xs), hi = Math.max(...xs);
+        for (const [id, p] of positions) {
+            if (own.has(id) || Math.abs(p.y - y) > 1) continue;
+            if (p.x > lo && p.x < hi) out.push(`${id} between the children of ${uid}`);
+        }
+    }
+    return out;
+}
+
 describe('Children shown in place: full pipeline invariants', () => {
     for (const fixture of FIXTURES) {
         for (const mode of MODES) {
@@ -96,6 +123,9 @@ describe('Children shown in place: full pipeline invariants', () => {
                         // Children drawn before stay drawn
                         const lost = [...visibleBefore].filter(c => !r.positions.has(c));
                         if (lost.length) failures.push(`${where}: children left the view ${lost.join(',')}`);
+                        // In place: the children of each of the person's unions stand together in their row
+                        const apart = foreignBetweenChildren(data, pid, r.positions);
+                        if (apart.length) failures.push(`${where}: not beside each other, ${apart.slice(0, 3).join('; ')}`);
                     }
                 }
                 expect(failures.slice(0, 20), `${fixture} [${mode.name}], ${failures.length} failures`).toEqual([]);
@@ -172,6 +202,32 @@ describe('Children shown in place: selection and hiding again', () => {
         const shown = layout(cascade, P('d'), DEFAULT_LAYOUT_CONFIG, 2, true, [P('b')]);
         for (const c of ['k_ab', 'k_bc', 'k_cd', 'k_de']) expect(shown.positions.has(P(c)), c).toBe(true);
         expect(auditGeometry(shown, DEFAULT_LAYOUT_CONFIG)).toEqual([]);
+    });
+
+    it('a great-great-grandfather with twelve hidden children shows them beside his direct-line child, under the couple', () => {
+        // Six generations up the father's line; the shown siblings must not
+        // land in the other half of the pedigree or under foreign cards
+        const tree = loadFixture('edge-ancestor-children');
+        for (const mode of [false, true]) {
+            const focus = P('focus');
+            const gf = P('f_m_f_m_f_f');
+            const base = layout(tree, focus, DEFAULT_LAYOUT_CONFIG, 6, mode);
+            const r = layout(tree, focus, DEFAULT_LAYOUT_CONFIG, 6, mode, [gf]);
+            const kids = tree.persons[gf].childIds;
+            expect(kids.length).toBe(13);
+            for (const c of kids) expect(r.positions.has(c), c).toBe(true);
+            assertNoNodeOverlap(r.positions, DEFAULT_LAYOUT_CONFIG.cardWidth, DEFAULT_LAYOUT_CONFIG.cardHeight);
+            expect(auditGeometry(r, DEFAULT_LAYOUT_CONFIG)).toEqual([]);
+            expect(foreignBetweenChildren(tree, gf, r.positions)).toEqual([]);
+            // The couple stands over its children's span
+            const xs = kids.map(c => r.positions.get(c)!.x);
+            const couple = [gf, P('f_m_f_m_f_m')].map(p => r.positions.get(p)!.x);
+            const mid = (Math.min(...couple) + Math.max(...couple)) / 2;
+            expect(mid).toBeGreaterThan(Math.min(...xs));
+            expect(mid).toBeLessThan(Math.max(...xs));
+            // The direct-line child keeps its place relative to the focus row
+            expect(r.positions.get(P('f_m_f_m_f'))!.y).toBe(base.positions.get(P('f_m_f_m_f'))!.y);
+        }
     });
 
     it('a person out of the view is skipped', () => {

@@ -58,7 +58,12 @@ children's partners or descendants) — and lifts the person's depth limit.
 `withChildrenShown` (pipeline orchestrator) then puts a listed person with more
 than one partnership in the selection into `expandedPersonIds` (out of the
 appendage set), so each union is a chain slot and its children hang under
-their own couple, in the standard display too. The rest of the pipeline is
+their own couple, in the standard display too. Phase B places the shown siblings
+of an ancestor (gen <= -2) beside that ancestor, in the run reserved for them
+in the compact tree (`attachSiblingRuns`/`placeSiblingRuns`, below), with the
+parents centred over all their children; before, they kept their step-5 place
+far from the parents and the outward overlap passes could end with cards over
+each other. The rest of the pipeline is
 unchanged; hiding the children again gives the original input and layout.
 The children tab is offered for the children out of view that showing would
 draw (`hiddenRelativesTabs`/`hiddenChildIds`, src/marriage-order.ts): the same
@@ -230,7 +235,15 @@ anchorUnion = unions.get(anchorUnionId)
 hTree = buildAncestorTree(husbandId, gen=-2)  // H-tree: husband's ancestors
 wTree = buildAncestorTree(wifeId, gen=-2)     // W-tree: wife's ancestors
 
-// 3. Compute tree widths (bottom-up)
+// 3a. Reserve room for the ancestors' siblings drawn in the selection (the
+//     children of a node's parents shown in place, gen <= -2): each node gets
+//     a run of its person's sibling blocks — the husband's on the left, the
+//     wife's on the right (a lone parent's on the tree's outward side); blocks
+//     of the tree union innermost, other chain unions further out by stem
+//     distance. extLeft/extRight widen the node (attachSiblingRuns)
+attachSiblingRuns(hTree, 'LEFT'); attachSiblingRuns(wTree, 'RIGHT')
+
+// 3. Compute tree widths (bottom-up; the runs count into a node's width)
 hWidth = computeAncestorTreeWidth(hTree)
 wWidth = computeAncestorTreeWidth(wTree)
 
@@ -255,9 +268,10 @@ enforceAllBoundariesUntilConvergence(wTree)
 // 6. Resolve any overlap between H-tree and W-tree
 resolveAncestorTreeOverlap(hTree, wTree)
 
-// 7. Transfer positions to FamilyBlocks
+// 7. Transfer positions to FamilyBlocks, then the sibling runs
 transferAncestorTreeToBlocks(hTree)
 transferAncestorTreeToBlocks(wTree)
+placeSiblingRuns(hTree); placeSiblingRuns(wTree)
 
 // 8. Handle collateral ancestors (passes until nothing moves, at most 20;
 //    ancestors' children shown in place can need more than a few)
