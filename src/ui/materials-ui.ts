@@ -28,7 +28,7 @@ import {
     materialCaps, materialActions, personMaterials, materialCounter, materialKindLabel, batchFolderLabel,
     materialType, fileExt, primeMaterials, cachedMaterials, cachedMaterialList, saveMaterialList,
     fetchMaterial, getCachedThumb, fileUrl, materialSystemLink,
-    clearMaterialsCache, mergeIntoCache, markBatchOpened,
+    clearMaterialsCache, mergeIntoCache, markBatchOpened, materialDate,
 } from '../materials.js';
 import { materialThumbs } from '../material-thumbs.js';
 import { formatBytesShort } from './originals-ui.js';
@@ -183,7 +183,7 @@ export function materialItemSha(item: MaterialItem): string | null {
 function metaLine(item: MaterialItem, agent: boolean): string {
     const m = strings.materials;
     const parts = [materialKindLabel(item)];
-    if (item.date) parts.push(item.date);
+    if (item.date) parts.push(materialDate(item.date));
     if (item.bytes) parts.push(formatBytesShort(item.bytes));
     if (agent && item.origin !== 'tree') {
         if (item.state === 'processed') parts.push(m.agentDone);

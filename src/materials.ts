@@ -18,6 +18,8 @@
 import { Attachment, Person } from './types.js';
 import { cleanText, isResearchHead, researchPersonRef, researchSchemeUrl, withAppVersion } from './research-link.js';
 import { strings } from './strings.js';
+import { formatFlexDate, parseFlexDate } from './dates.js';
+import { parseGedcomDate } from './ged-parser.js';
 
 // ==================== CAPABILITIES ====================
 
@@ -1405,4 +1407,11 @@ export async function clearMaterialsCache(treeId: string): Promise<void> {
     }
     lists.delete(treeId);
     notify(treeId);
+}
+
+/** The document's own date for showing (a GEDCOM-like text, else as written). */
+export function materialDate(date: string): string {
+    if (parseFlexDate(date)) return formatFlexDate(date);
+    const flex = parseGedcomDate(date);
+    return flex && parseFlexDate(flex) ? formatFlexDate(flex) : date;
 }

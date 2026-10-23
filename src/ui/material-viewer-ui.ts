@@ -21,10 +21,8 @@ import { announcedResearchScheme } from '../research-device.js';
 import {
     MaterialItem, cachedMaterialList, materialFileItem, materialType, materialKindLabel, materialFolder,
     materialFromKey, fileExt, fileUrl, thumbUrl, materialSystemLink, getCachedThumb, researchMakesThumb,
-    batchFolderLabel,
+    batchFolderLabel, materialDate,
 } from '../materials.js';
-import { formatFlexDate, parseFlexDate } from '../dates.js';
-import { parseGedcomDate } from '../ged-parser.js';
 import { pdfBlobFromDataUrl } from '../attachments.js';
 import { formatBytesShort } from './originals-ui.js';
 import { openViewerList, closeImageViewer, viewerListOpen, redrawViewerList, relayoutViewer, ViewerSlots } from './image-viewer.js';
@@ -80,13 +78,6 @@ export function attachmentOwner(attachmentId: string): Person | null {
         if (p.attachments?.some(a => a.id === attachmentId)) return p;
     }
     return null;
-}
-
-/** The document's own date for showing (a GEDCOM-like text, else as written). */
-function materialDate(date: string): string {
-    if (parseFlexDate(date)) return formatFlexDate(date);
-    const flex = parseGedcomDate(date);
-    return flex && parseFlexDate(flex) ? formatFlexDate(flex) : date;
 }
 
 function receivedTime(iso: string): string {

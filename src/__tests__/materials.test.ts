@@ -17,7 +17,9 @@ import {
     setMaterialsBackend, memoryMaterialsBackend, saveMaterialList, mergeIntoCache, cachedMaterialList, primeMaterials,
     clearMaterialsCache, putCachedThumb, getCachedThumb, personMaterialCount,
     directPersons, materialFromKey, addedPersons, assignUndoRequests, batchUndoRequest, applyBatchPersons, mergeAssignIntoCache,
+    materialDate,
 } from '../materials.js';
+import { formatFlexDate } from '../dates.js';
 
 const BASE = 'http://127.0.0.1:5998/0123456789abcdef0123456789abcdef';
 const sha = (n: number) => n.toString(16).padStart(64, '0');
@@ -526,5 +528,15 @@ describe('assign and its undo', () => {
         expect(l.batches[0].persons).toEqual(['P0001', 'P0002']);
         expect(l.files.map(f => f.id)).toEqual(['I0001']);
         expect(l.people.P0002).toBe('Eva');
+    });
+});
+
+describe('materialDate', () => {
+    it('shows a GEDCOM date formatted, not as the raw text', () => {
+        expect(materialDate('12 MAY 1932')).toBe(formatFlexDate('1932-05-12'));
+        expect(materialDate('12 MAY 1932')).not.toBe('12 MAY 1932');
+    });
+    it('keeps a free text as written', () => {
+        expect(materialDate('spring of the flood')).toBe('spring of the flood');
     });
 });
