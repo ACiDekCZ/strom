@@ -2151,7 +2151,7 @@ const stringsEN = {
         titleAfter: 'Title after name',
         marriedSurname: 'Married surname',
         showHint: 'Show help for this field',
-        nameVariantsHint: 'How the registers actually write it (Wischek, Vissek), an alias, or the farm the family was known by. Separate with commas. Search and merge find the person under any of them. Applies to this person only — surname spellings shared by the whole family belong in Actions → Tree → Surname spellings.',
+        nameVariantsHint: 'How the registers actually write it (Brauschek, Prousek), an alias, or the farm the family was known by. Separate with commas. Search and merge find the person under any of them. Applies to this person only — surname spellings shared by the whole family belong in Actions → Tree → Surname spellings.',
         firstName: 'First name',
         lastName: 'Last name',
         gender: 'Gender',
@@ -2203,7 +2203,7 @@ const stringsEN = {
 
     // Placeholders
     placeholders: {
-        nameVariants: 'Wischek, Vissek, Kovářovic',
+        nameVariants: 'Brauschek, Prousek, Kovářovic',
         titleBefore: 'e.g. Dr., Prof.',
         titleAfter: 'e.g. Jr., Ph.D.',
         firstName: 'First name',
@@ -6801,7 +6801,7 @@ const stringsCZ: StringsType = {
         titleAfter: 'Titul za jménem',
         marriedSurname: 'Příjmení po sňatku',
         showHint: 'Zobrazit nápovědu k poli',
-        nameVariantsHint: 'Jak to píší matriky (Wischek, Vissek), alias, nebo jméno po chalupě. Více tvarů se odděluje čárkami. Hledání i slučování pak osobu najdou pod kterýmkoli z nich. Platí jen pro tuto osobu — tvary příjmení společné celé rodině patří do Akce → Strom → Tvary příjmení.',
+        nameVariantsHint: 'Jak to píší matriky (Brauschek, Prousek), alias, nebo jméno po chalupě. Více tvarů se odděluje čárkami. Hledání i slučování pak osobu najdou pod kterýmkoli z nich. Platí jen pro tuto osobu — tvary příjmení společné celé rodině patří do Akce → Strom → Tvary příjmení.',
         firstName: 'Jméno',
         lastName: 'Příjmení',
         gender: 'Pohlaví',
@@ -6852,7 +6852,7 @@ const stringsCZ: StringsType = {
 
     // Placeholders
     placeholders: {
-        nameVariants: 'Wischek, Vissek, Kovářovic',
+        nameVariants: 'Brauschek, Prousek, Kovářovic',
         titleBefore: 'např. Ing., MUDr.',
         titleAfter: 'např. ml., Ph.D.',
         firstName: 'Jméno',
@@ -11429,7 +11429,7 @@ const stringsDE: StringsType = {
         titleAfter: 'Titel nach dem Namen',
         marriedSurname: 'Ehename',
         showHint: 'Hilfe zu diesem Feld anzeigen',
-        nameVariantsHint: 'Wie die Kirchenbücher ihn tatsächlich schreiben (Wischek, Vissek), ein Beiname oder der Hof, unter dem die Familie bekannt war. Mit Kommas trennen. Suche und Zusammenführen finden die Person unter jedem davon. Gilt nur für diese Person — Namensschreibweisen, die die ganze Familie teilt, gehören unter Aktionen → Stammbaum → Namensschreibweisen.',
+        nameVariantsHint: 'Wie die Kirchenbücher ihn tatsächlich schreiben (Brauschek, Prousek), ein Beiname oder der Hof, unter dem die Familie bekannt war. Mit Kommas trennen. Suche und Zusammenführen finden die Person unter jedem davon. Gilt nur für diese Person — Namensschreibweisen, die die ganze Familie teilt, gehören unter Aktionen → Stammbaum → Namensschreibweisen.',
         firstName: 'Vorname',
         lastName: 'Nachname',
         gender: 'Geschlecht',
@@ -11474,7 +11474,7 @@ const stringsDE: StringsType = {
 
     // Placeholders
     placeholders: {
-        nameVariants: 'Wischek, Vissek, Schmieds',
+        nameVariants: 'Brauschek, Prousek, Schmieds',
         titleBefore: 'z. B. Dr., Prof.',
         titleAfter: 'z. B. jun., Ph.D.',
         firstName: 'Vorname',
