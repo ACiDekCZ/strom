@@ -43,6 +43,8 @@ interface Bridge {
     adopted: string[];
     posts: string[];
     gedAsks: number;
+    /** What the research says it is (its /status `accepts`). */
+    accepts?: unknown;
 }
 
 async function routeBridge(page: Page, token: string, init: Partial<Bridge> = {}): Promise<Bridge> {
@@ -67,7 +69,7 @@ async function routeBridge(page: Page, token: string, init: Partial<Bridge> = {}
         }
         if (path.endsWith('/status')) {
             return json(200, { tree: { id: UUID, name: 'Test Win4' }, head: 'abc1234', links: ['send', 'open', 'new'],
-                accepts: { sync: { auto: 'off' }, sources: true, verified: true, media: null }, inbox: { trees: [], material: 0 }, sends: [] });
+                accepts: b.accepts ?? { sync: { auto: 'off' }, sources: true, verified: true, media: null }, inbox: { trees: [], material: 0 }, sends: [] });
         }
         if (path.endsWith('/tree.ged')) {
             b.gedAsks++;
@@ -178,6 +180,21 @@ test.describe('how changes go, chosen at the hand-over', () => {
         const st = await page.evaluate(() => JSON.parse(localStorage.getItem(`strom-research-auto:${window.Strom.TreeManager.getActiveTreeId()}`) ?? '{}'));
         expect(st.modeAsked).toBe(true);
     });
+
+    for (const [what, accepts] of [
+        ['an archive', { mode: 'archive', sync: { auto: 'mirror' }, sources: true, verified: true, media: null }],
+        ['a research waiting for its agent', { mode: 'research', agentHere: false, sync: { auto: 'write' }, sources: true, verified: true, media: null }],
+    ] as const) {
+        test(`into ${what}: by itself checked and recommended; kept as chosen (audit 017 a-D5)`, async ({ page }) => {
+            await handOver(page, { accepts }, async (page) => {
+                const dialog = page.locator('#research-adopt-modal');
+                await expect(dialog.locator('input[name="research-adopt-send-mode"][value="auto"]')).toBeChecked();
+                await expect(dialog.locator('label:has(input[value="auto"])')).toContainText('Recommended');
+                await expect(dialog.locator('label:has(input[value="manual"])')).not.toContainText('Recommended');
+            });
+            expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sendMode)).toBe('auto');
+        });
+    }
 });
 
 test.describe('the research\'s numbers after a hand-over', () => {

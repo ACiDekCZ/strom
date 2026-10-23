@@ -574,6 +574,11 @@ export const researchSyncMethods = uiModule({
         return accepts?.agentHere === false && this.researchModeOf(researchId, link) !== 'archive';
     },
 
+    /** This research works without an agent now: an archive, or a research waiting for its agent. */
+    researchAgentlessFor(researchId: string, link?: Pick<ResearchLink, 'mode'>): boolean {
+        return this.researchModeOf(researchId, link) === 'archive' || this.researchAgentAway(researchId, link);
+    },
+
     /** The active research tree waits for its agent (see researchAgentAway). */
     activeResearchAgentAway(): boolean {
         const ctx = this.researchSyncLink();

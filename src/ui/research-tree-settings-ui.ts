@@ -16,7 +16,7 @@ import { strings } from '../strings.js';
 import { TreeId, ResearchTranscripts, ResearchSendMode, StromData } from '../types.js';
 import { researchSchemeUrl, TERMINAL_CHOICE_FEATURE } from '../research-link.js';
 import { researchAutoState, patchResearchAutoState, researchSendPreviewSkipped, noteResearchSendPreviewSkipped, announcedResearchScheme } from '../research-device.js';
-import { sourceReadingHash, unverifiedOlderSources } from '../research-sync.js';
+import { sourceReadingHash, unverifiedOlderSources, newTieSendMode } from '../research-sync.js';
 import { uiModule } from './module.js';
 import { normalizeModal } from './modal-skeleton.js';
 import { onComputer, readTree } from './research-ui.js';
@@ -45,10 +45,12 @@ function esc(text: string): string {
 /**
  * The three ways changes go to the research, as cards (one checked), and the
  * three sentences under them: the same in "Research for this tree", the
- * hand-over and the one-time question. By hand is the recommended one, always;
- * `was` marks how it went so far (the one-time question).
+ * hand-over and the one-time question. `recommended`: by hand with an agent,
+ * by itself in an archive (newTieSendMode); `was` marks how it went so far
+ * (the one-time question).
  */
-export function researchSendModeCardsHtml(current: ResearchSendMode, compact = compactScreen(), name = 'research-send-mode', was?: ResearchSendMode): string {
+export function researchSendModeCardsHtml(current: ResearchSendMode, compact = compactScreen(), name = 'research-send-mode', was?: ResearchSendMode,
+    recommended: ResearchSendMode = 'manual'): string {
     const t = strings.treeSettings;
     const card = (value: ResearchSendMode, title: string, desc: string, recommended: boolean): string => `
             <label class="research-transcripts-card research-send-card">
@@ -58,8 +60,8 @@ export function researchSendModeCardsHtml(current: ResearchSendMode, compact = c
                     <span class="research-transcripts-desc">${esc(desc)}</span>
                 </span>
             </label>`;
-    return card('manual', t.manual, compact ? t.manualDescShort : t.manualDesc, true)
-        + card('auto', t.auto, compact ? t.autoDescShort : t.autoDesc, false)
+    return card('manual', t.manual, compact ? t.manualDescShort : t.manualDesc, recommended === 'manual')
+        + card('auto', t.auto, compact ? t.autoDescShort : t.autoDesc, recommended === 'auto')
         + card('off', t.off, compact ? t.offDescShort : t.offDesc, false);
 }
 
@@ -207,7 +209,7 @@ export const researchTreeSettingsMethods = uiModule({
         const sendingHtml = !sendingShown ? (olderLine ? `<p class="research-older-line">${olderLine}</p>` : '') : `
                 <fieldset class="research-transcripts research-send-mode">
                     <legend>${esc(t.sending)}</legend>
-                    ${researchSendModeCardsHtml(sendMode, compact)}
+                    ${researchSendModeCardsHtml(sendMode, compact, undefined, undefined, newTieSendMode(archive || agentAway))}
                 </fieldset>
                 ${compact ? '' : `<p class="research-send-piled" id="research-send-piled" hidden></p>`}
                 ${researchSendPrinciplesHtml()}
@@ -431,7 +433,7 @@ export const researchTreeSettingsMethods = uiModule({
                 </div>
                 <div class="research-send-dialog-body">
                     <fieldset class="research-transcripts research-send-mode research-mode-ask-cards" aria-labelledby="research-mode-ask-title">
-                        ${researchSendModeCardsHtml(current, compactScreen(), ASK_GROUP, current)}
+                        ${researchSendModeCardsHtml(current, compactScreen(), ASK_GROUP, current, newTieSendMode(this.researchAgentlessFor(link.id, link)))}
                     </fieldset>
                     ${researchSendPrinciplesHtml(true)}
                 </div>

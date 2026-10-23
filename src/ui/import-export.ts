@@ -1253,7 +1253,7 @@ export const importExportMethods = uiModule({
             syncedAt: new Date().toISOString(),
             ...(research.head ? { head: research.head } : {}),
             ...(holder && holder.id !== treeId ? { copy: true } : {}),
-        });
+        }, { agentless: this.researchAgentlessFor(research.id) });
     },
 
     closeImportTreeDialog(): void {

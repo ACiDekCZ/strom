@@ -1683,7 +1683,7 @@ export const researchUiMethods = uiModule({
                 ...(head ? { head } : {}),
                 ...(source.mode === 'archive' ? { mode: 'archive' as const } : {}),
                 ...(titlesIn ? { titlesIn } : {}),
-            });
+            }, { agentless: this.researchAgentlessFor(source.treeId, source.mode === 'archive' ? { mode: 'archive' } : undefined) });
             if (!titlesIn) TreeManager.patchResearchLink(treeId, { titlesIn: undefined });
             // The load itself counted as an edit (it went through the edit path before the tie moved on): nothing waits now.
             patchResearchAutoState(treeId, { edits: undefined, unsentSince: undefined });
@@ -2758,7 +2758,7 @@ export const researchUiMethods = uiModule({
             ...(s.head ? { head: s.head } : {}),
             ...(header.mode === 'archive' ? { mode: 'archive' as const } : {}),
             ...(titlesIn ? { titlesIn } : {}),
-        });
+        }, { agentless: this.researchAgentlessFor(s.researchId, header.mode === 'archive' ? { mode: 'archive' } : undefined) });
         if (!titlesIn) TreeManager.patchResearchLink(s.treeId, { titlesIn: undefined });
         this.researchKeepCopy(s.treeId, base);
         return loaded;

@@ -33,6 +33,7 @@ import { VIEW_LINK_KEY_PREFIXES, forgetViewLinks } from './view-links.js';
 import { unknownSexFromTie, fingerprintLike } from './research-link.js';
 import { unknownSexInResearchCopies } from './research-copy.js';
 import { requestPersistentStorage } from './persistence.js';
+import { newTieSendMode } from './research-sync.js';
 import { asciiSlug } from './filenames.js';
 import { announceTreeSaved, clearTreeStale, isTreeStale } from './tab-sync.js';
 import { cloneTreeDataAsJson, estimateJsonBytes } from './clone.js';
@@ -1461,7 +1462,7 @@ class TreeManagerClass {
      * user's settings for that research (how it takes their transcripts) stay
      * across updates from the same research; the state of a send does not.
      */
-    setResearchLink(treeId: TreeId, link: ResearchLink | undefined): void {
+    setResearchLink(treeId: TreeId, link: ResearchLink | undefined, opts: { agentless?: boolean } = {}): void {
         const tree = this.index.trees.find(t => t.id === treeId);
         if (!tree) return;
         const before = this.researchBaseOf(treeId);
@@ -1475,8 +1476,9 @@ class TreeManagerClass {
             if (prev?.sentSources && link.sentSources === undefined) kept.sentSources = prev.sentSources;
             if (prev?.sendMode && link.sendMode === undefined) kept.sendMode = prev.sendMode;
             if (prev?.previewDue && link.previewDue === undefined) kept.previewDue = true;
-            // A new tie sends by hand until the user chooses otherwise (a tie from before 3.9 keeps "by itself").
-            if (!prev && link.sendMode === undefined) kept.sendMode = 'manual';
+            // A new tie sends by hand until the user chooses otherwise (a tie from before 3.9 keeps "by itself");
+            // a new tie to an archive (or a research waiting for its agent: `agentless`) by itself.
+            if (!prev && link.sendMode === undefined) kept.sendMode = newTieSendMode(link.mode === 'archive' || !!opts.agentless);
             if (prev?.sendMedia === false && link.sendMedia === undefined) kept.sendMedia = false;
             if (prev?.autoLoadImages === false && link.autoLoadImages === undefined) kept.autoLoadImages = false;
             if (prev?.titlesIn && link.titlesIn === undefined) kept.titlesIn = prev.titlesIn;

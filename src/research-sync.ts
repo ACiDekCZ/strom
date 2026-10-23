@@ -5,7 +5,7 @@
  * Pure: the UI feeds it what it knows and shows the one state that matters most.
  */
 
-import { ResearchLink, ResearchSend, Source, StromData, Person, PersonId, ResearchConflict } from './types.js';
+import { ResearchLink, ResearchSend, ResearchSendMode, Source, StromData, Person, PersonId, ResearchConflict } from './types.js';
 import { ResearchInbox, LiveIntake, ResearchSendRecord } from './research-link.js';
 import { ResearchHeldConflicts, trimHeldConflicts } from './research-device.js';
 
@@ -32,6 +32,16 @@ export function researchSendVouches(sent: ResearchSend | undefined): boolean {
  */
 export function syncRefusalReason(code: string, words: Readonly<Record<string, string>>): string {
     return code && Object.prototype.hasOwnProperty.call(words, code) ? words[code] : '';
+}
+
+/**
+ * How changes go for a tree newly tied to a research, and the choice marked
+ * recommended: an archive (or a research waiting for its agent) writes them
+ * by itself, nobody there to review a send; with an agent by hand, a preview
+ * first. A tie that has a choice keeps it (audit 017 a-D5).
+ */
+export function newTieSendMode(agentless: boolean): ResearchSendMode {
+    return agentless ? 'auto' : 'manual';
 }
 
 export type ResearchSyncKind =

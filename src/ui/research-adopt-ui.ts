@@ -23,8 +23,10 @@ import { countImages, stripMedia } from '../attachments.js';
 import { exportToGedcom, countFamilies } from '../ged-exporter.js';
 import {
     parseLiveBridge, sanitizeAdoptOffer, sanitizeAdoptReply, newAdoptToken, researchNewUrl, contentFingerprint, researchSchemeUrl,
-    readResearchHeader, applyAdoptIds, AdoptOffer, AdoptIds, researchGedcomTitles, TitlesInGedcom,
+    readResearchHeader, applyAdoptIds, AdoptOffer, AdoptIds, researchGedcomTitles, TitlesInGedcom, ResearchAccepts,
 } from '../research-link.js';
+import { researchAgentless } from '../research-others.js';
+import { newTieSendMode } from '../research-sync.js';
 import { uiModule } from './module.js';
 import { onComputer, fetchWithTimeout, fetchStatus, fetchGedcomText, postSync, postCancel, readTree, CONNECT_TIMEOUT_MS } from './research-ui.js';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
@@ -83,6 +85,18 @@ async function researchTitlesAt(base: string): Promise<TitlesInGedcom> {
         return researchGedcomTitles({ features });
     } catch {
         return 'tags';
+    }
+}
+
+/** Whether the research behind this bridge works without an agent: an archive, or one waiting for its agent (its /status). Not said: not. */
+async function researchAgentlessAt(base: string): Promise<boolean> {
+    try {
+        const res = await fetchWithTimeout(`${base}/status`, 4000);
+        if (!res.ok) return false;
+        const body = await res.json() as { accepts?: ResearchAccepts } | null;
+        return researchAgentless(body?.accepts);
+    } catch {
+        return false;
     }
 }
 
@@ -259,7 +273,8 @@ export const researchAdoptMethods = uiModule({
             await this.endEmptyHandOver(tree.id, fromInstall ? offer.token : null);
             return;
         }
-        const choice = await this.askResearchAdopt(tree, offer, data, { install: ownInstall || !!moved, ...(moved ? { movedFrom: moved.from } : {}) });
+        const agentless = await researchAgentlessAt(bridge.base);
+        const choice = await this.askResearchAdopt(tree, offer, data, { install: ownInstall || !!moved, ...(moved ? { movedFrom: moved.from } : {}), agentless });
         if (choice === null) {
             postCancel(cancelUrl, 'cancelled');
             // The installation's hand-over declined: nothing waits to be finished any more.
@@ -612,7 +627,7 @@ export const researchAdoptMethods = uiModule({
         (copy ?? overlay.querySelector<HTMLElement>('.buttons .primary'))?.focus();
     },
 
-    askResearchAdopt(tree: TreeMetadata, offer: AdoptOffer, data: ReturnType<typeof DataManager.getData>, opts: { install?: boolean; movedFrom?: AppBrowser } = {}): Promise<{ images: boolean; sendMode: ResearchSendMode } | null> {
+    askResearchAdopt(tree: TreeMetadata, offer: AdoptOffer, data: ReturnType<typeof DataManager.getData>, opts: { install?: boolean; movedFrom?: AppBrowser; agentless?: boolean } = {}): Promise<{ images: boolean; sendMode: ResearchSendMode } | null> {
         document.getElementById(ADOPT_ID)?.remove();
         const r = strings.research;
         // As the research counts them: people with a name (an unnamed "?" stays out of its count).
@@ -624,6 +639,8 @@ export const researchAdoptMethods = uiModule({
         const files = RESEARCH_TAKES_IMAGES ? images.photos + images.attachments + images.excerpts : 0;
         const researchName = offer.name || r.defaultName;
         const t = strings.treeSettings;
+        // Into an archive (or a research waiting for its agent) by itself, with an agent by hand (audit 017 a-D5).
+        const sendModeFirst = newTieSendMode(!!opts.agentless);
         const tile = (n: number, noun: string): string => `<span class="research-adopt-tile"><b>${n}</b><span>${esc(noun)}</span></span>`;
 
         const overlay = document.createElement('div');
@@ -652,7 +669,7 @@ export const researchAdoptMethods = uiModule({
                     <div class="research-adopt-rule" aria-hidden="true"></div>
                     <fieldset class="research-transcripts research-send-mode research-adopt-send">
                         <legend>${esc(t.askTitle)}</legend>
-                        ${researchSendModeCardsHtml('manual', undefined, 'research-adopt-send-mode')}
+                        ${researchSendModeCardsHtml(sendModeFirst, undefined, 'research-adopt-send-mode', undefined, sendModeFirst)}
                     </fieldset>
                     ${researchSendPrinciplesHtml(true)}
                     <p class="research-adopt-backup-narrow">${esc(t.handoffBackupNote)}</p>
@@ -676,7 +693,7 @@ export const researchAdoptMethods = uiModule({
             (overlay.querySelector('#research-adopt-cancel') as HTMLButtonElement).onclick = () => finish(null);
             (overlay.querySelector('#research-adopt-confirm') as HTMLButtonElement).onclick = () => {
                 const box = overlay.querySelector<HTMLInputElement>('#research-adopt-images');
-                finish({ images: box ? box.checked : false, sendMode: researchSendModeChecked(overlay, 'research-adopt-send-mode') ?? 'manual' });
+                finish({ images: box ? box.checked : false, sendMode: researchSendModeChecked(overlay, 'research-adopt-send-mode') ?? sendModeFirst });
             };
             (overlay.querySelector('#research-adopt-confirm') as HTMLButtonElement).focus();
         });

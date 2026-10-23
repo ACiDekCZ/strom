@@ -9,6 +9,7 @@ import {
     researchSyncState, researchSyncWantsAttention, pendingSendFate, verifiedOffer, isOlderSource,
     researchReadSource, sourceReadingHash, unverifiedOlderSources, ResearchSyncInput, conflictTakeovers,
     heldConflicts, researchKeepsTakenBack, latestUndone, undoneLeftBehind, syncRefusalReason, unloadedWrittenSends, writtenConflictCount,
+    newTieSendMode,
 } from '../research-sync.js';
 import { getStringsForLang } from '../strings.js';
 import { sanitizeAccepts, sanitizeInbox, sanitizeLiveStatus, researchHeaderLines, stabilizeIds, sanitizeSyncReply } from '../research-link.js';
@@ -126,6 +127,11 @@ describe('the state of a research tree', () => {
 
 describe('sending by itself, the archive, one-time notices', () => {
     const auto = (extra: Partial<ResearchSyncInput> = {}) => input({ auto: true, matchesBase: false, ...extra });
+
+    it('a new tie: by itself into an archive (or a research without its agent), by hand with an agent (audit 017 a-D5)', () => {
+        expect(newTieSendMode(true)).toBe('auto');
+        expect(newTieSendMode(false)).toBe('manual');
+    });
 
     it('changes waiting quietly while the quiet time runs, the bridge up or not', () => {
         expect(researchSyncState(auto()).kind).toBe('autoWaiting');

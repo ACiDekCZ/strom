@@ -1995,6 +1995,18 @@ test.describe('data protection around the research', () => {
             tm.setResearchLink(tm.getActiveTreeId()!, { id: '0b0b0b0b-1111-4222-8333-444455556666', fingerprint: link.fingerprint, syncedAt: link.syncedAt });
         });
         expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sendMode)).toBe('manual');
+        // A new tie to an archive, or to a research waiting for its agent: by itself (audit 017 a-D5).
+        const tie = (id: string, extra: Record<string, unknown>, opts: Record<string, unknown> = {}) => page.evaluate(({ id, extra, opts }) => {
+            const tm = window.Strom.TreeManager;
+            const link = tm.getActiveTreeMetadata().research;
+            tm.setResearchLink(tm.getActiveTreeId()!, { id, fingerprint: link.fingerprint, syncedAt: link.syncedAt, ...extra }, opts);
+            return tm.getActiveTreeMetadata()?.research?.sendMode;
+        }, { id, extra, opts });
+        expect(await tie('0c0c0c0c-1111-4222-8333-444455556666', { mode: 'archive' })).toBe('auto');
+        expect(await tie('0d0d0d0d-1111-4222-8333-444455556666', {}, { agentless: true })).toBe('auto');
+        // The tie again (the same research), its choice made by hand: kept, whatever the research is now.
+        await page.evaluate(() => window.Strom.TreeManager.patchResearchLink(window.Strom.TreeManager.getActiveTreeId()!, { sendMode: 'manual' }));
+        expect(await tie('0d0d0d0d-1111-4222-8333-444455556666', { mode: 'archive' }, { agentless: true })).toBe('manual');
     });
 
     test('"Written N, not written M · Show" when sending by itself too', async ({ page }) => {
