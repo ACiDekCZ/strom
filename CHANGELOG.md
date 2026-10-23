@@ -2,6 +2,12 @@
 
 English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md)
 
+## 3.16.0
+
+*This version is in preparation; this section grows with every test version.*
+
+- **Fixes**: the hint and the example under *Other spellings of the name* use neutral sample spellings (*Brauschek*, *Prousek*), and the English example names an English farm instead of a Czech one.
+
 ## 3.15.0
 
 *Released 22 October 2026.*

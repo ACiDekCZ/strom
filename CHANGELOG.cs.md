@@ -2,6 +2,12 @@
 
 [English](CHANGELOG.md) · Čeština · [Deutsch](CHANGELOG.de.md)
 
+## 3.16.0
+
+*Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
+
+- **Opravy**: nápověda a příklad u *Dalších tvarů jména* používají neutrální ukázkové tvary (*Brauschek*, *Prousek*) a anglický příklad uvádí anglické jméno statku místo českého.
+
 ## 3.15.0
 
 *Vydáno 22. října 2026.*

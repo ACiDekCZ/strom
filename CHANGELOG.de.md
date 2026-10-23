@@ -2,6 +2,12 @@
 
 [English](CHANGELOG.md) · [Čeština](CHANGELOG.cs.md) · Deutsch
 
+## 3.16.0
+
+*Diese Version ist in Vorbereitung; dieser Abschnitt wächst mit jeder Testversion.*
+
+- **Fehlerbehebungen**: Hinweis und Beispiel bei *Andere Schreibweisen des Namens* verwenden neutrale Beispielschreibweisen (*Brauschek*, *Prousek*), und das englische Beispiel nennt einen englischen statt eines tschechischen Hofnamens.
+
 ## 3.15.0
 
 *Veröffentlicht am 22. Oktober 2026.*
