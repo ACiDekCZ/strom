@@ -9,16 +9,18 @@
  * until the research's status says it is decided. Decided by the research's
  * `conflict` link (it only asks to confirm); where there is none, its sides
  * and where it is decided. Once decided from this window, the research's
- * version loads (asked first as any load over changes made here).
+ * version loads: unasked when this window has nothing unsent (017 i), asked
+ * first as any load over changes made here.
  */
 
 import { DataManager } from '../data.js';
 import { strings } from '../strings.js';
 import { TreeId, StromData, Person } from '../types.js';
+import { TreeManager } from '../tree-manager.js';
 import { LiveStatus, SyncPersonConflict, ResearchSendRecord } from '../research-link.js';
 import { loadResearchCopy } from '../research-copy.js';
 import { ResearchRemovedAsk, researchAutoState, patchResearchAutoState } from '../research-device.js';
-import { removedAskOpen, withoutAskedConflicts } from '../research-sync.js';
+import { conflictTakeovers, removedAskOpen, withoutAskedConflicts } from '../research-sync.js';
 import { shownNameOrEmpty } from '../person-name.js';
 import { uiModule } from './module.js';
 
@@ -135,7 +137,37 @@ export const researchRemovedMethods = uiModule({
         this.refreshResearchSyncUi();
         // Its version after the poll that saw it decided (a load asks the bridge, which would wait for this poll).
         if (done.some(a => a.taken) && DataManager.getCurrentTreeId() === treeId) {
-            setTimeout(() => { if (DataManager.getCurrentTreeId() === treeId) void this.researchLoadNewer(); }, 0);
+            setTimeout(() => { if (DataManager.getCurrentTreeId() === treeId) void this.researchLoadRemovedDecided(treeId); }, 0);
         }
+    },
+
+    /**
+     * The research's version after a "comes back or goes" decided from this
+     * window (017 i): nothing here unsent — the tree is the research's version,
+     * or what was sent and written there, nothing left unwritten — it loads
+     * without asking (a backup first, "Restore the state before loading").
+     * Anything else asks as any load: changes made here since, what the last
+     * send left unwritten, a value here an open conflict there would replace.
+     */
+    async researchLoadRemovedDecided(treeId: TreeId): Promise<void> {
+        const link = TreeManager.getTreeMetadata(treeId)?.research;
+        if (!link || DataManager.getCurrentTreeId() !== treeId) return;
+        const fps = this.researchSyncFingerprints(treeId, link);
+        const sent = link.sent;
+        const nw = researchAutoState(treeId).notWritten;
+        const leftUnwritten = !!nw && nw.fingerprint === sent?.fingerprint && nw.items.length + nw.unexplained > 0;
+        const nothingUnsent = fps.matchesBase || (!!sent && sent.state === 'written' && fps.current === sent.fingerprint && !leftUnwritten);
+        if (nothingUnsent && !DataManager.isViewMode()) {
+            const version = await this.researchVersionRead(true);
+            if (DataManager.getCurrentTreeId() !== treeId) return;
+            if (version && !conflictTakeovers(DataManager.getData(), this.researchVersionAsLoaded(version.data)).length) {
+                if (!await this.ensureLocalUnlocked()) return;
+                await this.applyResearch(version.data, version.header, { force: true, ...(version.header.head ? { head: version.header.head } : {}) });
+                // An edit form open meanwhile shows the version loaded.
+                this.syncPersonFormWithData();
+                return;
+            }
+        }
+        await this.researchLoadNewer();
     },
 });

@@ -1,6 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { card } from './helpers.js';
-import { UUID, acceptLoad, block, dot, editJan, fakeBridge, links, openResearch, openResearchMenu, poll, researchGed, FakeBridge } from './research-bridge.js';
+import { UUID, block, dot, editJan, fakeBridge, links, openResearch, openResearchMenu, poll, researchGed, FakeBridge } from './research-bridge.js';
 
 /**
  * A person removed by an earlier send of another window (Strom Research
@@ -53,14 +53,15 @@ const deleteJan = (page: Page) => page.evaluate(() => {
 const conflictLink = (id: string, take: string) => `strom-research://conflict?tree=${UUID}&id=${id}&do=decide&take=${take}`;
 const head = (page: Page) => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head);
 
-/** The research decided it (its record lists no conflict open), its version `ged`: the next look loads it. */
+/**
+ * The research decided it (its record lists no conflict open), its version `ged`: the next look loads it —
+ * nothing unsent here, without asking (017 i).
+ */
 async function decidedThere(page: Page, bridge: FakeBridge, ged: (head: string) => string): Promise<void> {
     bridge.sends[0].conflicts = [];
     bridge.head = 'e5e5e5e5e5e5';
     bridge.treeGed = ged('e5e5e5e5e5e5');
     await poll(page);
-    // Asked as every load is ("Load the research version?").
-    await acceptLoad(page);
 }
 
 test.describe('removed by an earlier send of another window', () => {
@@ -130,10 +131,35 @@ test.describe('whether a person comes back or goes (PERSON)', () => {
         // Not decided there yet: nothing loads.
         await poll(page);
         expect(await head(page)).not.toBe('e5e5e5e5e5e5');
-        // Decided there (Jan back in its version): the question ends, the version loads.
+        // Decided there (Jan back in its version): the question ends, the version loads — nothing unsent
+        // here, so nothing asked ("Load the research version?" never shows), the backup offered.
         await decidedThere(page, bridge, (h) => researchGed(h));
         await expect.poll(() => head(page)).toBe('e5e5e5e5e5e5');
+        await expect(page.locator('#research-load-modal')).toHaveCount(0);
+        await expect(page.locator('.toast', { hasText: 'Research version loaded.' })
+            .getByRole('button', { name: 'Restore the state before loading' })).toBeVisible();
         await expect(card(page, 'Jan')).toBeVisible();
+        await openResearchMenu(page);
+        await expect(block(page)).not.toContainText('to decide: in the tree or not');
+    });
+
+    test('decided from here with changes made meanwhile that are not sent: asked as before, nothing loads unasked', async ({ page }) => {
+        const bridge = await archiveTree(page);
+        writes(bridge, { conflicts: [BACK] });
+        await editJan(page, 'Kolín');
+        send(page);
+        await expect.poll(() => bridge.posts.length).toBe(1);
+        await dialog(page).locator('[data-choice="user"]').click();
+        expect(await links(page)).toEqual([conflictLink('X0008', 'user')]);
+        // Edited again here, not sent.
+        await editJan(page, 'Brno');
+        const before = await head(page);
+        await decidedThere(page, bridge, (h) => researchGed(h));
+        // The question ends; its version waits behind the question every load over unsent changes asks.
+        await expect(dialog(page).locator('#confirm-title')).toHaveText("There are changes the research doesn't have");
+        expect(await head(page)).toBe(before);
+        await page.locator('#confirm-cancel-btn').click();
+        expect(await head(page)).toBe(before);
         await openResearchMenu(page);
         await expect(block(page)).not.toContainText('to decide: in the tree or not');
     });
