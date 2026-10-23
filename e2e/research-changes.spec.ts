@@ -270,6 +270,8 @@ test.describe('what will be sent beyond the people', () => {
         };
         await page.evaluate(() => window.Strom.UI.researchSyncAction('send'));
         await expect.poll(() => b.posts.length).toBe(1);
+        // The post is counted when it goes; the panel reads the answer once it is taken.
+        await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sent?.state)).toBe('written');
         await page.evaluate(() => window.Strom.UI.showResearchChanges('written'));
         await expect(panel.locator('.research-changes-section.is-warn')).toHaveText('Not written · 4');
         const not = panel.locator('.research-changes-row.is-not-written');
