@@ -262,6 +262,7 @@ export const treeManagementMethods = uiModule({
                      ${title ? `title="${this.escapeHtml(title)}"` : ''} onclick="window.Strom.UI.switchToTree('${tree.id}')">
                     <span class="tree-item-check">${isActive ? iconSvg('check') : ''}</span>
                     <span class="tree-item-name">${this.escapeHtml(tree.name)}</span>
+                    ${this.treeSwitcherKindHtml(tree)}
                     ${this.treeSwitcherMarksHtml(tree)}
                 </div>
             `;
@@ -719,8 +720,10 @@ export const treeManagementMethods = uiModule({
         this.presentMenuSheet(strings.treeManager.switcherTitle, [
             { rows: trees.map(tree => {
                 const marks = this.treeSheetMarks(tree);
+                const kind = this.treeKindLabel(tree);
                 return {
                     label: tree.name,
+                    ...(kind ? { sub: kind } : {}),
                     active: tree.id === activeId,
                     treeId: tree.id,
                     extra: marks?.extra,

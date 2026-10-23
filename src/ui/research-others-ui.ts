@@ -222,6 +222,22 @@ export const researchOthersMethods = uiModule({
         return m ? marksHtml(m) : '';
     },
 
+    /** A tree tied to a research: "Archive" or "Research" as its kind is known (none for a copy, or not known). */
+    treeKindLabel(tree: TreeMetadata): string {
+        const link = tree.research;
+        if (!link || link.copy) return '';
+        const kind = this.researchKindOf(link);
+        return kind === 'archive' ? strings.treeSwitcher.kindArchive : kind === 'agent' ? strings.treeSwitcher.kindResearch : '';
+    },
+
+    /** The switcher row's kind label (HTML; '' for none). */
+    treeSwitcherKindHtml(tree: TreeMetadata): string {
+        const label = this.treeKindLabel(tree);
+        if (!label) return '';
+        const kind = this.researchKindOf(tree.research!);
+        return `<span class="tree-item-kind" data-kind="${kind}">${esc(label)}</span>`;
+    },
+
     /** The row's hover text: the marks' sentence. */
     treeSwitcherTitle(tree: TreeMetadata): string {
         return this.researchMarksOf(tree)?.sr ?? '';

@@ -158,6 +158,8 @@ const stringsEN = {
     // Tree switcher (toolbar tree name)
     treeSwitcher: {
         import: 'Import…',
+        kindArchive: 'Archive',
+        kindResearch: 'Research',
     },
     menu: {
         export: 'Export',
@@ -4862,6 +4864,8 @@ const stringsCZ: StringsType = {
     // Menu dialogs
     treeSwitcher: {
         import: 'Importovat…',
+        kindArchive: 'Archiv',
+        kindResearch: 'Výzkum',
     },
     menu: {
         export: 'Export',
@@ -9530,6 +9534,8 @@ const stringsDE: StringsType = {
     // Menu dialogs
     treeSwitcher: {
         import: 'Importieren…',
+        kindArchive: 'Archiv',
+        kindResearch: 'Forschung',
     },
     menu: {
         export: 'Export',

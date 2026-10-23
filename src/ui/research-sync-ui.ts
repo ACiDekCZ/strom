@@ -534,6 +534,16 @@ export const researchSyncMethods = uiModule({
     },
 
     /**
+     * Archive or research as this browser knows it — the bridge's word (now or
+     * kept) or the file's archive; null when nothing says it (no label then).
+     */
+    researchKindOf(link: Pick<ResearchLink, 'id' | 'mode'>): 'agent' | 'archive' | null {
+        const accepts = runtime.get(link.id)?.status?.accepts ?? storedResearchBridge(link.id)?.accepts;
+        if (!accepts && link.mode !== 'archive') return null;
+        return this.researchModeOf(link.id, link);
+    },
+
+    /**
      * The link as its transcripts weigh in the research: an archive takes them as leads
      * (a source the user ticked as verified aside), so the tree's setting is neither
      * offered there nor sent (`_STROM_TRANSCRIPTS`); it is kept for a switch to research.
