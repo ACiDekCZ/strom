@@ -442,6 +442,26 @@ test.describe('Materials window: sizes', () => {
         await expect(win(page).locator('.mw-tile-title').first()).toBeHidden();
     });
 
+    test('selecting: one "Done" (in the header at 390, the toolbar chip from 641 up), it ends selecting', async ({ page }) => {
+        const done = (page: Page) => win(page).getByRole('button', { name: 'Done', exact: true }).filter({ visible: true });
+        await page.setViewportSize({ width: 390, height: 844 });
+        await setup(page, { files });
+        await openWindow(page);
+        await win(page).locator('[data-mw="select"]').click();
+        await expect(win(page).locator('.mw-selhead')).toBeVisible();
+        await expect(done(page)).toHaveCount(1);
+        await expect(done(page)).toHaveClass(/mw-selhead-done/);
+        await page.setViewportSize({ width: 820, height: 1180 });
+        await expect(win(page).locator('.mw-selhead')).toBeHidden();
+        await expect(done(page)).toHaveCount(1);
+        await expect(done(page)).toHaveAttribute('data-mw', 'select');
+        await page.setViewportSize({ width: 390, height: 844 });
+        await done(page).click();
+        await expect(win(page)).not.toHaveClass(/is-selecting/);
+        await expect(win(page).locator('.mw-selhead')).toBeHidden();
+        await expect(win(page).locator('[data-mw="select"]')).toHaveText('Select');
+    });
+
     test('820: the whole area, filters in a sheet', async ({ page }) => {
         await page.setViewportSize({ width: 820, height: 1180 });
         await setup(page, { files });
