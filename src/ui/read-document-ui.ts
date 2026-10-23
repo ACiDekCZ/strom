@@ -61,7 +61,7 @@ interface Page {
 }
 
 /** What stands in place of the dialog's content. */
-type ErrorKind = 'down' | 'not-ready' | 'older' | 'failed' | 'cancelled' | 'busy' | 'limit' | 'unreadable' | 'source';
+type ErrorKind = 'down' | 'not-ready' | 'older' | 'failed' | 'cancelled' | 'busy' | 'limit' | 'unreadable' | 'source' | 'held';
 
 /** Why a source's reading cannot be shown (the `source` error: the source's own transcription stands in). */
 export type SourceWhy = 'down' | 'older' | 'none' | 'archive' | 'unlinked' | 'computer' | 'other';
@@ -1606,6 +1606,14 @@ export const readDocumentMethods = uiModule({
             case 'older': title = t.older; break;
             case 'failed': title = t.failed; text = t.failedWhy[err.failure?.kind ?? ''] ?? ''; break;
             case 'cancelled': title = t.cancelled; break;
+            // Held by the research (sealed elsewhere, files not downloaded, a full disk): its own sentence (017 U7).
+            case 'held': {
+                const held = err.failure?.held ?? { kind: 'seal' as const, said: '' };
+                const words = this.researchWriteHeldText(held, false);
+                title = words.title;
+                text = held.said || words.sub;
+                break;
+            }
             case 'busy': title = t.busy; break;
             case 'limit': {
                 title = t.limit(err.failure?.per ?? 'queue');
@@ -1650,6 +1658,10 @@ export const readDocumentMethods = uiModule({
             case 'failed': return `<span class="batch-foot-note"></span>${own ? `${btn('close', t.close)}${btn('retry', t.retry, true)}` : btn('close', t.close, true)}`;
             case 'cancelled': return `<span class="batch-foot-note"></span>${s.readId && own ? btn('again', t.readAgain) : ''}${close}`;
             case 'busy': return `<span class="batch-foot-note"></span>${btn('close', t.close)}${btn('show-running', t.showRunning, true)}`;
+            case 'held': {
+                const seal = this.researchSealAction(s.error?.failure?.held)[0];
+                return `<span class="batch-foot-note"></span>${btn('close', t.close, !seal)}${seal ? btn('seal', seal.label, true) : ''}`;
+            }
             case 'unreadable': return `<span class="batch-foot-note"></span>${btn('close', t.close)}${btn('insert-other', t.insertOther, true)}`;
             default: return `<span class="batch-foot-note"></span>${close}`;
         }
@@ -1775,6 +1787,7 @@ export const readDocumentMethods = uiModule({
             case 'read': void this.submitReadDocument(); break;
             case 'cancel': void this.cancelReadDocument(); break;
             case 'retry': void this.retryReadDocument(); break;
+            case 'seal': this.researchSyncAction('sealTakeOver'); break;
             case 'again': void this.readDocumentAgain(); break;
             case 'another': this.newReadInput(); break;
             case 'insert-other': this.newReadInput(true); break;
@@ -1973,6 +1986,7 @@ export const readDocumentMethods = uiModule({
             : f.kind === 'not-ready' ? 'not-ready'
             : f.kind === 'read-busy' ? 'busy'
             : f.kind === 'limit' ? 'limit'
+            : f.kind === 'held' ? 'held'
             : 'failed';
         s.error = { kind, failure: f };
         if (s.phase === 'propose') {

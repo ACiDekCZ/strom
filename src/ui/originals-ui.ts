@@ -18,7 +18,8 @@ import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { SettingsManager } from '../settings.js';
 import { StorageManager } from '../storage.js';
-import { MediaOriginal, PersonId, StromData, TreeId } from '../types.js';
+import { MediaOriginal, PersonId, ResearchWriteHeld, StromData, TreeId } from '../types.js';
+import { writeHeldOfCode } from '../research-write-held.js';
 import { storedResearchBridge, researchLinksEnabled, announcedResearchScheme } from '../research-device.js';
 import { parseLiveBridge, withAppVersion, researchSchemeUrl } from '../research-link.js';
 import { strings, getCurrentLanguage } from '../strings.js';
@@ -113,6 +114,20 @@ const refusedReplies = new Map<string, unknown>();
 /** The research's answer to a file it refused at its last send ({error, code, params}), or undefined. */
 export function researchRefusalOf(sha: string): unknown {
     return refusedReplies.get(sha);
+}
+
+/**
+ * Research whose bridge held a file back (sealed elsewhere, files not downloaded, a full disk; 017 U7),
+ * by research id: nothing more of the queue goes by itself until its status says it is settled (the seal
+ * taken over here, everything downloaded) or a send of the tree is written again.
+ */
+const originalsHeld = new Map<string, ResearchWriteHeld>();
+/** Held kinds already said (research id + kind), once per page. */
+const originalsHeldTold = new Set<string>();
+
+/** A write of the tree went through: the research takes writes again, the queue may go. */
+export function forgetOriginalsHeld(researchId: string): void {
+    originalsHeld.delete(researchId);
 }
 
 /** The research's id of a file it took or had (`I…`), by its SHA-256, as its bridge answered in this page. */
@@ -720,10 +735,29 @@ export const originalsMethods = uiModule({
         return kickRun;
     },
 
+    /**
+     * The queue of this research is held (017 U7): its status says writes would not go now, or a file was
+     * held back and nothing says it is settled since. Null: files go.
+     */
+    researchOriginalsHeldNow(researchId: string): ResearchWriteHeld | null {
+        const now = this.researchWriteHeldNow(researchId);
+        if (now) return now;
+        const held = originalsHeld.get(researchId);
+        if (!held) return null;
+        // The research itself says it is settled (the seal here, nothing left to download): files go again.
+        const st = this.researchStatusOf(researchId);
+        const settled = !!st && ((held.kind === 'seal' && st.seal === 'here') || (held.kind === 'cloud' && st.notDownloaded === 0));
+        if (!settled) return held;
+        originalsHeld.delete(researchId);
+        return null;
+    },
+
     async researchOriginalsKickOnce(): Promise<void> {
         if (sending) return;
         const link = this.researchOriginalsLink();
         if (!link || !this.researchMediaAccepts(link.researchId)) return;
+        // Held by the research: nothing goes by itself (no attempt counted, nothing lost).
+        if (this.researchOriginalsHeldNow(link.researchId)) return;
         const bridge = parseLiveBridge(storedResearchBridge(link.researchId)?.base);
         if (!bridge) return;
         sending = true;
@@ -802,6 +836,19 @@ export const originalsMethods = uiModule({
         this.refreshResearchSyncUi();
     },
 
+    /** A file held back by the research: its sentence and that nothing is lost, once per kind in this page. */
+    tellOriginalsHeld(researchId: string, held: ResearchWriteHeld): void {
+        const key = `${researchId}:${held.kind}`;
+        if (originalsHeldTold.has(key)) return;
+        originalsHeldTold.add(key);
+        const text = this.researchWriteHeldText(held, false);
+        const seal = this.researchSealAction(held)[0];
+        this.showToast(text.toast, Infinity, {
+            closable: true,
+            ...(seal ? { action: { label: seal.label, run: () => this.researchSyncAction(seal.action) } } : {}),
+        });
+    },
+
     /**
      * One file: ask whether the research has it, send it when not. Returns the
      * research's id for it, 'refused' (it will never take it: wrong type, too
@@ -812,6 +859,7 @@ export const originalsMethods = uiModule({
         opts: { force?: boolean } = {}): Promise<string | 'refused' | 'retry' | 'down' | 'full'> {
         const url = `${base}/media/${rec.sha256}`;
         refusedReplies.delete(rec.sha256);
+        if (this.researchOriginalsHeldNow(rec.researchId)) return 'full';
         // Sent on purpose (material, a deleted attachment's original): no asking first — its note goes along.
         if (!opts.force) {
             try {
@@ -854,6 +902,17 @@ export const originalsMethods = uiModule({
                 const replyId = mediaReplyId(body);
                 if (replyId) replyIds.set(rec.sha256, replyId);
                 return replyId ?? 'ok';
+            }
+            // Held until something is settled in the research (sealed elsewhere, files not downloaded, its disk
+            // full): stop, said once with its sentence; never tried again by itself, never counted as an attempt.
+            if (res.status === 409 || res.status === 507) {
+                const body = await res.clone().json().catch(() => null) as Record<string, unknown> | null;
+                const held = writeHeldOfCode(body?.code, body?.error, body?.params);
+                if (held) {
+                    originalsHeld.set(rec.researchId, held);
+                    this.tellOriginalsHeld(rec.researchId, held);
+                    return 'full';
+                }
             }
             // Too large / a kind it does not take: never. Out of disk space: stop for now.
             if (res.status === 413 || res.status === 415) {

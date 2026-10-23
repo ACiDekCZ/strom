@@ -18,6 +18,7 @@
 import { Attachment, Person } from './types.js';
 import { cleanText, isResearchHead, researchPersonRef, researchSchemeUrl, withAppVersion } from './research-link.js';
 import { strings } from './strings.js';
+import { ResearchWriteHeld, writeHeldOfCode } from './research-write-held.js';
 import { formatFlexDate, parseFlexDate } from './dates.js';
 import { parseGedcomDate } from './ged-parser.js';
 
@@ -730,7 +731,9 @@ export interface BridgeOptions {
 
 export type MaterialErrorKind =
     | 'person' | 'file' | 'batch' | 'readonly' | 'busy' | 'body' | 'query'
-    | 'gone' | 'missing' | 'type' | 'size' | 'unknown' | 'down' | 'aborted';
+    | 'gone' | 'missing' | 'type' | 'size' | 'unknown' | 'down' | 'aborted'
+    // Held until something is settled in the research (sealed elsewhere, files not downloaded, its disk full; 017 U7).
+    | 'held';
 
 export interface MaterialError {
     kind: MaterialErrorKind;
@@ -740,6 +743,8 @@ export interface MaterialError {
     params?: Record<string, unknown>;
     /** Seconds the research asked to wait (busy). */
     retry?: number;
+    /** `held`: what holds it, with the research's sentence (its language, shown as it is). */
+    held?: ResearchWriteHeld;
 }
 
 export type MaterialResult<T> = { ok: true; value: T } | { ok: false; error: MaterialError };
@@ -767,6 +772,9 @@ const CODE_KINDS: Record<string, MaterialErrorKind> = {
 export function materialErrorOf(status: number, body: unknown, retryAfter?: string | null): MaterialError {
     const b = body && typeof body === 'object' ? body as Record<string, unknown> : {};
     const code = typeof b.code === 'string' ? b.code : undefined;
+    // Never a busy research to try again quietly: its sentence says what to do there.
+    const held = status === 409 || status === 507 ? writeHeldOfCode(code, b.error, b.params) : null;
+    if (held) return { kind: 'held', status, ...(code ? { code } : {}), held };
     let kind: MaterialErrorKind = code && CODE_KINDS[code] ? CODE_KINDS[code] : 'unknown';
     if (kind === 'unknown') {
         if (status === 409 || status === 503) kind = 'busy';
@@ -793,6 +801,7 @@ export function materialErrorText(err: MaterialError, agent: boolean): string {
         case 'readonly': return agent ? m.errReadonlyResearch : m.errReadonly;
         case 'busy': return agent ? m.errBusyResearch : m.errBusy;
         case 'gone': return agent ? m.notHereResearch : m.notHere;
+        case 'held': return err.held?.said || m.errGeneric;
         default: return m.errGeneric;
     }
 }

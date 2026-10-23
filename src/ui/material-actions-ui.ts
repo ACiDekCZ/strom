@@ -241,8 +241,11 @@ export const materialActionsMethods = uiModule({
     materialErrorToast(mc: MaterialsContext, err: MaterialError, retry: () => void): void {
         const m = strings.materials;
         const act = materialErrorAction(err);
+        // Sealed on another computer: the research's own way of taking it over (017 U7).
+        const seal = err.held ? this.researchSealAction(err.held)[0] : undefined;
         const action = act === 'reload' ? { label: m.reload, run: () => void this.reloadMaterialList() }
-            : act === 'retry' ? { label: m.retry, run: retry } : undefined;
+            : act === 'retry' ? { label: m.retry, run: retry }
+            : seal ? { label: seal.label, run: () => this.researchSyncAction(seal.action) } : undefined;
         this.showToast(materialErrorText(err, mc.agent), TOAST_MS, { closable: true, kind: 'materials', ...(action ? { action } : {}) });
     },
 
@@ -250,9 +253,11 @@ export const materialActionsMethods = uiModule({
     materialErrorInDialog(dialog: MaterialDialog, mc: MaterialsContext, err: MaterialError, retry: () => void): void {
         const m = strings.materials;
         const act = materialErrorAction(err);
+        const seal = err.held ? this.researchSealAction(err.held)[0] : undefined;
         dialog.error(materialErrorText(err, mc.agent), act === 'reload'
             ? { label: m.reload, run: () => { dialog.close(); void this.reloadMaterialList(); } }
-            : act === 'retry' ? { label: m.retry, run: retry } : undefined);
+            : act === 'retry' ? { label: m.retry, run: retry }
+            : seal ? { label: seal.label, run: () => this.researchSyncAction(seal.action) } : undefined);
     },
 
     /** The whole list again from the research (after it said a person or a file is gone). */

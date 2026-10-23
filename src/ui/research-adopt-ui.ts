@@ -18,14 +18,14 @@ import { validateJsonImport } from '../merge/validation.js';
 import { TreeId, TreeMetadata, StromData, STROM_DATA_VERSION, ResearchSendMode } from '../types.js';
 import { readInstallRecord, clearInstallRecord, installPhase, INSTALL_TTL_MS } from '../research-install.js';
 import { noteResearchBridge, patchResearchAutoState, announcedResearchScheme } from '../research-device.js';
+import { ResearchWriteHeld, writeHeldOfCode } from '../research-write-held.js';
 import { SettingsManager } from '../settings.js';
 import { countImages, stripMedia } from '../attachments.js';
 import { exportToGedcom, countFamilies } from '../ged-exporter.js';
 import {
     parseLiveBridge, sanitizeAdoptOffer, sanitizeAdoptReply, newAdoptToken, researchNewUrl, contentFingerprint, researchSchemeUrl,
-    readResearchHeader, applyAdoptIds, AdoptOffer, AdoptIds, researchGedcomTitles, TitlesInGedcom, ResearchAccepts,
+    readResearchHeader, applyAdoptIds, AdoptOffer, AdoptIds, researchGedcomTitles, TitlesInGedcom, sanitizeLiveStatus, statusAgentless,
 } from '../research-link.js';
-import { researchAgentless } from '../research-others.js';
 import { newTieSendMode } from '../research-sync.js';
 import { uiModule } from './module.js';
 import { onComputer, fetchWithTimeout, fetchStatus, fetchGedcomText, postSync, postCancel, readTree, CONNECT_TIMEOUT_MS } from './research-ui.js';
@@ -93,8 +93,8 @@ async function researchAgentlessAt(base: string): Promise<boolean> {
     try {
         const res = await fetchWithTimeout(`${base}/status`, 4000);
         if (!res.ok) return false;
-        const body = await res.json() as { accepts?: ResearchAccepts } | null;
-        return researchAgentless(body?.accepts);
+        const status = sanitizeLiveStatus(await res.json());
+        return !!status && statusAgentless(status);
     } catch {
         return false;
     }
@@ -293,10 +293,14 @@ export const researchAdoptMethods = uiModule({
         const exported = exportToGedcom(choice.images ? data : stripMedia(data), tree.name, { titles });
         let reply: { tree: string; head: string | null; ids: AdoptIds | null } | null = null;
         let refusedEmpty = false;
+        let held: ResearchWriteHeld | null = null;
         try {
             const res = await postSync(`${bridge.base}/adopt`, exported.content, 120000);
             if (res.ok) reply = sanitizeAdoptReply(await res.json());
-            else if (res.status === 400) refusedEmpty = await res.json().then((b: { code?: unknown }) => b?.code === 'tree.empty', () => false);
+            // Held until something is settled in the research (sealed elsewhere, files not downloaded, its disk full).
+            else if (res.status === 409 || res.status === 507) {
+                held = await res.json().then((b: { code?: unknown; error?: unknown; params?: unknown }) => writeHeldOfCode(b?.code, b?.error, b?.params), () => null);
+            } else if (res.status === 400) refusedEmpty = await res.json().then((b: { code?: unknown }) => b?.code === 'tree.empty', () => false);
         } catch (err) {
             console.warn('Handing the tree to the research failed', err);
             // Not reached (B1 of the Windows round: Edge asks about "Apps on device" only now, at the
@@ -307,6 +311,11 @@ export const researchAdoptMethods = uiModule({
         }
         if (refusedEmpty) {
             await this.endEmptyHandOver(tree.id, fromInstall ? offer.token : null);
+            return;
+        }
+        // Its sentence, the tree staying here as it is; never handed over again by itself (017 U7).
+        if (held) {
+            await this.showResearchWriteHeld(held);
             return;
         }
         if (!reply) {
@@ -418,6 +427,9 @@ export const researchAdoptMethods = uiModule({
                 if (typeof st.path === 'string') where = st.path.slice(0, 300);
                 archive = st.accepts?.mode === 'archive';
                 agentAway = !archive && st.accepts?.agentHere === false;
+                // `tree.state` when the bridge says it: an archive, or a research waiting for its agent.
+                const state = sanitizeLiveStatus(st)?.treeState;
+                if (state) { archive = state === 'archive'; agentAway = state === 'waiting'; }
                 // `agent: { id, name, where? }` (an archive has none); a bare name from an older shape too.
                 const named = st.agent && typeof st.agent === 'object' ? (st.agent as { name?: unknown }).name : st.agent;
                 if (typeof named === 'string') agent = named.slice(0, 60);

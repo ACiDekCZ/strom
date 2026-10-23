@@ -41,7 +41,7 @@ export function researchLinkScheme(value: unknown): string {
 export const RESEARCH_LINK_ACTIONS = [
     'send', 'excerpt', 'app', 'open', 'chat', 'task', 'review', 'research',
     'new', 'update', 'sessions', 'conflict', 'story', 'sync-undo', 'setup', 'live',
-    'direction', 'finish', 'media', 'archive',
+    'direction', 'finish', 'media', 'archive', 'seal',
 ] as const;
 export type ResearchLinkAction = typeof RESEARCH_LINK_ACTIONS[number];
 
@@ -196,6 +196,7 @@ export function researchSchemeUrl(action: ResearchLinkAction, p: ResearchLinkPar
         case 'sessions':
         case 'setup':
         case 'live':
+        case 'seal':
             return base;
         case 'excerpt': {
             const source = researchSourceRef(p.source);
@@ -1280,6 +1281,49 @@ export interface LiveStatus {
     phone?: PhoneSummary;
     /** Documents read, being read or waiting (`status.reads`, with `read.now` in `features`), newest first; absent: none said. */
     reads?: LiveRead[];
+    /** `tree.kind` (with `tree.kind` in `features`): what the tree is to the app; a research waiting for its agent is an archive. */
+    treeKind?: ResearchTreeKind;
+    /** `tree.state` (with `tree.state` in `features`): a research, one waiting for its agent, or an archive. */
+    treeState?: ResearchTreeState;
+    /** `seal` (with `seal.foreign` in `features`): the tree's key is on this computer, or it was sealed on another one. */
+    seal?: 'here' | 'elsewhere';
+    /** `notDownloaded` (with `tree.notDownloaded` in `features`): files of the tree a cloud folder has not brought down yet. */
+    notDownloaded?: number;
+}
+
+/** What a tree is to the app (`/status.tree.kind`). */
+export type ResearchTreeKind = 'archive' | 'research';
+/** The research's own state of a tree (`/status.tree.state`). */
+export type ResearchTreeState = 'research' | 'waiting' | 'archive';
+
+/** `/status.features`: the bridge says what the tree is (`tree.kind`). */
+export const TREE_KIND_FEATURE = 'tree.kind';
+/** `/status.features`: the bridge says the tree's state (`tree.state`: research / waiting / archive). */
+export const TREE_STATE_FEATURE = 'tree.state';
+/** `/status.features`: the bridge says where the tree was sealed and refuses writes to one sealed elsewhere (409 `seal.foreign`). */
+export const SEAL_FOREIGN_FEATURE = 'seal.foreign';
+/** `/status.features`: the bridge counts files not downloaded yet and refuses writes meanwhile (409 `tree.not-downloaded`). */
+export const NOT_DOWNLOADED_FEATURE = 'tree.notDownloaded';
+/** `/status.features`: the bridge refuses a write when its disk is full (507 `disk.full`). */
+export const DISK_FULL_FEATURE = 'disk.full';
+
+/** The tree's kind as the status said it, or null (an older research). */
+export function sanitizeTreeKind(value: unknown): ResearchTreeKind | null {
+    return value === 'archive' || value === 'research' ? value : null;
+}
+
+/** The tree's state as the status said it, or null (an older research, or a value the app does not know). */
+export function sanitizeTreeState(value: unknown): ResearchTreeState | null {
+    return value === 'research' || value === 'waiting' || value === 'archive' ? value : null;
+}
+
+/**
+ * Whether the tree works without an agent (an archive, or a research waiting
+ * for one): `tree.kind` when the bridge says it, else what `accepts` says.
+ */
+export function statusAgentless(status: Pick<LiveStatus, 'accepts' | 'treeKind'>): boolean {
+    if (status.treeKind) return status.treeKind === 'archive';
+    return status.accepts?.mode === 'archive' || status.accepts?.agentHere === false;
 }
 
 /** `/status.features`: the research can connect a phone on the home network (spec 012). */
@@ -1965,7 +2009,17 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         ...(r.channel === 'beta' ? { channel: 'beta' as const } : {}),
         ...(features?.includes(PHONE_FEATURE) ? { phone: sanitizePhoneSummary(r.phone) } : {}),
         ...(features?.includes(READ_FEATURE) && sanitizeReads(r.reads) ? { reads: sanitizeReads(r.reads)! } : {}),
+        ...treeSaid(tree, features),
+        ...(features?.includes(SEAL_FOREIGN_FEATURE) && (r.seal === 'here' || r.seal === 'elsewhere') ? { seal: r.seal } : {}),
+        ...(features?.includes(NOT_DOWNLOADED_FEATURE) && asCount(r.notDownloaded) !== null ? { notDownloaded: asCount(r.notDownloaded)! } : {}),
     };
+}
+
+/** `tree.kind` and `tree.state`, each read only when `features` names it. */
+function treeSaid(tree: Record<string, unknown> | null, features: string[] | null): Pick<LiveStatus, 'treeKind' | 'treeState'> {
+    const kind = features?.includes(TREE_KIND_FEATURE) ? sanitizeTreeKind(tree?.kind) : null;
+    const state = features?.includes(TREE_STATE_FEATURE) ? sanitizeTreeState(tree?.state) : null;
+    return { ...(kind ? { treeKind: kind } : {}), ...(state ? { treeState: state } : {}) };
 }
 
 /** `accepts.read` stays only from a bridge that says it reads now (`read.now` in `features`). */

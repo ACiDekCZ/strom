@@ -29,8 +29,8 @@ export interface MediaRefusal {
 export function parseMediaRefusal(value: unknown): MediaRefusal | null {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
     const r = value as Record<string, unknown>;
-    const error = typeof r.error === 'string' ? r.error.trim().slice(0, 200)
-        : typeof r.why === 'string' ? r.why.trim().slice(0, 200) : '';
+    const error = typeof r.error === 'string' ? r.error.trim().slice(0, 400)
+        : typeof r.why === 'string' ? r.why.trim().slice(0, 400) : '';
     const code = typeof r.code === 'string' && /^[a-z][a-z0-9.-]{0,40}$/.test(r.code) ? r.code : '';
     const params: Record<string, string> = {};
     if (r.params && typeof r.params === 'object' && !Array.isArray(r.params)) {
@@ -89,6 +89,9 @@ function translate(code: string, p: Record<string, string>): string | null {
         case 'batch.full-bytes': return need(p.gb) ? s.fullBytes(p.gb) : null;
         case 'batch.none': return s.batchNone;
         case 'batch.bad-body': return s.batchBadBody;
+        // Held until something is settled in the research (sealed on another computer, files of its cloud
+        // folder not downloaded, its disk full; 017 U7): its own sentence says what to do there.
+        case 'seal.foreign': case 'tree.not-downloaded': case 'disk.full': return null;
         // `media.refused`: another reason, told only by the research's sentence. Unknown codes: the list may grow.
         default: return null;
     }

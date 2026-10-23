@@ -18,6 +18,7 @@ import { LiveWaiting, ResearchAccepts, researchTaskRef, isResearchHead, cleanTex
 import { waitingPhase, waitingTaskActions, WaitingPhase } from './research-waiting.js';
 import { uploadHeaders, mediaReplyId, DEFAULT_MEDIA_MAX_BYTES } from './originals.js';
 import { sha256OfBlob } from './sha256.js';
+import { ResearchWriteHeld, writeHeldOfCode } from './research-write-held.js';
 
 /** The bridge takes "sent" / "unsent" for an item and for a place. */
 export const WAITING_SENT_FEATURE = 'waiting.sent';
@@ -107,7 +108,9 @@ export function waitingFileTaken(file: { type: string; name: string }): boolean 
  * - `unknown`: any other answer (another 409 too).
  */
 export type WaitingWriteCode =
-    | 'none' | 'not-sendable' | 'no-file' | 'locked' | 'app-only' | 'bad-body' | 'busy' | 'failed' | 'too-large' | 'type' | 'full' | 'network' | 'invalid' | 'unknown';
+    | 'none' | 'not-sendable' | 'no-file' | 'locked' | 'app-only' | 'bad-body' | 'busy' | 'failed' | 'too-large' | 'type' | 'full' | 'network' | 'invalid' | 'unknown'
+    // Held until something is settled in the research (sealed elsewhere, files not downloaded, its disk full; 017 U7).
+    | 'held';
 
 export interface WaitingWriteRefused {
     ok: false;
@@ -118,6 +121,8 @@ export interface WaitingWriteRefused {
     retryAfter: number | null;
     /** The bridge's own sentence (for the details only; '' = none). */
     reason: string;
+    /** `held`: what holds it and the research's sentence in its language (shown as it is). */
+    held?: ResearchWriteHeld;
 }
 
 export interface WaitingSentDone {
@@ -188,6 +193,8 @@ function refusal(status: number, body: unknown, retryAfter: string | null | unde
     const out = (c: WaitingWriteCode): WaitingWriteRefused => ({
         ok: false, code: c, status, retryAfter: c === 'busy' ? retryAfterSeconds(retryAfter) : null, reason,
     });
+    const held = status === 409 || status === 507 ? writeHeldOfCode(code, r.error, r.params) : null;
+    if (held) return { ...out('held'), held };
     const gone = code === 'waiting.none' || code === 'group.none';
     if (status === 404) return out(gone ? 'none' : 'unknown');
     if (status === 409) {

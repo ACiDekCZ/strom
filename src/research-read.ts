@@ -12,6 +12,7 @@
 
 import { cleanText, researchPersonRef, withAppVersion } from './research-link.js';
 import { clipText } from './text-clip.js';
+import { ResearchWriteHeld, writeHeldOfCode } from './research-write-held.js';
 
 /** `/status.features`: the research reads a document for the app now (`POST read`). */
 export const READ_FEATURE = 'read.now';
@@ -572,6 +573,8 @@ export type ReadFailureKind =
     | 'locked'
     /** 403 app.only, 400 read.bad-body / read.lang / read.region, and an unknown 4xx: the app's own mistake. */
     | 'refused'
+    /** 409 seal.foreign / tree.not-downloaded, 507 disk.full: held until it is settled in the research (`held`, 017 U7). */
+    | 'held'
     /** 500 read.failed and anything else. */
     | 'failed';
 
@@ -590,6 +593,8 @@ export interface ReadFailure {
     sha?: string;
     mime?: string;
     mb?: number;
+    /** `held`: what holds it, with the research's sentence (its language, shown as it is). */
+    held?: ResearchWriteHeld;
 }
 
 /** `Retry-After` in ms (seconds or an HTTP date), capped at a day; 0 when absent or bad. */
@@ -610,6 +615,8 @@ export function readFailure(status: number, body: unknown, retryAfterHeader: str
     const base: ReadFailure = { kind: 'failed', code: c, status, retryAfterMs: retryAfter(retryAfterHeader) };
     const sha = typeof p.sha === 'string' && /^[0-9a-f]{64}$/.test(p.sha) ? { sha: p.sha } : {};
     if (status === 0) return { ...base, kind: 'down' };
+    const held = status === 409 || status === 507 ? writeHeldOfCode(c, b?.error, b?.params) : null;
+    if (held) return { ...base, kind: 'held', held };
     switch (c) {
         case 'read.not-ready': return { ...base, kind: 'not-ready', why: code(p.why) || 'other', resets: isoTime(p.resets) };
         case 'research.busy': return { ...base, kind: 'research-busy', retryAfterMs: base.retryAfterMs || 5000 };

@@ -37,7 +37,7 @@ import {
     humanizeChange, isGedcomFileName, isSafariBrowser,
     parseSendBridge, pickSendDefault, sanitizeSyncReply, researchSchemeUrl, researchTaskRef,
     ResearchLinkAction, ResearchLinkParams, LiveBridgeUrls, LiveStatus, LiveChange, LiveWorker, LiveWaiting,
-    LiveQueueItem, LiveSpend, LiveIntake, LiveDirection, ResearchHeaderInfo, ExportXrefs, ResearchAccepts,
+    LiveQueueItem, LiveSpend, LiveIntake, LiveDirection, ResearchHeaderInfo, ExportXrefs, ResearchAccepts, statusAgentless,
 } from '../research-link.js';
 import { uiModule } from './module.js';
 import { returnFocusAfterViewer } from './sources.js';
@@ -58,7 +58,7 @@ import { formatRelativeDateTime } from '../format.js';
 import { safeFileName } from '../filenames.js';
 import {
     noteResearchLinks, announcedResearchLinks, announcedResearchScheme, researchLinksEnabled, noteResearchWaiting, storedResearchWaiting,
-    noteResearchBridge, noteResearchBridgeStatus, patchResearchAutoState, researchAutoState, researchIdAtBridge, ResearchLinkBefore,
+    noteResearchBridge, noteResearchBridgeStatus, researchTreeOfStatus, patchResearchAutoState, researchAutoState, researchIdAtBridge, ResearchLinkBefore,
     storedResearchBridge,
 } from '../research-device.js';
 import { rememberBridgeStatus, researchSendMode } from './research-sync-ui.js';
@@ -803,7 +803,7 @@ export async function fetchStatus(url: string, ms = 10000): Promise<LiveStatus |
         noteResearchWaiting(status.treeId, status.waiting, status);
         // Where this research's bridge is now (the port can change between runs).
         noteResearchBridge(status.treeId, url.replace(/\/status(\?.*)?$/, ''));
-        noteResearchBridgeStatus(status.treeId, status.accepts, status.head);
+        noteResearchBridgeStatus(status.treeId, status.accepts, status.head, researchTreeOfStatus(status));
         rememberBridgeStatus(status.treeId, status);
     }
     syncResearchCardInfo();
@@ -2388,7 +2388,7 @@ export const researchUiMethods = uiModule({
             }
             // An archive has no agent to follow: the tree opens for editing, its
             // bridge remembered (the changes go to it by themselves).
-            if (status.accepts?.mode === 'archive' || status.accepts?.agentHere === false) {
+            if (statusAgentless(status)) {
                 if (opts.resume) forgetLiveBridge();
                 passive();
                 this.refreshResearchSyncUi();
@@ -2642,11 +2642,12 @@ export const researchUiMethods = uiModule({
         const s = live;
         if (!s || s.ended || s.researchId !== researchId) return false;
         const accepts = status.accepts;
-        if (!accepts || (accepts.mode !== 'archive' && accepts.agentHere !== false)) return false;
-        if (status.treeId) noteResearchBridgeStatus(status.treeId, accepts, status.head);
+        if (!statusAgentless(status)) return false;
+        if (status.treeId) noteResearchBridgeStatus(status.treeId, accepts, status.head, researchTreeOfStatus(status));
         this.endLiveFollow(s, 'stopped');
         this.renderLiveFollowPill();
-        this.showToast(accepts.mode === 'archive' ? strings.research.liveEndedArchive : strings.research.liveEndedNoAgent, 6000);
+        const archive = status.treeState ? status.treeState === 'archive' : accepts?.mode === 'archive';
+        this.showToast(archive ? strings.research.liveEndedArchive : strings.research.liveEndedNoAgent, 6000);
         this.refreshResearchSyncUi();
         return true;
     },

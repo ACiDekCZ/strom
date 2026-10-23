@@ -60,11 +60,22 @@ function refusedText(r: WaitingWriteRefused): string {
         case 'app-only': return W.appOnly;
         case 'bad-body': return W.badBody;
         case 'failed': return W.writeFailed;
+        // The research's own sentence says what to do there (017 U7).
+        case 'held': return r.held?.said || W.failed;
         default: return W.failed;
     }
 }
 
 export const researchWaitingWriteMethods = uiModule({
+    /** A refused write, said; held by the research (sealed elsewhere …): its sentence, the seal's way beside. */
+    showWaitingRefused(result: WaitingWriteRefused): void {
+        const seal = result.held ? this.researchSealAction(result.held)[0] : undefined;
+        this.showToast(refusedText(result), seal ? 12000 : 6000, {
+            kind: 'waiting-failed',
+            ...(seal ? { action: { label: seal.label, run: () => this.researchSyncAction(seal.action) } } : {}),
+        });
+    },
+
     /** What the followed research's bridge takes from "Awaiting action". */
     liveWaitingWrites(s: LiveSession | null = liveSession()): WaitingWrites {
         if (!s || s.ended) return NO_WAITING_WRITES;
@@ -153,7 +164,7 @@ export const researchWaitingWriteMethods = uiModule({
                 action: { label: W.undo, run: () => { void this.markWaitingUnsent(s, w.id); } },
             });
         } else if (!result.ok && result.code !== 'none') {
-            this.showToast(refusedText(result), 6000, { kind: 'waiting-failed' });
+            this.showWaitingRefused(result);
         }
     },
 
@@ -172,7 +183,7 @@ export const researchWaitingWriteMethods = uiModule({
         const ok = this.settleWaitingWrite(s, [id], phase, result, back);
         if (!stillFollowing(s)) return;
         if (ok && phase === 'todo') this.showToast(strings.live.waitingWrite.unsentToast, 3000, { kind: 'waiting-unsent' });
-        else if (!result.ok && result.code !== 'none') this.showToast(refusedText(result), 6000, { kind: 'waiting-failed' });
+        else if (!result.ok && result.code !== 'none') this.showWaitingRefused(result);
     },
 
     /** "Sent" for a whole place: its items to do that offer it move at once; the research writes the place. */
@@ -206,7 +217,7 @@ export const researchWaitingWriteMethods = uiModule({
                 ...(marked.length > 0 ? { action: { label: W.undo, run: () => { void this.markWaitingGroupUnsent(s, key, marked); } } } : {}),
             });
         } else if (!result.ok && result.code !== 'none') {
-            this.showToast(refusedText(result), 6000, { kind: 'waiting-failed' });
+            this.showWaitingRefused(result);
         }
     },
 
@@ -236,7 +247,7 @@ export const researchWaitingWriteMethods = uiModule({
         const ok = this.settleWaitingWrite(s, ids, 'todo', result, back, 'exact');
         if (!stillFollowing(s)) return;
         if (ok) this.showToast(strings.live.waitingWrite.unsentToast, 3000, { kind: 'waiting-unsent' });
-        else if (!result.ok && result.code !== 'none') this.showToast(refusedText(result), 6000, { kind: 'waiting-failed' });
+        else if (!result.ok && result.code !== 'none') this.showWaitingRefused(result);
     },
 
     /** "All queries' text" of a place: read from the bridge, shown in a small window with Copy. */

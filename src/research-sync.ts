@@ -5,7 +5,7 @@
  * Pure: the UI feeds it what it knows and shows the one state that matters most.
  */
 
-import { ResearchLink, ResearchSend, ResearchSendMode, Source, StromData, Person, PersonId, ResearchConflict } from './types.js';
+import { ResearchLink, ResearchSend, ResearchSendMode, Source, StromData, Person, PersonId, ResearchConflict, ResearchWriteHeld } from './types.js';
 import { ResearchInbox, LiveIntake, ResearchSendRecord } from './research-link.js';
 import { ResearchHeldConflicts, trimHeldConflicts } from './research-device.js';
 
@@ -59,7 +59,9 @@ export type ResearchSyncKind =
     // out of "only load" (nothing goes before the preview); the research's version loaded lately; only loading.
     | 'notWritten' | 'piled' | 'loaded' | 'off'
     // The last send was written with nothing taken, and the tree still differs from the research's version (N38).
-    | 'notTaken';
+    | 'notTaken'
+    // Writes wait for something in the research (sealed elsewhere, files not downloaded, a full disk; 017 U7).
+    | 'writeHeld';
 
 export interface ResearchSyncInput {
     /** The tree's tie to its research (none: not a research tree). */
@@ -110,6 +112,8 @@ export interface ResearchSyncInput {
     piled?: boolean;
     /** The research's version was loaded within the hour and nothing edited since ("Restore the state before loading"). */
     loaded?: boolean;
+    /** The research's status says writes would not go now (sealed elsewhere, files not downloaded; 017 U7). */
+    held?: ResearchWriteHeld | null;
 }
 
 export interface ResearchSyncState {
@@ -122,6 +126,10 @@ export interface ResearchSyncState {
     reason?: string;
     /** The research switched mode and the user has not said "Got it": said beside this state (it outranks the notice). */
     switchedNote?: boolean;
+    /** What holds the writes (writeHeld): from the refusal of a send, or said ahead by the status (`ahead`). */
+    held?: ResearchWriteHeld;
+    /** writeHeld said by the status before any send (no refusal yet). */
+    ahead?: boolean;
 }
 
 /**
@@ -134,7 +142,7 @@ export function researchSyncState(input: ResearchSyncInput): ResearchSyncState {
     if (k === 'none') return st;
     // Not written: before every state but what has to come first (nothing may be sent, a send taken back, a send on its way).
     if (input.notWritten && input.link?.sent?.state === 'written'
-        && !['safari', 'stale', 'unsentAndNewer', 'rejected', 'sending'].includes(k)) return { ...st, kind: 'notWritten' };
+        && !['safari', 'stale', 'unsentAndNewer', 'rejected', 'sending', 'writeHeld'].includes(k)) return { ...st, kind: 'notWritten' };
     if (input.piled && (k === 'unsent' || k === 'unsentBridgeDown' || k === 'autoWaiting')) return { ...st, kind: 'piled' };
     const quiet = k === 'inSync' || k === 'written';
     if (input.loaded && (quiet || k === 'offerAuto')) return { ...st, kind: 'loaded' };
@@ -170,7 +178,13 @@ function sendsState(input: ResearchSyncInput): ResearchSyncState {
     if (sent?.state === 'undone') return st('rejected', { sent });
     if (unsent && newer && input.bridgeUp) return st('unsentAndNewer');
     if (sent?.state === 'discarded') return st('rejected', { sent });
+    // Refused for what the research has to settle first: its sentence, the edits waiting (never sent again by itself).
+    if (link.refused?.held) return st('writeHeld', { held: link.refused.held, reason: link.refused.reason });
     if (link.refused) return st(auto ? 'autoPaused' : 'refused', { reason: link.refused.reason });
+    // Said by the status before sending: nothing would be written now (a newer version to load stays first).
+    if (input.held && !input.sendOff && !input.sending && sent?.state !== 'pending' && (unsent || !newer)) {
+        return st('writeHeld', { held: input.held, ahead: true });
+    }
     if (unsent && auto && input.autoDue && !input.bridgeUp && !input.sending) return st('autoBridgeDown');
     if (unsent && !auto) return st(input.bridgeUp ? 'unsent' : 'unsentBridgeDown');
     // The research writing a send (a 202, an archive) is "sending", never "waiting for you".
@@ -223,7 +237,7 @@ export function ownWriteHeadTarget(link: Pick<ResearchLink, 'head' | 'sent'>, as
 export function researchSyncWantsAttention(kind: ResearchSyncKind): boolean {
     return kind === 'unsentBridgeDown' || kind === 'newer' || kind === 'unsentAndNewer'
         || kind === 'refused' || kind === 'rejected' || kind === 'autoPaused' || kind === 'autoBridgeDown'
-        || kind === 'switched' || kind === 'stale' || kind === 'writtenConflicts' || kind === 'notWritten';
+        || kind === 'switched' || kind === 'stale' || kind === 'writtenConflicts' || kind === 'notWritten' || kind === 'writeHeld';
 }
 
 /** A changes-not-sent state (the ⋯ label and the data window say so). */

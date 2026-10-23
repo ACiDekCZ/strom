@@ -40,11 +40,13 @@ import {
     researchHasTitles, hasTitles, withoutTitles, TITLES_FEATURE, researchConflictRef, isResearchHead,
 } from '../research-link.js';
 import { loadResearchCopy } from '../research-copy.js';
+import { ResearchWriteHeld, joinSaid, writeHeldOfRefusal, writeHeldOfStatus } from '../research-write-held.js';
+import { forgetOriginalsHeld } from './originals-ui.js';
 import {
-    noteResearchLinks, noteResearchWaiting, noteResearchBridgeStatus, storedResearchBridge, researchLinksEnabled,
+    noteResearchLinks, noteResearchWaiting, noteResearchBridgeStatus, researchTreeOfStatus, storedResearchBridge, researchLinksEnabled,
     researchAutoState, patchResearchAutoState, researchAutoIntroSeen, noteResearchAutoIntroSeen, forgetResearchWaitingItems, anyResearchBridgeKnown,
     researchSendPreviewSkipped, announcedResearchScheme, RESEARCH_BRIDGE_MOVED_EVENT,
-    ResearchHeldConflicts,
+    ResearchHeldConflicts, StoredResearchTree,
 } from '../research-device.js';
 import {
     ResearchSyncState, ResearchSyncKind, researchSyncState, researchSyncWantsAttention, researchSyncUnsent,
@@ -608,12 +610,26 @@ export const researchSyncMethods = uiModule({
     },
 
     /**
+     * What the bridge said the tree is (`tree.kind`, `tree.state`): its status
+     * now, else as kept from the last one; undefined when it never said (an
+     * older research: then `accepts` decides, as before).
+     */
+    researchTreeSaid(researchId: string): StoredResearchTree | undefined {
+        const status = runtime.get(researchId)?.status;
+        const tree = status ? researchTreeOfStatus(status) : storedResearchBridge(researchId)?.tree;
+        return tree && (tree.kind || tree.state) ? tree : undefined;
+    },
+
+    /**
      * Archive or research as this browser knows it — the bridge's word (now or
      * kept) or the file's archive; null when nothing says it (no label then).
      * A research waiting for its agent saves as an archive does and is shown
      * as one until the bridge says the agent is here (spec 017 decision e).
      */
     researchKindOf(link: Pick<ResearchLink, 'id' | 'mode'>): 'agent' | 'archive' | null {
+        // `tree.kind` when the bridge says it (`tree.kind` in its features): its word decides.
+        const said = this.researchTreeSaid(link.id);
+        if (said?.kind) return said.kind === 'archive' ? 'archive' : 'agent';
         const accepts = runtime.get(link.id)?.status?.accepts ?? storedResearchBridge(link.id)?.accepts;
         if (!accepts && link.mode !== 'archive') return null;
         return this.researchAgentlessFor(link.id, link) ? 'archive' : 'agent';
@@ -657,12 +673,17 @@ export const researchSyncMethods = uiModule({
      * the agent starts (researchKindOf, the archive tag and texts).
      */
     researchAgentAway(researchId: string, link?: Pick<ResearchLink, 'mode'>): boolean {
+        // `tree.state` when the bridge says it: "waiting" is a research waiting for its agent.
+        const state = this.researchTreeSaid(researchId)?.state;
+        if (state) return state === 'waiting';
         const accepts = runtime.get(researchId)?.status?.accepts ?? storedResearchBridge(researchId)?.accepts;
         return accepts?.agentHere === false && this.researchModeOf(researchId, link) !== 'archive';
     },
 
     /** This research works without an agent now: an archive, or a research waiting for its agent. */
     researchAgentlessFor(researchId: string, link?: Pick<ResearchLink, 'mode'>): boolean {
+        const kind = this.researchTreeSaid(researchId)?.kind;
+        if (kind) return kind === 'archive';
         return this.researchModeOf(researchId, link) === 'archive' || this.researchAgentAway(researchId, link);
     },
 
@@ -674,7 +695,8 @@ export const researchSyncMethods = uiModule({
 
     /** The active research tree works without an agent now: an archive, or a research waiting for its agent. */
     activeResearchAgentless(): boolean {
-        return this.activeResearchArchive() || this.activeResearchAgentAway();
+        const ctx = this.researchSyncLink();
+        return !!ctx && this.researchAgentlessFor(ctx.link.id, ctx.link);
     },
 
     /** The active research tree is an archive (no agent): the agent's actions are not offered. */
@@ -747,6 +769,34 @@ export const researchSyncMethods = uiModule({
         return fpCache;
     },
 
+    /**
+     * Writes would not go now, as the research's status says (sealed on
+     * another computer, files not downloaded yet; 017 U7): read only while
+     * its bridge answers and from one that names the capability. Null: they go.
+     */
+    researchWriteHeldNow(researchId: string): ResearchWriteHeld | null {
+        const rt = runtime.get(researchId);
+        return rt?.up ? writeHeldOfStatus(rt.status) : null;
+    },
+
+    /** What holds the writes, in the app's words: the title, the sentence, the research's own first when it said one. */
+    researchWriteHeldText(held: ResearchWriteHeld, ahead: boolean): { title: string; sub: string; pill: string; toast: string } {
+        const h = strings.sync.held;
+        const title = held.kind === 'seal' ? h.titleSeal : held.kind === 'cloud' ? h.titleCloud : h.titleDisk;
+        const pill = held.kind === 'seal' ? h.pillSeal : held.kind === 'cloud' ? h.pillCloud : h.pillDisk;
+        const own = held.kind === 'seal' ? h.aheadSeal : held.kind === 'cloud' ? h.aheadCloud(held.n ?? 0) : '';
+        // The research's sentence (in its language) says what to do there; the app adds that nothing is lost.
+        const said = held.said || own;
+        const sub = joinSaid(said, ahead ? h.keptAhead : h.kept);
+        return { title, pill, sub, toast: held.said ? sub : joinSaid(title, sub) };
+    },
+
+    /** "Take over on this computer": the research's own way of taking the seal over (`strom-research://seal`). */
+    researchSealAction(held: ResearchWriteHeld | undefined): ResearchSyncBlockAction[] {
+        return held?.kind === 'seal' && this.researchLinkAvailable('seal') && this.activeResearchLink('seal')
+            ? [{ action: 'sealTakeOver', label: strings.sync.held.sealButton }] : [];
+    },
+
     /** The one state of the active tree (kind 'none': nothing new is shown). */
     currentResearchSyncState(): ResearchSyncState {
         const ctx = this.researchSyncLink();
@@ -778,6 +828,7 @@ export const researchSyncMethods = uiModule({
             // A research waiting for its agent writes a send at once, as an archive does.
             archive: mode === 'archive' || this.researchAgentAway(link.id, link),
             sending: sendingTree === treeId,
+            held: this.researchWriteHeldNow(link.id),
             autoDue: autoDue.has(treeId),
             written: st.lastWritten ?? null,
             switched: !!st.modeSeen && st.modeSeen !== mode,
@@ -826,7 +877,7 @@ export const researchSyncMethods = uiModule({
         if (status) {
             noteResearchLinks(status.links, status.linkScheme);
             noteResearchWaiting(researchId, status.waiting, status);
-            noteResearchBridgeStatus(researchId, status.accepts, status.head);
+            noteResearchBridgeStatus(researchId, status.accepts, status.head, researchTreeOfStatus(status));
             tellBridgeStatus(researchId, status);
         }
         return status;
@@ -1343,6 +1394,13 @@ export const researchSyncMethods = uiModule({
             this.refreshResearchSyncUi();
             return;
         }
+        // Its status says nothing would be written (sealed elsewhere, files not downloaded): the changes wait,
+        // said in the state, and go after the first answer that no longer says so (017 U7).
+        if (this.researchWriteHeldNow(link.id)) {
+            autoDue.add(treeId);
+            this.refreshResearchSyncUi();
+            return;
+        }
         // The research newer: its version stays "newer" after the write, loaded only when the user asks.
         await this.postResearchSend(treeId, { auto: true, keepalive: why === 'leave' });
     },
@@ -1639,6 +1697,16 @@ export const researchSyncMethods = uiModule({
             this.tellResearchNoIds(treeId, opts.auto);
             return;
         }
+        // Refused for what the research has to settle first (sealed elsewhere, files not downloaded, a full disk):
+        // its own sentence, the edits waiting here; never sent again by itself (017 U7).
+        const held = !res.ok || !reply.ok ? writeHeldOfRefusal(reply.code, reply.error, this.researchStatusOf(link.id)?.features) : null;
+        if (held) {
+            TreeManager.patchResearchLink(treeId, { refused: { reason: held.said, at: new Date().toISOString(), held } });
+            this.refreshResearchSyncUi();
+            if (opts.auto) this.tellResearchWriteHeld(treeId, held);
+            else await this.showResearchWriteHeld(held);
+            return;
+        }
         if (!res.ok || !reply.ok) {
             // The bridge's own sentence is in the research's language: not put into this app's sentences.
             // Its code says why in the app's words (a code it does not know: no reason); its technical
@@ -1650,6 +1718,8 @@ export const researchSyncMethods = uiModule({
             else await this.showResearchRefused(why, { ...opts, details: reply.reason });
             return;
         }
+        // Written again: what the research held back of the files may go too.
+        forgetOriginalsHeld(link.id);
         // Sources sent as entries of a reading that the research took as sources of the app's own: said quietly, once.
         this.noteReadingsNotTaken(reply.readings);
         const now = new Date().toISOString();
@@ -1948,6 +2018,29 @@ export const researchSyncMethods = uiModule({
         }
     },
 
+    /** Sending by itself stopped on a held write: said once per kind, with the research's sentence (and the seal's way). */
+    tellResearchWriteHeld(treeId: TreeId, held: ResearchWriteHeld): void {
+        const told = researchAutoState(treeId).toldRefused ?? [];
+        const key = `held:${held.kind}`;
+        if (told.includes(key)) return;
+        patchResearchAutoState(treeId, { toldRefused: [...told, key] });
+        const text = this.researchWriteHeldText(held, false);
+        const seal = this.researchSealAction(held)[0];
+        this.showToast(text.toast, Infinity, {
+            closable: true,
+            ...(seal ? { action: { label: seal.label, run: () => this.researchSyncAction(seal.action) } } : {}),
+        });
+    },
+
+    /** A send held by the research (sent by hand): its sentence, that nothing is lost, the seal's way — never "try again". */
+    async showResearchWriteHeld(held: ResearchWriteHeld): Promise<void> {
+        const text = this.researchWriteHeldText(held, false);
+        const seal = this.researchSealAction(held)[0];
+        const pick = await this.showChoice(text.sub, text.title, seal ? [{ id: 'seal', label: seal.label }] : [], undefined,
+            { cancelLabel: strings.buttons.close });
+        if (pick === 'seal' && seal) this.researchSyncAction(seal.action);
+    },
+
     /** Sending by itself stopped (the research refused): said once per reason, with "Send again". */
     tellResearchAutoStopped(treeId: TreeId, reason: string): void {
         const told = researchAutoState(treeId).toldRefused ?? [];
@@ -2151,6 +2244,11 @@ export const researchSyncMethods = uiModule({
             // "Send again" on a send taken back writes that send again (`/again`); on a discarded one, the changes go again.
             case 'sendAgain': void this.researchSendNow({ undoAgain: ctx.link.sent?.state === 'undone' }); break;
             case 'acceptUndo': void this.researchAcceptUndo(); break;
+            case 'sealTakeOver': {
+                const url = this.activeResearchLink('seal');
+                if (url) this.launchResearchLink(url);
+                break;
+            }
             case 'sendThenLoad': void this.researchSendNow({ thenLoad: true }); break;
             case 'showChanges': this.showResearchChanges('send'); break;
             case 'showChangesFirst': this.showResearchChanges('send', { confirm: true }); break;
@@ -2520,6 +2618,13 @@ export const researchSyncMethods = uiModule({
             autoBridgeDown: () => shownArchive
                 ? { tone: 'warn', title: s.archiveBridgeDownSince(whenMs(rt?.downSince ?? 0) || changed), sub: s.archiveBridgeDownSub(edits), actions: start }
                 : { tone: 'warn', title: s.stateBridgeDown, sub: s.autoBridgeDownSub(changed), actions: start },
+            writeHeld: () => {
+                const held = state.held ?? { kind: 'seal' as const, said: '' };
+                const text = this.researchWriteHeldText(held, !!state.ahead);
+                // Never sent again by itself: "Send again" only after a refusal, once things are settled there.
+                return { tone: 'warn', title: text.title, sub: text.sub,
+                    actions: [...this.researchSealAction(held), ...(state.ahead ? [] : [{ action: 'sendAgain', label: s.sendAgain, asLink: true }])] };
+            },
             autoPaused: () => ({ tone: 'warn', title: s.stateRefused,
                 sub: [state.reason ? `${state.reason}.` : '', s.autoStoppedSub].filter(Boolean).join(' '), actions: [{ action: 'sendAgain', label: s.sendAgain }] }),
             switched: () => archive
@@ -2964,6 +3069,13 @@ export const researchSyncMethods = uiModule({
             writtenConflicts: { text: [this.researchHeldConflictCount(ctx.treeId, state.sent) > 0
                 ? s.flyConflict(this.researchHeldConflictCount(ctx.treeId, state.sent)) : s.writtenAt(when(researchAutoState(ctx.treeId).lastWritten?.at ?? state.sent?.closedAt)),
                 this.researchConnectionNote(ctx.link.id)?.title ?? ''].filter(Boolean).join(' · '), button: s.showConflicts, action: 'conflicts' },
+            // Writes wait for something in the research: said whichever way changes go (017 U7).
+            writeHeld: (() => {
+                const held = state.held ?? { kind: 'seal' as const, said: '' };
+                const seal = this.researchSealAction(held)[0];
+                return { text: this.researchWriteHeldText(held, !!state.ahead).pill,
+                    button: seal ? seal.label : s.showConflicts, action: seal ? seal.action : 'conflicts' };
+            })(),
             ...(auto ? {
                 autoBridgeDown: { text: archive ? s.pillBridgeDownWaiting(Math.max(1, researchAutoState(ctx.treeId).edits ?? 1)) : s.pillBridgeDown,
                     button: s.pillStart, action: 'startResearch' },
@@ -3204,6 +3316,10 @@ export const researchSyncMethods = uiModule({
         const state = this.currentResearchSyncState();
         switch (state.core) {
             case 'autoPaused': return { text: t.statusStopped(state.reason ?? ''), warn: true, action: 'sendAgain' };
+            case 'writeHeld': {
+                const text = this.researchWriteHeldText(state.held ?? { kind: 'seal', said: '' }, !!state.ahead);
+                return { text: `${text.title}. ${text.sub}`, warn: true, ...(state.ahead ? {} : { action: 'sendAgain' }) };
+            }
             case 'refused': return { text: state.reason ? `${strings.sync.stateRefused}: ${state.reason}.` : `${strings.sync.stateRefused}.`, warn: true, action: 'sendAgain' };
             case 'rejected': return { text: state.sent?.state !== 'undone' ? t.statusRejected(when(state.sent?.at))
                 : !this.researchHoldsForUndo(link) ? t.statusUndoneKept(when(state.sent?.at)) : t.statusUndone(when(state.sent?.at)),

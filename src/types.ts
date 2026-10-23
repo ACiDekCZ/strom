@@ -1404,8 +1404,12 @@ export interface ResearchLink {
     copy?: boolean;
     /** The last send straight to the bridge and what became of it (a research that announces `accepts`). */
     sent?: ResearchSend;
-    /** The bridge refused the last send at once, with its reason (cleared by the next good send or an update). */
-    refused?: { reason: string; at: string };
+    /**
+     * The bridge refused the last send at once, with its reason (cleared by the next good send or an update).
+     * `held`: refused for what the research itself has to settle first (sealed elsewhere, files not downloaded,
+     * a full disk), with its own sentence; nothing goes again until the user sends.
+     */
+    refused?: { reason: string; at: string; held?: ResearchWriteHeld };
     /**
      * How the research takes the user's transcripts (Research for this tree):
      * 'lead' (default) — it checks them by its own reading; 'evidence' — a
@@ -1479,6 +1483,19 @@ export type ResearchSendMode = 'auto' | 'manual' | 'off';
 export type ResearchTranscripts = 'lead' | 'evidence';
 
 /** A send straight to the research's bridge and its fate in the research's inbox. */
+/**
+ * A write the research does not take until something there is settled:
+ * the tree sealed on another computer (`seal`), files of a cloud folder not
+ * downloaded yet (`cloud`), no room on its disk (`disk`). `said`: the
+ * research's own sentence (its language); '' when only its status said it.
+ */
+export interface ResearchWriteHeld {
+    kind: 'seal' | 'cloud' | 'disk';
+    said: string;
+    /** `cloud`: files not downloaded yet, when said. */
+    n?: number;
+}
+
 export interface ResearchSend {
     /** Content fingerprint of the tree as sent (also `_STROM_SENT` in the file). */
     fingerprint: string;

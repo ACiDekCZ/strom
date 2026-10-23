@@ -75,7 +75,8 @@ export function researchTreeState(answer: BridgeAnswer | null, o: {
     if (answer.result === 'denied') return { kind: 'blocked', lines: 0, waiting: 0 };
     if (answer.result === 'off' || !answer.status) return { kind: 'off', lines: 0, waiting: 0 };
     const status = answer.status;
-    if (researchAgentless(status.accepts ?? o.accepts)) return { kind: 'idle', lines: 0, waiting: 0 };
+    // `tree.kind` when the bridge says it (a research waiting for its agent is an archive), else `accepts`.
+    if (status.treeKind ? status.treeKind === 'archive' : researchAgentless(status.accepts ?? o.accepts)) return { kind: 'idle', lines: 0, waiting: 0 };
     const lines = workingLines(status.working);
     return { kind: lines > 0 ? 'running' : 'idle', lines, waiting: waitingTodoCount(status.waiting) };
 }

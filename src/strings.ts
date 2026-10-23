@@ -946,6 +946,22 @@ const stringsEN = {
     // Opening a research from Strom Research (file handler, link, drag & drop, live bridge)
     // Where a research tree stands with its research (Strom Research 1.12+)
     sync: {
+        // Writes the research holds until something there is settled (spec 017 U7). Its own sentence is shown first.
+        held: {
+            titleSeal: 'Sealed on another computer',
+            titleCloud: 'Files not downloaded yet',
+            titleDisk: 'No room left on the disk',
+            pillSeal: 'Sealed on another computer',
+            pillCloud: 'Files not downloaded yet',
+            pillDisk: 'Disk full',
+            aheadSeal: 'This tree was sealed on another computer: nothing can be written to it here until it is taken over on this computer.',
+            aheadCloud: (n: number) => n > 0
+                ? `${nEn(n, 'file', 'files')} of the tree ${n === 1 ? 'is' : 'are'} not downloaded from the cloud folder yet: nothing is written until then.`
+                : 'Files of the tree are not downloaded from the cloud folder yet: nothing is written until then.',
+            kept: 'The changes made here wait unsent; nothing is lost.',
+            keptAhead: 'Changes made here wait unsent until then; nothing is lost.',
+            sealButton: 'Take over on this computer ↗',
+        },
         stateInSync: 'In sync with the research',
         sinceTime: (t: string) => `since ${t}`,
         stateUnsent: "Changes the research doesn't have",
@@ -5819,6 +5835,22 @@ const stringsCZ: StringsType = {
     // Otevření výzkumu ze Strom Research (obsluha souborů, odkaz, přetažení, živý most)
     // Where a research tree stands with its research (Strom Research 1.12+)
     sync: {
+        // Zápisy, které výzkum drží, dokud se u něj něco nevyřeší (spec 017 U7). Jeho vlastní věta je první.
+        held: {
+            titleSeal: 'Zapečetěno na jiném počítači',
+            titleCloud: 'Soubory ještě nejsou stažené',
+            titleDisk: 'Na disku není místo',
+            pillSeal: 'Zapečetěno na jiném počítači',
+            pillCloud: 'Soubory nejsou stažené',
+            pillDisk: 'Plný disk',
+            aheadSeal: 'Strom je zapečetěný na jiném počítači: zapsat do něj tady půjde, až se převezme na tomto počítači.',
+            aheadCloud: (n: number) => n > 0
+                ? `Ze složky v cloudu ještě nejsou stažené soubory stromu (${n}): do té doby se nic nezapíše.`
+                : 'Ze složky v cloudu ještě nejsou stažené všechny soubory stromu: do té doby se nic nezapíše.',
+            kept: 'Úpravy z aplikace čekají neodeslané, nic se neztratí.',
+            keptAhead: 'Úpravy z aplikace do té doby čekají neodeslané, nic se neztratí.',
+            sealButton: 'Převzít na tomto počítači ↗',
+        },
         stateInSync: 'V souladu s výzkumem',
         sinceTime: (t: string) => `od ${t}`,
         stateUnsent: 'Úpravy, které výzkum nezná',
@@ -10653,6 +10685,22 @@ const stringsDE: StringsType = {
     // Opening a research from Strom Research (file handler, link, drag & drop, live bridge)
     // Where a research tree stands with its research (Strom Research 1.12+)
     sync: {
+        // Schreibvorgänge, die die Forschung zurückhält, bis dort etwas geklärt ist (Spec 017 U7). Ihr eigener Satz steht zuerst.
+        held: {
+            titleSeal: 'Auf einem anderen Computer versiegelt',
+            titleCloud: 'Dateien noch nicht heruntergeladen',
+            titleDisk: 'Kein Platz mehr auf dem Datenträger',
+            pillSeal: 'Auf anderem Computer versiegelt',
+            pillCloud: 'Dateien nicht heruntergeladen',
+            pillDisk: 'Datenträger voll',
+            aheadSeal: 'Dieser Stammbaum wurde auf einem anderen Computer versiegelt: Hier lässt sich erst etwas hineinschreiben, wenn er auf diesem Computer übernommen ist.',
+            aheadCloud: (n: number) => n > 0
+                ? `Aus dem Cloud-Ordner sind noch nicht alle Dateien des Stammbaums heruntergeladen (${n}): Bis dahin wird nichts geschrieben.`
+                : 'Aus dem Cloud-Ordner sind noch nicht alle Dateien des Stammbaums heruntergeladen: Bis dahin wird nichts geschrieben.',
+            kept: 'Die Änderungen hier warten ungesendet, nichts geht verloren.',
+            keptAhead: 'Die Änderungen hier warten bis dahin ungesendet, nichts geht verloren.',
+            sealButton: 'Auf diesem Computer übernehmen ↗',
+        },
         stateInSync: 'Mit der Forschung abgeglichen',
         sinceTime: (t: string) => `seit ${t}`,
         stateUnsent: 'Änderungen, die die Forschung nicht kennt',

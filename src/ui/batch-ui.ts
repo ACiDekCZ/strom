@@ -20,6 +20,7 @@ import {
     batchFolderFiles, newBatchId, batchPathHeader, isZip, UnfinishedBatch, sanitizeUnfinishedBatch,
 } from '../batch.js';
 import { mediaCodesOn, mediaRefusalText } from '../media-refusal.js';
+import { isWriteHeldCode, joinSaid, writeHeldOfRefusal } from '../research-write-held.js';
 import { formatBytesShort } from './originals-ui.js';
 import { onComputer, fetchWithTimeout, bridgeFailure } from './research-ui.js';
 import { uiModule } from './module.js';
@@ -67,6 +68,10 @@ interface Run {
     current: string;
     paused: boolean;
     lost: boolean;
+    /** Paused by the research (sealed elsewhere, files not downloaded, a full disk; 017 U7): its sentence, '' otherwise. */
+    held: string;
+    /** That pause is the seal's: "Take over on this computer" beside it. */
+    heldSeal: boolean;
     cancelled: boolean;
     finished: boolean;
     hidden: boolean;
@@ -478,7 +483,8 @@ export const batchMethods = uiModule({
                     <div class="batch-progress-count" role="status"><strong>${esc(b.progressCount(done, r.total))}</strong>
                         <span>${esc(b.progressBytes(formatBytesShort(r.doneBytes), formatBytesShort(r.totalBytes)))}</span></div>
                     <div class="batch-bar"><span style="width:${pct}%"></span></div>
-                    ${r.paused ? `<p class="batch-paused-note">${esc(r.lost ? b.bridgeLost : b.pausedNote)}</p>`
+                    ${r.paused ? `<p class="batch-paused-note">${esc(r.held || (r.lost ? b.bridgeLost : b.pausedNote))}${r.held && r.heldSeal && this.activeResearchLink('seal')
+                        ? ` <button type="button" class="link-button" data-act="seal">${esc(strings.sync.held.sealButton)}</button>` : ''}</p>`
                         : cur ? `<p class="batch-now">${esc(b.now(cur.path, formatBytesShort(cur.size)))}</p>` : ''}
                     ${r.skipped + r.skippedAsked ? `<p class="batch-skipped">${esc(b.skipped)} · ${r.skipped + r.skippedAsked}</p>` : ''}
                     ${refused}
@@ -572,6 +578,7 @@ export const batchMethods = uiModule({
                 case 'go': void this.startBatchRun(); break;
                 case 'pause': if (run) { run.paused = true; this.renderBatchDialog(); } break;
                 case 'resume': this.resumeBatchRun(); break;
+                case 'seal': this.researchSyncAction('sealTakeOver'); break;
                 case 'hide': this.hideBatchDialog(); break;
                 case 'cancel-run': void this.cancelBatchRun(); break;
                 case 'open-materials': {
@@ -705,7 +712,7 @@ export const batchMethods = uiModule({
             name: s.name.trim() || strings.batch.defaultName(new Date().toLocaleDateString(getCurrentLanguage())),
             person, personId: s.personId, note: s.note.trim(), queue, index: 0, total: queue.length,
             totalBytes: queue.reduce((sum, i) => sum + i.size, 0), doneBytes: 0, received: 0, skipped: 0, skippedAsked: 0, refused: [],
-            current: '', paused: false, lost: false, cancelled: false, finished: false, hidden: false, result: null, resume: null,
+            current: '', paused: false, lost: false, held: '', heldSeal: false, cancelled: false, finished: false, hidden: false, result: null, resume: null,
         };
         s.step = 'progress';
         window.addEventListener('beforeunload', onLeave);
@@ -743,6 +750,8 @@ export const batchMethods = uiModule({
             draw();
             const outcome = await this.batchSendOne(r, item);
             if (outcome === 'down') { r.paused = true; r.lost = true; continue; }
+            // Held by the research: paused with its sentence, never sent again by itself (Continue does, 017 U7).
+            if (outcome === 'held') { r.paused = true; continue; }
             if (outcome === 'again') continue;
             r.doneBytes += item.size;
             r.index++;
@@ -752,9 +761,9 @@ export const batchMethods = uiModule({
         // down meanwhile (a new token, N37): paused like a file, Continue closes it at the new one.
         for (;;) {
             const closed = await this.batchClose(r);
-            if (closed !== 'down' || r.cancelled) { r.result = closed === 'down' ? null : closed; break; }
+            if ((closed !== 'down' && closed !== 'held') || r.cancelled) { r.result = closed === 'down' || closed === 'held' ? null : closed; break; }
             r.paused = true;
-            r.lost = true;
+            r.lost = closed === 'down';
             draw(true);
             await new Promise<void>(resolve => { r.resume = resolve; });
             r.resume = null;
@@ -776,7 +785,7 @@ export const batchMethods = uiModule({
     },
 
     /** One file: asked whether the research has it (not a ZIP), else sent with the batch's headers. */
-    async batchSendOne(r: Run, item: Item): Promise<'ok' | 'again' | 'down'> {
+    async batchSendOne(r: Run, item: Item): Promise<'ok' | 'again' | 'down' | 'held'> {
         let sha: string;
         try {
             sha = await sha256OfBlob(item.file);
@@ -829,6 +838,8 @@ export const batchMethods = uiModule({
                 await sleep(retryAfterMs(res.headers.get('Retry-After')));
                 return 'again';
             }
+            // Held by the research (sealed elsewhere, files not downloaded, a full disk): never a new batch, never again by itself.
+            if (this.batchHeld(r, res.status, body)) return 'held';
             // Closed meanwhile (24 h without a file): the rest goes as a new batch.
             if (res.status === 409) {
                 r.id = newBatchId();
@@ -846,6 +857,22 @@ export const batchMethods = uiModule({
         } finally {
             if (timer) clearTimeout(timer);
         }
+    },
+
+    /**
+     * A refusal for what the research has to settle first (409 `seal.foreign` / `tree.not-downloaded`,
+     * 507 `disk.full`; 017 U7): the run's pause says its sentence and that nothing is lost. Any such
+     * code pauses, whatever the bridge announced — a 409 is never taken for a closed batch then.
+     */
+    batchHeld(r: Run, status: number, body: unknown): boolean {
+        const code = body && typeof body === 'object' ? (body as Record<string, unknown>).code : undefined;
+        if ((status !== 409 && status !== 507) || !isWriteHeldCode(code)) return false;
+        const features = this.researchStatusOf(r.researchId)?.features;
+        const held = writeHeldOfRefusal(code, (body as Record<string, unknown>).error, features);
+        const said = held?.said || mediaRefusalText(body, false, `HTTP ${status}`);
+        r.held = joinSaid(said, strings.sync.held.kept);
+        r.heldSeal = code === 'seal.foreign';
+        return true;
     },
 
     /**
@@ -873,7 +900,7 @@ export const batchMethods = uiModule({
     },
 
     /** `POST /batch/<id>/done`: the research closes the batch and makes its tasks ('down': its address turned down). */
-    async batchClose(r: Run): Promise<DoneReply | null | 'down'> {
+    async batchClose(r: Run): Promise<DoneReply | null | 'down' | 'held'> {
         const body = JSON.stringify({ name: r.name, files: r.received + r.skipped + r.skippedAsked + r.refused.length,
             ...(r.person ? { person: r.person } : {}), ...(r.note ? { note: r.note } : {}) });
         for (let attempt = 0; attempt < 4; attempt++) {
@@ -884,7 +911,10 @@ export const batchMethods = uiModule({
                     headers: { 'Content-Type': 'text/plain;charset=UTF-8' }, body,
                 });
                 if (res.status === 503) { await sleep(retryAfterMs(res.headers.get('Retry-After'))); continue; }
-                if (!res.ok) return await this.batchAddressGone(r, res.status) ? 'down' : null;
+                if (!res.ok) {
+                    if (this.batchHeld(r, res.status, await res.clone().json().catch(() => null))) return 'held';
+                    return await this.batchAddressGone(r, res.status) ? 'down' : null;
+                }
                 const j = await res.json().catch(() => null) as Record<string, unknown> | null;
                 this.researchTakeOwnWriteHead(r.researchId, headBefore, j?.head, j?.parent);
                 const n = (v: unknown): number => (typeof v === 'number' && v >= 0 ? Math.floor(v) : 0);
@@ -904,6 +934,8 @@ export const batchMethods = uiModule({
         if (bridge) run.base = bridge.base;
         run.paused = false;
         run.lost = false;
+        run.held = '';
+        run.heldSeal = false;
         run.resume?.();
         this.renderBatchDialog();
     },

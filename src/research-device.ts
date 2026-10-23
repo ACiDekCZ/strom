@@ -11,6 +11,7 @@
 import {
     ResearchLinkAction, LiveWaiting, LiveIntake, ResearchAccepts, sanitizeResearchLinks, sanitizeWaiting, WAITING_GROUPS_FEATURE, sanitizeUpdate, sanitizeIntake,
     sanitizeAccepts, parseLiveBridge, isResearchHead, researchLinkScheme, DEFAULT_RESEARCH_SCHEME,
+    ResearchTreeKind, ResearchTreeState, sanitizeTreeKind, sanitizeTreeState,
 } from './research-link.js';
 import { ResearchConflict, ResearchSend } from './types.js';
 import type { NotWrittenItem } from './research-changes.js';
@@ -160,16 +161,33 @@ export interface StoredResearchBridge {
     accepts: ResearchAccepts | null;
     /** The research's head at the last status ('' = unknown). */
     head: string;
+    /** What the last status said the tree is (`tree.kind`, `tree.state`); absent: not said (an older research). */
+    tree?: StoredResearchTree;
+}
+
+/** `tree.kind` and `tree.state` of the last status, each only when the bridge said it. */
+export interface StoredResearchTree {
+    kind?: ResearchTreeKind;
+    state?: ResearchTreeState;
+}
+
+function storedTree(value: unknown): StoredResearchTree | undefined {
+    if (!value || typeof value !== 'object') return undefined;
+    const v = value as { kind?: unknown; state?: unknown };
+    const kind = sanitizeTreeKind(v.kind);
+    const state = sanitizeTreeState(v.state);
+    return kind || state ? { ...(kind ? { kind } : {}), ...(state ? { state } : {}) } : undefined;
 }
 
 export function storedResearchBridge(researchId: string): StoredResearchBridge | null {
     try {
         const raw = localStorage.getItem(BRIDGE_KEY + researchId);
         if (!raw) return null;
-        const parsed = JSON.parse(raw) as { base?: unknown; accepts?: unknown; head?: unknown };
+        const parsed = JSON.parse(raw) as { base?: unknown; accepts?: unknown; head?: unknown; tree?: unknown };
         const base = parseLiveBridge(parsed.base)?.base ?? '';
         const head = isResearchHead(parsed.head) ?? '';
-        return { base, accepts: sanitizeAccepts(parsed.accepts), head };
+        const tree = storedTree(parsed.tree);
+        return { base, accepts: sanitizeAccepts(parsed.accepts), head, ...(tree ? { tree } : {}) };
     } catch {
         return null;
     }
@@ -193,6 +211,7 @@ function writeBridge(researchId: string, value: StoredResearchBridge): void {
                 ...(value.accepts.modeSince ? { modeSince: value.accepts.modeSince } : {}),
             } } : {}),
             ...(value.head ? { head: value.head } : {}),
+            ...(storedTree(value.tree) ? { tree: storedTree(value.tree) } : {}),
         }));
     } catch { /* no storage: the bridge is found again at the next ?live= / ?send= */ }
 }
@@ -245,20 +264,30 @@ export function noteResearchBridge(researchId: string, base: string): void {
     const bridge = parseLiveBridge(base);
     if (!bridge) return;
     const prev = storedResearchBridge(researchId);
-    writeBridge(researchId, { base: bridge.base, accepts: prev?.accepts ?? null, head: prev?.head ?? '' });
+    writeBridge(researchId, { base: bridge.base, accepts: prev?.accepts ?? null, head: prev?.head ?? '', tree: prev?.tree });
     if (prev?.base && prev.base !== bridge.base && typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent(RESEARCH_BRIDGE_MOVED_EVENT, { detail: { researchId } }));
     }
 }
 
-/** What the bridge's status said: its `accepts` (only when it says) and head. */
-export function noteResearchBridgeStatus(researchId: string, accepts: ResearchAccepts | null, head: string): void {
+/**
+ * What the bridge's status said: its `accepts` (only when it says), head and
+ * what the tree is (`tree`: from a whole status, replacing the last one, so a
+ * kind no longer said is forgotten; left out: kept as it was).
+ */
+export function noteResearchBridgeStatus(researchId: string, accepts: ResearchAccepts | null, head: string, tree?: StoredResearchTree): void {
     const prev = storedResearchBridge(researchId);
     writeBridge(researchId, {
         base: prev?.base ?? '',
         accepts: accepts ?? prev?.accepts ?? null,
         head: isResearchHead(head) ?? prev?.head ?? '',
+        tree: tree === undefined ? prev?.tree : tree,
     });
+}
+
+/** The tree as a status says it (`tree.kind`, `tree.state`), for noteResearchBridgeStatus. */
+export function researchTreeOfStatus(status: { treeKind?: ResearchTreeKind; treeState?: ResearchTreeState }): StoredResearchTree {
+    return { ...(status.treeKind ? { kind: status.treeKind } : {}), ...(status.treeState ? { state: status.treeState } : {}) };
 }
 
 // ==================== "WHAT WILL BE SENT" FIRST (per tree, this browser) ====================
