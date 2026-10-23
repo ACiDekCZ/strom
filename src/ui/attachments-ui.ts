@@ -455,10 +455,11 @@ export const attachmentsMethods = uiModule({
         // in the research → it stays there, only detached.
         const state = this.mediaStateOf({ sha: att.original?.sha256, bytes: att.original?.bytes, personId: this.currentId });
         const queuedOriginal = state?.kind === 'queued' || state?.kind === 'sending';
+        // An archive keeps no attachments: only the original stays there (an attachment without one: no note).
         const archiveNote = this.researchArchiveDeleteNote();
         const note = state?.kind === 'inResearch'
-            ? { tag: archiveNote?.tag ?? strings.research.brand, text: m.deleteDetach }
-            : archiveNote;
+            ? archiveNote ? { tag: archiveNote.tag, text: strings.sync.archiveDeleteAttachmentNote } : { tag: strings.research.brand, text: m.deleteDetach }
+            : undefined;
         const confirmed = await this.showConfirm(d.undoHint, d.deleteAttachmentTitle(att.name), {
             confirmLabel: d.deleteAttachment, variant: 'danger', note,
             ...(queuedOriginal ? { checkbox: { label: m.deleteDiscard(formatBytes(att.original?.bytes ?? 0)), hint: m.deleteDiscardHint, checked: true } } : {}),

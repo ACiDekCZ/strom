@@ -214,6 +214,8 @@ export const personSourcesMethods = uiModule({
             list.innerHTML = `<p class="person-sources-empty">${esc(s.empty)}</p>`;
             return;
         }
+        // An archive has no reading results to give: no link to one.
+        const readings = !this.activeResearchAgentless();
         list.innerHTML = rows.map((r, i) => {
             const q = qualityLabel(r.source.quality);
             const labels = r.cites.map(c => c.title
@@ -228,7 +230,7 @@ export const personSourcesMethods = uiModule({
                     </span>
                 </button>`;
             // A source written from a reading: its whole result beside the row (a button cannot hold another).
-            return r.source.reading
+            return r.source.reading && readings
                 ? `<div class="person-source-item">${row}<button type="button" class="link-button person-source-reading" data-reading="${i}">${esc(strings.read.sourceLink)}</button></div>`
                 : row;
         }).join('');

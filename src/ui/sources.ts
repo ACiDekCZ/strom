@@ -417,8 +417,9 @@ export const sourcesMethods = uiModule({
         if (pageUrl) {
             chunks.push(`<a class="viewer-open-page" href="${esc(pageUrl)}" target="_blank" rel="noopener noreferrer">${esc(s.viewerOpenPage)} ↗</a>`);
         }
-        // Written from a reading ("Read a document"): its whole result is a click away, beside the transcript.
-        const reading = src.reading
+        // Written from a reading ("Read a document"): its whole result is a click away, beside the transcript
+        // (not in an archive: it has no reading results to give).
+        const reading = src.reading && !this.activeResearchAgentless()
             ? `<p class="viewer-reading"><button type="button" class="link-button viewer-reading-open" id="source-viewer-reading">${esc(strings.read.sourceLink)}</button></p>` : '';
         if (src.transcript) {
             // Who read the entry, as the research says (nothing when it does not).

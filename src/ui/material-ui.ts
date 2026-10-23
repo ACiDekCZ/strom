@@ -109,15 +109,17 @@ export const materialMethods = uiModule({
         const cantWait = !up && (SettingsManager.isEncryptionEnabled() || bridgeFailure(null) === 'safari');
         let box: string;
         let primary: { label: string; act: string };
-        if (archive && up) {
+        if (archive && up && ready) {
             box = m.infoArchive;
             primary = { label: m.saveArchive, act: 'send' };
         } else if (cantWait) {
             box = m.cantWait(formatBytesShort(bytes));
             primary = { label: strings.sync.startResearch, act: 'start' };
         } else if (!ready) {
-            box = m.infoNoId;
-            primary = { label: picked.length ? m.sendN(picked.length) : m.sendFiles, act: 'send' };
+            // A person the research does not know yet: the files wait in the browser (also in an archive).
+            box = archive ? m.infoNoIdArchive : m.infoNoId;
+            primary = archive ? { label: m.saveArchive, act: 'send' }
+                : { label: picked.length ? m.sendN(picked.length) : m.sendFiles, act: 'send' };
         } else if (!up) {
             box = m.infoQueue;
             primary = { label: m.sendLater, act: 'send' };

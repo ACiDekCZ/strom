@@ -1,4 +1,6 @@
 import { expect, Page, Route } from '@playwright/test';
+import { createHash } from 'node:crypto';
+import { deflateSync } from 'node:zlib';
 import { openApp, card } from './helpers.js';
 
 /**
@@ -115,6 +117,11 @@ export interface FakeBridge {
     phone?: FakePhone;
     /** Reading a document (`/read*`, spec 013); its readings go into `/status.reads`. */
     read?: FakeRead;
+    /**
+     * The family's material (`GET /material`, `POST /material/assign|hide`, `?thumb=`, spec 017).
+     * Answered per `features`: `material.list`, `material.assign`, `material.thumb`.
+     */
+    material?: FakeMaterial;
 }
 
 /** A reading as `/status.reads` lists it. */
@@ -210,6 +217,337 @@ export function fakePhone(init: Partial<FakePhone> = {}): FakePhone {
     };
 }
 
+/** All three material capabilities (`/status.features`). */
+export const MATERIAL_FEATURES = ['material.list', 'material.assign', 'material.thumb'];
+
+/** One material file as the bridge lists it (`GET /material`). */
+export interface FakeMaterialFile {
+    id: string;
+    name: string;
+    sha: string;
+    mime?: string;
+    bytes?: number;
+    at?: string;
+    from?: string;
+    persons: string[];
+    batch?: string;
+    path?: string;
+    notes?: { at?: string; by?: string; text: string }[];
+    state?: 'new' | 'processed' | 'skipped';
+    sorted?: { as?: string; persons?: string[]; source?: string; reason?: string };
+    source?: string;
+    here?: boolean;
+    title?: string;
+    kind?: 'photo' | 'document' | 'record' | 'other';
+    date?: string;
+    hidden?: { at?: string; by?: string; reason?: 'unrelated' | 'duplicate' };
+}
+
+export interface FakeMaterialBatch {
+    id: string;
+    name: string;
+    at?: string;
+    done?: string;
+    persons?: string[];
+    note?: string;
+}
+
+/** The research's material, what it was asked and how it misbehaves. */
+export interface FakeMaterial {
+    files: FakeMaterialFile[];
+    batches: FakeMaterialBatch[];
+    /** Names of the people it knows (REFN → name); assign accepts only these (and `knownPersons`). */
+    people: Record<string, string>;
+    knownPersons?: string[];
+    /** Every `GET /material` query string ('' = the whole list). */
+    asks: string[];
+    /** Every `POST /material/assign` and `/hide` body. */
+    assigns: Record<string, unknown>[];
+    hides: Record<string, unknown>[];
+    /** Every preview asked ("<sha>@<px>"). */
+    thumbAsks: string[];
+    /** The next this many requests to `/material*` answer 409 `material.busy`. */
+    busyTimes?: number;
+    /** Seconds in `Retry-After` and `retry` of a busy answer (default 0). */
+    busyRetry?: number;
+    /** Writes answer 403 `material.readonly`. */
+    readonly?: boolean;
+    /** Previews answer 503 `thumb.busy`. */
+    thumbBusy?: boolean;
+    /** `GET /material` answers this status (with a refusal body) instead. */
+    listStatus?: number;
+    /** The state a file had before it was hidden (restored by `hidden: false`). */
+    priorState?: Map<string, FakeMaterialFile['state']>;
+}
+
+export function fakeMaterial(init: Partial<FakeMaterial> = {}): FakeMaterial {
+    return { files: [], batches: [], people: {}, asks: [], assigns: [], hides: [], thumbAsks: [], ...init };
+}
+
+/** A stable fake SHA-256 from a seed. */
+export function materialSha(seed: string): string {
+    return createHash('sha256').update(seed).digest('hex');
+}
+
+/** A material file with defaults (an invented JPEG received on 1 Oct 2026). */
+export function materialFile(n: number, init: Partial<FakeMaterialFile> = {}): FakeMaterialFile {
+    const id = `I${String(n).padStart(4, '0')}`;
+    return {
+        id, name: `scan-${n}.jpg`, sha: materialSha(id), mime: 'image/jpeg', bytes: 400_000 + n,
+        at: new Date(Date.UTC(2026, 9, 1, 8, 0, n % 60)).toISOString(), from: 'the Strom app',
+        persons: [], state: 'new', ...init,
+    };
+}
+
+/**
+ * 3000 invented files: one batch of 2600 in folders (some sent to a person,
+ * part without anyone) and 400 single files; a few hidden, a few TIFF/PDF.
+ */
+export function materialFixture3000(): { files: FakeMaterialFile[]; batches: FakeMaterialBatch[]; people: Record<string, string> } {
+    const people: Record<string, string> = {
+        P0001: 'Jan Novák (1901–1975)', P0002: 'Marie Nováková (*1905)', P0003: 'Karel Novák (1930–1999)',
+        P0004: 'Eva Svobodová (1932–2010)', P0005: 'Josef Dvořák',
+    };
+    const batches: FakeMaterialBatch[] = [
+        { id: 'b-box-2600', name: 'Krabice z půdy', at: '2026-10-10T10:00:00.000Z', done: '2026-10-10T11:30:00.000Z', note: 'Půda, 1980' },
+    ];
+    const folders = ['Dopisy', 'Fotky/1930', 'Fotky/1950', 'Fotky/Svatby', 'Listiny', 'Pohlednice', ''];
+    const files: FakeMaterialFile[] = [];
+    for (let i = 1; i <= 2600; i++) {
+        const folder = folders[i % folders.length];
+        const ext = i % 97 === 0 ? 'tif' : i % 53 === 0 ? 'pdf' : 'jpg';
+        files.push(materialFile(i, {
+            name: `sken-${i}.${ext}`,
+            mime: ext === 'tif' ? 'image/tiff' : ext === 'pdf' ? 'application/pdf' : 'image/jpeg',
+            batch: 'b-box-2600', path: `${folder ? `${folder}/` : ''}sken-${i}.${ext}`, from: 'batch from the Strom app',
+            at: new Date(Date.UTC(2026, 9, 10, 10, Math.floor(i / 60) % 60, i % 60)).toISOString(),
+            persons: i % 5 === 0 ? ['P0001'] : i % 7 === 0 ? ['P0002', 'P0003'] : [],
+            ...(i % 11 === 0 ? { kind: 'photo' as const } : i % 13 === 0 ? { kind: 'document' as const } : {}),
+            ...(i % 17 === 0 ? { title: `Pohled ze Žďáru ${i}` } : {}),
+            ...(i % 250 === 0 ? { hidden: { at: '2026-10-11T08:00:00.000Z', by: 'app', reason: 'duplicate' as const }, state: 'skipped' as const } : {}),
+        }));
+    }
+    for (let i = 2601; i <= 3000; i++) {
+        files.push(materialFile(i, {
+            name: `foto-${i}.jpg`, from: i % 2 ? 'the Strom app' : 'the terminal',
+            at: new Date(Date.UTC(2026, 8, 1 + (i % 28), 9, 0, 0)).toISOString(),
+            persons: i % 3 === 0 ? ['P0004'] : i % 4 === 0 ? ['P0005'] : [],
+            ...(i % 9 === 0 ? { notes: [{ by: 'user', text: `Poznámka k fotce č. ${i}` }] } : {}),
+        }));
+    }
+    return { files, batches, people };
+}
+
+const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    return c >>> 0;
+});
+
+function crc32(buf: Buffer): number {
+    let c = 0xffffffff;
+    for (const byte of buf) c = CRC_TABLE[(c ^ byte) & 0xff] ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+}
+
+function pngChunk(type: string, data: Buffer): Buffer {
+    const len = Buffer.alloc(4);
+    len.writeUInt32BE(data.length);
+    const body = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(crc32(body));
+    return Buffer.concat([len, body, crc]);
+}
+
+/** A small PNG of one colour taken from the hash (a preview of a fake file). */
+export function materialPng(sha: string, width = 32, height = 24): Buffer {
+    const rgb = [0, 2, 4].map(i => parseInt(sha.slice(i, i + 2) || '80', 16));
+    const row = Buffer.alloc(1 + width * 3);
+    for (let x = 0; x < width; x++) row.set(rgb, 1 + x * 3);
+    const raw = Buffer.concat(Array.from({ length: height }, () => row));
+    const ihdr = Buffer.alloc(13);
+    ihdr.writeUInt32BE(width, 0);
+    ihdr.writeUInt32BE(height, 4);
+    ihdr.set([8, 2, 0, 0, 0], 8);
+    return Buffer.concat([
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+        pngChunk('IHDR', ihdr), pngChunk('IDAT', deflateSync(raw)), pngChunk('IEND', Buffer.alloc(0)),
+    ]);
+}
+
+const PERSON_REF = /^P\d{1,7}$/;
+const FILE_REF = /^I\d{1,7}$/;
+
+/** The answer to `/material*` (null: not a material path). */
+function serveMaterial(b: FakeBridge, method: string, url: URL, postData: string | null):
+    { status: number; body: unknown; headers?: Record<string, string> } | null {
+    const m = b.material;
+    const rest = url.pathname.replace(/^\/[^/]+/, '');
+    if (!m || !/^\/material(\/assign|\/hide)?$/.test(rest)) return null;
+    const features = b.features ?? [];
+    const refusal = (status: number, code: string, params?: Record<string, unknown>) =>
+        ({ status, body: { error: code, code, text: code, ...(params ? { params } : {}) } });
+    const busy = () => {
+        m.busyTimes = (m.busyTimes ?? 0) - 1;
+        const retry = m.busyRetry ?? 0;
+        return { status: 409, body: { error: 'busy', code: 'material.busy', text: 'busy', retry },
+            headers: { 'retry-after': String(retry), 'access-control-expose-headers': 'Retry-After' } };
+    };
+    const batchOf = (id?: string) => (id ? m.batches.find(x => x.id === id) : undefined);
+    const concerns = (f: FakeMaterialFile, p: string) =>
+        f.persons.includes(p) || !!f.sorted?.persons?.includes(p) || !!batchOf(f.batch)?.persons?.includes(p);
+    const assignOn = features.includes('material.assign');
+    const shown = (f: FakeMaterialFile): Record<string, unknown> => {
+        if (assignOn) return { ...f };
+        // An older research: no title, kind, date nor hidden.
+        const { title: _t, kind: _k, date: _d, hidden: _h, ...older } = f;
+        return older;
+    };
+    const peopleOf = (files: FakeMaterialFile[], batches: FakeMaterialBatch[]) => {
+        const out: Record<string, string> = {};
+        const add = (p: string) => { if (m.people[p]) out[p] = m.people[p]; };
+        files.forEach(f => { f.persons.forEach(add); f.sorted?.persons?.forEach(add); });
+        batches.forEach(x => x.persons?.forEach(add));
+        return out;
+    };
+
+    if (rest === '/material') {
+        if (method !== 'GET' || !features.includes('material.list')) return { status: 404, body: '' };
+        m.asks.push(url.search.replace(/^\?/, '').split('&').filter(q => q && !q.startsWith('app=')).join('&'));
+        if ((m.busyTimes ?? 0) > 0) return busy();
+        if (m.listStatus) return refusal(m.listStatus, 'material.failed');
+        const q = url.searchParams;
+        const person = q.get('person');
+        const batch = q.get('batch');
+        const filesParam = q.get('files');
+        if ((person !== null && !PERSON_REF.test(person)) || (batch !== null && !batch.trim())
+            || (filesParam !== null && filesParam !== '0' && filesParam !== '1')) {
+            return refusal(400, 'material.query');
+        }
+        let files = m.files;
+        if (person) files = files.filter(f => concerns(f, person));
+        if (batch) files = files.filter(f => f.batch === batch);
+        const batches = m.batches
+            .map(x => ({ ...x, files: files.filter(f => f.batch === x.id).length }))
+            .filter(x => x.files > 0);
+        const listed = filesParam === '0' ? [] : files;
+        return { status: 200, body: {
+            files: listed.map(shown), batches,
+            ...(assignOn ? { people: peopleOf(listed, batches) } : {}),
+        } };
+    }
+
+    if (method !== 'POST' || !assignOn) return { status: 404, body: '' };
+    let body: Record<string, unknown>;
+    try { body = JSON.parse(postData ?? ''); } catch { return refusal(400, 'material.body'); }
+    if (!body || typeof body !== 'object') return refusal(400, 'material.body');
+    (rest === '/material/assign' ? m.assigns : m.hides).push(body);
+    if ((m.busyTimes ?? 0) > 0) return busy();
+    if (m.readonly) return refusal(403, 'material.readonly');
+    const ids = body.files;
+    const now = new Date().toISOString();
+
+    if (rest === '/material/hide') {
+        if (!Array.isArray(ids) || ids.length === 0 || !ids.every(i => typeof i === 'string' && FILE_REF.test(i))
+            || typeof body.hidden !== 'boolean'
+            || (body.reason !== undefined && body.reason !== 'unrelated' && body.reason !== 'duplicate')) {
+            return refusal(400, 'material.body');
+        }
+        const files = (ids as string[]).map(id => m.files.find(f => f.id === id));
+        const missing = (ids as string[]).find((_, i) => !files[i]);
+        if (missing) return refusal(404, 'material.file', { id: missing });
+        m.priorState ??= new Map();
+        for (const f of files as FakeMaterialFile[]) {
+            if (body.hidden) {
+                if (!f.hidden) m.priorState.set(f.id, f.state);
+                f.hidden = { at: now, by: 'app', ...(body.reason ? { reason: body.reason as 'unrelated' | 'duplicate' } : {}) };
+                f.state = 'skipped';
+            } else if (f.hidden) {
+                delete f.hidden;
+                f.state = m.priorState.get(f.id) ?? 'new';
+                m.priorState.delete(f.id);
+            }
+        }
+        return { status: 200, body: { files: (files as FakeMaterialFile[]).map(shown), people: peopleOf(files as FakeMaterialFile[], []) } };
+    }
+
+    // POST /material/assign
+    const add = body.add ?? [];
+    const remove = body.remove ?? [];
+    const hasFiles = ids !== undefined;
+    const hasBatch = body.batch !== undefined;
+    if (hasFiles === hasBatch || !Array.isArray(add) || !Array.isArray(remove)
+        || (add.length === 0 && remove.length === 0)
+        || ![...add, ...remove].every(p => typeof p === 'string' && PERSON_REF.test(p))
+        || add.some(p => remove.includes(p))
+        || (hasFiles && (!Array.isArray(ids) || ids.length === 0 || ids.length > 5000 || !ids.every(i => typeof i === 'string' && FILE_REF.test(i))))
+        || (hasBatch && (typeof body.batch !== 'string' || !body.batch))) {
+        return refusal(400, 'material.body');
+    }
+    const known = new Set([...Object.keys(m.people), ...(m.knownPersons ?? [])]);
+    const unknown = [...add, ...remove].find(p => !known.has(p as string));
+    if (unknown) return refusal(404, 'material.person', { id: unknown });
+    const addP = add as string[];
+    const removeP = remove as string[];
+    const drop = (f: FakeMaterialFile) => {
+        f.persons = f.persons.filter(p => !removeP.includes(p));
+        if (f.sorted?.persons) f.sorted.persons = f.sorted.persons.filter(p => !removeP.includes(p));
+    };
+    if (hasBatch) {
+        const batch = batchOf(body.batch as string);
+        if (!batch) return refusal(404, 'material.batch', { batch: body.batch });
+        batch.persons = [...(batch.persons ?? []).filter(p => !removeP.includes(p)), ...addP.filter(p => !(batch.persons ?? []).includes(p))];
+        const files = m.files.filter(f => f.batch === batch.id);
+        files.forEach(drop);
+        return { status: 200, body: { files: files.map(shown), people: peopleOf(files, [batch]), kept: [] } };
+    }
+    const files = (ids as string[]).map(id => m.files.find(f => f.id === id));
+    const missing = (ids as string[]).find((_, i) => !files[i]);
+    if (missing) return refusal(404, 'material.file', { id: missing });
+    const kept: { id: string; person: string; batch: string }[] = [];
+    for (const f of files as FakeMaterialFile[]) {
+        for (const p of addP) if (!f.persons.includes(p)) f.persons.push(p);
+        drop(f);
+        const batch = batchOf(f.batch);
+        for (const p of removeP) if (batch?.persons?.includes(p)) kept.push({ id: f.id, person: p, batch: batch.id });
+    }
+    const keptBatches = m.batches.filter(x => kept.some(k => k.batch === x.id));
+    return { status: 200, body: { files: (files as FakeMaterialFile[]).map(shown), people: peopleOf(files as FakeMaterialFile[], keptBatches), kept } };
+}
+
+/** A preview or the file of a material (`GET /media/<sha>?thumb=` / `?file=1`); null: not one. */
+function serveMaterialMedia(b: FakeBridge, sha: string, url: URL):
+    { status: number; body: unknown; type?: string; headers?: Record<string, string> } | null {
+    const m = b.material;
+    if (!m) return null;
+    const file = m.files.find(f => f.sha === sha);
+    const thumb = url.searchParams.get('thumb');
+    if (thumb !== null) {
+        if (!(b.features ?? []).includes('material.thumb')) return null;
+        const px = Number(thumb);
+        if (![128, 256, 512].includes(px)) return { status: 400, body: { error: 'size', code: 'thumb.size', text: 'size' } };
+        m.thumbAsks.push(`${sha}@${px}`);
+        if (m.thumbBusy) {
+            return { status: 503, body: { error: 'busy', code: 'thumb.busy', text: 'busy', retry: 1 },
+                headers: { 'retry-after': '1', 'access-control-expose-headers': 'Retry-After' } };
+        }
+        if (!file) return { status: 404, body: { error: 'unknown' } };
+        if (file.here === false) return { status: 410, body: { error: 'gone', code: 'media.gone', text: 'gone' } };
+        if (!/^(image\/(jpeg|png|heic|heif)|application\/pdf)$/.test(file.mime ?? '')) {
+            return { status: 415, body: { error: 'type', code: 'thumb.type', text: 'type' } };
+        }
+        return { status: 200, body: materialPng(sha, Math.min(px, 64), Math.min(px, 48)), type: 'image/png',
+            headers: { 'cache-control': 'private, max-age=86400' } };
+    }
+    if (url.searchParams.get('file') === '1' && file && !b.mediaFiles.has(sha)) {
+        if (file.here === false) return { status: 410, body: { error: 'gone', code: 'media.gone', text: 'gone' } };
+        return (file.mime ?? '').startsWith('image/')
+            ? { status: 200, body: materialPng(sha, 320, 240), type: 'image/png' }
+            : { status: 200, body: Buffer.from(`fake ${file.name}`), type: file.mime ?? 'application/octet-stream' };
+    }
+    return null;
+}
+
 export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Promise<FakeBridge> {
     const b: FakeBridge = {
         head: HEAD,
@@ -250,6 +588,12 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
         const media = /\/media\/([0-9a-f]{64})$/.exec(url.pathname);
         if (media) {
             const sha = media[1];
+            const mat = method === 'GET' ? serveMaterialMedia(b, sha, url) : null;
+            if (mat) {
+                return Buffer.isBuffer(mat.body)
+                    ? route.fulfill({ status: mat.status, headers: { ...cors, 'content-type': mat.type ?? 'application/octet-stream', ...(mat.headers ?? {}) }, body: mat.body })
+                    : route.fulfill({ status: mat.status, headers: { ...cors, 'content-type': 'application/json', ...(mat.headers ?? {}) }, body: JSON.stringify(mat.body) });
+            }
             if (route.request().method() === 'PUT') {
                 const body = route.request().postDataBuffer();
                 b.mediaPuts.push({ sha, headers: route.request().headers(), bytes: body?.length ?? 0 });
@@ -275,6 +619,12 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
             b.mediaAsks.push(sha);
             const known = b.mediaKnown.get(sha);
             return known ? json(200, { known }) : json(404, { error: 'unknown' });
+        }
+        const material = serveMaterial(b, method, url, route.request().postData());
+        if (material) {
+            return material.body === ''
+                ? route.fulfill({ status: material.status, headers: cors, body: '' })
+                : route.fulfill({ status: material.status, headers: { ...cors, 'content-type': 'application/json', ...(material.headers ?? {}) }, body: JSON.stringify(material.body) });
         }
         const rd = b.read;
         // A read page's image (`read/<id>/page/<n>.jpg`): a drawn sheet with ruled lines (invented, no real document).
