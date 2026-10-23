@@ -5,10 +5,12 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { hiddenRelativesTabs, hiddenChildIds, newlyShownChildIds } from '../marriage-order.js';
+import { hiddenRelativesTabs, hiddenChildIds, newlyShownChildIds, childrenDrawnElsewhere, siblingOrderMark, childrenShownClosing } from '../marriage-order.js';
 import { tabsGlyphsOnly } from '../union-order-measure.js';
 import { childIdsShownInPlace } from '../layout/pipeline/1-select-subgraph.js';
-import { PersonId, PartnershipId, Person, StromData } from '../types.js';
+import { PersonId, PartnershipId, Person, StromData, DEFAULT_LAYOUT_CONFIG } from '../types.js';
+import { runLayoutPipeline } from '../layout/pipeline/index.js';
+import { loadFixture } from '../layout/__tests__/helpers/loadFixture.js';
 
 function tree(): StromData {
     const d = { persons: {}, partnerships: {} } as unknown as StromData;
@@ -98,6 +100,137 @@ describe('children tab', () => {
         // uncle: parents and siblings out of view; his only child is a stand-in
         expect(hiddenRelativesTabs(d, P('uncle'), inView, kids)).toEqual(['parents', 'siblings']);
         expect(hiddenRelativesTabs(d, P('uncle'), inView, kids, new Set([P('uncle')]))).toEqual(['parents', 'siblings', 'childrenShown']);
+    });
+});
+
+describe('children drawn elsewhere', () => {
+    const P = (id: string) => id as PersonId;
+
+    it('a daughter who stands as the wife in another branch: in view, no line to her, never promised again', () => {
+        const d = tree();
+        // The aunt married into another branch and is drawn there as a wife
+        const inView = (id: PersonId) => ['gf', 'gm', 'father', 'aunt'].includes(id);
+        const onLine = (id: PersonId) => id === 'father';
+        expect(childrenDrawnElsewhere(d, P('gf'), inView, onLine)).toEqual([P('aunt')]);
+        expect(hiddenChildIds(d, P('gf'), inView)).toEqual([P('uncle')]);
+        // A click brings the uncle; the aunt stood in view before and is not named as shown
+        const before = new Set([P('father'), P('aunt')]);
+        const after = (id: PersonId) => ['gf', 'gm', 'father', 'aunt', 'uncle'].includes(id);
+        expect(newlyShownChildIds(d, P('gf'), after, before)).toEqual([P('uncle')]);
+    });
+
+    it('none while every child in view hangs on the line; children out of view are not elsewhere', () => {
+        const d = tree();
+        const inView = (id: PersonId) => ['gf', 'gm', 'father'].includes(id);
+        expect(childrenDrawnElsewhere(d, P('gf'), inView, id => id === 'father')).toEqual([]);
+    });
+
+    it('a "?" stand-in child is never named', () => {
+        const d = tree();
+        expect(childrenDrawnElsewhere(d, P('uncle'), () => true, () => false)).toEqual([]);
+    });
+
+    it('the laid-out view: the mother\'s sister drawn as the wife of the father\'s brother, before and after the click', () => {
+        // edge-children-elsewhere (invented): Ilse, the grandmother's daughter, married the father's brother
+        const data = loadFixture('edge-children-elsewhere');
+        const run = (shown: PersonId[]) => runLayoutPipeline({
+            data, focusPersonId: P('focus'), config: DEFAULT_LAYOUT_CONFIG, ancestorDepth: 3, descendantDepth: 2,
+            includeSpouseAncestors: false, includeParentSiblings: true, includeParentSiblingDescendants: true,
+            displayPolicy: { mode: 'expanded', autoExpand: true }, ...(shown.length ? { expandChildrenOf: shown } : {}),
+        });
+        const elsewhereOf = (r: ReturnType<typeof run>, pid: PersonId) => {
+            const drops = new Set(r.connections.flatMap(c => c.drops.map(d => d.personId)));
+            return childrenDrawnElsewhere(data, pid, id => r.positions.has(id), id => drops.has(id));
+        };
+        const before = run([]);
+        expect(elsewhereOf(before, P('v_mo'))).toEqual([P('aunt')]);
+        // The tab promises only the half-brother out of view
+        expect(hiddenChildIds(data, P('v_mo'), id => before.positions.has(id))).toEqual([P('half_v')]);
+        const visible = new Set(data.persons[P('v_mo')].childIds.filter(id => before.positions.has(id)));
+        const after = run([P('v_mo')]);
+        expect(after.positions.has(P('half_v'))).toBe(true);
+        expect(newlyShownChildIds(data, P('v_mo'), id => after.positions.has(id), visible)).toEqual([P('half_v')]);
+        expect(elsewhereOf(after, P('v_mo'))).toEqual([P('aunt')]);
+    });
+});
+
+describe('sibling order pill', () => {
+    const P = (id: string) => id as PersonId;
+    const shown = new Set([P('gf')]);
+    // The father (direct line) stood in view before the click
+    const before = (pid: PersonId) => pid === 'gf' ? new Set([P('father')]) : undefined;
+    const dated = (dates: Record<string, string | undefined>): StromData => {
+        const d = tree();
+        for (const [id, date] of Object.entries(dates)) d.persons[P(id)].birthDate = date;
+        return d;
+    };
+    const at = (xs: Record<string, number>) => new Map(Object.entries(xs).map(([id, x]) => [P(id), { x }]));
+
+    it('the direct line out of its birth place: "n of total"', () => {
+        // Born second of three, drawn at the left end
+        const d = dated({ father: '1950-05-01', aunt: '1948-01-01', uncle: '1952-01-01' });
+        const pos = at({ father: 0, aunt: 200, uncle: 400 });
+        expect(siblingOrderMark(d, P('father'), pos, shown, before)).toEqual({ n: 2, total: 3 });
+        // The siblings carry no pill
+        expect(siblingOrderMark(d, P('aunt'), pos, shown, before)).toBeNull();
+    });
+
+    it('no pill where birth would put the direct line', () => {
+        const d = dated({ father: '1946-05-01', aunt: '1948-01-01', uncle: '1952-01-01' });
+        expect(siblingOrderMark(d, P('father'), at({ father: 0, aunt: 200, uncle: 400 }), shown, before)).toBeNull();
+        // The youngest at the right end
+        const y = dated({ father: '1960-05-01', aunt: '1948-01-01', uncle: '1952-01-01' });
+        expect(siblingOrderMark(y, P('father'), at({ aunt: 0, uncle: 200, father: 400 }), shown, before)).toBeNull();
+    });
+
+    it('siblings born the same day share the places: no pill on any of them', () => {
+        const d = dated({ father: '1950-05-01', aunt: '1950-05-01', uncle: '1952-01-01' });
+        expect(siblingOrderMark(d, P('father'), at({ father: 0, aunt: 200, uncle: 400 }), shown, before)).toBeNull();
+        expect(siblingOrderMark(d, P('father'), at({ aunt: 0, father: 200, uncle: 400 }), shown, before)).toBeNull();
+        // A twin pair born after the uncle, the father drawn first
+        const t = dated({ father: '1955-05-01', aunt: '1955-05-01', uncle: '1952-01-01' });
+        expect(siblingOrderMark(t, P('father'), at({ father: 0, uncle: 200, aunt: 400 }), shown, before)).toEqual({ n: 2, total: 3 });
+    });
+
+    it('no pill without a birth date (the person\'s or a sibling\'s)', () => {
+        const pos = at({ father: 0, aunt: 200, uncle: 400 });
+        expect(siblingOrderMark(dated({ father: undefined, aunt: '1948', uncle: '1952' }), P('father'), pos, shown, before)).toBeNull();
+        expect(siblingOrderMark(dated({ father: '1950', aunt: undefined, uncle: '1952' }), P('father'), pos, shown, before)).toBeNull();
+    });
+
+    it('a sister drawn elsewhere in the tree (a wife in another branch) stands in no row: she neither counts nor gets a pill', () => {
+        const d = dated({ father: '1950-05-01', aunt: '1948-01-01', uncle: '1952-01-01' });
+        // The aunt stands far right as the wife in another branch, no line from her parents
+        const pos = at({ father: 0, uncle: 200, aunt: 900 });
+        const onLine = (id: PersonId) => id !== 'aunt';
+        const shownBefore = (pid: PersonId) => pid === 'gf' ? new Set([P('father'), P('aunt')]) : undefined;
+        expect(siblingOrderMark(d, P('father'), pos, shown, shownBefore, onLine)).toBeNull();
+        expect(siblingOrderMark(d, P('aunt'), pos, shown, shownBefore, onLine)).toBeNull();
+        // Counted as standing in the row, the father would be out of his birth place
+        expect(siblingOrderMark(d, P('father'), pos, shown, shownBefore)).toEqual({ n: 2, total: 3 });
+    });
+
+    it('no pill while the parent does not show the children in place', () => {
+        const d = dated({ father: '1950-05-01', aunt: '1948-01-01', uncle: '1952-01-01' });
+        const pos = at({ father: 0, aunt: 200, uncle: 400 });
+        expect(siblingOrderMark(d, P('father'), pos, new Set(), before)).toBeNull();
+        // Only the siblings out of view count: a family of one in view has no order
+        expect(siblingOrderMark(d, P('father'), at({ father: 0 }), shown, before)).toBeNull();
+    });
+});
+
+describe('closing shown children', () => {
+    const P = (id: string) => id as PersonId;
+
+    it('closing an ancestor closes the expansions of the descendants it brought into view', () => {
+        const brought: Record<string, PersonId[]> = { gf: [P('aunt'), P('uncle')], uncle: [P('cousin')], cousin: [P('cousin_kid')] };
+        const broughtIn = (id: PersonId) => brought[id] ? new Set(brought[id]) : undefined;
+        const shownIds = [P('gf'), P('uncle'), P('cousin'), P('other')];
+        expect([...childrenShownClosing([P('gf')], shownIds, broughtIn)].sort()).toEqual(['cousin', 'gf', 'uncle']);
+        // Closing a descendant leaves the ancestor open
+        expect([...childrenShownClosing([P('uncle')], shownIds, broughtIn)].sort()).toEqual(['cousin', 'uncle']);
+        // A person not showing children closes nothing
+        expect([...childrenShownClosing([P('aunt')], shownIds, broughtIn)]).toEqual([]);
     });
 });
 

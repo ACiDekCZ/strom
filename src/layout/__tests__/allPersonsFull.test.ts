@@ -41,6 +41,9 @@ const DEFAULT_FIXTURES = [
     'edge-wide-family',
     'edge-placeholder-parents',
     'edge-marriage-cascade',
+    // Two families married twice into each other: a daughter drawn as the
+    // wife in the other branch, half-siblings out of view on both sides.
+    'edge-children-elsewhere',
     // Persons of unknown sex (U01): the comprehensive tree with every other
     // person unknown (man + unknown, unknown + woman, two unknown in data
     // order), and etalon E with each hub unknown, its partners men and women

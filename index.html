@@ -3178,6 +3178,91 @@
         .branch-tab.children-tab:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
         .branch-tab.line-link:focus-visible .badge-tooltip,
         .branch-tab.children-tab:focus-visible .badge-tooltip { display: block; }
+        /* "▾ children": the bubble beside the tab (its rows are buttons of
+           their own), opened by the renderer (bindChildrenBubble) while a
+           mouse is over the tab or the bubble, or the keyboard is in them;
+           its left set at the tab's middle. */
+        .children-bubble { pointer-events: auto; cursor: default; }
+        .children-bubble:has(.children-elsewhere) { min-width: 200px; }
+        .children-bubble.open { display: block; }
+        /* Before the click: how many children stand elsewhere in the tree. */
+        .badge-tooltip-elsewhere {
+            padding-top: 6px;
+            color: var(--text-light);
+            font-size: 11px;
+        }
+        .children-elsewhere {
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid var(--divider);
+        }
+        .children-elsewhere-row {
+            display: flex;
+            align-items: baseline;
+            gap: 2px;
+            width: calc(100% + 12px);
+            min-height: 28px;
+            margin: 0 -6px;
+            padding: 4px 6px;
+            box-sizing: border-box;
+            border: none;
+            border-radius: 6px;
+            background: transparent;
+            font: inherit;
+            text-align: left;
+            color: inherit;
+            cursor: pointer;
+        }
+        .children-elsewhere-label { flex: 1 1 auto; min-width: 0; }
+        .children-elsewhere-label .badge-tooltip-detail { white-space: nowrap; }
+        .children-elsewhere-row .children-elsewhere-go { flex-shrink: 0; padding-left: 8px; color: var(--primary); font-size: 12px; }
+        @media (hover: hover) {
+            .children-elsewhere-row:hover { background: var(--primary-soft); }
+            .children-elsewhere-row:hover .badge-tooltip-name,
+            .children-elsewhere-row:hover .children-elsewhere-go { color: var(--primary-dark); }
+        }
+        .children-elsewhere-row:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; background: var(--primary-soft); }
+        .children-bubble > .badge-tooltip-hint:last-child { margin-top: 2px; }
+
+        /* Sibling-order pill (children shown in place, src/marriage-order.ts
+           siblingOrderMark): "2 of 5" on the bottom-right edge of the
+           direct-line card standing out of its birth place. Not a control:
+           a mouse shows the bubble, the card's label carries the words. */
+        .sibling-order-pill {
+            position: relative;
+            height: 16px;
+            box-sizing: border-box;
+            padding: 0 6px;
+            border: 1px solid var(--primary);
+            border-radius: 999px;
+            background: var(--primary-soft);
+            color: var(--primary-dark);
+            font-family: var(--font-sans);
+            font-size: 10px;
+            font-weight: 600;
+            line-height: 1;
+            display: inline-flex;
+            align-items: center;
+            white-space: nowrap;
+            font-variant-numeric: tabular-nums;
+            cursor: default;
+        }
+        .sibling-order-pill .so-tip { min-width: 180px; font-variant-numeric: normal; }
+        @media (hover: hover) { .sibling-order-pill:hover .badge-tooltip { display: block; } }
+        /* The bubble of a pill on the bottom edge opens below the card's corner, not over the card's text. */
+        .edge-bottom-right .sibling-order-pill .so-tip { left: auto; right: -8px; transform: none; }
+        .edge-bottom-right .sibling-order-pill .so-tip::after { left: auto; right: 18px; }
+
+        /* The cards of a person's children glow for a moment (just shown, or
+           while the "▾ children" bubble is open) and a card the view glided
+           to: a ring in the primary colour, coming in over 500 ms. */
+        #tree-canvas .person-card.children-glow-anim { transition: transform 0.15s, box-shadow 500ms; }
+        #tree-canvas .person-card.children-glow {
+            box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 28%, transparent), var(--shadow-sm);
+        }
+        @media (prefers-reduced-motion: reduce) {
+            #tree-canvas .person-card.children-glow-anim { transition: none; }
+        }
         .badge-tooltip-header {
             font-weight: 600;
             font-size: 10.5px;
@@ -6826,6 +6911,68 @@
             transition: background 0.15s, color 0.15s;
         }
         @media (hover: hover) { .focus-clear:hover { background: var(--hover-bg); color: var(--text); } }
+        /* Hide every child shown in place (the card's children tab, src/renderer.ts
+           updateChildrenShownUI): a button in the focus bar after the depth
+           steppers on the desktop; below it a chip floating at the top centre
+           of the tree (phone, phone held sideways, tablet). */
+        .hide-shown-children,
+        .hide-shown-children-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            flex-shrink: 0;
+            box-sizing: border-box;
+            border-radius: 999px;
+            font-family: var(--font-sans);
+            font-size: 13px;
+            font-weight: 600;
+            line-height: 1;
+            white-space: nowrap;
+            color: var(--primary-dark);
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+        }
+        .hide-shown-children {
+            height: 28px;
+            padding: 0 11px;
+            border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
+            background: var(--primary-soft);
+        }
+        .hide-shown-children-chip {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 60;
+            height: 36px;
+            max-width: calc(100% - 32px);
+            padding: 0 14px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            box-shadow: 0 4px 14px rgba(20, 16, 8, 0.12);
+            display: none;
+        }
+        /* The touch target reaches 44px around the 36px chip. */
+        .hide-shown-children-chip::before { content: ''; position: absolute; inset: -4px 0; }
+        .hide-shown-children .hsc-glyph,
+        .hide-shown-children-chip .hsc-glyph { color: var(--primary); font-size: 12px; }
+        .hide-shown-children-chip .hsc-text { overflow: hidden; text-overflow: ellipsis; }
+        .hide-shown-children:focus-visible,
+        .hide-shown-children-chip:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        @media (hover: hover) {
+            .hide-shown-children:hover { border-color: var(--primary); }
+            .hide-shown-children-chip:hover { background: var(--primary-soft); }
+        }
+        .hide-shown-children[hidden],
+        .hide-shown-children-chip[hidden] { display: none !important; }
+        /* Tablet, phone and a phone held sideways: the chip, not the bar's button. */
+        @media (max-width: 1024px) {
+            .hide-shown-children { display: none !important; }
+            .hide-shown-children-chip { display: inline-flex; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .hide-shown-children-chip { top: 8px; }
+        }
         .focus-controls .btn-export-focus {
             padding: 8px 14px;
             border: none;
@@ -7483,13 +7630,13 @@
            the card: the stripes sit above it, the last text line keeps clear
            (a margin, not padding: a line's overflow clips at its padding edge). */
         .person-card.has-edge-br .card-state { bottom: 14px; }
-        .person-card.has-edge-br .card-body:not(.card-body--custom) > :last-child { margin-right: 34px; }
+        .person-card.has-edge-br .card-body:not(.card-body--custom) > :last-child { margin-right: var(--edge-br-room, 34px); }
         /* A card of details is never narrowed (its rows were measured for its
            width): with room for the pills its text ends above the stripes; a
            card of one height for the view keeps its last line clear of them
            (its rows were wrapped 34px narrower, CARD_EDGE_PILL_RIGHT, so a
            place fits or ends in "…", never clipped under the pill). */
-        .person-card.has-edge-br:not(.has-edge-room) .card-body--custom .card-lines > :last-child { padding-right: 34px; }
+        .person-card.has-edge-br:not(.has-edge-room) .card-body--custom .card-lines > :last-child { padding-right: var(--edge-br-room, 34px); }
 
         /* ==================== RESEARCH EDGE ==================== */
         /* Above a card where the tree ends: a stub whose SHAPE says what the
@@ -16413,6 +16560,8 @@
     </div>
 
     <div id="tree-container">
+        <!-- Below the desktop: the same as a floating chip over the tree -->
+        <button type="button" id="hide-shown-children-chip" class="hide-shown-children-chip" hidden onclick="window.Strom.TreeRenderer.hideAllShownChildren()"><span class="hsc-glyph" aria-hidden="true">▾</span><span class="hsc-text"></span></button>
         <div id="tree-canvas">
             <svg id="tree-lines"></svg>
             <!-- Sticky generation labels: fixed to the left edge (a screen-space
@@ -16573,6 +16722,8 @@
                 </select>
             </div>
         </div>
+        <!-- Children shown in place (the card's children tab): hide them all at once; filled by the renderer -->
+        <button type="button" id="hide-shown-children" class="hide-shown-children" hidden onclick="window.Strom.TreeRenderer.hideAllShownChildren()"><span class="hsc-glyph" aria-hidden="true">▾</span><span class="hsc-text"></span></button>
         <button type="button" class="focus-clear" onclick="window.Strom.ZoomPan.fitToScreen()" data-i18n-title="focus.showAll" data-i18n-aria-label="focus.showAll">&times;</button>
     </div>
 

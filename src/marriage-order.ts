@@ -299,6 +299,108 @@ export function hiddenChildIds(data: StromData, personId: PersonId, inView: (id:
 }
 
 /**
+ * The person's children in view that the view does not draw as children of
+ * this family: no line comes down to them (`hangsOnLine`: the child is a drop
+ * of a drawn parent line), they stand elsewhere in the tree — a daughter as
+ * the wife in another branch, an ancestor through a marriage of relatives.
+ * In data order; "?" stand-ins never count. The children tab never promises
+ * them (they are in view already); its bubbles name them.
+ */
+export function childrenDrawnElsewhere(
+    data: StromData,
+    personId: PersonId,
+    inView: (id: PersonId) => boolean,
+    hangsOnLine: (id: PersonId) => boolean
+): PersonId[] {
+    return (data.persons[personId]?.childIds ?? []).filter(id => {
+        const child = data.persons[id];
+        return !!child && !child.isPlaceholder && inView(id) && !hangsOnLine(id);
+    });
+}
+
+/** A direct-line card's place by birth among its siblings in view ("3 of 5"). */
+export interface SiblingOrderMark {
+    n: number;
+    total: number;
+}
+
+/** Chronological key of a birth date; null when there is none. */
+function birthKey(date: string | undefined): number | null {
+    const key = weddingKey(date);
+    return key === Infinity ? null : key;
+}
+
+/**
+ * The sibling-order pill of a card (children shown in place): the layout
+ * keeps the direct line at the inner end of its siblings' row and the others
+ * by birth, so the direct-line card is the one that can stand out of order.
+ * A mark when the person's parent shows the children in place (`childrenShown`),
+ * the person stood in view before that click (the direct line, `visibleBefore`)
+ * and does not stand where birth would put them in the row. `n` is the place
+ * by birth among the children of the family in the row (the union the person
+ * was born to; `hangsOnLine`: a child drawn elsewhere in the tree, say as a
+ * wife in another branch, stands in no row of theirs), `total` their number.
+ * No mark without a birth date (the person's or a sibling's: the place cannot
+ * be told); siblings born the same day share the places they could take.
+ */
+export function siblingOrderMark(
+    data: StromData,
+    personId: PersonId,
+    positions: ReadonlyMap<PersonId, { x: number }>,
+    childrenShown: ReadonlySet<PersonId>,
+    visibleBefore: (parentId: PersonId) => ReadonlySet<PersonId> | undefined,
+    hangsOnLine: (id: PersonId) => boolean = () => true
+): SiblingOrderMark | null {
+    const person = data.persons[personId];
+    const own = positions.get(personId);
+    if (!person || person.isPlaceholder || !own || !hangsOnLine(personId)) return null;
+    const parentId = person.parentIds.find(pid => childrenShown.has(pid) && !!visibleBefore(pid)?.has(personId));
+    if (!parentId) return null;
+    const union = Object.values(data.partnerships).find(u =>
+        u.childIds.includes(personId) && (u.person1Id === parentId || u.person2Id === parentId));
+    const family = (union?.childIds ?? data.persons[parentId]?.childIds ?? []).filter(id => {
+        const child = data.persons[id];
+        return !!child && !child.isPlaceholder && positions.has(id) && hangsOnLine(id);
+    });
+    if (family.length < 2) return null;
+    const keys = new Map<PersonId, number>();
+    for (const id of family) {
+        const key = birthKey(data.persons[id].birthDate);
+        if (key === null) return null;
+        keys.set(id, key);
+    }
+    const ownKey = keys.get(personId)!;
+    const n = 1 + family.filter(id => keys.get(id)! < ownKey).length;
+    const sameDay = family.filter(id => id !== personId && keys.get(id) === ownKey).length;
+    const place = 1 + family.filter(id => positions.get(id)!.x < own.x).length;
+    if (place >= n && place <= n + sameDay) return null;
+    return { n, total: family.length };
+}
+
+/**
+ * The persons whose shown children close together with `ids`: those, and
+ * every shown person whose card one of them brought into view (`broughtIn`:
+ * the cards a click added), on and on — a child's shown children go with it.
+ */
+export function childrenShownClosing(
+    ids: readonly PersonId[],
+    shownIds: readonly PersonId[],
+    broughtIn: (id: PersonId) => ReadonlySet<PersonId> | undefined
+): Set<PersonId> {
+    const out = new Set(ids.filter(id => shownIds.includes(id)));
+    let grew = true;
+    while (grew) {
+        grew = false;
+        for (const id of shownIds) {
+            if (out.has(id) || ![...out].some(x => broughtIn(x)?.has(id))) continue;
+            out.add(id);
+            grew = true;
+        }
+    }
+    return out;
+}
+
+/**
  * A tab that stands for a line the layout left out (LayoutResult.omittedEdges):
  * on the child's card "parents ↗", on a parent's card "child ↗" (or
  * "children ↗" for several). A click jumps to the other end.

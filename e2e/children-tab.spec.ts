@@ -78,7 +78,9 @@ test('a direct-line ancestor: children shown in place, the card stays, a second 
     await expect(hide).toHaveClass(/active/);
     await expect(hide).toHaveAttribute('aria-pressed', 'true');
     await expect(hide.locator('.pill-glyph')).toHaveText('▾');
-    await expect(hide.locator('.badge-tooltip-header')).toHaveText('Children shown here');
+    // Its bubble stands beside it (rows of its own may follow)
+    await expect(cardOf(page, ANCESTOR).locator('.children-bubble > .badge-tooltip-header')).toHaveText('Children shown here');
+    await expect(cardOf(page, ANCESTOR).locator('.children-bubble > .badge-tooltip-hint')).toHaveText('A click on the tab hides them again.');
     // Each shown child hangs on a line from its parents (no card left without one)
     const drops = await page.evaluate(() => (window.Strom.TreeRenderer as unknown as { connections: { drops: { personId: string }[] }[] }).connections.flatMap(c => c.drops.map(d => d.personId)));
     for (const id of [...SIBLINGS, HALF]) expect(drops).toContain(id);
@@ -101,7 +103,7 @@ test('the person menu shows and hides the children; a new focus starts without t
     for (const id of SIBLINGS) await expect(cardOf(page, id)).toBeVisible();
     await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), ANCESTOR);
     await cardOf(page, ANCESTOR).click({ position: { x: 60, y: 40 } });
-    await expect(page.locator('.context-menu .context-menu-item[data-action="toggle-children"]')).toHaveText('Hide shown children');
+    await expect(page.locator('.context-menu .context-menu-item[data-action="toggle-children"]')).toHaveText('Hide the children shown here');
     await page.keyboard.press('Escape');
 
     // Another focus: the shown children belong to the view they were shown in
@@ -283,8 +285,115 @@ test.describe('partner chains through several people', () => {
         const hide = tabOf(page, 'b');
         await expect(hide).toHaveAttribute('aria-pressed', 'true');
         // Kid BC stood in view before the click: the bubble leaves it out
-        await expect(hide.locator('.badge-tooltip-name')).toHaveText(['Kid AB']);
+        await expect(cardOf(page, 'b').locator('.children-bubble .badge-tooltip-name')).toHaveText(['Kid AB']);
     });
+});
+
+test('two expansions: the focus bar hides both at once, every card back where it stood', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await setup(page);
+    await page.mouse.move(5, 500);
+    const before = await screenPositions(page);
+    const button = page.locator('#hide-shown-children');
+    await expect(button).toBeHidden();
+    await tabOf(page, ANCESTOR).click();
+    await expect(cardOf(page, SIBLINGS[0])).toBeVisible();
+    await expect(button).toBeVisible();
+    await expect(button).toHaveText('▾Hide shown children · 1');
+    await expect(button).toHaveAttribute('aria-label', 'Hide the children shown for 1 person');
+    // Just shown: the father's children in view glow for a moment
+    await expect(cardOf(page, SIBLINGS[0])).toHaveClass(/children-glow/);
+    // A second card with children out of view (the view moves to keep it in place)
+    const second = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('#tree-canvas .person-card[data-id]')]
+        .find(c => c.querySelector('.children-tab:not(.active)'))?.dataset.id ?? null);
+    expect(second).not.toBeNull();
+    await page.evaluate(id => window.Strom.TreeRenderer.toggleChildrenShown(id as never), second);
+    await expect(cardOf(page, second!).locator('.children-tab')).toHaveAttribute('aria-pressed', 'true');
+    await expect(button).toHaveText('▾Hide shown children · 2');
+    await expect(button).toHaveAttribute('aria-label', 'Hide the children shown for 2 people');
+    // The bar's order: after the depth steppers
+    expect(await page.evaluate(() => {
+        const b = document.getElementById('hide-shown-children')!;
+        return b.previousElementSibling?.classList.contains('focus-depth') ?? false;
+    })).toBe(true);
+    await button.click();
+    await page.mouse.move(5, 500);
+    await expect(page.locator('#tree-canvas .children-tab.active')).toHaveCount(0);
+    await expect(button).toBeHidden();
+    for (const id of SIBLINGS) await expect(cardOf(page, id)).toHaveCount(0);
+    await expect.poll(() => screenPositions(page)).toEqual(before);
+});
+
+test('a child drawn elsewhere in the tree: counted before the click, after it a row that moves the view to the card', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    // Invented: the mother's sister Ilse married the father's brother and stands by him
+    await setupFixture(page, 'edge-children-elsewhere', 'focus');
+    const grandma = 'v_mo';
+    await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), grandma);
+    const tab = tabOf(page, grandma);
+    await expect(tab.locator('.badge-tooltip-item')).toHaveCount(1);
+    await expect(tab.locator('.badge-tooltip-elsewhere')).toHaveText('More elsewhere in the tree: 1');
+    // The menu offers the card under its children row
+    await cardOf(page, grandma).click({ position: { x: 60, y: 40 } });
+    const menuRow = page.locator('.context-menu [data-action="child-elsewhere:aunt"]');
+    await expect(menuRow).toHaveText(/Ilse Varnhag \*1951/);
+    await expect(page.locator('.context-menu .menu-section-header')).toContainText(['Already in the tree elsewhere']);
+    await page.keyboard.press('Escape');
+
+    await tab.click();
+    await expect(cardOf(page, 'half_v')).toBeVisible();
+    const hide = tabOf(page, grandma);
+    await expect(hide).toHaveAttribute('aria-pressed', 'true');
+    // Over the tab the bubble opens; the pointer reaches its rows
+    await hide.hover();
+    const bubble = cardOf(page, grandma).locator('.children-bubble');
+    await expect(bubble).toBeVisible();
+    await expect(bubble.locator('.badge-tooltip-name').first()).toHaveText('Gero Ostrel');
+    const row = bubble.locator('.children-elsewhere-row');
+    await expect(row).toHaveCount(1);
+    await expect(row).toHaveAttribute('aria-label', 'Move the view to the card of Ilse Varnhag');
+    await expect(bubble.locator('.badge-tooltip-hint').last()).toHaveText('A click on the tab hides them again.');
+    // While it is open the grandmother's children glow
+    await expect(cardOf(page, 'mother')).toHaveClass(/children-glow/);
+    await row.click();
+    await expect(bubble).toBeHidden();
+    // The card stands in the middle of the tree, the children stay shown
+    await expect.poll(() => page.evaluate(() => {
+        const c = document.querySelector<HTMLElement>('#tree-canvas .person-card[data-id="aunt"]')!.getBoundingClientRect();
+        const t = document.getElementById('tree-container')!.getBoundingClientRect();
+        return [Math.round(c.left + c.width / 2 - (t.left + t.width / 2)), Math.round(c.top + c.height / 2 - (t.top + t.height / 2))]
+            .every(d => Math.abs(d) <= 3);
+    })).toBe(true);
+    await expect(cardOf(page, 'aunt')).toHaveClass(/children-glow/);
+    await expect(cardOf(page, 'half_v')).toBeVisible();
+});
+
+test('the sibling-order pill: on the direct-line card beside its siblings, clear of the card\'s other edge pills', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await setup(page);
+    await tabOf(page, ANCESTOR).click();
+    await expect(cardOf(page, SIBLINGS[0])).toBeVisible();
+    const pills = page.locator('#tree-canvas .sibling-order-pill');
+    const marks = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('#tree-canvas .sibling-order-pill')].map(p => {
+        const card = p.closest<HTMLElement>('.person-card')!;
+        const r = p.getBoundingClientRect(), c = card.getBoundingClientRect();
+        const others = [...card.querySelectorAll<HTMLElement>('.card-edge > *')].filter(o => o !== p && !p.contains(o) && o.offsetWidth > 0)
+            .map(o => o.getBoundingClientRect())
+            .filter(o => o.left < r.right && r.left < o.right && o.top < r.bottom && r.top < o.bottom);
+        return { id: card.dataset.id, text: p.querySelector('.so-text')?.textContent, inside: r.left >= c.left && r.right <= c.right, overlaps: others.length, height: r.height };
+    }));
+    // Each mark stands on a card of the father's children, within the card, over no other pill
+    for (const m of marks) {
+        expect(['focus', ...SIBLINGS, HALF]).toContain(m.id);
+        expect(m.inside).toBe(true);
+        expect(m.overlaps).toBe(0);
+        expect(m.height).toBeGreaterThanOrEqual(15);
+        expect(m.height).toBeLessThanOrEqual(17);
+    }
+    expect(await pills.count()).toBe(marks.length);
+    // The focus's line: born second of three, drawn at the inner end of the row
+    expect(marks.map(m => [m.id, m.text])).toEqual([['focus', '2 of 3']]);
+    await expect(cardOf(page, 'focus')).toHaveAttribute('aria-label', /By birth 2 of 3\./);
 });
 
 test.describe('phone 390 × 844', () => {
@@ -302,5 +411,24 @@ test.describe('phone 390 × 844', () => {
         for (const id of SIBLINGS) await expect(cardOf(page, id)).toHaveCount(1);
         await tabOf(page, ANCESTOR).tap();
         for (const id of SIBLINGS) await expect(cardOf(page, id)).toHaveCount(0);
+    });
+
+    test('a chip at the top of the tree hides the shown children', async ({ page }) => {
+        await setup(page);
+        const chip = page.locator('#hide-shown-children-chip');
+        await expect(chip).toBeHidden();
+        await tabOf(page, ANCESTOR).tap();
+        for (const id of SIBLINGS) await expect(cardOf(page, id)).toHaveCount(1);
+        await expect(chip).toBeVisible();
+        await expect(chip).toHaveText('▾Hide shown children · 1');
+        await expect(page.locator('#hide-shown-children')).toBeHidden();
+        const box = (await chip.boundingBox())!;
+        expect(box.height).toBe(36);
+        // At the top centre of the tree, within the phone's width
+        expect(Math.abs(box.x + box.width / 2 - 195)).toBeLessThanOrEqual(2);
+        expect(box.x).toBeGreaterThanOrEqual(16);
+        await chip.tap();
+        for (const id of SIBLINGS) await expect(cardOf(page, id)).toHaveCount(0);
+        await expect(chip).toBeHidden();
     });
 });

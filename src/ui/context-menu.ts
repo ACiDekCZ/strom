@@ -8,12 +8,16 @@
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings } from '../strings.js';
-import { PersonId, RelationType } from '../types.js';
+import { Person, PersonId, RelationType } from '../types.js';
 import { uiModule } from './module.js';
 import { isCoarsePointer } from './bottom-sheet.js';
 import { isTabletOrMobile } from '../breakpoints.js';
 import { fitFlyout, FLYOUT_MARGIN } from './flyout.js';
 import { shownName, nameHtml } from '../person-name.js';
+import { displayYear } from '../dates.js';
+
+/** The menu action of a row that moves the view to a child drawn elsewhere (+ the child's id). */
+const CHILD_ELSEWHERE_ACTION = 'child-elsewhere:';
 
 /** One entry in the person action menu (context menu / bottom sheet). */
 export interface PersonMenuAction {
@@ -163,8 +167,8 @@ export const contextMenuMethods = uiModule({
         // The children in place (the card's children tab), by "Focus" in every variant (the view only).
         const children: PersonMenuAction[] = TreeRenderer.canToggleChildren(personId) ? [{
             action: 'toggle-children', sheetTop: true,
-            label: TreeRenderer.isChildrenShown(personId) ? c.hideChildrenHere : c.showChildrenHere,
-        }] : [];
+            label: TreeRenderer.isChildrenShown(personId) ? strings.focus.hideChildrenHere : c.showChildrenHere,
+        }, ...this.childrenElsewhereRows(personId)] : [];
         if (isViewMode) {
             return withViewLinkRows([
                 { action: 'focus', label: c.focus },
@@ -221,10 +225,35 @@ export const contextMenuMethods = uiModule({
         ], vl);
     },
 
+    /**
+     * Under the children row: the person's children the view draws elsewhere
+     * in the tree ("Already in the tree elsewhere"), a row each that moves
+     * the view to the card (also right under the bottom sheet's tiles).
+     */
+    childrenElsewhereRows(personId: PersonId): PersonMenuAction[] {
+        return TreeRenderer.childrenElsewhereOf(personId)
+            .map(id => DataManager.getPerson(id))
+            .filter((p): p is Person => p !== null)
+            .map((p, i) => {
+                const name = shownName(p, '?');
+                const year = displayYear(p.birthDate);
+                return {
+                    action: `${CHILD_ELSEWHERE_ACTION}${p.id}`, sheetTop: true,
+                    label: year ? `${name} *${year}` : name, meta: '↗',
+                    ariaLabel: strings.focus.childrenElsewhereAria(name),
+                    ...(i === 0 ? { header: strings.focus.childrenElsewhereHeader } : {}),
+                };
+            });
+    },
+
     /** Run a person menu action (shared by context menu + bottom sheet). */
     runPersonMenuAction(personId: PersonId, action: string): void {
         if (action.startsWith('view-link-')) {
             this.runViewLinkMenuAction(personId, action);
+            return;
+        }
+        if (action.startsWith(CHILD_ELSEWHERE_ACTION)) {
+            TreeRenderer.showChildElsewhere(action.slice(CHILD_ELSEWHERE_ACTION.length) as PersonId);
             return;
         }
         switch (action) {

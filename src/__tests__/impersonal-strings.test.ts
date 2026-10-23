@@ -27,6 +27,8 @@ const EXCEPTIONS: Record<'en' | 'cs' | 'de', Set<string>> = {
     // A sentence-initial "Sie" meaning "it/they" (the changes, the source, the backup, the originals, the research).
     de: new Set(['sync.notWrittenListed', 'sync.notWrittenToast', 'research.reviewIntro', 'treeSettings.guideDesc', 'sources.deleteConfirm',
         'snapshots.restoreConfirm', 'mediaQueue.browserOnly', 'mediaQueue.bridgeDownSince', 'mediaQueue.staleSub',
+        // "Sie" the parents folded aside for shown children.
+        'focus.parentsFoldedBody',
         // The sample message the sender writes to a relative.
         'share.messagePlaceholder']),
 };
