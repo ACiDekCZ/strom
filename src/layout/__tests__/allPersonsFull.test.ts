@@ -44,6 +44,9 @@ const DEFAULT_FIXTURES = [
     // Two families married twice into each other: a daughter drawn as the
     // wife in the other branch, half-siblings out of view on both sides.
     'edge-children-elsewhere',
+    // The same with the half-sibling through the mother's father: his
+    // second wife stands on the inner side of the pedigree.
+    'edge-children-elsewhere-father',
     // Persons of unknown sex (U01): the comprehensive tree with every other
     // person unknown (man + unknown, unknown + woman, two unknown in data
     // order), and etalon E with each hub unknown, its partners men and women

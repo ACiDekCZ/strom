@@ -438,3 +438,34 @@ describe('Children shown in place: inner siblings and folded ancestors', () => {
         }
     });
 });
+
+describe('Children shown in place: a grandparent\'s extra partner on the inner side', () => {
+    const P = (id: string) => id as PersonId;
+    const cw = DEFAULT_LAYOUT_CONFIG.cardWidth;
+    const x = (r: { positions: Map<PersonId, { x: number }> }, id: string) => r.positions.get(P(id))!.x;
+
+    it('the mother\'s father shows a child of his second wife (who stands left of him): it stands beyond the mother and her sisters, never on the father\'s card', () => {
+        // Oswin's second wife Wanda stands on his left, above the focus's
+        // father; her son Gero cannot come down under her. The mother's
+        // sister Ilse is drawn elsewhere (her husband's family, left).
+        const tree = loadFixture('edge-children-elsewhere-father');
+        // The same with a sister in the mother's row (the full siblings come first)
+        const withSister = loadFixture('edge-children-elsewhere-father');
+        withSister.persons[P('aunt2')] = { ...withSister.persons[P('half_v')], id: P('aunt2'), firstName: 'Hedda', parentIds: [P('v_fa'), P('v_mo')], birthDate: '1955-02-14' };
+        for (const id of ['v_fa', 'v_mo']) withSister.persons[P(id)].childIds.push(P('aunt2'));
+        withSister.partnerships['u_v_fa_v_mo' as never].childIds.push(P('aunt2'));
+        for (const [data, row] of [[tree, ['father', 'mother', 'half_v']], [withSister, ['father', 'mother', 'aunt2', 'half_v']]] as const) {
+            for (const mode of [false, true]) for (const focus of ['focus', 'cousin']) {
+                const r = plan(data, P(focus), DEFAULT_LAYOUT_CONFIG, 4, mode, [P('v_fa')]).result;
+                const xs = row.map(id => x(r, id));
+                expect(xs, `${focus} ${mode}`).toEqual([...xs].sort((a, b) => a - b));
+                expect(foreignBetweenChildren(data, P('v_fa'), r.positions)).toEqual([]);
+                assertNoNodeOverlap(r.positions, cw, DEFAULT_LAYOUT_CONFIG.cardHeight);
+                expect(auditGeometry(r, DEFAULT_LAYOUT_CONFIG)).toEqual([]);
+                expect(r.diagnostics.validationPassed).toBe(true);
+                // Its line would cross the line to the mother: the cards link instead
+                expect(r.omittedEdges?.some(e => e.childId === P('half_v'))).toBe(true);
+            }
+        }
+    });
+});

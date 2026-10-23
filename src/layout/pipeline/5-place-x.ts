@@ -453,38 +453,14 @@ function placeAncestorChain(
     // Chain ancestor blocks: use per-union placement for children
     if (block.chainInfo && block.chainInfo.unionChildBlockIds.size > 0) {
         placeAncestorChainBlockChildren(
-            block, ancestorUnionId, anchorX, directLineChild,
+            block, ancestorUnionId, anchorX, anchorPersonId, directLineChild,
             blocks, model, unionToBlock, config, placedBlocks
         );
         placedBlocks.add(blockId);
     } else {
         // Determine sibling direction based on anchor person's role in their couple.
         // Ancestor Side Ownership (ASO): siblings of a husband fan LEFT, siblings of a wife fan RIGHT.
-        let sibDir: 'LEFT' | 'RIGHT' | 'NATURAL' = 'NATURAL';
-        if (directLineChild.chainInfo) {
-            // Direct-line child is a partner chain: fan siblings toward the side
-            // where the anchor person actually sits in the chain. Using the
-            // couple role here would route the siblings' bus across the chain
-            // (over the other partners' columns), crossing foreign stems.
-            const order = directLineChild.chainInfo.personOrder;
-            const idx = order.indexOf(anchorPersonId);
-            if (idx >= 0) {
-                sibDir = idx <= (order.length - 1) / 2 ? 'LEFT' : 'RIGHT';
-            }
-        }
-        if (sibDir === 'NATURAL') {
-            const anchorUnionId2 = model.personToUnion.get(anchorPersonId);
-            if (anchorUnionId2) {
-                const anchorUnion = model.unions.get(anchorUnionId2);
-                if (anchorUnion) {
-                    if (anchorUnion.partnerA === anchorPersonId) {
-                        sibDir = 'LEFT';  // Husband's siblings go left
-                    } else if (anchorUnion.partnerB === anchorPersonId) {
-                        sibDir = 'RIGHT'; // Wife's siblings go right
-                    }
-                }
-            }
-        }
+        const sibDir = siblingSideOf(directLineChild, anchorPersonId, model);
 
         // Place sibling blocks around the direct-line child
         placeSiblingsAround(block, directLineChild, blocks, model, unionToBlock, config, placedBlocks, sibDir);
@@ -540,6 +516,42 @@ function placeAncestorChain(
 }
 
 /**
+ * The side the anchor person's siblings fan out to beside the direct-line
+ * child's block. Ancestor Side Ownership (ASO): siblings of a husband fan
+ * LEFT, siblings of a wife fan RIGHT. A partner chain fans toward the side
+ * where the anchor person actually sits in it: using the couple role there
+ * would route the siblings' bus across the chain (over the other partners'
+ * columns), crossing foreign stems. A person without a partner: NATURAL.
+ */
+function siblingSideOf(
+    directLineChild: FamilyBlock,
+    anchorPersonId: PersonId,
+    model: LayoutModel
+): 'LEFT' | 'RIGHT' | 'NATURAL' {
+    if (directLineChild.chainInfo) {
+        const order = directLineChild.chainInfo.personOrder;
+        const idx = order.indexOf(anchorPersonId);
+        if (idx >= 0) return idx <= (order.length - 1) / 2 ? 'LEFT' : 'RIGHT';
+    }
+    const anchorUnionId = model.personToUnion.get(anchorPersonId);
+    const anchorUnion = anchorUnionId ? model.unions.get(anchorUnionId) : undefined;
+    if (anchorUnion?.partnerA === anchorPersonId) return 'LEFT';
+    if (anchorUnion?.partnerB === anchorPersonId) return 'RIGHT';
+    return 'NATURAL';
+}
+
+/** The anchor person's partner in a (non-chain) couple block has parents in the layout. */
+function partnerHasParents(block: FamilyBlock, personId: PersonId, model: LayoutModel): boolean {
+    if (block.chainInfo) return false;
+    const union = model.unions.get(block.rootUnionId);
+    if (!union || !union.partnerB) return false;
+    const partnerId = union.partnerA === personId ? union.partnerB
+        : union.partnerB === personId ? union.partnerA
+        : null;
+    return !!partnerId && model.childToParentUnion.has(partnerId);
+}
+
+/**
  * Anchor X for a specific person within a block. For chain blocks the person's
  * actual chain position is used — husband/wife anchors point at the chain
  * ENDS, which may belong to a different person (e.g. an extra partner).
@@ -563,6 +575,7 @@ function placeAncestorChainBlockChildren(
     block: FamilyBlock,
     ancestorUnionId: UnionId,
     anchorX: number,
+    anchorPersonId: PersonId,
     directLineChild: FamilyBlock,
     blocks: Map<FamilyBlockId, FamilyBlock>,
     model: LayoutModel,
@@ -694,16 +707,50 @@ function placeAncestorChainBlockChildren(
         });
     }
 
+    // A union whose extra partner stands on the far side of the parents'
+    // couple from the anchor person's siblings (an extra partner on the
+    // inner side of the pedigree, e.g. the mother's father's second wife left
+    // of him) cannot have its children under its slot when they share the
+    // gen -1 row with the direct-line couple and the person's partner has
+    // parents in view: the couple stands there, locked after Phase A, with
+    // the partner's family beyond it, and the children would land on the
+    // partner's card, among the other half's cards or between the person's
+    // full siblings. They stand on the person's own side instead, beyond the
+    // full siblings, nearest union first (as Phase B's sibling runs do in the
+    // rows above). A partner without parents leaves the far side free: the
+    // children stand beyond the partner as before. Rows below gen -1 are
+    // still Phase A's to resolve.
+    const side = directLineChild.generation === -1 && partnerHasParents(directLineChild, anchorPersonId, model)
+        ? siblingSideOf(directLineChild, anchorPersonId, model)
+        : 'NATURAL';
+    const across = (g: SecondaryGroup): boolean =>
+        side === 'RIGHT' ? g.anchorX <= childrenSpanCenter
+        : side === 'LEFT' ? g.anchorX > childrenSpanCenter
+        : false;
+    const goesLeft = (g: SecondaryGroup): boolean =>
+        across(g) ? side === 'LEFT' : g.anchorX <= childrenSpanCenter;
+    // Across the couple: after the groups on this side, nearest anchor first
+    const distance = (g: SecondaryGroup): number => Math.abs(g.anchorX - childrenSpanCenter);
+    const order = (a: SecondaryGroup, b: SecondaryGroup, outward: number): number =>
+        (Number(across(a)) - Number(across(b)))
+        || (across(a) ? distance(a) - distance(b) : (a.anchorX - b.anchorX) * outward);
+    // The direct-line couple's cards (a couple block, never a chain here)
+    const directCards = {
+        left: directLineChild.xCenter - directLineChild.coupleWidth / 2,
+        right: directLineChild.xCenter + directLineChild.coupleWidth / 2,
+    };
+
     const hasPivot = minChildX < Infinity;
     const leftGroups = secondaryGroups
-        .filter(g => g.anchorX <= childrenSpanCenter)
-        .sort((a, b) => b.anchorX - a.anchorX); // nearest to pivot first
+        .filter(goesLeft)
+        .sort((a, b) => order(a, b, -1)); // nearest to pivot first
     const rightGroups = secondaryGroups
-        .filter(g => g.anchorX > childrenSpanCenter)
-        .sort((a, b) => a.anchorX - b.anchorX);
+        .filter(g => !goesLeft(g))
+        .sort((a, b) => order(a, b, 1));
 
     let frontierLeft = hasPivot ? minChildX : Infinity;
     for (const g of leftGroups) {
+        if (across(g)) frontierLeft = Math.min(frontierLeft, directCards.left);
         if (g.left + g.groupWidth > frontierLeft - config.horizontalGap) {
             g.left = frontierLeft - config.horizontalGap - g.groupWidth;
         }
@@ -711,6 +758,7 @@ function placeAncestorChainBlockChildren(
     }
     let frontierRight = hasPivot ? maxChildX : -Infinity;
     for (const g of rightGroups) {
+        if (across(g)) frontierRight = Math.max(frontierRight, directCards.right);
         if (g.left < frontierRight + config.horizontalGap) {
             g.left = frontierRight + config.horizontalGap;
         }

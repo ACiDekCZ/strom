@@ -1,0 +1,288 @@
+{
+  "persons": {
+    "q_fa": {
+      "id": "q_fa",
+      "firstName": "Ewald",
+      "lastName": "Quenzel",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_q_fa_q_mo",
+        "u_q_fa_q_w2"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "uncle",
+        "father",
+        "half_q"
+      ],
+      "birthDate": "1920-03-11"
+    },
+    "q_mo": {
+      "id": "q_mo",
+      "firstName": "Hilde",
+      "lastName": "Quenzel",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_q_fa_q_mo"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "uncle",
+        "father"
+      ],
+      "birthDate": "1922-07-02"
+    },
+    "q_w2": {
+      "id": "q_w2",
+      "firstName": "Rosa",
+      "lastName": "Mettlach",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_q_fa_q_w2"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "half_q"
+      ],
+      "birthDate": "1932-01-20"
+    },
+    "v_fa": {
+      "id": "v_fa",
+      "firstName": "Oswin",
+      "lastName": "Varnhag",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_v_fa_v_mo",
+        "u_v_fa_v_w2"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "mother",
+        "aunt",
+        "half_v"
+      ],
+      "birthDate": "1921-05-14"
+    },
+    "v_mo": {
+      "id": "v_mo",
+      "firstName": "Trudel",
+      "lastName": "Varnhag",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_v_fa_v_mo"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "mother",
+        "aunt"
+      ],
+      "birthDate": "1923-09-30"
+    },
+    "v_w2": {
+      "id": "v_w2",
+      "firstName": "Wanda",
+      "lastName": "Ostrel",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_v_fa_v_w2"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "half_v"
+      ],
+      "birthDate": "1930-04-08"
+    },
+    "father": {
+      "id": "father",
+      "firstName": "Kunibald",
+      "lastName": "Quenzel",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_father_mother"
+      ],
+      "parentIds": [
+        "q_fa",
+        "q_mo"
+      ],
+      "childIds": [
+        "focus"
+      ],
+      "birthDate": "1948-02-17"
+    },
+    "uncle": {
+      "id": "uncle",
+      "firstName": "Ruland",
+      "lastName": "Quenzel",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_uncle_aunt"
+      ],
+      "parentIds": [
+        "q_fa",
+        "q_mo"
+      ],
+      "childIds": [
+        "cousin"
+      ],
+      "birthDate": "1946-12-01"
+    },
+    "half_q": {
+      "id": "half_q",
+      "firstName": "Till",
+      "lastName": "Quenzel",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "q_fa",
+        "q_w2"
+      ],
+      "childIds": [],
+      "birthDate": "1962-10-12"
+    },
+    "mother": {
+      "id": "mother",
+      "firstName": "Leni",
+      "lastName": "Varnhag",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_father_mother"
+      ],
+      "parentIds": [
+        "v_fa",
+        "v_mo"
+      ],
+      "childIds": [
+        "focus"
+      ],
+      "birthDate": "1949-08-22"
+    },
+    "aunt": {
+      "id": "aunt",
+      "firstName": "Ilse",
+      "lastName": "Varnhag",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_uncle_aunt"
+      ],
+      "parentIds": [
+        "v_fa",
+        "v_mo"
+      ],
+      "childIds": [
+        "cousin"
+      ],
+      "birthDate": "1951-06-05"
+    },
+    "half_v": {
+      "id": "half_v",
+      "firstName": "Gero",
+      "lastName": "Varnhag",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "v_fa",
+        "v_w2"
+      ],
+      "childIds": [],
+      "birthDate": "1960-03-03"
+    },
+    "focus": {
+      "id": "focus",
+      "firstName": "Pia",
+      "lastName": "Quenzel",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "father",
+        "mother"
+      ],
+      "childIds": [],
+      "birthDate": "1975-04-19"
+    },
+    "cousin": {
+      "id": "cousin",
+      "firstName": "Jonas",
+      "lastName": "Quenzel",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "uncle",
+        "aunt"
+      ],
+      "childIds": [],
+      "birthDate": "1978-11-09"
+    }
+  },
+  "partnerships": {
+    "u_q_fa_q_mo": {
+      "id": "u_q_fa_q_mo",
+      "person1Id": "q_fa",
+      "person2Id": "q_mo",
+      "childIds": [
+        "uncle",
+        "father"
+      ],
+      "status": "married"
+    },
+    "u_q_fa_q_w2": {
+      "id": "u_q_fa_q_w2",
+      "person1Id": "q_fa",
+      "person2Id": "q_w2",
+      "childIds": [
+        "half_q"
+      ],
+      "status": "married"
+    },
+    "u_v_fa_v_mo": {
+      "id": "u_v_fa_v_mo",
+      "person1Id": "v_fa",
+      "person2Id": "v_mo",
+      "childIds": [
+        "mother",
+        "aunt"
+      ],
+      "status": "married"
+    },
+    "u_v_fa_v_w2": {
+      "id": "u_v_fa_v_w2",
+      "person1Id": "v_fa",
+      "person2Id": "v_w2",
+      "childIds": [
+        "half_v"
+      ],
+      "status": "married"
+    },
+    "u_father_mother": {
+      "id": "u_father_mother",
+      "person1Id": "father",
+      "person2Id": "mother",
+      "childIds": [
+        "focus"
+      ],
+      "status": "married"
+    },
+    "u_uncle_aunt": {
+      "id": "u_uncle_aunt",
+      "person1Id": "uncle",
+      "person2Id": "aunt",
+      "childIds": [
+        "cousin"
+      ],
+      "status": "married"
+    }
+  }
+}

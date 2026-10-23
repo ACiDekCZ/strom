@@ -78,6 +78,17 @@ reported in `LayoutResult.innerSiblingRuns` (`InnerSiblingRun`: `personId`,
 `partnerId`, `besidePartner` — false when the partner's parents keep the run
 on the inner side). Chain couples and lone parents keep A.
 
+A grandparent's other union in the gen -1 row. When a gen -2 chain's extra
+partner stands on the far side of the parents' couple from the direct-line
+person's siblings (the mother's father's second wife left of him, the father's
+mother's second husband right of her) and the direct-line partner has parents
+in view, that union's children cannot hang under the extra partner: the couple
+below is locked after Phase A and the partner's family stands beyond it. Step 5
+(`placeAncestorChainBlockChildren`) puts them on the person's own side, beyond
+the full siblings, nearest union first; their line would cross the line to the
+person, so step 7 leaves it out and the cards link instead (`omittedEdges`).
+With a partner without parents they stand beyond the partner as before.
+
 Folded ancestors (`PipelineInput.foldAncestorsOf`, applied only together with
 `expandChildrenOf`): after `withChildrenShown`, `foldAncestorsInSelection`
 cuts the child→parent links of the listed persons and removes from the
