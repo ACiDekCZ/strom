@@ -917,7 +917,7 @@ export const miscMethods = uiModule({
                         return;
                     }
                     if (currentDialog === 'materials-modal') {
-                        this.closeMaterials();
+                        this.materialsEscape();
                         return;
                     }
                     if (currentDialog === 'batch-modal') {

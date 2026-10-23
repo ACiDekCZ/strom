@@ -24,12 +24,13 @@ import { researchPersonRef, parseLiveBridge } from '../research-link.js';
 import { storedResearchBridge, announcedResearchScheme, researchLinksEnabled } from '../research-device.js';
 import {
     MATERIAL_LIST_FEATURE, MATERIAL_ASSIGN_FEATURE, MATERIAL_THUMB_FEATURE, MATERIALS_EVENT,
-    MaterialCaps, MaterialEnv, MaterialItem, MaterialList, MaterialAction, MaterialActionId, MaterialFile,
+    MaterialCaps, MaterialEnv, MaterialItem, MaterialList, MaterialAction, MaterialActionId, MaterialFile, MaterialBatch,
     materialCaps, materialActions, personMaterials, materialCounter, materialKindLabel, batchFolderLabel,
     materialType, fileExt, primeMaterials, cachedMaterials, cachedMaterialList, saveMaterialList,
-    fetchMaterial, fetchThumb, getCachedThumb, putCachedThumb, fileUrl, materialSystemLink,
+    fetchMaterial, getCachedThumb, fileUrl, materialSystemLink,
     clearMaterialsCache, mergeIntoCache, markBatchOpened,
 } from '../materials.js';
+import { materialThumbs } from '../material-thumbs.js';
 import { formatBytesShort } from './originals-ui.js';
 import { onComputer } from './research-ui.js';
 import { openImageViewer } from './image-viewer.js';
@@ -40,8 +41,7 @@ const SECTION_ID = 'materials-section';
 const MENU_ID = 'materials-item-menu';
 /** Rows of the person's section before "All materials of this person (N) ›". */
 export const PERSON_SECTION_ROWS = 6;
-/** Previews fetched at once from the bridge. */
-const THUMB_CONCURRENCY = 3;
+/** The person's section's previews (the window's are 256). */
 const THUMB_PX = 128;
 /** The research's material capabilities, remembered per research (`/status` is gone while it is not running). */
 const FEATURES_KEY = 'strom-material-features:';
@@ -54,6 +54,26 @@ export interface MaterialsOpenOptions {
     person?: string;
     batch?: string;
     group?: 'batch' | 'date';
+}
+
+/** Where a research write on items was asked from (the dialogs' context). */
+export interface MaterialActionCtx {
+    /** The person whose section it came from (REFN). */
+    person?: string | null;
+    where?: 'section' | 'window' | 'viewer';
+    /** A batch's ⋯ (the items are its files). */
+    batch?: MaterialBatch;
+    /** A folder's ⋯ inside a batch (`path`: the folder as shown, e.g. "Fotky / 1930"). */
+    folder?: { batch: string; path: string };
+    /** The items are the window's selection (a successful action ends selecting). */
+    selection?: boolean;
+}
+
+/** Where an item was opened from, for the viewer (its ‹ › go through `items`). */
+export interface MaterialOpenCtx {
+    where: 'section' | 'window';
+    /** What the items are ("Jan Novák", a batch's name) for the viewer's header. */
+    label?: string;
 }
 
 /** What the materials need to know about the active tree (null: not linked to a research). */
@@ -138,12 +158,12 @@ export function materialShortDate(iso: string | undefined, now: Date = new Date(
     return d.toLocaleDateString(getCurrentLanguage(), opts);
 }
 
-function staleTime(ms: number): string {
+export function materialStaleTime(ms: number): string {
     return new Date(ms).toLocaleString(getCurrentLanguage(), { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 /** The type tile's letters (PDF, TIFF, JPG). */
-function tileLetters(item: MaterialItem): string {
+export function materialTileLetters(item: MaterialItem): string {
     const ext = fileExt(item.file?.name ?? item.attachment?.name ?? item.title);
     if (ext) return ext.replace(/^jpeg$/, 'jpg').slice(0, 4).toUpperCase();
     const type = materialType(item.mime);
@@ -151,7 +171,7 @@ function tileLetters(item: MaterialItem): string {
 }
 
 /** The SHA-256 of the item's file (for its preview from the bridge). */
-function itemSha(item: MaterialItem): string | null {
+export function materialItemSha(item: MaterialItem): string | null {
     return item.file?.sha ?? item.attachment?.original?.sha256 ?? null;
 }
 
@@ -197,17 +217,8 @@ let providerState: { on: boolean; count: ((p: Person) => number) | null } = { on
 /** The last state of the gates and the bridge the section was drawn with. */
 let lastBridgeKey = '';
 
-// Lazy previews.
+/** The section's lazy previews (as rows come into view). */
 let thumbObserver: IntersectionObserver | null = null;
-const thumbQueue: HTMLElement[] = [];
-let thumbActive = 0;
-let thumbGeneration = 0;
-let thumbUrls: string[] = [];
-
-function revokeThumbs(): void {
-    for (const url of thumbUrls) URL.revokeObjectURL(url);
-    thumbUrls = [];
-}
 
 let menuAnchor: HTMLElement | null = null;
 let menuKeyHandler: ((e: KeyboardEvent) => void) | null = null;
@@ -289,12 +300,24 @@ export const materialsMethods = uiModule({
         const batch = typeof opts.batch === 'string' && BATCH_ID.test(opts.batch) ? opts.batch : null;
         if (person) overlay.dataset.person = person;
         if (batch) overlay.dataset.batch = batch;
-        overlay.dataset.group = opts.group === 'date' ? 'date' : 'batch';
+        const group = opts.group === 'date' || opts.group === 'batch' ? opts.group : undefined;
+        overlay.dataset.group = group ?? 'batch';
         const m = strings.materials;
         overlay.innerHTML = `
             <div class="modal modal--lg materials-window" role="dialog" aria-modal="true" aria-labelledby="materials-title">
-                <div class="modal-header">
-                    <h2 id="materials-title">${esc(m.title)}</h2>
+                <div class="modal-header mw-head">
+                    <div class="mw-titles">
+                        <h2 id="materials-title">${esc(m.title)}</h2>
+                        <span class="mw-summary" role="status" aria-live="polite"></span>
+                    </div>
+                    <div class="mw-selhead">
+                        <span class="mw-selhead-count" role="status"></span>
+                        <button type="button" class="link-button mw-selhead-done">${esc(m.done)}</button>
+                    </div>
+                    <div class="mw-toolbar">
+                        <input type="search" id="materials-search" class="mw-search" placeholder="${esc(m.search)}" aria-label="${esc(m.search)}" autocomplete="off" spellcheck="false">
+                        <div class="mw-tools"></div>
+                    </div>
                     <button type="button" class="close-btn" aria-label="${esc(strings.buttons.close)}">&times;</button>
                 </div>
                 <div class="modal-content materials-window-body" id="materials-window-body"></div>
@@ -307,10 +330,12 @@ export const materialsMethods = uiModule({
             const ctx = this.materialsContext();
             if (ctx) void markBatchOpened(ctx.treeId, batch);
         }
+        this.initMaterialsWindow({ ...(group ? { group } : {}), person, batch });
         (overlay.querySelector('.close-btn') as HTMLElement | null)?.focus();
     },
 
     closeMaterials(): void {
+        this.teardownMaterialsWindow();
         document.getElementById(MODAL_ID)?.remove();
         this.dialogStack = this.dialogStack.filter(d => d !== MODAL_ID);
     },
@@ -318,8 +343,10 @@ export const materialsMethods = uiModule({
     /**
      * The research's writes on items (assign, remove from a person, hide,
      * restore): filled by the overview's dialogs. False: not handled.
+     * From the window: a batch's / folder's ⋯ (`ctx.batch`, `ctx.folder`),
+     * the selection bar (`ctx.selection`) and "Restore" under a hidden tile.
      */
-    materialAction(id: MaterialActionId, items: MaterialItem[], ctx: { person?: string | null; where?: 'section' | 'window' | 'viewer' } = {}): boolean {
+    materialAction(id: MaterialActionId, items: MaterialItem[], ctx: MaterialActionCtx = {}): boolean {
         void id; void items; void ctx;
         return false;
     },
@@ -373,7 +400,7 @@ export const materialsMethods = uiModule({
         else if (touch && attachments) attachments.style.display = '';
         if (listOn) this.renderMaterialsSection();
         else {
-            revokeThumbs();
+            thumbObserver?.disconnect();
             sectionItems = new Map();
         }
         return listOn || touch;
@@ -407,7 +434,7 @@ export const materialsMethods = uiModule({
             note = `<div class="materials-bar" role="status"><span>${esc(m.loadWhenRunning)}</span>${start}</div>`;
         } else if (!ctx.caps.bridgeUp) {
             state = 'stale';
-            note = `<div class="materials-bar" role="status"><span>${esc(m.stale(staleTime(rec?.list.fetchedAt || Date.now())))}</span>${start}</div>`;
+            note = `<div class="materials-bar" role="status"><span>${esc(m.stale(materialStaleTime(rec?.list.fetchedAt || Date.now())))}</span>${start}</div>`;
         }
         // Rows from the research still on their way (nothing remembered yet): two placeholder rows.
         const loading = !!refn && !rec && personLoading.has(refn);
@@ -426,8 +453,6 @@ export const materialsMethods = uiModule({
         const more = items.length > PERSON_SECTION_ROWS
             ? `<button type="button" class="link-button materials-all" data-act="all-person">${esc(m.allForPerson(items.length))}</button>`
             : items.length > 0 ? `<button type="button" class="link-button materials-all" data-act="all">${esc(m.all)}</button>` : '';
-        revokeThumbs();
-        thumbGeneration++;
         section.innerHTML = `
             <div class="materials-head">
                 <span class="materials-title">${esc(m.title)}</span>
@@ -447,11 +472,11 @@ export const materialsMethods = uiModule({
         const m = strings.materials;
         const att = item.attachment;
         const imgPreview = att && !att.originalOnly && att.mimeType.startsWith('image/') && att.dataUrl;
-        const sha = itemSha(item);
+        const sha = materialItemSha(item);
         const lazy = !imgPreview && !!sha && item.origin !== 'tree' && ['image', 'pdf'].includes(materialType(item.mime, item.title));
         const thumb = imgPreview
             ? `<span class="material-thumb"><img src="${esc(att.dataUrl)}" alt=""></span>`
-            : `<span class="material-thumb"${lazy ? ` data-sha="${esc(sha)}"` : ''}><span class="material-row-tile">${esc(tileLetters(item))}</span></span>`;
+            : `<span class="material-thumb"${lazy ? ` data-sha="${esc(sha)}"` : ''}><span class="material-row-tile">${esc(materialTileLetters(item))}</span></span>`;
         const where = `<span class="material-line3"><span class="material-where">${esc(batchFolderLabel(item))}</span>${refn && item.viaBatch.includes(refn) ? `<span class="material-via">${esc(m.viaBatch)}</span>` : ''}</span>`;
         // A tree attachment keeps its own note field (editable as before); the research's note is shown.
         let note = '';
@@ -501,11 +526,11 @@ export const materialsMethods = uiModule({
                     this.showMaterialsItemMenu(key, target.closest('.material-more') as HTMLElement);
                     return;
                 }
-                this.openMaterialItem(key);
+                this.openSectionMaterial(key);
             });
             row.addEventListener('keydown', (e) => {
                 if (e.target !== row) return;
-                if (e.key === 'Enter') { e.preventDefault(); this.openMaterialItem(key); }
+                if (e.key === 'Enter') { e.preventDefault(); this.openSectionMaterial(key); }
             });
         });
         section.querySelectorAll<HTMLInputElement>('.material-note-input[data-attachment-id]').forEach(el => {
@@ -567,9 +592,30 @@ export const materialsMethods = uiModule({
 
     // ==================== OPENING ====================
 
-    openMaterialItem(key: string): void {
+    /** An item of the person's section, opened with all the person's items around it. */
+    openSectionMaterial(key: string): void {
         const item = sectionItems.get(key);
-        if (!item) return;
+        if (!item || !this.currentId) return;
+        const all = this.personMaterialItems(this.currentId);
+        const index = all.findIndex(i => i.key === key);
+        const person = DataManager.getPerson(this.currentId);
+        const label = person ? `${person.firstName} ${person.lastName}`.trim() : '';
+        if (index >= 0) this.openMaterialItems(all, index, { where: 'section', label });
+        else this.openMaterial(item);
+    },
+
+    /**
+     * Open `items[index]` (the section's and the window's click). The viewer
+     * replaces this: `items` are in the order shown, for its ‹ ›.
+     */
+    openMaterialItems(items: MaterialItem[], index: number, ctx: MaterialOpenCtx): void {
+        void ctx;
+        const item = items[index];
+        if (item) this.openMaterial(item);
+    },
+
+    /** One item without a viewer: an attachment's preview, an image, a PDF, else the system's program. */
+    openMaterial(item: MaterialItem): void {
         const att = item.attachment;
         if (att) {
             if (att.originalOnly) this.openAttachmentFullQuality(att.id);
@@ -696,9 +742,9 @@ export const materialsMethods = uiModule({
     runMaterialItemAction(item: MaterialItem, action: MaterialAction, refn: string | null): void {
         const ctx = this.materialsContext();
         switch (action.id) {
-            case 'open': this.openMaterialItem(item.key); break;
+            case 'open': this.openSectionMaterial(item.key); break;
             case 'openSystem': {
-                const sha = itemSha(item);
+                const sha = materialItemSha(item);
                 const link = ctx && sha ? materialSystemLink(ctx.researchId, sha, announcedResearchScheme()) : null;
                 if (link) this.launchResearchLink(link);
                 break;
@@ -722,59 +768,41 @@ export const materialsMethods = uiModule({
 
     // ==================== PREVIEWS ====================
 
-    /** Previews of the research's files: from the cache, else from the bridge as rows come into view. */
+    /** Previews of the research's files (the shared queue), as the section's rows come into view. */
     observeMaterialThumbs(root: HTMLElement, ctx: MaterialsContext): void {
         thumbObserver?.disconnect();
-        thumbQueue.length = 0;
+        thumbObserver = null;
         const tiles = Array.from(root.querySelectorAll<HTMLElement>('.material-thumb[data-sha]'));
         if (tiles.length === 0) return;
-        const generation = thumbGeneration;
-        const enqueue = (el: HTMLElement) => {
-            thumbQueue.push(el);
-            this.pumpMaterialThumbs(ctx, generation);
+        const queue = materialThumbs();
+        queue.setEnv({ treeId: ctx.treeId, base: ctx.base, thumb: ctx.caps.thumb, bridgeUp: ctx.caps.bridgeUp });
+        const want = (el: HTMLElement) => {
+            const sha = el.dataset.sha;
+            const item = sectionItems.get(el.closest<HTMLElement>('.material-row')?.dataset.key ?? '');
+            if (!sha) return;
+            queue.want(
+                { sha, px: THUMB_PX, mime: item?.mime, name: item?.file?.name ?? item?.title, bytes: item?.bytes, where: strings.materials.title },
+                url => {
+                    if (!url || !el.isConnected) return;
+                    el.innerHTML = `<img src="${esc(url)}" alt="">`;
+                    el.classList.add('has-thumb');
+                },
+                () => el.isConnected && el.dataset.vis !== '0',
+            );
         };
         if (typeof IntersectionObserver !== 'function') {
-            tiles.forEach(enqueue);
+            tiles.forEach(want);
             return;
         }
-        thumbObserver = new IntersectionObserver((entries) => {
+        const observer = new IntersectionObserver((entries) => {
             for (const entry of entries) {
-                if (!entry.isIntersecting) continue;
-                thumbObserver?.unobserve(entry.target);
-                enqueue(entry.target as HTMLElement);
+                const el = entry.target as HTMLElement;
+                el.dataset.vis = entry.isIntersecting ? '1' : '0';
+                if (entry.isIntersecting) want(el);
             }
         }, { rootMargin: '200px' });
-        tiles.forEach(el => thumbObserver?.observe(el));
-    },
-
-    pumpMaterialThumbs(ctx: MaterialsContext, generation: number): void {
-        while (thumbActive < THUMB_CONCURRENCY && thumbQueue.length) {
-            const el = thumbQueue.shift()!;
-            const sha = el.dataset.sha;
-            if (!sha || !el.isConnected || generation !== thumbGeneration) continue;
-            thumbActive++;
-            void (async () => {
-                try {
-                    let blob = await getCachedThumb(ctx.treeId, sha, THUMB_PX);
-                    if (!blob && ctx.caps.thumb && ctx.base) {
-                        const answer = await fetchThumb(ctx.base, sha, THUMB_PX);
-                        if (answer.ok) {
-                            blob = answer.value;
-                            void putCachedThumb(ctx.treeId, sha, THUMB_PX, blob);
-                        }
-                    }
-                    if (blob && el.isConnected && generation === thumbGeneration) {
-                        const url = URL.createObjectURL(blob);
-                        thumbUrls.push(url);
-                        el.innerHTML = `<img src="${url}" alt="">`;
-                        el.classList.add('has-thumb');
-                    }
-                } finally {
-                    thumbActive--;
-                    this.pumpMaterialThumbs(ctx, generation);
-                }
-            })();
-        }
+        thumbObserver = observer;
+        tiles.forEach(el => observer.observe(el));
     },
 
     // ==================== KEEPING UP ====================
@@ -798,6 +826,7 @@ export const materialsMethods = uiModule({
                 void this.refreshPersonMaterials(this.currentId);
             }
         }
+        this.refreshMaterialsWindow();
         if (changed) {
             lastBridgeKey = key;
             const person = this.currentId ? DataManager.getPerson(this.currentId) : null;
@@ -826,6 +855,7 @@ export const materialsMethods = uiModule({
         const ctx = this.materialsContext();
         if (!ctx || ctx.treeId !== treeId) return;
         if (document.getElementById('person-modal')?.classList.contains('active')) this.renderMaterialsSection();
+        this.refreshMaterialsWindow();
         this.refreshMaterialsCounts();
     },
 

@@ -81,6 +81,7 @@ import { researchAdoptMethods } from './research-adopt-ui.js';
 import { researchInstallMethods } from './research-install-ui.js';
 import { materialMethods } from './material-ui.js';
 import { materialsMethods } from './materials-ui.js';
+import { materialsWindowMethods } from './materials-window.js';
 import { researchUpdateMethods } from './research-update-ui.js';
 import { researchChangesMethods } from './research-changes-ui.js';
 import { batchMethods } from './batch-ui.js';
@@ -574,6 +575,10 @@ Object.assign(UIClass.prototype, materialMethods);
 type MaterialsMethods = typeof materialsMethods;
 export interface UIClass extends MaterialsMethods {}
 Object.assign(UIClass.prototype, materialsMethods);
+
+type MaterialsWindowMethods = typeof materialsWindowMethods;
+export interface UIClass extends MaterialsWindowMethods {}
+Object.assign(UIClass.prototype, materialsWindowMethods);
 
 type ResearchUpdateMethods = typeof researchUpdateMethods;
 export interface UIClass extends ResearchUpdateMethods {}
