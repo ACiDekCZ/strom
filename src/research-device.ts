@@ -314,6 +314,13 @@ export interface ResearchAutoState {
      */
     lastCopy?: { intake: string; base: string; version?: string };
     /**
+     * A send that went as the page was left (keepalive): its answer never
+     * came back to a page that ended. The next look at the research finds it
+     * in its record of sends (`/status.sends`, by the state's fingerprint) and
+     * takes it as this tree's last send — never sent a second time.
+     */
+    leftSend?: { fingerprint: string; at: string; head: string; ownBase?: true; titles?: true; version?: string };
+    /**
      * The backup taken before the research's version was last loaded, and the
      * tree's fingerprint right after that load: "Restore the state before
      * loading" is offered while the tree is still just that (no edit since).
@@ -458,6 +465,12 @@ export function researchAutoState(treeId: string): ResearchAutoState {
         if (lc && typeof lc.intake === 'string' && lc.intake.length <= 80 && typeof lc.base === 'string') {
             out.lastCopy = { intake: lc.intake, base: lc.base,
                 ...(typeof lc.version === 'string' && lc.version && lc.version.length <= 40 ? { version: lc.version } : {}) };
+        }
+        const ls = p.leftSend as Record<string, unknown> | undefined;
+        if (ls && typeof ls.fingerprint === 'string' && ls.fingerprint.length <= 80 && typeof ls.at === 'string' && Number.isFinite(Date.parse(ls.at))) {
+            out.leftSend = { fingerprint: ls.fingerprint, at: ls.at, head: typeof ls.head === 'string' ? ls.head.slice(0, 80) : '',
+                ...(ls.ownBase === true ? { ownBase: true as const } : {}), ...(ls.titles === true ? { titles: true as const } : {}),
+                ...(typeof ls.version === 'string' && ls.version && ls.version.length <= 40 ? { version: ls.version } : {}) };
         }
         if (Array.isArray(p.resent)) out.resent = p.resent.filter((r): r is string => typeof r === 'string' && r.length <= 80).slice(-30);
         const lb = p.loadBackup as Record<string, unknown> | undefined;

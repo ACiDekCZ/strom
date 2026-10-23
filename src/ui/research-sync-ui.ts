@@ -112,6 +112,8 @@ const WRITTEN_MARK_MS = 2000;
 const CONFLICT_NOTE_MS = 8000;
 /** A keepalive request body is capped at 64 kB: a bigger tree goes as a normal request. */
 const KEEPALIVE_MAX_CHARS = 60_000;
+/** A send made as the page was left is found in the research's record from this long before it (clocks apart). */
+const LEFT_SEND_SKEW_MS = 60_000;
 /** The toolbar keeps a place for the research from this width (index.html has the same breakpoint). */
 const TOOLBAR_MIN_WIDTH = 1180;
 
@@ -385,6 +387,8 @@ export const researchSyncMethods = uiModule({
             if (visible()) this.refreshResearchStateSoon();
             else void this.researchAutoLeave();
         });
+        // The page ends (closed, another address): when it was not seen hidden first.
+        window.addEventListener('pagehide', () => { void this.researchAutoLeave(); });
         window.addEventListener('focus', () => this.refreshResearchStateSoon());
         let resizeTimer: ReturnType<typeof setTimeout> | null = null;
         window.addEventListener('resize', () => {
@@ -767,6 +771,7 @@ export const researchSyncMethods = uiModule({
         // The next ask by what this one found (down with changes waiting: soon).
         if (opts.reschedule !== false) this.scheduleResearchPoll();
         if (status) {
+            this.researchSettleLeftSend(ctx.treeId, status);
             await this.settleResearchSend(ctx.treeId, status);
             this.researchNoteUndone(ctx.treeId, status);
             this.researchNoteWrittenAgain(ctx.treeId, status);
@@ -858,6 +863,36 @@ export const researchSyncMethods = uiModule({
         }
         // An archive: the tasks it listed with an agent are not the user's any more.
         if (mode === 'archive') forgetResearchWaitingItems(link.id);
+    },
+
+    /**
+     * A send that went as the page was left (its answer never came back): the
+     * research's record of sends has it — this tree's last send now, settled
+     * as any waiting one (written, nothing new, discarded); never sent again.
+     * Not there (the bridge was not running, or it does not list its sends):
+     * the changes wait and go as usual. Asked once (audit 017 a-D1).
+     */
+    researchSettleLeftSend(treeId: TreeId, status: LiveStatus): void {
+        const left = researchAutoState(treeId).leftSend;
+        if (!left) return;
+        patchResearchAutoState(treeId, { leftSend: undefined });
+        const link = TreeManager.getTreeMetadata(treeId)?.research;
+        if (!link || !status.sends || link.id !== status.treeId) return;
+        // A send of this tree after it (another window): that one stands.
+        if (link.sent && Date.parse(link.sent.at) > Date.parse(left.at)) return;
+        const since = Date.parse(left.at) - LEFT_SEND_SKEW_MS;
+        const rec = status.sends.find(r => (r.tree === treeId || r.tree === link.id) && r.sent === left.fingerprint
+            && r.state !== 'replaced' && Date.parse(r.at) >= since);
+        if (!rec) return;
+        TreeManager.patchResearchLink(treeId, { refused: undefined,
+            sent: { fingerprint: left.fingerprint, at: left.at, changes: rec.changes, head: left.head, intake: rec.intake, state: 'pending',
+                ...(left.ownBase ? { ownBase: true } : {}), ...(left.titles ? { titles: true as const } : {}) } });
+        patchResearchAutoState(treeId, { lastCopy: { intake: rec.intake, base: link.head ?? '', ...(left.version ? { version: left.version } : {}) } });
+        if (DataManager.getCurrentTreeId() === treeId && this.researchSyncFingerprints(treeId, link).current === left.fingerprint) {
+            TreeManager.patchResearchLink(treeId, { sentSources: sourceReadings(DataManager.getData()) });
+            patchResearchAutoState(treeId, { edits: undefined, unsentSince: undefined, toldRefused: undefined });
+        }
+        autoDue.delete(treeId);
     },
 
     /** A send waiting in the research (its inbox, or still being written): written, discarded, or still there. */
@@ -1179,7 +1214,12 @@ export const researchSyncMethods = uiModule({
             autoDue.delete(treeId);
             return;
         }
-        const up = this.researchBridgeFresh(link.id) || !!await this.askResearchBridge(link.id, PING_TIMEOUT_MS);
+        // Leaving the page: the send goes at once, without asking the bridge first — the page ends before
+        // an answer (audit 017 a-D1). A bridge not there turns the request down and the changes wait here
+        // as ever. Not to one known to turn this app down, or stuck: asked as usual.
+        const rt = runtime.get(link.id);
+        const leaving = why === 'leave' && active && !(rt && !rt.up && rt.why);
+        const up = leaving || this.researchBridgeFresh(link.id) || !!await this.askResearchBridge(link.id, PING_TIMEOUT_MS);
         if (!up) {
             autoDue.add(treeId);
             this.refreshResearchSyncUi();
@@ -1306,9 +1346,17 @@ export const researchSyncMethods = uiModule({
         }
         // Another window stored this tree since: what this one holds would
         // take back what that one has. Never send it; a reload brings it up to date.
-        if (isTreeStale(treeId) || !await TreeManager.researchBaseMatches(treeId)) {
+        // Leaving the page: only what is known at once (another window's save is told to this one as it
+        // happens) — reading the stored base takes longer than the page has (audit 017 a-D1).
+        if (isTreeStale(treeId) || (!opts.keepalive && !await TreeManager.researchBaseMatches(treeId))) {
             console.warn('Not sending a stale copy of the tree to the research', treeId);
             if (!opts.auto) this.showToast(s.staleTab, 8000, { action: { label: strings.storageSafety.reload, run: () => window.location.reload() } });
+            return;
+        }
+        // Leaving the page: at once, not after the windows' lock (granted later than the page lasts); the
+        // research takes the same copy from two windows once.
+        if (opts.keepalive) {
+            await this.postResearchSendNow(treeId, opts);
             return;
         }
         // One window sends by itself (another window of this tree may be at it).
@@ -1350,8 +1398,9 @@ export const researchSyncMethods = uiModule({
             TreeManager.patchResearchLink(treeId, { awaitingIds: undefined });
             patchResearchAutoState(treeId, { toldRefused: (researchAutoState(treeId).toldRefused ?? []).filter(r => r !== NO_IDS) });
         } else if (link.awaitingIds) {
-            // Another tree (sent on a switch): it waits, and is told once it is open.
-            if (!active) return;
+            // Another tree (sent on a switch): it waits, and is told once it is open. Leaving the page:
+            // no time to fetch the numbers — it waits for the next time.
+            if (!active || opts.keepalive) return;
             if (!await this.researchFetchIds(treeId)) {
                 this.tellResearchNoIds(treeId, opts.auto);
                 return;
@@ -1403,11 +1452,20 @@ export const researchSyncMethods = uiModule({
         }
         if (autoTimerTree === treeId) this.clearResearchAutoTimer();
         this.refreshResearchSyncUi();
+        // Leaving the page: its answer may never come back here — remembered, so the next look at the
+        // research takes this send as the last one, never sends it a second time (audit 017 a-D1).
+        if (opts.keepalive && !again) {
+            patchResearchAutoState(treeId, { leftSend: { fingerprint: sentFp, at: new Date().toISOString(), head,
+                ...(ownBase ? { ownBase: true as const } : {}), ...(carriesTitles ? { titles: true as const } : {}), ...(version ? { version } : {}) } });
+        }
         let res: Response;
         try {
             res = await postSync(again ? `${bridge.base}/sync/${encodeURIComponent(again.intake!)}/again` : `${bridge.base}/sync`,
                 gedcom, SEND_TIMEOUT_MS, !!opts.keepalive && gedcom.length < KEEPALIVE_MAX_CHARS);
+            // The page is still here: the answer is taken in as any.
+            if (opts.keepalive) patchResearchAutoState(treeId, { leftSend: undefined });
         } catch (err) {
+            if (opts.keepalive) patchResearchAutoState(treeId, { leftSend: undefined });
             console.warn('Sending to the research failed', err);
             sendingTree = null;
             const prev = runtime.get(link.id);
