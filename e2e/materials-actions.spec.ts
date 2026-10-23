@@ -2,7 +2,7 @@ import { test, expect, Page } from '@playwright/test';
 import {
     fakeBridge, fakeMaterial, materialFile, materialSha, MATERIAL_FEATURES, openResearch, poll, links,
     researchGed, UUID, BRIDGE, FakeBridge, FakeMaterial, FakeMaterialFile, FakeMaterialBatch,
-    HEAD, NEW_HEAD, block, dot, openResearchMenu,
+    HEAD, NEW_HEAD, block, dot, openResearchMenu, foreignCommit,
 } from './research-bridge.js';
 
 /**
@@ -507,6 +507,60 @@ test.describe('The research\'s own commits', () => {
         await poll(page);
         await openResearchMenu(page);
         await expect(block(page)).toHaveAttribute('data-state', 'newer');
+    });
+
+    /** Assign "Rodinná fotka" to Jan from the viewer; its toast said. */
+    async function assignToJan(page: Page): Promise<void> {
+        await view(page, 'Rodinná fotka');
+        await act(page, 'assign').click();
+        await pick(page, ['Jan Fíšek']);
+        await dialog(page).locator('.mdlg-btn.is-primary').click();
+        await expect(toast(page)).toContainText('Assigned: 1 file to');
+    }
+
+    /** The tree kept its head; the research's newer version (its agent's commit) is offered. */
+    async function newerOffered(page: Page, head: string): Promise<void> {
+        await page.waitForTimeout(200);
+        expect(await treeHead(page)).toBe(head);
+        await page.keyboard.press('Escape');
+        await page.locator('#materials-modal .close-btn').click();
+        await poll(page);
+        await openResearchMenu(page);
+        await expect(block(page)).toHaveAttribute('data-state', 'newer');
+    }
+
+    test('its agent committed after the last ask (an older research, no parent): asked right before the write, nothing taken', async ({ page }) => {
+        const { bridge, material } = await setup(page, { files: [materialFile(1, { title: 'Rodinná fotka' })] });
+        // The app's last poll said HEAD; the agent commits before the write — no poll in between.
+        foreignCommit(bridge);
+        await assignToJan(page);
+        expect(material.assigns).toHaveLength(1);
+        await newerOffered(page, HEAD);
+    });
+
+    test('its agent committed right as the write arrived: the answer\'s parent is not the tree\'s head, nothing taken', async ({ page }) => {
+        const { material } = await setup(page, { files: [materialFile(1, { title: 'Rodinná fotka' })] });
+        material.writeParent = true;
+        material.foreignAtWrite = 1;
+        await assignToJan(page);
+        await newerOffered(page, HEAD);
+    });
+
+    test('the answer\'s parent is the tree\'s head: taken, still in step (no /status asked before the next write)', async ({ page }) => {
+        const { bridge, material } = await setup(page, { files: [materialFile(1, { title: 'Rodinná fotka' })] });
+        material.writeParent = true;
+        await assignToJan(page);
+        await expect.poll(() => treeHead(page)).toBe(bridge.head);
+        // The research says parent: the Undo goes without asking its status first.
+        const statusAsks = () => (bridge.seen ?? []).filter(x => x.startsWith('GET /status')).length;
+        const asked = statusAsks();
+        await toast(page).locator('.toast-action').click();
+        await expect.poll(() => material.assigns.length).toBe(2);
+        await expect.poll(() => treeHead(page)).toBe(bridge.head);
+        expect(statusAsks()).toBe(asked);
+        await page.keyboard.press('Escape');
+        await page.locator('#materials-modal .close-btn').click();
+        await inStep(page, bridge);
     });
 
     test('a write takes seconds: the button is busy, a second click sends nothing more', async ({ page }) => {

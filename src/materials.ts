@@ -905,6 +905,8 @@ export interface AssignAnswer {
     kept: MaterialKept[];
     /** The research's head after the write ('' = not said). */
     head: string;
+    /** The research's head the write was made on ('' = not said: an older research). */
+    parent: string;
 }
 
 /** The answer to `POST /material/hide`. */
@@ -913,6 +915,8 @@ export interface HideAnswer {
     people: Record<string, string>;
     /** The research's head after the write ('' = not said). */
     head: string;
+    /** The research's head the write was made on ('' = not said: an older research). */
+    parent: string;
 }
 
 function parseKept(raw: unknown): MaterialKept[] {
@@ -944,7 +948,7 @@ export async function assignMaterial(base: string, req: AssignRequest, opts: Bri
     if ('kind' in answer) return { ok: false, error: answer };
     if (answer.status === 200 && answer.body && typeof answer.body === 'object') {
         const b = answer.body as Record<string, unknown>;
-        return { ok: true, value: { files: parseFiles(b.files), people: parsePeople(b.people), kept: parseKept(b.kept), head: isResearchHead(b.head) ?? '' } };
+        return { ok: true, value: { files: parseFiles(b.files), people: parsePeople(b.people), kept: parseKept(b.kept), head: isResearchHead(b.head) ?? '', parent: isResearchHead(b.parent) ?? '' } };
     }
     return { ok: false, error: materialErrorOf(answer.status, answer.body, answer.retryAfter) };
 }
@@ -964,7 +968,7 @@ export async function hideMaterial(base: string, req: HideRequest, opts: BridgeO
     if ('kind' in answer) return { ok: false, error: answer };
     if (answer.status === 200 && answer.body && typeof answer.body === 'object') {
         const b = answer.body as Record<string, unknown>;
-        return { ok: true, value: { files: parseFiles(b.files), people: parsePeople(b.people), head: isResearchHead(b.head) ?? '' } };
+        return { ok: true, value: { files: parseFiles(b.files), people: parsePeople(b.people), head: isResearchHead(b.head) ?? '', parent: isResearchHead(b.parent) ?? '' } };
     }
     return { ok: false, error: materialErrorOf(answer.status, answer.body, answer.retryAfter) };
 }

@@ -265,11 +265,11 @@ export const materialActionsMethods = uiModule({
 
     /** An assign written and its answer remembered (the undo's requests run one after another). */
     async writeAssign(mc: MaterialsContext, req: AssignRequest): Promise<MaterialResult<AssignAnswer>> {
-        const before = this.researchHeadNow(mc.researchId);
+        const before = await this.researchHeadBeforeWrite(mc.researchId);
         const res = await assignMaterial(mc.base!, req);
         if (res.ok) {
             // The research's new head is this write's own: the tree stays in step with it.
-            this.researchTakeOwnWriteHead(mc.researchId, before, res.value.head);
+            this.researchTakeOwnWriteHead(mc.researchId, before, res.value.head, res.value.parent);
             const batch = req.batch ? { id: req.batch, ...(req.add ? { add: req.add } : {}), ...(req.remove ? { remove: req.remove } : {}) } : undefined;
             await mergeAssignIntoCache(mc.treeId, res.value.files, res.value.people, batch);
         }
@@ -278,9 +278,9 @@ export const materialActionsMethods = uiModule({
 
     /** Hide or restore files in the research; its new head taken as the tree's own (as writeAssign). */
     async writeHide(mc: MaterialsContext, req: HideRequest): Promise<MaterialResult<HideAnswer>> {
-        const before = this.researchHeadNow(mc.researchId);
+        const before = await this.researchHeadBeforeWrite(mc.researchId);
         const res = await hideMaterial(mc.base!, req);
-        if (res.ok) this.researchTakeOwnWriteHead(mc.researchId, before, res.value.head);
+        if (res.ok) this.researchTakeOwnWriteHead(mc.researchId, before, res.value.head, res.value.parent);
         return res;
     },
 

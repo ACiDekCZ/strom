@@ -802,9 +802,9 @@ export const batchMethods = uiModule({
             ...(r.person ? { 'X-Strom-Person': r.person } : {}),
             ...(zip ? { 'X-Strom-Zip': '1' } : {}),
         };
+        const headBefore = await this.researchHeadBeforeWrite(r.researchId);
         const ctl = typeof AbortController === 'function' ? new AbortController() : null;
         const timer = ctl ? setTimeout(() => ctl.abort(), Math.max(PUT_MIN_TIMEOUT_MS, item.size / 2000)) : null;
-        const headBefore = this.researchHeadNow(r.researchId);
         try {
             const res = await fetch(withAppVersion(url), {
                 method: 'PUT', mode: 'cors', credentials: 'omit', cache: 'no-store', headers, body: item.file, signal: ctl?.signal,
@@ -812,7 +812,7 @@ export const batchMethods = uiModule({
             const body = await res.json().catch(() => null) as Record<string, unknown> | null;
             if (res.ok) {
                 // The research's new head is this write's own (a file, not the tree): the tree stays in step with it.
-                this.researchTakeOwnWriteHead(r.researchId, headBefore, body?.head);
+                this.researchTakeOwnWriteHead(r.researchId, headBefore, body?.head, body?.parent);
                 const z = body?.zip && typeof body.zip === 'object' ? body.zip as Record<string, unknown> : null;
                 if (z) {
                     r.received += Array.isArray(z.inputs) ? z.inputs.length : 0;
@@ -877,7 +877,7 @@ export const batchMethods = uiModule({
         const body = JSON.stringify({ name: r.name, files: r.received + r.skipped + r.skippedAsked + r.refused.length,
             ...(r.person ? { person: r.person } : {}), ...(r.note ? { note: r.note } : {}) });
         for (let attempt = 0; attempt < 4; attempt++) {
-            const headBefore = this.researchHeadNow(r.researchId);
+            const headBefore = await this.researchHeadBeforeWrite(r.researchId);
             try {
                 const res = await fetch(withAppVersion(`${r.base}/batch/${encodeURIComponent(r.id)}/done`), {
                     method: 'POST', mode: 'cors', credentials: 'omit', cache: 'no-store',
@@ -886,7 +886,7 @@ export const batchMethods = uiModule({
                 if (res.status === 503) { await sleep(retryAfterMs(res.headers.get('Retry-After'))); continue; }
                 if (!res.ok) return await this.batchAddressGone(r, res.status) ? 'down' : null;
                 const j = await res.json().catch(() => null) as Record<string, unknown> | null;
-                this.researchTakeOwnWriteHead(r.researchId, headBefore, j?.head);
+                this.researchTakeOwnWriteHead(r.researchId, headBefore, j?.head, j?.parent);
                 const n = (v: unknown): number => (typeof v === 'number' && v >= 0 ? Math.floor(v) : 0);
                 return j ? { inputs: n(j.inputs), known: n(j.known), refused: n(j.refused), tasks: Array.isArray(j.tasks) ? j.tasks.length : 0 } : null;
             } catch {

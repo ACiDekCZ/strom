@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { card } from './helpers.js';
 import {
     fakeBridge, fakeMaterial, materialFile, materialSha, MATERIAL_FEATURES, openResearch, openResearchMenu, poll, block, dot,
-    researchGed, HEAD, UUID, BRIDGE, FakeBridge, FakeMaterial, FakeMaterialFile, FakeMaterialBatch,
+    researchGed, HEAD, UUID, BRIDGE, FakeBridge, FakeMaterial, FakeMaterialFile, FakeMaterialBatch, foreignCommit,
 } from './research-bridge.js';
 
 /**
@@ -334,6 +334,23 @@ test.describe('Add material… (Strom archive)', () => {
         await openResearchMenu(page);
         await expect(block(page)).not.toHaveAttribute('data-state', 'newer');
         await expect(block(page)).toHaveAttribute('data-state', 'inSync');
+    });
+
+    test('its agent committed after the last ask: the new file\'s head is not taken, the newer version is offered', async ({ page }) => {
+        const { bridge } = await setup(page, { archive: true });
+        foreignCommit(bridge);
+        const dialog = await open(page);
+        await dialog.locator('#material-input').setInputFiles(AVATAR);
+        await dialog.locator('#material-attach').uncheck();
+        await dialog.getByRole('button', { name: 'Save 1 file' }).click();
+        await expect(dialog).toHaveCount(0);
+        expect(bridge.mediaPuts).toHaveLength(1);
+        await page.waitForTimeout(200);
+        expect(await page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe(HEAD);
+        await page.keyboard.press('Escape');
+        await poll(page);
+        await openResearchMenu(page);
+        await expect(block(page)).toHaveAttribute('data-state', 'newer');
     });
 
     test('a file over 2 MB: "Also save to the tree" is off and cannot be ticked', async ({ page }) => {

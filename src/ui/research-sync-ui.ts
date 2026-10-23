@@ -52,6 +52,8 @@ import {
     researchKeepsTakenBack, latestUndone, nextUndone, openUndone, undoneLeftBehind, syncRefusalReason, unloadedWrittenSends, writtenConflictCount,
     ownWriteHeadTarget,
 } from '../research-sync.js';
+import { MATERIAL_ASSIGN_FEATURE } from '../materials.js';
+import { rememberedMaterialFeatures } from './materials-ui.js';
 import { setResearchConflictsProvider } from '../card-signals.js';
 import { ConflictDecideMode, conflictDecideMode, DecideKind, DecideBody, DecideResult, postBridgeDecide, canDecideInApp } from '../research-decide.js';
 import { researchConflictTitle } from './person-research-ui.js';
@@ -137,6 +139,10 @@ let titlesCatchingUp = false;
 
 /** Researches that said nothing of what they take, asked once in this page whether they do now. */
 const olderAsked = new Set<string>();
+/** Researches whose write answers said their `parent` (researchHeadBeforeWrite asks no /status for them). */
+const parentSaid = new Set<string>();
+/** Researches whose write answers said their new head (they commit the app's writes). */
+const headSaid = new Set<string>();
 /** Reading sources the research did not take as entries of its reading, already said (`read/entry/code`). */
 const readingsSaid = new Set<string>();
 
@@ -514,31 +520,64 @@ export const researchSyncMethods = uiModule({
         return answer;
     },
 
-    /** The research's head as this page knows it now ('' = not known): taken right before a write of the app's own. */
+    /** The research's head as this page knows it now ('' = not known). */
     researchHeadNow(researchId: string): string {
         return runtime.get(researchId)?.status?.head || storedResearchBridge(researchId)?.head || '';
     },
 
     /**
-     * A write of this app that leaves the tree as it is (the family's
-     * material) moved the research's head from `before` to `after` (its
-     * answer's `head`). The open tree in step with the research before the
-     * write takes the new head as that version — the write is its own,
-     * nothing newer to load came of it. Not in step: nothing changes here,
-     * so a change made elsewhere meanwhile is still said (ownWriteHeadTarget).
+     * The research's head right before a write of the app's own (the family's
+     * material), for researchTakeOwnWriteHead. A research whose write answers
+     * say their `parent` needs no asking (the answer is sure); one that does
+     * not is asked its `/status` now, never the last poll's — a commit of its
+     * agent since then would otherwise be taken in as the tree's own. '' (it
+     * does not answer): nothing will be taken.
      */
-    researchTakeOwnWriteHead(researchId: string, before: string, after: unknown): void {
+    async researchHeadBeforeWrite(researchId: string): Promise<string> {
+        const id = researchId.toLowerCase();
+        if (parentSaid.has(id)) return this.researchHeadNow(researchId);
+        // A research that commits none of the app's writes (no `material.assign`, never a head in an answer): nothing asked.
+        if (!headSaid.has(id) && !rememberedMaterialFeatures(researchId)?.includes(MATERIAL_ASSIGN_FEATURE)) return '';
+        try {
+            return (await this.askResearchBridge(researchId, POLL_TIMEOUT_MS))?.head ?? '';
+        } catch {
+            return '';
+        }
+    },
+
+    /**
+     * A write of this app that leaves the tree as it is (the family's
+     * material) moved the research's head to `after` (its answer's `head`),
+     * written on `parentRaw` (its answer's `parent`; not said by an older
+     * research: `before`, its head asked right before the write,
+     * researchHeadBeforeWrite). The open tree in step with the research
+     * before the write takes the new head as that version — the write is its
+     * own, nothing newer to load came of it. Not in step: the tree's head
+     * stays, so a change made elsewhere meanwhile is still said (ownWriteHeadTarget).
+     */
+    researchTakeOwnWriteHead(researchId: string, before: string, after: unknown, parentRaw?: unknown): void {
         const head = isResearchHead(after);
+        if (!head) return;
+        headSaid.add(researchId.toLowerCase());
+        const parent = isResearchHead(parentRaw) ?? '';
+        if (parent) parentSaid.add(researchId.toLowerCase());
         const ctx = this.researchSyncLink();
-        if (!head || !ctx || ctx.link.id !== researchId.toLowerCase() || ctx.link.copy || isTreeStale(ctx.treeId)) return;
+        const target = ctx && ctx.link.id === researchId.toLowerCase() && !ctx.link.copy && !isTreeStale(ctx.treeId)
+            ? ownWriteHeadTarget(ctx.link, before, head, parent) : null;
+        if (!ctx || !target) {
+            // Not taken: the research's new head is known at once (its newer version said now, not at the next ask).
+            const rt = runtime.get(researchId);
+            if (rt?.status) runtime.set(researchId, { ...rt, status: { ...rt.status, head } });
+            if (storedResearchBridge(researchId)) noteResearchBridgeStatus(researchId, null, head);
+            this.refreshResearchSyncUi();
+            return;
+        }
         const { treeId, link } = ctx;
-        const target = ownWriteHeadTarget(link, before, head);
-        if (!target) return;
         if (target === 'base') {
             const lastCopy = researchAutoState(treeId).lastCopy;
             TreeManager.patchResearchLink(treeId, { head });
             // The copy the research took in still is the base of the next send (no version was loaded).
-            if (lastCopy?.base === before) patchResearchAutoState(treeId, { lastCopy: { ...lastCopy, base: head } });
+            if (lastCopy?.base === (parent || before)) patchResearchAutoState(treeId, { lastCopy: { ...lastCopy, base: head } });
         } else {
             TreeManager.patchResearchLink(treeId, { sent: { ...link.sent!, replyHead: head } });
         }

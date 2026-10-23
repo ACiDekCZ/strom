@@ -282,6 +282,10 @@ export interface FakeMaterial {
     priorState?: Map<string, FakeMaterialFile['state']>;
     /** Writes (`assign`, `hide`) answer after this long (ms): the real bridge commits for seconds. */
     writeDelayMs?: number;
+    /** Write answers (`assign`, `hide`, a new file's `PUT /media`, `batch/<id>/done`) say `parent`: the head they were written on. */
+    writeParent?: boolean;
+    /** Before the next this many writes, right as each arrives, the research's agent commits a change of its own (foreignCommit). */
+    foreignAtWrite?: number;
 }
 
 /**
@@ -294,6 +298,29 @@ export function moveHead(b: FakeBridge): string {
     b.head = head;
     b.treeGed = b.treeGed.replace(/^1 _STROM_HEAD \S+$/m, `1 _STROM_HEAD ${head}`);
     return head;
+}
+
+/**
+ * A commit of the research's own (its agent, a terminal): the head moves and
+ * the tree changes (Jan gets a second name) — a newer version the app must say.
+ */
+export function foreignCommit(b: FakeBridge): string {
+    b.headMoves = (b.headMoves ?? 0) + 1;
+    const head = `beef00${b.headMoves.toString(16).padStart(6, '0')}`;
+    b.head = head;
+    b.treeGed = b.treeGed.replace(/^1 _STROM_HEAD \S+$/m, `1 _STROM_HEAD ${head}`).replace('1 NAME Jan /Fíšek/', '1 NAME Jan Václav /Fíšek/');
+    return head;
+}
+
+/** A write of the app committed (foreignAtWrite first, if due): its answer's `head` (and `parent` with writeParent). */
+function commitWrite(b: FakeBridge): { head: string; parent?: string } {
+    if (b.material?.foreignAtWrite) {
+        b.material.foreignAtWrite--;
+        foreignCommit(b);
+    }
+    const parent = b.head;
+    const head = moveHead(b);
+    return { head, ...(b.material?.writeParent ? { parent } : {}) };
 }
 
 export function fakeMaterial(init: Partial<FakeMaterial> = {}): FakeMaterial {
@@ -484,7 +511,7 @@ function serveMaterial(b: FakeBridge, method: string, url: URL, postData: string
                 m.priorState.delete(f.id);
             }
         }
-        return { status: 200, body: { files: (files as FakeMaterialFile[]).map(shown), people: peopleOf(files as FakeMaterialFile[], []), head: moveHead(b) } };
+        return { status: 200, body: { files: (files as FakeMaterialFile[]).map(shown), people: peopleOf(files as FakeMaterialFile[], []), ...commitWrite(b) } };
     }
 
     // POST /material/assign
@@ -515,7 +542,7 @@ function serveMaterial(b: FakeBridge, method: string, url: URL, postData: string
         batch.persons = [...(batch.persons ?? []).filter(p => !removeP.includes(p)), ...addP.filter(p => !(batch.persons ?? []).includes(p))];
         const files = m.files.filter(f => f.batch === batch.id);
         files.forEach(drop);
-        return { status: 200, body: { files: files.map(shown), people: peopleOf(files, [batch]), kept: [], head: moveHead(b) } };
+        return { status: 200, body: { files: files.map(shown), people: peopleOf(files, [batch]), kept: [], ...commitWrite(b) } };
     }
     const files = (ids as string[]).map(id => m.files.find(f => f.id === id));
     const missing = (ids as string[]).find((_, i) => !files[i]);
@@ -528,7 +555,7 @@ function serveMaterial(b: FakeBridge, method: string, url: URL, postData: string
         for (const p of removeP) if (batch?.persons?.includes(p)) kept.push({ id: f.id, person: p, batch: batch.id });
     }
     const keptBatches = m.batches.filter(x => kept.some(k => k.batch === x.id));
-    return { status: 200, body: { files: (files as FakeMaterialFile[]).map(shown), people: peopleOf(files as FakeMaterialFile[], keptBatches), kept, head: moveHead(b) } };
+    return { status: 200, body: { files: (files as FakeMaterialFile[]).map(shown), people: peopleOf(files as FakeMaterialFile[], keptBatches), kept, ...commitWrite(b) } };
 }
 
 /** A preview or the file of a material (`GET /media/<sha>?thumb=` / `?file=1`); null: not one. */
@@ -625,7 +652,7 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
                 const id = `I${String(100 + b.mediaPuts.length).padStart(4, '0')}`;
                 b.mediaKnown.set(sha, id);
                 // With the family's material on (spec 017), a new file is a commit, as in the research.
-                return json(200, { input: id, ...(b.material ? { head: moveHead(b) } : {}) });
+                return json(200, { input: id, ...(b.material ? commitWrite(b) : {}) });
             }
             if (url.searchParams.get('file') === '1') {
                 const file = b.mediaFiles.get(sha);
@@ -769,7 +796,8 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
             try { body = JSON.parse(route.request().postData() ?? '{}'); } catch { /* keep empty */ }
             (b.batchDone ??= []).push({ id: decodeURIComponent(done[1]), body });
             const files = b.mediaPuts.filter(p => p.headers['x-strom-batch'] === decodeURIComponent(done[1])).length;
-            return json(200, { batch: done[1], name: body.name, inputs: files, known: 0, refused: 0, nested: [], tasks: files ? ['T0101'] : [], head: b.head });
+            return json(200, { batch: done[1], name: body.name, inputs: files, known: 0, refused: 0, nested: [], tasks: files ? ['T0101'] : [], head: b.head,
+                ...(b.material?.writeParent ? { parent: b.head } : {}) });
         }
         const ph = b.phone;
         const phonePath = /\/phone(?:\/(.*))?$/.exec(url.pathname);

@@ -716,6 +716,18 @@ describe('the research\'s head after the app\'s own write (the family\'s materia
         expect(ownWriteHeadTarget(link(), 'eeeeeee', 'fffffff')).toBeNull();
         expect(ownWriteHeadTarget(link({ sent: sent({ state: 'written', ownBase: false, replyHead: 'eeeeeee' }) }), 'eeeeeee', 'fffffff')).toBeNull();
     });
+    it('the answer\'s parent decides: a commit of someone else\'s between the ask and the write is never absorbed', () => {
+        // Asked right before: in step; the research wrote on another head (its agent committed meanwhile).
+        expect(ownWriteHeadTarget(link(), 'aaaaaaa', 'fffffff', 'eeeeeee')).toBeNull();
+        // Written right on the tree's head: taken, even when the asked head was older or unknown.
+        expect(ownWriteHeadTarget(link(), '', 'bbbbbbb', 'aaaaaaa')).toBe('base');
+        expect(ownWriteHeadTarget(link(), '1111111', 'bbbbbbb', 'aaaaaaa')).toBe('base');
+        const l = link({ sent: sent({ state: 'written', ownBase: true, replyHead: 'ccccccc' }) });
+        expect(ownWriteHeadTarget(l, 'ccccccc', 'ddddddd', 'eeeeeee')).toBeNull();
+        expect(ownWriteHeadTarget(l, '', 'ddddddd', 'ccccccc')).toBe('own');
+        // A write that wrote nothing (parent === head): nothing moved.
+        expect(ownWriteHeadTarget(link(), 'aaaaaaa', 'aaaaaaa', 'aaaaaaa')).toBeNull();
+    });
     it('no head before or after, or the same: nothing', () => {
         expect(ownWriteHeadTarget(link(), '', 'bbbbbbb')).toBeNull();
         expect(ownWriteHeadTarget(link(), 'aaaaaaa', '')).toBeNull();

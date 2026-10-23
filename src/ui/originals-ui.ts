@@ -826,9 +826,9 @@ export const originalsMethods = uiModule({
                 return 'down';
             }
         }
+        const headBefore = await this.researchHeadBeforeWrite(rec.researchId);
         const ctl = typeof AbortController === 'function' ? new AbortController() : null;
         const timer = ctl ? setTimeout(() => ctl.abort(), Math.max(PUT_MIN_TIMEOUT_MS, rec.bytes / 2000)) : null;
-        const headBefore = this.researchHeadNow(rec.researchId);
         try {
             const res = await fetch(withAppVersion(url), {
                 method: 'PUT',
@@ -842,7 +842,7 @@ export const originalsMethods = uiModule({
             if (res.ok) {
                 const body = await res.json().catch(() => null) as Record<string, unknown> | null;
                 // The research's new head is this write's own (a file, not the tree): the tree stays in step with it.
-                this.researchTakeOwnWriteHead(rec.researchId, headBefore, body?.head);
+                this.researchTakeOwnWriteHead(rec.researchId, headBefore, body?.head, body?.parent);
                 if (body && typeof body.known === 'string') {
                     knownByResearch.add(rec.sha256);
                     // Strom Research 1.12: what it added to its input (a person it did not have, the note).
