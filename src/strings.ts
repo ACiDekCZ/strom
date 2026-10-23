@@ -4286,7 +4286,10 @@ const stringsEN = {
         contentPhotos: 'Photos',
         contentAttachments: 'Attachments, documents & source excerpts',
         contentNotes: 'Notes',
-        contentSources: 'Sources & citations'
+        contentSources: 'Sources & citations',
+        // Any privacy mode but Full data leaves the source catalog, citations and attachments out (all persons).
+        dropsSources: (full: string) => `With any choice other than “${full}”, sources, citations and attachments are not exported, not even for deceased people.`,
+        dropsSourcesContent: 'Attachments and sources are left out by the chosen privacy of living people.',
     },
 
     // Poster export (SVG / PNG / tiled PDF)
@@ -8944,7 +8947,9 @@ const stringsCZ: StringsType = {
         contentPhotos: 'Fotky',
         contentAttachments: 'Přílohy, dokumenty a výřezy pramenů',
         contentNotes: 'Poznámky',
-        contentSources: 'Zdroje a citace'
+        contentSources: 'Zdroje a citace',
+        dropsSources: (full: string) => `Při jiné volbě než „${full}“ se zdroje, citace a přílohy nevyexportují, ani u zemřelých osob.`,
+        dropsSourcesContent: 'Přílohy a zdroje vynechá zvolené soukromí žijících osob.',
     },
 
     // Poster export (SVG / PNG / tiled PDF)
@@ -13523,7 +13528,9 @@ const stringsDE: StringsType = {
         contentPhotos: 'Fotos',
         contentAttachments: 'Anhänge, Dokumente & Quellenausschnitte',
         contentNotes: 'Notizen',
-        contentSources: 'Quellen & Zitate'
+        contentSources: 'Quellen & Zitate',
+        dropsSources: (full: string) => `Bei jeder Wahl außer „${full}“ werden Quellen, Zitate und Anhänge nicht exportiert, auch nicht bei Verstorbenen.`,
+        dropsSourcesContent: 'Anhänge und Quellen lässt die gewählte Privatsphäre lebender Personen weg.',
     },
 
     // Poster export (SVG / PNG / tiled PDF)

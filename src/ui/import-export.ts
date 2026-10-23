@@ -313,7 +313,7 @@ export const importExportMethods = uiModule({
             const { AppExporter } = await import('../export.js');
             await AppExporter.exportAllAsApp(password, includeAuditLog, this.readExportPrivacyMode(), this.readExportContentOptions());
         // A full backup: every tree, unfiltered (like the JSON "Export all").
-        }, true, { defaultPrivacy: 'full', format: 'html' });
+        }, true, { defaultPrivacy: 'full', format: 'html', allTrees: true });
     },
 
     /**
@@ -1402,7 +1402,7 @@ export const importExportMethods = uiModule({
             await this.downloadAllTreesJson(password, includeAuditLog, this.readExportPrivacyMode(), this.readExportContentOptions());
         }, !quick, quick
             ? { quick: { hint: strings.fileCopy.quickHintAll(TreeManager.getTrees().length) } }
-            : { format: 'all' });
+            : { format: 'all', allTrees: true });
     },
 
     /** Every tree into one JSON file (the "Export all" backup). Returns the file name. */

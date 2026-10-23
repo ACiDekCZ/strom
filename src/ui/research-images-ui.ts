@@ -818,6 +818,8 @@ export const researchImagesMethods = uiModule({
     async loadImagesBeforeExport(): Promise<boolean> {
         const fieldset = document.getElementById('export-source-images');
         if (!exportImagesTreeId || fieldset?.dataset.choice !== 'all') return true;
+        // A privacy mode leaves the sources out, their images with them: nothing to load.
+        if (this.readExportPrivacyMode() !== 'full') return true;
         if (this.heldSources().length === 0 || this.researchImagesEnv().mode !== 'fetch') return true;
         const progress = document.getElementById('export-images-progress');
         const buttons = document.querySelector<HTMLElement>('#export-password-modal .export-buttons');

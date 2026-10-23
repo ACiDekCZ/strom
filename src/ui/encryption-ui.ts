@@ -22,7 +22,7 @@ import {
     LastFocusedMarker
 } from '../types.js';
 import { strings } from '../strings.js';
-import { PrivacyMode, ContentOptions, ContentPreset, CONTENT_PRESETS, matchContentPreset, applyContentOptions } from '../privacy.js';
+import { PrivacyMode, ContentOptions, ContentPreset, CONTENT_PRESETS, matchContentPreset, applyContentOptions, applyLivingPrivacy } from '../privacy.js';
 import { totalPhotoBytes } from '../photo.js';
 import { totalAttachmentBytes, totalExcerptBytes } from '../attachments.js';
 import { parseGedcom, convertToStrom, GedcomConversionResult } from '../ged-parser.js';
@@ -53,8 +53,17 @@ export type ExportFormat = 'json' | 'html' | 'gedcom' | 'csv' | 'all';
 
 /** The dialog is the narrowed full backup (button says "Save to file"). */
 let exportQuick = false;
+/** The export takes every tree (only the current one is measured; the others may hold sources). */
+let exportAllTrees = false;
 /** The encryption block while taken out of the dialog (GEDCOM, CSV). */
 let detachedEncryptBlock: HTMLElement | null = null;
+
+/** The tree holds anything a privacy mode leaves out of an export: sources, citations, attachments. */
+function hasSourcesOrAttachments(data: StromData): boolean {
+    if (Object.keys(data.sources ?? {}).length > 0) return true;
+    return Object.values(data.persons).some(p => (p.attachments?.length ?? 0) > 0
+        || PERSON_CITATION_FIELDS.some(f => (p[f]?.length ?? 0) > 0));
+}
 
 export const encryptionUiMethods = uiModule({
     // ---- ENCRYPTION ----
@@ -778,7 +787,8 @@ export const encryptionUiMethods = uiModule({
         if (!sizes || !el) return;
         const opts = this.readExportContentOptions();
         // Source images offered apart: attachments count without the file's excerpts, the choice adds its own.
-        const images = this.exportSourceImagesBytes();
+        // A privacy mode drops the sources, and their images with them.
+        const images = this.readExportPrivacyMode() === 'full' ? this.exportSourceImagesBytes() : null;
         const total = sizes.base
             + (opts.photos ? sizes.photos : 0)
             + (opts.attachments ? sizes.attachments - (images ? sizes.excerpts : 0) : 0)
@@ -826,6 +836,48 @@ export const encryptionUiMethods = uiModule({
         this.syncExportPresetHighlight();
     },
 
+    /**
+     * The privacy choice changed (or the dialog opened). Any mode but Full data
+     * drops the source catalog, every citation and every attachment, for the
+     * deceased too (applyLivingPrivacy). When the tree has any, say so under
+     * the choice and in Content, dim the two checkboxes (and source images)
+     * they would otherwise light, and size the estimate on the filtered tree.
+     */
+    syncExportPrivacyEffects(): void {
+        const mode = this.readExportPrivacyMode();
+        const data = DataManager.getData();
+        const section = document.getElementById('export-content-section');
+        const showContent = !!section && section.style.display !== 'none';
+        const drops = mode !== 'full' && showContent && (exportAllTrees || hasSourcesOrAttachments(data));
+        const p = strings.privacy;
+        const privacyNote = document.getElementById('export-privacy-drops');
+        if (privacyNote) {
+            privacyNote.textContent = drops ? p.dropsSources(p.modeFull) : '';
+            privacyNote.hidden = !drops;
+        }
+        const contentNote = document.getElementById('export-content-privacy-note');
+        if (contentNote) {
+            contentNote.textContent = drops ? p.dropsSourcesContent : '';
+            contentNote.hidden = !drops;
+        }
+        for (const id of ['export-content-attachments', 'export-content-sources']) {
+            const input = document.getElementById(id) as HTMLInputElement | null;
+            if (!input) continue;
+            // The ticks stay as chosen: Full data takes them again.
+            input.disabled = drops;
+            if (drops) input.setAttribute('aria-describedby', 'export-content-privacy-note');
+            else input.removeAttribute('aria-describedby');
+            input.closest('.content-check')?.classList.toggle('is-inert', drops);
+        }
+        const images = document.getElementById('export-source-images') as HTMLFieldSetElement | null;
+        if (images) images.disabled = drops;
+        if (showContent) {
+            // Per-category sizes computed here (open, privacy change); toggling never re-stringifies.
+            this.readExportContentSizes(mode === 'full' ? data : applyLivingPrivacy(data, mode));
+            this.updateExportSizeEstimate();
+        }
+    },
+
     /** A single content checkbox changed: refresh the estimate and preset highlight. */
     onExportContentChange(): void {
         this.updateExportSizeEstimate();
@@ -847,11 +899,14 @@ export const encryptionUiMethods = uiModule({
             quick?: { hint: string };
             /** The one tree exported (its source images from the research may be offered). */
             imagesTreeId?: string;
+            /** Every tree goes into the file (not only the current one). */
+            allTrees?: boolean;
         } = {}
     ): void {
         this.exportPasswordCallback = callback;
         const quick = options.quick;
         exportQuick = !!quick;
+        exportAllTrees = !!options.allTrees;
         const format = options.format ?? 'json';
         const e = strings.encryption;
 
@@ -897,12 +952,9 @@ export const encryptionUiMethods = uiModule({
         }
         // Source images from the research: offered for one tree that has any (not for a quick save).
         this.setupExportSourceImages(showContent ? options.imagesTreeId ?? null : null);
-        if (showContent) {
-            // Per-category sizes computed once here; toggling never re-stringifies.
-            this.readExportContentSizes(DataManager.getData());
-            this.updateExportSizeEstimate();
-            this.syncExportPresetHighlight();
-        }
+        // What the chosen privacy leaves out, and the estimate on what remains.
+        this.syncExportPrivacyEffects();
+        if (showContent) this.syncExportPresetHighlight();
 
         const modal = document.getElementById('export-password-modal');
         const input = block.querySelector<HTMLInputElement>('#export-password-input');
