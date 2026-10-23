@@ -15676,10 +15676,12 @@
         .mv-chip-via { font-size: 11px; color: var(--text-faint); white-space: nowrap; }
         .mv-chip-x {
             width: 22px; height: 22px; flex: none; border: none; border-radius: 999px; background: none; padding: 0;
-            color: var(--text-faint); font-size: 15px; line-height: 1; cursor: pointer;
+            color: var(--text-light); font-size: 15px; line-height: 1; cursor: pointer;
             display: inline-flex; align-items: center; justify-content: center;
         }
-        .mv-chip-x[aria-disabled="true"] { opacity: 0.45; cursor: default; }
+        /* Off while the research does not run: as dim as Assign / Hide beside it. */
+        .mv-chip-x[aria-disabled="true"] { color: var(--text-faint); opacity: 0.35; cursor: default; }
+        .mv-chip-x[aria-busy="true"] { opacity: 0.45; cursor: progress; }
         @media (hover: hover) { .mv-chip-x:not([aria-disabled="true"]):hover { background: var(--hover-bg); color: var(--text); } }
         .mv-none { font-size: 13px; color: var(--accent-text); }
         .mv-fields { display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: 6px 8px; margin: 0; font-size: 13px; line-height: 1.4; }
@@ -15799,6 +15801,7 @@
         .mdlg-btn.is-primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); font-weight: 600; }
         .mdlg-btn.is-danger { color: var(--danger); border-color: var(--danger); }
         .mdlg-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .mdlg[aria-busy="true"] .mdlg-btn:disabled { cursor: progress; }
         @media (hover: hover) {
             .mdlg-btn:not(:disabled):hover { background: var(--hover-bg); }
             .mdlg-btn.is-primary:not(:disabled):hover { background: var(--primary-dark); }

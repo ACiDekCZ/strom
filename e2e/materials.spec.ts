@@ -2,7 +2,7 @@ import { test, expect, Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { card } from './helpers.js';
 import {
-    fakeBridge, fakeMaterial, materialFile, materialSha, MATERIAL_FEATURES, openResearch, openResearchMenu, poll, block,
+    fakeBridge, fakeMaterial, materialFile, materialSha, MATERIAL_FEATURES, openResearch, openResearchMenu, poll, block, dot,
     researchGed, HEAD, UUID, BRIDGE, FakeBridge, FakeMaterial, FakeMaterialFile, FakeMaterialBatch,
 } from './research-bridge.js';
 
@@ -316,6 +316,24 @@ test.describe('Add material… (Strom archive)', () => {
         const again = await open(page);
         await again.locator('#material-input').setInputFiles(AVATAR);
         await expect(again.locator('#material-attach')).toBeChecked();
+    });
+
+    test('the archive commits the file: its new head is the tree\'s own, no "newer version"', async ({ page }) => {
+        const { bridge } = await setup(page, { archive: true });
+        const dialog = await open(page);
+        await dialog.locator('#material-input').setInputFiles(AVATAR);
+        await dialog.locator('#material-attach').uncheck();
+        await dialog.getByRole('button', { name: 'Save 1 file' }).click();
+        await expect(dialog).toHaveCount(0);
+        expect(bridge.mediaPuts).toHaveLength(1);
+        expect(bridge.head).not.toBe(HEAD);
+        await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe(bridge.head);
+        await page.keyboard.press('Escape');
+        await poll(page);
+        await expect(dot(page)).toBeHidden();
+        await openResearchMenu(page);
+        await expect(block(page)).not.toHaveAttribute('data-state', 'newer');
+        await expect(block(page)).toHaveAttribute('data-state', 'inSync');
     });
 
     test('a file over 2 MB: "Also save to the tree" is off and cannot be ticked', async ({ page }) => {

@@ -69,6 +69,8 @@ export interface MaterialActionCtx {
     selection?: boolean;
     /** The element the action came from (the viewer's chip: the "only through the batch" bubble sits by it). */
     anchor?: HTMLElement;
+    /** Called once a write started without a dialog has its answer (the element that asked for it stops waiting). */
+    settled?: () => void;
 }
 
 /** Where an item was opened from, for the viewer (its ‹ › go through `items`). */

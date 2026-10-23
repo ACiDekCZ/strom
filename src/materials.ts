@@ -16,7 +16,7 @@
  */
 
 import { Attachment, Person } from './types.js';
-import { cleanText, researchPersonRef, researchSchemeUrl, withAppVersion } from './research-link.js';
+import { cleanText, isResearchHead, researchPersonRef, researchSchemeUrl, withAppVersion } from './research-link.js';
 import { strings } from './strings.js';
 
 // ==================== CAPABILITIES ====================
@@ -889,6 +889,16 @@ export interface AssignAnswer {
     files: MaterialFile[];
     people: Record<string, string>;
     kept: MaterialKept[];
+    /** The research's head after the write ('' = not said). */
+    head: string;
+}
+
+/** The answer to `POST /material/hide`. */
+export interface HideAnswer {
+    files: MaterialFile[];
+    people: Record<string, string>;
+    /** The research's head after the write ('' = not said). */
+    head: string;
 }
 
 function parseKept(raw: unknown): MaterialKept[] {
@@ -920,7 +930,7 @@ export async function assignMaterial(base: string, req: AssignRequest, opts: Bri
     if ('kind' in answer) return { ok: false, error: answer };
     if (answer.status === 200 && answer.body && typeof answer.body === 'object') {
         const b = answer.body as Record<string, unknown>;
-        return { ok: true, value: { files: parseFiles(b.files), people: parsePeople(b.people), kept: parseKept(b.kept) } };
+        return { ok: true, value: { files: parseFiles(b.files), people: parsePeople(b.people), kept: parseKept(b.kept), head: isResearchHead(b.head) ?? '' } };
     }
     return { ok: false, error: materialErrorOf(answer.status, answer.body, answer.retryAfter) };
 }
@@ -932,7 +942,7 @@ export interface HideRequest {
 }
 
 /** Hide or restore files (`POST /material/hide`). */
-export async function hideMaterial(base: string, req: HideRequest, opts: BridgeOptions = {}): Promise<MaterialResult<{ files: MaterialFile[]; people: Record<string, string> }>> {
+export async function hideMaterial(base: string, req: HideRequest, opts: BridgeOptions = {}): Promise<MaterialResult<HideAnswer>> {
     if (!req.files.length || !req.files.every(f => FILE_ID.test(f))) return bodyError();
     const body: Record<string, unknown> = { files: req.files, hidden: req.hidden };
     if (req.hidden && req.reason) body.reason = req.reason;
@@ -940,7 +950,7 @@ export async function hideMaterial(base: string, req: HideRequest, opts: BridgeO
     if ('kind' in answer) return { ok: false, error: answer };
     if (answer.status === 200 && answer.body && typeof answer.body === 'object') {
         const b = answer.body as Record<string, unknown>;
-        return { ok: true, value: { files: parseFiles(b.files), people: parsePeople(b.people) } };
+        return { ok: true, value: { files: parseFiles(b.files), people: parsePeople(b.people), head: isResearchHead(b.head) ?? '' } };
     }
     return { ok: false, error: materialErrorOf(answer.status, answer.body, answer.retryAfter) };
 }

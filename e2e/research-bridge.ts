@@ -122,6 +122,8 @@ export interface FakeBridge {
      * Answered per `features`: `material.list`, `material.assign`, `material.thumb`.
      */
     material?: FakeMaterial;
+    /** Writes the research committed so far (each moved `head`, see moveHead). */
+    headMoves?: number;
 }
 
 /** A reading as `/status.reads` lists it. */
@@ -278,6 +280,20 @@ export interface FakeMaterial {
     listStatus?: number;
     /** The state a file had before it was hidden (restored by `hidden: false`). */
     priorState?: Map<string, FakeMaterialFile['state']>;
+    /** Writes (`assign`, `hide`) answer after this long (ms): the real bridge commits for seconds. */
+    writeDelayMs?: number;
+}
+
+/**
+ * The research commits a write (a material's assign / hide, a new file): its
+ * head moves and its tree's file says the new one — the tree itself as it was.
+ */
+export function moveHead(b: FakeBridge): string {
+    b.headMoves = (b.headMoves ?? 0) + 1;
+    const head = `c0ffee${b.headMoves.toString(16).padStart(6, '0')}`;
+    b.head = head;
+    b.treeGed = b.treeGed.replace(/^1 _STROM_HEAD \S+$/m, `1 _STROM_HEAD ${head}`);
+    return head;
 }
 
 export function fakeMaterial(init: Partial<FakeMaterial> = {}): FakeMaterial {
@@ -468,7 +484,7 @@ function serveMaterial(b: FakeBridge, method: string, url: URL, postData: string
                 m.priorState.delete(f.id);
             }
         }
-        return { status: 200, body: { files: (files as FakeMaterialFile[]).map(shown), people: peopleOf(files as FakeMaterialFile[], []) } };
+        return { status: 200, body: { files: (files as FakeMaterialFile[]).map(shown), people: peopleOf(files as FakeMaterialFile[], []), head: moveHead(b) } };
     }
 
     // POST /material/assign
@@ -499,7 +515,7 @@ function serveMaterial(b: FakeBridge, method: string, url: URL, postData: string
         batch.persons = [...(batch.persons ?? []).filter(p => !removeP.includes(p)), ...addP.filter(p => !(batch.persons ?? []).includes(p))];
         const files = m.files.filter(f => f.batch === batch.id);
         files.forEach(drop);
-        return { status: 200, body: { files: files.map(shown), people: peopleOf(files, [batch]), kept: [] } };
+        return { status: 200, body: { files: files.map(shown), people: peopleOf(files, [batch]), kept: [], head: moveHead(b) } };
     }
     const files = (ids as string[]).map(id => m.files.find(f => f.id === id));
     const missing = (ids as string[]).find((_, i) => !files[i]);
@@ -512,7 +528,7 @@ function serveMaterial(b: FakeBridge, method: string, url: URL, postData: string
         for (const p of removeP) if (batch?.persons?.includes(p)) kept.push({ id: f.id, person: p, batch: batch.id });
     }
     const keptBatches = m.batches.filter(x => kept.some(k => k.batch === x.id));
-    return { status: 200, body: { files: (files as FakeMaterialFile[]).map(shown), people: peopleOf(files as FakeMaterialFile[], keptBatches), kept } };
+    return { status: 200, body: { files: (files as FakeMaterialFile[]).map(shown), people: peopleOf(files as FakeMaterialFile[], keptBatches), kept, head: moveHead(b) } };
 }
 
 /** A preview or the file of a material (`GET /media/<sha>?thumb=` / `?file=1`); null: not one. */
@@ -608,7 +624,8 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
                 }
                 const id = `I${String(100 + b.mediaPuts.length).padStart(4, '0')}`;
                 b.mediaKnown.set(sha, id);
-                return json(200, { input: id });
+                // With the family's material on (spec 017), a new file is a commit, as in the research.
+                return json(200, { input: id, ...(b.material ? { head: moveHead(b) } : {}) });
             }
             if (url.searchParams.get('file') === '1') {
                 const file = b.mediaFiles.get(sha);
@@ -619,6 +636,9 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
             b.mediaAsks.push(sha);
             const known = b.mediaKnown.get(sha);
             return known ? json(200, { known }) : json(404, { error: 'unknown' });
+        }
+        if (b.material?.writeDelayMs && method === 'POST' && /\/material\/(assign|hide)$/.test(url.pathname)) {
+            await new Promise(resolve => setTimeout(resolve, b.material!.writeDelayMs));
         }
         const material = serveMaterial(b, method, url, route.request().postData());
         if (material) {

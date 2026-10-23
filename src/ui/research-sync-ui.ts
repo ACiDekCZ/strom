@@ -37,7 +37,7 @@ import {
     LiveStatus, contentFingerprint, fingerprintLike, sanitizeLiveStatus, sanitizeSyncReply, isSafariBrowser,
     parseLiveBridge, researchSchemeUrl, readResearchHeader, stabilizeIds, researchPersonRef, ResearchAccepts,
     researchIdsByContent, holdsResearchIds, ResearchSendRecord, AdoptIds, ExportXrefs, applySyncIds, sourceIdOfXref, researchGedcomTitles, researchSendsReadings, SyncReading,
-    researchHasTitles, hasTitles, withoutTitles, TITLES_FEATURE, researchConflictRef,
+    researchHasTitles, hasTitles, withoutTitles, TITLES_FEATURE, researchConflictRef, isResearchHead,
 } from '../research-link.js';
 import { loadResearchCopy } from '../research-copy.js';
 import {
@@ -50,6 +50,7 @@ import {
     ResearchSyncState, ResearchSyncKind, researchSyncState, researchSyncWantsAttention, researchSyncUnsent,
     pendingSendFate, sourceReadings, THEN_LOAD_MAX_AGE_MS, conflictTakeovers, heldConflicts,
     researchKeepsTakenBack, latestUndone, nextUndone, openUndone, undoneLeftBehind, syncRefusalReason, unloadedWrittenSends, writtenConflictCount,
+    ownWriteHeadTarget,
 } from '../research-sync.js';
 import { setResearchConflictsProvider } from '../card-signals.js';
 import { ConflictDecideMode, conflictDecideMode, DecideKind, DecideBody, DecideResult, postBridgeDecide, canDecideInApp } from '../research-decide.js';
@@ -511,6 +512,40 @@ export const researchSyncMethods = uiModule({
             noteResearchBridgeStatus(ctx.link.id, null, answer.head);
         }
         return answer;
+    },
+
+    /** The research's head as this page knows it now ('' = not known): taken right before a write of the app's own. */
+    researchHeadNow(researchId: string): string {
+        return runtime.get(researchId)?.status?.head || storedResearchBridge(researchId)?.head || '';
+    },
+
+    /**
+     * A write of this app that leaves the tree as it is (the family's
+     * material) moved the research's head from `before` to `after` (its
+     * answer's `head`). The open tree in step with the research before the
+     * write takes the new head as that version — the write is its own,
+     * nothing newer to load came of it. Not in step: nothing changes here,
+     * so a change made elsewhere meanwhile is still said (ownWriteHeadTarget).
+     */
+    researchTakeOwnWriteHead(researchId: string, before: string, after: unknown): void {
+        const head = isResearchHead(after);
+        const ctx = this.researchSyncLink();
+        if (!head || !ctx || ctx.link.id !== researchId.toLowerCase() || ctx.link.copy || isTreeStale(ctx.treeId)) return;
+        const { treeId, link } = ctx;
+        const target = ownWriteHeadTarget(link, before, head);
+        if (!target) return;
+        if (target === 'base') {
+            const lastCopy = researchAutoState(treeId).lastCopy;
+            TreeManager.patchResearchLink(treeId, { head });
+            // The copy the research took in still is the base of the next send (no version was loaded).
+            if (lastCopy?.base === before) patchResearchAutoState(treeId, { lastCopy: { ...lastCopy, base: head } });
+        } else {
+            TreeManager.patchResearchLink(treeId, { sent: { ...link.sent!, replyHead: head } });
+        }
+        const rt = runtime.get(link.id);
+        if (rt?.status) runtime.set(link.id, { ...rt, status: { ...rt.status, head } });
+        noteResearchBridgeStatus(link.id, null, head);
+        this.refreshResearchSyncUi();
     },
 
     /** The research said what it takes (now or before): sending straight and the states are on. */
@@ -1973,7 +2008,8 @@ export const researchSyncMethods = uiModule({
                 }
             }
             // (Changes the last send left unwritten would go: the load dialog says so, V-J.)
-            await this.importResearchFromUrl(`${bridge.base}/tree.ged`, opts.afterSend ? { afterSend: treeId } : {});
+            // (The very same tree under a new head — a write of the family's material — is only taken.)
+            await this.importResearchFromUrl(`${bridge.base}/tree.ged`, opts.afterSend ? { afterSend: treeId } : { takeSame: true });
             return;
         }
         const url = this.activeResearchLink('app');

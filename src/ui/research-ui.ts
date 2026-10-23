@@ -1263,7 +1263,7 @@ export const researchUiMethods = uiModule({
     },
 
     /** B. ?import-url=: a file offered by Strom Research on this computer. */
-    async importResearchFromUrl(raw: string, opts: { afterSend?: TreeId; plainAsk?: boolean } = {}): Promise<void> {
+    async importResearchFromUrl(raw: string, opts: { afterSend?: TreeId; plainAsk?: boolean; takeSame?: boolean } = {}): Promise<void> {
         // "Load new version" asked for this: its spinner is done.
         this.settleResearchVersion();
         const url = parseLoopbackUrl(raw);
@@ -1440,7 +1440,7 @@ export const researchUiMethods = uiModule({
      * GEDCOM text from outside. A Strom Research file opens its research
      * tree; any other GEDCOM goes to the normal import dialog.
      */
-    async openGedcomText(text: string, opts: { afterSend?: TreeId; plainAsk?: boolean } = {}): Promise<void> {
+    async openGedcomText(text: string, opts: { afterSend?: TreeId; plainAsk?: boolean; takeSame?: boolean } = {}): Promise<void> {
         if (DataManager.isViewMode()) {
             this.showToast(strings.research.notInViewMode, 5000);
             return;
@@ -1464,7 +1464,34 @@ export const researchUiMethods = uiModule({
             return;
         }
         if (!await this.ensureLocalUnlocked()) return;
-        await this.applyResearch(result.data, header, { ...(opts.afterSend ? { afterSend: opts.afterSend } : {}), ...(opts.plainAsk ? { plainAsk: true } : {}) });
+        await this.applyResearch(result.data, header, { ...(opts.afterSend ? { afterSend: opts.afterSend } : {}), ...(opts.plainAsk ? { plainAsk: true } : {}),
+            ...(opts.takeSame ? { takeSame: true } : {}) });
+    },
+
+    /**
+     * The research's version (`data` as read, `research` as it came) is the
+     * open tree `treeId` as it is and its base unchanged — its head moved on
+     * by a write that left the tree alone (the family's material): its head
+     * is taken, nothing loaded, no backup, said briefly. False when anything
+     * would change (the usual load then asks).
+     */
+    researchTakeSameVersion(treeId: TreeId, previous: StromData, data: StromData, research: StromData, source: ResearchSource,
+        head: string, includeImages: boolean, knowsTitles: boolean): boolean {
+        const link = TreeManager.getTreeMetadata(treeId)?.research;
+        if (!head || !link || !source.treeId || DataManager.getCurrentTreeId() !== treeId || head === link.head) return false;
+        const incoming = includeImages ? data : stripMedia(data);
+        const kept = carryOverMedia(stabilizeIds(incoming, previous), previous).data;
+        const stable = this.researchKeepsLoneFamilies(source.treeId) ? kept : carryOverUnknownPartners(kept, previous);
+        if (contentFingerprint(stable) !== contentFingerprint(previous)) return false;
+        const { base, titlesIn } = researchTitlesBase(stable, research, knowsTitles, link.titlesIn);
+        if (fingerprintLike(base, link.fingerprint) !== link.fingerprint) return false;
+        TreeManager.patchResearchLink(treeId, {
+            head, syncedAt: new Date().toISOString(), titlesIn,
+            ...(source.mode === 'archive' ? { mode: 'archive' as const } : {}),
+        });
+        this.refreshResearchSyncUi();
+        this.showToast(strings.sync.stateInSync, 4000);
+        return true;
     },
 
     /**
@@ -1479,7 +1506,9 @@ export const researchUiMethods = uiModule({
      * lacks; anything that would ask leaves the tree as it is (null), and
      * the load says nothing.
      */
-    async applyResearch(data: StromData, source: ResearchSource, opts: { head?: string; quiet?: boolean; afterSend?: TreeId; plainAsk?: boolean; noAsk?: boolean; live?: string; force?: boolean; noDialog?: boolean }): Promise<TreeId | null> {
+    async applyResearch(data: StromData, source: ResearchSource, opts: { head?: string; quiet?: boolean; afterSend?: TreeId; plainAsk?: boolean; noAsk?: boolean; live?: string; force?: boolean; noDialog?: boolean;
+        /** "Load the new version" from the running research: the very same tree under a new head is only taken (no question). */
+        takeSame?: boolean }): Promise<TreeId | null> {
         const name = source.name || strings.research.defaultName;
         const dateLabel = researchDateLabel(source.date);
         const existing = source.treeId ? TreeManager.findTreeByResearchId(source.treeId) : null;
@@ -1619,6 +1648,11 @@ export const researchUiMethods = uiModule({
             // Following live asks too when it would replace changes made here the research lacks (only
             // loading): once, at the start — while it follows, the tree is read-only.
             if (askLoad && previous && !asCopy && !opts.quiet && !opts.afterSend && (!opts.noAsk || (edited && !holdsSent))) {
+                // The research's version is this tree as it is (its head moved by a write that left the
+                // tree alone — the family's material): nothing to load or to ask; its head is taken.
+                if (opts.takeSame && !edited && !holdsSent && source.treeId && this.researchTakeSameVersion(existing.id, previous, data, research, source, opts.head || source.head || '', includeImages, knowsTitles)) {
+                    return existing.id;
+                }
                 if (DataManager.getCurrentTreeId() !== existing.id) {
                     if (existing.isHidden) TreeManager.setTreeVisibility(existing.id, false);
                     await this.switchToTree(existing.id, { follow: false });

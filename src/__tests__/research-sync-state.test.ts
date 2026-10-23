@@ -9,7 +9,7 @@ import {
     researchSyncState, researchSyncWantsAttention, pendingSendFate, verifiedOffer, isOlderSource,
     researchReadSource, sourceReadingHash, unverifiedOlderSources, ResearchSyncInput, conflictTakeovers,
     heldConflicts, researchKeepsTakenBack, latestUndone, undoneLeftBehind, syncRefusalReason, unloadedWrittenSends, writtenConflictCount,
-    newTieSendMode,
+    newTieSendMode, ownWriteHeadTarget,
 } from '../research-sync.js';
 import { getStringsForLang } from '../strings.js';
 import { sanitizeAccepts, sanitizeInbox, sanitizeLiveStatus, researchHeaderLines, stabilizeIds, sanitizeSyncReply } from '../research-link.js';
@@ -701,5 +701,24 @@ describe('a send refused, by its code', () => {
         expect(syncRefusalReason('', words)).toBe('');
         expect(syncRefusalReason('toString', words)).toBe('');
         expect(sanitizeSyncReply({ ok: false, error: 'strom je moc velký', code: 'tree.large' }).code).toBe('tree.large');
+    });
+});
+
+describe('the research\'s head after the app\'s own write (the family\'s material)', () => {
+    it('in step before the write: the new head is the base', () => {
+        expect(ownWriteHeadTarget(link(), 'aaaaaaa', 'bbbbbbb')).toBe('base');
+    });
+    it('in step with its own written send: the new head is that reply\'s', () => {
+        const l = link({ sent: sent({ state: 'written', ownBase: true, replyHead: 'ccccccc' }) });
+        expect(ownWriteHeadTarget(l, 'ccccccc', 'ddddddd')).toBe('own');
+    });
+    it('the research had moved on before: nothing is taken (its newer version stays offered)', () => {
+        expect(ownWriteHeadTarget(link(), 'eeeeeee', 'fffffff')).toBeNull();
+        expect(ownWriteHeadTarget(link({ sent: sent({ state: 'written', ownBase: false, replyHead: 'eeeeeee' }) }), 'eeeeeee', 'fffffff')).toBeNull();
+    });
+    it('no head before or after, or the same: nothing', () => {
+        expect(ownWriteHeadTarget(link(), '', 'bbbbbbb')).toBeNull();
+        expect(ownWriteHeadTarget(link(), 'aaaaaaa', '')).toBeNull();
+        expect(ownWriteHeadTarget(link(), 'aaaaaaa', 'aaaaaaa')).toBeNull();
     });
 });

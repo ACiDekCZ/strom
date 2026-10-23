@@ -372,8 +372,12 @@ export const materialViewerMethods = uiModule({
                 if (!up) x.setAttribute('aria-disabled', 'true');
                 const refn = p.refn;
                 x.addEventListener('click', () => {
-                    if (x.getAttribute('aria-disabled') === 'true') return;
-                    this.materialAction('removeFromPerson', [item], { person: refn, where: 'viewer', anchor: chip });
+                    if (x.getAttribute('aria-disabled') === 'true' || x.getAttribute('aria-busy') === 'true') return;
+                    // The research takes seconds to commit: the × waits (a second click sends nothing).
+                    x.setAttribute('aria-busy', 'true');
+                    this.materialAction('removeFromPerson', [item], {
+                        person: refn, where: 'viewer', anchor: chip, settled: () => x.removeAttribute('aria-busy'),
+                    });
                 });
                 chip.appendChild(x);
             }

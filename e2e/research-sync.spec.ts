@@ -2,7 +2,7 @@ import { test, expect, Page } from '@playwright/test';
 import { openApp, card } from './helpers.js';
 import {
     BRIDGE, FakeBridge, HEAD, NEW_HEAD, UUID, block, dot, dropFile, editJan, fakeBridge, links, openResearch, openResearchMenu, poll, researchGed,
-    acceptLoad,
+    acceptLoad, moveHead,
 } from './research-bridge.js';
 
 /**
@@ -371,6 +371,23 @@ test('a newer version: the block offers Load, the menu does not repeat it', asyn
     await expect(block(page)).toHaveAttribute('data-state', 'newer');
     await expect(block(page).locator('[data-action="loadNewer"]')).toBeVisible();
     await expect(page.locator('#research-item-version')).toHaveCount(0);
+});
+
+test('a newer version with the very same tree (the research committed only its files): Load takes it without asking', async ({ page }) => {
+    await openResearch(page);
+    const bridge = await fakeBridge(page);
+    moveHead(bridge);
+    await poll(page);
+    await openResearchMenu(page);
+    await expect(block(page)).toHaveAttribute('data-state', 'newer');
+    await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+    await expect(page.locator('.toast')).toContainText('In sync with the research');
+    await expect(page.locator('#research-load-modal.active')).toHaveCount(0);
+    await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.head)).toBe(bridge.head);
+    await poll(page);
+    await expect(dot(page)).toBeHidden();
+    await openResearchMenu(page);
+    await expect(block(page)).toHaveAttribute('data-state', 'inSync');
 });
 
 test.describe('updating over changes the research does not have', () => {

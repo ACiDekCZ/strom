@@ -200,6 +200,21 @@ function sendsState(input: ResearchSyncInput): ResearchSyncState {
     return quiet;
 }
 
+/**
+ * A write of this app that leaves the tree as it is (the family's material:
+ * assign, hide, a file sent) moved the research's head from `before` to
+ * `after`. Which head of the tie takes the new one: the version the tree
+ * builds on ('base'), the tree's own last write ('own'), or none — the tree
+ * was not in step with the research before the write (a change made
+ * elsewhere meanwhile is still said), or nothing moved.
+ */
+export function ownWriteHeadTarget(link: Pick<ResearchLink, 'head' | 'sent'>, before: string, after: string): 'base' | 'own' | null {
+    if (!before || !after || before === after) return null;
+    if (link.head && link.head === before) return 'base';
+    if (link.sent?.state === 'written' && link.sent.ownBase && link.sent.replyHead === before) return 'own';
+    return null;
+}
+
 /** States that light the dot on ⋯ (the user has something to do). */
 export function researchSyncWantsAttention(kind: ResearchSyncKind): boolean {
     return kind === 'unsentBridgeDown' || kind === 'newer' || kind === 'unsentAndNewer'

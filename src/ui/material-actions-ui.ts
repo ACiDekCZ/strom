@@ -16,7 +16,7 @@ import { Person, PersonId } from '../types.js';
 import { strings } from '../strings.js';
 import { researchPersonRef } from '../research-link.js';
 import {
-    MaterialItem, MaterialFile, MaterialBatch, MaterialActionId, MaterialError, MaterialResult, AssignRequest, AssignAnswer,
+    MaterialItem, MaterialFile, MaterialBatch, MaterialActionId, MaterialError, MaterialResult, AssignRequest, AssignAnswer, HideRequest, HideAnswer,
     HiddenReason, assignMaterial, hideMaterial, fetchMaterial, saveMaterialList, mergeAssignIntoCache, mergeIntoCache,
     cachedMaterialList, addedPersons, assignUndoRequests, batchUndoRequest, directPersons,
     materialErrorText, materialErrorAction,
@@ -54,7 +54,8 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: s
 function button(label: string, cls: string, run: () => void): HTMLButtonElement {
     const b = h('button', `mdlg-btn${cls ? ` ${cls}` : ''}`, label);
     b.type = 'button';
-    b.addEventListener('click', run);
+    // Disabled while the research answers: a click that still arrives (a script's, a double one) sends nothing.
+    b.addEventListener('click', () => { if (!b.disabled) run(); });
     return b;
 }
 
@@ -153,6 +154,20 @@ function materialDialog(opts: { title: string; sub?: string; modifier?: string; 
     return dialog;
 }
 
+/** Writes without a dialog that wait for the research's answer (a second click on the same is ignored). */
+const writesInFlight = new Set<string>();
+
+/** `run` unless the same write is still waiting for its answer (the bridge takes seconds to commit); null: skipped. */
+async function writeOnce<T>(key: string, run: () => Promise<T>): Promise<T | null> {
+    if (writesInFlight.has(key)) return null;
+    writesInFlight.add(key);
+    try {
+        return await run();
+    } finally {
+        writesInFlight.delete(key);
+    }
+}
+
 function fullName(p: Person): string {
     return `${p.firstName} ${p.lastName}`.trim();
 }
@@ -183,8 +198,8 @@ export const materialActionsMethods = uiModule({
     materialAction(id: MaterialActionId, items: MaterialItem[], ctx: MaterialActionCtx = {}): boolean {
         if (!['assign', 'removeFromPerson', 'hide', 'restore'].includes(id)) return false;
         const mc = this.materialsContext();
-        if (!mc) return false;
-        if (!mc.caps.bridgeUp || !mc.base || !mc.caps.assign) return true;
+        if (!mc) { ctx.settled?.(); return false; }
+        if (!mc.caps.bridgeUp || !mc.base || !mc.caps.assign) { ctx.settled?.(); return true; }
         const files = researchFiles(items);
         const wholeBatch = ctx.batch && !ctx.folder ? ctx.batch : null;
         switch (id) {
@@ -194,6 +209,7 @@ export const materialActionsMethods = uiModule({
             case 'removeFromPerson':
                 if (wholeBatch && !ctx.person) this.openBatchRemoveDialog(mc, wholeBatch, ctx);
                 else if (ctx.person && files.length) this.removeMaterialPerson(mc, files, ctx.person, ctx);
+                else ctx.settled?.();
                 break;
             case 'hide':
                 if (files.length) this.openHideDialog(mc, files.filter(i => !i.hidden), ctx);
@@ -249,25 +265,38 @@ export const materialActionsMethods = uiModule({
 
     /** An assign written and its answer remembered (the undo's requests run one after another). */
     async writeAssign(mc: MaterialsContext, req: AssignRequest): Promise<MaterialResult<AssignAnswer>> {
+        const before = this.researchHeadNow(mc.researchId);
         const res = await assignMaterial(mc.base!, req);
         if (res.ok) {
+            // The research's new head is this write's own: the tree stays in step with it.
+            this.researchTakeOwnWriteHead(mc.researchId, before, res.value.head);
             const batch = req.batch ? { id: req.batch, ...(req.add ? { add: req.add } : {}), ...(req.remove ? { remove: req.remove } : {}) } : undefined;
             await mergeAssignIntoCache(mc.treeId, res.value.files, res.value.people, batch);
         }
         return res;
     },
 
+    /** Hide or restore files in the research; its new head taken as the tree's own (as writeAssign). */
+    async writeHide(mc: MaterialsContext, req: HideRequest): Promise<MaterialResult<HideAnswer>> {
+        const before = this.researchHeadNow(mc.researchId);
+        const res = await hideMaterial(mc.base!, req);
+        if (res.ok) this.researchTakeOwnWriteHead(mc.researchId, before, res.value.head);
+        return res;
+    },
+
     /** Undo of assigns: the requests in order; a refusal stops and says so. */
     async undoMaterialAssign(mc: MaterialsContext, reqs: AssignRequest[]): Promise<void> {
-        for (let i = 0; i < reqs.length; i++) {
-            const res = await this.writeAssign(mc, reqs[i]);
-            if (!res.ok) {
-                const rest = reqs.slice(i);
-                this.materialErrorToast(mc, res.error, () => void this.undoMaterialAssign(mc, rest));
-                return;
+        await writeOnce(`undo:${JSON.stringify(reqs)}`, async () => {
+            for (let i = 0; i < reqs.length; i++) {
+                const res = await this.writeAssign(mc, reqs[i]);
+                if (!res.ok) {
+                    const rest = reqs.slice(i);
+                    this.materialErrorToast(mc, res.error, () => void this.undoMaterialAssign(mc, rest));
+                    return;
+                }
             }
-        }
-        this.refreshMaterialsWindow();
+            this.refreshMaterialsWindow();
+        });
     },
 
     // ==================== ASSIGN (5a) ====================
@@ -371,6 +400,7 @@ export const materialActionsMethods = uiModule({
             const go = button(m.removeFromBatch, 'is-primary', () => void run());
             dialog.foot.append(button(strings.buttons.cancel, '', () => dialog.close()), go);
             go.focus();
+            ctx.settled?.();
             const run = async () => {
                 dialog.busy(true);
                 const res = await this.writeAssign(mc, { batch: item.batch!.id, remove: [refn] });
@@ -388,6 +418,15 @@ export const materialActionsMethods = uiModule({
     },
 
     async removeFromFiles(mc: MaterialsContext, files: MaterialItem[], refn: string, ctx: MaterialActionCtx): Promise<void> {
+        const key = `remove:${refn}:${files.map(i => i.file!.id).join(',')}`;
+        try {
+            await writeOnce(key, () => this.removeFromFilesNow(mc, files, refn, ctx));
+        } finally {
+            ctx.settled?.();
+        }
+    },
+
+    async removeFromFilesNow(mc: MaterialsContext, files: MaterialItem[], refn: string, ctx: MaterialActionCtx): Promise<void> {
         const m = strings.materials;
         const name = this.materialPersonName(refn);
         const before = currentRecords(mc.treeId, files);
@@ -417,12 +456,14 @@ export const materialActionsMethods = uiModule({
     },
 
     async removeFromWholeBatch(mc: MaterialsContext, batchId: string, batchName: string, refn: string, ctx: MaterialActionCtx): Promise<void> {
-        const res = await this.writeAssign(mc, { batch: batchId, remove: [refn] });
-        if (!res.ok) {
-            this.materialErrorToast(mc, res.error, () => void this.removeFromWholeBatch(mc, batchId, batchName, refn, ctx));
-            return;
-        }
-        this.materialBatchRemovedToast(mc, batchId, batchName, refn, ctx);
+        await writeOnce(`batch-remove:${batchId}:${refn}`, async () => {
+            const res = await this.writeAssign(mc, { batch: batchId, remove: [refn] });
+            if (!res.ok) {
+                this.materialErrorToast(mc, res.error, () => void this.removeFromWholeBatch(mc, batchId, batchName, refn, ctx));
+                return;
+            }
+            this.materialBatchRemovedToast(mc, batchId, batchName, refn, ctx);
+        });
     },
 
     materialBatchRemovedToast(mc: MaterialsContext, batchId: string, batchName: string, refn: string, ctx: MaterialActionCtx): void {
@@ -517,7 +558,7 @@ export const materialActionsMethods = uiModule({
             const ids = files.map(i => i.file!.id);
             dialog.busy(true);
             dialog.error(null);
-            const res = await hideMaterial(mc.base!, { files: ids, hidden: true, ...(reason ? { reason } : {}) });
+            const res = await this.writeHide(mc, { files: ids, hidden: true, ...(reason ? { reason } : {}) });
             dialog.busy(false);
             if (!res.ok) {
                 this.materialErrorInDialog(dialog, mc, res.error, () => void run());
@@ -566,7 +607,9 @@ export const materialActionsMethods = uiModule({
 
     /** Hide or restore files quietly (an undo); a refusal says so in a toast. */
     async writeHidden(mc: MaterialsContext, ids: string[], hidden: boolean, reason: HiddenReason | undefined): Promise<boolean> {
-        const res = await hideMaterial(mc.base!, { files: ids, hidden, ...(reason ? { reason } : {}) });
+        const res = await writeOnce(`hidden:${hidden}:${reason ?? ''}:${ids.join(',')}`,
+            () => this.writeHide(mc, { files: ids, hidden, ...(reason ? { reason } : {}) }));
+        if (!res) return false;
         if (!res.ok) {
             this.materialErrorToast(mc, res.error, () => void this.writeHidden(mc, ids, hidden, reason));
             return false;
@@ -580,7 +623,8 @@ export const materialActionsMethods = uiModule({
         if (!files.length) return;
         const m = strings.materials;
         const ids = files.map(i => i.file!.id);
-        const res = await hideMaterial(mc.base!, { files: ids, hidden: false });
+        const res = await writeOnce(`restore:${ids.join(',')}`, () => this.writeHide(mc, { files: ids, hidden: false }));
+        if (!res) return;
         if (!res.ok) {
             this.materialErrorToast(mc, res.error, () => void this.restoreMaterials(mc, files, ctx));
             return;
