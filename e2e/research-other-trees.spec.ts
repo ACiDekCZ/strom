@@ -427,7 +427,7 @@ test.describe('the switcher tells an archive from a research (audit 017 b-D5)', 
         await page.evaluate(({ a, r, u }) => {
             const tm = window.Strom.TreeManager as unknown as { createTree(name: string): string; setResearchLink(id: string, link: unknown): void };
             const at = new Date().toISOString();
-            tm.setResearchLink(tm.createTree('Archivovi z Dlouhé Lhoty u Tábora'), { id: a, fingerprint: 'fp0', syncedAt: at, mode: 'archive' });
+            tm.setResearchLink(tm.createTree('Archivovi z Horní Smyšlené u Vymyšlova'), { id: a, fingerprint: 'fp0', syncedAt: at, mode: 'archive' });
             tm.setResearchLink(tm.createTree('Výzkumníci'), { id: r, fingerprint: 'fp0', syncedAt: at });
             localStorage.setItem(`strom-research-bridge:${r}`, JSON.stringify({ accepts: { mode: 'research', agentHere: false } }));
             tm.setResearchLink(tm.createTree('Neznámí'), { id: u, fingerprint: 'fp0', syncedAt: at });
@@ -443,14 +443,14 @@ test.describe('the switcher tells an archive from a research (audit 017 b-D5)', 
         await kinds(page);
         await page.locator('.tree-switcher-btn').click();
         const kindOf = (name: string) => row(page, name).locator('.tree-item-kind');
-        await expect(kindOf('Archivovi z Dlouhé Lhoty u Tábora')).toHaveText('Archive');
-        await expect(kindOf('Archivovi z Dlouhé Lhoty u Tábora')).toHaveAttribute('data-kind', 'archive');
+        await expect(kindOf('Archivovi z Horní Smyšlené u Vymyšlova')).toHaveText('Archive');
+        await expect(kindOf('Archivovi z Horní Smyšlené u Vymyšlova')).toHaveAttribute('data-kind', 'archive');
         await expect(kindOf('Výzkumníci')).toHaveText('Research');
         await expect(kindOf('Neznámí')).toHaveCount(0);
         await expect(kindOf('Archivovi (kopie)')).toHaveCount(0);
         await expect(kindOf('Jen v aplikaci')).toHaveCount(0);
         // The long name shortens; the label stays whole and inside the list.
-        const fits = await row(page, 'Archivovi z Dlouhé Lhoty u Tábora').evaluate((r) => {
+        const fits = await row(page, 'Archivovi z Horní Smyšlené u Vymyšlova').evaluate((r) => {
             const k = r.querySelector('.tree-item-kind')!.getBoundingClientRect();
             const box = r.getBoundingClientRect();
             const label = r.querySelector('.tree-item-kind') as HTMLElement;
@@ -465,7 +465,7 @@ test.describe('the switcher tells an archive from a research (audit 017 b-D5)', 
         await kinds(page);
         await page.locator('.tree-switcher-btn').click();
         const sheetRow = (name: string) => page.locator('.bottom-sheet-item[data-tree-id]', { hasText: name });
-        await expect(sheetRow('Archivovi z Dlouhé Lhoty u Tábora').locator('.bottom-sheet-sub')).toHaveText('Archive');
+        await expect(sheetRow('Archivovi z Horní Smyšlené u Vymyšlova').locator('.bottom-sheet-sub')).toHaveText('Archive');
         await expect(sheetRow('Výzkumníci').locator('.bottom-sheet-sub')).toHaveText('Research');
         await expect(sheetRow('Neznámí').locator('.bottom-sheet-sub')).toHaveCount(0);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
