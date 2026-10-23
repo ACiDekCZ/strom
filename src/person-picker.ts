@@ -553,3 +553,183 @@ export class PersonPicker {
         this.container.innerHTML = '';
     }
 }
+
+/** The multi-person mode (assigning a file to several people): chips of the chosen, a search, a list with checkboxes. */
+export interface MultiPersonPickerOptions {
+    containerId: string;
+    multi: true;
+    persons?: Person[];
+    data?: StromData;
+    placeholder?: string;
+    /** At most this many chosen (default 50). */
+    max?: number;
+    /** Why a person cannot be chosen (said under the name; null: they can). */
+    blocked?: (person: Person) => string | null;
+    /** Already there for everything asked: shown ticked and not changeable. */
+    fixed?: (person: Person) => boolean;
+    onChange?: (ids: PersonId[]) => void;
+    /** Texts: the empty chips line, a chip's ×, the note at the limit, a fixed row's title. */
+    noneLabel: string;
+    removeLabel: (name: string) => string;
+    maxLabel?: (max: number) => string;
+    fixedLabel?: string;
+}
+
+const MULTI_BATCH = 100;
+
+export class MultiPersonPicker {
+    private options: MultiPersonPickerOptions;
+    private container: HTMLElement;
+    private chips!: HTMLElement;
+    private input!: HTMLInputElement;
+    private list!: HTMLElement;
+    private note!: HTMLElement;
+    private allPersons: Person[];
+    private filtered: Person[] = [];
+    private shown = MULTI_BATCH;
+    private chosen: PersonId[] = [];
+
+    constructor(options: MultiPersonPickerOptions) {
+        this.options = { max: 50, ...options };
+        const container = document.getElementById(options.containerId);
+        if (!container) throw new Error(`Container not found: ${options.containerId}`);
+        this.container = container;
+        this.allPersons = options.persons ?? DataManager.getAllPersons();
+        this.build();
+    }
+
+    private build(): void {
+        this.container.innerHTML = '';
+        this.container.className = 'person-picker person-picker--multi';
+        this.chips = document.createElement('div');
+        this.chips.className = 'ppm-chips';
+        this.chips.setAttribute('aria-live', 'polite');
+        this.input = document.createElement('input');
+        this.input.type = 'search';
+        this.input.className = 'person-picker-input ppm-search';
+        this.input.placeholder = this.options.placeholder ?? strings.personPicker.placeholder;
+        this.input.setAttribute('aria-label', this.input.placeholder);
+        this.input.autocomplete = 'off';
+        this.input.setAttribute('autocapitalize', 'off');
+        this.input.setAttribute('autocorrect', 'off');
+        this.input.spellcheck = false;
+        this.list = document.createElement('div');
+        this.list.className = 'ppm-list';
+        this.list.setAttribute('role', 'group');
+        this.note = document.createElement('div');
+        this.note.className = 'ppm-note';
+        this.note.hidden = true;
+        this.container.append(this.chips, this.input, this.list, this.note);
+        this.input.addEventListener('input', () => { this.shown = MULTI_BATCH; this.renderList(); });
+        this.input.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                this.list.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus();
+            }
+        });
+        this.list.addEventListener('change', (e) => {
+            const box = e.target as HTMLInputElement;
+            const id = box.closest<HTMLElement>('[data-id]')?.dataset.id as PersonId | undefined;
+            if (id) this.toggle(id, box.checked);
+        });
+        this.list.addEventListener('keydown', (e) => {
+            if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+            const boxes = Array.from(this.list.querySelectorAll<HTMLInputElement>('input:not(:disabled)'));
+            const i = boxes.indexOf(document.activeElement as HTMLInputElement);
+            if (i < 0) return;
+            e.preventDefault();
+            if (e.key === 'ArrowUp' && i === 0) { this.input.focus(); return; }
+            boxes[Math.min(boxes.length - 1, Math.max(0, i + (e.key === 'ArrowDown' ? 1 : -1)))]?.focus();
+        });
+        this.list.addEventListener('scroll', () => {
+            const { scrollTop, scrollHeight, clientHeight } = this.list;
+            if (scrollTop + clientHeight >= scrollHeight - 60 && this.shown < this.filtered.length) {
+                this.shown += MULTI_BATCH;
+                this.renderList(false);
+            }
+        });
+        this.chips.addEventListener('click', (e) => {
+            const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-remove]');
+            if (btn) this.toggle(btn.dataset.remove as PersonId, false);
+        });
+        this.renderChips();
+        this.renderList();
+    }
+
+    private searchData(): StromData | null {
+        if (this.options.data) return this.options.data;
+        try { return DataManager.getData(); } catch { return null; }
+    }
+
+    private esc(text: string): string {
+        return (text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    private full(): boolean {
+        return this.chosen.length >= (this.options.max ?? 50);
+    }
+
+    private toggle(id: PersonId, on: boolean): void {
+        const person = this.allPersons.find(p => p.id === id);
+        if (!person || this.options.blocked?.(person) || this.options.fixed?.(person)) return;
+        const has = this.chosen.includes(id);
+        if (on && !has && !this.full()) this.chosen.push(id);
+        else if (!on && has) this.chosen = this.chosen.filter(x => x !== id);
+        this.renderChips();
+        this.renderList(false);
+        this.options.onChange?.([...this.chosen]);
+    }
+
+    private renderChips(): void {
+        if (this.chosen.length === 0) {
+            this.chips.innerHTML = `<span class="ppm-none">${this.esc(this.options.noneLabel)}</span>`;
+            return;
+        }
+        this.chips.innerHTML = this.chosen.map(id => {
+            const p = this.allPersons.find(x => x.id === id);
+            const name = p ? `${p.firstName} ${p.lastName}`.trim() : id;
+            return `<span class="ppm-chip">${this.esc(name)}<button type="button" class="ppm-chip-x" data-remove="${this.esc(id)}" aria-label="${this.esc(this.options.removeLabel(name))}">&times;</button></span>`;
+        }).join('');
+    }
+
+    private renderList(refilter = true): void {
+        if (refilter) this.filtered = filterAndSort(this.input.value, this.allPersons, this.searchData());
+        const scroll = this.list.scrollTop;
+        if (this.filtered.length === 0) {
+            this.list.innerHTML = `<div class="person-picker-empty">${strings.personPicker.noResults}</div>`;
+        } else {
+            const full = this.full();
+            this.list.innerHTML = this.filtered.slice(0, this.shown).map(p => {
+                const why = this.options.blocked?.(p) ?? null;
+                const fixed = !why && !!this.options.fixed?.(p);
+                const on = fixed || this.chosen.includes(p.id);
+                const off = !!why || fixed || (full && !on);
+                const year = p.birthDate ? ` <span class="birth-year">(*${this.esc(p.birthDate.split('-')[0])})</span>` : '';
+                const cls = `ppm-row${why ? ' is-blocked' : ''}${fixed ? ' is-fixed' : ''}`;
+                const title = fixed && this.options.fixedLabel ? ` title="${this.esc(this.options.fixedLabel)}"` : '';
+                return `<label class="${cls}" data-id="${this.esc(p.id)}"${title}>
+                    <input type="checkbox" class="ppm-check"${on ? ' checked' : ''}${off ? ' disabled' : ''}>
+                    <span class="ppm-text"><span class="ppm-name">${nameHtml(p)}${year}</span>${why ? `<span class="ppm-why">${this.esc(why)}</span>` : ''}</span>
+                </label>`;
+            }).join('');
+        }
+        this.list.scrollTop = scroll;
+        const max = this.options.max ?? 50;
+        this.note.hidden = !this.full() || !this.options.maxLabel;
+        this.note.textContent = this.full() && this.options.maxLabel ? this.options.maxLabel(max) : '';
+    }
+
+    /** The chosen people (in the order chosen). */
+    getValue(): PersonId[] {
+        return [...this.chosen];
+    }
+
+    focusInput(): void {
+        this.input.focus();
+    }
+
+    destroy(): void {
+        this.container.innerHTML = '';
+    }
+}

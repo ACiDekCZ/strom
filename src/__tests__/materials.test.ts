@@ -16,6 +16,7 @@ import {
     applyMaterialAnswer, trimListForCache, thumbsToEvict, LIST_CACHE_LIMIT,
     setMaterialsBackend, memoryMaterialsBackend, saveMaterialList, mergeIntoCache, cachedMaterialList, primeMaterials,
     clearMaterialsCache, putCachedThumb, getCachedThumb, personMaterialCount,
+    directPersons, materialFromKey, addedPersons, assignUndoRequests, batchUndoRequest, applyBatchPersons, mergeAssignIntoCache,
 } from '../materials.js';
 
 const BASE = 'http://127.0.0.1:5998/0123456789abcdef0123456789abcdef';
@@ -468,5 +469,62 @@ describe('cache', () => {
         setMaterialsBackend(broken);
         await saveMaterialList('t2', list([file(1)]), { kind: 'all' });
         expect(cachedMaterialList('t2')?.files).toHaveLength(1);
+    });
+});
+
+describe('assign and its undo', () => {
+    beforeEach(() => setMaterialsBackend(memoryMaterialsBackend()));
+
+    it('a file names its own and its sorting\'s people, not its batch\'s', () => {
+        expect(directPersons(file(1, { persons: ['P0001'], sorted: { persons: ['P0002', 'P0001'] }, batch: 'b1' }))).toEqual(['P0001', 'P0002']);
+    });
+
+    it('where a file came from', () => {
+        expect(materialFromKey('the Strom app')).toBe('app');
+        expect(materialFromKey('batch from the Strom app')).toBe('batch');
+        expect(materialFromKey('phone')).toBe('phone');
+        expect(materialFromKey('terminal')).toBe('cli');
+        expect(materialFromKey('cli')).toBe('cli');
+        expect(materialFromKey('somewhere')).toBeNull();
+        expect(materialFromKey(undefined)).toBeNull();
+    });
+
+    it('the people an assign really added (not those already there)', () => {
+        const before = [file(1, { persons: ['P0001'] }), file(2)];
+        const after = [file(1, { persons: ['P0001', 'P0002'] }), file(2, { persons: ['P0001', 'P0002'] })];
+        expect(addedPersons(before, after, ['P0001', 'P0002', 'P0003'])).toEqual(['P0001', 'P0002']);
+        expect(addedPersons(after, after, ['P0001'])).toEqual([]);
+    });
+
+    it('undo takes off only what the assign added and puts back only what it took off', () => {
+        const before = [file(1, { persons: ['P0001'] }), file(2), file(3, { persons: ['P0002'] })];
+        const after = [file(1, { persons: ['P0001', 'P0003'] }), file(2, { persons: ['P0003'] }), file(3)];
+        expect(assignUndoRequests(before, after)).toEqual([
+            { files: ['I0001', 'I0002'], remove: ['P0003'] },
+            { files: ['I0003'], add: ['P0002'] },
+        ]);
+        expect(assignUndoRequests(before, before)).toEqual([]);
+    });
+
+    it('a whole batch\'s undo: only the people really changed', () => {
+        const batch = { id: 'b1', persons: ['P0001'] };
+        expect(batchUndoRequest(batch, ['P0001', 'P0002'], [])).toEqual({ batch: 'b1', remove: ['P0002'] });
+        expect(batchUndoRequest(batch, [], ['P0001', 'P0003'])).toEqual({ batch: 'b1', add: ['P0001'] });
+        expect(batchUndoRequest(batch, ['P0001'], [])).toBeNull();
+    });
+
+    it('a batch\'s people change in the remembered list (pure) and with an assign answer', async () => {
+        const rec: MaterialCacheRecord = { treeId: 't', list: list([], { batches: [{ id: 'b1', name: 'B', files: 2, persons: ['P0001'] }] }), full: true, opened: {} };
+        const next = applyBatchPersons(rec, 'b1', ['P0002'], ['P0001']);
+        expect(next.list.batches[0].persons).toEqual(['P0002']);
+        expect(rec.list.batches[0].persons).toEqual(['P0001']);
+        expect(applyBatchPersons(rec, 'nope', ['P0002'])).toBe(rec);
+
+        await saveMaterialList('t3', rec.list, { kind: 'all' });
+        await mergeAssignIntoCache('t3', [file(1, { batch: 'b1' })], { P0002: 'Eva' }, { id: 'b1', add: ['P0002'] });
+        const l = cachedMaterialList('t3')!;
+        expect(l.batches[0].persons).toEqual(['P0001', 'P0002']);
+        expect(l.files.map(f => f.id)).toEqual(['I0001']);
+        expect(l.people.P0002).toBe('Eva');
     });
 });

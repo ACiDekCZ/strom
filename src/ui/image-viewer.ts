@@ -3,6 +3,11 @@
  * wheel / trackpad and double-tap zoom, drag to pan, − / level / + buttons,
  * keys + − 0 and arrows. A tap on the backdrop, × or Escape closes it.
  *
+ * List mode (`openViewerList`, the materials): ‹ › beside the image, ← / →
+ * while the image is fitted, a sideways swipe on touch; the position on top,
+ * a details panel at the side (a bottom sheet on a phone) filled by the
+ * caller, and a card instead of the image for files the browser cannot show.
+ *
  * The page disables browser zoom (viewport user-scalable=no), so the viewer
  * does its own: the stage takes all touches (touch-action: none) and the math
  * lives in src/image-zoom.ts.
@@ -20,6 +25,8 @@ const DOUBLE_TAP_SLOP = 30;
 /** Movement that turns a tap into a drag. */
 const DRAG_SLOP = 6;
 const HINT_MS = 2600;
+/** A sideways swipe this long goes to the next item (list mode). */
+const SWIPE_MIN = 50;
 
 let view: ZoomView = { scale: 1, x: 0, y: 0 };
 let box: ZoomBox = { nw: 0, nh: 0, vw: 0, vh: 0 };
@@ -34,6 +41,8 @@ let gesture: {
     startDist: number; startMidX: number; startMidY: number;
     moved: boolean;
     onImage: boolean;
+    /** The image was fitted when the gesture began (a sideways swipe goes to the next item). */
+    fitted: boolean;
 } | null = null;
 let lastTap: { t: number; x: number; y: number } | null = null;
 
@@ -42,6 +51,7 @@ function el<T extends HTMLElement>(id: string): T | null {
 }
 
 function overlay(): HTMLElement | null { return el('attachment-overlay'); }
+function isCard(): boolean { return !!overlay()?.classList.contains('is-card'); }
 function img(): HTMLImageElement | null { return el<HTMLImageElement>('attachment-overlay-img'); }
 function isOpen(): boolean { return !!overlay()?.classList.contains('active'); }
 
@@ -126,6 +136,7 @@ function beginGesture(onImage: boolean): void {
         startMidY: b ? (a.y + b.y) / 2 : a.y,
         moved: gesture?.moved ?? false,
         onImage: gesture?.onImage ?? onImage,
+        fitted: gesture?.fitted ?? (isFitted(view, box) || isCard()),
     };
 }
 
@@ -177,7 +188,16 @@ function onPointerUp(e: PointerEvent): void {
     }
     const g = gesture;
     gesture = null;
-    if (!g || g.moved || e.type === 'pointercancel') return;
+    if (!g || e.type === 'pointercancel') return;
+    // List mode: a sideways swipe over a fitted image (or a card) goes to the neighbour.
+    if (list && g.moved && g.fitted && g.startDist === 0) {
+        const dx = point.x - g.startX, dy = point.y - g.startY;
+        if (Math.abs(dx) >= SWIPE_MIN && Math.abs(dx) > Math.abs(dy) * 1.5) {
+            goViewerList(dx < 0 ? 1 : -1);
+            return;
+        }
+    }
+    if (g.moved) return;
     // A tap: a second one soon after on the same spot toggles the zoom; a
     // single tap on the backdrop closes.
     const now = performance.now();
@@ -204,14 +224,17 @@ function onWheel(e: WheelEvent): void {
 
 function onKey(e: KeyboardEvent): void {
     if (!isOpen()) return;
+    // A dialog opened from the viewer (assigning, hiding) takes its own keys.
+    if (document.querySelector('[data-over-viewer]')) return;
+    const browse = !!list && (isFitted(view, box) || isCard());
     const handled = (() => {
         switch (e.key) {
             case 'Escape': closeImageViewer(); return true;
-            case '+': case '=': step(ZOOM_STEP); return true;
-            case '-': case '_': step(1 / ZOOM_STEP); return true;
-            case '0': fit(true); return true;
-            case 'ArrowLeft': setView(panBy(view, 80, 0, box), true); return true;
-            case 'ArrowRight': setView(panBy(view, -80, 0, box), true); return true;
+            case '+': case '=': if (isCard()) return false; step(ZOOM_STEP); return true;
+            case '-': case '_': if (isCard()) return false; step(1 / ZOOM_STEP); return true;
+            case '0': if (isCard()) return false; fit(true); return true;
+            case 'ArrowLeft': if (browse) goViewerList(-1); else setView(panBy(view, 80, 0, box), true); return true;
+            case 'ArrowRight': if (browse) goViewerList(1); else setView(panBy(view, -80, 0, box), true); return true;
             case 'ArrowUp': setView(panBy(view, 0, 80, box), true); return true;
             case 'ArrowDown': setView(panBy(view, 0, -80, box), true); return true;
             default: return false;
@@ -227,6 +250,7 @@ function onKey(e: KeyboardEvent): void {
 
 function onResize(): void {
     if (!isOpen()) return;
+    if (list) sheetHeight();
     const wasFitted = isFitted(view, box);
     measure();
     if (wasFitted) fit(); else setView(clampView(view, box));
@@ -250,6 +274,8 @@ function wire(): void {
     el('image-viewer-out')?.addEventListener('click', () => step(1 / ZOOM_STEP));
     el('image-viewer-level')?.addEventListener('click', () => { fit(true); dismissHint(); });
     el('image-viewer-close')?.addEventListener('click', () => closeImageViewer());
+    el('image-viewer-prev')?.addEventListener('click', () => goViewerList(-1));
+    el('image-viewer-next')?.addEventListener('click', () => goViewerList(1));
     window.addEventListener('resize', onResize);
 }
 
@@ -366,6 +392,7 @@ export function openImageViewer(dataUrl: string, close?: () => void, original?: 
     const image = img();
     const ov = overlay();
     if (!image || !ov || !dataUrl) return;
+    if (list && isOpen()) closeImageViewer();
     previewSrc = dataUrl;
     renderMediaBar(original);
     if (original?.autoLoad) queueMicrotask(() => { void loadOriginal(original); });
@@ -406,7 +433,225 @@ export function closeImageViewer(): void {
     dismissHint();
     pointers.clear();
     gesture = null;
+    if (list) {
+        list = null;
+        listToken++;
+        ov.classList.remove('is-list', 'is-card');
+        ov.style.removeProperty('--iv-sheet');
+        const panel = el('image-viewer-panel');
+        if (panel) panel.innerHTML = '';
+        const card = el('image-viewer-card');
+        if (card) { card.innerHTML = ''; card.hidden = true; }
+        listNote(null);
+        const pos = el('image-viewer-pos');
+        if (pos) pos.textContent = '';
+        if (image) { image.onerror = null; image.style.visibility = ''; }
+    }
     const done = onClose;
     onClose = null;
+    const back = returnFocus;
+    returnFocus = null;
     done?.();
+    if (back?.isConnected) back.focus({ preventScroll: true });
+}
+
+// ==================== LIST MODE ====================
+
+/** What the caller draws for each item of a list. */
+export interface ViewerSlots {
+    /** An image: `preview` at once (when given), then `src` over it once loaded. `failed`: neither could be shown. */
+    image: (src: string, preview?: string | null, failed?: () => void) => void;
+    /** A card in place of the image (a file the browser does not show). */
+    card: (content: HTMLElement) => void;
+    /** The position line on top ("3 / 14 · Materials of Jan Novák"). */
+    pos: (text: string) => void;
+    /** A label over the bottom of the image ("Stored preview…"); null: none. */
+    note: (text: string | null) => void;
+    /** The details panel (emptied before each item). */
+    panel: HTMLElement;
+    /** Only the panel is drawn again (the stage keeps its image or card). */
+    redraw?: boolean;
+}
+
+export interface ViewerList {
+    count: number;
+    index: number;
+    show: (index: number, slots: ViewerSlots) => void;
+}
+
+let list: ViewerList | null = null;
+/** Bumped on every drawn item: a late image load of the previous one is dropped. */
+let listToken = 0;
+let returnFocus: HTMLElement | null = null;
+
+/** Is the viewer open in list mode. */
+export function viewerListOpen(): boolean {
+    return !!list && isOpen();
+}
+
+/** The item shown (list mode; -1: none). */
+export function viewerListIndex(): number {
+    return list && isOpen() ? list.index : -1;
+}
+
+function listImage(src: string, preview: string | null | undefined, failed: (() => void) | undefined, token: number): void {
+    const image = img();
+    const ov = overlay();
+    const card = el('image-viewer-card');
+    if (!image || !ov) return;
+    ov.classList.remove('is-card');
+    if (card) { card.innerHTML = ''; card.hidden = true; }
+    const first = preview || src;
+    image.style.visibility = 'hidden';
+    image.onload = () => {
+        if (token !== listToken) return;
+        measure();
+        fit();
+        image.style.visibility = '';
+    };
+    image.onerror = () => {
+        if (token === listToken && first === src) failed?.();
+    };
+    image.src = first;
+    if (!preview || preview === src) return;
+    // Full quality over the preview, once it is here (the view stays fitted).
+    const full = new Image();
+    full.onload = () => {
+        if (token !== listToken || !isOpen()) return;
+        const wasFitted = isFitted(view, box);
+        image.onload = () => {
+            if (token !== listToken) return;
+            measure();
+            if (wasFitted) fit(); else setView(clampView(view, box));
+            image.style.visibility = '';
+        };
+        image.onerror = null;
+        image.src = src;
+    };
+    full.onerror = () => { if (token === listToken) failed?.(); };
+    full.src = src;
+}
+
+function listCard(content: HTMLElement, token: number): void {
+    const image = img();
+    const ov = overlay();
+    const card = el('image-viewer-card');
+    if (!image || !ov || !card || token !== listToken) return;
+    image.onload = null;
+    image.onerror = null;
+    image.removeAttribute('src');
+    image.style.visibility = 'hidden';
+    ov.classList.add('is-card');
+    ov.classList.remove('is-zoomed');
+    card.innerHTML = '';
+    card.appendChild(content);
+    card.hidden = false;
+    dismissHint();
+}
+
+/** On a phone the panel is a sheet under the image: the stage ends above it (collapsed). */
+function sheetHeight(): void {
+    const ov = overlay();
+    const panel = el('image-viewer-panel');
+    if (!ov || !panel) return;
+    const phone = matchMedia('(max-width: 640px)').matches;
+    if (!phone || panel.classList.contains('is-expanded')) {
+        if (!phone) ov.style.removeProperty('--iv-sheet');
+        return;
+    }
+    ov.style.setProperty('--iv-sheet', `${panel.offsetHeight}px`);
+}
+
+/** The panel's size changed (expanded, redrawn): the stage follows and the image stays fitted. */
+export function relayoutViewer(): void {
+    if (!isOpen()) return;
+    sheetHeight();
+    const wasFitted = isFitted(view, box);
+    measure();
+    if (wasFitted) fit(); else setView(clampView(view, box));
+}
+
+function listNote(text: string | null): void {
+    const note = el('image-viewer-note');
+    if (!note) return;
+    note.textContent = text ?? '';
+    note.hidden = !text;
+}
+
+function drawListItem(): void {
+    const l = list;
+    const ov = overlay();
+    const panel = el('image-viewer-panel');
+    if (!l || !ov || !panel) return;
+    const token = ++listToken;
+    listNote(null);
+    pointers.clear();
+    gesture = null;
+    panel.innerHTML = '';
+    panel.scrollTop = 0;
+    const prev = el<HTMLButtonElement>('image-viewer-prev');
+    const next = el<HTMLButtonElement>('image-viewer-next');
+    if (prev) prev.disabled = l.index <= 0;
+    if (next) next.disabled = l.index >= l.count - 1;
+    ov.classList.toggle('is-single', l.count <= 1);
+    l.show(l.index, {
+        image: (src, preview, failed) => { if (token === listToken) listImage(src, preview, failed, token); },
+        card: (content) => listCard(content, token),
+        pos: (text) => { const p = el('image-viewer-pos'); if (p && token === listToken) p.textContent = text; },
+        note: (text) => { if (token === listToken) listNote(text); },
+        panel,
+    });
+    requestAnimationFrame(() => { if (token === listToken) relayoutViewer(); });
+}
+
+/** Go `delta` items along the list (‹ ›, arrows, swipe); stops at the ends. */
+export function goViewerList(delta: number): void {
+    const l = list;
+    if (!l || !isOpen()) return;
+    const next = Math.max(0, Math.min(l.count - 1, l.index + delta));
+    if (next === l.index) return;
+    l.index = next;
+    renderMediaBar(undefined);
+    drawListItem();
+}
+
+/** Draw the shown item again (its data changed): the panel only, or with `stage` the image or card too. */
+export function redrawViewerList(opts: { stage?: boolean } = {}): void {
+    const l = list;
+    const panel = el('image-viewer-panel');
+    if (!l || !panel || !isOpen()) return;
+    if (opts.stage) {
+        drawListItem();
+        return;
+    }
+    const scroll = panel.scrollTop;
+    const token = listToken;
+    panel.innerHTML = '';
+    l.show(l.index, {
+        image: () => { /* the stage stays */ },
+        card: () => { /* the stage stays */ },
+        note: () => { /* the stage stays */ },
+        pos: (text) => { const p = el('image-viewer-pos'); if (p && token === listToken) p.textContent = text; },
+        panel,
+        redraw: true,
+    });
+    panel.scrollTop = scroll;
+    requestAnimationFrame(() => { if (token === listToken) relayoutViewer(); });
+}
+
+/** Open the viewer over a list of items: `show` draws each one (the stage and the panel). */
+export function openViewerList(opts: ViewerList, close?: () => void): void {
+    const ov = overlay();
+    if (!ov || opts.count <= 0) return;
+    if (isOpen()) closeImageViewer();
+    wire();
+    returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    list = { ...opts, index: Math.max(0, Math.min(opts.count - 1, opts.index)) };
+    onClose = close ?? null;
+    lastTap = null;
+    renderMediaBar(undefined);
+    ov.classList.add('is-list', 'active');
+    drawListItem();
+    document.addEventListener('keydown', onKey, true);
+    ov.focus({ preventScroll: true });
 }

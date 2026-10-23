@@ -1798,6 +1798,19 @@ const stringsEN = {
         folderHide: 'Hide whole folder…',
         moreActions: 'More actions',
         selectItem: (name: string) => `Select ${name}`,
+        // The viewer and the dialogs (E4)
+        prev: 'Previous',
+        next: 'Next',
+        details: 'Details',
+        allDetails: 'All details',
+        fewerDetails: 'Fewer details',
+        reasonLabel: 'Reason',
+        hideConfirm: 'Hide',
+        assignMax: (n: number) => `At most ${n} people at once.`,
+        alreadyOn: 'Already assigned',
+        removePerson: (name: string) => `Remove ${name}`,
+        batchRemoveTitle: 'Remove a person from the whole batch',
+        batchRemoveText: (batch: string, n: number) => `Batch ${batch} (${nEn(n, 'file', 'files')}).`,
     },
 
     // A file the research refused, by its code (L3; `media.codes`): said as the reason after "file: "
@@ -6648,6 +6661,19 @@ const stringsCZ: StringsType = {
         folderHide: 'Skrýt celou složku…',
         moreActions: 'Další akce',
         selectItem: (name: string) => `Vybrat ${name}`,
+        // Prohlížeč a dialogy (E4)
+        prev: 'Předchozí',
+        next: 'Další',
+        details: 'Údaje',
+        allDetails: 'Všechny údaje',
+        fewerDetails: 'Méně údajů',
+        reasonLabel: 'Důvod',
+        hideConfirm: 'Skrýt',
+        assignMax: (n: number) => `Najednou nejvýš ${n} osob.`,
+        alreadyOn: 'Už přiřazeno',
+        removePerson: (name: string) => `Odebrat: ${name}`,
+        batchRemoveTitle: 'Odebrat osobu z celé dávky',
+        batchRemoveText: (batch: string, n: number) => `Dávka ${batch} (${nCs(n, 'soubor', 'soubory', 'souborů')}).`,
     },
 
     // A file the research refused, by its code (L3; `media.codes`): said as the reason after "file: "
@@ -11469,6 +11495,19 @@ const stringsDE: StringsType = {
         folderHide: 'Ganzen Ordner ausblenden…',
         moreActions: 'Weitere Aktionen',
         selectItem: (name: string) => `${name} auswählen`,
+        // Betrachter und Dialoge (E4)
+        prev: 'Vorherige',
+        next: 'Nächste',
+        details: 'Angaben',
+        allDetails: 'Alle Angaben',
+        fewerDetails: 'Weniger Angaben',
+        reasonLabel: 'Grund',
+        hideConfirm: 'Ausblenden',
+        assignMax: (n: number) => `Höchstens ${n} Personen auf einmal.`,
+        alreadyOn: 'Bereits zugeordnet',
+        removePerson: (name: string) => `${name} entfernen`,
+        batchRemoveTitle: 'Person vom ganzen Stapel entfernen',
+        batchRemoveText: (batch: string, n: number) => `Stapel ${batch} (${nDe(n, 'Datei', 'Dateien')}).`,
     },
 
     // A file the research refused, by its code (L3; `media.codes`): said as the reason after "file: "

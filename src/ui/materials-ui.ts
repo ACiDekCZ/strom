@@ -67,6 +67,8 @@ export interface MaterialActionCtx {
     folder?: { batch: string; path: string };
     /** The items are the window's selection (a successful action ends selecting). */
     selection?: boolean;
+    /** The element the action came from (the viewer's chip: the "only through the batch" bubble sits by it). */
+    anchor?: HTMLElement;
 }
 
 /** Where an item was opened from, for the viewer (its ‹ › go through `items`). */
@@ -340,17 +342,6 @@ export const materialsMethods = uiModule({
         this.dialogStack = this.dialogStack.filter(d => d !== MODAL_ID);
     },
 
-    /**
-     * The research's writes on items (assign, remove from a person, hide,
-     * restore): filled by the overview's dialogs. False: not handled.
-     * From the window: a batch's / folder's ⋯ (`ctx.batch`, `ctx.folder`),
-     * the selection bar (`ctx.selection`) and "Restore" under a hidden tile.
-     */
-    materialAction(id: MaterialActionId, items: MaterialItem[], ctx: MaterialActionCtx = {}): boolean {
-        void id; void items; void ctx;
-        return false;
-    },
-
     // ==================== THE PERSON'S SECTION ====================
 
     /**
@@ -599,19 +590,9 @@ export const materialsMethods = uiModule({
         const all = this.personMaterialItems(this.currentId);
         const index = all.findIndex(i => i.key === key);
         const person = DataManager.getPerson(this.currentId);
-        const label = person ? `${person.firstName} ${person.lastName}`.trim() : '';
+        const label = person ? strings.materials.ctxPerson(`${person.firstName} ${person.lastName}`.trim()) : '';
         if (index >= 0) this.openMaterialItems(all, index, { where: 'section', label });
         else this.openMaterial(item);
-    },
-
-    /**
-     * Open `items[index]` (the section's and the window's click). The viewer
-     * replaces this: `items` are in the order shown, for its ‹ ›.
-     */
-    openMaterialItems(items: MaterialItem[], index: number, ctx: MaterialOpenCtx): void {
-        void ctx;
-        const item = items[index];
-        if (item) this.openMaterial(item);
     },
 
     /** One item without a viewer: an attachment's preview, an image, a PDF, else the system's program. */
@@ -857,6 +838,7 @@ export const materialsMethods = uiModule({
         if (document.getElementById('person-modal')?.classList.contains('active')) this.renderMaterialsSection();
         this.refreshMaterialsWindow();
         this.refreshMaterialsCounts();
+        this.materialViewerListChanged();
     },
 
     /** Put what was just saved into the remembered list (before the research's own answer comes). */

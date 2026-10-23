@@ -1024,7 +1024,7 @@ export const materialsWindowMethods = uiModule({
         const index = items.findIndex(i => i.key === key);
         if (index < 0) return;
         const personName = w.filters.person ? nameWithoutYears(w.names.get(w.filters.person) ?? w.filters.person) : '';
-        this.openMaterialItems(items, index, { where: 'window', label: personName || (group ? this.mwGroupName(group) : '') });
+        this.openMaterialItems(items, index, { where: 'window', label: personName ? strings.materials.ctxPerson(personName) : group ? this.mwGroupName(group) : '' });
     },
 
     mwRun(id: MaterialActionId, items: MaterialItem[], ctx: MaterialActionCtx): void {

@@ -590,6 +590,70 @@ export function materialActions(item: MaterialItem, caps: MaterialCaps, ctx: Mat
     return out;
 }
 
+/** Who a file names itself: its own people and those from sorting (not its batch's). */
+export function directPersons(file: Pick<MaterialFile, 'persons' | 'sorted'>): string[] {
+    const out = [...file.persons];
+    for (const p of file.sorted?.persons ?? []) if (!out.includes(p)) out.push(p);
+    return out;
+}
+
+/** Where a file came from by its `from` (a key of `materials.from`; null: not known). */
+export function materialFromKey(from: string | undefined): 'app' | 'batch' | 'phone' | 'cli' | null {
+    const f = (from ?? '').toLowerCase();
+    if (!f) return null;
+    if (f.includes('batch')) return 'batch';
+    if (f.includes('phone')) return 'phone';
+    if (f.includes('terminal') || f === 'cli') return 'cli';
+    if (f.includes('app')) return 'app';
+    return null;
+}
+
+/** The people an assign really put on files (by the records before and after), in `add`'s order. */
+export function addedPersons(before: readonly MaterialFile[], after: readonly MaterialFile[], add: readonly string[]): string[] {
+    const prev = new Map(before.map(f => [f.id, new Set(directPersons(f))]));
+    const got = new Set<string>();
+    for (const f of after) {
+        const was = prev.get(f.id) ?? new Set<string>();
+        for (const p of directPersons(f)) if (!was.has(p)) got.add(p);
+    }
+    return add.filter(p => got.has(p));
+}
+
+/**
+ * The writes that take an assign back: each person off the files the
+ * operation really added them to, and back on the files it really took them
+ * off (not where they were before). Files with the same change share one
+ * request. Pure.
+ */
+export function assignUndoRequests(before: readonly MaterialFile[], after: readonly MaterialFile[]): AssignRequest[] {
+    const prev = new Map(before.map(f => [f.id, new Set(directPersons(f))]));
+    const byFile = new Map<string, { add: string[]; remove: string[] }>();
+    for (const f of after) {
+        const was = prev.get(f.id);
+        if (!was) continue;
+        const now = new Set(directPersons(f));
+        const change = { add: [...was].filter(p => !now.has(p)), remove: [...now].filter(p => !was.has(p)) };
+        if (change.add.length || change.remove.length) byFile.set(f.id, change);
+    }
+    const groups = new Map<string, AssignRequest>();
+    for (const [id, change] of byFile) {
+        const key = `${[...change.add].sort().join(',')}|${[...change.remove].sort().join(',')}`;
+        const req = groups.get(key);
+        if (req) req.files!.push(id);
+        else groups.set(key, { files: [id], ...(change.add.length ? { add: change.add } : {}), ...(change.remove.length ? { remove: change.remove } : {}) });
+    }
+    return [...groups.values()];
+}
+
+/** The write that takes a batch's assign back (only the people it really added or took off; null: nothing). */
+export function batchUndoRequest(batch: Pick<MaterialBatch, 'id' | 'persons'>, add: readonly string[], remove: readonly string[]): AssignRequest | null {
+    const had = new Set(batch.persons ?? []);
+    const added = add.filter(p => !had.has(p));
+    const removed = remove.filter(p => had.has(p));
+    if (!added.length && !removed.length) return null;
+    return { batch: batch.id, ...(removed.length ? { add: removed } : {}), ...(added.length ? { remove: added } : {}) };
+}
+
 /** How many materials the person has (menu, card tooltip): items without hidden ones; without the list: attachments. */
 export function personMaterialCount(person: Pick<Person, 'refn' | 'attachments'>, list: MaterialList | null | undefined, listOn: boolean): number {
     if (!listOn) return person.attachments?.length ?? 0;
@@ -1219,6 +1283,31 @@ export async function mergeIntoCache(treeId: string, files: MaterialFile[], peop
     const rec = cloneRecord(cachedMaterials(treeId) ?? emptyRecord(treeId));
     rec.list.files = mergeFiles(rec.list.files, files);
     Object.assign(rec.list.people, people);
+    return putRecord(rec, now);
+}
+
+/** The record with a batch's people changed (an assign on the whole batch; pure). */
+export function applyBatchPersons(rec: MaterialCacheRecord, batchId: string, add: readonly string[] = [], remove: readonly string[] = []): MaterialCacheRecord {
+    const i = rec.list.batches.findIndex(b => b.id === batchId);
+    if (i < 0) return rec;
+    const next = cloneRecord(rec);
+    const b = next.list.batches[i];
+    const persons = (b.persons ?? []).filter(p => !remove.includes(p));
+    for (const p of add) if (!persons.includes(p)) persons.push(p);
+    next.list.batches[i] = { ...b, persons };
+    return next;
+}
+
+/** An `assign` answer into the cache: its records, its people and (for a whole batch) the batch's people. */
+export async function mergeAssignIntoCache(
+    treeId: string, files: MaterialFile[], people: Record<string, string> = {},
+    batch?: { id: string; add?: readonly string[]; remove?: readonly string[] }, now: number = Date.now(),
+): Promise<MaterialCacheRecord> {
+    await primeMaterials(treeId);
+    let rec = cloneRecord(cachedMaterials(treeId) ?? emptyRecord(treeId));
+    rec.list.files = mergeFiles(rec.list.files, files);
+    Object.assign(rec.list.people, people);
+    if (batch) rec = applyBatchPersons(rec, batch.id, batch.add, batch.remove);
     return putRecord(rec, now);
 }
 

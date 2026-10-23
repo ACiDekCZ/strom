@@ -444,18 +444,19 @@ export const attachmentsMethods = uiModule({
         DataManager.updateAttachmentNote(this.currentId, attachmentId, note);
     },
 
-    async deleteAttachment(attachmentId: string): Promise<void> {
-        if (!this.currentId) return;
+    async deleteAttachment(attachmentId: string, ownerId?: PersonId): Promise<void> {
+        const personId = ownerId ?? this.currentId;
+        if (!personId) return;
         // Name the file — a list of scans all confirming "Delete this
         // attachment?" tells you nothing about which one you hit.
-        const person = DataManager.getPerson(this.currentId);
+        const person = DataManager.getPerson(personId);
         const att = person?.attachments?.find(a => a.id === attachmentId);
         if (!att) return;
         const d = strings.danger;
         const m = strings.media;
         // Its original: waiting → discard it too (ticked), or send it and let the research detach it;
         // in the research → it stays there, only detached.
-        const state = this.mediaStateOf({ sha: att.original?.sha256, bytes: att.original?.bytes, personId: this.currentId });
+        const state = this.mediaStateOf({ sha: att.original?.sha256, bytes: att.original?.bytes, personId });
         const queuedOriginal = state?.kind === 'queued' || state?.kind === 'sending';
         // An archive keeps no attachments: only the original stays there (an attachment without one: no note).
         const archiveNote = this.researchArchiveDeleteNote();
@@ -469,7 +470,7 @@ export const attachmentsMethods = uiModule({
         if (!confirmed) return;
         const sha = att.original?.sha256;
         if (queuedOriginal && sha) await this.settleQueuedOriginal(sha, this.confirmChecked);
-        DataManager.removeAttachment(this.currentId, attachmentId);
+        DataManager.removeAttachment(personId, attachmentId);
         this.renderAttachmentsList();
     },
 });
