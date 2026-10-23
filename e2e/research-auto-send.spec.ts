@@ -662,6 +662,8 @@ test('findings D/E: "Send, then load" with a conflict still open over the user\'
     await renameJan(page, 'Jenda');
     await page.clock.fastForward(QUIET + 1000);
     await expect.poll(() => bridge.posts.length).toBe(1);
+    // Its answer taken first: "Send now" while a send is out does nothing (the post is counted when it goes).
+    await expect.poll(() => page.evaluate(() => window.Strom.TreeManager.getActiveTreeMetadata()?.research?.sent?.state)).toBe('written');
     // An unrelated edit sent with "Send, then load": written, no new conflict; its version still has the research's name.
     bridge.syncReply = WRITE;
     bridge.onWrite = () => ({ head: 'c2c2c2c2c2c2', ged: nameConflictGed('c2c2c2c2c2c2', ['1 BIRT', '2 PLAC Praha']) });
