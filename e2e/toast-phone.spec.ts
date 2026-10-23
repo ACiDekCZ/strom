@@ -113,6 +113,20 @@ test.describe('phone', () => {
     });
 });
 
+test.describe('a window as narrow as a phone, with a mouse', () => {
+    test.use({ viewport: { width: 390, height: 844 } });
+
+    test('390: ＋ and − stay in the zoom stack, the toast leaves them their column', async ({ page }) => {
+        await sampleWithBack(page);
+        await expect(page.locator('.zoom-controls button').first()).toBeVisible();
+        const toast = await longToast(page);
+        const t = (await toast.boundingBox())!;
+        expect(Math.round(t.x)).toBe(16);
+        await actionWhole(toast);
+        await coversNothing(page, toast);
+    });
+});
+
 test.describe('phone held sideways', () => {
     test.use({ viewport: { width: 844, height: 390 }, hasTouch: true, isMobile: true });
 

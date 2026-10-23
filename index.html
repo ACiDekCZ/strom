@@ -13813,6 +13813,14 @@
                 gap: 8px;
             }
         }
+        /* A window as narrow as a phone with a mouse keeps ＋ and − in the zoom stack, taller than the toast's
+           lift: the toast leaves them their column (12 + 48 + 8 from the right edge) instead (017 j). */
+        @media (max-width: 640px) and (not (pointer: coarse)) {
+            .toast, .toast--rich {
+                max-width: calc(100vw - 84px - env(safe-area-inset-right, 0px));
+                left: calc(16px + (100vw - 84px - env(safe-area-inset-right, 0px)) / 2);
+            }
+        }
         /* Touch zooms with two fingers: only ⛶ Fit stays (＋/− are for the
            mouse), a 44px circle (3.2). */
         @media (pointer: coarse) {
