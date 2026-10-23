@@ -409,6 +409,31 @@ test('the sibling-order pill: on the direct-line card beside its siblings, clear
     await expect(cardOf(page, 'focus')).toHaveAttribute('aria-label', /By birth 2 of 3\./);
 });
 
+test('tablet and a phone held sideways: the chip stands below the evidence pill, not under it', async ({ page }) => {
+    for (const viewport of [{ width: 1024, height: 768 }, { width: 844, height: 390 }]) {
+        await page.setViewportSize(viewport);
+        await setup(page);
+        await tabOf(page, ANCESTOR).click();
+        const chip = page.locator('#hide-shown-children-chip');
+        await expect(chip).toBeVisible();
+        const alone = (await chip.boundingBox())!;
+        await page.evaluate(() => window.Strom.UI.showEvidenceLevels());
+        const pill = page.locator('#evidence-pill');
+        await expect(pill).toBeVisible();
+        const p = (await pill.boundingBox())!;
+        const c = (await chip.boundingBox())!;
+        const label = `${viewport.width}×${viewport.height}`;
+        expect(c.y, label).toBeGreaterThanOrEqual(p.y + p.height);
+        expect(c.y + c.height, label).toBeLessThanOrEqual(viewport.height);
+        // Still the top centre of the tree, and a click there reaches the chip
+        expect(Math.abs(c.x + c.width / 2 - viewport.width / 2), label).toBeLessThanOrEqual(2);
+        expect(await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest('#hide-shown-children-chip') !== null, [c.x + c.width / 2, c.y + c.height / 2])).toBe(true);
+        await page.evaluate(() => window.Strom.UI.endEvidenceHighlight());
+        await expect(pill).toHaveCount(0);
+        expect((await chip.boundingBox())!.y, label).toBe(alone.y);
+    }
+});
+
 test.describe('phone 390 × 844', () => {
     test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
@@ -612,6 +637,31 @@ test.describe('ancestors folded for the children (§2)', () => {
         await expect(page.locator('#tree-canvas .branch-tab.folded')).toHaveCount(0);
         expect(await page.evaluate(() => window.Strom.TreeRenderer.shownChildrenCount())).toBe(0);
         await expect.poll(() => screenPositions(page)).toEqual(before);
+    });
+
+    test('German: the dashed tab\'s bubble header wraps to lines of their own height, not pressed together', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await setupFixture(page, 'edge-ancestor-inner-siblings', 'focus');
+        await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
+        await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), 'f_m_f');
+        await tabOf(page, 'f_m_f').click();
+        const folded = cardOf(page, 'f_f').locator('.edge-top-right .branch-tab.folded');
+        await expect(folded).toHaveCount(1);
+        // The cards settle (the move of §1, the glow after it) before the bubble is opened
+        await page.mouse.move(5, 500);
+        await expect.poll(() => page.evaluate(() => document.getAnimations().length)).toBe(0);
+        await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), 'f_f');
+        const header = folded.locator('.badge-tooltip-header');
+        await folded.hover();
+        await expect(header).toBeVisible();
+        await expect(header).toHaveText('Eltern vorübergehend ausgeblendet');
+        const m = await header.evaluate(el => {
+            const cs = getComputedStyle(el);
+            return { lineHeight: parseFloat(cs.lineHeight), fontSize: parseFloat(cs.fontSize), height: el.getBoundingClientRect().height };
+        });
+        // The words do not fit one line in the bubble; each line keeps room above and below
+        expect(m.height).toBeGreaterThan(m.lineHeight * 1.5);
+        expect(m.lineHeight).toBeGreaterThanOrEqual(m.fontSize * 1.25);
     });
 
     test('the clicked card with its own parents folded: "▸ parents" left of "▾ children", both within the card in every card type', async ({ page }) => {
