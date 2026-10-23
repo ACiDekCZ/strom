@@ -13795,6 +13795,10 @@
         @media (max-width: 640px) {
             /* The phone's toast, as wide as the phone (017 j), above back / forward and the zoom stack. */
             .toast { bottom: calc(var(--bottom-bar-h) + 68px); }
+            /* It rises (and sinks) only the 8px between them and its place: from 100px below it would slide
+               across back / forward and the bar while it comes and goes, a tap there reaching the toast. */
+            .toast { transform: translateX(-50%) translateY(8px); }
+            .toast.show { transform: translateX(-50%) translateY(0); }
             .desktop-only { display: none !important; }
             .mobile-only { display: flex !important; }
 
