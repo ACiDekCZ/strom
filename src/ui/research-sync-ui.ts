@@ -37,7 +37,7 @@ import {
     LiveStatus, contentFingerprint, fingerprintLike, sanitizeLiveStatus, sanitizeSyncReply, isSafariBrowser,
     parseLiveBridge, researchSchemeUrl, readResearchHeader, stabilizeIds, researchPersonRef, ResearchAccepts,
     researchIdsByContent, holdsResearchIds, ResearchSendRecord, AdoptIds, ExportXrefs, applySyncIds, sourceIdOfXref, researchGedcomTitles, researchSendsReadings, SyncReading,
-    researchHasTitles, hasTitles, withoutTitles, TITLES_FEATURE, researchConflictRef, isResearchHead,
+    researchHasTitles, hasTitles, withoutTitles, TITLES_FEATURE, researchConflictRef, isResearchHead, SYNC_REMOVED_FEATURE, SyncPersonConflict,
 } from '../research-link.js';
 import { loadResearchCopy } from '../research-copy.js';
 import { ResearchWriteHeld, joinSaid, writeHeldOfRefusal, writeHeldOfStatus } from '../research-write-held.js';
@@ -924,6 +924,7 @@ export const researchSyncMethods = uiModule({
             this.researchNoteUndone(ctx.treeId, status);
             this.researchNoteWrittenAgain(ctx.treeId, status);
             this.researchNoteConflictsSettled(ctx.treeId, status);
+            this.researchNoteRemovedSettled(ctx.treeId, status);
             // Its version moved on since its conflicts were read (a send taken back closed them, or one
             // was decided there): read again, never counted from the old one (B1 of beta.56).
             const held = this.researchHeld(ctx.treeId);
@@ -1742,6 +1743,7 @@ export const researchSyncMethods = uiModule({
             + (reply.notWritten.length ? reply.notWritten.length : reply.takenBack ?? 0);
         const unexplained = written && reply.applied !== null && reply.changes !== null ? reply.changes - reply.applied - explained : 0;
         const listed = reply.notWritten.filter(n => n.why !== 'takenBack');
+        const removedOn = !!this.researchStatusOf(link.id)?.features?.includes(SYNC_REMOVED_FEATURE);
         const notWrittenCount = written ? listed.length + Math.max(0, unexplained) : 0;
         if (notWrittenCount > 0) {
             if (unexplained > 0) console.warn('The research wrote fewer changes than it counted, without saying why', reply);
@@ -1751,7 +1753,10 @@ export const researchSyncMethods = uiModule({
                 items: listed.slice(0, 50).map(n => {
                     // A source by the sent file's xref: the app's own id is known from that file.
                     const sourceId = n.source.startsWith('@') && exported ? sourceIdOfXref(exported.xrefs, n.source) : '';
-                    return { person: n.person, fact: n.fact, why: n.why, ...(n.name ? { name: n.name } : {}), ...(n.family ? { family: n.family } : {}),
+                    // `removed` only from a research that says it does (`sync.removed`): any other answer as before.
+                    const why = n.why === 'removed' && !removedOn ? '' : n.why;
+                    return { person: n.person, fact: n.fact, why, ...(why === 'removed' && n.removedBy ? { removedBy: n.removedBy } : {}),
+                        ...(n.name ? { name: n.name } : {}), ...(n.family ? { family: n.family } : {}),
                         ...(n.source ? { source: n.source } : {}), ...(sourceId ? { sourceId } : {}), ...(n.place ? { place: n.place } : {}) };
                 }), unexplained: Math.max(0, unexplained) } });
             // "Written N, not written M · Show": by hand and by itself alike (the written count is in it).
@@ -1763,6 +1768,16 @@ export const researchSyncMethods = uiModule({
         } else if (written && reply.changes !== 0) {
             patchResearchAutoState(treeId, { notWritten: undefined });
         }
+        // Whether a person comes back or goes (`sync.removed`): asked on its own, one question per person with
+        // that person's fact conflicts, never also among the conflicts to decide (nor a second time).
+        const personAsks: SyncPersonConflict[] = written && removedOn ? reply.personConflicts : [];
+        const askedIds = new Set(personAsks.flatMap(a => [a.id, ...a.facts]));
+        const known = reply.conflicts !== null ? {
+            conflicts: Math.max(0, reply.conflicts - reply.conflictIds.filter(id => askedIds.has(id)).length),
+            refs: reply.conflictPersons.filter(p => !personAsks.some(a => a.person === p)),
+            ids: reply.conflictIds.filter(id => !askedIds.has(id)),
+        } : undefined;
+        if (personAsks.length) await this.researchTakeRemovedAsks(treeId, personAsks, data, reply.intake, now);
         const sent: ResearchSend = {
             fingerprint: sentFp, at: now, changes, head,
             ...(reply.intake ? { intake: reply.intake } : {}),
@@ -1822,10 +1837,8 @@ export const researchSyncMethods = uiModule({
             }
             // This send itself was written: remembered and its conflicts told like any write (nothing loads —
             // the copy and the research differ by the send taken back).
-            if (written && reply.changes !== 0) {
-                await this.researchAfterWrite(treeId, sent,
-                    reply.conflicts !== null ? { conflicts: reply.conflicts, refs: reply.conflictPersons, ids: reply.conflictIds } : undefined);
-            }
+            if (written && reply.changes !== 0) await this.researchAfterWrite(treeId, sent, known);
+            await this.tellResearchRemovedAsks(treeId, !!opts.auto);
             return;
         }
         autoDue.delete(treeId);
@@ -1846,14 +1859,15 @@ export const researchSyncMethods = uiModule({
             // A write that left conflicts never loads after itself: told as any write (the note, the
             // conflicts), its version waits for the user — it holds the research's values in place of theirs.
             // Nor one that left changes unwritten: loading would drop them here without a word (V-J).
-            if (opts.thenLoad && active && !((reply.conflicts ?? 0) > 0) && notWrittenCount === 0) {
+            // Nor one that asks whether a person comes back or goes: its version would decide it here unasked.
+            if (opts.thenLoad && active && !((reply.conflicts ?? 0) > 0) && notWrittenCount === 0 && !personAsks.length) {
                 patchResearchAutoState(treeId, { lastWritten: { at: now, changes, conflicts: 0, ...(sent.intake ? { intake: sent.intake } : {}), fingerprint: sentFp } });
                 if (!opts.auto) this.showToast(s.writtenToast(changes ?? 0), 6000);
                 await this.researchLoadNewer({ afterSend: true });
             } else {
-                await this.researchAfterWrite(treeId, sent,
-                    reply.conflicts !== null ? { conflicts: reply.conflicts, refs: reply.conflictPersons, ids: reply.conflictIds } : undefined);
+                await this.researchAfterWrite(treeId, sent, known);
             }
+            await this.tellResearchRemovedAsks(treeId, !!opts.auto);
         } else if (writing) {
             if (!opts.auto) this.showToast(strings.sync.markWriting, 4000);
         } else if (!opts.auto) {
@@ -2280,6 +2294,7 @@ export const researchSyncMethods = uiModule({
             case 'changeSendMode': this.closeActionsMenu(); void this.showResearchTreeSettings(ctx.treeId); break;
             case 'showConflicts': this.researchShowConflicts(this.researchWrittenConflictPersons(ctx.treeId)); break;
             case 'showConflict': this.researchShowOneConflict(ctx.treeId); break;
+            case 'removedAsk': void this.showResearchRemovedAsk(ctx.treeId); break;
             case 'conflicts': this.openResearchSyncMenu(); break;
             case 'decideInResearch': {
                 const url = this.researchDecideUrl(ctx.treeId);
@@ -2561,8 +2576,9 @@ export const researchSyncMethods = uiModule({
             notWritten: () => {
                 const nw = autoState.notWritten;
                 const m = (nw?.items.length ?? 0) + (nw?.unexplained ?? 0);
-                // The archive still holds what was not written (a removal taken back there, audit 017 a-D2): its version at once.
-                const kept = !!nw?.items.some(i => i.why === 'kept');
+                // The archive still holds what was not written (a removal taken back there, audit 017 a-D2), or another
+                // window removed the person there (`sync.removed`): its version at once.
+                const kept = !!nw?.items.some(i => i.why === 'kept' || i.why === 'removed');
                 return { tone: nw?.seen ? 'neutral' : 'warn', title: s.writtenCount(nw?.written ?? 0, m).replace(/\.$/, ''),
                     sub: s.notWrittenSub(when(nw?.at)), actions: [{ action: 'showWritten', label: s.showConflicts, asLink: true },
                         ...(kept ? [{ action: 'loadNewer' as const, label: s.loadVersion, asLink: true }] : [])] };
@@ -2679,6 +2695,14 @@ export const researchSyncMethods = uiModule({
             b.tone = 'warn';
             b.sub = [b.sub, s.leftBehind(when(behind.at))].filter(Boolean).join(' ');
             if (!(b.actions ?? []).some(a => a.action === 'loadNewer')) b.actions = [...(b.actions ?? []), { action: 'loadNewer', label: s.loadVersion, asLink: true }];
+        }
+        // Whether a person comes back or goes, asked by a send and not decided there yet: said in any state
+        // but those that come first, with Decide (the question again).
+        const asks = treeId ? this.researchRemovedAsks(treeId) : [];
+        if (asks.length && !['stale', 'safari', 'sending'].includes(state.kind)) {
+            b.tone = 'warn';
+            b.sub = [b.sub, strings.conflict.person.blockLine(asks.length)].filter(Boolean).join(' ');
+            b.actions = [{ action: 'removedAsk', label: strings.conflict.person.decide }, ...(b.actions ?? [])];
         }
         // ("Only load from the research" is the quiet `off` block; a real state of the research outranks it.
         // "Restore the state before loading" is the `loaded` block for an hour, then a row of the menu.)
@@ -2874,7 +2898,7 @@ export const researchSyncMethods = uiModule({
     researchHeldConflictCount(treeId: TreeId, sent: ResearchSend | undefined): number {
         const link = TreeManager.getTreeMetadata(treeId)?.research;
         if (!link) return 0;
-        const records = this.researchUnloadedSends(treeId, link);
+        const records = this.researchWithoutRemovedAsks(treeId, this.researchUnloadedSends(treeId, link));
         const listed = (intake: string | undefined): boolean => !!intake && records.some(r => r.intake === intake && r.conflicts !== null);
         const lw = researchAutoState(treeId).lastWritten;
         // The last write's own count, while its version is not loaded here (it outlives loading).
@@ -2891,7 +2915,7 @@ export const researchSyncMethods = uiModule({
      * as its `/status.sends` says (0: none, or not known). Those of a send the tree loaded since are here.
      */
     researchSendsOpenConflicts(treeId: TreeId, link: ResearchLink): number {
-        return this.researchUnloadedSends(treeId, link).reduce((n, r) => n + Math.max(0, r.conflicts ?? 0), 0);
+        return this.researchWithoutRemovedAsks(treeId, this.researchUnloadedSends(treeId, link)).reduce((n, r) => n + Math.max(0, r.conflicts ?? 0), 0);
     },
 
     /** This tree's sends the research wrote after the tree last loaded its version (`/status.sends`). */
@@ -3007,7 +3031,9 @@ export const researchSyncMethods = uiModule({
         // Not written: a dot until its list was seen.
         const ctx = this.researchSyncLink();
         const notWrittenSeen = kind === 'notWritten' && !!ctx && !!researchAutoState(ctx.treeId).notWritten?.seen;
-        return (researchSyncWantsAttention(kind) && !notWrittenSeen) || this.originalsQueueWarn() || !!this.researchUndoneLeftBehind();
+        // A person to return or remove, not answered from this window yet.
+        const asked = !!ctx && this.researchRemovedAsks(ctx.treeId).some(a => !a.taken);
+        return (researchSyncWantsAttention(kind) && !notWrittenSeen) || this.originalsQueueWarn() || !!this.researchUndoneLeftBehind() || asked;
     },
 
     /**

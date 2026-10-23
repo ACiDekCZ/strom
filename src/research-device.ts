@@ -371,6 +371,30 @@ export interface ResearchAutoState {
     notWritten?: ResearchNotWritten;
     /** Conflicts decided in the research since the tree's version was loaded (its head `base`): no badge for them here (V-E). */
     settledConflicts?: { base: string; ids: string[] };
+    /** Whether a person comes back or goes, asked by a written send (`sync.removed`): until the research has it decided. */
+    removedAsk?: ResearchRemovedAsk[];
+}
+
+/**
+ * One person's "comes back or goes" (a `PERSON` conflict a send's answer
+ * asked): `way` 'back' — removed by another window, edited in this one, the
+ * person still here; 'remove' — removed here, edited elsewhere, the person
+ * not in this copy. The sides as the research words them; `facts`: that
+ * person's fact conflicts, decided with it. `taken`: the side this window
+ * asked for (its version loads once the research has it decided).
+ */
+export interface ResearchRemovedAsk {
+    id: string;
+    person: string;
+    name: string;
+    way: 'back' | 'remove';
+    user: string;
+    research: string;
+    facts: string[];
+    /** The send that asked it (its mark in `/status.sends`). */
+    intake: string;
+    at: string;
+    taken?: 'user' | 'research';
 }
 
 /** What a written send did not write (`ResearchAutoState.notWritten`). */
@@ -463,6 +487,22 @@ export function trimHeldConflicts(held: ResearchHeldConflicts): ResearchHeldConf
     return { ...held, persons: Object.fromEntries(keep.map(id => [id, held.persons[id]])) };
 }
 
+/** A kept "comes back or goes", checked (anything off: dropped, never asked on a guess). */
+function removedAskFrom(v: unknown): ResearchRemovedAsk | null {
+    if (!v || typeof v !== 'object') return null;
+    const a = v as Record<string, unknown>;
+    if (typeof a.id !== 'string' || !/^X\d{1,9}$/.test(a.id) || typeof a.person !== 'string' || !/^P\d{1,9}$/.test(a.person)) return null;
+    if (a.way !== 'back' && a.way !== 'remove') return null;
+    const text = (x: unknown, max: number) => typeof x === 'string' ? x.slice(0, max) : '';
+    return {
+        id: a.id, person: a.person, name: text(a.name, 120), way: a.way,
+        user: text(a.user, 300), research: text(a.research, 300),
+        facts: Array.isArray(a.facts) ? a.facts.filter((x): x is string => typeof x === 'string' && /^X\d{1,9}$/.test(x)).slice(0, 20) : [],
+        intake: text(a.intake, 80), at: typeof a.at === 'string' && Number.isFinite(Date.parse(a.at)) ? a.at : '',
+        ...(a.taken === 'user' || a.taken === 'research' ? { taken: a.taken } : {}),
+    };
+}
+
 export function researchAutoState(treeId: string): ResearchAutoState {
     try {
         const raw = localStorage.getItem(AUTO_KEY + treeId);
@@ -521,6 +561,10 @@ export function researchAutoState(treeId: string): ResearchAutoState {
         if (sc && typeof sc.base === 'string' && Array.isArray(sc.ids)) {
             out.settledConflicts = { base: sc.base, ids: sc.ids.filter((x): x is string => typeof x === 'string' && /^X\d{1,9}$/.test(x)).slice(0, 50) };
         }
+        if (Array.isArray(p.removedAsk)) {
+            const asks = p.removedAsk.slice(0, 20).map(removedAskFrom).filter((a): a is ResearchRemovedAsk => !!a);
+            if (asks.length) out.removedAsk = asks;
+        }
         const nw = p.notWritten as Record<string, unknown> | undefined;
         if (nw && typeof nw.at === 'string' && typeof nw.fingerprint === 'string' && Array.isArray(nw.items)) {
             out.notWritten = {
@@ -533,7 +577,8 @@ export function researchAutoState(treeId: string): ResearchAutoState {
                         ...(typeof i.family === 'string' && /^F\d{1,9}$/.test(i.family) ? { family: i.family } : {}),
                         ...(typeof i.source === 'string' && /^(S\d{1,9}|@[A-Za-z0-9_-]{1,20}@)$/.test(i.source) ? { source: i.source } : {}),
                         ...(typeof i.sourceId === 'string' && i.sourceId ? { sourceId: i.sourceId.slice(0, 80) } : {}),
-                        ...(typeof i.place === 'string' && i.place.trim() ? { place: i.place.slice(0, 200) } : {}) })),
+                        ...(typeof i.place === 'string' && i.place.trim() ? { place: i.place.slice(0, 200) } : {}),
+                        ...(typeof i.removedBy === 'string' && /^I\d{1,9}$/.test(i.removedBy) ? { removedBy: i.removedBy } : {}) })),
                 unexplained: typeof nw.unexplained === 'number' && nw.unexplained > 0 ? Math.floor(nw.unexplained) : 0,
                 ...(nw.seen === true ? { seen: true as const } : {}),
             };

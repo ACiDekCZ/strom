@@ -501,8 +501,10 @@ export const researchChangesMethods = uiModule({
                     const n = row.item;
                     const removed = row.type === 'person' && !!row.deleted;
                     const why = n.why === 'kept' ? (removed ? s.notWrittenKeptUndone : s.notWrittenKept)
-                        : n.why === 'report' ? s.notWrittenReport : n.why === 'pick' ? s.notWrittenPick : c.noReason;
-                    if (n.why === 'kept') keptHere = true;
+                        : n.why === 'report' ? s.notWrittenReport : n.why === 'pick' ? s.notWrittenPick
+                        : n.why === 'removed' ? s.notWrittenRemoved : c.noReason;
+                    // Kept there, or removed there by another window: the research's version (without them) at once.
+                    if (n.why === 'kept' || n.why === 'removed') keptHere = true;
                     let name: string;
                     let what = '';
                     let type = '';

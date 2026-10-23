@@ -97,6 +97,7 @@ import { treeOverviewMethods } from './tree-overview.js';
 import { cardSignalsUiMethods } from './card-signals-ui.js';
 import { researchOverviewMethods } from './research-overview-ui.js';
 import { researchWaitingWriteMethods } from './research-waiting-write-ui.js';
+import { researchRemovedMethods } from './research-removed-ui.js';
 import { researchDirectionsMethods } from './research-directions-ui.js';
 import { liveFollowMethods } from './live-follow-ui.js';
 import { researchEdgeUiMethods } from './research-edge-ui.js';
@@ -640,6 +641,10 @@ Object.assign(UIClass.prototype, researchOverviewMethods);
 type ResearchWaitingWriteMethods = typeof researchWaitingWriteMethods;
 export interface UIClass extends ResearchWaitingWriteMethods {}
 Object.assign(UIClass.prototype, researchWaitingWriteMethods);
+
+type ResearchRemovedMethods = typeof researchRemovedMethods;
+export interface UIClass extends ResearchRemovedMethods {}
+Object.assign(UIClass.prototype, researchRemovedMethods);
 
 type ResearchDirectionsMethods = typeof researchDirectionsMethods;
 export interface UIClass extends ResearchDirectionsMethods {}

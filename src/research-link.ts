@@ -2437,6 +2437,11 @@ export interface SyncReply {
     takenBack: number | null;
     /** Every change not written and why (`notWritten`, 1.12.0-rc.25): taken back, kept by an archive, only reported, to pick. */
     notWritten: SyncNotWritten[];
+    /**
+     * Whether a person comes back or goes (`fact: "PERSON"` conflicts decidable by a side, `sync.removed`):
+     * one per person, the fact conflicts of that person with it (personConflictsOf).
+     */
+    personConflicts: SyncPersonConflict[];
     /** The research's numbers for the people and sources this send added, by the sent file's xrefs (`ids`, 1.12.0-rc.26). */
     ids: AdoptIds | null;
     /** How the research took each source sent as an entry of a reading (`readings`, `read.sync`). */
@@ -2488,7 +2493,10 @@ export interface SyncNotWritten {
     person: string;
     family: string;
     fact: string;
-    why: 'takenBack' | 'kept' | 'report' | 'pick' | '';
+    /** `removed`: the person was removed in the research by an earlier send (`sync.removed`), nothing of them written. */
+    why: 'takenBack' | 'kept' | 'report' | 'pick' | 'removed' | '';
+    /** The send that removed them (the research's "I0042"; '' = not said), with `why: removed`. */
+    removedBy: string;
     /** The person's name as the research says it (`child.gone` from rc.41): shown when the tree has no such person. */
     name: string;
     /** A source's change (1.18): the research's "S0012", or the sent file's "@S12@" of one it does not have; '' none. */
@@ -2499,7 +2507,7 @@ export interface SyncNotWritten {
 
 export function sanitizeSyncReply(value: unknown): SyncReply {
     const r = asRecord(value);
-    if (!r) return { ok: false, changes: null, error: '', inbox: null, intake: '', head: '', applied: null, pending: false, conflicts: null, conflictPersons: [], conflictIds: [], conflictTakeIds: [], kept: null, reason: '', skipped: [], code: '', undoneSince: [], takenBack: null, notWritten: [], ids: null, readings: [] };
+    if (!r) return { ok: false, changes: null, error: '', inbox: null, intake: '', head: '', applied: null, pending: false, conflicts: null, conflictPersons: [], conflictIds: [], conflictTakeIds: [], kept: null, reason: '', skipped: [], code: '', undoneSince: [], takenBack: null, notWritten: [], personConflicts: [], ids: null, readings: [] };
     const idsRec = asRecord(r.ids);
     const idPersons = adoptIdMap(idsRec?.persons, /^P\d{1,9}$/);
     const idSources = adoptIdMap(idsRec?.sources, /^S\d{1,9}$/);
@@ -2532,14 +2540,60 @@ export function sanitizeSyncReply(value: unknown): SyncReply {
                 person: typeof x.person === 'string' && /^P\d{1,9}$/.test(x.person) ? x.person : '',
                 family: typeof x.family === 'string' && /^F\d{1,9}$/.test(x.family) ? x.family : '',
                 fact: typeof x.fact === 'string' && /^[A-Z_]{2,8}$/.test(x.fact) ? x.fact : '',
-                why: x.why === 'takenBack' || x.why === 'kept' || x.why === 'report' || x.why === 'pick' ? x.why : '',
+                why: x.why === 'takenBack' || x.why === 'kept' || x.why === 'report' || x.why === 'pick' || x.why === 'removed' ? x.why : '',
+                removedBy: x.why === 'removed' ? researchIntakeRef(x.removedBy) ?? '' : '',
                 name: cleanText(x.name, 120),
                 source: typeof x.source === 'string' && /^(S\d{1,9}|@[A-Za-z0-9_-]{1,20}@)$/.test(x.source) ? x.source : '',
                 place: cleanText(x.place, 200),
             })),
+        personConflicts: personConflictsOf(r.conflicts),
         ids: Object.keys(idPersons).length || Object.keys(idSources).length ? { persons: idPersons, sources: idSources } : null,
         readings: sanitizeSyncReadings(r.readings),
     };
+}
+
+/** `/status.features`: a send's answer says a person removed by an earlier send (`why: removed`) and asks whether they come back or go. */
+export const SYNC_REMOVED_FEATURE = 'sync.removed';
+
+/**
+ * Whether a person comes back or goes, as a send's answer asks it: a
+ * `fact: "PERSON"` conflict decidable by a side (`take: true`), its two sides
+ * as the research words them (`user`: the app's side — edited, or removed;
+ * `research`: the research's). Fact conflicts of the same person are about a
+ * person whose being there is still open: they go with it (`facts`), never a
+ * second question. Asked again by a later send, it is the same id.
+ */
+export interface SyncPersonConflict {
+    /** The research's conflict ("X0007"). */
+    id: string;
+    /** The research's person ("P0012"). */
+    person: string;
+    user: string;
+    research: string;
+    /** The fact conflicts of that person in the same answer (research ids). */
+    facts: string[];
+}
+
+/** The PERSON conflicts of a list of conflicts (at most 20), each person once, with that person's fact conflicts. */
+export function personConflictsOf(value: unknown): SyncPersonConflict[] {
+    if (!Array.isArray(value)) return [];
+    const items = value.slice(0, MAX_ITEMS).map(x => asRecord(x)).filter((x): x is Record<string, unknown> => !!x);
+    const out: SyncPersonConflict[] = [];
+    for (const r of items) {
+        if (r.fact !== 'PERSON' || r.take !== true) continue;
+        const id = researchConflictRef(r.id ?? r.conflict);
+        const person = researchPersonRef(r.person);
+        const sides = asRecord(r.sides);
+        if (!id || !person || !sides || out.some(p => p.id === id || p.person === person)) continue;
+        out.push({ id, person, user: cleanText(sides.user, 300), research: cleanText(sides.research, 300), facts: [] });
+    }
+    for (const r of items) {
+        if (r.fact === 'PERSON') continue;
+        const id = researchConflictRef(r.id ?? r.conflict);
+        const ask = id ? out.find(p => p.person === researchPersonRef(r.person)) : undefined;
+        if (ask && id && !ask.facts.includes(id) && ask.facts.length < 20) ask.facts.push(id);
+    }
+    return out.slice(0, 20);
 }
 
 /**

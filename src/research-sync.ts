@@ -572,3 +572,29 @@ export function nextUndone(sends: readonly ResearchSendRecord[] | null | undefin
     const left = openUndone(sends, ours, resent, since);
     return left[0] ?? null;
 }
+
+/**
+ * Whether a person's "comes back or goes" (a PERSON conflict a send asked,
+ * ResearchAutoState.removedAsk) is still open there, as `/status.sends`
+ * says: listed by any send (asked again by a later one, the same id) —
+ * open; its own send listing its conflicts without it, or none left — not;
+ * that send not listed, or counting without naming them: not known (null).
+ */
+export function removedAskOpen(ask: { id: string; intake: string }, records: readonly ResearchSendRecord[] | null | undefined): boolean | null {
+    if (!records) return null;
+    if (records.some(r => r.conflictIds?.includes(ask.id))) return true;
+    const own = ask.intake ? records.find(r => r.intake === ask.intake) : undefined;
+    if (!own || own.conflicts === null) return null;
+    if (own.conflicts === 0 || own.conflictIds?.length) return false;
+    return null;
+}
+
+/** Sends' records without the conflicts asked as "comes back or goes" (counted there, never among the conflicts to decide). */
+export function withoutAskedConflicts(records: readonly ResearchSendRecord[], asked: ReadonlySet<string>): ResearchSendRecord[] {
+    if (!asked.size) return [...records];
+    return records.map(r => {
+        const out = r.conflictIds?.filter(id => asked.has(id)).length ?? 0;
+        if (!out || !r.conflictIds) return r;
+        return { ...r, conflicts: Math.max(0, (r.conflicts ?? 0) - out), conflictIds: r.conflictIds.filter(id => !asked.has(id)) };
+    });
+}

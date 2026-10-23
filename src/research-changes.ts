@@ -582,6 +582,8 @@ export interface NotWrittenItem {
     sourceId?: string;
     /** A place by its name as the file has it (`place.coords`). */
     place?: string;
+    /** `why: removed`: the research's send that removed the person ("I0042"). */
+    removedBy?: string;
 }
 
 /** A not-written item put to what it is about here. */
