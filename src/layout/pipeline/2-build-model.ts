@@ -564,6 +564,12 @@ function expandPartnerChains(
 
                 unions.set(chainUnionId, chainUnion);
                 chainUnionIds.push(chainUnionId);
+                // A partnership folded for BOTH partners (each primary
+                // elsewhere, both expanded) gets one chain union: the other
+                // partner's chain reuses it, so mergeOverlappingChains joins
+                // the two chains through it. A second copy would leave the
+                // other chain without a shared union, never built as a block.
+                partnershipToUnion.set(partnershipId, chainUnionId);
 
                 // Update personToUnion for the secondary partner
                 const existingPartnerUnion = personToUnion.get(partnerId);
@@ -571,22 +577,24 @@ function expandPartnerChains(
                     personToUnion.set(partnerId, chainUnionId);
                 }
 
-                // Move children from primary union to chain union
+                // Move children to the chain union from the union that held
+                // them: the primary union, or (a partnership folded for both
+                // partners) the other partner's primary union
                 for (const childId of sortedChildIds) {
-                    const primaryIdx = primaryUnion.childIds.indexOf(childId);
-                    if (primaryIdx !== -1) {
-                        primaryUnion.childIds.splice(primaryIdx, 1);
+                    const fromUnionIds = new Set<UnionId>([primaryUnionId]);
+                    const heldBy = childToParentUnion.get(childId);
+                    if (heldBy) fromUnionIds.add(heldBy);
+                    for (const fromUnionId of fromUnionIds) {
+                        const fromUnion = unions.get(fromUnionId);
+                        const idx = fromUnion ? fromUnion.childIds.indexOf(childId) : -1;
+                        if (idx !== -1) fromUnion!.childIds.splice(idx, 1);
+                        const oldEdgeIdx = edges.findIndex(e =>
+                            e.parentUnionId === fromUnionId && e.childPersonId === childId
+                        );
+                        if (oldEdgeIdx !== -1) edges.splice(oldEdgeIdx, 1);
                     }
 
                     childToParentUnion.set(childId, chainUnionId);
-
-                    // Update edges
-                    const oldEdgeIdx = edges.findIndex(e =>
-                        e.parentUnionId === primaryUnionId && e.childPersonId === childId
-                    );
-                    if (oldEdgeIdx !== -1) {
-                        edges.splice(oldEdgeIdx, 1);
-                    }
                     edges.push({
                         parentUnionId: chainUnionId,
                         childPersonId: childId
@@ -603,59 +611,62 @@ function expandPartnerChains(
         });
     }
 
-    // Post-process: merge chains that share the same primary union
+    // Post-process: merge chains that share a union
     // This happens when BOTH partners in a couple are expanded (both have multiple partnerships)
     mergeOverlappingChains(partnerChains, unions, personToUnion);
 
 }
 
 /**
- * Merge chains that share the same primary union.
+ * Merge chains that share a union (transitively).
  *
  * When both partners (A and B) in a couple have multiple partnerships
- * and both are expanded, each gets its own chain with the same primary union.
- * This merges them into a single chain owned by partnerA (convention).
+ * and both are expanded, each gets its own chain with a shared union (the
+ * primary union, or one chain union of a partnership folded for both).
+ * This merges them into a single chain owned by the first of them.
  *
- * Result: one chain with unionIds from both, sharedPersonId = partnerA.
+ * Result: one chain with unionIds from all of them, sharedPersonId = the kept chain's person.
  * buildChainBlockPersonOrder in measure step will then produce:
  * [A's extras LEFT, A, B, B's extras RIGHT]
  */
 function mergeOverlappingChains(
     partnerChains: Map<PersonId, PartnerChain>,
-    unions: Map<UnionId, UnionNode>,
+    _unions: Map<UnionId, UnionNode>,
     _personToUnion: Map<PersonId, UnionId>
 ): void {
-    // Build reverse map: unionId → which chain persons use it
-    const unionToChainPersons = new Map<UnionId, Set<PersonId>>();
+    // Chains that share a union belong together, transitively: in a
+    // marriage cascade (b-c, c-d, d-e, all expanded) c's chain shares one
+    // union with d's and another with b's, so all three are one chain.
+    // Each group is kept by its first chain (partnerChains order).
+    const order = [...partnerChains.keys()];
+    const rank = new Map(order.map((id, i) => [id, i]));
+    const root = new Map<PersonId, PersonId>(order.map(id => [id, id]));
+    const find = (id: PersonId): PersonId => {
+        let r = id;
+        while (root.get(r) !== r) r = root.get(r)!;
+        root.set(id, r);
+        return r;
+    };
+    const unionOwner = new Map<UnionId, PersonId>();
     for (const [personId, chain] of partnerChains) {
         for (const uid of chain.unionIds) {
-            if (!unionToChainPersons.has(uid)) unionToChainPersons.set(uid, new Set());
-            unionToChainPersons.get(uid)!.add(personId);
+            const owner = unionOwner.get(uid);
+            if (!owner) { unionOwner.set(uid, personId); continue; }
+            const a = find(owner);
+            const b = find(personId);
+            if (a === b) continue;
+            if (rank.get(a)! < rank.get(b)!) root.set(b, a); else root.set(a, b);
         }
     }
 
-    // Find pairs of chains that share a union
-    const merged = new Set<PersonId>();
-    for (const [, chainPersons] of unionToChainPersons) {
-        if (chainPersons.size <= 1) continue;
-
-        const personIds = [...chainPersons].filter(pid => !merged.has(pid));
-        if (personIds.length <= 1) continue;
-
-        // Merge all overlapping chains into the first one
-        const keepId = personIds[0];
+    for (const personId of order) {
+        const keepId = find(personId);
+        if (keepId === personId) continue;
         const keepChain = partnerChains.get(keepId)!;
+        const absorbChain = partnerChains.get(personId)!;
         const allUnionIds = new Set<UnionId>(keepChain.unionIds);
-
-        for (let i = 1; i < personIds.length; i++) {
-            const absorbId = personIds[i];
-            const absorbChain = partnerChains.get(absorbId);
-            if (!absorbChain) continue;
-            for (const uid of absorbChain.unionIds) allUnionIds.add(uid);
-            partnerChains.delete(absorbId);
-            merged.add(absorbId);
-        }
-
+        for (const uid of absorbChain.unionIds) allUnionIds.add(uid);
         keepChain.unionIds = [...allUnionIds];
+        partnerChains.delete(personId);
     }
 }

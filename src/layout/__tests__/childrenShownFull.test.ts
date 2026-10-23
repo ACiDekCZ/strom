@@ -7,12 +7,12 @@
  * overlap, the built-in validation, the geometry audit; bands with own
  * heights), no tolerance widened, and the person's children are drawn.
  *
- * Children the layout cannot draw are the known limits of partner chains
- * that run through several people (a marriage cascade, a remarriage web, a
- * merged chain, the stepfather's other family beside the mother's): the
- * selection holds them, the chain layout leaves them out, as it does
- * whenever those chains meet. KNOWN_UNDRAWN lists them, so a new
- * case fails.
+ * The cards to check are the ones the renderer offers the tab on, by its
+ * own decision (hiddenRelativesTabs), and the children it promises
+ * (hiddenChildIds) are the ones a click must draw; the "▾ children" bubble
+ * then names exactly those (newlyShownChildIds), none drawn before. No case
+ * is exempt: partner chains through several people (a marriage cascade, a
+ * remarriage web, a merged chain) draw every child too.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -25,6 +25,7 @@ import { auditGeometry } from './helpers/geometryAudit.js';
 import { auditBands, syntheticPersonHeights } from './helpers/bandAudit.js';
 import { PersonId, LayoutConfig, DEFAULT_LAYOUT_CONFIG, StromData } from '../../types.js';
 import { normalizeSingleParents } from '../../single-parent.js';
+import { hiddenRelativesTabs, hiddenChildIds, newlyShownChildIds } from '../../marriage-order.js';
 
 const DEPTHS = [2, 4, 8];
 
@@ -35,29 +36,6 @@ const MODES = [
     { name: 'expanded-v3', heights: true, autoExpand: true },
 ];
 
-/** `fixture focus mode(expanded|standard) shown-person: undrawn children` */
-const KNOWN_UNDRAWN = new Set([
-    'edge-marriage-cascade b expanded d: k_de',
-    'edge-marriage-cascade c expanded d: k_de',
-    'edge-marriage-cascade d expanded c: k_bc',
-    'edge-marriage-cascade e expanded c: k_bc',
-    'edge-marriage-cascade k_bc expanded d: k_de',
-    'edge-marriage-cascade k_cd expanded b: k_ab',
-    'edge-marriage-cascade k_de expanded c: k_bc',
-    'edge-remarriage-web adam expanded bea: k_cb1,k_eb1',
-    'edge-remarriage-web bea expanded adam: k_ad1',
-    'edge-remarriage-web cyril expanded adam: k_ad1',
-    'edge-remarriage-web dana expanded bea: k_cb1,k_eb1',
-    'edge-remarriage-web emil expanded adam: k_ad1',
-    'edge-remarriage-web k_ad1 expanded bea: k_cb1,k_eb1',
-    'edge-remarriage-web k_cb1 expanded adam: k_ad1',
-    'edge-remarriage-web k_eb1 expanded adam: k_ad1',
-    'etalon-ancestor-chain eG_half_mat expanded eG_father: eG_half_pat',
-    'etalon-merged-chain eF_p2 expanded eF_p4: eF_k3',
-    'etalon-merged-chain eF_p4 expanded eF_p2: eF_k0',
-    'etalon-merged-chain eF_k2 expanded eF_p2: eF_k0',
-    'etalon-merged-chain eF_k3 expanded eF_p3: eF_k1',
-]);
 
 const FIXTURES = readdirSync(join(process.cwd(), 'test'))
     .filter(n => /^(comprehensive|edge-.*|etalon-.*|real-large)\.json$/.test(n))
@@ -86,14 +64,17 @@ describe('Children shown in place: full pipeline invariants', () => {
                     ? { ...DEFAULT_LAYOUT_CONFIG, spouseLineY: 25, personHeights: syntheticPersonHeights(ids) }
                     : DEFAULT_LAYOUT_CONFIG;
                 const failures: string[] = [];
-                const undrawn = new Set<string>();
+                const noSiblings = new Set<PersonId>();
                 for (const depth of DEPTHS) for (const focus of ids) {
                     const base = layout(data, focus, config, depth, mode.autoExpand);
+                    const inBase = (id: PersonId) => base.positions.has(id);
                     for (const pid of base.positions.keys()) {
                         const person = data.persons[pid];
                         if (!person || person.isPlaceholder) continue;
-                        const kids = person.childIds.filter(c => data.persons[c] && !data.persons[c].isPlaceholder);
-                        if (!kids.some(c => !base.positions.has(c))) continue;
+                        // The renderer's decision: the tab is offered, these children promised
+                        if (!hiddenRelativesTabs(data, pid, inBase, noSiblings).includes('children')) continue;
+                        const promised = hiddenChildIds(data, pid, inBase);
+                        const visibleBefore = new Set(person.childIds.filter(inBase));
                         const r = layout(data, focus, config, depth, mode.autoExpand, [pid]);
                         const where = `${focus} d${depth} shows ${pid}`;
                         try { assertValidPositions(r.positions); } catch (e) { failures.push(`${where} Positions: ${(e as Error).message.split('\n')[0]}`); }
@@ -103,12 +84,14 @@ describe('Children shown in place: full pipeline invariants', () => {
                         if (mode.heights) for (const v of auditBands(r, config).slice(0, 3)) failures.push(`${where} Bands: ${v}`);
                         // The person stays drawn; their children are drawn
                         if (!r.positions.has(pid)) failures.push(`${where}: the person left the view`);
-                        const missing = kids.filter(c => !r.positions.has(c));
-                        if (missing.length) {
-                            const key = `${fixture} ${focus} ${mode.autoExpand ? 'expanded' : 'standard'} ${pid}: ${missing.join(',')}`;
-                            if (KNOWN_UNDRAWN.has(key)) undrawn.add(key);
-                            else failures.push(`${where}: children not drawn ${missing.join(',')}`);
-                        }
+                        const missing = promised.filter(c => !r.positions.has(c));
+                        if (missing.length) failures.push(`${where}: children not drawn ${missing.join(',')}`);
+                        // The children shown are the promised ones: none drawn before the click
+                        const named = newlyShownChildIds(data, pid, id => r.positions.has(id), visibleBefore);
+                        if (named.join(',') !== promised.join(',')) failures.push(`${where}: shown ${named.join(',')} for promised ${promised.join(',')}`);
+                        // Children drawn before stay drawn
+                        const lost = [...visibleBefore].filter(c => !r.positions.has(c));
+                        if (lost.length) failures.push(`${where}: children left the view ${lost.join(',')}`);
                     }
                 }
                 expect(failures.slice(0, 20), `${fixture} [${mode.name}], ${failures.length} failures`).toEqual([]);
@@ -154,6 +137,36 @@ describe('Children shown in place: selection and hiding again', () => {
         expect(conn).toBeDefined();
         const union = Object.values(data.partnerships).find(u => u.childIds.includes(P('halfsibling_1')))!;
         expect([union.person1Id, union.person2Id].sort()).toEqual([P('father'), P('stepmother')].sort());
+        expect(auditGeometry(shown, DEFAULT_LAYOUT_CONFIG)).toEqual([]);
+    });
+
+    it('a widow remarried twice beside the focus\'s second wife: every family\'s children drawn, each under its couple', () => {
+        // adam (focus) is married to dana and to bea; bea also to cyril and
+        // emil. Their partnership is folded for both (each primary
+        // elsewhere): one chain union, so the two chains join into one.
+        const web = loadFixture('edge-remarriage-web');
+        const r = layout(web, P('adam'), DEFAULT_LAYOUT_CONFIG, 2, true);
+        for (const c of ['k_ab1', 'k_ab2', 'k_ad1', 'k_cb1', 'k_eb1']) expect(r.positions.has(P(c)), c).toBe(true);
+        for (const c of ['k_cb1', 'k_eb1', 'k_ab1']) {
+            const conn = r.connections.filter(x => x.drops.some(d => d.personId === P(c)));
+            expect(conn.length, c).toBe(1);
+            // The line comes down from between the child's own parents
+            const xs = web.persons[P(c)].parentIds.map(p => r.positions.get(p)!.x);
+            const w = DEFAULT_LAYOUT_CONFIG.cardWidth;
+            expect(conn[0].stemX, c).toBeGreaterThanOrEqual(Math.min(...xs) - w);
+            expect(conn[0].stemX, c).toBeLessThanOrEqual(Math.max(...xs) + w);
+        }
+        expect(auditGeometry(r, DEFAULT_LAYOUT_CONFIG)).toEqual([]);
+    });
+
+    it('a marriage cascade: chains joined through a third person draw the shown children', () => {
+        // b-c, c-d, d-e: d's chain meets c's on one union and c's meets b's on
+        // another, so b's chain joins too and b's first family is drawn
+        const cascade = loadFixture('edge-marriage-cascade');
+        const base = layout(cascade, P('d'), DEFAULT_LAYOUT_CONFIG, 2, true);
+        expect(base.positions.has(P('k_ab'))).toBe(false);
+        const shown = layout(cascade, P('d'), DEFAULT_LAYOUT_CONFIG, 2, true, [P('b')]);
+        for (const c of ['k_ab', 'k_bc', 'k_cd', 'k_de']) expect(shown.positions.has(P(c)), c).toBe(true);
         expect(auditGeometry(shown, DEFAULT_LAYOUT_CONFIG)).toEqual([]);
     });
 

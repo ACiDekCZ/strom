@@ -60,6 +60,13 @@ than one partnership in the selection into `expandedPersonIds` (out of the
 appendage set), so each union is a chain slot and its children hang under
 their own couple, in the standard display too. The rest of the pipeline is
 unchanged; hiding the children again gives the original input and layout.
+The children tab is offered for the children out of view
+(`hiddenRelativesTabs`/`hiddenChildIds`, src/marriage-order.ts) and the
+"▾ children" bubble names only the children the click brought into view
+(`newlyShownChildIds`). `childrenShownFull.test.ts` checks, on every fixture
+card the tab is offered on, that showing draws every promised child. As a
+safety net the renderer gives the view back when a click draws none of them
+and offers no tab or menu row for that person in that view.
 
 ---
 
@@ -584,7 +591,14 @@ row: the shared person sits at their gender-side end (male = LEFT), all
 partners on the opposite side. A shared person of unknown sex sits where the
 primary couple puts them (the couple order above): their extra partners go
 on their outer side, whatever those partners' sex. Chains merge transitively when both partners of
-a couple have multiple marriages. The chain lives in one **chain block**
+a couple have multiple marriages: `mergeOverlappingChains` joins all chains
+that share a union, through any number of people (a marriage cascade b–c,
+c–d, d–e is one chain). A partnership folded for both partners (each primary
+elsewhere, e.g. a widow remarried twice married to a man with another wife)
+gets ONE chain union: the second partner's chain reuses it (and its children
+leave whichever primary union held them), so the two chains share it and
+merge. Two copies would leave the second chain without a shared union, never
+built as a block, its other families' children selected but undrawn. The chain lives in one **chain block**
 (`FamilyBlock.chainInfo`) that is atomic for collision resolution.
 
 The primary union (the couple adjacent at the chain's centre) is chosen by the

@@ -64,7 +64,7 @@ import { isMobile as isMobileViewport } from './breakpoints.js';
 import { parentRelKind, parentRelDash, connectionDash } from './parent-rel-style.js';
 import { isDiagramStandIn } from './layout/pipeline/placeholders.js';
 import {
-    unionOrderBadges, UnionOrderBadge, hiddenRelativesTabs, hiddenChildIds, BranchTab, lineLinksOf, lineLinkTabs, LineLinks, placeUnionOrderPill, PillPlacement, REL_LINK_ICON_WIDTH,
+    unionOrderBadges, UnionOrderBadge, hiddenRelativesTabs, hiddenChildIds, newlyShownChildIds, BranchTab, lineLinksOf, lineLinkTabs, LineLinks, placeUnionOrderPill, PillPlacement, REL_LINK_ICON_WIDTH,
     viewLineSegments, segmentsNearCard, EDGE_INSET, PillLabel, pillLabelForms, pillLabelWidths, unionSummaries,
 } from './marriage-order.js';
 import { measureUnionOrderPills, measureTabRows, rowKey, unionOrderPillKey, unionOrderPillPartsHtml, pillFontsPending, branchTabRestHtml, tabsGlyphsOnly } from './union-order-measure.js';
@@ -274,6 +274,14 @@ class TreeRendererClass {
      * A view of its own: cleared with a new focus, view mode or tree.
      */
     private childrenShownIds: PersonId[] = [];
+    /** Per shown person: their children the view drew before the click (the tab never names them). */
+    private childrenVisibleBefore = new Map<PersonId, ReadonlySet<PersonId>>();
+    /**
+     * Persons whose children a click drew none of: the tab and the menu row
+     * are not offered again in this view (a safety net; the layout draws the
+     * children it is asked for, childrenShownFull.test.ts).
+     */
+    private childrenUnshowable = new Set<PersonId>();
     /** Incremented per render; stale async renders bail out (see renderInternal). */
     private renderSeq = 0;
     /** Signature of the last places datalist, to skip rebuilding it unchanged. */
@@ -902,7 +910,7 @@ class TreeRendererClass {
         // Tree load/switch/startup: the focus that follows is programmatic,
         // not user navigation, so history starts empty for the new tree.
         this.resetFocusHistory();
-        this.childrenShownIds = [];
+        this.resetChildrenShown();
         // Restore the per-tree display view mode on tree switch / startup.
         this.loadViewModeForCurrentTree();
 
@@ -968,7 +976,7 @@ class TreeRendererClass {
         }
 
         // Children shown in place belong to the view they were shown in
-        if (this.focusPersonId !== personId) this.childrenShownIds = [];
+        if (this.focusPersonId !== personId) this.resetChildrenShown();
         this.focusPersonId = personId;
 
         // Set default depth to max available when focusing on a new person
@@ -1004,6 +1012,13 @@ class TreeRendererClass {
         return new Set(this.childrenShownIds);
     }
 
+    /** A new view (focus, view mode, tree): no children shown in place. */
+    private resetChildrenShown(): void {
+        this.childrenShownIds = [];
+        this.childrenVisibleBefore.clear();
+        this.childrenUnshowable.clear();
+    }
+
     /** Whether the family view shows the person's children in place (the children tab). */
     isChildrenShown(personId: PersonId): boolean {
         return this.childrenShownIds.includes(personId);
@@ -1012,25 +1027,43 @@ class TreeRendererClass {
     /**
      * Whether the person's card offers the children tab: the family view,
      * the person drawn, their children shown in place or any of them out of
-     * view.
+     * view (unless a click drew none of them in this view).
      */
     canToggleChildren(personId: PersonId): boolean {
         if (this.viewMode !== 'family' || !this.positions.has(personId)) return false;
-        return this.isChildrenShown(personId)
-            || hiddenChildIds(DataManager.getData(), personId, id => this.positions.has(id)).length > 0;
+        if (this.isChildrenShown(personId)) return true;
+        return !this.childrenUnshowable.has(personId)
+            && hiddenChildIds(DataManager.getData(), personId, id => this.positions.has(id)).length > 0;
     }
 
     /**
      * Show the person's children in place, or hide the shown ones again. The
      * focus, depth and zoom stay; the person's card keeps its place on the
-     * screen. Hiding lays the view out as it was before.
+     * screen. Hiding lays the view out as it was before. A click that draws
+     * none of the children it promised gives the view back and leaves the
+     * tab out (the safety net, childrenUnshowable).
      */
     async toggleChildrenShown(personId: PersonId): Promise<void> {
         const before = this.positions.get(personId);
-        this.childrenShownIds = this.isChildrenShown(personId)
-            ? this.childrenShownIds.filter(id => id !== personId)
-            : [...this.childrenShownIds, personId];
-        await this.renderInternal();
+        if (this.isChildrenShown(personId)) {
+            this.childrenShownIds = this.childrenShownIds.filter(id => id !== personId);
+            this.childrenVisibleBefore.delete(personId);
+            await this.renderInternal();
+        } else {
+            const data = DataManager.getData();
+            const inView = (id: PersonId) => this.positions.has(id);
+            const promised = hiddenChildIds(data, personId, inView);
+            const visible = new Set((data.persons[personId]?.childIds ?? []).filter(inView));
+            this.childrenShownIds = [...this.childrenShownIds, personId];
+            this.childrenVisibleBefore.set(personId, visible);
+            await this.renderInternal();
+            if (!promised.some(inView)) {
+                this.childrenShownIds = this.childrenShownIds.filter(id => id !== personId);
+                this.childrenVisibleBefore.delete(personId);
+                this.childrenUnshowable.add(personId);
+                await this.renderInternal();
+            }
+        }
         const after = this.positions.get(personId);
         if (before && after) ZoomPan.shiftWorld(after.x - before.x, after.y - before.y);
     }
@@ -1078,7 +1111,7 @@ class TreeRendererClass {
     presetViewMode(mode: ViewMode): void {
         if (this.viewMode === mode) return;
         this.viewMode = mode;
-        this.childrenShownIds = [];
+        this.resetChildrenShown();
         this.persistViewMode();
     }
 
@@ -1086,7 +1119,7 @@ class TreeRendererClass {
     setViewMode(mode: ViewMode): void {
         if (this.viewMode === mode) return;
         this.viewMode = mode;
-        this.childrenShownIds = [];
+        this.resetChildrenShown();
         this.persistViewMode();
         // The modes lay the tree out in different coordinate frames — the
         // pan/zoom state from the previous mode can leave every card outside
@@ -1757,7 +1790,7 @@ class TreeRendererClass {
             // Hidden parents, siblings (children of a union, as the layout
             // counts them) or children: a branch tab each (one rule with the
             // marriage-order pill's layout, src/marriage-order.ts).
-            const hiddenTabs = hiddenRelativesTabs(DataManager.getData(), id, pid => this.positions.has(pid), partnershipChildIds, this.childrenShownSet());
+            const hiddenTabs = hiddenRelativesTabs(DataManager.getData(), id, pid => this.positions.has(pid), partnershipChildIds, this.childrenShownSet(), this.childrenUnshowable);
             const hasHiddenParents = hiddenTabs.includes('parents');
             const hasHiddenChildren = hiddenTabs.includes('children');
             const childrenShown = hiddenTabs.includes('childrenShown');
@@ -1798,8 +1831,9 @@ class TreeRendererClass {
                 }
                 // Children: shown in place and hidden again (the view stays)
                 if (hasHiddenChildren || childrenShown) {
+                    // Shown: only the children the click brought into view
                     const ids = childrenShown
-                        ? person.childIds.filter(cid => this.positions.has(cid))
+                        ? newlyShownChildIds(DataManager.getData(), id, cid => this.positions.has(cid), this.childrenVisibleBefore.get(id) ?? new Set())
                         : hiddenChildIds(DataManager.getData(), id, cid => this.positions.has(cid));
                     const childItems = ids
                         .map(cid => DataManager.getPerson(cid))
@@ -3377,7 +3411,7 @@ class TreeRendererClass {
         const tabsOf = new Map<PersonId, BranchTab[]>();
         for (const id of badges.keys()) {
             // The line links show in every view (the descendants chart too)
-            const hidden = showTabs ? hiddenRelativesTabs(data, id, pid => this.positions.has(pid), unionChildIds, this.childrenShownSet()) : [];
+            const hidden = showTabs ? hiddenRelativesTabs(data, id, pid => this.positions.has(pid), unionChildIds, this.childrenShownSet(), this.childrenUnshowable) : [];
             tabsOf.set(id, [...hidden, ...lineLinkTabs(this.lineLinks.get(id))]);
         }
         const glyphsOf = new Map([...tabsOf].map(([id, kinds]) => {

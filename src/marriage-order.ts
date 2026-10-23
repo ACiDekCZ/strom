@@ -239,13 +239,16 @@ export type HiddenRelativesTab = 'parents' | 'siblings' | 'children' | 'children
  * of them is in view (siblings count only as children of a union, as the
  * layout does). Children get one when any child (not a "?" stand-in) is out
  * of view, or as "childrenShown" while `childrenShown` holds the person.
+ * `childrenUnshowable`: persons whose children a click drew none of (the
+ * view's safety net, TreeRenderer.toggleChildrenShown): no children tab.
  */
 export function hiddenRelativesTabs(
     data: StromData,
     personId: PersonId,
     inView: (id: PersonId) => boolean,
     unionChildIds: ReadonlySet<PersonId>,
-    childrenShown: ReadonlySet<PersonId> = new Set()
+    childrenShown: ReadonlySet<PersonId> = new Set(),
+    childrenUnshowable: ReadonlySet<PersonId> = new Set()
 ): HiddenRelativesTab[] {
     const person = data.persons[personId];
     if (!person) return [];
@@ -259,8 +262,25 @@ export function hiddenRelativesTabs(
     }
     if (siblings.size > 0 && ![...siblings].some(inView)) out.push('siblings');
     if (childrenShown.has(personId)) out.push('childrenShown');
-    else if (hiddenChildIds(data, personId, inView).length > 0) out.push('children');
+    else if (!childrenUnshowable.has(personId) && hiddenChildIds(data, personId, inView).length > 0) out.push('children');
     return out;
+}
+
+/**
+ * The children a "▾ children" tab names: the person's children in view that
+ * were not in view before the click (`visibleBefore`), in data order; never
+ * the ones the view drew already ("?" stand-ins never count).
+ */
+export function newlyShownChildIds(
+    data: StromData,
+    personId: PersonId,
+    inView: (id: PersonId) => boolean,
+    visibleBefore: ReadonlySet<PersonId>
+): PersonId[] {
+    return (data.persons[personId]?.childIds ?? []).filter(id => {
+        const child = data.persons[id];
+        return !!child && !child.isPlaceholder && inView(id) && !visibleBefore.has(id);
+    });
 }
 
 /** The person's children out of view, in data order ("?" stand-ins never count). */

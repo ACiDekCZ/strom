@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { hiddenRelativesTabs, hiddenChildIds } from '../marriage-order.js';
+import { hiddenRelativesTabs, hiddenChildIds, newlyShownChildIds } from '../marriage-order.js';
 import { tabsGlyphsOnly } from '../union-order-measure.js';
 import { PersonId, PartnershipId, Person, StromData } from '../types.js';
 
@@ -57,6 +57,25 @@ describe('children tab', () => {
         const inView = (id: PersonId) => ['gf', 'gm', 'uncle'].includes(id);
         expect(hiddenChildIds(d, P('uncle'), inView)).toEqual([]);
         expect(hiddenRelativesTabs(d, P('uncle'), inView, kids)).not.toContain('children');
+    });
+
+    it('the shown state names only the children the click brought into view, never ones drawn before', () => {
+        // The father stood in view before; the aunt and the uncle came with the click
+        const before = new Set([P('father')]);
+        const after = (id: PersonId) => ['gf', 'gm', 'father', 'aunt', 'uncle'].includes(id);
+        expect(newlyShownChildIds(d, P('gf'), after, before)).toEqual([P('aunt'), P('uncle')]);
+        // A click that drew nothing new names nobody
+        const same = (id: PersonId) => ['gf', 'gm', 'father'].includes(id);
+        expect(newlyShownChildIds(d, P('gf'), same, before)).toEqual([]);
+        // "?" stand-ins never count
+        expect(newlyShownChildIds(d, P('uncle'), () => true, new Set())).toEqual([]);
+    });
+
+    it('no tab for a person whose children a click drew none of (the safety net)', () => {
+        const inView = (id: PersonId) => ['gf', 'gm', 'father'].includes(id);
+        expect(hiddenRelativesTabs(d, P('gf'), inView, kids, new Set(), new Set([P('gf')]))).toEqual([]);
+        // Another person keeps theirs
+        expect(hiddenRelativesTabs(d, P('gm'), inView, kids, new Set(), new Set([P('gf')]))).toEqual(['children']);
     });
 
     it('keeps the order parents, siblings, children', () => {

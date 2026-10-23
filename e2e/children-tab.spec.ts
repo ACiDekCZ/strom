@@ -198,6 +198,50 @@ test('a grandfather with parents, a brother and a son of his second marriage out
     await expect(row.locator('.children-tab')).toHaveAttribute('aria-pressed', 'true');
 });
 
+/** Import a test fixture (invented data) and focus a person. */
+async function setupFixture(page: Page, fixture: string, focus: string): Promise<void> {
+    await openApp(page);
+    const data = JSON.parse(readFileSync(join(process.cwd(), 'test', `${fixture}.json`), 'utf-8'));
+    await page.evaluate(async ([tree, f]) => {
+        await window.Strom.DataManager.importAsNewTree(tree as never, 'Chains');
+        await window.Strom.TreeRenderer.setFocus(f as never);
+    }, [data, focus] as const);
+    await expect(cardOf(page, focus)).toBeVisible();
+}
+
+test.describe('partner chains through several people', () => {
+    test('a widow remarried twice: her other families stand in view already, her card promises nothing', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        // adam, married to dana and to bea; bea also to cyril and to emil
+        await setupFixture(page, 'edge-remarriage-web', 'adam');
+        for (const id of ['bea', 'cyril', 'emil', 'k_ab1', 'k_ab2', 'k_ad1', 'k_cb1', 'k_eb1']) await expect(cardOf(page, id)).toBeVisible();
+        await expect(tabOf(page, 'bea')).toHaveCount(0);
+        await cardOf(page, 'bea').click({ position: { x: 60, y: 40 } });
+        await expect(page.locator('.context-menu')).toBeVisible();
+        await expect(page.locator('.context-menu .context-menu-item[data-action="toggle-children"]')).toHaveCount(0);
+    });
+
+    test('a marriage cascade: the tab shows the promised child, and the shown bubble names only that child', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        // b-c, c-d, d-e; focus d: b's first family (with a) is out of view
+        await setupFixture(page, 'edge-marriage-cascade', 'd');
+        await expect(cardOf(page, 'k_bc')).toBeVisible();
+        await expect(cardOf(page, 'k_ab')).toHaveCount(0);
+        const tab = tabOf(page, 'b');
+        await expect(tab).toHaveCount(1);
+        await expect(tab.locator('.badge-tooltip-item')).toHaveCount(1);
+        await expect(tab.locator('.badge-tooltip-name')).toHaveText('Kid AB');
+        await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), 'b');
+        await tab.click();
+        await expect(cardOf(page, 'k_ab')).toBeVisible();
+        await expect(cardOf(page, 'a')).toBeVisible();
+        const hide = tabOf(page, 'b');
+        await expect(hide).toHaveAttribute('aria-pressed', 'true');
+        // Kid BC stood in view before the click: the bubble leaves it out
+        await expect(hide.locator('.badge-tooltip-name')).toHaveText(['Kid AB']);
+    });
+});
+
 test.describe('phone 390 × 844', () => {
     test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
