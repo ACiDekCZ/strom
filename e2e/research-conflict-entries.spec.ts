@@ -243,12 +243,12 @@ test.describe('the panel by the edit form\'s field', () => {
         expect(decide.asks).toHaveLength(0);
     });
 
-    test('not on this device: the sides without choices, "Decided on the computer with the research."', async ({ page }) => {
+    test('not on this device: the sides without choices, "Decided in a terminal: strom → What waits"', async ({ page }) => {
         await setup(page, { links: ['send', 'open', 'live', 'app', 'setup'] }, undefined, { bridge: false });
         await editJan(page);
         await tag(page).click();
         await expect(panel(page)).toHaveAttribute('data-state', 'none');
-        await expect(panel(page).locator('.prc-notice--info .prc-notice-text')).toHaveText('Decided on the computer with the research.');
+        await expect(panel(page).locator('.prc-notice--info .prc-notice-text')).toHaveText('Decided in a terminal on the computer with the research: strom → What waits.');
         await expect(panel(page).locator('.prc-panel-choice')).toHaveCount(0);
         await expect(panel(page).locator('.prc-panel-close')).toBeFocused();
     });

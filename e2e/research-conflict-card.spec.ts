@@ -272,13 +272,13 @@ test.describe('a conflict decided by a side in the app', () => {
         expect(decide.asks).toHaveLength(0);
     });
 
-    test('not on this device (no bridge, no link): the sides without choices, "Decided on the computer with the research."', async ({ page }) => {
+    test('not on this device (no bridge, no link): the sides without choices, "Decided in a terminal: strom → What waits"', async ({ page }) => {
         await page.setViewportSize({ width: 1280, height: 900 });
         await setup(page, { features: null, linkList: ['send', 'open', 'live', 'app', 'setup'] });
         await openKnows(page);
         const c = cardOf(page);
         await expect(c).toHaveAttribute('data-state', 'none');
-        await expect(c.locator('.prc-notice--info')).toHaveText('Decided on the computer with the research.');
+        await expect(c.locator('.prc-notice--info')).toHaveText('Decided in a terminal on the computer with the research: strom → What waits.');
         await expect(c.locator('.prc-side-label')).toHaveText(['From the app', 'In the research']);
         await expect(c.locator('.prc-choice, .prc-note, .prc-links')).toHaveCount(0);
     });
@@ -377,7 +377,7 @@ test.describe('a conflict decided by a side: phones and tablets', () => {
             await openKnows(page);
             const c = cardOf(page);
             await expect(c).toHaveAttribute('data-state', 'none');
-            await expect(c.locator('.prc-notice--info')).toHaveText('Decided on the computer with the research.');
+            await expect(c.locator('.prc-notice--info')).toHaveText('Decided in a terminal on the computer with the research: strom → What waits.');
             const [a, b] = await boxes(c.locator('.prc-side'));
             expect(Math.abs(a.y - b.y)).toBeLessThan(1);
             // Over 640 px the notice stays above the sides.

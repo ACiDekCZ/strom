@@ -123,7 +123,7 @@ test.describe('the phone\'s sheet in every mode', () => {
             const p = panel(page);
             await expect(p).toHaveClass(/prc-panel--sheet/);
             await expect(p).toHaveAttribute('data-state', 'none');
-            await expect(p.locator('.prc-notice--info .prc-notice-text')).toHaveText('Decided on the computer with the research.');
+            await expect(p.locator('.prc-notice--info .prc-notice-text')).toHaveText('Decided in a terminal on the computer with the research: strom → What waits.');
             await expect(p.locator('.prc-panel-row[data-side="user"] .prc-panel-value')).toHaveText('1865');
             await expect(p.locator('.prc-panel-row[data-side="research"] .prc-panel-source')).toHaveText('Oddací matrika Čáslav');
             await expect(p.locator('.prc-panel-choice, .prc-panel-note, .prc-link-note')).toHaveCount(0);

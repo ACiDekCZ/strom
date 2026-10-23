@@ -580,6 +580,22 @@ test('finding 43, research 1.12.0-rc.19: it leaves out what a send taken back br
     expect(await janFirst(page)).toBe('Jenda');
 });
 
+test('017 U7: Send again is told by what the research wrote again (applied, notWritten): a detail it still keeps is one this window never had', async ({ page }) => {
+    const bridge = await writtenThenUndone(page);
+    const first = bridge.sends.find(r => r.state === 'undone')!.intake;
+    bridge.againReply = { applied: 5, notWritten: [{ kind: 'fact.gone', person: 'P0003', fact: 'BIRT', why: 'kept' }] };
+    await openResearchMenu(page);
+    await block(page).getByRole('menuitem', { name: 'Send again' }).click();
+    await expect.poll(() => bridge.againAsks ?? []).toEqual([first]);
+    await expect(page.locator('.toast', { hasText: 'Written 5, not written 1.' })).toBeVisible();
+    await openResearchMenu(page);
+    await expect(block(page)).toHaveAttribute('data-state', 'notWritten');
+    await block(page).getByRole('menuitem', { name: 'Show' }).click();
+    const row = page.locator('#research-changes-panel .research-changes-row.is-not-written');
+    await expect(row).toContainText('Jan Fíšek');
+    await expect(row).toContainText('the Strom archive still keeps it: this window never had these details');
+});
+
 test('finding 40: a conflict the next rename updates shows its new value in What the research knows, and stays on the toolbar after an unrelated send', async ({ page }) => {
     await page.setViewportSize({ width: 1600, height: 900 });
     const bridge = await autoTree(page);

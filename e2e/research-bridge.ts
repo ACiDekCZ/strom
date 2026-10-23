@@ -47,7 +47,7 @@ export interface FakeBridge {
     head: string;
     accepts: unknown;
     inbox: { tree: string; at: string; changes: number; sent: string }[];
-    sends: { intake: string; at: string; state: string; changes: number; tree: string; sent: string; decidedAt?: string; reason?: string }[];
+    sends: { intake: string; at: string; state: string; changes: number; tree: string; sent: string; decidedAt?: string; reason?: string; conflicts?: unknown }[];
     lastIntake: { id: string; at: string } | null;
     syncReply: { status: number; body: unknown };
     treeGed: string;
@@ -60,6 +60,8 @@ export interface FakeBridge {
     onWrite?: (posted: string) => { head: string; ged: string };
     /** The sends asked to be written again (`POST /sync/<R…>/again`), by their marks. */
     againAsks?: string[];
+    /** More of the answer to a send written again (e.g. `applied`, `notWritten`), over the default one. */
+    againReply?: Record<string, unknown>;
     /** Originals it has (by SHA-256) and the id it gives them. */
     mediaKnown: Map<string, string>;
     /** Every `PUT /media/<sha>`: the hash, the headers it carried and the body's size. */
@@ -756,7 +758,7 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
             if (v) { b.head = v.head; b.treeGed = v.ged; }
             (old as { again?: string }).again = intake;
             b.sends.unshift({ intake, at: new Date().toISOString(), state: 'written', changes: 6, tree: old.tree, sent: old.sent, decidedAt: new Date().toISOString() });
-            return json(200, { ok: true, inbox: false, changes: 6, applied: 6, intake, ...(v ? { head: v.head } : {}) });
+            return json(200, { ok: true, inbox: false, changes: 6, applied: 6, intake, ...(v ? { head: v.head } : {}), ...(b.againReply ?? {}) });
         }
         if (url.pathname.endsWith('/sync') && route.request().method() === 'POST') {
             if (b.syncAbort) return route.abort('connectionreset');

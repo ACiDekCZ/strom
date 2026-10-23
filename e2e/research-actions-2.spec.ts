@@ -481,6 +481,8 @@ test.describe('Start research with this tree (G3)', () => {
         await expect(dialog.locator('.research-info-lead')).toContainText('can take over the tree Dvořákovi');
         await expect(dialog.locator('.research-info-need')).toHaveCount(0);
         await expect(dialog.locator('.research-info-step')).toHaveCount(3);
+        // Never a promise of a new research every time: with trees already there, it first offers one of them (017 b-D4).
+        await expect(dialog.locator('.research-info-step').first()).toContainText('it first offers to open one of them in the app');
         await expect(dialog.locator('.research-info-about')).toContainText('What is Strom Research');
         await dialog.locator('#research-adopt-start').click();
         await expect(dialog).toHaveCount(0);

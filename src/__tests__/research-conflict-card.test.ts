@@ -79,7 +79,7 @@ describe('the card of a decidable conflict: its states (DEV §3)', () => {
         expect(v).toMatchObject({ row: 'link', tag: 'open', body: 'sides', choices: 'links', disabled: false, notes: true, linkNote: true, researchLinks: true });
     });
 
-    it('none (not on this device): the sides without choices or sentences, "Decided on the computer…", no links', () => {
+    it('none (not on this device): the sides without choices or sentences, "Decided in a terminal…", no links', () => {
         const v = view({ mode: 'none', links: false });
         expect(v).toMatchObject({ row: 'none', body: 'sides', choices: 'none', notes: false, linkNote: false, researchLinks: false, agent: false,
             notice: { tone: 'info', text: 'remote', action: null } });
