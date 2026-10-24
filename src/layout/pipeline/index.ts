@@ -441,6 +441,16 @@ function ancestorDepthEdge(data: StromData, selection: GraphSelection, result: L
 }
 
 /**
+ * The persons the view draws without its parents shown beyond the depth
+ * (the same input without extraDepthFor): the ones extendAncestorDepth
+ * keeps when it leaves the shown parents' other children out.
+ */
+function drawnWithoutExtraDepth(input: PipelineInput): ReadonlySet<PersonId> {
+    const { extraDepthFor: _extra, ...without } = input;
+    return new Set(runLayoutPipeline(without).positions.keys());
+}
+
+/**
  * Run the complete layout pipeline.
  */
 export function runLayoutPipeline(input: PipelineInput): LayoutResult {
@@ -475,7 +485,8 @@ export function runLayoutPipeline(input: PipelineInput): LayoutResult {
         includeParentSiblingDescendants
     });
     // Parents shown in place beyond the ancestor depth (an edge ancestor's "▸ parents")
-    const extraDepthDrawn = input.extraDepthFor?.length ? extendAncestorDepth(data, selection, input.extraDepthFor) : [];
+    const extraDepthDrawn = input.extraDepthFor?.length
+        ? extendAncestorDepth(data, selection, input.extraDepthFor, () => drawnWithoutExtraDepth(input)) : [];
 
     // Early return if no persons selected
     if (selection.persons.size === 0) {
@@ -688,7 +699,8 @@ export function runLayoutPipelineWithDebug(
         includeParentSiblings,
         includeParentSiblingDescendants
     });
-    const extraDepthDrawn = input.extraDepthFor?.length ? extendAncestorDepth(data, selection, input.extraDepthFor) : [];
+    const extraDepthDrawn = input.extraDepthFor?.length
+        ? extendAncestorDepth(data, selection, input.extraDepthFor, () => drawnWithoutExtraDepth(input)) : [];
 
     // Auto-expand: find persons at gen >= -1 with multiple partnerships,
     // plus deep direct-line ancestors whose extra spouses render as appendages

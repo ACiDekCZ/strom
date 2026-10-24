@@ -129,10 +129,20 @@ clicks). Listed persons not at the limit are skipped. Nothing else changes:
 the other branches keep their depth, Phase B builds the deeper branch like
 any unbalanced pedigree (incomplete data does the same), and without
 `extraDepthFor` the selection and the layout are exactly the previous ones.
-A parent of the focus at depth 1 is the one case where more comes in: the
-selection already holds the parents' other children (aunts and uncles with
-their families, `includeParentSiblings`), which the layout draws only once
-the grandparents are there; that branch then looks as at depth 2.
+The step brings the parents alone, never their ancestors nor their other
+children: at depth 1 the selection already holds a focus parent's siblings
+(aunts and uncles with their families, `includeParentSiblings`), which the
+layout would draw once the grandparents are there. `extendAncestorDepth`
+therefore cuts the line from each parent it added down to a child that is
+not a listed person and drops from the selection everyone reached only
+through such a cut (the child, partners, descendants and whoever hangs on
+them), except the persons the same input without `extraDepthFor` draws (a
+pedigree collapse, a cousin married into the view): those stay and stop the
+walk. That second, plain layout runs only when such a child is in the
+selection (in practice at depth 1). The siblings come with another input:
+`expandChildrenOf` the parents (the person's "▸ siblings", or a grandparent's
+"▸ children" after "▸ parents"), each without partners or descendants, as
+children shown in place always come.
 `LayoutResult.ancestorDepthEdge` lists the drawn persons of the limit whose
 parents are neither selected nor drawn and who have a parent that is not a
 "?" stand-in: the cards whose parents are out of view only because of the
@@ -147,11 +157,11 @@ expansion after the render, the parents staying drawn.
 `parentsShownFull.test.ts` checks, for every fixture, every focus, depths 1
 to 7 and the four modes, every edge person: the strict harness checks, the
 parents drawn in the row above, nobody drawn before lost, only the parents
-(and in the expanded mode their other partners; for a focus parent never
-more than the next depth draws) added, a line to the
-person; with the parents' children shown the promised siblings drawn beside
-each other; nested steps; and that removing the step gives the original
-positions.
+(and in the expanded mode their other partners) added, never a sibling of
+the person nor anyone descended from one, a line to the person; with the
+parents' children shown the promised siblings drawn beside each other (a
+sibling's partner chain may stand between them, as at the plain depth);
+nested steps; and that removing the step gives the original positions.
 
 Other partners shown in place (`PipelineInput.showPartnersOf`, the "▸ ∞"
 pill of a card). `partnerIdsShownInPlace(data, P)` lists the partners of P's

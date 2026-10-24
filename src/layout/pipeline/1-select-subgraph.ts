@@ -457,19 +457,32 @@ function addPartnersShown(data: StromData, selection: GraphSelection, personId: 
  * an ancestor at the edge of the depth, PipelineInput.extraDepthFor): each
  * listed person of the line whose parents lie beyond the ancestor depth
  * (ancestorLimitPersons, no parent in the selection) gets one generation
- * more, as a depth one higher would add for that branch alone: the parents'
- * couple (or, without one, each parent with their partners). The parents
- * stand at the new edge in turn, so a later person of the list can be one of
- * them (the parents' own "▸ parents", nested). Others are skipped.
+ * more above that branch alone: the parents' couple (or, without one, each
+ * parent with their partners), never their ancestors. The parents stand at
+ * the new edge in turn, so a later person of the list can be one of them
+ * (the parents' own "▸ parents", nested). Others are skipped.
+ *
+ * Only the parents: their other children (the person's siblings) and
+ * everything hanging on those stay out of the view, at every depth. At
+ * depth 1 the selection holds them already (the aunts and uncles with their
+ * families, includeParentSiblings), not drawn until the grandparents are;
+ * they leave it here, so the parents alone come. Another input brings them
+ * (the parents' children shown in place, PipelineInput.expandChildrenOf:
+ * the person's "▸ siblings" or a parent's "▸ children"). Anyone the view
+ * draws without the extension stays (`drawnWithout`, the drawn persons of
+ * the same input without extraDepthFor; asked only when one of those
+ * siblings is in the selection).
  * Returns the persons extended, in the order of the list as reached.
  */
 export function extendAncestorDepth(
     data: StromData,
     selection: GraphSelection,
-    personIds: readonly PersonId[]
+    personIds: readonly PersonId[],
+    drawnWithout: () => ReadonlySet<PersonId>
 ): PersonId[] {
     const limit = selection.ancestorLimitPersons ?? (selection.ancestorLimitPersons = new Set());
     const processed = new Set(selection.partnerships);
+    const before = new Set(selection.persons);
     const done = new Set<PersonId>();
     for (let grew = true; grew;) {
         grew = false;
@@ -482,8 +495,70 @@ export function extendAncestorDepth(
             grew = true;
         }
     }
-    if (done.size > 0) collectPartnerships(data, selection.persons, selection.partnerships);
+    if (done.size > 0) {
+        const added = new Set([...selection.persons].filter(id => !before.has(id)));
+        leaveOutOtherChildrenOf(data, selection, added, done, drawnWithout);
+        collectPartnerships(data, selection.persons, selection.partnerships);
+    }
     return [...done];
+}
+
+/**
+ * The parents shown beyond the depth come alone (extendAncestorDepth): the
+ * line from each of `parents` down to a child that is not one of `line`
+ * (the persons whose parents they are shown for) is cut, and everyone
+ * reached only through such a cut goes — the child, their partners, their
+ * descendants and whoever hangs on those — unless the view without the
+ * extension draws them (`drawnWithout`: a pedigree collapse, a cousin
+ * married into the view); those stay and stop the walk. `drawnWithout` is
+ * asked only when such a child is in the selection (at depth 1: the aunts
+ * and uncles).
+ */
+function leaveOutOtherChildrenOf(
+    data: StromData,
+    selection: GraphSelection,
+    parents: ReadonlySet<PersonId>,
+    line: ReadonlySet<PersonId>,
+    drawnWithout: () => ReadonlySet<PersonId>
+): void {
+    const isCut = (childId: PersonId, parentId: PersonId): boolean =>
+        parents.has(parentId) && !line.has(childId) && (data.persons[childId]?.parentIds ?? []).includes(parentId);
+    const cutChildren: PersonId[] = [];
+    for (const parentId of parents) {
+        for (const childId of data.persons[parentId]?.childIds ?? []) {
+            if (selection.persons.has(childId) && isCut(childId, parentId) && !cutChildren.includes(childId)) cutChildren.push(childId);
+        }
+    }
+    if (cutChildren.length === 0) return;
+    const drawn = drawnWithout();
+    const stays = (id: PersonId): boolean => drawn.has(id) || parents.has(id) || line.has(id) || id === selection.focusPersonId;
+    const gone = new Set<PersonId>();
+    const stack = cutChildren.filter(id => !stays(id));
+    while (stack.length > 0) {
+        const id = stack.pop()!;
+        if (gone.has(id)) continue;
+        gone.add(id);
+        const person = data.persons[id];
+        if (!person) continue;
+        const next: PersonId[] = [];
+        for (const parentId of person.parentIds) if (!isCut(id, parentId)) next.push(parentId);
+        for (const childId of person.childIds) if (!isCut(childId, id)) next.push(childId);
+        for (const partnershipId of person.partnerships) {
+            const partnership = data.partnerships[partnershipId];
+            if (partnership) next.push(partnership.person1Id === id ? partnership.person2Id : partnership.person1Id);
+        }
+        for (const n of next) if (selection.persons.has(n) && !gone.has(n) && !stays(n)) stack.push(n);
+    }
+    for (const id of gone) {
+        selection.persons.delete(id);
+        selection.depthLimitPersons?.delete(id);
+    }
+    for (const partnershipId of [...selection.partnerships]) {
+        const partnership = data.partnerships[partnershipId];
+        if (partnership && (gone.has(partnership.person1Id) || gone.has(partnership.person2Id))) {
+            selection.partnerships.delete(partnershipId);
+        }
+    }
 }
 
 /**
@@ -541,12 +616,22 @@ export function foldAncestorsInSelection(
 
     // Who stays connected to whom inside the selection: parent and child,
     // partner and partner (as buildLayoutModel links them)
+    // The focus's own line: the focus and their ancestors in the selection
+    const ownLine = new Set<PersonId>();
+    for (const stack = [selection.focusPersonId]; stack.length > 0;) {
+        const id = stack.pop()!;
+        if (ownLine.has(id) || !selection.persons.has(id)) continue;
+        ownLine.add(id);
+        stack.push(...(data.persons[id]?.parentIds ?? []));
+    }
     const neighbours = (id: PersonId): PersonId[] => {
         const person = data.persons[id];
         if (!person) return [];
         const out: PersonId[] = [];
-        for (const parentId of person.parentIds) {
-            if (selection.persons.has(parentId) && !isCut(id, parentId)) out.push(parentId);
+        if (ownLine.has(id)) {
+            for (const parentId of person.parentIds) {
+                if (selection.persons.has(parentId) && !isCut(id, parentId)) out.push(parentId);
+            }
         }
         for (const childId of person.childIds) {
             if (selection.persons.has(childId) && !isCut(childId, id)) out.push(childId);

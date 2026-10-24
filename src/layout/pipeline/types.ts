@@ -634,7 +634,9 @@ export interface PipelineInput {
     /**
      * Persons of the line whose parents the view shows in place although they
      * lie beyond the ancestor depth (the "▸ parents" of an ancestor at the
-     * edge of the depth): one generation more for that branch alone
+     * edge of the depth): one generation more for that branch alone, the
+     * parents only — never their other children (the person's siblings) nor
+     * anything hanging on those, which come with expandChildrenOf the parents
      * (extendAncestorDepth). Listed persons not at the edge are skipped.
      */
     extraDepthFor?: readonly PersonId[];

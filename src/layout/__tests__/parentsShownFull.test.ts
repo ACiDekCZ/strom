@@ -10,10 +10,11 @@
  * widened; the parents are drawn as a couple in the row above the person,
  * nobody drawn before leaves, the click adds one generation above that branch
  * alone (the parents and, in the expanded mode, their other partners), and
- * the person is no longer at the edge. A parent of the focus (depth 1) is the
- * exception: the selection already holds the parents' other children (the
- * aunts and uncles, includeParentSiblings), drawn once the grandparents are;
- * the new cards are then never more than the next depth draws.
+ * the person is no longer at the edge. Only the parents come, at every
+ * depth: the person's siblings (the parents' other children) and their
+ * descendants stay out of the view, also for a parent of the focus at depth
+ * 1, whose aunts and uncles with their families the selection holds already
+ * (includeParentSiblings).
  *
  * With the parents' children shown in the same step (the "▸ siblings" of an
  * edge ancestor: extraDepthFor [P] and expandChildrenOf the parents) every
@@ -80,16 +81,23 @@ function genOf(r: LayoutResult, id: PersonId): number | undefined {
     return y === undefined ? undefined : (r.bands ?? []).find(b => y >= b.top - 1 && y < b.top + b.height + 1)?.generation;
 }
 
-/** Cards between the children of one of the person's unions in their row that are neither such a child nor a child's partner. */
+/**
+ * Cards between the children of one of the person's unions in their row that
+ * are neither such a child nor in a child's partner chain (the child's
+ * partners, their other partners and so on: one chain of marriages, drawn
+ * side by side as the plain depth draws it).
+ */
 function foreignBetweenChildren(data: StromData, pid: PersonId, positions: Map<PersonId, { x: number; y: number }>): string[] {
     const out: string[] = [];
     for (const uid of data.persons[pid]?.partnerships ?? []) {
         const kids = (data.partnerships[uid]?.childIds ?? []).filter(c => positions.has(c));
         if (kids.length < 2) continue;
-        const own = new Set<PersonId>(kids);
-        for (const k of kids) for (const ku of data.persons[k]?.partnerships ?? []) {
-            const u = data.partnerships[ku];
-            if (u) { own.add(u.person1Id); own.add(u.person2Id); }
+        const own = new Set<PersonId>();
+        for (const stack = [...kids]; stack.length > 0;) {
+            const id = stack.pop()!;
+            if (own.has(id)) continue;
+            own.add(id);
+            stack.push(...partnersOf(data, id).filter(o => positions.has(o)));
         }
         const y = positions.get(kids[0])!.y;
         if (kids.some(k => Math.abs(positions.get(k)!.y - y) > 1)) continue;
@@ -101,6 +109,19 @@ function foreignBetweenChildren(data: StromData, pid: PersonId, positions: Map<P
         }
     }
     return out;
+}
+
+/** The person's siblings (the parents' other children) and everyone descended from them. */
+function siblingsAndDescendants(data: StromData, id: PersonId): PersonId[] {
+    const out = new Set<PersonId>();
+    const stack = (data.persons[id]?.parentIds ?? []).flatMap(q => data.persons[q]?.childIds ?? []).filter(c => c !== id);
+    while (stack.length > 0) {
+        const c = stack.pop()!;
+        if (out.has(c) || c === id) continue;
+        out.add(c);
+        stack.push(...(data.persons[c]?.childIds ?? []));
+    }
+    return [...out];
 }
 
 /** The persons a person's union partners are (any union). */
@@ -149,10 +170,11 @@ describe('Parents shown in place beyond the depth: full pipeline invariants', ()
                         if (lost.length) failures.push(`${where}: left the view ${lost.slice(0, 5).join(',')}`);
                         const allowed = new Set<PersonId>(person.parentIds);
                         for (const q of person.parentIds) for (const o of partnersOf(data, q)) allowed.add(o);
-                        // A parent of the focus: the aunts and uncles the selection holds come with the grandparents
-                        const next = data.persons[focus].parentIds.includes(pid) ? layout(data, focus, config, depth + 1, mode.autoExpand).positions : null;
-                        const extra = [...r.positions.keys()].filter(id => !base.positions.has(id) && !allowed.has(id) && !next?.has(id));
+                        const extra = [...r.positions.keys()].filter(id => !base.positions.has(id) && !allowed.has(id));
                         if (extra.length) failures.push(`${where}: more than the parents came in ${extra.slice(0, 5).join(',')}`);
+                        // Never the person's siblings nor anyone descended from them (the aunts and uncles at depth 1)
+                        const kin = siblingsAndDescendants(data, pid).filter(id => r.positions.has(id) && !base.positions.has(id));
+                        if (kin.length) failures.push(`${where}: siblings or their descendants came in ${kin.slice(0, 5).join(',')}`);
                         // The parents' line comes down to the person
                         const line = r.connections.find(c => c.drops.some(d => d.personId === pid));
                         if (parents.length && !line && !(r.omittedEdges ?? []).some(e => e.childId === pid)) failures.push(`${where}: no line to the person`);

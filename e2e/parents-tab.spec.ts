@@ -271,3 +271,46 @@ test('raising the depth over parents shown here ends that expansion; the parents
     await expect(cardOf(page, PERSON).locator('.branch-tab.parents-tab.active, .branch-tab.parents-tab[aria-pressed="true"]')).toHaveCount(0);
     await expect(cardOf(page, PARENTS[0])).not.toHaveClass(/shown-here/);
 });
+
+/** Open a fixture (invented data) with the focus on `focus` at the ancestor depth `depth`, the view centred on `center`. */
+async function setupWith(page: Page, fixture: string, focus: string, depth: number, center: string): Promise<void> {
+    await openApp(page);
+    const data = JSON.parse(readFileSync(join(process.cwd(), 'test', `${fixture}.json`), 'utf-8'));
+    await page.evaluate(async ([tree, f, d]) => {
+        await window.Strom.DataManager.importAsNewTree(tree as never, 'Fixture');
+        await window.Strom.TreeRenderer.setFocus(f as never);
+        window.Strom.TreeRenderer.setFocusDepth(d as number, window.Strom.TreeRenderer.getFocusDepthDown());
+    }, [data, focus, depth] as const);
+    await expect(cardOf(page, center)).toBeVisible();
+    await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), center);
+}
+
+/**
+ * At depth 1 the selection holds the aunts and uncles already: "▸ parents"
+ * on a focus parent still shows the parents alone (frame 4c), the siblings
+ * come with "▸ siblings" (the parents with their children in one step).
+ */
+test('depth 1: "▸ parents" on a parent of the focus shows the grandparents alone; "▸ siblings" brings the aunts and uncles too', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await setupWith(page, 'comprehensive', 'focus', 1, PERSON);
+    for (const id of [...PARENTS, ...SIBLINGS]) await expect(cardOf(page, id)).toHaveCount(0);
+    await parentsTab(page, PERSON).click();
+    for (const id of PARENTS) await expect(cardOf(page, id)).toBeVisible();
+    await page.mouse.move(5, 500);
+    for (const id of [...SIBLINGS, 'cousin_h_1', 'cousin_h_4']) await expect(cardOf(page, id)).toHaveCount(0);
+    await expect(parentsTab(page, PERSON)).toHaveClass(/active/);
+    // The aunts and uncles are what the siblings tab now promises (the parents in view, §1)
+    await expect(siblingsTab(page, PERSON)).toHaveClass(/kind-place/);
+    await expect(siblingsTab(page, PERSON).locator('.badge-tooltip-item')).toHaveCount(SIBLINGS.length);
+    await parentsTab(page, PERSON).click();
+    for (const id of PARENTS) await expect(cardOf(page, id)).toHaveCount(0);
+    await page.mouse.move(5, 500);
+
+    await siblingsTab(page, PERSON).click();
+    for (const id of [...PARENTS, ...SIBLINGS]) await expect(cardOf(page, id)).toBeVisible();
+    for (const id of [...PARENTS, ...SIBLINGS]) await expect(cardOf(page, id)).toHaveClass(/shown-here/);
+    // The siblings come as children shown in place do: without their families
+    for (const id of ['cousin_h_1', 'cousin_h_4']) await expect(cardOf(page, id)).toHaveCount(0);
+    expect(await shownCount(page)).toBe(1);
+});
+
