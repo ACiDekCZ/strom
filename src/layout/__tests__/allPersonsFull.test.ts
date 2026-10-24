@@ -53,6 +53,10 @@ const DEFAULT_FIXTURES = [
     // by turns (the hub's chain sides decided by its partners).
     'edge-unknown-gender',
     'edge-unknown-chains',
+    // A parent's childless siblings over the focus's wide family (two
+    // marriages, ten children): they stand beside the parent, not beyond
+    // the width of the family below.
+    'edge-aunts-wide-family',
     // Synthetic etalon: systematically designed constellations (see docs/ETALON.md).
     'etalon-line-10gen',
     'etalon-ancestors-binary5',

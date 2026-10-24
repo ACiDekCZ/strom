@@ -23,7 +23,9 @@
  * - the comprehensive fixture with families attached: parents (and theirs)
  *   of a child's spouse with a chain inside that family, one parent alone, a
  *   partner, parents replacing a named stand-in, a real parent + "?" filled
- *   by a shown one, parents of the stepmother; a partner of the focus's spouse.
+ *   by a shown one, parents of the stepmother; a partner of the focus's spouse;
+ * - edge-aunts-wide-family: the father of a focus with a wide family linked
+ *   to his parents, his childless siblings coming along.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -179,6 +181,21 @@ function comprehensiveScenarios(): Scenario[] {
 }
 
 /**
+ * The father of a focus with a wide family (edge-aunts-wide-family) linked
+ * to his parents in the view only: his childless siblings come along as the
+ * focus's aunts and uncles and stand beside him.
+ */
+function auntsScenarios(): Scenario[] {
+    const d = loadFixture('edge-aunts-wide-family');
+    const fa = 'fa' as PersonId, gf = 'gf' as PersonId, gm = 'gm' as PersonId;
+    const u = d.partnerships['u_g' as PartnershipId];
+    u.childIds = u.childIds.filter(c => c !== fa);
+    d.persons[fa].parentIds = [];
+    for (const g of [gf, gm]) d.persons[g].childIds = d.persons[g].childIds.filter(c => c !== fa);
+    return [{ name: 'aunts beside a father linked in the view', data: d, links: [vl('H0110', 'child', fa, [gf, gm])] }];
+}
+
+/**
  * Every scenario gets the strict checks, including the in-law columns of a
  * spouse beside a sibling family on that spouse's side (a parent's other
  * family there; the parents of the focus's spouse beside the focus's
@@ -186,7 +203,7 @@ function comprehensiveScenarios(): Scenario[] {
  * one out and the cards link to each other, with the view link as with the
  * real one.
  */
-const SCENARIOS: Scenario[] = [...researchScenarios(), ...comprehensiveScenarios()];
+const SCENARIOS: Scenario[] = [...researchScenarios(), ...comprehensiveScenarios(), ...auntsScenarios()];
 
 for (const scenario of SCENARIOS) {
     const { data, links } = scenario;

@@ -125,6 +125,25 @@ moves each such group of children, with everything drawn below them, toward
 the focus parents as one piece, as far as the nearest card in any of its rows
 allows (horizontalGap), never across the focus parents; nearer groups first.
 
+The parents' siblings beside the parent. Step 5 (`placeSiblingsAround`)
+stands the siblings of a focus parent beyond that parent's block, and the
+block spans the whole descendant subtree of the focus family: with a wide
+family below (many children, several marriages of the focus) the aunts and
+uncles stood far out at the edge of the tree, the grandparents' bus running
+across the whole tree to them. Right before `pullAncestorSiblingChildren`,
+`pullParentSiblingsToParent` moves them back toward the parent: for each focus
+parent, the siblings on one side of the parent's cards (each with partners)
+move, nearest first, as far as the nearest gen -1 card beyond each allows
+(horizontalGap), never past the cards between them and the parent. Only a
+side whose siblings are all childless (no children in any of their unions)
+and untethered (no partner with parents in view) moves, and the whole side
+or nothing: a sibling with children brings the cousins' families, which the
+cousin separation (CSP) and the sibling family rules (SFNI) bind, so such a
+side keeps step 5's place. The same holds for a real parent link and for one
+drawn from a view link (a hypothesis), and with the siblings shown in place
+("▸ siblings" at depth 1). Still beyond the descendant span: a side with a
+sibling who has children, and the focus's own siblings in gen 0.
+
 Parents shown in place beyond the depth (`PipelineInput.extraDepthFor`, the
 "▸ parents" of an ancestor at the edge of the depth). While the ancestor walk
 of `selectSubgraph` (focus and spouse lines) stops at `ancestorDepth`, it

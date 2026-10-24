@@ -1,0 +1,560 @@
+{
+  "persons": {
+    "gf": {
+      "id": "gf",
+      "firstName": "Albert",
+      "lastName": "Rowan",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_g"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "aunt_1",
+        "uncle_1",
+        "fa",
+        "aunt_2"
+      ],
+      "birthDate": "1680"
+    },
+    "gm": {
+      "id": "gm",
+      "firstName": "Clara",
+      "lastName": "Rowan",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_g"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "aunt_1",
+        "uncle_1",
+        "fa",
+        "aunt_2"
+      ],
+      "birthDate": "1684"
+    },
+    "aunt_1": {
+      "id": "aunt_1",
+      "firstName": "Edith",
+      "lastName": "Rowan",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "gf",
+        "gm"
+      ],
+      "childIds": [],
+      "birthDate": "1705"
+    },
+    "uncle_1": {
+      "id": "uncle_1",
+      "firstName": "Felix",
+      "lastName": "Rowan",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "gf",
+        "gm"
+      ],
+      "childIds": [],
+      "birthDate": "1708"
+    },
+    "fa": {
+      "id": "fa",
+      "firstName": "Ivo",
+      "lastName": "Rowan",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p"
+      ],
+      "parentIds": [
+        "gf",
+        "gm"
+      ],
+      "childIds": [
+        "fo"
+      ],
+      "birthDate": "1711"
+    },
+    "aunt_2": {
+      "id": "aunt_2",
+      "firstName": "Greta",
+      "lastName": "Rowan",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_aunt_2"
+      ],
+      "parentIds": [
+        "gf",
+        "gm"
+      ],
+      "childIds": [],
+      "birthDate": "1713"
+    },
+    "aunt_2_h": {
+      "id": "aunt_2_h",
+      "firstName": "Hugo",
+      "lastName": "Marsh",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_aunt_2"
+      ],
+      "parentIds": [],
+      "childIds": [],
+      "birthDate": "1710"
+    },
+    "mgf": {
+      "id": "mgf",
+      "firstName": "Max",
+      "lastName": "Brook",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_mg"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "mo",
+        "m_aunt"
+      ],
+      "birthDate": "1682"
+    },
+    "mgm": {
+      "id": "mgm",
+      "firstName": "Nora",
+      "lastName": "Brook",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_mg"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "mo",
+        "m_aunt"
+      ],
+      "birthDate": "1686"
+    },
+    "mo": {
+      "id": "mo",
+      "firstName": "Lena",
+      "lastName": "Brook",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p"
+      ],
+      "parentIds": [
+        "mgf",
+        "mgm"
+      ],
+      "childIds": [
+        "fo"
+      ],
+      "birthDate": "1712"
+    },
+    "m_aunt": {
+      "id": "m_aunt",
+      "firstName": "Olga",
+      "lastName": "Brook",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "mgf",
+        "mgm"
+      ],
+      "childIds": [],
+      "birthDate": "1716"
+    },
+    "fo": {
+      "id": "fo",
+      "firstName": "Paula",
+      "lastName": "Rowan",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_f1",
+        "u_f2"
+      ],
+      "parentIds": [
+        "fa",
+        "mo"
+      ],
+      "childIds": [
+        "c1",
+        "c2",
+        "c3",
+        "c4",
+        "c5",
+        "c6",
+        "c7",
+        "c8",
+        "c9",
+        "c10"
+      ],
+      "birthDate": "1730"
+    },
+    "h1": {
+      "id": "h1",
+      "firstName": "Quentin",
+      "lastName": "Ash",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_f1"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "c1",
+        "c2",
+        "c3",
+        "c4",
+        "c5",
+        "c6",
+        "c7",
+        "c8"
+      ],
+      "birthDate": "1725"
+    },
+    "h2": {
+      "id": "h2",
+      "firstName": "Ulric",
+      "lastName": "Pine",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_f2"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "c9",
+        "c10"
+      ],
+      "birthDate": "1728"
+    },
+    "c1": {
+      "id": "c1",
+      "firstName": "Oswin",
+      "lastName": "Ash",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "h1",
+        "fo"
+      ],
+      "childIds": [],
+      "birthDate": "1752"
+    },
+    "c2": {
+      "id": "c2",
+      "firstName": "Una",
+      "lastName": "Ash",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_c2"
+      ],
+      "parentIds": [
+        "h1",
+        "fo"
+      ],
+      "childIds": [
+        "g1"
+      ],
+      "birthDate": "1754"
+    },
+    "c3": {
+      "id": "c3",
+      "firstName": "Lionel",
+      "lastName": "Ash",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "h1",
+        "fo"
+      ],
+      "childIds": [],
+      "birthDate": "1756"
+    },
+    "c4": {
+      "id": "c4",
+      "firstName": "Xenia",
+      "lastName": "Ash",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_c4"
+      ],
+      "parentIds": [
+        "h1",
+        "fo"
+      ],
+      "childIds": [
+        "g2",
+        "g3"
+      ],
+      "birthDate": "1758"
+    },
+    "c5": {
+      "id": "c5",
+      "firstName": "Yorick",
+      "lastName": "Ash",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "h1",
+        "fo"
+      ],
+      "childIds": [],
+      "birthDate": "1760"
+    },
+    "c6": {
+      "id": "c6",
+      "firstName": "Zora",
+      "lastName": "Ash",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "h1",
+        "fo"
+      ],
+      "childIds": [],
+      "birthDate": "1762"
+    },
+    "c7": {
+      "id": "c7",
+      "firstName": "Anton",
+      "lastName": "Ash",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "h1",
+        "fo"
+      ],
+      "childIds": [],
+      "birthDate": "1764"
+    },
+    "c8": {
+      "id": "c8",
+      "firstName": "Bella",
+      "lastName": "Ash",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "h1",
+        "fo"
+      ],
+      "childIds": [],
+      "birthDate": "1766"
+    },
+    "c9": {
+      "id": "c9",
+      "firstName": "Cora",
+      "lastName": "Pine",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "h2",
+        "fo"
+      ],
+      "childIds": [],
+      "birthDate": "1772"
+    },
+    "c10": {
+      "id": "c10",
+      "firstName": "Dora",
+      "lastName": "Pine",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "h2",
+        "fo"
+      ],
+      "childIds": [],
+      "birthDate": "1774"
+    },
+    "c2_h": {
+      "id": "c2_h",
+      "firstName": "Elias",
+      "lastName": "Fern",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_c2"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "g1"
+      ],
+      "birthDate": "1748"
+    },
+    "g1": {
+      "id": "g1",
+      "firstName": "Leopold",
+      "lastName": "Fern",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "c2_h",
+        "c2"
+      ],
+      "childIds": [],
+      "birthDate": "1776"
+    },
+    "c4_h": {
+      "id": "c4_h",
+      "firstName": "Gideon",
+      "lastName": "Hale",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_c4"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "g2",
+        "g3"
+      ],
+      "birthDate": "1756"
+    },
+    "g2": {
+      "id": "g2",
+      "firstName": "Hedda",
+      "lastName": "Hale",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "c4_h",
+        "c4"
+      ],
+      "childIds": [],
+      "birthDate": "1780"
+    },
+    "g3": {
+      "id": "g3",
+      "firstName": "Ivar",
+      "lastName": "Hale",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "c4_h",
+        "c4"
+      ],
+      "childIds": [],
+      "birthDate": "1782"
+    }
+  },
+  "partnerships": {
+    "u_g": {
+      "id": "u_g",
+      "person1Id": "gf",
+      "person2Id": "gm",
+      "childIds": [
+        "aunt_1",
+        "uncle_1",
+        "fa",
+        "aunt_2"
+      ],
+      "status": "married",
+      "startDate": "1703"
+    },
+    "u_aunt_2": {
+      "id": "u_aunt_2",
+      "person1Id": "aunt_2_h",
+      "person2Id": "aunt_2",
+      "childIds": [],
+      "status": "married",
+      "startDate": "1735"
+    },
+    "u_mg": {
+      "id": "u_mg",
+      "person1Id": "mgf",
+      "person2Id": "mgm",
+      "childIds": [
+        "mo",
+        "m_aunt"
+      ],
+      "status": "married",
+      "startDate": "1709"
+    },
+    "u_p": {
+      "id": "u_p",
+      "person1Id": "fa",
+      "person2Id": "mo",
+      "childIds": [
+        "fo"
+      ],
+      "status": "married",
+      "startDate": "1729"
+    },
+    "u_f1": {
+      "id": "u_f1",
+      "person1Id": "h1",
+      "person2Id": "fo",
+      "childIds": [
+        "c1",
+        "c2",
+        "c3",
+        "c4",
+        "c5",
+        "c6",
+        "c7",
+        "c8"
+      ],
+      "status": "married",
+      "startDate": "1751"
+    },
+    "u_f2": {
+      "id": "u_f2",
+      "person1Id": "h2",
+      "person2Id": "fo",
+      "childIds": [
+        "c9",
+        "c10"
+      ],
+      "status": "married",
+      "startDate": "1771"
+    },
+    "u_c2": {
+      "id": "u_c2",
+      "person1Id": "c2_h",
+      "person2Id": "c2",
+      "childIds": [
+        "g1"
+      ],
+      "status": "married",
+      "startDate": "1775"
+    },
+    "u_c4": {
+      "id": "u_c4",
+      "person1Id": "c4_h",
+      "person2Id": "c4",
+      "childIds": [
+        "g2",
+        "g3"
+      ],
+      "status": "married",
+      "startDate": "1779"
+    }
+  }
+}

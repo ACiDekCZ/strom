@@ -1902,6 +1902,12 @@ export function applyConstraints(input: ConstraintsInput): ConstrainedModel {
         resolveParentCoupleOverlaps(blocks, model, fbm.unionToBlock, input.focusPersonId, config);
     }
 
+    // The parents' siblings (aunts and uncles) move up beside their sibling
+    // on the line, over the focus family's wide rows where those leave room
+    if (input.focusPersonId) {
+        pullParentSiblingsToParent(blocks, model, fbm.unionToBlock, input.focusPersonId, config);
+    }
+
     // Children of an ancestor's sibling drawn in the parents' row move up to
     // the focus family, so the sibling can stand over them in its run
     if (input.focusPersonId) {
@@ -2390,6 +2396,98 @@ function relocateSplitSiblingSubtrees(
                     }
                 }
                 break;
+            }
+        }
+    }
+}
+
+/**
+ * The siblings of a focus parent (the focus's aunts and uncles, gen -1)
+ * without children in view: step 5 stands them beyond the parent's whole
+ * block, whose width is that of everything drawn below the parent, so a focus
+ * with a wide family (many children, grandchildren) left them several card
+ * widths away from the parent, the grandparents' line running over the empty
+ * row to them.
+ *
+ * On each side of the parent, when every sibling family there is drawn in
+ * the parents' row alone (the sibling, with partners, no children in view),
+ * the siblings move toward the parent, nearest first, each as far as the
+ * nearest card in the row allows (horizontalGap): never past a card, so they
+ * keep their order and side. Their row is the only one they stand in, so
+ * the rows below (the focus family) do not limit them. A side with a sibling
+ * whose children are in view keeps its place: the cousins stand beside the
+ * focus's siblings' families (CSP), and a run moved in part would split. So
+ * does a side with a sibling whose partner has parents in view (moving would
+ * part them).
+ */
+function pullParentSiblingsToParent(
+    blocks: Map<FamilyBlockId, FamilyBlock>,
+    model: LayoutModel,
+    unionToBlock: Map<UnionId, FamilyBlockId>,
+    focusPersonId: PersonId,
+    config: LayoutConfig
+): void {
+    const parentUnionId = model.childToParentUnion.get(focusPersonId);
+    const parentUnion = parentUnionId ? model.unions.get(parentUnionId) : undefined;
+    const parentBlockId = parentUnionId ? unionToBlock.get(parentUnionId) : undefined;
+    const parentBlock = parentBlockId ? blocks.get(parentBlockId) : undefined;
+    if (!parentUnion || !parentBlock || parentBlock.generation !== -1) return;
+    const parentCards = getBlockCardExtent(parentBlock, model, config);
+    const personsOf = (b: FamilyBlock): PersonId[] => {
+        if (b.chainInfo) return b.chainInfo.personOrder;
+        const u = model.unions.get(b.rootUnionId);
+        return u ? [u.partnerA, ...(u.partnerB ? [u.partnerB] : [])] : [];
+    };
+
+    for (const parent of [parentUnion.partnerA, parentUnion.partnerB]) {
+        if (!parent) continue;
+        const gpUnion = model.unions.get(model.childToParentUnion.get(parent) ?? ('' as UnionId));
+        if (!gpUnion || gpUnion.childIds.length < 2) continue;
+
+        type Sibling = { block: FamilyBlock; left: number; right: number; distance: number };
+        const sides: Record<'left' | 'right', { siblings: Sibling[]; movable: boolean }> = {
+            left: { siblings: [], movable: true },
+            right: { siblings: [], movable: true },
+        };
+        const seen = new Set<FamilyBlockId>([parentBlock.id]);
+        for (const sibling of gpUnion.childIds) {
+            if (sibling === parent) continue;
+            const block = blocks.get(unionToBlock.get(model.personToUnion.get(sibling) ?? ('' as UnionId)) ?? ('' as FamilyBlockId));
+            if (!block || block.generation !== -1 || seen.has(block.id)) continue;
+            seen.add(block.id);
+            const cards = getBlockCardExtent(block, model, config);
+            const side = cards.right <= parentCards.left + 0.5 ? sides.left
+                : cards.left >= parentCards.right - 0.5 ? sides.right : null;
+            if (!side) { sides.left.movable = sides.right.movable = false; continue; }
+            // Children in view, or a partner whose parents are in view: the side stays
+            const own = new Set<UnionId>([block.rootUnionId, ...(block.chainInfo?.unionIds ?? [])]);
+            const childless = block.childBlockIds.length === 0 && [...own].every(u => (model.unions.get(u)?.childIds.length ?? 0) === 0);
+            const tethered = personsOf(block).some(p => p !== sibling && model.childToParentUnion.has(p));
+            if (!childless || tethered) side.movable = false;
+            side.siblings.push({
+                block, left: cards.left, right: cards.right,
+                distance: side === sides.left ? parentCards.left - cards.right : cards.left - parentCards.right,
+            });
+        }
+
+        for (const [name, side] of Object.entries(sides)) {
+            if (!side.movable) continue;
+            const toRight = name === 'left';
+            side.siblings.sort((a, b) => a.distance - b.distance);
+            for (const sib of side.siblings) {
+                let room = Infinity;
+                let blocked = false;
+                for (const [, other] of blocks) {
+                    if (other.id === sib.block.id || other.generation !== -1) continue;
+                    const cards = getBlockCardExtent(other, model, config);
+                    if (toRight && cards.left >= sib.right - 0.5) room = Math.min(room, cards.left - sib.right - config.horizontalGap);
+                    else if (!toRight && cards.right <= sib.left + 0.5) room = Math.min(room, sib.left - cards.right - config.horizontalGap);
+                    else if (cards.right > sib.left + 0.5 && cards.left < sib.right - 0.5) blocked = true;
+                }
+                // A card inside the run already: the siblings farther out stay too
+                if (blocked) break;
+                if (!isFinite(room) || room < 0.5) continue;
+                shiftBlock(sib.block, toRight ? room : -room);
             }
         }
     }
