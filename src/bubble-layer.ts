@@ -13,6 +13,13 @@
  *
  * Without the top layer (an old browser) the bubble stays on the canvas as
  * before, above or below its tab.
+ *
+ * A toast stands over a bubble (round 4 §29: the tree < the zoom buttons <
+ * a bubble < a toast; the focus toast carries "↩ Back"). A toast that comes
+ * while a bubble is open closes the bubble. One already on the screen when
+ * a bubble opens is lifted into the top layer after it (so above it) while
+ * the bubble stays open, and put back when it closes: a toast stays under
+ * dialogs everywhere else.
  */
 
 import { ZoomPan } from './zoom.js';
@@ -31,6 +38,56 @@ interface OpenBubble {
 
 let open: OpenBubble | null = null;
 let installed = false;
+
+/** The app's toasts: a message, the undo pill, the focus confirmation (its container, while it holds one). */
+const TOAST_SELECTOR = 'body > .toast, body > .undo-toast, #focus-toast';
+
+/** The toasts on the screen now. */
+function toastsShown(): HTMLElement[] {
+    return [...document.querySelectorAll<HTMLElement>(TOAST_SELECTOR)].filter(t => t.id !== 'focus-toast' || t.childElementCount > 0);
+}
+
+/** The toasts lifted over the open bubble. */
+let lifted: HTMLElement[] = [];
+
+/** Lift the toasts on the screen into the top layer, over the bubble just shown there. */
+function liftToasts(): void {
+    for (const t of toastsShown()) {
+        if (!t.hasAttribute('popover')) t.setAttribute('popover', 'manual');
+        if (t.matches(':popover-open')) t.hidePopover();
+        t.showPopover();
+        if (!lifted.includes(t)) lifted.push(t);
+    }
+}
+
+/** Put the lifted toasts back in the page (under dialogs again). */
+function lowerToasts(): void {
+    for (const t of lifted) {
+        if (t.matches(':popover-open')) t.hidePopover();
+        t.removeAttribute('popover');
+    }
+    lifted = [];
+}
+
+/** Watches for a toast coming while a bubble is open: it closes the bubble. */
+let toastWatch: MutationObserver | null = null;
+
+function watchToasts(): void {
+    if (toastWatch || typeof MutationObserver === 'undefined') return;
+    toastWatch = new MutationObserver(records => {
+        const came = records.some(r => [...r.addedNodes].some(n => n instanceof HTMLElement
+            && ((r.target as Element).id === 'focus-toast' || n.matches('.toast, .undo-toast'))));
+        if (came) closeOpenBubble();
+    });
+    toastWatch.observe(document.body, { childList: true });
+    const focusToast = document.getElementById('focus-toast');
+    if (focusToast) toastWatch.observe(focusToast, { childList: true });
+}
+
+function unwatchToasts(): void {
+    toastWatch?.disconnect();
+    toastWatch = null;
+}
 
 function install(): void {
     if (installed) return;
@@ -60,13 +117,21 @@ export function showBubble(bubble: HTMLElement, owner: HTMLElement, close: () =>
     install();
     if (open && open.bubble !== bubble) open.close();
     open = { bubble, owner, close };
-    if (prepareBubble(bubble) && !bubble.matches(':popover-open') && bubble.isConnected) bubble.showPopover();
+    if (prepareBubble(bubble) && !bubble.matches(':popover-open') && bubble.isConnected) {
+        bubble.showPopover();
+        liftToasts();
+        watchToasts();
+    }
 }
 
 /** Take the bubble out of the top layer. */
 export function hideBubble(bubble: HTMLElement): void {
     if (open?.bubble === bubble) open = null;
     if (bubble.hasAttribute('popover') && bubble.matches(':popover-open')) bubble.hidePopover();
+    if (!open) {
+        unwatchToasts();
+        lowerToasts();
+    }
 }
 
 /** Close the bubble that is open (a new drawing, the tree moved). */

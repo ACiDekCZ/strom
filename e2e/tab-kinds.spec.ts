@@ -142,3 +142,90 @@ test('a married-in husband with children out of view: "◎ family" before "▸ c
     await expect(tabs.nth(1)).toHaveClass(/kind-place/);
     await expect(tabs.nth(1).locator('.pill-glyph')).toHaveText('▸');
 });
+
+/**
+ * A toast over a bubble (round 4 §29): the tree < the zoom buttons < a
+ * bubble < a toast. A toast that comes while a bubble is open closes it; one
+ * already on the screen stays over a bubble opened after it.
+ */
+test.describe('a toast over a bubble', () => {
+    /** Whether the element on the screen at the middle of the box is the box's. */
+    const hitAtMiddle = (page: Page, sel: string) => page.evaluate(s => {
+        const r = document.querySelector(s)!.getBoundingClientRect();
+        const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        return !!el?.closest(s);
+    }, sel);
+
+    /** Wait until the box has come in (its slide over). */
+    const settledBox = (page: Page, sel: string) => expect.poll(() => page.evaluate(s =>
+        document.querySelector(s)!.getAnimations({ subtree: true }).length, sel)).toBe(0);
+
+    /** Move the open bubble so it covers the middle of the box. */
+    const bubbleOver = (page: Page, sel: string) => page.evaluate(s => {
+        const r = document.querySelector(s)!.getBoundingClientRect();
+        const b = document.querySelector<HTMLElement>('.badge-tooltip:popover-open')!;
+        const w = b.getBoundingClientRect();
+        b.style.left = `${r.left + r.width / 2 - w.width / 2}px`;
+        b.style.top = `${r.top + r.height / 2 - w.height / 2}px`;
+    }, sel);
+
+    test('a toast coming while a bubble is open closes the bubble', async ({ page }) => {
+        await setup(page);
+        const family = rowOf(page, 'g1').locator('.branch-tab.kind-focus');
+        await family.hover();
+        const bubble = family.locator('.badge-tooltip');
+        await expect(bubble).toBeVisible();
+        await page.evaluate(() => window.Strom.UI.showToast('Saved', 10000));
+        await expect(page.locator('.toast')).toBeVisible();
+        await expect(bubble).toBeHidden();
+    });
+
+    test('a message toast on the screen stays over a bubble opened after it', async ({ page }) => {
+        await setup(page);
+        await page.evaluate(() => window.Strom.UI.showToast('Saved', 10000));
+        await expect(page.locator('.toast.show')).toBeVisible();
+        const family = rowOf(page, 'g1').locator('.branch-tab.kind-focus');
+        await family.hover();
+        const bubble = family.locator('.badge-tooltip');
+        await expect(bubble).toBeVisible();
+        await settledBox(page, '.toast');
+        await bubbleOver(page, '.toast');
+        expect(await hitAtMiddle(page, '.toast')).toBe(true);
+        // the bubble closed, the toast is back in the page (under dialogs)
+        await page.mouse.move(8, 450);
+        await page.mouse.click(8, 450);
+        await expect(bubble).toBeHidden();
+        await expect(page.locator('.toast')).not.toHaveAttribute('popover');
+    });
+
+    test('the focus toast with "↩ Back" stays over a bubble opened after it', async ({ page }) => {
+        await setup(page);
+        await rowOf(page, 'g1').locator('.branch-tab.kind-focus').click();
+        await expect.poll(() => focusOf(page)).toBe('g1');
+        const toast = page.locator('#focus-toast .focus-toast-box');
+        await expect(toast).toBeVisible();
+        const tab = page.locator('#tree-canvas .branch-tab').first();
+        await tab.hover();
+        const bubble = tab.locator('.badge-tooltip');
+        await expect(bubble).toBeVisible();
+        await expect(toast).toBeVisible();
+        await settledBox(page, '#focus-toast .focus-toast-box');
+        await bubbleOver(page, '#focus-toast .focus-toast-box');
+        expect(await hitAtMiddle(page, '#focus-toast .focus-toast-box')).toBe(true);
+    });
+
+    test('a phone held sideways: the focus toast at the top of the tree, under the top bar', async ({ page }) => {
+        await setup(page);
+        await page.setViewportSize({ width: 844, height: 390 });
+        await page.evaluate(() => window.Strom.ZoomPan.centerOnPerson('g1' as never));
+        await page.waitForTimeout(400);
+        await rowOf(page, 'g1').locator('.branch-tab.kind-focus').click();
+        await expect.poll(() => focusOf(page)).toBe('g1');
+        const toast = page.locator('#focus-toast .focus-toast-box');
+        await expect(toast).toBeVisible();
+        const t = (await toast.boundingBox())!;
+        const bar = await page.evaluate(() => document.querySelector('.toolbar')!.getBoundingClientRect().bottom);
+        expect(t.y).toBeGreaterThanOrEqual(bar);
+        expect(t.y + t.height).toBeLessThan(390 / 2);
+    });
+});
