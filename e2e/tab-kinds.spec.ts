@@ -111,3 +111,34 @@ test('"Focus" in the menu focuses without the toast; the menu marks its rows by 
     await page.waitForTimeout(300);
     await expect(page.locator('#focus-toast .focus-toast-box')).toHaveCount(0);
 });
+
+/**
+ * The order of the relation (§3) on a married-in card with children out of
+ * view: "◎ family" (parents and siblings) stands before "▸ children".
+ */
+test('a married-in husband with children out of view: "◎ family" before "▸ children"', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openApp(page);
+    await seedTree(page, {
+        c: { firstName: 'Quirin', lastName: 'Morquist', parents: ['p', 'm'] },
+        p: { firstName: 'Pirmin', lastName: 'Morquist', partners: ['m'] },
+        m: { firstName: 'Ilvana', lastName: 'Morquist', gender: 'female', partners: ['p'] },
+        d: { firstName: 'Dorothea', lastName: 'Morquist', gender: 'female', parents: ['p', 'm'], partners: ['g1'] },
+        g1: { firstName: 'Wolfbrecht', lastName: 'Zwolbrack', parents: ['gg1', 'gg2'], partners: ['d'] },
+        k: { firstName: 'Odalric', lastName: 'Zwolbrack', parents: ['g1', 'd'] },
+        s: { firstName: 'Sigwulf', lastName: 'Zwolbrack', parents: ['gg1', 'gg2'] },
+        gg1: { firstName: 'Arbogast', lastName: 'Zwolbrack', partners: ['gg2'] },
+        gg2: { firstName: 'Adelgunde', lastName: 'Zwolbrack', gender: 'female', partners: ['gg1'] },
+    }, 'Zwolbrack', 'c');
+    await page.evaluate(() => window.Strom.TreeRenderer.setFocus('c' as never));
+    await page.evaluate(() => window.Strom.TreeRenderer.setFocusDepth(2, 0));
+    await expect(cardOf(page, 'g1')).toBeVisible();
+    await expect(cardOf(page, 'k')).toHaveCount(0);
+    const tabs = rowOf(page, 'g1').locator('.branch-tab');
+    await expect(tabs).toHaveCount(2);
+    await expect(tabs.nth(0)).toHaveAttribute('data-tab', 'family');
+    await expect(tabs.nth(0)).toHaveClass(/kind-focus/);
+    await expect(tabs.nth(1)).toHaveClass(/children-tab/);
+    await expect(tabs.nth(1)).toHaveClass(/kind-place/);
+    await expect(tabs.nth(1).locator('.pill-glyph')).toHaveText('▸');
+});

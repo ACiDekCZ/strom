@@ -56,6 +56,8 @@ export interface PersonMenuAction {
     sheetTop?: boolean;
     /** A quiet line under the row in the bottom sheet only (the siblings shown: through which parents). */
     sheetNote?: string;
+    /** In the bottom sheet only, not in the desktop menu (a nested expansion's "◎ Focus on …", §6). */
+    sheetOnly?: boolean;
     /**
      * What the row does, marked as the card's tabs mark it (§2): shows in
      * place (▸), hides what it showed (▾, "placeOpen"), focuses (◎), or moves
@@ -177,14 +179,26 @@ export const contextMenuMethods = uiModule({
         const vl = this.personViewLinkMenu(personId);
         // The siblings and the children in place (the card's tabs, in their order), by "Focus"
         // in every variant (the view only).
-        const children: PersonMenuAction[] = [
+        const inPlace: PersonMenuAction[] = [
             ...this.parentsRows(personId),
             ...this.siblingsRows(personId),
             ...(TreeRenderer.canToggleChildren(personId) ? [{
                 action: 'toggle-children', sheetTop: true,
                 label: TreeRenderer.isChildrenShown(personId) ? strings.focus.hideChildrenHere : c.showChildrenHere,
                 kind: TreeRenderer.isChildrenShown(personId) ? 'placeOpen' as const : 'place' as const,
-            }, ...this.childrenElsewhereRows(personId)] : []),
+            }] : []),
+        ];
+        // A nested expansion (§6): "◎ Focus on …" under the last "Hide … shown here" row, in the sheet only
+        const lastOpen = inPlace.map(a => a.kind).lastIndexOf('placeOpen');
+        if (lastOpen >= 0 && TreeRenderer.nestedFocusOffered(personId)) {
+            inPlace.splice(lastOpen + 1, 0, {
+                action: 'nested-focus', sheetTop: true, sheetOnly: true, kind: 'focus',
+                label: strings.focus.nestedFocusRow(shownName(person, '?')), sheetNote: strings.focus.nestedFocusHint,
+            });
+        }
+        const children: PersonMenuAction[] = [
+            ...inPlace,
+            ...(TreeRenderer.canToggleChildren(personId) ? this.childrenElsewhereRows(personId) : []),
         ];
         if (isViewMode) {
             return withViewLinkRows([
@@ -330,6 +344,10 @@ export const contextMenuMethods = uiModule({
             case 'toggle-parents':
                 void TreeRenderer.toggleParentsShown(personId);
                 break;
+            case 'nested-focus':
+                // The anchor of a nested expansion as the new focus (§6): a conscious choice, no confirmation
+                void TreeRenderer.setFocus(personId);
+                break;
             case 'materials':
                 this.showPersonMaterials(personId);
                 break;
@@ -451,7 +469,7 @@ export const contextMenuMethods = uiModule({
         }
 
         this.hideContextMenu();
-        const actions = this.getPersonMenuActions(personId);
+        const actions = this.getPersonMenuActions(personId).filter(a => !a.sheetOnly);
         if (actions.length === 0) return;
 
         const menu = document.createElement('div');

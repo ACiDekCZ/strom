@@ -175,3 +175,99 @@ test('closing "▾ parents" closes the siblings shown under them too (nested)', 
     for (const id of [...PARENTS, ...SIBLINGS]) await expect(cardOf(page, id)).toHaveCount(0);
     expect(await shownCount(page)).toBe(0);
 });
+
+/**
+ * Nested expansion (§6, frame 6b): the children of a sibling shown here are
+ * a second level; the "▾" bubble of that card offers "◎ Focus on …" (a new
+ * centre with all branches), which sets the focus without the toast of the
+ * focus tabs. The one step's own tabs (the father's siblings, the parents'
+ * children brought in with them) offer nothing of the kind.
+ */
+test('children of a sibling shown here: the "▾" bubble offers a focus on the sibling, without the toast', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await setup(page);
+    await siblingsTab(page, PERSON).click();
+    await expect(cardOf(page, SIBLINGS[0])).toBeVisible();
+    await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), SIBLINGS[0]);
+    await childrenTab(page, SIBLINGS[0]).click();
+    await expect(cardOf(page, 'cousin_h_1')).toBeVisible();
+    // A shown (hatched) card keeps its own tabs, on a solid ground in the light and the dark theme (frames 6c/6d)
+    await expect(cardOf(page, SIBLINGS[0])).toHaveClass(/shown-here/);
+    for (const theme of ['light', 'dark']) {
+        await page.evaluate(t => document.documentElement.setAttribute('data-theme', t), theme);
+        const grounds = await cardOf(page, SIBLINGS[0]).locator('.card-edge > *').evaluateAll(els => els.map(e => getComputedStyle(e).backgroundColor));
+        expect(grounds.length, theme).toBeGreaterThan(0);
+        for (const g of grounds) expect(g, theme).toMatch(/^rgb\(/);
+    }
+    await page.evaluate(() => document.documentElement.removeAttribute('data-theme'));
+    // One step is not nested: no row on the father's siblings nor on the parents' children
+    await expect(cardOf(page, PERSON).locator('.nested-focus-row')).toHaveCount(0);
+    await expect(cardOf(page, PARENTS[0]).locator('.nested-focus-row')).toHaveCount(0);
+    expect(await page.evaluate(id => window.Strom.TreeRenderer.nestedFocusOffered(id as never), PERSON)).toBe(false);
+
+    await page.mouse.move(5, 500);
+    await childrenTab(page, SIBLINGS[0]).hover();
+    const bubble = cardOf(page, SIBLINGS[0]).locator('.children-bubble[data-bubble="children"]');
+    const row = bubble.locator('.nested-focus-row');
+    await expect(row).toBeVisible();
+    await expect(row).toHaveText('◎Focus on Uncle H1');
+    await expect(bubble.locator('.badge-tooltip-nested .badge-tooltip-body')).toHaveText('A new centre of the tree with all its branches.');
+    const h = (await row.boundingBox())!.height;
+    expect(h).toBeGreaterThanOrEqual(28);
+    await row.click();
+    await expect.poll(() => page.evaluate(() => window.Strom.TreeRenderer.getFocusPersonId())).toBe(SIBLINGS[0]);
+    await expect(page.locator('#focus-toast .focus-toast-box')).toHaveCount(0);
+    await page.waitForTimeout(300);
+    await expect(page.locator('#focus-toast .focus-toast-box')).toHaveCount(0);
+});
+
+test('the sheet offers the nested focus under the hide row; the context menu does not', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await setup(page);
+    await siblingsTab(page, PERSON).click();
+    await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), SIBLINGS[0]);
+    await childrenTab(page, SIBLINGS[0]).click();
+    await expect(cardOf(page, 'cousin_h_1')).toBeVisible();
+    // Desktop: the context menu leaves it out (the bubble has it)
+    await cardOf(page, SIBLINGS[0]).click();
+    const menu = page.locator('.context-menu:not(.context-submenu)');
+    await expect(menu).toBeVisible();
+    await expect(menu.locator('[data-action="toggle-children"]')).toHaveCount(1);
+    await expect(menu.locator('[data-action="nested-focus"]')).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    // The sheet (≤ 1024 px): the row stands right under "Hide the children shown here"
+    await page.setViewportSize({ width: 800, height: 900 });
+    await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), SIBLINGS[0]);
+    await cardOf(page, SIBLINGS[0]).click();
+    const sheet = page.locator('.bottom-sheet-person');
+    await expect(sheet).toBeVisible();
+    const actions = await sheet.locator('.bottom-sheet-item[data-action]').evaluateAll(els => els.map(e => (e as HTMLElement).dataset.action));
+    const i = actions.indexOf('nested-focus');
+    expect(i).toBeGreaterThan(0);
+    expect(actions[i - 1]).toBe('toggle-children');
+    const row = sheet.locator('.bottom-sheet-item[data-action="nested-focus"]');
+    await expect(row).toContainText('Focus on Uncle H1');
+    await expect(row.locator('xpath=following-sibling::*[1]')).toHaveText('A new centre of the tree with all its branches.');
+    await row.click();
+    await expect.poll(() => page.evaluate(() => window.Strom.TreeRenderer.getFocusPersonId())).toBe(SIBLINGS[0]);
+    await expect(page.locator('#focus-toast .focus-toast-box')).toHaveCount(0);
+});
+
+/**
+ * A depth raised after "▸ parents" draws those parents at the plain depth:
+ * the expansion has nothing left to show, so the tab no longer reads "▾"
+ * and the shown count drops; the parents stay drawn.
+ */
+test('raising the depth over parents shown here ends that expansion; the parents stay drawn', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await setup(page);
+    await parentsTab(page, PERSON).click();
+    await expect(cardOf(page, PARENTS[0])).toBeVisible();
+    expect(await shownCount(page)).toBe(1);
+    await page.evaluate(() => window.Strom.TreeRenderer.setFocusDepth(3, window.Strom.TreeRenderer.getFocusDepthDown()));
+    await expect(cardOf(page, PARENTS[0])).toBeVisible();
+    await expect.poll(() => page.evaluate(id => window.Strom.TreeRenderer.isParentsShown(id as never), PERSON)).toBe(false);
+    expect(await shownCount(page)).toBe(0);
+    await expect(cardOf(page, PERSON).locator('.branch-tab.parents-tab.active, .branch-tab.parents-tab[aria-pressed="true"]')).toHaveCount(0);
+    await expect(cardOf(page, PARENTS[0])).not.toHaveClass(/shown-here/);
+});

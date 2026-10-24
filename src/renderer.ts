@@ -553,6 +553,7 @@ class TreeRendererClass {
         this.layoutBands = result.bands ?? [];
         this.viewLayer = result.viewLayer ?? null;
         this.depthEdge = new Set(result.ancestorDepthEdge ?? []);
+        if (!descendantsOnly) this.pruneParentsShown(result.extraDepthDrawn ?? []);
         this.addOtherFamilyLinks();
 
         // Timeline, fan and map show the same person selection drawn their own
@@ -1183,6 +1184,28 @@ class TreeRendererClass {
         this.partnersUnshowable.clear();
         this.partnersZoom.clear();
         this.partnersAnchorScreen.clear();
+    }
+
+    /**
+     * Parents shown beyond the depth that the view now draws without it
+     * (a higher ancestor depth: the layout extended nobody for them,
+     * LayoutResult.extraDepthDrawn; or the person left the view): their
+     * "▾ parents" and its step go, the parents stay as the depth draws them.
+     * The children shown in place stay (the siblings shown with the parents
+     * keep their "▾ siblings", §1). The layout is the same with or without
+     * them, so the cards are drawn from this render's state.
+     */
+    private pruneParentsShown(drawn: readonly PersonId[]): void {
+        const keep = new Set(drawn);
+        const gone = this.parentsShownIds.filter(id => !keep.has(id));
+        if (gone.length === 0) return;
+        this.parentsShownIds = this.parentsShownIds.filter(id => keep.has(id));
+        for (const id of gone) {
+            this.parentsBroughtIn.delete(id);
+            this.parentsWithSiblings.delete(id);
+            this.parentsZoom.delete(id);
+            this.parentsAnchorScreen.delete(id);
+        }
     }
 
     /** Whether the view shows anyone's children, parents or other partners in place. */
@@ -2151,6 +2174,59 @@ class TreeRendererClass {
             : '';
     }
 
+    /** The generation of a drawn card counted from the focus's (0; ancestors negative, LayoutResult.bands), or null. */
+    private generationOf(id: PersonId): number | null {
+        const pos = this.positions.get(id);
+        if (!pos) return null;
+        return this.layoutBands.find(b => pos.y >= b.top - 1 && pos.y < b.top + b.height)?.generation ?? null;
+    }
+
+    /**
+     * Whether what the anchor's "▾" tab shows is a nested expansion (§6):
+     * the anchor is itself a card shown here (by another expansion), or it
+     * stands more than three generations from the focus. Its bubble and the
+     * sheet then offer "◎ Focus on …" (nestedFocusHtml). The tab's kind:
+     * the siblings of an anchor shown as a child of the same parents, and
+     * the children of parents shown with them by an edge ancestor's
+     * "▸ siblings" (§4), are that one expansion, not a nested one.
+     */
+    private isNestedShown(anchorId: PersonId, shownHere: ReadonlySet<PersonId>, tab: 'children' | 'siblings' | 'other'): boolean {
+        if (this.viewMode !== 'family' || anchorId === this.focusPersonId || !this.positions.has(anchorId)) return false;
+        const generation = this.generationOf(anchorId);
+        if (generation !== null && Math.abs(generation) > 3) return true;
+        if (!shownHere.has(anchorId)) return false;
+        if (tab === 'siblings') return !this.siblingsShownParents(anchorId).some(q => this.childrenBroughtIn.get(q)?.has(anchorId));
+        if (tab === 'children') return ![...this.parentsWithSiblings].some(p => this.siblingsShownFor.get(p)?.includes(anchorId));
+        return true;
+    }
+
+    /**
+     * Whether the person's sheet offers "◎ Focus on …" under its "Hide …
+     * shown here" row (§6): one of the person's "▾" tabs in the menu
+     * (parents, siblings, children) shows a nested expansion.
+     */
+    nestedFocusOffered(personId: PersonId): boolean {
+        if (this.viewMode !== 'family') return false;
+        const shownHere = this.shownHereIds();
+        return (this.isChildrenShown(personId) && this.isNestedShown(personId, shownHere, 'children'))
+            || (this.isParentsShown(personId) && this.isNestedShown(personId, shownHere, 'other'))
+            || (this.isSiblingsShown(personId) && this.isNestedShown(personId, shownHere, 'siblings'));
+    }
+
+    /**
+     * "◎ Focus on …" in a "▾" bubble of a nested expansion (§6): a row
+     * button that sets the focus on the anchor (a conscious choice: no
+     * confirmation toast), with what it does under it.
+     */
+    private nestedFocusHtml(anchorId: PersonId): string {
+        const person = DataManager.getPerson(anchorId);
+        if (!person) return '';
+        const label = strings.focus.nestedFocusRow(shownName(person, '?'));
+        return `<div class="badge-tooltip-nested"><button type="button" class="nested-focus-row" data-person-id="${this.escapeHtml(anchorId)}">`
+            + `<span class="nested-focus-glyph" aria-hidden="true">◎</span><span class="nested-focus-label">${this.escapeHtml(label)}</span></button>`
+            + `<div class="badge-tooltip-body">${this.escapeHtml(strings.focus.nestedFocusHint)}</div></div>`;
+    }
+
     /**
      * The person's siblings in a bubble (§6): by the union they were born
      * to — the full siblings, then the half siblings of each other marriage
@@ -2202,7 +2278,7 @@ class TreeRendererClass {
      * drawn elsewhere as rows that glide to them; a click hides them again,
      * on the parents too).
      */
-    private siblingsTabHtml(personId: PersonId, shown: boolean, fullTitle: string, unionChildIds: ReadonlySet<PersonId>): string {
+    private siblingsTabHtml(personId: PersonId, shown: boolean, fullTitle: string, unionChildIds: ReadonlySet<PersonId>, nested = false): string {
         const data = DataManager.getData();
         const inView = (id: PersonId) => this.positions.has(id);
         const elsewhere = this.siblingsElsewhereOf(personId);
@@ -2220,10 +2296,11 @@ class TreeRendererClass {
         const ids = newlyShownSiblingIds(data, personId, inView, this.childrenShownSet(), q => this.childrenVisibleBefore.get(q));
         const via = this.siblingsShownParents(personId)
             .map(q => DataManager.getPerson(q)).filter((p): p is Person => p !== null).map(p => shownNameFull(p, '?')).join(', ');
-        return `${tabHtml}</button><div class="badge-tooltip children-bubble siblings-bubble"><div class="badge-tooltip-header">${strings.focus.siblingsShownTooltip}</div>`
+        return `${tabHtml}</button><div class="badge-tooltip children-bubble siblings-bubble" data-bubble="siblings"><div class="badge-tooltip-header">${strings.focus.siblingsShownTooltip}</div>`
             + this.siblingGroupsHtml(personId, ids)
             + (via ? `<div class="badge-tooltip-body">${this.escapeHtml(strings.focus.siblingsShownVia(via))}</div>` : '')
             + this.elsewhereSectionHtml(elsewhere)
+            + (nested ? this.nestedFocusHtml(personId) : '')
             + `<div class="badge-tooltip-action">${strings.focus.siblingsTabHideHint}</div></div>`;
     }
 
@@ -2233,17 +2310,20 @@ class TreeRendererClass {
      * does), or "▾ parents" (active) naming the parents shown here; a click
      * hides them again with what they brought.
      */
-    private parentsTabHtml(personId: PersonId, shown: boolean, fullTitle: string): string {
+    private parentsTabHtml(personId: PersonId, shown: boolean, fullTitle: string, nested = false): string {
         const parentIds = DataManager.getPerson(personId)?.parentIds ?? [];
         const items = (shown ? this.shownParentsOf(personId) : parentIds.filter(q => !this.positions.has(q)))
             .map(q => DataManager.getPerson(q))
             .filter((p): p is Person => p !== null && !p.isPlaceholder)
             .map(p => this.bubbleItemHtml(p)).join('');
         const aria = (shown ? strings.focus.parentsTabHideAria : strings.focus.parentsTabShowAria)(fullTitle);
-        return `<button type="button" class="branch-tab parents-tab kind-place${shown ? ' active' : ''}" data-action="toggle-parents" aria-pressed="${shown}" aria-label="${this.escapeHtml(aria)}">`
-            + branchTabRestHtml(shown ? 'parentsShown' : 'parentsHere')
-            + `<div class="badge-tooltip"><div class="badge-tooltip-header">${shown ? strings.focus.parentsShownTooltip : strings.focus.hiddenParentsTooltip}</div>${items}`
-            + `<div class="badge-tooltip-action">${shown ? strings.focus.placeHideHint : strings.focus.placeShowHint}</div></div></button>`;
+        const button = `<button type="button" class="branch-tab parents-tab kind-place${shown ? ' active' : ''}" data-action="toggle-parents" aria-pressed="${shown}" aria-label="${this.escapeHtml(aria)}">`
+            + branchTabRestHtml(shown ? 'parentsShown' : 'parentsHere');
+        const body = `<div class="badge-tooltip-header">${shown ? strings.focus.parentsShownTooltip : strings.focus.hiddenParentsTooltip}</div>${items}`;
+        const action = `<div class="badge-tooltip-action">${shown ? strings.focus.placeHideHint : strings.focus.placeShowHint}</div>`;
+        // Nested (§6): the bubble beside the tab, its "◎ Focus on …" a button of its own
+        if (shown && nested) return `${button}</button><div class="badge-tooltip children-bubble" data-bubble="parents">${body}${this.nestedFocusHtml(personId)}${action}</div>`;
+        return `${button}<div class="badge-tooltip">${body}${action}</div></button>`;
     }
 
     /**
@@ -2314,6 +2394,11 @@ class TreeRendererClass {
                 close();
                 this.showChildElsewhereStep(row.dataset.personId as PersonId);
             });
+        });
+        // "◎ Focus on …" of a nested expansion (§6): a new focus, no confirmation (a conscious choice)
+        bubble.querySelector<HTMLElement>('.nested-focus-row')?.addEventListener('click', () => {
+            close();
+            void this.setFocus(personId);
         });
     }
 
@@ -3290,12 +3375,15 @@ class TreeRendererClass {
                 }
                 // An ancestor at the edge of the depth (§4): its parents in place
                 const parentsPlace = hiddenTabs.includes('parentsShown') ? 'parentsShown' : hiddenTabs.includes('parentsHere') ? 'parentsHere' : null;
-                if (parentsPlace) tabHtml.set(parentsPlace, this.parentsTabHtml(id, parentsPlace === 'parentsShown', fullTitle));
+                if (parentsPlace) tabHtml.set(parentsPlace, this.parentsTabHtml(id, parentsPlace === 'parentsShown', fullTitle, this.isNestedShown(id, shownHere, 'other')));
                 // The family of origin out of view (no anchor in it): a focus on the person (§4)
                 for (const kind of ['family', 'parents', 'siblings'] as const) {
                     if (hiddenTabs.includes(kind)) tabHtml.set(kind, this.focusTabHtml(id, kind, partnershipChildIds));
                 }
-                if (siblingsHere || siblingsShown) tabHtml.set(siblingsShown ? 'siblingsShown' : 'siblingsHere', this.siblingsTabHtml(id, siblingsShown, fullTitle, partnershipChildIds));
+                if (siblingsHere || siblingsShown) {
+                    tabHtml.set(siblingsShown ? 'siblingsShown' : 'siblingsHere',
+                        this.siblingsTabHtml(id, siblingsShown, fullTitle, partnershipChildIds, siblingsShown && this.isNestedShown(id, shownHere, 'siblings')));
+                }
                 // Children: shown in place and hidden again (the view stays)
                 if (hasHiddenChildren || childrenShown) {
                     // Shown: only the children the click brought into view
@@ -3327,7 +3415,8 @@ class TreeRendererClass {
                             .filter((q): q is Person => q !== null)
                             .map(q => `<div class="badge-tooltip-folded">${this.escapeHtml(strings.focus.childrenShownFoldedLine(shownNameFull(q, '?')))}</div>`)
                             .join('');
-                        tabHtml.set(kind, `${button}</button><div class="badge-tooltip children-bubble"><div class="badge-tooltip-header">${header}</div>${childItems}${foldedHtml}${elsewhereHtml}<div class="badge-tooltip-action">${hint}</div></div>`);
+                        const nestedHtml = this.isNestedShown(id, shownHere, 'children') ? this.nestedFocusHtml(id) : '';
+                        tabHtml.set(kind, `${button}</button><div class="badge-tooltip children-bubble" data-bubble="children"><div class="badge-tooltip-header">${header}</div>${childItems}${foldedHtml}${elsewhereHtml}${nestedHtml}<div class="badge-tooltip-action">${hint}</div></div>`);
                     }
                 }
             }
@@ -3344,7 +3433,8 @@ class TreeRendererClass {
             // Other partners (bottom-left edge slot, §5): "▸ ∞ N" shows the
             // partners of unions without children in place, "▾ ∞ N" hides them.
             const partnersPill = this.partnersPillOf(id, pid => this.positions.has(pid));
-            const hiddenIndicatorsHtml = partnersPill ? this.partnersPillHtml(id, partnersPill, fullTitle) : '';
+            const hiddenIndicatorsHtml = partnersPill
+                ? this.partnersPillHtml(id, partnersPill, fullTitle, partnersPill.shown && this.isNestedShown(id, shownHere, 'other')) : '';
 
             const isLocked = DataManager.isPersonLocked(id);
 
@@ -3681,7 +3771,7 @@ class TreeRendererClass {
                 e.stopPropagation();
                 void this.toggleChildrenShown(id);
             });
-            const childrenBubble = card.querySelector<HTMLElement>('.children-bubble:not(.siblings-bubble)');
+            const childrenBubble = card.querySelector<HTMLElement>('.children-bubble[data-bubble="children"]');
             if (childrenTab && childrenBubble) this.bindChildrenBubble(id, childrenTab, childrenBubble);
             // The siblings tab in place (§1): the parents' children, one step
             const siblingsTab = card.querySelector<HTMLElement>('.branch-tab.siblings-tab');
@@ -3694,10 +3784,14 @@ class TreeRendererClass {
                 this.bindChildrenBubble(id, siblingsTab, siblingsBubble, () => this.shownSiblingsInView(id));
             }
             // The parents tab in place (§4): the parents beyond the depth, one step
-            card.querySelector<HTMLElement>('.branch-tab.parents-tab')?.addEventListener('click', (e) => {
+            const parentsTab = card.querySelector<HTMLElement>('.branch-tab.parents-tab');
+            parentsTab?.addEventListener('click', (e) => {
                 e.stopPropagation();
                 void this.toggleParentsShown(id);
             });
+            // Its bubble beside it when nested (§6: "◎ Focus on …")
+            const parentsBubble = card.querySelector<HTMLElement>('.children-bubble[data-bubble="parents"]');
+            if (parentsTab && parentsBubble) this.bindChildrenBubble(id, parentsTab, parentsBubble, () => this.shownParentsOf(id));
             // The dashed "▸ parents" (§2): hide the children that folded the parents away
             card.querySelector<HTMLElement>('.branch-tab.folded')?.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -3731,10 +3825,13 @@ class TreeRendererClass {
             }
 
             // ∞ other partners (§5): shown here and hidden again, the view stays
-            card.querySelector('.hidden-partners-btn')?.addEventListener('click', (e) => {
+            const partnersBtn = card.querySelector<HTMLElement>('.hidden-partners-btn');
+            partnersBtn?.addEventListener('click', (e) => {
                 e.stopPropagation();
                 void this.togglePartnersShown(id);
             });
+            const partnersBubble = card.querySelector<HTMLElement>('.children-bubble[data-bubble="partners"]');
+            if (partnersBtn && partnersBubble) this.bindChildrenBubble(id, partnersBtn, partnersBubble, () => this.shownPartnersOf(id));
 
             // Attach event listeners to add buttons
             card.querySelectorAll('.add-btn').forEach(btn => {
@@ -4996,7 +5093,7 @@ class TreeRendererClass {
      * them with their marriage ("2. ∞ 1890", numbered as the marriage-order
      * pill counts) and ends with what a click does.
      */
-    private partnersPillHtml(id: PersonId, pill: { shown: boolean; ids: PersonId[] }, fullTitle: string): string {
+    private partnersPillHtml(id: PersonId, pill: { shown: boolean; ids: PersonId[] }, fullTitle: string, nested = false): string {
         const data = DataManager.getData();
         const order = marriagesInOrder(data, id);
         const items = pill.ids.map(q => {
@@ -5015,10 +5112,13 @@ class TreeRendererClass {
         const header = pill.shown ? strings.focus.partnersShownTooltip : strings.focus.hiddenPartnersTooltip;
         const hint = pill.shown ? strings.focus.placeHideHint : strings.focus.placeShowHint;
         const aria = (pill.shown ? strings.focus.partnersTabHideAria : strings.focus.partnersTabShowAria)(fullTitle);
-        return `<button type="button" class="hidden-partners-btn kind-place${pill.shown ? ' active' : ''}" data-action="toggle-partners" aria-pressed="${pill.shown}" aria-label="${this.escapeHtml(aria)}">`
-            + `<span class="pill-glyph">${pill.shown ? '▾' : '▸'}</span><span class="pill-glyph">∞</span><span class="pill-count">${pill.ids.length}</span>`
-            + `<div class="badge-tooltip" aria-hidden="true"><div class="badge-tooltip-header">${this.escapeHtml(header)}</div>${items}`
-            + `<div class="badge-tooltip-action">${this.escapeHtml(hint)}</div></div></button>`;
+        const button = `<button type="button" class="hidden-partners-btn kind-place${pill.shown ? ' active' : ''}" data-action="toggle-partners" aria-pressed="${pill.shown}" aria-label="${this.escapeHtml(aria)}">`
+            + `<span class="pill-glyph">${pill.shown ? '▾' : '▸'}</span><span class="pill-glyph">∞</span><span class="pill-count">${pill.ids.length}</span>`;
+        const body = `<div class="badge-tooltip-header">${this.escapeHtml(header)}</div>${items}`;
+        const action = `<div class="badge-tooltip-action">${this.escapeHtml(hint)}</div>`;
+        // Nested (§6): the bubble beside the pill, its "◎ Focus on …" a button of its own
+        if (nested) return `${button}</button><div class="badge-tooltip children-bubble" data-bubble="partners">${body}${this.nestedFocusHtml(id)}${action}</div>`;
+        return `${button}<div class="badge-tooltip" aria-hidden="true">${body}${action}</div></button>`;
     }
 
     /**

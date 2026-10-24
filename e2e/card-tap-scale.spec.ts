@@ -121,19 +121,24 @@ for (const scale of [0.3, 0.5, 1]) {
 }
 
 test.describe('at 1 the pills work by touch', () => {
-    /** Tap a pill on its middle, on its part over the card, or 6 px off the card past its outer edge. */
-    async function tapPill(page: Page, pill: Locator, where: 'middle' | 'inner' | 'outside'): Promise<void> {
+    /**
+     * Tap a pill on its middle, on its part over the card, 6 px off the card
+     * past its outer edge, or 15 px past it (§6: the pill stays 18 px, its
+     * touch area reaches 44 px beyond the card).
+     */
+    async function tapPill(page: Page, pill: Locator, where: 'middle' | 'inner' | 'outside' | 'far'): Promise<void> {
         const p = (await pill.boundingBox())!;
         const card = (await pill.locator('xpath=ancestor::div[contains(@class, "person-card")][1]').boundingBox())!;
         const top = p.y + p.height / 2 < card.y + card.height / 2;
         const y = where === 'middle' ? p.y + p.height / 2
             : where === 'inner' ? (top ? p.y + p.height - 3 : p.y + 3)
-            : top ? p.y - 6 : p.y + p.height + 6;
+            : where === 'outside' ? (top ? p.y - 6 : p.y + p.height + 6)
+            : top ? p.y - 15 : p.y + p.height + 15;
         await page.touchscreen.tap(p.x + p.width / 2, y);
     }
 
-    for (const where of ['middle', 'inner', 'outside'] as const) {
-        const words = { middle: 'on', inner: 'on the part over the card of', outside: 'just off the card beside' }[where];
+    for (const where of ['middle', 'inner', 'outside', 'far'] as const) {
+        const words = { middle: 'on', inner: 'on the part over the card of', outside: 'just off the card beside', far: '15 px off the card beside' }[where];
         test(`a tap ${words} each tab does what the tab does`, async ({ page }) => {
             await setupFixture(page, 'comprehensive', 'grandchild_1');
             await showChildren(page, 'father');

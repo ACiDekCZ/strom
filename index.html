@@ -3309,6 +3309,64 @@
         }
         .children-elsewhere-row:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; background: var(--primary-soft); }
         .children-bubble > .badge-tooltip-hint:last-child { margin-top: 2px; }
+        /* A nested expansion (§6: its anchor a card shown here, or more than
+           three generations from the focus): "◎ Focus on …" in the "▾"
+           bubble, a row button in the primary's soft tone, what it does
+           under it (src/renderer.ts nestedFocusHtml). */
+        .children-bubble:has(.badge-tooltip-nested) { min-width: 200px; }
+        .badge-tooltip-nested {
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid var(--divider);
+        }
+        .nested-focus-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            width: calc(100% + 12px);
+            min-height: 28px;
+            margin: 2px -6px 0;
+            padding: 4px 6px;
+            box-sizing: border-box;
+            border: none;
+            border-radius: 6px;
+            background: var(--primary-soft);
+            color: var(--primary-dark);
+            font: inherit;
+            font-weight: 600;
+            text-align: left;
+            cursor: pointer;
+        }
+        .nested-focus-glyph { flex: none; font-size: 13px; line-height: 1; }
+        .nested-focus-label { flex: 1 1 auto; min-width: 0; }
+        @media (hover: hover) {
+            .nested-focus-row:hover { background: color-mix(in srgb, var(--primary) 18%, var(--surface)); }
+        }
+        .nested-focus-row:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        @media (pointer: coarse) { .nested-focus-row { min-height: 44px; } }
+        .badge-tooltip-nested > .badge-tooltip-body { padding-top: 6px; }
+
+        /* Touch (§6): a pill keeps its 18px look; the tap reaches it on 44 × 44
+           px — a transparent area (::before) standing out of the card only,
+           beside the pill and away from the card's edge; behind every pill
+           of its row (z-index -1 in the edge's stacking context), so no pill
+           loses a tap to a neighbour's area. On the card the point the finger
+           touched decides as before (src/card-tap.ts). */
+        @media (pointer: coarse) {
+            .card-edge > :is(.branch-tab, .hidden-partners-btn, .cross-tree-badge) { position: relative; }
+            .card-edge > :is(.branch-tab, .hidden-partners-btn, .cross-tree-badge)::before {
+                content: '';
+                position: absolute;
+                z-index: -1;
+                left: 50%;
+                width: 100%;
+                min-width: 44px;
+                height: 35px;           /* + the pill's 9px over the card = 44 */
+                transform: translateX(-50%);
+            }
+            :is(.edge-top-right, .edge-top-left) > :is(.branch-tab, .hidden-partners-btn, .cross-tree-badge)::before { bottom: 50%; }
+            :is(.edge-bottom-left, .edge-bottom-right) > :is(.branch-tab, .hidden-partners-btn, .cross-tree-badge)::before { top: 50%; }
+        }
 
         /* Sibling-order pill (children shown in place, src/marriage-order.ts
            siblingOrderMark): "2 of 5" on the bottom-right edge of the
@@ -15001,6 +15059,9 @@
         .context-menu:has(.menu-item-kind) > .menu-section-header { padding-left: 44px; }
         .bottom-sheet-person:has(.menu-item-kind) .bottom-sheet-item:not(.sheet-tile):not(.menu-chip):not(:has(> .menu-item-kind)),
         .bottom-sheet-person:has(.menu-item-kind) .bottom-sheet-section { padding-left: 46px; }
+        /* A nested expansion's "◎ Focus on …" under its "Hide … shown here" row (§6). */
+        .bottom-sheet-item[data-action="nested-focus"] { background: var(--primary-soft); color: var(--primary-dark); font-weight: 600; }
+        .bottom-sheet-item[data-action="nested-focus"] .menu-item-kind { color: var(--primary-dark); }
         /* The focus tile: ◎ in its top left corner. */
         .bottom-sheet-person .sheet-tile[data-action="focus"] { position: relative; }
         .bottom-sheet-person .sheet-tile[data-action="focus"]::before {
