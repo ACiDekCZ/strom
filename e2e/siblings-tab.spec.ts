@@ -645,6 +645,16 @@ test.describe('touch, phone held sideways 844 × 390', () => {
         expect(a.y + a.height).toBeLessThanOrEqual(b.y + b.height + 0.5);
     }
 
+    /** A cut bubble: its last line reaches down to its bottom border, no cut name showing under it. */
+    async function expectActionAtBottom(bubble: ReturnType<Page['locator']>): Promise<void> {
+        await expect(bubble).toHaveClass(/\bbubble-clipped\b/);
+        const gap = await bubble.evaluate(el => {
+            const action = el.querySelector(':scope > .badge-tooltip-action')!.getBoundingClientRect();
+            return el.getBoundingClientRect().bottom - parseFloat(getComputedStyle(el).borderBottomWidth) - action.bottom;
+        });
+        expect(Math.abs(gap)).toBeLessThan(0.5);
+    }
+
     test('a bubble opens below its tab with its arrow, never over the tab or the top bar, as tall as the window lets it', async ({ page }) => {
         await setup(page);
         const tab = siblingsTab(page, PERSON);
@@ -666,7 +676,7 @@ test.describe('touch, phone held sideways 844 × 390', () => {
         await cardAt(page, PERSON, 300);
         await hold(page, tab);
         await expectBelow(page, tab, bubble);
-        await expect(bubble).toHaveClass(/\bbubble-clipped\b/);
+        await expectActionAtBottom(bubble);
     });
 
     test('a low window lists 4 names at most, "and n more" the rest', async ({ page }) => {
@@ -709,6 +719,7 @@ test.describe('touch, phone held sideways 844 × 390', () => {
         const a = (await action.boundingBox())!;
         expect(a.y).toBeGreaterThanOrEqual(b.y);
         expect(a.y + a.height).toBeLessThanOrEqual(b.y + b.height + 0.5);
+        await expectActionAtBottom(bubble);
     });
 });
 

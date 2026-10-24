@@ -3276,9 +3276,11 @@
         }
         /* Taller than the window even with one name a group (TreeRenderer.fitBubbleNames lists fewer names first): cut, no scrollbar;
            its last line (what a click does) stays whole at its bottom, over the names cut. By touch the
-           max-height reaches from its top to 8 px over the window's bottom (TreeRenderer.placeTouchBubble). */
+           max-height reaches from its top to 8 px over the window's bottom (TreeRenderer.placeTouchBubble).
+           A sticky line stops at the bubble's padding: bottom -10px (its bottom padding) takes it down
+           to the border, so no name cut under it shows in that padding. */
         .badge-tooltip[popover].bubble-clipped { overflow: hidden; }
-        .badge-tooltip[popover].bubble-clipped > .badge-tooltip-action { position: sticky; bottom: 0; padding-bottom: 10px; background: var(--surface); }
+        .badge-tooltip[popover].bubble-clipped > .badge-tooltip-action { position: sticky; bottom: -10px; padding-bottom: 10px; background: var(--surface); }
         .badge-tooltip[popover]::after { left: var(--arrow-x, 50%); }
         /* Moved over its own tab to stay whole in the window (a low window,
            by touch): no arrow, it would point past the tab at nothing. */
