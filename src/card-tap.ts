@@ -11,12 +11,15 @@
  *
  * Here the point the finger touched decides. A touch click the browser gave
  * to an edge pill while the finger stood on a card goes to what is under the
- * finger, as a tap there would: the card, or another pill. The pill keeps:
- * - the finger on the pill itself, from 60 % zoom (below, the half over the
- *   card is a few pixels high, no finger aims at it: it is the card's);
+ * finger, as a tap there would: the card, or another pill. From 60 % zoom
+ * the pill keeps:
+ * - the finger on the pill itself;
  * - the finger off the cards: the half of the pill standing out of the card
- *   and the finger-sized area the browser gives it around (so a line link
- *   still jumps from a view zoomed far out).
+ *   and the finger-sized area the browser gives it around.
+ * Below 60 % the whole pill is its card's (round 5 §37): the part standing
+ * out of the card and the area around it too, a tap there opens the
+ * person's menu as a tap on the card does (a long press too, pillUnderFinger);
+ * a finger on another card is that card's.
  */
 
 import { ZoomPan } from './zoom.js';
@@ -37,26 +40,29 @@ export function installCardTapTarget(): void {
     document.addEventListener('click', onClick, true);
 }
 
-/** The element a tap at (x, y) is for, when it is not the given pill: on a card, else null. */
+/**
+ * The element a tap at (x, y) is for, when it is not the given pill: on a
+ * card, else null (the pill's). Zoomed out below 60 % never the pill: the
+ * card under the finger, else the pill's own card.
+ */
 function cardTargetAt(pill: Element, x: number, y: number): Element | null {
     const pillsTakeCard = ZoomPan.getScale() >= PILL_OVER_CARD_MIN_SCALE;
     for (const el of document.elementsFromPoint(x, y)) {
         const inPill = el.closest('.card-edge > *');
         if (inPill && !pillsTakeCard) continue;          // zoomed out: the card under the pill
         if (inPill === pill) return null;                // the finger on the pill itself
-        return el.closest('#tree-canvas .person-card') ? el : null;
+        if (el.closest('#tree-canvas .person-card')) return el;
+        break;
     }
-    return null;
+    return pillsTakeCard ? null : pill.closest('#tree-canvas .person-card');
 }
 
 /**
  * The edge pill a long press at (x, y) is for (its bubble opens): the finger
  * on the pill itself from 60 % zoom; else null, the press is the card's (the
  * person's menu). Below 60 % a long press is the card's wherever on its
- * pills the finger stands (round 4 §31): under 55 % the tabs are a glyph
- * only and a tap there is the card's too, between 55 and 60 % the tap on
- * the pill's part over the card is the card's and a bubble no finger aims at
- * stays shut.
+ * pills the finger stands (round 4 §31, round 5 §37), as a tap there is:
+ * no bubble opens.
  */
 export function pillUnderFinger(x: number, y: number): HTMLElement | null {
     if (ZoomPan.getScale() < PILL_OVER_CARD_MIN_SCALE) return null;

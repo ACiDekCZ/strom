@@ -110,9 +110,9 @@ test('the poster labels both ends of the left-out line, without the arrow', asyn
 const READABLE = 0.75;
 
 /** Zoom far out, the card in the middle (its tabs still there to press). */
-async function zoomFarOut(page: Page, id: string): Promise<void> {
-    await page.evaluate(cardId => window.Strom.ZoomPan.glideToPerson(cardId as never, 0.3, 0), id);
-    await expect.poll(() => page.evaluate(() => window.Strom.ZoomPan.getScale())).toBeCloseTo(0.3, 2);
+async function zoomFarOut(page: Page, id: string, scale = 0.3): Promise<void> {
+    await page.evaluate(([cardId, s]) => window.Strom.ZoomPan.glideToPerson(cardId as never, s as number, 0), [id, scale] as const);
+    await expect.poll(() => page.evaluate(() => window.Strom.ZoomPan.getScale())).toBeCloseTo(scale, 2);
 }
 
 /** How far the card's centre stands from the middle of the tree's viewport (px). */
@@ -124,16 +124,16 @@ async function offCentre(page: Page, id: string): Promise<number> {
     }, id);
 }
 
-async function jumpsReadably(page: Page, press: (tab: Locator) => Promise<void>): Promise<void> {
+async function jumpsReadably(page: Page, press: (tab: Locator) => Promise<void>, scale = 0.3): Promise<void> {
     // "child ↗" from a view zoomed far out: the child in the middle, readable, highlighted
-    await zoomFarOut(page, PARENTS[0]);
+    await zoomFarOut(page, PARENTS[0], scale);
     await press(cardOf(page, PARENTS[0]).locator('.branch-tab.line-link[data-action="jump-child"]'));
     await expect(cardOf(page, CHILD)).toHaveClass(/highlighted/);
     await expect.poll(() => page.evaluate(() => window.Strom.ZoomPan.getScale())).toBeGreaterThanOrEqual(READABLE);
     expect(await inView(page, CHILD)).toBe(true);
     expect(await offCentre(page, CHILD)).toBeLessThanOrEqual(3);
     // "parents ↗" from far out: both parents, together, readable
-    await zoomFarOut(page, CHILD);
+    await zoomFarOut(page, CHILD, scale);
     await press(cardOf(page, CHILD).locator('.branch-tab.line-link[data-action="jump-parents"]'));
     await expect.poll(() => page.evaluate(() => window.Strom.ZoomPan.getScale())).toBeGreaterThanOrEqual(READABLE);
     for (const id of PARENTS) {
@@ -151,13 +151,9 @@ test('a jump from a view zoomed far out lands readable: the other end in the mid
 test.describe('phone 390 × 844', () => {
     test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
-    test('a jump from a view zoomed far out lands readable on a phone too', async ({ page }) => {
+    test('a jump from a view zoomed out lands readable on a phone too', async ({ page }) => {
         await setup(page, null);
-        // Zoomed far out the pill's few pixels over the card are the card's (src/card-tap.ts): a tap on its part above the card
-        await jumpsReadably(page, async tab => {
-            const t = (await tab.boundingBox())!;
-            const card = (await tab.locator('xpath=ancestor::div[contains(@class, "person-card")][1]').boundingBox())!;
-            await page.touchscreen.tap(t.x + t.width / 2, (t.y + card.y) / 2);
-        });
+        // Below 0.6 a tap on a pill is its card's (round 5 §37, src/card-tap.ts): from 0.6, the farthest a tap jumps
+        await jumpsReadably(page, tab => tab.tap(), 0.6);
     });
 });

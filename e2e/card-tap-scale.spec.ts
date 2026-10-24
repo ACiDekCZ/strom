@@ -10,9 +10,10 @@ import { openApp } from './helpers.js';
  * moves a finger's tap onto the nearest button within the finger's area
  * (touch adjustment), and the card holding the pills was never a candidate:
  * zoomed out to 0.3 a tap in the middle of the 56 × 19 px card hid its
- * shown children or set the focus. A pill takes the taps beside it off the
- * card and, from 0.6 on, the ones on itself; a tap on the card beside it (and
- * zoomed out, on its few pixels over the card) stays the card's (src/card-tap.ts).
+ * shown children or set the focus. From 0.6 on a pill takes the taps on
+ * itself and beside it off the card; a tap on the card beside it stays the
+ * card's; below 0.6 the whole pill is the card's (round 5 §37,
+ * src/card-tap.ts).
  * Invented fixtures only.
  */
 
@@ -116,6 +117,56 @@ for (const scale of [0.3, 0.5, 1]) {
             await setupFixture(page, 'edge-ancestor-inner-siblings', 'focus');
             await showChildren(page, 'f_m_f');
             await expectCardTaps(page, 'f_f', ['.branch-tab.folded'], scale);
+        });
+    });
+}
+
+/**
+ * Below 0.6 the whole pill is the card's (round 5 §37): a tap on its part
+ * standing out of the card, or just off the card in its 44 px touch area,
+ * opens the person's sheet as a tap on the card does; the pill's own action
+ * (hide the children, show the siblings, jump, show the partners) does not
+ * happen. From 0.6 those taps stay the pill's ("at 1 the pills work").
+ */
+async function expectOutTapsCard(page: Page, id: string, pills: string[], scale: number): Promise<void> {
+    await zoomTo(page, id, scale);
+    const card = cardOf(page, id);
+    const name = await nameOf(page, id);
+    const before = await state(page);
+    for (const sel of pills) {
+        const pill = card.locator(sel);
+        await expect(pill, `${id} ${sel}`).toHaveCount(1);
+        const c = (await card.boundingBox())!;
+        const p = (await pill.boundingBox())!;
+        const top = p.y + p.height / 2 < c.y + c.height / 2;
+        // its part standing out of the card, and 3 px off it past its outer edge
+        const out = top ? (p.y + c.y) / 2 : (p.y + p.height + c.y + c.height) / 2;
+        const off = top ? p.y - 3 : p.y + p.height + 3;
+        expect(top ? out < c.y : out > c.y + c.height, `${sel} stands out of the card`).toBe(true);
+        for (const y of [out, off]) {
+            const label = `${id} at ${scale}, ${sel} at y ${y.toFixed(1)}`;
+            await page.touchscreen.tap(p.x + p.width / 2, y);
+            await expect.poll(async () => (await state(page)).sheet, label).toContain(name);
+            expect(await state(page), label).toEqual({ ...before, sheet: expect.stringContaining(name) });
+            await page.evaluate(() => window.Strom.UI.hideBottomSheet());
+            await expect(page.locator('.bottom-sheet-person')).toHaveCount(0);
+        }
+    }
+}
+
+for (const scale of [0.3, 0.57]) {
+    test.describe(`zoomed to ${scale}, the whole pill is the card's (round 5 §37)`, () => {
+        test('a tap on a tab\'s part standing out of the card opens the card\'s sheet, not the tab\'s action', async ({ page }) => {
+            await setupFixture(page, 'comprehensive', 'grandchild_1');
+            await showChildren(page, 'father');
+            await expectOutTapsCard(page, 'father', ['.branch-tab.siblings-tab', '.branch-tab.children-tab.active'], scale);
+            await setupFixture(page, 'edge-childless-partners', 'f');
+            await expectOutTapsCard(page, 'gf', ['.hidden-partners-btn'], scale);
+        });
+
+        test('a line link\'s part standing out of the card is the card\'s too: no jump', async ({ page }) => {
+            await setupFixture(page, 'edge-children-elsewhere', 'focus');
+            await expectOutTapsCard(page, 'v_mo', ['.branch-tab.line-link[data-action="jump-child"]'], scale);
         });
     });
 }
