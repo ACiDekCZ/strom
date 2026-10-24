@@ -943,6 +943,124 @@ function collectBlockSubtree(blockId: FamilyBlockId, blocks: Map<FamilyBlockId, 
     return out;
 }
 
+/** A person's card center as the blocks have it now (undefined: not laid out). */
+function personCenterInBlocks(
+    personId: PersonId,
+    blocks: Map<FamilyBlockId, FamilyBlock>,
+    model: LayoutModel,
+    unionToBlock: Map<UnionId, FamilyBlockId>,
+    config: LayoutConfig
+): number | undefined {
+    const unionId = model.personToUnion.get(personId);
+    const blockId = unionId ? unionToBlock.get(unionId) : undefined;
+    const block = blockId ? blocks.get(blockId) : undefined;
+    if (!block) return undefined;
+    if (block.chainInfo) return block.chainInfo.personPositions.get(personId);
+    const union = model.unions.get(block.rootUnionId);
+    if (!union) return undefined;
+    if (!union.partnerB) return union.partnerA === personId ? block.xCenter : undefined;
+    const [leftId, rightId] = union.swapped ? [union.partnerB, union.partnerA] : [union.partnerA, union.partnerB];
+    const offset = config.partnerGap / 2 + config.cardWidth / 2;
+    return personId === leftId ? block.xCenter - offset : personId === rightId ? block.xCenter + offset : undefined;
+}
+
+/**
+ * An ancestor's other partner in a partner chain stands next to the partner,
+ * not across the room the chain kept for the couple's children.
+ *
+ * A chain block sizes the primary couple's area for the couple's children
+ * and stops an extra partner who has children at the inner edge of their own
+ * slot (measure/placement: the stem must stay above the children). In the
+ * ancestor rows that area is empty: Phase B lays the couple's children out
+ * as a sibling run around the direct-line child, wherever the tree needs
+ * them, so the extra partner stood one or more card widths away from the
+ * partner with nothing in between, and their stem away from their own
+ * children (ancestors' children shown in place, PipelineInput.expandChildrenOf).
+ *
+ * Each extra partner moves toward the partner, from the couple outward, up to
+ * the card beside them; one with children drawn stops where the stem reaches
+ * the nearest child's center (never moving away from the children), and never
+ * farther from their own parents' line than before. Only the ancestor rows
+ * (gen <= -2) move: Phase B owns them; the cards stay inside the chain's own
+ * stretch of the row, so no other card is in the way.
+ */
+function gatherAncestorChainPartners(
+    blocks: Map<FamilyBlockId, FamilyBlock>,
+    model: LayoutModel,
+    unionToBlock: Map<UnionId, FamilyBlockId>,
+    config: LayoutConfig
+): void {
+    const half = config.cardWidth / 2;
+    for (const [, block] of blocks) {
+        const chain = block.chainInfo;
+        if (!chain || block.generation > -2) continue;
+        const order = chain.personOrder;
+        const primary = chain.primaryCouple ?? [];
+        const first = order.findIndex(p => primary.includes(p));
+        if (first < 0) continue;
+        let last = first;
+        while (last + 1 < order.length && primary.includes(order[last + 1])) last++;
+        const positions = chain.personPositions;
+
+        // The drawn children of the unions each extra partner stems
+        const childCenters = new Map<PersonId, number[]>();
+        for (const unionId of chain.unionIds) {
+            const union = model.unions.get(unionId);
+            if (!union) continue;
+            const extra = findChainExtraPartner(union, chain, model);
+            if (!extra) continue;
+            const list = childCenters.get(extra) ?? [];
+            for (const childId of union.childIds) {
+                const x = personCenterInBlocks(childId, blocks, model, unionToBlock, config);
+                if (x !== undefined) list.push(x);
+            }
+            childCenters.set(extra, list);
+        }
+        // Where the person's parents' line comes down (undefined: no parents in view)
+        const parentsX = (pid: PersonId): number | undefined => {
+            const unionId = model.childToParentUnion.get(pid);
+            const union = unionId ? model.unions.get(unionId) : undefined;
+            if (!union || !unionToBlock.has(unionId!)) return undefined;
+            const xs = [union.partnerA, union.partnerB]
+                .map(p => p ? personCenterInBlocks(p, blocks, model, unionToBlock, config) : undefined)
+                .filter((x): x is number => x !== undefined);
+            return xs.length > 0 ? xs.reduce((a, b) => a + b, 0) / xs.length : undefined;
+        };
+
+        let edge = (positions.get(order[first]) ?? 0) - half;
+        for (let i = first - 1; i >= 0; i--) {
+            const pid = order[i];
+            const current = positions.get(pid);
+            if (current === undefined) continue;
+            const beside = edge - config.partnerGap - half;
+            const kids = childCenters.get(pid) ?? [];
+            const target = kids.length > 0 ? Math.min(beside, Math.max(current, Math.max(...kids))) : beside;
+            let next = Math.max(current, target);
+            // Never farther from the person's own parents than now
+            const up = parentsX(pid);
+            if (up !== undefined) next = Math.max(current, Math.min(next, up + Math.abs(current - up)));
+            positions.set(pid, next);
+            edge = next - half;
+        }
+        edge = (positions.get(order[last]) ?? 0) + half;
+        for (let i = last + 1; i < order.length; i++) {
+            const pid = order[i];
+            const current = positions.get(pid);
+            if (current === undefined) continue;
+            const beside = edge + config.partnerGap + half;
+            const kids = childCenters.get(pid) ?? [];
+            const target = kids.length > 0 ? Math.max(beside, Math.min(current, Math.min(...kids))) : beside;
+            let next = Math.min(current, target);
+            const up = parentsX(pid);
+            if (up !== undefined) next = Math.min(current, Math.max(next, up - Math.abs(current - up)));
+            positions.set(pid, next);
+            edge = next + half;
+        }
+        block.husbandAnchorX = positions.get(order[0]) ?? block.husbandAnchorX;
+        block.wifeAnchorX = positions.get(order[order.length - 1]) ?? block.wifeAnchorX;
+    }
+}
+
 /**
  * Put each node's sibling runs (attachSiblingRuns) into the room the tree kept
  * beside the couple, in sibling order, each with its own blocks below it.
@@ -1551,6 +1669,8 @@ export function applyConstraints(input: ConstraintsInput): ConstrainedModel {
             const delta = resolveOverlapsOutward(blocks, model, fbm.unionToBlock, config);
             if (delta < 0.5) break;
         }
+
+        gatherAncestorChainPartners(blocks, model, fbm.unionToBlock, config);
     }
 
     // Verify Phase B didn't modify any descendant (gen>=-1) positions
@@ -2042,9 +2162,33 @@ function resolveParentCoupleOverlaps(
                 delta = -overlap;
             }
 
-            shiftAncestorComponent(target.block.id, delta, blocks, other.block.id);
-            target.left += delta;
-            target.right += delta;
+            const component = collectAncestorComponent(target.block.id, blocks, model, other.block.id);
+            if (other.block.id === focusParentBlockId) {
+                // Clear the focus parents with the whole component at once: its
+                // gen -1 cards can stand on both sides of the couple (children
+                // of an ancestor's sibling placed under their parents), and
+                // pushing one card at a time only moves another one into it.
+                let compLeft = Infinity, compRight = -Infinity;
+                for (const id of component) {
+                    const b = blocks.get(id);
+                    if (!b || b.generation !== -1) continue;
+                    const ext = getBlockCardExtent(b, model, config);
+                    compLeft = Math.min(compLeft, ext.left);
+                    compRight = Math.max(compRight, ext.right);
+                }
+                if (isFinite(compLeft) && compLeft < other.right + config.horizontalGap && compRight > other.left - config.horizontalGap) {
+                    delta = delta < 0
+                        ? Math.min(delta, other.left - config.horizontalGap - compRight)
+                        : Math.max(delta, other.right + config.horizontalGap - compLeft);
+                }
+            }
+            for (const id of component) {
+                const b = blocks.get(id);
+                if (b) shiftBlock(b, delta);
+            }
+            for (const entry of genMinus1) {
+                if (component.has(entry.block.id)) { entry.left += delta; entry.right += delta; }
+            }
             shifted = true;
         }
         genMinus1.sort((a, b) => a.left - b.left);
@@ -2053,9 +2197,10 @@ function resolveParentCoupleOverlaps(
 }
 
 /**
- * Shift a block together with its ancestor component: the block itself, all
+ * The ancestor component of a block: the block itself, all
  * blocks reachable upward via parentBlockId, and their subtrees — but never
- * any block at gen >= 0 (descendant positions are locked by Phase A).
+ * any block at gen >= 0 (descendant positions are locked by Phase A). It
+ * moves as one when the block is pushed out of an overlap.
  *
  * `forbiddenBlockId` (the block this one is being pushed away from) must not
  * be dragged along. In a pedigree collapse the two couples share an ancestor
@@ -2063,14 +2208,33 @@ function resolveParentCoupleOverlaps(
  * other couple and move both together. The upward walk stops before any
  * ancestor whose subtree contains the forbidden block; the shared ancestors
  * stay put and Phase B re-places them.
+ *
+ * A block hangs under ONE parent block (parentBlockId), but a couple has two
+ * sets of parents: the forbidden couple can be the child of an ancestor's
+ * union through the other partner (the focus's mother is a daughter of the
+ * block walked into, while the parents' block hangs under the father's
+ * parents). That ancestor's subtree does not contain the forbidden block, yet
+ * moving it would move the forbidden couple's siblings into the couple, so
+ * the walk stops there too.
  */
-function shiftAncestorComponent(
+function collectAncestorComponent(
     blockId: FamilyBlockId,
-    deltaX: number,
     blocks: Map<FamilyBlockId, FamilyBlock>,
+    model: LayoutModel,
     forbiddenBlockId?: FamilyBlockId
-): void {
+): Set<FamilyBlockId> {
     const component = new Set<FamilyBlockId>();
+    const forbiddenBlock = forbiddenBlockId ? blocks.get(forbiddenBlockId) : undefined;
+    const forbiddenUnion = forbiddenBlock ? model.unions.get(forbiddenBlock.rootUnionId) : undefined;
+    const forbiddenParentUnions = new Set<UnionId>();
+    for (const pid of [forbiddenUnion?.partnerA, forbiddenUnion?.partnerB]) {
+        const up = pid ? model.childToParentUnion.get(pid) : undefined;
+        if (up) forbiddenParentUnions.add(up);
+    }
+    const parentOfForbidden = (ids: Set<FamilyBlockId>) => [...ids].some(id => {
+        const b = blocks.get(id);
+        return !!b && (forbiddenParentUnions.has(b.rootUnionId) || (b.chainInfo?.unionIds ?? []).some(u => forbiddenParentUnions.has(u)));
+    });
 
     // Walk UP via parentBlockId, collecting each ancestor's subtree
     let currentId: FamilyBlockId | null = blockId;
@@ -2080,16 +2244,12 @@ function shiftAncestorComponent(
 
         const levelSubtree = new Set<FamilyBlockId>();
         collectSubtreeAboveGen0(currentId, blocks, levelSubtree);
-        if (forbiddenBlockId && levelSubtree.has(forbiddenBlockId)) break;
+        if (forbiddenBlockId && (levelSubtree.has(forbiddenBlockId) || parentOfForbidden(levelSubtree))) break;
 
         for (const id of levelSubtree) component.add(id);
         currentId = block.parentBlockId;
     }
-
-    for (const id of component) {
-        const block = blocks.get(id);
-        if (block) shiftBlock(block, deltaX);
-    }
+    return component;
 }
 
 /**

@@ -168,6 +168,36 @@ export function placeX(input: PlaceXInput): PlacedModel {
 // ==================== PHASE A: DESCENDANTS (TOP-DOWN) ====================
 
 /**
+ * The room a child block takes in its row when it is placed under its
+ * parents' block. An ancestor-row block's envelopeWidth reserves the width of
+ * the ancestor tree above it (its parents' envelope, recursively), which is
+ * the parents' block itself here: spacing the children of an ancestor's
+ * sibling by it would scatter them a whole ancestor tree apart. Their
+ * measured subtree width is their footprint. Below the ancestor rows the two
+ * are the same.
+ *
+ * In the parents' row (generation -1) a block keeps the envelope when a
+ * partner of it has parents drawn (the focus's parents, an aunt married to a
+ * man whose parents are in view): that ancestor tree stands above the block
+ * and Phase A locks the row, so Phase B could not move the block out of its
+ * way later. Rows from the grandparents up are rearranged by Phase B (sibling
+ * runs, the outward overlap passes).
+ */
+function descendantRowWidth(block: FamilyBlock, parentBlock: FamilyBlock, model: LayoutModel): number {
+    if (block.generation >= 0) return block.envelopeWidth;
+    if (block.generation < -1) return block.width;
+    const union = model.unions.get(block.rootUnionId);
+    if (!union) return block.width;
+    const parentUnions = new Set<UnionId>(parentBlock.chainInfo?.unionIds ?? [parentBlock.rootUnionId]);
+    const inLawTree = [union.partnerA, union.partnerB].some(pid => {
+        if (!pid) return false;
+        const up = model.childToParentUnion.get(pid);
+        return up !== undefined && !parentUnions.has(up) && model.unions.has(up);
+    });
+    return inLawTree ? block.envelopeWidth : block.width;
+}
+
+/**
  * Place all descendants of a block top-down using envelope widths.
  * Children are placed left-to-right using envelopeWidth for spacing,
  * then shifted so parent is centered over children's couple-bounds.
@@ -194,7 +224,7 @@ function placeDescendantsTopDown(
     for (const childId of parentBlock.childBlockIds) {
         const childBlock = blocks.get(childId);
         if (childBlock) {
-            totalWidth += childBlock.envelopeWidth;
+            totalWidth += descendantRowWidth(childBlock, parentBlock, model);
         }
     }
     totalWidth += (parentBlock.childBlockIds.length - 1) * config.horizontalGap;
@@ -204,10 +234,10 @@ function placeDescendantsTopDown(
     for (const childId of parentBlock.childBlockIds) {
         const childBlock = blocks.get(childId);
         if (!childBlock) continue;
-        const childCenter = x + childBlock.envelopeWidth / 2;
+        const childCenter = x + descendantRowWidth(childBlock, parentBlock, model) / 2;
         setBlockPosition(childBlock, childCenter, config);
         placedBlocks.add(childId);
-        x += childBlock.envelopeWidth + config.horizontalGap;
+        x += descendantRowWidth(childBlock, parentBlock, model) + config.horizontalGap;
     }
 
     // Step 3: Compute couple-bounds centering correction
@@ -296,7 +326,7 @@ function placeChainChildrenPerUnion(
         let groupWidth = 0;
         for (const cbId of childBlockIds) {
             const cb = blocks.get(cbId);
-            if (cb) groupWidth += cb.envelopeWidth;
+            if (cb) groupWidth += descendantRowWidth(cb, parentBlock, model);
         }
         groupWidth += (childBlockIds.length - 1) * config.horizontalGap;
 
@@ -331,10 +361,10 @@ function placeChainChildrenPerUnion(
         for (const cbId of group.childBlockIds) {
             const cb = blocks.get(cbId);
             if (!cb) continue;
-            const childCenter = x + cb.envelopeWidth / 2;
+            const childCenter = x + descendantRowWidth(cb, parentBlock, model) / 2;
             setBlockPosition(cb, childCenter, config);
             placedBlocks.add(cbId);
-            x += cb.envelopeWidth + config.horizontalGap;
+            x += descendantRowWidth(cb, parentBlock, model) + config.horizontalGap;
         }
     }
 

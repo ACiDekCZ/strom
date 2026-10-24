@@ -156,6 +156,177 @@ describe('Children shown in place: full pipeline invariants', () => {
     }
 });
 
+/** Stem of the person's union lines to the nearest edge of the children's span (0: the stem is over the children). */
+function stemToSpan(data: StromData, r: { positions: Map<PersonId, { x: number }>; connections: { stemX: number; drops: { personId: PersonId }[] }[] }, pid: PersonId, cw: number): number {
+    let best = 0;
+    for (const c of r.connections) {
+        const kids = c.drops.map(d => d.personId).filter(id => r.positions.has(id));
+        if (!kids.some(id => data.persons[id]?.parentIds.includes(pid))) continue;
+        const xs = kids.map(id => r.positions.get(id)!.x);
+        const lo = Math.min(...xs), hi = Math.max(...xs) + cw;
+        best = Math.max(best, c.stemX < lo ? lo - c.stemX : c.stemX > hi ? c.stemX - hi : 0);
+    }
+    return best;
+}
+
+/** Empty room in the row between the person and each partner drawn in it (cards standing between them are not empty room). */
+function partnerRoom(data: StromData, positions: Map<PersonId, { x: number; y: number }>, pid: PersonId, cw: number): number {
+    const p = positions.get(pid);
+    if (!p) return 0;
+    let best = 0;
+    for (const uid of data.persons[pid]?.partnerships ?? []) {
+        const u = data.partnerships[uid];
+        if (!u) continue;
+        const q = positions.get(u.person1Id === pid ? u.person2Id : u.person1Id);
+        if (!q || Math.abs(q.y - p.y) > 1) continue;
+        const lo = Math.min(p.x, q.x), hi = Math.max(p.x, q.x);
+        const between = [...positions.values()].filter(o => Math.abs(o.y - p.y) < 1 && o.x > lo && o.x < hi).map(o => o.x).sort((a, b) => a - b);
+        let room = 0, at = lo + cw;
+        for (const x of [...between, hi]) { room += Math.max(0, x - at); at = Math.max(at, x + cw); }
+        best = Math.max(best, room);
+    }
+    return best;
+}
+
+/** The focus and every ancestor of the focus. */
+function directLine(data: StromData, focus: PersonId): Set<PersonId> {
+    const line = new Set<PersonId>([focus]);
+    const todo = [focus];
+    while (todo.length) {
+        for (const p of data.persons[todo.pop()!]?.parentIds ?? []) {
+            if (!line.has(p)) { line.add(p); todo.push(p); }
+        }
+    }
+    return line;
+}
+
+describe('Children shown in place: two clicks deep, near their parents', () => {
+    // A child the first click showed shows its own children. Both persons'
+    // lines come down over (or within two card widths of) their children, and
+    // each stands within two card widths of their partners: two card widths is
+    // the rule the ancestor folding works to (planShownChildrenFolding, B2),
+    // the room of one card plus the gaps around it. Depth 8 only (the deepest
+    // view, every ancestor row in play); every person as focus.
+    //
+    // The distance checks cover children drawn in a row of the focus's
+    // grandparents or above (generation -2 and up), the rows Phase B places:
+    // there the children of an ancestor's sibling or of an ancestor's other
+    // marriage are free to stand under their parents. Children in the rows of
+    // the focus's parents and below sit in the rows Phase A locks around the
+    // focus family, where the focus family's own subtree comes first (its
+    // bus may not be overlapped), and children who are half-siblings of a
+    // direct-line ancestor drawn in their row stand beside that ancestor as
+    // its sibling run, so their distance is the direct line's (the ancestor
+    // tree above it), not the click's. Children shown together in a row of
+    // the focus's parents or below can still be split by the focus family
+    // there (a known limit, docs/CURRENT.MD), so contiguity is checked in the
+    // same rows as the distances; overlaps, validation, the geometry audit
+    // and the bands are checked for every case.
+    for (const fixture of FIXTURES) {
+        for (const mode of MODES) {
+            it(`${fixture} [${mode.name}]`, () => {
+                const data = loadFixture(fixture);
+                normalizeSingleParents(data);
+                const ids = (Object.keys(data.persons) as PersonId[]).filter(id => !data.persons[id].isPlaceholder);
+                const config: LayoutConfig = mode.heights
+                    ? { ...DEFAULT_LAYOUT_CONFIG, spouseLineY: 25, personHeights: syntheticPersonHeights(ids) }
+                    : DEFAULT_LAYOUT_CONFIG;
+                const cw = config.cardWidth;
+                const none = new Set<PersonId>();
+                const failures: string[] = [];
+                const genOf = (r: ReturnType<typeof layout>, id: PersonId) => {
+                    const y = r.positions.get(id)?.y;
+                    return y === undefined ? undefined : (r.bands ?? []).find(b => y >= b.top - 1 && y < b.top + b.height + 1)?.generation;
+                };
+                const deep = (r: ReturnType<typeof layout>, pid: PersonId) =>
+                    (data.persons[pid]?.childIds ?? []).some(c => (genOf(r, c) ?? 0) <= -2);
+                const near = (r: ReturnType<typeof layout>, shown: PersonId[], where: string, focus: PersonId) => {
+                    const line = directLine(data, focus);
+                    for (const pid of shown) {
+                        if (!deep(r, pid)) continue;
+                        const kids = (data.persons[pid]?.childIds ?? []).filter(c => r.positions.has(c));
+                        const halfSiblingsOfLine = kids.some(c => data.persons[c].parentIds.some(par =>
+                            par !== pid && data.persons[par]?.childIds.some(s => s !== c && line.has(s) && genOf(r, s) === genOf(r, c))));
+                        if (halfSiblingsOfLine) continue;
+                        const stem = stemToSpan(data, r, pid, cw);
+                        if (stem > 2 * cw) failures.push(`${where}: ${pid}'s line ${(stem / cw).toFixed(1)} card widths from the children`);
+                        const room = partnerRoom(data, r.positions, pid, cw);
+                        if (room > 2 * cw) failures.push(`${where}: ${pid} ${(room / cw).toFixed(1)} card widths from a partner`);
+                    }
+                };
+                for (const focus of ids) {
+                    const base = layout(data, focus, config, 8, mode.autoExpand);
+                    for (const first of base.positions.keys()) {
+                        if (!data.persons[first]) continue;
+                        if (!hiddenRelativesTabs(data, first, id => base.positions.has(id), none).includes('children')) continue;
+                        const one = plan(data, focus, config, 8, mode.autoExpand, [first]).result;
+                        near(one, [first], `${focus} shows ${first}`, focus);
+                        const inOne = (id: PersonId) => one.positions.has(id);
+                        for (const second of data.persons[first].childIds) {
+                            if (base.positions.has(second) || !inOne(second)) continue;
+                            if (!hiddenRelativesTabs(data, second, inOne, none, new Set([first])).includes('children')) continue;
+                            const promised = hiddenChildIds(data, second, inOne);
+                            const r = plan(data, focus, config, 8, mode.autoExpand, [first, second]).result;
+                            const where = `${focus} shows ${first} > ${second}`;
+                            try { assertNoNodeOverlap(r.positions, cw, config.cardHeight); } catch (e) { failures.push(`${where} Overlap: ${(e as Error).message.split('\n')[0]}`); }
+                            if (!r.diagnostics.validationPassed) for (const err of r.diagnostics.errors.slice(0, 3)) failures.push(`${where} Validation: ${err}`);
+                            for (const v of auditGeometry(r, config).slice(0, 3)) failures.push(`${where} Geometry: [${v.type}] ${v.detail}`);
+                            if (mode.heights) for (const v of auditBands(r, config).slice(0, 3)) failures.push(`${where} Bands: ${v}`);
+                            const missing = promised.filter(c => !r.positions.has(c));
+                            if (missing.length) failures.push(`${where}: children not drawn ${missing.join(',')}`);
+                            const apart = deep(r, second) ? foreignBetweenChildren(data, second, r.positions) : [];
+                            if (apart.length) failures.push(`${where}: not beside each other, ${apart.slice(0, 3).join('; ')}`);
+                            near(r, [first, second].filter(id => r.positions.has(id)), where, focus);
+                        }
+                    }
+                }
+                expect(failures.slice(0, 20), `${fixture} [${mode.name}], ${failures.length} failures`).toEqual([]);
+            }, 600_000);
+        }
+    }
+});
+
+describe('Children shown in place: an ancestor\'s other marriage and an ancestor\'s brother', () => {
+    // edge-ancestor-far-children: the focus's great-grandfather (fff) has a
+    // second wife with two children, and his brother (bro) four children;
+    // above them a wide ancestry. Before the fix the brother's children stood
+    // a whole ancestor tree apart (spaced by the reserve for the ancestry
+    // above their parents) and the second wife stood more than three card
+    // widths off her husband, so the folding took his ancestors away.
+    const FIX = 'edge-ancestor-far-children';
+    const fixturePresent = existsSync(join(process.cwd(), 'test', `${FIX}.json`));
+    for (const autoExpand of [false, true]) {
+        const mode = autoExpand ? 'expanded' : 'standard';
+        // From the focus the brother's children are in the great-grandparents'
+        // row (Phase B); from the focus's father they are in his parents' row
+        // (gen -1, placed and locked by Phase A).
+        for (const focus of ['focus', 'f'] as PersonId[]) it.runIf(fixturePresent)(`the brother's children stand side by side under him, focus ${focus} [${mode}]`, () => {
+            const data = loadFixture(FIX);
+            const cw = DEFAULT_LAYOUT_CONFIG.cardWidth;
+            const r = plan(data, focus, DEFAULT_LAYOUT_CONFIG, 8, autoExpand, ['ffff', 'bro'] as PersonId[]).result;
+            const kids = data.persons['bro' as PersonId].childIds;
+            const xs = kids.map(k => r.positions.get(k)!.x).sort((a, b) => a - b);
+            const step = cw + DEFAULT_LAYOUT_CONFIG.horizontalGap;
+            // Siblings next to each other: the span of n cards with one gap
+            // between neighbours (a partner standing beside a child would add a
+            // partner slot; these children have none).
+            expect(xs[xs.length - 1] - xs[0]).toBeLessThanOrEqual((kids.length - 1) * step + 1);
+            expect(foreignBetweenChildren(data, 'bro' as PersonId, r.positions)).toEqual([]);
+            expect(stemToSpan(data, r, 'bro' as PersonId, cw)).toBeLessThanOrEqual(2 * cw);
+        });
+        it.runIf(fixturePresent)(`the second wife stands beside her husband, his ancestors stay [${mode}]`, () => {
+            const data = loadFixture(FIX);
+            const cw = DEFAULT_LAYOUT_CONFIG.cardWidth;
+            const p = plan(data, 'focus' as PersonId, DEFAULT_LAYOUT_CONFIG, 8, autoExpand, ['fff'] as PersonId[]);
+            const at = (id: string) => p.result.positions.get(id as PersonId);
+            expect([...p.foldedFor.keys()]).toEqual([]);
+            expect(at('ffff')).toBeDefined();
+            expect(Math.abs(at('fff_w2')!.x - at('fff')!.x)).toBeLessThanOrEqual(cw + DEFAULT_LAYOUT_CONFIG.partnerGap + 1);
+            expect(stemToSpan(data, p.result, 'fff_w2' as PersonId, cw)).toBeLessThanOrEqual(cw);
+        });
+    }
+});
+
 describe('Children shown in place: selection and hiding again', () => {
     const data = loadFixture('comprehensive');
     const P = (id: string) => id as PersonId;

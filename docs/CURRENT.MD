@@ -213,6 +213,16 @@ Two phases:
 **Phase A (Descendants, top-down):**
 1. Focus block placed at x=0
 2. Children distributed left-right using `envelopeWidth`
+   (`descendantRowWidth`). Exception: children in the ancestor rows (the
+   children of an ancestor's sibling or of an ancestor's other marriage shown
+   in place) are spaced by their measured subtree `width`. Their
+   `envelopeWidth` also reserves the ancestor tree above them, which here is
+   their parents' own block, so spacing by it put siblings a whole ancestor
+   tree apart (the "children terribly far" bug). In the parents' row (gen -1)
+   a block keeps the envelope when a partner of it has parents in view (the
+   focus's parents, an aunt married to a man whose parents are drawn): that
+   tree stands above it, Phase A locks the row and Phase B could not move
+   the block out of its way.
 3. Children shifted so parent is centered above them
 4. Recurse into grandchildren
 
@@ -332,6 +342,15 @@ placeSiblingRuns(hTree); placeSiblingRuns(wTree)
 // 8. Handle collateral ancestors (passes until nothing moves, at most 20;
 //    ancestors' children shown in place can need more than a few)
 resolveOverlapsOutward()
+
+// 8a. Partners of an ancestor's other marriage back beside the partner
+//     (gatherAncestorChainPartners, chain blocks at gen <= -2): the overlap
+//     passes can leave an extra partner several card widths away. Each one
+//     moves toward its partner, as far as "beside", into free row space only.
+//     A partner with drawn children stops at the nearest child's center (its
+//     line stays over its children). It never moves farther from its own
+//     parents, and the block's anchors follow.
+gatherAncestorChainPartners()
 
 // 9. Verify locked positions unchanged
 assertLockedDescendantsUnchanged(lockedX)
@@ -760,6 +779,34 @@ with two adaptations: `computeAncestorTreeWidth` uses the chain block's real
   constellation) — spouse lines then run across foreign cards' row space.
 - Long single-child dynasty lines drift diagonally ("staircase") because each
   couple centers over its one child.
+- Children shown in place, remaining gaps (measured on a real 1,300-state
+  sweep and the two-clicks test in `childrenShownFull.test.ts`):
+  - Phase B packs sibling runs and leftovers as rectangles (block widths, not
+    contours). Two runs side by side can keep up to about 4 card widths of
+    empty row between their children when a wide subtree hangs under one of
+    them. Contour packing would close these gaps.
+  - Children shown in the parents' row (gen -1) stand compactly under their
+    parents now, and can be placed where the focus's parents stand.
+    `resolveParentCoupleOverlaps` then moves the other block's whole
+    ancestor component clear of the focus parents in one step; one card at a
+    time would move another card into the couple. The component walk stops
+    at an ancestor whose union is a parent union of either focus parent:
+    the parents' block hangs under one parent's parents only, and the walk
+    would otherwise drag the other parent's siblings into the couple.
+  - Children shown in the parents' row (gen -1, Phase A, locked) still yield
+    to the focus family. A step-parent's children can stand about 6 card
+    widths from their parent's line, because their bus may not overlap the
+    focus family's bus, and step 6 can put half-siblings on the far side of
+    the direct-line parent. The two-clicks test therefore checks distances
+    and contiguity only for children drawn in rows gen <= -2.
+  - Half-siblings of a direct-line ancestor (an ancestor's other marriage)
+    stand beside that ancestor as its sibling run, so their distance from
+    the other parent follows how far the ancestor tree places the direct
+    line from that parent. The click does not set it.
+  - Forced cases: a couple centered over many children with the direct-line
+    child at the end of the run (invariants 5 and 6), and a person standing
+    over their own child next to a couple centered over a wide run. A bus
+    from the person would overlap the couple's bus.
 
 ---
 
