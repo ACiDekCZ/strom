@@ -152,8 +152,6 @@ const VIEW_LABEL_BELOW = 18;
 const VIEW_LABEL_LINE_ENDS = 24;
 /** How long the cards of children just shown (or one glided to) glow (ms). */
 const CHILDREN_GLOW_MS = 1600;
-/** A jump to a card elsewhere that glides: when to look whether it has moved the view (a step of the history). */
-const JUMP_STEP_CHECK_MS = 120;
 /** The "▾ children" bubble stays this long after the pointer left it (ms), so the pointer can reach its rows. */
 const CHILDREN_BUBBLE_CLOSE_MS = 150;
 /** §5: the margin the new children keep from the tree's edges and from the controls over it. */
@@ -1573,9 +1571,10 @@ class TreeRendererClass {
     }
 
     /** Glide the view to a child drawn elsewhere (readable, glideToCards) and let its card glow for a moment. */
-    showChildElsewhere(childId: PersonId): void {
-        if (this.glideToCards([childId]).length === 0) return;
-        this.highlightCards([childId], CHILDREN_GLOW_MS);
+    showChildElsewhere(childId: PersonId): boolean {
+        const { shown, moves } = this.glideToCards([childId]);
+        if (shown.length > 0) this.highlightCards([childId], CHILDREN_GLOW_MS);
+        return moves;
     }
 
     /**
@@ -1951,32 +1950,14 @@ class TreeRendererClass {
     /**
      * Run a move of the view to a card drawn elsewhere (a line link's
      * "child ↗", a row of "Already in the tree elsewhere") as a step of the
-     * history: the pan and zoom before it come back with ↩. A move that
-     * glides adds its step once it has moved; one that moves nothing (the
-     * cards stood in view) adds none.
+     * history: the pan and zoom before it come back with ↩. `move` says
+     * whether it moves the view (a glide still under way counts); one that
+     * moves nothing (the cards stood in view) adds no step.
      */
-    private jumpStep(move: () => void): void {
+    private jumpStep(move: () => boolean): void {
         const before = this.currentHistoryEntry();
-        if (!before) {
-            move();
-            return;
-        }
         const view = ZoomPan.getTransform();
-        const seq = this.historySeq;
-        const focus = this.focusPersonId;
-        move();
-        const moved = (): boolean => !sameTransform(ZoomPan.getTransform(), view);
-        if (moved()) {
-            this.pushHistoryStep({ ...before, view });
-            return;
-        }
-        // A glide starts on the next frame: look again once it is under way
-        setTimeout(() => {
-            if (seq === this.historySeq && focus === this.focusPersonId
-                && sameShown(before.shown, this.currentHistoryEntry()?.shown ?? []) && moved()) {
-                this.pushHistoryStep({ ...before, view });
-            }
-        }, JUMP_STEP_CHECK_MS);
+        if (move() && before) this.pushHistoryStep({ ...before, view });
     }
 
     /** Move the view to a child drawn elsewhere in the tree (§4), as a step of the history. */
@@ -4341,9 +4322,10 @@ class TreeRendererClass {
      * focus (a line link's other end): one card centred, several fitted,
      * always at a readable scale (glideToCards).
      */
-    private jumpToPersons(ids: readonly PersonId[]): void {
-        const shown = this.glideToCards(ids);
+    private jumpToPersons(ids: readonly PersonId[]): boolean {
+        const { shown, moves } = this.glideToCards(ids);
         for (const pid of shown) ZoomPan.highlightPerson(pid);
+        return moves;
     }
 
     /**
@@ -4351,14 +4333,14 @@ class TreeRendererClass {
      * centred at a readable scale, several together when they fit readably,
      * else the one nearest the view's centre). A running children transition
      * ends first, so its zoom does not land over the glide. Returns the cards
-     * drawn of `ids`.
+     * drawn of `ids` and whether the view moves.
      */
-    private glideToCards(ids: readonly PersonId[]): PersonId[] {
+    private glideToCards(ids: readonly PersonId[]): { shown: PersonId[]; moves: boolean } {
         const shown = ids.filter(pid => this.positions.has(pid));
-        if (shown.length === 0) return shown;
+        if (shown.length === 0) return { shown, moves: false };
         this.finishChildrenTransition();
-        ZoomPan.jumpToBoxes(shown.map(pid => this.cardBox(pid)).filter((b): b is ChildrenRect => b !== null));
-        return shown;
+        const plan = ZoomPan.jumpToBoxes(shown.map(pid => this.cardBox(pid)).filter((b): b is ChildrenRect => b !== null));
+        return { shown, moves: plan !== null };
     }
 
     private escapeHtml(text: string): string {

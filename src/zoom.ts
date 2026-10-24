@@ -871,7 +871,7 @@ class ZoomPanClass {
      * a child drawn elsewhere): glide to them at a readable scale, one card
      * never below CONTEXT_SCALE, several together never below
      * JUMP_TOGETHER_SCALE (jumpView). `boxes` are the cards in the world.
-     * Returns the plan (null: the view stays).
+     * Returns the plan (null: the view stays, also when it already stands there).
      */
     jumpToBoxes(boxes: readonly Rect[]): JumpViewPlan | null {
         if (this.isStandaloneViewActive()) return null;
@@ -882,7 +882,11 @@ class ZoomPanClass {
             view: { width: container.clientWidth, height: container.clientHeight },
             targets: boxes, minScale: CONTEXT_SCALE, togetherMinScale: JUMP_TOGETHER_SCALE, maxScale: MAX_SCALE, padding: FIT_PADDING / 2,
         });
-        if (plan) this.glideToWorldPoint(plan.centerX, plan.centerY, plan.scale, JUMP_GLIDE_MS);
+        if (!plan) return null;
+        const endTx = container.clientWidth / 2 - plan.centerX * plan.scale;
+        const endTy = container.clientHeight / 2 - plan.centerY * plan.scale;
+        if (Math.abs(plan.scale - this.scale) < 1e-3 && Math.abs(endTx - this.tx) < 0.5 && Math.abs(endTy - this.ty) < 0.5) return null;
+        this.glideToWorldPoint(plan.centerX, plan.centerY, plan.scale, JUMP_GLIDE_MS);
         return plan;
     }
 

@@ -61,6 +61,10 @@ async function centerOf(page: Page, id: string): Promise<[number, number]> {
 /** Whether two screen points are the same to a pixel. */
 const near = (a: [number, number], b: [number, number]) => Math.abs(a[0] - b[0]) <= 1 && Math.abs(a[1] - b[1]) <= 1;
 
+/** Whether two views draw the same cards, each where it stood to a pixel (positions round to whole pixels). */
+const sameView = (a: Record<string, [number, number]>, b: Record<string, [number, number]>) =>
+    Object.keys(a).length === Object.keys(b).length && Object.keys(a).every(id => !!b[id] && near(a[id], b[id]));
+
 async function settled(page: Page): Promise<void> {
     await expect.poll(() => page.evaluate(() => document.getAnimations().filter(a => a.playState === 'running').length)).toBe(0);
 }
@@ -108,7 +112,7 @@ test.describe('desktop 1440 × 900', () => {
         await expect(fwd(page)).toBeVisible();
         // (the zoom of §5 comes back around its centre)
         await expect.poll(async () => near(await centerOf(page, SIBLINGS[0]), daughterAt)).toBe(true);
-        await expect.poll(() => screenPositions(page)).toEqual(afterFirst);
+        await expect.poll(async () => sameView(await screenPositions(page), afterFirst)).toBe(true);
         expect(await focusOf(page)).toBe(FOCUS);
 
         // Back again: the view before the first click, every card where it stood
@@ -118,7 +122,7 @@ test.describe('desktop 1440 × 900', () => {
         await expect(tabOf(page, FATHER)).toHaveAttribute('aria-pressed', 'false');
         await expect(back(page)).toBeHidden();
         await expect(fwd(page)).toBeVisible();
-        await expect.poll(() => screenPositions(page)).toEqual(start);
+        await expect.poll(async () => sameView(await screenPositions(page), start)).toBe(true);
 
         // Forward twice: both expansions again
         await fwd(page).click();
