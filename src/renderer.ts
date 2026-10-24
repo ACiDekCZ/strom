@@ -2389,6 +2389,11 @@ class TreeRendererClass {
      */
     private placeBubble(tab: HTMLElement, bubble: HTMLElement): void {
         bubble.classList.remove('below', 'beside-right', 'beside-left');
+        const cardEl = tab.closest<HTMLElement>('.person-card');
+        // The card grows under the pointer (:hover scale) and the bubble with it:
+        // measured before that ends, a bubble moved up to the tree's bottom
+        // reached a few px past it. Measured as they will stand once it ends.
+        const grown = this.cardGrowth(cardEl);
         const measure = (): DOMRect => {
             const shown = getComputedStyle(bubble).display !== 'none';
             if (!shown) { bubble.style.visibility = 'hidden'; bubble.style.display = 'block'; }
@@ -2396,12 +2401,12 @@ class TreeRendererClass {
             if (!shown) { bubble.style.display = ''; bubble.style.visibility = ''; }
             return rect;
         };
-        const b = measure();
+        const b = grown(measure());
         if (b.height === 0) return;
         // Screen pixels per CSS pixel of the bubble (the zoom, a card's hover scale)
         const ratio = bubble.offsetWidth > 0 ? b.width / bubble.offsetWidth : 1;
-        const r = tab.getBoundingClientRect();
-        const card = (tab.closest<HTMLElement>('.person-card') ?? tab).getBoundingClientRect();
+        const r = grown(tab.getBoundingClientRect());
+        const card = grown((cardEl ?? tab).getBoundingClientRect());
         const container = document.getElementById('tree-container')?.getBoundingClientRect();
         let roomTop = container?.top ?? 0;
         const roomBottom = container?.bottom ?? window.innerHeight;
@@ -2426,7 +2431,30 @@ class TreeRendererClass {
             bubble.style.setProperty('--beside-arrow', `${Math.max(0, Math.min(card.top - top, b.height - 28)) / ratio}px`);
             bubble.classList.add(`beside-${place}`);
         }
-        this.liftBubble(bubble, place === 'above' ? b : measure());
+        this.liftBubble(bubble, place === 'above' ? b : grown(measure()));
+    }
+
+    /**
+     * A rect inside the card as it will stand once the card's running scale
+     * transition (the :hover growth) ends: scaled about the card's centre by
+     * the ratio of the end scale to the present one; unchanged when none runs.
+     */
+    private cardGrowth(cardEl: HTMLElement | null): (rect: DOMRect) => DOMRect {
+        const same = (rect: DOMRect): DOMRect => rect;
+        const run = cardEl?.getAnimations?.().find(a => (a as CSSTransition).transitionProperty === 'transform');
+        if (!cardEl || !run || typeof DOMMatrixReadOnly === 'undefined') return same;
+        const frames = (run.effect as KeyframeEffect | null)?.getKeyframes() ?? [];
+        const end = frames[frames.length - 1]?.transform;
+        if (typeof end !== 'string') return same;
+        try {
+            const k = new DOMMatrixReadOnly(end).a / new DOMMatrixReadOnly(getComputedStyle(cardEl).transform).a;
+            if (!Number.isFinite(k) || Math.abs(k - 1) < 1e-3) return same;
+            const c = cardEl.getBoundingClientRect();
+            const cx = c.left + c.width / 2, cy = c.top + c.height / 2;
+            return rect => new DOMRect(cx + (rect.left - cx) * k, cy + (rect.top - cy) * k, rect.width * k, rect.height * k);
+        } catch {
+            return same;
+        }
     }
 
     /** The bubble whose rect lies over the zoom buttons while it is open (liftBubble). */

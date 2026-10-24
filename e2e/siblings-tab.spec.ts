@@ -213,6 +213,11 @@ async function cardUnderBars(page: Page, id: string, below: number, x: number | 
     }, [barsBottom.toString(), id, below, x] as const);
 }
 
+/** The card's hover growth (or its shrinking back) has ended. */
+async function settled(page: Page, id: string): Promise<void> {
+    await cardOf(page, id).evaluate(c => Promise.all(c.getAnimations().map(a => a.finished)));
+}
+
 /** The person's card and the open bubble of its siblings tab, on the screen. */
 async function cardAndBubble(page: Page, id: string) {
     return page.evaluate(([fn, pid]) => {
@@ -221,7 +226,7 @@ async function cardAndBubble(page: Page, id: string) {
         const c = card.getBoundingClientRect();
         const t = document.getElementById('tree-container')!.getBoundingClientRect();
         const bars = new Function(`return (${fn})()`)() as number;
-        return { card: { left: c.left, right: c.right, top: c.top }, bubble: { left: b.left, right: b.right, top: b.top, bottom: b.bottom }, tree: { left: t.left, right: t.right, bottom: t.bottom }, bars };
+        return { card: { left: c.left, right: c.right, top: c.top }, bubble: { left: b.left, right: b.right, top: b.top, bottom: b.bottom }, tree: { left: t.left, right: t.right, bottom: t.bottom }, bars, innerHeight: window.innerHeight };
     }, [barsBottom.toString(), id] as const);
 }
 
@@ -296,12 +301,15 @@ test('at 844 × 390 a bubble that fits nowhere whole opens beside the card, move
     const below = tree.y + tree.height - h + 20 - bars;
     expect(h + 12).toBeGreaterThan(below - 9);
     await cardUnderBars(page, PERSON, below, 150);
+    await settled(page, PERSON);
     await tab.hover();
     await expect(bubble).toHaveClass(/\bbeside-right\b/);
     const g = await cardAndBubble(page, PERSON);
     expect(g.bubble.left).toBeGreaterThan(g.card.right);
     expect(g.bubble.top).toBeGreaterThanOrEqual(g.bars - 1);
     expect(g.bubble.bottom).toBeLessThanOrEqual(g.tree.bottom + 1);
+    // whole in the window (#tree-container reaches under its bottom edge)
+    expect(g.bubble.bottom).toBeLessThanOrEqual(g.innerHeight);
     expect(g.bubble.top).toBeLessThan(g.card.top);
     // the arrow still at the card's top
     const arrow = await bubble.evaluate(b => {
@@ -310,6 +318,42 @@ test('at 844 × 390 a bubble that fits nowhere whole opens beside the card, move
         return { top: r.top + parseFloat(getComputedStyle(b, '::after').top) * ratio, ratio };
     });
     expect(Math.abs(arrow.top - (g.card.top + 14 * arrow.ratio))).toBeLessThanOrEqual(3);
+});
+
+/**
+ * The card grows under the pointer (1.03) and its bubble with it: a bubble
+ * moved up to the tree's bottom was measured before that ended and stood
+ * 2 px past the window's bottom edge (edge-ancestor-children, 844 × 390,
+ * zoomed out once). Measured after the growth, it stays whole in the window.
+ */
+test('at 844 × 390 a bubble moved up beside the card stays whole in the window once the card has grown', async ({ page }) => {
+    await page.setViewportSize({ width: 844, height: 390 });
+    await setupFixture(page, 'edge-ancestor-children', 'focus');
+    const person = 'f_m_f_m_f';
+    await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), person);
+    const scale = await page.evaluate(() => window.Strom.ZoomPan.getScale());
+    await page.evaluate(() => window.Strom.ZoomPan.zoomOut());
+    await expect.poll(() => page.evaluate(() => window.Strom.ZoomPan.getScale())).toBeLessThan(scale * 0.8);
+    await page.waitForTimeout(400);
+    const tab = siblingsTab(page, person);
+    const bubble = tab.locator(':scope > .badge-tooltip');
+    await tab.hover();
+    await expect(bubble).toBeVisible();
+    const h = (await bubble.boundingBox())!.height;
+    await page.mouse.move(5, 200);
+    await expect(bubble).toBeHidden();
+    const tree = (await page.locator('#tree-container').boundingBox())!;
+    const bars = await page.evaluate(fn => new Function(`return (${fn})()`)() as number, barsBottom.toString());
+    // the card's top 30 px lower than the bubble would fit beside it: it moves up, far below the card's centre (the growth adds most there)
+    await cardUnderBars(page, person, tree.y + tree.height - bars - h + 30, 100);
+    await settled(page, person);
+    await tab.hover();
+    await expect(bubble).toHaveClass(/\bbeside-right\b/);
+    await settled(page, person);
+    const b = (await bubble.boundingBox())!;
+    expect(b.y).toBeLessThan((await cardOf(page, person).boundingBox())!.y);
+    expect(b.y + b.height).toBeLessThanOrEqual(await page.evaluate(() => window.innerHeight));
+    expect(b.y + b.height).toBeLessThanOrEqual(tree.y + tree.height);
 });
 
 /**
