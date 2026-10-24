@@ -211,7 +211,7 @@ test('every card keeps its tabs within its own width (three tabs, German words):
     }
 });
 
-test('a grandfather with parents, a brother and a son of his second marriage out of view: "◎ family" and the children tab, whole words, the children shown in place', async ({ page }) => {
+test('a grandfather at the edge of the depth with parents, a brother and a son of his second marriage out of view: parents, siblings and children in place, the tabs inside the card, the children shown in place', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openApp(page);
     await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
@@ -230,15 +230,12 @@ test('a grandfather with parents, a brother and a son of his second marriage out
     }, 'Zwolbrack', 'c');
     await page.evaluate(() => window.Strom.TreeRenderer.setFocusDepth(2, 1));
     const row = cardOf(page, 'g1').locator(':scope > .edge-top-right');
-    // Parents and brother out of view make one focus tab; the order goes by relation
-    await expect(row.locator(':scope > .branch-tab')).toHaveCount(2);
-    expect(await row.locator(':scope > .branch-tab').evaluateAll(tabs => tabs.map(t => (t as HTMLElement).dataset.tab ?? t.className)))
-        .toEqual(['family', expect.stringContaining('children-tab')]);
-    // Two tabs fit with their words (the three tabs before needed glyphs alone)
-    await expect(row).not.toHaveClass(/tabs-short|tabs-glyph/);
+    // Out of view only because of the depth (§4): parents and brother are shown in place, no focus tab; the order goes by relation
+    await expect(row.locator(':scope > .branch-tab')).toHaveCount(3);
+    expect(await row.locator(':scope > .branch-tab').evaluateAll(tabs => tabs.map(t => t.className)))
+        .toEqual([expect.stringContaining('parents-tab'), expect.stringContaining('siblings-tab'), expect.stringContaining('children-tab')]);
+    await expect(row.locator('.branch-tab.kind-focus')).toHaveCount(0);
     await expect(row.locator('.children-tab')).toHaveAttribute('aria-label', /^Kinder von .+ hier zeigen$/);
-    await expect(row.locator('.branch-tab.kind-focus .pill-text')).toHaveText('Familie');
-    await expect(row.locator('.children-tab .pill-short')).toBeHidden();
     const inCard = await cardOf(page, 'g1').evaluate(card => {
         const c = card.getBoundingClientRect();
         return [...card.querySelectorAll(':scope > .edge-top-right > .branch-tab')].every(t => t.getBoundingClientRect().left >= c.left);

@@ -129,6 +129,10 @@ clicks). Listed persons not at the limit are skipped. Nothing else changes:
 the other branches keep their depth, Phase B builds the deeper branch like
 any unbalanced pedigree (incomplete data does the same), and without
 `extraDepthFor` the selection and the layout are exactly the previous ones.
+A parent of the focus at depth 1 is the one case where more comes in: the
+selection already holds the parents' other children (aunts and uncles with
+their families, `includeParentSiblings`), which the layout draws only once
+the grandparents are there; that branch then looks as at depth 2.
 `LayoutResult.ancestorDepthEdge` lists the drawn persons of the limit whose
 parents are neither selected nor drawn and who have a parent that is not a
 "?" stand-in: the cards whose parents are out of view only because of the
@@ -136,10 +140,11 @@ depth. A parent drawn another way (pedigree collapse), parents folded away
 for children shown (`foldAncestorsOf`) and in-laws (never on the ancestor
 walk) are not on it. The "▸ siblings" of such a person combines both inputs
 in one layout: `extraDepthFor: [P]` and `expandChildrenOf` the parents.
-`parentsShownFull.test.ts` checks, for every fixture, every focus, depths 2
+`parentsShownFull.test.ts` checks, for every fixture, every focus, depths 1
 to 7 and the four modes, every edge person: the strict harness checks, the
 parents drawn in the row above, nobody drawn before lost, only the parents
-(and in the expanded mode their other partners) added, a line to the
+(and in the expanded mode their other partners; for a focus parent never
+more than the next depth draws) added, a line to the
 person; with the parents' children shown the promised siblings drawn beside
 each other; nested steps; and that removing the step gives the original
 positions.

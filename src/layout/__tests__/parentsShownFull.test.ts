@@ -1,7 +1,7 @@
 /**
  * Parents shown in place beyond the ancestor depth (PipelineInput.extraDepthFor,
  * the "▸ parents" of an ancestor at the edge of the depth): for every
- * fixture, every person as focus, ancestor depths 2 to 7, the standard and
+ * fixture, every person as focus, ancestor depths 1 to 7, the standard and
  * expanded modes, cards of one height and of their own heights, every
  * ancestor the layout reports at the edge (LayoutResult.ancestorDepthEdge)
  * gets their parents shown in place. The strict checks of
@@ -10,7 +10,10 @@
  * widened; the parents are drawn as a couple in the row above the person,
  * nobody drawn before leaves, the click adds one generation above that branch
  * alone (the parents and, in the expanded mode, their other partners), and
- * the person is no longer at the edge.
+ * the person is no longer at the edge. A parent of the focus (depth 1) is the
+ * exception: the selection already holds the parents' other children (the
+ * aunts and uncles, includeParentSiblings), drawn once the grandparents are;
+ * the new cards are then never more than the next depth draws.
  *
  * With the parents' children shown in the same step (the "▸ siblings" of an
  * edge ancestor: extraDepthFor [P] and expandChildrenOf the parents) every
@@ -34,7 +37,7 @@ import type { LayoutResult } from '../pipeline/types.js';
 import { normalizeSingleParents } from '../../single-parent.js';
 import { hiddenChildIds } from '../../marriage-order.js';
 
-const DEPTHS = [2, 3, 4, 5, 6, 7];
+const DEPTHS = [1, 2, 3, 4, 5, 6, 7];
 
 const MODES = [
     { name: 'standard', heights: false, autoExpand: false },
@@ -146,7 +149,9 @@ describe('Parents shown in place beyond the depth: full pipeline invariants', ()
                         if (lost.length) failures.push(`${where}: left the view ${lost.slice(0, 5).join(',')}`);
                         const allowed = new Set<PersonId>(person.parentIds);
                         for (const q of person.parentIds) for (const o of partnersOf(data, q)) allowed.add(o);
-                        const extra = [...r.positions.keys()].filter(id => !base.positions.has(id) && !allowed.has(id));
+                        // A parent of the focus: the aunts and uncles the selection holds come with the grandparents
+                        const next = data.persons[focus].parentIds.includes(pid) ? layout(data, focus, config, depth + 1, mode.autoExpand).positions : null;
+                        const extra = [...r.positions.keys()].filter(id => !base.positions.has(id) && !allowed.has(id) && !next?.has(id));
                         if (extra.length) failures.push(`${where}: more than the parents came in ${extra.slice(0, 5).join(',')}`);
                         // The parents' line comes down to the person
                         const line = r.connections.find(c => c.drops.some(d => d.personId === pid));

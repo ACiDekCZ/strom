@@ -1,0 +1,177 @@
+import { test, expect, Page } from '@playwright/test';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import { openApp } from './helpers.js';
+
+/**
+ * Parents shown in place beyond the depth (GitHub #4, §4): an ancestor of
+ * the line at the edge of the depth carries "▸ parents" in place (not a
+ * focus); a click draws one generation more above that branch alone — the
+ * card keeps its place, the parents carry the hatch of the cards shown here,
+ * the tab turns to "▾ parents" — and a second click gives the view back.
+ * Its "▸ siblings" shows the parents with their children in one step. The
+ * comprehensive fixture (invented data), focus on a child of "Focus Person"
+ * at an ancestor depth of 2: the grandparents' parents are out of view only
+ * because of the depth.
+ */
+
+const FOCUS = 'child_1';
+const PERSON = 'father';
+const PARENTS = ['gp_h_h', 'gp_h_w'];
+const SIBLINGS = ['uncle_h_1', 'aunt_h_1'];
+const OTHER_SIDE = ['gp_w_h', 'gp_w_w'];
+
+const cardOf = (page: Page, id: string) => page.locator(`#tree-canvas .person-card[data-id="${id}"]`);
+const parentsTab = (page: Page, id: string) => cardOf(page, id).locator('.edge-top-right .branch-tab.parents-tab');
+const siblingsTab = (page: Page, id: string) => cardOf(page, id).locator('.edge-top-right .branch-tab.siblings-tab');
+const childrenTab = (page: Page, id: string) => cardOf(page, id).locator('.edge-top-right .branch-tab.children-tab');
+const shownCount = (page: Page) => page.evaluate(() => window.Strom.TreeRenderer.shownChildrenCount());
+
+async function setup(page: Page): Promise<void> {
+    await openApp(page);
+    const data = JSON.parse(readFileSync(join(process.cwd(), 'test', 'comprehensive.json'), 'utf-8'));
+    await page.evaluate(async ([tree, f]) => {
+        await window.Strom.DataManager.importAsNewTree(tree as never, 'Comprehensive');
+        await window.Strom.TreeRenderer.setFocus(f as never);
+        window.Strom.TreeRenderer.setFocusDepth(2, window.Strom.TreeRenderer.getFocusDepthDown());
+    }, [data, FOCUS] as const);
+    await expect(cardOf(page, PARENTS[0])).toHaveCount(0);
+    await expect(parentsTab(page, PERSON)).toHaveCount(1);
+    await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), PERSON);
+}
+
+/** Every drawn card's centre on the screen, by id (to a pixel). */
+async function screenCenters(page: Page): Promise<Record<string, [number, number]>> {
+    return page.evaluate(() => {
+        const out: Record<string, [number, number]> = {};
+        for (const c of document.querySelectorAll<HTMLElement>('#tree-canvas .person-card[data-id]')) {
+            const r = c.getBoundingClientRect();
+            out[c.dataset.id!] = [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)];
+        }
+        return out;
+    });
+}
+
+const near = (a: [number, number], b: [number, number]) => Math.abs(a[0] - b[0]) <= 1 && Math.abs(a[1] - b[1]) <= 1;
+
+/** The view as it was: every card where it stood, up to the shift of the anchor's card. */
+async function expectViewBack(page: Page, before: Record<string, [number, number]>, anchor: string): Promise<void> {
+    await expect.poll(async () => Object.keys(await screenCenters(page)).sort()).toEqual(Object.keys(before).sort());
+    const after = await screenCenters(page);
+    const dx = after[anchor][0] - before[anchor][0], dy = after[anchor][1] - before[anchor][1];
+    for (const [id, at] of Object.entries(before)) expect(near(after[id], [at[0] + dx, at[1] + dy]), id).toBe(true);
+}
+
+test('"▸ parents" on an ancestor at the edge of the depth shows them in place; the card stays; a second click gives the view back', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await setup(page);
+    await page.mouse.move(5, 500);
+    const tab = parentsTab(page, PERSON);
+    // In place, not a focus: no "◎ family" on the edge ancestor
+    await expect(tab).toHaveClass(/kind-place/);
+    await expect(cardOf(page, PERSON).locator('.branch-tab.kind-focus')).toHaveCount(0);
+    await expect(tab.locator('.pill-glyph')).toHaveText('▸');
+    await expect(tab).toHaveAttribute('aria-pressed', 'false');
+    await expect(tab).toHaveAttribute('aria-label', /^Show the parents of .+ here$/);
+    await expect(tab.locator('.badge-tooltip-header')).toHaveText('Parents');
+    await expect(tab.locator('.badge-tooltip-item')).toHaveCount(2);
+    await expect(tab.locator('.badge-tooltip-action')).toHaveText('A click shows them here; the view stays.');
+
+    const before = await screenCenters(page);
+    await tab.click();
+    for (const id of PARENTS) await expect(cardOf(page, id)).toBeVisible();
+    await page.mouse.move(5, 500);
+    expect(await page.evaluate(() => window.Strom.TreeRenderer.getFocusPersonId())).toBe(FOCUS);
+    // One generation above that branch alone: the other grandparent's parents (and the siblings) stay out of view
+    for (const id of [...OTHER_SIDE, ...SIBLINGS]) await expect(cardOf(page, id)).toHaveCount(0);
+    // The clicked card keeps its place on the screen
+    await expect.poll(async () => near((await screenCenters(page))[PERSON], before[PERSON])).toBe(true);
+    // The parents carry the hatch of the cards shown here; the tab is "▾ parents"
+    for (const id of PARENTS) await expect(cardOf(page, id)).toHaveClass(/shown-here/);
+    await expect(cardOf(page, PERSON)).not.toHaveClass(/shown-here/);
+    const hide = parentsTab(page, PERSON);
+    await expect(hide).toHaveClass(/active/);
+    await expect(hide).toHaveAttribute('aria-pressed', 'true');
+    await expect(hide.locator('.pill-glyph')).toHaveText('▾');
+    await expect(hide).toHaveAttribute('aria-label', /^Hide the parents of .+ shown here$/);
+    await expect(hide.locator('.badge-tooltip-header')).toHaveText('Parents shown here');
+    await expect(hide.locator('.badge-tooltip-action')).toHaveText('A click on the tab hides them again.');
+    expect(await shownCount(page)).toBe(1);
+    await expect(page.locator('#hide-shown-children')).toBeVisible();
+    // The parents in view: the siblings tab is now the one of a parent in view (§1, nested)
+    await expect(siblingsTab(page, PERSON).locator('.badge-tooltip-body')).toHaveText('The same people as “▸ children” on the parents.');
+
+    await hide.click();
+    await page.mouse.move(5, 500);
+    for (const id of PARENTS) await expect(cardOf(page, id)).toHaveCount(0);
+    expect(await shownCount(page)).toBe(0);
+    await expect(parentsTab(page, PERSON)).toHaveAttribute('aria-pressed', 'false');
+    await expectViewBack(page, before, PERSON);
+});
+
+test('↩ after "▸ parents" is one step back; ↪ brings the parents again', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await setup(page);
+    const couldGoBack = await page.evaluate(() => window.Strom.TreeRenderer.canGoBack());
+    await parentsTab(page, PERSON).click();
+    for (const id of PARENTS) await expect(cardOf(page, id)).toBeVisible();
+    await page.evaluate(() => window.Strom.TreeRenderer.goBack());
+    for (const id of PARENTS) await expect(cardOf(page, id)).toHaveCount(0);
+    expect(await shownCount(page)).toBe(0);
+    expect(await page.evaluate(() => window.Strom.TreeRenderer.canGoBack())).toBe(couldGoBack);
+    await page.evaluate(() => window.Strom.TreeRenderer.goForward());
+    for (const id of PARENTS) await expect(cardOf(page, id)).toBeVisible();
+    await expect(parentsTab(page, PERSON)).toHaveClass(/active/);
+    expect(await shownCount(page)).toBe(1);
+});
+
+test('"▸ siblings" on an ancestor at the edge of the depth shows the parents and the siblings in one step; "Hide shown children" closes it all', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await setup(page);
+    await page.mouse.move(5, 500);
+    const tab = siblingsTab(page, PERSON);
+    await expect(tab).toHaveClass(/kind-place/);
+    await expect(tab.locator('.pill-glyph')).toHaveText('▸');
+    await expect(tab.locator('.badge-tooltip-item')).toHaveCount(SIBLINGS.length);
+    await expect(tab.locator('.badge-tooltip-body')).toHaveText('The parents come into view with them.');
+
+    const before = await screenCenters(page);
+    const couldGoBack = await page.evaluate(() => window.Strom.TreeRenderer.canGoBack());
+    await tab.click();
+    for (const id of [...PARENTS, ...SIBLINGS]) await expect(cardOf(page, id)).toBeVisible();
+    await page.mouse.move(5, 500);
+    await expect.poll(async () => near((await screenCenters(page))[PERSON], before[PERSON])).toBe(true);
+    // One state as §1: the person's "▾ siblings" (no "▾ parents" of its own), the parents' "▾ children", one step
+    await expect(siblingsTab(page, PERSON)).toHaveClass(/active/);
+    await expect(parentsTab(page, PERSON)).toHaveCount(0);
+    for (const id of PARENTS) await expect(childrenTab(page, id)).toHaveClass(/active/);
+    for (const id of [...PARENTS, ...SIBLINGS]) await expect(cardOf(page, id)).toHaveClass(/shown-here/);
+    expect(await shownCount(page)).toBe(1);
+    // ↩ is one step back: parents and siblings go together
+    await page.evaluate(() => window.Strom.TreeRenderer.goBack());
+    for (const id of [...PARENTS, ...SIBLINGS]) await expect(cardOf(page, id)).toHaveCount(0);
+    expect(await page.evaluate(() => window.Strom.TreeRenderer.canGoBack())).toBe(couldGoBack);
+    await page.evaluate(() => window.Strom.TreeRenderer.goForward());
+    for (const id of [...PARENTS, ...SIBLINGS]) await expect(cardOf(page, id)).toBeVisible();
+
+    await page.locator('#hide-shown-children').click();
+    await page.mouse.move(5, 500);
+    for (const id of [...PARENTS, ...SIBLINGS]) await expect(cardOf(page, id)).toHaveCount(0);
+    expect(await shownCount(page)).toBe(0);
+    await expectViewBack(page, before, PERSON);
+});
+
+test('closing "▾ parents" closes the siblings shown under them too (nested)', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await setup(page);
+    await parentsTab(page, PERSON).click();
+    for (const id of PARENTS) await expect(cardOf(page, id)).toBeVisible();
+    await page.mouse.move(5, 500);
+    await siblingsTab(page, PERSON).click();
+    for (const id of SIBLINGS) await expect(cardOf(page, id)).toBeVisible();
+    await page.mouse.move(5, 500);
+    expect(await shownCount(page)).toBe(2);
+    await parentsTab(page, PERSON).click();
+    for (const id of [...PARENTS, ...SIBLINGS]) await expect(cardOf(page, id)).toHaveCount(0);
+    expect(await shownCount(page)).toBe(0);
+});

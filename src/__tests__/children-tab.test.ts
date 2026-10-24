@@ -378,3 +378,40 @@ describe('the kinds of the tabs (§2: in place, focus, jump)', () => {
         expect(branchTabsInOrder(['parentsFolded', 'siblingsShown'], [])).toEqual(['parentsFolded', 'siblingsShown']);
     });
 });
+
+describe('an ancestor at the edge of the depth (§4: parents and siblings in place)', () => {
+    const P = (id: string) => id as PersonId;
+    const d = halfTree();
+    const kids = unionChildIdSet(d);
+    const view = (...ids: string[]) => (id: PersonId) => ids.includes(id);
+    const edge = { atDepthEdge: (id: PersonId) => id === P('father') };
+
+    it('"▸ parents" and "▸ siblings" in place instead of "◎ family"', () => {
+        expect(hiddenRelativesTabs(d, P('father'), view('father'), kids, new Set(), new Set(), edge)).toEqual(['parentsHere', 'siblingsHere']);
+        const tab = siblingsTabState(d, P('father'), view('father'), kids, new Set(), new Set(), edge);
+        expect(tab).toEqual({ kind: 'siblingsHere', parents: [P('gf'), P('gm')], promised: [P('aunt'), P('uncle'), P('half_gf'), P('half_gm')], beyondDepth: true });
+        expect(branchTabKind('parentsHere')).toBe('place');
+        expect(tabGlyph('parentsHere')).toBe('▸');
+        expect(tabLabel('parentsHere')).toBe(tabLabel('parents'));
+    });
+
+    it('"▾ parents" while its click shows them; the siblings tab is then the one of a parent in view', () => {
+        const ctx = { ...edge, parentsShown: (id: PersonId) => id === P('father') };
+        expect(hiddenRelativesTabs(d, P('father'), view('gf', 'gm', 'father'), kids, new Set(), new Set(), ctx)).toEqual(['parentsShown', 'siblingsHere']);
+        expect(tabGlyph('parentsShown')).toBe('▾');
+        expect(branchTabKind('parentsShown')).toBe('place');
+    });
+
+    it('after "▸ siblings" (parents and their children, one step): "▾ siblings" alone', () => {
+        const all = view('gf', 'gm', 'father', 'aunt', 'uncle', 'half_gf', 'half_gm');
+        const visibleBefore = (q: PersonId) => (['gf', 'gm'].includes(q) ? new Set([P('father')]) : undefined);
+        const ctx = { ...edge, visibleBefore, parentsShown: () => false };
+        expect(hiddenRelativesTabs(d, P('father'), all, kids, new Set([P('gf'), P('gm')]), new Set(), ctx)).toEqual(['siblingsShown']);
+    });
+
+    it('a person whose parents are out of view for another reason keeps the focus tab', () => {
+        expect(hiddenRelativesTabs(d, P('father'), view('father'), kids, new Set(), new Set(), { atDepthEdge: () => false })).toEqual(['family']);
+        // folded away for children shown: the dashed tab, not the edge's
+        expect(hiddenRelativesTabs(d, P('father'), view('father'), kids, new Set(), new Set(), { ...edge, parentsFolded: () => true })[0]).toBe('parentsFolded');
+    });
+});

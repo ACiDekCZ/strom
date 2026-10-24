@@ -58,7 +58,7 @@ export function unionOrderPillPartsHtml(ordinal: string, year: string, glyph = t
  * word) moves the view to a card drawn elsewhere.
  */
 export function tabGlyph(tab: BranchTab): string {
-    if (tab === 'siblingsShown' || tab === 'childrenShown') return '▾';
+    if (tab === 'parentsShown' || tab === 'siblingsShown' || tab === 'childrenShown') return '▾';
     const kind = branchTabKind(tab);
     return kind === 'focus' ? '◎' : kind === 'jump' ? '↗' : '▸';
 }
@@ -67,6 +67,8 @@ export function tabGlyph(tab: BranchTab): string {
 export function tabLabel(kind: BranchTab): string {
     switch (kind) {
         case 'parents':
+        case 'parentsHere':
+        case 'parentsShown':
         case 'parentsFolded': return strings.focus.branchTabParents;
         case 'family': return strings.focus.branchTabFamily;
         case 'siblings':

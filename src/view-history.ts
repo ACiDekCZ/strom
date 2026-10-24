@@ -21,7 +21,7 @@ export interface ViewTransform {
 }
 
 /**
- * One person whose children the view shows in place, with what closing it
+ * One person whose children (or, with `parents`, parents) the view shows in place, with what closing it
  * again by a click needs: the children the view drew before the click, the
  * cards the click brought in, the zoom of §5 and where the card stood on the
  * screen before the click. Kept rather than worked out again: they depend on
@@ -33,8 +33,23 @@ export interface ShownChildrenSnapshot {
     readonly broughtIn: ReadonlySet<PersonId>;
     readonly zoom?: { readonly before: number; readonly after: number };
     readonly anchorScreen?: { readonly x: number; readonly y: number };
-    /** Shown by the siblings tab of this person (one step with the person's other parent in view). */
+    /**
+     * Shown by the siblings tab of this person (one step with the person's
+     * other parent in view; on a `parents` snapshot: the person's parents
+     * came with their children in that step).
+     */
     readonly siblingsOf?: PersonId;
+    /**
+     * The person's parents shown beyond the depth (§4, extraDepthFor), not
+     * their children: `visibleBefore` is empty, `broughtIn` the cards that
+     * step brought.
+     */
+    readonly parents?: true;
+}
+
+/** A shown snapshot's key: children and parents of one person are two steps. */
+export function shownKey(s: ShownChildrenSnapshot): string {
+    return `${s.parents ? 'p' : 'c'}:${s.id}`;
 }
 
 /**
@@ -93,7 +108,7 @@ export function liveEntry(entry: ViewHistoryEntry, exists: (id: PersonId) => boo
 
 /** Whether two entries show the same children, in the same order. */
 export function sameShown(a: readonly ShownChildrenSnapshot[], b: readonly ShownChildrenSnapshot[]): boolean {
-    return a.length === b.length && a.every((s, i) => s.id === b[i].id && s.siblingsOf === b[i].siblingsOf);
+    return a.length === b.length && a.every((s, i) => shownKey(s) === shownKey(b[i]) && s.siblingsOf === b[i].siblingsOf);
 }
 
 export function sameTransform(a: ViewTransform, b: ViewTransform): boolean {

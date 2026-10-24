@@ -178,6 +178,7 @@ export const contextMenuMethods = uiModule({
         // The siblings and the children in place (the card's tabs, in their order), by "Focus"
         // in every variant (the view only).
         const children: PersonMenuAction[] = [
+            ...this.parentsRows(personId),
             ...this.siblingsRows(personId),
             ...(TreeRenderer.canToggleChildren(personId) ? [{
                 action: 'toggle-children', sheetTop: true,
@@ -239,6 +240,21 @@ export const contextMenuMethods = uiModule({
                 ]),
             ]),
         ], vl);
+    },
+
+    /**
+     * The parents in place (the card's "▸ parents" of an ancestor at the edge
+     * of the depth, §4): "Show parents here", or once they are shown "Hide
+     * the parents shown here".
+     */
+    parentsRows(personId: PersonId): PersonMenuAction[] {
+        if (!TreeRenderer.canToggleParents(personId)) return [];
+        const shown = TreeRenderer.isParentsShown(personId);
+        return [{
+            action: 'toggle-parents', sheetTop: true,
+            label: shown ? strings.focus.hideParentsHere : strings.focus.showParentsHere,
+            kind: shown ? 'placeOpen' : 'place',
+        }];
     },
 
     /**
@@ -310,6 +326,9 @@ export const contextMenuMethods = uiModule({
                 break;
             case 'toggle-siblings':
                 void TreeRenderer.toggleSiblingsShown(personId);
+                break;
+            case 'toggle-parents':
+                void TreeRenderer.toggleParentsShown(personId);
                 break;
             case 'materials':
                 this.showPersonMaterials(personId);

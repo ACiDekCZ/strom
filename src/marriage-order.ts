@@ -237,8 +237,12 @@ export function unionOrderBadges(
  * "◎ family" (family) stands for both focus tabs at once (parents and
  * siblings out of view: both did the same); "▸ parents" dashed
  * (parentsFolded): the parents folded away for children shown in place.
+ * An ancestor of the line at the edge of the depth (the parents out of view
+ * only for the depth, the card is their anchor) shows them in place:
+ * "▸ parents" (parentsHere), "▾ parents" while shown (parentsShown); its
+ * siblings tab shows the parents and their children in one step.
  */
-export type HiddenRelativesTab = 'parents' | 'parentsFolded' | 'family' | 'siblings' | 'siblingsHere' | 'siblingsShown' | 'children' | 'childrenShown';
+export type HiddenRelativesTab = 'parents' | 'parentsHere' | 'parentsShown' | 'parentsFolded' | 'family' | 'siblings' | 'siblingsHere' | 'siblingsShown' | 'children' | 'childrenShown';
 
 /** What the view tells hiddenRelativesTabs about the children shown in place (the siblings tab). */
 export interface ShownChildrenContext {
@@ -252,6 +256,18 @@ export interface ShownChildrenContext {
     hangsOnLine?: (id: PersonId) => boolean;
     /** Whether the person's parents are folded away for children shown in place (the dashed "▸ parents"). Default: never. */
     parentsFolded?: (id: PersonId) => boolean;
+    /**
+     * Whether the person is an ancestor of the line whose parents are out of
+     * view only because of the depth (LayoutResult.ancestorDepthEdge): the
+     * parents and siblings tabs show them in place. Default: never.
+     */
+    atDepthEdge?: (id: PersonId) => boolean;
+    /**
+     * Whether the view shows the person's parents in place beyond the depth
+     * by the person's own "▸ parents" ("▾ parents"; not as part of a
+     * siblings step, which the siblings tab closes). Default: never.
+     */
+    parentsShown?: (id: PersonId) => boolean;
 }
 
 /** The person's siblings as the layout counts them: the other children of the parents that are a union's children. */
@@ -272,14 +288,22 @@ export interface SiblingsTabState {
     parents: PersonId[];
     /** siblingsHere: the siblings out of view that click draws (hiddenChildIds of those parents), in that order. */
     promised: PersonId[];
+    /**
+     * siblingsHere of an ancestor at the edge of the depth: `parents` are out
+     * of view, the click shows them first (one generation more) and their
+     * children with them, one step.
+     */
+    beyondDepth?: boolean;
 }
 
 /**
  * The siblings tab of a card, or null for none:
  *
- * - no parent in view: "◆ siblings" (a focus on the person) when the person
+ * - no parent in view: "◎ siblings" (a focus on the person) when the person
  *   has siblings and none of them is in view (siblings count only as
- *   children of a union, as the layout does);
+ *   children of a union, as the layout does); for an ancestor at the edge
+ *   of the depth (ctx.atDepthEdge) "▸ siblings" instead, beyondDepth: the
+ *   parents come into view with their children, one step;
  * - a parent in view: the siblings are the children of the parents, shown
  *   in place by the parents' children ("▸ children" of each, one step).
  *   No tab while a sibling stood in view before (hanging on the parents'
@@ -307,7 +331,16 @@ export function siblingsTabState(
     if (siblings.size === 0) return null;
     const parentsInView = person.parentIds.filter(inView);
     if (parentsInView.length === 0) {
-        return [...siblings].some(inView) ? null : { kind: 'siblings', parents: [], promised: [] };
+        if ([...siblings].some(inView)) return null;
+        if (ctx.atDepthEdge?.(personId)) {
+            const parents = person.parentIds.filter(q => !!data.persons[q] && !data.persons[q].isPlaceholder);
+            const promised: PersonId[] = [];
+            for (const q of parents) {
+                for (const c of hiddenChildIds(data, q, inView)) if (c !== personId && !promised.includes(c)) promised.push(c);
+            }
+            if (promised.length > 0) return { kind: 'siblingsHere', parents, promised, beyondDepth: true };
+        }
+        return { kind: 'siblings', parents: [], promised: [] };
     }
     const hangs = ctx.hangsOnLine ?? (() => true);
     // Shown by a parent's click: in view now, not drawn before it
@@ -331,7 +364,9 @@ export function siblingsTabState(
  * The hidden-relatives tabs of a card, in the order the card shows them
  * (parents, siblings, children): parents get one when the person has
  * parents and none of them is in view (folded away for children shown in
- * place: parentsFolded); siblings as siblingsTabState decides (`ctx`: the
+ * place: parentsFolded; an ancestor at the edge of the depth: parentsHere),
+ * "▾ parents" (parentsShown) while the person's own click shows them;
+ * siblings as siblingsTabState decides (`ctx`: the
  * children shown in place). Both focus tabs at once (parents and siblings
  * out of view, nothing to anchor them to) become the one "◎ family".
  * Children get one when any child (not a "?" stand-in) is out of view, or
@@ -353,10 +388,12 @@ export function hiddenRelativesTabs(
     const out: HiddenRelativesTab[] = [];
     const parents = person.parentIds.length > 0 && !person.parentIds.some(inView);
     const folded = parents && (ctx.parentsFolded?.(personId) ?? false);
+    const edge = parents && !folded && (ctx.atDepthEdge?.(personId) ?? false);
     const siblings = siblingsTabState(data, personId, inView, unionChildIds, childrenShown, childrenUnshowable, ctx);
-    if (parents && !folded && siblings?.kind === 'siblings') out.push('family');
+    if (parents && !folded && !edge && siblings?.kind === 'siblings') out.push('family');
     else {
-        if (parents) out.push(folded ? 'parentsFolded' : 'parents');
+        if (parents) out.push(folded ? 'parentsFolded' : edge ? 'parentsHere' : 'parents');
+        else if (ctx.parentsShown?.(personId) && person.parentIds.some(inView)) out.push('parentsShown');
         if (siblings) out.push(siblings.kind);
     }
     if (childrenShown.has(personId)) out.push('childrenShown');
@@ -600,6 +637,8 @@ export function branchTabKind(tab: BranchTab): TabKind {
 export function branchTabRelation(tab: BranchTab): 'parents' | 'siblings' | 'children' {
     switch (tab) {
         case 'parents':
+        case 'parentsHere':
+        case 'parentsShown':
         case 'parentsFolded':
         case 'family':
         case 'linkParents': return 'parents';

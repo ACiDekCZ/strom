@@ -4,9 +4,11 @@ import { openApp, seedTree } from './helpers.js';
 /**
  * The kinds of a card's tabs (GitHub #4, round 2): the look says what a
  * click does — in place (▸/▾, round), focus (◎, squarer, a toast with ↩
- * after it), jump (↗ after the word, no shadow). A grandfather whose parents
- * and brother are out of view carries one "◎ family" tab; the menu marks its
- * rows the same way. Invented data.
+ * after it), jump (↗ after the word, no shadow). A sister's husband (married
+ * in) whose parents and brother are out of view carries one "◎ family" tab;
+ * the menu marks its rows the same way. (An ancestor of the line at the edge
+ * of the depth shows them in place instead: e2e/parents-tab.spec.ts.)
+ * Invented data.
  */
 
 const cardOf = (page: Page, id: string) => page.locator(`#tree-canvas .person-card[data-id="${id}"]`);
@@ -17,11 +19,11 @@ async function setup(page: Page): Promise<void> {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openApp(page);
     await seedTree(page, {
-        c: { firstName: 'Quirin', lastName: 'Zwolbrack', parents: ['p', 'm'] },
-        p: { firstName: 'Pirmin', lastName: 'Zwolbrack', parents: ['g1', 'g2'], partners: ['m'] },
+        c: { firstName: 'Quirin', lastName: 'Morquist', parents: ['p', 'm'] },
+        p: { firstName: 'Pirmin', lastName: 'Morquist', partners: ['m'] },
         m: { firstName: 'Ilvana', lastName: 'Morquist', gender: 'female', partners: ['p'] },
-        g1: { firstName: 'Wolfbrecht', lastName: 'Zwolbrack', parents: ['gg1', 'gg2'], partners: ['g2'] },
-        g2: { firstName: 'Gerlinde', lastName: 'Zwolbrack', gender: 'female', partners: ['g1'] },
+        d: { firstName: 'Dorothea', lastName: 'Morquist', gender: 'female', parents: ['p', 'm'], partners: ['g1'] },
+        g1: { firstName: 'Wolfbrecht', lastName: 'Zwolbrack', parents: ['gg1', 'gg2'], partners: ['d'] },
         s: { firstName: 'Sigwulf', lastName: 'Zwolbrack', parents: ['gg1', 'gg2'] },
         gg1: { firstName: 'Arbogast', lastName: 'Zwolbrack', partners: ['gg2'] },
         gg2: { firstName: 'Adelgunde', lastName: 'Zwolbrack', gender: 'female', partners: ['gg1'] },
@@ -29,7 +31,7 @@ async function setup(page: Page): Promise<void> {
     await startView(page);
 }
 
-/** Quirin in focus, two generations up: the grandfather's parents and brother are out of view. */
+/** Quirin in focus, two generations up: his sister's husband is in view, the husband's parents and brother are not. */
 async function startView(page: Page): Promise<void> {
     await page.evaluate(() => window.Strom.TreeRenderer.setFocus('c' as never));
     await page.evaluate(() => window.Strom.TreeRenderer.setFocusDepth(2, 1));

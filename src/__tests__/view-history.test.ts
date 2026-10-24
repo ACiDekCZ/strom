@@ -6,7 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-    ViewHistoryEntry, ShownChildrenSnapshot, emptyViewHistory, pushViewStep, stepViewHistory, liveEntry, sameShown,
+    ViewHistoryEntry, ShownChildrenSnapshot, emptyViewHistory, pushViewStep, stepViewHistory, liveEntry, sameShown, shownKey,
     sameTransform, historyView, VIEW_HISTORY_LIMIT,
 } from '../view-history.js';
 import type { PersonId } from '../types.js';
@@ -178,6 +178,11 @@ describe('view history', () => {
         const bySiblings = shown('a', 'b').map(s => ({ ...s, siblingsOf: id('p') }));
         expect(sameShown(bySiblings, shown('a', 'b'))).toBe(false);
         expect(sameShown(bySiblings, shown('a', 'b').map(s => ({ ...s, siblingsOf: id('p') })))).toBe(true);
+        // A person's parents shown beyond the depth (§4) and the same person's children are two steps
+        const parentsOfA = shown('a').map(s => ({ ...s, parents: true as const }));
+        expect(sameShown(parentsOfA, shown('a'))).toBe(false);
+        expect(sameShown(parentsOfA, shown('a').map(s => ({ ...s, parents: true as const })))).toBe(true);
+        expect(shownKey(parentsOfA[0])).not.toBe(shownKey(shown('a')[0]));
         expect(sameTransform({ scale: 1, tx: 0, ty: 0 }, { scale: 1, tx: 0.2, ty: -0.3 })).toBe(true);
         expect(sameTransform({ scale: 1, tx: 0, ty: 0 }, { scale: 1, tx: 3, ty: 0 })).toBe(false);
         expect(sameTransform({ scale: 1, tx: 0, ty: 0 }, { scale: 0.9, tx: 0, ty: 0 })).toBe(false);

@@ -2938,6 +2938,7 @@ const stringsEN = {
         childrenTabHideAria: (name: string) => `Hide the children of ${name} shown here`,
         // Siblings shown in place: the children of the parents in view (one step, the view stays).
         siblingsSameAsChildren: 'The same people as “▸ children” on the parents.',
+        siblingsWithParents: 'The parents come into view with them.',
         siblingsShownTooltip: 'Siblings shown here',
         siblingsShownVia: (names: string) => `Shown as the children of the parents: ${names}.`,
         siblingsTabHideHint: 'A click on the tab hides them again, on the parents too.',
@@ -7889,6 +7890,7 @@ const stringsCZ: StringsType = {
         childrenTabHideAria: (name: string) => `Skrýt ukázané děti osoby ${name}`,
         // Siblings shown in place: the children of the parents in view (one step, the view stays).
         siblingsSameAsChildren: 'Stejní lidé jako „▸ děti“ u rodičů.',
+        siblingsWithParents: 'Ukážou se s nimi i rodiče.',
         siblingsShownTooltip: 'Sourozenci ukázaní tady',
         siblingsShownVia: (names: string) => `Ukázaní jako děti rodičů: ${names}.`,
         siblingsTabHideHint: 'Kliknutí na záložku je zase skryje, i u rodičů.',
@@ -12791,6 +12793,7 @@ const stringsDE: StringsType = {
         childrenTabHideAria: (name: string) => `Hier gezeigte Kinder von ${name} ausblenden`,
         // Siblings shown in place: the children of the parents in view (one step, the view stays).
         siblingsSameAsChildren: 'Dieselben Personen wie „▸ Kinder“ bei den Eltern.',
+        siblingsWithParents: 'Die Eltern werden mit ihnen gezeigt.',
         siblingsShownTooltip: 'Hier gezeigte Geschwister',
         siblingsShownVia: (names: string) => `Gezeigt als Kinder der Eltern: ${names}.`,
         siblingsTabHideHint: 'Ein Klick auf den Reiter blendet sie wieder aus, auch bei den Eltern.',
