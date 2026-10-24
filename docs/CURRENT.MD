@@ -140,6 +140,10 @@ depth. A parent drawn another way (pedigree collapse), parents folded away
 for children shown (`foldAncestorsOf`) and in-laws (never on the ancestor
 walk) are not on it. The "▸ siblings" of such a person combines both inputs
 in one layout: `extraDepthFor: [P]` and `expandChildrenOf` the parents.
+`LayoutResult.extraDepthDrawn` lists the listed persons the walk actually
+extended (absent when none): a person whose parents a raised depth or a new
+view draws anyway is not on it, and the renderer drops that "▾ parents"
+expansion after the render, the parents staying drawn.
 `parentsShownFull.test.ts` checks, for every fixture, every focus, depths 1
 to 7 and the four modes, every edge person: the strict harness checks, the
 parents drawn in the row above, nobody drawn before lost, only the parents

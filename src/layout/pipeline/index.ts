@@ -475,7 +475,7 @@ export function runLayoutPipeline(input: PipelineInput): LayoutResult {
         includeParentSiblingDescendants
     });
     // Parents shown in place beyond the ancestor depth (an edge ancestor's "▸ parents")
-    if (input.extraDepthFor?.length) extendAncestorDepth(data, selection, input.extraDepthFor);
+    const extraDepthDrawn = input.extraDepthFor?.length ? extendAncestorDepth(data, selection, input.extraDepthFor) : [];
 
     // Early return if no persons selected
     if (selection.persons.size === 0) {
@@ -588,6 +588,7 @@ export function runLayoutPipeline(input: PipelineInput): LayoutResult {
     if (model.innerSiblingRuns?.length) result.innerSiblingRuns = model.innerSiblingRuns;
     const depthEdge = ancestorDepthEdge(data, selection, result);
     if (depthEdge.length) result.ancestorDepthEdge = depthEdge;
+    if (extraDepthDrawn.length) result.extraDepthDrawn = extraDepthDrawn;
 
     return result;
 }
@@ -687,7 +688,7 @@ export function runLayoutPipelineWithDebug(
         includeParentSiblings,
         includeParentSiblingDescendants
     });
-    if (input.extraDepthFor?.length) extendAncestorDepth(data, selection, input.extraDepthFor);
+    const extraDepthDrawn = input.extraDepthFor?.length ? extendAncestorDepth(data, selection, input.extraDepthFor) : [];
 
     // Auto-expand: find persons at gen >= -1 with multiple partnerships,
     // plus deep direct-line ancestors whose extra spouses render as appendages
@@ -842,6 +843,7 @@ export function runLayoutPipelineWithDebug(
     if (model.innerSiblingRuns?.length) result.innerSiblingRuns = model.innerSiblingRuns;
     const depthEdge = ancestorDepthEdge(data, selection, result);
     if (depthEdge.length) result.ancestorDepthEdge = depthEdge;
+    if (extraDepthDrawn.length) result.extraDepthDrawn = extraDepthDrawn;
 
     snapshots.push(createSnapshot(8, { selection, model, genModel, measured, placed: constrained.placed, constrained, routed, result }));
 

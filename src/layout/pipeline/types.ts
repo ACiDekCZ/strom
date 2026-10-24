@@ -554,6 +554,12 @@ export interface LayoutResult {
      * PipelineInput.extraDepthFor); absent when there is none.
      */
     ancestorDepthEdge?: PersonId[];
+    /**
+     * The persons of PipelineInput.extraDepthFor whose parents the view
+     * shows one generation above the depth (the others' parents are in view
+     * without it, or the person is not); absent when there is none.
+     */
+    extraDepthDrawn?: PersonId[];
 }
 
 /**

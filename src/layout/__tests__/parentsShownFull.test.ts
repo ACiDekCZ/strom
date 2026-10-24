@@ -235,3 +235,40 @@ describe('Parents shown in place beyond the depth: nested and closed', () => {
         }, 600_000);
     }
 });
+
+describe('Parents shown in place beyond the depth: which persons the layout extended', () => {
+    // LayoutResult.extraDepthDrawn names the persons of extraDepthFor whose
+    // parents the extension drew. With the depth one higher their parents
+    // are in view without it: the same input extends nobody and lays out
+    // exactly as the input without them (the screen then drops them from
+    // its "▾ parents" state, renderer.ts pruneParentsShown).
+    it('comprehensive, every focus, depth 2 then 3', () => {
+        const data = loadFixture('comprehensive');
+        normalizeSingleParents(data);
+        const ids = (Object.keys(data.persons) as PersonId[]).filter(id => !data.persons[id].isPlaceholder);
+        const config = DEFAULT_LAYOUT_CONFIG;
+        const failures: string[] = [];
+        let checked = 0;
+        for (const autoExpand of [false, true]) for (const focus of ids) {
+            const base = layout(data, focus, config, 2, autoExpand);
+            expect(base.extraDepthDrawn).toBeUndefined();
+            for (const pid of base.ancestorDepthEdge ?? []) {
+                const where = `${focus}${autoExpand ? ' expanded' : ''} parents of ${pid}`;
+                const once = layout(data, focus, config, 2, autoExpand, [pid]);
+                if (JSON.stringify(once.extraDepthDrawn) !== JSON.stringify([pid])) failures.push(`${where}: drawn ${once.extraDepthDrawn}`);
+                const deeper = layout(data, focus, config, 3, autoExpand, [pid]);
+                const plain = layout(data, focus, config, 3, autoExpand);
+                if (!data.persons[pid].parentIds.every(q => !plain.positions.has(pid) || plain.positions.has(q) || !data.persons[q] || data.persons[q].isPlaceholder)) continue;
+                checked++;
+                if (deeper.extraDepthDrawn !== undefined) failures.push(`${where}: depth 3 still extends ${deeper.extraDepthDrawn}`);
+                if (deeper.positions.size !== plain.positions.size) failures.push(`${where}: depth 3, other cards`);
+                for (const [id, p] of plain.positions) {
+                    const b = deeper.positions.get(id);
+                    if (!b || b.x !== p.x || b.y !== p.y) { failures.push(`${where}: depth 3, ${id} moved`); break; }
+                }
+            }
+        }
+        expect(checked).toBeGreaterThan(0);
+        expect(failures.slice(0, 20), `${failures.length} failures`).toEqual([]);
+    }, 120_000);
+});

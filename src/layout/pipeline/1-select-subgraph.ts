@@ -461,12 +461,13 @@ function addPartnersShown(data: StromData, selection: GraphSelection, personId: 
  * couple (or, without one, each parent with their partners). The parents
  * stand at the new edge in turn, so a later person of the list can be one of
  * them (the parents' own "▸ parents", nested). Others are skipped.
+ * Returns the persons extended, in the order of the list as reached.
  */
 export function extendAncestorDepth(
     data: StromData,
     selection: GraphSelection,
     personIds: readonly PersonId[]
-): void {
+): PersonId[] {
     const limit = selection.ancestorLimitPersons ?? (selection.ancestorLimitPersons = new Set());
     const processed = new Set(selection.partnerships);
     const done = new Set<PersonId>();
@@ -482,6 +483,7 @@ export function extendAncestorDepth(
         }
     }
     if (done.size > 0) collectPartnerships(data, selection.persons, selection.partnerships);
+    return [...done];
 }
 
 /**
