@@ -9008,23 +9008,44 @@
         /* Tablet: above the bottom bar, in the middle between ↩ ↪ (left,
            up to 112px) and the zoom stack (right). */
         @media (max-width: 1024px) {
-            .focus-toast { bottom: calc(var(--bottom-bar-h) + 16px); max-width: calc(100vw - 248px); }
+            .focus-toast,
+            body > .at-focus-toast { bottom: calc(var(--bottom-bar-h) + 16px); max-width: calc(100vw - 248px); box-sizing: border-box; }
         }
         /* Phone: a row above ↩ ↪ and clear of the zoom stack's column; a long name ends in "…". */
         @media (max-width: 640px) {
-            .focus-toast { bottom: calc(var(--bottom-bar-h) + 68px); max-width: calc(100vw - 136px); }
+            .focus-toast,
+            body > .at-focus-toast { bottom: calc(var(--bottom-bar-h) + 68px); max-width: calc(100vw - 136px); }
+            /* The undo pill there takes the phone's width: at this place it centres as the box does */
+            body > .undo-toast.at-focus-toast { left: 50%; right: auto; width: max-content; transform: translateX(-50%) translateY(12px); }
+            body > .undo-toast.at-focus-toast.show { transform: translateX(-50%); }
         }
-        /* A phone held sideways: at the top of the tree in its middle beside
-           the side bar, over a bubble opened under it (round 4 §29); under
-           the "Hide shown" chip while that stands there. */
+        /* A phone held sideways (round 5 §39): at the bottom of the tree in
+           its middle beside the side bar (the bar of the other regimes),
+           between ↩ ↪ and the zoom stack, clear of the home indicator. Only
+           dialogs stand at the top. */
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
-            .focus-toast {
-                top: calc(var(--toolbar-h) + 8px); bottom: auto;
+            .focus-toast,
+            body > .at-focus-toast {
+                bottom: calc(var(--bottom-bar-h) + 16px + env(safe-area-inset-bottom, 0px));
                 left: calc(var(--side-bar-w) + (100vw - var(--side-bar-w)) / 2);
                 max-width: calc(100vw - var(--side-bar-w) - 248px);
             }
-            body:has(#hide-shown-children-chip:not([hidden])) .focus-toast { top: calc(var(--toolbar-h) + 52px); }
         }
+        /* One toast at a time (round 5 §39, src/focus-toast.ts): a message on
+           the screen with the confirmation takes its place (.at-focus-toast)
+           and carries its "↩ Back" while its time runs; the box steps aside. */
+        .focus-toast-box[hidden] { display: none; }
+        .toast > .focus-toast-sep {
+            display: inline-block; vertical-align: middle; width: 1px; height: 1.2em; margin: 0 4px 0 12px;
+            background: color-mix(in srgb, var(--surface) 40%, transparent);
+        }
+        .toast > .focus-toast-back {
+            height: auto; min-width: 0; margin: -6px 0; padding: 6px 8px; vertical-align: baseline;
+            color: inherit; text-decoration: underline;
+        }
+        @media (hover: hover) { .toast > .focus-toast-back:hover { background: color-mix(in srgb, var(--surface) 15%, transparent); } }
+        .toast > .focus-toast-back:focus-visible { outline-color: var(--surface); }
+        .undo-toast > .focus-toast-sep { margin: 4px 0; }
         /* A toast lifted over an open bubble into the top layer (src/bubble-layer.ts):
            it stays where it stands, none of a popover's own box (no specificity:
            the toasts' own rules win). */

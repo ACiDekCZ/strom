@@ -214,7 +214,7 @@ test.describe('a toast over a bubble', () => {
         expect(await hitAtMiddle(page, '#focus-toast .focus-toast-box')).toBe(true);
     });
 
-    test('a phone held sideways: the focus toast at the top of the tree, under the top bar', async ({ page }) => {
+    test('a phone held sideways: the focus toast at the bottom of the tree beside the side bar, clear of ↩ ↪ and the zoom stack (round 5 §39)', async ({ page }) => {
         await setup(page);
         await page.setViewportSize({ width: 844, height: 390 });
         await page.evaluate(() => window.Strom.ZoomPan.centerOnPerson('g1' as never));
@@ -223,9 +223,118 @@ test.describe('a toast over a bubble', () => {
         await expect.poll(() => focusOf(page)).toBe('g1');
         const toast = page.locator('#focus-toast .focus-toast-box');
         await expect(toast).toBeVisible();
+        await settledBox(page, '#focus-toast .focus-toast-box');
         const t = (await toast.boundingBox())!;
-        const bar = await page.evaluate(() => document.querySelector('.toolbar')!.getBoundingClientRect().bottom);
-        expect(t.y).toBeGreaterThanOrEqual(bar);
-        expect(t.y + t.height).toBeLessThan(390 / 2);
+        // At the bottom: a gap of 16 px to the window's bottom edge (no bottom bar sideways)
+        expect(390 - (t.y + t.height)).toBeGreaterThanOrEqual(12);
+        expect(390 - (t.y + t.height)).toBeLessThanOrEqual(24);
+        // Beside the side bar (the bottom bar of the other regimes), clear of ↩ ↪ and the zoom stack
+        const rects = await page.evaluate(() => ['.bottom-bar', '#focus-back-btn', '#focus-forward-btn', '.zoom-controls']
+            .map(s => document.querySelector(s)!.getBoundingClientRect())
+            .filter(r => r.width > 0 && r.height > 0)
+            .map(r => ({ left: r.left, right: r.right, top: r.top, bottom: r.bottom })));
+        expect(rects.length).toBeGreaterThanOrEqual(3);
+        for (const r of rects) {
+            const apart = t.x >= r.right || t.x + t.width <= r.left || t.y >= r.bottom || t.y + t.height <= r.top;
+            expect(apart, JSON.stringify(r)).toBe(true);
+        }
+    });
+});
+
+/**
+ * One toast at a time (round 5 §39): a message coming while the focus toast
+ * stands takes its place and carries its "↩ Back" while the focus toast's
+ * time runs (5 s); then "↩ Back" goes and the message runs its own time. A
+ * message gone sooner gives the focus toast back.
+ */
+test.describe('one toast at a time', () => {
+    /** The toasts a person sees now (a message, the undo pill, the focus toast's box). */
+    const toastsOnScreen = (page: Page) => page.evaluate(() => [...document.querySelectorAll<HTMLElement>('body > .toast, body > .undo-toast, #focus-toast .focus-toast-box')]
+        .filter(el => {
+            const r = el.getBoundingClientRect();
+            return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden' && Number(getComputedStyle(el).opacity) > 0;
+        }).length);
+
+    async function focusWithToast(page: Page): Promise<void> {
+        await setup(page);
+        await rowOf(page, 'g1').locator('.branch-tab.kind-focus').click();
+        await expect.poll(() => focusOf(page)).toBe('g1');
+        await expect(page.locator('#focus-toast .focus-toast-box')).toBeVisible();
+        await page.mouse.move(8, 450);
+    }
+
+    test('a message while the focus toast stands: one toast, the message with "↩ Back", which works', async ({ page }) => {
+        await focusWithToast(page);
+        const box = page.locator('#focus-toast .focus-toast-box');
+        const boxRect = (await box.boundingBox())!;
+        await page.evaluate(() => window.Strom.UI.showToast('Saved', 10000));
+        const message = page.locator('body > .toast');
+        await expect(message).toBeVisible();
+        await expect(box).toBeHidden();
+        await expect(message).toContainText('Saved');
+        const back = message.getByRole('button', { name: 'Return to the previous view' });
+        await expect(back).toHaveText('↩ Back');
+        await expect.poll(() => toastsOnScreen(page)).toBe(1);
+        // At the focus toast's place (its bottom edge)
+        await expect.poll(async () => {
+            const m = (await message.boundingBox())!;
+            return Math.abs((m.y + m.height) - (boxRect.y + boxRect.height));
+        }).toBeLessThanOrEqual(2);
+        await back.click();
+        await expect.poll(() => focusOf(page)).toBe('c');
+        await expect(back).toHaveCount(0);
+        await expect(box).toHaveCount(0);
+    });
+
+    test('the undo pill takes the focus toast\'s place as well', async ({ page }) => {
+        await focusWithToast(page);
+        await page.evaluate(() => window.Strom.UI.showUndoToast('adding Wolfbrecht'));
+        const pill = page.locator('body > .undo-toast');
+        await expect(pill.locator('.focus-toast-back')).toHaveText('↩ Back');
+        await expect(page.locator('#focus-toast .focus-toast-box')).toBeHidden();
+        await expect.poll(() => toastsOnScreen(page)).toBe(1);
+    });
+
+    test('"↩ Back" leaves the message when the focus toast\'s time runs out; the message runs its own time', async ({ page }) => {
+        await focusWithToast(page);
+        await page.evaluate(() => window.Strom.UI.showToast('Saved', 9000));
+        const message = page.locator('body > .toast');
+        await expect(message.locator('.focus-toast-back')).toHaveCount(1);
+        await expect(message.locator('.focus-toast-back')).toHaveCount(0, { timeout: 6000 });
+        await expect(message).toBeVisible();
+        await expect(message).toHaveText('Saved');
+        await expect(page.locator('#focus-toast .focus-toast-box')).toHaveCount(0);
+    });
+
+    test('a message gone before the focus toast\'s time gives the focus toast back with "↩ Back"', async ({ page }) => {
+        await focusWithToast(page);
+        await page.evaluate(() => window.Strom.UI.showToast('Saved', 800));
+        await expect(page.locator('body > .toast .focus-toast-back')).toHaveCount(1);
+        const box = page.locator('#focus-toast .focus-toast-box');
+        await expect(box).toBeVisible({ timeout: 3000 });
+        await expect(box.locator('.focus-toast-back')).toHaveText('↩ Back');
+        await expect.poll(() => toastsOnScreen(page)).toBe(1);
+    });
+
+    test('a phone held sideways: the message carrying "↩ Back" stands at the focus toast\'s place at the bottom', async ({ page }) => {
+        await setup(page);
+        await page.setViewportSize({ width: 844, height: 390 });
+        await page.evaluate(() => window.Strom.ZoomPan.centerOnPerson('g1' as never));
+        await page.waitForTimeout(400);
+        await rowOf(page, 'g1').locator('.branch-tab.kind-focus').click();
+        await expect.poll(() => focusOf(page)).toBe('g1');
+        await page.mouse.move(400, 200);
+        const box = page.locator('#focus-toast .focus-toast-box');
+        await expect(box).toBeVisible();
+        const b = (await box.boundingBox())!;
+        await page.evaluate(() => window.Strom.UI.showToast('Saved', 10000));
+        const message = page.locator('body > .toast');
+        await expect(message.locator('.focus-toast-back')).toHaveCount(1);
+        await expect(message).toHaveClass(/at-focus-toast/);
+        await expect.poll(() => toastsOnScreen(page)).toBe(1);
+        await expect.poll(async () => {
+            const m = (await message.boundingBox())!;
+            return Math.round(m.y + m.height);
+        }).toBe(Math.round(b.y + b.height));
     });
 });
