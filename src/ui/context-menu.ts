@@ -253,7 +253,7 @@ export const contextMenuMethods = uiModule({
             return;
         }
         if (action.startsWith(CHILD_ELSEWHERE_ACTION)) {
-            TreeRenderer.showChildElsewhere(action.slice(CHILD_ELSEWHERE_ACTION.length) as PersonId);
+            TreeRenderer.showChildElsewhereStep(action.slice(CHILD_ELSEWHERE_ACTION.length) as PersonId);
             return;
         }
         switch (action) {

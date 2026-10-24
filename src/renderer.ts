@@ -84,6 +84,7 @@ import {
 } from './children-transition.js';
 import type { LayoutViewLayer, ViewLineFlag } from './layout/index.js';
 import { buildViewLayer } from './layout/index.js';
+import { ViewHistory, ViewHistoryEntry, ViewTransform, ShownChildrenSnapshot, emptyViewHistory, pushViewStep, stepViewHistory, sameShown, sameTransform } from './view-history.js';
 
 /**
  * One generation band's world-space geometry, consumed by the sticky HTML
@@ -151,6 +152,8 @@ const VIEW_LABEL_BELOW = 18;
 const VIEW_LABEL_LINE_ENDS = 24;
 /** How long the cards of children just shown (or one glided to) glow (ms). */
 const CHILDREN_GLOW_MS = 1600;
+/** A jump to a card elsewhere that glides: when to look whether it has moved the view (a step of the history). */
+const JUMP_STEP_CHECK_MS = 120;
 /** The "▾ children" bubble stays this long after the pointer left it (ms), so the pointer can reach its rows. */
 const CHILDREN_BUBBLE_CLOSE_MS = 150;
 /** §5: the margin the new children keep from the tree's edges and from the controls over it. */
@@ -247,10 +250,17 @@ class TreeRendererClass {
     // Focus mode state
     private focusPersonId: PersonId | null = null;
 
-    /** Focus navigation history (browser back/forward style), per tree. */
-    private focusHistory: PersonId[] = [];
-    private focusForward: PersonId[] = [];
+    /**
+     * The view's back/forward history (browser style), per tree: a new
+     * focus, children shown or hidden, a jump to a card elsewhere
+     * (src/view-history.ts).
+     */
+    private history: ViewHistory = emptyViewHistory();
     private suppressHistoryPush = false;
+    /** Bumped by every new step: a jump that moves the view late (a glide) adds its step only when none came between. */
+    private historySeq = 0;
+    /** The children a focus from the history shows again (setFocus applies them with the new focus). */
+    private pendingShown: readonly ShownChildrenSnapshot[] | null = null;
     /** Search highlight: hits get 'search-hit', everyone else 'search-dim'. */
     private highlightIds: Set<PersonId> | null = null;
     /** People the last live-research change touched: 'live-changed' glow. */
@@ -1031,21 +1041,24 @@ class TreeRendererClass {
             personId = this.findDefaultFocusPerson();
         }
 
-        // Focus history (browser back/forward): a NORMAL navigation pushes the
-        // previous focus and clears the forward stack. History is reset
-        // explicitly by resetFocusHistory() on tree load/switch (not inferred
-        // here) — that avoids counting the programmatic focus a load performs,
-        // while still counting the user's very first click. goBack/goForward
-        // set suppressHistoryPush so they can manage the stacks themselves.
+        // View history (browser back/forward): a NORMAL navigation pushes the
+        // previous view (focus + children shown) and clears the forward stack.
+        // History is reset explicitly by resetFocusHistory() on tree
+        // load/switch (not inferred here) — that avoids counting the
+        // programmatic focus a load performs, while still counting the user's
+        // very first click. goBack/goForward set suppressHistoryPush so they
+        // can manage the stacks themselves.
         if (!this.suppressHistoryPush && this.focusPersonId && personId
             && this.focusPersonId !== personId) {
-            this.focusHistory.push(this.focusPersonId);
-            if (this.focusHistory.length > 50) this.focusHistory.shift();
-            this.focusForward = [];
+            this.pushHistoryStep(this.currentHistoryEntry());
         }
 
         // Children shown in place belong to the view they were shown in
+        // (a focus from the history brings back the ones it had)
         if (this.focusPersonId !== personId) this.resetChildrenShown();
+        const pendingShown = this.pendingShown;
+        this.pendingShown = null;
+        if (pendingShown && this.viewMode === 'family') this.applyShownSnapshot(pendingShown);
         this.focusPersonId = personId;
 
         // Set default depth to max available when focusing on a new person
@@ -1124,6 +1137,7 @@ class TreeRendererClass {
             return;
         }
         this.finishChildrenTransition();
+        const historyBefore = this.currentHistoryEntry();
         const scene = this.captureChildrenScene();
         const data = DataManager.getData();
         const beforeAll = new Map(this.positions);
@@ -1142,6 +1156,8 @@ class TreeRendererClass {
             this.keepCardInPlace(personId, beforeAll, false);
             return;
         }
+        // A step of the history (the safety net above showed nothing: no step)
+        if (historyBefore) this.pushHistoryStep({ ...historyBefore, anchorId: personId });
         const broughtIn = new Set([...this.positions.keys()].filter(id => !beforeAll.has(id)));
         this.childrenBroughtIn.set(personId, broughtIn);
         if (screenBefore) this.childrenAnchorScreen.set(personId, screenBefore);
@@ -1169,6 +1185,9 @@ class TreeRendererClass {
         const closing = childrenShownClosing(ids, this.childrenShownIds, id => this.childrenBroughtIn.get(id));
         if (closing.size === 0) return;
         this.finishChildrenTransition();
+        const historyBefore = this.currentHistoryEntry();
+        const anchorAt = restoreView ? this.cardScreenCenter(anchorId) : null;
+        if (historyBefore) this.pushHistoryStep({ ...historyBefore, anchorId, ...(restoreView ? { restoreView: true } : {}), ...(anchorAt ? { anchorAt } : {}) });
         const scene = this.captureChildrenScene();
         const beforeAll = new Map(this.positions);
         const zooms = this.childrenShownIds.filter(id => closing.has(id)).map(id => this.childrenZoom.get(id)).filter(z => !!z);
@@ -1650,7 +1669,7 @@ class TreeRendererClass {
         bubble.querySelectorAll<HTMLElement>('.children-elsewhere-row').forEach(row => {
             row.addEventListener('click', () => {
                 close();
-                this.showChildElsewhere(row.dataset.personId as PersonId);
+                this.showChildElsewhereStep(row.dataset.personId as PersonId);
             });
         });
     }
@@ -1774,51 +1793,206 @@ class TreeRendererClass {
      * from another tree would be skipped anyway, this just keeps it tidy.
      */
     resetFocusHistory(): void {
-        this.focusHistory = [];
-        this.focusForward = [];
+        this.history = emptyViewHistory();
+        this.historySeq++;
         this.updateNavButtons();
     }
 
-    /** Is there a previous focus to go back to? */
+    /** Is there a previous view to go back to? */
     canGoBack(): boolean {
-        return this.focusHistory.length > 0;
+        return this.history.back.length > 0;
     }
 
-    /** Is there a focus to go forward to (after going back)? */
+    /** Is there a view to go forward to (after going back)? */
     canGoForward(): boolean {
-        return this.focusForward.length > 0;
+        return this.history.forward.length > 0;
+    }
+
+    /** The view as a history entry: the focus and the children shown (null: no focus). */
+    private currentHistoryEntry(): ViewHistoryEntry | null {
+        if (!this.focusPersonId) return null;
+        return {
+            focus: this.focusPersonId,
+            shown: this.childrenShownIds.map(id => {
+                const zoom = this.childrenZoom.get(id), anchorScreen = this.childrenAnchorScreen.get(id);
+                return {
+                    id,
+                    visibleBefore: this.childrenVisibleBefore.get(id) ?? new Set<PersonId>(),
+                    broughtIn: this.childrenBroughtIn.get(id) ?? new Set<PersonId>(),
+                    ...(zoom ? { zoom } : {}),
+                    ...(anchorScreen ? { anchorScreen } : {}),
+                };
+            }),
+        };
+    }
+
+    /** A new step of the history: the view before it goes back, forward is cleared, ↩ shows. */
+    private pushHistoryStep(before: ViewHistoryEntry | null): void {
+        if (!before) return;
+        pushViewStep(this.history, before);
+        this.historySeq++;
+        this.updateNavButtons();
+    }
+
+    /** Set the children shown in place as a history entry has them (no render). */
+    private applyShownSnapshot(shown: readonly ShownChildrenSnapshot[]): void {
+        this.childrenShownIds = shown.map(s => s.id);
+        this.childrenVisibleBefore = new Map(shown.map(s => [s.id, s.visibleBefore] as const));
+        this.childrenBroughtIn = new Map(shown.map(s => [s.id, s.broughtIn] as const));
+        this.childrenZoom = new Map(shown.filter(s => s.zoom).map(s => [s.id, s.zoom!] as const));
+        this.childrenAnchorScreen = new Map(shown.filter(s => s.anchorScreen).map(s => [s.id, s.anchorScreen!] as const));
+        if (shown.length === 0) this.childrenShownDrift.clear();
     }
 
     /**
-     * Navigate one step through focus history. `from` is the stack we pop the
-     * target off; `to` is the stack the current focus is pushed onto, so the
-     * opposite direction can retrace it. Skips persons deleted meanwhile.
+     * Navigate one step through the view history. A view with another focus
+     * comes back with the children it showed (centred on the focus, as a new
+     * focus is); within the focus the children shown change as a click
+     * changes them (the transition of §1, the step's card in place, the zoom
+     * of §5 back); a jump's pan and zoom come back as they were. Outside the
+     * family view a step of the children shown alone is skipped. Skips
+     * persons deleted meanwhile.
      */
-    private navigateHistory(from: PersonId[], to: PersonId[]): Promise<void> {
-        while (from.length > 0) {
-            const target = from.pop()!;
-            if (DataManager.getPerson(target)) {
-                if (this.focusPersonId) to.push(this.focusPersonId);
-                this.suppressHistoryPush = true;
-                try {
-                    return this.setFocus(target);
-                } finally {
-                    this.suppressHistoryPush = false;
-                }
+    private async navigateHistory(dir: 'back' | 'forward'): Promise<void> {
+        const current = this.currentHistoryEntry();
+        if (!current) {
+            this.updateNavButtons();
+            return;
+        }
+        this.finishChildrenTransition();
+        const family = this.viewMode === 'family';
+        const target = stepViewHistory(this.history, dir, current, ZoomPan.getTransform(),
+            id => !!DataManager.getPerson(id),
+            // outside the family view a step of the children alone is skipped; so is a view that is the current one
+            e => e.focus !== current.focus || (family && (!sameShown(e.shown, current.shown) || !!e.view)),
+            id => this.cardScreenCenter(id));
+        if (!target) {
+            this.updateNavButtons();
+            return;
+        }
+        this.historySeq++;
+        if (target.focus !== current.focus) {
+            this.pendingShown = target.shown;
+            this.suppressHistoryPush = true;
+            try {
+                await this.setFocus(target.focus);
+            } finally {
+                this.suppressHistoryPush = false;
+                this.pendingShown = null;
             }
+            return;
+        }
+        if (!sameShown(target.shown, current.shown)) {
+            await this.restoreChildrenShown(current.shown, target, target.anchorId ?? target.shown[0]?.id ?? current.shown[0]?.id ?? target.focus);
+        } else if (target.view) {
+            this.restoreTransform(target.view);
         }
         this.updateNavButtons();
-        return Promise.resolve();
     }
 
-    /** Navigate to the previous focus (browser back); resolves once the view is drawn and placed. */
+    /**
+     * Change the children shown from `current` to the history entry's, in one
+     * render, as the click of that step would (or its opposite): the cards
+     * move, grow out of their stem or shrink into it (§1); the step's card
+     * keeps its place on the screen ("Hide shown children" again: the first
+     * card where it stood before); the zoom of §5 goes back as closing gives
+     * it back, and comes again when its scale still stands.
+     */
+    private async restoreChildrenShown(current: readonly ShownChildrenSnapshot[], target: ViewHistoryEntry, anchorId: PersonId): Promise<void> {
+        const targetIds = new Set(target.shown.map(s => s.id));
+        const currentIds = new Set(current.map(s => s.id));
+        const closing = current.filter(s => !targetIds.has(s.id));
+        const opening = target.shown.filter(s => !currentIds.has(s.id));
+        const scene = this.captureChildrenScene();
+        const beforeAll = new Map(this.positions);
+        const anchorScreen = this.childrenAnchorScreen.get(anchorId);
+        const involved = new Map<PersonId, ReadonlySet<PersonId>>([...closing, ...opening].map(s => [s.id, s.broughtIn] as const));
+        this.applyShownSnapshot(target.shown);
+        await this.renderInternal();
+        const dir: ChildrenTransitionDir = opening.length > 0 ? 'open' : 'close';
+        const restoreView = dir === 'close' && !!target.restoreView;
+        const shift = this.keepCardInPlace(anchorId, beforeAll, restoreView);
+        const scale = ZoomPan.getScale();
+        let zoomTo: number | null = null;
+        if (dir === 'close') {
+            const zooms = closing.map(s => s.zoom).filter(z => !!z);
+            if (zooms.length > 0 && scale === zooms[zooms.length - 1].after) zoomTo = zooms[0].before;
+        } else {
+            const zooms = opening.map(s => s.zoom).filter(z => !!z);
+            if (zooms.length > 0 && scale === zooms[0].before) zoomTo = zooms[zooms.length - 1].after;
+        }
+        // Back over "Hide shown children": the step's card where it stood before it
+        const landAt = dir === 'open' && target.restoreView ? target.anchorAt ?? null : null;
+        let pivot = restoreView && zoomTo !== null && anchorScreen ? this.landingPivot(anchorId, anchorScreen, zoomTo) : null;
+        if (landAt && zoomTo !== null) pivot = this.landingPivot(anchorId, landAt, zoomTo);
+        else if (landAt) {
+            const now = this.cardScreenCenter(anchorId);
+            if (now) {
+                const dx = (now.x - landAt.x) / scale, dy = (now.y - landAt.y) / scale;
+                ZoomPan.shiftWorld(dx, dy);
+                shift.x += dx;
+                shift.y += dy;
+            }
+        }
+        const data = DataManager.getData();
+        const glow = dir === 'open' && opening.some(s => s.id === anchorId)
+            ? () => this.highlightCards((data.persons[anchorId]?.childIds ?? []).filter(id => this.positions.has(id)), CHILDREN_GLOW_MS)
+            : undefined;
+        this.playChildrenTransition(scene, dir, anchorId, shift, involved, zoomTo, glow, pivot);
+    }
+
+    /** Put the pan and zoom back as a history entry has them (at once). */
+    private restoreTransform(view: ViewTransform): void {
+        ZoomPan.finishAnimation();
+        ZoomPan.zoomAroundWorldPoint(0, 0, view.scale, 0, t => t);
+        const t = ZoomPan.getTransform();
+        ZoomPan.shiftWorld((t.tx - view.tx) / t.scale, (t.ty - view.ty) / t.scale);
+    }
+
+    /**
+     * Run a move of the view to a card drawn elsewhere (a line link's
+     * "child ↗", a row of "Already in the tree elsewhere") as a step of the
+     * history: the pan and zoom before it come back with ↩. A move that
+     * glides adds its step once it has moved; one that moves nothing (the
+     * cards stood in view) adds none.
+     */
+    private jumpStep(move: () => void): void {
+        const before = this.currentHistoryEntry();
+        if (!before) {
+            move();
+            return;
+        }
+        const view = ZoomPan.getTransform();
+        const seq = this.historySeq;
+        const focus = this.focusPersonId;
+        move();
+        const moved = (): boolean => !sameTransform(ZoomPan.getTransform(), view);
+        if (moved()) {
+            this.pushHistoryStep({ ...before, view });
+            return;
+        }
+        // A glide starts on the next frame: look again once it is under way
+        setTimeout(() => {
+            if (seq === this.historySeq && focus === this.focusPersonId
+                && sameShown(before.shown, this.currentHistoryEntry()?.shown ?? []) && moved()) {
+                this.pushHistoryStep({ ...before, view });
+            }
+        }, JUMP_STEP_CHECK_MS);
+    }
+
+    /** Move the view to a child drawn elsewhere in the tree (§4), as a step of the history. */
+    showChildElsewhereStep(childId: PersonId): void {
+        this.jumpStep(() => this.showChildElsewhere(childId));
+    }
+
+    /** Navigate to the previous view (browser back); resolves once the view is drawn and placed. */
     goBack(): Promise<void> {
-        return this.navigateHistory(this.focusHistory, this.focusForward);
+        return this.navigateHistory('back');
     }
 
-    /** Navigate to the next focus after going back (browser forward). */
-    goForward(): void {
-        this.navigateHistory(this.focusForward, this.focusHistory);
+    /** Navigate to the next view after going back (browser forward). */
+    goForward(): Promise<void> {
+        return this.navigateHistory('forward');
     }
 
     /** Show/hide the floating back & forward buttons to match history state. */
@@ -2895,7 +3069,7 @@ class TreeRendererClass {
                     e.stopPropagation();
                     const links = this.lineLinks.get(id);
                     if (!links) return;
-                    this.jumpToPersons(tab.dataset.action === 'jump-parents' ? links.parentIds : links.childIds);
+                    this.jumpStep(() => this.jumpToPersons(tab.dataset.action === 'jump-parents' ? links.parentIds : links.childIds));
                 });
             });
 
