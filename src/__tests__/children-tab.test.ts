@@ -6,7 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { hiddenRelativesTabs, hiddenChildIds, newlyShownChildIds, childrenDrawnElsewhere, siblingOrderMark, childrenShownClosing, siblingsTabState, newlyShownSiblingIds, siblingGroups, unionChildIdSet, hiddenPartnerIds, childrenByUnion, childrenComeWithPartners, otherFamilyChildrenElsewhere, HiddenRelativesTab } from '../marriage-order.js';
-import { tabsForm, tabGlyph, tabLabel, tabKindClass, branchTabRestHtml } from '../union-order-measure.js';
+import { tabsForm, tabGlyph, tabLabel, tabKindClass, branchTabRestHtml, bubbleOpensBelow } from '../union-order-measure.js';
 import { branchTabKind, branchTabsInOrder } from '../marriage-order.js';
 import { childIdsShownInPlace } from '../layout/pipeline/1-select-subgraph.js';
 import { PersonId, PartnershipId, Person, StromData, DEFAULT_LAYOUT_CONFIG } from '../types.js';
@@ -490,5 +490,26 @@ describe('other families and partners (§5)', () => {
         expect(otherFamilyChildrenElsewhere(d, P('karl'), view('karl', 'a1'), id => id === P('a1'))).toEqual([]);
         // the partner in view: the family is drawn
         expect(otherFamilyChildrenElsewhere(d, P('karl'), view('karl', 'anna', 'a1'), () => false)).toEqual([]);
+    });
+});
+
+describe('where a tab\'s bubble opens', () => {
+    // a tab 18 px high; the tree from 100 (under the bars) to 800
+    const tab = (top: number) => ({ top, bottom: top + 18 });
+
+    it('above the tab while the bubble fits under the bars, with its arrow', () => {
+        expect(bubbleOpensBelow(tab(400), 200, 100, 800)).toBe(false);
+        expect(bubbleOpensBelow(tab(312), 200, 100, 800)).toBe(false);
+    });
+
+    it('below the tab when the room above is too small and the room below larger', () => {
+        // a tall bubble (siblings by group) over a card near the top: it would go under the bars
+        expect(bubbleOpensBelow(tab(311), 200, 100, 800)).toBe(true);
+        expect(bubbleOpensBelow(tab(150), 300, 100, 800)).toBe(true);
+    });
+
+    it('stays above when the room below is no larger (it shows the more of itself there)', () => {
+        expect(bubbleOpensBelow(tab(500), 600, 100, 800)).toBe(false);
+        expect(bubbleOpensBelow(tab(441), 600, 100, 800)).toBe(false);
     });
 });

@@ -3223,6 +3223,10 @@
             border: 1px solid var(--border);
             border-radius: 8px;
             padding: 10px 14px;
+            /* As wide as its lines up to the maximum: inside a narrow tab the
+               shrink-to-fit width would stay at the minimum and a bubble of
+               groups and sentences would grow tall instead. */
+            width: max-content;
             min-width: 150px;
             max-width: 240px;
             box-shadow: var(--shadow-lg);
@@ -3248,6 +3252,11 @@
             border-bottom: 1px solid var(--border);
             transform: rotate(45deg);
         }
+        /* Too little room above the tab (under the bars over the tree) and
+           more below: the bubble opens below it, the arrow on its top edge
+           (TreeRenderer.placeBubble). */
+        .badge-tooltip.below { bottom: auto; top: 100%; margin-bottom: 0; margin-top: 8px; }
+        .badge-tooltip.below::after { top: auto; bottom: 100%; margin-top: 0; margin-bottom: -5px; transform: rotate(225deg); }
         @media (hover: hover) { .hidden-partners-btn:hover .badge-tooltip,
         .branch-tab:hover .badge-tooltip {
             display: block;

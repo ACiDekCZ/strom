@@ -158,6 +158,34 @@ test('the person menu: "Show siblings here" with the count above the children ro
     for (const id of SIBLINGS) await expect(cardOf(page, id)).toHaveCount(0);
 });
 
+test('at 1024 × 768 the tall "▸ siblings" bubble of a card just under the bars stays on the screen: it opens below the tab', async ({ page }) => {
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await setup(page);
+    // the lowest bar over the tree (the toolbar, the focus bar); the card panned to 60 px under it
+    const barsBottom = (): number => Math.max(0, ...['.toolbar', '#focus-controls']
+        .map(s => document.querySelector<HTMLElement>(s))
+        .filter((e): e is HTMLElement => !!e && e.getClientRects().length > 0)
+        .map(e => e.getBoundingClientRect().bottom));
+    await page.evaluate(([fn]) => {
+        const bars = new Function(`return (${fn})()`)() as number;
+        const card = document.querySelector<HTMLElement>('#tree-canvas .person-card[data-id="focus"]')!;
+        const zp = window.Strom.ZoomPan;
+        zp.shiftWorld(0, (card.getBoundingClientRect().top - (bars + 60)) / zp.getScale());
+    }, [barsBottom.toString()] as const);
+    const tab = siblingsTab(page, PERSON);
+    await tab.hover();
+    const bubble = tab.locator(':scope > .badge-tooltip');
+    await expect(bubble).toBeVisible();
+    await expect(bubble).toHaveClass(/\bbelow\b/);
+    const box = await page.evaluate(([fn]) => {
+        const bars = new Function(`return (${fn})()`)() as number;
+        const r = document.querySelector<HTMLElement>('#tree-canvas .person-card[data-id="focus"] .siblings-tab > .badge-tooltip')!.getBoundingClientRect();
+        return { top: r.top, bottom: r.bottom, bars, vh: window.innerHeight };
+    }, [barsBottom.toString()] as const);
+    expect(box.top).toBeGreaterThanOrEqual(box.bars);
+    expect(box.bottom).toBeLessThanOrEqual(box.vh);
+});
+
 test.describe('phone 390 × 844', () => {
     test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 

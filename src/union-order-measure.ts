@@ -96,6 +96,21 @@ export function tabKindClass(tab: BranchTab): string {
     return `kind-${branchTabKind(tab)}`;
 }
 
+/** The gap between a tab and its bubble with the bubble's arrow (index.html .badge-tooltip margin). */
+const BUBBLE_GAP = 12;
+
+/**
+ * Whether a tab's bubble opens below the tab instead of above it: only when
+ * the room above (from the tab's top up to the bars over the tree) is too
+ * small for the bubble and the room below (down to the tree's bottom) is
+ * larger. Screen pixels, the zoom included.
+ */
+export function bubbleOpensBelow(tab: { top: number; bottom: number }, bubbleHeight: number, roomTop: number, roomBottom: number): boolean {
+    const above = tab.top - roomTop;
+    if (above >= bubbleHeight + BUBBLE_GAP) return false;
+    return roomBottom - tab.bottom > above;
+}
+
 /**
  * The resting look of a top-edge tab (no bubble): its glyph, its word (kept
  * for screen readers when the card shortens its tabs) and its short letter

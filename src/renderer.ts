@@ -73,7 +73,7 @@ import {
     hiddenPartnerIds, childrenByUnion, childrenComeWithPartners, otherFamilyChildrenElsewhere, marriagesInOrder,
 } from './marriage-order.js';
 import { partnerIdsShownInPlace } from './layout/pipeline/1-select-subgraph.js';
-import { measureUnionOrderPills, measureTabRows, rowKey, unionOrderPillKey, unionOrderPillPartsHtml, pillFontsPending, branchTabRestHtml, tabsForm, tabsFormClass } from './union-order-measure.js';
+import { measureUnionOrderPills, measureTabRows, rowKey, unionOrderPillKey, unionOrderPillPartsHtml, pillFontsPending, branchTabRestHtml, tabsForm, tabsFormClass, bubbleOpensBelow } from './union-order-measure.js';
 import { showFocusToast, hideFocusToast } from './focus-toast.js';
 import { openCardMenuFromKeyboard } from './ui/keyboard-access.js';
 import { syncDepthStepper } from './ui/depth-stepper.js';
@@ -2335,6 +2335,35 @@ class TreeRendererClass {
      * is open the person's children in view glow (§6). A row glides the view
      * to the child drawn elsewhere (§4).
      */
+    /**
+     * A tab's bubble opens above the tab; a long one (groups of siblings, a
+     * family) near the top went under the bars over the tree or off the
+     * screen. It opens below the tab (.below) when the room above is too
+     * small and the room below larger: measured when it opens, the zoom
+     * included.
+     */
+    private placeBubble(tab: HTMLElement, bubble: HTMLElement): void {
+        const shown = getComputedStyle(bubble).display !== 'none';
+        if (!shown) { bubble.style.visibility = 'hidden'; bubble.style.display = 'block'; }
+        const height = bubble.getBoundingClientRect().height;
+        if (!shown) { bubble.style.display = ''; bubble.style.visibility = ''; }
+        if (height === 0) return;
+        const r = tab.getBoundingClientRect();
+        const container = document.getElementById('tree-container')?.getBoundingClientRect();
+        let roomTop = container?.top ?? 0;
+        const roomBottom = container?.bottom ?? window.innerHeight;
+        // The bars standing over the tree above the tab (the toolbar, the focus bar, the "Hide shown" button or chip)
+        const reach = 130;
+        for (const sel of ['.toolbar', '#focus-controls', '#hide-shown-children', '#hide-shown-children-chip']) {
+            const el = document.querySelector<HTMLElement>(sel);
+            if (!el || el.hidden || el.getClientRects().length === 0) continue;
+            const b = el.getBoundingClientRect();
+            if (b.width === 0 || b.bottom > r.top || b.right < r.left - reach || b.left > r.right + reach) continue;
+            roomTop = Math.max(roomTop, b.bottom);
+        }
+        bubble.classList.toggle('below', bubbleOpensBelow(r, height, roomTop, roomBottom));
+    }
+
     private bindChildrenBubble(personId: PersonId, tab: HTMLElement, bubble: HTMLElement,
         glowIds: () => PersonId[] = () => (DataManager.getPerson(personId)?.childIds ?? []).filter(cid => this.positions.has(cid))): void {
         let closeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -2351,6 +2380,7 @@ class TreeRendererClass {
             const row = tab.offsetParent as HTMLElement | null;
             const fromRight = (row?.clientWidth ?? 0) - (tab.offsetLeft + tab.offsetWidth / 2);
             bubble.style.left = row ? `calc(100% - ${fromRight}px)` : `${tab.offsetLeft + tab.offsetWidth / 2}px`;
+            this.placeBubble(tab, bubble);
             bubble.classList.add('open');
             releaseGlow = this.highlightCards(glowIds());
         };
@@ -3764,6 +3794,14 @@ class TreeRendererClass {
                     card.classList.toggle('tooltip-below', cardTop - needed < 4);
                 });
             }
+
+            // The bubbles inside the tabs (hover, keyboard) open below when there is no room above
+            card.querySelectorAll<HTMLElement>('.branch-tab, .hidden-partners-btn').forEach(host => {
+                const tip = host.querySelector<HTMLElement>(':scope > .badge-tooltip');
+                if (!tip) return;
+                host.addEventListener('mouseenter', () => this.placeBubble(host, tip));
+                host.addEventListener('focus', () => this.placeBubble(host, tip));
+            });
 
             // The children tab shows (hides) the children in place
             const childrenTab = card.querySelector<HTMLElement>('.branch-tab.children-tab');
