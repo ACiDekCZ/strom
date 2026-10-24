@@ -105,6 +105,40 @@ test('a direct-line ancestor: children shown in place, the card stays, a second 
     await expect.poll(() => screenPositions(page)).toEqual(before);
 });
 
+test('the children shown in place wear the hatch, at every level, and lose it when hidden again', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await setup(page);
+    const marked = () => page.evaluate(() => [...document.querySelectorAll<HTMLElement>('#tree-canvas .person-card.shown-here')]
+        .map(c => c.dataset.id!).sort());
+    const hatch = (id: string) => page.evaluate(pid => getComputedStyle(document.querySelector(`#tree-canvas .person-card[data-id="${pid}"]`)!).backgroundImage, id);
+    expect(await marked()).toEqual([]);
+    await tabOf(page, ANCESTOR).click();
+    await expect(cardOf(page, SIBLINGS[0])).toBeVisible();
+    // The children the click brought into view; not the father, not the focus's line drawn before
+    await expect.poll(marked).toEqual([HALF, ...SIBLINGS].sort());
+    expect(await hatch(SIBLINGS[0])).toContain('repeating-linear-gradient');
+    expect(await hatch(ANCESTOR)).toBe('none');
+    await expect(cardOf(page, 'focus')).not.toHaveClass(/shown-here/);
+    // Not the look of a person linked in the view only: the card's own border stays
+    const border = (id: string) => page.evaluate(pid => getComputedStyle(document.querySelector(`#tree-canvas .person-card[data-id="${pid}"]`)!).borderTopColor, id);
+    expect(await border(SIBLINGS[0])).toBe(await border(ANCESTOR));
+    // A level down: a shown child's own children
+    const nested = tabOf(page, SIBLINGS[0]);
+    await nested.click();
+    await expect(cardOf(page, 'nephew_1_1')).toBeVisible();
+    await expect.poll(marked).toEqual([HALF, ...SIBLINGS, 'nephew_1_1', 'nephew_1_2', 'nephew_1_3'].sort());
+    await tabOf(page, SIBLINGS[0]).click();
+    await expect(cardOf(page, 'nephew_1_1')).toHaveCount(0);
+    await expect.poll(marked).toEqual([HALF, ...SIBLINGS].sort());
+    // Dark: the hatch is there too
+    await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+    expect(await hatch(SIBLINGS[0])).toContain('repeating-linear-gradient');
+    await page.evaluate(() => document.documentElement.removeAttribute('data-theme'));
+    await tabOf(page, ANCESTOR).click();
+    await expect(cardOf(page, SIBLINGS[0])).toHaveCount(0);
+    await expect.poll(marked).toEqual([]);
+});
+
 test('the person menu shows and hides the children; a new focus starts without them', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await setup(page);

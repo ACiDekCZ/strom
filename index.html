@@ -7921,6 +7921,16 @@
         #tree-canvas .person-card.view-ghost .avatar-initials { color: var(--ghost-text); }
         #tree-canvas .person-card.view-ghost .card-avatar { background: color-mix(in srgb, var(--ghost-bg) 60%, var(--avatar-bg)); }
         #tree-canvas .person-card.view-ghost .island-caption { display: none; }
+        /* Children shown in place (the "▾ children" tab, src/renderer.ts
+           shownHereIds): the ghost's hatch on the card's own surface (its
+           stripe mixed so it reads on the surface in both themes), and nothing
+           else of the ghost — the card's border, text and shadow stay, so a
+           shown child and a person linked in the view only read apart. Gone
+           when the children are hidden again. The evidence view's fills and a
+           ghost's own look win. Not printed or exported, like the ghosts. */
+        #tree-canvas .person-card.shown-here:not(.view-ghost, .evl-full, .evl-none) {
+            background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--ghost-line) 24%, var(--surface)) 0 1.5px, var(--surface) 1.5px 6px);
+        }
         /* Lines: inside a shown family the tree's own shape (an adoptive or
            step dash stays) in the ghost's tone; the linking line hollow — a
            5px stroke under a 2px one in the canvas colour, round joins, no dash. */

@@ -1696,6 +1696,22 @@ class TreeRendererClass {
             pid => this.childrenVisibleBefore.get(pid), cid => drops.has(cid));
     }
 
+    /**
+     * The children shown in place (the "▾ children" tab, at every level):
+     * the ones each click brought into view — the bubble's list. Their cards
+     * carry the hatch of the cards linked in the view only (`shown-here`),
+     * until their parent's children are hidden again.
+     */
+    private shownHereIds(): ReadonlySet<PersonId> {
+        const out = new Set<PersonId>();
+        if (this.viewMode !== 'family') return out;
+        const data = DataManager.getData();
+        for (const pid of this.childrenShownIds) {
+            for (const cid of newlyShownChildIds(data, pid, id => this.positions.has(id), this.childrenVisibleBefore.get(pid) ?? new Set())) out.add(cid);
+        }
+        return out;
+    }
+
     /** The card may carry the sibling-order pill: a child its shown parent's view drew before the click. */
     private siblingOrderCandidate(id: PersonId): boolean {
         if (this.viewMode !== 'family' || this.childrenShownIds.length === 0) return false;
@@ -2457,6 +2473,7 @@ class TreeRendererClass {
         const orderBadges = unionOrderBadges(DataManager.getData(),
             { positions: this.positions, spouseLines: this.spouseLines }, DataManager.getData(), this.focusPersonId);
         const orderSlots = this.unionOrderSlots(orderBadges, partnershipChildIds, signalCtx);
+        const shownHere = this.shownHereIds();
 
         for (const [id, pos] of this.positions) {
             const person = DataManager.getPerson(id);
@@ -2491,6 +2508,7 @@ class TreeRendererClass {
             // A person of a family shown "linked in the view only" (the hook of its look: package C).
             const ghostOf = this.viewLayer?.ghostIds.has(id) ? this.viewLayer.ghostOf.get(id) : undefined;
             if (ghostOf) classes += ' view-ghost';
+            if (shownHere.has(id)) classes += ' shown-here';
             if (this.evidenceIds) classes += this.evidenceIds.has(id) ? ' evidence-hit' : ' evidence-dim';
             const evl = this.evidenceLevelMap?.get(id);
             if (evl) classes += ` evl-${evl}`;
