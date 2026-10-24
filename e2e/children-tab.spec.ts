@@ -1,7 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { openApp, seedTree } from './helpers.js';
+import { openApp, seedTree, seedSetting } from './helpers.js';
 
 /**
  * The children tab (GitHub #4): a card whose person has children out of view
@@ -140,6 +140,78 @@ test('the children shown in place wear the hatch, at every level, and lose it wh
     await expect(cardOf(page, SIBLINGS[0])).toHaveCount(0);
     await expect.poll(marked).toEqual([]);
 });
+
+/**
+ * The small text of a card wearing the hatch reads at AA (≥ 4.5:1) both on
+ * the hatch's stripe and on the card's surface, in the light and the dark
+ * theme, on the default card and on the custom card with its detail lines:
+ * in the dark the date (11 px) stood at 3.8:1 on the stripe. Every element of
+ * the card with its own text, against what lies under it (the hatched card:
+ * the stripe's and the surface's colour as the computed gradient gives them).
+ */
+for (const custom of [false, true]) {
+    test(`the text on a hatched card reads at AA on the stripe and on the surface, light and dark${custom ? ' (the custom card)' : ''}`, async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        if (custom) {
+            await seedSetting(page, 'cardDensity', 'custom');
+            await seedSetting(page, 'cardFields', { style: 'labels', on: ['birth', 'death', 'occupation'], place: ['birth', 'death'], cause: true, fullDate: true });
+        }
+        await setup(page);
+        await tabOf(page, ANCESTOR).click();
+        await expect(cardOf(page, SIBLINGS[0])).toBeVisible();
+        await page.mouse.move(5, 500);
+        // the colours as they stand, no transition between the themes
+        await page.addStyleTag({ content: '*, *::before, *::after { transition: none !important; animation: none !important; }' });
+        for (const theme of ['light', 'dark']) {
+            await page.evaluate(t => document.documentElement.setAttribute('data-theme', t), theme);
+            const low = await page.evaluate(() => {
+                const parse = (c: string): number[][] => [...c.matchAll(/rgba?\(([^)]+)\)|color\(srgb ([^)]+)\)/g)].map(m => m[1]
+                    ? m[1].split(/[ ,/]+/).filter(Boolean).slice(0, 3).map(Number)
+                    : m[2].split(/[ /]+/).filter(Boolean).slice(0, 3).map(v => Number(v) * 255));
+                const lum = (rgb: number[]) => {
+                    const [r, g, b] = rgb.map(v => { const c = v / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
+                    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+                };
+                const ratio = (a: number[], b: number[]) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+                const out: string[] = [];
+                let checked = 0;
+                for (const card of document.querySelectorAll<HTMLElement>('#tree-canvas .person-card.shown-here')) {
+                    const bg = getComputedStyle(card).backgroundImage;
+                    if (!bg.includes('repeating-linear-gradient')) { out.push(`${card.dataset.id}: no hatch`); continue; }
+                    // the stripe's colour and the surface's, as the gradient's stops
+                    const hatch = parse(bg).filter((c, i, all) => all.findIndex(d => d.every((v, k) => Math.abs(v - c[k]) < 0.5)) === i);
+                    for (const el of card.querySelectorAll<HTMLElement>('*')) {
+                        if (el.closest('.card-tooltip, .badge-tooltip')) continue;
+                        // text of its own (a letter or a digit: a glyph like "▸" is a mark, not text)
+                        if (![...el.childNodes].some(n => n.nodeType === 3 && /[\p{L}\p{N}]/u.test(n.textContent!))) continue;
+                        if (el.getClientRects().length === 0) continue;
+                        let under: number[][] = hatch;
+                        for (let a: HTMLElement | null = el; a && a !== card; a = a.parentElement) {
+                            const cs = getComputedStyle(a);
+                            if (cs.backgroundImage !== 'none') { under = parse(cs.backgroundImage); break; }
+                            const c = parse(cs.backgroundColor)[0];
+                            if (cs.backgroundColor !== 'rgba(0, 0, 0, 0)' && c) { under = [c]; break; }
+                        }
+                        const fg = parse(getComputedStyle(el).color)[0];
+                        for (const u of under) {
+                            checked++;
+                            const r = ratio(fg, u);
+                            if (r < 4.5) out.push(`${card.dataset.id} .${el.className} "${el.textContent!.trim().slice(0, 16)}" ${getComputedStyle(el).fontSize}: ${r.toFixed(2)}:1`);
+                        }
+                    }
+                }
+                return { out, checked };
+            });
+            expect(low.checked, theme).toBeGreaterThan(10);
+            expect(low.out, theme).toEqual([]);
+        }
+        // Still not the look of a person linked in the view only (dark): the card's own border and shadow
+        const look = (id: string) => page.evaluate(pid => { const cs = getComputedStyle(document.querySelector(`#tree-canvas .person-card[data-id="${pid}"]`)!); return [cs.borderTopColor, cs.boxShadow]; }, id);
+        const [child, father] = [await look(SIBLINGS[0]), await look(ANCESTOR)];
+        expect(child[0]).toBe(father[0]);
+        expect(child[1]).not.toContain('inset');
+    });
+}
 
 test('the person menu shows and hides the children; a new focus starts without them', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
