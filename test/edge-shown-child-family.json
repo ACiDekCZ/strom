@@ -1,0 +1,656 @@
+{
+  "persons": {
+    "focus": {
+      "id": "focus",
+      "firstName": "Ilse",
+      "lastName": "Varnholt",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "g1",
+        "g1w"
+      ],
+      "childIds": [],
+      "birthDate": "1990-03-02"
+    },
+    "g1": {
+      "id": "g1",
+      "firstName": "Orvald",
+      "lastName": "Varnholt",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u1"
+      ],
+      "parentIds": [
+        "g2",
+        "g2w"
+      ],
+      "childIds": [
+        "focus"
+      ],
+      "birthDate": "1960-05-11"
+    },
+    "g1w": {
+      "id": "g1w",
+      "firstName": "Ysolde",
+      "lastName": "Oskand",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u1"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "focus"
+      ],
+      "birthDate": "1962-07-21"
+    },
+    "g2": {
+      "id": "g2",
+      "firstName": "Tobiah",
+      "lastName": "Varnholt",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u2"
+      ],
+      "parentIds": [
+        "g3",
+        "g3w"
+      ],
+      "childIds": [
+        "g1"
+      ],
+      "birthDate": "1930-02-14"
+    },
+    "g2w": {
+      "id": "g2w",
+      "firstName": "Rena",
+      "lastName": "Clathe",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u2"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "g1"
+      ],
+      "birthDate": "1932-09-03"
+    },
+    "g3": {
+      "id": "g3",
+      "firstName": "Fenwick",
+      "lastName": "Varnholt",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u3"
+      ],
+      "parentIds": [
+        "g4",
+        "g4w"
+      ],
+      "childIds": [
+        "g2"
+      ],
+      "birthDate": "1900-04-18"
+    },
+    "g3w": {
+      "id": "g3w",
+      "firstName": "Ottilie",
+      "lastName": "Brask",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u3"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "g2"
+      ],
+      "birthDate": "1902-11-30"
+    },
+    "g4": {
+      "id": "g4",
+      "firstName": "Thadric",
+      "lastName": "Varnholt",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u4"
+      ],
+      "parentIds": [
+        "g5",
+        "g5w"
+      ],
+      "childIds": [
+        "g3",
+        "s3"
+      ],
+      "birthDate": "1870-01-09"
+    },
+    "g4w": {
+      "id": "g4w",
+      "firstName": "Henrike",
+      "lastName": "Dorlan",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u4"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "g3",
+        "s3"
+      ],
+      "birthDate": "1872-06-15"
+    },
+    "g5": {
+      "id": "g5",
+      "firstName": "Quillon",
+      "lastName": "Varnholt",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u5"
+      ],
+      "parentIds": [
+        "g6",
+        "g6w"
+      ],
+      "childIds": [
+        "s4a",
+        "g4",
+        "s4b"
+      ],
+      "birthDate": "1840-08-22"
+    },
+    "g5w": {
+      "id": "g5w",
+      "firstName": "Wilma",
+      "lastName": "Eskerod",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u5"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "s4a",
+        "g4",
+        "s4b"
+      ],
+      "birthDate": "1842-03-27"
+    },
+    "g6": {
+      "id": "g6",
+      "firstName": "Barthel",
+      "lastName": "Varnholt",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u6",
+        "u6b"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "g5",
+        "b5",
+        "h5"
+      ],
+      "birthDate": "1810-10-05"
+    },
+    "g6w": {
+      "id": "g6w",
+      "firstName": "Brinja",
+      "lastName": "Fenmoor",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u6"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "g5",
+        "b5"
+      ],
+      "birthDate": "1812-12-12"
+    },
+    "g6w2": {
+      "id": "g6w2",
+      "firstName": "Petra",
+      "lastName": "Holmvik",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u6b"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "h5"
+      ],
+      "birthDate": "1816-02-02"
+    },
+    "b5": {
+      "id": "b5",
+      "firstName": "Ulfert",
+      "lastName": "Varnholt",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "g6",
+        "g6w"
+      ],
+      "childIds": [],
+      "birthDate": "1843-05-05"
+    },
+    "h5": {
+      "id": "h5",
+      "firstName": "Agathe",
+      "lastName": "Varnholt",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_h5"
+      ],
+      "parentIds": [
+        "g6",
+        "g6w2"
+      ],
+      "childIds": [
+        "h5c"
+      ],
+      "birthDate": "1850-07-07"
+    },
+    "h5h": {
+      "id": "h5h",
+      "firstName": "Rudolf",
+      "lastName": "Questen",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_h5"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "h5c"
+      ],
+      "birthDate": "1848-04-04"
+    },
+    "h5c": {
+      "id": "h5c",
+      "firstName": "Elmar",
+      "lastName": "Questen",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "h5h",
+        "h5"
+      ],
+      "childIds": [],
+      "birthDate": "1875-09-09"
+    },
+    "s4a": {
+      "id": "s4a",
+      "firstName": "Ferdl",
+      "lastName": "Varnholt",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_s4a1",
+        "u_s4a2"
+      ],
+      "parentIds": [
+        "g5",
+        "g5w"
+      ],
+      "childIds": [
+        "s4a1",
+        "s4a2",
+        "s4a3",
+        "s4a4"
+      ],
+      "birthDate": "1868-03-03"
+    },
+    "s4aw1": {
+      "id": "s4aw1",
+      "firstName": "Lotte",
+      "lastName": "Mirsch",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_s4a1"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "s4a1",
+        "s4a2"
+      ],
+      "birthDate": "1870-04-04"
+    },
+    "s4aw2": {
+      "id": "s4aw2",
+      "firstName": "Hanne",
+      "lastName": "Tolvik",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_s4a2"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "s4a3",
+        "s4a4"
+      ],
+      "birthDate": "1874-05-05"
+    },
+    "s4a1": {
+      "id": "s4a1",
+      "firstName": "Gernot",
+      "lastName": "Varnholt",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "s4a",
+        "s4aw1"
+      ],
+      "childIds": [],
+      "birthDate": "1895-01-01"
+    },
+    "s4a2": {
+      "id": "s4a2",
+      "firstName": "Irmel",
+      "lastName": "Varnholt",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "s4a",
+        "s4aw1"
+      ],
+      "childIds": [],
+      "birthDate": "1897-02-02"
+    },
+    "s4a3": {
+      "id": "s4a3",
+      "firstName": "Jost",
+      "lastName": "Varnholt",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "s4a",
+        "s4aw2"
+      ],
+      "childIds": [],
+      "birthDate": "1902-03-03"
+    },
+    "s4a4": {
+      "id": "s4a4",
+      "firstName": "Kunna",
+      "lastName": "Varnholt",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "s4a",
+        "s4aw2"
+      ],
+      "childIds": [],
+      "birthDate": "1904-04-04"
+    },
+    "s4b": {
+      "id": "s4b",
+      "firstName": "Hesketh",
+      "lastName": "Varnholt",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_s4b"
+      ],
+      "parentIds": [
+        "g5",
+        "g5w"
+      ],
+      "childIds": [
+        "s4b1",
+        "s4b2",
+        "s4b3",
+        "s4b4",
+        "s4b5"
+      ],
+      "birthDate": "1874-06-06"
+    },
+    "s4bw": {
+      "id": "s4bw",
+      "firstName": "Swaantje",
+      "lastName": "Pelgrim",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_s4b"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "s4b1",
+        "s4b2",
+        "s4b3",
+        "s4b4",
+        "s4b5"
+      ],
+      "birthDate": "1876-07-07"
+    },
+    "s4b1": {
+      "id": "s4b1",
+      "firstName": "Arno",
+      "lastName": "Varnholt",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "s4b",
+        "s4bw"
+      ],
+      "childIds": [],
+      "birthDate": "1898-01-11"
+    },
+    "s4b2": {
+      "id": "s4b2",
+      "firstName": "Britt",
+      "lastName": "Varnholt",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "s4b",
+        "s4bw"
+      ],
+      "childIds": [],
+      "birthDate": "1899-02-12"
+    },
+    "s4b3": {
+      "id": "s4b3",
+      "firstName": "Cyriak",
+      "lastName": "Varnholt",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "s4b",
+        "s4bw"
+      ],
+      "childIds": [],
+      "birthDate": "1901-03-13"
+    },
+    "s4b4": {
+      "id": "s4b4",
+      "firstName": "Dörte",
+      "lastName": "Varnholt",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "s4b",
+        "s4bw"
+      ],
+      "childIds": [],
+      "birthDate": "1903-04-14"
+    },
+    "s4b5": {
+      "id": "s4b5",
+      "firstName": "Eckart",
+      "lastName": "Varnholt",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "s4b",
+        "s4bw"
+      ],
+      "childIds": [],
+      "birthDate": "1905-05-15"
+    },
+    "s3": {
+      "id": "s3",
+      "firstName": "Malwine",
+      "lastName": "Varnholt",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "g4",
+        "g4w"
+      ],
+      "childIds": [],
+      "birthDate": "1904-08-08"
+    }
+  },
+  "partnerships": {
+    "u1": {
+      "id": "u1",
+      "person1Id": "g1",
+      "person2Id": "g1w",
+      "childIds": [
+        "focus"
+      ],
+      "status": "married",
+      "startDate": "1988"
+    },
+    "u2": {
+      "id": "u2",
+      "person1Id": "g2",
+      "person2Id": "g2w",
+      "childIds": [
+        "g1"
+      ],
+      "status": "married",
+      "startDate": "1958"
+    },
+    "u3": {
+      "id": "u3",
+      "person1Id": "g3",
+      "person2Id": "g3w",
+      "childIds": [
+        "g2"
+      ],
+      "status": "married",
+      "startDate": "1928"
+    },
+    "u4": {
+      "id": "u4",
+      "person1Id": "g4",
+      "person2Id": "g4w",
+      "childIds": [
+        "g3",
+        "s3"
+      ],
+      "status": "married",
+      "startDate": "1898"
+    },
+    "u5": {
+      "id": "u5",
+      "person1Id": "g5",
+      "person2Id": "g5w",
+      "childIds": [
+        "s4a",
+        "g4",
+        "s4b"
+      ],
+      "status": "married",
+      "startDate": "1866"
+    },
+    "u6": {
+      "id": "u6",
+      "person1Id": "g6",
+      "person2Id": "g6w",
+      "childIds": [
+        "g5",
+        "b5"
+      ],
+      "status": "married",
+      "startDate": "1838"
+    },
+    "u6b": {
+      "id": "u6b",
+      "person1Id": "g6",
+      "person2Id": "g6w2",
+      "childIds": [
+        "h5"
+      ],
+      "status": "married",
+      "startDate": "1849"
+    },
+    "u_h5": {
+      "id": "u_h5",
+      "person1Id": "h5h",
+      "person2Id": "h5",
+      "childIds": [
+        "h5c"
+      ],
+      "status": "married",
+      "startDate": "1872"
+    },
+    "u_s4a1": {
+      "id": "u_s4a1",
+      "person1Id": "s4a",
+      "person2Id": "s4aw1",
+      "childIds": [
+        "s4a1",
+        "s4a2"
+      ],
+      "status": "married",
+      "startDate": "1894"
+    },
+    "u_s4a2": {
+      "id": "u_s4a2",
+      "person1Id": "s4a",
+      "person2Id": "s4aw2",
+      "childIds": [
+        "s4a3",
+        "s4a4"
+      ],
+      "status": "married",
+      "startDate": "1901"
+    },
+    "u_s4b": {
+      "id": "u_s4b",
+      "person1Id": "s4b",
+      "person2Id": "s4bw",
+      "childIds": [
+        "s4b1",
+        "s4b2",
+        "s4b3",
+        "s4b4",
+        "s4b5"
+      ],
+      "status": "married",
+      "startDate": "1897"
+    }
+  }
+}

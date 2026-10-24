@@ -65,7 +65,11 @@ without children, "▸ children" for one with). Never a partner the selection
 holds already (drawn elsewhere: that union stays undrawn) or an empty "?"
 stand-in (`isDiagramStandIn`, drawn only with a union's children). Never the
 children's children: the child's own "children" tab leads on. A child the
-selection held already keeps what it had.
+selection held already keeps what it had. The list holds nested clicks, so a
+listed person the step itself brings (a shown child's partner clicking
+"▸ children" on their own card, or a child listed before its parent) is
+reached in a further pass: the passes repeat until no listed person joins the
+selection.
 `withChildrenShown` (pipeline orchestrator) then puts a listed person with more
 than one partnership in the selection into `expandedPersonIds` (out of the
 appendage set), so each union is a chain slot and its children hang under

@@ -578,7 +578,10 @@ function leaveOutOtherChildrenOf(
  * already (drawn elsewhere: the union stays undrawn, as before) or an empty
  * "?" stand-in (drawn only with the union's children). Never the children's
  * children (the child's own tab leads on). A child the selection held
- * already keeps what it had. Persons not in the selection are skipped.
+ * already keeps what it had. A listed person the step itself brings (a
+ * shown child's partner, a child listed before its parent: nested clicks)
+ * is reached in a further pass; persons the selection never holds are
+ * skipped.
  */
 export function expandChildrenInSelection(
     data: StromData,
@@ -587,24 +590,56 @@ export function expandChildrenInSelection(
     allPartners = true
 ): void {
     const before = new Set(selection.persons);
-    const brought: PersonId[] = [];
-    for (const personId of personIds) {
-        const person = data.persons[personId];
-        if (!person || !selection.persons.has(personId)) continue;
-        for (const partnershipId of person.partnerships) {
-            const partnership = data.partnerships[partnershipId];
-            if (!partnership || partnership.childIds.length === 0) continue;
-            selection.persons.add(partnership.person1Id);
-            selection.persons.add(partnership.person2Id);
-            selection.partnerships.add(partnershipId);
+    const done = new Set<PersonId>();
+    const partnered = new Set<PersonId>();
+    // A person of the list the step itself brings into the selection (a
+    // shown child's partner, whose own "▸ children" is a nested click, or a
+    // child of a person later in the list) is reached in a further pass
+    for (let grew = true; grew;) {
+        grew = false;
+        const brought: PersonId[] = [];
+        for (let reached = true; reached;) {
+            reached = false;
+            for (const personId of personIds) {
+                const person = data.persons[personId];
+                if (done.has(personId) || !person || !selection.persons.has(personId)) continue;
+                done.add(personId);
+                reached = true;
+                for (const partnershipId of person.partnerships) {
+                    const partnership = data.partnerships[partnershipId];
+                    if (!partnership || partnership.childIds.length === 0) continue;
+                    selection.persons.add(partnership.person1Id);
+                    selection.persons.add(partnership.person2Id);
+                    selection.partnerships.add(partnershipId);
+                }
+                for (const childId of childIdsShownInPlace(data, personId)) {
+                    if (!before.has(childId) && !partnered.has(childId) && !brought.includes(childId)) brought.push(childId);
+                    selection.persons.add(childId);
+                }
+                // The person's children now stand in the view: no longer the deepest generation
+                selection.depthLimitPersons?.delete(personId);
+            }
         }
-        for (const childId of childIdsShownInPlace(data, personId)) {
-            if (!before.has(childId) && !brought.includes(childId)) brought.push(childId);
-            selection.persons.add(childId);
-        }
-        // The person's children now stand in the view: no longer the deepest generation
-        selection.depthLimitPersons?.delete(personId);
+        for (const childId of brought) partnered.add(childId);
+        const size = selection.persons.size;
+        bringPartnersOfShownChildren(data, selection, brought, before, allPartners);
+        grew = selection.persons.size > size && personIds.some(id => !done.has(id) && selection.persons.has(id));
     }
+}
+
+/**
+ * The partners a child brought by children shown in place comes with
+ * (expandChildrenInSelection): every partner (`allPartners`) or the one
+ * the standard mode draws; never one the selection held before the step
+ * (`before`) or an empty "?" stand-in.
+ */
+function bringPartnersOfShownChildren(
+    data: StromData,
+    selection: GraphSelection,
+    brought: readonly PersonId[],
+    before: ReadonlySet<PersonId>,
+    allPartners: boolean
+): void {
     for (const childId of brought) {
         const unions: Array<{ partnershipId: PartnershipId; partnerId: PersonId }> = [];
         for (const partnershipId of data.persons[childId]?.partnerships ?? []) {

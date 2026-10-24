@@ -458,8 +458,11 @@ describe('Children shown in place: two clicks deep, near their parents', () => {
                         const one = plan(data, focus, config, 8, mode.autoExpand, [first]).result;
                         near(one, [first], `${focus} shows ${first}`, focus);
                         const inOne = (id: PersonId) => one.positions.has(id);
-                        for (const second of data.persons[first].childIds) {
-                            if (base.positions.has(second) || !inOne(second)) continue;
+                        // Every card the first click brought: a child, and a child's
+                        // partner (the step brings the partner itself; its own
+                        // "▸ children" draws them as the child's does)
+                        const brought = [...one.positions.keys()].filter(id => !base.positions.has(id) && data.persons[id]);
+                        for (const second of brought) {
                             if (!hiddenRelativesTabs(data, second, inOne, none, new Set([first])).includes('children')) continue;
                             const promised = hiddenChildIds(data, second, inOne);
                             const r = plan(data, focus, config, 8, mode.autoExpand, [first, second]).result;
@@ -608,6 +611,25 @@ describe('Children shown in place: selection and hiding again', () => {
         // Hiding: the same input as before, the same layout
         const again = layout(data, focus, DEFAULT_LAYOUT_CONFIG, 6, true, []);
         expect(JSON.stringify([...again.positions])).toBe(JSON.stringify([...base.positions]));
+    });
+
+    it('a shown son\'s wife shows her own children (a nested click on a card the first click brought), in both displays', () => {
+        // edge-shown-child-family: g5's "▸ children" brings his son s4a with
+        // his wife s4aw1; her "▸ children" then shows their two children
+        const family = loadFixture('edge-shown-child-family');
+        for (const autoExpand of [true, false]) {
+            const first = layout(family, P('focus'), DEFAULT_LAYOUT_CONFIG, 6, autoExpand, [P('g5')]);
+            expect(first.positions.has(P('s4aw1'))).toBe(true);
+            for (const c of ['s4a1', 's4a2']) expect(first.positions.has(P(c)), c).toBe(false);
+            const nested = layout(family, P('focus'), DEFAULT_LAYOUT_CONFIG, 6, autoExpand, [P('g5'), P('s4aw1')]);
+            for (const c of ['s4a1', 's4a2']) expect(nested.positions.has(P(c)), `${c} ${autoExpand}`).toBe(true);
+            // The other marriage's children stay behind her husband's own tab
+            for (const c of ['s4a3', 's4a4']) expect(nested.positions.has(P(c)), c).toBe(false);
+            expect(auditGeometry(nested, DEFAULT_LAYOUT_CONFIG)).toEqual([]);
+            // Hiding: the first click's layout again
+            const again = layout(family, P('focus'), DEFAULT_LAYOUT_CONFIG, 6, autoExpand, [P('g5')]);
+            expect(JSON.stringify([...again.positions])).toBe(JSON.stringify([...first.positions]));
+        }
     });
 
     it('a father with two families in the standard mode shows the children of both, each under its own union', () => {
