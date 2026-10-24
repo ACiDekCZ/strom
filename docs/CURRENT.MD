@@ -374,6 +374,14 @@ placeSiblingRuns(hTree); placeSiblingRuns(wTree)
 //    its children; the free siblings fill the room before it in their order
 //    while they fit, the rest go beyond. The parents centre over the siblings
 //    in their own row.
+//    A chain block is moved so that its block centre stands at the node's
+//    X; when the children of another of its unions are in view and that
+//    partner's slot grows wider than the cards, the block centre falls beyond
+//    the last card, and the middle of the card row stands at the node's X
+//    instead (chainCardRowCenter): the couple stays over its line child.
+//    The packing and the overlap passes measure a chain by its drawn cards
+//    (drawnCardExtent): the slot of a hidden "?" stand-in partner is no card,
+//    and a childless sibling stands right beside the stand-in's partner.
 
 // 8. Handle collateral ancestors (passes until nothing moves, at most 20;
 //    ancestors' children shown in place can need more than a few)
@@ -387,6 +395,15 @@ resolveOverlapsOutward()
 //     line stays over its children). It never moves farther from its own
 //     parents, and the block's anchors follow.
 gatherAncestorChainPartners()
+
+// 8b. The children of a "?" family under the known parent
+//     (tuckStandInChildren, chain blocks at gen <= -3): they stand centred
+//     under the couple the hidden stand-in's slot makes, half a card out from
+//     the parent whose card the line comes from. Their subtrees (all in rows
+//     gen <= -2) move toward that parent's card, at most until they stand
+//     under it, and only as far as the nearest other card in each of their
+//     rows leaves room (horizontalGap).
+tuckStandInChildren()
 
 // 9. Verify locked positions unchanged
 assertLockedDescendantsUnchanged(lockedX)
@@ -846,6 +863,15 @@ with two adaptations: `computeAncestorTreeWidth` uses the chain block's real
     at an ancestor whose union is a parent union of either focus parent:
     the parents' block hangs under one parent's parents only, and the walk
     would otherwise drag the other parent's siblings into the couple.
+    The pairwise passes can fail to settle: a component whose cards stand on
+    both sides of another block (the children of an ancestor's other
+    marriage shown around an aunt) is pushed back and forth, and it can
+    reach the focus parents through a common ancestor. When an overlap is
+    left after the passes, the row goes back to its positions before them
+    and is swept outward from the focus parents' block
+    (`sweepParentRowOutward`): the ancestor components merged where they
+    share blocks, the focus parents' siblings first, then by distance, each
+    pushed only away from the couple past the cards already placed.
   - Children shown in the parents' row (gen -1, Phase A, locked) still yield
     to the focus family. In the expanded display a parent's chain slot is
     sized for the primary children, so a focus parent with another marriage
@@ -857,7 +883,13 @@ with two adaptations: `computeAncestorTreeWidth` uses the chain block's real
     under the couple and several other marriages stand in the partners'
     order beside it (up to 4 card widths, `KNOWN_HALF_SIBLING_STEMS`), or
     a half-sibling's husband stands between her and the line (a couple's
-    order follows gender, invariant 3).
+    order follows gender, invariant 3). For a line ancestor in the
+    grandparents' row the distance is counted without the cards of the line
+    child's own family standing between the line and the half-siblings: the
+    line child's full siblings stay together (invariant 5) with their
+    families as rigid clusters (invariant 4), so the half-siblings can only
+    stand beyond them; the test measures the line's distance to that family
+    plus the family's distance to the half-siblings.
   - Half-siblings of a direct-line ancestor (an ancestor's other marriage)
     stand beside that ancestor as its sibling run (children of one person
     side by side), so their distance from the other parent follows how far

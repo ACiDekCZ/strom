@@ -766,6 +766,31 @@ function enforceAllBoundariesUntilConvergence(
 }
 
 /**
+ * The X of a chain block that stands where the ancestor tree put the node.
+ *
+ * The block's own centre, as a rule. When the children of another of the
+ * chain's unions are in view, that partner's slot can grow wider than the
+ * chain's cards, and the block's centre then falls beyond its last card: the
+ * cards, the couple over the child among them, stood wholly off the place the
+ * tree chose for them. Then the middle of the card row stands there instead.
+ */
+function chainCardRowCenter(block: FamilyBlock, enteredUnionId: UnionId, config: LayoutConfig): number {
+    const chain = block.chainInfo;
+    if (!chain) return block.xCenter;
+    let otherKids = false;
+    for (const [unionId, kids] of chain.unionChildBlockIds) {
+        if (unionId !== enteredUnionId && kids.length > 0) otherKids = true;
+    }
+    if (!otherKids) return block.xCenter;
+    const xs = [...chain.personPositions.values()];
+    if (xs.length === 0) return block.xCenter;
+    const left = Math.min(...xs) - config.cardWidth / 2;
+    const right = Math.max(...xs) + config.cardWidth / 2;
+    if (block.xCenter >= left && block.xCenter <= right) return block.xCenter;
+    return (left + right) / 2;
+}
+
+/**
  * Transfer computed positions from AncestorNode tree to FamilyBlocks.
  * Updates xCenter, xLeft, xRight, and anchor positions.
  */
@@ -796,7 +821,7 @@ function transferAncestorTreeToBlocks(
             if (block.chainInfo) {
                 // Chain block: rigid shift keeps the internal chain geometry
                 // (per-person card positions, slot centers) intact
-                shiftBlock(block, node.xCenter - block.xCenter);
+                shiftBlock(block, node.xCenter - chainCardRowCenter(block, node.unionId, config));
             } else {
                 // Update block positions from tree node
                 const oldCenter = block.xCenter;
@@ -971,6 +996,28 @@ function collectBlockSubtree(blockId: FamilyBlockId, blocks: Map<FamilyBlockId, 
 }
 
 /**
+ * The cards of a block that are drawn: a chain leaves out a "?" stand-in
+ * partner the diagram does not draw (placeholders.ts), whose slot only keeps
+ * the room for the children below. A sibling packed by the cards then stands
+ * beside the parent's own card, not a card's width away from it.
+ */
+function drawnCardExtent(
+    block: FamilyBlock,
+    model: LayoutModel,
+    config: LayoutConfig
+): { left: number; right: number } {
+    const hidden = model.hiddenPersonIds;
+    const chain = block.chainInfo;
+    if (!chain || !hidden || !chain.personOrder.some(p => hidden.has(p))) return getBlockCardExtent(block, model, config);
+    const centres = [...chain.personPositions].filter(([p]) => !hidden.has(p)).map(([, x]) => x);
+    if (centres.length === 0) return getBlockCardExtent(block, model, config);
+    return {
+        left: Math.min(...centres) - config.cardWidth / 2,
+        right: Math.max(...centres) + config.cardWidth / 2
+    };
+}
+
+/**
  * Pack a sibling run row by row (attachSiblingRuns / placeSiblingRuns).
  *
  * Each sibling's block and everything below it moves as one piece, in
@@ -1011,7 +1058,7 @@ function packSiblingRun(
         const rows = new Map<number, { near: number; far: number }>();
         for (const b of collectBlockSubtree(id, blocks)) {
             if (b.generation >= -1) continue;
-            const cards = getBlockCardExtent(b, model, config);
+            const cards = drawnCardExtent(b, model, config);
             const near = outward === 'RIGHT' ? cards.left - inner : inner - cards.right;
             const far = outward === 'RIGHT' ? cards.right - inner : inner - cards.left;
             const row = rows.get(b.generation);
@@ -1173,6 +1220,66 @@ function gatherAncestorChainPartners(
         }
         block.husbandAnchorX = positions.get(order[0]) ?? block.husbandAnchorX;
         block.wifeAnchorX = positions.get(order[order.length - 1]) ?? block.wifeAnchorX;
+    }
+}
+
+/**
+ * The children of a "?" stand-in's family stand under the known parent.
+ *
+ * A chain keeps a slot for a stand-in partner the diagram does not draw
+ * (placeholders.ts), and the family's children stand centred under the
+ * couple the slot makes — half a card out from the known parent, whose card
+ * the line actually comes from, and that far from the children of the
+ * parent's next family. In the ancestor rows (gen <= -2, Phase B owns them
+ * and everything below them there) the children move toward the known
+ * parent's card, at most until they stand under it, and only as far as the
+ * nearest other card in each of their rows leaves room.
+ */
+function tuckStandInChildren(
+    blocks: Map<FamilyBlockId, FamilyBlock>,
+    model: LayoutModel,
+    config: LayoutConfig
+): void {
+    const hidden = model.hiddenPersonIds;
+    if (!hidden) return;
+    for (const [, block] of blocks) {
+        const chain = block.chainInfo;
+        if (!chain || block.generation > -3) continue;
+        for (const [unionId, kidIds] of chain.unionChildBlockIds) {
+            const union = model.unions.get(unionId);
+            if (!union?.partnerB || kidIds.length === 0) continue;
+            const standIn = hidden.has(union.partnerA) ? union.partnerA : hidden.has(union.partnerB) ? union.partnerB : undefined;
+            if (!standIn) continue;
+            const known = standIn === union.partnerA ? union.partnerB : union.partnerA;
+            const standInX = chain.personPositions.get(standIn);
+            const knownX = chain.personPositions.get(known);
+            if (standInX === undefined || knownX === undefined) continue;
+            const moving = kidIds.flatMap(id => collectBlockSubtree(id, blocks));
+            if (moving.some(b => b.generation >= -1)) continue;
+            const movingIds = new Set(moving.map(b => b.id));
+            const kidRow = moving.filter(b => kidIds.includes(b.id)).map(b => drawnCardExtent(b, model, config));
+            const kidCenter = (Math.min(...kidRow.map(e => e.left)) + Math.max(...kidRow.map(e => e.right))) / 2;
+            const dir = knownX > standInX ? 1 : -1;
+            let shift = (knownX - kidCenter) * dir;
+            if (shift <= 0.5) continue;
+            // Room before the nearest other card in each row the children take
+            const rows = new Map<number, { left: number; right: number }>();
+            for (const b of moving) {
+                const e = drawnCardExtent(b, model, config);
+                const row = rows.get(b.generation);
+                rows.set(b.generation, row ? { left: Math.min(row.left, e.left), right: Math.max(row.right, e.right) } : e);
+            }
+            for (const [, other] of blocks) {
+                if (movingIds.has(other.id)) continue;
+                const row = rows.get(other.generation);
+                if (!row) continue;
+                const e = drawnCardExtent(other, model, config);
+                const room = dir > 0 ? e.left - row.right : row.left - e.right;
+                if (room >= -0.5) shift = Math.min(shift, room - config.horizontalGap);
+            }
+            if (shift <= 0.5) continue;
+            for (const b of moving) shiftBlock(b, shift * dir);
+        }
     }
 }
 
@@ -1806,6 +1913,7 @@ export function applyConstraints(input: ConstraintsInput): ConstrainedModel {
         }
 
         gatherAncestorChainPartners(blocks, model, fbm.unionToBlock, config);
+        tuckStandInChildren(blocks, model, config);
     }
 
     // Verify Phase B didn't modify any descendant (gen>=-1) positions
@@ -2381,6 +2489,8 @@ function resolveParentCoupleOverlaps(
     if (genMinus1.length < 2) return;
 
     genMinus1.sort((a, b) => a.left - b.left);
+    const before = new Map<FamilyBlockId, number>();
+    for (const [id, b] of blocks) before.set(id, b.xCenter);
 
     for (let pass = 0; pass < 5; pass++) {
         let shifted = false;
@@ -2431,6 +2541,118 @@ function resolveParentCoupleOverlaps(
         }
         genMinus1.sort((a, b) => a.left - b.left);
         if (!shifted) break;
+    }
+
+    // The pairwise passes can fail to settle: a component whose cards stand on
+    // both sides of another block (children of an ancestor's other marriage
+    // shown around an aunt) is pushed back and forth, and the aunt's
+    // component can reach the focus parents through their common parents.
+    // Then start over from the positions before the passes and sweep outward.
+    const stillOverlapping = genMinus1.some((e, i) => i > 0 && genMinus1[i - 1].right + config.horizontalGap - e.left > 0.5);
+    if (!stillOverlapping || !focusParentBlockId || !blocks.has(focusParentBlockId)) return;
+    for (const [id, b] of blocks) {
+        const x = before.get(id);
+        if (x !== undefined && Math.abs(b.xCenter - x) > 0.01) shiftBlock(b, x - b.xCenter);
+    }
+    sweepParentRowOutward(blocks, model, focusParentBlockId, config);
+}
+
+/**
+ * Clear the parents' row (gen -1) around the focus parents, which stay put:
+ * every other block moves with its ancestor component (never including the
+ * focus parents, collectAncestorComponent with them forbidden), components
+ * that share a block move as one. The focus parents' siblings go first, each
+ * on its own side, then the other components, nearest first, each to the
+ * side that needs the shorter move; a component moves outward just past the
+ * cards already settled on that side, or not at all when it is clear. The
+ * siblings stay together next to the couple (invariant 5) and every move
+ * goes one way, so the sweep always ends without overlaps.
+ */
+function sweepParentRowOutward(
+    blocks: Map<FamilyBlockId, FamilyBlock>,
+    model: LayoutModel,
+    anchorId: FamilyBlockId,
+    config: LayoutConfig
+): void {
+    const anchor = blocks.get(anchorId)!;
+    const anchorExt = getBlockCardExtent(anchor, model, config);
+    const anchorUnion = model.unions.get(anchor.rootUnionId);
+    const anchorParentUnions = new Set<UnionId>();
+    for (const pid of [anchorUnion?.partnerA, anchorUnion?.partnerB]) {
+        const up = pid ? model.childToParentUnion.get(pid) : undefined;
+        if (up) anchorParentUnions.add(up);
+    }
+    const persons = (b: FamilyBlock): PersonId[] => {
+        if (b.chainInfo) return b.chainInfo.personOrder;
+        const u = model.unions.get(b.rootUnionId);
+        return u ? [u.partnerA, u.partnerB].filter((p): p is PersonId => !!p) : [];
+    };
+
+    // Components, merged where they share a block
+    const units: Array<{ ids: Set<FamilyBlockId>; sibling: boolean; key: string }> = [];
+    const unitOf = new Map<FamilyBlockId, number>();
+    const ordered = [...blocks.values()].filter(b => b.generation === -1 && b.id !== anchorId)
+        .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    for (const b of ordered) {
+        const comp = collectAncestorComponent(b.id, blocks, model, anchorId);
+        comp.add(b.id);
+        const hit = [...new Set([...comp].map(id => unitOf.get(id)).filter((i): i is number => i !== undefined))];
+        let target: number;
+        if (hit.length === 0) {
+            target = units.length;
+            units.push({ ids: new Set(), sibling: false, key: b.id });
+        } else {
+            target = Math.min(...hit);
+            for (const i of hit) {
+                if (i === target) continue;
+                for (const id of units[i].ids) { units[target].ids.add(id); unitOf.set(id, target); }
+                units[i].ids.clear();
+            }
+        }
+        for (const id of comp) { units[target].ids.add(id); unitOf.set(id, target); }
+        if (persons(b).some(p => anchorParentUnions.has(model.childToParentUnion.get(p) ?? ('' as UnionId)))) {
+            units[target].sibling = true;
+        }
+    }
+    for (const unit of units) {
+        if (unit.ids.has(anchorId)) unit.ids.clear();
+    }
+
+    const rowExtent = (ids: Set<FamilyBlockId>) => {
+        let left = Infinity, right = -Infinity;
+        for (const id of ids) {
+            const b = blocks.get(id);
+            if (!b || b.generation !== -1) continue;
+            const ext = getBlockCardExtent(b, model, config);
+            left = Math.min(left, ext.left);
+            right = Math.max(right, ext.right);
+        }
+        return { left, right };
+    };
+    const live = units.filter(u => u.ids.size > 0).map(u => ({ ...u, ext: rowExtent(u.ids) }))
+        .filter(u => isFinite(u.ext.left));
+    const distance = (e: { left: number; right: number }) =>
+        Math.max(0, anchorExt.left - e.right, e.left - anchorExt.right);
+    live.sort((a, b) => (a.sibling === b.sibling ? 0 : a.sibling ? -1 : 1)
+        || distance(a.ext) - distance(b.ext)
+        || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+
+    const gap = config.horizontalGap;
+    let leftFrontier = anchorExt.left, rightFrontier = anchorExt.right;
+    const anchorCenter = (anchorExt.left + anchorExt.right) / 2;
+    for (const unit of live) {
+        const { left, right } = rowExtent(unit.ids);
+        const toLeft = Math.min(0, leftFrontier - gap - right);
+        const toRight = Math.max(0, rightFrontier + gap - left);
+        const leftSide = unit.sibling
+            ? (left + right) / 2 < anchorCenter
+            : -toLeft < toRight || (-toLeft === toRight && (left + right) / 2 < anchorCenter);
+        const delta = leftSide ? toLeft : toRight;
+        if (Math.abs(delta) > 0.01) {
+            for (const id of unit.ids) shiftBlock(blocks.get(id)!, delta);
+        }
+        if (leftSide) leftFrontier = Math.min(leftFrontier, left + delta);
+        else rightFrontier = Math.max(rightFrontier, right + delta);
     }
 }
 
@@ -4812,7 +5034,7 @@ function resolveOverlapsOutward(
             const union = model.unions.get(block.rootUnionId);
             if (!union) continue;
 
-            const ext = getBlockCardExtent(block, model, config);
+            const ext = drawnCardExtent(block, model, config);
             entries.push({ block, left: ext.left, right: ext.right });
         }
 

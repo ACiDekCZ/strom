@@ -303,7 +303,38 @@ describe('Children shown in place: two clicks deep, near their parents', () => {
                                 if (!ks.some(k => half.includes(k)) || ks.some(k => line.has(k))) continue;
                                 const xs = ks.filter(k => r.positions.has(k)).map(k => r.positions.get(k)!.x);
                                 const lo = Math.min(...xs), hi = Math.max(...xs) + cw;
-                                const gap = c.stemX < lo ? lo - c.stemX : c.stemX > hi ? c.stemX - hi : 0;
+                                let gap = c.stemX < lo ? lo - c.stemX : c.stemX > hi ? c.stemX - hi : 0;
+                                // The line child's full siblings stand together under
+                                // their parents (invariant 5), each family with its
+                                // partners and descendants as one piece (invariant 4),
+                                // and a half-sibling's partner may stand on her inner
+                                // side (a couple's order follows gender, invariant 3):
+                                // when such cards stand between the line and the
+                                // half-siblings, their width is not the line's
+                                // distance — what counts is the stem's distance to them
+                                // plus theirs to the half-siblings.
+                                if (gap > 0) {
+                                    const fam = new Set<PersonId>();
+                                    const todo = (data.persons[pid].childIds as PersonId[]).filter(k => !half.includes(k));
+                                    while (todo.length) {
+                                        const k = todo.pop()!;
+                                        if (fam.has(k)) continue;
+                                        fam.add(k);
+                                        todo.push(...(data.persons[k]?.childIds ?? []));
+                                    }
+                                    for (const k of [...fam, ...half]) for (const u of data.persons[k]?.partnerships ?? []) {
+                                        const pp = data.partnerships[u];
+                                        if (pp) for (const q of [pp.person1Id, pp.person2Id]) if (!half.includes(q)) fam.add(q);
+                                    }
+                                    const left = c.stemX < lo;
+                                    const between = [...fam].map(id => r.positions.get(id)).filter((p): p is { x: number; y: number } => !!p)
+                                        .filter(p => left ? p.x + cw > c.stemX && p.x + cw <= lo + 1 : p.x < c.stemX && p.x >= hi - 1);
+                                    if (between.length > 0) {
+                                        const near = left ? Math.min(...between.map(p => p.x)) : Math.max(...between.map(p => p.x + cw));
+                                        const far = left ? Math.max(...between.map(p => p.x + cw)) : Math.min(...between.map(p => p.x));
+                                        gap = Math.max(0, left ? near - c.stemX : c.stemX - near) + (left ? lo - far : far - hi);
+                                    }
+                                }
                                 if (gap > (KNOWN_HALF_SIBLING_STEMS[pid] ?? 2) * cw) failures.push(`${where}: ${pid}'s line ${(gap / cw).toFixed(1)} card widths from the children of the other marriage`);
                             }
                             continue;
@@ -869,6 +900,113 @@ describe('Children shown in place: a grandparent\'s extra partner on the inner s
                 expect(auditGeometry(r, DEFAULT_LAYOUT_CONFIG)).toEqual([]);
                 expect(r.diagnostics.validationPassed).toBe(true);
             }
+        }
+    });
+});
+
+describe('Children shown in place: far families in the ancestors\' rows', () => {
+    const P = (id: string) => id as PersonId;
+    const cw = DEFAULT_LAYOUT_CONFIG.cardWidth;
+    const gap = DEFAULT_LAYOUT_CONFIG.horizontalGap;
+    const x = (r: { positions: Map<PersonId, { x: number }> }, id: string) => r.positions.get(P(id))!.x;
+    /** Persons as "id gender born" ("?id gender" is a "?" stand-in), unions as "id father|- mother kids,...". */
+    const tree = (people: string[], unions: string[]): StromData => {
+        const persons: Record<string, unknown> = {};
+        const partnerships: Record<string, unknown> = {};
+        for (const line of people) {
+            const [raw, gender, born] = line.split(' ');
+            const stand = raw.startsWith('?');
+            const id = stand ? raw.slice(1) : raw;
+            persons[id] = stand
+                ? { id, firstName: '?', lastName: '', gender, isPlaceholder: true, partnerships: [], parentIds: [], childIds: [] }
+                : { id, firstName: id[0].toUpperCase() + id.slice(1), lastName: 'Ortner', gender, isPlaceholder: false, partnerships: [], parentIds: [], childIds: [], birthDate: born };
+        }
+        for (const line of unions) {
+            const [id, a, b, kidList] = line.split(' ');
+            const kids = kidList ? kidList.split(',') : [];
+            const parents = a === '-' ? [b] : [a, b];
+            partnerships[id] = { id, person1Id: parents[0], person2Id: parents[1], childIds: kids, status: 'married' };
+            for (const p of parents) {
+                (persons[p] as { partnerships: string[] }).partnerships.push(id);
+                (persons[p] as { childIds: string[] }).childIds.push(...kids);
+            }
+            for (const k of kids) (persons[k] as { parentIds: string[] }).parentIds.push(...parents);
+        }
+        const data = { persons, partnerships } as unknown as StromData;
+        normalizeSingleParents(data);
+        return data;
+    };
+    const sound = (r: ReturnType<typeof plan>['result'], where: string) => {
+        expect(r.omittedEdges ?? [], where).toEqual([]);
+        assertNoNodeOverlap(r.positions, cw, DEFAULT_LAYOUT_CONFIG.cardHeight);
+        expect(auditGeometry(r, DEFAULT_LAYOUT_CONFIG), where).toEqual([]);
+        expect(r.diagnostics.validationPassed, where).toBe(true);
+    };
+
+    it('a grandmother with the children of a second marriage shown: her couple with the grandfather stays over their daughter, her parents over her', () => {
+        // The grandmother's block holds both her marriages; the slot of her
+        // ancestor tree widened for the four children of the second one, and
+        // her couple with the grandfather stood at the slot's far end, four
+        // card widths from their daughter (the mother).
+        const data = tree(
+            ['focus female 2008-01-01', 'sib male 2006-01-01', 'fa male 1978-01-01', 'mo female 1980-01-01', 'gf male 1949-01-01', 'gm female 1943-01-01',
+                'ggf male 1915-01-01', 'ggm female 1918-01-01', 'h2 male 1938-01-01', 'k1 female 1962-01-01', 'k1s male 1960-01-01', 'k1a male 1985-01-01',
+                'k1b female 1987-01-01', 'k2 male 1964-01-01', 'k2s female 1965-01-01', 'k2a male 1990-01-01', 'k2b female 1992-01-01', 'k2c male 1994-01-01',
+                'k3 male 1966-01-01', 'k4 female 1968-01-01', 'k4s male 1966-02-01', 'k4a female 1993-01-01', 'k4b male 1995-01-01'],
+            ['u_fa_mo fa mo sib,focus', 'u_gf_gm gf gm mo', 'u_ggf_ggm ggf ggm gm', 'u_h2_gm h2 gm k1,k2,k3,k4',
+                'u_k1 k1s k1 k1a,k1b', 'u_k2 k2 k2s k2a,k2b,k2c', 'u_k4 k4s k4 k4a,k4b']);
+        for (const mode of [false, true]) for (const depth of [4, 8]) {
+            const r = plan(data, P('focus'), DEFAULT_LAYOUT_CONFIG, depth, mode, [P('gm')]).result;
+            const where = `${mode} d${depth}`;
+            const mid = (a: string, b: string) => (Math.min(x(r, a), x(r, b)) + Math.max(x(r, a), x(r, b)) + cw) / 2;
+            expect(Math.abs(mid('gf', 'gm') - (x(r, 'mo') + cw / 2)), where).toBeLessThanOrEqual(cw);
+            expect(Math.abs(mid('ggf', 'ggm') - (x(r, 'gm') + cw / 2)), where).toBeLessThanOrEqual(cw);
+            sound(r, where);
+        }
+    });
+
+    it('a great-aunt with a "?" family: her childless sister stands beside her, and the "?" child beside her other children', () => {
+        // The grandmother is a wife whose husband has no parents: her sisters
+        // stand on her husband's side. Oo's chain keeps a slot for the hidden
+        // "?" partner; the slot counted as a card, and Qq stood a card away
+        // from Oo. With the focus one generation lower, Oo's "?" daughter
+        // stood apart from her half-siblings, under the empty slot.
+        const data = tree(
+            ['?qx male', 'baby male 2030-01-01', 'hb male 2003-01-01', 'focus female 2005-01-01', 'fa male 1975-01-01', 'mo female 1977-01-01', 'gpa male 1945-01-01',
+                'gma female 1947-01-01', 'l1 male 1914-01-01', 'l2 female 1920-01-01', 'qq female 1945-01-01', 'qqs male 1943-01-01', 'qk male 1970-01-01',
+                'oo female 1955-01-01', 'pp male 1950-06-01', 'o1 female 1975-03-01', 'o2 male 1977-01-01', 'o3 female 1996-01-01'],
+            ['u_focus hb focus baby','u_fa_mo fa mo focus', 'u_gpa_gma gpa gma fa', 'u_l1_l2 l1 l2 qq,gma,oo', 'u_qq qqs qq qk',
+                'u_pp_oo pp oo o1,o2', 'u_oo qx oo o3']);
+        for (const focus of ['focus', 'baby']) for (const mode of [false, true]) for (const depth of [4, 8]) {
+            const r = plan(data, P(focus), DEFAULT_LAYOUT_CONFIG, depth, mode, [P('l1'), P('oo')]).result;
+            const where = `${focus} ${mode} d${depth}`;
+            expect(x(r, 'oo') - x(r, 'qq') - cw, where).toBeLessThanOrEqual(gap + 1);
+            if (focus === 'baby') expect(x(r, 'o1') - x(r, 'o3') - cw, where).toBeLessThanOrEqual(gap + 1);
+            sound(r, where);
+        }
+    });
+
+    it('a great-grandmother\'s second husband and then his daughter show their children: the daughter\'s children stand in the parents\' row beside the focus parents, never on the father\'s sister', () => {
+        // Lia's children belong in the parents' row; their component reaches
+        // the focus parents through the great-grandmother, and the pairwise
+        // passes pushed it back and forth until it stood on the father's
+        // sister Ada and her husband, with its lines dropped.
+        const data = tree(
+            ['focus male 1960-01-01', 'sib female 1962-01-01', 'fa male 1930-01-01', 'mo female 1932-01-01', 'gf male 1905-01-01', 'gm female 1907-01-01',
+                'ggf1 male 1870-01-01', 'ggm female 1875-01-01', 'dd male 1872-01-01', 'gff male 1875-01-01', 'gfm female 1878-01-01',
+                'ada female 1931-01-01', 'adah male 1929-01-01', 'a2 male 1934-01-01', 'a2w female 1935-01-01', 'a2k male 1960-06-01', 'a2k2 female 1962-02-01',
+                'a2k3 male 1964-02-01', 'a3 male 1936-01-01', 'a3w female 1937-01-01', 'a3k female 1962-06-01', 'a3k2 male 1964-03-01', 'a3k3 female 1966-03-01',
+                'a3k4 male 1968-03-01', 'a4 male 1938-01-01', 'a4w female 1940-01-01', 'a4k male 1965-01-01', 'a4k2 female 1967-01-01', 'a4k3 male 1969-01-01',
+                'a4k4 female 1971-01-01', 'e1 male 1898-01-01', 'e2 female 1900-01-01', 'lia female 1902-01-01', 'e3 male 1904-01-01', 'e4 female 1906-01-01',
+                'liah male 1900-06-01', 'ob male 1925-01-01', 'cz female 1927-01-01', 'g2 female 1909-01-01'],
+            ['u_fa_mo fa mo focus,sib', 'u_gf_gm gf gm fa,ada,a2,a3,a4', 'u_gff gff gfm gf', 'u_ggm1 ggf1 ggm gm,g2', 'u_ggm2 dd ggm e1,e2,lia,e3,e4',
+                'u_ada adah ada', 'u_a2 a2 a2w a2k,a2k2,a2k3', 'u_a3 a3 a3w a3k,a3k2,a3k3,a3k4', 'u_a4 a4 a4w a4k,a4k2,a4k3,a4k4', 'u_lia liah lia ob,cz']);
+        // (The second husband is drawn in the expanded mode only.)
+        for (const depth of [4, 8]) {
+            const r = plan(data, P('focus'), DEFAULT_LAYOUT_CONFIG, depth, true, [P('dd'), P('lia')]).result;
+            const where = `expanded d${depth}`;
+            expect(r.positions.has(P('ob')) && r.positions.has(P('cz')), where).toBe(true);
+            sound(r, where);
         }
     });
 });
