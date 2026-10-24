@@ -100,10 +100,11 @@ export interface CustomCardEntry<L extends CardLineText = CardLine> {
      */
     birth?: string;
     /**
-     * The room (px) the last line keeps free at its right: the ⇄ pill on the
-     * bottom-right edge of a card of one height for the view
-     * (CARD_EDGE_PILL_RIGHT). Its rows are wrapped that much narrower, so a
-     * text either fits beside the pill or ends in "…".
+     * The room (px) the last line keeps free beside the pills on the bottom
+     * edge of a card of one height for the view: the ⇄ pill on the right
+     * (CARD_EDGE_PILL_RIGHT), the ∞ pill on the left (CARD_EDGE_PILL_LEFT).
+     * Its rows are wrapped that much narrower, so a text either fits beside
+     * the pills or ends in "…".
      */
     lastLineReserve?: number;
 }
@@ -540,7 +541,7 @@ export const CARD_ROW_HEIGHT = 17;
 export const CARD_DETAIL_GAP = 3;
 /**
  * The room a card of details as tall as its content (the height "by
- * content") takes at its bottom for the pills on its bottom edge (∞ ⌂ on the
+ * content") takes at its bottom for the pills on its bottom edge (∞ on the
  * left, ⇄ on the right): 18px tall, they reach 9px into the card, so the card
  * grows by 12px (padding 10 → 22) and the pills cover no text.
  */
@@ -551,6 +552,11 @@ export const CARD_EDGE_PILL_ROOM = 12;
  * the same 46px as the line's padding there: "⇄ N ↗").
  */
 export const CARD_EDGE_PILL_RIGHT = 46;
+/**
+ * The same at the left for the ∞ pill on the bottom-left edge ("▸ ∞ 2",
+ * index.html .edge-bl-room: the line's padding there).
+ */
+export const CARD_EDGE_PILL_LEFT = 52;
 /** The partner line on a card taller than one row a detail: the middle of its header. */
 export const CARD_HEAD_LINE_Y = 25;
 /** The same with the years under the name: the middle of the taller header (10 + 33 / 2). */

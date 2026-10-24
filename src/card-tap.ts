@@ -3,7 +3,7 @@
  *
  * The browser moves a finger's tap onto the nearest button within the
  * finger's area (touch adjustment). The pills on a card's edges (branch tabs,
- * line links, hidden partners and families, ⇄) are buttons inside the card,
+ * line links, ∞ other partners, ⇄) are buttons inside the card,
  * and a card holding such a button never counts as a target of its own: a tap
  * on the card a few pixels from a pill went to the pill. Zoomed out the whole
  * card lies within the finger's area, so a tap in its middle hid the children

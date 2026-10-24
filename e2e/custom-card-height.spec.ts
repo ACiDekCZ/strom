@@ -422,13 +422,14 @@ test.describe('the compact custom card (1 line, Equal) is drawn as in 3.10.0-bet
 });
 
 // ---------------------------------------------------------------------------
-// U03a: pills on the bottom edge (∞ hidden partners, ⌂ hidden families on the
-// left, ⇄ other trees on the right) on all five card types.
+// U03a: pills on the bottom edge (∞ other partners on the left, ⇄ other
+// trees on the right) on all five card types.
 // ---------------------------------------------------------------------------
 
 test.describe('pills on the bottom edge (U03a)', () => {
     /**
-     * Václav married twice: Anna (drawn) and Rozálie with a son (not drawn: ∞ 1, ⌂ 1).
+     * Václav married three times: Anna (drawn), Rozálie with a son (not
+     * drawn: "▸ children") and Kateřina without children (not drawn: "▸ ∞ 1").
      * Their son Jan + Marie → Josef (the focus) → Ota, Josef's son alone (a
      * single parent's line from the bottom of Josef's card). The tree is
      * imported twice, so every card carries ⇄ 1 too.
@@ -440,10 +441,11 @@ test.describe('pills on the bottom edge (U03a)', () => {
             const P = (id: string, o: Record<string, unknown>) => ({ id, gender: 'male', isPlaceholder: false, partnerships: [], parentIds: [], childIds: [], ...o });
             const persons = {
                 g1: P('g1', { firstName: 'Václav', lastName: 'Vlk', birthDate: '1800', birthPlace: 'Horní Lhota', deathDate: '1870', deathPlace: 'Horní Lhota',
-                    partnerships: ['u1', 'u2'], childIds: ['p1', 'x1'], birthSourceIds: ['s1'] }),
+                    partnerships: ['u1', 'u2', 'u4'], childIds: ['p1', 'x1'], birthSourceIds: ['s1'] }),
                 g2: P('g2', { firstName: 'Anna', lastName: 'Vlková', gender: 'female', birthDate: '1805', partnerships: ['u1'], childIds: ['p1'],
                     story: { text: 'Hospodařila.', status: 'final' } }),
                 gx: P('gx', { firstName: 'Rozálie', lastName: 'Dvořáková', gender: 'female', birthDate: '1810', partnerships: ['u2'], childIds: ['x1'] }),
+                gy: P('gy', { firstName: 'Kateřina', lastName: 'Malá', gender: 'female', birthDate: '1815', partnerships: ['u4'] }),
                 x1: P('x1', { firstName: 'Matěj', lastName: 'Vlk', birthDate: '1835', parentIds: ['g1', 'gx'] }),
                 p1: P('p1', { firstName: 'Jan', lastName: 'Vlk', birthDate: '1830', birthPlace: 'Horní Lhota', deathDate: '1890', deathPlace: 'Dolní Lhota',
                     parentIds: ['g1', 'g2'], partnerships: ['u3'], childIds: ['f'], question: 'Kdy zemřel?',
@@ -457,6 +459,7 @@ test.describe('pills on the bottom edge (U03a)', () => {
                 u1: { id: 'u1', person1Id: 'g1', person2Id: 'g2', childIds: ['p1'], status: 'married', isPrimary: true },
                 u2: { id: 'u2', person1Id: 'g1', person2Id: 'gx', childIds: ['x1'], status: 'married' },
                 u3: { id: 'u3', person1Id: 'p1', person2Id: 'p2', childIds: ['f'], status: 'married', startDate: '1858' },
+                u4: { id: 'u4', person1Id: 'g1', person2Id: 'gy', childIds: [], status: 'married', startDate: '1850' },
             };
             const sources = { s1: { id: 's1', title: 'Matrika' } };
             const dm = window.Strom.DataManager;
@@ -484,7 +487,7 @@ test.describe('pills on the bottom edge (U03a)', () => {
                     range.selectNodeContents(n);
                     for (const r of range.getClientRects()) texts.push({ text: n.textContent.trim(), rect: box(r) });
                 }
-                const pills = [...el.querySelectorAll<HTMLElement>('.hidden-partners-btn, .hidden-families-btn, .cross-tree-badge')]
+                const pills = [...el.querySelectorAll<HTMLElement>('.hidden-partners-btn, .cross-tree-badge')]
                     .map(p => ({ kind: p.className, rect: box(p.getBoundingClientRect()) }));
                 const state = el.querySelector(':scope > .card-state');
                 return {
@@ -496,14 +499,14 @@ test.describe('pills on the bottom edge (U03a)', () => {
     }
 
     for (const density of ['compact', 'normal', 'detailed', 'register', 'custom'] as const) {
-        test(`${density}: ⌂ ∞ ⇄ at once cover no text, no stripes and no other pill; cards of details grow 12px and keep clear of each other and the lines`, async ({ page }) => {
+        test(`${density}: ∞ ⇄ at once cover no text, no stripes and no other pill; cards of details grow 12px and keep clear of each other and the lines`, async ({ page }) => {
             await pillTree(page);
             await page.evaluate((d) => window.Strom.UI.setCardDensity(d), density);
             await expect(page.locator('body')).toHaveAttribute('data-card-density', density);
             await expect.poll(() => cardBoxesMatchLayout(page)).toBe(true);
             const vaclav = card(page, 'Václav');
             await expect(vaclav.locator('.hidden-partners-btn')).toBeVisible();
-            await expect(vaclav.locator('.hidden-families-btn')).toBeVisible();
+            await expect(vaclav.locator('.hidden-partners-btn')).toHaveText(/▸\s*∞\s*1/);
             await expect(vaclav.locator('.cross-tree-badge')).toBeVisible();
             await expect(vaclav).toHaveClass(/has-edge-bl/);
             await expect(vaclav).toHaveClass(/has-edge-br/);
@@ -544,7 +547,7 @@ test.describe('pills on the bottom edge (U03a)', () => {
             for (const l of geo.lines) for (const c of geo.cards) expect(hit(l, c), `a line through ${c.id}`).toBe(false);
 
             if (!fields) return;
-            // 12px taller with the pills (padding 10 → 22): the ⇄ pill off, Josef (⇄ only) loses them, Václav keeps ⌂ ∞.
+            // 12px taller with the pills (padding 10 → 22): the ⇄ pill off, Josef (⇄ only) loses them, Václav keeps ∞.
             const before = Object.fromEntries(parts.map(c => [c.name, c.height]));
             await page.evaluate(() => window.Strom.UI.toggleCrossTreeBadges(false));
             await expect(card(page, 'Josef').locator('.cross-tree-badge')).toHaveCount(0);

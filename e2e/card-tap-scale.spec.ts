@@ -6,7 +6,7 @@ import { openApp } from './helpers.js';
 /**
  * A tap on a card by touch is the card's (GitHub #4): its person sheet, at
  * any zoom, also beside the pills on the card's edges (branch tabs, line
- * links, the dashed "▸ parents", hidden partners and families). The browser
+ * links, the dashed "▸ parents", "▸ ∞" other partners). The browser
  * moves a finger's tap onto the nearest button within the finger's area
  * (touch adjustment), and the card holding the pills was never a candidate:
  * zoomed out to 0.3 a tap in the middle of the 56 × 19 px card hid its
@@ -101,8 +101,9 @@ for (const scale of [0.3, 0.5, 1]) {
             await setupFixture(page, 'comprehensive', 'grandchild_1');
             await showChildren(page, 'father');
             await expectCardTaps(page, 'father', ['.branch-tab.siblings-tab', '.branch-tab.children-tab.active'], scale);
-            // A shown child with hidden partners and families on its bottom edge
-            await expectCardTaps(page, 'sibling_1', ['.hidden-partners-btn', '.hidden-families-btn'], scale);
+            // A grandfather with another partner (no children) on the bottom edge: "▸ ∞ 1"
+            await setupFixture(page, 'edge-childless-partners', 'f');
+            await expectCardTaps(page, 'gf', ['.hidden-partners-btn'], scale);
         });
 
         test('line links: a tap on the card beside "child ↗" or "parents ↗" is the card\'s', async ({ page }) => {
@@ -154,10 +155,13 @@ test.describe('at 1 the pills work by touch', () => {
             await tapPill(page, cardOf(page, 'v_mo').locator('.branch-tab.line-link[data-action="jump-child"]'), where);
             await expect.poll(async () => (await cardOf(page, 'v_mo').boundingBox())?.x).not.toBe(at!.x);
             await expect(page.locator('.bottom-sheet-person')).toHaveCount(0);
-            // Hidden partners (bottom edge) set the focus
-            await zoomTo(page, 'v_mo', 1);
-            await tapPill(page, cardOf(page, 'v_mo').locator('.hidden-partners-btn'), where);
-            await expect.poll(() => page.evaluate(() => window.Strom.TreeRenderer.getFocusPersonId())).toBe('v_mo');
+            // "▸ ∞" (bottom edge) shows the other partners in place, the focus stays
+            await setupFixture(page, 'edge-childless-partners', 'f');
+            await zoomTo(page, 'gf', 1);
+            await tapPill(page, cardOf(page, 'gf').locator('.hidden-partners-btn'), where);
+            await expect.poll(() => page.evaluate(() => window.Strom.TreeRenderer.isPartnersShown('gf' as never))).toBe(true);
+            expect(await page.evaluate(() => window.Strom.TreeRenderer.getFocusPersonId())).toBe('f');
+            await expect(page.locator('.bottom-sheet-person')).toHaveCount(0);
 
             // The dashed "▸ parents" hides the children that folded them
             await setupFixture(page, 'edge-ancestor-inner-siblings', 'focus');

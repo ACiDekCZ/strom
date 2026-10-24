@@ -24,7 +24,7 @@ import { ViewMode, STANDALONE_VIEWS, ResearchEdgeMode, ResearchEdgeHypo } from '
 import { cardLines, CardLine, cardLineHtml, cardYears, CardLineStyle, cardDateReferences, cardAge, formatAge, isFieldCardDensity } from './card-fields.js';
 import {
     CustomCardMetrics, CardLineRows, CardHead, customCardMetrics, customCardRows, customCardViewHeight, customCardSpouseLineY,
-    measureCardTexts, cardFontsPending, CARD_HEAD_HEIGHT, CARD_EDGE_PILL_ROOM, CARD_EDGE_PILL_RIGHT,
+    measureCardTexts, cardFontsPending, CARD_HEAD_HEIGHT, CARD_EDGE_PILL_ROOM, CARD_EDGE_PILL_RIGHT, CARD_EDGE_PILL_LEFT,
 } from './card-width.js';
 import { checkRecordedAge, ageBirthDate } from './recorded-age.js';
 import { ACTION_GLYPH, AGENT_DONE_MS, AGENT_DONE_FADE_MS, AGENT_SPIN_MS, CardSignalContext, CardSignalInfo, cardSignalInfo, researchCardInfoNow, sharedPhaseDelay, stateStripesHtml } from './card-signals.js';
@@ -70,7 +70,9 @@ import {
     viewLineSegments, segmentsNearCard, EDGE_INSET, PillLabel, pillLabelForms, pillLabelWidths, unionSummaries,
     childrenDrawnElsewhere, siblingOrderMark, SiblingOrderMark,
     siblingsTabState, SiblingsTabState, newlyShownSiblingIds, siblingGroups, ShownChildrenContext, HiddenRelativesTab, unionChildIdSet, branchTabsInOrder,
+    hiddenPartnerIds, childrenByUnion, childrenComeWithPartners, otherFamilyChildrenElsewhere, marriagesInOrder,
 } from './marriage-order.js';
+import { partnerIdsShownInPlace } from './layout/pipeline/1-select-subgraph.js';
 import { measureUnionOrderPills, measureTabRows, rowKey, unionOrderPillKey, unionOrderPillPartsHtml, pillFontsPending, branchTabRestHtml, tabsForm, tabsFormClass } from './union-order-measure.js';
 import { showFocusToast, hideFocusToast } from './focus-toast.js';
 import { openCardMenuFromKeyboard } from './ui/keyboard-access.js';
@@ -120,6 +122,8 @@ interface CustomCardsMeasure {
     edgeRoomIds: Set<PersonId>;
     /** The cards of one height whose last line was wrapped clear of the ⇄ pill (CARD_EDGE_PILL_RIGHT). */
     edgeRightIds: Set<PersonId>;
+    /** The cards of one height whose last line was wrapped clear of the ∞ pill (CARD_EDGE_PILL_LEFT). */
+    edgeLeftIds: Set<PersonId>;
 }
 /**
  * What the outputs draw (the poster, the book's tree, the people of the
@@ -206,6 +210,8 @@ class TreeRendererClass {
     private edgeRoomIds = new Set<PersonId>();
     /** The cards of one height whose last line was wrapped clear of the ⇄ pill (CARD_EDGE_PILL_RIGHT). */
     private edgeRightIds = new Set<PersonId>();
+    /** The cards of one height whose last line was wrapped clear of the ∞ pill (CARD_EDGE_PILL_LEFT). */
+    private edgeLeftIds = new Set<PersonId>();
     /** The other trees the last cards were matched against (the ⇄ pill); the next measure reads them. */
     private lastCrossTrees: Map<TreeId, { name: string; data: StromData }> | null = null;
     /** The last render was the one more render asked for by pills measured otherwise (never twice in a row). */
@@ -349,6 +355,21 @@ class TreeRendererClass {
     private parentsZoom = new Map<PersonId, { before: number; after: number }>();
     /** Where the card of each person of parentsShownIds stood on the screen before its click (hide all brings it back there). */
     private parentsAnchorScreen = new Map<PersonId, { x: number; y: number }>();
+    /**
+     * Other partners shown in place (§5, the "▸ ∞" pill,
+     * PipelineInput.showPartnersOf): the persons whose partners of unions
+     * without children the view shows as further marriages beside them, in
+     * the order shown. Cleared with the children shown.
+     */
+    private partnersShownIds: PersonId[] = [];
+    /** Per person of partnersShownIds: the cards the click brought into view (closing them closes the expansions among those). */
+    private partnersBroughtIn = new Map<PersonId, ReadonlySet<PersonId>>();
+    /** Persons whose click drew none of their partners: the pill is not offered again in this view (a safety net, partnersShownFull.test.ts). */
+    private partnersUnshowable = new Set<PersonId>();
+    /** Per person of partnersShownIds whose click zoomed the view out (§5 of round 1): the scale before and the scale it left. */
+    private partnersZoom = new Map<PersonId, { before: number; after: number }>();
+    /** Where the card of each person of partnersShownIds stood on the screen before its click. */
+    private partnersAnchorScreen = new Map<PersonId, { x: number; y: number }>();
     /** The drawn persons whose parents are out of view only because of the depth (LayoutResult.ancestorDepthEdge), per screen layout. */
     private depthEdge: ReadonlySet<PersonId> = new Set();
     /**
@@ -516,6 +537,7 @@ class TreeRendererClass {
             this.customMetrics = null;
             this.edgeRoomIds.clear();
             this.edgeRightIds.clear();
+            this.edgeLeftIds.clear();
             this.customLines.clear();
             this.customRows.clear();
             this.customHeads.clear();
@@ -531,6 +553,7 @@ class TreeRendererClass {
         this.layoutBands = result.bands ?? [];
         this.viewLayer = result.viewLayer ?? null;
         this.depthEdge = new Set(result.ancestorDepthEdge ?? []);
+        this.addOtherFamilyLinks();
 
         // Timeline, fan and map show the same person selection drawn their own
         // way, in their own container (the pipeline above only served to pick
@@ -616,6 +639,7 @@ class TreeRendererClass {
             ...(viewLinks.length > 0 ? { viewLinks } : {}),
             ...(!descendantsOnly && this.childrenShownIds.length > 0 ? { expandChildrenOf: this.childrenShownIds } : {}),
             ...(!descendantsOnly && this.parentsShownIds.length > 0 ? { extraDepthFor: this.parentsShownIds } : {}),
+            ...(!descendantsOnly && this.partnersShownIds.length > 0 ? { showPartnersOf: this.partnersShownIds } : {}),
         };
 
         // Use debug pipeline if debug mode is enabled
@@ -633,6 +657,7 @@ class TreeRendererClass {
                     viewLinks: request.viewLinks,
                     expandChildrenOf: request.expandChildrenOf,
                     extraDepthFor: request.extraDepthFor,
+                    showPartnersOf: request.showPartnersOf,
                     ...(request.expandChildrenOf && this.foldedFor.size > 0 ? { foldAncestorsOf: [...this.foldedFor.keys()] } : {}),
                 },
                 this.debugOptions
@@ -855,6 +880,7 @@ class TreeRendererClass {
         this.customHeads = measured.heads;
         this.edgeRoomIds = measured.edgeRoomIds;
         this.edgeRightIds = measured.edgeRightIds;
+        this.edgeLeftIds = measured.edgeLeftIds;
         return measured.metrics;
     }
 
@@ -868,8 +894,11 @@ class TreeRendererClass {
         const ids: PersonId[] = [];
         const entries = [];
         // A card of one height for the view keeps its last line clear of the ⇄ pill
-        // (index.html .has-edge-br): its rows are wrapped that much narrower.
+        // (index.html .has-edge-br) and the ∞ pill (.edge-bl-room): its rows are
+        // wrapped that much narrower.
         const edgeRightIds = new Set<PersonId>();
+        const edgeLeftIds = new Set<PersonId>();
+        const visible = (pid: PersonId) => positions.has(pid);
         let anyBirth = false;
         for (const id of positions.keys()) {
             const person = DataManager.getPerson(id);
@@ -879,8 +908,10 @@ class TreeRendererClass {
             ids.push(id);
             const crossPill = this.hasCrossTreePill(person, this.lastCrossTrees);
             const siblingPill = this.siblingOrderCandidate(id);
-            const reserve = fields.height !== 'content' && personLines.length > 0 && (crossPill || siblingPill);
-            if (reserve) edgeRightIds.add(id);
+            const partnersPill = this.partnersPillOf(id, visible) !== null;
+            const reserve = fields.height !== 'content' && personLines.length > 0 && (crossPill || siblingPill || partnersPill);
+            if (reserve && (crossPill || siblingPill)) edgeRightIds.add(id);
+            if (reserve && partnersPill) edgeLeftIds.add(id);
             // The birth surname under the name (src/person-name.ts): its row never widens the card.
             const birth = birthNoteText(shownNameParts(person, '?').birthNote);
             if (birth) anyBirth = true;
@@ -888,7 +919,8 @@ class TreeRendererClass {
                 name: shownName(person, '?'), avatar: !person.isPlaceholder, lines: personLines,
                 ...(birth ? { birth } : {}),
                 ...(presumed ? { years: cardYears(person, presumed.has(id)) } : {}),
-                ...(reserve ? { lastLineReserve: (crossPill ? CARD_EDGE_PILL_RIGHT : 0) + (siblingPill ? SIBLING_ORDER_PILL_RIGHT : 0) } : {}),
+                ...(reserve ? { lastLineReserve: (crossPill ? CARD_EDGE_PILL_RIGHT : 0) + (siblingPill ? SIBLING_ORDER_PILL_RIGHT : 0)
+                    + (partnersPill ? CARD_EDGE_PILL_LEFT : 0) } : {}),
             });
         }
         // The chosen width's cap (narrow / medium / wide); the poster takes this width too.
@@ -898,13 +930,12 @@ class TreeRendererClass {
         const { rows, heights, heads } = customCardRows(entries, metrics, measureCardTexts, fields.lines, fields.style);
         const measured = {
             lines, rows, wrapped: fields.lines !== 1, style: fields.style,
-            heads: new Map(ids.map((id, i) => [id, heads[i]])), edgeRoomIds: new Set<PersonId>(), edgeRightIds,
+            heads: new Map(ids.map((id, i) => [id, heads[i]])), edgeRoomIds: new Set<PersonId>(), edgeRightIds, edgeLeftIds,
         };
         if (fields.height === 'content') {
             // Each card as tall as its own content; the view's height is its tallest
             // (a band with no card, the CSS default). A card with pills on its
             // bottom edge grows by their room, so they cover no text.
-            const visible = (pid: PersonId) => positions.has(pid);
             ids.forEach((id, i) => {
                 const pills = this.bottomEdgePills(id, visible, this.lastCrossTrees);
                 if (pills.left || pills.right) {
@@ -954,37 +985,36 @@ class TreeRendererClass {
     }
 
     /**
-     * A person's partners not drawn in the view (the ∞ pill) and the
-     * partnerships with children whose partner is not drawn (the ⌂ pill: a
-     * step family the view leaves out). An empty "?" stand-in is never drawn
-     * (T11), so it counts as neither.
+     * The ∞ pill of a card (§5, family view only): before a click the
+     * partners of the person's unions without children out of view
+     * (hiddenPartnerIds, "▸ ∞ N"), after it the ones it brought ("▾ ∞ N");
+     * null without a pill (none of them, a click that drew none, another
+     * view). Partners with children come with "▸ children". An empty "?"
+     * stand-in never counts (T11).
      */
-    private hiddenPartnersAndFamilies(id: PersonId, visible: (pid: PersonId) => boolean): {
-        partners: Person[]; families: import('./types.js').Partnership[];
-    } {
+    private partnersPillOf(id: PersonId, visible: (pid: PersonId) => boolean): { shown: boolean; ids: PersonId[] } | null {
+        if (this.viewMode !== 'family') return null;
         const data = DataManager.getData();
-        const partners = DataManager.getAllPartners(id).filter(p => !isDiagramStandIn(data, p.id) && !visible(p.id));
-        const families = DataManager.getPartnerships(id).filter(p => {
-            const partnerId = p.person1Id === id ? p.person2Id : p.person1Id;
-            return !visible(partnerId) && p.childIds.length > 0 && !isDiagramStandIn(data, partnerId);
-        });
-        return { partners, families };
+        if (!data.persons[id] || data.persons[id].isPlaceholder) return null;
+        if (this.partnersShownIds.includes(id)) {
+            const brought = this.partnersBroughtIn.get(id);
+            return { shown: true, ids: partnerIdsShownInPlace(data, id).filter(q => visible(q) && !!brought?.has(q)) };
+        }
+        if (this.partnersUnshowable.has(id)) return null;
+        const ids = hiddenPartnerIds(data, id, visible);
+        return ids.length > 0 ? { shown: false, ids } : null;
     }
 
     /**
-     * Whether a card carries pills on its bottom edge: on the left ∞ hidden
-     * partners or ⌂ hidden families (not in the descendants chart, which hides
-     * relatives by design), on the right ⇄ the person in other trees.
+     * Whether a card carries pills on its bottom edge: on the left ∞ other
+     * partners (the family view, partnersPillOf), on the right ⇄ the person
+     * in other trees or the sibling-order pill's room.
      */
     private bottomEdgePills(id: PersonId, visible: (pid: PersonId) => boolean,
         crossTrees: Map<TreeId, { name: string; data: StromData }> | null): { left: boolean; right: boolean } {
         const person = DataManager.getPerson(id);
         if (!person) return { left: false, right: false };
-        let left = false;
-        if (this.viewMode !== 'descendants') {
-            const hidden = this.hiddenPartnersAndFamilies(id, visible);
-            left = hidden.partners.length > 0 || hidden.families.length > 0;
-        }
+        const left = this.partnersPillOf(id, visible) !== null;
         return { left, right: this.hasCrossTreePill(person, crossTrees) || this.siblingOrderCandidate(id) };
     }
 
@@ -1148,11 +1178,16 @@ class TreeRendererClass {
         this.parentsUnshowable.clear();
         this.parentsZoom.clear();
         this.parentsAnchorScreen.clear();
+        this.partnersShownIds = [];
+        this.partnersBroughtIn.clear();
+        this.partnersUnshowable.clear();
+        this.partnersZoom.clear();
+        this.partnersAnchorScreen.clear();
     }
 
-    /** Whether the view shows anyone's children or parents in place. */
+    /** Whether the view shows anyone's children, parents or other partners in place. */
     private anyShown(): boolean {
-        return this.childrenShownIds.length > 0 || this.parentsShownIds.length > 0;
+        return this.childrenShownIds.length > 0 || this.parentsShownIds.length > 0 || this.partnersShownIds.length > 0;
     }
 
     /** What the tabs need to know about the children shown in place (hiddenRelativesTabs). */
@@ -1325,6 +1360,71 @@ class TreeRendererClass {
         this.playChildrenTransition(scene, 'open', personId, shift, this.parentsInvolved(personId, broughtIn), zoomTo, glow);
     }
 
+    /** The person's other partners in view while their "▾ ∞" shows them (the ones its click brought). */
+    shownPartnersOf(personId: PersonId): PersonId[] {
+        const brought = this.partnersBroughtIn.get(personId);
+        return partnerIdsShownInPlace(DataManager.getData(), personId).filter(q => this.positions.has(q) && !!brought?.has(q));
+    }
+
+    /** Whether the view shows the person's other partners in place ("▾ ∞"). */
+    isPartnersShown(personId: PersonId): boolean {
+        return this.partnersShownIds.includes(personId);
+    }
+
+    /** The partners of unions without children a "▸ ∞" of the person would show (none outside the family view or after a click that drew none). */
+    private partnersToShow(personId: PersonId): PersonId[] {
+        if (this.viewMode !== 'family' || this.partnersUnshowable.has(personId) || this.partnersShownIds.includes(personId)) return [];
+        return hiddenPartnerIds(DataManager.getData(), personId, id => this.positions.has(id));
+    }
+
+    /**
+     * The "▸ ∞" pill (§5): show the person's other partners (of unions
+     * without children) in place, as further marriages beside the card, or
+     * hide them again with what they brought.
+     */
+    async togglePartnersShown(personId: PersonId): Promise<void> {
+        if (this.partnersShownIds.includes(personId)) await this.closeShown([], [], personId, false, [personId]);
+        else if (this.partnersToShow(personId).length > 0) await this.showPartnersOf(personId);
+    }
+
+    /**
+     * Show the other partners of `personId` in one render and one step of
+     * the history (PipelineInput.showPartnersOf): the card keeps its place
+     * on the screen, the partners carry the hatch of the cards shown here
+     * and glow for a moment. A click that draws none of them gives the view
+     * back and leaves the pill out (partnersUnshowable).
+     */
+    private async showPartnersOf(personId: PersonId): Promise<void> {
+        this.finishChildrenTransition();
+        const historyBefore = this.currentHistoryEntry();
+        const scene = this.captureChildrenScene();
+        const beforeAll = new Map(this.positions);
+        const screenBefore = this.cardScreenCenter(personId);
+        const promised = this.partnersToShow(personId);
+        this.partnersShownIds = [...this.partnersShownIds, personId];
+        // The partners promised carry the hatch from the first render (the cards brought in replace them below)
+        this.partnersBroughtIn.set(personId, new Set(promised));
+        await this.renderInternal();
+        if (!promised.some(id => this.positions.has(id))) {
+            this.partnersBroughtIn.delete(personId);
+            this.partnersShownIds = this.partnersShownIds.filter(id => id !== personId);
+            this.partnersUnshowable.add(personId);
+            await this.renderInternal();
+            this.keepCardInPlace(personId, beforeAll, false);
+            return;
+        }
+        if (historyBefore) this.pushHistoryStep({ ...historyBefore, anchorId: personId });
+        const broughtIn = new Set([...this.positions.keys()].filter(id => !beforeAll.has(id)));
+        this.partnersBroughtIn.set(personId, broughtIn);
+        if (screenBefore) this.partnersAnchorScreen.set(personId, screenBefore);
+        const shift = this.keepCardInPlace(personId, beforeAll, false);
+        const scaleBefore = ZoomPan.getScale();
+        const zoomTo = this.childrenZoomOut(personId, [...broughtIn]);
+        if (zoomTo !== null) this.partnersZoom.set(personId, { before: scaleBefore, after: zoomTo });
+        const glow = () => this.highlightCards(this.shownPartnersOf(personId), CHILDREN_GLOW_MS);
+        this.playChildrenTransition(scene, 'open', personId, shift, new Map([[personId, broughtIn]]), zoomTo, glow);
+    }
+
     /** For the transition of a parents step: each parent of the person with the cards the step brought (they grow out of the parents' stem). */
     private parentsInvolved(personId: PersonId, broughtIn: ReadonlySet<PersonId>): Map<PersonId, ReadonlySet<PersonId>> {
         return new Map((DataManager.getPerson(personId)?.parentIds ?? []).map(q => [q, broughtIn] as const));
@@ -1469,16 +1569,19 @@ class TreeRendererClass {
     }
 
     /**
-     * The steps that close together with the children shown for `childIds`
-     * and the parents shown for `parentIds`: a siblings step goes as one
+     * The steps that close together with the children shown for `childIds`,
+     * the parents shown for `parentIds` and the other partners shown for
+     * `partnerIds`: a siblings step goes as one
      * (both parents; for an edge ancestor its parents too), closing parents
      * closes their children shown, and whatever the closing steps brought
      * into view closes its own expansions (as childrenShownClosing: a card
      * shown without its line would stand alone).
      */
-    private shownClosing(childIds: readonly PersonId[], parentIds: readonly PersonId[]): { children: Set<PersonId>; parents: Set<PersonId> } {
+    private shownClosing(childIds: readonly PersonId[], parentIds: readonly PersonId[], partnerIds: readonly PersonId[] = []):
+        { children: Set<PersonId>; parents: Set<PersonId>; partners: Set<PersonId> } {
         const children = new Set(childIds.filter(id => this.childrenShownIds.includes(id)));
         const parents = new Set(parentIds.filter(id => this.parentsShownIds.includes(id)));
+        const partners = new Set(partnerIds.filter(id => this.partnersShownIds.includes(id)));
         let grew = true;
         const add = (set: Set<PersonId>, id: PersonId) => {
             if (set.has(id)) return;
@@ -1499,11 +1602,13 @@ class TreeRendererClass {
             const brought = [
                 ...[...children].map(id => this.childrenBroughtIn.get(id)),
                 ...[...parents].map(id => this.parentsBroughtIn.get(id)),
+                ...[...partners].map(id => this.partnersBroughtIn.get(id)),
             ].filter((b): b is ReadonlySet<PersonId> => !!b);
             for (const id of this.childrenShownIds) if (brought.some(b => b.has(id))) add(children, id);
             for (const id of this.parentsShownIds) if (brought.some(b => b.has(id))) add(parents, id);
+            for (const id of this.partnersShownIds) if (brought.some(b => b.has(id))) add(partners, id);
         }
-        return { children, parents };
+        return { children, parents, partners };
     }
 
     /**
@@ -1517,16 +1622,17 @@ class TreeRendererClass {
     }
 
     /**
-     * Hide the children shown for `childIds` and the parents shown beyond the
-     * depth for `parentIds` in one render, with everything that closes with
-     * them (shownClosing). The anchor's card keeps its place on the screen;
+     * Hide the children shown for `childIds`, the parents shown beyond the
+     * depth for `parentIds` and the other partners shown for `partnerIds` in
+     * one render, with everything that closes with them (shownClosing). The anchor's card keeps its place on the screen;
      * with `restoreView` it goes back where it stood before the first
      * expansion (hide all). The scale a click zoomed out from comes back
      * unless it was changed since (§5).
      */
-    private async closeShown(childIds: readonly PersonId[], parentIds: readonly PersonId[], anchorId: PersonId, restoreView = false): Promise<void> {
-        const { children: closing, parents: closingParents } = this.shownClosing(childIds, parentIds);
-        if (closing.size === 0 && closingParents.size === 0) return;
+    private async closeShown(childIds: readonly PersonId[], parentIds: readonly PersonId[], anchorId: PersonId, restoreView = false,
+        partnerIds: readonly PersonId[] = []): Promise<void> {
+        const { children: closing, parents: closingParents, partners: closingPartners } = this.shownClosing(childIds, parentIds, partnerIds);
+        if (closing.size === 0 && closingParents.size === 0 && closingPartners.size === 0) return;
         this.finishChildrenTransition();
         const historyBefore = this.currentHistoryEntry();
         const anchorAt = restoreView ? this.cardScreenCenter(anchorId) : null;
@@ -1536,11 +1642,13 @@ class TreeRendererClass {
         const zooms = [
             ...this.childrenShownIds.filter(id => closing.has(id)).map(id => this.childrenZoom.get(id)),
             ...this.parentsShownIds.filter(id => closingParents.has(id)).map(id => this.parentsZoom.get(id)),
+            ...this.partnersShownIds.filter(id => closingPartners.has(id)).map(id => this.partnersZoom.get(id)),
         ].filter(z => !!z);
         const involved = new Map([...closing].map(id => [id, this.childrenBroughtIn.get(id) ?? new Set<PersonId>()] as const));
         for (const p of closingParents) {
             for (const [q, b] of this.parentsInvolved(p, this.parentsBroughtIn.get(p) ?? new Set())) if (!involved.has(q)) involved.set(q, b);
         }
+        for (const p of closingPartners) if (!involved.has(p)) involved.set(p, this.partnersBroughtIn.get(p) ?? new Set());
         this.childrenShownIds = this.childrenShownIds.filter(id => !closing.has(id));
         for (const id of closing) {
             this.childrenVisibleBefore.delete(id);
@@ -1550,7 +1658,7 @@ class TreeRendererClass {
         for (const [p, parents] of this.siblingsShownFor) {
             if (parents.some(q => closing.has(q))) this.siblingsShownFor.delete(p);
         }
-        const anchorScreen = this.childrenAnchorScreen.get(anchorId) ?? this.parentsAnchorScreen.get(anchorId);
+        const anchorScreen = this.childrenAnchorScreen.get(anchorId) ?? this.parentsAnchorScreen.get(anchorId) ?? this.partnersAnchorScreen.get(anchorId);
         for (const id of closing) this.childrenAnchorScreen.delete(id);
         this.parentsShownIds = this.parentsShownIds.filter(id => !closingParents.has(id));
         for (const id of closingParents) {
@@ -1558,6 +1666,12 @@ class TreeRendererClass {
             this.parentsWithSiblings.delete(id);
             this.parentsZoom.delete(id);
             this.parentsAnchorScreen.delete(id);
+        }
+        this.partnersShownIds = this.partnersShownIds.filter(id => !closingPartners.has(id));
+        for (const id of closingPartners) {
+            this.partnersBroughtIn.delete(id);
+            this.partnersZoom.delete(id);
+            this.partnersAnchorScreen.delete(id);
         }
         await this.renderInternal();
         const shift = this.keepCardInPlace(anchorId, beforeAll, restoreView);
@@ -1588,14 +1702,16 @@ class TreeRendererClass {
     }
 
     /**
-     * How many steps show children in place in this view: a person whose
+     * How many steps show relatives in place in this view: a person whose
      * children are shown counts once, the parents of a siblings step
-     * ("▸ siblings") count once together.
+     * ("▸ siblings") count once together, so do the parents and the other
+     * partners shown of a person.
      */
     shownChildrenCount(): number {
         const grouped = new Set([...this.siblingsShownFor.values()].flat());
         return this.childrenShownIds.filter(id => !grouped.has(id)).length + this.siblingsShownFor.size
-            + this.parentsShownIds.filter(id => !this.parentsWithSiblings.has(id)).length;
+            + this.parentsShownIds.filter(id => !this.parentsWithSiblings.has(id)).length
+            + this.partnersShownIds.length;
     }
 
     /**
@@ -1607,11 +1723,14 @@ class TreeRendererClass {
         // The first step's card: a parents step came first when the first children shown came with it
         const firstParents = this.parentsShownIds[0];
         const firstChildren = this.childrenShownIds[0];
-        const anchor = firstParents !== undefined && (firstChildren === undefined
+        let anchor = firstParents !== undefined && (firstChildren === undefined
             || this.parentsBroughtIn.get(firstParents)?.has(firstChildren)
             || this.siblingsShownFor.get(firstParents)?.includes(firstChildren))
             ? firstParents : firstChildren;
-        await this.closeShown([...this.childrenShownIds], [...this.parentsShownIds], anchor, true);
+        // Partners shown first: before every step that shows a card they brought
+        const firstPartners = this.partnersShownIds[0];
+        if (firstPartners !== undefined && (anchor === undefined || this.partnersBroughtIn.get(firstPartners)?.has(anchor))) anchor = firstPartners;
+        await this.closeShown([...this.childrenShownIds], [...this.parentsShownIds], anchor, true, [...this.partnersShownIds]);
     }
 
     /**
@@ -1926,6 +2045,29 @@ class TreeRendererClass {
         this.childrenTransition = transition;
         void Promise.all(animations.map(a => a.finished.catch(() => undefined))).then(() => end(true));
     }
+    /**
+     * The children of another family drawn elsewhere (§5, in place of the
+     * former ⌂): a person whose other union's partner is out of view and
+     * whose children of it all stand elsewhere in the family view gets a
+     * "children ↗" jump to them (a line link's tab), when no "▸ children" /
+     * "▾ children" of the card speaks of the children already.
+     */
+    private addOtherFamilyLinks(): void {
+        if (this.viewMode !== 'family') return;
+        const data = DataManager.getData();
+        const inView = (id: PersonId) => this.positions.has(id);
+        const drops = this.dropIds();
+        for (const id of this.positions.keys()) {
+            const person = data.persons[id];
+            if (!person || person.isPlaceholder || person.partnerships.length === 0) continue;
+            if (this.childrenShownIds.includes(id) || hiddenChildIds(data, id, inView).length > 0) continue;
+            const kids = otherFamilyChildrenElsewhere(data, id, inView, cid => drops.has(cid));
+            if (kids.length === 0) continue;
+            const links = this.lineLinks.get(id) ?? { parentIds: [], childIds: [] };
+            this.lineLinks.set(id, { parentIds: links.parentIds, childIds: [...links.childIds, ...kids.filter(k => !links.childIds.includes(k))] });
+        }
+    }
+
     /** The children hanging on a drawn parent line in the drawn view. */
     private dropIds(): Set<PersonId> {
         if (this.dropIdsCache?.connections !== this.connections) {
@@ -2203,6 +2345,8 @@ class TreeRendererClass {
         }
         // The parents shown beyond the depth (§4) carry it too (out of view before their click: the person was at the edge)
         for (const id of this.parentsShownIds) for (const q of this.shownParentsOf(id)) out.add(q);
+        // So do the other partners shown by "▸ ∞" (§5)
+        for (const id of this.partnersShownIds) for (const q of this.shownPartnersOf(id)) out.add(q);
         return out;
     }
 
@@ -2355,6 +2499,16 @@ class TreeRendererClass {
                     ...(anchorScreen ? { anchorScreen } : {}),
                     ...(this.parentsWithSiblings.has(id) ? { siblingsOf: id } : {}),
                 };
+            })).concat(this.partnersShownIds.map(id => {
+                const zoom = this.partnersZoom.get(id), anchorScreen = this.partnersAnchorScreen.get(id);
+                return {
+                    id,
+                    partners: true as const,
+                    visibleBefore: new Set<PersonId>(),
+                    broughtIn: this.partnersBroughtIn.get(id) ?? new Set<PersonId>(),
+                    ...(zoom ? { zoom } : {}),
+                    ...(anchorScreen ? { anchorScreen } : {}),
+                };
             })),
         };
     }
@@ -2381,7 +2535,12 @@ class TreeRendererClass {
         this.parentsZoom = new Map(parents.filter(s => s.zoom).map(s => [s.id, s.zoom!] as const));
         this.parentsAnchorScreen = new Map(parents.filter(s => s.anchorScreen).map(s => [s.id, s.anchorScreen!] as const));
         this.parentsWithSiblings = new Set(parents.filter(s => s.siblingsOf).map(s => s.id));
-        const shown = all.filter(s => !s.parents);
+        const partners = all.filter(s => s.partners);
+        this.partnersShownIds = partners.map(s => s.id);
+        this.partnersBroughtIn = new Map(partners.map(s => [s.id, s.broughtIn] as const));
+        this.partnersZoom = new Map(partners.filter(s => s.zoom).map(s => [s.id, s.zoom!] as const));
+        this.partnersAnchorScreen = new Map(partners.filter(s => s.anchorScreen).map(s => [s.id, s.anchorScreen!] as const));
+        const shown = all.filter(s => !s.parents && !s.partners);
         this.childrenShownIds = shown.map(s => s.id);
         this.childrenVisibleBefore = new Map(shown.map(s => [s.id, s.visibleBefore] as const));
         this.childrenBroughtIn = new Map(shown.map(s => [s.id, s.broughtIn] as const));
@@ -2461,7 +2620,7 @@ class TreeRendererClass {
         const opening = target.shown.filter(s => !currentKeys.has(shownKey(s)));
         const scene = this.captureChildrenScene();
         const beforeAll = new Map(this.positions);
-        const anchorScreen = this.childrenAnchorScreen.get(anchorId) ?? this.parentsAnchorScreen.get(anchorId);
+        const anchorScreen = this.childrenAnchorScreen.get(anchorId) ?? this.parentsAnchorScreen.get(anchorId) ?? this.partnersAnchorScreen.get(anchorId);
         const involved = new Map<PersonId, ReadonlySet<PersonId>>();
         for (const s of [...closing, ...opening]) {
             if (!s.parents) involved.set(s.id, s.broughtIn);
@@ -2496,7 +2655,9 @@ class TreeRendererClass {
         }
         const siblingsStep = opening.filter(s => s.siblingsOf === anchorId && !s.parents).map(s => s.id);
         const parentsStep = opening.some(s => s.parents && s.id === anchorId);
+        const partnersStep = opening.some(s => s.partners && s.id === anchorId);
         const glow = dir !== 'open' ? undefined
+            : partnersStep ? () => this.highlightCards(this.shownPartnersOf(anchorId), CHILDREN_GLOW_MS)
             : parentsStep ? () => this.glowParents(anchorId, siblingsStep)
                 : siblingsStep.length > 0 ? () => this.glowShown(siblingsStep, anchorId)
                     : opening.some(s => s.id === anchorId) ? () => this.glowShown([anchorId], null) : undefined;
@@ -2530,7 +2691,7 @@ class TreeRendererClass {
     }
 
     /**
-     * A focus set from a card's tab (§2: ◎ parents / siblings / family, ∞, ⌂,
+     * A focus set from a card's tab (§2: ◎ parents / siblings / family,
      * "+ family"): the tree is rebuilt around the person and the confirmation
      * "◎ Focused on {name} | ↩ Back" offers the previous view. A focus from
      * the menu, the fan, the timeline or the search is a choice of its own
@@ -2876,41 +3037,6 @@ class TreeRendererClass {
     }
 
     /**
-     * Get partners of a person that are not currently visible (hidden in focus mode)
-     */
-    getHiddenPartners(personId: PersonId): Person[] {
-        const allPartners = DataManager.getAllPartners(personId);
-        return allPartners.filter(p => !this.positions.has(p.id));
-    }
-
-    /**
-     * Get partners with children that are not currently visible (hidden families)
-     */
-    getHiddenFamilyPartners(personId: PersonId): Person[] {
-        const partnerships = DataManager.getPartnerships(personId);
-        const hiddenFamilyPartners: Person[] = [];
-
-        for (const partnership of partnerships) {
-            // Only consider partnerships with children
-            if (partnership.childIds.length === 0) continue;
-
-            const partnerId = partnership.person1Id === personId
-                ? partnership.person2Id
-                : partnership.person1Id;
-
-            // Only if partner is not visible
-            if (!this.positions.has(partnerId)) {
-                const partner = DataManager.getPerson(partnerId);
-                if (partner) {
-                    hiddenFamilyPartners.push(partner);
-                }
-            }
-        }
-
-        return hiddenFamilyPartners;
-    }
-
-    /**
      * Toggle showing all partnerships inline.
      */
     toggleShowAllPartnerships(): void {
@@ -3084,7 +3210,7 @@ class TreeRendererClass {
                 const target = e.target as HTMLElement;
                 if (target.classList.contains('add-btn') || target.classList.contains('branch-tab')) return;
                 // Don't open context menu when clicking on badge buttons or their children
-                if (target.closest('.hidden-partners-btn') || target.closest('.hidden-families-btn')) return;
+                if (target.closest('.hidden-partners-btn')) return;
                 // The badge opens what it signals (touch: the person menu, which leads with it).
                 const badge = target.closest<HTMLElement>('.card-signal');
                 if (badge && !window.matchMedia?.('(pointer: coarse)').matches) {
@@ -3123,13 +3249,7 @@ class TreeRendererClass {
             // Birth year for the card meta row (the year range replaces the dagger).
             const birthYear = person.birthDate ? displayYear(person.birthDate) : '';
 
-            // Hidden partners (not in the visible/rendered set) and hidden
-            // families (a partnership with children whose partner is not
-            // visible: a step family the view leaves out).
             const partnerships = DataManager.getPartnerships(id);
-            const hidden = this.hiddenPartnersAndFamilies(id, pid => this.positions.has(pid));
-            const hiddenPartnersCount = hidden.partners.length;
-            const hiddenFamiliesCount = hidden.families.length;
 
             // Hidden parents, siblings (children of a union, as the layout
             // counts them) or children: a branch tab each (one rule with the
@@ -3182,12 +3302,12 @@ class TreeRendererClass {
                     const ids = childrenShown
                         ? newlyShownChildIds(DataManager.getData(), id, cid => this.positions.has(cid), this.childrenVisibleBefore.get(id) ?? new Set())
                         : hiddenChildIds(DataManager.getData(), id, cid => this.positions.has(cid));
-                    const childItems = ids
-                        .map(cid => DataManager.getPerson(cid))
-                        .filter((c): c is Person => c !== null)
-                        .map(c => this.bubbleItemHtml(c)).join('');
+                    const childItems = this.childrenByUnionHtml(id, ids);
                     const header = childrenShown ? strings.focus.childrenShownTooltip : strings.focus.hiddenChildrenTooltip;
-                    const hint = childrenShown ? strings.focus.placeHideHint : strings.focus.placeShowHint;
+                    // Children of a union whose partner is out of view bring the partner along (§5)
+                    const hint = childrenShown ? strings.focus.placeHideHint
+                        : childrenComeWithPartners(DataManager.getData(), id, ids, cid => this.positions.has(cid))
+                            ? strings.focus.childrenWithPartnersHint : strings.focus.placeShowHint;
                     const aria = (childrenShown ? strings.focus.childrenTabHideAria : strings.focus.childrenTabShowAria)(fullTitle);
                     // Children the view draws elsewhere in the tree (§4): counted
                     // before the click; after it, rows that glide to them
@@ -3221,40 +3341,10 @@ class TreeRendererClass {
             const tabKinds = branchTabsInOrder(showHiddenBadges ? hiddenTabs : [], linkTabs);
             for (const kind of tabKinds) branchTabsHtml += tabHtml.get(kind) ?? '';
 
-            // Hidden relationship indicators (bottom-left edge slot): ∞ partners, ⌂ families.
-            // Gen >= -1 persons are auto-expanded, so these only appear for ancestors (gen <= -2).
-            let hiddenIndicatorsHtml = '';
-            if (showHiddenBadges && (hiddenPartnersCount > 0 || hiddenFamiliesCount > 0)) {
-                if (hiddenPartnersCount > 0) {
-                    // Build rich tooltip with list of hidden partners
-                    const partnerItems = hidden.partners.map(p => {
-                        const name = shownName(p, '?');
-                        const year = displayYear(p.birthDate);
-                        return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(name)}</span>${year ? `<span class="badge-tooltip-detail"> *${this.escapeHtml(year)}</span>` : ''}</div>`;
-                    }).join('');
-                    hiddenIndicatorsHtml += `<button class="hidden-partners-btn kind-focus" data-action="focus"><span class="pill-glyph">∞</span><span class="pill-count">${hiddenPartnersCount}</span><div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenPartnersTooltip}</div>${partnerItems}</div></button>`;
-                }
-                if (hiddenFamiliesCount > 0) {
-                    // Build rich tooltip with hidden families (partner + children)
-                    const hiddenFamilyItems = hidden.families
-                        .map(p => {
-                            const pid = p.person1Id === id ? p.person2Id : p.person1Id;
-                            const partner = DataManager.getPerson(pid);
-                            const partnerName = partner ? shownName(partner, '?') : '?';
-                            const partnerYear = displayYear(partner?.birthDate);
-                            const childLabels = p.childIds
-                                .map(cid => DataManager.getPerson(cid))
-                                .filter((c): c is Person => c !== null)
-                                .map(c => {
-                                    const name = shownName(c, '?');
-                                    const year = displayYear(c.birthDate);
-                                    return this.escapeHtml(name) + (year ? ` *${this.escapeHtml(year)}` : '');
-                                });
-                            return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(partnerName)}</span>${partnerYear ? `<span class="badge-tooltip-detail"> *${this.escapeHtml(partnerYear)}</span>` : ''}<div class="badge-tooltip-detail">${childLabels.join(', ')}</div></div>`;
-                        }).join('');
-                    hiddenIndicatorsHtml += `<button class="hidden-families-btn kind-focus" data-action="focus"><span class="pill-glyph">⌂</span><span class="pill-count">${hiddenFamiliesCount}</span><div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenFamiliesTooltip}</div>${hiddenFamilyItems}</div></button>`;
-                }
-            }
+            // Other partners (bottom-left edge slot, §5): "▸ ∞ N" shows the
+            // partners of unions without children in place, "▾ ∞ N" hides them.
+            const partnersPill = this.partnersPillOf(id, pid => this.positions.has(pid));
+            const hiddenIndicatorsHtml = partnersPill ? this.partnersPillHtml(id, partnersPill, fullTitle) : '';
 
             const isLocked = DataManager.isPersonLocked(id);
 
@@ -3431,6 +3521,8 @@ class TreeRendererClass {
                 // The pills reach 9 px into the card: a card of details is measured taller for them.
                 card.classList.add('has-edge-bl');
             }
+            // A card of one height wrapped its last line clear of the ∞ pill (index.html .edge-bl-room)
+            if (this.edgeLeftIds.has(id)) card.classList.add('edge-bl-room');
             // The sibling-order pill (§3): the direct-line card out of its birth place among the shown siblings
             const siblingOrder = this.siblingOrderOf(id);
             const siblingOrderHtml = siblingOrder
@@ -3456,6 +3548,7 @@ class TreeRendererClass {
             if (measuresEdgeRoom && this.edgeRoomIds.has(id) !== !!(hiddenIndicatorsHtml || rightPills)) edgeRoomStale = true;
             // A card of one height: its last line wrapped clear of the ⇄ pill exactly when the pill is there.
             if (customLines?.length && !measuresEdgeRoom && this.edgeRightIds.has(id) !== rightPills) edgeRoomStale = true;
+            if (customLines?.length && !measuresEdgeRoom && this.edgeLeftIds.has(id) !== !!hiddenIndicatorsHtml) edgeRoomStale = true;
             // The research edge above the card (a stub, or a label by the dashed line to the parents).
             const edge = this.edgeViews.get(id);
             if (edge) {
@@ -3637,25 +3730,11 @@ class TreeRendererClass {
                 });
             }
 
-            // Attach event listener for hidden partners button
-            // Since gen >= -1 persons are auto-expanded, remaining badges are for ancestors (gen <= -2)
-            // → navigate to that person (setFocus)
-            const hiddenPartnersBtn = card.querySelector('.hidden-partners-btn');
-            if (hiddenPartnersBtn) {
-                hiddenPartnersBtn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    void this.focusFromTab(id);
-                });
-            }
-
-            // Attach event listener for hidden families button → setFocus
-            const hiddenFamiliesBtn = card.querySelector('.hidden-families-btn');
-            if (hiddenFamiliesBtn) {
-                hiddenFamiliesBtn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    void this.focusFromTab(id);
-                });
-            }
+            // ∞ other partners (§5): shown here and hidden again, the view stays
+            card.querySelector('.hidden-partners-btn')?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                void this.togglePartnersShown(id);
+            });
 
             // Attach event listeners to add buttons
             card.querySelectorAll('.add-btn').forEach(btn => {
@@ -4889,6 +4968,57 @@ class TreeRendererClass {
         return `<button type="button" class="branch-tab line-link kind-jump" data-action="${toParents ? 'jump-parents' : 'jump-child'}" aria-label="${this.escapeHtml(label)}">`
             + `${branchTabRestHtml(kind)}<div class="badge-tooltip" aria-hidden="true"><div class="badge-tooltip-header">${this.escapeHtml(header)}</div>${items}`
             + `<div class="badge-tooltip-action">${this.escapeHtml(strings.focus.jumpHint(people.length))}</div></div></button>`;
+    }
+
+    /**
+     * The children in a "▸ children" / "▾ children" bubble (§5): by the
+     * marriage they were born to ("2. ∞ · Berta", numbered as the
+     * marriage-order pill counts) when they come from more than one, else
+     * the plain list.
+     */
+    private childrenByUnionHtml(personId: PersonId, ids: readonly PersonId[]): string {
+        const itemsOf = (list: readonly PersonId[]) => list
+            .map(cid => DataManager.getPerson(cid))
+            .filter((c): c is Person => c !== null)
+            .map(c => this.bubbleItemHtml(c)).join('');
+        const groups = childrenByUnion(DataManager.getData(), personId, ids);
+        if (groups.length < 2) return itemsOf(ids);
+        return groups.map(g => {
+            const partner = g.partnerId ? DataManager.getPerson(g.partnerId) : null;
+            const label = g.number > 0 ? strings.focus.childrenGroupUnion(g.number, partner ? shownName(partner, '?') : '?') : '';
+            return (label ? `<div class="badge-tooltip-group">${this.escapeHtml(label)}</div>` : '') + itemsOf(g.ids);
+        }).join('');
+    }
+
+    /**
+     * The ∞ pill of a card (§5, partnersPillOf): "▸ ∞ N" before a click,
+     * "▾ ∞ N" (active) while the partners are shown here; its bubble names
+     * them with their marriage ("2. ∞ 1890", numbered as the marriage-order
+     * pill counts) and ends with what a click does.
+     */
+    private partnersPillHtml(id: PersonId, pill: { shown: boolean; ids: PersonId[] }, fullTitle: string): string {
+        const data = DataManager.getData();
+        const order = marriagesInOrder(data, id);
+        const items = pill.ids.map(q => {
+            const partner = DataManager.getPerson(q);
+            if (!partner) return '';
+            const uid = order.find(u => {
+                const union = data.partnerships[u];
+                return !!union && (union.person1Id === q || union.person2Id === q) && union.childIds.length === 0;
+            }) ?? order.find(u => data.partnerships[u]?.person1Id === q || data.partnerships[u]?.person2Id === q);
+            const union = uid ? data.partnerships[uid] : undefined;
+            const year = union?.startDate ? displayYear(union.startDate) : '';
+            const marriage = uid ? `${strings.focus.unionOrdinal(order.indexOf(uid) + 1)} ∞${year ? ` ${year}` : ''}` : '';
+            return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(shownName(partner, '?'))}</span>`
+                + `${marriage ? `<span class="badge-tooltip-detail"> ${this.escapeHtml(marriage)}</span>` : ''}</div>`;
+        }).join('');
+        const header = pill.shown ? strings.focus.partnersShownTooltip : strings.focus.hiddenPartnersTooltip;
+        const hint = pill.shown ? strings.focus.placeHideHint : strings.focus.placeShowHint;
+        const aria = (pill.shown ? strings.focus.partnersTabHideAria : strings.focus.partnersTabShowAria)(fullTitle);
+        return `<button type="button" class="hidden-partners-btn kind-place${pill.shown ? ' active' : ''}" data-action="toggle-partners" aria-pressed="${pill.shown}" aria-label="${this.escapeHtml(aria)}">`
+            + `<span class="pill-glyph">${pill.shown ? '▾' : '▸'}</span><span class="pill-glyph">∞</span><span class="pill-count">${pill.ids.length}</span>`
+            + `<div class="badge-tooltip" aria-hidden="true"><div class="badge-tooltip-header">${this.escapeHtml(header)}</div>${items}`
+            + `<div class="badge-tooltip-action">${this.escapeHtml(hint)}</div></div></button>`;
     }
 
     /**

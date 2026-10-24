@@ -580,11 +580,11 @@ test('a pill above the tabs never covers the bubble of a hovered tab', async ({ 
                 await page.evaluate((f) => window.Strom.TreeRenderer.setFocus(f as never), focus);
                 await page.evaluate(() => document.fonts.ready);
                 const ids = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('#tree-canvas .person-card')]
-                    .filter(c => c.querySelector(':scope > .edge-top-above .union-order-pill') && c.querySelector('.edge-top-right :is(.branch-tab, .hidden-families-btn)'))
+                    .filter(c => c.querySelector(':scope > .edge-top-above .union-order-pill') && c.querySelector('.edge-top-right .branch-tab'))
                     .map(c => c.dataset.id!));
                 for (const id of ids) {
                     await zoomTo(page, 1, id);
-                    const tabs = byId(page, id).locator('.edge-top-right :is(.branch-tab, .hidden-families-btn)');
+                    const tabs = byId(page, id).locator('.edge-top-right .branch-tab');
                     for (let i = 0; i < await tabs.count(); i++) {
                         const box = (await tabs.nth(i).boundingBox())!;
                         await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);

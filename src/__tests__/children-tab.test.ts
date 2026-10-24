@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { hiddenRelativesTabs, hiddenChildIds, newlyShownChildIds, childrenDrawnElsewhere, siblingOrderMark, childrenShownClosing, siblingsTabState, newlyShownSiblingIds, siblingGroups, unionChildIdSet } from '../marriage-order.js';
+import { hiddenRelativesTabs, hiddenChildIds, newlyShownChildIds, childrenDrawnElsewhere, siblingOrderMark, childrenShownClosing, siblingsTabState, newlyShownSiblingIds, siblingGroups, unionChildIdSet, hiddenPartnerIds, childrenByUnion, childrenComeWithPartners, otherFamilyChildrenElsewhere, HiddenRelativesTab } from '../marriage-order.js';
 import { tabsForm, tabGlyph, tabLabel, tabKindClass, branchTabRestHtml } from '../union-order-measure.js';
 import { branchTabKind, branchTabsInOrder } from '../marriage-order.js';
 import { childIdsShownInPlace } from '../layout/pipeline/1-select-subgraph.js';
@@ -413,5 +413,82 @@ describe('an ancestor at the edge of the depth (§4: parents and siblings in pla
         expect(hiddenRelativesTabs(d, P('father'), view('father'), kids, new Set(), new Set(), { atDepthEdge: () => false })).toEqual(['family']);
         // folded away for children shown: the dashed tab, not the edge's
         expect(hiddenRelativesTabs(d, P('father'), view('father'), kids, new Set(), new Set(), { ...edge, parentsFolded: () => true })[0]).toBe('parentsFolded');
+    });
+});
+
+/**
+ * Other families (§5): the ⌂ pill is gone. Children of another marriage are
+ * promised by "▸ children" (named by marriage when they come from more than
+ * one), a family whose children all stand elsewhere gets "children ↗", and
+ * the "▸ ∞" pill promises the partners of unions without children.
+ */
+describe('other families and partners (§5)', () => {
+    function family(): StromData {
+        const d = { persons: {}, partnerships: {} } as unknown as StromData;
+        const add = (id: string, gender: 'male' | 'female', isPlaceholder = false): PersonId => {
+            d.persons[id as PersonId] = {
+                id: id as PersonId, firstName: id, lastName: 'X', gender, isPlaceholder,
+                partnerships: [], parentIds: [], childIds: [],
+            } as Person;
+            return id as PersonId;
+        };
+        const fam = (id: string, a: PersonId, b: PersonId, kids: PersonId[], startDate?: string): void => {
+            d.partnerships[id as PartnershipId] = { id: id as PartnershipId, person1Id: a, person2Id: b, childIds: kids, status: 'married', ...(startDate ? { startDate } : {}) };
+            for (const p of [a, b]) { d.persons[p].partnerships.push(id as PartnershipId); d.persons[p].childIds.push(...kids); }
+            for (const k of kids) d.persons[k].parentIds.push(a, b);
+        };
+        // Karl: 2nd marriage Berta (1890, children b1 b2), 1st marriage Anna (1880, child a1),
+        // a childless 3rd with Cilka, a childless "?" union
+        const k = add('karl', 'male'), anna = add('anna', 'female'), berta = add('berta', 'female'), cilka = add('cilka', 'female');
+        const a1 = add('a1', 'male'), b1 = add('b1', 'female'), b2 = add('b2', 'male'), q = add('q', 'female', true);
+        fam('u_berta', k, berta, [b1, b2], '1890');
+        fam('u_anna', k, anna, [a1], '1880');
+        fam('u_cilka', k, cilka, [], '1900');
+        fam('u_q', k, q, []);
+        return d;
+    }
+    const d = family();
+    const P = (id: string) => id as PersonId;
+    const kids = unionChildIdSet(d);
+    const view = (...ids: string[]) => (id: PersonId) => ids.includes(id);
+
+    it('hiddenRelativesTabs never returns the former families tab', () => {
+        for (const inView of [view('karl'), view('karl', 'anna'), view('karl', 'berta', 'b1', 'b2'), view('karl', 'a1')]) {
+            const tabs: readonly HiddenRelativesTab[] = hiddenRelativesTabs(d, P('karl'), inView, kids);
+            expect(tabs as readonly string[]).not.toContain('families');
+        }
+        // The children of a marriage whose partner is out of view are promised by "▸ children"
+        expect(hiddenRelativesTabs(d, P('karl'), view('karl', 'berta', 'b1', 'b2'), kids)).toEqual(['children']);
+        expect(hiddenChildIds(d, P('karl'), view('karl', 'berta', 'b1', 'b2'))).toEqual([P('a1')]);
+    });
+
+    it('"▸ ∞" promises the partners of unions without children out of view, a childless "?" union too', () => {
+        expect(hiddenPartnerIds(d, P('karl'), view('karl'))).toEqual([P('cilka'), P('q')]);
+        expect(hiddenPartnerIds(d, P('karl'), view('karl', 'cilka'))).toEqual([P('q')]);
+        // a partner with children is not counted (the children tab brings them)
+        expect(hiddenPartnerIds(d, P('karl'), view('karl'))).not.toContain(P('anna'));
+    });
+
+    it('the children by marriage, in the order of the marriages, numbered as the pill numbers them', () => {
+        const groups = childrenByUnion(d, P('karl'), [P('b1'), P('b2'), P('a1')]);
+        expect(groups.map(g => [g.number, g.partnerId, g.ids])).toEqual([[1, P('anna'), [P('a1')]], [2, P('berta'), [P('b1'), P('b2')]]]);
+        // one marriage: one group (the bubble then names no group)
+        expect(childrenByUnion(d, P('karl'), [P('b2')])).toHaveLength(1);
+    });
+
+    it('the bubble says the partners come along when one of them is out of view', () => {
+        expect(childrenComeWithPartners(d, P('karl'), [P('a1')], view('karl', 'berta'))).toBe(true);
+        expect(childrenComeWithPartners(d, P('karl'), [P('b1')], view('karl', 'berta'))).toBe(false);
+    });
+
+    it('"children ↗" for a family whose children all stand elsewhere, not for one with a child out of view', () => {
+        // Anna out of view, a1 drawn elsewhere (no line from this family)
+        expect(otherFamilyChildrenElsewhere(d, P('karl'), view('karl', 'a1'), () => false)).toEqual([P('a1')]);
+        // Berta out of view, b1 elsewhere, b2 out of view: the children tab, no jump
+        expect(otherFamilyChildrenElsewhere(d, P('karl'), view('karl', 'anna', 'b1'), () => false)).toEqual([]);
+        // a child on a line of a drawn family is not elsewhere
+        expect(otherFamilyChildrenElsewhere(d, P('karl'), view('karl', 'a1'), id => id === P('a1'))).toEqual([]);
+        // the partner in view: the family is drawn
+        expect(otherFamilyChildrenElsewhere(d, P('karl'), view('karl', 'anna', 'a1'), () => false)).toEqual([]);
     });
 });

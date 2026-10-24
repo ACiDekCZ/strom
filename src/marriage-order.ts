@@ -26,7 +26,7 @@ import { PartnershipId, PersonId, Position, StromData, Partnership } from './typ
 import type { Connection, SpouseLine, OmittedEdge } from './layout/pipeline/types.js';
 import { parseFlexDate, displayYear } from './dates.js';
 import { isDiagramStandIn } from './layout/pipeline/placeholders.js';
-import { childIdsShownInPlace } from './layout/pipeline/1-select-subgraph.js';
+import { childIdsShownInPlace, partnerIdsShownInPlace } from './layout/pipeline/1-select-subgraph.js';
 
 /** Chronological key of a wedding date; Infinity when there is none (after every dated union). */
 function weddingKey(date: string | undefined): number {
@@ -518,6 +518,98 @@ export function childrenDrawnElsewhere(
         const child = data.persons[id];
         return !!child && !child.isPlaceholder && inView(id) && !hangsOnLine(id);
     });
+}
+
+/**
+ * The other partners a card's "▸ ∞" promises (§5): the partners of the
+ * person's unions without children that the view does not draw (the
+ * layout's own rule, partnerIdsShownInPlace: showing draws them as further
+ * marriages beside the person), in data order; never an empty "?" stand-in.
+ * A partner of a union with children comes with the children ("▸ children").
+ */
+export function hiddenPartnerIds(data: StromData, personId: PersonId, inView: (id: PersonId) => boolean): PersonId[] {
+    return partnerIdsShownInPlace(data, personId).filter(id => !inView(id) && !isDiagramStandIn(data, id));
+}
+
+/** The children of one union of a person in a "▸ children" bubble (§5). */
+export interface ChildrenUnionGroup {
+    /** The union, null for children linked to the person outside any union. */
+    partnershipId: PartnershipId | null;
+    /** The union's place among the person's marriages, as the marriage-order pill counts it (0: outside them). */
+    number: number;
+    /** The other partner, null without one (or a "?" stand-in). */
+    partnerId: PersonId | null;
+    ids: PersonId[];
+}
+
+/**
+ * The person's children `ids` by the union they were born to, in the order
+ * of the marriages (marriagesInOrder, as the marriage-order pill numbers
+ * them; a "?" stand-in family after them), each in the order of `ids`.
+ * Children of no union of the person close the list. Empty groups are left
+ * out. The bubble labels the groups only when there is more than one.
+ */
+export function childrenByUnion(data: StromData, personId: PersonId, ids: readonly PersonId[]): ChildrenUnionGroup[] {
+    const person = data.persons[personId];
+    if (!person) return [];
+    const ordered = marriagesInOrder(data, personId);
+    const unions = [...ordered, ...person.partnerships.filter(u => !ordered.includes(u))];
+    const left = new Set(ids);
+    const out: ChildrenUnionGroup[] = [];
+    for (const uid of unions) {
+        const u = data.partnerships[uid];
+        if (!u) continue;
+        const kids = ids.filter(id => u.childIds.includes(id) && left.delete(id));
+        if (kids.length === 0) continue;
+        const other = u.person1Id === personId ? u.person2Id : u.person1Id;
+        const partnerId = other !== personId && data.persons[other] && !data.persons[other].isPlaceholder ? other : null;
+        out.push({ partnershipId: uid, number: ordered.indexOf(uid) + 1, partnerId, ids: kids });
+    }
+    const rest = ids.filter(id => left.has(id));
+    if (rest.length) out.push({ partnershipId: null, number: 0, partnerId: null, ids: rest });
+    return out;
+}
+
+/**
+ * Whether showing these children of the person in place brings a partner
+ * along: the other parent of some child (its union with the person) is not
+ * in view, so the bubble says the partners come too (§5).
+ */
+export function childrenComeWithPartners(data: StromData, personId: PersonId, ids: readonly PersonId[], inView: (id: PersonId) => boolean): boolean {
+    for (const uid of data.persons[personId]?.partnerships ?? []) {
+        const u = data.partnerships[uid];
+        if (!u || !u.childIds.some(id => ids.includes(id))) continue;
+        const other = u.person1Id === personId ? u.person2Id : u.person1Id;
+        if (other !== personId && data.persons[other] && !isDiagramStandIn(data, other) && !inView(other)) return true;
+    }
+    return false;
+}
+
+/**
+ * The children of the person's other families that the view draws, all of
+ * them, elsewhere in the tree (§5: "children ↗" in place of the former ⌂):
+ * a union with children whose partner is out of view and whose every child
+ * is in view without a line from this family (`hangsOnLine`, as
+ * childrenDrawnElsewhere). In data order, each once; "?" stand-ins never
+ * count, nor a "?" stand-in partner's family (drawn under the person).
+ */
+export function otherFamilyChildrenElsewhere(
+    data: StromData,
+    personId: PersonId,
+    inView: (id: PersonId) => boolean,
+    hangsOnLine: (id: PersonId) => boolean
+): PersonId[] {
+    const out: PersonId[] = [];
+    for (const uid of data.persons[personId]?.partnerships ?? []) {
+        const u = data.partnerships[uid];
+        if (!u) continue;
+        const other = u.person1Id === personId ? u.person2Id : u.person1Id;
+        if (other === personId || !data.persons[other] || inView(other) || isDiagramStandIn(data, other)) continue;
+        const kids = u.childIds.filter(id => !!data.persons[id] && !data.persons[id].isPlaceholder);
+        if (kids.length === 0 || !kids.every(id => inView(id) && !hangsOnLine(id))) continue;
+        for (const id of kids) if (!out.includes(id)) out.push(id);
+    }
+    return out;
 }
 
 /** A direct-line card's place by birth among its siblings in view ("3 of 5"). */

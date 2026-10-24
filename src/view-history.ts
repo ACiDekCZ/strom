@@ -21,7 +21,7 @@ export interface ViewTransform {
 }
 
 /**
- * One person whose children (or, with `parents`, parents) the view shows in place, with what closing it
+ * One person whose children (or, with `parents`, parents; with `partners`, other partners) the view shows in place, with what closing it
  * again by a click needs: the children the view drew before the click, the
  * cards the click brought in, the zoom of §5 and where the card stood on the
  * screen before the click. Kept rather than worked out again: they depend on
@@ -45,11 +45,17 @@ export interface ShownChildrenSnapshot {
      * step brought.
      */
     readonly parents?: true;
+    /**
+     * The person's other partners shown in place (§5, the "▸ ∞" pill,
+     * showPartnersOf), not their children: `visibleBefore` is empty,
+     * `broughtIn` the cards that step brought.
+     */
+    readonly partners?: true;
 }
 
-/** A shown snapshot's key: children and parents of one person are two steps. */
+/** A shown snapshot's key: children, parents and partners of one person are three steps. */
 export function shownKey(s: ShownChildrenSnapshot): string {
-    return `${s.parents ? 'p' : 'c'}:${s.id}`;
+    return `${s.parents ? 'p' : s.partners ? 's' : 'c'}:${s.id}`;
 }
 
 /**

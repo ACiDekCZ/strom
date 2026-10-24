@@ -183,6 +183,12 @@ describe('view history', () => {
         expect(sameShown(parentsOfA, shown('a'))).toBe(false);
         expect(sameShown(parentsOfA, shown('a').map(s => ({ ...s, parents: true as const })))).toBe(true);
         expect(shownKey(parentsOfA[0])).not.toBe(shownKey(shown('a')[0]));
+        // The other partners shown in place (§5) are a third step of the same person
+        const partnersOfA = shown('a').map(s => ({ ...s, partners: true as const }));
+        expect(sameShown(partnersOfA, shown('a'))).toBe(false);
+        expect(sameShown(partnersOfA, parentsOfA)).toBe(false);
+        expect(sameShown(partnersOfA, shown('a').map(s => ({ ...s, partners: true as const })))).toBe(true);
+        expect(new Set([shownKey(partnersOfA[0]), shownKey(parentsOfA[0]), shownKey(shown('a')[0])]).size).toBe(3);
         expect(sameTransform({ scale: 1, tx: 0, ty: 0 }, { scale: 1, tx: 0.2, ty: -0.3 })).toBe(true);
         expect(sameTransform({ scale: 1, tx: 0, ty: 0 }, { scale: 1, tx: 3, ty: 0 })).toBe(false);
         expect(sameTransform({ scale: 1, tx: 0, ty: 0 }, { scale: 0.9, tx: 0, ty: 0 })).toBe(false);
