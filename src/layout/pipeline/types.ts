@@ -632,6 +632,15 @@ export interface PipelineInput {
      * (extendAncestorDepth). Listed persons not at the edge are skipped.
      */
     extraDepthFor?: readonly PersonId[];
+    /**
+     * Persons whose other partners the view shows in place (the "▸ ∞" pill):
+     * each partner of a union without children who is not in the selection
+     * joins it with the partnership, as another marriage in the person's
+     * partner chain, on the side away from the partner drawn already
+     * (showPartnersInSelection). Listed persons not in the selection are
+     * skipped.
+     */
+    showPartnersOf?: readonly PersonId[];
 }
 
 // ==================== ANCESTOR CLUSTER ====================
@@ -703,4 +712,6 @@ export interface LayoutRequest {
     foldAncestorsOf?: readonly PersonId[];
     /** See PipelineInput.extraDepthFor. */
     extraDepthFor?: readonly PersonId[];
+    /** See PipelineInput.showPartnersOf. */
+    showPartnersOf?: readonly PersonId[];
 }

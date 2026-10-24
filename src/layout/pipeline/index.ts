@@ -19,7 +19,7 @@ export * from './types.js';
 export * from './debug-types.js';
 
 // Re-export individual steps
-export { selectSubgraph, expandSelectionForDisplay, expandChildrenInSelection, foldAncestorsInSelection, extendAncestorDepth } from './1-select-subgraph.js';
+export { selectSubgraph, expandSelectionForDisplay, expandChildrenInSelection, foldAncestorsInSelection, extendAncestorDepth, partnerIdsShownInPlace, showPartnersInSelection } from './1-select-subgraph.js';
 export { buildLayoutModel, getChildUnions } from './2-build-model.js';
 export { assignGenerations, validateGenerations } from './3-assign-generations.js';
 export { measureSubtrees, getTotalWidth } from './4-measure.js';
@@ -52,7 +52,7 @@ import {
     DEBUG_STEP_NAMES
 } from './debug-types.js';
 
-import { selectSubgraph, expandSelectionForDisplay, expandChildrenInSelection, foldAncestorsInSelection, extendAncestorDepth } from './1-select-subgraph.js';
+import { selectSubgraph, expandSelectionForDisplay, expandChildrenInSelection, foldAncestorsInSelection, extendAncestorDepth, showPartnersInSelection } from './1-select-subgraph.js';
 import { buildLayoutModel } from './2-build-model.js';
 import { assignGenerations } from './3-assign-generations.js';
 import { measureSubtrees } from './4-measure.js';
@@ -396,6 +396,32 @@ function withChildrenShown(
 }
 
 /**
+ * Show the other partners of the given persons in place (the "▸ ∞" pill,
+ * PipelineInput.showPartnersOf), after the display expansion and the
+ * children shown. A person who now stands in more than one union is laid
+ * out as a partner chain (the extra partner on the side away from the
+ * partner drawn already, the way the expanded mode draws extra marriages
+ * and a deep ancestor's appendage spouses).
+ */
+function withPartnersShown(
+    data: StromData,
+    selection: GraphSelection,
+    policy: DisplayPolicy,
+    personIds: readonly PersonId[] | undefined
+): DisplayPolicy {
+    if (!personIds?.length) return policy;
+    const chained = showPartnersInSelection(data, selection, personIds);
+    if (chained.length === 0) return policy;
+    // Chained after every chain person before: merged chains are kept by
+    // their first person (mergeOverlappingChains), whose generation the
+    // chain's unions take, and a partner shown on an appendage spouse of a
+    // deep ancestor has no generation of its own (the ancestor has).
+    const appendage = new Set(policy.appendagePersonIds ?? []);
+    for (const id of chained) if (!policy.expandedPersonIds?.has(id)) appendage.add(id);
+    return { ...policy, mode: 'expanded', appendagePersonIds: appendage };
+}
+
+/**
  * The drawn persons of the line whose parents are out of view only because
  * of the ancestor depth (LayoutResult.ancestorDepthEdge): reached at the
  * depth with parents beyond it, no parent drawn (a parent drawn another way,
@@ -491,6 +517,8 @@ export function runLayoutPipeline(input: PipelineInput): LayoutResult {
     expandSelectionForDisplay(data, selection, effectivePolicy);
     // Children shown in place (the card's "children" tab)
     effectivePolicy = withChildrenShown(data, selection, effectivePolicy, input.expandChildrenOf);
+    // Other partners shown in place (the "▸ ∞" pill)
+    effectivePolicy = withPartnersShown(data, selection, effectivePolicy, input.showPartnersOf);
     // Ancestors folded for now to make room for the children shown
     if (input.expandChildrenOf?.length && input.foldAncestorsOf?.length) {
         foldAncestorsInSelection(data, selection, input.foldAncestorsOf, focusPersonId);
@@ -685,6 +713,7 @@ export function runLayoutPipelineWithDebug(
     // Expand selection for expanded persons (add missing partners/children)
     expandSelectionForDisplay(data, selection, effectivePolicyDebug);
     effectivePolicyDebug = withChildrenShown(data, selection, effectivePolicyDebug, input.expandChildrenOf);
+    effectivePolicyDebug = withPartnersShown(data, selection, effectivePolicyDebug, input.showPartnersOf);
     if (input.expandChildrenOf?.length && input.foldAncestorsOf?.length) {
         foldAncestorsInSelection(data, selection, input.foldAncestorsOf, focusPersonId);
     }
@@ -848,7 +877,8 @@ export function pipelineInputFromRequest(request: LayoutRequest): PipelineInput 
         includeView: request.includeView,
         expandChildrenOf: request.expandChildrenOf,
         foldAncestorsOf: request.foldAncestorsOf,
-        extraDepthFor: request.extraDepthFor
+        extraDepthFor: request.extraDepthFor,
+        showPartnersOf: request.showPartnersOf
     };
 }
 

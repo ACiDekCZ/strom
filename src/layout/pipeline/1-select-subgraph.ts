@@ -384,6 +384,75 @@ export function childIdsShownInPlace(data: StromData, personId: PersonId): Perso
 }
 
 /**
+ * The other partners a "▸ ∞" shows in place: the partner of each of the
+ * person's unions without children (a union with children comes with them,
+ * by the children tab), in data order, each once. Any partner can be drawn
+ * so: an empty "?" stand-in is hidden only with children (isDiagramStandIn).
+ */
+export function partnerIdsShownInPlace(data: StromData, personId: PersonId): PersonId[] {
+    const out: PersonId[] = [];
+    for (const partnershipId of data.persons[personId]?.partnerships ?? []) {
+        const partnership = data.partnerships[partnershipId];
+        if (!partnership || partnership.childIds.length > 0) continue;
+        const partnerId = partnership.person1Id === personId ? partnership.person2Id : partnership.person1Id;
+        if (partnerId !== personId && data.persons[partnerId] && !out.includes(partnerId)) out.push(partnerId);
+    }
+    return out;
+}
+
+/**
+ * Show the other partners of the given persons in place (the "▸ ∞" pill,
+ * PipelineInput.showPartnersOf): each partner of partnerIdsShownInPlace not
+ * in the selection joins it with the partnership (without the partner's
+ * parents, other partners or children; their own tabs lead on). A partner
+ * the selection holds already (drawn elsewhere) is left alone. Persons not
+ * in the selection are skipped. Returns the persons that now stand in more
+ * than one union of the selection (a partner chain).
+ */
+export function showPartnersInSelection(
+    data: StromData,
+    selection: GraphSelection,
+    personIds: readonly PersonId[]
+): PersonId[] {
+    const chained: PersonId[] = [];
+    const done = new Set<PersonId>();
+    // A partner shown here can be listed too (nested): until nobody new comes in
+    for (let grew = true; grew;) {
+        grew = false;
+        for (const personId of personIds) {
+            if (done.has(personId) || !selection.persons.has(personId)) continue;
+            done.add(personId);
+            grew = true;
+            addPartnersShown(data, selection, personId);
+        }
+    }
+    for (const personId of done) {
+        const person = data.persons[personId];
+        if (!person) continue;
+        const unions = person.partnerships.filter(pid => {
+            const u = data.partnerships[pid];
+            return !!u && selection.partnerships.has(pid) && selection.persons.has(u.person1Id) && selection.persons.has(u.person2Id);
+        });
+        if (unions.length > 1) chained.push(personId);
+    }
+    return chained;
+}
+
+/** One person's step of showPartnersInSelection: the partners of unions without children not in the selection join it. */
+function addPartnersShown(data: StromData, selection: GraphSelection, personId: PersonId): void {
+    const person = data.persons[personId];
+    if (!person) return;
+    for (const partnershipId of person.partnerships) {
+        const partnership = data.partnerships[partnershipId];
+        if (!partnership || partnership.childIds.length > 0) continue;
+        const partnerId = partnership.person1Id === personId ? partnership.person2Id : partnership.person1Id;
+        if (partnerId === personId || !data.persons[partnerId] || selection.persons.has(partnerId)) continue;
+        selection.persons.add(partnerId);
+        selection.partnerships.add(partnershipId);
+    }
+}
+
+/**
  * Show the parents of the given persons in place (the card's "▸ parents" on
  * an ancestor at the edge of the depth, PipelineInput.extraDepthFor): each
  * listed person of the line whose parents lie beyond the ancestor depth

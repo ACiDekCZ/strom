@@ -149,6 +149,37 @@ person; with the parents' children shown the promised siblings drawn beside
 each other; nested steps; and that removing the step gives the original
 positions.
 
+Other partners shown in place (`PipelineInput.showPartnersOf`, the "▸ ∞"
+pill of a card). `partnerIdsShownInPlace(data, P)` lists the partners of P's
+unions without children; the pill promises those not drawn.
+`showPartnersInSelection` (run by `withPartnersShown` after the display
+expansion and the children shown) adds, for each listed person in the
+selection, each such partner with the partnership; a partner shown this way
+can list its own other partners in turn (nested clicks), so the walk repeats
+until nothing new comes. Listed persons not in the selection are skipped. A
+person who then stands in more than one selected union becomes a chain
+person: it joins `DisplayPolicy.appendagePersonIds` (the set merged into the
+chain persons in step 2; the mode becomes 'expanded'). It is added after
+every chain person already there because merged chains are kept by their
+first person (`mergeOverlappingChains`) and their unions take its
+generation: a partner shown on a deep ancestor's appendage spouse has no
+generation of its own, the ancestor has. The partner card then stands as
+another marriage in the person's partner chain, on the side away from the
+partner drawn before (`buildChainBlockPersonOrder`). A person the layout drew
+with one union (everyone in the standard mode, a stepchild in the expanded
+mode) shows, as a chain, the other unions the selection holds too (the
+partners, and their children when the selection has them), as the children
+tab does. Without `showPartnersOf` the selection and the layout are exactly
+the previous ones; removing a person gives back the positions before.
+`partnersShownFull.test.ts` checks, for every fixture, every focus, depths
+1, 2, 3, 5 and the four modes, every drawn person with a promised partner:
+the strict harness checks, the partners drawn in the person's row on the
+side away from the partners drawn before, nobody drawn before lost, nothing
+added beyond the partners (and the person's family as above); with the
+person's children shown as well; nested steps and closing.
+(`test/edge-childless-partners.json` has a childless partner at an
+ancestor, the focus line, a descendant, a cousin and persons married in.)
+
 Folded ancestors (`PipelineInput.foldAncestorsOf`, applied only together with
 `expandChildrenOf`): after `withChildrenShown`, `foldAncestorsInSelection`
 cuts the child→parent links of the listed persons and removes from the
