@@ -208,6 +208,13 @@ describe('Children shown in place: two clicks deep, near their parents', () => {
     // the room of one card plus the gaps around it. Depth 8 only (the deepest
     // view, every ancestor row in play); every person as focus.
     //
+    // A shown child with no children of its own drawn stands one gap from
+    // the next card of its family in the row (a sibling or a sibling's
+    // partner): Phase B packs a sibling run by the contour of each
+    // sibling's drawn subtree (packSiblingRun), so a childless sibling does
+    // not wait a whole children row away from her brother. This also holds
+    // for the half-siblings of a direct-line ancestor.
+    //
     // The distance checks cover children drawn in a row of the focus's
     // grandparents or above (generation -2 and up), the rows Phase B places:
     // there the children of an ancestor's sibling or of an ancestor's other
@@ -247,6 +254,25 @@ describe('Children shown in place: two clicks deep, near their parents', () => {
                         const kids = (data.persons[pid]?.childIds ?? []).filter(c => r.positions.has(c));
                         const halfSiblingsOfLine = kids.some(c => data.persons[c].parentIds.some(par =>
                             par !== pid && data.persons[par]?.childIds.some(s => s !== c && line.has(s) && genOf(r, s) === genOf(r, c))));
+                        // A child with no children of its own drawn stands right
+                        // beside the next card of its family in the row (a
+                        // sibling or a sibling's partner), not a children row away
+                        const family = new Set<PersonId>(kids);
+                        for (const k of kids) for (const ku of data.persons[k]?.partnerships ?? []) {
+                            const u = data.partnerships[ku];
+                            if (u) { family.add(u.person1Id); family.add(u.person2Id); }
+                        }
+                        for (const k of kids) {
+                            if ((genOf(r, k) ?? 0) > -2 || (data.persons[k]?.childIds ?? []).some(c => r.positions.has(c))) continue;
+                            const at = r.positions.get(k)!;
+                            const row = [...r.positions].filter(([, p]) => Math.abs(p.y - at.y) < 1).sort((a, b) => a[1].x - b[1].x);
+                            const i = row.findIndex(([id]) => id === k);
+                            const gaps = [row[i - 1], row[i + 1]]
+                                .filter((e): e is [PersonId, { x: number; y: number }] => !!e && family.has(e[0]))
+                                .map(([, p]) => Math.abs(p.x - at.x) - cw);
+                            const step = Math.max(config.horizontalGap, config.partnerGap) + 1;
+                            if (gaps.length > 0 && Math.min(...gaps) > step) failures.push(`${where}: ${k} ${(Math.min(...gaps) / cw).toFixed(1)} card widths from its family's next card`);
+                        }
                         if (halfSiblingsOfLine) continue;
                         const stem = stemToSpan(data, r, pid, cw);
                         if (stem > 2 * cw) failures.push(`${where}: ${pid}'s line ${(stem / cw).toFixed(1)} card widths from the children`);
@@ -313,6 +339,31 @@ describe('Children shown in place: an ancestor\'s other marriage and an ancestor
             expect(xs[xs.length - 1] - xs[0]).toBeLessThanOrEqual((kids.length - 1) * step + 1);
             expect(foreignBetweenChildren(data, 'bro' as PersonId, r.positions)).toEqual([]);
             expect(stemToSpan(data, r, 'bro' as PersonId, cw)).toBeLessThanOrEqual(2 * cw);
+        });
+        // The great-grandfather's elder sister (eld, childless) stands beyond
+        // the brother, whose six children reach farther out than his couple.
+        // Packed by block widths she stood a whole children row off the
+        // brother's card, and the parents were centred on the run's widest
+        // row rather than over their children.
+        it.runIf(fixturePresent)(`a childless sibling stands next to her brother's card, the parents over their children [${mode}]`, () => {
+            const data = loadFixture(FIX);
+            const cw = DEFAULT_LAYOUT_CONFIG.cardWidth;
+            const r = plan(data, 'focus' as PersonId, DEFAULT_LAYOUT_CONFIG, 8, autoExpand, ['ffff', 'bro'] as PersonId[]).result;
+            const x = (id: string) => r.positions.get(id as PersonId)!.x;
+            // card left edges: eld | bro bro_w ... fff
+            expect(x('bro') - (x('eld') + cw)).toBeLessThanOrEqual(DEFAULT_LAYOUT_CONFIG.horizontalGap + 1);
+            // The parents over the middle of their children's cards, measured
+            // with the great-great-grandparents in the top row: with their
+            // ancestry drawn, each couple's branches keep to their own side
+            // and may hold the parents off the middle (in expanded mode the
+            // great-great-grandmother's parents' tree has to fit between her
+            // card and the great-grandfather's right edge).
+            const top = plan(data, 'focus' as PersonId, DEFAULT_LAYOUT_CONFIG, 4, autoExpand, ['ffff', 'bro'] as PersonId[]).result;
+            const tx = (id: string) => top.positions.get(id as PersonId)!.x;
+            const kids = data.persons['ffff' as PersonId].childIds.map(k => tx(k));
+            const middle = (Math.min(...kids) + Math.max(...kids) + cw) / 2;
+            const parents = (tx('ffff') + tx('fffm') + cw) / 2;
+            expect(Math.abs(parents - middle)).toBeLessThanOrEqual(1);
         });
         it.runIf(fixturePresent)(`the second wife stands beside her husband, his ancestors stay [${mode}]`, () => {
             const data = loadFixture(FIX);

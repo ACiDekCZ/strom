@@ -947,6 +947,7 @@
         "ffff_m"
       ],
       "childIds": [
+        "eld",
         "bro",
         "fff"
       ],
@@ -966,6 +967,7 @@
         "fffm_m"
       ],
       "childIds": [
+        "eld",
         "bro",
         "fff"
       ],
@@ -988,7 +990,9 @@
         "bro_k1",
         "bro_k2",
         "bro_k3",
-        "bro_k4"
+        "bro_k4",
+        "bro_k5",
+        "bro_k6"
       ],
       "birthDate": "1903-06-15"
     },
@@ -1006,7 +1010,9 @@
         "bro_k1",
         "bro_k2",
         "bro_k3",
-        "bro_k4"
+        "bro_k4",
+        "bro_k5",
+        "bro_k6"
       ],
       "birthDate": "1906-07-16"
     },
@@ -1521,6 +1527,48 @@
         "fffm_m_m"
       ],
       "birthDate": "1794-03-12"
+    },
+    "eld": {
+      "id": "eld",
+      "firstName": "Aldric Bartram",
+      "lastName": "Thornbury",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "ffff",
+        "fffm"
+      ],
+      "childIds": [],
+      "birthDate": "1900-04-13"
+    },
+    "bro_k5": {
+      "id": "bro_k5",
+      "firstName": "Aldric Clemence",
+      "lastName": "Thornbury",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "bro",
+        "bro_w"
+      ],
+      "childIds": [],
+      "birthDate": "1936-05-14"
+    },
+    "bro_k6": {
+      "id": "bro_k6",
+      "firstName": "Aldric Drogo",
+      "lastName": "Thornbury",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "bro",
+        "bro_w"
+      ],
+      "childIds": [],
+      "birthDate": "1938-06-15"
     }
   },
   "partnerships": {
@@ -1760,6 +1808,7 @@
       "person1Id": "ffff",
       "person2Id": "fffm",
       "childIds": [
+        "eld",
         "bro",
         "fff"
       ],
@@ -1773,7 +1822,9 @@
         "bro_k1",
         "bro_k2",
         "bro_k3",
-        "bro_k4"
+        "bro_k4",
+        "bro_k5",
+        "bro_k6"
       ],
       "status": "married"
     },

@@ -115,6 +115,14 @@ interface AncestorNode {
     runRight: FamilyBlockId[];
     extRight: number;
     /**
+     * How far the runs reach in the couple's own row (the farthest sibling's
+     * outer card edge). extLeft/extRight also count the rows below, where a
+     * sibling's children may reach farther; the parents centre over the
+     * children in this row.
+     */
+    rowExtLeft: number;
+    rowExtRight: number;
+    /**
      * The husband's siblings stand right of the wife instead (runRight): he
      * is a man on the female side of his child and the wife has no parents
      * in view, so the row reads husband, wife, his siblings (InnerSiblingRun).
@@ -401,6 +409,8 @@ function buildAncestorTree(
         xCenter: 0,
         runLeft: [],
         extLeft: 0,
+        rowExtLeft: 0,
+        rowExtRight: 0,
         runRight: [],
         extRight: 0,
         husbandBeyondWife: false,
@@ -517,11 +527,11 @@ function placeAncestorTree(
     // partner's card (the farthest sibling's centre is about the run's
     // width past the partner's centre)
     const husbandRunShift = node.husbandBeyondWife
-        ? (wifeCenterX + node.extRight - husbandCenterX) / 2
-        : node.wifeId || node.extRight === 0 ? -node.extLeft / 2 : node.extRight / 2;
+        ? (wifeCenterX + node.rowExtRight - husbandCenterX) / 2
+        : node.wifeId || node.rowExtRight === 0 ? -node.rowExtLeft / 2 : node.rowExtRight / 2;
     const wifeRunShift = node.wifeBeyondHusband
-        ? (husbandCenterX - node.extLeft - wifeCenterX) / 2
-        : node.wifeId ? node.extRight / 2 : 0;
+        ? (husbandCenterX - node.rowExtLeft - wifeCenterX) / 2
+        : node.wifeId ? node.rowExtRight / 2 : 0;
 
     // Place H-subtree: it must stay LEFT of husband's RIGHT EDGE — but only
     // while there is a W-subtree on the other side to keep clear of
@@ -886,8 +896,6 @@ function attachSiblingRuns(
     // Innermost group beside the couple: a left run lists the outermost first
     const leftRun = (groups: FamilyBlockId[][]): FamilyBlockId[] => [...groups].reverse().flat();
     const rightRun = (groups: FamilyBlockId[][]): FamilyBlockId[] => groups.flat();
-    const runWidth = (run: FamilyBlockId[]): number =>
-        run.reduce((sum, id) => sum + (blocks.get(id)?.width ?? 0) + config.horizontalGap, 0);
 
     const husbandRun = runOf(node.hSubtree, node.husbandId);
     const husbandSide = node.wifeId ? 'LEFT' : outward;
@@ -918,8 +926,12 @@ function attachSiblingRuns(
     } else {
         node.runRight = rightRun(husbandRun);
     }
-    node.extLeft = runWidth(node.runLeft);
-    node.extRight = runWidth(node.runRight);
+    const packedLeft = packSiblingRun([...node.runLeft].reverse(), 'LEFT', node.generation, blocks, model, config);
+    const packedRight = packSiblingRun(node.runRight, 'RIGHT', node.generation, blocks, model, config);
+    node.extLeft = packedLeft.reach;
+    node.extRight = packedRight.reach;
+    node.rowExtLeft = packedLeft.rowReach;
+    node.rowExtRight = packedRight.rowReach;
 
     const parentsSide = node.wifeId ? 'H' : null;
     attachSiblingRuns(node.hSubtree, outward, model, unionToBlock, blocks, config, taken, parentsSide, inner);
@@ -941,6 +953,59 @@ function collectBlockSubtree(blockId: FamilyBlockId, blocks: Map<FamilyBlockId, 
         stack.push(...block.childBlockIds);
     }
     return out;
+}
+
+/**
+ * Pack a sibling run row by row (attachSiblingRuns / placeSiblingRuns).
+ *
+ * Each sibling's block and everything below it moves as one piece, in
+ * sibling order from the couple outward, only as far out as its cards need
+ * to clear the cards already placed in the same rows (the couple's own cards
+ * and the siblings nearer to it) by horizontalGap. Packing whole block widths
+ * instead left a childless sibling standing a whole children row away from
+ * the sibling before it, which pushed the run, and the parents centred above
+ * it, far from their neighbours. No card of the run comes nearer to the
+ * couple than the couple's own outer card edge, in any row, so the rows
+ * below keep the room the run always had.
+ *
+ * `run` is innermost first. Returns each block's distance from the couple's
+ * card edge (to the block's inner edge, xLeft on the right, xRight on the
+ * left), the run's reach over all its rows and its reach in the couple's row.
+ */
+function packSiblingRun(
+    run: FamilyBlockId[],
+    outward: 'LEFT' | 'RIGHT',
+    rowGeneration: number,
+    blocks: Map<FamilyBlockId, FamilyBlock>,
+    model: LayoutModel,
+    config: LayoutConfig
+): { offsets: Map<FamilyBlockId, number>; reach: number; rowReach: number } {
+    const offsets = new Map<FamilyBlockId, number>();
+    const frontier = new Map<number, number>();
+    for (const id of run) {
+        const block = blocks.get(id);
+        if (!block) continue;
+        // The cards of the block and everything below it, per row, as
+        // distances outward from the block's inner edge
+        const inner = outward === 'RIGHT' ? block.xLeft : block.xRight;
+        const rows = new Map<number, { near: number; far: number }>();
+        for (const b of collectBlockSubtree(id, blocks)) {
+            const cards = getBlockCardExtent(b, model, config);
+            const near = outward === 'RIGHT' ? cards.left - inner : inner - cards.right;
+            const far = outward === 'RIGHT' ? cards.right - inner : inner - cards.left;
+            const row = rows.get(b.generation);
+            rows.set(b.generation, row
+                ? { near: Math.min(row.near, near), far: Math.max(row.far, far) }
+                : { near, far });
+        }
+        if (rows.size === 0) rows.set(block.generation, { near: 0, far: block.width });
+        let offset = -Infinity;
+        for (const [gen, row] of rows) offset = Math.max(offset, (frontier.get(gen) ?? 0) + config.horizontalGap - row.near);
+        offsets.set(id, offset);
+        for (const [gen, row] of rows) frontier.set(gen, Math.max(frontier.get(gen) ?? 0, offset + row.far));
+    }
+    const reach = frontier.size > 0 ? Math.max(0, ...frontier.values()) : 0;
+    return { offsets, reach, rowReach: frontier.get(rowGeneration) ?? 0 };
 }
 
 /** A person's card center as the blocks have it now (undefined: not laid out). */
@@ -1091,20 +1156,13 @@ function placeSiblingRuns(
             transferred?.add(b.id);
         }
     };
-    let cursor = cards.left - config.horizontalGap;
-    for (let i = node.runLeft.length - 1; i >= 0; i--) {
-        const block = blocks.get(node.runLeft[i]);
-        if (!block) continue;
-        moveTo(block.id, cursor - block.width);
-        cursor -= block.width + config.horizontalGap;
-    }
-    cursor = cards.right + config.horizontalGap;
-    for (const id of node.runRight) {
+    const left = packSiblingRun([...node.runLeft].reverse(), 'LEFT', node.generation, blocks, model, config);
+    for (const [id, offset] of left.offsets) {
         const block = blocks.get(id);
-        if (!block) continue;
-        moveTo(id, cursor);
-        cursor += block.width + config.horizontalGap;
+        if (block) moveTo(id, cards.left - offset - block.width);
     }
+    const right = packSiblingRun(node.runRight, 'RIGHT', node.generation, blocks, model, config);
+    for (const [id, offset] of right.offsets) moveTo(id, cards.right + offset);
     placeSiblingRuns(node.hSubtree, blocks, model, unionToBlock, config, claimed, transferred);
     placeSiblingRuns(node.wSubtree, blocks, model, unionToBlock, config, claimed, transferred);
 }
