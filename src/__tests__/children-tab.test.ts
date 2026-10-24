@@ -620,6 +620,24 @@ describe('a bubble\'s box on the screen (round 3 §24: whole in the window, 8 px
         expect(bubbleBox('right', tab(1100, 300), card(1000, 309), { width: 240, height: 200 }, room, vp).left).toBe(vp.width - m - 240);
     });
 
+    it('moved over its own tab to stay whole in the window: no arrow; an arrow wherever it stays clear of the tab', () => {
+        // a phone held sideways, by touch: a bubble 231 tall below a tab in the middle, moved up over the tab
+        const low = { top: 44, bottom: 382 };
+        const sideways = { width: 844, height: 390 };
+        const over = bubbleBox('below', tab(500, 190), card(470, 199), { width: 240, height: 231 }, low, sideways);
+        expect(over.top).toBe(390 - m - 231);
+        expect(over.noArrow).toBe(true);
+        // above a tab near the top, moved down over it
+        expect(bubbleBox('above', tab(500, 60), card(470, 69), { width: 240, height: 300 }, room, vp).noArrow).toBe(true);
+        // moved up, but still below the tab: the arrow stays
+        const up = bubbleBox('below', tab(500, 30), card(470, 39), { width: 240, height: 330 }, low, sideways);
+        expect(up.top).toBe(390 - m - 330);
+        expect(up.noArrow).toBeUndefined();
+        // in its place, and beside the card: the arrow stays
+        expect(bubbleBox('below', tab(500, 500), card(470, 509), { width: 240, height: 200 }, room, vp).noArrow).toBeUndefined();
+        expect(bubbleBox('right', tab(320, 251), card(300, 260), { width: 247, height: 292 }, low, sideways).noArrow).toBeUndefined();
+    });
+
     it('beside the card moved up: the arrow stays at the card\'s top', () => {
         // a phone held sideways: room 44 to 382, a bubble 292 tall beside a card at 260
         const low = { top: 44, bottom: 382 };

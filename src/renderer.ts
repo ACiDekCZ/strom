@@ -2435,6 +2435,7 @@ class TreeRendererClass {
         bubble.style.setProperty(beside ? '--beside-arrow' : '--arrow-x', `${box.arrow}px`);
         bubble.style.removeProperty(beside ? '--arrow-x' : '--beside-arrow');
         if (place !== 'above') bubble.classList.add(beside ? `beside-${place}` : 'below');
+        bubble.classList.toggle('no-arrow', box.noArrow === true);
     }
 
     /**

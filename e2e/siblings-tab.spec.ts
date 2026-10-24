@@ -555,6 +555,21 @@ test('the keyboard opens a bubble on the tab, Escape closes it and leaves the fo
     await expect(bubble).toBeHidden();
 });
 
+/** A finger held at a point of the element (fraction of its box) for 700 ms, then lifted. */
+async function hold(page: Page, el: ReturnType<Page['locator']>, fx = 0.5, fy = 0.5): Promise<void> {
+    await el.evaluate((e: HTMLElement, [ax, ay]) => {
+        const r = e.getBoundingClientRect();
+        const t = new Touch({ identifier: 1, target: e, clientX: r.x + r.width * ax, clientY: r.y + r.height * ay });
+        e.dispatchEvent(new TouchEvent('touchstart', { touches: [t], targetTouches: [t], changedTouches: [t], bubbles: true, cancelable: true }));
+    }, [fx, fy] as const);
+    await page.waitForTimeout(700);
+    await el.evaluate((e: HTMLElement, [ax, ay]) => {
+        const r = e.getBoundingClientRect();
+        const t = new Touch({ identifier: 1, target: e, clientX: r.x + r.width * ax, clientY: r.y + r.height * ay });
+        e.dispatchEvent(new TouchEvent('touchend', { touches: [], targetTouches: [], changedTouches: [t], bubbles: true, cancelable: true }));
+    }, [fx, fy] as const);
+}
+
 /**
  * Touch (round 3 §22): a press held on a tab opens its bubble below the tab
  * (never beside the card), not the person's sheet; a press elsewhere closes
@@ -562,21 +577,6 @@ test('the keyboard opens a bubble on the tab, Escape closes it and leaves the fo
  */
 test.describe('touch, tablet 1024 × 768', () => {
     test.use({ viewport: { width: 1024, height: 768 }, hasTouch: true, isMobile: true });
-
-    /** A finger held at a point of the element (fraction of its box) for 700 ms, then lifted. */
-    async function hold(page: Page, el: ReturnType<Page['locator']>, fx = 0.5, fy = 0.5): Promise<void> {
-        await el.evaluate((e: HTMLElement, [ax, ay]) => {
-            const r = e.getBoundingClientRect();
-            const t = new Touch({ identifier: 1, target: e, clientX: r.x + r.width * ax, clientY: r.y + r.height * ay });
-            e.dispatchEvent(new TouchEvent('touchstart', { touches: [t], targetTouches: [t], changedTouches: [t], bubbles: true, cancelable: true }));
-        }, [fx, fy] as const);
-        await page.waitForTimeout(700);
-        await el.evaluate((e: HTMLElement, [ax, ay]) => {
-            const r = e.getBoundingClientRect();
-            const t = new Touch({ identifier: 1, target: e, clientX: r.x + r.width * ax, clientY: r.y + r.height * ay });
-            e.dispatchEvent(new TouchEvent('touchend', { touches: [], targetTouches: [], changedTouches: [t], bubbles: true, cancelable: true }));
-        }, [fx, fy] as const);
-    }
 
     test('a press held on a tab opens its bubble below the tab; a press elsewhere closes it; on the card the sheet', async ({ page }) => {
         await setup(page);
@@ -600,6 +600,46 @@ test.describe('touch, tablet 1024 × 768', () => {
         await hold(page, cardOf(page, PERSON), 0.3, 0.6);
         await expect(page.locator('.bottom-sheet')).toBeVisible();
         await expect(bubble).toBeHidden();
+    });
+});
+
+/**
+ * A phone held sideways, by touch: a bubble that fits neither below nor
+ * above its tab is moved up over the tab to stay whole in the window; it
+ * then has no arrow (it pointed past the tab at the line above). One that
+ * stays clear of its tab keeps it.
+ */
+test.describe('touch, phone held sideways 844 × 390', () => {
+    test.use({ viewport: { width: 844, height: 390 }, hasTouch: true, isMobile: true });
+
+    test('a bubble moved over its own tab has no arrow; below a tab near the top it keeps it', async ({ page }) => {
+        await setup(page);
+        const tab = siblingsTab(page, PERSON);
+        const bubble = tab.locator(':scope > .badge-tooltip');
+        const arrow = () => bubble.evaluate(b => getComputedStyle(b, '::after').display);
+        // the card in the middle of the window: no room above or below the tab
+        await page.evaluate(([pid]) => {
+            const zp = window.Strom.ZoomPan;
+            zp.finishAnimation();
+            const c = document.querySelector<HTMLElement>(`#tree-canvas .person-card[data-id="${pid}"]`)!.getBoundingClientRect();
+            zp.shiftWorld((c.left - 300) / zp.getScale(), (c.top - 190) / zp.getScale());
+        }, [PERSON] as const);
+        await hold(page, tab);
+        await expect(bubble).toBeVisible();
+        const t = (await tab.boundingBox())!;
+        const b = (await bubble.boundingBox())!;
+        expect(b.y).toBeLessThan(t.y + t.height);
+        expect(b.y + b.height).toBeLessThanOrEqual(390 - 7.5);
+        await expect(bubble).toHaveClass(/\bno-arrow\b/);
+        expect(await arrow()).toBe('none');
+        // closed, then the card just under the bars: below the tab, clear of it, the arrow back
+        await page.locator('#tree-container').dispatchEvent('pointerdown', { clientX: 830, clientY: 380, pointerType: 'touch' });
+        await expect(bubble).toBeHidden();
+        await cardUnderBars(page, PERSON, 8, 300);
+        await hold(page, tab);
+        await expect(bubble).toBeVisible();
+        await expect(bubble).not.toHaveClass(/\bno-arrow\b/);
+        expect(await arrow()).not.toBe('none');
     });
 });
 

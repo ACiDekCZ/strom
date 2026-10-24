@@ -190,6 +190,8 @@ export interface BubbleBox {
     top: number;
     /** Above or below the tab: the arrow's distance from the bubble's left edge; beside the card: how far under BUBBLE_SIDE_ARROW_TOP it points. */
     arrow: number;
+    /** Above or below the tab, moved over the tab to stay whole in the window: no arrow (it would point past the tab, at nothing). */
+    noArrow?: true;
 }
 
 /**
@@ -199,7 +201,8 @@ export interface BubbleBox {
  * into the window, BUBBLE_WINDOW_MARGIN from each edge (a bubble wider or
  * taller than the window keeps its left or top edge there). The arrow keeps
  * pointing at the tab's middle (at the card's top beside the card) as far as
- * the bubble's edge allows.
+ * the bubble's edge allows. A bubble above or below the tab that the window
+ * moved over the tab itself (a low window, by touch) has no arrow.
  */
 export function bubbleBox(
     place: BubblePlace,
@@ -224,7 +227,9 @@ export function bubbleBox(
     const arrow = place === 'right' || place === 'left'
         ? Math.max(0, Math.min(card.top - top, bubble.height - 2 * BUBBLE_SIDE_ARROW_TOP))
         : Math.max(BUBBLE_ARROW_INSET, Math.min(tabMid - left, bubble.width - BUBBLE_ARROW_INSET));
-    return { left, top, arrow };
+    const overTab = place !== 'right' && place !== 'left' && top < tab.bottom && top + bubble.height > tab.top
+        && left < tab.right && left + bubble.width > tab.left;
+    return overTab ? { left, top, arrow, noArrow: true } : { left, top, arrow };
 }
 
 /** The most names a tab's bubble lists; the rest is one line "and n more" (the menu and the sheet list them all). */

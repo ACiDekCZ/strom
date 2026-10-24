@@ -3277,6 +3277,9 @@
         /* Taller than the window (it never is with 8 names at most): cut, no scrollbar. */
         .badge-tooltip[popover].bubble-clipped { overflow: hidden; }
         .badge-tooltip[popover]::after { left: var(--arrow-x, 50%); }
+        /* Moved over its own tab to stay whole in the window (a low window,
+           by touch): no arrow, it would point past the tab at nothing. */
+        .badge-tooltip[popover].no-arrow::after { display: none; }
         /* Too little room above the tab (under the bars over the tree) and
            more below: the bubble opens below it, the arrow on its top edge
            (TreeRenderer.placeBubble); by touch it always opens there. */
