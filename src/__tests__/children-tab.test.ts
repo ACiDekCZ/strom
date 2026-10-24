@@ -6,7 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { hiddenRelativesTabs, hiddenChildIds, newlyShownChildIds, childrenDrawnElsewhere, siblingOrderMark, childrenShownClosing, siblingsTabState, newlyShownSiblingIds, siblingGroups, unionChildIdSet, hiddenPartnerIds, childrenByUnion, childrenComeWithPartners, otherFamilyChildrenElsewhere, HiddenRelativesTab } from '../marriage-order.js';
-import { tabsForm, tabGlyph, tabLabel, tabKindClass, branchTabRestHtml, bubbleOpensBelow, bubblePlacement, besideTop, bubbleBox, BUBBLE_WINDOW_MARGIN, bubbleNameCounts, bubbleNamesToFit, BUBBLE_MAX_NAMES } from '../union-order-measure.js';
+import { tabsForm, tabGlyph, tabLabel, tabKindClass, branchTabRestHtml, bubbleOpensBelow, bubblePlacement, besideTop, bubbleBox, touchBubbleBox, BUBBLE_WINDOW_MARGIN, BUBBLE_LOW_WINDOW_NAMES, bubbleNameCounts, bubbleNamesToFit, BUBBLE_MAX_NAMES } from '../union-order-measure.js';
 import { branchTabKind, branchTabsInOrder } from '../marriage-order.js';
 import { childIdsShownInPlace } from '../layout/pipeline/1-select-subgraph.js';
 import { PersonId, PartnershipId, Person, StromData, DEFAULT_LAYOUT_CONFIG } from '../types.js';
@@ -573,10 +573,54 @@ describe('a tab\'s bubble by touch (round 3 §22)', () => {
         expect(bubblePlacement(tabOn(150), cardAt(500, 150), bubble, room, { touch: true })).toBe('below');
     });
 
-    it('above only where it fits there and not below; fitting nowhere: below (moved up into the window)', () => {
-        expect(bubblePlacement(tabOn(700), cardAt(500, 700), bubble, room, { touch: true })).toBe('above');
+    it('always below (round 4 §30): also where only the room above would hold it, or none', () => {
+        expect(bubblePlacement(tabOn(700), cardAt(500, 700), bubble, room, { touch: true })).toBe('below');
         const tall = { width: 240, height: 650 };
         expect(bubblePlacement(tabOn(400), cardAt(500, 400), tall, room, { touch: true })).toBe('below');
+    });
+});
+
+describe('a bubble\'s box by touch (round 4 §30: below the tab, as tall as the window lets it)', () => {
+    const sideways = { width: 844, height: 390 };
+    const tab = (left: number, top: number) => ({ left, right: left + 60, top, bottom: top + 18 });
+    const m = BUBBLE_WINDOW_MARGIN;
+
+    it('8 px under the tab, centred on it, its max-height down to 8 px over the window\'s bottom, the arrow on the tab', () => {
+        expect(touchBubbleBox(tab(500, 190), 240, 44, sideways)).toEqual({ left: 410, top: 216, arrow: 120, maxHeight: 390 - 216 - m });
+        // never moved up over the tab, however little room is left below it
+        const low = touchBubbleBox(tab(500, 340), 240, 44, sideways);
+        expect(low.top).toBe(366);
+        expect(low.maxHeight).toBe(16);
+        expect(low.noArrow).toBeUndefined();
+    });
+
+    it('pushed in sideways to 8 px from the window\'s edges, the arrow kept on the tab', () => {
+        const r = touchBubbleBox(tab(760, 190), 240, 44, sideways);
+        expect(r.left).toBe(844 - m - 240);
+        expect(r.arrow).toBe(790 - r.left);
+        expect(touchBubbleBox(tab(-20, 190), 240, 44, sideways).left).toBe(m);
+    });
+
+    it('never over the top bar: a tab under it has the bubble start at the bar\'s bottom, away from the tab, without its arrow', () => {
+        const under = touchBubbleBox(tab(500, 30), 240, 52, sideways);
+        expect(under.top).toBe(56);
+        expect(under.noArrow).toBeUndefined();
+        // the tab's bottom 2 px under the bar: the bubble 8 px under the tab still
+        expect(touchBubbleBox(tab(500, 36), 240, 52, sideways).top).toBe(62);
+        const hidden = touchBubbleBox(tab(500, 10), 240, 52, sideways);
+        expect(hidden.top).toBe(52);
+        expect(hidden.noArrow).toBe(true);
+        expect(hidden.maxHeight).toBe(390 - 52 - m);
+    });
+});
+
+describe('a low window by touch lists 4 names at most (round 4 §30)', () => {
+    it('in proportion, one a group at least, then fewer while it does not fit', () => {
+        const sizes = [9, 3];
+        const start = bubbleNameCounts(sizes, BUBBLE_LOW_WINDOW_NAMES).map((n, i) => Math.min(n, bubbleNameCounts(sizes)[i]));
+        expect(start).toEqual([3, 1]);
+        expect(bubbleNamesToFit(sizes, start, () => true)).toEqual([3, 1]);
+        expect(bubbleNamesToFit(sizes, start, c => c[0] + c[1] <= 2)).toEqual([1, 1]);
     });
 });
 

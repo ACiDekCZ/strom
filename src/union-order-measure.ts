@@ -136,12 +136,10 @@ export function bubblePlacement(
     room: { top: number; bottom: number; left: number; right: number },
     opts: { touch?: boolean } = {},
 ): BubblePlace {
-    // Touch (round 3 §22): below the tab, never beside the card (the finger
-    // came from above); above only where it fits there and not below.
-    if (opts.touch) {
-        if (room.bottom - tab.bottom >= bubble.height + BUBBLE_GAP) return 'below';
-        return tab.top - room.top >= bubble.height + BUBBLE_GAP ? 'above' : 'below';
-    }
+    // Touch (round 3 §22, round 4 §30): always below the tab, never above
+    // it nor beside the card (the finger came from above); a low window
+    // shortens it instead (touchBubbleBox).
+    if (opts.touch) return 'below';
     if (tab.top - room.top >= bubble.height + BUBBLE_GAP) return 'above';
     const side = (): BubblePlace | null => {
         if (card.right + BUBBLE_SIDE_GAP + bubble.width <= room.right) return 'right';
@@ -232,8 +230,46 @@ export function bubbleBox(
     return overTab ? { left, top, arrow, noArrow: true } : { left, top, arrow };
 }
 
+/** Where a bubble opened by touch stands: its box (BubbleBox) and how tall it may be. */
+export interface TouchBubbleBox extends BubbleBox {
+    /** Its max-height: down to BUBBLE_WINDOW_MARGIN over the window's bottom. */
+    maxHeight: number;
+}
+
+/**
+ * Where a tab's bubble opened by touch stands (round 4 §30; screen pixels,
+ * the bubble at scale 1): always below the tab, BUBBLE_TAB_MARGIN under it,
+ * centred on it and pushed in sideways to BUBBLE_WINDOW_MARGIN from the
+ * window's edges; never higher than `barsBottom` (the app's top bar and the
+ * bars over the tree: it never covers them) and never moved up over the tab
+ * to stay whole: it is as tall as the window lets it under its top
+ * (`maxHeight`), the names it lists fitted to that (fitBubbleNames). Only
+ * a tab hidden under the bars has it start lower, at the bars' bottom, away
+ * from the tab: no arrow then (it would point at the bar).
+ */
+export function touchBubbleBox(
+    tab: { left: number; right: number; top: number; bottom: number },
+    bubbleWidth: number,
+    barsBottom: number,
+    viewport: { width: number; height: number },
+): TouchBubbleBox {
+    const m = BUBBLE_WINDOW_MARGIN;
+    const tabMid = (tab.left + tab.right) / 2;
+    const left = Math.max(m, Math.min(tabMid - bubbleWidth / 2, viewport.width - m - bubbleWidth));
+    const top = Math.max(tab.bottom + BUBBLE_TAB_MARGIN, barsBottom);
+    const arrow = Math.max(BUBBLE_ARROW_INSET, Math.min(tabMid - left, bubbleWidth - BUBBLE_ARROW_INSET));
+    const maxHeight = Math.max(0, viewport.height - m - top);
+    return top > tab.bottom + BUBBLE_TAB_MARGIN ? { left, top, arrow, maxHeight, noArrow: true } : { left, top, arrow, maxHeight };
+}
+
 /** The most names a tab's bubble lists; the rest is one line "and n more" (the menu and the sheet list them all). */
 export const BUBBLE_MAX_NAMES = 8;
+
+/** The most names a bubble opened by touch lists in a low window (round 4 §30: a phone held sideways). */
+export const BUBBLE_LOW_WINDOW_NAMES = 4;
+
+/** A window this low (CSS px) or lower is a low one (a phone held sideways; MQ_PHONE_LANDSCAPE's height). */
+export const BUBBLE_LOW_WINDOW_HEIGHT = 500;
 
 /**
  * How many names of each group a tab's bubble lists (siblings by union,

@@ -604,42 +604,85 @@ test.describe('touch, tablet 1024 × 768', () => {
 });
 
 /**
- * A phone held sideways, by touch: a bubble that fits neither below nor
- * above its tab is moved up over the tab to stay whole in the window; it
- * then has no arrow (it pointed past the tab at the line above). One that
- * stays clear of its tab keeps it.
+ * A phone held sideways, by touch (round 4 §30): a bubble always opens below
+ * its tab, its arrow on the tab, never moved up over the tab or the top bar;
+ * it is as tall as the window lets it under its top (max-height down to 8 px
+ * over the window's bottom), listing 4 names at most and as many as fit
+ * there; cut only when not even one name fits, its last line (what a click
+ * does) still whole at its bottom.
  */
 test.describe('touch, phone held sideways 844 × 390', () => {
     test.use({ viewport: { width: 844, height: 390 }, hasTouch: true, isMobile: true });
 
-    test('a bubble moved over its own tab has no arrow; below a tab near the top it keeps it', async ({ page }) => {
-        await setup(page);
-        const tab = siblingsTab(page, PERSON);
-        const bubble = tab.locator(':scope > .badge-tooltip');
-        const arrow = () => bubble.evaluate(b => getComputedStyle(b, '::after').display);
-        // the card in the middle of the window: no room above or below the tab
-        await page.evaluate(([pid]) => {
+    /** Pan the tree so the person's card has its top edge at `top` on the screen, its left at 300. */
+    async function cardAt(page: Page, id: string, top: number): Promise<void> {
+        await page.evaluate(([pid, y]) => {
             const zp = window.Strom.ZoomPan;
             zp.finishAnimation();
             const c = document.querySelector<HTMLElement>(`#tree-canvas .person-card[data-id="${pid}"]`)!.getBoundingClientRect();
-            zp.shiftWorld((c.left - 300) / zp.getScale(), (c.top - 190) / zp.getScale());
-        }, [PERSON] as const);
-        await hold(page, tab);
+            zp.shiftWorld((c.left - 300) / zp.getScale(), (c.top - (y as number)) / zp.getScale());
+        }, [id, top] as const);
+    }
+
+    /** The open bubble below its tab, under the top bar, whole in the window down to 8 px, its last line whole. */
+    async function expectBelow(page: Page, tab: ReturnType<Page['locator']>, bubble: ReturnType<Page['locator']>): Promise<void> {
         await expect(bubble).toBeVisible();
+        await expect(bubble).toHaveClass(/\bbelow\b/);
+        await expect(bubble).not.toHaveClass(/\bno-arrow\b/);
+        expect(await bubble.evaluate(b => getComputedStyle(b, '::after').display)).not.toBe('none');
         const t = (await tab.boundingBox())!;
         const b = (await bubble.boundingBox())!;
-        expect(b.y).toBeLessThan(t.y + t.height);
-        expect(b.y + b.height).toBeLessThanOrEqual(390 - 7.5);
-        await expect(bubble).toHaveClass(/\bno-arrow\b/);
-        expect(await arrow()).toBe('none');
-        // closed, then the card just under the bars: below the tab, clear of it, the arrow back
-        await page.locator('#tree-container').dispatchEvent('pointerdown', { clientX: 830, clientY: 380, pointerType: 'touch' });
+        const bar = await page.evaluate(() => document.querySelector('.toolbar')!.getBoundingClientRect().bottom);
+        expect(b.y).toBeGreaterThan(t.y + t.height);
+        expect(b.y).toBeGreaterThanOrEqual(bar);
+        expect(b.y + b.height).toBeLessThanOrEqual(390 - 8 + 0.5);
+        const maxHeight = await bubble.evaluate(el => parseFloat(getComputedStyle(el).maxHeight));
+        expect(Math.abs(maxHeight - (390 - b.y - 8))).toBeLessThan(1);
+        const action = bubble.locator(':scope > .badge-tooltip-action');
+        await expect(action).toBeVisible();
+        const a = (await action.boundingBox())!;
+        expect(a.y).toBeGreaterThanOrEqual(b.y);
+        expect(a.y + a.height).toBeLessThanOrEqual(b.y + b.height + 0.5);
+    }
+
+    test('a bubble opens below its tab with its arrow, never over the tab or the top bar, as tall as the window lets it', async ({ page }) => {
+        await setup(page);
+        const tab = siblingsTab(page, PERSON);
+        const bubble = tab.locator(':scope > .badge-tooltip');
+        const close = () => page.locator('#tree-container').dispatchEvent('pointerdown', { clientX: 830, clientY: 380, pointerType: 'touch' });
+        // the card in the middle of the window: no room for the whole bubble below the tab
+        await cardAt(page, PERSON, 190);
+        await hold(page, tab);
+        await expectBelow(page, tab, bubble);
+        await close();
         await expect(bubble).toBeHidden();
+        // the card just under the bars
         await cardUnderBars(page, PERSON, 8, 300);
         await hold(page, tab);
-        await expect(bubble).toBeVisible();
-        await expect(bubble).not.toHaveClass(/\bno-arrow\b/);
-        expect(await arrow()).not.toBe('none');
+        await expectBelow(page, tab, bubble);
+        await expect(bubble).not.toHaveClass(/\bbubble-clipped\b/);
+        await close();
+        // the card low in the window: cut, what a click does still whole at its bottom
+        await cardAt(page, PERSON, 300);
+        await hold(page, tab);
+        await expectBelow(page, tab, bubble);
+        await expect(bubble).toHaveClass(/\bbubble-clipped\b/);
+    });
+
+    test('a low window lists 4 names at most, "and n more" the rest', async ({ page }) => {
+        await setupFixture(page, 'edge-ancestor-children', 'focus');
+        await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), 'f_m_f_m_f');
+        await page.evaluate(() => window.Strom.ZoomPan.finishAnimation());
+        await cardUnderBars(page, 'f_m_f_m_f', 8, 300);
+        const tab = siblingsTab(page, 'f_m_f_m_f');
+        const bubble = tab.locator(':scope > .badge-tooltip');
+        await hold(page, tab);
+        await expectBelow(page, tab, bubble);
+        await expect(bubble).not.toHaveClass(/\bbubble-clipped\b/);
+        const shown = await bubble.locator('.badge-tooltip-item:visible').count();
+        expect(shown).toBeGreaterThanOrEqual(1);
+        expect(shown).toBeLessThanOrEqual(4);
+        await expect(bubble.locator('.badge-tooltip-more')).toHaveText(`and ${12 - shown} more`);
     });
 });
 
@@ -748,11 +791,14 @@ test.describe('a bubble taller than a low window lists fewer names (de, 844 × 3
 
         test('a finger held on the tab', async ({ page }) => {
             await setupLong(page);
+            // below its tab by touch (round 4 §30): the card under the bars, the room below it
+            await cardUnderBars(page, 'f_m_f_m_f', 8, 300);
             const tab = siblingsTab(page, 'f_m_f_m_f');
             const bubble = tab.locator(':scope > .badge-tooltip');
             await hold(page, tab);
             await expect(bubble).toBeVisible();
             await expectWhole(bubble);
+            expect(await bubble.locator('.badge-tooltip-item:visible').count()).toBeLessThanOrEqual(4);
         });
     });
 });

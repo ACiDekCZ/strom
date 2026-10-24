@@ -73,7 +73,7 @@ import {
     hiddenPartnerIds, childrenByUnion, childrenComeWithPartners, otherFamilyChildrenElsewhere, marriagesInOrder,
 } from './marriage-order.js';
 import { partnerIdsShownInPlace } from './layout/pipeline/1-select-subgraph.js';
-import { measureUnionOrderPills, measureTabRows, rowKey, unionOrderPillKey, unionOrderPillPartsHtml, pillFontsPending, branchTabRestHtml, tabsForm, tabsFormClass, bubblePlacement, bubbleBox, bubbleOpensBelow, BUBBLE_WINDOW_MARGIN, bubbleNameCounts, bubbleNamesToFit } from './union-order-measure.js';
+import { measureUnionOrderPills, measureTabRows, rowKey, unionOrderPillKey, unionOrderPillPartsHtml, pillFontsPending, branchTabRestHtml, tabsForm, tabsFormClass, bubblePlacement, bubbleBox, touchBubbleBox, bubbleOpensBelow, BUBBLE_WINDOW_MARGIN, BUBBLE_LOW_WINDOW_NAMES, BUBBLE_LOW_WINDOW_HEIGHT, bubbleNameCounts, bubbleNamesToFit } from './union-order-measure.js';
 import { prepareBubble, showBubble, hideBubble, closeOpenBubble, openBubble } from './bubble-layer.js';
 import { pillUnderFinger } from './card-tap.js';
 import { showFocusToast, hideFocusToast } from './focus-toast.js';
@@ -2286,7 +2286,9 @@ class TreeRendererClass {
             more += g.items.length - counts[i];
             if (g.items.length > 0 && counts[i] === 0) return '';
             // Each name tagged with its group: fitBubbleNames lists fewer in a low window
-            return g.pre + g.items.slice(0, counts[i]).map(item => item.replace(/^<div /, `<div data-name-group="${i}" `)).join('');
+            // (and its label, hidden with its last name)
+            return g.pre.replace(/<div class="badge-tooltip-group"/g, `<div data-group-head="${i}" class="badge-tooltip-group"`)
+                + g.items.slice(0, counts[i]).map(item => item.replace(/^<div /, `<div data-name-group="${i}" `)).join('');
         }).join('');
         if (sizes.every(n => n === 0)) return html;
         // "and n more", hidden while every name is listed (fitBubbleNames shows it when it lists fewer)
@@ -2301,14 +2303,17 @@ class TreeRendererClass {
      * one name a group at least; "and n more" counts the rest. Every opening
      * starts from all the names nameGroupsHtml lists (a larger window lists
      * them again). Only a bubble that does not fit even then is cut.
+     * `maxNames`: it lists that many at most (by touch in a low window,
+     * round 4 §30), in proportion as well.
      */
-    private fitBubbleNames(bubble: HTMLElement, maxHeight: number): void {
+    private fitBubbleNames(bubble: HTMLElement, maxHeight: number, maxNames?: number): void {
         const more = bubble.querySelector<HTMLElement>('.badge-tooltip-more[data-name-sizes]');
         if (!more) return;
         const sizes = (more.dataset.nameSizes ?? '').split(',').map(Number);
         const items = [...bubble.querySelectorAll<HTMLElement>('[data-name-group]')];
         const groupOf = (el: HTMLElement) => Number(el.dataset.nameGroup);
-        const shown = sizes.map((_, i) => items.filter(el => groupOf(el) === i).length);
+        const listed = sizes.map((_, i) => items.filter(el => groupOf(el) === i).length);
+        const shown = maxNames === undefined ? listed : bubbleNameCounts(sizes, maxNames).map((n, i) => Math.min(n, listed[i]));
         const total = sizes.reduce((a, b) => a + b, 0);
         const apply = (counts: number[]): void => {
             const seen = sizes.map(() => 0);
@@ -2316,6 +2321,7 @@ class TreeRendererClass {
                 const g = groupOf(el);
                 el.hidden = seen[g]++ >= counts[g];
             }
+            for (const head of bubble.querySelectorAll<HTMLElement>('[data-group-head]')) head.hidden = counts[Number(head.dataset.groupHead)] === 0;
             const rest = total - counts.reduce((a, b) => a + b, 0);
             more.hidden = rest <= 0;
             more.textContent = rest > 0 ? strings.focus.tabMoreNames(rest) : '';
@@ -2420,8 +2426,9 @@ class TreeRendererClass {
      * (right, else left; .beside-*, its top edge at the card's top, on a low
      * screen moved up as far as it needs), and only where it fits on
      * neither side below the tab (.below, when the room below is larger);
-     * by touch (a long press) below the tab, never beside the card (round 3
-     * §22): measured when it opens (bubblePlacement). In the top layer
+     * by touch (a long press) always below the tab, never above it nor
+     * beside the card (round 3 §22, round 4 §30; placeTouchBubble):
+     * measured when it opens (bubblePlacement). In the top layer
      * (bubble-layer.ts) it stands at scale 1 in screen pixels whatever the
      * zoom, over the zoom buttons and the bars, whole in the window
      * (bubbleBox); without the top layer it stays on the canvas, above or
@@ -2429,23 +2436,12 @@ class TreeRendererClass {
      */
     private placeBubble(tab: HTMLElement, bubble: HTMLElement, touch = false): void {
         bubble.classList.remove('below', 'beside-right', 'beside-left');
+        bubble.style.maxHeight = '';
         const layered = bubble.hasAttribute('popover') && bubble.matches(':popover-open');
         const cardEl = tab.closest<HTMLElement>('.person-card');
         // The card grows under the pointer (:hover scale), its tab with it:
         // measured as they will stand once that ends.
         const grown = this.cardGrowth(cardEl);
-        // In the top layer whole in the window: as many names as fit there
-        if (layered) this.fitBubbleNames(bubble, window.innerHeight - 2 * BUBBLE_WINDOW_MARGIN);
-        const measure = (): DOMRect => {
-            if (layered) return bubble.getBoundingClientRect();
-            const shown = getComputedStyle(bubble).display !== 'none';
-            if (!shown) { bubble.style.visibility = 'hidden'; bubble.style.display = 'block'; }
-            const rect = grown(bubble.getBoundingClientRect());
-            if (!shown) { bubble.style.display = ''; bubble.style.visibility = ''; }
-            return rect;
-        };
-        const b = measure();
-        if (b.height === 0) return;
         const r = grown(tab.getBoundingClientRect());
         const card = grown((cardEl ?? tab).getBoundingClientRect());
         const container = document.getElementById('tree-container')?.getBoundingClientRect();
@@ -2465,6 +2461,22 @@ class TreeRendererClass {
             top: Math.max(roomTop, m), bottom: Math.min(container?.bottom ?? vh, vh - m),
             left: Math.max(container?.left ?? 0, m), right: Math.min(container?.right ?? vw, vw - m),
         };
+        if (layered && touch) {
+            this.placeTouchBubble(bubble, r, room.top);
+            return;
+        }
+        // In the top layer whole in the window: as many names as fit there
+        if (layered) this.fitBubbleNames(bubble, vh - 2 * m);
+        const measure = (): DOMRect => {
+            if (layered) return bubble.getBoundingClientRect();
+            const shown = getComputedStyle(bubble).display !== 'none';
+            if (!shown) { bubble.style.visibility = 'hidden'; bubble.style.display = 'block'; }
+            const rect = grown(bubble.getBoundingClientRect());
+            if (!shown) { bubble.style.display = ''; bubble.style.visibility = ''; }
+            return rect;
+        };
+        const b = measure();
+        if (b.height === 0) return;
         const place = bubblePlacement(r, card, { width: b.width, height: b.height }, room, { touch });
         if (!layered) {
             // On the canvas: above the tab or below it, never beside the card
@@ -2481,6 +2493,36 @@ class TreeRendererClass {
         bubble.style.setProperty(beside ? '--beside-arrow' : '--arrow-x', `${box.arrow}px`);
         bubble.style.removeProperty(beside ? '--arrow-x' : '--beside-arrow');
         if (place !== 'above') bubble.classList.add(beside ? `beside-${place}` : 'below');
+        bubble.classList.toggle('no-arrow', box.noArrow === true);
+    }
+
+    /**
+     * A bubble opened by touch in the top layer (round 4 §30): always below
+     * its tab (touchBubbleBox), never over the app's top bar nor the bars over
+     * the tree (`barsTop`, the room's top), as tall as the window lets it
+     * under its top edge (max-height, 8 px over the window's bottom). It lists
+     * as many names as fit there, in a low window (a phone held sideways)
+     * 4 at most; only a bubble that does not fit even with one name a group
+     * is cut, its last line (what a click does) standing at its bottom.
+     */
+    private placeTouchBubble(bubble: HTMLElement, tab: DOMRect, barsTop: number): void {
+        const vw = window.innerWidth, vh = window.innerHeight;
+        const toolbar = document.querySelector<HTMLElement>('.toolbar');
+        const barsBottom = Math.max(barsTop, toolbar && toolbar.getClientRects().length > 0 ? toolbar.getBoundingClientRect().bottom : 0);
+        const viewport = { width: vw, height: vh };
+        const { maxHeight } = touchBubbleBox(tab, bubble.getBoundingClientRect().width, barsBottom, viewport);
+        this.fitBubbleNames(bubble, maxHeight, vh <= BUBBLE_LOW_WINDOW_HEIGHT ? BUBBLE_LOW_WINDOW_NAMES : undefined);
+        // Its own height, not the one a max-height cuts it to
+        bubble.style.maxHeight = 'none';
+        const b = bubble.getBoundingClientRect();
+        const box = touchBubbleBox(tab, b.width, barsBottom, viewport);
+        bubble.style.maxHeight = `${box.maxHeight}px`;
+        bubble.classList.toggle('bubble-clipped', b.height > box.maxHeight + 0.5);
+        bubble.style.left = `${box.left}px`;
+        bubble.style.top = `${box.top}px`;
+        bubble.style.setProperty('--arrow-x', `${box.arrow}px`);
+        bubble.style.removeProperty('--beside-arrow');
+        bubble.classList.add('below');
         bubble.classList.toggle('no-arrow', box.noArrow === true);
     }
 
