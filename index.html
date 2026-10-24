@@ -8102,14 +8102,21 @@
         #tree-canvas .person-card.shown-here:not(.view-ghost, .evl-full, .evl-none) {
             background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--ghost-line) 24%, var(--surface)) 0 1.5px, var(--surface) 1.5px 6px);
         }
+        /* Dark: a fainter stripe, white at 4 % over the surface (round 4 §32),
+           so the card's light and faint text stay apart on it. */
+        [data-theme="dark"] #tree-canvas .person-card.shown-here:not(.view-ghost, .evl-full, .evl-none) {
+            background: repeating-linear-gradient(135deg, color-mix(in srgb, #fff 4%, var(--surface)) 0 1.5px, var(--surface) 1.5px 6px);
+        }
         /* The card's small text (the date, a detail line's label and place)
            at AA on the stripe as on the surface: a shade stronger on the
-           hatch (light 3.98:1 and dark 3.84:1 / 3.26:1 on the stripe before);
-           only in the card's body, the pills and bubbles keep their own. */
+           hatch (light 3.98:1 on the stripe before); only in the card's body,
+           the pills and bubbles keep their own. The light text stays a step
+           above the faint one on the stripe (contrast ratios 1.0 apart at
+           least, as in the light theme: 5.7 and 4.6). */
         #tree-canvas .person-card.shown-here:not(.view-ghost, .evl-full, .evl-none) > .card-body { --text-faint: #6a6254; }
         [data-theme="dark"] #tree-canvas .person-card.shown-here:not(.view-ghost, .evl-full, .evl-none) > .card-body {
-            --text-light: #b7afa0;  /* 4.6:1 on the stripe, 6.6:1 on the surface */
-            --text-faint: #b5afa2;
+            --text-light: #b5ae9e;  /* 5.8:1 on the stripe, 6.5:1 on the surface */
+            --text-faint: #a39c8a;  /* 4.7:1 on the stripe, 5.3:1 on the surface */
         }
         /* Lines: inside a shown family the tree's own shape (an adoptive or
            step dash stays) in the ghost's tone; the linking line hollow — a

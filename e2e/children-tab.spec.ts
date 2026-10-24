@@ -200,10 +200,31 @@ for (const custom of [false, true]) {
                         }
                     }
                 }
-                return { out, checked };
+                // The light and the faint text of the card's body against the stripe they read worst on
+                // (round 4 §32): the faint one still at AA, the light one a step above it.
+                const card = document.querySelector<HTMLElement>('#tree-canvas .person-card.shown-here')!;
+                const stops = parse(getComputedStyle(card).backgroundImage);
+                const probe = document.createElement('span');
+                card.querySelector('.card-body')!.appendChild(probe);
+                const level = (token: string) => {
+                    probe.style.color = `var(${token})`;
+                    const fg = parse(getComputedStyle(probe).color)[0];
+                    return Math.min(...stops.map(u => ratio(fg, u)));
+                };
+                const levels = { light: level('--text-light'), faint: level('--text-faint') };
+                probe.remove();
+                // The stripe: the first stop, the surface the last
+                const stripe = stops[0], surface = stops[stops.length - 1];
+                return { out, checked, levels, stripe, surface };
             });
             expect(low.checked, theme).toBeGreaterThan(10);
             expect(low.out, theme).toEqual([]);
+            expect(low.levels.faint, `${theme}: faint text on the stripe`).toBeGreaterThanOrEqual(4.5);
+            expect(low.levels.light - low.levels.faint, `${theme}: light vs faint text on the stripe ${JSON.stringify(low.levels)}`).toBeGreaterThanOrEqual(1);
+            // Dark: the stripe is white at 4 % over the surface
+            if (theme === 'dark') {
+                low.stripe.forEach((v, k) => expect(Math.abs(v - (low.surface[k] + 0.04 * (255 - low.surface[k]))), `dark stripe ${low.stripe}`).toBeLessThan(1));
+            }
         }
         // Still not the look of a person linked in the view only (dark): the card's own border and shadow
         const look = (id: string) => page.evaluate(pid => { const cs = getComputedStyle(document.querySelector(`#tree-canvas .person-card[data-id="${pid}"]`)!); return [cs.borderTopColor, cs.boxShadow]; }, id);
