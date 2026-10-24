@@ -122,3 +122,44 @@ describe('The parents\' siblings stand beside the parent over a wide family [edg
         });
     }
 });
+
+describe('Only childless runs move: the cousins\' families and the focus\'s siblings keep their place beyond the family [edge-aunts-wide-family]', () => {
+    // One family in one row comes up beside the parent; a side with a
+    // sibling whose children are in view (the cousins' families) and the
+    // focus's own siblings stand beyond the width of the family below.
+    /** The fixture with a son for Felix (uncle_1) and a brother for Paula (the focus). */
+    function withCousinAndBrother(): StromData {
+        const d = loadFixture('edge-aunts-wide-family');
+        const person = (id: string, firstName: string, gender: 'male' | 'female', birthDate: string, parentIds: PersonId[], partnerships: string[]) => {
+            d.persons[P(id)] = { id: P(id), firstName, lastName: id === 'uncle_1_w' ? 'Sorel' : 'Rowan', gender, isPlaceholder: false,
+                partnerships: partnerships as PartnershipId[], parentIds, childIds: [], birthDate } as unknown as StromData['persons'][PersonId];
+        };
+        person('uncle_1_w', 'Wanda', 'female', '1709', [], ['u_uncle_1']);
+        person('cousin', 'Jonas', 'male', '1735', [P('uncle_1'), P('uncle_1_w')], []);
+        person('fo_brother', 'Bertil', 'male', '1733', [FATHER, MOTHER], []);
+        d.partnerships['u_uncle_1' as PartnershipId] = { id: 'u_uncle_1', person1Id: P('uncle_1'), person2Id: P('uncle_1_w'), childIds: [P('cousin')], status: 'married', startDate: '1732' } as unknown as StromData['partnerships'][PartnershipId];
+        d.persons[P('uncle_1')].partnerships = ['u_uncle_1' as PartnershipId];
+        d.persons[P('uncle_1')].childIds = [P('cousin')];
+        d.persons[P('uncle_1_w')].childIds = [P('cousin')];
+        d.partnerships['u_p' as PartnershipId].childIds.push(P('fo_brother'));
+        for (const id of [FATHER, MOTHER]) d.persons[id].childIds.push(P('fo_brother'));
+        return d;
+    }
+    for (const autoExpand of [false, true]) {
+        const mode = autoExpand ? 'expanded' : 'standard';
+        it(`depth 2 [${mode}]`, () => {
+            const r = layout(withCousinAndBrother(), 2, autoExpand);
+            expect(strict(r)).toEqual([]);
+            for (const id of [P('cousin'), P('fo_brother')]) expect(r.positions.has(id), id).toBe(true);
+            // The father's siblings all stand on one side, one of them with the
+            // cousin: the side stays away from the father, the whole side; the
+            // mother's childless sister comes up beside her
+            expect(runBesideParent(r, FATHER, [...FATHER_SIDE, P('uncle_1_w')])).not.toEqual([]);
+            expect(runBesideParent(r, MOTHER, MOTHER_SIDE)).toEqual([]);
+            // The focus's brother stands beyond the width of her family below
+            const family = [...r.positions].filter(([id]) => /^(fo|h1|h2|c\d+|c\d+_h|g\d+)$/.test(id)).map(([, p]) => p.x);
+            const brother = r.positions.get(P('fo_brother'))!.x;
+            expect(brother < Math.min(...family) || brother > Math.max(...family), `brother at ${brother}`).toBe(true);
+        });
+    }
+});
