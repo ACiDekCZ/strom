@@ -6,7 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { hiddenRelativesTabs, hiddenChildIds, newlyShownChildIds, childrenDrawnElsewhere, siblingOrderMark, childrenShownClosing, siblingsTabState, newlyShownSiblingIds, siblingGroups, unionChildIdSet, hiddenPartnerIds, childrenByUnion, childrenComeWithPartners, otherFamilyChildrenElsewhere, HiddenRelativesTab } from '../marriage-order.js';
-import { tabsForm, tabGlyph, tabLabel, tabKindClass, branchTabRestHtml, bubbleOpensBelow, bubblePlacement, besideTop, bubbleBox, touchBubbleBox, BUBBLE_WINDOW_MARGIN, BUBBLE_LOW_WINDOW_NAMES, bubbleNameCounts, bubbleNamesToFit, BUBBLE_MAX_NAMES } from '../union-order-measure.js';
+import { tabsForm, tabGlyph, tabLabel, tabKindClass, branchTabRestHtml, bubbleOpensBelow, bubblePlacement, besideTop, bubbleBox, touchBubbleBox, touchBubbleBounds, touchBubbleSide, BUBBLE_WINDOW_MARGIN, BUBBLE_LOW_WINDOW_NAMES, bubbleNameCounts, bubbleNamesToFit, BUBBLE_MAX_NAMES } from '../union-order-measure.js';
 import { branchTabKind, branchTabsInOrder } from '../marriage-order.js';
 import { childIdsShownInPlace } from '../layout/pipeline/1-select-subgraph.js';
 import { PersonId, PartnershipId, Person, StromData, DEFAULT_LAYOUT_CONFIG } from '../types.js';
@@ -580,56 +580,100 @@ describe('a tab\'s bubble by touch (round 3 §22)', () => {
     });
 });
 
-describe('a bubble\'s box by touch (round 4 §30: below the tab, as tall as the window lets it)', () => {
+describe('a bubble\'s box by touch (round 4 §30, round 5 §33, §34: below the tab, else above it, never over the bars or the bottom navigation)', () => {
     const sideways = { width: 844, height: 390 };
+    const phone = { width: 390, height: 844 };
     const tab = (left: number, top: number) => ({ left, right: left + 60, top, bottom: top + 18 });
     const m = BUBBLE_WINDOW_MARGIN;
+    const bounds = (barsBottom: number, viewport = sideways) => touchBubbleBounds(barsBottom, viewport, null);
 
-    it('8 px under the tab, centred on it, its max-height down to 8 px over the window\'s bottom, the arrow on the tab', () => {
-        expect(touchBubbleBox(tab(500, 190), 240, 44, sideways)).toEqual({ left: 410, top: 216, arrow: 120, maxHeight: 390 - 216 - m });
-        // never moved up over the tab, however little room is left below it
-        const low = touchBubbleBox(tab(500, 340), 240, 44, sideways);
-        expect(low.top).toBe(366);
-        expect(low.maxHeight).toBe(16);
-        expect(low.noArrow).toBeUndefined();
+    it('the bounds: under the bars, 8 px in from the window\'s sides and over its bottom without a navigation', () => {
+        expect(bounds(44)).toEqual({ top: 44, bottom: 390 - m, left: m, right: 844 - m });
     });
 
-    it('pushed in sideways to 8 px from the window\'s edges, the arrow kept on the tab', () => {
-        const r = touchBubbleBox(tab(760, 190), 240, 44, sideways);
+    it('the bounds: 8 px over the bottom navigation\'s top edge (its safe area in its box), never over it (§34)', () => {
+        // 390 × 844: the bar 56 px high, 34 px of safe area under it
+        expect(touchBubbleBounds(56, phone, { left: 0, top: 754, right: 390, bottom: 844 })).toEqual({ top: 56, bottom: 754 - m, left: m, right: 390 - m });
+        // 1024 × 768 by touch: the same bar
+        expect(touchBubbleBounds(56, { width: 1024, height: 768 }, { left: 0, top: 712, right: 1024, bottom: 768 }).bottom).toBe(712 - m);
+        // a phone held sideways: the navigation on the left side, the bubble right of it, down to the window's bottom
+        expect(touchBubbleBounds(44, sideways, { left: 0, top: 0, right: 76, bottom: 390 })).toEqual({ top: 44, bottom: 390 - m, left: 76 + m, right: 844 - m });
+    });
+
+    it('below the tab where it fits there whole, its arrow on the tab (§33: 1)', () => {
+        expect(touchBubbleSide(tab(500, 100), 200, 90, bounds(44))).toEqual({ side: 'below', room: 390 - m - 126 });
+        expect(touchBubbleBox('below', tab(500, 190), { width: 240, height: 150 }, bounds(44))).toEqual({ left: 410, top: 216, arrow: 120, maxHeight: 390 - 216 - m });
+    });
+
+    it('above the tab where it fits only there whole, its bottom 8 px over the tab, the arrow on it (§33: 2)', () => {
+        // 160 px: 148 below the tab, 230 above it (down from 8 px under the bar)
+        expect(touchBubbleSide(tab(500, 290), 160, 90, bounds(44))).toEqual({ side: 'above', room: 290 - 8 - 44 - m });
+        const box = touchBubbleBox('above', tab(500, 290), { width: 240, height: 160 }, bounds(44));
+        expect(box).toEqual({ left: 410, top: 290 - 8 - 160, arrow: 120, maxHeight: 290 - 8 - 44 - m });
+        // the bubble may cover its card (a tab on the card's bottom edge), never the bar: room only from 8 px under it
+        expect(touchBubbleSide(tab(500, 120), 100, 90, bounds(44)).side).toBe('below');
+    });
+
+    it('whole on neither side: the side with more room, as tall as that, one name at least (§33: 3)', () => {
+        // 300 px: 148 below, 230 above
+        expect(touchBubbleSide(tab(500, 290), 300, 90, bounds(44))).toEqual({ side: 'above', room: 230 });
+        const above = touchBubbleBox('above', tab(500, 290), { width: 240, height: 230 }, bounds(44));
+        expect(above.top).toBe(44 + m);
+        expect(above.top + above.maxHeight).toBe(290 - 8);
+        // more room below: below; the same room: below
+        expect(touchBubbleSide(tab(500, 150), 300, 90, bounds(44))).toEqual({ side: 'below', room: 390 - m - 176 });
+        expect(touchBubbleSide(tab(500, 208), 400, 90, bounds(44))).toEqual({ side: 'below', room: 148 });
+    });
+
+    it('not even one name fits on either side: no bubble, the person\'s menu (§38)', () => {
+        // a window 160 px high, the bar 44 px: 108 px at most on a side
+        const low = touchBubbleBounds(44, { width: 844, height: 160 }, null);
+        expect(touchBubbleSide(tab(500, 80), 300, 120, low).side).toBe('menu');
+        expect(touchBubbleSide(tab(500, 80), 300, 40, low).side).toBe('below');
+    });
+
+    it('never over the bottom navigation: its room ends 8 px over the bar, whole above the tab where that bar takes the room below (§34)', () => {
+        const b = touchBubbleBounds(56, phone, { left: 0, top: 754, right: 390, bottom: 844 });
+        // the tab 60 px over the bar: 26 px below, the bubble above the tab
+        const t = { left: 150, right: 210, top: 694, bottom: 712 };
+        expect(touchBubbleSide(t, 200, 90, b)).toEqual({ side: 'above', room: 694 - 8 - 56 - m });
+        // below a tab higher up: down to 8 px over the bar
+        expect(touchBubbleBox('below', { left: 150, right: 210, top: 300, bottom: 318 }, { width: 240, height: 500 }, b).maxHeight).toBe(754 - m - 326);
+    });
+
+    it('pushed in sideways to 8 px from the window\'s edges or right of the navigation on the left, the arrow kept on the tab', () => {
+        const r = touchBubbleBox('below', tab(760, 190), { width: 240, height: 100 }, bounds(44));
         expect(r.left).toBe(844 - m - 240);
         expect(r.arrow).toBe(790 - r.left);
-        expect(touchBubbleBox(tab(-20, 190), 240, 44, sideways).left).toBe(m);
+        expect(touchBubbleBox('below', tab(-20, 190), { width: 240, height: 100 }, bounds(44)).left).toBe(m);
+        const rail = touchBubbleBounds(44, sideways, { left: 0, top: 0, right: 76, bottom: 390 });
+        const at = touchBubbleBox('above', tab(90, 290), { width: 240, height: 100 }, rail);
+        expect(at.left).toBe(76 + m);
+        expect(at.arrow).toBe(120 - at.left);
     });
 
     it('never over the top bar: a tab under it has the bubble start at the bar\'s bottom, away from the tab, without its arrow', () => {
-        const under = touchBubbleBox(tab(500, 30), 240, 52, sideways);
+        const under = touchBubbleBox('below', tab(500, 30), { width: 240, height: 100 }, bounds(52));
         expect(under.top).toBe(56);
         expect(under.noArrow).toBeUndefined();
         // the tab's bottom 2 px under the bar: the bubble 8 px under the tab still
-        expect(touchBubbleBox(tab(500, 36), 240, 52, sideways).top).toBe(62);
-        const hidden = touchBubbleBox(tab(500, 10), 240, 52, sideways);
+        expect(touchBubbleBox('below', tab(500, 36), { width: 240, height: 100 }, bounds(52)).top).toBe(62);
+        const hidden = touchBubbleBox('below', tab(500, 10), { width: 240, height: 100 }, bounds(52));
         expect(hidden.top).toBe(52);
         expect(hidden.noArrow).toBe(true);
         expect(hidden.maxHeight).toBe(390 - 52 - m);
+        // no room above a tab under the bar
+        expect(touchBubbleSide(tab(500, 10), 400, 90, bounds(52)).side).toBe('below');
     });
 
-    it('a tab at the window\'s bottom: moved up over the tab just enough to hold its last line whole, without its arrow', () => {
-        // 60 px: the bubble cut to its last line (what a click does)
-        const low = touchBubbleBox(tab(500, 340), 240, 44, sideways, 60);
-        expect(low.top).toBe(390 - m - 60);
-        expect(low.maxHeight).toBe(60);
-        expect(low.noArrow).toBe(true);
-        // the tab's bottom edge at the window's: still whole in it
-        const edge = touchBubbleBox(tab(500, 372), 240, 44, sideways, 60);
-        expect(edge.top + edge.maxHeight).toBe(390 - m);
-        expect(edge.maxHeight).toBe(60);
-        // room for that under the tab: below it with its arrow, as tall as the window lets it
-        const room = touchBubbleBox(tab(500, 290), 240, 44, sideways, 60);
-        expect(room.top).toBe(316);
-        expect(room.maxHeight).toBe(390 - 316 - m);
-        expect(room.noArrow).toBeUndefined();
-        // never over the top bar, even then
-        expect(touchBubbleBox(tab(500, 340), 240, 44, { width: 844, height: 100 }, 60).top).toBe(44);
+    it('never moved over its own tab (round 4\'s move up at the window\'s bottom is gone): a tab at the bottom has it above', () => {
+        // the tab's bottom edge 4 px over the window's: no room below, the bubble above with its arrow
+        const t = tab(500, 368);
+        const { side } = touchBubbleSide(t, 150, 90, bounds(44));
+        expect(side).toBe('above');
+        const box = touchBubbleBox('above', t, { width: 240, height: 150 }, bounds(44));
+        expect(box.top + 150).toBe(368 - 8);
+        expect(box.noArrow).toBeUndefined();
     });
 });
 
@@ -640,6 +684,15 @@ describe('a low window by touch lists 4 names at most (round 4 §30)', () => {
         expect(start).toEqual([3, 1]);
         expect(bubbleNamesToFit(sizes, start, () => true)).toEqual([3, 1]);
         expect(bubbleNamesToFit(sizes, start, c => c[0] + c[1] <= 2)).toEqual([1, 1]);
+    });
+
+    it('by touch fewer down to one name in all, never none (round 5 §38): the first group keeps it', () => {
+        const sizes = [9, 3];
+        expect(bubbleNamesToFit(sizes, [3, 1], c => c[0] + c[1] <= 1, 1)).toEqual([1, 0]);
+        expect(bubbleNamesToFit(sizes, [3, 1], () => false, 1)).toEqual([1, 0]);
+        expect(bubbleNamesToFit([2, 1, 1], [2, 1, 1], c => c[0] + c[1] + c[2] <= 2, 1)).toEqual([1, 1, 0]);
+        // a mouse keeps one a group
+        expect(bubbleNamesToFit(sizes, [3, 1], () => false)).toEqual([1, 1]);
     });
 });
 

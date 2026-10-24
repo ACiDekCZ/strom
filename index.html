@@ -3275,19 +3275,21 @@
             overflow: visible;
         }
         /* Taller than the window even with one name a group (TreeRenderer.fitBubbleNames lists fewer names first): cut, no scrollbar;
-           its last line (what a click does) stays whole at its bottom, over the names cut. By touch the
-           max-height reaches from its top to 8 px over the window's bottom (TreeRenderer.placeTouchBubble).
+           its last line (what a click does) stays whole at its bottom, over the names cut. By touch a bubble
+           is never cut: it lists one name at least and leaves out the lines between, else the person's menu
+           opens instead (TreeRenderer.placeTouchBubble; the class there only a safeguard).
            A sticky line stops at the bubble's padding: bottom -10px (its bottom padding) takes it down
            to the border, so no name cut under it shows in that padding. */
         .badge-tooltip[popover].bubble-clipped { overflow: hidden; }
         .badge-tooltip[popover].bubble-clipped > .badge-tooltip-action { position: sticky; bottom: -10px; padding-bottom: 10px; background: var(--surface); }
         .badge-tooltip[popover]::after { left: var(--arrow-x, 50%); }
         /* Moved over its own tab to stay whole in the window (a low window,
-           by touch): no arrow, it would point past the tab at nothing. */
+           with a mouse) or, by touch, away from a tab hidden under the bars:
+           no arrow, it would point past the tab at nothing. */
         .badge-tooltip[popover].no-arrow::after { display: none; }
         /* Too little room above the tab (under the bars over the tree) and
            more below: the bubble opens below it, the arrow on its top edge
-           (TreeRenderer.placeBubble); by touch it always opens there. */
+           (TreeRenderer.placeBubble); by touch there where it fits, else above the tab (placeTouchBubble). */
         .badge-tooltip.below { bottom: auto; top: 100%; margin-bottom: 0; margin-top: 8px; }
         .badge-tooltip.below::after { top: auto; bottom: 100%; margin-top: 0; margin-bottom: -5px; transform: rotate(225deg); }
         /* Too little room above the tab (with a mouse): beside the card, its

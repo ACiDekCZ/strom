@@ -136,9 +136,9 @@ export function bubblePlacement(
     room: { top: number; bottom: number; left: number; right: number },
     opts: { touch?: boolean } = {},
 ): BubblePlace {
-    // Touch (round 3 §22, round 4 §30): always below the tab, never above
-    // it nor beside the card (the finger came from above); a low window
-    // shortens it instead (touchBubbleBox).
+    // Touch (round 3 §22): below the tab, never beside the card (the finger
+    // came from above); in the top layer touchBubbleSide turns it above the
+    // tab where it fits only there (round 5 §33).
     if (opts.touch) return 'below';
     if (tab.top - room.top >= bubble.height + BUBBLE_GAP) return 'above';
     const side = (): BubblePlace | null => {
@@ -230,41 +230,115 @@ export function bubbleBox(
     return overTab ? { left, top, arrow, noArrow: true } : { left, top, arrow };
 }
 
+/**
+ * Where a bubble opened by touch may stand (screen pixels): under the bars
+ * over the tree (the app's top bar, the focus bar: it never covers them),
+ * BUBBLE_WINDOW_MARGIN over the bottom navigation (round 5 §34) or over the
+ * window's bottom without one, BUBBLE_WINDOW_MARGIN in from the window's
+ * sides, and right of the navigation where it stands on the left side (a
+ * phone held sideways: never over it either).
+ */
+export interface TouchBubbleBounds {
+    top: number;
+    bottom: number;
+    left: number;
+    right: number;
+}
+
+/**
+ * The bounds of a bubble opened by touch (TouchBubbleBounds): `barsBottom`
+ * the bottom of the bars over the tree, `nav` the bottom navigation's box as
+ * it stands on the screen (its safe area included; null without one). A
+ * navigation wider than tall runs along the window's bottom: the bubble
+ * stays 8 px over its top edge; one taller than wide stands on the left
+ * side (a phone held sideways): the bubble stays 8 px right of it.
+ */
+export function touchBubbleBounds(
+    barsBottom: number,
+    viewport: { width: number; height: number },
+    nav: { left: number; top: number; right: number; bottom: number } | null,
+): TouchBubbleBounds {
+    const m = BUBBLE_WINDOW_MARGIN;
+    let bottom = viewport.height - m, left = m;
+    if (nav && nav.right > nav.left && nav.bottom > nav.top) {
+        if (nav.right - nav.left >= nav.bottom - nav.top) bottom = Math.min(bottom, nav.top - m);
+        else if (nav.left < viewport.width / 2) left = Math.max(left, nav.right + m);
+    }
+    return { top: barsBottom, bottom, left, right: viewport.width - m };
+}
+
+/** Where a bubble opened by touch stands: below its tab, above it, or no bubble at all (the person's menu instead). */
+export type TouchBubbleSide = 'below' | 'above' | 'menu';
+
+/**
+ * The height a bubble opened by touch has on a side of its tab: below it
+ * from BUBBLE_TAB_MARGIN under the tab (or the bars' bottom, a tab under
+ * them) down to the bounds' bottom; above it from BUBBLE_TAB_MARGIN over the
+ * tab up to BUBBLE_WINDOW_MARGIN under the bars.
+ */
+export function touchBubbleRoom(side: 'below' | 'above', tab: { top: number; bottom: number }, bounds: TouchBubbleBounds): number {
+    return side === 'below'
+        ? bounds.bottom - Math.max(bounds.top, tab.bottom + BUBBLE_TAB_MARGIN)
+        : tab.top - BUBBLE_TAB_MARGIN - (bounds.top + BUBBLE_WINDOW_MARGIN);
+}
+
+/**
+ * Where a tab's bubble opened by touch stands (round 5 §33, §38; screen
+ * pixels, the bubble at scale 1): whole below the tab where it fits there
+ * (`height`, the names it lists at most: 8, 4 in a low window); else whole
+ * above it (its arrow at its bottom, on the tab; it may cover its card);
+ * else on the side with more room, fewer names (fitBubbleNames) as tall as
+ * that room (`room`), never under `least` (one name, "and n more" and its
+ * last line, what a click does). Where not even that fits on either side,
+ * no bubble: the person's menu opens instead ('menu').
+ */
+export function touchBubbleSide(
+    tab: { top: number; bottom: number },
+    height: number,
+    least: number,
+    bounds: TouchBubbleBounds,
+): { side: TouchBubbleSide; room: number } {
+    const below = touchBubbleRoom('below', tab, bounds);
+    const above = touchBubbleRoom('above', tab, bounds);
+    if (height <= below) return { side: 'below', room: below };
+    if (height <= above) return { side: 'above', room: above };
+    const side = above > below ? 'above' : 'below';
+    const room = Math.max(above, below);
+    return room >= least ? { side, room } : { side: 'menu', room };
+}
+
 /** Where a bubble opened by touch stands: its box (BubbleBox) and how tall it may be. */
 export interface TouchBubbleBox extends BubbleBox {
-    /** Its max-height: down to BUBBLE_WINDOW_MARGIN over the window's bottom. */
+    /** Its max-height: the room on its side of the tab (touchBubbleRoom). */
     maxHeight: number;
 }
 
 /**
- * Where a tab's bubble opened by touch stands (round 4 §30; screen pixels,
- * the bubble at scale 1): always below the tab, BUBBLE_TAB_MARGIN under it,
- * centred on it and pushed in sideways to BUBBLE_WINDOW_MARGIN from the
- * window's edges; never higher than `barsBottom` (the app's top bar and the
- * bars over the tree: it never covers them) and never moved up over the tab
- * to stay whole: it is as tall as the window lets it under its top
- * (`maxHeight`), the names it lists fitted to that (fitBubbleNames). Only
- * a tab hidden under the bars has it start lower, at the bars' bottom, away
- * from the tab: no arrow then (it would point at the bar). And only a tab so
- * near the window's bottom that not even `minHeight` (the bubble cut to its
- * last line, what a click does) fits under it has the bubble moved up just
- * enough to hold that whole in the window, over the tab: no arrow then
- * either (it would point into the tab).
+ * Where a tab's bubble opened by touch stands on its side of the tab
+ * (touchBubbleSide; screen pixels, the bubble at scale 1, `bubble.height`
+ * its own height): centred on the tab, pushed in sideways into the bounds
+ * (TouchBubbleBounds), its arrow on the tab. Below the tab
+ * BUBBLE_TAB_MARGIN under it; only a tab hidden under the bars has it start
+ * lower, at the bars' bottom, away from the tab: no arrow then (it would
+ * point at the bar). Above the tab its bottom edge BUBBLE_TAB_MARGIN over
+ * it, its top never closer to the bars than BUBBLE_WINDOW_MARGIN.
  */
 export function touchBubbleBox(
+    side: 'below' | 'above',
     tab: { left: number; right: number; top: number; bottom: number },
-    bubbleWidth: number,
-    barsBottom: number,
-    viewport: { width: number; height: number },
-    minHeight = 0,
+    bubble: { width: number; height: number },
+    bounds: TouchBubbleBounds,
 ): TouchBubbleBox {
-    const m = BUBBLE_WINDOW_MARGIN;
     const tabMid = (tab.left + tab.right) / 2;
-    const left = Math.max(m, Math.min(tabMid - bubbleWidth / 2, viewport.width - m - bubbleWidth));
+    const left = Math.max(bounds.left, Math.min(tabMid - bubble.width / 2, bounds.right - bubble.width));
+    const arrow = Math.max(BUBBLE_ARROW_INSET, Math.min(tabMid - left, bubble.width - BUBBLE_ARROW_INSET));
+    const maxHeight = Math.max(0, touchBubbleRoom(side, tab, bounds));
+    if (side === 'above') {
+        const top = tab.top - BUBBLE_TAB_MARGIN - Math.min(bubble.height, maxHeight);
+        return { left, top, arrow, maxHeight };
+    }
     const below = tab.bottom + BUBBLE_TAB_MARGIN;
-    const top = Math.max(barsBottom, Math.min(below, viewport.height - m - minHeight));
-    const arrow = Math.max(BUBBLE_ARROW_INSET, Math.min(tabMid - left, bubbleWidth - BUBBLE_ARROW_INSET));
-    const maxHeight = Math.max(0, viewport.height - m - top);
+    const top = Math.max(bounds.top, below);
     return top !== below ? { left, top, arrow, maxHeight, noArrow: true } : { left, top, arrow, maxHeight };
 }
 
@@ -325,11 +399,13 @@ export function bubbleNameCounts(sizes: readonly number[], max = BUBBLE_MAX_NAME
  * its names; bubbleNameCounts, never more of a group than `shown`), every
  * group with names keeping one at least. `fits` tells whether the bubble
  * with these counts stands whole in the window. When even one name a group
- * does not fit, that least (the window then cuts the bubble).
+ * does not fit, that least (the window then cuts the bubble). `leastNames`:
+ * fewer names in all down to that many (by touch one, round 5 §38: the
+ * first groups one name each, a group with none drops out of the bubble).
  */
-export function bubbleNamesToFit(sizes: readonly number[], shown: readonly number[], fits: (counts: number[]) => boolean): number[] {
+export function bubbleNamesToFit(sizes: readonly number[], shown: readonly number[], fits: (counts: number[]) => boolean, leastNames?: number): number[] {
     const most = shown.reduce((a, b) => a + b, 0);
-    const least = shown.filter(n => n > 0).length;
+    const least = Math.min(most, leastNames ?? shown.filter(n => n > 0).length);
     let counts = [...shown];
     for (let n = most; n >= least; n--) {
         counts = n === most ? [...shown] : bubbleNameCounts(sizes, n).map((c, i) => Math.min(c, shown[i]));
