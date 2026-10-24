@@ -111,6 +111,77 @@ export function bubbleOpensBelow(tab: { top: number; bottom: number }, bubbleHei
     return roomBottom - tab.bottom > above;
 }
 
+/** The gap between a card and a bubble beside it with the bubble's arrow (index.html .badge-tooltip.beside-*). */
+export const BUBBLE_SIDE_GAP = 10;
+
+/** Where a tab's bubble opens: above the tab, beside the card (right, left) or below the tab. */
+export type BubblePlace = 'above' | 'right' | 'left' | 'below';
+
+/**
+ * Where a tab's bubble opens (screen pixels, the zoom included; `room` the
+ * visible tree under the bars over it): above the tab while it fits there;
+ * else beside the card, its top edge at the card's top, on the right where
+ * it fits, else on the left; only when it fits on neither side, below the
+ * tab where the room below is larger than above (bubbleOpensBelow), else
+ * above all the same.
+ */
+export function bubblePlacement(
+    tab: { top: number; bottom: number },
+    card: { left: number; right: number; top: number },
+    bubble: { width: number; height: number },
+    room: { top: number; bottom: number; left: number; right: number },
+): BubblePlace {
+    if (tab.top - room.top >= bubble.height + BUBBLE_GAP) return 'above';
+    if (card.top >= room.top && card.top + bubble.height <= room.bottom) {
+        if (card.right + BUBBLE_SIDE_GAP + bubble.width <= room.right) return 'right';
+        if (card.left - BUBBLE_SIDE_GAP - bubble.width >= room.left) return 'left';
+    }
+    return bubbleOpensBelow(tab, bubble.height, room.top, room.bottom) ? 'below' : 'above';
+}
+
+/** The most names a tab's bubble lists; the rest is one line "and n more" (the menu and the sheet list them all). */
+export const BUBBLE_MAX_NAMES = 8;
+
+/**
+ * How many names of each group a tab's bubble lists (siblings by union,
+ * children by marriage, a family's parents and siblings): all of them up to
+ * `max` in total; above it each group in proportion to its size, every group
+ * with names keeps at least one (while there are fewer groups than `max`;
+ * else the first `max` groups one each), the sum exactly `max`. Deterministic:
+ * the largest remainder gets a free place first, the earlier group on a tie;
+ * a place taken back comes from the largest share, the later group on a tie.
+ */
+export function bubbleNameCounts(sizes: readonly number[], max = BUBBLE_MAX_NAMES): number[] {
+    const total = sizes.reduce((a, b) => a + b, 0);
+    if (total <= max) return [...sizes];
+    const groups = sizes.map((n, i) => ({ n, i })).filter(g => g.n > 0);
+    const out = sizes.map(() => 0);
+    if (groups.length >= max) {
+        for (const g of groups.slice(0, max)) out[g.i] = 1;
+        return out;
+    }
+    for (const g of groups) out[g.i] = Math.min(g.n, Math.max(1, Math.floor(max * g.n / total)));
+    let sum = out.reduce((a, b) => a + b, 0);
+    while (sum > max) {
+        let at = -1;
+        for (const g of groups) if (out[g.i] > 1 && (at < 0 || out[g.i] >= out[at])) at = g.i;
+        out[at]--;
+        sum--;
+    }
+    while (sum < max) {
+        let at = -1;
+        let best = -Infinity;
+        for (const g of groups) {
+            if (out[g.i] >= g.n) continue;
+            const rest = max * g.n / total - out[g.i];
+            if (rest > best) { best = rest; at = g.i; }
+        }
+        out[at]++;
+        sum++;
+    }
+    return out;
+}
+
 /**
  * The resting look of a top-edge tab (no bubble): its glyph, its word (kept
  * for screen readers when the card shortens its tabs) and its short letter

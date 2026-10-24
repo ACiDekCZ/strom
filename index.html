@@ -3257,6 +3257,19 @@
            (TreeRenderer.placeBubble). */
         .badge-tooltip.below { bottom: auto; top: 100%; margin-bottom: 0; margin-top: 8px; }
         .badge-tooltip.below::after { top: auto; bottom: 100%; margin-top: 0; margin-bottom: -5px; transform: rotate(225deg); }
+        /* Too little room above the tab: beside the card, its top edge at the
+           card's top, on the right (else the left), the arrow on the edge
+           toward the card; moved there from above the tab by the offset the
+           renderer measured (TreeRenderer.placeBubble, --beside-dx/-dy). */
+        .badge-tooltip.beside-right,
+        .badge-tooltip.beside-left { transform: translateX(-50%) translate(var(--beside-dx, 0px), var(--beside-dy, 0px)); }
+        .badge-tooltip.beside-right::after,
+        .badge-tooltip.beside-left::after { top: 14px; margin-top: 0; }
+        .badge-tooltip.beside-right::after { left: auto; right: 100%; margin-left: 0; margin-right: -5px; transform: rotate(135deg); }
+        .badge-tooltip.beside-left::after { left: 100%; margin-left: -5px; transform: rotate(-45deg); }
+        /* A bubble over the zoom buttons (+/−, the corner block): the tree
+           above them while it is open (TreeRenderer.liftBubble); they stay put. */
+        #tree-container.bubble-over-controls { z-index: 101; }
         @media (hover: hover) { .hidden-partners-btn:hover .badge-tooltip,
         .branch-tab:hover .badge-tooltip {
             display: block;
@@ -3455,6 +3468,13 @@
         }
         /* A group of people in a bubble (the siblings tab: full siblings, the
            half siblings of each other marriage of a parent). */
+        /* A list of names cut at the bubble's maximum: "and n more" after the names it shows. */
+        .badge-tooltip-more {
+            padding: 4px 0 2px;
+            color: var(--text-faint);
+            font-size: 12px;
+            line-height: 1.4;
+        }
         .badge-tooltip-group {
             padding-top: 5px;
             color: var(--text-faint);

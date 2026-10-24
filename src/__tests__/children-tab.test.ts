@@ -6,7 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { hiddenRelativesTabs, hiddenChildIds, newlyShownChildIds, childrenDrawnElsewhere, siblingOrderMark, childrenShownClosing, siblingsTabState, newlyShownSiblingIds, siblingGroups, unionChildIdSet, hiddenPartnerIds, childrenByUnion, childrenComeWithPartners, otherFamilyChildrenElsewhere, HiddenRelativesTab } from '../marriage-order.js';
-import { tabsForm, tabGlyph, tabLabel, tabKindClass, branchTabRestHtml, bubbleOpensBelow } from '../union-order-measure.js';
+import { tabsForm, tabGlyph, tabLabel, tabKindClass, branchTabRestHtml, bubbleOpensBelow, bubblePlacement, bubbleNameCounts, BUBBLE_MAX_NAMES } from '../union-order-measure.js';
 import { branchTabKind, branchTabsInOrder } from '../marriage-order.js';
 import { childIdsShownInPlace } from '../layout/pipeline/1-select-subgraph.js';
 import { PersonId, PartnershipId, Person, StromData, DEFAULT_LAYOUT_CONFIG } from '../types.js';
@@ -511,5 +511,70 @@ describe('where a tab\'s bubble opens', () => {
     it('stays above when the room below is no larger (it shows the more of itself there)', () => {
         expect(bubbleOpensBelow(tab(500), 600, 100, 800)).toBe(false);
         expect(bubbleOpensBelow(tab(441), 600, 100, 800)).toBe(false);
+    });
+});
+
+describe('a tab\'s bubble beside the card', () => {
+    // the tree from 100 (under the bars) to 800, 0 to 1200 wide; a card 188 × 64 with its tab on the top edge
+    const room = { top: 100, bottom: 800, left: 0, right: 1200 };
+    const cardAt = (left: number, top: number) => ({ left, right: left + 188, top });
+    const tabOn = (top: number) => ({ top: top - 9, bottom: top + 9 });
+    const bubble = { width: 240, height: 300 };
+
+    it('above the tab while it fits there, whatever the sides', () => {
+        expect(bubblePlacement(tabOn(500), cardAt(500, 500), bubble, room)).toBe('above');
+    });
+
+    it('too little room above: beside the card, on the right where it fits, else on the left', () => {
+        expect(bubblePlacement(tabOn(150), cardAt(500, 150), bubble, room)).toBe('right');
+        // the card's right edge at 1000: 1000 + 10 + 240 > 1200
+        expect(bubblePlacement(tabOn(150), cardAt(812, 150), bubble, room)).toBe('left');
+        // exactly to the edge still fits
+        expect(bubblePlacement(tabOn(150), cardAt(1200 - 250 - 188, 150), bubble, room)).toBe('right');
+    });
+
+    it('below the tab only when it fits on neither side (and the room below is larger)', () => {
+        const narrow = { ...room, right: 600 };
+        // 188-wide card in the middle of a 600-wide tree: 240 + 10 fits neither left of 206 nor right of 394
+        expect(bubblePlacement(tabOn(150), cardAt(206, 150), bubble, narrow)).toBe('below');
+        // too tall beside the card (its top at the card's top, the tree ends at 800)
+        expect(bubblePlacement(tabOn(150), cardAt(500, 150), { width: 240, height: 700 }, room)).toBe('below');
+        // a card partly under the bars: not beside it
+        expect(bubblePlacement(tabOn(95), cardAt(500, 95), bubble, room)).toBe('below');
+    });
+});
+
+describe('the names in a tab\'s bubble', () => {
+    const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
+
+    it('all of them up to the maximum (8): no "and n more"', () => {
+        expect(BUBBLE_MAX_NAMES).toBe(8);
+        expect(bubbleNameCounts([3, 5])).toEqual([3, 5]);
+        expect(bubbleNameCounts([8])).toEqual([8]);
+        expect(bubbleNameCounts([2, 0, 1])).toEqual([2, 0, 1]);
+    });
+
+    it('above it 8 in all, each group in proportion to its size', () => {
+        expect(bubbleNameCounts([12])).toEqual([8]);
+        expect(bubbleNameCounts([10, 10])).toEqual([4, 4]);
+        expect(bubbleNameCounts([12, 4])).toEqual([6, 2]);
+        expect(bubbleNameCounts([9, 0, 3])).toEqual([6, 0, 2]);
+        for (const sizes of [[5, 4], [7, 2, 1], [20, 1, 1, 1], [3, 3, 3], [1, 1, 1, 1, 1, 1, 1, 1, 1]]) {
+            const out = bubbleNameCounts(sizes);
+            expect(sum(out), String(sizes)).toBe(8);
+            out.forEach((n, i) => expect(n, String(sizes)).toBeLessThanOrEqual(sizes[i]));
+        }
+    });
+
+    it('every group with names keeps one at least', () => {
+        expect(bubbleNameCounts([20, 1, 1])).toEqual([6, 1, 1]);
+        expect(bubbleNameCounts([30, 1, 0, 2])).toEqual([6, 1, 0, 1]);
+        const out = bubbleNameCounts([40, 1, 1, 1, 1, 1, 1]);
+        expect(out.slice(1).every(n => n === 1)).toBe(true);
+        expect(sum(out)).toBe(8);
+    });
+
+    it('more groups than places: the first eight one name each', () => {
+        expect(bubbleNameCounts([2, 2, 2, 2, 2, 2, 2, 2, 2, 2])).toEqual([1, 1, 1, 1, 1, 1, 1, 1, 0, 0]);
     });
 });

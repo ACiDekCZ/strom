@@ -197,32 +197,146 @@ test('the person menu: a sibling drawn elsewhere is a row of "Already in the tre
     })).toBe(true);
 });
 
-test('at 1024 × 768 the tall "▸ siblings" bubble of a card just under the bars stays on the screen: it opens below the tab', async ({ page }) => {
+/** The lowest bar over the tree (the toolbar, the focus bar), as a function source for page.evaluate. */
+const barsBottom = (): number => Math.max(0, ...['.toolbar', '#focus-controls']
+    .map(s => document.querySelector<HTMLElement>(s))
+    .filter((e): e is HTMLElement => !!e && e.getClientRects().length > 0)
+    .map(e => e.getBoundingClientRect().bottom));
+
+/** Pan the tree so the person's card stands `below` px under the bars, `x` its left edge on the screen (unchanged when null). */
+async function cardUnderBars(page: Page, id: string, below: number, x: number | null = null): Promise<void> {
+    await page.evaluate(([fn, pid, b, left]) => {
+        const bars = new Function(`return (${fn})()`)() as number;
+        const card = document.querySelector<HTMLElement>(`#tree-canvas .person-card[data-id="${pid}"]`)!.getBoundingClientRect();
+        const zp = window.Strom.ZoomPan;
+        zp.shiftWorld(left === null ? 0 : (card.left - (left as number)) / zp.getScale(), (card.top - (bars + (b as number))) / zp.getScale());
+    }, [barsBottom.toString(), id, below, x] as const);
+}
+
+/** The person's card and the open bubble of its siblings tab, on the screen. */
+async function cardAndBubble(page: Page, id: string) {
+    return page.evaluate(([fn, pid]) => {
+        const card = document.querySelector<HTMLElement>(`#tree-canvas .person-card[data-id="${pid}"]`)!;
+        const b = card.querySelector<HTMLElement>('.siblings-tab > .badge-tooltip')!.getBoundingClientRect();
+        const c = card.getBoundingClientRect();
+        const t = document.getElementById('tree-container')!.getBoundingClientRect();
+        const bars = new Function(`return (${fn})()`)() as number;
+        return { card: { left: c.left, right: c.right, top: c.top }, bubble: { left: b.left, right: b.right, top: b.top, bottom: b.bottom }, tree: { left: t.left, right: t.right, bottom: t.bottom }, bars };
+    }, [barsBottom.toString(), id] as const);
+}
+
+test('at 1024 × 768 the tall "▸ siblings" bubble of a card just under the bars opens beside the card, its top at the card\'s top', async ({ page }) => {
     await page.setViewportSize({ width: 1024, height: 768 });
     await setup(page);
-    // the lowest bar over the tree (the toolbar, the focus bar); the card panned to 60 px under it
-    const barsBottom = (): number => Math.max(0, ...['.toolbar', '#focus-controls']
-        .map(s => document.querySelector<HTMLElement>(s))
-        .filter((e): e is HTMLElement => !!e && e.getClientRects().length > 0)
-        .map(e => e.getBoundingClientRect().bottom));
-    await page.evaluate(([fn]) => {
-        const bars = new Function(`return (${fn})()`)() as number;
-        const card = document.querySelector<HTMLElement>('#tree-canvas .person-card[data-id="focus"]')!;
-        const zp = window.Strom.ZoomPan;
-        zp.shiftWorld(0, (card.getBoundingClientRect().top - (bars + 60)) / zp.getScale());
-    }, [barsBottom.toString()] as const);
+    await cardUnderBars(page, PERSON, 60, 300);
+    const tab = siblingsTab(page, PERSON);
+    await tab.hover();
+    const bubble = tab.locator(':scope > .badge-tooltip');
+    await expect(bubble).toBeVisible();
+    await expect(bubble).toHaveClass(/\bbeside-right\b/);
+    await expect(bubble).not.toHaveClass(/\bbelow\b/);
+    const g = await cardAndBubble(page, PERSON);
+    expect(Math.abs(g.bubble.top - g.card.top)).toBeLessThanOrEqual(2);
+    expect(g.bubble.left).toBeGreaterThan(g.card.right);
+    expect(g.bubble.right).toBeLessThanOrEqual(g.tree.right);
+    expect(g.bubble.bottom).toBeLessThanOrEqual(g.tree.bottom);
+});
+
+test('beside the card on the left where the right has no room for the bubble', async ({ page }) => {
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await setup(page);
+    // the card's right edge 60 px from the tree's right edge
+    await cardUnderBars(page, PERSON, 60, 1024 - 60 - 194);
+    const tab = siblingsTab(page, PERSON);
+    await tab.hover();
+    const bubble = tab.locator(':scope > .badge-tooltip');
+    await expect(bubble).toHaveClass(/\bbeside-left\b/);
+    const g = await cardAndBubble(page, PERSON);
+    expect(Math.abs(g.bubble.top - g.card.top)).toBeLessThanOrEqual(2);
+    expect(g.bubble.right).toBeLessThan(g.card.left);
+    expect(g.bubble.left).toBeGreaterThanOrEqual(g.tree.left);
+});
+
+test('below the tab only where it fits beside the card on neither side', async ({ page }) => {
+    await page.setViewportSize({ width: 700, height: 900 });
+    await setup(page);
+    // zoomed in: the card wider than the room beside it on either side
+    for (let i = 0; i < 3; i++) await page.evaluate(() => { window.Strom.ZoomPan.zoomIn(); window.Strom.ZoomPan.finishAnimation(); });
+    await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), PERSON);
+    await cardUnderBars(page, PERSON, 60);
     const tab = siblingsTab(page, PERSON);
     await tab.hover();
     const bubble = tab.locator(':scope > .badge-tooltip');
     await expect(bubble).toBeVisible();
     await expect(bubble).toHaveClass(/\bbelow\b/);
-    const box = await page.evaluate(([fn]) => {
-        const bars = new Function(`return (${fn})()`)() as number;
-        const r = document.querySelector<HTMLElement>('#tree-canvas .person-card[data-id="focus"] .siblings-tab > .badge-tooltip')!.getBoundingClientRect();
-        return { top: r.top, bottom: r.bottom, bars, vh: window.innerHeight };
-    }, [barsBottom.toString()] as const);
-    expect(box.top).toBeGreaterThanOrEqual(box.bars);
-    expect(box.bottom).toBeLessThanOrEqual(box.vh);
+    await expect(bubble).not.toHaveClass(/beside/);
+    const g = await cardAndBubble(page, PERSON);
+    expect(g.bubble.top).toBeGreaterThanOrEqual(g.bars);
+});
+
+/**
+ * More names than a bubble lists (§17 of round 2): edge-ancestor-children
+ * (invented), an ancestor at the edge of the depth with 13 children: its
+ * bubble names 8 and says "and 4 more" (the person's own card in view), the
+ * line of what a click does stays last; the menu names them by the count.
+ */
+test('a bubble names 8 at most, then "and n more"; what the click does stays its last line', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await setupFixture(page, 'edge-ancestor-children', 'focus');
+    const person = 'f_m_f_m_f';
+    await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), person);
+    const tab = siblingsTab(page, person);
+    await tab.hover();
+    const bubble = tab.locator(':scope > .badge-tooltip');
+    await expect(bubble).toBeVisible();
+    await expect(bubble.locator('.badge-tooltip-item')).toHaveCount(8);
+    await expect(bubble.locator('.badge-tooltip-more')).toHaveText('and 4 more');
+    await expect(bubble.locator(':scope > :last-child')).toHaveClass(/badge-tooltip-action/);
+    // No scrollbar: the bubble is as tall as its content
+    expect(await bubble.evaluate(b => b.scrollHeight <= b.clientHeight + 1 && getComputedStyle(b).maxHeight === 'none')).toBe(true);
+    // The parent's "▸ children" too
+    const children = cardOf(page, 'f_m_f_m_f_m').locator('.branch-tab.children-tab > .badge-tooltip');
+    await expect(children.locator('.badge-tooltip-item')).toHaveCount(8);
+    await expect(children.locator('.badge-tooltip-more')).toHaveText('and 4 more');
+});
+
+/**
+ * A bubble over the zoom buttons (§18 of round 2): it lies over them while
+ * it is open, the buttons stay where they are; with the bubble closed they
+ * are on top again.
+ */
+test('a bubble over the zoom buttons lies above them; they do not move', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await setup(page);
+    const block = await page.locator('.control-block').boundingBox();
+    expect(block).not.toBeNull();
+    // the tab just left of the block, a little lower than its top: its bubble reaches over the block's corner
+    await page.evaluate(([pid, x, y]) => {
+        const t = document.querySelector<HTMLElement>(`#tree-canvas .person-card[data-id="${pid}"] .siblings-tab`)!.getBoundingClientRect();
+        const zp = window.Strom.ZoomPan;
+        zp.shiftWorld((t.left + t.width / 2 - (x as number)) / zp.getScale(), (t.top - (y as number)) / zp.getScale());
+    }, [PERSON, block!.x - 40, block!.y + 30] as const);
+    const tab = siblingsTab(page, PERSON);
+    await tab.hover();
+    const bubble = tab.locator(':scope > .badge-tooltip');
+    await expect(bubble).toBeVisible();
+    const b = (await bubble.boundingBox())!;
+    // a point inside both the bubble and the block
+    const px = Math.min(b.x + b.width, block!.x + block!.width) - 6;
+    const py = Math.max(b.y, block!.y) + 6;
+    expect(px).toBeGreaterThan(block!.x);
+    expect(py).toBeLessThan(Math.min(b.y + b.height, block!.y + block!.height));
+    const topAt = () => page.evaluate(([x, y]) => {
+        const el = document.elementFromPoint(x, y);
+        return el?.closest('.badge-tooltip') ? 'bubble' : el?.closest('.control-block') ? 'controls' : el?.tagName ?? null;
+    }, [px, py] as const);
+    expect(await topAt()).toBe('bubble');
+    expect(await page.locator('.control-block').boundingBox()).toEqual(block);
+    // Closed: the buttons on top again
+    await page.mouse.move(5, 500);
+    await expect(bubble).toBeHidden();
+    await expect(page.locator('#tree-container')).not.toHaveClass(/bubble-over-controls/);
+    expect(await topAt()).toBe('controls');
 });
 
 test.describe('phone 390 × 844', () => {

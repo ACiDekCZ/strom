@@ -73,7 +73,7 @@ import {
     hiddenPartnerIds, childrenByUnion, childrenComeWithPartners, otherFamilyChildrenElsewhere, marriagesInOrder,
 } from './marriage-order.js';
 import { partnerIdsShownInPlace } from './layout/pipeline/1-select-subgraph.js';
-import { measureUnionOrderPills, measureTabRows, rowKey, unionOrderPillKey, unionOrderPillPartsHtml, pillFontsPending, branchTabRestHtml, tabsForm, tabsFormClass, bubbleOpensBelow } from './union-order-measure.js';
+import { measureUnionOrderPills, measureTabRows, rowKey, unionOrderPillKey, unionOrderPillPartsHtml, pillFontsPending, branchTabRestHtml, tabsForm, tabsFormClass, bubblePlacement, BUBBLE_SIDE_GAP, bubbleNameCounts } from './union-order-measure.js';
 import { showFocusToast, hideFocusToast } from './focus-toast.js';
 import { openCardMenuFromKeyboard } from './ui/keyboard-access.js';
 import { syncDepthStepper } from './ui/depth-stepper.js';
@@ -89,6 +89,12 @@ import {
 import type { LayoutViewLayer, ViewLineFlag } from './layout/index.js';
 import { buildViewLayer } from './layout/index.js';
 import { ViewHistory, ViewHistoryEntry, ViewTransform, ViewStandIn, ShownChildrenSnapshot, emptyViewHistory, pushViewStep, stepViewHistory, sameShown, shownKey, sameTransform, historyView } from './view-history.js';
+
+/** A group of names in a tab's bubble: its own lines (a group label) before its names (nameGroupsHtml). */
+interface BubbleNameGroup {
+    pre: string;
+    items: readonly string[];
+}
 
 /**
  * One generation band's world-space geometry, consumed by the sticky HTML
@@ -438,6 +444,8 @@ class TreeRendererClass {
         const seq = ++this.renderSeq;
         // A transition of children shown in place ends with any new drawing
         this.finishChildrenTransition();
+        // The cards go: a bubble that lifted the tree over the zoom buttons with them
+        this.releaseBubble(null);
         const canvas = document.getElementById('tree-canvas');
         const svg = document.getElementById('tree-lines') as SVGSVGElement | null;
         const empty = document.getElementById('empty-state');
@@ -2236,6 +2244,11 @@ class TreeRendererClass {
      * of a parent — with a group line only when there is more than one group.
      */
     private siblingGroupsHtml(personId: PersonId, ids: readonly PersonId[]): string {
+        return this.nameGroupsHtml(this.siblingNameGroups(personId, ids));
+    }
+
+    /** The groups of siblingGroupsHtml: each group's line (none when there is one group) and its names. */
+    private siblingNameGroups(personId: PersonId, ids: readonly PersonId[]): BubbleNameGroup[] {
         const groups = siblingGroups(DataManager.getData(), personId, ids);
         const nameOf = (id: PersonId | null) => {
             const p = id ? DataManager.getPerson(id) : null;
@@ -2245,9 +2258,33 @@ class TreeRendererClass {
             const label = groups.length < 2 ? ''
                 : g.full ? strings.focus.siblingsGroupFull
                     : g.parentId ? strings.focus.siblingsGroupHalf(nameOf(g.parentId), nameOf(g.partnerId)) : '';
-            const items = g.ids.map(id => DataManager.getPerson(id)).filter((p): p is Person => p !== null).map(p => this.bubbleItemHtml(p)).join('');
-            return (label ? `<div class="badge-tooltip-group">${this.escapeHtml(label)}</div>` : '') + items;
+            return {
+                pre: label ? `<div class="badge-tooltip-group">${this.escapeHtml(label)}</div>` : '',
+                items: this.bubbleItems(g.ids),
+            };
+        });
+    }
+
+    /** The bubble lines of these persons (bubbleItemHtml), the missing left out. */
+    private bubbleItems(ids: readonly PersonId[]): string[] {
+        return ids.map(id => DataManager.getPerson(id)).filter((p): p is Person => p !== null).map(p => this.bubbleItemHtml(p));
+    }
+
+    /**
+     * The names of a bubble by group (each group's own lines before its
+     * names), at most BUBBLE_MAX_NAMES in all, each group in proportion and
+     * with one name at least (bubbleNameCounts); the rest as one line
+     * "and n more". The menu and the sheet name everyone.
+     */
+    private nameGroupsHtml(groups: readonly BubbleNameGroup[]): string {
+        const counts = bubbleNameCounts(groups.map(g => g.items.length));
+        let more = 0;
+        const html = groups.map((g, i) => {
+            more += g.items.length - counts[i];
+            if (g.items.length > 0 && counts[i] === 0) return '';
+            return g.pre + g.items.slice(0, counts[i]).join('');
         }).join('');
+        return more > 0 ? `${html}<div class="badge-tooltip-more">${this.escapeHtml(strings.focus.tabMoreNames(more))}</div>` : html;
     }
 
     /**
@@ -2316,10 +2353,10 @@ class TreeRendererClass {
      */
     private parentsTabHtml(personId: PersonId, shown: boolean, fullTitle: string, nested = false): string {
         const parentIds = DataManager.getPerson(personId)?.parentIds ?? [];
-        const items = (shown ? this.shownParentsOf(personId) : parentIds.filter(q => !this.positions.has(q)))
+        const items = this.nameGroupsHtml([{ pre: '', items: (shown ? this.shownParentsOf(personId) : parentIds.filter(q => !this.positions.has(q)))
             .map(q => DataManager.getPerson(q))
             .filter((p): p is Person => p !== null && !p.isPlaceholder)
-            .map(p => this.bubbleItemHtml(p)).join('');
+            .map(p => this.bubbleItemHtml(p)) }]);
         const aria = (shown ? strings.focus.parentsTabHideAria : strings.focus.parentsTabShowAria)(fullTitle);
         const button = `<button type="button" class="branch-tab parents-tab kind-place${shown ? ' active' : ''}" data-action="toggle-parents" aria-pressed="${shown}" aria-label="${this.escapeHtml(aria)}">`
             + branchTabRestHtml(shown ? 'parentsShown' : 'parentsHere');
@@ -2342,17 +2379,28 @@ class TreeRendererClass {
     /**
      * A tab's bubble opens above the tab; a long one (groups of siblings, a
      * family) near the top went under the bars over the tree or off the
-     * screen. It opens below the tab (.below) when the room above is too
-     * small and the room below larger: measured when it opens, the zoom
-     * included.
+     * screen. Where the room above is too small it opens beside the card
+     * (right, else left; .beside-*, its top edge at the card's top), and
+     * only where it fits on neither side below the tab (.below, when the
+     * room below is larger): measured when it opens, the zoom included
+     * (bubblePlacement). A bubble over the zoom buttons lifts the tree over
+     * them while it is open (liftBubble).
      */
     private placeBubble(tab: HTMLElement, bubble: HTMLElement): void {
-        const shown = getComputedStyle(bubble).display !== 'none';
-        if (!shown) { bubble.style.visibility = 'hidden'; bubble.style.display = 'block'; }
-        const height = bubble.getBoundingClientRect().height;
-        if (!shown) { bubble.style.display = ''; bubble.style.visibility = ''; }
-        if (height === 0) return;
+        bubble.classList.remove('below', 'beside-right', 'beside-left');
+        const measure = (): DOMRect => {
+            const shown = getComputedStyle(bubble).display !== 'none';
+            if (!shown) { bubble.style.visibility = 'hidden'; bubble.style.display = 'block'; }
+            const rect = bubble.getBoundingClientRect();
+            if (!shown) { bubble.style.display = ''; bubble.style.visibility = ''; }
+            return rect;
+        };
+        const b = measure();
+        if (b.height === 0) return;
+        // Screen pixels per CSS pixel of the bubble (the zoom, a card's hover scale)
+        const ratio = bubble.offsetWidth > 0 ? b.width / bubble.offsetWidth : 1;
         const r = tab.getBoundingClientRect();
+        const card = (tab.closest<HTMLElement>('.person-card') ?? tab).getBoundingClientRect();
         const container = document.getElementById('tree-container')?.getBoundingClientRect();
         let roomTop = container?.top ?? 0;
         const roomBottom = container?.bottom ?? window.innerHeight;
@@ -2361,11 +2409,46 @@ class TreeRendererClass {
         for (const sel of ['.toolbar', '#focus-controls', '#hide-shown-children', '#hide-shown-children-chip']) {
             const el = document.querySelector<HTMLElement>(sel);
             if (!el || el.hidden || el.getClientRects().length === 0) continue;
-            const b = el.getBoundingClientRect();
-            if (b.width === 0 || b.bottom > r.top || b.right < r.left - reach || b.left > r.right + reach) continue;
-            roomTop = Math.max(roomTop, b.bottom);
+            const bar = el.getBoundingClientRect();
+            if (bar.width === 0 || bar.bottom > r.top || bar.right < r.left - reach || bar.left > r.right + reach) continue;
+            roomTop = Math.max(roomTop, bar.bottom);
         }
-        bubble.classList.toggle('below', bubbleOpensBelow(r, height, roomTop, roomBottom));
+        const place = bubblePlacement(r, card, { width: b.width, height: b.height },
+            { top: roomTop, bottom: roomBottom, left: container?.left ?? 0, right: container?.right ?? window.innerWidth });
+        if (place === 'below') bubble.classList.add('below');
+        if (place === 'right' || place === 'left') {
+            const x = place === 'right' ? card.right + BUBBLE_SIDE_GAP : card.left - BUBBLE_SIDE_GAP - b.width;
+            bubble.style.setProperty('--beside-dx', `${(x - b.left) / ratio}px`);
+            bubble.style.setProperty('--beside-dy', `${(card.top - b.top) / ratio}px`);
+            bubble.classList.add(`beside-${place}`);
+        }
+        this.liftBubble(bubble, place === 'above' ? b : measure());
+    }
+
+    /** The bubble whose rect lies over the zoom buttons while it is open (liftBubble). */
+    private liftedBubble: HTMLElement | null = null;
+
+    /**
+     * A bubble that lies over the zoom buttons (+/−, the block in the
+     * corner): the tree goes over them while it is open (#tree-container
+     * .bubble-over-controls; the tree is otherwise under them, the bubble
+     * cannot leave the tree's layer). The buttons do not move.
+     */
+    private liftBubble(bubble: HTMLElement, rect: DOMRect): void {
+        const block = document.querySelector<HTMLElement>('.control-block');
+        const controls = block && block.getBoundingClientRect().width > 0 ? block : document.querySelector<HTMLElement>('.zoom-controls');
+        const c = controls?.getBoundingClientRect();
+        const over = !!c && c.width > 0 && rect.left < c.right && rect.right > c.left && rect.top < c.bottom && rect.bottom > c.top;
+        if (over) this.liftedBubble = bubble;
+        else if (this.liftedBubble === bubble) this.liftedBubble = null;
+        document.getElementById('tree-container')?.classList.toggle('bubble-over-controls', this.liftedBubble !== null);
+    }
+
+    /** The bubble closed (or its card is gone): the tree back under the zoom buttons. */
+    private releaseBubble(bubble: HTMLElement | null): void {
+        if (bubble !== null && this.liftedBubble !== bubble) return;
+        this.liftedBubble = null;
+        document.getElementById('tree-container')?.classList.remove('bubble-over-controls');
     }
 
     private bindChildrenBubble(personId: PersonId, tab: HTMLElement, bubble: HTMLElement,
@@ -2391,6 +2474,7 @@ class TreeRendererClass {
         const close = (): void => {
             if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; }
             bubble.classList.remove('open');
+            this.releaseBubble(bubble);
             releaseGlow?.();
             releaseGlow = null;
         };
@@ -3815,6 +3899,8 @@ class TreeRendererClass {
                 if (!tip) return;
                 host.addEventListener('mouseenter', () => this.placeBubble(host, tip));
                 host.addEventListener('focus', () => this.placeBubble(host, tip));
+                host.addEventListener('mouseleave', () => this.releaseBubble(tip));
+                host.addEventListener('blur', () => this.releaseBubble(tip));
             });
 
             // The children tab shows (hides) the children in place
@@ -5109,7 +5195,7 @@ class TreeRendererClass {
             .filter((p): p is Person => p !== null);
         const header = kind === 'linkParents' ? strings.focus.linkParentsTooltip
             : kind === 'linkChild' ? strings.focus.linkChildTooltip : strings.focus.linkChildrenTooltip;
-        const items = people.map(p => this.bubbleItemHtml(p)).join('');
+        const items = this.nameGroupsHtml([{ pre: '', items: people.map(p => this.bubbleItemHtml(p)) }]);
         const self = DataManager.getPerson(id);
         const name = self ? shownNameFull(self, '?') : '?';
         const label = (kind === 'linkParents' ? strings.focus.linkParentsAria
@@ -5126,17 +5212,13 @@ class TreeRendererClass {
      * the plain list.
      */
     private childrenByUnionHtml(personId: PersonId, ids: readonly PersonId[]): string {
-        const itemsOf = (list: readonly PersonId[]) => list
-            .map(cid => DataManager.getPerson(cid))
-            .filter((c): c is Person => c !== null)
-            .map(c => this.bubbleItemHtml(c)).join('');
         const groups = childrenByUnion(DataManager.getData(), personId, ids);
-        if (groups.length < 2) return itemsOf(ids);
-        return groups.map(g => {
+        if (groups.length < 2) return this.nameGroupsHtml([{ pre: '', items: this.bubbleItems(ids) }]);
+        return this.nameGroupsHtml(groups.map(g => {
             const partner = g.partnerId ? DataManager.getPerson(g.partnerId) : null;
             const label = g.number > 0 ? strings.focus.childrenGroupUnion(g.number, partner ? shownName(partner, '?') : '?') : '';
-            return (label ? `<div class="badge-tooltip-group">${this.escapeHtml(label)}</div>` : '') + itemsOf(g.ids);
-        }).join('');
+            return { pre: label ? `<div class="badge-tooltip-group">${this.escapeHtml(label)}</div>` : '', items: this.bubbleItems(g.ids) };
+        }));
     }
 
     /**
@@ -5148,9 +5230,8 @@ class TreeRendererClass {
     private partnersPillHtml(id: PersonId, pill: { shown: boolean; ids: PersonId[] }, fullTitle: string, nested = false): string {
         const data = DataManager.getData();
         const order = marriagesInOrder(data, id);
-        const items = pill.ids.map(q => {
-            const partner = DataManager.getPerson(q);
-            if (!partner) return '';
+        const items = this.nameGroupsHtml([{ pre: '', items: pill.ids.filter(q => DataManager.getPerson(q) !== null).map(q => {
+            const partner = DataManager.getPerson(q)!;
             const uid = order.find(u => {
                 const union = data.partnerships[u];
                 return !!union && (union.person1Id === q || union.person2Id === q) && union.childIds.length === 0;
@@ -5160,7 +5241,7 @@ class TreeRendererClass {
             const marriage = uid ? `${strings.focus.unionOrdinal(order.indexOf(uid) + 1)} ∞${year ? ` ${year}` : ''}` : '';
             return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(shownName(partner, '?'))}</span>`
                 + `${marriage ? `<span class="badge-tooltip-detail"> ${this.escapeHtml(marriage)}</span>` : ''}</div>`;
-        }).join('');
+        }) }]);
         const header = pill.shown ? strings.focus.partnersShownTooltip : strings.focus.hiddenPartnersTooltip;
         const hint = pill.shown ? strings.focus.placeHideHint : strings.focus.placeShowHint;
         const aria = (pill.shown ? strings.focus.partnersTabHideAria : strings.focus.partnersTabShowAria)(fullTitle);
@@ -5191,14 +5272,21 @@ class TreeRendererClass {
         const siblingIds = DataManager.getSiblings(personId)
             .filter(s => unionChildIds.has(s.id) && !this.positions.has(s.id))
             .map(s => s.id);
-        const parentsHtml = parents.map(p => this.bubbleItemHtml(p)).join('');
+        const parentItems = parents.map(p => this.bubbleItemHtml(p));
         let body: string;
         if (kind === 'family') {
+            // Parents and siblings: one list of names, cut at the maximum as a whole
+            const siblingGroupsOf = this.siblingNameGroups(personId, siblingIds);
+            const siblingsLine = `<div class="badge-tooltip-group">${strings.focus.hiddenSiblingsTooltip}</div>`;
             body = `<div class="badge-tooltip-header">${strings.focus.familyTooltip}</div>`
-                + `<div class="badge-tooltip-group">${strings.focus.hiddenParentsTooltip}</div>${parentsHtml}`
-                + `<div class="badge-tooltip-group">${strings.focus.hiddenSiblingsTooltip}</div>${this.siblingGroupsHtml(personId, siblingIds)}`;
+                + this.nameGroupsHtml([
+                    { pre: `<div class="badge-tooltip-group">${strings.focus.hiddenParentsTooltip}</div>`, items: parentItems },
+                    ...(siblingGroupsOf.length > 0
+                        ? siblingGroupsOf.map((g, i) => (i === 0 ? { ...g, pre: siblingsLine + g.pre } : g))
+                        : [{ pre: siblingsLine, items: [] }]),
+                ]);
         } else if (kind === 'parents') {
-            body = `<div class="badge-tooltip-header">${strings.focus.hiddenParentsTooltip}</div>${parentsHtml}`;
+            body = `<div class="badge-tooltip-header">${strings.focus.hiddenParentsTooltip}</div>${this.nameGroupsHtml([{ pre: '', items: parentItems }])}`;
         } else {
             body = `<div class="badge-tooltip-header">${strings.focus.hiddenSiblingsTooltip}</div>${this.siblingGroupsHtml(personId, siblingIds)}`;
         }
