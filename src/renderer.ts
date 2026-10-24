@@ -1616,7 +1616,8 @@ class TreeRendererClass {
      * The "▾ children" bubble beside its tab: opens while a mouse is over the
      * tab or the bubble (the way between them closes it after 150 ms, so the
      * pointer reaches the rows) and while the tab or a row has the keyboard
-     * focus; Escape closes it and gives the focus back to the tab. While it
+     * focus; while it is open the card keeps its hover look (index.html), so
+     * the bubble stands still the whole way between the tab and its rows; Escape closes it and gives the focus back to the tab. While it
      * is open the person's children in view glow (§6). A row glides the view
      * to the child drawn elsewhere (§4).
      */
@@ -1627,7 +1628,14 @@ class TreeRendererClass {
         const open = (): void => {
             if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; }
             if (bubble.classList.contains('open')) return;
-            bubble.style.left = `${tab.offsetLeft + tab.offsetWidth / 2}px`;
+            // Measured from the edge row's right side: the row is anchored there
+            // and grows to the left (the card's hover shows the relations pill
+            // left of the tabs), so the bubble stays over the tab whether or not
+            // the card is under the pointer — a bubble that moved with the hover
+            // shows and hides under a still pointer at its edge (a hover loop).
+            const row = tab.offsetParent as HTMLElement | null;
+            const fromRight = (row?.clientWidth ?? 0) - (tab.offsetLeft + tab.offsetWidth / 2);
+            bubble.style.left = row ? `calc(100% - ${fromRight}px)` : `${tab.offsetLeft + tab.offsetWidth / 2}px`;
             bubble.classList.add('open');
             const kids = (DataManager.getPerson(personId)?.childIds ?? []).filter(cid => this.positions.has(cid));
             releaseGlow = this.highlightCards(kids);

@@ -413,6 +413,123 @@ test('a child drawn elsewhere from a view zoomed far out: the row lands on the c
     await expectElsewhereLanding(page);
 });
 
+/**
+ * A pointer that stays still while the page under it changes: Chrome hit-tests
+ * it again after every layout, so a bubble that moves when its card loses the
+ * hover shows and hides in a loop (Milan, beta.6). The headless browser
+ * hit-tests only on input, so moves to the same point every 20 ms stand in for
+ * it. Returns how often, after the first `settleMs`, the bubble (or the tab's
+ * own bubble) changed: opened or closed, moved, or came under the pointer or
+ * left it.
+ */
+async function restingChanges(page: Page, cardId: string, bubbleSel: string, x: number, y: number, settleMs = 300, countMs = 900): Promise<number> {
+    await page.evaluate(([id, sel, px, py]) => {
+        const w = window as unknown as { __rest: { n: number; on: boolean; stop: boolean } };
+        w.__rest = { n: 0, on: false, stop: false };
+        const card = document.querySelector<HTMLElement>(`#tree-canvas .person-card[data-id="${id}"]`)!;
+        const bubble = card.querySelector<HTMLElement>(sel as string)!;
+        const state = (): string => {
+            const shown = getComputedStyle(bubble).display !== 'none';
+            const r = bubble.getBoundingClientRect();
+            const under = document.elementFromPoint(px as number, py as number);
+            return `${shown}|${Math.round(r.left)}|${Math.round(r.top)}|${!!under && bubble.contains(under)}`;
+        };
+        let last = state();
+        const tick = (): void => {
+            const s = state();
+            if (s !== last && w.__rest.on) w.__rest.n++;
+            last = s;
+            if (!w.__rest.stop) requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+    }, [cardId, bubbleSel, x, y] as const);
+    const t0 = Date.now();
+    let counting = false;
+    while (Date.now() - t0 < settleMs + countMs) {
+        if (!counting && Date.now() - t0 >= settleMs) {
+            counting = true;
+            await page.evaluate(() => { (window as unknown as { __rest: { on: boolean } }).__rest.on = true; });
+        }
+        await page.mouse.move(x, y);
+        await page.waitForTimeout(20);
+    }
+    return page.evaluate(() => {
+        const r = (window as unknown as { __rest: { n: number; stop: boolean } }).__rest;
+        r.stop = true;
+        return r.n;
+    });
+}
+
+test.describe('a still pointer by a tab or its bubble (mouse)', () => {
+    test('"▾ children": at the bubble\'s edge, in the way to the tab and on the tab the bubble neither blinks nor moves', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await setup(page);
+        await tabOf(page, ANCESTOR).click();
+        await expect(cardOf(page, SIBLINGS[0])).toBeVisible();
+        await page.mouse.move(5, 500);
+        const tab = tabOf(page, ANCESTOR);
+        const bubble = cardOf(page, ANCESTOR).locator('.children-bubble');
+        const t = (await tab.boundingBox())!;
+        const cx = t.x + t.width / 2;
+        await tab.hover();
+        await expect(bubble).toBeVisible();
+        const b = (await bubble.boundingBox())!;
+        // The arrow points at the tab's middle
+        expect(Math.abs(b.x + b.width / 2 - cx)).toBeLessThanOrEqual(2);
+        // Just inside and just outside the bubble's edges (sides at the header, the bottom by the tab)
+        const spots: [string, number, number][] = [
+            ['right edge, inside', b.x + b.width - 2, b.y + 12],
+            ['right edge, outside', b.x + b.width + 4, b.y + 12],
+            ['right edge, further out', b.x + b.width + 12, b.y + 12],
+            ['left edge, inside', b.x + 2, b.y + 12],
+            ['left edge, outside', b.x - 4, b.y + 12],
+            ['bottom edge, inside', b.x + 20, b.y + b.height - 2],
+            ['bottom edge, outside', b.x + 20, b.y + b.height + 1],
+            ['the way to the tab', cx, (b.y + b.height + t.y) / 2],
+            ['the tab', cx, t.y + t.height / 2],
+        ];
+        const moved: string[] = [];
+        for (const [name, x, y] of spots) {
+            await page.mouse.move(5, 500);
+            await page.waitForTimeout(250);
+            await tab.hover();
+            await expect(bubble).toBeVisible();
+            await page.mouse.move(cx, b.y + b.height / 2, { steps: 4 });
+            await page.mouse.move(x, y, { steps: 4 });
+            const n = await restingChanges(page, ANCESTOR, '.children-bubble', x, y);
+            if (n > 0) moved.push(`${name}: ${n}`);
+        }
+        expect(moved).toEqual([]);
+        // Out of both the bubble closes; from the tab into the bubble it stays
+        await page.mouse.move(5, 500);
+        await expect(bubble).toBeHidden();
+        await tab.hover();
+        await page.mouse.move(cx, b.y + b.height / 2, { steps: 6 });
+        await expect(bubble).toBeVisible();
+    });
+
+    test('the tab\'s own bubble ("▸ children"): a pointer on the tab\'s lower edge does not make it blink', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await setup(page);
+        const tab = tabOf(page, ANCESTOR);
+        await page.mouse.move(5, 500);
+        // The card is under the pointer (it grows a little): the tab as it stands then
+        await cardOf(page, ANCESTOR).hover({ position: { x: 40, y: 40 } });
+        const t = (await tab.boundingBox())!;
+        const cx = t.x + t.width / 2;
+        const blinks: string[] = [];
+        for (let dy = -3; dy <= 0.5; dy += 0.5) {
+            const y = t.y + t.height + dy;
+            await page.mouse.move(cx, t.y + t.height + 20, { steps: 2 });
+            await page.waitForTimeout(100);
+            await page.mouse.move(cx, y, { steps: 3 });
+            const n = await restingChanges(page, ANCESTOR, '.children-tab .badge-tooltip', cx, y, 200, 600);
+            if (n > 0) blinks.push(`${dy}: ${n}`);
+        }
+        expect(blinks).toEqual([]);
+    });
+});
+
 test('the sibling-order pill: on the direct-line card beside its siblings, clear of the card\'s other edge pills', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await setup(page);

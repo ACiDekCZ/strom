@@ -1830,6 +1830,9 @@
            DOM and would cover the bubble of a tab below it). */
         .card-edge:focus-within { z-index: 8; }
         @media (hover: hover) { .card-edge:hover { z-index: 8; } }
+        /* The "▾ children" bubble stays above the other edges also on the way
+           from its tab to its rows (src/renderer.ts bindChildrenBubble). */
+        .card-edge:has(> .children-bubble.open) { z-index: 8; }
         .edge-top-left    { top: -9px; left: 12px; }
         .edge-top-right    { top: -9px; right: 12px; }
         /* The marriage-order pill above the tabs (its left set by the renderer). */
@@ -3068,6 +3071,20 @@
         .hidden-partners-btn:hover,
         .hidden-families-btn:hover {
             transform: translateY(-1px);
+        }
+        /* The lifted pill keeps the row it left under the pointer: without it
+           a pointer still on the pill's lower edge lost the hover, the pill
+           dropped back under it, and its bubble blinked in a loop. (The lifted
+           pill is the containing block of its pseudo-element.) */
+        .branch-tab:hover::after,
+        .hidden-partners-btn:hover::after,
+        .hidden-families-btn:hover::after {
+            content: '';
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 100%;
+            height: 2px;
         } }
         .branch-tab .pill-glyph,
         .hidden-partners-btn .pill-glyph,
@@ -6806,6 +6823,16 @@
         @media (hover: hover) { .person-card.focused:hover {
             transform: scale(1.07);
         } }
+        /* While the "▾ children" bubble is open its card keeps the hover look
+           (also on the way between the tab and the bubble, where the card is
+           not under the pointer): a card that shrank back moved the bubble
+           under a pointer resting at its edge, the card grew again and moved
+           it away — the bubble blinked in a loop (src/renderer.ts
+           bindChildrenBubble). */
+        @media (hover: hover) {
+            .person-card:has(.children-bubble.open) { transform: scale(1.03); z-index: 100; }
+            .person-card.focused:has(.children-bubble.open) { transform: scale(1.07); }
+        }
         /* The focused card no longer wears a "FOCUS" pill (the fact is already
            carried by the green border, the focus shadow, and the top-left focus
            chip). Instead it turns green where identity lives: the avatar ring
