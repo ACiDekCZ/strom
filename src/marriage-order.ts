@@ -230,16 +230,104 @@ export function unionOrderBadges(
 /**
  * A hidden-relatives tab on a card's top edge ("◂ parents", "◆ siblings",
  * "▸ children"); "▾ children" (childrenShown) is the children tab while the
- * view shows the person's children in place.
+ * view shows the person's children in place. The siblings of a person with
+ * a parent in view are shown in place as well, as the children of the
+ * parents ("▸ siblings", siblingsHere; "▾ siblings", siblingsShown); without
+ * a parent in view the siblings tab focuses on the person (siblings).
  */
-export type HiddenRelativesTab = 'parents' | 'siblings' | 'children' | 'childrenShown';
+export type HiddenRelativesTab = 'parents' | 'siblings' | 'siblingsHere' | 'siblingsShown' | 'children' | 'childrenShown';
+
+/** What the view tells hiddenRelativesTabs about the children shown in place (the siblings tab). */
+export interface ShownChildrenContext {
+    /** Per person whose children the view shows in place: their children it drew before the click. */
+    visibleBefore?: (parentId: PersonId) => ReadonlySet<PersonId> | undefined;
+    /**
+     * Whether a card in view hangs on a drawn parent line (a child drawn
+     * elsewhere in the tree, say as a wife in another branch, does not).
+     * Default: every card in view does.
+     */
+    hangsOnLine?: (id: PersonId) => boolean;
+}
+
+/** The person's siblings as the layout counts them: the other children of the parents that are a union's children. */
+function siblingIdsOf(data: StromData, personId: PersonId, unionChildIds: ReadonlySet<PersonId>): Set<PersonId> {
+    const out = new Set<PersonId>();
+    for (const parentId of data.persons[personId]?.parentIds ?? []) {
+        for (const childId of data.persons[parentId]?.childIds ?? []) {
+            if (childId !== personId && data.persons[childId] && unionChildIds.has(childId)) out.add(childId);
+        }
+    }
+    return out;
+}
+
+/** The siblings tab of a card and what it does (siblingsTabState). */
+export interface SiblingsTabState {
+    kind: 'siblings' | 'siblingsHere' | 'siblingsShown';
+    /** siblingsHere: the parents in view a click shows the children of (one step), in the person's order of parents. */
+    parents: PersonId[];
+    /** siblingsHere: the siblings out of view that click draws (hiddenChildIds of those parents), in that order. */
+    promised: PersonId[];
+}
+
+/**
+ * The siblings tab of a card, or null for none:
+ *
+ * - no parent in view: "◆ siblings" (a focus on the person) when the person
+ *   has siblings and none of them is in view (siblings count only as
+ *   children of a union, as the layout does);
+ * - a parent in view: the siblings are the children of the parents, shown
+ *   in place by the parents' children ("▸ children" of each, one step).
+ *   No tab while a sibling stood in view before (hanging on the parents'
+ *   line: the parents' family is drawn, the focus's and its parents'
+ *   siblings); "▸ siblings" (siblingsHere) while a parent in view has
+ *   children out of view (a sibling drawn elsewhere is never promised);
+ *   "▾ siblings" (siblingsShown) once the parents show them all — also
+ *   after a click on a parent's "▸ children".
+ *
+ * `childrenUnshowable`: persons whose children a click drew none of (the
+ * view's safety net): never shown again by the siblings tab either.
+ */
+export function siblingsTabState(
+    data: StromData,
+    personId: PersonId,
+    inView: (id: PersonId) => boolean,
+    unionChildIds: ReadonlySet<PersonId>,
+    childrenShown: ReadonlySet<PersonId> = new Set(),
+    childrenUnshowable: ReadonlySet<PersonId> = new Set(),
+    ctx: ShownChildrenContext = {}
+): SiblingsTabState | null {
+    const person = data.persons[personId];
+    if (!person) return null;
+    const siblings = siblingIdsOf(data, personId, unionChildIds);
+    if (siblings.size === 0) return null;
+    const parentsInView = person.parentIds.filter(inView);
+    if (parentsInView.length === 0) {
+        return [...siblings].some(inView) ? null : { kind: 'siblings', parents: [], promised: [] };
+    }
+    const hangs = ctx.hangsOnLine ?? (() => true);
+    // Shown by a parent's click: in view now, not drawn before it
+    const newly = (s: PersonId) => parentsInView.some(q => childrenShown.has(q)
+        && (data.persons[q]?.childIds ?? []).includes(s) && !(ctx.visibleBefore?.(q)?.has(s) ?? false));
+    if ([...siblings].some(s => inView(s) && hangs(s) && !newly(s))) return null;
+    const parents = parentsInView.filter(q => !childrenShown.has(q) && !childrenUnshowable.has(q)
+        && hiddenChildIds(data, q, inView).length > 0);
+    const promised: PersonId[] = [];
+    for (const q of parents) {
+        for (const c of hiddenChildIds(data, q, inView)) if (c !== personId && !promised.includes(c)) promised.push(c);
+    }
+    if (promised.length > 0) return { kind: 'siblingsHere', parents, promised };
+    if (parentsInView.some(q => childrenShown.has(q)) && [...siblings].some(s => inView(s) && newly(s))) {
+        return { kind: 'siblingsShown', parents: [], promised: [] };
+    }
+    return null;
+}
 
 /**
  * The hidden-relatives tabs of a card, in the order the card shows them:
- * parents and siblings get one when the person has relatives there and none
- * of them is in view (siblings count only as children of a union, as the
- * layout does). Children get one when any child (not a "?" stand-in) is out
- * of view, or as "childrenShown" while `childrenShown` holds the person.
+ * parents get one when the person has parents and none of them is in view;
+ * siblings as siblingsTabState decides (`ctx`: the children shown in place).
+ * Children get one when any child (not a "?" stand-in) is out of view, or
+ * as "childrenShown" while `childrenShown` holds the person.
  * `childrenUnshowable`: persons whose children a click drew none of (the
  * view's safety net, TreeRenderer.toggleChildrenShown): no children tab.
  */
@@ -249,21 +337,85 @@ export function hiddenRelativesTabs(
     inView: (id: PersonId) => boolean,
     unionChildIds: ReadonlySet<PersonId>,
     childrenShown: ReadonlySet<PersonId> = new Set(),
-    childrenUnshowable: ReadonlySet<PersonId> = new Set()
+    childrenUnshowable: ReadonlySet<PersonId> = new Set(),
+    ctx: ShownChildrenContext = {}
 ): HiddenRelativesTab[] {
     const person = data.persons[personId];
     if (!person) return [];
     const out: HiddenRelativesTab[] = [];
     if (person.parentIds.length > 0 && !person.parentIds.some(inView)) out.push('parents');
-    const siblings = new Set<PersonId>();
-    for (const parentId of person.parentIds) {
-        for (const childId of data.persons[parentId]?.childIds ?? []) {
-            if (childId !== personId && data.persons[childId] && unionChildIds.has(childId)) siblings.add(childId);
-        }
-    }
-    if (siblings.size > 0 && ![...siblings].some(inView)) out.push('siblings');
+    const siblings = siblingsTabState(data, personId, inView, unionChildIds, childrenShown, childrenUnshowable, ctx);
+    if (siblings) out.push(siblings.kind);
     if (childrenShown.has(personId)) out.push('childrenShown');
     else if (!childrenUnshowable.has(personId) && hiddenChildIds(data, personId, inView).length > 0) out.push('children');
+    return out;
+}
+
+/**
+ * The siblings the parents' click brought into view (the "▾ siblings"
+ * bubble): the children each parent in `childrenShown` shows that it did not
+ * draw before (newlyShownChildIds), the person left out, each once.
+ */
+export function newlyShownSiblingIds(
+    data: StromData,
+    personId: PersonId,
+    inView: (id: PersonId) => boolean,
+    childrenShown: ReadonlySet<PersonId>,
+    visibleBefore: (parentId: PersonId) => ReadonlySet<PersonId> | undefined
+): PersonId[] {
+    const out: PersonId[] = [];
+    for (const q of data.persons[personId]?.parentIds ?? []) {
+        if (!childrenShown.has(q)) continue;
+        for (const c of newlyShownChildIds(data, q, inView, visibleBefore(q) ?? new Set())) {
+            if (c !== personId && !out.includes(c)) out.push(c);
+        }
+    }
+    return out;
+}
+
+/**
+ * One group of siblings in a bubble: the full siblings (the person's own
+ * union of the parents), or the half siblings of one parent's other union
+ * (`parentId` with `partnerId`; null for a "?" stand-in or none).
+ */
+export interface SiblingGroup {
+    full: boolean;
+    parentId: PersonId | null;
+    partnerId: PersonId | null;
+    ids: PersonId[];
+}
+
+/**
+ * `ids` (siblings of the person) by the union they were born to: the full
+ * siblings first, then for each parent (the person's order of parents) the
+ * children of the parent's other unions in the order of the marriages.
+ * Empty groups are left out; siblings of no such union close the list in a
+ * group of their own (no parent).
+ */
+export function siblingGroups(data: StromData, personId: PersonId, ids: readonly PersonId[]): SiblingGroup[] {
+    const person = data.persons[personId];
+    if (!person) return [];
+    const left = new Set(ids);
+    const take = (kids: readonly PersonId[]): PersonId[] => ids.filter(id => kids.includes(id) && left.delete(id));
+    const own = Object.values(data.partnerships).find(u => u.childIds.includes(personId));
+    const out: SiblingGroup[] = [];
+    const full = take(own?.childIds ?? []);
+    if (full.length) out.push({ full: true, parentId: null, partnerId: null, ids: full });
+    for (const q of person.parentIds) {
+        const ordered = marriagesInOrder(data, q);
+        const unions = [...ordered, ...(data.persons[q]?.partnerships ?? []).filter(u => !ordered.includes(u))];
+        for (const uid of unions) {
+            const u = data.partnerships[uid];
+            if (!u || uid === own?.id) continue;
+            const kids = take(u.childIds);
+            if (kids.length === 0) continue;
+            const other = u.person1Id === q ? u.person2Id : u.person1Id;
+            const partnerId = other && data.persons[other] && !data.persons[other].isPlaceholder ? other : null;
+            out.push({ full: false, parentId: q, partnerId, ids: kids });
+        }
+    }
+    const rest = ids.filter(id => left.has(id));
+    if (rest.length) out.push({ full: false, parentId: null, partnerId: null, ids: rest });
     return out;
 }
 

@@ -33,6 +33,8 @@ export interface ShownChildrenSnapshot {
     readonly broughtIn: ReadonlySet<PersonId>;
     readonly zoom?: { readonly before: number; readonly after: number };
     readonly anchorScreen?: { readonly x: number; readonly y: number };
+    /** Shown by the siblings tab of this person (one step with the person's other parent in view). */
+    readonly siblingsOf?: PersonId;
 }
 
 /**
@@ -91,7 +93,7 @@ export function liveEntry(entry: ViewHistoryEntry, exists: (id: PersonId) => boo
 
 /** Whether two entries show the same children, in the same order. */
 export function sameShown(a: readonly ShownChildrenSnapshot[], b: readonly ShownChildrenSnapshot[]): boolean {
-    return a.length === b.length && a.every((s, i) => s.id === b[i].id);
+    return a.length === b.length && a.every((s, i) => s.id === b[i].id && s.siblingsOf === b[i].siblingsOf);
 }
 
 export function sameTransform(a: ViewTransform, b: ViewTransform): boolean {

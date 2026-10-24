@@ -97,10 +97,10 @@ async function expectCardTaps(page: Page, id: string, pills: string[], scale: nu
 for (const scale of [0.3, 0.5, 1]) {
     test.describe(`zoomed to ${scale}`, () => {
         test('an ancestor with children shown: a tap on the card opens its sheet, in the middle and beside its tabs', async ({ page }) => {
-            // comprehensive: the father of the focus's parent, "◆ siblings" and "▾ children"
+            // comprehensive: the father of the focus's parent, "▸ siblings" (his parents in view) and "▾ children"
             await setupFixture(page, 'comprehensive', 'grandchild_1');
             await showChildren(page, 'father');
-            await expectCardTaps(page, 'father', ['.branch-tab[data-action="focus-sibling"]', '.branch-tab.children-tab.active'], scale);
+            await expectCardTaps(page, 'father', ['.branch-tab.siblings-tab', '.branch-tab.children-tab.active'], scale);
             // A shown child with hidden partners and families on its bottom edge
             await expectCardTaps(page, 'sibling_1', ['.hidden-partners-btn', '.hidden-families-btn'], scale);
         });
@@ -141,10 +141,10 @@ test.describe('at 1 the pills work by touch', () => {
             await tapPill(page, cardOf(page, 'father').locator('.branch-tab.children-tab'), where);
             await expect.poll(() => page.evaluate(() => window.Strom.TreeRenderer.shownChildrenCount())).toBe(0);
             await expect(page.locator('.bottom-sheet-person')).toHaveCount(0);
-            // "◆ siblings" sets the focus on the father
+            // "▸ siblings" shows the father's siblings in place (his parents' children, one step)
             await zoomTo(page, 'father', 1);
-            await tapPill(page, cardOf(page, 'father').locator('.branch-tab[data-action="focus-sibling"]'), where);
-            await expect.poll(() => page.evaluate(() => window.Strom.TreeRenderer.getFocusPersonId())).toBe('father');
+            await tapPill(page, cardOf(page, 'father').locator('.branch-tab.siblings-tab'), where);
+            await expect.poll(() => page.evaluate(() => window.Strom.TreeRenderer.isSiblingsShown('father' as never))).toBe(true);
             await expect(page.locator('.bottom-sheet-person')).toHaveCount(0);
 
             // "child ↗" jumps to the child drawn elsewhere: the view moves, no sheet

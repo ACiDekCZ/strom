@@ -69,6 +69,7 @@ import {
     unionOrderBadges, UnionOrderBadge, hiddenRelativesTabs, hiddenChildIds, newlyShownChildIds, BranchTab, lineLinksOf, lineLinkTabs, LineLinks, placeUnionOrderPill, PillPlacement, REL_LINK_ICON_WIDTH,
     viewLineSegments, segmentsNearCard, EDGE_INSET, PillLabel, pillLabelForms, pillLabelWidths, unionSummaries,
     childrenDrawnElsewhere, siblingOrderMark, SiblingOrderMark, childrenShownClosing,
+    siblingsTabState, SiblingsTabState, newlyShownSiblingIds, siblingGroups, ShownChildrenContext, HiddenRelativesTab, unionChildIdSet,
 } from './marriage-order.js';
 import { measureUnionOrderPills, measureTabRows, rowKey, unionOrderPillKey, unionOrderPillPartsHtml, pillFontsPending, branchTabRestHtml, tabsGlyphsOnly } from './union-order-measure.js';
 import { openCardMenuFromKeyboard } from './ui/keyboard-access.js';
@@ -319,6 +320,13 @@ class TreeRendererClass {
     private childrenUnshowable = new Set<PersonId>();
     /** Per shown person: the cards their click brought into view (closing them closes the expansions among those). */
     private childrenBroughtIn = new Map<PersonId, ReadonlySet<PersonId>>();
+    /**
+     * Siblings shown in place (the card's siblings tab, §1): the person whose
+     * tab was clicked → the parents whose children that click showed (one
+     * step: they are in childrenShownIds and close together). Only for the
+     * tab's look and the step; the layout knows the parents alone.
+     */
+    private siblingsShownFor = new Map<PersonId, PersonId[]>();
     /**
      * While any children are shown: how far each card has moved on the screen
      * since the first expansion, in world units (a click keeps its own card
@@ -1101,9 +1109,68 @@ class TreeRendererClass {
         this.childrenVisibleBefore.clear();
         this.childrenUnshowable.clear();
         this.childrenBroughtIn.clear();
+        this.siblingsShownFor.clear();
         this.childrenShownDrift.clear();
         this.childrenZoom.clear();
         this.childrenAnchorScreen.clear();
+    }
+
+    /** What the tabs need to know about the children shown in place (hiddenRelativesTabs). */
+    private shownChildrenContext(): ShownChildrenContext {
+        const drops = this.dropIds();
+        return { visibleBefore: pid => this.childrenVisibleBefore.get(pid), hangsOnLine: id => drops.has(id) };
+    }
+
+    /** The hidden-relatives tabs of a drawn card in this view (hiddenRelativesTabs). */
+    private relativesTabs(id: PersonId, unionChildIds: ReadonlySet<PersonId>): HiddenRelativesTab[] {
+        return hiddenRelativesTabs(DataManager.getData(), id, pid => this.positions.has(pid), unionChildIds,
+            this.childrenShownSet(), this.childrenUnshowable, this.shownChildrenContext());
+    }
+
+    /** The siblings tab of a drawn card in the family view (siblingsTabState), or null. */
+    private siblingsTab(personId: PersonId): SiblingsTabState | null {
+        if (this.viewMode !== 'family' || !this.positions.has(personId)) return null;
+        const data = DataManager.getData();
+        return siblingsTabState(data, personId, id => this.positions.has(id), unionChildIdSet(data),
+            this.childrenShownSet(), this.childrenUnshowable, this.shownChildrenContext());
+    }
+
+    /** Whether the family view shows the person's siblings in place: all of them, through the parents' children ("▾ siblings"). */
+    isSiblingsShown(personId: PersonId): boolean {
+        return this.siblingsTab(personId)?.kind === 'siblingsShown';
+    }
+
+    /** Whether the person's card offers the siblings tab in place (a parent in view): "▸ siblings" or "▾ siblings". */
+    canToggleSiblings(personId: PersonId): boolean {
+        const kind = this.siblingsTab(personId)?.kind;
+        return kind === 'siblingsHere' || kind === 'siblingsShown';
+    }
+
+    /** How many siblings "▸ siblings" would show in place (0: none to show). */
+    siblingsToShowCount(personId: PersonId): number {
+        const tab = this.siblingsTab(personId);
+        return tab?.kind === 'siblingsHere' ? tab.promised.length : 0;
+    }
+
+    /** The parents in view whose children show the person's siblings in place (the "▾ siblings" bubble and sheet). */
+    siblingsShownParents(personId: PersonId): PersonId[] {
+        return (DataManager.getPerson(personId)?.parentIds ?? []).filter(q => this.childrenShownIds.includes(q));
+    }
+
+    /**
+     * Show the person's siblings in place — the children of the parents in
+     * view, of every marriage, in one step (the parents' "▸ children"; the
+     * person's card keeps its place) — or hide them again: the parents'
+     * children shown, whichever click showed them.
+     */
+    async toggleSiblingsShown(personId: PersonId): Promise<void> {
+        const tab = this.siblingsTab(personId);
+        if (tab?.kind === 'siblingsShown') {
+            await this.closeChildrenShown(this.siblingsShownParents(personId), personId);
+            return;
+        }
+        if (tab?.kind !== 'siblingsHere') return;
+        await this.showChildrenOf(tab.parents, personId, personId);
     }
 
     /** Whether the family view shows the person's children in place (the children tab). */
@@ -1137,39 +1204,104 @@ class TreeRendererClass {
             await this.closeChildrenShown([personId], personId);
             return;
         }
+        await this.showChildrenOf([personId], personId, null);
+    }
+
+    /**
+     * Show the children of `parents` in place in one render and one step of
+     * the history (the children tab: one person; the siblings tab: the
+     * parents in view, `siblingsOf` the person whose tab it is). `anchorId`'s
+     * card keeps its place on the screen. A parent whose click draws none of
+     * the children it promised is left out again (the safety net,
+     * childrenUnshowable); when none is left, the view comes back and no
+     * step is made. After the transition the children in view glow.
+     */
+    private async showChildrenOf(parents: readonly PersonId[], anchorId: PersonId, siblingsOf: PersonId | null): Promise<void> {
         this.finishChildrenTransition();
         const historyBefore = this.currentHistoryEntry();
         const scene = this.captureChildrenScene();
         const data = DataManager.getData();
         const beforeAll = new Map(this.positions);
-        const screenBefore = this.cardScreenCenter(personId);
+        const screenBefore = new Map(parents.map(q => [q, this.cardScreenCenter(q)] as const));
         const inView = (id: PersonId) => this.positions.has(id);
-        const promised = hiddenChildIds(data, personId, inView);
-        const visible = new Set((data.persons[personId]?.childIds ?? []).filter(inView));
-        this.childrenShownIds = [...this.childrenShownIds, personId];
-        this.childrenVisibleBefore.set(personId, visible);
+        const promised = new Map(parents.map(q => [q, hiddenChildIds(data, q, inView)] as const));
+        const visible = new Map(parents.map(q => [q, new Set((data.persons[q]?.childIds ?? []).filter(inView))] as const));
+        this.childrenShownIds = [...this.childrenShownIds, ...parents];
+        for (const q of parents) this.childrenVisibleBefore.set(q, visible.get(q)!);
+        // One step (the focus bar's count) from the first render on
+        if (siblingsOf) this.siblingsShownFor.set(siblingsOf, [...parents]);
         await this.renderInternal();
-        if (!promised.some(inView)) {
-            this.childrenShownIds = this.childrenShownIds.filter(id => id !== personId);
-            this.childrenVisibleBefore.delete(personId);
-            this.childrenUnshowable.add(personId);
+        const failed = parents.filter(q => !promised.get(q)!.some(inView));
+        const shown = parents.filter(q => !failed.includes(q));
+        if (failed.length > 0) {
+            this.childrenShownIds = this.childrenShownIds.filter(id => !failed.includes(id));
+            for (const q of failed) {
+                this.childrenVisibleBefore.delete(q);
+                this.childrenUnshowable.add(q);
+            }
+            if (siblingsOf && shown.length > 0) this.siblingsShownFor.set(siblingsOf, shown);
+            else if (siblingsOf) this.siblingsShownFor.delete(siblingsOf);
             await this.renderInternal();
-            this.keepCardInPlace(personId, beforeAll, false);
-            return;
+            if (shown.length === 0) {
+                this.keepCardInPlace(anchorId, beforeAll, false);
+                return;
+            }
         }
         // A step of the history (the safety net above showed nothing: no step)
-        if (historyBefore) this.pushHistoryStep({ ...historyBefore, anchorId: personId });
+        if (historyBefore) this.pushHistoryStep({ ...historyBefore, anchorId });
         const broughtIn = new Set([...this.positions.keys()].filter(id => !beforeAll.has(id)));
-        this.childrenBroughtIn.set(personId, broughtIn);
-        if (screenBefore) this.childrenAnchorScreen.set(personId, screenBefore);
-        const shift = this.keepCardInPlace(personId, beforeAll, false);
+        for (const q of shown) {
+            this.childrenBroughtIn.set(q, broughtIn);
+            const at = screenBefore.get(q);
+            if (at) this.childrenAnchorScreen.set(q, at);
+        }
+        const shift = this.keepCardInPlace(anchorId, beforeAll, false);
         // §5: zoom out around the card as far as the new children need (desktop)
         const scaleBefore = ZoomPan.getScale();
-        const zoomTo = this.childrenZoomOut(personId, newlyShownChildIds(data, personId, inView, visible));
-        if (zoomTo !== null) this.childrenZoom.set(personId, { before: scaleBefore, after: zoomTo });
-        // §6: the person's children in view, of every marriage, glow once the cards stand
-        const glow = () => this.highlightCards((data.persons[personId]?.childIds ?? []).filter(inView), CHILDREN_GLOW_MS);
-        this.playChildrenTransition(scene, 'open', personId, shift, new Map([[personId, broughtIn]]), zoomTo, glow);
+        const kids = shown.flatMap(q => newlyShownChildIds(data, q, inView, visible.get(q)!)).filter(id => id !== anchorId);
+        const zoomTo = this.childrenZoomOut(anchorId, kids);
+        if (zoomTo !== null) this.childrenZoom.set(shown[0], { before: scaleBefore, after: zoomTo });
+        // §6: the children in view, of every marriage, glow once the cards stand (§1: and the active tabs)
+        const glow = () => this.glowShown(shown, siblingsOf);
+        this.playChildrenTransition(scene, 'open', anchorId, shift, new Map(shown.map(q => [q, broughtIn] as const)), zoomTo, glow);
+    }
+
+    /**
+     * After a click that showed the children of `parents`: their children in
+     * view glow for a moment (the person whose siblings they are left out);
+     * after the siblings tab its active tabs glow too — the parents'
+     * "▾ children" and the person's "▾ siblings" (§1).
+     */
+    private glowShown(parents: readonly PersonId[], siblingsOf: PersonId | null): void {
+        const data = DataManager.getData();
+        const kids = new Set(parents.flatMap(q => (data.persons[q]?.childIds ?? []).filter(id => this.positions.has(id) && id !== siblingsOf)));
+        this.highlightCards([...kids], CHILDREN_GLOW_MS);
+        if (!siblingsOf) return;
+        const tabs: HTMLElement[] = [];
+        for (const q of parents) {
+            const t = this.cardElement(q)?.querySelector<HTMLElement>('.branch-tab.children-tab.active');
+            if (t) tabs.push(t);
+        }
+        const own = this.cardElement(siblingsOf)?.querySelector<HTMLElement>('.branch-tab.siblings-tab.active');
+        if (own) tabs.push(own);
+        for (const t of tabs) {
+            t.classList.add('tab-glow-anim');
+            void t.offsetWidth;
+            t.classList.add('tab-glow');
+        }
+        setTimeout(() => { for (const t of tabs) t.classList.remove('tab-glow'); }, CHILDREN_GLOW_MS);
+    }
+
+    /**
+     * The persons whose children close together with `ids`: the parents of a
+     * siblings step ("▸ siblings" showed them in one click) go as one.
+     */
+    private withSiblingSteps(ids: Iterable<PersonId>): Set<PersonId> {
+        const out = new Set(ids);
+        for (const parents of this.siblingsShownFor.values()) {
+            if (parents.some(q => out.has(q))) for (const q of parents) out.add(q);
+        }
+        return out;
     }
 
     /**
@@ -1183,7 +1315,12 @@ class TreeRendererClass {
      * "▸ parents", "Hide shown children".
      */
     async closeChildrenShown(ids: readonly PersonId[], anchorId: PersonId, restoreView = false): Promise<void> {
-        const closing = childrenShownClosing(ids, this.childrenShownIds, id => this.childrenBroughtIn.get(id));
+        // A siblings step closes as one (both parents), with what its cards showed
+        let closing = new Set<PersonId>();
+        for (let next = this.withSiblingSteps(ids.filter(id => this.childrenShownIds.includes(id))); next.size > closing.size;) {
+            closing = next;
+            next = this.withSiblingSteps(childrenShownClosing([...closing], this.childrenShownIds, id => this.childrenBroughtIn.get(id)));
+        }
         if (closing.size === 0) return;
         this.finishChildrenTransition();
         const historyBefore = this.currentHistoryEntry();
@@ -1198,6 +1335,9 @@ class TreeRendererClass {
             this.childrenVisibleBefore.delete(id);
             this.childrenBroughtIn.delete(id);
             this.childrenZoom.delete(id);
+        }
+        for (const [p, parents] of this.siblingsShownFor) {
+            if (parents.some(q => closing.has(q))) this.siblingsShownFor.delete(p);
         }
         const anchorScreen = this.childrenAnchorScreen.get(anchorId);
         for (const id of closing) this.childrenAnchorScreen.delete(id);
@@ -1217,7 +1357,7 @@ class TreeRendererClass {
      * in place.
      */
     private updateChildrenShownUI(): void {
-        const n = this.viewMode === 'family' ? this.childrenShownIds.length : 0;
+        const n = this.viewMode === 'family' ? this.shownChildrenCount() : 0;
         for (const id of ['hide-shown-children', 'hide-shown-children-chip']) {
             const el = document.getElementById(id);
             if (!el) continue;
@@ -1229,9 +1369,14 @@ class TreeRendererClass {
         }
     }
 
-    /** How many persons show their children in place in this view. */
+    /**
+     * How many steps show children in place in this view: a person whose
+     * children are shown counts once, the parents of a siblings step
+     * ("▸ siblings") count once together.
+     */
     shownChildrenCount(): number {
-        return this.childrenShownIds.length;
+        const grouped = new Set([...this.siblingsShownFor.values()].flat());
+        return this.childrenShownIds.filter(id => !grouped.has(id)).length + this.siblingsShownFor.size;
     }
 
     /**
@@ -1612,6 +1757,108 @@ class TreeRendererClass {
         return release;
     }
 
+    /** A person line of a bubble: the name and the year of birth. */
+    private bubbleItemHtml(p: Person): string {
+        const year = displayYear(p.birthDate);
+        return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(shownName(p, '?'))}</span>${year ? `<span class="badge-tooltip-detail"> *${this.escapeHtml(year)}</span>` : ''}</div>`;
+    }
+
+    /**
+     * "Already in the tree elsewhere" in a "▾" bubble (§4 of round 1): a row
+     * per card the view draws elsewhere, a click glides the view to it.
+     */
+    private elsewhereSectionHtml(ids: readonly PersonId[]): string {
+        const rows = ids
+            .map(cid => DataManager.getPerson(cid))
+            .filter((c): c is Person => c !== null)
+            .map(c => {
+                const name = shownName(c, '?');
+                const year = displayYear(c.birthDate);
+                return `<button type="button" class="children-elsewhere-row" data-person-id="${this.escapeHtml(c.id)}" aria-label="${this.escapeHtml(strings.focus.childrenElsewhereAria(name))}">`
+                    + `<span class="children-elsewhere-label"><span class="badge-tooltip-name">${this.escapeHtml(name)}</span>${year ? `<span class="badge-tooltip-detail"> *${this.escapeHtml(year)}</span>` : ''}</span>`
+                    + `<span class="children-elsewhere-go" aria-hidden="true">↗</span></button>`;
+            }).join('');
+        return rows
+            ? `<div class="children-elsewhere"><div class="badge-tooltip-header">${strings.focus.childrenElsewhereHeader}</div>${rows}<div class="badge-tooltip-hint">${strings.focus.childrenElsewhereHint}</div></div>`
+            : '';
+    }
+
+    /**
+     * The person's siblings in a bubble (§6): by the union they were born
+     * to — the full siblings, then the half siblings of each other marriage
+     * of a parent — with a group line only when there is more than one group.
+     */
+    private siblingGroupsHtml(personId: PersonId, ids: readonly PersonId[]): string {
+        const groups = siblingGroups(DataManager.getData(), personId, ids);
+        const nameOf = (id: PersonId | null) => {
+            const p = id ? DataManager.getPerson(id) : null;
+            return p ? shownName(p, '?') : '?';
+        };
+        return groups.map(g => {
+            const label = groups.length < 2 ? ''
+                : g.full ? strings.focus.siblingsGroupFull
+                    : g.parentId ? strings.focus.siblingsGroupHalf(nameOf(g.parentId), nameOf(g.partnerId)) : '';
+            const items = g.ids.map(id => DataManager.getPerson(id)).filter((p): p is Person => p !== null).map(p => this.bubbleItemHtml(p)).join('');
+            return (label ? `<div class="badge-tooltip-group">${this.escapeHtml(label)}</div>` : '') + items;
+        }).join('');
+    }
+
+    /**
+     * The person's siblings the parents' children show in place, drawn
+     * elsewhere in the tree (childrenDrawnElsewhere of each parent in view,
+     * each once, the person left out).
+     */
+    private siblingsElsewhereOf(personId: PersonId): PersonId[] {
+        const out: PersonId[] = [];
+        for (const q of DataManager.getPerson(personId)?.parentIds ?? []) {
+            for (const id of this.childrenElsewhereOf(q)) if (id !== personId && !out.includes(id)) out.push(id);
+        }
+        return out;
+    }
+
+    /** The person's siblings in view while the siblings tab shows them (the parents' children, the person left out): they glow while its bubble is open. */
+    private shownSiblingsInView(personId: PersonId): PersonId[] {
+        const data = DataManager.getData();
+        const out = new Set<PersonId>();
+        for (const q of this.siblingsShownParents(personId)) {
+            for (const id of data.persons[q]?.childIds ?? []) if (id !== personId && this.positions.has(id)) out.add(id);
+        }
+        return [...out];
+    }
+
+    /**
+     * The siblings tab in place (§1, a parent in view): "▸ siblings" with its
+     * bubble inside (who, by group; the same people as the parents'
+     * "▸ children"; what a click does), or "▾ siblings" (active) with the
+     * bubble beside it (who was shown, through which parents, the siblings
+     * drawn elsewhere as rows that glide to them; a click hides them again,
+     * on the parents too).
+     */
+    private siblingsTabHtml(personId: PersonId, shown: boolean, fullTitle: string, unionChildIds: ReadonlySet<PersonId>): string {
+        const data = DataManager.getData();
+        const inView = (id: PersonId) => this.positions.has(id);
+        const elsewhere = this.siblingsElsewhereOf(personId);
+        const aria = (shown ? strings.focus.siblingsTabHideAria : strings.focus.siblingsTabShowAria)(fullTitle);
+        const tabHtml = `<button type="button" class="branch-tab siblings-tab${shown ? ' active' : ''}" data-action="toggle-siblings" aria-pressed="${shown}" aria-label="${this.escapeHtml(aria)}">`
+            + `<span class="pill-glyph">${shown ? '▾' : '▸'}</span><span class="pill-text">${strings.focus.branchTabSiblings}</span>`;
+        if (!shown) {
+            const state = siblingsTabState(data, personId, inView, unionChildIds, this.childrenShownSet(), this.childrenUnshowable, this.shownChildrenContext());
+            const elsewhereLine = elsewhere.length ? `<div class="badge-tooltip-elsewhere">${this.escapeHtml(strings.focus.childrenElsewhereCount(elsewhere.length))}</div>` : '';
+            return `${tabHtml}<div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenSiblingsTooltip}</div>`
+                + this.siblingGroupsHtml(personId, state?.promised ?? [])
+                + `<div class="badge-tooltip-body">${this.escapeHtml(strings.focus.siblingsSameAsChildren)}</div>${elsewhereLine}`
+                + `<div class="badge-tooltip-action">${strings.focus.placeShowHint}</div></div></button>`;
+        }
+        const ids = newlyShownSiblingIds(data, personId, inView, this.childrenShownSet(), q => this.childrenVisibleBefore.get(q));
+        const via = this.siblingsShownParents(personId)
+            .map(q => DataManager.getPerson(q)).filter((p): p is Person => p !== null).map(p => shownNameFull(p, '?')).join(', ');
+        return `${tabHtml}</button><div class="badge-tooltip children-bubble siblings-bubble"><div class="badge-tooltip-header">${strings.focus.siblingsShownTooltip}</div>`
+            + this.siblingGroupsHtml(personId, ids)
+            + (via ? `<div class="badge-tooltip-body">${this.escapeHtml(strings.focus.siblingsShownVia(via))}</div>` : '')
+            + this.elsewhereSectionHtml(elsewhere)
+            + `<div class="badge-tooltip-action">${strings.focus.siblingsTabHideHint}</div></div>`;
+    }
+
     /**
      * The "▾ children" bubble beside its tab: opens while a mouse is over the
      * tab or the bubble (the way between them closes it after 150 ms, so the
@@ -1621,7 +1868,8 @@ class TreeRendererClass {
      * is open the person's children in view glow (§6). A row glides the view
      * to the child drawn elsewhere (§4).
      */
-    private bindChildrenBubble(personId: PersonId, tab: HTMLElement, bubble: HTMLElement): void {
+    private bindChildrenBubble(personId: PersonId, tab: HTMLElement, bubble: HTMLElement,
+        glowIds: () => PersonId[] = () => (DataManager.getPerson(personId)?.childIds ?? []).filter(cid => this.positions.has(cid))): void {
         let closeTimer: ReturnType<typeof setTimeout> | null = null;
         let releaseGlow: (() => void) | null = null;
         const hover = window.matchMedia?.('(hover: hover)').matches ?? false;
@@ -1637,8 +1885,7 @@ class TreeRendererClass {
             const fromRight = (row?.clientWidth ?? 0) - (tab.offsetLeft + tab.offsetWidth / 2);
             bubble.style.left = row ? `calc(100% - ${fromRight}px)` : `${tab.offsetLeft + tab.offsetWidth / 2}px`;
             bubble.classList.add('open');
-            const kids = (DataManager.getPerson(personId)?.childIds ?? []).filter(cid => this.positions.has(cid));
-            releaseGlow = this.highlightCards(kids);
+            releaseGlow = this.highlightCards(glowIds());
         };
         const close = (): void => {
             if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; }
@@ -1841,12 +2088,14 @@ class TreeRendererClass {
             focus: this.focusPersonId,
             shown: this.childrenShownIds.map(id => {
                 const zoom = this.childrenZoom.get(id), anchorScreen = this.childrenAnchorScreen.get(id);
+                const siblingsOf = [...this.siblingsShownFor].find(([, parents]) => parents.includes(id))?.[0];
                 return {
                     id,
                     visibleBefore: this.childrenVisibleBefore.get(id) ?? new Set<PersonId>(),
                     broughtIn: this.childrenBroughtIn.get(id) ?? new Set<PersonId>(),
                     ...(zoom ? { zoom } : {}),
                     ...(anchorScreen ? { anchorScreen } : {}),
+                    ...(siblingsOf ? { siblingsOf } : {}),
                 };
             }),
         };
@@ -1873,6 +2122,10 @@ class TreeRendererClass {
         this.childrenBroughtIn = new Map(shown.map(s => [s.id, s.broughtIn] as const));
         this.childrenZoom = new Map(shown.filter(s => s.zoom).map(s => [s.id, s.zoom!] as const));
         this.childrenAnchorScreen = new Map(shown.filter(s => s.anchorScreen).map(s => [s.id, s.anchorScreen!] as const));
+        this.siblingsShownFor = new Map();
+        for (const s of shown) {
+            if (s.siblingsOf) this.siblingsShownFor.set(s.siblingsOf, [...(this.siblingsShownFor.get(s.siblingsOf) ?? []), s.id]);
+        }
         if (shown.length === 0) this.childrenShownDrift.clear();
     }
 
@@ -1972,10 +2225,10 @@ class TreeRendererClass {
                 shift.y += dy;
             }
         }
-        const data = DataManager.getData();
-        const glow = dir === 'open' && opening.some(s => s.id === anchorId)
-            ? () => this.highlightCards((data.persons[anchorId]?.childIds ?? []).filter(id => this.positions.has(id)), CHILDREN_GLOW_MS)
-            : undefined;
+        const siblingsStep = opening.filter(s => s.siblingsOf === anchorId).map(s => s.id);
+        const glow = dir !== 'open' ? undefined
+            : siblingsStep.length > 0 ? () => this.glowShown(siblingsStep, anchorId)
+                : opening.some(s => s.id === anchorId) ? () => this.glowShown([anchorId], null) : undefined;
         this.playChildrenTransition(scene, dir, anchorId, shift, involved, zoomTo, glow, pivot);
     }
 
@@ -2595,11 +2848,14 @@ class TreeRendererClass {
             // Hidden parents, siblings (children of a union, as the layout
             // counts them) or children: a branch tab each (one rule with the
             // marriage-order pill's layout, src/marriage-order.ts).
-            const hiddenTabs = hiddenRelativesTabs(DataManager.getData(), id, pid => this.positions.has(pid), partnershipChildIds, this.childrenShownSet(), this.childrenUnshowable);
+            const hiddenTabs = this.relativesTabs(id, partnershipChildIds);
             const hasHiddenParents = hiddenTabs.includes('parents');
             const hasHiddenChildren = hiddenTabs.includes('children');
             const childrenShown = hiddenTabs.includes('childrenShown');
             const hasHiddenSiblings = hiddenTabs.includes('siblings');
+            // Siblings in place (a parent in view, §1): "▸ siblings" / "▾ siblings"
+            const siblingsHere = hiddenTabs.includes('siblingsHere');
+            const siblingsShown = hiddenTabs.includes('siblingsShown');
             const siblings = hasHiddenSiblings ? DataManager.getSiblings(id).filter(s => partnershipChildIds.has(s.id)) : [];
 
             let html = '';
@@ -2612,7 +2868,7 @@ class TreeRendererClass {
             // Branch tabs (top-right edge slot): one pill per hidden direction.
             // Built into a string here; assembled into the edge container below.
             let branchTabsHtml = '';
-            if (showHiddenBadges && (hasHiddenParents || hasHiddenChildren || childrenShown || hasHiddenSiblings)) {
+            if (showHiddenBadges && (hasHiddenParents || hasHiddenChildren || childrenShown || hasHiddenSiblings || siblingsHere || siblingsShown)) {
                 // Parents folded away for children shown in place (§2): the dashed
                 // tab hides those children again and brings the parents back
                 const foldedBy = hasHiddenParents ? this.foldedFor.get(id) : undefined;
@@ -2645,6 +2901,7 @@ class TreeRendererClass {
                     }).join('');
                     branchTabsHtml += `<button class="branch-tab" data-action="focus-sibling"><span class="pill-glyph">◆</span><span class="pill-text">${strings.focus.branchTabSiblings}</span><div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenSiblingsTooltip}</div>${siblingItems}</div></button>`;
                 }
+                if (siblingsHere || siblingsShown) branchTabsHtml += this.siblingsTabHtml(id, siblingsShown, fullTitle, partnershipChildIds);
                 // Children: shown in place and hidden again (the view stays)
                 if (hasHiddenChildren || childrenShown) {
                     // Shown: only the children the click brought into view
@@ -2660,7 +2917,7 @@ class TreeRendererClass {
                             return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(name)}</span>${year ? `<span class="badge-tooltip-detail"> *${this.escapeHtml(year)}</span>` : ''}</div>`;
                         }).join('');
                     const header = childrenShown ? strings.focus.childrenShownTooltip : strings.focus.hiddenChildrenTooltip;
-                    const hint = childrenShown ? strings.focus.childrenTabHideHint : strings.focus.childrenTabShowHint;
+                    const hint = childrenShown ? strings.focus.placeHideHint : strings.focus.placeShowHint;
                     const aria = (childrenShown ? strings.focus.childrenTabHideAria : strings.focus.childrenTabShowAria)(fullTitle);
                     // Children the view draws elsewhere in the tree (§4): counted
                     // before the click; after it, rows that glide to them
@@ -2672,19 +2929,7 @@ class TreeRendererClass {
                         branchTabsHtml += `${tabHtml}<div class="badge-tooltip"><div class="badge-tooltip-header">${header}</div>${childItems}${elsewhereLine}<div class="badge-tooltip-hint">${hint}</div></div></button>`;
                     } else {
                         // The bubble beside the tab, not in it: its rows are buttons of their own
-                        const rows = elsewhere
-                            .map(cid => DataManager.getPerson(cid))
-                            .filter((c): c is Person => c !== null)
-                            .map(c => {
-                                const name = shownName(c, '?');
-                                const year = displayYear(c.birthDate);
-                                return `<button type="button" class="children-elsewhere-row" data-person-id="${this.escapeHtml(c.id)}" aria-label="${this.escapeHtml(strings.focus.childrenElsewhereAria(name))}">`
-                                    + `<span class="children-elsewhere-label"><span class="badge-tooltip-name">${this.escapeHtml(name)}</span>${year ? `<span class="badge-tooltip-detail"> *${this.escapeHtml(year)}</span>` : ''}</span>`
-                                    + `<span class="children-elsewhere-go" aria-hidden="true">↗</span></button>`;
-                            }).join('');
-                        const elsewhereHtml = rows
-                            ? `<div class="children-elsewhere"><div class="badge-tooltip-header">${strings.focus.childrenElsewhereHeader}</div>${rows}<div class="badge-tooltip-hint">${strings.focus.childrenElsewhereHint}</div></div>`
-                            : '';
+                        const elsewhereHtml = this.elsewhereSectionHtml(elsewhere);
                         // The ancestors folded away for these children (§2)
                         const foldedHtml = (this.foldedAncestorsOf.get(id) ?? [])
                             .map(qid => DataManager.getPerson(qid))
@@ -3069,8 +3314,18 @@ class TreeRendererClass {
                 e.stopPropagation();
                 void this.toggleChildrenShown(id);
             });
-            const childrenBubble = card.querySelector<HTMLElement>('.children-bubble');
+            const childrenBubble = card.querySelector<HTMLElement>('.children-bubble:not(.siblings-bubble)');
             if (childrenTab && childrenBubble) this.bindChildrenBubble(id, childrenTab, childrenBubble);
+            // The siblings tab in place (§1): the parents' children, one step
+            const siblingsTab = card.querySelector<HTMLElement>('.branch-tab.siblings-tab');
+            siblingsTab?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                void this.toggleSiblingsShown(id);
+            });
+            const siblingsBubble = card.querySelector<HTMLElement>('.siblings-bubble');
+            if (siblingsTab && siblingsBubble) {
+                this.bindChildrenBubble(id, siblingsTab, siblingsBubble, () => this.shownSiblingsInView(id));
+            }
             // The dashed "▸ parents" (§2): hide the children that folded the parents away
             card.querySelector<HTMLElement>('.branch-tab.folded')?.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -3078,7 +3333,7 @@ class TreeRendererClass {
                 if (shownId && this.isChildrenShown(shownId)) void this.closeChildrenShown([shownId], shownId);
             });
             // The other branch tabs focus on this person
-            const branchTabs = card.querySelectorAll('.branch-tab:not(.line-link):not(.children-tab):not(.folded)');
+            const branchTabs = card.querySelectorAll('.branch-tab:not(.line-link):not(.children-tab):not(.siblings-tab):not(.folded)');
             branchTabs.forEach(tab => {
                 tab.addEventListener('click', (e) => {
                     e.stopPropagation();
@@ -4281,7 +4536,7 @@ class TreeRendererClass {
         const tabsOf = new Map<PersonId, BranchTab[]>();
         for (const id of badges.keys()) {
             // The line links show in every view (the descendants chart too)
-            const hidden = showTabs ? hiddenRelativesTabs(data, id, pid => this.positions.has(pid), unionChildIds, this.childrenShownSet(), this.childrenUnshowable) : [];
+            const hidden = showTabs ? this.relativesTabs(id, unionChildIds) : [];
             tabsOf.set(id, [...hidden, ...lineLinkTabs(this.lineLinks.get(id))]);
         }
         const glyphsOf = new Map([...tabsOf].map(([id, kinds]) => {

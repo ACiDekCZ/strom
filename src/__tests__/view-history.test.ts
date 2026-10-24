@@ -174,6 +174,10 @@ describe('view history', () => {
         expect(sameShown(shown('a', 'b'), shown('a', 'b'))).toBe(true);
         expect(sameShown(shown('a', 'b'), shown('b', 'a'))).toBe(false);
         expect(sameShown(shown('a'), shown('a', 'b'))).toBe(false);
+        // The parents shown by a siblings tab (one step) differ from the same parents shown one by one
+        const bySiblings = shown('a', 'b').map(s => ({ ...s, siblingsOf: id('p') }));
+        expect(sameShown(bySiblings, shown('a', 'b'))).toBe(false);
+        expect(sameShown(bySiblings, shown('a', 'b').map(s => ({ ...s, siblingsOf: id('p') })))).toBe(true);
         expect(sameTransform({ scale: 1, tx: 0, ty: 0 }, { scale: 1, tx: 0.2, ty: -0.3 })).toBe(true);
         expect(sameTransform({ scale: 1, tx: 0, ty: 0 }, { scale: 1, tx: 3, ty: 0 })).toBe(false);
         expect(sameTransform({ scale: 1, tx: 0, ty: 0 }, { scale: 0.9, tx: 0, ty: 0 })).toBe(false);

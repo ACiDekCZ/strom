@@ -2524,6 +2524,11 @@
             display: flex; align-items: center; gap: 8px; margin: 4px 16px 8px;
             font-size: 14px; color: var(--text-light);
         }
+        /* A quiet line under a row of the person sheet (the siblings shown: through which parents). */
+        .bottom-sheet-row-note {
+            margin: -6px 16px 6px;
+            font-size: 12px; line-height: 1.4; color: var(--text-faint);
+        }
         .bottom-sheet-note::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--warning); }
 
         /* Tree-actions sheet (tree-actions.ts): name + summary on top, the six
@@ -3231,9 +3236,11 @@
         /* A line link (a line the layout left out, src/renderer.ts lineLinkTabsHtml):
            the branch tab; from the keyboard it shows its bubble too. */
         .branch-tab.line-link:focus-visible,
-        .branch-tab.children-tab:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .branch-tab.children-tab:focus-visible,
+        .branch-tab.siblings-tab:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
         .branch-tab.line-link:focus-visible .badge-tooltip,
-        .branch-tab.children-tab:focus-visible .badge-tooltip { display: block; }
+        .branch-tab.children-tab:focus-visible .badge-tooltip,
+        .branch-tab.siblings-tab:focus-visible .badge-tooltip { display: block; }
         /* "▾ children": the bubble beside the tab (its rows are buttons of
            their own), opened by the renderer (bindChildrenBubble) while a
            mouse is over the tab or the bubble, or the keyboard is in them;
@@ -3355,6 +3362,32 @@
             color: var(--text-faint);
             font-size: 11px;
             line-height: 1.4;
+        }
+        /* A group of people in a bubble (the siblings tab: full siblings, the
+           half siblings of each other marriage of a parent). */
+        .badge-tooltip-group {
+            padding-top: 5px;
+            color: var(--text-faint);
+            font-size: 11px;
+            font-weight: 600;
+            line-height: 1.4;
+        }
+        /* The bubble's last line: what a click on the tab does, apart from the rest. */
+        .badge-tooltip-action {
+            margin-top: 4px;
+            padding-top: 6px;
+            border-top: 1px solid var(--divider);
+            color: var(--text-faint);
+            font-size: 11.5px;
+            line-height: 1.4;
+        }
+        /* The active tabs of siblings just shown in place (the person's
+           "▾ siblings", the parents' "▾ children") glow for a moment: the
+           ring of the children's glow, coming in and going over 500 ms. */
+        .branch-tab.tab-glow-anim { transition: box-shadow 500ms; }
+        .branch-tab.tab-glow { box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 30%, transparent); }
+        @media (prefers-reduced-motion: reduce) {
+            .branch-tab.tab-glow-anim { transition: none; }
         }
 
         /* ==================== CROSS-TREE BADGE ==================== */

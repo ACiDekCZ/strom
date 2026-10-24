@@ -53,14 +53,16 @@ export function unionOrderPillPartsHtml(ordinal: string, year: string, glyph = t
 }
 
 const TAB_GLYPH: Record<BranchTab, string> = {
-    parents: '◂', siblings: '◆', children: '▸', childrenShown: '▾', linkParents: '◂', linkChild: '▸', linkChildren: '▸',
+    parents: '◂', siblings: '◆', siblingsHere: '▸', siblingsShown: '▾', children: '▸', childrenShown: '▾', linkParents: '◂', linkChild: '▸', linkChildren: '▸',
 };
 
 /** The word of a card's top-edge tab (a hidden-relatives tab or a line link). */
 export function tabLabel(kind: BranchTab): string {
     switch (kind) {
         case 'parents': return strings.focus.branchTabParents;
-        case 'siblings': return strings.focus.branchTabSiblings;
+        case 'siblings':
+        case 'siblingsHere':
+        case 'siblingsShown': return strings.focus.branchTabSiblings;
         case 'children':
         case 'childrenShown': return strings.focus.branchTabChildren;
         case 'linkParents': return strings.focus.linkTabParents;

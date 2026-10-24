@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { hiddenRelativesTabs, hiddenChildIds, newlyShownChildIds, childrenDrawnElsewhere, siblingOrderMark, childrenShownClosing } from '../marriage-order.js';
+import { hiddenRelativesTabs, hiddenChildIds, newlyShownChildIds, childrenDrawnElsewhere, siblingOrderMark, childrenShownClosing, siblingsTabState, newlyShownSiblingIds, siblingGroups, unionChildIdSet } from '../marriage-order.js';
 import { tabsGlyphsOnly } from '../union-order-measure.js';
 import { childIdsShownInPlace } from '../layout/pipeline/1-select-subgraph.js';
 import { PersonId, PartnershipId, Person, StromData, DEFAULT_LAYOUT_CONFIG } from '../types.js';
@@ -100,6 +100,96 @@ describe('children tab', () => {
         // uncle: parents and siblings out of view; his only child is a stand-in
         expect(hiddenRelativesTabs(d, P('uncle'), inView, kids)).toEqual(['parents', 'siblings']);
         expect(hiddenRelativesTabs(d, P('uncle'), inView, kids, new Set([P('uncle')]))).toEqual(['parents', 'siblings', 'childrenShown']);
+    });
+});
+
+/**
+ * The father's family with a half sibling through each parent: the
+ * grandfather's second wife (half_gf) and the grandmother's second husband
+ * (half_gm), besides the full siblings aunt and uncle.
+ */
+function halfTree(): StromData {
+    const d = tree();
+    const add = (id: string, gender: 'male' | 'female'): PersonId => {
+        d.persons[id as PersonId] = {
+            id: id as PersonId, firstName: id, lastName: 'X', gender, isPlaceholder: false,
+            partnerships: [], parentIds: [], childIds: [],
+        } as Person;
+        return id as PersonId;
+    };
+    const fam = (id: string, a: PersonId, b: PersonId, kids: PersonId[]): void => {
+        d.partnerships[id as PartnershipId] = { id: id as PartnershipId, person1Id: a, person2Id: b, childIds: kids, status: 'married' };
+        for (const p of [a, b]) { d.persons[p].partnerships.push(id as PartnershipId); d.persons[p].childIds.push(...kids); }
+        for (const k of kids) d.persons[k].parentIds.push(a, b);
+    };
+    const sw = add('second_wife', 'female'), sh = add('second_husband', 'male');
+    fam('u3', 'gf' as PersonId, sw, [add('half_gf', 'female')]);
+    fam('u4', sh, 'gm' as PersonId, [add('half_gm', 'male')]);
+    return d;
+}
+
+describe('siblings tab in place (a parent in view)', () => {
+    const P = (id: string) => id as PersonId;
+    const d = halfTree();
+    const kids = unionChildIdSet(d);
+    const view = (...ids: string[]) => (id: PersonId) => ids.includes(id);
+
+    it('"▸ siblings": the children of both parents in view, of every marriage, in one step', () => {
+        const inView = view('gf', 'gm', 'father');
+        const tab = siblingsTabState(d, P('father'), inView, kids);
+        expect(tab).toEqual({ kind: 'siblingsHere', parents: [P('gf'), P('gm')], promised: [P('aunt'), P('uncle'), P('half_gf'), P('half_gm')] });
+        expect(hiddenRelativesTabs(d, P('father'), inView, kids)).toEqual(['siblingsHere']);
+    });
+
+    it('without a parent in view the siblings tab still focuses on the person', () => {
+        expect(hiddenRelativesTabs(d, P('father'), view('father'), kids)).toEqual(['parents', 'siblings']);
+    });
+
+    it('"▾ siblings" after the step, and after the parents\' own "▸ children" too', () => {
+        const after = view('gf', 'gm', 'father', 'aunt', 'uncle', 'half_gf', 'half_gm');
+        const visibleBefore = (q: PersonId) => (['gf', 'gm'].includes(q) ? new Set([P('father')]) : undefined);
+        const both = new Set([P('gf'), P('gm')]);
+        expect(hiddenRelativesTabs(d, P('father'), after, kids, both, new Set(), { visibleBefore })).toEqual(['siblingsShown']);
+        expect(newlyShownSiblingIds(d, P('father'), after, both, visibleBefore)).toEqual([P('aunt'), P('uncle'), P('half_gf'), P('half_gm')]);
+        // The grandfather's "▸ children" alone: the grandmother still has a child out of view
+        const gfOnly = view('gf', 'gm', 'father', 'aunt', 'uncle', 'half_gf');
+        expect(siblingsTabState(d, P('father'), gfOnly, kids, new Set([P('gf')]), new Set(), { visibleBefore }))
+            .toEqual({ kind: 'siblingsHere', parents: [P('gm')], promised: [P('half_gm')] });
+        // Without half siblings of the grandmother the tab turns to "▾ siblings"
+        const t = tree();
+        expect(siblingsTabState(t, P('father'), view('gf', 'gm', 'father', 'aunt', 'uncle'), unionChildIdSet(t), new Set([P('gf')]), new Set(), { visibleBefore })?.kind)
+            .toBe('siblingsShown');
+    });
+
+    it('no tab while a sibling stood in view before (the focus\'s and its parents\' siblings, unchanged)', () => {
+        const inView = view('gf', 'gm', 'father', 'aunt');
+        expect(siblingsTabState(d, P('father'), inView, kids)).toBeNull();
+        // Drawn before the grandfather's own click as well: still no tab
+        const visibleBefore = (q: PersonId) => (q === 'gf' ? new Set([P('father'), P('aunt')]) : undefined);
+        expect(siblingsTabState(d, P('father'), inView, kids, new Set([P('gf')]), new Set(), { visibleBefore })).toBeNull();
+    });
+
+    it('a sibling drawn elsewhere (no parent line to it) is never promised and keeps the tab', () => {
+        const inView = view('gf', 'gm', 'father', 'aunt');
+        const tab = siblingsTabState(d, P('father'), inView, kids, new Set(), new Set(), { hangsOnLine: id => id !== 'aunt' });
+        expect(tab?.kind).toBe('siblingsHere');
+        expect(tab?.promised).toEqual([P('uncle'), P('half_gf'), P('half_gm')]);
+    });
+
+    it('a parent whose click drew none (the safety net) is left out of the step', () => {
+        const tab = siblingsTabState(d, P('father'), view('gf', 'gm', 'father'), kids, new Set(), new Set([P('gm')]));
+        expect(tab).toEqual({ kind: 'siblingsHere', parents: [P('gf')], promised: [P('aunt'), P('uncle'), P('half_gf')] });
+    });
+
+    it('the bubble\'s groups: the full siblings, then each parent\'s other marriage', () => {
+        const ids = [P('aunt'), P('uncle'), P('half_gf'), P('half_gm')];
+        expect(siblingGroups(d, P('father'), ids)).toEqual([
+            { full: true, parentId: null, partnerId: null, ids: [P('aunt'), P('uncle')] },
+            { full: false, parentId: P('gf'), partnerId: P('second_wife'), ids: [P('half_gf')] },
+            { full: false, parentId: P('gm'), partnerId: P('second_husband'), ids: [P('half_gm')] },
+        ]);
+        // Full siblings alone: one group (the bubble shows no group line then)
+        expect(siblingGroups(d, P('father'), [P('aunt')])).toHaveLength(1);
     });
 });
 

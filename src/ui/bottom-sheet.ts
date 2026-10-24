@@ -126,7 +126,8 @@ export const bottomSheetMethods = uiModule({
             }
             // Keep the class out of the attribute (see context-menu.ts note).
             const cls = a.danger ? 'bottom-sheet-item danger' : a.strong ? 'bottom-sheet-item is-strong' : 'bottom-sheet-item';
-            return `${divider}${header}<button type="button" class="${cls}" role="menuitem" data-action="${esc(a.action)}"${menuItemAria(a)}>${menuItemBody(a)}</button>`;
+            const note = a.sheetNote ? `<p class="bottom-sheet-row-note">${esc(a.sheetNote)}</p>` : '';
+            return `${divider}${header}<button type="button" class="${cls}" role="menuitem" data-action="${esc(a.action)}"${menuItemAria(a)}>${menuItemBody(a)}</button>${note}`;
         };
         const tilesHtml = tiles.length === 0 ? '' : `<div class="sheet-tiles" style="--tiles: ${tiles.length}">`
             + tiles.map(t => `<button type="button" class="bottom-sheet-item sheet-tile" role="menuitem" data-action="${esc(t.action)}"${menuItemAria(t)}>`

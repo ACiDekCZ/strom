@@ -13,7 +13,7 @@ import { uiModule } from './module.js';
 import { isCoarsePointer } from './bottom-sheet.js';
 import { isTabletOrMobile } from '../breakpoints.js';
 import { fitFlyout, FLYOUT_MARGIN } from './flyout.js';
-import { shownName, nameHtml } from '../person-name.js';
+import { shownName, shownNameFull, nameHtml } from '../person-name.js';
 import { displayYear } from '../dates.js';
 
 /** The menu action of a row that moves the view to a child drawn elsewhere (+ the child's id). */
@@ -54,6 +54,8 @@ export interface PersonMenuAction {
     lead?: boolean;
     /** In the bottom sheet right under the tiles (where "Focus" is), not with the rows below "Add". */
     sheetTop?: boolean;
+    /** A quiet line under the row in the bottom sheet only (the siblings shown: through which parents). */
+    sheetNote?: string;
 }
 
 /** The person menu with the rows of the view links: a ghost's block on top, the rest right after "Focus". */
@@ -164,11 +166,15 @@ export const contextMenuMethods = uiModule({
 
         // Linked in the view only: never a change of the data, so offered in every variant.
         const vl = this.personViewLinkMenu(personId);
-        // The children in place (the card's children tab), by "Focus" in every variant (the view only).
-        const children: PersonMenuAction[] = TreeRenderer.canToggleChildren(personId) ? [{
-            action: 'toggle-children', sheetTop: true,
-            label: TreeRenderer.isChildrenShown(personId) ? strings.focus.hideChildrenHere : c.showChildrenHere,
-        }, ...this.childrenElsewhereRows(personId)] : [];
+        // The siblings and the children in place (the card's tabs, in their order), by "Focus"
+        // in every variant (the view only).
+        const children: PersonMenuAction[] = [
+            ...this.siblingsRows(personId),
+            ...(TreeRenderer.canToggleChildren(personId) ? [{
+                action: 'toggle-children', sheetTop: true,
+                label: TreeRenderer.isChildrenShown(personId) ? strings.focus.hideChildrenHere : c.showChildrenHere,
+            }, ...this.childrenElsewhereRows(personId)] : []),
+        ];
         if (isViewMode) {
             return withViewLinkRows([
                 { action: 'focus', label: c.focus },
@@ -226,6 +232,23 @@ export const contextMenuMethods = uiModule({
     },
 
     /**
+     * The siblings in place (the card's "▸ siblings" with a parent in view,
+     * §1): "Show siblings here" with how many it shows, or once they are
+     * shown "Hide the siblings shown here" (in the bottom sheet with the
+     * parents whose children show them under it).
+     */
+    siblingsRows(personId: PersonId): PersonMenuAction[] {
+        if (!TreeRenderer.canToggleSiblings(personId)) return [];
+        if (!TreeRenderer.isSiblingsShown(personId)) {
+            const n = TreeRenderer.siblingsToShowCount(personId);
+            return [{ action: 'toggle-siblings', sheetTop: true, label: strings.contextMenu.showSiblingsHere, ...(n > 0 ? { meta: String(n) } : {}) }];
+        }
+        const via = TreeRenderer.siblingsShownParents(personId)
+            .map(id => DataManager.getPerson(id)).filter((p): p is Person => p !== null).map(p => shownNameFull(p, '?')).join(', ');
+        return [{ action: 'toggle-siblings', sheetTop: true, label: strings.focus.hideSiblingsHere, ...(via ? { sheetNote: strings.focus.siblingsShownVia(via) } : {}) }];
+    },
+
+    /**
      * Under the children row: the person's children the view draws elsewhere
      * in the tree ("Already in the tree elsewhere"), a row each that moves
      * the view to the card (also right under the bottom sheet's tiles).
@@ -274,6 +297,9 @@ export const contextMenuMethods = uiModule({
                 break;
             case 'toggle-children':
                 void TreeRenderer.toggleChildrenShown(personId);
+                break;
+            case 'toggle-siblings':
+                void TreeRenderer.toggleSiblingsShown(personId);
                 break;
             case 'materials':
                 this.showPersonMaterials(personId);
