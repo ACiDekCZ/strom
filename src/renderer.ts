@@ -1572,10 +1572,9 @@ class TreeRendererClass {
         return childrenDrawnElsewhere(DataManager.getData(), personId, id => this.positions.has(id), id => drops.has(id));
     }
 
-    /** Glide the view to a child drawn elsewhere and let its card glow for a moment. */
+    /** Glide the view to a child drawn elsewhere (readable, glideToCards) and let its card glow for a moment. */
     showChildElsewhere(childId: PersonId): void {
-        if (!this.positions.has(childId)) return;
-        ZoomPan.glideToPerson(childId);
+        if (this.glideToCards([childId]).length === 0) return;
         this.highlightCards([childId], CHILDREN_GLOW_MS);
     }
 
@@ -4339,14 +4338,27 @@ class TreeRendererClass {
 
     /**
      * Bring these cards into view and highlight them, without changing the
-     * focus (a line link's other end): one card centred, several fitted.
+     * focus (a line link's other end): one card centred, several fitted,
+     * always at a readable scale (glideToCards).
      */
     private jumpToPersons(ids: readonly PersonId[]): void {
-        const shown = ids.filter(pid => this.positions.has(pid));
-        if (shown.length === 0) return;
-        if (shown.length === 1) ZoomPan.centerOnPerson(shown[0]);
-        else ZoomPan.fitPersons(shown);
+        const shown = this.glideToCards(ids);
         for (const pid of shown) ZoomPan.highlightPerson(pid);
+    }
+
+    /**
+     * Glide the view to drawn cards elsewhere in the view (ZoomPan.jumpToBoxes:
+     * centred at a readable scale, several together when they fit readably,
+     * else the one nearest the view's centre). A running children transition
+     * ends first, so its zoom does not land over the glide. Returns the cards
+     * drawn of `ids`.
+     */
+    private glideToCards(ids: readonly PersonId[]): PersonId[] {
+        const shown = ids.filter(pid => this.positions.has(pid));
+        if (shown.length === 0) return shown;
+        this.finishChildrenTransition();
+        ZoomPan.jumpToBoxes(shown.map(pid => this.cardBox(pid)).filter((b): b is ChildrenRect => b !== null));
+        return shown;
     }
 
     private escapeHtml(text: string): string {

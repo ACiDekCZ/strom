@@ -381,6 +381,38 @@ test('a child drawn elsewhere in the tree: counted before the click, after it a 
     await expect(cardOf(page, 'half_v')).toBeVisible();
 });
 
+/** The child drawn elsewhere lands in the middle of the tree at a readable scale (75 % or more, src/jump-view.ts). */
+async function expectElsewhereLanding(page: Page): Promise<void> {
+    await expect.poll(() => page.evaluate(() => window.Strom.ZoomPan.getScale())).toBeGreaterThanOrEqual(0.75);
+    await expect.poll(() => page.evaluate(() => {
+        const c = document.querySelector<HTMLElement>('#tree-canvas .person-card[data-id="aunt"]')!.getBoundingClientRect();
+        const t = document.getElementById('tree-container')!.getBoundingClientRect();
+        return Math.hypot(c.left + c.width / 2 - (t.left + t.width / 2), c.top + c.height / 2 - (t.top + t.height / 2)) <= 3;
+    })).toBe(true);
+    await expect(cardOf(page, 'aunt')).toHaveClass(/children-glow/);
+}
+
+/** Zoom far out around a card (its controls still there to press). */
+async function zoomFarOut(page: Page, id: string): Promise<void> {
+    await page.evaluate(pid => window.Strom.ZoomPan.glideToPerson(pid as never, 0.3, 0), id);
+    await expect.poll(() => page.evaluate(() => window.Strom.ZoomPan.getScale())).toBeCloseTo(0.3, 2);
+}
+
+test('a child drawn elsewhere from a view zoomed far out: the row lands on the card readable', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await setupFixture(page, 'edge-children-elsewhere', 'focus');
+    const grandma = 'v_mo';
+    await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), grandma);
+    await tabOf(page, grandma).click();
+    await expect(cardOf(page, 'half_v')).toBeVisible();
+    await zoomFarOut(page, grandma);
+    await tabOf(page, grandma).hover();
+    const row = cardOf(page, grandma).locator('.children-bubble .children-elsewhere-row');
+    await expect(row).toBeVisible();
+    await row.click();
+    await expectElsewhereLanding(page);
+});
+
 test('the sibling-order pill: on the direct-line card beside its siblings, clear of the card\'s other edge pills', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await setup(page);
@@ -468,6 +500,22 @@ test.describe('phone 390 × 844', () => {
         await chip.tap();
         for (const id of SIBLINGS) await expect(cardOf(page, id)).toHaveCount(0);
         await expect(chip).toBeHidden();
+    });
+
+    test('a child drawn elsewhere from a view zoomed far out: the sheet row lands on the card readable', async ({ page }) => {
+        await setupFixture(page, 'edge-children-elsewhere', 'focus');
+        const grandma = 'v_mo';
+        await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), grandma);
+        await tabOf(page, grandma).tap();
+        await expect(cardOf(page, 'half_v')).toBeVisible();
+        // The sheet opens on the readable card; the view then zooms far out behind it
+        await cardOf(page, grandma).tap({ position: { x: 40, y: 30 } });
+        const sheet = page.locator('.bottom-sheet-person');
+        await expect(sheet).toBeVisible();
+        await zoomFarOut(page, grandma);
+        await sheet.locator('[data-action="child-elsewhere:aunt"]').tap();
+        await expect(sheet).toHaveCount(0);
+        await expectElsewhereLanding(page);
     });
 });
 

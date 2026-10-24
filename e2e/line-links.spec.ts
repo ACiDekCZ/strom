@@ -1,4 +1,4 @@
-import { test, expect, Page } from '@playwright/test';
+import { test, expect, Page, Locator } from '@playwright/test';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { openApp } from './helpers.js';
@@ -19,8 +19,8 @@ const FOCUS = 'eJ_focus_kid';
 
 const cardOf = (page: Page, id: string) => page.locator(`#tree-canvas .person-card[data-id="${id}"]`);
 
-async function setup(page: Page): Promise<void> {
-    await page.setViewportSize({ width: 1440, height: 900 });
+async function setup(page: Page, viewport: { width: number; height: number } | null = { width: 1440, height: 900 }): Promise<void> {
+    if (viewport) await page.setViewportSize(viewport);
     await openApp(page);
     const data = JSON.parse(readFileSync(join(process.cwd(), 'test', 'etalon-inlaw-loop.json'), 'utf-8'));
     await page.evaluate(async ([tree, focus]) => {
@@ -96,4 +96,59 @@ test('the poster labels both ends of the left-out line, without the arrow', asyn
     expect(svg).toMatch(/>parents: [^<]+</);
     expect(svg).toMatch(/>child: [^<]+</);
     expect(svg).not.toContain('↗');
+});
+
+/**
+ * A jump lands at a readable scale (src/jump-view.ts): from a view zoomed far
+ * out the other end of the link is centred at 75 % or more, not left a speck
+ * (reported on a real tree: "child ↗" ended in a view of tiny cards).
+ */
+const READABLE = 0.75;
+
+/** Zoom far out, the card in the middle (its tabs still there to press). */
+async function zoomFarOut(page: Page, id: string): Promise<void> {
+    await page.evaluate(cardId => window.Strom.ZoomPan.glideToPerson(cardId as never, 0.3, 0), id);
+    await expect.poll(() => page.evaluate(() => window.Strom.ZoomPan.getScale())).toBeCloseTo(0.3, 2);
+}
+
+/** How far the card's centre stands from the middle of the tree's viewport (px). */
+async function offCentre(page: Page, id: string): Promise<number> {
+    return page.evaluate(cardId => {
+        const c = document.querySelector(`#tree-canvas .person-card[data-id="${cardId}"]`)!.getBoundingClientRect();
+        const v = document.getElementById('tree-container')!.getBoundingClientRect();
+        return Math.hypot(c.left + c.width / 2 - (v.left + v.width / 2), c.top + c.height / 2 - (v.top + v.height / 2));
+    }, id);
+}
+
+async function jumpsReadably(page: Page, press: (tab: Locator) => Promise<void>): Promise<void> {
+    // "child ↗" from a view zoomed far out: the child in the middle, readable, highlighted
+    await zoomFarOut(page, PARENTS[0]);
+    await press(cardOf(page, PARENTS[0]).locator('.branch-tab.line-link[data-action="jump-child"]'));
+    await expect(cardOf(page, CHILD)).toHaveClass(/highlighted/);
+    await expect.poll(() => page.evaluate(() => window.Strom.ZoomPan.getScale())).toBeGreaterThanOrEqual(READABLE);
+    expect(await inView(page, CHILD)).toBe(true);
+    expect(await offCentre(page, CHILD)).toBeLessThanOrEqual(3);
+    // "parents ↗" from far out: both parents, together, readable
+    await zoomFarOut(page, CHILD);
+    await press(cardOf(page, CHILD).locator('.branch-tab.line-link[data-action="jump-parents"]'));
+    await expect.poll(() => page.evaluate(() => window.Strom.ZoomPan.getScale())).toBeGreaterThanOrEqual(READABLE);
+    for (const id of PARENTS) {
+        await expect(cardOf(page, id)).toHaveClass(/highlighted/);
+        expect(await inView(page, id)).toBe(true);
+    }
+    expect(await page.evaluate(() => window.Strom.TreeRenderer.getFocusPersonId())).toBe(FOCUS);
+}
+
+test('a jump from a view zoomed far out lands readable: the other end in the middle at 75 % or more', async ({ page }) => {
+    await setup(page);
+    await jumpsReadably(page, tab => tab.click());
+});
+
+test.describe('phone 390 × 844', () => {
+    test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+    test('a jump from a view zoomed far out lands readable on a phone too', async ({ page }) => {
+        await setup(page, null);
+        await jumpsReadably(page, tab => tab.tap());
+    });
 });

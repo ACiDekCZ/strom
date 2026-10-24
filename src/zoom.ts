@@ -4,6 +4,8 @@
  */
 
 import { PersonId } from './types.js';
+import type { Rect } from './children-transition.js';
+import { jumpView, JumpViewPlan } from './jump-view.js';
 
 // Import dynamically to avoid circular dependency
 let getTreeRenderer: () => { getFocusPersonId: () => PersonId | null } | null = () => null;
@@ -47,6 +49,19 @@ const FIT_MAX_SCALE = 1.5;
 /** Margin (world px) around the cards when the whole tree is fitted to the screen. */
 const FIT_PADDING = 50;
 const MAX_SCALE = 4;
+/**
+ * The scale a tree opens at (centred on the focus with its family around)
+ * and the lowest one a jump to a card lands on (jumpToBoxes): the cards
+ * readable, their badges whole (above ZOOM_FAR).
+ */
+const CONTEXT_SCALE = 0.75;
+/**
+ * The lowest scale a jump shows several cards together at (a couple of
+ * parents on a phone): the cards whole, their badges not yet dots.
+ */
+const JUMP_TOGETHER_SCALE = 0.6;
+/** Glide of a jump to a card elsewhere in the view (ms). */
+const JUMP_GLIDE_MS = 300;
 /** Below this scale the card badges become dots and the status icons hide. */
 const ZOOM_FAR = 0.55;
 /** Below this scale the research edge's stub becomes a stretch of the card's top edge. */
@@ -621,7 +636,7 @@ class ZoomPanClass {
         const focusedId = renderer?.getFocusPersonId();
         if (focusedId) {
             this.settleAnimation();
-            this.scale = 0.75;
+            this.scale = CONTEXT_SCALE;
             this.tx = 0;
             this.ty = 0;
             this.apply();
@@ -847,6 +862,37 @@ class ZoomPanClass {
         const cy = (parseFloat(card.style.top) || 0) + card.offsetHeight / 2;
         // A view fitted below MIN_SCALE keeps its scale (no jump in).
         const endScale = Math.max(Math.min(MIN_SCALE, this.scale), Math.min(MAX_SCALE, targetScale));
+        this.glideToWorldPoint(cx, cy, endScale, duration);
+        return true;
+    }
+
+    /**
+     * A jump to cards drawn elsewhere in the view (a line link's other end,
+     * a child drawn elsewhere): glide to them at a readable scale, one card
+     * never below CONTEXT_SCALE, several together never below
+     * JUMP_TOGETHER_SCALE (jumpView). `boxes` are the cards in the world.
+     * Returns the plan (null: the view stays).
+     */
+    jumpToBoxes(boxes: readonly Rect[]): JumpViewPlan | null {
+        if (this.isStandaloneViewActive()) return null;
+        const container = document.getElementById('tree-container');
+        if (!container) return null;
+        const plan = jumpView({
+            scale: this.scale, tx: this.tx, ty: this.ty,
+            view: { width: container.clientWidth, height: container.clientHeight },
+            targets: boxes, minScale: CONTEXT_SCALE, togetherMinScale: JUMP_TOGETHER_SCALE, maxScale: MAX_SCALE, padding: FIT_PADDING / 2,
+        });
+        if (plan) this.glideToWorldPoint(plan.centerX, plan.centerY, plan.scale, JUMP_GLIDE_MS);
+        return plan;
+    }
+
+    /**
+     * Glide (ease-out) so the world point stands in the middle of the view at
+     * `endScale`; reduced motion or no duration: at once.
+     */
+    private glideToWorldPoint(cx: number, cy: number, endScale: number, duration: number): void {
+        const container = document.getElementById('tree-container');
+        if (!container) return;
         const endTx = container.clientWidth / 2 - cx * endScale;
         const endTy = container.clientHeight / 2 - cy * endScale;
         if (this.animationFrame) cancelAnimationFrame(this.animationFrame);
@@ -859,7 +905,7 @@ class ZoomPanClass {
             this.ty = endTy;
             this.apply();
             this.endMotion();
-            return true;
+            return;
         }
         const startScale = this.scale, startTx = this.tx, startTy = this.ty;
         const startTime = performance.now();
@@ -875,7 +921,6 @@ class ZoomPanClass {
         };
         this.beginMotion();
         this.animationFrame = requestAnimationFrame(step);
-        return true;
     }
 
     centerOnPerson(personId: PersonId): void {
