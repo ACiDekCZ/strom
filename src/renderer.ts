@@ -1723,9 +1723,9 @@ class TreeRendererClass {
     }
 
     /**
-     * "▾ Hide shown children · n" (the focus bar's button on the desktop, the
-     * floating chip below it): while the family view shows anyone's children
-     * in place.
+     * "▾ Hide shown · n" (the focus bar's button on the desktop, the
+     * floating chip below it): while the family view shows anything in place,
+     * n the steps (shownChildrenCount).
      */
     private updateChildrenShownUI(): void {
         const n = this.viewMode === 'family' ? this.shownChildrenCount() : 0;
@@ -1735,8 +1735,8 @@ class TreeRendererClass {
             el.hidden = n === 0;
             if (n === 0) continue;
             const text = el.querySelector('.hsc-text');
-            if (text) text.textContent = strings.focus.hideAllShownChildren(n);
-            el.setAttribute('aria-label', strings.focus.hideAllShownChildrenAria(n));
+            if (text) text.textContent = strings.focus.hideAllShown(n);
+            el.setAttribute('aria-label', strings.focus.hideAllShownAria(n));
         }
     }
 
@@ -2200,8 +2200,8 @@ class TreeRendererClass {
     /**
      * Whether what the anchor's "▾" tab shows is a nested expansion (§6):
      * the anchor is itself a card shown here (by another expansion), or it
-     * stands more than three generations from the focus. Its bubble and the
-     * sheet then offer "◎ Focus on …" (nestedFocusHtml). The tab's kind:
+     * stands more than three generations from the focus. Its bubble then
+     * offers "◎ Focus on …" (nestedFocusHtml; the sheet has its "Focus" tile). The tab's kind:
      * the siblings of an anchor shown as a child of the same parents, and
      * the children of parents shown with them by an edge ancestor's
      * "▸ siblings" (§4), are that one expansion, not a nested one.
@@ -2214,19 +2214,6 @@ class TreeRendererClass {
         if (tab === 'siblings') return !this.siblingsShownParents(anchorId).some(q => this.childrenBroughtIn.get(q)?.has(anchorId));
         if (tab === 'children') return ![...this.parentsWithSiblings].some(p => this.siblingsShownFor.get(p)?.includes(anchorId));
         return true;
-    }
-
-    /**
-     * Whether the person's sheet offers "◎ Focus on …" under its "Hide …
-     * shown here" row (§6): one of the person's "▾" tabs in the menu
-     * (parents, siblings, children) shows a nested expansion.
-     */
-    nestedFocusOffered(personId: PersonId): boolean {
-        if (this.viewMode !== 'family') return false;
-        const shownHere = this.shownHereIds();
-        return (this.isChildrenShown(personId) && this.isNestedShown(personId, shownHere, 'children'))
-            || (this.isParentsShown(personId) && this.isNestedShown(personId, shownHere, 'other'))
-            || (this.isSiblingsShown(personId) && this.isNestedShown(personId, shownHere, 'siblings'));
     }
 
     /**
@@ -2266,9 +2253,10 @@ class TreeRendererClass {
     /**
      * The person's siblings the parents' children show in place, drawn
      * elsewhere in the tree (childrenDrawnElsewhere of each parent in view,
-     * each once, the person left out).
+     * each once, the person left out). Also the rows of the person menu and
+     * the sheet.
      */
-    private siblingsElsewhereOf(personId: PersonId): PersonId[] {
+    siblingsElsewhereOf(personId: PersonId): PersonId[] {
         const out: PersonId[] = [];
         for (const q of DataManager.getPerson(personId)?.parentIds ?? []) {
             for (const id of this.childrenElsewhereOf(q)) if (id !== personId && !out.includes(id)) out.push(id);

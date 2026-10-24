@@ -56,8 +56,6 @@ export interface PersonMenuAction {
     sheetTop?: boolean;
     /** A quiet line under the row in the bottom sheet only (the siblings shown: through which parents). */
     sheetNote?: string;
-    /** In the bottom sheet only, not in the desktop menu (a nested expansion's "◎ Focus on …", §6). */
-    sheetOnly?: boolean;
     /**
      * What the row does, marked as the card's tabs mark it (§2): shows in
      * place (▸), hides what it showed (▾, "placeOpen"), focuses (◎), or moves
@@ -188,18 +186,7 @@ export const contextMenuMethods = uiModule({
                 kind: TreeRenderer.isChildrenShown(personId) ? 'placeOpen' as const : 'place' as const,
             }] : []),
         ];
-        // A nested expansion (§6): "◎ Focus on …" under the last "Hide … shown here" row, in the sheet only
-        const lastOpen = inPlace.map(a => a.kind).lastIndexOf('placeOpen');
-        if (lastOpen >= 0 && TreeRenderer.nestedFocusOffered(personId)) {
-            inPlace.splice(lastOpen + 1, 0, {
-                action: 'nested-focus', sheetTop: true, sheetOnly: true, kind: 'focus',
-                label: strings.focus.nestedFocusRow(shownName(person, '?')), sheetNote: strings.focus.nestedFocusHint,
-            });
-        }
-        const children: PersonMenuAction[] = [
-            ...inPlace,
-            ...(TreeRenderer.canToggleChildren(personId) ? this.childrenElsewhereRows(personId) : []),
-        ];
+        const children: PersonMenuAction[] = [...inPlace, ...this.elsewhereRows(personId)];
         if (isViewMode) {
             return withViewLinkRows([
                 { action: 'focus', label: c.focus, kind: 'focus' },
@@ -289,12 +276,18 @@ export const contextMenuMethods = uiModule({
     },
 
     /**
-     * Under the children row: the person's children the view draws elsewhere
-     * in the tree ("Already in the tree elsewhere"), a row each that moves
-     * the view to the card (also right under the bottom sheet's tiles).
+     * Under the rows in place: the person's siblings (with the siblings tab)
+     * and children (with the children tab) the view draws elsewhere in the
+     * tree, in the tabs' order, each once ("Already in the tree elsewhere"),
+     * a row each that moves the view to the card (also right under the
+     * bottom sheet's tiles).
      */
-    childrenElsewhereRows(personId: PersonId): PersonMenuAction[] {
-        return TreeRenderer.childrenElsewhereOf(personId)
+    elsewhereRows(personId: PersonId): PersonMenuAction[] {
+        const ids = [
+            ...(TreeRenderer.canToggleSiblings(personId) ? TreeRenderer.siblingsElsewhereOf(personId) : []),
+            ...(TreeRenderer.canToggleChildren(personId) ? TreeRenderer.childrenElsewhereOf(personId) : []),
+        ];
+        return [...new Set(ids)]
             .map(id => DataManager.getPerson(id))
             .filter((p): p is Person => p !== null)
             .map((p, i) => {
@@ -343,10 +336,6 @@ export const contextMenuMethods = uiModule({
                 break;
             case 'toggle-parents':
                 void TreeRenderer.toggleParentsShown(personId);
-                break;
-            case 'nested-focus':
-                // The anchor of a nested expansion as the new focus (§6): a conscious choice, no confirmation
-                void TreeRenderer.setFocus(personId);
                 break;
             case 'materials':
                 this.showPersonMaterials(personId);
@@ -469,7 +458,7 @@ export const contextMenuMethods = uiModule({
         }
 
         this.hideContextMenu();
-        const actions = this.getPersonMenuActions(personId).filter(a => !a.sheetOnly);
+        const actions = this.getPersonMenuActions(personId);
         if (actions.length === 0) return;
 
         const menu = document.createElement('div');

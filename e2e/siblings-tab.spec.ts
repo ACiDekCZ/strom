@@ -34,6 +34,17 @@ async function setup(page: Page): Promise<void> {
     await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), PERSON);
 }
 
+/** Another invented fixture with its focus. */
+async function setupFixture(page: Page, fixture: string, focus: string): Promise<void> {
+    await openApp(page);
+    const data = JSON.parse(readFileSync(join(process.cwd(), 'test', `${fixture}.json`), 'utf-8'));
+    await page.evaluate(async ([tree, f]) => {
+        await window.Strom.DataManager.importAsNewTree(tree as never, 'Elsewhere');
+        await window.Strom.TreeRenderer.setFocus(f as never);
+    }, [data, focus] as const);
+    await expect(cardOf(page, focus)).toBeVisible();
+}
+
 /** Every drawn card's centre on the screen, by id (to a pixel). */
 async function screenCenters(page: Page): Promise<Record<string, [number, number]>> {
     return page.evaluate(() => {
@@ -80,7 +91,7 @@ test('"▸ siblings" shows the children of both parents in one step; the card st
     await expect(hide.locator('.pill-glyph')).toHaveText('▾');
     for (const id of PARENTS) await expect(childrenTab(page, id)).toHaveClass(/active/);
     expect(await shownCount(page)).toBe(1);
-    await expect(page.locator('#hide-shown-children')).toHaveText('▾Hide shown children · 1');
+    await expect(page.locator('#hide-shown-children')).toHaveText('▾Hide shown · 1');
     expect(await page.evaluate(id => window.Strom.TreeRenderer.isSiblingsShown(id as never), PERSON)).toBe(true);
     // The bubble beside the tab: who was shown, through which parents, what a click does
     const bubble = cardOf(page, PERSON).locator('.siblings-bubble');
@@ -158,6 +169,34 @@ test('the person menu: "Show siblings here" with the count above the children ro
     for (const id of SIBLINGS) await expect(cardOf(page, id)).toHaveCount(0);
 });
 
+/**
+ * A sibling drawn elsewhere in the tree (edge-children-elsewhere, invented:
+ * the mother's sister Ilse married the father's brother and stands by him):
+ * the mother's menu names her under "Already in the tree elsewhere" as it
+ * names a child drawn elsewhere, a row that moves the view to her card.
+ */
+test('the person menu: a sibling drawn elsewhere is a row of "Already in the tree elsewhere" that moves the view', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await setupFixture(page, 'edge-children-elsewhere', 'focus');
+    await expect(siblingsTab(page, 'mother')).toHaveCount(1);
+    await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), 'mother');
+    await cardOf(page, 'mother').click({ position: { x: 60, y: 40 } });
+    const row = page.locator('.context-menu [data-action="child-elsewhere:aunt"]');
+    await expect(row).toHaveText(/Ilse Varnhag \*1951/);
+    await expect(row).toHaveAttribute('aria-label', 'Move the view to the card of Ilse Varnhag');
+    await expect(page.locator('.context-menu .menu-section-header')).toContainText(['Already in the tree elsewhere']);
+    // Under the siblings row
+    const actions = await page.locator('.context-menu .context-menu-item').evaluateAll(els => els.map(e => (e as HTMLElement).dataset.action));
+    expect(actions.indexOf('child-elsewhere:aunt')).toBeGreaterThan(actions.indexOf('toggle-siblings'));
+    await row.click();
+    await expect(cardOf(page, 'aunt')).toHaveClass(/children-glow/);
+    await expect.poll(() => page.evaluate(() => {
+        const c = document.querySelector<HTMLElement>('#tree-canvas .person-card[data-id="aunt"]')!.getBoundingClientRect();
+        const t = document.getElementById('tree-container')!.getBoundingClientRect();
+        return Math.abs(c.left + c.width / 2 - (t.left + t.width / 2)) <= 3;
+    })).toBe(true);
+});
+
 test('at 1024 × 768 the tall "▸ siblings" bubble of a card just under the bars stays on the screen: it opens below the tab', async ({ page }) => {
     await page.setViewportSize({ width: 1024, height: 768 });
     await setup(page);
@@ -205,5 +244,19 @@ test.describe('phone 390 × 844', () => {
         await expect(sheet.locator('.bottom-sheet-row-note')).toHaveText(/^Shown as the children of the parents: Father .+, Mother .+\.$/);
         await sheet.locator('[data-action="toggle-siblings"]').tap();
         for (const id of SIBLINGS) await expect(cardOf(page, id)).toHaveCount(0);
+    });
+
+    test('the bottom sheet: a sibling drawn elsewhere under "Already in the tree elsewhere"', async ({ page }) => {
+        await setupFixture(page, 'edge-children-elsewhere', 'focus');
+        await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), 'mother');
+        await cardOf(page, 'mother').tap({ position: { x: 40, y: 30 } });
+        const sheet = page.locator('.bottom-sheet-person');
+        await expect(sheet).toBeVisible();
+        await expect(sheet.locator('.bottom-sheet-section')).toContainText(['Already in the tree elsewhere']);
+        const row = sheet.locator('[data-action="child-elsewhere:aunt"]');
+        await expect(row).toContainText('Ilse Varnhag');
+        await row.tap();
+        await expect(sheet).toHaveCount(0);
+        await expect(cardOf(page, 'aunt')).toHaveClass(/children-glow/);
     });
 });

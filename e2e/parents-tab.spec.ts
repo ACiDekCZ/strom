@@ -125,7 +125,7 @@ test('↩ after "▸ parents" is one step back; ↪ brings the parents again', a
     expect(await shownCount(page)).toBe(1);
 });
 
-test('"▸ siblings" on an ancestor at the edge of the depth shows the parents and the siblings in one step; "Hide shown children" closes it all', async ({ page }) => {
+test('"▸ siblings" on an ancestor at the edge of the depth shows the parents and the siblings in one step; "Hide shown" closes it all', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await setup(page);
     await page.mouse.move(5, 500);
@@ -203,7 +203,6 @@ test('children of a sibling shown here: the "▾" bubble offers a focus on the s
     // One step is not nested: no row on the father's siblings nor on the parents' children
     await expect(cardOf(page, PERSON).locator('.nested-focus-row')).toHaveCount(0);
     await expect(cardOf(page, PARENTS[0]).locator('.nested-focus-row')).toHaveCount(0);
-    expect(await page.evaluate(id => window.Strom.TreeRenderer.nestedFocusOffered(id as never), PERSON)).toBe(false);
 
     await page.mouse.move(5, 500);
     await childrenTab(page, SIBLINGS[0]).hover();
@@ -221,7 +220,7 @@ test('children of a sibling shown here: the "▾" bubble offers a focus on the s
     await expect(page.locator('#focus-toast .focus-toast-box')).toHaveCount(0);
 });
 
-test('the sheet offers the nested focus under the hide row; the context menu does not', async ({ page }) => {
+test('neither the sheet nor the context menu repeats the nested focus: the sheet\'s "Focus" tile does it', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await setup(page);
     await siblingsTab(page, PERSON).click();
@@ -235,22 +234,17 @@ test('the sheet offers the nested focus under the hide row; the context menu doe
     await expect(menu.locator('[data-action="toggle-children"]')).toHaveCount(1);
     await expect(menu.locator('[data-action="nested-focus"]')).toHaveCount(0);
     await page.keyboard.press('Escape');
-    // The sheet (≤ 1024 px): the row stands right under "Hide the children shown here"
+    // The sheet (≤ 1024 px): no "◎ Focus on …" row; the "Focus" tile sets the focus on the person
     await page.setViewportSize({ width: 800, height: 900 });
     await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), SIBLINGS[0]);
     await cardOf(page, SIBLINGS[0]).click();
     const sheet = page.locator('.bottom-sheet-person');
     await expect(sheet).toBeVisible();
-    const actions = await sheet.locator('.bottom-sheet-item[data-action]').evaluateAll(els => els.map(e => (e as HTMLElement).dataset.action));
-    const i = actions.indexOf('nested-focus');
-    expect(i).toBeGreaterThan(0);
-    expect(actions[i - 1]).toBe('toggle-children');
-    const row = sheet.locator('.bottom-sheet-item[data-action="nested-focus"]');
-    await expect(row).toContainText('Focus on Uncle H1');
-    await expect(row.locator('xpath=following-sibling::*[1]')).toHaveText('A new centre of the tree with all its branches.');
-    await row.click();
+    await expect(sheet.locator('.bottom-sheet-item[data-action="toggle-children"]')).toHaveCount(1);
+    await expect(sheet.locator('.bottom-sheet-item[data-action="nested-focus"]')).toHaveCount(0);
+    await expect(sheet).not.toContainText('Focus on Uncle H1');
+    await sheet.locator('.sheet-tile[data-action="focus"]').click();
     await expect.poll(() => page.evaluate(() => window.Strom.TreeRenderer.getFocusPersonId())).toBe(SIBLINGS[0]);
-    await expect(page.locator('#focus-toast .focus-toast-box')).toHaveCount(0);
 });
 
 /**

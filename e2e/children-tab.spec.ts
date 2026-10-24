@@ -348,8 +348,8 @@ test('two expansions: the focus bar hides both at once, every card back where it
     await tabOf(page, ANCESTOR).click();
     await expect(cardOf(page, SIBLINGS[0])).toBeVisible();
     await expect(button).toBeVisible();
-    await expect(button).toHaveText('▾Hide shown children · 1');
-    await expect(button).toHaveAttribute('aria-label', 'Hide the children shown for 1 person');
+    await expect(button).toHaveText('▾Hide shown · 1');
+    await expect(button).toHaveAttribute('aria-label', 'Hide everything shown here (1 expansion)');
     // Just shown: the father's children in view glow for a moment
     await expect(cardOf(page, SIBLINGS[0])).toHaveClass(/children-glow/);
     // A second card with children out of view (the view moves to keep it in place)
@@ -358,8 +358,8 @@ test('two expansions: the focus bar hides both at once, every card back where it
     expect(second).not.toBeNull();
     await page.evaluate(id => window.Strom.TreeRenderer.toggleChildrenShown(id as never), second);
     await expect(cardOf(page, second!).locator('.children-tab')).toHaveAttribute('aria-pressed', 'true');
-    await expect(button).toHaveText('▾Hide shown children · 2');
-    await expect(button).toHaveAttribute('aria-label', 'Hide the children shown for 2 people');
+    await expect(button).toHaveText('▾Hide shown · 2');
+    await expect(button).toHaveAttribute('aria-label', 'Hide everything shown here (2 expansions)');
     // The bar's order: after the depth steppers
     expect(await page.evaluate(() => {
         const b = document.getElementById('hide-shown-children')!;
@@ -643,7 +643,7 @@ test.describe('phone 390 × 844', () => {
         await tabOf(page, ANCESTOR).tap();
         for (const id of SIBLINGS) await expect(cardOf(page, id)).toHaveCount(1);
         await expect(chip).toBeVisible();
-        await expect(chip).toHaveText('▾Hide shown children · 1');
+        await expect(chip).toHaveText('▾Hide shown · 1');
         await expect(page.locator('#hide-shown-children')).toBeHidden();
         const box = (await chip.boundingBox())!;
         expect(box.height).toBe(36);

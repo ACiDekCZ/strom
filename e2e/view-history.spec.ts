@@ -5,7 +5,7 @@ import { openApp } from './helpers.js';
 
 /**
  * The view's back/forward history (↩ / ↪, Alt+← / Alt+→, GitHub #4): showing
- * children in place, hiding them (the tab, "Hide shown children", the dashed
+ * children in place, hiding them (the tab, "Hide shown", the dashed
  * "▸ parents") and a jump to a card elsewhere are steps like a new focus.
  * Back restores the view before the step — within the focus through the
  * transition, the step's card in place; with another focus the focus and the
@@ -146,7 +146,7 @@ test.describe('desktop 1440 × 900', () => {
         await expectShown(page, [...SIBLINGS, ...NEPHEWS], true);
     });
 
-    test('"Hide shown children": back brings every expansion at once, forward hides them again', async ({ page }) => {
+    test('"Hide shown": back brings every expansion at once, forward hides them again', async ({ page }) => {
         await setupFixture(page, 'comprehensive', FOCUS, FATHER);
         await tabOf(page, FATHER).click();
         await expectShown(page, SIBLINGS, true);
@@ -157,7 +157,7 @@ test.describe('desktop 1440 × 900', () => {
         const fatherAt = await centerOf(page, FATHER);
         const scaleShown = await page.evaluate(() => window.Strom.ZoomPan.getScale());
         const button = page.locator('#hide-shown-children');
-        await expect(button).toHaveText('▾Hide shown children · 2');
+        await expect(button).toHaveText('▾Hide shown · 2');
         await button.click();
         await expectShown(page, [...SIBLINGS, ...NEPHEWS], false);
         await expect(button).toBeHidden();
@@ -165,7 +165,7 @@ test.describe('desktop 1440 × 900', () => {
 
         await back(page).click();
         await expectShown(page, [...SIBLINGS, ...NEPHEWS], true);
-        await expect(button).toHaveText('▾Hide shown children · 2');
+        await expect(button).toHaveText('▾Hide shown · 2');
         await expect(tabOf(page, FATHER)).toHaveAttribute('aria-pressed', 'true');
         await expect(tabOf(page, SIBLINGS[0])).toHaveAttribute('aria-pressed', 'true');
         await expect(fwd(page)).toBeVisible();
@@ -326,7 +326,7 @@ test.describe('phone 390 × 844', () => {
 
         await fwd(page).tap();
         await expectShown(page, SIBLINGS, true);
-        await expect(page.locator('#hide-shown-children-chip')).toHaveText('▾Hide shown children · 1');
+        await expect(page.locator('#hide-shown-children-chip')).toHaveText('▾Hide shown · 1');
         await expect(back(page)).toBeVisible();
         await expect(fwd(page)).toBeVisible();
     });

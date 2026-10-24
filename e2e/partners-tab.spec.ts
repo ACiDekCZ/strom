@@ -105,7 +105,7 @@ test('"▸ ∞" shows the other partners in place; the card stays; a second clic
     expect(await positions(page)).toEqual(layoutBefore);
 });
 
-test('↩ after "▸ ∞" is one step back; ↪ brings the partners again; "Hide shown children" closes them', async ({ page }) => {
+test('↩ after "▸ ∞" is one step back; ↪ brings the partners again; "Hide shown" closes them', async ({ page }) => {
     await setup(page);
     const couldGoBack = await page.evaluate(() => window.Strom.TreeRenderer.canGoBack());
     await partnersPill(page, PERSON).click();
