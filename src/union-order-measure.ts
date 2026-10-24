@@ -122,8 +122,12 @@ export type BubblePlace = 'above' | 'right' | 'left' | 'below';
  * visible tree under the bars over it): above the tab while it fits there;
  * else beside the card, its top edge at the card's top, on the right where
  * it fits, else on the left; only when it fits on neither side, below the
- * tab where the room below is larger than above (bubbleOpensBelow), else
- * above all the same.
+ * tab while it fits there whole. A bubble that fits neither above nor below
+ * the tab nor beside the card at its top (a low screen: a phone held
+ * sideways, a small window) still goes beside the card where the tree is
+ * tall enough for it, moved up as far as it needs (besideTop); only then
+ * below the tab where the room below is larger than above
+ * (bubbleOpensBelow), else above all the same.
  */
 export function bubblePlacement(
     tab: { top: number; bottom: number },
@@ -132,11 +136,33 @@ export function bubblePlacement(
     room: { top: number; bottom: number; left: number; right: number },
 ): BubblePlace {
     if (tab.top - room.top >= bubble.height + BUBBLE_GAP) return 'above';
-    if (card.top >= room.top && card.top + bubble.height <= room.bottom) {
+    const side = (): BubblePlace | null => {
         if (card.right + BUBBLE_SIDE_GAP + bubble.width <= room.right) return 'right';
         if (card.left - BUBBLE_SIDE_GAP - bubble.width >= room.left) return 'left';
+        return null;
+    };
+    if (card.top >= room.top && card.top + bubble.height <= room.bottom) {
+        const at = side();
+        if (at) return at;
+    }
+    if (room.bottom - tab.bottom >= bubble.height + BUBBLE_GAP) return 'below';
+    if (bubble.height <= room.bottom - room.top) {
+        const at = side();
+        if (at) return at;
     }
     return bubbleOpensBelow(tab, bubble.height, room.top, room.bottom) ? 'below' : 'above';
+}
+
+/** The margin a bubble moved up beside the card keeps from the tree's bottom (the card grows a little under the pointer). */
+const BUBBLE_EDGE_GAP = 4;
+
+/**
+ * The top edge of a bubble beside the card (bubblePlacement 'right'/'left'):
+ * the card's top, unless the bubble would then reach under the tree's
+ * bottom or start under the bars; then as low as it still fits whole.
+ */
+export function besideTop(cardTop: number, bubbleHeight: number, room: { top: number; bottom: number }): number {
+    return Math.max(room.top, Math.min(cardTop, room.bottom - BUBBLE_EDGE_GAP - bubbleHeight));
 }
 
 /** The most names a tab's bubble lists; the rest is one line "and n more" (the menu and the sheet list them all). */

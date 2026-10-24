@@ -73,7 +73,7 @@ import {
     hiddenPartnerIds, childrenByUnion, childrenComeWithPartners, otherFamilyChildrenElsewhere, marriagesInOrder,
 } from './marriage-order.js';
 import { partnerIdsShownInPlace } from './layout/pipeline/1-select-subgraph.js';
-import { measureUnionOrderPills, measureTabRows, rowKey, unionOrderPillKey, unionOrderPillPartsHtml, pillFontsPending, branchTabRestHtml, tabsForm, tabsFormClass, bubblePlacement, BUBBLE_SIDE_GAP, bubbleNameCounts } from './union-order-measure.js';
+import { measureUnionOrderPills, measureTabRows, rowKey, unionOrderPillKey, unionOrderPillPartsHtml, pillFontsPending, branchTabRestHtml, tabsForm, tabsFormClass, bubblePlacement, besideTop, BUBBLE_SIDE_GAP, bubbleNameCounts } from './union-order-measure.js';
 import { showFocusToast, hideFocusToast } from './focus-toast.js';
 import { openCardMenuFromKeyboard } from './ui/keyboard-access.js';
 import { syncDepthStepper } from './ui/depth-stepper.js';
@@ -2380,9 +2380,10 @@ class TreeRendererClass {
      * A tab's bubble opens above the tab; a long one (groups of siblings, a
      * family) near the top went under the bars over the tree or off the
      * screen. Where the room above is too small it opens beside the card
-     * (right, else left; .beside-*, its top edge at the card's top), and
-     * only where it fits on neither side below the tab (.below, when the
-     * room below is larger): measured when it opens, the zoom included
+     * (right, else left; .beside-*, its top edge at the card's top, on a low
+     * screen moved up as far as it needs), and only where it fits on
+     * neither side below the tab (.below, when the room below is larger):
+     * measured when it opens, the zoom included
      * (bubblePlacement). A bubble over the zoom buttons lifts the tree over
      * them while it is open (liftBubble).
      */
@@ -2413,13 +2414,16 @@ class TreeRendererClass {
             if (bar.width === 0 || bar.bottom > r.top || bar.right < r.left - reach || bar.left > r.right + reach) continue;
             roomTop = Math.max(roomTop, bar.bottom);
         }
-        const place = bubblePlacement(r, card, { width: b.width, height: b.height },
-            { top: roomTop, bottom: roomBottom, left: container?.left ?? 0, right: container?.right ?? window.innerWidth });
+        const room = { top: roomTop, bottom: roomBottom, left: container?.left ?? 0, right: container?.right ?? window.innerWidth };
+        const place = bubblePlacement(r, card, { width: b.width, height: b.height }, room);
         if (place === 'below') bubble.classList.add('below');
         if (place === 'right' || place === 'left') {
             const x = place === 'right' ? card.right + BUBBLE_SIDE_GAP : card.left - BUBBLE_SIDE_GAP - b.width;
             bubble.style.setProperty('--beside-dx', `${(x - b.left) / ratio}px`);
-            bubble.style.setProperty('--beside-dy', `${(card.top - b.top) / ratio}px`);
+            const top = besideTop(card.top, b.height, room);
+            bubble.style.setProperty('--beside-dy', `${(top - b.top) / ratio}px`);
+            // The arrow keeps pointing at the card's top where the bubble moved up
+            bubble.style.setProperty('--beside-arrow', `${Math.max(0, Math.min(card.top - top, b.height - 28)) / ratio}px`);
             bubble.classList.add(`beside-${place}`);
         }
         this.liftBubble(bubble, place === 'above' ? b : measure());

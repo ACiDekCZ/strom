@@ -3258,13 +3258,15 @@
         .badge-tooltip.below { bottom: auto; top: 100%; margin-bottom: 0; margin-top: 8px; }
         .badge-tooltip.below::after { top: auto; bottom: 100%; margin-top: 0; margin-bottom: -5px; transform: rotate(225deg); }
         /* Too little room above the tab: beside the card, its top edge at the
-           card's top, on the right (else the left), the arrow on the edge
-           toward the card; moved there from above the tab by the offset the
-           renderer measured (TreeRenderer.placeBubble, --beside-dx/-dy). */
+           card's top (on a low screen moved up as far as it needs, the arrow
+           still at the card's top), on the right (else the left), the arrow
+           on the edge toward the card; moved there from above the tab by the
+           offset the renderer measured (TreeRenderer.placeBubble,
+           --beside-dx/-dy/-arrow). */
         .badge-tooltip.beside-right,
         .badge-tooltip.beside-left { transform: translateX(-50%) translate(var(--beside-dx, 0px), var(--beside-dy, 0px)); }
         .badge-tooltip.beside-right::after,
-        .badge-tooltip.beside-left::after { top: 14px; margin-top: 0; }
+        .badge-tooltip.beside-left::after { top: calc(14px + var(--beside-arrow, 0px)); margin-top: 0; }
         .badge-tooltip.beside-right::after { left: auto; right: 100%; margin-left: 0; margin-right: -5px; transform: rotate(135deg); }
         .badge-tooltip.beside-left::after { left: 100%; margin-left: -5px; transform: rotate(-45deg); }
         /* A bubble over the zoom buttons (+/−, the corner block): the tree

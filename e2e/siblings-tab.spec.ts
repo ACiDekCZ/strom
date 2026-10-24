@@ -275,6 +275,44 @@ test('below the tab only where it fits beside the card on neither side', async (
 });
 
 /**
+ * A low screen (a window 390 px tall): a tall bubble fits whole neither
+ * above nor below the tab nor beside the card at its top; it goes beside the
+ * card all the same, moved up just enough to stand whole in the tree (it
+ * opened above the tab and went under the bar).
+ */
+test('at 844 × 390 a bubble that fits nowhere whole opens beside the card, moved up into the tree', async ({ page }) => {
+    await page.setViewportSize({ width: 844, height: 390 });
+    await setup(page);
+    const tab = siblingsTab(page, PERSON);
+    const bubble = tab.locator(':scope > .badge-tooltip');
+    await tab.hover();
+    await expect(bubble).toBeVisible();
+    const h = (await bubble.boundingBox())!.height;
+    await page.mouse.move(5, 200);
+    await expect(bubble).toBeHidden();
+    const tree = (await page.locator('#tree-container').boundingBox())!;
+    const bars = await page.evaluate(fn => new Function(`return (${fn})()`)() as number, barsBottom.toString());
+    // the card's top 20 px lower than the bubble would fit beside it: too little room above, below and beside at its top
+    const below = tree.y + tree.height - h + 20 - bars;
+    expect(h + 12).toBeGreaterThan(below - 9);
+    await cardUnderBars(page, PERSON, below, 150);
+    await tab.hover();
+    await expect(bubble).toHaveClass(/\bbeside-right\b/);
+    const g = await cardAndBubble(page, PERSON);
+    expect(g.bubble.left).toBeGreaterThan(g.card.right);
+    expect(g.bubble.top).toBeGreaterThanOrEqual(g.bars - 1);
+    expect(g.bubble.bottom).toBeLessThanOrEqual(g.tree.bottom + 1);
+    expect(g.bubble.top).toBeLessThan(g.card.top);
+    // the arrow still at the card's top
+    const arrow = await bubble.evaluate(b => {
+        const r = b.getBoundingClientRect();
+        const ratio = r.width / b.offsetWidth;
+        return { top: r.top + parseFloat(getComputedStyle(b, '::after').top) * ratio, ratio };
+    });
+    expect(Math.abs(arrow.top - (g.card.top + 14 * arrow.ratio))).toBeLessThanOrEqual(3);
+});
+
+/**
  * More names than a bubble lists (§17 of round 2): edge-ancestor-children
  * (invented), an ancestor at the edge of the depth with 13 children: its
  * bubble names 8 and says "and 4 more" (the person's own card in view), the

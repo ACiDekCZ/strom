@@ -6,7 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { hiddenRelativesTabs, hiddenChildIds, newlyShownChildIds, childrenDrawnElsewhere, siblingOrderMark, childrenShownClosing, siblingsTabState, newlyShownSiblingIds, siblingGroups, unionChildIdSet, hiddenPartnerIds, childrenByUnion, childrenComeWithPartners, otherFamilyChildrenElsewhere, HiddenRelativesTab } from '../marriage-order.js';
-import { tabsForm, tabGlyph, tabLabel, tabKindClass, branchTabRestHtml, bubbleOpensBelow, bubblePlacement, bubbleNameCounts, BUBBLE_MAX_NAMES } from '../union-order-measure.js';
+import { tabsForm, tabGlyph, tabLabel, tabKindClass, branchTabRestHtml, bubbleOpensBelow, bubblePlacement, besideTop, bubbleNameCounts, BUBBLE_MAX_NAMES } from '../union-order-measure.js';
 import { branchTabKind, branchTabsInOrder } from '../marriage-order.js';
 import { childIdsShownInPlace } from '../layout/pipeline/1-select-subgraph.js';
 import { PersonId, PartnershipId, Person, StromData, DEFAULT_LAYOUT_CONFIG } from '../types.js';
@@ -537,10 +537,25 @@ describe('a tab\'s bubble beside the card', () => {
         const narrow = { ...room, right: 600 };
         // 188-wide card in the middle of a 600-wide tree: 240 + 10 fits neither left of 206 nor right of 394
         expect(bubblePlacement(tabOn(150), cardAt(206, 150), bubble, narrow)).toBe('below');
-        // too tall beside the card (its top at the card's top, the tree ends at 800)
-        expect(bubblePlacement(tabOn(150), cardAt(500, 150), { width: 240, height: 700 }, room)).toBe('below');
+        // taller than the whole tree: nowhere whole, below where the room is larger
+        expect(bubblePlacement(tabOn(150), cardAt(500, 150), { width: 240, height: 701 }, room)).toBe('below');
         // a card partly under the bars: not beside it
         expect(bubblePlacement(tabOn(95), cardAt(500, 95), bubble, room)).toBe('below');
+    });
+
+    it('a low screen: whole neither above, below nor beside at the card\'s top: beside the card, moved up', () => {
+        // a phone held sideways: the tree from 44 to 390, the tab 216 under the bars, a bubble 292 tall
+        const low = { top: 44, bottom: 390, left: 76, right: 844 };
+        const tall = { width: 247, height: 292 };
+        expect(bubblePlacement(tabOn(260), cardAt(300, 260), tall, low)).toBe('right');
+        expect(bubblePlacement(tabOn(260), cardAt(560, 260), tall, low)).toBe('left');
+        // as low as it fits whole: its bottom 4 px over the tree's bottom
+        expect(besideTop(260, 292, low)).toBe(94);
+        // at the card's top where it fits there, never above the bars
+        expect(besideTop(60, 292, low)).toBe(60);
+        expect(besideTop(20, 292, low)).toBe(44);
+        // fits on no side: stays above (more room there than below)
+        expect(bubblePlacement(tabOn(260), cardAt(400, 260), { width: 400, height: 292 }, low)).toBe('above');
     });
 });
 
