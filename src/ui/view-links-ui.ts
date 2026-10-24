@@ -35,6 +35,8 @@ export interface ViewLinkMenuItem {
     hint?: string;
     /** A hook for tests and styles ("show", "unlink", "go"…). */
     action: string;
+    /** What the click does, as the card's tabs say it (§2): shows in place (▸) or focuses (◎). */
+    kind?: 'place' | 'focus';
     run: () => void;
 }
 
@@ -287,7 +289,7 @@ export const viewLinksUiMethods = uiModule({
             .filter(c => c.anchorId === personId && c.state === 'draw' && !shown.some(l => l.hypo === c.hypo));
         if (offers.length === 1) {
             const c = offers[0];
-            out.afterFocus.push({ action: `view-link-show:${c.hypo}:${c.variant}`, label: v.show, sheetTop: true });
+            out.afterFocus.push({ action: `view-link-show:${c.hypo}:${c.variant}`, label: v.show, sheetTop: true, kind: 'place' });
         } else if (offers.length > 1) {
             const submenu = offers.map((c, i): PersonMenuAction => {
                 const h = ctx.hypotheses.get(c.hypo);
@@ -300,7 +302,7 @@ export const viewLinksUiMethods = uiModule({
                     ...(first ? { header: h?.title ? `${c.hypo} · ${h.title}` : c.hypo, divider: i > 0 } : {}),
                 };
             });
-            out.afterFocus.push({ action: 'view-link-show-menu', label: v.showMenu, submenu, sheetTop: true });
+            out.afterFocus.push({ action: 'view-link-show-menu', label: v.showMenu, submenu, sheetTop: true, kind: 'place' });
         }
         return out;
     },
@@ -449,6 +451,14 @@ export const viewLinksUiMethods = uiModule({
             item.setAttribute('role', 'menuitem');
             item.tabIndex = -1;
             item.dataset.action = it.action;
+            // The kind column (§2): a mark for the rows that have one, an empty column for the rest
+            if (items.some(x => x.kind)) {
+                const mark = document.createElement('span');
+                mark.className = 'menu-item-kind';
+                mark.setAttribute('aria-hidden', 'true');
+                if (it.kind) mark.dataset.kind = it.kind;
+                item.appendChild(mark);
+            }
             const name = document.createElement('span');
             name.className = 'view-link-menu__label';
             name.textContent = it.label;
@@ -546,7 +556,7 @@ export const viewLinksUiMethods = uiModule({
                     if (!touch() && !menuCleanup) this.showResearchEdgeBubble(personId, pill);
                 });
                 pill.addEventListener('mouseleave', () => this.hideResearchEdgeBubbleSoon());
-            } else if (family) pill.onclick = (e) => { e.stopPropagation(); void TreeRenderer.setFocus(joinId); };
+            } else if (family) pill.onclick = (e) => { e.stopPropagation(); void TreeRenderer.focusFromTab(joinId); };
             else {
                 pill.tabIndex = -1;
                 pill.classList.add('is-inert');
@@ -589,7 +599,7 @@ export const viewLinksUiMethods = uiModule({
                 if (o.state?.state !== 'draw' || !o.choice) continue;
                 const choice = o.choice;
                 items.push({
-                    label: v.show, action: 'show',
+                    label: v.show, action: 'show', kind: 'place',
                     hint: `${hypo} ${o.variant} · ${v.names(choice.islandIds.map(personName))}, ${v.people(o.people)}`,
                     run: () => void this.viewLinkShow(choice, { focusLabel: true }),
                 });
@@ -599,12 +609,12 @@ export const viewLinksUiMethods = uiModule({
             for (const f of families) {
                 const who = [personName(f.personId), f.size ? v.people(f.size) : ''].filter(Boolean).join(', ');
                 items.push({
-                    label: v.goToFamily, action: 'go',
+                    label: v.goToFamily, action: 'go', kind: 'focus',
                     hint: f.variants.length > 0 ? `${hypo} ${f.variants.join(', ')} · ${who}` : who,
-                    run: () => void TreeRenderer.setFocus(f.personId),
+                    run: () => void TreeRenderer.focusFromTab(f.personId),
                 });
             }
-        } else items.push({ label: v.goToFamily, hint: v.goBackHint, action: 'go', run: () => void TreeRenderer.setFocus(joinId) });
+        } else items.push({ label: v.goToFamily, hint: v.goBackHint, action: 'go', kind: 'focus', run: () => void TreeRenderer.focusFromTab(joinId) });
         this.openViewLinkMenu(pill, items, v.menuAria(personName(personId)));
     },
 

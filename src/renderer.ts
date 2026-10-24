@@ -69,9 +69,10 @@ import {
     unionOrderBadges, UnionOrderBadge, hiddenRelativesTabs, hiddenChildIds, newlyShownChildIds, BranchTab, lineLinksOf, lineLinkTabs, LineLinks, placeUnionOrderPill, PillPlacement, REL_LINK_ICON_WIDTH,
     viewLineSegments, segmentsNearCard, EDGE_INSET, PillLabel, pillLabelForms, pillLabelWidths, unionSummaries,
     childrenDrawnElsewhere, siblingOrderMark, SiblingOrderMark, childrenShownClosing,
-    siblingsTabState, SiblingsTabState, newlyShownSiblingIds, siblingGroups, ShownChildrenContext, HiddenRelativesTab, unionChildIdSet,
+    siblingsTabState, SiblingsTabState, newlyShownSiblingIds, siblingGroups, ShownChildrenContext, HiddenRelativesTab, unionChildIdSet, branchTabsInOrder,
 } from './marriage-order.js';
-import { measureUnionOrderPills, measureTabRows, rowKey, unionOrderPillKey, unionOrderPillPartsHtml, pillFontsPending, branchTabRestHtml, tabsGlyphsOnly } from './union-order-measure.js';
+import { measureUnionOrderPills, measureTabRows, rowKey, unionOrderPillKey, unionOrderPillPartsHtml, pillFontsPending, branchTabRestHtml, tabsForm, tabsFormClass } from './union-order-measure.js';
+import { showFocusToast, hideFocusToast } from './focus-toast.js';
 import { openCardMenuFromKeyboard } from './ui/keyboard-access.js';
 import { syncDepthStepper } from './ui/depth-stepper.js';
 import {
@@ -1048,6 +1049,8 @@ class TreeRendererClass {
         if (!personId) {
             personId = this.findDefaultFocusPerson();
         }
+        // A new focus ends the confirmation of the previous one (§2)
+        hideFocusToast();
 
         // View history (browser back/forward): a NORMAL navigation pushes the
         // previous view (focus + children shown) and clears the forward stack.
@@ -1118,7 +1121,7 @@ class TreeRendererClass {
     /** What the tabs need to know about the children shown in place (hiddenRelativesTabs). */
     private shownChildrenContext(): ShownChildrenContext {
         const drops = this.dropIds();
-        return { visibleBefore: pid => this.childrenVisibleBefore.get(pid), hangsOnLine: id => drops.has(id) };
+        return { visibleBefore: pid => this.childrenVisibleBefore.get(pid), hangsOnLine: id => drops.has(id), parentsFolded: id => this.foldedFor.has(id) };
     }
 
     /** The hidden-relatives tabs of a drawn card in this view (hiddenRelativesTabs). */
@@ -1839,8 +1842,8 @@ class TreeRendererClass {
         const inView = (id: PersonId) => this.positions.has(id);
         const elsewhere = this.siblingsElsewhereOf(personId);
         const aria = (shown ? strings.focus.siblingsTabHideAria : strings.focus.siblingsTabShowAria)(fullTitle);
-        const tabHtml = `<button type="button" class="branch-tab siblings-tab${shown ? ' active' : ''}" data-action="toggle-siblings" aria-pressed="${shown}" aria-label="${this.escapeHtml(aria)}">`
-            + `<span class="pill-glyph">${shown ? '▾' : '▸'}</span><span class="pill-text">${strings.focus.branchTabSiblings}</span>`;
+        const tabHtml = `<button type="button" class="branch-tab siblings-tab kind-place${shown ? ' active' : ''}" data-action="toggle-siblings" aria-pressed="${shown}" aria-label="${this.escapeHtml(aria)}">`
+            + branchTabRestHtml(shown ? 'siblingsShown' : 'siblingsHere');
         if (!shown) {
             const state = siblingsTabState(data, personId, inView, unionChildIds, this.childrenShownSet(), this.childrenUnshowable, this.shownChildrenContext());
             const elsewhereLine = elsewhere.length ? `<div class="badge-tooltip-elsewhere">${this.escapeHtml(strings.focus.childrenElsewhereCount(elsewhere.length))}</div>` : '';
@@ -2256,6 +2259,21 @@ class TreeRendererClass {
     /** Move the view to a child drawn elsewhere in the tree (§4), as a step of the history. */
     showChildElsewhereStep(childId: PersonId): void {
         this.jumpStep(() => this.showChildElsewhere(childId));
+    }
+
+    /**
+     * A focus set from a card's tab (§2: ◎ parents / siblings / family, ∞, ⌂,
+     * "+ family"): the tree is rebuilt around the person and the confirmation
+     * "◎ Focused on {name} | ↩ Back" offers the previous view. A focus from
+     * the menu, the fan, the timeline or the search is a choice of its own
+     * and goes without it (setFocus).
+     */
+    async focusFromTab(personId: PersonId): Promise<void> {
+        const person = DataManager.getPerson(personId);
+        if (!person || personId === this.focusPersonId) return this.setFocus(personId);
+        await this.setFocus(personId);
+        if (this.focusPersonId !== personId || !this.canGoBack()) return;
+        showFocusToast(shownNameFull(person, '?'), () => { void this.goBack(); });
     }
 
     /** Navigate to the previous view (browser back); resolves once the view is drawn and placed. */
@@ -2849,14 +2867,11 @@ class TreeRendererClass {
             // counts them) or children: a branch tab each (one rule with the
             // marriage-order pill's layout, src/marriage-order.ts).
             const hiddenTabs = this.relativesTabs(id, partnershipChildIds);
-            const hasHiddenParents = hiddenTabs.includes('parents');
             const hasHiddenChildren = hiddenTabs.includes('children');
             const childrenShown = hiddenTabs.includes('childrenShown');
-            const hasHiddenSiblings = hiddenTabs.includes('siblings');
             // Siblings in place (a parent in view, §1): "▸ siblings" / "▾ siblings"
             const siblingsHere = hiddenTabs.includes('siblingsHere');
             const siblingsShown = hiddenTabs.includes('siblingsShown');
-            const siblings = hasHiddenSiblings ? DataManager.getSiblings(id).filter(s => partnershipChildIds.has(s.id)) : [];
 
             let html = '';
 
@@ -2865,43 +2880,31 @@ class TreeRendererClass {
             // changes nothing inside the filtered view. Skip them entirely.
             const showHiddenBadges = this.viewMode !== 'descendants';
 
-            // Branch tabs (top-right edge slot): one pill per hidden direction.
+            // Branch tabs (top-right edge slot): one pill per hidden direction,
+            // in the order of the generations (parents, siblings, children; a
+            // line link at its relation's place, branchTabsInOrder), each in
+            // the look of what its click does (§2: in place, focus, jump).
             // Built into a string here; assembled into the edge container below.
             let branchTabsHtml = '';
-            if (showHiddenBadges && (hasHiddenParents || hasHiddenChildren || childrenShown || hasHiddenSiblings || siblingsHere || siblingsShown)) {
+            const tabHtml = new Map<BranchTab, string>();
+            if (showHiddenBadges) {
                 // Parents folded away for children shown in place (§2): the dashed
                 // tab hides those children again and brings the parents back
-                const foldedBy = hasHiddenParents ? this.foldedFor.get(id) : undefined;
+                const foldedBy = hiddenTabs.includes('parentsFolded') ? this.foldedFor.get(id) : undefined;
                 const foldedByPerson = foldedBy ? DataManager.getPerson(foldedBy) : null;
                 if (foldedBy && foldedByPerson) {
                     const byName = shownNameFull(foldedByPerson, '?');
-                    branchTabsHtml += `<button type="button" class="branch-tab folded" data-action="unfold-parents" data-shown-id="${this.escapeHtml(foldedBy)}" aria-label="${this.escapeHtml(strings.focus.parentsFoldedAria(byName))}">`
-                        + `<span class="pill-glyph">▸</span><span class="pill-text">${strings.focus.branchTabParents}</span>`
+                    tabHtml.set('parentsFolded', `<button type="button" class="branch-tab kind-place folded" data-action="unfold-parents" data-shown-id="${this.escapeHtml(foldedBy)}" aria-label="${this.escapeHtml(strings.focus.parentsFoldedAria(byName))}">`
+                        + branchTabRestHtml('parentsFolded')
                         + `<div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.parentsFoldedHeader}</div>`
                         + `<div class="badge-tooltip-body">${this.escapeHtml(strings.focus.parentsFoldedBody(byName))}</div>`
-                        + `<div class="badge-tooltip-hint">${strings.focus.parentsFoldedHint}</div></div></button>`;
-                } else if (hasHiddenParents) {
-                    const hiddenParents = person.parentIds
-                        .filter(pid => !this.positions.has(pid))
-                        .map(pid => DataManager.getPerson(pid))
-                        .filter((p): p is Person => p !== null);
-                    const parentItems = hiddenParents.map(p => {
-                        const name = shownName(p, '?');
-                        const year = displayYear(p.birthDate);
-                        return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(name)}</span>${year ? `<span class="badge-tooltip-detail"> *${this.escapeHtml(year)}</span>` : ''}</div>`;
-                    }).join('');
-                    branchTabsHtml += `<button class="branch-tab" data-action="focus-parent"><span class="pill-glyph">◂</span><span class="pill-text">${strings.focus.branchTabParents}</span><div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenParentsTooltip}</div>${parentItems}</div></button>`;
+                        + `<div class="badge-tooltip-action">${strings.focus.parentsFoldedHint}</div></div></button>`);
                 }
-                if (hasHiddenSiblings) {
-                    const hiddenSiblings = siblings.filter(s => !this.positions.has(s.id));
-                    const siblingItems = hiddenSiblings.map(s => {
-                        const name = shownName(s, '?');
-                        const year = displayYear(s.birthDate);
-                        return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(name)}</span>${year ? `<span class="badge-tooltip-detail"> *${this.escapeHtml(year)}</span>` : ''}</div>`;
-                    }).join('');
-                    branchTabsHtml += `<button class="branch-tab" data-action="focus-sibling"><span class="pill-glyph">◆</span><span class="pill-text">${strings.focus.branchTabSiblings}</span><div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenSiblingsTooltip}</div>${siblingItems}</div></button>`;
+                // The family of origin out of view (no anchor in it): a focus on the person (§4)
+                for (const kind of ['family', 'parents', 'siblings'] as const) {
+                    if (hiddenTabs.includes(kind)) tabHtml.set(kind, this.focusTabHtml(id, kind, partnershipChildIds));
                 }
-                if (siblingsHere || siblingsShown) branchTabsHtml += this.siblingsTabHtml(id, siblingsShown, fullTitle, partnershipChildIds);
+                if (siblingsHere || siblingsShown) tabHtml.set(siblingsShown ? 'siblingsShown' : 'siblingsHere', this.siblingsTabHtml(id, siblingsShown, fullTitle, partnershipChildIds));
                 // Children: shown in place and hidden again (the view stays)
                 if (hasHiddenChildren || childrenShown) {
                     // Shown: only the children the click brought into view
@@ -2911,22 +2914,19 @@ class TreeRendererClass {
                     const childItems = ids
                         .map(cid => DataManager.getPerson(cid))
                         .filter((c): c is Person => c !== null)
-                        .map(c => {
-                            const name = shownName(c, '?');
-                            const year = displayYear(c.birthDate);
-                            return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(name)}</span>${year ? `<span class="badge-tooltip-detail"> *${this.escapeHtml(year)}</span>` : ''}</div>`;
-                        }).join('');
+                        .map(c => this.bubbleItemHtml(c)).join('');
                     const header = childrenShown ? strings.focus.childrenShownTooltip : strings.focus.hiddenChildrenTooltip;
                     const hint = childrenShown ? strings.focus.placeHideHint : strings.focus.placeShowHint;
                     const aria = (childrenShown ? strings.focus.childrenTabHideAria : strings.focus.childrenTabShowAria)(fullTitle);
                     // Children the view draws elsewhere in the tree (§4): counted
                     // before the click; after it, rows that glide to them
                     const elsewhere = this.childrenElsewhereOf(id);
-                    const tabHtml = `<button type="button" class="branch-tab children-tab${childrenShown ? ' active' : ''}" data-action="toggle-children" aria-pressed="${childrenShown}" aria-label="${this.escapeHtml(aria)}">`
-                        + `<span class="pill-glyph">${childrenShown ? '▾' : '▸'}</span><span class="pill-text">${strings.focus.branchTabChildren}</span>`;
+                    const kind = childrenShown ? 'childrenShown' : 'children';
+                    const button = `<button type="button" class="branch-tab children-tab kind-place${childrenShown ? ' active' : ''}" data-action="toggle-children" aria-pressed="${childrenShown}" aria-label="${this.escapeHtml(aria)}">`
+                        + branchTabRestHtml(kind);
                     if (!childrenShown) {
                         const elsewhereLine = elsewhere.length ? `<div class="badge-tooltip-elsewhere">${this.escapeHtml(strings.focus.childrenElsewhereCount(elsewhere.length))}</div>` : '';
-                        branchTabsHtml += `${tabHtml}<div class="badge-tooltip"><div class="badge-tooltip-header">${header}</div>${childItems}${elsewhereLine}<div class="badge-tooltip-hint">${hint}</div></div></button>`;
+                        tabHtml.set(kind, `${button}<div class="badge-tooltip"><div class="badge-tooltip-header">${header}</div>${childItems}${elsewhereLine}<div class="badge-tooltip-action">${hint}</div></div></button>`);
                     } else {
                         // The bubble beside the tab, not in it: its rows are buttons of their own
                         const elsewhereHtml = this.elsewhereSectionHtml(elsewhere);
@@ -2936,16 +2936,19 @@ class TreeRendererClass {
                             .filter((q): q is Person => q !== null)
                             .map(q => `<div class="badge-tooltip-folded">${this.escapeHtml(strings.focus.childrenShownFoldedLine(shownNameFull(q, '?')))}</div>`)
                             .join('');
-                        branchTabsHtml += `${tabHtml}</button><div class="badge-tooltip children-bubble"><div class="badge-tooltip-header">${header}</div>${childItems}${foldedHtml}${elsewhereHtml}<div class="badge-tooltip-hint">${hint}</div></div>`;
+                        tabHtml.set(kind, `${button}</button><div class="badge-tooltip children-bubble"><div class="badge-tooltip-header">${header}</div>${childItems}${foldedHtml}${elsewhereHtml}<div class="badge-tooltip-action">${hint}</div></div>`);
                     }
                 }
             }
 
-            // Line links (after the hidden-relatives tabs, in every view, the
-            // descendants chart too): a line the layout left out because it
-            // could not be drawn without crossing or running along another
-            // family's line (step 7). A click jumps to the other end.
-            branchTabsHtml += this.lineLinkTabsHtml(id);
+            // Line links (in every view, the descendants chart too): a line the
+            // layout left out because it could not be drawn without crossing or
+            // running along another family's line (step 7). A click jumps to
+            // the other end.
+            const linkTabs = lineLinkTabs(this.lineLinks.get(id));
+            for (const kind of linkTabs) tabHtml.set(kind, this.lineLinkTabHtml(id, kind));
+            const tabKinds = branchTabsInOrder(showHiddenBadges ? hiddenTabs : [], linkTabs);
+            for (const kind of tabKinds) branchTabsHtml += tabHtml.get(kind) ?? '';
 
             // Hidden relationship indicators (bottom-left edge slot): ∞ partners, ⌂ families.
             // Gen >= -1 persons are auto-expanded, so these only appear for ancestors (gen <= -2).
@@ -2958,7 +2961,7 @@ class TreeRendererClass {
                         const year = displayYear(p.birthDate);
                         return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(name)}</span>${year ? `<span class="badge-tooltip-detail"> *${this.escapeHtml(year)}</span>` : ''}</div>`;
                     }).join('');
-                    hiddenIndicatorsHtml += `<button class="hidden-partners-btn" data-action="focus"><span class="pill-glyph">∞</span><span class="pill-count">${hiddenPartnersCount}</span><div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenPartnersTooltip}</div>${partnerItems}</div></button>`;
+                    hiddenIndicatorsHtml += `<button class="hidden-partners-btn kind-focus" data-action="focus"><span class="pill-glyph">∞</span><span class="pill-count">${hiddenPartnersCount}</span><div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenPartnersTooltip}</div>${partnerItems}</div></button>`;
                 }
                 if (hiddenFamiliesCount > 0) {
                     // Build rich tooltip with hidden families (partner + children)
@@ -2978,7 +2981,7 @@ class TreeRendererClass {
                                 });
                             return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(partnerName)}</span>${partnerYear ? `<span class="badge-tooltip-detail"> *${this.escapeHtml(partnerYear)}</span>` : ''}<div class="badge-tooltip-detail">${childLabels.join(', ')}</div></div>`;
                         }).join('');
-                    hiddenIndicatorsHtml += `<button class="hidden-families-btn" data-action="focus"><span class="pill-glyph">⌂</span><span class="pill-count">${hiddenFamiliesCount}</span><div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenFamiliesTooltip}</div>${hiddenFamilyItems}</div></button>`;
+                    hiddenIndicatorsHtml += `<button class="hidden-families-btn kind-focus" data-action="focus"><span class="pill-glyph">⌂</span><span class="pill-count">${hiddenFamiliesCount}</span><div class="badge-tooltip"><div class="badge-tooltip-header">${strings.focus.hiddenFamiliesTooltip}</div>${hiddenFamilyItems}</div></button>`;
                 }
             }
 
@@ -3119,13 +3122,14 @@ class TreeRendererClass {
                     ).join('');
                     const moreCount = crossTreeMatches.length > 5 ? crossTreeMatches.length - 5 : 0;
 
-                    crossTreeHtml = `<div class="cross-tree-badge" data-person-id="${this.escapeHtml(id)}" title="${strings.crossTree.badgeTitle(crossTreeMatches.length)}">
-                        <span class="pill-glyph">⇄</span><span class="pill-count">${crossTreeMatches.length}</span>
+                    // A jump (§2): "⇄ N ↗" in the jump's look, its bubble names the trees and what a click does
+                    crossTreeHtml = `<div class="cross-tree-badge kind-jump" data-person-id="${this.escapeHtml(id)}" aria-label="${this.escapeHtml(strings.crossTree.badgeTitle(crossTreeMatches.length))}">
+                        <span class="pill-glyph">⇄</span><span class="pill-count">${crossTreeMatches.length}</span><span class="pill-glyph pill-jump" aria-hidden="true">↗</span>
                         <div class="cross-tree-tooltip">
-                            <div class="cross-tree-tooltip-header">${strings.crossTree.tooltipHeader}</div>
+                            <div class="cross-tree-tooltip-header">${this.escapeHtml(strings.crossTree.badgeTitle(crossTreeMatches.length))}</div>
                             ${tooltipItems}
                             ${moreCount > 0 ? `<div class="cross-tree-tooltip-item">${strings.crossTree.moreMatches(moreCount)}</div>` : ''}
-                            <div class="cross-tree-tooltip-hint">${strings.crossTree.clickToSwitch}</div>
+                            <div class="cross-tree-tooltip-hint badge-tooltip-action">${strings.focus.crossTreeHint}</div>
                         </div>
                     </div>`;
                 }
@@ -3146,10 +3150,9 @@ class TreeRendererClass {
             // pointer-events:none (children re-enable auto) so the gaps between
             // pills never steal a click meant for the card.
             if (leftOrderHtml || parentAddHtml) html += `<div class="card-edge edge-top-left">${leftOrderHtml}${parentAddHtml}</div>`;
-            // Tabs too wide for the card (three of them, long words): the glyphs alone
-            const tabKinds = [...(showHiddenBadges ? hiddenTabs : []), ...lineLinkTabs(this.lineLinks.get(id))];
-            const tabsGlyph = tabsGlyphsOnly(tabKinds, this.tabRoom(id, card.classList.contains('has-signal')));
-            if (chainHtml || rightOrderHtml || branchTabsHtml) html += `<div class="card-edge edge-top-right${tabsGlyph ? ' tabs-glyph' : ''}">${chainHtml}${rightOrderHtml}${branchTabsHtml}</div>`;
+            // Tabs too wide for the card (§3): the short forms, then the glyphs alone (the whole card at once)
+            const formClass = tabsFormClass(tabsForm(tabKinds, this.tabRoom(id, card.classList.contains('has-signal'))));
+            if (chainHtml || rightOrderHtml || branchTabsHtml) html += `<div class="card-edge edge-top-right${formClass ? ` ${formClass}` : ''}">${chainHtml}${rightOrderHtml}${branchTabsHtml}</div>`;
             // Above the tabs: placed from the card's padding edge (the border inside the box).
             if (orderSlot?.row === 'above') html += `<div class="card-edge edge-top-above" style="left:${(orderSlot.x - orderSlot.border).toFixed(2)}px">${orderHtml}</div>`;
             if (hiddenIndicatorsHtml) {
@@ -3332,12 +3335,11 @@ class TreeRendererClass {
                 const shownId = (e.currentTarget as HTMLElement).dataset.shownId as PersonId | undefined;
                 if (shownId && this.isChildrenShown(shownId)) void this.closeChildrenShown([shownId], shownId);
             });
-            // The other branch tabs focus on this person
-            const branchTabs = card.querySelectorAll('.branch-tab:not(.line-link):not(.children-tab):not(.siblings-tab):not(.folded)');
-            branchTabs.forEach(tab => {
+            // The focus tabs (◎ parents / siblings / family) focus on this person, with ↩ offered
+            card.querySelectorAll('.branch-tab.kind-focus').forEach(tab => {
                 tab.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    this.setFocus(id);
+                    void this.focusFromTab(id);
                 });
             });
             // Line links jump to the other end of the left-out line; the focus stays
@@ -3366,7 +3368,7 @@ class TreeRendererClass {
             if (hiddenPartnersBtn) {
                 hiddenPartnersBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    this.setFocus(id);
+                    void this.focusFromTab(id);
                 });
             }
 
@@ -3375,7 +3377,7 @@ class TreeRendererClass {
             if (hiddenFamiliesBtn) {
                 hiddenFamiliesBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    this.setFocus(id);
+                    void this.focusFromTab(id);
                 });
             }
 
@@ -4537,15 +4539,15 @@ class TreeRendererClass {
         for (const id of badges.keys()) {
             // The line links show in every view (the descendants chart too)
             const hidden = showTabs ? this.relativesTabs(id, unionChildIds) : [];
-            tabsOf.set(id, [...hidden, ...lineLinkTabs(this.lineLinks.get(id))]);
+            tabsOf.set(id, branchTabsInOrder(hidden, lineLinkTabs(this.lineLinks.get(id))));
         }
-        const glyphsOf = new Map([...tabsOf].map(([id, kinds]) => {
+        const formOf = new Map([...tabsOf].map(([id, kinds]) => {
             const person = DataManager.getPerson(id);
             const signals = person ? cardSignalInfo(person, signalCtx) : null;
-            return [id, tabsGlyphsOnly(kinds, this.tabRoom(id, !!signals && (!!signals.action || signals.showAgent || signals.doneSince !== null)))];
+            return [id, tabsForm(kinds, this.tabRoom(id, !!signals && (!!signals.action || signals.showAgent || signals.doneSince !== null)))];
         }));
-        const tabRows = measureTabRows([...tabsOf].filter(([id]) => !glyphsOf.get(id)).map(([, kinds]) => kinds));
-        const glyphRows = measureTabRows([...tabsOf].filter(([id]) => glyphsOf.get(id)).map(([, kinds]) => kinds), true);
+        const rowsByForm = new Map((['full', 'short', 'glyph'] as const).map(form =>
+            [form, measureTabRows([...tabsOf].filter(([id]) => formOf.get(id) === form).map(([, kinds]) => kinds), form)]));
         const segments = viewLineSegments({ connections: this.connections, spouseLines: this.spouseLines });
         const compact = SettingsManager.getCardDensity() === 'compact';
         const W = this.config.cardWidth;
@@ -4565,7 +4567,7 @@ class TreeRendererClass {
                 side: b.side,
                 ...pillLabelWidths(forms, forms.map(f => pills.get(unionOrderPillKey(f.ordinal, f.year, f.glyph))!.width)),
                 leftTabs: 0,
-                rightTabs: (glyphsOf.get(id) ? glyphRows.get(rowKey(tabsOf.get(id)!, true)) : tabRows.get(rowKey(tabsOf.get(id)!))) ?? 0,
+                rightTabs: rowsByForm.get(formOf.get(id) ?? 'full')?.get(rowKey(tabsOf.get(id)!, formOf.get(id) ?? 'full')) ?? 0,
                 leftInset: border + EDGE_INSET,
                 rightInset: border + EDGE_INSET + (signal ? 8 : 0),
                 rightHover: DataManager.isPersonLocked(id) ? 0 : hoverIcon,
@@ -4580,7 +4582,7 @@ class TreeRendererClass {
     }
 
     /**
-     * The room of a card's top-edge tabs (tabsGlyphsOnly): the card's width
+     * The room of a card's top-edge tabs (tabsForm): the card's width
      * less both corner insets, the compact card's 8px beside a status badge.
      */
     private tabRoom(id: PersonId, signal: boolean): number {
@@ -4590,28 +4592,63 @@ class TreeRendererClass {
     }
 
     /**
-     * The line-link tabs of a card (lineLinkTabs): the branch-tab pill, its
-     * bubble naming the people at the other end of the left-out line.
+     * A line-link tab of a card (lineLinkTabs, §2: a jump, "parents ↗"): the
+     * branch-tab pill, its bubble naming the people at the other end of the
+     * left-out line and what a click does (the view moves, the tree stays).
      */
-    private lineLinkTabsHtml(id: PersonId): string {
+    private lineLinkTabHtml(id: PersonId, kind: BranchTab): string {
         const links = this.lineLinks.get(id);
-        let html = '';
-        for (const kind of lineLinkTabs(links)) {
-            const toParents = kind === 'linkParents';
-            const people = (toParents ? links!.parentIds : links!.childIds)
-                .map(pid => DataManager.getPerson(pid))
-                .filter((p): p is Person => p !== null);
-            const header = kind === 'linkParents' ? strings.focus.linkParentsTooltip
-                : kind === 'linkChild' ? strings.focus.linkChildTooltip : strings.focus.linkChildrenTooltip;
-            const items = people.map(p => {
-                const year = displayYear(p.birthDate);
-                return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(shownName(p, '?'))}</span>${year ? `<span class="badge-tooltip-detail"> *${this.escapeHtml(year)}</span>` : ''}</div>`;
-            }).join('');
-            const label = `${header}: ${people.map(p => shownName(p, '?')).join(', ')}`;
-            html += `<button type="button" class="branch-tab line-link" data-action="${toParents ? 'jump-parents' : 'jump-child'}" aria-label="${this.escapeHtml(label)}">`
-                + `${branchTabRestHtml(kind)}<div class="badge-tooltip" aria-hidden="true"><div class="badge-tooltip-header">${this.escapeHtml(header)}</div>${items}</div></button>`;
+        if (!links) return '';
+        const toParents = kind === 'linkParents';
+        const people = (toParents ? links.parentIds : links.childIds)
+            .map(pid => DataManager.getPerson(pid))
+            .filter((p): p is Person => p !== null);
+        const header = kind === 'linkParents' ? strings.focus.linkParentsTooltip
+            : kind === 'linkChild' ? strings.focus.linkChildTooltip : strings.focus.linkChildrenTooltip;
+        const items = people.map(p => this.bubbleItemHtml(p)).join('');
+        const self = DataManager.getPerson(id);
+        const name = self ? shownNameFull(self, '?') : '?';
+        const label = (kind === 'linkParents' ? strings.focus.linkParentsAria
+            : kind === 'linkChild' ? strings.focus.linkChildAria : strings.focus.linkChildrenAria)(name);
+        return `<button type="button" class="branch-tab line-link kind-jump" data-action="${toParents ? 'jump-parents' : 'jump-child'}" aria-label="${this.escapeHtml(label)}">`
+            + `${branchTabRestHtml(kind)}<div class="badge-tooltip" aria-hidden="true"><div class="badge-tooltip-header">${this.escapeHtml(header)}</div>${items}`
+            + `<div class="badge-tooltip-action">${this.escapeHtml(strings.focus.jumpHint(people.length))}</div></div></button>`;
+    }
+
+    /**
+     * A tab that sets the focus on the card's person (§2, §4: "◎ parents",
+     * "◎ siblings", "◎ family" — the family of origin out of view and no
+     * anchor of it in view): the bubble names the people the new focus
+     * shows (by group in the family tab) and ends with what a click does;
+     * the click rebuilds the tree around the person and offers ↩ (toast).
+     */
+    private focusTabHtml(personId: PersonId, kind: 'parents' | 'siblings' | 'family', unionChildIds: ReadonlySet<PersonId>): string {
+        const person = DataManager.getPerson(personId);
+        if (!person) return '';
+        const name = shownNameFull(person, '?');
+        const parents = person.parentIds
+            .filter(pid => !this.positions.has(pid))
+            .map(pid => DataManager.getPerson(pid))
+            .filter((p): p is Person => p !== null);
+        const siblingIds = DataManager.getSiblings(personId)
+            .filter(s => unionChildIds.has(s.id) && !this.positions.has(s.id))
+            .map(s => s.id);
+        const parentsHtml = parents.map(p => this.bubbleItemHtml(p)).join('');
+        let body: string;
+        if (kind === 'family') {
+            body = `<div class="badge-tooltip-header">${strings.focus.familyTooltip}</div>`
+                + `<div class="badge-tooltip-group">${strings.focus.hiddenParentsTooltip}</div>${parentsHtml}`
+                + `<div class="badge-tooltip-group">${strings.focus.hiddenSiblingsTooltip}</div>${this.siblingGroupsHtml(personId, siblingIds)}`;
+        } else if (kind === 'parents') {
+            body = `<div class="badge-tooltip-header">${strings.focus.hiddenParentsTooltip}</div>${parentsHtml}`;
+        } else {
+            body = `<div class="badge-tooltip-header">${strings.focus.hiddenSiblingsTooltip}</div>${this.siblingGroupsHtml(personId, siblingIds)}`;
         }
-        return html;
+                return `<button type="button" class="branch-tab kind-focus" data-action="focus-person" data-tab="${kind}" aria-label="${this.escapeHtml(strings.focus.focusTabAria(name))}">`
+            + branchTabRestHtml(kind)
+            + `<div class="badge-tooltip" aria-hidden="true">${body}`
+            + `<div class="badge-tooltip-body">${this.escapeHtml(strings.focus.familyOfOrigin)}</div>`
+            + `<div class="badge-tooltip-action">${this.escapeHtml(strings.focus.focusTabHint(name))}</div></div></button>`;
     }
 
     /**

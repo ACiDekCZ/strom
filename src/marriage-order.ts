@@ -228,14 +228,17 @@ export function unionOrderBadges(
 // ============= Hidden-relatives tabs =============
 
 /**
- * A hidden-relatives tab on a card's top edge ("◂ parents", "◆ siblings",
+ * A hidden-relatives tab on a card's top edge ("◎ parents", "◎ siblings",
  * "▸ children"); "▾ children" (childrenShown) is the children tab while the
  * view shows the person's children in place. The siblings of a person with
  * a parent in view are shown in place as well, as the children of the
  * parents ("▸ siblings", siblingsHere; "▾ siblings", siblingsShown); without
  * a parent in view the siblings tab focuses on the person (siblings).
+ * "◎ family" (family) stands for both focus tabs at once (parents and
+ * siblings out of view: both did the same); "▸ parents" dashed
+ * (parentsFolded): the parents folded away for children shown in place.
  */
-export type HiddenRelativesTab = 'parents' | 'siblings' | 'siblingsHere' | 'siblingsShown' | 'children' | 'childrenShown';
+export type HiddenRelativesTab = 'parents' | 'parentsFolded' | 'family' | 'siblings' | 'siblingsHere' | 'siblingsShown' | 'children' | 'childrenShown';
 
 /** What the view tells hiddenRelativesTabs about the children shown in place (the siblings tab). */
 export interface ShownChildrenContext {
@@ -247,6 +250,8 @@ export interface ShownChildrenContext {
      * Default: every card in view does.
      */
     hangsOnLine?: (id: PersonId) => boolean;
+    /** Whether the person's parents are folded away for children shown in place (the dashed "▸ parents"). Default: never. */
+    parentsFolded?: (id: PersonId) => boolean;
 }
 
 /** The person's siblings as the layout counts them: the other children of the parents that are a union's children. */
@@ -323,9 +328,12 @@ export function siblingsTabState(
 }
 
 /**
- * The hidden-relatives tabs of a card, in the order the card shows them:
- * parents get one when the person has parents and none of them is in view;
- * siblings as siblingsTabState decides (`ctx`: the children shown in place).
+ * The hidden-relatives tabs of a card, in the order the card shows them
+ * (parents, siblings, children): parents get one when the person has
+ * parents and none of them is in view (folded away for children shown in
+ * place: parentsFolded); siblings as siblingsTabState decides (`ctx`: the
+ * children shown in place). Both focus tabs at once (parents and siblings
+ * out of view, nothing to anchor them to) become the one "◎ family".
  * Children get one when any child (not a "?" stand-in) is out of view, or
  * as "childrenShown" while `childrenShown` holds the person.
  * `childrenUnshowable`: persons whose children a click drew none of (the
@@ -343,9 +351,14 @@ export function hiddenRelativesTabs(
     const person = data.persons[personId];
     if (!person) return [];
     const out: HiddenRelativesTab[] = [];
-    if (person.parentIds.length > 0 && !person.parentIds.some(inView)) out.push('parents');
+    const parents = person.parentIds.length > 0 && !person.parentIds.some(inView);
+    const folded = parents && (ctx.parentsFolded?.(personId) ?? false);
     const siblings = siblingsTabState(data, personId, inView, unionChildIds, childrenShown, childrenUnshowable, ctx);
-    if (siblings) out.push(siblings.kind);
+    if (parents && !folded && siblings?.kind === 'siblings') out.push('family');
+    else {
+        if (parents) out.push(folded ? 'parentsFolded' : 'parents');
+        if (siblings) out.push(siblings.kind);
+    }
     if (childrenShown.has(personId)) out.push('childrenShown');
     else if (!childrenUnshowable.has(personId) && hiddenChildIds(data, personId, inView).length > 0) out.push('children');
     return out;
@@ -559,8 +572,57 @@ export function childrenShownClosing(
  */
 export type LineLinkTab = 'linkParents' | 'linkChild' | 'linkChildren';
 
-/** Any tab on a card's top edge, in one row: the hidden-relatives tabs, then the line links. */
+/** Any tab on a card's top edge, in one row (branchTabsInOrder): the hidden-relatives tabs and the line links. */
 export type BranchTab = HiddenRelativesTab | LineLinkTab;
+
+/**
+ * What a click on a tab does, carried by the pill's shape and glyph (not by
+ * its colour): shows people in place, the view staying ("▸"/"▾", a round
+ * pill), rebuilds the tree around the person ("◎", squarer corners), or moves
+ * the view to a card drawn elsewhere ("↗" at the end, no shadow).
+ */
+export type TabKind = 'place' | 'focus' | 'jump';
+
+/** The kind of a top-edge tab (TabKind). */
+export function branchTabKind(tab: BranchTab): TabKind {
+    switch (tab) {
+        case 'parents':
+        case 'family':
+        case 'siblings': return 'focus';
+        case 'linkParents':
+        case 'linkChild':
+        case 'linkChildren': return 'jump';
+        default: return 'place';
+    }
+}
+
+/** The relation a top-edge tab stands for (its place in the row, its short letter). */
+export function branchTabRelation(tab: BranchTab): 'parents' | 'siblings' | 'children' {
+    switch (tab) {
+        case 'parents':
+        case 'parentsFolded':
+        case 'family':
+        case 'linkParents': return 'parents';
+        case 'siblings':
+        case 'siblingsHere':
+        case 'siblingsShown': return 'siblings';
+        default: return 'children';
+    }
+}
+
+/**
+ * A card's top-edge tabs in the order the card shows them: by relation
+ * (parents, siblings, children, as the generations go), a line link at the
+ * place of the relation it stands for ("parents ↗" with the parents,
+ * "child ↗" after the children tab). Stable within a relation.
+ */
+export function branchTabsInOrder(hidden: readonly HiddenRelativesTab[], links: readonly LineLinkTab[]): BranchTab[] {
+    const rank = { parents: 0, siblings: 1, children: 2 } as const;
+    return [...hidden, ...links]
+        .map((tab, i) => ({ tab, i }))
+        .sort((a, b) => rank[branchTabRelation(a.tab)] - rank[branchTabRelation(b.tab)] || a.i - b.i)
+        .map(x => x.tab);
+}
 
 /** The other ends of a card's left-out lines: its parents (as a child) and its children (as a parent). */
 export interface LineLinks {

@@ -3144,10 +3144,27 @@
         /* The action badge on the avatar's corner stays whole above a left pill. */
         .person-card:has(.edge-top-left .union-order-pill) .card-avatar-wrap { z-index: 7; }
 
-        /* A card whose tabs do not fit with their words (three tabs, long
-           words; tabsGlyphsOnly in src/union-order-measure.ts): the glyphs
-           alone, the words kept for screen readers; the bubble names them. */
-        .tabs-glyph > .branch-tab > .pill-text {
+        /* The kinds of a card's tabs (§2, src/marriage-order.ts branchTabKind):
+           the shape says what a click does. In place (▸/▾): the round pill
+           above. Focus (◎ at the start; ∞ and ⌂ focus too): squarer, a
+           fainter outline. Jump (↗ after the word; ⇄ another tree): the
+           canvas's ground, no shadow. */
+        .branch-tab.kind-focus,
+        .hidden-partners-btn.kind-focus,
+        .hidden-families-btn.kind-focus { border-radius: 4px; border-color: var(--text-faint); }
+        .branch-tab.kind-jump,
+        .cross-tree-badge.kind-jump { background: var(--bg); box-shadow: none; }
+
+        /* A card whose tabs do not fit with their words (tabsForm in
+           src/union-order-measure.ts, the whole card at once): the glyph and
+           a letter each (.tabs-short), or the glyphs alone (.tabs-glyph, and
+           every card far out, below the zoom's ZOOM_FAR). The words stay for
+           screen readers; the bubble names the relatives. */
+        .branch-tab > .pill-short { display: none; }
+        .tabs-short > .branch-tab > .pill-short { display: inline; color: var(--text-light); font-size: 10px; font-weight: 600; }
+        .tabs-short > .branch-tab > .pill-text,
+        .tabs-glyph > .branch-tab > .pill-text,
+        #tree-canvas.zoom-far .branch-tab > .pill-text {
             position: absolute;
             width: 1px;
             height: 1px;
@@ -3155,7 +3172,10 @@
             clip-path: inset(50%);
             white-space: nowrap;
         }
-        .tabs-glyph > .branch-tab { padding: 0 6px; gap: 0; }
+        #tree-canvas.zoom-far .branch-tab > .pill-short { display: none; }
+        .tabs-short > .branch-tab { padding: 0 6px; gap: 2px; }
+        .tabs-glyph > .branch-tab,
+        #tree-canvas.zoom-far .branch-tab { padding: 0 6px; gap: 0; }
 
         /* Active branch tab: a filled primary pill, no copper glyph. */
         .branch-tab.active {
@@ -3237,10 +3257,12 @@
            the branch tab; from the keyboard it shows its bubble too. */
         .branch-tab.line-link:focus-visible,
         .branch-tab.children-tab:focus-visible,
-        .branch-tab.siblings-tab:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .branch-tab.siblings-tab:focus-visible,
+        .branch-tab.kind-focus:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
         .branch-tab.line-link:focus-visible .badge-tooltip,
         .branch-tab.children-tab:focus-visible .badge-tooltip,
-        .branch-tab.siblings-tab:focus-visible .badge-tooltip { display: block; }
+        .branch-tab.siblings-tab:focus-visible .badge-tooltip,
+        .branch-tab.kind-focus:focus-visible .badge-tooltip { display: block; }
         /* "▾ children": the bubble beside the tab (its rows are buttons of
            their own), opened by the renderer (bindChildrenBubble) while a
            mouse is over the tab or the bubble, or the keyboard is in them;
@@ -3483,6 +3505,8 @@
             color: var(--text-faint);
             font-style: italic;
         }
+        /* The last line says what a click does (§3): the bubbles' action line. */
+        .cross-tree-tooltip-hint.badge-tooltip-action { font-style: normal; margin-top: 6px; }
 
         /* Cross-tree chooser: floating menu shown when a badge has >1 match.
            Modelled on .context-menu (position: fixed, appended to body). */
@@ -7745,13 +7769,13 @@
            the card: the stripes sit above it, the last text line keeps clear
            (a margin, not padding: a line's overflow clips at its padding edge). */
         .person-card.has-edge-br .card-state { bottom: 14px; }
-        .person-card.has-edge-br .card-body:not(.card-body--custom) > :last-child { margin-right: var(--edge-br-room, 34px); }
+        .person-card.has-edge-br .card-body:not(.card-body--custom) > :last-child { margin-right: var(--edge-br-room, 46px); }
         /* A card of details is never narrowed (its rows were measured for its
            width): with room for the pills its text ends above the stripes; a
            card of one height for the view keeps its last line clear of them
-           (its rows were wrapped 34px narrower, CARD_EDGE_PILL_RIGHT, so a
+           (its rows were wrapped 46px narrower, CARD_EDGE_PILL_RIGHT, so a
            place fits or ends in "…", never clipped under the pill). */
-        .person-card.has-edge-br:not(.has-edge-room) .card-body--custom .card-lines > :last-child { padding-right: var(--edge-br-room, 34px); }
+        .person-card.has-edge-br:not(.has-edge-room) .card-body--custom .card-lines > :last-child { padding-right: var(--edge-br-room, 46px); }
 
         /* ==================== RESEARCH EDGE ==================== */
         /* Above a card where the tree ends: a stub whose SHAPE says what the
@@ -8800,6 +8824,67 @@
         @media (hover: hover) { .focus-nav-btn:hover { background: rgba(128,128,128,0.12); } }
         body.view-mode-print .focus-nav-btn { display: none !important; }
         @media print { .focus-nav-btn { display: none !important; } }
+
+        /* The confirmation after a focus set from a card's tab (§2,
+           src/focus-toast.ts): "◎ Focused on {name} | ↩ Back" at the bottom
+           middle over the tree, 5 s. The container is a polite live region;
+           the box comes and goes. */
+        .focus-toast {
+            position: fixed; left: 50%; bottom: 24px; z-index: 90;
+            transform: translateX(-50%);
+            max-width: min(92vw, 480px);
+            pointer-events: none;
+        }
+        .focus-toast-box {
+            pointer-events: auto;
+            display: flex; align-items: center; gap: 10px;
+            height: 40px; box-sizing: border-box; padding: 0 5px 0 14px;
+            background: var(--surface); color: var(--text);
+            border: 1px solid var(--border); border-radius: var(--r-lg);
+            box-shadow: var(--shadow-lg);
+            font-family: var(--font-sans); font-size: 13px; white-space: nowrap;
+            opacity: 0; transform: translateY(6px);
+            transition: opacity 0.2s ease, transform 0.2s ease;
+        }
+        .focus-toast-box.show { opacity: 1; transform: none; }
+        .focus-toast-glyph { color: var(--accent); font-size: 14px; line-height: 1; flex-shrink: 0; }
+        .focus-toast-msg { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text-light); }
+        .focus-toast-name { font-weight: 600; color: var(--text); }
+        .focus-toast-sep { align-self: stretch; width: 1px; margin: 8px 0; background: var(--divider); flex-shrink: 0; }
+        .focus-toast-back {
+            flex-shrink: 0; height: 30px; padding: 0 12px;
+            border: none; border-radius: var(--r-md); background: transparent;
+            color: var(--primary); font: inherit; font-weight: 600; cursor: pointer;
+        }
+        @media (hover: hover) { .focus-toast-back:hover { background: color-mix(in srgb, var(--primary) 12%, transparent); } }
+        .focus-toast-back:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        @media (prefers-reduced-motion: reduce) { .focus-toast-box { transition: none; transform: none; } }
+        body.view-mode-print .focus-toast,
+        body.slideshow-mode .focus-toast,
+        body:has(.modal-overlay.active) .focus-toast { display: none; }
+        @media print { .focus-toast { display: none !important; } }
+        /* Touch and the bottom bar's regime: a thumb high (48, the button 44). */
+        @media (pointer: coarse), (max-width: 1024px) {
+            .focus-toast-box { height: 48px; padding-left: 16px; }
+            .focus-toast-back { height: 44px; min-width: 44px; }
+        }
+        /* Tablet: above the bottom bar, in the middle between ↩ ↪ (left,
+           up to 112px) and the zoom stack (right). */
+        @media (max-width: 1024px) {
+            .focus-toast { bottom: calc(var(--bottom-bar-h) + 16px); max-width: calc(100vw - 248px); }
+        }
+        /* Phone: a row above ↩ ↪ and clear of the zoom stack's column; a long name ends in "…". */
+        @media (max-width: 640px) {
+            .focus-toast { bottom: calc(var(--bottom-bar-h) + 68px); max-width: calc(100vw - 136px); }
+        }
+        /* A phone held sideways: the middle of the tree beside the side bar, on the row of ↩ ↪. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .focus-toast {
+                bottom: 16px;
+                left: calc(var(--side-bar-w) + (100vw - var(--side-bar-w)) / 2);
+                max-width: calc(100vw - var(--side-bar-w) - 248px);
+            }
+        }
 
         /* ==================== SLIDESHOW / TV MODE ==================== */
         .slideshow-overlay { display: none; }
@@ -14892,6 +14977,38 @@
         .context-menu.person-menu { width: 272px; }
         .context-menu.person-menu .context-menu-header { max-width: none; }
 
+        /* The kind column of the person menu and sheet (§2, PersonMenuAction.kind):
+           an 18px mark at the row's start, as the card's tabs mark the same
+           click — ▸ shows in place, ▾ hides what it showed (the row tinted),
+           ◎ focuses; a row going elsewhere keeps its ↗ at the end and the
+           column empty. In a list with marks the other rows and the section
+           headings keep the text in line (16 + 18 + the row's gap). */
+        .menu-item-kind {
+            flex: none; width: 18px; text-align: center;
+            color: var(--accent); font-size: 13px; line-height: 1;
+        }
+        .menu-item-kind[data-kind="place"]::before { content: '▸'; }
+        .menu-item-kind[data-kind="placeOpen"]::before { content: '▾'; }
+        .menu-item-kind[data-kind="focus"]::before { content: '◎'; }
+        :is(.context-menu-item, .bottom-sheet-item):has(> .menu-item-kind[data-kind="placeOpen"]) {
+            background: var(--primary-soft); color: var(--primary-dark);
+        }
+        :is(.context-menu-item, .bottom-sheet-item):has(> .menu-item-kind[data-kind="placeOpen"]) .menu-item-kind { color: var(--primary-dark); }
+        .context-menu:has(.menu-item-kind) > .context-menu-item:not(:has(> .menu-item-kind)),
+        .context-menu:has(.menu-item-kind) > .menu-section-header { padding-left: 44px; }
+        .bottom-sheet-person:has(.menu-item-kind) .bottom-sheet-item:not(.sheet-tile):not(.menu-chip):not(:has(> .menu-item-kind)),
+        .bottom-sheet-person:has(.menu-item-kind) .bottom-sheet-section { padding-left: 46px; }
+        /* The focus tile: ◎ in its top left corner. */
+        .bottom-sheet-person .sheet-tile[data-action="focus"] { position: relative; }
+        .bottom-sheet-person .sheet-tile[data-action="focus"]::before {
+            content: '◎'; position: absolute; top: 6px; left: 8px;
+            color: var(--accent); font-size: 12px; line-height: 1;
+        }
+        /* "+ family" menu: the same marks beside label and hint. */
+        .view-link-menu__item:has(> .menu-item-kind) { position: relative; padding-left: 44px; }
+        .view-link-menu:has(.menu-item-kind) > .view-link-menu__item { padding-left: 44px; }
+        .view-link-menu__item > .menu-item-kind { position: absolute; left: 16px; top: 12px; }
+
         /* Person sheet: the person's own actions as tiles on top. */
         .sheet-tiles {
             display: grid; grid-template-columns: repeat(var(--tiles, 4), minmax(0, 1fr)); gap: 8px;
@@ -16766,6 +16883,7 @@
         onclick="window.Strom.TreeRenderer.goBack()" data-i18n-title="focus.back">↩</button>
     <button id="focus-forward-btn" class="focus-nav-btn focus-forward-btn" style="display:none;"
         onclick="window.Strom.TreeRenderer.goForward()" data-i18n-title="focus.forward">↪</button>
+    <div id="focus-toast" class="focus-toast" role="status" aria-live="polite"></div>
 
     <div id="slideshow-overlay" class="slideshow-overlay">
         <div id="slideshow-caption" class="slideshow-caption"></div>

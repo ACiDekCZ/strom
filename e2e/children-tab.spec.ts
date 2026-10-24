@@ -73,7 +73,7 @@ test('a direct-line ancestor: children shown in place, the card stays, a second 
     await expect(tab).toHaveAttribute('aria-label', /^Show the children of .+ here$/);
     // The bubble names the children out of view and what a click does
     await expect(tab.locator('.badge-tooltip-item')).toHaveCount(3);
-    await expect(tab.locator('.badge-tooltip-hint')).toHaveText('A click shows them here; the view stays.');
+    await expect(tab.locator('.badge-tooltip-action')).toHaveText('A click shows them here; the view stays.');
 
     const before = await screenPositions(page);
     const scale = await page.evaluate(() => window.Strom.ZoomPan.getScale());
@@ -92,7 +92,7 @@ test('a direct-line ancestor: children shown in place, the card stays, a second 
     await expect(hide.locator('.pill-glyph')).toHaveText('▾');
     // Its bubble stands beside it (rows of its own may follow)
     await expect(cardOf(page, ANCESTOR).locator('.children-bubble > .badge-tooltip-header')).toHaveText('Children shown here');
-    await expect(cardOf(page, ANCESTOR).locator('.children-bubble > .badge-tooltip-hint')).toHaveText('A click on the tab hides them again.');
+    await expect(cardOf(page, ANCESTOR).locator('.children-bubble > .badge-tooltip-action')).toHaveText('A click on the tab hides them again.');
     // Each shown child hangs on a line from its parents (no card left without one)
     const drops = await page.evaluate(() => (window.Strom.TreeRenderer as unknown as { connections: { drops: { personId: string }[] }[] }).connections.flatMap(c => c.drops.map(d => d.personId)));
     for (const id of [...SIBLINGS, HALF]) expect(drops).toContain(id);
@@ -211,7 +211,7 @@ test('every card keeps its tabs within its own width (three tabs, German words):
     }
 });
 
-test('a grandfather with parents, a brother and a son of his second marriage out of view: three tabs in glyphs alone, the children shown in place', async ({ page }) => {
+test('a grandfather with parents, a brother and a son of his second marriage out of view: "◎ family" and the children tab, whole words, the children shown in place', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openApp(page);
     await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
@@ -230,11 +230,15 @@ test('a grandfather with parents, a brother and a son of his second marriage out
     }, 'Zwolbrack', 'c');
     await page.evaluate(() => window.Strom.TreeRenderer.setFocusDepth(2, 1));
     const row = cardOf(page, 'g1').locator(':scope > .edge-top-right');
-    await expect(row.locator(':scope > .branch-tab')).toHaveCount(3);
-    await expect(row).toHaveClass(/tabs-glyph/);
-    // The words stay for screen readers, the glyph alone on the screen
+    // Parents and brother out of view make one focus tab; the order goes by relation
+    await expect(row.locator(':scope > .branch-tab')).toHaveCount(2);
+    expect(await row.locator(':scope > .branch-tab').evaluateAll(tabs => tabs.map(t => (t as HTMLElement).dataset.tab ?? t.className)))
+        .toEqual(['family', expect.stringContaining('children-tab')]);
+    // Two tabs fit with their words (the three tabs before needed glyphs alone)
+    await expect(row).not.toHaveClass(/tabs-short|tabs-glyph/);
     await expect(row.locator('.children-tab')).toHaveAttribute('aria-label', /^Kinder von .+ hier zeigen$/);
-    expect(await row.locator('.children-tab .pill-text').evaluate(el => el.getBoundingClientRect().width)).toBeLessThanOrEqual(1);
+    await expect(row.locator('.branch-tab.kind-focus .pill-text')).toHaveText('Familie');
+    await expect(row.locator('.children-tab .pill-short')).toBeHidden();
     const inCard = await cardOf(page, 'g1').evaluate(card => {
         const c = card.getBoundingClientRect();
         return [...card.querySelectorAll(':scope > .edge-top-right > .branch-tab')].every(t => t.getBoundingClientRect().left >= c.left);
@@ -399,7 +403,7 @@ test('a child drawn elsewhere in the tree: counted before the click, after it a 
     const row = bubble.locator('.children-elsewhere-row');
     await expect(row).toHaveCount(1);
     await expect(row).toHaveAttribute('aria-label', 'Move the view to the card of Ilse Varnhag');
-    await expect(bubble.locator('.badge-tooltip-hint').last()).toHaveText('A click on the tab hides them again.');
+    await expect(bubble.locator('.badge-tooltip-action')).toHaveText('A click on the tab hides them again.');
     // While it is open the grandmother's children glow
     await expect(cardOf(page, 'mother')).toHaveClass(/children-glow/);
     await row.click();
@@ -812,7 +816,7 @@ test.describe('ancestors folded for the children (§2)', () => {
         await expect(folded).toHaveAttribute('aria-label', `Hide the children of ${shownName} and bring the parents back`);
         await expect(folded.locator('.badge-tooltip-header')).toHaveText('Parents hidden for now');
         await expect(folded.locator('.badge-tooltip-body')).toHaveText(`They make room for the children of ${shownName}.`);
-        await expect(folded.locator('.badge-tooltip-hint')).toHaveText('A click hides the children and brings the parents back.');
+        await expect(folded.locator('.badge-tooltip-action')).toHaveText('A click hides the children and brings the parents back.');
         // The dashed look
         expect(await folded.evaluate(el => getComputedStyle(el).borderTopStyle)).toBe('dashed');
         // The "▾ children" bubble names whose ancestors are folded

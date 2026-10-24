@@ -6,7 +6,8 @@
 
 import { describe, it, expect } from 'vitest';
 import { hiddenRelativesTabs, hiddenChildIds, newlyShownChildIds, childrenDrawnElsewhere, siblingOrderMark, childrenShownClosing, siblingsTabState, newlyShownSiblingIds, siblingGroups, unionChildIdSet } from '../marriage-order.js';
-import { tabsGlyphsOnly } from '../union-order-measure.js';
+import { tabsForm, tabGlyph, tabLabel, tabKindClass, branchTabRestHtml } from '../union-order-measure.js';
+import { branchTabKind, branchTabsInOrder } from '../marriage-order.js';
 import { childIdsShownInPlace } from '../layout/pipeline/1-select-subgraph.js';
 import { PersonId, PartnershipId, Person, StromData, DEFAULT_LAYOUT_CONFIG } from '../types.js';
 import { runLayoutPipeline } from '../layout/pipeline/index.js';
@@ -95,11 +96,20 @@ describe('children tab', () => {
         expect(childIdsShownInPlace(t, P('gf'))).toEqual([P('father'), P('aunt'), P('uncle')]);
     });
 
-    it('keeps the order parents, siblings, children', () => {
+    it('keeps the order parents, siblings, children; parents and siblings out of view are one "◎ family" (§4)', () => {
         const inView = (id: PersonId) => id === 'uncle';
         // uncle: parents and siblings out of view; his only child is a stand-in
-        expect(hiddenRelativesTabs(d, P('uncle'), inView, kids)).toEqual(['parents', 'siblings']);
-        expect(hiddenRelativesTabs(d, P('uncle'), inView, kids, new Set([P('uncle')]))).toEqual(['parents', 'siblings', 'childrenShown']);
+        expect(hiddenRelativesTabs(d, P('uncle'), inView, kids)).toEqual(['family']);
+        expect(hiddenRelativesTabs(d, P('uncle'), inView, kids, new Set([P('uncle')]))).toEqual(['family', 'childrenShown']);
+        // A sibling in view: the parents' tab alone
+        const withAunt = (id: PersonId) => id === 'uncle' || id === 'aunt';
+        expect(hiddenRelativesTabs(d, P('uncle'), withAunt, kids)).not.toContain('family');
+    });
+
+    it('parents folded away for children shown in place keep their own dashed tab beside the siblings', () => {
+        const inView = (id: PersonId) => id === 'uncle';
+        const folded = { parentsFolded: (id: PersonId) => id === 'uncle' };
+        expect(hiddenRelativesTabs(d, P('uncle'), inView, kids, new Set(), new Set(), folded)).toEqual(['parentsFolded', 'siblings']);
     });
 });
 
@@ -141,8 +151,8 @@ describe('siblings tab in place (a parent in view)', () => {
         expect(hiddenRelativesTabs(d, P('father'), inView, kids)).toEqual(['siblingsHere']);
     });
 
-    it('without a parent in view the siblings tab still focuses on the person', () => {
-        expect(hiddenRelativesTabs(d, P('father'), view('father'), kids)).toEqual(['parents', 'siblings']);
+    it('without a parent in view the parents and siblings are one focus tab on the person (◎ family)', () => {
+        expect(hiddenRelativesTabs(d, P('father'), view('father'), kids)).toEqual(['family']);
     });
 
     it('"▾ siblings" after the step, and after the parents\' own "▸ children" too', () => {
@@ -324,17 +334,47 @@ describe('closing shown children', () => {
     });
 });
 
-describe('tabsGlyphsOnly', () => {
+describe('tabsForm (§3: words, a letter each, the glyphs alone)', () => {
     // The default card: 188px wide, both corner insets 13px
     const room = 188 - 2 * 13;
 
-    it('three tabs never fit with their words: the glyphs alone', () => {
-        expect(tabsGlyphsOnly(['parents', 'siblings', 'children'], room)).toBe(true);
+    it('three tabs never fit with their words: a glyph and a letter each', () => {
+        expect(tabsForm(['parents', 'siblings', 'children'], room)).toBe('short');
+    });
+
+    it('where even the letters do not fit: the glyphs alone', () => {
+        expect(tabsForm(['parents', 'siblings', 'children'], 90)).toBe('glyph');
     });
 
     it('two tabs and one keep their words', () => {
-        expect(tabsGlyphsOnly(['parents', 'siblings'], room)).toBe(false);
-        expect(tabsGlyphsOnly(['children'], 20)).toBe(false);
-        expect(tabsGlyphsOnly([], room)).toBe(false);
+        expect(tabsForm(['parents', 'siblings'], room)).toBe('full');
+        expect(tabsForm(['children'], 20)).toBe('full');
+        expect(tabsForm([], room)).toBe('full');
+    });
+});
+
+describe('the kinds of the tabs (§2: in place, focus, jump)', () => {
+    it('the glyph says what a click does, not the relation', () => {
+        expect(['parents', 'family', 'siblings'].map(t => tabGlyph(t as never))).toEqual(['◎', '◎', '◎']);
+        expect(['siblingsHere', 'children', 'parentsFolded'].map(t => tabGlyph(t as never))).toEqual(['▸', '▸', '▸']);
+        expect(['siblingsShown', 'childrenShown'].map(t => tabGlyph(t as never))).toEqual(['▾', '▾']);
+        expect(['linkParents', 'linkChild', 'linkChildren'].map(t => tabGlyph(t as never))).toEqual(['↗', '↗', '↗']);
+        expect(tabKindClass('family')).toBe('kind-focus');
+        expect(tabKindClass('childrenShown')).toBe('kind-place');
+        expect(tabKindClass('linkChild')).toBe('kind-jump');
+        expect(branchTabKind('parentsFolded')).toBe('place');
+    });
+
+    it('a focus tab has no letter: its ◎ says it (one focus tab a card)', () => {
+        expect(branchTabRestHtml('family')).not.toContain('pill-short');
+        expect(branchTabRestHtml('family')).toMatch(/^<span class="pill-glyph">◎<\/span><span class="pill-text">/);
+        expect(branchTabRestHtml('children')).toContain('pill-short');
+        expect(tabLabel('family')).not.toBe(tabLabel('parents'));
+    });
+
+    it('the tabs stand in the order of the generations, a line link at its relation', () => {
+        expect(branchTabsInOrder(['children', 'siblings'], ['linkParents'])).toEqual(['linkParents', 'siblings', 'children']);
+        expect(branchTabsInOrder(['family', 'childrenShown'], ['linkChildren'])).toEqual(['family', 'childrenShown', 'linkChildren']);
+        expect(branchTabsInOrder(['parentsFolded', 'siblingsShown'], [])).toEqual(['parentsFolded', 'siblingsShown']);
     });
 });

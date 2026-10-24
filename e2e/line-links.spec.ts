@@ -50,11 +50,15 @@ test('the left-out line: tabs on both ends, a jump that keeps the focus', async 
     // The child's tab names its parents, each parent's tab names the child
     const toParents = cardOf(page, CHILD).locator('.edge-top-right .branch-tab.line-link[data-action="jump-parents"]');
     await expect(toParents).toHaveCount(1);
-    await expect(toParents.locator('.pill-text')).toHaveText('parents ↗');
-    await expect(toParents).toHaveAttribute('aria-label', /^Parents stand elsewhere in the tree: /);
+    await expect(toParents.locator('.pill-text')).toHaveText('parents');
+    // A jump (§2): "↗" after the word, the jump's look, what a click does as the bubble's last line
+    await expect(toParents.locator('.pill-glyph')).toHaveText('↗');
+    await expect(toParents).toHaveClass(/kind-jump/);
+    await expect(toParents).toHaveAttribute('aria-label', /^Move the view to the parents of /);
+    await expect(toParents.locator('.badge-tooltip-action')).toHaveText('A click moves the view to the cards; the tree stays.');
     for (const id of PARENTS) {
         const toChild = cardOf(page, id).locator('.branch-tab.line-link[data-action="jump-child"]');
-        await expect(toChild.locator('.pill-text')).toHaveText('child ↗');
+        await expect(toChild.locator('.pill-text')).toHaveText('child');
     }
 
     // Click on the child's tab: both parents come into view, highlighted

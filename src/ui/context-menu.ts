@@ -56,6 +56,13 @@ export interface PersonMenuAction {
     sheetTop?: boolean;
     /** A quiet line under the row in the bottom sheet only (the siblings shown: through which parents). */
     sheetNote?: string;
+    /**
+     * What the row does, marked as the card's tabs mark it (§2): shows in
+     * place (▸), hides what it showed (▾, "placeOpen"), focuses (◎), or moves
+     * the view to a card elsewhere (its ↗ stays at the end; the mark column
+     * stays empty).
+     */
+    kind?: 'place' | 'placeOpen' | 'focus' | 'jump';
 }
 
 /** The person menu with the rows of the view links: a ghost's block on top, the rest right after "Focus". */
@@ -99,7 +106,9 @@ export function menuItemBody(a: PersonMenuAction): string {
         + (a.external ? '<span class="menu-item-ext" aria-hidden="true">↗</span>' : '')
         + (a.submenu ? '<span class="menu-item-chev" aria-hidden="true">›</span>' : '');
     const label = a.note ? `${e(a.label)}<span class="menu-item-note">${e(a.note)}</span>` : e(a.label);
-    return tail || a.note ? `<span class="menu-item-label">${label}</span>${tail}` : label;
+    // The kind column (§2): an empty span, its mark drawn by the style (index.html .menu-item-kind)
+    const kind = a.kind ? `<span class="menu-item-kind" data-kind="${a.kind}" aria-hidden="true"></span>` : '';
+    return tail || a.note || kind ? `${kind}<span class="menu-item-label">${label}</span>${tail}` : label;
 }
 
 /** ` aria-label="…"` when the item carries one. */
@@ -173,11 +182,12 @@ export const contextMenuMethods = uiModule({
             ...(TreeRenderer.canToggleChildren(personId) ? [{
                 action: 'toggle-children', sheetTop: true,
                 label: TreeRenderer.isChildrenShown(personId) ? strings.focus.hideChildrenHere : c.showChildrenHere,
+                kind: TreeRenderer.isChildrenShown(personId) ? 'placeOpen' as const : 'place' as const,
             }, ...this.childrenElsewhereRows(personId)] : []),
         ];
         if (isViewMode) {
             return withViewLinkRows([
-                { action: 'focus', label: c.focus },
+                { action: 'focus', label: c.focus, kind: 'focus' },
                 ...children,
                 ...readItems(false),
                 ...group([
@@ -189,7 +199,7 @@ export const contextMenuMethods = uiModule({
         }
         if (isPersonLocked) {
             return withViewLinkRows([
-                { action: 'focus', label: c.focus },
+                { action: 'focus', label: c.focus, kind: 'focus' },
                 ...children,
                 // Read-only look at the record (the edit form in its locked mode).
                 { action: 'view', label: c.view },
@@ -202,11 +212,11 @@ export const contextMenuMethods = uiModule({
         }
         const chip = (action: string, label: string, ariaLabel: string): PersonMenuAction => ({ action, label, ariaLabel });
         return withViewLinkRows([
-            { action: 'focus', label: c.focus },
+            { action: 'focus', label: c.focus, kind: 'focus' },
             ...children,
             { action: 'edit', label: c.edit },
             ...readItems(true),
-            { action: 'descendants', label: c.showDescendants },
+            { action: 'descendants', label: c.showDescendants, kind: 'focus' },
             {
                 action: 'add', label: c.addSection, header: c.addSection, divider: true, chips: [
                     ...(DataManager.parentSlotFree(person.id) ? [chip('parent', c.chipParent, c.addParent)] : []),
@@ -241,11 +251,11 @@ export const contextMenuMethods = uiModule({
         if (!TreeRenderer.canToggleSiblings(personId)) return [];
         if (!TreeRenderer.isSiblingsShown(personId)) {
             const n = TreeRenderer.siblingsToShowCount(personId);
-            return [{ action: 'toggle-siblings', sheetTop: true, label: strings.contextMenu.showSiblingsHere, ...(n > 0 ? { meta: String(n) } : {}) }];
+            return [{ action: 'toggle-siblings', sheetTop: true, kind: 'place', label: strings.contextMenu.showSiblingsHere, ...(n > 0 ? { meta: String(n) } : {}) }];
         }
         const via = TreeRenderer.siblingsShownParents(personId)
             .map(id => DataManager.getPerson(id)).filter((p): p is Person => p !== null).map(p => shownNameFull(p, '?')).join(', ');
-        return [{ action: 'toggle-siblings', sheetTop: true, label: strings.focus.hideSiblingsHere, ...(via ? { sheetNote: strings.focus.siblingsShownVia(via) } : {}) }];
+        return [{ action: 'toggle-siblings', sheetTop: true, kind: 'placeOpen', label: strings.focus.hideSiblingsHere, ...(via ? { sheetNote: strings.focus.siblingsShownVia(via) } : {}) }];
     },
 
     /**
@@ -262,7 +272,7 @@ export const contextMenuMethods = uiModule({
                 const year = displayYear(p.birthDate);
                 return {
                     action: `${CHILD_ELSEWHERE_ACTION}${p.id}`, sheetTop: true,
-                    label: year ? `${name} *${year}` : name, meta: '↗',
+                    label: year ? `${name} *${year}` : name, meta: '↗', kind: 'jump',
                     ariaLabel: strings.focus.childrenElsewhereAria(name),
                     ...(i === 0 ? { header: strings.focus.childrenElsewhereHeader } : {}),
                 };

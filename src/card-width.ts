@@ -548,9 +548,9 @@ export const CARD_EDGE_PILL_ROOM = 12;
 /**
  * The room the last line of a card of one height for the view keeps at its
  * right for the ⇄ pill on the bottom-right edge (index.html .has-edge-br,
- * the same 34px as the line's padding there).
+ * the same 46px as the line's padding there: "⇄ N ↗").
  */
-export const CARD_EDGE_PILL_RIGHT = 34;
+export const CARD_EDGE_PILL_RIGHT = 46;
 /** The partner line on a card taller than one row a detail: the middle of its header. */
 export const CARD_HEAD_LINE_Y = 25;
 /** The same with the years under the name: the middle of the taller header (10 + 33 / 2). */

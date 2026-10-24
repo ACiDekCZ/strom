@@ -7,7 +7,7 @@
  * measure again).
  */
 
-import { PillMetrics, BranchTab, estimatePillMetrics } from './marriage-order.js';
+import { PillMetrics, BranchTab, estimatePillMetrics, branchTabKind, branchTabRelation } from './marriage-order.js';
 import { strings } from './strings.js';
 
 /** The face of the pill and tab texts (index.html: 600 10px var(--font-sans)). */
@@ -52,14 +52,23 @@ export function unionOrderPillPartsHtml(ordinal: string, year: string, glyph = t
         + (year ? `<span class="uo-year">${escapeHtml(year)}</span>` : '');
 }
 
-const TAB_GLYPH: Record<BranchTab, string> = {
-    parents: '◂', siblings: '◆', siblingsHere: '▸', siblingsShown: '▾', children: '▸', childrenShown: '▾', linkParents: '◂', linkChild: '▸', linkChildren: '▸',
-};
+/**
+ * The glyph of a top-edge tab: the kind of its click, not the relation —
+ * "▸" shows in place ("▾" while shown), "◎" focuses, "↗" (at the end of the
+ * word) moves the view to a card drawn elsewhere.
+ */
+export function tabGlyph(tab: BranchTab): string {
+    if (tab === 'siblingsShown' || tab === 'childrenShown') return '▾';
+    const kind = branchTabKind(tab);
+    return kind === 'focus' ? '◎' : kind === 'jump' ? '↗' : '▸';
+}
 
 /** The word of a card's top-edge tab (a hidden-relatives tab or a line link). */
 export function tabLabel(kind: BranchTab): string {
     switch (kind) {
-        case 'parents': return strings.focus.branchTabParents;
+        case 'parents':
+        case 'parentsFolded': return strings.focus.branchTabParents;
+        case 'family': return strings.focus.branchTabFamily;
         case 'siblings':
         case 'siblingsHere':
         case 'siblingsShown': return strings.focus.branchTabSiblings;
@@ -71,9 +80,31 @@ export function tabLabel(kind: BranchTab): string {
     }
 }
 
-/** The resting look of a top-edge tab (no bubble): its glyph and word. */
+/**
+ * The letter of a tab in the short form (a card whose words do not fit):
+ * the relation's (cs R/S/D, en P/S/C, de E/G/K); a focus tab none — a card
+ * has one focus tab at most, its "◎" says it.
+ */
+export function tabShort(tab: BranchTab): string {
+    return branchTabKind(tab) === 'focus' ? '' : strings.focus.branchTabShort[branchTabRelation(tab)];
+}
+
+/** The class of a top-edge tab's kind (index.html: .kind-place, .kind-focus, .kind-jump). */
+export function tabKindClass(tab: BranchTab): string {
+    return `kind-${branchTabKind(tab)}`;
+}
+
+/**
+ * The resting look of a top-edge tab (no bubble): its glyph, its word (kept
+ * for screen readers when the card shortens its tabs) and its short letter
+ * (shown only then). A jump's "↗" stands after the word.
+ */
 export function branchTabRestHtml(kind: BranchTab): string {
-    return `<span class="pill-glyph">${TAB_GLYPH[kind]}</span><span class="pill-text">${escapeHtml(tabLabel(kind))}</span>`;
+    const glyph = `<span class="pill-glyph">${tabGlyph(kind)}</span>`;
+    const short = tabShort(kind);
+    const words = `<span class="pill-text">${escapeHtml(tabLabel(kind))}</span>`
+        + (short ? `<span class="pill-short" aria-hidden="true">${escapeHtml(short)}</span>` : '');
+    return branchTabKind(kind) === 'jump' ? words + glyph : glyph + words;
 }
 
 function hiddenHost(): HTMLElement {
@@ -139,28 +170,44 @@ export function measureUnionOrderPill(ordinal: string, year: string, glyph = tru
 /** The key of a pill in measureUnionOrderPills' result. */
 export { pillKey as unionOrderPillKey };
 
-/** The key of a row of tabs in measureTabRows' result (its words: the language's; `glyphs`: the glyphs alone). */
-export function rowKey(kinds: readonly BranchTab[], glyphs = false): string {
-    return kinds.map(k => `${k}:${tabLabel(k)}`).join(',') + (glyphs ? '|glyphs' : '');
+/**
+ * How a card's top-edge tabs show (the whole card at once): their words
+ * ("full"), their glyphs with a letter each ("short", .tabs-short), or their
+ * glyphs alone ("glyph", .tabs-glyph: not even the letters fit). Far out
+ * (below the zoom's ZOOM_FAR) the screen shows the glyphs alone anyway
+ * (index.html: #tree-canvas.zoom-far).
+ */
+export type TabsForm = 'full' | 'short' | 'glyph';
+
+/** The key of a row of tabs in measureTabRows' result (its words: the language's; `form`: how the row shows). */
+export function rowKey(kinds: readonly BranchTab[], form: TabsForm = 'full'): string {
+    return kinds.map(k => `${k}:${tabLabel(k)}:${tabShort(k)}`).join(',') + (form === 'full' ? '' : `|${form}`);
+}
+
+/** The class of a row of tabs in this form ('' for the words). */
+export function tabsFormClass(form: TabsForm): string {
+    return form === 'full' ? '' : `tabs-${form}`;
 }
 
 /**
  * Widths of rows of resting top-edge tabs (hidden relatives, line links; 4px apart, as on the card's
- * top edge), one per distinct row; 0 for an empty row. `glyphs`: the rows of a card whose tabs show
- * their glyphs alone (.tabs-glyph, see tabsGlyphsOnly).
+ * top edge), one per distinct row; 0 for an empty row. `form`: the rows of a card whose tabs show
+ * shortened (tabsForm).
  */
-export function measureTabRows(rows: Iterable<readonly BranchTab[]>, glyphs = false): Map<string, number> {
+export function measureTabRows(rows: Iterable<readonly BranchTab[]>, form: TabsForm = 'full'): Map<string, number> {
     const out = new Map<string, number>();
     const todo: Array<{ key: string; kinds: readonly BranchTab[] }> = [];
     for (const kinds of rows) {
-        const key = rowKey(kinds, glyphs);
+        const key = rowKey(kinds, form);
         if (out.has(key)) continue;
         if (kinds.length === 0) { out.set(key, 0); continue; }
         const hit = tabCache.get(key);
         if (hit !== undefined) out.set(key, hit);
         else {
-            // Estimate: 7px padding and a 1px border a side, the glyph and the word.
-            out.set(key, kinds.reduce((w, k) => w + 16 + 11 + (glyphs ? 0 : 3 + tabLabel(k).length * 5.6), 0) + 4 * (kinds.length - 1));
+            // Estimate: 7px padding and a 1px border a side, the glyph and the word (the letter).
+            const text = (k: BranchTab): number => form === 'full' ? 3 + tabLabel(k).length * 5.6
+                : form === 'short' && tabShort(k) ? 2 + tabShort(k).length * 6.2 : 0;
+            out.set(key, kinds.reduce((w, k) => w + (form === 'full' ? 16 : 14) + 11 + text(k), 0) + 4 * (kinds.length - 1));
             todo.push({ key, kinds });
         }
     }
@@ -169,8 +216,8 @@ export function measureTabRows(rows: Iterable<readonly BranchTab[]>, glyphs = fa
     const els = todo.map(t => {
         const row = document.createElement('div');
         row.style.cssText = 'display:flex;align-items:center;gap:4px;width:max-content;height:18px;';
-        if (glyphs) row.className = 'tabs-glyph';
-        row.innerHTML = t.kinds.map(k => `<button class="branch-tab" type="button">${branchTabRestHtml(k)}</button>`).join('');
+        row.className = tabsFormClass(form);
+        row.innerHTML = t.kinds.map(k => `<button class="branch-tab ${tabKindClass(k)}" type="button">${branchTabRestHtml(k)}</button>`).join('');
         host.appendChild(row);
         return row;
     });
@@ -187,11 +234,14 @@ export function measureTabRows(rows: Iterable<readonly BranchTab[]>, glyphs = fa
 }
 
 /**
- * Whether a card's top-edge tabs show their glyphs alone: with their words the
- * row would reach past the card's left inset (`room`: the card's width less
- * both corner insets) into the tabs of the next card (three tabs, long words).
- * The words stay for screen readers and the bubbles name the relatives.
+ * How a card's top-edge tabs show (TabsForm): with their words while the
+ * row stays within the card's corner insets (`room`: the card's width less
+ * both corner insets; one tab always keeps its word), else shortened to a
+ * glyph and a letter each, and to the glyphs alone where even that would
+ * reach into the tabs of the next card. The words stay for screen readers
+ * and the bubbles name the relatives.
  */
-export function tabsGlyphsOnly(kinds: readonly BranchTab[], room: number): boolean {
-    return kinds.length > 1 && (measureTabRows([kinds]).get(rowKey(kinds)) ?? 0) > room;
+export function tabsForm(kinds: readonly BranchTab[], room: number): TabsForm {
+    if (kinds.length <= 1 || (measureTabRows([kinds]).get(rowKey(kinds)) ?? 0) <= room) return 'full';
+    return (measureTabRows([kinds], 'short').get(rowKey(kinds, 'short')) ?? 0) <= room ? 'short' : 'glyph';
 }

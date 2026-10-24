@@ -588,7 +588,7 @@ test.describe('pills on the bottom edge (U03a)', () => {
 });
 
 /**
- * A card of one height for the view with the ⇄ pill: its last line keeps 34px
+ * A card of one height for the view with the ⇄ N ↗ pill: its last line keeps 46px
  * clear at the right, and its rows were wrapped that narrow, so a place either
  * fits or ends in "…" — never clipped mid-word (T30). Both styles, whole and two rows.
  */
@@ -620,7 +620,7 @@ test.describe('the ⇄ pill on a card of one height (T30)', () => {
             await page.evaluate(() => document.fonts.ready);
             await expect.poll(() => cardBoxesMatchLayout(page)).toBe(true);
             const last = anna.locator('.card-lines > :last-child');
-            await expect(last).toHaveCSS('padding-right', '34px');
+            await expect(last).toHaveCSS('padding-right', '46px');
             // Every row of the last line shows whole: its text no wider than the row's box.
             await expect.poll(() => last.locator('.card-line-row').evaluateAll(rows => rows.map(row => {
                 const range = document.createRange();

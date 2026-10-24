@@ -42,18 +42,20 @@ describe('the line links of the cards', () => {
 });
 
 describe('the tab words (cs/en/de, impersonal)', () => {
-    const cases: Array<['en' | 'cs' | 'de', string[]]> = [
-        ['en', ['parents ↗', 'child ↗', 'children ↗']],
-        ['cs', ['rodiče ↗', 'dítě ↗', 'děti ↗']],
-        ['de', ['Eltern ↗', 'Kind ↗', 'Kinder ↗']],
+    const cases: Array<['en' | 'cs' | 'de', string[], string[]]> = [
+        ['en', ['parents', 'child', 'children'], ['P', 'C', 'C']],
+        ['cs', ['rodiče', 'dítě', 'děti'], ['R', 'D', 'D']],
+        ['de', ['Eltern', 'Kind', 'Kinder'], ['E', 'K', 'K']],
     ];
-    it.each(cases)('%s', (lang, words) => {
+    it.each(cases)('%s', (lang, words, letters) => {
         setLanguage(lang);
         expect(['linkParents', 'linkChild', 'linkChildren'].map(k => tabLabel(k as never))).toEqual(words);
-        // The resting tab: the branch tab's glyph and word
-        expect(branchTabRestHtml('linkParents')).toBe(`<span class="pill-glyph">◂</span><span class="pill-text">${words[0]}</span>`);
-        expect(branchTabRestHtml('linkChild')).toContain('<span class="pill-glyph">▸</span>');
-        const tips = [strings.focus.linkParentsTooltip, strings.focus.linkChildTooltip, strings.focus.linkChildrenTooltip];
+        // The resting tab of a jump (§2): the word (its letter in the short form), then "↗"
+        expect(branchTabRestHtml('linkParents')).toBe(`<span class="pill-text">${words[0]}</span><span class="pill-short" aria-hidden="true">${letters[0]}</span><span class="pill-glyph">↗</span>`);
+        expect(branchTabRestHtml('linkChild')).not.toContain('▸');
+        expect(branchTabRestHtml('linkChildren')).toContain(`>${letters[2]}</span><span class="pill-glyph">↗</span>`);
+        const tips = [strings.focus.linkParentsTooltip, strings.focus.linkChildTooltip, strings.focus.linkChildrenTooltip,
+            strings.focus.linkParentsAria('A'), strings.focus.linkChildAria('A'), strings.focus.linkChildrenAria('A'), strings.focus.jumpHint(1), strings.focus.jumpHint(2)];
         for (const tip of tips) expect(tip).not.toMatch(/\b(you|your|vy|váš|vaše|Sie|Ihr|du)\b/i);
     });
 

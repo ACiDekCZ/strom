@@ -238,7 +238,7 @@ test.describe('card signals', () => {
                 await expect(jan.locator('.card-line [title]')).toHaveCount(0);
             } else {
                 // The last text line (the name in compact) ends before the stripes.
-                await expect(jan.locator('.card-body > :last-child')).toHaveCSS('margin-right', '34px');
+                await expect(jan.locator('.card-body > :last-child')).toHaveCSS('margin-right', '46px');
             }
             // Text lines clip at their own box: no box reaches under the stripes.
             for (const sel of ['.name', '.birth-date', '.card-line']) {
