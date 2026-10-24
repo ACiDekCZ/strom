@@ -82,6 +82,8 @@ export interface GraphSelection {
     /** Persons in the deepest shown descendant generation (and their partners):
      *  display expansion must not pull in their children (T19). */
     depthLimitPersons?: Set<PersonId>;
+    /** Persons of the line reached at the ancestor depth whose parents lie beyond it (extendAncestorDepth). */
+    ancestorLimitPersons?: Set<PersonId>;
 }
 
 // ==================== STEP 2: BUILD MODEL ====================
@@ -546,6 +548,12 @@ export interface LayoutResult {
     omittedEdges?: OmittedEdge[];
     /** See InnerSiblingRun; absent when no ancestor's siblings belong on the inner side. */
     innerSiblingRuns?: InnerSiblingRun[];
+    /**
+     * Drawn persons of the line whose parents are out of view only because
+     * of the ancestor depth (their "▸ parents" shows them in place,
+     * PipelineInput.extraDepthFor); absent when there is none.
+     */
+    ancestorDepthEdge?: PersonId[];
 }
 
 /**
@@ -617,6 +625,13 @@ export interface PipelineInput {
      * with expandChildrenOf (foldAncestorsInSelection).
      */
     foldAncestorsOf?: readonly PersonId[];
+    /**
+     * Persons of the line whose parents the view shows in place although they
+     * lie beyond the ancestor depth (the "▸ parents" of an ancestor at the
+     * edge of the depth): one generation more for that branch alone
+     * (extendAncestorDepth). Listed persons not at the edge are skipped.
+     */
+    extraDepthFor?: readonly PersonId[];
 }
 
 // ==================== ANCESTOR CLUSTER ====================
@@ -686,4 +701,6 @@ export interface LayoutRequest {
     expandChildrenOf?: readonly PersonId[];
     /** See PipelineInput.foldAncestorsOf. */
     foldAncestorsOf?: readonly PersonId[];
+    /** See PipelineInput.extraDepthFor. */
+    extraDepthFor?: readonly PersonId[];
 }

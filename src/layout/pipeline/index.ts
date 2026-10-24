@@ -19,7 +19,7 @@ export * from './types.js';
 export * from './debug-types.js';
 
 // Re-export individual steps
-export { selectSubgraph, expandSelectionForDisplay, expandChildrenInSelection, foldAncestorsInSelection } from './1-select-subgraph.js';
+export { selectSubgraph, expandSelectionForDisplay, expandChildrenInSelection, foldAncestorsInSelection, extendAncestorDepth } from './1-select-subgraph.js';
 export { buildLayoutModel, getChildUnions } from './2-build-model.js';
 export { assignGenerations, validateGenerations } from './3-assign-generations.js';
 export { measureSubtrees, getTotalWidth } from './4-measure.js';
@@ -52,7 +52,7 @@ import {
     DEBUG_STEP_NAMES
 } from './debug-types.js';
 
-import { selectSubgraph, expandSelectionForDisplay, expandChildrenInSelection, foldAncestorsInSelection } from './1-select-subgraph.js';
+import { selectSubgraph, expandSelectionForDisplay, expandChildrenInSelection, foldAncestorsInSelection, extendAncestorDepth } from './1-select-subgraph.js';
 import { buildLayoutModel } from './2-build-model.js';
 import { assignGenerations } from './3-assign-generations.js';
 import { measureSubtrees } from './4-measure.js';
@@ -396,6 +396,25 @@ function withChildrenShown(
 }
 
 /**
+ * The drawn persons of the line whose parents are out of view only because
+ * of the ancestor depth (LayoutResult.ancestorDepthEdge): reached at the
+ * depth with parents beyond it, no parent drawn (a parent drawn another way,
+ * or folded for children shown, is not the depth's doing), and a parent the
+ * view would draw (not only "?" stand-ins). In selection order.
+ */
+function ancestorDepthEdge(data: StromData, selection: GraphSelection, result: LayoutResult): PersonId[] {
+    const out: PersonId[] = [];
+    for (const id of selection.ancestorLimitPersons ?? []) {
+        if (!result.positions.has(id)) continue;
+        const parents = data.persons[id]?.parentIds ?? [];
+        if (parents.some(p => selection.persons.has(p) || result.positions.has(p))) continue;
+        if (!parents.some(p => data.persons[p] && !data.persons[p].isPlaceholder)) continue;
+        out.push(id);
+    }
+    return out;
+}
+
+/**
  * Run the complete layout pipeline.
  */
 export function runLayoutPipeline(input: PipelineInput): LayoutResult {
@@ -429,6 +448,8 @@ export function runLayoutPipeline(input: PipelineInput): LayoutResult {
         includeParentSiblings,
         includeParentSiblingDescendants
     });
+    // Parents shown in place beyond the ancestor depth (an edge ancestor's "▸ parents")
+    if (input.extraDepthFor?.length) extendAncestorDepth(data, selection, input.extraDepthFor);
 
     // Early return if no persons selected
     if (selection.persons.size === 0) {
@@ -537,6 +558,8 @@ export function runLayoutPipeline(input: PipelineInput): LayoutResult {
 
     if (viewLayer) flagViewLayer(result, model, viewLayer);
     if (model.innerSiblingRuns?.length) result.innerSiblingRuns = model.innerSiblingRuns;
+    const depthEdge = ancestorDepthEdge(data, selection, result);
+    if (depthEdge.length) result.ancestorDepthEdge = depthEdge;
 
     return result;
 }
@@ -636,6 +659,7 @@ export function runLayoutPipelineWithDebug(
         includeParentSiblings,
         includeParentSiblingDescendants
     });
+    if (input.extraDepthFor?.length) extendAncestorDepth(data, selection, input.extraDepthFor);
 
     // Auto-expand: find persons at gen >= -1 with multiple partnerships,
     // plus deep direct-line ancestors whose extra spouses render as appendages
@@ -787,6 +811,8 @@ export function runLayoutPipelineWithDebug(
     result.diagnostics.errors = validation.errors;
     if (viewLayer) flagViewLayer(result, model, viewLayer);
     if (model.innerSiblingRuns?.length) result.innerSiblingRuns = model.innerSiblingRuns;
+    const depthEdge = ancestorDepthEdge(data, selection, result);
+    if (depthEdge.length) result.ancestorDepthEdge = depthEdge;
 
     snapshots.push(createSnapshot(8, { selection, model, genModel, measured, placed: constrained.placed, constrained, routed, result }));
 
@@ -821,7 +847,8 @@ export function pipelineInputFromRequest(request: LayoutRequest): PipelineInput 
         viewLinks: request.viewLinks,
         includeView: request.includeView,
         expandChildrenOf: request.expandChildrenOf,
-        foldAncestorsOf: request.foldAncestorsOf
+        foldAncestorsOf: request.foldAncestorsOf,
+        extraDepthFor: request.extraDepthFor
     };
 }
 

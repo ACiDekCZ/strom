@@ -33,6 +33,7 @@ export function selectSubgraph(input: SelectSubgraphInput): GraphSelection {
     const partnerships = new Set<PartnershipId>();
     const processedPartnerships = new Set<PartnershipId>();
     const depthLimit = new Set<PersonId>();
+    const ancestorLimit = new Set<PersonId>();
 
     const focusPerson = data.persons[focusPersonId];
     if (!focusPerson) {
@@ -41,7 +42,8 @@ export function selectSubgraph(input: SelectSubgraphInput): GraphSelection {
             partnerships,
             focusPersonId,
             maxAncestorGen: 0,
-            maxDescendantGen: 0
+            maxDescendantGen: 0,
+            ancestorLimitPersons: ancestorLimit
         };
     }
 
@@ -78,7 +80,7 @@ export function selectSubgraph(input: SelectSubgraphInput): GraphSelection {
     // 4. Direct ancestors of focus (through partnerships - both parents as unit)
     if (ancestorDepth > 0) {
         const depth = addAncestorsThroughPartnership(
-            data, focusPersonId, ancestorDepth, persons, partnerships, processedPartnerships
+            data, focusPersonId, ancestorDepth, persons, partnerships, processedPartnerships, 0, ancestorLimit
         );
         actualAncestorDepth = Math.max(actualAncestorDepth, depth);
 
@@ -92,7 +94,7 @@ export function selectSubgraph(input: SelectSubgraphInput): GraphSelection {
                         : partnership.person1Id;
                     if (spouseId && persons.has(spouseId)) {
                         const spouseDepth = addAncestorsThroughPartnership(
-                            data, spouseId, ancestorDepth, persons, partnerships, processedPartnerships
+                            data, spouseId, ancestorDepth, persons, partnerships, processedPartnerships, 0, ancestorLimit
                         );
                         actualAncestorDepth = Math.max(actualAncestorDepth, spouseDepth);
                     }
@@ -147,7 +149,8 @@ export function selectSubgraph(input: SelectSubgraphInput): GraphSelection {
         focusPersonId,
         maxAncestorGen: actualAncestorDepth,
         maxDescendantGen: actualDescendantDepth,
-        depthLimitPersons: depthLimit
+        depthLimitPersons: depthLimit,
+        ancestorLimitPersons: ancestorLimit
     };
 }
 
@@ -247,7 +250,8 @@ function findParentPartnership(data: StromData, childId: PersonId): Partnership 
 
 /**
  * Add ancestors through partnerships (both parents as a unit).
- * Returns the actual depth reached.
+ * Returns the actual depth reached. `ancestorLimit` collects the persons
+ * reached whose parents lie beyond the depth (GraphSelection.ancestorLimitPersons).
  */
 function addAncestorsThroughPartnership(
     data: StromData,
@@ -256,9 +260,13 @@ function addAncestorsThroughPartnership(
     persons: Set<PersonId>,
     partnerships: Set<PartnershipId>,
     processedPartnerships: Set<PartnershipId>,
-    currentDepth: number = 0
+    currentDepth: number = 0,
+    ancestorLimit?: Set<PersonId>
 ): number {
-    if (maxDepth <= 0) return currentDepth;
+    if (maxDepth <= 0) {
+        if ((data.persons[childId]?.parentIds.length ?? 0) > 0) ancestorLimit?.add(childId);
+        return currentDepth;
+    }
 
     const child = data.persons[childId];
     if (!child || child.parentIds.length === 0) return currentDepth;
@@ -276,11 +284,11 @@ function addAncestorsThroughPartnership(
         // Continue recursively for each parent
         const depth1 = addAncestorsThroughPartnership(
             data, parentPartnership.person1Id, maxDepth - 1,
-            persons, partnerships, processedPartnerships, currentDepth + 1
+            persons, partnerships, processedPartnerships, currentDepth + 1, ancestorLimit
         );
         const depth2 = addAncestorsThroughPartnership(
             data, parentPartnership.person2Id, maxDepth - 1,
-            persons, partnerships, processedPartnerships, currentDepth + 1
+            persons, partnerships, processedPartnerships, currentDepth + 1, ancestorLimit
         );
         return Math.max(depth1, depth2);
     } else if (!parentPartnership) {
@@ -293,7 +301,7 @@ function addAncestorsThroughPartnership(
                 addPartners(data, parentId, persons, partnerships);
                 const depth = addAncestorsThroughPartnership(
                     data, parentId, maxDepth - 1,
-                    persons, partnerships, processedPartnerships, currentDepth + 1
+                    persons, partnerships, processedPartnerships, currentDepth + 1, ancestorLimit
                 );
                 maxReached = Math.max(maxReached, depth);
             }
@@ -373,6 +381,38 @@ export function childIdsShownInPlace(data: StromData, personId: PersonId): Perso
         }
     }
     return out;
+}
+
+/**
+ * Show the parents of the given persons in place (the card's "▸ parents" on
+ * an ancestor at the edge of the depth, PipelineInput.extraDepthFor): each
+ * listed person of the line whose parents lie beyond the ancestor depth
+ * (ancestorLimitPersons, no parent in the selection) gets one generation
+ * more, as a depth one higher would add for that branch alone: the parents'
+ * couple (or, without one, each parent with their partners). The parents
+ * stand at the new edge in turn, so a later person of the list can be one of
+ * them (the parents' own "▸ parents", nested). Others are skipped.
+ */
+export function extendAncestorDepth(
+    data: StromData,
+    selection: GraphSelection,
+    personIds: readonly PersonId[]
+): void {
+    const limit = selection.ancestorLimitPersons ?? (selection.ancestorLimitPersons = new Set());
+    const processed = new Set(selection.partnerships);
+    const done = new Set<PersonId>();
+    for (let grew = true; grew;) {
+        grew = false;
+        for (const personId of personIds) {
+            if (done.has(personId) || !limit.has(personId) || !selection.persons.has(personId)) continue;
+            if ((data.persons[personId]?.parentIds ?? []).some(id => selection.persons.has(id))) continue;
+            done.add(personId);
+            limit.delete(personId);
+            addAncestorsThroughPartnership(data, personId, 1, selection.persons, selection.partnerships, processed, 0, limit);
+            grew = true;
+        }
+    }
+    if (done.size > 0) collectPartnerships(data, selection.persons, selection.partnerships);
 }
 
 /**

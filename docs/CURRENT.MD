@@ -115,6 +115,35 @@ moves each such group of children, with everything drawn below them, toward
 the focus parents as one piece, as far as the nearest card in any of its rows
 allows (horizontalGap), never across the focus parents; nearer groups first.
 
+Parents shown in place beyond the depth (`PipelineInput.extraDepthFor`, the
+"▸ parents" of an ancestor at the edge of the depth). While the ancestor walk
+of `selectSubgraph` (focus and spouse lines) stops at `ancestorDepth`, it
+records in `GraphSelection.ancestorLimitPersons` every person it reached at
+the limit who has parents in the data. `extendAncestorDepth` (right after
+`selectSubgraph`, before the display expansion) walks one generation more
+from each listed person still at the limit whose parents are not in the
+selection: the parents, their partnership (and, through the usual partnership
+collection, unions between selected persons), and records the parents at the
+limit in turn, so a parent's own "▸ parents" goes one step further (nested
+clicks). Listed persons not at the limit are skipped. Nothing else changes:
+the other branches keep their depth, Phase B builds the deeper branch like
+any unbalanced pedigree (incomplete data does the same), and without
+`extraDepthFor` the selection and the layout are exactly the previous ones.
+`LayoutResult.ancestorDepthEdge` lists the drawn persons of the limit whose
+parents are neither selected nor drawn and who have a parent that is not a
+"?" stand-in: the cards whose parents are out of view only because of the
+depth. A parent drawn another way (pedigree collapse), parents folded away
+for children shown (`foldAncestorsOf`) and in-laws (never on the ancestor
+walk) are not on it. The "▸ siblings" of such a person combines both inputs
+in one layout: `extraDepthFor: [P]` and `expandChildrenOf` the parents.
+`parentsShownFull.test.ts` checks, for every fixture, every focus, depths 2
+to 7 and the four modes, every edge person: the strict harness checks, the
+parents drawn in the row above, nobody drawn before lost, only the parents
+(and in the expanded mode their other partners) added, a line to the
+person; with the parents' children shown the promised siblings drawn beside
+each other; nested steps; and that removing the step gives the original
+positions.
+
 Folded ancestors (`PipelineInput.foldAncestorsOf`, applied only together with
 `expandChildrenOf`): after `withChildrenShown`, `foldAncestorsInSelection`
 cuts the child→parent links of the listed persons and removes from the
