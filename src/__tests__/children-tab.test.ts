@@ -6,7 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { hiddenRelativesTabs, hiddenChildIds, newlyShownChildIds, childrenDrawnElsewhere, siblingOrderMark, childrenShownClosing, siblingsTabState, newlyShownSiblingIds, siblingGroups, unionChildIdSet, hiddenPartnerIds, childrenByUnion, childrenComeWithPartners, otherFamilyChildrenElsewhere, HiddenRelativesTab } from '../marriage-order.js';
-import { tabsForm, tabGlyph, tabLabel, tabKindClass, branchTabRestHtml, bubbleOpensBelow, bubblePlacement, besideTop, bubbleNameCounts, BUBBLE_MAX_NAMES } from '../union-order-measure.js';
+import { tabsForm, tabGlyph, tabLabel, tabKindClass, branchTabRestHtml, bubbleOpensBelow, bubblePlacement, besideTop, bubbleBox, BUBBLE_WINDOW_MARGIN, bubbleNameCounts, BUBBLE_MAX_NAMES } from '../union-order-measure.js';
 import { branchTabKind, branchTabsInOrder } from '../marriage-order.js';
 import { childIdsShownInPlace } from '../layout/pipeline/1-select-subgraph.js';
 import { PersonId, PartnershipId, Person, StromData, DEFAULT_LAYOUT_CONFIG } from '../types.js';
@@ -556,6 +556,77 @@ describe('a tab\'s bubble beside the card', () => {
         expect(besideTop(20, 292, low)).toBe(44);
         // fits on no side: stays above (more room there than below)
         expect(bubblePlacement(tabOn(260), cardAt(400, 260), { width: 400, height: 292 }, low)).toBe('above');
+    });
+});
+
+describe('a tab\'s bubble by touch (round 3 §22)', () => {
+    const room = { top: 100, bottom: 800, left: 0, right: 1200 };
+    const cardAt = (left: number, top: number) => ({ left, right: left + 188, top });
+    const tabOn = (top: number) => ({ top: top - 9, bottom: top + 9 });
+    const bubble = { width: 240, height: 300 };
+
+    it('below the tab, never beside the card, even where a mouse would open it above or beside', () => {
+        // a mouse: above (room above), beside (little room above)
+        expect(bubblePlacement(tabOn(450), cardAt(500, 450), bubble, room)).toBe('above');
+        expect(bubblePlacement(tabOn(150), cardAt(500, 150), bubble, room)).toBe('right');
+        expect(bubblePlacement(tabOn(450), cardAt(500, 450), bubble, room, { touch: true })).toBe('below');
+        expect(bubblePlacement(tabOn(150), cardAt(500, 150), bubble, room, { touch: true })).toBe('below');
+    });
+
+    it('above only where it fits there and not below; fitting nowhere: below (moved up into the window)', () => {
+        expect(bubblePlacement(tabOn(700), cardAt(500, 700), bubble, room, { touch: true })).toBe('above');
+        const tall = { width: 240, height: 650 };
+        expect(bubblePlacement(tabOn(400), cardAt(500, 400), tall, room, { touch: true })).toBe('below');
+    });
+});
+
+describe('a bubble\'s box on the screen (round 3 §24: whole in the window, 8 px from its edges)', () => {
+    const vp = { width: 1200, height: 900 };
+    const room = { top: 100, bottom: 892 };
+    const tab = (left: number, top: number) => ({ left, right: left + 60, top, bottom: top + 18 });
+    const card = (left: number, top: number) => ({ left, right: left + 188, top });
+    const m = BUBBLE_WINDOW_MARGIN;
+
+    it('above and below: centred on the tab, 8 px from it, the arrow at the tab\'s middle', () => {
+        const above = bubbleBox('above', tab(500, 500), card(470, 509), { width: 240, height: 200 }, room, vp);
+        expect(above).toEqual({ left: 410, top: 292, arrow: 120 });
+        const below = bubbleBox('below', tab(500, 500), card(470, 509), { width: 240, height: 200 }, room, vp);
+        expect(below).toEqual({ left: 410, top: 526, arrow: 120 });
+    });
+
+    it('beside the card: its top at the card\'s top, 10 px from the card', () => {
+        const right = bubbleBox('right', tab(500, 300), card(470, 309), { width: 240, height: 200 }, room, vp);
+        expect(right).toEqual({ left: 668, top: 309, arrow: 0 });
+        const left = bubbleBox('left', tab(500, 300), card(470, 309), { width: 240, height: 200 }, room, vp);
+        expect(left).toEqual({ left: 220, top: 309, arrow: 0 });
+    });
+
+    it('never past the window: pushed in to 8 px from each edge, the arrow kept on the tab', () => {
+        // a tab near the right edge: the bubble pushed left, the arrow moves right with the tab
+        const r = bubbleBox('above', tab(1150, 500), card(1100, 509), { width: 240, height: 200 }, room, vp);
+        expect(r.left).toBe(vp.width - m - 240);
+        expect(r.arrow).toBe(1180 - r.left);
+        // a tab at the left edge: the arrow stays 12 px inside the bubble's corner
+        const l = bubbleBox('above', tab(0, 500), card(0, 509), { width: 240, height: 200 }, room, vp);
+        expect(l.left).toBe(m);
+        expect(l.arrow).toBe(22);
+        expect(bubbleBox('above', tab(-80, 500), card(-80, 509), { width: 240, height: 200 }, room, vp).arrow).toBe(12);
+        // below a tab near the bottom: moved up until whole, 8 px over the bottom
+        const b = bubbleBox('below', tab(500, 800), card(470, 809), { width: 240, height: 300 }, room, vp);
+        expect(b.top).toBe(vp.height - m - 300);
+        // above a tab near the top: moved down to 8 px under the top
+        expect(bubbleBox('above', tab(500, 60), card(470, 69), { width: 240, height: 300 }, room, vp).top).toBe(m);
+        // beside a card at the right edge: pushed back into the window
+        expect(bubbleBox('right', tab(1100, 300), card(1000, 309), { width: 240, height: 200 }, room, vp).left).toBe(vp.width - m - 240);
+    });
+
+    it('beside the card moved up: the arrow stays at the card\'s top', () => {
+        // a phone held sideways: room 44 to 382, a bubble 292 tall beside a card at 260
+        const low = { top: 44, bottom: 382 };
+        const box = bubbleBox('right', tab(320, 251), card(300, 260), { width: 247, height: 292 }, low, { width: 844, height: 390 });
+        expect(box.top).toBe(besideTop(260, 292, low));
+        expect(box.top + 292).toBeLessThanOrEqual(390 - m);
+        expect(box.arrow).toBe(260 - box.top);
     });
 });
 

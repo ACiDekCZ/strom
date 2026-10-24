@@ -1259,6 +1259,10 @@
             position: absolute;
             top: 56px; left: 0; right: 0; bottom: 0;
             overflow: hidden;
+            /* Nothing may scroll the container (a focus, an automated pointer
+               bringing a tab "into view"): pan/zoom is a transform, a scroll
+               offset would shift the canvas under an open bubble. */
+            overflow: clip;
             cursor: grab;
             /* Our JS drives pan/pinch — stop the browser from panning/zooming
                the page (rubber-banding) on touch. */
@@ -3252,26 +3256,41 @@
             border-bottom: 1px solid var(--border);
             transform: rotate(45deg);
         }
+        /* Open in the browser's top layer (src/bubble-layer.ts, a manual
+           popover): over the tree, the zoom buttons and the bars, at scale 1
+           in screen pixels whatever the zoom, where TreeRenderer.placeBubble
+           puts it (left, top; its arrow at --arrow-x, beside the card at
+           --beside-arrow), whole in the window and never taller than it.
+           Closed, it stays hidden whatever its tab's hover or focus says. */
+        .badge-tooltip[popover]:not(:popover-open) { display: none !important; }
+        .badge-tooltip[popover]:popover-open {
+            display: block;
+            position: fixed;
+            inset: auto;
+            margin: 0;
+            transform: none;
+            max-height: calc(100vh - 16px);
+            max-height: calc(100dvh - 16px);
+            /* The arrow stands out of the box (a popover scrolls by default) */
+            overflow: visible;
+        }
+        /* Taller than the window (it never is with 8 names at most): cut, no scrollbar. */
+        .badge-tooltip[popover].bubble-clipped { overflow: hidden; }
+        .badge-tooltip[popover]::after { left: var(--arrow-x, 50%); }
         /* Too little room above the tab (under the bars over the tree) and
            more below: the bubble opens below it, the arrow on its top edge
-           (TreeRenderer.placeBubble). */
+           (TreeRenderer.placeBubble); by touch it always opens there. */
         .badge-tooltip.below { bottom: auto; top: 100%; margin-bottom: 0; margin-top: 8px; }
         .badge-tooltip.below::after { top: auto; bottom: 100%; margin-top: 0; margin-bottom: -5px; transform: rotate(225deg); }
-        /* Too little room above the tab: beside the card, its top edge at the
-           card's top (on a low screen moved up as far as it needs, the arrow
-           still at the card's top), on the right (else the left), the arrow
-           on the edge toward the card; moved there from above the tab by the
-           offset the renderer measured (TreeRenderer.placeBubble,
-           --beside-dx/-dy/-arrow). */
-        .badge-tooltip.beside-right,
-        .badge-tooltip.beside-left { transform: translateX(-50%) translate(var(--beside-dx, 0px), var(--beside-dy, 0px)); }
+        /* Too little room above the tab (with a mouse): beside the card, its
+           top edge at the card's top (on a low screen moved up as far as it
+           needs, the arrow still at the card's top), on the right (else the
+           left), the arrow on the edge toward the card (TreeRenderer.placeBubble,
+           --beside-arrow). */
         .badge-tooltip.beside-right::after,
         .badge-tooltip.beside-left::after { top: calc(14px + var(--beside-arrow, 0px)); margin-top: 0; }
         .badge-tooltip.beside-right::after { left: auto; right: 100%; margin-left: 0; margin-right: -5px; transform: rotate(135deg); }
         .badge-tooltip.beside-left::after { left: 100%; margin-left: -5px; transform: rotate(-45deg); }
-        /* A bubble over the zoom buttons (+/−, the corner block): the tree
-           above them while it is open (TreeRenderer.liftBubble); they stay put. */
-        #tree-container.bubble-over-controls { z-index: 101; }
         @media (hover: hover) { .hidden-partners-btn:hover .badge-tooltip,
         .branch-tab:hover .badge-tooltip {
             display: block;

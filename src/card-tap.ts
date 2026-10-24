@@ -49,11 +49,29 @@ function cardTargetAt(pill: Element, x: number, y: number): Element | null {
     return null;
 }
 
+/**
+ * The edge pill a long press at (x, y) is for, by the same rule as a tap:
+ * the finger on the pill itself from 60 % zoom, below it only on the part of
+ * the pill standing out of its card; else null (the press is the card's).
+ */
+export function pillUnderFinger(x: number, y: number): HTMLElement | null {
+    const top = document.elementFromPoint(x, y);
+    if (!top || top.closest('.badge-tooltip')) return null;
+    const pill = top.closest<HTMLElement>(PILL_SELECTOR);
+    if (!pill) return null;
+    if (ZoomPan.getScale() >= PILL_OVER_CARD_MIN_SCALE) return pill;
+    const card = pill.closest('.person-card')?.getBoundingClientRect();
+    const onCard = !!card && x >= card.left && x <= card.right && y >= card.top && y <= card.bottom;
+    return onCard ? null : pill;
+}
+
 function onClick(e: MouseEvent): void {
     const touch = lastTouch;
     if (!touch || !e.isTrusted || performance.now() - touch.at > TAP_CLICK_MS) return;
     const pointerType = (e as PointerEvent).pointerType;
     if (pointerType === 'mouse' || pointerType === 'pen') return;
+    // A tap in an open bubble (a long press opened it over the tree) is the bubble's
+    if ((e.target as Element | null)?.closest?.('.badge-tooltip')) return;
     const pill = (e.target as Element | null)?.closest?.(PILL_SELECTOR);
     if (!pill) return;
     const target = cardTargetAt(pill, touch.x, touch.y);

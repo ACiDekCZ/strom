@@ -369,39 +369,42 @@ test('at 844 × 390 a bubble that fits nowhere whole opens beside the card, move
 });
 
 /**
- * The card grows under the pointer (1.03) and its bubble with it: a bubble
- * moved up to the tree's bottom was measured before that ended and stood
- * 2 px past the window's bottom edge (edge-ancestor-children, 844 × 390,
- * zoomed out once). Measured after the growth, it stays whole in the window.
+ * The card grows under the pointer (1.03); its bubble no longer grows with it
+ * (round 3 §25) and stands whole in the window, 8 px from its edges, wherever
+ * the card is (§24): edge-ancestor-children (invented), 844 × 390, the card
+ * low in the tree, its 13-children bubble taller than the tree itself.
  */
-test('at 844 × 390 a bubble moved up beside the card stays whole in the window once the card has grown', async ({ page }) => {
+test('at 844 × 390 a bubble taller than the tree stays whole in the window, 8 px from its edges, the card grown or not', async ({ page }) => {
     await page.setViewportSize({ width: 844, height: 390 });
     await setupFixture(page, 'edge-ancestor-children', 'focus');
     const person = 'f_m_f_m_f';
     await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), person);
-    const scale = await page.evaluate(() => window.Strom.ZoomPan.getScale());
-    await page.evaluate(() => window.Strom.ZoomPan.zoomOut());
-    await expect.poll(() => page.evaluate(() => window.Strom.ZoomPan.getScale())).toBeLessThan(scale * 0.8);
-    await page.waitForTimeout(400);
     const tab = siblingsTab(page, person);
     const bubble = tab.locator(':scope > .badge-tooltip');
     await tab.hover();
     await expect(bubble).toBeVisible();
-    const h = (await bubble.boundingBox())!.height;
+    const first = (await bubble.boundingBox())!;
     await page.mouse.move(5, 200);
     await expect(bubble).toBeHidden();
     const tree = (await page.locator('#tree-container').boundingBox())!;
     const bars = await page.evaluate(fn => new Function(`return (${fn})()`)() as number, barsBottom.toString());
-    // the card's top 30 px lower than the bubble would fit beside it: it moves up, far below the card's centre (the growth adds most there)
-    await cardUnderBars(page, person, tree.y + tree.height - bars - h + 30, 100);
+    expect(first.height).toBeGreaterThan(tree.y + tree.height - bars);
+    // the card near the tree's bottom
+    await cardUnderBars(page, person, tree.y + tree.height - bars - 120, 100);
     await settled(page, person);
     await tab.hover();
-    await expect(bubble).toHaveClass(/\bbeside-right\b/);
+    await expect(bubble).toBeVisible();
     await settled(page, person);
     const b = (await bubble.boundingBox())!;
-    expect(b.y).toBeLessThan((await cardOf(page, person).boundingBox())!.y);
-    expect(b.y + b.height).toBeLessThanOrEqual(await page.evaluate(() => window.innerHeight));
-    expect(b.y + b.height).toBeLessThanOrEqual(tree.y + tree.height);
+    const vh = await page.evaluate(() => window.innerHeight);
+    const vw = await page.evaluate(() => window.innerWidth);
+    expect(b.y).toBeGreaterThanOrEqual(8 - 0.5);
+    expect(b.y + b.height).toBeLessThanOrEqual(vh - 8 + 0.5);
+    expect(b.x).toBeGreaterThanOrEqual(8 - 0.5);
+    expect(b.x + b.width).toBeLessThanOrEqual(vw - 8 + 0.5);
+    // the same size as before, wherever the card stands and however it has grown
+    expect(Math.abs(b.width - first.width)).toBeLessThanOrEqual(1);
+    expect(Math.abs(b.height - first.height)).toBeLessThanOrEqual(1);
 });
 
 /**
@@ -422,8 +425,9 @@ test('a bubble names 8 at most, then "and n more"; what the click does stays its
     await expect(bubble.locator('.badge-tooltip-item')).toHaveCount(8);
     await expect(bubble.locator('.badge-tooltip-more')).toHaveText('and 4 more');
     await expect(bubble.locator(':scope > :last-child')).toHaveClass(/badge-tooltip-action/);
-    // No scrollbar: the bubble is as tall as its content
-    expect(await bubble.evaluate(b => b.scrollHeight <= b.clientHeight + 1 && getComputedStyle(b).maxHeight === 'none')).toBe(true);
+    // No scrollbar: the bubble is as tall as its content, at most the window less 8 px above and below
+    expect(await bubble.evaluate(b => b.scrollHeight <= b.clientHeight + 1 && getComputedStyle(b).overflowY !== 'auto' && getComputedStyle(b).overflowY !== 'scroll')).toBe(true);
+    expect(await bubble.evaluate(b => parseFloat(getComputedStyle(b).maxHeight))).toBeCloseTo(900 - 16, 0);
     // The parent's "▸ children" too
     const children = cardOf(page, 'f_m_f_m_f_m').locator('.branch-tab.children-tab > .badge-tooltip');
     await expect(children.locator('.badge-tooltip-item')).toHaveCount(8);
@@ -465,8 +469,138 @@ test('a bubble over the zoom buttons lies above them; they do not move', async (
     // Closed: the buttons on top again
     await page.mouse.move(5, 500);
     await expect(bubble).toBeHidden();
-    await expect(page.locator('#tree-container')).not.toHaveClass(/bubble-over-controls/);
     expect(await topAt()).toBe('controls');
+});
+
+/** What lies on top at a point: the bubble, the zoom buttons, a card or something else. */
+const layerAt = (page: Page, x: number, y: number) => page.evaluate(([px, py]) => {
+    const el = document.elementFromPoint(px, py);
+    return el?.closest('.badge-tooltip') ? 'bubble' : el?.closest('.control-block') ? 'controls' : el?.closest('.person-card') ? 'card' : el?.tagName ?? null;
+}, [x, y] as const);
+
+/**
+ * The layers (round 3 §23): tree < zoom buttons < bubble. A card under the
+ * buttons never lies over them, with a bubble open or not (the whole tree
+ * rose over the buttons while a bubble lay over them).
+ */
+test('a card under the zoom buttons stays under them, a bubble open or not', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await setup(page);
+    const button = (await page.locator('.control-block button:visible').first().boundingBox())!;
+    const bx = button.x + button.width / 2, by = button.y + button.height / 2;
+    // the card's lower half under the button's centre, its tab clear of the block
+    await page.evaluate(([pid, x, y]) => {
+        const c = document.querySelector<HTMLElement>(`#tree-canvas .person-card[data-id="${pid}"]`)!.getBoundingClientRect();
+        const zp = window.Strom.ZoomPan;
+        zp.shiftWorld((c.left + c.width / 2 - (x as number)) / zp.getScale(), (c.top + c.height * 0.75 - (y as number)) / zp.getScale());
+    }, [PERSON, bx, by] as const);
+    const card = (await cardOf(page, PERSON).boundingBox())!;
+    expect(bx).toBeGreaterThan(card.x);
+    expect(by).toBeLessThan(card.y + card.height);
+    expect(await layerAt(page, bx, by)).toBe('controls');
+    // a bubble open: the card still under the buttons
+    await page.keyboard.press('Shift');
+    await siblingsTab(page, PERSON).focus();
+    const bubble = siblingsTab(page, PERSON).locator(':scope > .badge-tooltip');
+    await expect(bubble).toBeVisible();
+    expect(['controls', 'bubble']).toContain(await layerAt(page, bx, by));
+    const b = (await bubble.boundingBox())!;
+    if (bx < b.x || bx > b.x + b.width || by < b.y || by > b.y + b.height) expect(await layerAt(page, bx, by)).toBe('controls');
+});
+
+/**
+ * The bubble stands outside the canvas (§25): the same size on the screen
+ * at every zoom, the arrow at its tab.
+ */
+test('a bubble keeps its size on the screen at zoom 0.3, 1 and 3', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await setup(page);
+    const sizes: { scale: number; w: number; h: number }[] = [];
+    for (const scale of [0.3, 1, 3]) {
+        await page.mouse.move(5, 500);
+        await page.evaluate(([pid, k]) => { window.Strom.ZoomPan.glideToPerson(pid as never, k as number, 1); window.Strom.ZoomPan.finishAnimation(); }, [PERSON, scale] as const);
+        await expect.poll(() => page.evaluate(() => window.Strom.ZoomPan.getScale())).toBeCloseTo(scale, 2);
+        const tab = siblingsTab(page, PERSON);
+        await tab.hover();
+        const bubble = tab.locator(':scope > .badge-tooltip');
+        await expect(bubble).toBeVisible();
+        await settled(page, PERSON);
+        const b = (await bubble.boundingBox())!;
+        sizes.push({ scale, w: b.width, h: b.height });
+        // whole in the window
+        expect(b.y).toBeGreaterThanOrEqual(7.5);
+        expect(b.y + b.height).toBeLessThanOrEqual(900 - 7.5);
+    }
+    for (const s of sizes.slice(1)) {
+        expect(Math.abs(s.w - sizes[0].w), `width at ${s.scale}`).toBeLessThanOrEqual(1);
+        expect(Math.abs(s.h - sizes[0].h), `height at ${s.scale}`).toBeLessThanOrEqual(1);
+    }
+});
+
+test('the keyboard opens a bubble on the tab, Escape closes it and leaves the focus on the tab; a pan closes it', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await setup(page);
+    const tab = siblingsTab(page, PERSON);
+    const bubble = tab.locator(':scope > .badge-tooltip');
+    await page.keyboard.press('Shift');
+    await tab.focus();
+    await expect(bubble).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(bubble).toBeHidden();
+    await expect(tab).toBeFocused();
+    // the pointer on the tab, then the tree moves under the still bubble: it closes
+    await tab.hover();
+    await expect(bubble).toBeVisible();
+    await page.evaluate(() => window.Strom.ZoomPan.shiftWorld(30, 0));
+    await expect(bubble).toBeHidden();
+});
+
+/**
+ * Touch (round 3 §22): a press held on a tab opens its bubble below the tab
+ * (never beside the card), not the person's sheet; a press elsewhere closes
+ * it. A press held on the card off its tabs still opens the sheet.
+ */
+test.describe('touch, tablet 1024 × 768', () => {
+    test.use({ viewport: { width: 1024, height: 768 }, hasTouch: true, isMobile: true });
+
+    /** A finger held at a point of the element (fraction of its box) for 700 ms, then lifted. */
+    async function hold(page: Page, el: ReturnType<Page['locator']>, fx = 0.5, fy = 0.5): Promise<void> {
+        await el.evaluate((e: HTMLElement, [ax, ay]) => {
+            const r = e.getBoundingClientRect();
+            const t = new Touch({ identifier: 1, target: e, clientX: r.x + r.width * ax, clientY: r.y + r.height * ay });
+            e.dispatchEvent(new TouchEvent('touchstart', { touches: [t], targetTouches: [t], changedTouches: [t], bubbles: true, cancelable: true }));
+        }, [fx, fy] as const);
+        await page.waitForTimeout(700);
+        await el.evaluate((e: HTMLElement, [ax, ay]) => {
+            const r = e.getBoundingClientRect();
+            const t = new Touch({ identifier: 1, target: e, clientX: r.x + r.width * ax, clientY: r.y + r.height * ay });
+            e.dispatchEvent(new TouchEvent('touchend', { touches: [], targetTouches: [], changedTouches: [t], bubbles: true, cancelable: true }));
+        }, [fx, fy] as const);
+    }
+
+    test('a press held on a tab opens its bubble below the tab; a press elsewhere closes it; on the card the sheet', async ({ page }) => {
+        await setup(page);
+        // the card just under the bars: with a mouse its tall bubble would open beside the card
+        await cardUnderBars(page, PERSON, 60, 300);
+        const tab = siblingsTab(page, PERSON);
+        const bubble = tab.locator(':scope > .badge-tooltip');
+        await hold(page, tab);
+        await expect(bubble).toBeVisible();
+        await expect(bubble).toHaveClass(/\bbelow\b/);
+        await expect(bubble).not.toHaveClass(/beside/);
+        await expect(page.locator('.bottom-sheet')).toHaveCount(0);
+        const t = (await tab.boundingBox())!;
+        const b = (await bubble.boundingBox())!;
+        expect(b.y).toBeGreaterThan(t.y + t.height);
+        expect(b.y + b.height).toBeLessThanOrEqual(768 - 7.5);
+        // a press elsewhere closes it
+        await page.locator('#tree-container').dispatchEvent('pointerdown', { clientX: 5, clientY: 700, pointerType: 'touch' });
+        await expect(bubble).toBeHidden();
+        // held on the card off its tabs: the person's sheet
+        await hold(page, cardOf(page, PERSON), 0.3, 0.6);
+        await expect(page.locator('.bottom-sheet')).toBeVisible();
+        await expect(bubble).toBeHidden();
+    });
 });
 
 test.describe('phone 390 × 844', () => {

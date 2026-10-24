@@ -134,7 +134,14 @@ export function bubblePlacement(
     card: { left: number; right: number; top: number },
     bubble: { width: number; height: number },
     room: { top: number; bottom: number; left: number; right: number },
+    opts: { touch?: boolean } = {},
 ): BubblePlace {
+    // Touch (round 3 §22): below the tab, never beside the card (the finger
+    // came from above); above only where it fits there and not below.
+    if (opts.touch) {
+        if (room.bottom - tab.bottom >= bubble.height + BUBBLE_GAP) return 'below';
+        return tab.top - room.top >= bubble.height + BUBBLE_GAP ? 'above' : 'below';
+    }
     if (tab.top - room.top >= bubble.height + BUBBLE_GAP) return 'above';
     const side = (): BubblePlace | null => {
         if (card.right + BUBBLE_SIDE_GAP + bubble.width <= room.right) return 'right';
@@ -163,6 +170,61 @@ const BUBBLE_EDGE_GAP = 4;
  */
 export function besideTop(cardTop: number, bubbleHeight: number, room: { top: number; bottom: number }): number {
     return Math.max(room.top, Math.min(cardTop, room.bottom - BUBBLE_EDGE_GAP - bubbleHeight));
+}
+
+/** The margin a bubble keeps from the window's edges: it stands whole in the window (round 3 §24). */
+export const BUBBLE_WINDOW_MARGIN = 8;
+
+/** The CSS gap between a tab and its bubble above or below it (index.html .badge-tooltip margin; the arrow reaches into it). */
+const BUBBLE_TAB_MARGIN = 8;
+
+/** Where a bubble's arrow stays from the bubble's corners (its rounded border). */
+const BUBBLE_ARROW_INSET = 12;
+
+/** Where a bubble beside the card points its arrow: this far under the card's top (index.html .beside-*::after). */
+export const BUBBLE_SIDE_ARROW_TOP = 14;
+
+/** Where a bubble stands on the screen: its top-left corner and where its arrow points. */
+export interface BubbleBox {
+    left: number;
+    top: number;
+    /** Above or below the tab: the arrow's distance from the bubble's left edge; beside the card: how far under BUBBLE_SIDE_ARROW_TOP it points. */
+    arrow: number;
+}
+
+/**
+ * Where a tab's bubble stands on the screen in its place (bubblePlacement;
+ * screen pixels; the bubble at scale 1, whatever the zoom): above or below
+ * the tab, centred on it; beside the card at its top (besideTop). Then moved
+ * into the window, BUBBLE_WINDOW_MARGIN from each edge (a bubble wider or
+ * taller than the window keeps its left or top edge there). The arrow keeps
+ * pointing at the tab's middle (at the card's top beside the card) as far as
+ * the bubble's edge allows.
+ */
+export function bubbleBox(
+    place: BubblePlace,
+    tab: { left: number; right: number; top: number; bottom: number },
+    card: { left: number; right: number; top: number },
+    bubble: { width: number; height: number },
+    room: { top: number; bottom: number },
+    viewport: { width: number; height: number },
+): BubbleBox {
+    const m = BUBBLE_WINDOW_MARGIN;
+    const tabMid = (tab.left + tab.right) / 2;
+    let left: number, top: number;
+    if (place === 'right' || place === 'left') {
+        left = place === 'right' ? card.right + BUBBLE_SIDE_GAP : card.left - BUBBLE_SIDE_GAP - bubble.width;
+        top = besideTop(card.top, bubble.height, room);
+    } else {
+        left = tabMid - bubble.width / 2;
+        top = place === 'above' ? tab.top - BUBBLE_TAB_MARGIN - bubble.height : tab.bottom + BUBBLE_TAB_MARGIN;
+    }
+    left = Math.max(m, Math.min(left, viewport.width - m - bubble.width));
+    top = Math.max(m, Math.min(top, viewport.height - m - bubble.height));
+    const arrow = place === 'right' || place === 'left'
+        ? Math.max(0, Math.min(card.top - top, bubble.height - 2 * BUBBLE_SIDE_ARROW_TOP))
+        : Math.max(BUBBLE_ARROW_INSET, Math.min(tabMid - left, bubble.width - BUBBLE_ARROW_INSET));
+    return { left, top, arrow };
 }
 
 /** The most names a tab's bubble lists; the rest is one line "and n more" (the menu and the sheet list them all). */

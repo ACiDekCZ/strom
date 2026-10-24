@@ -73,7 +73,9 @@ import {
     hiddenPartnerIds, childrenByUnion, childrenComeWithPartners, otherFamilyChildrenElsewhere, marriagesInOrder,
 } from './marriage-order.js';
 import { partnerIdsShownInPlace } from './layout/pipeline/1-select-subgraph.js';
-import { measureUnionOrderPills, measureTabRows, rowKey, unionOrderPillKey, unionOrderPillPartsHtml, pillFontsPending, branchTabRestHtml, tabsForm, tabsFormClass, bubblePlacement, besideTop, BUBBLE_SIDE_GAP, bubbleNameCounts } from './union-order-measure.js';
+import { measureUnionOrderPills, measureTabRows, rowKey, unionOrderPillKey, unionOrderPillPartsHtml, pillFontsPending, branchTabRestHtml, tabsForm, tabsFormClass, bubblePlacement, bubbleBox, bubbleOpensBelow, BUBBLE_WINDOW_MARGIN, bubbleNameCounts } from './union-order-measure.js';
+import { prepareBubble, showBubble, hideBubble, closeOpenBubble, openBubble } from './bubble-layer.js';
+import { pillUnderFinger } from './card-tap.js';
 import { showFocusToast, hideFocusToast } from './focus-toast.js';
 import { openCardMenuFromKeyboard } from './ui/keyboard-access.js';
 import { syncDepthStepper } from './ui/depth-stepper.js';
@@ -444,8 +446,8 @@ class TreeRendererClass {
         const seq = ++this.renderSeq;
         // A transition of children shown in place ends with any new drawing
         this.finishChildrenTransition();
-        // The cards go: a bubble that lifted the tree over the zoom buttons with them
-        this.releaseBubble(null);
+        // The cards go: an open bubble (in the top layer) with them
+        closeOpenBubble();
         const canvas = document.getElementById('tree-canvas');
         const svg = document.getElementById('tree-lines') as SVGSVGElement | null;
         const empty = document.getElementById('empty-state');
@@ -2368,48 +2370,41 @@ class TreeRendererClass {
     }
 
     /**
-     * The "▾ children" bubble beside its tab: opens while a mouse is over the
-     * tab or the bubble (the way between them closes it after 150 ms, so the
-     * pointer reaches the rows) and while the tab or a row has the keyboard
-     * focus; while it is open the card keeps its hover look (index.html), so
-     * the bubble stands still the whole way between the tab and its rows; Escape closes it and gives the focus back to the tab. While it
-     * is open the person's children in view glow (§6). A row glides the view
-     * to the child drawn elsewhere (§4).
-     */
-    /**
      * A tab's bubble opens above the tab; a long one (groups of siblings, a
      * family) near the top went under the bars over the tree or off the
      * screen. Where the room above is too small it opens beside the card
      * (right, else left; .beside-*, its top edge at the card's top, on a low
      * screen moved up as far as it needs), and only where it fits on
-     * neither side below the tab (.below, when the room below is larger):
-     * measured when it opens, the zoom included
-     * (bubblePlacement). A bubble over the zoom buttons lifts the tree over
-     * them while it is open (liftBubble).
+     * neither side below the tab (.below, when the room below is larger);
+     * by touch (a long press) below the tab, never beside the card (round 3
+     * §22): measured when it opens (bubblePlacement). In the top layer
+     * (bubble-layer.ts) it stands at scale 1 in screen pixels whatever the
+     * zoom, over the zoom buttons and the bars, whole in the window
+     * (bubbleBox); without the top layer it stays on the canvas, above or
+     * below its tab.
      */
-    private placeBubble(tab: HTMLElement, bubble: HTMLElement): void {
+    private placeBubble(tab: HTMLElement, bubble: HTMLElement, touch = false): void {
         bubble.classList.remove('below', 'beside-right', 'beside-left');
+        const layered = bubble.hasAttribute('popover') && bubble.matches(':popover-open');
         const cardEl = tab.closest<HTMLElement>('.person-card');
-        // The card grows under the pointer (:hover scale) and the bubble with it:
-        // measured before that ends, a bubble moved up to the tree's bottom
-        // reached a few px past it. Measured as they will stand once it ends.
+        // The card grows under the pointer (:hover scale), its tab with it:
+        // measured as they will stand once that ends.
         const grown = this.cardGrowth(cardEl);
         const measure = (): DOMRect => {
+            if (layered) return bubble.getBoundingClientRect();
             const shown = getComputedStyle(bubble).display !== 'none';
             if (!shown) { bubble.style.visibility = 'hidden'; bubble.style.display = 'block'; }
-            const rect = bubble.getBoundingClientRect();
+            const rect = grown(bubble.getBoundingClientRect());
             if (!shown) { bubble.style.display = ''; bubble.style.visibility = ''; }
             return rect;
         };
-        const b = grown(measure());
+        const b = measure();
         if (b.height === 0) return;
-        // Screen pixels per CSS pixel of the bubble (the zoom, a card's hover scale)
-        const ratio = bubble.offsetWidth > 0 ? b.width / bubble.offsetWidth : 1;
         const r = grown(tab.getBoundingClientRect());
         const card = grown((cardEl ?? tab).getBoundingClientRect());
         const container = document.getElementById('tree-container')?.getBoundingClientRect();
+        const vw = window.innerWidth, vh = window.innerHeight, m = BUBBLE_WINDOW_MARGIN;
         let roomTop = container?.top ?? 0;
-        const roomBottom = container?.bottom ?? window.innerHeight;
         // The bars standing over the tree above the tab (the toolbar, the focus bar, the "Hide shown" button or chip)
         const reach = 130;
         for (const sel of ['.toolbar', '#focus-controls', '#hide-shown-children', '#hide-shown-children-chip']) {
@@ -2419,19 +2414,27 @@ class TreeRendererClass {
             if (bar.width === 0 || bar.bottom > r.top || bar.right < r.left - reach || bar.left > r.right + reach) continue;
             roomTop = Math.max(roomTop, bar.bottom);
         }
-        const room = { top: roomTop, bottom: roomBottom, left: container?.left ?? 0, right: container?.right ?? window.innerWidth };
-        const place = bubblePlacement(r, card, { width: b.width, height: b.height }, room);
-        if (place === 'below') bubble.classList.add('below');
-        if (place === 'right' || place === 'left') {
-            const x = place === 'right' ? card.right + BUBBLE_SIDE_GAP : card.left - BUBBLE_SIDE_GAP - b.width;
-            bubble.style.setProperty('--beside-dx', `${(x - b.left) / ratio}px`);
-            const top = besideTop(card.top, b.height, room);
-            bubble.style.setProperty('--beside-dy', `${(top - b.top) / ratio}px`);
-            // The arrow keeps pointing at the card's top where the bubble moved up
-            bubble.style.setProperty('--beside-arrow', `${Math.max(0, Math.min(card.top - top, b.height - 28)) / ratio}px`);
-            bubble.classList.add(`beside-${place}`);
+        // The visible tree under the bars, inside the window's margin (#tree-container may reach under its bottom edge)
+        const room = {
+            top: Math.max(roomTop, m), bottom: Math.min(container?.bottom ?? vh, vh - m),
+            left: Math.max(container?.left ?? 0, m), right: Math.min(container?.right ?? vw, vw - m),
+        };
+        const place = bubblePlacement(r, card, { width: b.width, height: b.height }, room, { touch });
+        if (!layered) {
+            // On the canvas: above the tab or below it, never beside the card
+            const below = place === 'below' || (place !== 'above' && bubbleOpensBelow(r, b.height, room.top, room.bottom));
+            if (below) bubble.classList.add('below');
+            return;
         }
-        this.liftBubble(bubble, place === 'above' ? b : grown(measure()));
+        // As tall as the window lets it (max-height): cut without a scrollbar
+        bubble.classList.toggle('bubble-clipped', b.height >= vh - 2 * m - 0.5);
+        const box = bubbleBox(place, r, card, { width: b.width, height: b.height }, room, { width: vw, height: vh });
+        bubble.style.left = `${box.left}px`;
+        bubble.style.top = `${box.top}px`;
+        const beside = place === 'right' || place === 'left';
+        bubble.style.setProperty(beside ? '--beside-arrow' : '--arrow-x', `${box.arrow}px`);
+        bubble.style.removeProperty(beside ? '--arrow-x' : '--beside-arrow');
+        if (place !== 'above') bubble.classList.add(beside ? `beside-${place}` : 'below');
     }
 
     /**
@@ -2457,66 +2460,109 @@ class TreeRendererClass {
         }
     }
 
-    /** The bubble whose rect lies over the zoom buttons while it is open (liftBubble). */
-    private liftedBubble: HTMLElement | null = null;
+    /** What a long press on a tab opens: the tab's bubble, below it (bindTabBubble, bindChildrenBubble). */
+    private bubbleOpeners = new WeakMap<HTMLElement, () => void>();
+
+    /** A long press on a card at (x, y): on a tab with a bubble, the bubble opens (true); else the card's sheet. */
+    private openBubbleByTouch(x: number, y: number): boolean {
+        const pill = pillUnderFinger(x, y);
+        const opener = pill ? this.bubbleOpeners.get(pill) : undefined;
+        if (!opener) return false;
+        opener();
+        return true;
+    }
 
     /**
-     * A bubble that lies over the zoom buttons (+/−, the block in the
-     * corner): the tree goes over them while it is open (#tree-container
-     * .bubble-over-controls; the tree is otherwise under them, the bubble
-     * cannot leave the tree's layer). The buttons do not move.
+     * The bubble inside a tab (who, what a click does): with a mouse while
+     * the pointer is over the tab, from the keyboard while the tab has the
+     * focus (Escape closes it), by touch after a long press until a press
+     * elsewhere (a tap on the bubble only closes it). In the top layer
+     * (bubble-layer.ts); without it the stylesheet shows it on the canvas.
      */
-    private liftBubble(bubble: HTMLElement, rect: DOMRect): void {
-        const block = document.querySelector<HTMLElement>('.control-block');
-        const controls = block && block.getBoundingClientRect().width > 0 ? block : document.querySelector<HTMLElement>('.zoom-controls');
-        const c = controls?.getBoundingClientRect();
-        const over = !!c && c.width > 0 && rect.left < c.right && rect.right > c.left && rect.top < c.bottom && rect.bottom > c.top;
-        if (over) this.liftedBubble = bubble;
-        else if (this.liftedBubble === bubble) this.liftedBubble = null;
-        document.getElementById('tree-container')?.classList.toggle('bubble-over-controls', this.liftedBubble !== null);
+    private bindTabBubble(host: HTMLElement, tip: HTMLElement): void {
+        if (!prepareBubble(tip)) {
+            host.addEventListener('mouseenter', () => this.placeBubble(host, tip));
+            host.addEventListener('focus', () => this.placeBubble(host, tip));
+            return;
+        }
+        const hover = window.matchMedia?.('(hover: hover)').matches ?? false;
+        let byTouch = false;
+        const close = (): void => { byTouch = false; hideBubble(tip); };
+        const open = (touch = false): void => {
+            byTouch = touch;
+            showBubble(tip, host, close);
+            this.placeBubble(host, tip, touch);
+        };
+        if (hover) {
+            host.addEventListener('mouseenter', () => open());
+            host.addEventListener('mouseleave', () => { if (!host.matches(':focus-visible')) close(); });
+        }
+        host.addEventListener('focus', () => { if (host.matches(':focus-visible')) open(); });
+        host.addEventListener('blur', () => { if (!(hover && host.matches(':hover'))) close(); });
+        host.addEventListener('keydown', (e) => {
+            if (e.key !== 'Escape' || openBubble() !== tip) return;
+            e.stopPropagation();
+            close();
+        });
+        tip.addEventListener('click', (e) => {
+            if (!byTouch) return;
+            e.preventDefault();
+            e.stopPropagation();
+            close();
+        });
+        this.bubbleOpeners.set(host, () => open(true));
     }
 
-    /** The bubble closed (or its card is gone): the tree back under the zoom buttons. */
-    private releaseBubble(bubble: HTMLElement | null): void {
-        if (bubble !== null && this.liftedBubble !== bubble) return;
-        this.liftedBubble = null;
-        document.getElementById('tree-container')?.classList.remove('bubble-over-controls');
-    }
-
+    /**
+     * The "▾ children" bubble beside its tab: opens while a mouse is over the
+     * tab or the bubble (the way between them closes it after 150 ms, so the
+     * pointer reaches the rows) and while the tab or a row has the keyboard
+     * focus; while it is open the card keeps its hover look (index.html), so
+     * the bubble stands still the whole way between the tab and its rows; Escape closes it and gives the focus back to the tab. While it
+     * is open the person's children in view glow (§6). A row glides the view
+     * to the child drawn elsewhere (§4). By touch a long press on the tab
+     * opens it below the tab, until a press elsewhere.
+     */
     private bindChildrenBubble(personId: PersonId, tab: HTMLElement, bubble: HTMLElement,
         glowIds: () => PersonId[] = () => (DataManager.getPerson(personId)?.childIds ?? []).filter(cid => this.positions.has(cid))): void {
         let closeTimer: ReturnType<typeof setTimeout> | null = null;
         let releaseGlow: (() => void) | null = null;
         const hover = window.matchMedia?.('(hover: hover)').matches ?? false;
-        const open = (): void => {
+        const layered = prepareBubble(bubble);
+        const open = (touch = false): void => {
             if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; }
             if (bubble.classList.contains('open')) return;
-            // Measured from the edge row's right side: the row is anchored there
-            // and grows to the left (the card's hover shows the relations pill
-            // left of the tabs), so the bubble stays over the tab whether or not
-            // the card is under the pointer — a bubble that moved with the hover
-            // shows and hides under a still pointer at its edge (a hover loop).
-            const row = tab.offsetParent as HTMLElement | null;
-            const fromRight = (row?.clientWidth ?? 0) - (tab.offsetLeft + tab.offsetWidth / 2);
-            bubble.style.left = row ? `calc(100% - ${fromRight}px)` : `${tab.offsetLeft + tab.offsetWidth / 2}px`;
-            this.placeBubble(tab, bubble);
+            if (layered) {
+                showBubble(bubble, tab, close);
+            } else {
+                // Measured from the edge row's right side: the row is anchored there
+                // and grows to the left (the card's hover shows the relations pill
+                // left of the tabs), so the bubble stays over the tab whether or not
+                // the card is under the pointer — a bubble that moved with the hover
+                // shows and hides under a still pointer at its edge (a hover loop).
+                const row = tab.offsetParent as HTMLElement | null;
+                const fromRight = (row?.clientWidth ?? 0) - (tab.offsetLeft + tab.offsetWidth / 2);
+                bubble.style.left = row ? `calc(100% - ${fromRight}px)` : `${tab.offsetLeft + tab.offsetWidth / 2}px`;
+            }
+            this.placeBubble(tab, bubble, touch);
             bubble.classList.add('open');
             releaseGlow = this.highlightCards(glowIds());
         };
         const close = (): void => {
             if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; }
             bubble.classList.remove('open');
-            this.releaseBubble(bubble);
+            hideBubble(bubble);
             releaseGlow?.();
             releaseGlow = null;
         };
+        if (layered) this.bubbleOpeners.set(tab, () => open(true));
         const closeSoon = (): void => {
             if (closeTimer) clearTimeout(closeTimer);
             closeTimer = setTimeout(close, CHILDREN_BUBBLE_CLOSE_MS);
         };
         if (hover) {
             for (const el of [tab, bubble]) {
-                el.addEventListener('mouseenter', open);
+                el.addEventListener('mouseenter', () => open());
                 el.addEventListener('mouseleave', closeSoon);
             }
         }
@@ -3479,7 +3525,7 @@ class TreeRendererClass {
             });
 
             // Touch: long-press opens the mobile bottom sheet (coarse pointer only).
-            UI.attachCardLongPress(card, id);
+            UI.attachCardLongPress(card, id, (x, y) => this.openBubbleByTouch(x, y));
 
             // The name as shown: the given name with the title before it, the
             // person's own lastName (maiden name for women) with the title
@@ -3928,11 +3974,7 @@ class TreeRendererClass {
             // The bubbles inside the tabs (hover, keyboard) open below when there is no room above
             card.querySelectorAll<HTMLElement>('.branch-tab, .hidden-partners-btn').forEach(host => {
                 const tip = host.querySelector<HTMLElement>(':scope > .badge-tooltip');
-                if (!tip) return;
-                host.addEventListener('mouseenter', () => this.placeBubble(host, tip));
-                host.addEventListener('focus', () => this.placeBubble(host, tip));
-                host.addEventListener('mouseleave', () => this.releaseBubble(tip));
-                host.addEventListener('blur', () => this.releaseBubble(tip));
+                if (tip) this.bindTabBubble(host, tip);
             });
 
             // The children tab shows (hides) the children in place

@@ -870,9 +870,10 @@ export const bottomSheetMethods = uiModule({
      * Attach a long-press gesture to a card: on a coarse pointer, holding for
      * LONG_PRESS_MS without moving > MOVE_CANCEL_PX opens the bottom sheet and
      * suppresses the following click (so the desktop context menu never fires).
-     * A pan (finger drag) cancels the long-press.
+     * A pan (finger drag) cancels the long-press. A long press on one of
+     * the card's tabs opens the tab's bubble instead (`onTab` true: it did).
      */
-    attachCardLongPress(card: HTMLElement, personId: PersonId): void {
+    attachCardLongPress(card: HTMLElement, personId: PersonId, onTab?: (x: number, y: number) => boolean): void {
         if (!isCoarsePointer()) return;
         let timer: ReturnType<typeof setTimeout> | null = null;
         let startX = 0, startY = 0, fired = false;
@@ -884,7 +885,8 @@ export const bottomSheetMethods = uiModule({
             startX = t.clientX; startY = t.clientY; fired = false;
             timer = setTimeout(() => {
                 fired = true;
-                ZoomPan.releaseTouch();   // the finger moving on now must not pan under the sheet
+                ZoomPan.releaseTouch();   // the finger moving on now must not pan under the sheet (the bubble)
+                if (onTab?.(startX, startY)) return;
                 this.showPersonBottomSheet(personId);
             }, LONG_PRESS_MS);
         }, { passive: true });
