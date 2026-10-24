@@ -1,0 +1,67 @@
+/**
+ * A tap on a person card by touch is the card's (GitHub #4).
+ *
+ * The browser moves a finger's tap onto the nearest button within the
+ * finger's area (touch adjustment). The pills on a card's edges (branch tabs,
+ * line links, hidden partners and families, ⇄) are buttons inside the card,
+ * and a card holding such a button never counts as a target of its own: a tap
+ * on the card a few pixels from a pill went to the pill. Zoomed out the whole
+ * card lies within the finger's area, so a tap in its middle hid the children
+ * shown there or set the focus instead of opening the person's sheet.
+ *
+ * Here the point the finger touched decides. A touch click the browser gave
+ * to an edge pill while the finger stood on a card goes to what is under the
+ * finger, as a tap there would: the card, or another pill. The pill keeps:
+ * - the finger on the pill itself, from 60 % zoom (below, the half over the
+ *   card is a few pixels high, no finger aims at it: it is the card's);
+ * - the finger off the cards: the half of the pill standing out of the card
+ *   and the finger-sized area the browser gives it around (so a line link
+ *   still jumps from a view zoomed far out).
+ */
+
+import { ZoomPan } from './zoom.js';
+
+/** An edge pill on a card of the tree. */
+const PILL_SELECTOR = '#tree-canvas .person-card .card-edge > *';
+/** From this scale on a pill takes the taps on its part over the card. */
+const PILL_OVER_CARD_MIN_SCALE = 0.6;
+/** A click this long after the finger came down is not that tap's. */
+const TAP_CLICK_MS = 1500;
+
+let lastTouch: { x: number; y: number; at: number } | null = null;
+
+export function installCardTapTarget(): void {
+    document.addEventListener('pointerdown', (e) => {
+        lastTouch = e.pointerType === 'touch' ? { x: e.clientX, y: e.clientY, at: performance.now() } : null;
+    }, true);
+    document.addEventListener('click', onClick, true);
+}
+
+/** The element a tap at (x, y) is for, when it is not the given pill: on a card, else null. */
+function cardTargetAt(pill: Element, x: number, y: number): Element | null {
+    const pillsTakeCard = ZoomPan.getScale() >= PILL_OVER_CARD_MIN_SCALE;
+    for (const el of document.elementsFromPoint(x, y)) {
+        const inPill = el.closest('.card-edge > *');
+        if (inPill && !pillsTakeCard) continue;          // zoomed out: the card under the pill
+        if (inPill === pill) return null;                // the finger on the pill itself
+        return el.closest('#tree-canvas .person-card') ? el : null;
+    }
+    return null;
+}
+
+function onClick(e: MouseEvent): void {
+    const touch = lastTouch;
+    if (!touch || !e.isTrusted || performance.now() - touch.at > TAP_CLICK_MS) return;
+    const pointerType = (e as PointerEvent).pointerType;
+    if (pointerType === 'mouse' || pointerType === 'pen') return;
+    const pill = (e.target as Element | null)?.closest?.(PILL_SELECTOR);
+    if (!pill) return;
+    const target = cardTargetAt(pill, touch.x, touch.y);
+    if (!target) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    target.dispatchEvent(new MouseEvent('click', {
+        bubbles: true, cancelable: true, composed: true, view: window, detail: 1,
+        clientX: touch.x, clientY: touch.y,
+    }));
+}

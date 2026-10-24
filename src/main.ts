@@ -8,6 +8,7 @@ import { TreeManager } from './tree-manager.js';
 import { TreeRenderer } from './renderer.js';
 import { UI } from './ui.js';
 import { ZoomPan, setTreeRendererGetter } from './zoom.js';
+import { installCardTapTarget } from './card-tap.js';
 import { AppExporter } from './export.js';
 import { MergerUI } from './merge/index.js';
 import { SettingsManager } from './settings.js';
@@ -339,6 +340,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Initialize zoom/pan
     ZoomPan.init();
+    // A touch tap on a card beside its edge pills stays the card's
+    installCardTapTarget();
 
     // Overview minimap (wires ZoomPan.onChange + canvas handlers)
     UI.initMinimap();

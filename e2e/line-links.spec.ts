@@ -149,6 +149,11 @@ test.describe('phone 390 × 844', () => {
 
     test('a jump from a view zoomed far out lands readable on a phone too', async ({ page }) => {
         await setup(page, null);
-        await jumpsReadably(page, tab => tab.tap());
+        // Zoomed far out the pill's few pixels over the card are the card's (src/card-tap.ts): a tap on its part above the card
+        await jumpsReadably(page, async tab => {
+            const t = (await tab.boundingBox())!;
+            const card = (await tab.locator('xpath=ancestor::div[contains(@class, "person-card")][1]').boundingBox())!;
+            await page.touchscreen.tap(t.x + t.width / 2, (t.y + card.y) / 2);
+        });
     });
 });
