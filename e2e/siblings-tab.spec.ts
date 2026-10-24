@@ -678,3 +678,81 @@ test.describe('phone 390 × 844', () => {
         await expect(cardOf(page, 'aunt')).toHaveClass(/children-glow/);
     });
 });
+
+/**
+ * A bubble taller than the window (a phone held sideways, in German, two
+ * long invented names): it lists fewer names, each group one at least, and
+ * "and n more" counts the rest, so it stands whole in the window 8 px from
+ * its edges with its header and its last line (what a click does) whole;
+ * nothing is cut (round 3 §17, §25). With a mouse and by touch.
+ */
+test.describe('a bubble taller than a low window lists fewer names (de, 844 × 390)', () => {
+    test.use({ locale: 'de-DE', viewport: { width: 844, height: 390 } });
+
+    async function setupLong(page: Page): Promise<void> {
+        await openApp(page);
+        const data = JSON.parse(readFileSync(join(process.cwd(), 'test', 'edge-ancestor-children.json'), 'utf-8'));
+        Object.assign(data.persons.f_m_f_m_f_sib0, { firstName: 'Zebulon', lastName: 'Quarrington-Holloway' });
+        Object.assign(data.persons.f_m_f_m_f_sib1, { firstName: 'Bartholomäus', lastName: 'Kranichfeld-Oberau' });
+        await page.evaluate(async tree => {
+            await window.Strom.DataManager.importAsNewTree(tree as never, 'Niedrig');
+            await window.Strom.TreeRenderer.setFocus('focus' as never);
+        }, data);
+        await expect(cardOf(page, 'focus')).toBeVisible();
+        await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), 'f_m_f_m_f');
+        await page.evaluate(() => window.Strom.ZoomPan.finishAnimation());
+    }
+
+    async function expectWhole(bubble: ReturnType<Page['locator']>): Promise<void> {
+        const b = (await bubble.boundingBox())!;
+        expect(b.y).toBeGreaterThanOrEqual(8 - 0.5);
+        expect(b.y + b.height).toBeLessThanOrEqual(390 - 8 + 0.5);
+        // nothing cut: its content as tall as the box, the last line (what a click does) inside it
+        expect(await bubble.evaluate(el => el.scrollHeight <= el.clientHeight + 1)).toBe(true);
+        await expect(bubble).not.toHaveClass(/\bbubble-clipped\b/);
+        const action = bubble.locator(':scope > .badge-tooltip-action');
+        await expect(action).toBeVisible();
+        await expect(bubble.locator(':scope > :last-child')).toHaveClass(/badge-tooltip-action/);
+        const a = (await action.boundingBox())!;
+        expect(a.y + a.height).toBeLessThanOrEqual(b.y + b.height + 0.5);
+        await expect(bubble.locator(':scope > .badge-tooltip-header')).toBeVisible();
+        // fewer than 8 names, one at least, "and n more" counting the rest of the 12
+        const shown = await bubble.locator('.badge-tooltip-item:visible').count();
+        expect(shown).toBeGreaterThanOrEqual(1);
+        expect(shown).toBeLessThan(8);
+        await expect(bubble.locator('.badge-tooltip-more')).toHaveText(`und ${12 - shown} weitere`);
+    }
+
+    test('with a mouse', async ({ page }) => {
+        await setupLong(page);
+        const tab = siblingsTab(page, 'f_m_f_m_f');
+        const bubble = tab.locator(':scope > .badge-tooltip');
+        await tab.hover();
+        await expect(bubble).toBeVisible();
+        await settled(page, 'f_m_f_m_f');
+        await expectWhole(bubble);
+        // a taller window lists all 8 again
+        await page.mouse.move(5, 200);
+        await expect(bubble).toBeHidden();
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), 'f_m_f_m_f');
+        await page.evaluate(() => window.Strom.ZoomPan.finishAnimation());
+        await tab.hover();
+        await expect(bubble).toBeVisible();
+        await expect(bubble.locator('.badge-tooltip-item:visible')).toHaveCount(8);
+        await expect(bubble.locator('.badge-tooltip-more')).toHaveText('und 4 weitere');
+    });
+
+    test.describe('by touch', () => {
+        test.use({ hasTouch: true, isMobile: true });
+
+        test('a finger held on the tab', async ({ page }) => {
+            await setupLong(page);
+            const tab = siblingsTab(page, 'f_m_f_m_f');
+            const bubble = tab.locator(':scope > .badge-tooltip');
+            await hold(page, tab);
+            await expect(bubble).toBeVisible();
+            await expectWhole(bubble);
+        });
+    });
+});

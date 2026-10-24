@@ -73,7 +73,7 @@ import {
     hiddenPartnerIds, childrenByUnion, childrenComeWithPartners, otherFamilyChildrenElsewhere, marriagesInOrder,
 } from './marriage-order.js';
 import { partnerIdsShownInPlace } from './layout/pipeline/1-select-subgraph.js';
-import { measureUnionOrderPills, measureTabRows, rowKey, unionOrderPillKey, unionOrderPillPartsHtml, pillFontsPending, branchTabRestHtml, tabsForm, tabsFormClass, bubblePlacement, bubbleBox, bubbleOpensBelow, BUBBLE_WINDOW_MARGIN, bubbleNameCounts } from './union-order-measure.js';
+import { measureUnionOrderPills, measureTabRows, rowKey, unionOrderPillKey, unionOrderPillPartsHtml, pillFontsPending, branchTabRestHtml, tabsForm, tabsFormClass, bubblePlacement, bubbleBox, bubbleOpensBelow, BUBBLE_WINDOW_MARGIN, bubbleNameCounts, bubbleNamesToFit } from './union-order-measure.js';
 import { prepareBubble, showBubble, hideBubble, closeOpenBubble, openBubble } from './bubble-layer.js';
 import { pillUnderFinger } from './card-tap.js';
 import { showFocusToast, hideFocusToast } from './focus-toast.js';
@@ -2279,14 +2279,58 @@ class TreeRendererClass {
      * "and n more". The menu and the sheet name everyone.
      */
     private nameGroupsHtml(groups: readonly BubbleNameGroup[]): string {
-        const counts = bubbleNameCounts(groups.map(g => g.items.length));
+        const sizes = groups.map(g => g.items.length);
+        const counts = bubbleNameCounts(sizes);
         let more = 0;
         const html = groups.map((g, i) => {
             more += g.items.length - counts[i];
             if (g.items.length > 0 && counts[i] === 0) return '';
-            return g.pre + g.items.slice(0, counts[i]).join('');
+            // Each name tagged with its group: fitBubbleNames lists fewer in a low window
+            return g.pre + g.items.slice(0, counts[i]).map(item => item.replace(/^<div /, `<div data-name-group="${i}" `)).join('');
         }).join('');
-        return more > 0 ? `${html}<div class="badge-tooltip-more">${this.escapeHtml(strings.focus.tabMoreNames(more))}</div>` : html;
+        if (sizes.every(n => n === 0)) return html;
+        // "and n more", hidden while every name is listed (fitBubbleNames shows it when it lists fewer)
+        return `${html}<div class="badge-tooltip-more" data-name-sizes="${sizes.join(',')}"${more > 0 ? '' : ' hidden'}>`
+            + `${more > 0 ? this.escapeHtml(strings.focus.tabMoreNames(more)) : ''}</div>`;
+    }
+
+    /**
+     * A bubble taller than the window lists fewer names, so it stands whole
+     * in it with its header, "and n more" and its last line (what a click
+     * does; round 3 §17, §25): bubbleNamesToFit, each group in proportion,
+     * one name a group at least; "and n more" counts the rest. Every opening
+     * starts from all the names nameGroupsHtml lists (a larger window lists
+     * them again). Only a bubble that does not fit even then is cut.
+     */
+    private fitBubbleNames(bubble: HTMLElement, maxHeight: number): void {
+        const more = bubble.querySelector<HTMLElement>('.badge-tooltip-more[data-name-sizes]');
+        if (!more) return;
+        const sizes = (more.dataset.nameSizes ?? '').split(',').map(Number);
+        const items = [...bubble.querySelectorAll<HTMLElement>('[data-name-group]')];
+        const groupOf = (el: HTMLElement) => Number(el.dataset.nameGroup);
+        const shown = sizes.map((_, i) => items.filter(el => groupOf(el) === i).length);
+        const total = sizes.reduce((a, b) => a + b, 0);
+        const apply = (counts: number[]): void => {
+            const seen = sizes.map(() => 0);
+            for (const el of items) {
+                const g = groupOf(el);
+                el.hidden = seen[g]++ >= counts[g];
+            }
+            const rest = total - counts.reduce((a, b) => a + b, 0);
+            more.hidden = rest <= 0;
+            more.textContent = rest > 0 ? strings.focus.tabMoreNames(rest) : '';
+        };
+        // Its own height, not the one its max-height cuts it to
+        const height = (): number => {
+            bubble.style.maxHeight = 'none';
+            const h = bubble.getBoundingClientRect().height;
+            bubble.style.maxHeight = '';
+            return h;
+        };
+        apply(bubbleNamesToFit(sizes, shown, counts => {
+            apply(counts);
+            return height() <= maxHeight;
+        }));
     }
 
     /**
@@ -2390,6 +2434,8 @@ class TreeRendererClass {
         // The card grows under the pointer (:hover scale), its tab with it:
         // measured as they will stand once that ends.
         const grown = this.cardGrowth(cardEl);
+        // In the top layer whole in the window: as many names as fit there
+        if (layered) this.fitBubbleNames(bubble, window.innerHeight - 2 * BUBBLE_WINDOW_MARGIN);
         const measure = (): DOMRect => {
             if (layered) return bubble.getBoundingClientRect();
             const shown = getComputedStyle(bubble).display !== 'none';

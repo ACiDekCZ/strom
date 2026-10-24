@@ -3274,7 +3274,7 @@
             /* The arrow stands out of the box (a popover scrolls by default) */
             overflow: visible;
         }
-        /* Taller than the window (it never is with 8 names at most): cut, no scrollbar. */
+        /* Taller than the window even with one name a group (TreeRenderer.fitBubbleNames lists fewer names first): cut, no scrollbar. */
         .badge-tooltip[popover].bubble-clipped { overflow: hidden; }
         .badge-tooltip[popover]::after { left: var(--arrow-x, 50%); }
         /* Moved over its own tab to stay whole in the window (a low window,

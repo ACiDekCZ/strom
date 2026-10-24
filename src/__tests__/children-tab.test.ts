@@ -6,7 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { hiddenRelativesTabs, hiddenChildIds, newlyShownChildIds, childrenDrawnElsewhere, siblingOrderMark, childrenShownClosing, siblingsTabState, newlyShownSiblingIds, siblingGroups, unionChildIdSet, hiddenPartnerIds, childrenByUnion, childrenComeWithPartners, otherFamilyChildrenElsewhere, HiddenRelativesTab } from '../marriage-order.js';
-import { tabsForm, tabGlyph, tabLabel, tabKindClass, branchTabRestHtml, bubbleOpensBelow, bubblePlacement, besideTop, bubbleBox, BUBBLE_WINDOW_MARGIN, bubbleNameCounts, BUBBLE_MAX_NAMES } from '../union-order-measure.js';
+import { tabsForm, tabGlyph, tabLabel, tabKindClass, branchTabRestHtml, bubbleOpensBelow, bubblePlacement, besideTop, bubbleBox, BUBBLE_WINDOW_MARGIN, bubbleNameCounts, bubbleNamesToFit, BUBBLE_MAX_NAMES } from '../union-order-measure.js';
 import { branchTabKind, branchTabsInOrder } from '../marriage-order.js';
 import { childIdsShownInPlace } from '../layout/pipeline/1-select-subgraph.js';
 import { PersonId, PartnershipId, Person, StromData, DEFAULT_LAYOUT_CONFIG } from '../types.js';
@@ -680,5 +680,51 @@ describe('the names in a tab\'s bubble', () => {
 
     it('more groups than places: the first eight one name each', () => {
         expect(bubbleNameCounts([2, 2, 2, 2, 2, 2, 2, 2, 2, 2])).toEqual([1, 1, 1, 1, 1, 1, 1, 1, 0, 0]);
+    });
+
+    describe('fewer in a low window (round 3 §17, §25)', () => {
+        // a bubble: header, "and n more", what a click does (130 px), 29 px a name
+        const heightOf = (counts: number[]) => 130 + 29 * sum(counts);
+        const fitting = (room: number) => (counts: number[]) => heightOf(counts) <= room;
+
+        it('a large window: the names it lists at most, unchanged', () => {
+            expect(bubbleNamesToFit([12], [8], fitting(884))).toEqual([8]);
+            expect(bubbleNamesToFit([12, 4], [6, 2], fitting(884))).toEqual([6, 2]);
+            expect(bubbleNamesToFit([3, 2], [3, 2], fitting(884))).toEqual([3, 2]);
+        });
+
+        it('as many names as the window\'s height lets the bubble have', () => {
+            // 374 px (390 less 8 above and below): 8 names (362) fit; 340 px: 7 (333); 300 px: 5 (275)
+            expect(bubbleNamesToFit([12], [8], fitting(374))).toEqual([8]);
+            expect(bubbleNamesToFit([12], [8], fitting(340))).toEqual([7]);
+            expect(bubbleNamesToFit([12], [8], fitting(300))).toEqual([5]);
+            for (let room = 160; room <= 400; room += 7) {
+                const out = bubbleNamesToFit([12], [8], fitting(room));
+                expect(heightOf(out), String(room)).toBeLessThanOrEqual(room);
+                if (out[0] < 8) expect(heightOf([out[0] + 1]), String(room)).toBeGreaterThan(room);
+            }
+        });
+
+        it('each group in proportion, one name a group at least', () => {
+            expect(bubbleNamesToFit([12, 4], [6, 2], fitting(130 + 29 * 4))).toEqual([3, 1]);
+            expect(bubbleNamesToFit([12, 4], [6, 2], fitting(130 + 29 * 2))).toEqual([1, 1]);
+            expect(bubbleNamesToFit([20, 1, 1], [6, 1, 1], fitting(130 + 29 * 5))).toEqual([3, 1, 1]);
+            // all names listed (no "and n more" before): fewer, in proportion
+            expect(bubbleNamesToFit([4, 4], [4, 4], fitting(130 + 29 * 6))).toEqual([3, 3]);
+            expect(bubbleNamesToFit([2, 0, 1], [2, 0, 1], fitting(130 + 29 * 2))).toEqual([1, 0, 1]);
+        });
+
+        it('never more of a group than the bubble lists at most', () => {
+            for (let n = 2; n <= 8; n++) {
+                const out = bubbleNamesToFit([9, 3, 1], bubbleNameCounts([9, 3, 1]), fitting(130 + 29 * n));
+                out.forEach((c, i) => expect(c).toBeLessThanOrEqual(bubbleNameCounts([9, 3, 1])[i]));
+                expect(out.every(c => c >= 1)).toBe(true);
+            }
+        });
+
+        it('not even one name a group fits: that least (the window cuts the bubble)', () => {
+            expect(bubbleNamesToFit([12, 4], [6, 2], fitting(100))).toEqual([1, 1]);
+            expect(bubbleNamesToFit([12], [8], () => false)).toEqual([1]);
+        });
     });
 });

@@ -276,6 +276,27 @@ export function bubbleNameCounts(sizes: readonly number[], max = BUBBLE_MAX_NAME
 }
 
 /**
+ * How many names of each group a bubble lists to stand whole in the window
+ * (round 3 §17, §25: its last line, what a click does, always stays): the
+ * names it lists at most (`shown`, bubbleNameCounts) while they fit, else
+ * fewer, one at a time, each group in proportion to its size (`sizes`, all
+ * its names; bubbleNameCounts, never more of a group than `shown`), every
+ * group with names keeping one at least. `fits` tells whether the bubble
+ * with these counts stands whole in the window. When even one name a group
+ * does not fit, that least (the window then cuts the bubble).
+ */
+export function bubbleNamesToFit(sizes: readonly number[], shown: readonly number[], fits: (counts: number[]) => boolean): number[] {
+    const most = shown.reduce((a, b) => a + b, 0);
+    const least = shown.filter(n => n > 0).length;
+    let counts = [...shown];
+    for (let n = most; n >= least; n--) {
+        counts = n === most ? [...shown] : bubbleNameCounts(sizes, n).map((c, i) => Math.min(c, shown[i]));
+        if (fits(counts)) return counts;
+    }
+    return counts;
+}
+
+/**
  * The resting look of a top-edge tab (no bubble): its glyph, its word (kept
  * for screen readers when the card shortens its tabs) and its short letter
  * (shown only then). A jump's "↗" stands after the word.
