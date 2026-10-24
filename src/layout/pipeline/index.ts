@@ -376,7 +376,9 @@ export function collectBloodRelatives(data: StromData, personId: PersonId): Set<
  * pulled in everyone it adds. A person who now stands in more than one
  * union is laid out as a partner chain (each union's children under
  * that union), as the expanded mode does: the standard mode draws one union
- * per person and would leave the others' children out.
+ * per person and would leave the others' children out. The children come
+ * with their partners (expandChildrenInSelection); the standard mode draws
+ * one of them, as it draws any relative, the expanded mode all of them.
  */
 function withChildrenShown(
     data: StromData,
@@ -385,8 +387,12 @@ function withChildrenShown(
     personIds: readonly PersonId[] | undefined
 ): DisplayPolicy {
     if (!personIds?.length) return policy;
+    const before = new Set(selection.persons);
     expandChildrenInSelection(data, selection, personIds);
-    const chained = personIds.filter(id => selection.persons.has(id)
+    // With every partner drawn (the expanded mode) a child the step brought
+    // with partners of several unions stands in a chain with all of them
+    const brought = policy.autoExpand !== false ? [...selection.persons].filter(id => !before.has(id)) : [];
+    const chained = [...new Set([...personIds, ...brought])].filter(id => selection.persons.has(id)
         && (data.persons[id]?.partnerships ?? []).filter(pid => selection.partnerships.has(pid)).length > 1);
     if (chained.length === 0) return policy;
     const expanded = new Set(policy.expandedPersonIds ?? []);

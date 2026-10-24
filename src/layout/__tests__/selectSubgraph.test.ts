@@ -11,8 +11,9 @@
 
 import { describe, it, expect, beforeAll } from 'vitest';
 import { loadFixture } from './helpers/loadFixture.js';
-import { selectSubgraph } from '../pipeline/1-select-subgraph.js';
-import { PersonId, StromData } from '../../types.js';
+import { selectSubgraph, extendAncestorDepth, expandChildrenInSelection } from '../pipeline/1-select-subgraph.js';
+import { planShownChildrenFolding } from '../pipeline/index.js';
+import { PersonId, StromData, DEFAULT_LAYOUT_CONFIG } from '../../types.js';
 import { GraphSelection } from '../pipeline/types.js';
 
 describe('selectSubgraph', () => {
@@ -267,5 +268,46 @@ describe('selectSubgraph', () => {
             expect(selection1.maxAncestorGen).toBe(selection2.maxAncestorGen);
             expect(selection1.maxDescendantGen).toBe(selection2.maxDescendantGen);
         });
+    });
+});
+
+describe('children shown in place come with their partners', () => {
+    // "▸ siblings" of the father at ancestor depth 1 (comprehensive): the
+    // grandparents beyond the depth and their children shown in place. The
+    // aunt and the uncle come with their partners, as the plain depth draws
+    // a relative, never with their children (the cousins come with the
+    // uncle's own "▸ children").
+    const ids = (...xs: string[]) => xs as PersonId[];
+    const shownSiblings = (focus: string, edge: string, autoExpand: boolean) => planShownChildrenFolding({
+        data: loadFixture('comprehensive'), focusPersonId: focus as PersonId, config: DEFAULT_LAYOUT_CONFIG,
+        ancestorDepth: 1, descendantDepth: 1,
+        includeSpouseAncestors: false, includeParentSiblings: true, includeParentSiblingDescendants: true,
+        displayPolicy: { mode: autoExpand ? 'expanded' : 'standard', autoExpand },
+        extraDepthFor: ids(edge), expandChildrenOf: ids('gp_h_h', 'gp_h_w'),
+    }).result;
+
+    it('the selection holds the aunt\'s and the uncle\'s partners, not the cousins', () => {
+        const data = loadFixture('comprehensive');
+        const selection = selectSubgraph({
+            data, focusPersonId: 'focus' as PersonId, ancestorDepth: 1, descendantDepth: 1,
+            includeSpouseAncestors: false, includeParentSiblings: true, includeParentSiblingDescendants: true
+        });
+        extendAncestorDepth(data, selection, ids('father'), () => new Set());
+        expandChildrenInSelection(data, selection, ids('gp_h_h', 'gp_h_w'));
+        for (const id of ids('uncle_h_1', 'aunt_h_1', 'aunt_h_1_spouse', 'uncle_h_1_husband')) expect(selection.persons.has(id), id).toBe(true);
+        for (const id of ids('cousin_h_1', 'cousin_h_2', 'cousin_h_3', 'cousin_h_4')) expect(selection.persons.has(id), id).toBe(false);
+    });
+
+    it('the layout draws them beside the aunt and the uncle', () => {
+        const r = shownSiblings('focus', 'father', false);
+        for (const id of ids('uncle_h_1', 'aunt_h_1', 'aunt_h_1_spouse', 'uncle_h_1_husband')) expect(r.positions.has(id), id).toBe(true);
+        for (const id of ids('cousin_h_1', 'cousin_h_2', 'cousin_h_3', 'cousin_h_4')) expect(r.positions.has(id), id).toBe(false);
+    });
+
+    it('with every partner drawn, an uncle of two marriages stands with both partners', () => {
+        // The cousin's view: the father is an uncle, married twice
+        const r = shownSiblings('cousin_h_1', 'uncle_h_1', true);
+        for (const id of ids('father', 'mother', 'stepmother', 'aunt_h_1', 'uncle_h_1_husband')) expect(r.positions.has(id), id).toBe(true);
+        for (const id of ids('focus', 'halfsibling_1', 'cousin_h_4')) expect(r.positions.has(id), id).toBe(false);
     });
 });

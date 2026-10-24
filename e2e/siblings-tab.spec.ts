@@ -117,6 +117,49 @@ test('"▸ siblings" shows the children of both parents in one step; the card st
     for (const [id, at] of Object.entries(before)) expect(near(after[id], [at[0] + dx, at[1] + dy]), id).toBe(true);
 });
 
+/**
+ * At ancestor depth 1 (focus "Focus Person") the grandparents lie beyond the
+ * depth: the father's "▸ siblings" shows them with their children, the aunt
+ * and the uncle, and these come as every child shown in place comes, with
+ * their partners (hatched, in view only thanks to the step) and without
+ * their children: the cousins wait for the uncle's own "▸ children".
+ */
+test('at depth 1 "▸ siblings" on the father brings the aunt and the uncle with their partners, hatched, not the cousins; closing gives the view back', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openApp(page);
+    const data = JSON.parse(readFileSync(join(process.cwd(), 'test', 'comprehensive.json'), 'utf-8'));
+    await page.evaluate(async ([tree, f]) => {
+        await window.Strom.DataManager.importAsNewTree(tree as never, 'Comprehensive');
+        await window.Strom.TreeRenderer.setFocus(f as never);
+        window.Strom.TreeRenderer.setFocusDepth(1, window.Strom.TreeRenderer.getFocusDepthDown());
+    }, [data, 'focus'] as const);
+    await expect(cardOf(page, 'father')).toBeVisible();
+    await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), 'father');
+    const auntsAndUncles = ['uncle_h_1', 'aunt_h_1'];
+    const partners = ['aunt_h_1_spouse', 'uncle_h_1_husband'];
+    const cousins = ['cousin_h_1', 'cousin_h_2', 'cousin_h_3', 'cousin_h_4'];
+    for (const id of [...auntsAndUncles, ...partners, ...cousins]) await expect(cardOf(page, id)).toHaveCount(0);
+    await page.mouse.move(5, 500);
+    const before = await screenCenters(page);
+
+    await siblingsTab(page, 'father').click();
+    for (const id of [...auntsAndUncles, ...partners]) await expect(cardOf(page, id), id).toBeVisible();
+    await page.mouse.move(5, 500);
+    for (const id of [...auntsAndUncles, ...partners]) await expect(cardOf(page, id), id).toHaveClass(/shown-here/);
+    for (const id of cousins) await expect(cardOf(page, id), id).toHaveCount(0);
+    expect(await shownCount(page)).toBe(1);
+
+    // One click closes the step: the partners leave with the aunt and the uncle, every card back in its place
+    await siblingsTab(page, 'father').click();
+    await page.mouse.move(5, 500);
+    for (const id of [...auntsAndUncles, ...partners]) await expect(cardOf(page, id), id).toHaveCount(0);
+    expect(await shownCount(page)).toBe(0);
+    const after = await screenCenters(page);
+    expect(Object.keys(after).sort()).toEqual(Object.keys(before).sort());
+    const dx = after.father[0] - before.father[0], dy = after.father[1] - before.father[1];
+    for (const [id, at] of Object.entries(before)) expect(near(after[id], [at[0] + dx, at[1] + dy]), id).toBe(true);
+});
+
 test('↩ after "▸ siblings" is one step back; ↪ brings the siblings step again', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await setup(page);
@@ -161,7 +204,12 @@ test('the person menu: "Show siblings here" with the count above the children ro
     if (actions.includes('toggle-children')) expect(actions.indexOf('toggle-siblings')).toBeLessThan(actions.indexOf('toggle-children'));
     await show.click();
     for (const id of SIBLINGS) await expect(cardOf(page, id)).toBeVisible();
-    await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), PERSON);
+    // Back to the scale of 1 (the step zoomed out as far as the siblings needed, §5), the card in the middle
+    await page.evaluate(async id => {
+        window.Strom.ZoomPan.reset();
+        await new Promise(r => setTimeout(r, 0));
+        window.Strom.ZoomPan.centerOnPerson(id as never);
+    }, PERSON);
     await cardOf(page, PERSON).click({ position: { x: 60, y: 40 } });
     const hide = page.locator('.context-menu .context-menu-item[data-action="toggle-siblings"]');
     await expect(hide).toHaveText('Hide the siblings shown here');

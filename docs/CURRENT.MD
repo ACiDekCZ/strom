@@ -53,12 +53,22 @@ union's children are deliberately NOT pulled in (see Partner Chains below).
 Children shown in place (`PipelineInput.expandChildrenOf`, the card's
 "children" tab): after `expandSelectionForDisplay`, `expandChildrenInSelection`
 adds, for every listed person already in the selection, each of their unions
-with children — the partner, the partnership and the children (not the
-children's partners or descendants) — and lifts the person's depth limit.
+with children — the partner, the partnership and the children — and lifts the
+person's depth limit. A child the step brings comes with their partners, as
+the plain depth draws a relative: the partner of each of the child's unions
+joins with the partnership, unless the selection holds that partner already
+(drawn elsewhere: that union stays undrawn) or the partner is an empty "?"
+stand-in (`isDiagramStandIn`, drawn only with a union's children). Never the
+children's children: the child's own "children" tab leads on. A child the
+selection held already keeps what it had.
 `withChildrenShown` (pipeline orchestrator) then puts a listed person with more
 than one partnership in the selection into `expandedPersonIds` (out of the
 appendage set), so each union is a chain slot and its children hang under
-their own couple, in the standard display too. Phase B places the shown siblings
+their own couple, in the standard display too. With every partner drawn
+(`autoExpand`, the expanded display) a person the step brought with partners
+of several unions joins `expandedPersonIds` as well and stands in a chain with
+all of them; the standard display draws one of them, as it draws any relative
+(the others stay behind the card's partners tab). Phase B places the shown siblings
 of an ancestor (gen <= -2) beside that ancestor, in the run reserved for them
 in the compact tree (`attachSiblingRuns`/`placeSiblingRuns`, below), with the
 parents centred over all their children; before, they kept their step-5 place
@@ -141,8 +151,9 @@ pedigree collapse, a cousin married into the view): those stay and stop the
 walk. That second, plain layout runs only when such a child is in the
 selection (in practice at depth 1). The siblings come with another input:
 `expandChildrenOf` the parents (the person's "▸ siblings", or a grandparent's
-"▸ children" after "▸ parents"), each without partners or descendants, as
-children shown in place always come.
+"▸ children" after "▸ parents"), each with their partners and without their
+descendants, as children shown in place always come (the cousins come with an
+aunt's or uncle's own "▸ children").
 `LayoutResult.ancestorDepthEdge` lists the drawn persons of the limit whose
 parents are neither selected nor drawn and who have a parent that is not a
 "?" stand-in: the cards whose parents are out of view only because of the
@@ -471,7 +482,12 @@ resolveOverlapsOutward()
 //     passes can leave an extra partner several card widths away. Each one
 //     moves toward its partner, as far as "beside", into free row space only.
 //     A partner with drawn children stops at the nearest child's center (its
-//     line stays over its children). It never moves farther from its own
+//     line stays over its children). When the children already stand beyond
+//     the partner's card (the chain's other families, children shown with
+//     their partners, push them outward), the line may move inward over the
+//     family's cards in the children's row — the chain's children and their
+//     partners standing side by side up to the nearest child — and the empty
+//     room between the partners goes. It never moves farther from its own
 //     parents, and the block's anchors follow.
 gatherAncestorChainPartners()
 

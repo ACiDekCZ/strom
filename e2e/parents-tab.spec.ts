@@ -204,6 +204,12 @@ test('children of a sibling shown here: the "▾" bubble offers a focus on the s
     await expect(cardOf(page, PERSON).locator('.nested-focus-row')).toHaveCount(0);
     await expect(cardOf(page, PARENTS[0]).locator('.nested-focus-row')).toHaveCount(0);
 
+    // The bubble's sizes are measured at the scale of 1 (the steps zoomed out as far as their cards needed, §5)
+    await page.evaluate(async id => {
+        window.Strom.ZoomPan.reset();
+        await new Promise(r => setTimeout(r, 0));
+        window.Strom.ZoomPan.centerOnPerson(id as never);
+    }, SIBLINGS[0]);
     await page.mouse.move(5, 500);
     await childrenTab(page, SIBLINGS[0]).hover();
     const bubble = cardOf(page, SIBLINGS[0]).locator('.children-bubble[data-bubble="children"]');
@@ -303,7 +309,7 @@ test('depth 1: "▸ parents" on a parent of the focus shows the grandparents alo
     await siblingsTab(page, PERSON).click();
     for (const id of [...PARENTS, ...SIBLINGS]) await expect(cardOf(page, id)).toBeVisible();
     for (const id of [...PARENTS, ...SIBLINGS]) await expect(cardOf(page, id)).toHaveClass(/shown-here/);
-    // The siblings come as children shown in place do: without their families
+    // The siblings come as children shown in place do: with their partners, without their children
     for (const id of ['cousin_h_1', 'cousin_h_4']) await expect(cardOf(page, id)).toHaveCount(0);
     expect(await shownCount(page)).toBe(1);
 });

@@ -114,8 +114,9 @@ test('the children shown in place wear the hatch, at every level, and lose it wh
     expect(await marked()).toEqual([]);
     await tabOf(page, ANCESTOR).click();
     await expect(cardOf(page, SIBLINGS[0])).toBeVisible();
-    // The children the click brought into view; not the father, not the focus's line drawn before
-    await expect.poll(marked).toEqual([HALF, ...SIBLINGS].sort());
+    // The children the click brought into view, with their partners; not the father, not the focus's line drawn before
+    const step = [HALF, ...SIBLINGS, 'sibling_1_spouse', 'sibling_2_spouse'].sort();
+    await expect.poll(marked).toEqual(step);
     expect(await hatch(SIBLINGS[0])).toContain('repeating-linear-gradient');
     expect(await hatch(ANCESTOR)).toBe('none');
     await expect(cardOf(page, 'focus')).not.toHaveClass(/shown-here/);
@@ -127,10 +128,10 @@ test('the children shown in place wear the hatch, at every level, and lose it wh
     const nested = tabOf(page, SIBLINGS[0]);
     await nested.click();
     await expect(cardOf(page, 'nephew_1_1')).toBeVisible();
-    await expect.poll(marked).toEqual([HALF, ...SIBLINGS, 'sibling_1_spouse', 'nephew_1_1', 'nephew_1_2', 'nephew_1_3'].sort());
+    await expect.poll(marked).toEqual([...step, 'nephew_1_1', 'nephew_1_2', 'nephew_1_3', 'nephew_1_1_spouse'].sort());
     await tabOf(page, SIBLINGS[0]).click();
     await expect(cardOf(page, 'nephew_1_1')).toHaveCount(0);
-    await expect.poll(marked).toEqual([HALF, ...SIBLINGS].sort());
+    await expect.poll(marked).toEqual(step);
     // Dark: the hatch is there too
     await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
     expect(await hatch(SIBLINGS[0])).toContain('repeating-linear-gradient');

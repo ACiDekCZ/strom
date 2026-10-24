@@ -14,6 +14,7 @@
 
 import { PersonId, PartnershipId, Person, Partnership, StromData } from '../../types.js';
 import { SelectSubgraphInput, GraphSelection, DisplayPolicy } from './types.js';
+import { isDiagramStandIn } from './placeholders.js';
 
 /**
  * Select visible subgraph based on focus person and policy.
@@ -565,14 +566,21 @@ function leaveOutOtherChildrenOf(
  * Show the children of the given persons in place (the card's "children"
  * tab): for every union of a person already in the selection, the partner,
  * the partnership and the union's children (childIdsShownInPlace) join it.
- * The children come without their partners or descendants (their own tabs
- * lead on). Persons not in the selection are skipped.
+ * A child the step brings comes with their partners, as the plain depth
+ * draws a relative: the partner of each of the child's unions joins with the
+ * partnership, unless the selection holds that partner already (drawn
+ * elsewhere: the union stays undrawn, as before) or the partner is an empty
+ * "?" stand-in (drawn only with the union's children). Never the children's
+ * children (the child's own tab leads on). A child the selection held
+ * already keeps what it had. Persons not in the selection are skipped.
  */
 export function expandChildrenInSelection(
     data: StromData,
     selection: GraphSelection,
     personIds: readonly PersonId[]
 ): void {
+    const before = new Set(selection.persons);
+    const brought: PersonId[] = [];
     for (const personId of personIds) {
         const person = data.persons[personId];
         if (!person || !selection.persons.has(personId)) continue;
@@ -583,9 +591,23 @@ export function expandChildrenInSelection(
             selection.persons.add(partnership.person2Id);
             selection.partnerships.add(partnershipId);
         }
-        for (const childId of childIdsShownInPlace(data, personId)) selection.persons.add(childId);
+        for (const childId of childIdsShownInPlace(data, personId)) {
+            if (!before.has(childId) && !brought.includes(childId)) brought.push(childId);
+            selection.persons.add(childId);
+        }
         // The person's children now stand in the view: no longer the deepest generation
         selection.depthLimitPersons?.delete(personId);
+    }
+    for (const childId of brought) {
+        for (const partnershipId of data.persons[childId]?.partnerships ?? []) {
+            const partnership = data.partnerships[partnershipId];
+            if (!partnership) continue;
+            const partnerId = partnership.person1Id === childId ? partnership.person2Id : partnership.person1Id;
+            // An empty "?" stand-in stands only for the union's children (isDiagramStandIn)
+            if (partnerId === childId || !data.persons[partnerId] || before.has(partnerId) || isDiagramStandIn(data, partnerId)) continue;
+            selection.persons.add(partnerId);
+            selection.partnerships.add(partnershipId);
+        }
     }
 }
 

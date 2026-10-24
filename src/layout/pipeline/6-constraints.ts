@@ -1142,7 +1142,13 @@ function personCenterInBlocks(
  * Each extra partner moves toward the partner, from the couple outward, up to
  * the card beside them; one with children drawn stops where the stem reaches
  * the nearest child's center (never moving away from the children), and never
- * farther from their own parents' line than before. Only the ancestor rows
+ * farther from their own parents' line than before. When the children already
+ * stand beyond the stem (the chain's other families, children shown with
+ * their partners, push them outward), the stem may move inward over the
+ * family's cards in the children's row — the chain's children and their
+ * partners standing side by side up to the nearest child — since the line
+ * passes over that family anyway; the empty room it left between the
+ * partners is what goes. Only the ancestor rows
  * (gen <= -2) move: Phase B owns them; the cards stay inside the chain's own
  * stretch of the row, so no other card is in the way.
  */
@@ -1178,6 +1184,33 @@ function gatherAncestorChainPartners(
             }
             childCenters.set(extra, list);
         }
+        // The family's cards in the children's row: every chain union's
+        // children and their partners, sorted
+        const familyRow: number[] = [];
+        {
+            const kidIds = new Set<PersonId>();
+            for (const unionId of chain.unionIds) for (const c of model.unions.get(unionId)?.childIds ?? []) kidIds.add(c);
+            const ids = new Set<PersonId>(kidIds);
+            for (const [, u] of model.unions) {
+                if (u.partnerB && (kidIds.has(u.partnerA) || kidIds.has(u.partnerB))) { ids.add(u.partnerA); ids.add(u.partnerB); }
+            }
+            for (const id of ids) {
+                const x = personCenterInBlocks(id, blocks, model, unionToBlock, config);
+                if (x !== undefined) familyRow.push(x);
+            }
+            familyRow.sort((a, b) => a - b);
+        }
+        const step = config.cardWidth + Math.max(config.horizontalGap, config.partnerGap) + 0.5;
+        // The innermost card of the family's run that reaches the nearest child (dir -1: inward is left)
+        const runEnd = (nearest: number, dir: 1 | -1): number => {
+            let at = nearest;
+            for (const x of dir < 0 ? [...familyRow].reverse() : familyRow) {
+                if (dir < 0 ? x >= at : x <= at) continue;
+                if (Math.abs(x - at) > step) break;
+                at = x;
+            }
+            return at;
+        };
         // Where the person's parents' line comes down (undefined: no parents in view)
         const parentsX = (pid: PersonId): number | undefined => {
             const unionId = model.childToParentUnion.get(pid);
@@ -1196,7 +1229,9 @@ function gatherAncestorChainPartners(
             if (current === undefined) continue;
             const beside = edge - config.partnerGap - half;
             const kids = childCenters.get(pid) ?? [];
-            const target = kids.length > 0 ? Math.min(beside, Math.max(current, Math.max(...kids))) : beside;
+            const nearestL = kids.length > 0 ? Math.max(...kids) : 0;
+            const reachL = kids.length > 0 && nearestL < current ? runEnd(nearestL, 1) : nearestL;
+            const target = kids.length > 0 ? Math.min(beside, Math.max(current, reachL)) : beside;
             let next = Math.max(current, target);
             // Never farther from the person's own parents than now
             const up = parentsX(pid);
@@ -1211,7 +1246,9 @@ function gatherAncestorChainPartners(
             if (current === undefined) continue;
             const beside = edge + config.partnerGap + half;
             const kids = childCenters.get(pid) ?? [];
-            const target = kids.length > 0 ? Math.max(beside, Math.min(current, Math.min(...kids))) : beside;
+            const nearestR = kids.length > 0 ? Math.min(...kids) : 0;
+            const reachR = kids.length > 0 && nearestR > current ? runEnd(nearestR, -1) : nearestR;
+            const target = kids.length > 0 ? Math.max(beside, Math.min(current, reachR)) : beside;
             let next = Math.min(current, target);
             const up = parentsX(pid);
             if (up !== undefined) next = Math.min(current, Math.max(next, up - Math.abs(current - up)));

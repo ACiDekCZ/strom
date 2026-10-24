@@ -18,7 +18,13 @@
  *
  * With the parents' children shown in the same step (the "▸ siblings" of an
  * edge ancestor: extraDepthFor [P] and expandChildrenOf the parents) every
- * promised sibling is drawn as well, beside each other.
+ * promised sibling is drawn as well, beside each other, with their partners
+ * (as every child shown in place, and as the view draws a relative: one
+ * partner in the standard mode, every one in the expanded mode; an empty
+ * "?" stand-in excepted) and
+ * without their children (the cousins come with the sibling's own
+ * "▸ children"); closing the step gives the view before back, position for
+ * position.
  *
  * The edge is the layout's own: the persons of the line reached at the depth
  * whose parents lie beyond it, never a person whose parents are folded or
@@ -37,6 +43,7 @@ import { PersonId, LayoutConfig, DEFAULT_LAYOUT_CONFIG, StromData } from '../../
 import type { LayoutResult } from '../pipeline/types.js';
 import { normalizeSingleParents } from '../../single-parent.js';
 import { hiddenChildIds } from '../../marriage-order.js';
+import { isDiagramStandIn } from '../pipeline/placeholders.js';
 
 const DEPTHS = [1, 2, 3, 4, 5, 6, 7];
 
@@ -195,6 +202,27 @@ describe('Parents shown in place beyond the depth: full pipeline invariants', ()
                         for (const q of showable) {
                             const apart = foreignBetweenChildren(data, q, s.positions);
                             if (apart.length) failures.push(`${sw}: not beside each other, ${apart.slice(0, 3).join('; ')}`);
+                        }
+                        // The siblings come with their partners, as the view draws a
+                        // relative (the standard mode one partner, the expanded mode
+                        // every one), not with their children
+                        const partnersOfSibling = (c: PersonId) => partnersOf(data, c).filter(o => data.persons[o] && !isDiagramStandIn(data, o));
+                        const partners = new Set(promised.flatMap(partnersOfSibling));
+                        const noPartner = promised.flatMap(c => {
+                            const own = partnersOfSibling(c);
+                            const drawn = own.filter(o => s.positions.has(o));
+                            return mode.autoExpand ? own.filter(o => !s.positions.has(o)) : own.length > 0 && drawn.length === 0 ? [c] : [];
+                        });
+                        if (noPartner.length) failures.push(`${sw}: partners of the siblings not drawn ${noPartner.slice(0, 5).join(',')}`);
+                        const cousins = promised.flatMap(c => data.persons[c]?.childIds ?? [])
+                            .filter(k => s.positions.has(k) && !r.positions.has(k) && !promised.includes(k) && !partners.has(k));
+                        if (cousins.length) failures.push(`${sw}: the siblings' children came in ${cousins.slice(0, 5).join(',')}`);
+                        // Closing the step gives the view before back
+                        const closed = layout(data, focus, config, depth, mode.autoExpand);
+                        if (closed.positions.size !== base.positions.size) failures.push(`${sw}: closed, other cards`);
+                        for (const [id, p] of base.positions) {
+                            const b = closed.positions.get(id);
+                            if (!b || b.x !== p.x || b.y !== p.y) { failures.push(`${sw}: closed, ${id} moved`); break; }
                         }
                     }
                 }
