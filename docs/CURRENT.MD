@@ -133,6 +133,15 @@ the focus family. Before Phase A locks the row, `pullAncestorSiblingChildren`
 moves each such group of children, with everything drawn below them, toward
 the focus parents as one piece, as far as the nearest card in any of its rows
 allows (horizontalGap), never across the focus parents; nearer groups first.
+When the children's parent is a partner chain (in the expanded display a
+grandparent's sister between two husbands, each marriage with children), the
+lines come down under each union's own stem, which can stand cards out from
+the chain's inner edge (the second husband's line two and a half cards out).
+The children then stop where that chain, standing right beside the nearest
+card, would have its lines (`chainStemsCenter`: the middle of the stems of
+the unions with children drawn) over them, not further in; else a second
+husband's child stood beside the focus parents and his line 2.2 card widths
+off it.
 
 The parents' siblings beside the parent. Step 5 (`placeSiblingsAround`)
 stands the siblings of a focus parent beyond that parent's block, and the
@@ -522,7 +531,8 @@ placeSiblingRuns(hTree); placeSiblingRuns(wTree)
 //    sibling stands right beside the sibling before it, not a children row
 //    away. A sibling in the grandparents' row whose children stand in the
 //    parents' row (locked by Phase A) is pinned: it asks for the place over
-//    its children; the free siblings fill the room before it in their order
+//    its children (a partner chain by its lines, `chainStemsCenter`, not by
+//    its middle); the free siblings fill the room before it in their order
 //    while they fit, the rest go beyond. The parents centre over the siblings
 //    in their own row.
 //    A chain block is moved so that its block centre stands at the node's

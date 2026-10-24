@@ -1127,6 +1127,40 @@ function personCenterInBlocks(
 }
 
 /**
+ * Where a partner chain's lines to its drawn children come down, as one
+ * point: the middle between the outermost stems of the chain's unions that
+ * have children drawn (a union's stem as recomputePositions sets it: the
+ * primary couple's midpoint, else the extra partner's center). Undefined for
+ * a block that is not a chain or has no children drawn.
+ *
+ * A chain stands its children under each union's own stem, which can be
+ * several cards out from the chain's middle (a wife between two husbands,
+ * the children of the second marriage under the second husband).
+ */
+function chainStemsCenter(block: FamilyBlock, model: LayoutModel): number | undefined {
+    const chain = block.chainInfo;
+    if (!chain) return undefined;
+    const primaryUnionId = model.personToUnion.get(chain.chainPersonId);
+    const stems: number[] = [];
+    for (const unionId of chain.unionIds) {
+        if ((chain.unionChildBlockIds.get(unionId) ?? []).length === 0) continue;
+        const union = model.unions.get(unionId);
+        if (!union) continue;
+        let stem: number | undefined;
+        if (unionId === primaryUnionId) {
+            const a = chain.personPositions.get(union.partnerA);
+            const b = union.partnerB ? chain.personPositions.get(union.partnerB) : undefined;
+            stem = a !== undefined && b !== undefined ? (a + b) / 2 : a;
+        } else {
+            const extra = findChainExtraPartner(union, chain, model);
+            stem = extra ? chain.personPositions.get(extra) : undefined;
+        }
+        if (stem !== undefined) stems.push(stem);
+    }
+    return stems.length > 0 ? (Math.min(...stems) + Math.max(...stems)) / 2 : undefined;
+}
+
+/**
  * An ancestor's other partner in a partner chain stands next to the partner,
  * not across the room the chain kept for the couple's children.
  *
@@ -1365,8 +1399,9 @@ function placeSiblingRuns(
                 .map(b => getBlockCardExtent(b, model, config));
             if (kids.length === 0) continue;
             const own = getBlockCardExtent(block, model, config);
+            // A chain stands with its lines over the children, not its middle
             const delta = (Math.min(...kids.map(k => k.left)) + Math.max(...kids.map(k => k.right))) / 2
-                - (own.left + own.right) / 2;
+                - (chainStemsCenter(block, model) ?? (own.left + own.right) / 2);
             want.set(id, outward === 'RIGHT' ? block.xLeft + delta - cards.right : cards.left - (block.xRight + delta));
         }
         return want;
@@ -2539,12 +2574,12 @@ function pullAncestorSiblingChildren(
     // Child-block sets to pull: the children of a grandparent's sibling, and
     // (when a grandparent's children are shown) the children of the
     // grandparent's other marriages, i.e. the half-siblings of a parent
-    const sets: FamilyBlockId[][] = [];
+    const sets: Array<{ childIds: FamilyBlockId[]; parent?: FamilyBlock }> = [];
     for (const [, parent] of blocks) {
         if (parent.generation !== -2 || parent.childBlockIds.length === 0) continue;
         if (!onLine(parent)) {
             const grand = parent.parentBlockId ? blocks.get(parent.parentBlockId) : undefined;
-            if (grand && onLine(grand)) sets.push(parent.childBlockIds);
+            if (grand && onLine(grand)) sets.push({ childIds: parent.childBlockIds, parent });
             continue;
         }
         const chain = parent.chainInfo;
@@ -2553,12 +2588,12 @@ function pullAncestorSiblingChildren(
             const union = model.unions.get(unionId);
             if (!union || union.childIds.some(c => line.has(c))) continue;
             const childIds = chain.unionChildBlockIds.get(unionId) ?? [];
-            if (childIds.length > 0) sets.push(childIds);
+            if (childIds.length > 0) sets.push({ childIds });
         }
     }
 
-    const groups: Array<{ ids: Set<FamilyBlockId>; rows: Map<number, { left: number; right: number }>; toLeft: boolean; distance: number }> = [];
-    for (const childBlockIds of sets) {
+    const groups: Array<{ ids: Set<FamilyBlockId>; rows: Map<number, { left: number; right: number }>; toLeft: boolean; distance: number; lead: number }> = [];
+    for (const { childIds: childBlockIds, parent } of sets) {
         const ids = new Set<FamilyBlockId>();
         for (const childId of childBlockIds) for (const b of collectBlockSubtree(childId, blocks)) ids.add(b.id);
         const rows = new Map<number, { left: number; right: number }>();
@@ -2575,8 +2610,24 @@ function pullAncestorSiblingChildren(
         if (!below || rows.size === 0) continue;
         const left = Math.min(...[...rows.values()].map(r => r.left));
         const right = Math.max(...[...rows.values()].map(r => r.right));
-        if (left > anchorX) groups.push({ ids, rows, toLeft: true, distance: left - anchorX });
-        else if (right < anchorX) groups.push({ ids, rows, toLeft: false, distance: anchorX - right });
+        const toLeft = left > anchorX;
+        if (!toLeft && right >= anchorX) continue;
+        // A partner chain's lines come down over its children, often cards
+        // out from the chain's inner edge (a wife between two husbands, the
+        // children of the second marriage under the second husband): the
+        // children stop where the chain, standing right beside the nearest
+        // card, would have its lines over them, not further in. `lead`: how
+        // far that inner edge stands before the children's row.
+        let lead = 0;
+        const kidRow = rows.get(-1);
+        const stems = parent ? chainStemsCenter(parent, model) : undefined;
+        if (parent && kidRow && stems !== undefined) {
+            const cards = drawnCardExtent(parent, model, config);
+            const reach = toLeft ? stems - cards.left : cards.right - stems;
+            lead = Math.max(0, reach - (kidRow.right - kidRow.left) / 2);
+        }
+        if (toLeft) groups.push({ ids, rows, toLeft, distance: left - anchorX, lead });
+        else groups.push({ ids, rows, toLeft, distance: anchorX - right, lead });
     }
     groups.sort((a, b) => a.distance - b.distance);
 
@@ -2586,9 +2637,10 @@ function pullAncestorSiblingChildren(
             if (group.ids.has(other.id)) continue;
             const row = group.rows.get(other.generation);
             if (!row) continue;
+            const lead = other.generation === -1 ? group.lead : 0;
             const cards = getBlockCardExtent(other, model, config);
-            if (group.toLeft && cards.right <= row.left + 0.5) room = Math.min(room, row.left - cards.right - config.horizontalGap);
-            if (!group.toLeft && cards.left >= row.right - 0.5) room = Math.min(room, cards.left - row.right - config.horizontalGap);
+            if (group.toLeft && cards.right <= row.left + 0.5) room = Math.min(room, row.left - lead - cards.right - config.horizontalGap);
+            if (!group.toLeft && cards.left >= row.right - 0.5) room = Math.min(room, cards.left - row.right - lead - config.horizontalGap);
         }
         if (!isFinite(room) || room < 0.5) continue;
         const delta = group.toLeft ? -room : room;

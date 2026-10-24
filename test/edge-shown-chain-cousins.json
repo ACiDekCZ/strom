@@ -1,0 +1,425 @@
+{
+  "persons": {
+    "ggff": {
+      "id": "ggff",
+      "firstName": "Ambrus",
+      "lastName": "Quellmar",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_ggp"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "ggf"
+      ],
+      "birthDate": "1890-02-11"
+    },
+    "ggfm": {
+      "id": "ggfm",
+      "firstName": "Ottilie",
+      "lastName": "Quellmar",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_ggp"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "ggf"
+      ],
+      "birthDate": "1893-07-03"
+    },
+    "ggf": {
+      "id": "ggf",
+      "firstName": "Tharvel",
+      "lastName": "Quellmar",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_gg"
+      ],
+      "parentIds": [
+        "ggff",
+        "ggfm"
+      ],
+      "childIds": [
+        "gm",
+        "a1",
+        "a2",
+        "a3"
+      ],
+      "birthDate": "1922-04-18"
+    },
+    "ggm": {
+      "id": "ggm",
+      "firstName": "Wyndra",
+      "lastName": "Quellmar",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_gg"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "gm",
+        "a1",
+        "a2",
+        "a3"
+      ],
+      "birthDate": "1922-09-27"
+    },
+    "gm": {
+      "id": "gm",
+      "firstName": "Rosmunde",
+      "lastName": "Quellmar",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_g"
+      ],
+      "parentIds": [
+        "ggf",
+        "ggm"
+      ],
+      "childIds": [
+        "mother"
+      ],
+      "birthDate": "1943-01-14"
+    },
+    "gf": {
+      "id": "gf",
+      "firstName": "Leopold",
+      "lastName": "Brannick",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_g"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "mother"
+      ],
+      "birthDate": "1949-06-02"
+    },
+    "mother": {
+      "id": "mother",
+      "firstName": "Isolde",
+      "lastName": "Brannick",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p"
+      ],
+      "parentIds": [
+        "gf",
+        "gm"
+      ],
+      "childIds": [
+        "focus",
+        "sib"
+      ],
+      "birthDate": "1980-03-21"
+    },
+    "father": {
+      "id": "father",
+      "firstName": "Korvath",
+      "lastName": "Dorwell",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_p"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "focus",
+        "sib"
+      ],
+      "birthDate": "1977-11-08"
+    },
+    "focus": {
+      "id": "focus",
+      "firstName": "Mirella",
+      "lastName": "Dorwell",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "father",
+        "mother"
+      ],
+      "childIds": [],
+      "birthDate": "2005-05-16"
+    },
+    "sib": {
+      "id": "sib",
+      "firstName": "Fennick",
+      "lastName": "Dorwell",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "father",
+        "mother"
+      ],
+      "childIds": [],
+      "birthDate": "2008-08-30"
+    },
+    "a1": {
+      "id": "a1",
+      "firstName": "Cordula",
+      "lastName": "Quellmar",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "ggf",
+        "ggm"
+      ],
+      "childIds": [],
+      "birthDate": "1945-10-05"
+    },
+    "a2": {
+      "id": "a2",
+      "firstName": "Edeltraud",
+      "lastName": "Quellmar",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_a2h1",
+        "u_a2h2"
+      ],
+      "parentIds": [
+        "ggf",
+        "ggm"
+      ],
+      "childIds": [
+        "a2c1",
+        "a2c2"
+      ],
+      "birthDate": "1950-02-19"
+    },
+    "a2h1": {
+      "id": "a2h1",
+      "firstName": "Bertold",
+      "lastName": "Hasskamp",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_a2h1"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "a2c1"
+      ],
+      "birthDate": "1950-12-01"
+    },
+    "a2h2": {
+      "id": "a2h2",
+      "firstName": "Gottlob",
+      "lastName": "Wendrich",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_a2h2"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "a2c2"
+      ],
+      "birthDate": "1947-04-07"
+    },
+    "a2c1": {
+      "id": "a2c1",
+      "firstName": "Hiltrud",
+      "lastName": "Hasskamp",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "a2h1",
+        "a2"
+      ],
+      "childIds": [],
+      "birthDate": "1972-06-13"
+    },
+    "a2c2": {
+      "id": "a2c2",
+      "firstName": "Gesine",
+      "lastName": "Wendrich",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "a2h2",
+        "a2"
+      ],
+      "childIds": [],
+      "birthDate": "1981-01-25"
+    },
+    "a3": {
+      "id": "a3",
+      "firstName": "Waltraut",
+      "lastName": "Quellmar",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_a3h1",
+        "u_a3h2"
+      ],
+      "parentIds": [
+        "ggf",
+        "ggm"
+      ],
+      "childIds": [
+        "a3c1",
+        "a3c2"
+      ],
+      "birthDate": "1957-03-09"
+    },
+    "a3h1": {
+      "id": "a3h1",
+      "firstName": "Reinmar",
+      "lastName": "Tessendorf",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_a3h1"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "a3c1"
+      ],
+      "birthDate": "1956-08-22"
+    },
+    "a3h2": {
+      "id": "a3h2",
+      "firstName": "Eckbert",
+      "lastName": "Lindquell",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_a3h2"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "a3c2"
+      ],
+      "birthDate": "1952-05-30"
+    },
+    "a3c1": {
+      "id": "a3c1",
+      "firstName": "Almut",
+      "lastName": "Tessendorf",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "a3h1",
+        "a3"
+      ],
+      "childIds": [],
+      "birthDate": "1976-09-17"
+    },
+    "a3c2": {
+      "id": "a3c2",
+      "firstName": "Swanhild",
+      "lastName": "Lindquell",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "a3h2",
+        "a3"
+      ],
+      "childIds": [],
+      "birthDate": "1985-12-04"
+    }
+  },
+  "partnerships": {
+    "u_ggp": {
+      "id": "u_ggp",
+      "person1Id": "ggff",
+      "person2Id": "ggfm",
+      "childIds": [
+        "ggf"
+      ],
+      "status": "married",
+      "startDate": "1920"
+    },
+    "u_gg": {
+      "id": "u_gg",
+      "person1Id": "ggf",
+      "person2Id": "ggm",
+      "childIds": [
+        "gm",
+        "a1",
+        "a2",
+        "a3"
+      ],
+      "status": "married",
+      "startDate": "1942"
+    },
+    "u_g": {
+      "id": "u_g",
+      "person1Id": "gf",
+      "person2Id": "gm",
+      "childIds": [
+        "mother"
+      ],
+      "status": "married",
+      "startDate": "1978"
+    },
+    "u_p": {
+      "id": "u_p",
+      "person1Id": "father",
+      "person2Id": "mother",
+      "childIds": [
+        "focus",
+        "sib"
+      ],
+      "status": "married",
+      "startDate": "2003"
+    },
+    "u_a2h1": {
+      "id": "u_a2h1",
+      "person1Id": "a2h1",
+      "person2Id": "a2",
+      "childIds": [
+        "a2c1"
+      ],
+      "status": "married",
+      "startDate": "1971"
+    },
+    "u_a2h2": {
+      "id": "u_a2h2",
+      "person1Id": "a2h2",
+      "person2Id": "a2",
+      "childIds": [
+        "a2c2"
+      ],
+      "status": "married",
+      "startDate": "1980"
+    },
+    "u_a3h1": {
+      "id": "u_a3h1",
+      "person1Id": "a3h1",
+      "person2Id": "a3",
+      "childIds": [
+        "a3c1"
+      ],
+      "status": "married",
+      "startDate": "1975"
+    },
+    "u_a3h2": {
+      "id": "u_a3h2",
+      "person1Id": "a3h2",
+      "person2Id": "a3",
+      "childIds": [
+        "a3c2"
+      ],
+      "status": "married",
+      "startDate": "1984"
+    }
+  }
+}

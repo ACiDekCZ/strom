@@ -590,6 +590,39 @@ describe('Children shown in place: a great-uncle\'s children in the parents\' ro
     }
 });
 
+describe('Children shown in place: a great-aunt\'s two marriages in the parents\' row', () => {
+    // edge-shown-chain-cousins: the focus's great-grandparents show their
+    // children; the grandmother's sisters a2 and a3 each stand in the
+    // expanded display between two husbands (a chain: first husband, wife,
+    // second husband), each marriage with one child. A second click on a
+    // husband (or the wife) shows that marriage's child in the row of the
+    // focus's parents (gen -1, locked by Phase A). The child was pulled up to
+    // the focus's parents, but the second husband's line comes down two and a
+    // half cards out from the chain's inner edge: 2.2 card widths off the
+    // child. The child now stops where the chain, standing beside the
+    // grandmother, has its line over it, and the chain stands there by its
+    // lines, not by its middle.
+    const FIX = 'edge-shown-chain-cousins';
+    const P = (id: string) => id as PersonId;
+    const cfg = DEFAULT_LAYOUT_CONFIG;
+    const cw = cfg.cardWidth;
+    for (const focus of ['focus', 'sib']) for (const second of ['a2h1', 'a2h2', 'a2', 'a3h1', 'a3h2', 'a3']) {
+        it(`${second}'s line comes down over the child, the chain beside the grandmother, focus ${focus}`, () => {
+            const data = loadFixture(FIX);
+            normalizeSingleParents(data);
+            const r = plan(data, P(focus), cfg, 8, true, [P('ggf'), P(second)]).result;
+            const wife = second.slice(0, 2);
+            const kids = data.persons[P(wife)].childIds.filter(c => data.persons[c].parentIds.includes(P(second)));
+            for (const k of kids) expect(r.positions.has(k)).toBe(true);
+            expect(stemToSpan(data, r, P(second), cw)).toBeLessThanOrEqual(cfg.horizontalGap);
+            // The chain right beside the grandmother's card in her row
+            const gm = r.positions.get(P('gm'))!;
+            const chain = [`${wife}h1`, `${wife}h2`, wife].map(id => r.positions.get(P(id))!.x);
+            expect(Math.min(...chain) - (gm.x + cw)).toBeLessThanOrEqual(cfg.horizontalGap + 1);
+        });
+    }
+});
+
 describe('Children shown in place: selection and hiding again', () => {
     const data = loadFixture('comprehensive');
     const P = (id: string) => id as PersonId;
