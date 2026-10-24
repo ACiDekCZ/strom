@@ -42,7 +42,7 @@ import { auditBands, syntheticPersonHeights } from './helpers/bandAudit.js';
 import { PersonId, LayoutConfig, DEFAULT_LAYOUT_CONFIG, StromData } from '../../types.js';
 import type { LayoutResult } from '../pipeline/types.js';
 import { normalizeSingleParents } from '../../single-parent.js';
-import { hiddenChildIds } from '../../marriage-order.js';
+import { hiddenChildIds, marriagesInOrder } from '../../marriage-order.js';
 import { isDiagramStandIn } from '../pipeline/placeholders.js';
 
 const DEPTHS = [1, 2, 3, 4, 5, 6, 7];
@@ -214,6 +214,22 @@ describe('Parents shown in place beyond the depth: full pipeline invariants', ()
                             return mode.autoExpand ? own.filter(o => !s.positions.has(o)) : own.length > 0 && drawn.length === 0 ? [c] : [];
                         });
                         if (noPartner.length) failures.push(`${sw}: partners of the siblings not drawn ${noPartner.slice(0, 5).join(',')}`);
+                        // The standard mode brings one: the partner of the first marriage
+                        // (in the marriage order) whose children are in view, else of the
+                        // first marriage; a partner drawn before stays where it was
+                        if (!mode.autoExpand) for (const c of promised) {
+                            if (r.positions.has(c)) continue;
+                            const came = partnersOfSibling(c).filter(o => s.positions.has(o) && !r.positions.has(o) && !promised.includes(o));
+                            const unions = marriagesInOrder(data, c).filter(u => {
+                                const p = data.partnerships[u];
+                                const o = p.person1Id === c ? p.person2Id : p.person1Id;
+                                return o !== c && !r.positions.has(o) && !promised.includes(o);
+                            });
+                            const first = unions.find(u => data.partnerships[u].childIds.some(k => s.positions.has(k))) ?? unions[0];
+                            const p = first && data.partnerships[first];
+                            const expected = p ? [p.person1Id === c ? p.person2Id : p.person1Id] : [];
+                            if (came.join() !== expected.join()) failures.push(`${sw}: ${c} came with ${came.join(',') || 'nobody'}, not ${expected.join(',') || 'nobody'}`);
+                        }
                         const cousins = promised.flatMap(c => data.persons[c]?.childIds ?? [])
                             .filter(k => s.positions.has(k) && !r.positions.has(k) && !promised.includes(k) && !partners.has(k));
                         if (cousins.length) failures.push(`${sw}: the siblings' children came in ${cousins.slice(0, 5).join(',')}`);

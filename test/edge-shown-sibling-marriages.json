@@ -1,0 +1,207 @@
+{
+  "persons": {
+    "father": {
+      "id": "father",
+      "firstName": "Oskar",
+      "lastName": "Lind",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_parents"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "person",
+        "sib"
+      ],
+      "birthDate": "1938-03-02"
+    },
+    "mother": {
+      "id": "mother",
+      "firstName": "Ida",
+      "lastName": "Lind",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_parents"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "person",
+        "sib"
+      ],
+      "birthDate": "1940-07-19"
+    },
+    "person": {
+      "id": "person",
+      "firstName": "Nora",
+      "lastName": "Lind",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_nora"
+      ],
+      "parentIds": [
+        "father",
+        "mother"
+      ],
+      "childIds": [
+        "focus"
+      ],
+      "birthDate": "1963-05-11"
+    },
+    "sib": {
+      "id": "sib",
+      "firstName": "Teo",
+      "lastName": "Lind",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_sib_3",
+        "u_sib_2",
+        "u_sib_1"
+      ],
+      "parentIds": [
+        "father",
+        "mother"
+      ],
+      "childIds": [
+        "sib_c2"
+      ],
+      "birthDate": "1966-09-24"
+    },
+    "nora_h": {
+      "id": "nora_h",
+      "firstName": "Felix",
+      "lastName": "Quillon",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_nora"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "focus"
+      ],
+      "birthDate": "1961-01-30"
+    },
+    "focus": {
+      "id": "focus",
+      "firstName": "Elsa",
+      "lastName": "Quillon",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "person",
+        "nora_h"
+      ],
+      "childIds": [],
+      "birthDate": "1990-04-08"
+    },
+    "sib_w1": {
+      "id": "sib_w1",
+      "firstName": "Mira",
+      "lastName": "Holt",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_sib_1"
+      ],
+      "parentIds": [],
+      "childIds": [],
+      "birthDate": "1967-02-14"
+    },
+    "sib_w2": {
+      "id": "sib_w2",
+      "firstName": "Lena",
+      "lastName": "Fross",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_sib_2"
+      ],
+      "parentIds": [],
+      "childIds": [
+        "sib_c2"
+      ],
+      "birthDate": "1970-11-03"
+    },
+    "sib_c2": {
+      "id": "sib_c2",
+      "firstName": "Kai",
+      "lastName": "Lind",
+      "gender": "male",
+      "isPlaceholder": false,
+      "partnerships": [],
+      "parentIds": [
+        "sib",
+        "sib_w2"
+      ],
+      "childIds": [],
+      "birthDate": "1998-06-21"
+    },
+    "sib_w3": {
+      "id": "sib_w3",
+      "firstName": "Zoe",
+      "lastName": "Arden",
+      "gender": "female",
+      "isPlaceholder": false,
+      "partnerships": [
+        "u_sib_3"
+      ],
+      "parentIds": [],
+      "childIds": [],
+      "birthDate": "1972-08-17"
+    }
+  },
+  "partnerships": {
+    "u_parents": {
+      "id": "u_parents",
+      "person1Id": "father",
+      "person2Id": "mother",
+      "childIds": [
+        "person",
+        "sib"
+      ],
+      "status": "married",
+      "startDate": "1961"
+    },
+    "u_nora": {
+      "id": "u_nora",
+      "person1Id": "nora_h",
+      "person2Id": "person",
+      "childIds": [
+        "focus"
+      ],
+      "status": "married",
+      "startDate": "1988"
+    },
+    "u_sib_1": {
+      "id": "u_sib_1",
+      "person1Id": "sib",
+      "person2Id": "sib_w1",
+      "childIds": [],
+      "status": "divorced",
+      "startDate": "1990"
+    },
+    "u_sib_2": {
+      "id": "u_sib_2",
+      "person1Id": "sib",
+      "person2Id": "sib_w2",
+      "childIds": [
+        "sib_c2"
+      ],
+      "status": "married",
+      "startDate": "1996"
+    },
+    "u_sib_3": {
+      "id": "u_sib_3",
+      "person1Id": "sib",
+      "person2Id": "sib_w3",
+      "childIds": [],
+      "status": "married",
+      "startDate": "2010"
+    }
+  }
+}

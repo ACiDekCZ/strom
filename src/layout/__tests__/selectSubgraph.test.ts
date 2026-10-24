@@ -311,3 +311,66 @@ describe('children shown in place come with their partners', () => {
         for (const id of ids('focus', 'halfsibling_1', 'cousin_h_4')) expect(r.positions.has(id), id).toBe(false);
     });
 });
+
+describe('a child of several marriages shown in place: the standard mode brings one partner', () => {
+    // edge-shown-sibling-marriages (invented): the focus Elsa's mother Nora
+    // has a brother Teo out of view, married three times: Mira (1990, no
+    // children), Lena (1996, their son Kai) and Zoe (2010, no children),
+    // listed in the data as Zoe, Lena, Mira. "▸ siblings" on Nora shows the
+    // children of her parents in place; "▸ children" on Teo shows his son.
+    const ids = (...xs: string[]) => xs as PersonId[];
+    const TEO_PARTNERS = ids('sib_w1', 'sib_w2', 'sib_w3');
+    const shown = (expandChildrenOf: PersonId[], autoExpand: boolean) => planShownChildrenFolding({
+        data: loadFixture('edge-shown-sibling-marriages'), focusPersonId: 'focus' as PersonId, config: DEFAULT_LAYOUT_CONFIG,
+        ancestorDepth: 2, descendantDepth: 2,
+        includeSpouseAncestors: false, includeParentSiblings: false, includeParentSiblingDescendants: false,
+        displayPolicy: { mode: autoExpand ? 'expanded' : 'standard', autoExpand },
+        expandChildrenOf,
+    }).result;
+    const drawnPartners = (r: { positions: ReadonlyMap<PersonId, unknown> }) => TEO_PARTNERS.filter(id => r.positions.has(id));
+
+    it('no children in view: the partner of the first marriage in the marriage order (not the data order, not the union with children)', () => {
+        const r = shown(ids('father', 'mother'), false);
+        expect(r.positions.has('sib' as PersonId)).toBe(true);
+        expect(drawnPartners(r)).toEqual(ids('sib_w1'));
+        expect(r.positions.has('sib_c2' as PersonId)).toBe(false);
+    });
+
+    it('the children of the second marriage in view: the partner of that marriage, only', () => {
+        const r = shown(ids('father', 'mother', 'sib'), false);
+        expect(drawnPartners(r)).toEqual(ids('sib_w2'));
+        expect(r.positions.has('sib_c2' as PersonId)).toBe(true);
+    });
+
+    it('the selection carries only the partner drawn', () => {
+        const data = loadFixture('edge-shown-sibling-marriages');
+        for (const [personIds, partner] of [[ids('father', 'mother'), 'sib_w1'], [ids('father', 'mother', 'sib'), 'sib_w2']] as const) {
+            const selection = selectSubgraph({
+                data, focusPersonId: 'focus' as PersonId, ancestorDepth: 2, descendantDepth: 2,
+                includeSpouseAncestors: false, includeParentSiblings: false, includeParentSiblingDescendants: false
+            });
+            expandChildrenInSelection(data, selection, personIds, false);
+            expect(TEO_PARTNERS.filter(id => selection.persons.has(id)), personIds.join('+')).toEqual([partner]);
+        }
+    });
+
+    it('with every partner drawn: all three, in a chain', () => {
+        for (const personIds of [ids('father', 'mother'), ids('father', 'mother', 'sib')]) {
+            const r = shown(personIds, true);
+            expect(drawnPartners(r), personIds.join('+')).toEqual(TEO_PARTNERS);
+        }
+    });
+
+    it('comprehensive, the cousin\'s view: the uncle of two marriages with children comes with the first one\'s partner', () => {
+        // Father Focus married Mother, then Stepmother (no dates: the data order)
+        const r = planShownChildrenFolding({
+            data: loadFixture('comprehensive'), focusPersonId: 'cousin_h_1' as PersonId, config: DEFAULT_LAYOUT_CONFIG,
+            ancestorDepth: 1, descendantDepth: 1,
+            includeSpouseAncestors: false, includeParentSiblings: true, includeParentSiblingDescendants: true,
+            displayPolicy: { mode: 'standard', autoExpand: false },
+            extraDepthFor: ids('uncle_h_1'), expandChildrenOf: ids('gp_h_h', 'gp_h_w'),
+        }).result;
+        expect(r.positions.has('mother' as PersonId)).toBe(true);
+        expect(r.positions.has('stepmother' as PersonId)).toBe(false);
+    });
+});

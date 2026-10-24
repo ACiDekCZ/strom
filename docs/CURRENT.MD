@@ -55,9 +55,14 @@ Children shown in place (`PipelineInput.expandChildrenOf`, the card's
 adds, for every listed person already in the selection, each of their unions
 with children — the partner, the partnership and the children — and lifts the
 person's depth limit. A child the step brings comes with their partners, as
-the plain depth draws a relative: the partner of each of the child's unions
-joins with the partnership, unless the selection holds that partner already
-(drawn elsewhere: that union stays undrawn) or the partner is an empty "?"
+the plain depth draws a relative. With every partner drawn (`autoExpand`) the
+partner of each of the child's unions joins with the partnership; the standard
+display brings exactly one: the partner of the first union (in the marriage
+order, `marriagesInOrder`, as the marriage-order pill numbers them) whose
+children are in the selection after the step, else of the first union in that
+order. The other partners stay behind the card's own tabs ("▸ ∞" for a union
+without children, "▸ children" for one with). Never a partner the selection
+holds already (drawn elsewhere: that union stays undrawn) or an empty "?"
 stand-in (`isDiagramStandIn`, drawn only with a union's children). Never the
 children's children: the child's own "children" tab leads on. A child the
 selection held already keeps what it had.
@@ -67,8 +72,8 @@ appendage set), so each union is a chain slot and its children hang under
 their own couple, in the standard display too. With every partner drawn
 (`autoExpand`, the expanded display) a person the step brought with partners
 of several unions joins `expandedPersonIds` as well and stands in a chain with
-all of them; the standard display draws one of them, as it draws any relative
-(the others stay behind the card's partners tab). Phase B places the shown siblings
+all of them; the standard display brought only one (above), so the selection
+carries no partner the view does not draw. Phase B places the shown siblings
 of an ancestor (gen <= -2) beside that ancestor, in the run reserved for them
 in the compact tree (`attachSiblingRuns`/`placeSiblingRuns`, below), with the
 parents centred over all their children; before, they kept their step-5 place

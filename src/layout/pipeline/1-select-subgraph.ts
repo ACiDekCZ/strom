@@ -15,6 +15,7 @@
 import { PersonId, PartnershipId, Person, Partnership, StromData } from '../../types.js';
 import { SelectSubgraphInput, GraphSelection, DisplayPolicy } from './types.js';
 import { isDiagramStandIn } from './placeholders.js';
+import { marriagesInOrder } from '../../marriage-order.js';
 
 /**
  * Select visible subgraph based on focus person and policy.
@@ -567,9 +568,14 @@ function leaveOutOtherChildrenOf(
  * tab): for every union of a person already in the selection, the partner,
  * the partnership and the union's children (childIdsShownInPlace) join it.
  * A child the step brings comes with their partners, as the plain depth
- * draws a relative: the partner of each of the child's unions joins with the
- * partnership, unless the selection holds that partner already (drawn
- * elsewhere: the union stays undrawn, as before) or the partner is an empty
+ * draws a relative: with every partner drawn (`allPartners`, the expanded
+ * mode) the partner of each of the child's unions joins with the
+ * partnership; the standard mode draws one partner, so only one joins: the
+ * partner of the union whose children stand in the view (after this step),
+ * else the first union in the marriage order (marriagesInOrder, as the
+ * marriage-order pill numbers them); the other partners stay behind the
+ * card's own tabs ("▸ ∞", "▸ children"). Never a partner the selection holds
+ * already (drawn elsewhere: the union stays undrawn, as before) or an empty
  * "?" stand-in (drawn only with the union's children). Never the children's
  * children (the child's own tab leads on). A child the selection held
  * already keeps what it had. Persons not in the selection are skipped.
@@ -577,7 +583,8 @@ function leaveOutOtherChildrenOf(
 export function expandChildrenInSelection(
     data: StromData,
     selection: GraphSelection,
-    personIds: readonly PersonId[]
+    personIds: readonly PersonId[],
+    allPartners = true
 ): void {
     const before = new Set(selection.persons);
     const brought: PersonId[] = [];
@@ -599,16 +606,39 @@ export function expandChildrenInSelection(
         selection.depthLimitPersons?.delete(personId);
     }
     for (const childId of brought) {
+        const unions: Array<{ partnershipId: PartnershipId; partnerId: PersonId }> = [];
         for (const partnershipId of data.persons[childId]?.partnerships ?? []) {
             const partnership = data.partnerships[partnershipId];
             if (!partnership) continue;
             const partnerId = partnership.person1Id === childId ? partnership.person2Id : partnership.person1Id;
             // An empty "?" stand-in stands only for the union's children (isDiagramStandIn)
             if (partnerId === childId || !data.persons[partnerId] || before.has(partnerId) || isDiagramStandIn(data, partnerId)) continue;
+            unions.push({ partnershipId, partnerId });
+        }
+        for (const { partnershipId, partnerId } of allPartners ? unions : onePartnerUnion(data, selection, childId, unions)) {
             selection.persons.add(partnerId);
             selection.partnerships.add(partnershipId);
         }
     }
+}
+
+/**
+ * The one union of a child shown in place whose partner the standard mode
+ * brings (expandChildrenInSelection): the first in the marriage order whose
+ * children stand in the view, else the first in the marriage order.
+ */
+function onePartnerUnion<T extends { partnershipId: PartnershipId }>(
+    data: StromData,
+    selection: GraphSelection,
+    childId: PersonId,
+    unions: readonly T[]
+): T[] {
+    if (unions.length <= 1) return [...unions];
+    const order = marriagesInOrder(data, childId);
+    const ranked = [...unions].sort((a, b) => order.indexOf(a.partnershipId) - order.indexOf(b.partnershipId));
+    const withChildrenInView = ranked.find(u =>
+        (data.partnerships[u.partnershipId]?.childIds ?? []).some(id => selection.persons.has(id)));
+    return [withChildrenInView ?? ranked[0]];
 }
 
 /**
