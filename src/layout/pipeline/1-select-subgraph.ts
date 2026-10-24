@@ -582,22 +582,43 @@ function leaveOutOtherChildrenOf(
  * shown child's partner, a child listed before its parent: nested clicks)
  * is reached in a further pass; persons the selection never holds are
  * skipped.
+ *
+ * `unions` (PipelineInput.showPartnerUnions, the "▸ ∞" of a child shown in
+ * place): each union with children of a person in the selection (the
+ * children brought in the same pass included) whose other partner is not in
+ * it comes the same way, the partner, the partnership and the union's
+ * children, after the persons' own unions and before the children's
+ * partners, so the one partner of such a child is the one of that marriage
+ * (onePartnerUnion). Returns the persons those unions belong to.
  */
 export function expandChildrenInSelection(
     data: StromData,
     selection: GraphSelection,
     personIds: readonly PersonId[],
-    allPartners = true
-): void {
+    allPartners = true,
+    unions: readonly PartnershipId[] = []
+): PersonId[] {
     const before = new Set(selection.persons);
     const done = new Set<PersonId>();
     const partnered = new Set<PersonId>();
+    const unionsDone = new Set<PartnershipId>();
+    const owners: PersonId[] = [];
+    const unionReady = (partnershipId: PartnershipId): boolean => {
+        const partnership = data.partnerships[partnershipId];
+        return !unionsDone.has(partnershipId) && !!partnership && partnership.childIds.length > 0
+            && partnerShownFor(data, selection, partnership) !== null;
+    };
     // A person of the list the step itself brings into the selection (a
     // shown child's partner, whose own "▸ children" is a nested click, or a
     // child of a person later in the list) is reached in a further pass
     for (let grew = true; grew;) {
         grew = false;
         const brought: PersonId[] = [];
+        const bring = (childId: PersonId): void => {
+            if (!data.persons[childId]) return;
+            if (!before.has(childId) && !partnered.has(childId) && !brought.includes(childId)) brought.push(childId);
+            selection.persons.add(childId);
+        };
         for (let reached = true; reached;) {
             reached = false;
             for (const personId of personIds) {
@@ -612,19 +633,33 @@ export function expandChildrenInSelection(
                     selection.persons.add(partnership.person2Id);
                     selection.partnerships.add(partnershipId);
                 }
-                for (const childId of childIdsShownInPlace(data, personId)) {
-                    if (!before.has(childId) && !partnered.has(childId) && !brought.includes(childId)) brought.push(childId);
-                    selection.persons.add(childId);
-                }
+                for (const childId of childIdsShownInPlace(data, personId)) bring(childId);
                 // The person's children now stand in the view: no longer the deepest generation
                 selection.depthLimitPersons?.delete(personId);
+            }
+            // The marriages with children "▸ ∞" listed, of a person now in
+            // the view: before the children's partners are chosen
+            for (const partnershipId of unions) {
+                if (!unionReady(partnershipId)) continue;
+                const partnership = data.partnerships[partnershipId]!;
+                const ownerId = partnerShownFor(data, selection, partnership)!;
+                unionsDone.add(partnershipId);
+                reached = true;
+                selection.persons.add(partnership.person1Id);
+                selection.persons.add(partnership.person2Id);
+                selection.partnerships.add(partnershipId);
+                for (const childId of partnership.childIds) bring(childId);
+                selection.depthLimitPersons?.delete(ownerId);
+                if (!owners.includes(ownerId)) owners.push(ownerId);
             }
         }
         for (const childId of brought) partnered.add(childId);
         const size = selection.persons.size;
         bringPartnersOfShownChildren(data, selection, brought, before, allPartners);
-        grew = selection.persons.size > size && personIds.some(id => !done.has(id) && selection.persons.has(id));
+        grew = selection.persons.size > size
+            && (personIds.some(id => !done.has(id) && selection.persons.has(id)) || unions.some(unionReady));
     }
+    return owners;
 }
 
 /**
@@ -655,6 +690,56 @@ function bringPartnersOfShownChildren(
             selection.partnerships.add(partnershipId);
         }
     }
+}
+
+/**
+ * The person a union listed in PipelineInput.showPartnerUnions belongs to:
+ * the one of its two persons in the selection while the other (the partner
+ * the "▸ ∞" brings) is not; null otherwise (both drawn: the union is drawn
+ * or the partner stands elsewhere; neither: nothing to show it beside).
+ */
+function partnerShownFor(data: StromData, selection: GraphSelection, partnership: Partnership): PersonId | null {
+    const a = partnership.person1Id, b = partnership.person2Id;
+    if (a === b || !data.persons[a] || !data.persons[b]) return null;
+    const hasA = selection.persons.has(a), hasB = selection.persons.has(b);
+    if (hasA === hasB) return null;
+    return hasA ? a : b;
+}
+
+/**
+ * The marriages without children of PipelineInput.showPartnerUnions (the
+ * ones with children came with the children shown,
+ * expandChildrenInSelection): the partner joins the selection with the
+ * partnership, as showPartnersInSelection brings one. Returns the persons
+ * that now stand in more than one union of the selection (a partner chain).
+ */
+export function showPartnerUnionsInSelection(
+    data: StromData,
+    selection: GraphSelection,
+    unions: readonly PartnershipId[]
+): PersonId[] {
+    const owners: PersonId[] = [];
+    for (const partnershipId of unions) {
+        const partnership = data.partnerships[partnershipId];
+        if (!partnership) continue;
+        if (partnership.childIds.length > 0) {
+            // Brought with its children: its person may stand in a chain now
+            for (const id of [partnership.person1Id, partnership.person2Id]) {
+                if (selection.partnerships.has(partnershipId) && selection.persons.has(id) && !owners.includes(id)) owners.push(id);
+            }
+            continue;
+        }
+        const ownerId = partnerShownFor(data, selection, partnership);
+        if (!ownerId) continue;
+        selection.persons.add(partnership.person1Id);
+        selection.persons.add(partnership.person2Id);
+        selection.partnerships.add(partnershipId);
+        if (!owners.includes(ownerId)) owners.push(ownerId);
+    }
+    return owners.filter(id => (data.persons[id]?.partnerships ?? []).filter(pid => {
+        const u = data.partnerships[pid];
+        return !!u && selection.partnerships.has(pid) && selection.persons.has(u.person1Id) && selection.persons.has(u.person2Id);
+    }).length > 1);
 }
 
 /**

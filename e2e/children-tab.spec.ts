@@ -1052,7 +1052,7 @@ test.describe('zoom out for many children (§5)', () => {
     });
 });
 
-test('the standard display: a sibling of three marriages shown in place comes with one partner, hatched; "▸ ∞" on the card offers a further one', async ({ page }) => {
+test('the standard display: a sibling of three marriages shown in place comes with one partner, hatched; "▸ ∞" on the card offers every other marriage', async ({ page }) => {
     // edge-shown-sibling-marriages (invented): the focus Elsa's mother Nora
     // has a brother Teo out of view, married to Mira (1990, no children),
     // Lena (1996, their son Kai) and Zoe (2010, no children). At ancestor
@@ -1073,14 +1073,29 @@ test('the standard display: a sibling of three marriages shown in place comes wi
         await expect(cardOf(page, id), id).toHaveClass(/shown-here/);
     }
     for (const id of ['sib_w2', 'sib_w3', 'sib_c2']) await expect(cardOf(page, id), id).toHaveCount(0);
-    // The shown card carries "▸ ∞" (the childless marriage out of view) and "▸ children" (the son with his mother)
+    // The shown card carries "▸ ∞" and "▸ children" (the son with his mother)
     const pill = cardOf(page, 'sib').locator('.edge-bottom-left .hidden-partners-btn');
     await expect(pill).toHaveCount(1);
     await expect(tabOf(page, 'sib')).toHaveCount(1);
+    // Round 5 §36: "▸ ∞" offers every marriage out of view, the one with children with its count
+    await expect(pill).toHaveText(/▸\s*∞\s*2/);
+    await expect(pill.locator('.badge-tooltip-name')).toHaveText(['Lena Fross · 1 child', 'Zoe Arden']);
     await pill.click();
     await page.mouse.move(5, 500);
-    await expect(cardOf(page, 'sib_w3')).toBeVisible();
-    await expect(cardOf(page, 'sib_w3')).toHaveClass(/shown-here/);
+    // Lena comes with Kai (as "▸ children" brings that marriage) and takes Mira's place; Zoe beside
+    for (const id of ['sib_w2', 'sib_c2', 'sib_w3']) {
+        await expect(cardOf(page, id), id).toBeVisible();
+        await expect(cardOf(page, id), id).toHaveClass(/shown-here/);
+    }
+    await expect(cardOf(page, 'sib_w1')).toHaveCount(0);
+    await expect(pill).toHaveText(/▾\s*∞\s*2/);
+    // A second click gives the view back: Mira again, the others gone
+    await pill.click();
+    await page.mouse.move(5, 500);
     await expect(cardOf(page, 'sib_w1')).toBeVisible();
-    await expect(cardOf(page, 'sib_w2')).toHaveCount(0);
+    for (const id of ['sib_w2', 'sib_c2', 'sib_w3']) await expect(cardOf(page, id), id).toHaveCount(0);
+    // ↩ brings the marriages again, as the step showed them (Lena with Kai, Mira out)
+    await page.evaluate(() => window.Strom.TreeRenderer.goBack());
+    for (const id of ['sib_w2', 'sib_c2', 'sib_w3']) await expect(cardOf(page, id), id).toBeVisible();
+    await expect(cardOf(page, 'sib_w1')).toHaveCount(0);
 });

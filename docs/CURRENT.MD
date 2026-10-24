@@ -233,6 +233,39 @@ person's children shown as well; nested steps and closing.
 (`test/edge-childless-partners.json` has a childless partner at an
 ancestor, the focus line, a descendant, a cousin and persons married in.)
 
+Every marriage of a child shown in place (`PipelineInput.showPartnerUnions`,
+the "▸ ∞" of such a child in the standard mode). A child that children shown
+in place brought stands with one partner there (`onePartnerUnion`: the first
+union in marriage order with children in view, else the first one), so its
+"▸ ∞" offers every marriage whose partner is out of view
+(`offeredPartners(data, P, inView, true)`, in marriage order, each with its
+child count); the renderer then lists those unions instead of the person in
+`showPartnersOf`. A listed union with children whose one person is in the
+selection and the other is not comes in `expandChildrenInSelection` (run by
+`withChildrenShown`) as the children tab brings it: the partner, the
+partnership and the union's children, which join the brought children. It is
+taken in the same pass of the step's loop as the listed persons, as soon as
+its person is in the selection (a child brought in that pass included), and
+before `bringPartnersOfShownChildren` gives the brought children their one
+partner, so the child now
+stands with the partner of that marriage and the partner it stood with
+leaves the view (the partners are exchanged, as "▸ children" on that child
+would do). A listed union without children comes in
+`showPartnerUnionsInSelection` (run by `withPartnersShown`): the partner and
+the partnership, as `showPartnersInSelection` brings one. A person who then
+stands in more than one selected union becomes a chain person as above
+(`expandedPersonIds` via `withChildrenShown`, `appendagePersonIds` via
+`withPartnersShown`). A union whose two persons are both selected, or neither,
+is skipped. Without `showPartnerUnions` the selection and the layout are
+exactly the previous ones. `partnersShownFull.test.ts` checks, for every
+fixture, every focus, depths 2 and 3, cards of one height and of their own
+heights, every child brought by a drawn person's children shown with a
+marriage with children among its offers: the strict harness checks, every
+offered partner in the child's row, the children of those marriages drawn,
+and nobody lost but the partner the child stood with.
+(`test/edge-shown-sibling-marriages.json`: a sibling of the focus's mother
+with a childless first marriage, a second with a son and a childless third.)
+
 Folded ancestors (`PipelineInput.foldAncestorsOf`, applied only together with
 `expandChildrenOf`): after `withChildrenShown`, `foldAncestorsInSelection`
 cuts the child→parent links of the listed persons and removes from the

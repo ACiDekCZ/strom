@@ -649,6 +649,19 @@ export interface PipelineInput {
      * skipped.
      */
     showPartnersOf?: readonly PersonId[];
+    /**
+     * The marriages a "▸ ∞" shows in place on a child shown in place in the
+     * standard display (round 5 §36), listed instead of the person in
+     * showPartnersOf: for each union, of a person in the selection, whose
+     * other partner is not in it, the partner joins with the partnership and,
+     * for a union with children, its children (as the person's children tab
+     * brings that union, expandChildrenInSelection), before the children
+     * shown come with their one partner, so a child shown in place stands
+     * with the partner of a marriage with children in view rather than the
+     * partner of the first marriage (the partners are exchanged). A person
+     * who then stands in more than one union is a partner chain.
+     */
+    showPartnerUnions?: readonly PartnershipId[];
 }
 
 // ==================== ANCESTOR CLUSTER ====================
@@ -722,4 +735,6 @@ export interface LayoutRequest {
     extraDepthFor?: readonly PersonId[];
     /** See PipelineInput.showPartnersOf. */
     showPartnersOf?: readonly PersonId[];
+    /** See PipelineInput.showPartnerUnions. */
+    showPartnerUnions?: readonly PartnershipId[];
 }

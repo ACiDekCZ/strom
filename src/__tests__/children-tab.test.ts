@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { hiddenRelativesTabs, hiddenChildIds, newlyShownChildIds, childrenDrawnElsewhere, siblingOrderMark, childrenShownClosing, siblingsTabState, newlyShownSiblingIds, siblingGroups, unionChildIdSet, hiddenPartnerIds, childrenByUnion, childrenComeWithPartners, otherFamilyChildrenElsewhere, HiddenRelativesTab } from '../marriage-order.js';
+import { hiddenRelativesTabs, hiddenChildIds, newlyShownChildIds, childrenDrawnElsewhere, siblingOrderMark, childrenShownClosing, siblingsTabState, newlyShownSiblingIds, siblingGroups, unionChildIdSet, hiddenPartnerIds, offeredPartners, childrenByUnion, childrenComeWithPartners, otherFamilyChildrenElsewhere, HiddenRelativesTab } from '../marriage-order.js';
 import { tabsForm, tabGlyph, tabLabel, tabKindClass, branchTabRestHtml, bubbleOpensBelow, bubblePlacement, besideTop, bubbleBox, touchBubbleBox, touchBubbleBounds, touchBubbleSide, BUBBLE_WINDOW_MARGIN, BUBBLE_LOW_WINDOW_NAMES, bubbleNameCounts, bubbleNamesToFit, BUBBLE_MAX_NAMES } from '../union-order-measure.js';
 import { branchTabKind, branchTabsInOrder } from '../marriage-order.js';
 import { childIdsShownInPlace } from '../layout/pipeline/1-select-subgraph.js';
@@ -467,6 +467,19 @@ describe('other families and partners (§5)', () => {
         expect(hiddenPartnerIds(d, P('karl'), view('karl', 'cilka'))).toEqual([P('q')]);
         // a partner with children is not counted (the children tab brings them)
         expect(hiddenPartnerIds(d, P('karl'), view('karl'))).not.toContain(P('anna'));
+    });
+
+    it('"▸ ∞" on a child shown in place in the standard display offers every marriage out of view, with its children counted (round 5 §36)', () => {
+        const offer = (inView: (id: PersonId) => boolean, every: boolean) =>
+            offeredPartners(d, P('karl'), inView, every).map(o => [o.partnerId, o.partnershipId, o.childCount]);
+        // in the order of the marriages; the partner the card stands with is not offered
+        expect(offer(view('karl', 'anna'), true)).toEqual([[P('berta'), 'u_berta', 2], [P('cilka'), 'u_cilka', 0], [P('q'), 'u_q', 0]]);
+        expect(offer(view('karl', 'cilka'), true)).toEqual([[P('anna'), 'u_anna', 1], [P('berta'), 'u_berta', 2], [P('q'), 'u_q', 0]]);
+        // elsewhere: only the marriages without children, as hiddenPartnerIds
+        for (const inView of [view('karl'), view('karl', 'cilka'), view('karl', 'anna')]) {
+            expect(offeredPartners(d, P('karl'), inView, false).map(o => o.partnerId)).toEqual(hiddenPartnerIds(d, P('karl'), inView));
+        }
+        expect(offeredPartners(d, P('karl'), view('karl'), false).every(o => o.childCount === 0)).toBe(true);
     });
 
     it('the children by marriage, in the order of the marriages, numbered as the pill numbers them', () => {

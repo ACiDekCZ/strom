@@ -13,7 +13,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { loadFixture } from './helpers/loadFixture.js';
 import { selectSubgraph, extendAncestorDepth, expandChildrenInSelection } from '../pipeline/1-select-subgraph.js';
 import { planShownChildrenFolding } from '../pipeline/index.js';
-import { PersonId, StromData, DEFAULT_LAYOUT_CONFIG } from '../../types.js';
+import { PersonId, PartnershipId, StromData, DEFAULT_LAYOUT_CONFIG } from '../../types.js';
 import { GraphSelection } from '../pipeline/types.js';
 
 describe('selectSubgraph', () => {
@@ -372,5 +372,54 @@ describe('a child of several marriages shown in place: the standard mode brings 
         }).result;
         expect(r.positions.has('mother' as PersonId)).toBe(true);
         expect(r.positions.has('stepmother' as PersonId)).toBe(false);
+    });
+});
+
+describe('"▸ ∞" on a child shown in place in the standard mode: every marriage (round 5 §36)', () => {
+    // edge-shown-sibling-marriages (invented): Teo, shown in place by his
+    // parents' children, stands with Mira (the first marriage, no children);
+    // his "▸ ∞" shows the other marriages: Lena with their son Kai and Zoe.
+    const ids = (...xs: string[]) => xs as PersonId[];
+    const unions = (...xs: string[]) => xs as PartnershipId[];
+    const shown = (showPartnerUnions: PartnershipId[], extra: { expandChildrenOf?: PersonId[] } = {}) => planShownChildrenFolding({
+        data: loadFixture('edge-shown-sibling-marriages'), focusPersonId: 'focus' as PersonId, config: DEFAULT_LAYOUT_CONFIG,
+        ancestorDepth: 2, descendantDepth: 2,
+        includeSpouseAncestors: false, includeParentSiblings: false, includeParentSiblingDescendants: false,
+        displayPolicy: { mode: 'standard', autoExpand: false },
+        expandChildrenOf: ids('father', 'mother'), ...extra,
+        ...(showPartnerUnions.length ? { showPartnerUnions } : {}),
+    }).result;
+    const drawn = (r: { positions: ReadonlyMap<PersonId, unknown> }, ...xs: string[]) => xs.filter(id => r.positions.has(id as PersonId));
+
+    it('the marriage with children: Lena comes with Kai and Mira goes (the partners exchanged), as by "▸ children"', () => {
+        const r = shown(unions('u_sib_2'));
+        expect(drawn(r, 'sib', 'sib_w1', 'sib_w2', 'sib_w3', 'sib_c2')).toEqual(['sib', 'sib_w2', 'sib_c2']);
+        const children = shown([], { expandChildrenOf: ids('father', 'mother', 'sib') });
+        for (const id of ids('sib', 'sib_w2', 'sib_c2')) expect(r.positions.get(id), id).toEqual(children.positions.get(id));
+    });
+
+    it('every marriage offered: Lena with Kai and Zoe beside in Teo\'s row; Mira goes', () => {
+        const r = shown(unions('u_sib_2', 'u_sib_3'));
+        expect(drawn(r, 'sib', 'sib_w1', 'sib_w2', 'sib_w3', 'sib_c2')).toEqual(['sib', 'sib_w2', 'sib_w3', 'sib_c2']);
+        const y = (id: string) => r.positions.get(id as PersonId)!.y;
+        expect(y('sib_w2')).toBe(y('sib'));
+        expect(y('sib_w3')).toBe(y('sib'));
+        expect(r.diagnostics.validationPassed).toBe(true);
+    });
+
+    it('a marriage without children: Zoe comes beside, Mira stays', () => {
+        const r = shown(unions('u_sib_3'));
+        expect(drawn(r, 'sib', 'sib_w1', 'sib_w2', 'sib_w3', 'sib_c2')).toEqual(['sib', 'sib_w1', 'sib_w3']);
+    });
+
+    it('closing gives the view before back, position for position', () => {
+        const before = shown([]);
+        shown(unions('u_sib_2', 'u_sib_3'));
+        expect([...shown([]).positions]).toEqual([...before.positions]);
+    });
+
+    it('a union whose persons are both drawn changes nothing', () => {
+        const before = shown([]);
+        expect([...shown(unions('u_parents', 'u_nora')).positions]).toEqual([...before.positions]);
     });
 });

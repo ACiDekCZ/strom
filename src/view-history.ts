@@ -8,7 +8,7 @@
  * renderer takes the snapshots and applies them.
  */
 
-import type { PersonId } from './types.js';
+import type { PersonId, PartnershipId } from './types.js';
 
 /** At most this many steps back (the oldest drop out). */
 export const VIEW_HISTORY_LIMIT = 50;
@@ -51,6 +51,12 @@ export interface ShownChildrenSnapshot {
      * `broughtIn` the cards that step brought.
      */
     readonly partners?: true;
+    /**
+     * On a `partners` snapshot whose "▸ ∞" offered a marriage with children
+     * (a child shown in place in the standard display, round 5 §36): the
+     * unions it showed (showPartnerUnions) instead of showPartnersOf.
+     */
+    readonly partnerUnions?: readonly PartnershipId[];
 }
 
 /** A shown snapshot's key: children, parents and partners of one person are three steps. */

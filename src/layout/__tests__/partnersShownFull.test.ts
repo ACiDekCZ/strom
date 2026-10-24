@@ -25,10 +25,10 @@ import { runLayoutPipeline, planShownChildrenFolding, partnerIdsShownInPlace } f
 import { assertNoNodeOverlap, assertValidPositions } from './helpers/assertions.js';
 import { auditGeometry } from './helpers/geometryAudit.js';
 import { auditBands, syntheticPersonHeights } from './helpers/bandAudit.js';
-import { PersonId, LayoutConfig, DEFAULT_LAYOUT_CONFIG, StromData } from '../../types.js';
+import { PersonId, PartnershipId, LayoutConfig, DEFAULT_LAYOUT_CONFIG, StromData } from '../../types.js';
 import type { LayoutResult } from '../pipeline/types.js';
 import { normalizeSingleParents } from '../../single-parent.js';
-import { hiddenChildIds } from '../../marriage-order.js';
+import { hiddenChildIds, offeredPartners } from '../../marriage-order.js';
 
 const DEPTHS = [1, 2, 3, 5];
 
@@ -46,12 +46,13 @@ const FIXTURES = readdirSync(join(process.cwd(), 'test'))
     .sort();
 
 function layout(data: StromData, focus: PersonId, config: LayoutConfig, depth: number, autoExpand: boolean,
-    showPartnersOf: PersonId[] = [], shown: PersonId[] = []): LayoutResult {
+    showPartnersOf: PersonId[] = [], shown: PersonId[] = [], showPartnerUnions: PartnershipId[] = []): LayoutResult {
     const input = {
         data, focusPersonId: focus, config, ancestorDepth: depth, descendantDepth: depth,
         includeSpouseAncestors: false, includeParentSiblings: true, includeParentSiblingDescendants: true,
         displayPolicy: { mode: autoExpand ? 'expanded' as const : 'standard' as const, autoExpand },
         ...(showPartnersOf.length ? { showPartnersOf } : {}),
+        ...(showPartnerUnions.length ? { showPartnerUnions } : {}),
         ...(shown.length ? { expandChildrenOf: shown } : {}),
     };
     // As the renderer: children shown go through the folding planner
@@ -215,5 +216,60 @@ describe('Other partners shown in place: nested and closed', () => {
             }
             expect(failures.slice(0, 20), `${fixture}, ${failures.length} failures`).toEqual([]);
         }, 600_000);
+    }
+});
+
+describe('Every marriage of a child shown in place in the standard mode (showPartnerUnions, round 5 §36)', () => {
+    // A child a children step brought stands with one partner; its "▸ ∞"
+    // offers every marriage out of view (offeredPartners). For every child
+    // so brought with a marriage with children among them: the strict checks
+    // hold, every offered partner stands in the child's row, the children of
+    // those marriages are drawn, and only the partner the child stood with
+    // may leave (it gives its place to the marriage with children).
+    for (const fixture of FIXTURES) {
+        for (const heights of [false, true]) {
+            it(`${fixture}${heights ? ' [v3]' : ''}`, () => {
+                const data = loadFixture(fixture);
+                normalizeSingleParents(data);
+                const before = JSON.stringify(data);
+                const ids = (Object.keys(data.persons) as PersonId[]).filter(id => !data.persons[id].isPlaceholder);
+                const config: LayoutConfig = heights
+                    ? { ...DEFAULT_LAYOUT_CONFIG, spouseLineY: 25, personHeights: syntheticPersonHeights(ids) }
+                    : DEFAULT_LAYOUT_CONFIG;
+                const failures: string[] = [];
+                let checked = 0;
+                for (const depth of [2, 3]) for (const focus of ids) {
+                    const base = layout(data, focus, config, depth, false);
+                    for (const pid of base.positions.keys()) {
+                        if (hiddenChildIds(data, pid, id => base.positions.has(id)).length === 0) continue;
+                        const shown = layout(data, focus, config, depth, false, [], [pid]);
+                        for (const child of shown.positions.keys()) {
+                            if (base.positions.has(child) || !(data.persons[pid]?.childIds ?? []).includes(child)) continue;
+                            const offers = offeredPartners(data, child, id => shown.positions.has(id), true);
+                            if (!offers.some(o => o.childCount > 0)) continue;
+                            checked++;
+                            const where = `${focus} d${depth} children of ${pid}, every marriage of ${child}`;
+                            const r = layout(data, focus, config, depth, false, [], [pid], offers.map(o => o.partnershipId));
+                            strict(r, config, heights, where, failures);
+                            if (!r.positions.has(child)) { failures.push(`${where}: the child left the view`); continue; }
+                            const g = genOf(r, child);
+                            for (const o of offers) {
+                                if (!r.positions.has(o.partnerId)) failures.push(`${where}: partner ${o.partnerId} not drawn`);
+                                else if (genOf(r, o.partnerId) !== g) failures.push(`${where}: partner ${o.partnerId} not in the child's row`);
+                                const kids = data.partnerships[o.partnershipId].childIds.filter(k => !data.persons[k]?.isPlaceholder);
+                                const missing = kids.filter(k => !r.positions.has(k));
+                                if (missing.length) failures.push(`${where}: children of ${o.partnershipId} not drawn ${missing.join(',')}`);
+                            }
+                            const stoodWith = new Set(drawnPartners(data, child, shown));
+                            const lost = [...shown.positions.keys()].filter(id => !r.positions.has(id) && !stoodWith.has(id));
+                            if (lost.length) failures.push(`${where}: left the view ${lost.slice(0, 5).join(',')}`);
+                        }
+                    }
+                }
+                expect(failures.slice(0, 20), `${fixture}, ${failures.length} failures of ${checked}`).toEqual([]);
+                if (process.env.PARTNERS_SHOWN_COUNTS) console.log(`${fixture} every marriage ${checked}`);
+                expect(JSON.stringify(data)).toBe(before);
+            }, 600_000);
+        }
     }
 });

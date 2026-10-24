@@ -19,7 +19,7 @@ export * from './types.js';
 export * from './debug-types.js';
 
 // Re-export individual steps
-export { selectSubgraph, expandSelectionForDisplay, expandChildrenInSelection, foldAncestorsInSelection, extendAncestorDepth, partnerIdsShownInPlace, showPartnersInSelection } from './1-select-subgraph.js';
+export { selectSubgraph, expandSelectionForDisplay, expandChildrenInSelection, foldAncestorsInSelection, extendAncestorDepth, partnerIdsShownInPlace, showPartnersInSelection, showPartnerUnionsInSelection } from './1-select-subgraph.js';
 export { buildLayoutModel, getChildUnions } from './2-build-model.js';
 export { assignGenerations, validateGenerations } from './3-assign-generations.js';
 export { measureSubtrees, getTotalWidth } from './4-measure.js';
@@ -52,7 +52,7 @@ import {
     DEBUG_STEP_NAMES
 } from './debug-types.js';
 
-import { selectSubgraph, expandSelectionForDisplay, expandChildrenInSelection, foldAncestorsInSelection, extendAncestorDepth, showPartnersInSelection } from './1-select-subgraph.js';
+import { selectSubgraph, expandSelectionForDisplay, expandChildrenInSelection, foldAncestorsInSelection, extendAncestorDepth, showPartnersInSelection, showPartnerUnionsInSelection } from './1-select-subgraph.js';
 import { buildLayoutModel } from './2-build-model.js';
 import { assignGenerations } from './3-assign-generations.js';
 import { measureSubtrees } from './4-measure.js';
@@ -385,16 +385,18 @@ function withChildrenShown(
     data: StromData,
     selection: GraphSelection,
     policy: DisplayPolicy,
-    personIds: readonly PersonId[] | undefined
+    personIds: readonly PersonId[] | undefined,
+    unions: readonly PartnershipId[] | undefined
 ): DisplayPolicy {
-    if (!personIds?.length) return policy;
+    if (!personIds?.length && !unions?.length) return policy;
     const before = new Set(selection.persons);
     const allPartners = policy.autoExpand !== false;
-    expandChildrenInSelection(data, selection, personIds, allPartners);
+    // The marriages with children a "▸ ∞" shows (PipelineInput.showPartnerUnions) come as children shown
+    const owners = expandChildrenInSelection(data, selection, personIds ?? [], allPartners, unions ?? []);
     // With every partner drawn (the expanded mode) a child the step brought
     // with partners of several unions stands in a chain with all of them
     const brought = allPartners ? [...selection.persons].filter(id => !before.has(id)) : [];
-    const chained = [...new Set([...personIds, ...brought])].filter(id => selection.persons.has(id)
+    const chained = [...new Set([...(personIds ?? []), ...owners, ...brought])].filter(id => selection.persons.has(id)
         && (data.persons[id]?.partnerships ?? []).filter(pid => selection.partnerships.has(pid)).length > 1);
     if (chained.length === 0) return policy;
     const expanded = new Set(policy.expandedPersonIds ?? []);
@@ -415,10 +417,15 @@ function withPartnersShown(
     data: StromData,
     selection: GraphSelection,
     policy: DisplayPolicy,
-    personIds: readonly PersonId[] | undefined
+    personIds: readonly PersonId[] | undefined,
+    unions: readonly PartnershipId[] | undefined
 ): DisplayPolicy {
-    if (!personIds?.length) return policy;
-    const chained = showPartnersInSelection(data, selection, personIds);
+    if (!personIds?.length && !unions?.length) return policy;
+    const chained = [...new Set([
+        ...(personIds?.length ? showPartnersInSelection(data, selection, personIds) : []),
+        // The marriages a "▸ ∞" of a child shown in place shows (PipelineInput.showPartnerUnions)
+        ...(unions?.length ? showPartnerUnionsInSelection(data, selection, unions) : []),
+    ])];
     if (chained.length === 0) return policy;
     // Chained after every chain person before: merged chains are kept by
     // their first person (mergeOverlappingChains), whose generation the
@@ -535,9 +542,9 @@ export function runLayoutPipeline(input: PipelineInput): LayoutResult {
     // Expand selection for expanded persons (add missing partners/children)
     expandSelectionForDisplay(data, selection, effectivePolicy);
     // Children shown in place (the card's "children" tab)
-    effectivePolicy = withChildrenShown(data, selection, effectivePolicy, input.expandChildrenOf);
+    effectivePolicy = withChildrenShown(data, selection, effectivePolicy, input.expandChildrenOf, input.showPartnerUnions);
     // Other partners shown in place (the "▸ ∞" pill)
-    effectivePolicy = withPartnersShown(data, selection, effectivePolicy, input.showPartnersOf);
+    effectivePolicy = withPartnersShown(data, selection, effectivePolicy, input.showPartnersOf, input.showPartnerUnions);
     // Ancestors folded for now to make room for the children shown
     if (input.expandChildrenOf?.length && input.foldAncestorsOf?.length) {
         foldAncestorsInSelection(data, selection, input.foldAncestorsOf, focusPersonId);
@@ -733,8 +740,8 @@ export function runLayoutPipelineWithDebug(
 
     // Expand selection for expanded persons (add missing partners/children)
     expandSelectionForDisplay(data, selection, effectivePolicyDebug);
-    effectivePolicyDebug = withChildrenShown(data, selection, effectivePolicyDebug, input.expandChildrenOf);
-    effectivePolicyDebug = withPartnersShown(data, selection, effectivePolicyDebug, input.showPartnersOf);
+    effectivePolicyDebug = withChildrenShown(data, selection, effectivePolicyDebug, input.expandChildrenOf, input.showPartnerUnions);
+    effectivePolicyDebug = withPartnersShown(data, selection, effectivePolicyDebug, input.showPartnersOf, input.showPartnerUnions);
     if (input.expandChildrenOf?.length && input.foldAncestorsOf?.length) {
         foldAncestorsInSelection(data, selection, input.foldAncestorsOf, focusPersonId);
     }
@@ -900,7 +907,8 @@ export function pipelineInputFromRequest(request: LayoutRequest): PipelineInput 
         expandChildrenOf: request.expandChildrenOf,
         foldAncestorsOf: request.foldAncestorsOf,
         extraDepthFor: request.extraDepthFor,
-        showPartnersOf: request.showPartnersOf
+        showPartnersOf: request.showPartnersOf,
+        showPartnerUnions: request.showPartnerUnions
     };
 }
 

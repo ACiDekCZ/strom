@@ -10,6 +10,7 @@ import { strings } from './strings.js';
 import {
     Person,
     PersonId,
+    PartnershipId,
     Position,
     DEFAULT_LAYOUT_CONFIG,
     LayoutConfig,
@@ -70,7 +71,7 @@ import {
     viewLineSegments, segmentsNearCard, EDGE_INSET, PillLabel, pillLabelForms, pillLabelWidths, unionSummaries,
     childrenDrawnElsewhere, siblingOrderMark, SiblingOrderMark,
     siblingsTabState, SiblingsTabState, newlyShownSiblingIds, siblingGroups, ShownChildrenContext, HiddenRelativesTab, unionChildIdSet, branchTabsInOrder,
-    hiddenPartnerIds, childrenByUnion, childrenComeWithPartners, otherFamilyChildrenElsewhere, marriagesInOrder,
+    offeredPartners, OfferedPartner, childrenByUnion, childrenComeWithPartners, otherFamilyChildrenElsewhere, marriagesInOrder,
 } from './marriage-order.js';
 import { partnerIdsShownInPlace } from './layout/pipeline/1-select-subgraph.js';
 import { measureUnionOrderPills, measureTabRows, rowKey, unionOrderPillKey, unionOrderPillPartsHtml, pillFontsPending, branchTabRestHtml, tabsForm, tabsFormClass, bubblePlacement, bubbleBox, touchBubbleBox, touchBubbleBounds, touchBubbleSide, bubbleOpensBelow, BUBBLE_WINDOW_MARGIN, BUBBLE_LOW_WINDOW_NAMES, BUBBLE_LOW_WINDOW_HEIGHT, bubbleNameCounts, bubbleNamesToFit } from './union-order-measure.js';
@@ -398,6 +399,14 @@ class TreeRendererClass {
     /** Where the card of each person of partnersShownIds stood on the screen before its click. */
     private partnersAnchorScreen = new Map<PersonId, { x: number; y: number }>();
     /**
+     * Per person of partnersShownIds whose "▸ ∞" offered a marriage with
+     * children (a child shown in place in the standard display, round 5 §36,
+     * partnerOffers): the unions it showed (PipelineInput.showPartnerUnions;
+     * those with children come with the children and take the place of the
+     * partner the child stood with). The others go by showPartnersOf.
+     */
+    private partnersShownUnions = new Map<PersonId, PartnershipId[]>();
+    /**
      * While a click that shows relatives in place renders before it knows
      * which cards it brought (showChildrenOf, showParentsOf, showPartnersOf):
      * the cards in view before the click. The cards new against them carry
@@ -676,7 +685,10 @@ class TreeRendererClass {
             ...(viewLinks.length > 0 ? { viewLinks } : {}),
             ...(!descendantsOnly && this.childrenShownIds.length > 0 ? { expandChildrenOf: this.childrenShownIds } : {}),
             ...(!descendantsOnly && this.parentsShownIds.length > 0 ? { extraDepthFor: this.parentsShownIds } : {}),
-            ...(!descendantsOnly && this.partnersShownIds.length > 0 ? { showPartnersOf: this.partnersShownIds } : {}),
+            ...(!descendantsOnly && this.partnersShownIds.some(id => !this.partnersShownUnions.has(id))
+                ? { showPartnersOf: this.partnersShownIds.filter(id => !this.partnersShownUnions.has(id)) } : {}),
+            ...(!descendantsOnly && this.partnersShownUnions.size > 0
+                ? { showPartnerUnions: this.partnersShownIds.flatMap(id => this.partnersShownUnions.get(id) ?? []) } : {}),
         };
 
         // Use debug pipeline if debug mode is enabled
@@ -695,6 +707,7 @@ class TreeRendererClass {
                     expandChildrenOf: request.expandChildrenOf,
                     extraDepthFor: request.extraDepthFor,
                     showPartnersOf: request.showPartnersOf,
+                    showPartnerUnions: request.showPartnerUnions,
                     ...(request.expandChildrenOf && this.foldedFor.size > 0 ? { foldAncestorsOf: [...this.foldedFor.keys()] } : {}),
                 },
                 this.debugOptions
@@ -1026,20 +1039,47 @@ class TreeRendererClass {
      * partners of the person's unions without children out of view
      * (hiddenPartnerIds, "▸ ∞ N"), after it the ones it brought ("▾ ∞ N");
      * null without a pill (none of them, a click that drew none, another
-     * view). Partners with children come with "▸ children". An empty "?"
-     * stand-in never counts (T11).
+     * view). Partners with children come with "▸ children", except on a
+     * child shown in place in the standard display, which stands with one
+     * partner: there the pill offers every marriage out of view (round 5
+     * §36, partnerOffers). An empty "?" stand-in never counts (T11).
      */
-    private partnersPillOf(id: PersonId, visible: (pid: PersonId) => boolean): { shown: boolean; ids: PersonId[] } | null {
+    private partnersPillOf(id: PersonId, visible: (pid: PersonId) => boolean):
+        { shown: boolean; ids: PersonId[]; offers?: OfferedPartner[] } | null {
         if (this.viewMode !== 'family') return null;
         const data = DataManager.getData();
         if (!data.persons[id] || data.persons[id].isPlaceholder) return null;
-        if (this.partnersShownIds.includes(id)) {
-            const brought = this.partnersBroughtIn.get(id);
-            return { shown: true, ids: partnerIdsShownInPlace(data, id).filter(q => visible(q) && !!brought?.has(q)) };
-        }
+        if (this.partnersShownIds.includes(id)) return { shown: true, ids: this.partnersShownBy(id, visible) };
         if (this.partnersUnshowable.has(id)) return null;
-        const ids = hiddenPartnerIds(data, id, visible);
-        return ids.length > 0 ? { shown: false, ids } : null;
+        const offers = this.partnerOffers(id, visible);
+        return offers.length > 0 ? { shown: false, ids: offers.map(o => o.partnerId), offers } : null;
+    }
+
+    /**
+     * What a "▸ ∞" of the person offers (offeredPartners): on a child a
+     * children step brought in the standard display (it stands with one
+     * partner, round 5 §36) every marriage whose partner is out of view,
+     * elsewhere the marriages without children.
+     */
+    private partnerOffers(id: PersonId, visible: (pid: PersonId) => boolean): OfferedPartner[] {
+        const data = DataManager.getData();
+        const brought = !this.showAllPartnerships && (data.persons[id]?.parentIds ?? [])
+            .some(q => this.childrenShownIds.includes(q) && !this.childrenVisibleBefore.get(q)?.has(id));
+        return offeredPartners(data, id, visible, brought);
+    }
+
+    /** The partners in view the person's "▸ ∞" brought (its "▾ ∞" names them). */
+    private partnersShownBy(id: PersonId, visible: (pid: PersonId) => boolean): PersonId[] {
+        const data = DataManager.getData();
+        const brought = this.partnersBroughtIn.get(id);
+        const unions = this.partnersShownUnions.get(id);
+        const ids = unions
+            ? unions.flatMap(u => {
+                const union = data.partnerships[u];
+                return union ? [union.person1Id === id ? union.person2Id : union.person1Id] : [];
+            })
+            : partnerIdsShownInPlace(data, id);
+        return ids.filter(q => visible(q) && !!brought?.has(q));
     }
 
     /**
@@ -1220,6 +1260,7 @@ class TreeRendererClass {
         this.partnersUnshowable.clear();
         this.partnersZoom.clear();
         this.partnersAnchorScreen.clear();
+        this.partnersShownUnions.clear();
     }
 
     /**
@@ -1424,8 +1465,7 @@ class TreeRendererClass {
 
     /** The person's other partners in view while their "▾ ∞" shows them (the ones its click brought). */
     shownPartnersOf(personId: PersonId): PersonId[] {
-        const brought = this.partnersBroughtIn.get(personId);
-        return partnerIdsShownInPlace(DataManager.getData(), personId).filter(q => this.positions.has(q) && !!brought?.has(q));
+        return this.partnersShownBy(personId, q => this.positions.has(q));
     }
 
     /** Whether the view shows the person's other partners in place ("▾ ∞"). */
@@ -1433,16 +1473,17 @@ class TreeRendererClass {
         return this.partnersShownIds.includes(personId);
     }
 
-    /** The partners of unions without children a "▸ ∞" of the person would show (none outside the family view or after a click that drew none). */
-    private partnersToShow(personId: PersonId): PersonId[] {
+    /** The marriages a "▸ ∞" of the person would show (partnerOffers; none outside the family view or after a click that drew none). */
+    private partnersToShow(personId: PersonId): OfferedPartner[] {
         if (this.viewMode !== 'family' || this.partnersUnshowable.has(personId) || this.partnersShownIds.includes(personId)) return [];
-        return hiddenPartnerIds(DataManager.getData(), personId, id => this.positions.has(id));
+        return this.partnerOffers(personId, id => this.positions.has(id));
     }
 
     /**
      * The "▸ ∞" pill (§5): show the person's other partners (of unions
-     * without children) in place, as further marriages beside the card, or
-     * hide them again with what they brought.
+     * without children; on a child shown in place in the standard display
+     * every marriage, round 5 §36) in place, as further marriages beside the
+     * card, or hide them again with what they brought.
      */
     async togglePartnersShown(personId: PersonId): Promise<void> {
         if (this.partnersShownIds.includes(personId)) await this.closeShown([], [], personId, false, [personId]);
@@ -1454,7 +1495,11 @@ class TreeRendererClass {
      * the history (PipelineInput.showPartnersOf): the card keeps its place
      * on the screen, the partners carry the hatch of the cards shown here
      * and glow for a moment. A click that draws none of them gives the view
-     * back and leaves the pill out (partnersUnshowable).
+     * back and leaves the pill out (partnersUnshowable). With a marriage
+     * with children among the offered ones (round 5 §36) the step goes by
+     * its unions (PipelineInput.showPartnerUnions): such a partner comes
+     * with the children, as "▸ children" brings that marriage, and takes
+     * the place of the partner the child stood with.
      */
     private async showPartnersOf(personId: PersonId): Promise<void> {
         this.finishChildrenTransition();
@@ -1462,7 +1507,9 @@ class TreeRendererClass {
         const scene = this.captureChildrenScene();
         const beforeAll = new Map(this.positions);
         const screenBefore = this.cardScreenCenter(personId);
-        const promised = this.partnersToShow(personId);
+        const offers = this.partnersToShow(personId);
+        const promised = offers.map(o => o.partnerId);
+        if (offers.some(o => o.childCount > 0)) this.partnersShownUnions.set(personId, offers.map(o => o.partnershipId));
         this.partnersShownIds = [...this.partnersShownIds, personId];
         // The partners promised carry the hatch from the first render (the cards brought in replace them below)
         this.partnersBroughtIn.set(personId, new Set(promised));
@@ -1471,6 +1518,7 @@ class TreeRendererClass {
         if (!promised.some(id => this.positions.has(id))) {
             this.shownStepBefore = null;
             this.partnersBroughtIn.delete(personId);
+            this.partnersShownUnions.delete(personId);
             this.partnersShownIds = this.partnersShownIds.filter(id => id !== personId);
             this.partnersUnshowable.add(personId);
             await this.renderInternal();
@@ -1740,6 +1788,7 @@ class TreeRendererClass {
             this.partnersBroughtIn.delete(id);
             this.partnersZoom.delete(id);
             this.partnersAnchorScreen.delete(id);
+            this.partnersShownUnions.delete(id);
         }
         await this.renderInternal();
         const shift = this.keepCardInPlace(anchorId, beforeAll, restoreView);
@@ -2951,6 +3000,7 @@ class TreeRendererClass {
                 };
             })).concat(this.partnersShownIds.map(id => {
                 const zoom = this.partnersZoom.get(id), anchorScreen = this.partnersAnchorScreen.get(id);
+                const partnerUnions = this.partnersShownUnions.get(id);
                 return {
                     id,
                     partners: true as const,
@@ -2958,6 +3008,7 @@ class TreeRendererClass {
                     broughtIn: this.partnersBroughtIn.get(id) ?? new Set<PersonId>(),
                     ...(zoom ? { zoom } : {}),
                     ...(anchorScreen ? { anchorScreen } : {}),
+                    ...(partnerUnions ? { partnerUnions } : {}),
                 };
             })),
         };
@@ -2990,6 +3041,7 @@ class TreeRendererClass {
         this.partnersBroughtIn = new Map(partners.map(s => [s.id, s.broughtIn] as const));
         this.partnersZoom = new Map(partners.filter(s => s.zoom).map(s => [s.id, s.zoom!] as const));
         this.partnersAnchorScreen = new Map(partners.filter(s => s.anchorScreen).map(s => [s.id, s.anchorScreen!] as const));
+        this.partnersShownUnions = new Map(partners.filter(s => s.partnerUnions).map(s => [s.id, [...s.partnerUnions!]] as const));
         const shown = all.filter(s => !s.parents && !s.partners);
         this.childrenShownIds = shown.map(s => s.id);
         this.childrenVisibleBefore = new Map(shown.map(s => [s.id, s.visibleBefore] as const));
@@ -5460,19 +5512,25 @@ class TreeRendererClass {
      * them with their marriage ("2. ∞ 1890", numbered as the marriage-order
      * pill counts) and ends with what a click does.
      */
-    private partnersPillHtml(id: PersonId, pill: { shown: boolean; ids: PersonId[] }, fullTitle: string, nested = false): string {
+    private partnersPillHtml(id: PersonId, pill: { shown: boolean; ids: PersonId[]; offers?: OfferedPartner[] }, fullTitle: string, nested = false): string {
         const data = DataManager.getData();
         const order = marriagesInOrder(data, id);
+        const shownUnions = this.partnersShownUnions.get(id);
         const items = this.nameGroupsHtml([{ pre: '', items: pill.ids.filter(q => DataManager.getPerson(q) !== null).map(q => {
             const partner = DataManager.getPerson(q)!;
-            const uid = order.find(u => {
-                const union = data.partnerships[u];
-                return !!union && (union.person1Id === q || union.person2Id === q) && union.childIds.length === 0;
-            }) ?? order.find(u => data.partnerships[u]?.person1Id === q || data.partnerships[u]?.person2Id === q);
+            const withPartner = (u: PartnershipId) => data.partnerships[u]?.person1Id === q || data.partnerships[u]?.person2Id === q;
+            // The marriage the pill offers or showed (round 5 §36), else the one without children
+            const uid = pill.offers?.find(o => o.partnerId === q)?.partnershipId
+                ?? shownUnions?.find(withPartner)
+                ?? order.find(u => withPartner(u) && data.partnerships[u].childIds.length === 0)
+                ?? order.find(withPartner);
             const union = uid ? data.partnerships[uid] : undefined;
             const year = union?.startDate ? displayYear(union.startDate) : '';
             const marriage = uid ? `${strings.focus.unionOrdinal(order.indexOf(uid) + 1)} ∞${year ? ` ${year}` : ''}` : '';
-            return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(shownName(partner, '?'))}</span>`
+            // A marriage with children: their count after the name ("Lena Fross · 1 child")
+            const childCount = union ? union.childIds.filter(c => !!data.persons[c] && !data.persons[c].isPlaceholder).length : 0;
+            const children = childCount > 0 ? ` · ${strings.tooltip.childrenCount(childCount)}` : '';
+            return `<div class="badge-tooltip-item"><span class="badge-tooltip-name">${this.escapeHtml(shownName(partner, '?') + children)}</span>`
                 + `${marriage ? `<span class="badge-tooltip-detail"> ${this.escapeHtml(marriage)}</span>` : ''}</div>`;
         }) }]);
         const header = pill.shown ? strings.focus.partnersShownTooltip : strings.focus.hiddenPartnersTooltip;

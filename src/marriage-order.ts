@@ -531,6 +531,40 @@ export function hiddenPartnerIds(data: StromData, personId: PersonId, inView: (i
     return partnerIdsShownInPlace(data, personId).filter(id => !inView(id) && !isDiagramStandIn(data, id));
 }
 
+/** One marriage a card's "▸ ∞" offers: the partner, the union and how many children it has. */
+export interface OfferedPartner {
+    partnerId: PersonId;
+    partnershipId: PartnershipId;
+    /** The union's children (real persons), 0 for a marriage without children. */
+    childCount: number;
+}
+
+/**
+ * The marriages a card's "▸ ∞" offers. On a child shown in place in the
+ * standard display (`everyMarriage`, round 5 §36), which stands with one
+ * partner: every marriage whose partner the view does not draw, those with
+ * children too (the pill then brings the partner with the children, as
+ * "▸ children" brings that marriage), in the marriage order. Elsewhere the
+ * partners of the marriages without children out of view
+ * (hiddenPartnerIds, in data order). Never an empty "?" stand-in.
+ */
+export function offeredPartners(data: StromData, personId: PersonId, inView: (id: PersonId) => boolean,
+    everyMarriage: boolean): OfferedPartner[] {
+    const out: OfferedPartner[] = [];
+    const unions = everyMarriage ? marriagesInOrder(data, personId) : (data.persons[personId]?.partnerships ?? []);
+    for (const partnershipId of unions) {
+        const union = data.partnerships[partnershipId];
+        if (!union) continue;
+        const partnerId = union.person1Id === personId ? union.person2Id : union.person1Id;
+        const childCount = union.childIds.filter(id => !!data.persons[id] && !data.persons[id].isPlaceholder).length;
+        if (!everyMarriage && union.childIds.length > 0) continue;
+        if (partnerId === personId || !data.persons[partnerId] || inView(partnerId) || isDiagramStandIn(data, partnerId)) continue;
+        if (out.some(o => o.partnerId === partnerId)) continue;
+        out.push({ partnerId, partnershipId, childCount });
+    }
+    return out;
+}
+
 /** The children of one union of a person in a "▸ children" bubble (§5). */
 export interface ChildrenUnionGroup {
     /** The union, null for children linked to the person outside any union. */
