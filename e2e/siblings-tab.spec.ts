@@ -686,6 +686,47 @@ test.describe('touch, phone held sideways 844 × 390', () => {
     });
 });
 
+/**
+ * Zoomed out by touch (round 4 §31): under 60 % a long press on a tab is the
+ * card's, as a tap there is: the person's menu (the sheet), no bubble. From
+ * 60 % the tab's bubble.
+ */
+test.describe('touch, zoomed out, phone 390 × 844', () => {
+    test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+    for (const scale of [0.5, 0.57]) {
+        test(`at ${scale} a press held on a tab opens the person's menu, not the bubble`, async ({ page }) => {
+            await setup(page);
+            await page.evaluate(([pid, s]) => window.Strom.ZoomPan.glideToPerson(pid as never, s as number, 0), [PERSON, scale] as const);
+            await expect.poll(() => page.evaluate(() => window.Strom.ZoomPan.getScale())).toBeCloseTo(scale, 2);
+            const tab = siblingsTab(page, PERSON);
+            const bubble = tab.locator(':scope > .badge-tooltip');
+            const name = await page.evaluate(pid => window.Strom.DataManager.getPerson(pid as never)!.firstName, PERSON);
+            // on the tab's middle and on its part standing out of the card
+            for (const fy of [0.5, 0.1]) {
+                await hold(page, tab, 0.5, fy);
+                const sheet = page.locator('.bottom-sheet-person');
+                await expect(sheet).toBeVisible();
+                await expect(sheet).toHaveAttribute('aria-label', new RegExp(name));
+                await expect(bubble).toBeHidden();
+                await page.evaluate(() => window.Strom.UI.hideBottomSheet());
+                await expect(sheet).toHaveCount(0);
+            }
+        });
+    }
+
+    test('at 0.6 a press held on a tab opens its bubble', async ({ page }) => {
+        await setup(page);
+        await page.evaluate(pid => window.Strom.ZoomPan.glideToPerson(pid as never, 0.6, 0), PERSON);
+        await expect.poll(() => page.evaluate(() => window.Strom.ZoomPan.getScale())).toBeCloseTo(0.6, 2);
+        const tab = siblingsTab(page, PERSON);
+        const bubble = tab.locator(':scope > .badge-tooltip');
+        await hold(page, tab);
+        await expect(bubble).toBeVisible();
+        await expect(page.locator('.bottom-sheet-person')).toHaveCount(0);
+    });
+});
+
 test.describe('phone 390 × 844', () => {
     test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
