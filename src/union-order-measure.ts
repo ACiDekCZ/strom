@@ -245,21 +245,27 @@ export interface TouchBubbleBox extends BubbleBox {
  * to stay whole: it is as tall as the window lets it under its top
  * (`maxHeight`), the names it lists fitted to that (fitBubbleNames). Only
  * a tab hidden under the bars has it start lower, at the bars' bottom, away
- * from the tab: no arrow then (it would point at the bar).
+ * from the tab: no arrow then (it would point at the bar). And only a tab so
+ * near the window's bottom that not even `minHeight` (the bubble cut to its
+ * last line, what a click does) fits under it has the bubble moved up just
+ * enough to hold that whole in the window, over the tab: no arrow then
+ * either (it would point into the tab).
  */
 export function touchBubbleBox(
     tab: { left: number; right: number; top: number; bottom: number },
     bubbleWidth: number,
     barsBottom: number,
     viewport: { width: number; height: number },
+    minHeight = 0,
 ): TouchBubbleBox {
     const m = BUBBLE_WINDOW_MARGIN;
     const tabMid = (tab.left + tab.right) / 2;
     const left = Math.max(m, Math.min(tabMid - bubbleWidth / 2, viewport.width - m - bubbleWidth));
-    const top = Math.max(tab.bottom + BUBBLE_TAB_MARGIN, barsBottom);
+    const below = tab.bottom + BUBBLE_TAB_MARGIN;
+    const top = Math.max(barsBottom, Math.min(below, viewport.height - m - minHeight));
     const arrow = Math.max(BUBBLE_ARROW_INSET, Math.min(tabMid - left, bubbleWidth - BUBBLE_ARROW_INSET));
     const maxHeight = Math.max(0, viewport.height - m - top);
-    return top > tab.bottom + BUBBLE_TAB_MARGIN ? { left, top, arrow, maxHeight, noArrow: true } : { left, top, arrow, maxHeight };
+    return top !== below ? { left, top, arrow, maxHeight, noArrow: true } : { left, top, arrow, maxHeight };
 }
 
 /** The most names a tab's bubble lists; the rest is one line "and n more" (the menu and the sheet list them all). */

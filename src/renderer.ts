@@ -2503,19 +2503,23 @@ class TreeRendererClass {
      * under its top edge (max-height, 8 px over the window's bottom). It lists
      * as many names as fit there, in a low window (a phone held sideways)
      * 4 at most; only a bubble that does not fit even with one name a group
-     * is cut, its last line (what a click does) standing at its bottom.
+     * is cut, its last line (what a click does) standing at its bottom. A tab
+     * at the window's bottom with no room under it even for that last line
+     * has the bubble moved up over the tab, whole in the window
+     * (bubbleMinHeight).
      */
     private placeTouchBubble(bubble: HTMLElement, tab: DOMRect, barsTop: number): void {
         const vw = window.innerWidth, vh = window.innerHeight;
         const toolbar = document.querySelector<HTMLElement>('.toolbar');
         const barsBottom = Math.max(barsTop, toolbar && toolbar.getClientRects().length > 0 ? toolbar.getBoundingClientRect().bottom : 0);
         const viewport = { width: vw, height: vh };
-        const { maxHeight } = touchBubbleBox(tab, bubble.getBoundingClientRect().width, barsBottom, viewport);
+        const minHeight = this.bubbleMinHeight(bubble);
+        const { maxHeight } = touchBubbleBox(tab, bubble.getBoundingClientRect().width, barsBottom, viewport, minHeight);
         this.fitBubbleNames(bubble, maxHeight, vh <= BUBBLE_LOW_WINDOW_HEIGHT ? BUBBLE_LOW_WINDOW_NAMES : undefined);
         // Its own height, not the one a max-height cuts it to
         bubble.style.maxHeight = 'none';
         const b = bubble.getBoundingClientRect();
-        const box = touchBubbleBox(tab, b.width, barsBottom, viewport);
+        const box = touchBubbleBox(tab, b.width, barsBottom, viewport, minHeight);
         bubble.style.maxHeight = `${box.maxHeight}px`;
         bubble.classList.toggle('bubble-clipped', b.height > box.maxHeight + 0.5);
         bubble.style.left = `${box.left}px`;
@@ -2524,6 +2528,28 @@ class TreeRendererClass {
         bubble.style.removeProperty('--beside-arrow');
         bubble.classList.add('below');
         bubble.classList.toggle('no-arrow', box.noArrow === true);
+    }
+
+    /**
+     * The least a bubble opened by touch shows (touchBubbleBox's
+     * `minHeight`): its last line, what a click does, whole, as it stands
+     * cut (.bubble-clipped). Measured with its other lines hidden for a
+     * moment, then put back as they were.
+     */
+    private bubbleMinHeight(bubble: HTMLElement): number {
+        const rows = [...bubble.children].filter((el): el is HTMLElement => el instanceof HTMLElement
+            && !el.classList.contains('badge-tooltip-action'));
+        const was = rows.map(el => el.hidden);
+        const clipped = bubble.classList.contains('bubble-clipped');
+        const maxHeight = bubble.style.maxHeight;
+        rows.forEach(el => { el.hidden = true; });
+        bubble.classList.add('bubble-clipped');
+        bubble.style.maxHeight = 'none';
+        const h = bubble.getBoundingClientRect().height;
+        rows.forEach((el, i) => { el.hidden = was[i]; });
+        bubble.classList.toggle('bubble-clipped', clipped);
+        bubble.style.maxHeight = maxHeight;
+        return h;
     }
 
     /**

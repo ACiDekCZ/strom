@@ -612,6 +612,25 @@ describe('a bubble\'s box by touch (round 4 §30: below the tab, as tall as the 
         expect(hidden.noArrow).toBe(true);
         expect(hidden.maxHeight).toBe(390 - 52 - m);
     });
+
+    it('a tab at the window\'s bottom: moved up over the tab just enough to hold its last line whole, without its arrow', () => {
+        // 60 px: the bubble cut to its last line (what a click does)
+        const low = touchBubbleBox(tab(500, 340), 240, 44, sideways, 60);
+        expect(low.top).toBe(390 - m - 60);
+        expect(low.maxHeight).toBe(60);
+        expect(low.noArrow).toBe(true);
+        // the tab's bottom edge at the window's: still whole in it
+        const edge = touchBubbleBox(tab(500, 372), 240, 44, sideways, 60);
+        expect(edge.top + edge.maxHeight).toBe(390 - m);
+        expect(edge.maxHeight).toBe(60);
+        // room for that under the tab: below it with its arrow, as tall as the window lets it
+        const room = touchBubbleBox(tab(500, 290), 240, 44, sideways, 60);
+        expect(room.top).toBe(316);
+        expect(room.maxHeight).toBe(390 - 316 - m);
+        expect(room.noArrow).toBeUndefined();
+        // never over the top bar, even then
+        expect(touchBubbleBox(tab(500, 340), 240, 44, { width: 844, height: 100 }, 60).top).toBe(44);
+    });
 });
 
 describe('a low window by touch lists 4 names at most (round 4 §30)', () => {

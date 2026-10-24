@@ -684,6 +684,32 @@ test.describe('touch, phone held sideways 844 × 390', () => {
         expect(shown).toBeLessThanOrEqual(4);
         await expect(bubble.locator('.badge-tooltip-more')).toHaveText(`and ${12 - shown} more`);
     });
+
+    test('a tab at the window\'s bottom: the bubble moved up over it, whole in the window with its last line, no arrow', async ({ page }) => {
+        await setup(page);
+        const tab = siblingsTab(page, PERSON);
+        const bubble = tab.locator(':scope > .badge-tooltip');
+        // the tab's bottom edge 4 px over the window's: no room under it even for the bubble's last line
+        const card = (await cardOf(page, PERSON).boundingBox())!;
+        const t0 = (await tab.boundingBox())!;
+        await cardAt(page, PERSON, 386 - (t0.y + t0.height - card.y));
+        await hold(page, tab);
+        await expect(bubble).toBeVisible();
+        await expect(bubble).toHaveClass(/\bno-arrow\b/);
+        expect(await bubble.evaluate(b => getComputedStyle(b, '::after').display)).toBe('none');
+        const t = (await tab.boundingBox())!;
+        const b = (await bubble.boundingBox())!;
+        expect(t.y + t.height).toBeGreaterThan(380);
+        expect(b.y).toBeLessThan(t.y + t.height);
+        expect(b.y + b.height).toBeLessThanOrEqual(390 - 8 + 0.5);
+        const bar = await page.evaluate(() => document.querySelector('.toolbar')!.getBoundingClientRect().bottom);
+        expect(b.y).toBeGreaterThanOrEqual(bar);
+        const action = bubble.locator(':scope > .badge-tooltip-action');
+        await expect(action).toBeVisible();
+        const a = (await action.boundingBox())!;
+        expect(a.y).toBeGreaterThanOrEqual(b.y);
+        expect(a.y + a.height).toBeLessThanOrEqual(b.y + b.height + 0.5);
+    });
 });
 
 /**
