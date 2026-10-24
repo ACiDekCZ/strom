@@ -370,6 +370,13 @@ class TreeRendererClass {
     private partnersZoom = new Map<PersonId, { before: number; after: number }>();
     /** Where the card of each person of partnersShownIds stood on the screen before its click. */
     private partnersAnchorScreen = new Map<PersonId, { x: number; y: number }>();
+    /**
+     * While a click that shows relatives in place renders before it knows
+     * which cards it brought (showChildrenOf, showParentsOf, showPartnersOf):
+     * the cards in view before the click. The cards new against them carry
+     * the hatch from that first render on (shownHereIds).
+     */
+    private shownStepBefore: ReadonlyMap<PersonId, unknown> | null = null;
     /** The drawn persons whose parents are out of view only because of the depth (LayoutResult.ancestorDepthEdge), per screen layout. */
     private depthEdge: ReadonlySet<PersonId> = new Set();
     /**
@@ -1334,6 +1341,7 @@ class TreeRendererClass {
         const promised = new Map(parents.map(q => [q, hiddenChildIds(data, q, inView).filter(id => id !== personId)] as const));
         const visible = new Map(parents.map(q => [q, new Set((data.persons[q]?.childIds ?? []).filter(inView))] as const));
         this.parentsShownIds = [...this.parentsShownIds, personId];
+        this.shownStepBefore = beforeAll;
         if (withSiblings) {
             this.parentsWithSiblings.add(personId);
             this.childrenShownIds = [...this.childrenShownIds, ...parents];
@@ -1362,6 +1370,7 @@ class TreeRendererClass {
             this.parentsUnshowable.add(personId);
         }
         if (failed.length > 0 || !drawn) {
+            if (!drawn) this.shownStepBefore = null;
             await this.renderInternal();
             if (!drawn) {
                 this.keepCardInPlace(personId, beforeAll, false);
@@ -1371,6 +1380,7 @@ class TreeRendererClass {
         if (historyBefore) this.pushHistoryStep({ ...historyBefore, anchorId: personId });
         const broughtIn = new Set([...this.positions.keys()].filter(id => !beforeAll.has(id)));
         this.parentsBroughtIn.set(personId, broughtIn);
+        this.shownStepBefore = null;
         const shown = withSiblings ? parents.filter(q => this.childrenShownIds.includes(q)) : [];
         for (const q of shown) this.childrenBroughtIn.set(q, broughtIn);
         if (screenBefore) this.parentsAnchorScreen.set(personId, screenBefore);
@@ -1427,8 +1437,10 @@ class TreeRendererClass {
         this.partnersShownIds = [...this.partnersShownIds, personId];
         // The partners promised carry the hatch from the first render (the cards brought in replace them below)
         this.partnersBroughtIn.set(personId, new Set(promised));
+        this.shownStepBefore = beforeAll;
         await this.renderInternal();
         if (!promised.some(id => this.positions.has(id))) {
+            this.shownStepBefore = null;
             this.partnersBroughtIn.delete(personId);
             this.partnersShownIds = this.partnersShownIds.filter(id => id !== personId);
             this.partnersUnshowable.add(personId);
@@ -1439,6 +1451,7 @@ class TreeRendererClass {
         if (historyBefore) this.pushHistoryStep({ ...historyBefore, anchorId: personId });
         const broughtIn = new Set([...this.positions.keys()].filter(id => !beforeAll.has(id)));
         this.partnersBroughtIn.set(personId, broughtIn);
+        this.shownStepBefore = null;
         if (screenBefore) this.partnersAnchorScreen.set(personId, screenBefore);
         const shift = this.keepCardInPlace(personId, beforeAll, false);
         const scaleBefore = ZoomPan.getScale();
@@ -1529,6 +1542,7 @@ class TreeRendererClass {
         for (const q of parents) this.childrenVisibleBefore.set(q, visible.get(q)!);
         // One step (the focus bar's count) from the first render on
         if (siblingsOf) this.siblingsShownFor.set(siblingsOf, [...parents]);
+        this.shownStepBefore = beforeAll;
         await this.renderInternal();
         const failed = parents.filter(q => !promised.get(q)!.some(inView));
         const shown = parents.filter(q => !failed.includes(q));
@@ -1540,6 +1554,7 @@ class TreeRendererClass {
             }
             if (siblingsOf && shown.length > 0) this.siblingsShownFor.set(siblingsOf, shown);
             else if (siblingsOf) this.siblingsShownFor.delete(siblingsOf);
+            if (shown.length === 0) this.shownStepBefore = null;
             await this.renderInternal();
             if (shown.length === 0) {
                 this.keepCardInPlace(anchorId, beforeAll, false);
@@ -1549,6 +1564,7 @@ class TreeRendererClass {
         // A step of the history (the safety net above showed nothing: no step)
         if (historyBefore) this.pushHistoryStep({ ...historyBefore, anchorId });
         const broughtIn = new Set([...this.positions.keys()].filter(id => !beforeAll.has(id)));
+        this.shownStepBefore = null;
         for (const q of shown) {
             this.childrenBroughtIn.set(q, broughtIn);
             const at = screenBefore.get(q);
@@ -2446,21 +2462,31 @@ class TreeRendererClass {
     }
 
     /**
-     * The children shown in place (the "▾ children" tab, at every level):
-     * the ones each click brought into view — the bubble's list. Their cards
-     * carry the hatch of the cards linked in the view only (`shown-here`),
-     * until their parent's children are hidden again.
+     * The cards in view only thanks to an expansion in place (children,
+     * siblings, parents beyond the depth, other partners; at every level):
+     * every card a click of those brought into view, as long as it stays —
+     * the children and siblings themselves, the parents and the partners
+     * the layout draws with them (a parent's other partner, a shown
+     * parent's further marriages). They carry the hatch of the cards shown
+     * here (`shown-here`) until the step that brought them is closed. A "?"
+     * stand-in keeps its own look.
      */
     private shownHereIds(): ReadonlySet<PersonId> {
         const out = new Set<PersonId>();
         if (this.viewMode !== 'family') return out;
         const data = DataManager.getData();
+        const shownCard = (id: PersonId) => this.positions.has(id) && !!data.persons[id] && !data.persons[id].isPlaceholder;
+        for (const brought of [this.childrenBroughtIn, this.parentsBroughtIn, this.partnersBroughtIn]) {
+            for (const ids of brought.values()) for (const id of ids) if (shownCard(id)) out.add(id);
+        }
+        // A click rendering for the first time: what is new against the view before it
+        const before = this.shownStepBefore;
+        if (before) for (const id of this.positions.keys()) if (!before.has(id) && shownCard(id)) out.add(id);
+        // The relatives each step promised (the bubbles' lists) are always among them
         for (const pid of this.childrenShownIds) {
             for (const cid of newlyShownChildIds(data, pid, id => this.positions.has(id), this.childrenVisibleBefore.get(pid) ?? new Set())) out.add(cid);
         }
-        // The parents shown beyond the depth (§4) carry it too (out of view before their click: the person was at the edge)
         for (const id of this.parentsShownIds) for (const q of this.shownParentsOf(id)) out.add(q);
-        // So do the other partners shown by "▸ ∞" (§5)
         for (const id of this.partnersShownIds) for (const q of this.shownPartnersOf(id)) out.add(q);
         return out;
     }

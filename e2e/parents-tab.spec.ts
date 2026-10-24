@@ -314,3 +314,32 @@ test('depth 1: "▸ parents" on a parent of the focus shows the grandparents alo
     expect(await shownCount(page)).toBe(1);
 });
 
+/**
+ * Every card in view only thanks to an expansion carries the hatch (§6,
+ * answer 7): the further partners the layout draws beside parents shown
+ * beyond the depth too, not only the parents. Invented fixture
+ * edge-childless-partners: the focus's father FA, whose father GF has two
+ * other partners (GF-W2 with a son of theirs, GF-X without children) and
+ * whose mother GM has one more (GM-X).
+ */
+test('the further partners drawn with parents shown here carry the hatch too', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await setupWith(page, 'edge-childless-partners', 'f', 1, 'fa');
+    const shownParents = ['gf', 'gm'];
+    const partners = ['gf_w2', 'gf_x', 'gm_x'];
+    await parentsTab(page, 'fa').click();
+    for (const id of [...shownParents, ...partners]) await expect(cardOf(page, id)).toBeVisible();
+    await page.mouse.move(5, 500);
+    for (const id of [...shownParents, ...partners]) await expect(cardOf(page, id), id).toHaveClass(/shown-here/);
+    // Cards in view before the click do not
+    for (const id of ['fa', 'fm', 'fa_x', 'fm_x', 'f']) await expect(cardOf(page, id), id).not.toHaveClass(/shown-here/);
+    // Only the parents (with their marriages): GF's son of the other marriage stays out (answer 6)
+    await expect(cardOf(page, 'uh')).toHaveCount(0);
+    // ↩ and ↪ keep the hatch where it was
+    await page.evaluate(() => window.Strom.TreeRenderer.goBack());
+    for (const id of partners) await expect(cardOf(page, id)).toHaveCount(0);
+    await page.evaluate(() => window.Strom.TreeRenderer.goForward());
+    for (const id of [...shownParents, ...partners]) await expect(cardOf(page, id), id).toHaveClass(/shown-here/);
+    await parentsTab(page, 'fa').click();
+    for (const id of [...shownParents, ...partners]) await expect(cardOf(page, id)).toHaveCount(0);
+});

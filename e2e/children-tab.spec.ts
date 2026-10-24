@@ -122,11 +122,12 @@ test('the children shown in place wear the hatch, at every level, and lose it wh
     // Not the look of a person linked in the view only: the card's own border stays
     const border = (id: string) => page.evaluate(pid => getComputedStyle(document.querySelector(`#tree-canvas .person-card[data-id="${pid}"]`)!).borderTopColor, id);
     expect(await border(SIBLINGS[0])).toBe(await border(ANCESTOR));
-    // A level down: a shown child's own children
+    // A level down: a shown child's own children, with the partner they come with
+    // (every card in view only thanks to an expansion wears it)
     const nested = tabOf(page, SIBLINGS[0]);
     await nested.click();
     await expect(cardOf(page, 'nephew_1_1')).toBeVisible();
-    await expect.poll(marked).toEqual([HALF, ...SIBLINGS, 'nephew_1_1', 'nephew_1_2', 'nephew_1_3'].sort());
+    await expect.poll(marked).toEqual([HALF, ...SIBLINGS, 'sibling_1_spouse', 'nephew_1_1', 'nephew_1_2', 'nephew_1_3'].sort());
     await tabOf(page, SIBLINGS[0]).click();
     await expect(cardOf(page, 'nephew_1_1')).toHaveCount(0);
     await expect.poll(marked).toEqual([HALF, ...SIBLINGS].sort());
