@@ -217,6 +217,8 @@ export interface MeasureInput {
     genModel: GenerationalModel;
     config: LayoutConfig;
     focusPersonId?: PersonId;
+    /** See PipelineInput.expandChildrenOf. */
+    expandChildrenOf?: readonly PersonId[];
 }
 
 /**
@@ -382,6 +384,8 @@ export interface ConstraintsInput {
     tolerance: number;       // Default 0.5px
     stopAfterPhase?: 'A' | 'B';
     focusPersonId?: PersonId;
+    /** See PipelineInput.expandChildrenOf. */
+    expandChildrenOf?: readonly PersonId[];
 }
 
 /**

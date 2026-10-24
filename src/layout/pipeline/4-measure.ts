@@ -20,6 +20,7 @@ import {
     BranchId,
     BlockSide,
     UnionId,
+    UnionNode,
     GenerationalModel,
     LayoutModel,
     PartnerChain,
@@ -35,6 +36,7 @@ import { getChildUnions } from './2-build-model.js';
 export function measureSubtrees(input: MeasureInput): BranchModel {
     const { genModel, config } = input;
     const { model } = genModel;
+    const shown = new Set<PersonId>(input.expandChildrenOf ?? []);
 
     // Find focus person (gen=0)
     const focusPersonId = input.focusPersonId ??
@@ -85,7 +87,8 @@ export function measureSubtrees(input: MeasureInput): BranchModel {
                 blocks,
                 unionToBlock,
                 focusUnionId,
-                isFocusPersonPartnerA  // true if this is the focus person's direct ancestor chain
+                isFocusPersonPartnerA,  // true if this is the focus person's direct ancestor chain
+                shown
             );
 
             // PartnerB (wife) ancestors
@@ -100,7 +103,8 @@ export function measureSubtrees(input: MeasureInput): BranchModel {
                     blocks,
                     unionToBlock,
                     focusUnionId,
-                    isFocusPersonPartnerB  // true if this is the focus person's direct ancestor chain
+                    isFocusPersonPartnerB,  // true if this is the focus person's direct ancestor chain
+                    shown
                 );
             }
         }
@@ -448,6 +452,77 @@ function buildChainBlockPersonOrder(
 }
 
 /**
+ * An ancestor's other partners in the grandparents' rows and above
+ * (gen <= -2) stand on the side where the children of those marriages stand
+ * beside the ancestor's child on the line. When they stand on the opposite
+ * side (by default a man's other partners stand left of him, a woman's right
+ * of her), the line from the couple to the child on the line runs across all
+ * the half-siblings' lines and is dropped.
+ *
+ * Where the line child's siblings stand (Phase B's sibling runs,
+ * attachSiblingRuns): a wife's to the right of her, a husband's to the left
+ * of him; beyond the partner instead when the partner has no parents in view
+ * and the siblings would face the other half of the pedigree (the inner side:
+ * a wife's in the couple of a husband's parents, a husband's in the couple of
+ * a wife's parents; a couple with other partners keeps the first rule); a
+ * line child without a partner has them on the tree's outer side (the
+ * father's ancestors left, the mother's right). In the grandparents' row the
+ * line child is a parent of the focus, placed by Phase A: only the first rule
+ * applies there, with a partner who has parents in view.
+ *
+ * Only when the ancestors' children are shown (PipelineInput.expandChildrenOf),
+ * for a primary couple that is the line child's parents, when only the shared
+ * person has other partners and one of those marriages has children in view.
+ */
+function faceLineSiblings(
+    order: PersonId[],
+    parentUnion: UnionNode,
+    lineChildId: PersonId,
+    lineUnionId: UnionId,
+    gen: number,
+    side: BlockSide,
+    lineCoupleChildRole: 'H' | 'W' | null,
+    shown: ReadonlySet<PersonId>,
+    model: LayoutModel,
+    unionIds: readonly UnionId[],
+    blocks: Map<FamilyBlockId, FamilyBlock>,
+    unionToBlock: Map<UnionId, FamilyBlockId>
+): PersonId[] {
+    if (gen > -2 || !parentUnion.partnerB || !order.some(p => shown.has(p))) return order;
+    if (!unionIds.some(u => u !== parentUnion.id && (model.unions.get(u)?.childIds.length ?? 0) > 0)) return order;
+    const a = order.indexOf(parentUnion.partnerA);
+    const b = order.indexOf(parentUnion.partnerB);
+    if (a < 0 || b !== a + 1) return order;
+    const lineUnion = model.unions.get(lineUnionId);
+    if (!lineUnion) return order;
+    let siblingsRight: boolean;
+    if (!lineUnion.partnerB) {
+        if (gen === -2 || side === 'BOTH') return order;
+        siblingsRight = side === 'WIFE';
+    } else {
+        const wife = lineUnion.partnerB === lineChildId;
+        const partner = wife ? lineUnion.partnerA : lineUnion.partnerB;
+        const lineBlockId = unionToBlock.get(lineUnionId);
+        const chainCouple = !!(lineBlockId && blocks.get(lineBlockId)?.chainInfo);
+        if (model.childToParentUnion.has(partner) || chainCouple) siblingsRight = wife;
+        else if (gen === -2) return order;
+        else {
+            const inner = wife ? lineCoupleChildRole === 'H' : lineCoupleChildRole === 'W';
+            siblingsRight = inner ? !wife : wife;
+        }
+    }
+    if (siblingsRight && b === order.length - 1 && a > 0) {
+        // [extras..., A, B] -> [A, B, extras (nearest first)...]
+        return [order[a], order[b], ...order.slice(0, a).reverse()];
+    }
+    if (!siblingsRight && a === 0 && b < order.length - 1) {
+        // [A, B, extras...] -> [extras (outermost first)..., A, B]
+        return [...order.slice(b + 1).reverse(), order[a], order[b]];
+    }
+    return order;
+}
+
+/**
  * Build ancestor blocks for a person, traversing up the tree.
  * Each ancestor union gets a block with the specified side.
  * The ancestor block's children include ALL children of the ancestor union
@@ -480,7 +555,9 @@ function buildAncestorBlocks(
     blocks: Map<FamilyBlockId, FamilyBlock>,
     unionToBlock: Map<UnionId, FamilyBlockId>,
     directLineUnionId: UnionId,
-    isFocusPersonAncestorChain: boolean = false
+    isFocusPersonAncestorChain: boolean = false,
+    shown: ReadonlySet<PersonId> = new Set(),
+    lineCoupleChildRole: 'H' | 'W' | null = null
 ): void {
     let parentUnionId = model.childToParentUnion.get(personId);
     if (!parentUnionId) return;
@@ -509,7 +586,8 @@ function buildAncestorBlocks(
 
     if (chain) {
         // Chain block: wider coupleWidth for all unique persons
-        const personOrder = buildChainBlockPersonOrder(chain, model);
+        const personOrder = faceLineSiblings(
+            buildChainBlockPersonOrder(chain, model), parentUnion, personId, directLineUnionId, gen, side, lineCoupleChildRole, shown, model, chain.unionIds, blocks, unionToBlock);
         const uniquePersonCount = personOrder.length;
         coupleWidth = uniquePersonCount * config.cardWidth + (uniquePersonCount - 1) * config.partnerGap;
         chainInfo = {
@@ -684,6 +762,11 @@ function buildAncestorBlocks(
     // because we're no longer tracing from the focus person directly.
     const husbandSide: BlockSide = isFocusParents ? 'HUSBAND' : side;
     const wifeSide: BlockSide = isFocusParents ? 'WIFE' : side;
+    // The parents' couple's child on the line is this person: husband or wife
+    // in their own couple (where Phase B puts the parents' siblings)
+    const lineUnionNode = model.unions.get(directLineUnionId);
+    const childRole: 'H' | 'W' | null = !lineUnionNode?.partnerB ? null
+        : lineUnionNode.partnerA === personId ? 'H' : lineUnionNode.partnerB === personId ? 'W' : null;
 
     buildAncestorBlocks(
         parentUnion.partnerA,
@@ -695,7 +778,9 @@ function buildAncestorBlocks(
         blocks,
         unionToBlock,
         parentUnionId,
-        false  // After first level, no longer the focus person's direct chain
+        false,  // After first level, no longer the focus person's direct chain
+        shown,
+        childRole
     );
 
     if (parentUnion.partnerB) {
@@ -709,7 +794,9 @@ function buildAncestorBlocks(
             blocks,
             unionToBlock,
             parentUnionId,
-            false  // After first level, no longer the focus person's direct chain
+            false,  // After first level, no longer the focus person's direct chain
+            shown,
+            childRole
         );
     }
 }

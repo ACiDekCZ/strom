@@ -497,7 +497,8 @@ export function runLayoutPipeline(input: PipelineInput): LayoutResult {
     const measured = measureSubtrees({
         genModel,
         config,
-        focusPersonId
+        focusPersonId,
+        expandChildrenOf: input.expandChildrenOf
     });
 
     // Step 5: Place X positions (block-based)
@@ -512,7 +513,8 @@ export function runLayoutPipeline(input: PipelineInput): LayoutResult {
         config,
         maxIterations,
         tolerance,
-        focusPersonId
+        focusPersonId,
+        expandChildrenOf: input.expandChildrenOf
     });
 
     // Step 7: Route edges
@@ -698,7 +700,8 @@ export function runLayoutPipelineWithDebug(
     const measured = measureSubtrees({
         genModel,
         config,
-        focusPersonId
+        focusPersonId,
+        expandChildrenOf: input.expandChildrenOf
     });
 
     snapshots.push(createSnapshot(4, { selection, model, genModel, measured }));
@@ -735,6 +738,7 @@ export function runLayoutPipelineWithDebug(
         maxIterations,
         tolerance,
         focusPersonId,
+        expandChildrenOf: input.expandChildrenOf,
         stopAfterPhase: debugOptions.phase
     });
 

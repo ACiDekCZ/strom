@@ -123,6 +123,12 @@ interface AncestorNode {
     rowExtLeft: number;
     rowExtRight: number;
     /**
+     * Run members whose children are drawn in the parents' row (gen -1),
+     * which Phase A has locked: they stand over their children where they
+     * can (placeSiblingRuns), the rest of the run packed around them.
+     */
+    pinned: Set<FamilyBlockId>;
+    /**
      * The husband's siblings stand right of the wife instead (runRight): he
      * is a man on the female side of his child and the wife has no parents
      * in view, so the row reads husband, wife, his siblings (InnerSiblingRun).
@@ -413,6 +419,7 @@ function buildAncestorTree(
         rowExtRight: 0,
         runRight: [],
         extRight: 0,
+        pinned: new Set(),
         husbandBeyondWife: false,
         wifeBeyondHusband: false
     };
@@ -878,7 +885,12 @@ function attachSiblingRuns(
             const block = blocks.get(id);
             if (!block || block.parentBlockId !== parentBlock.id || block.generation !== node.generation) continue;
             const subtree = collectBlockSubtree(id, blocks);
-            if (subtree.some(b => b.generation >= -1 || (b.id !== id && taken.has(b.id)))) continue;
+            // A sibling in the grandparents' row whose children are drawn in
+            // the parents' row stands in the run too, over its children
+            const pinned = node.generation === -2 && subtree.length > 1
+                && subtree.every(b => b.id === id || b.generation >= -1);
+            if (subtree.some(b => (!pinned && b.generation >= -1) || (b.id !== id && taken.has(b.id)))) continue;
+            if (pinned) node.pinned.add(id);
             const union = model.unions.get(block.rootUnionId);
             const parentUnionId = [union?.partnerA, union?.partnerB]
                 .map(pid => pid ? model.childToParentUnion.get(pid) : undefined)
@@ -926,8 +938,11 @@ function attachSiblingRuns(
     } else {
         node.runRight = rightRun(husbandRun);
     }
-    const packedLeft = packSiblingRun([...node.runLeft].reverse(), 'LEFT', node.generation, blocks, model, config);
-    const packedRight = packSiblingRun(node.runRight, 'RIGHT', node.generation, blocks, model, config);
+    // Room for the pinned siblings beside the couple; where they stand over
+    // their children is known only once the tree is placed
+    const nearest = new Map([...node.pinned].map(id => [id, 0]));
+    const packedLeft = packSiblingRun([...node.runLeft].reverse(), 'LEFT', node.generation, blocks, model, config, nearest);
+    const packedRight = packSiblingRun(node.runRight, 'RIGHT', node.generation, blocks, model, config, nearest);
     node.extLeft = packedLeft.reach;
     node.extRight = packedRight.reach;
     node.rowExtLeft = packedLeft.rowReach;
@@ -968,6 +983,12 @@ function collectBlockSubtree(blockId: FamilyBlockId, blocks: Map<FamilyBlockId, 
  * couple than the couple's own outer card edge, in any row, so the rows
  * below keep the room the run always had.
  *
+ * A pinned member (`want`: its children are locked in the parents' row)
+ * asks for the offset at which it stands over them. It stands there unless
+ * the members nearer the couple already reach past it; the free members fill
+ * the room before it in their order as long as they fit, the rest go beyond.
+ * Its children do not move, so only its own row counts.
+ *
  * `run` is innermost first. Returns each block's distance from the couple's
  * card edge (to the block's inner edge, xLeft on the right, xRight on the
  * left), the run's reach over all its rows and its reach in the couple's row.
@@ -978,18 +999,18 @@ function packSiblingRun(
     rowGeneration: number,
     blocks: Map<FamilyBlockId, FamilyBlock>,
     model: LayoutModel,
-    config: LayoutConfig
+    config: LayoutConfig,
+    want: Map<FamilyBlockId, number> = new Map()
 ): { offsets: Map<FamilyBlockId, number>; reach: number; rowReach: number } {
     const offsets = new Map<FamilyBlockId, number>();
     const frontier = new Map<number, number>();
-    for (const id of run) {
-        const block = blocks.get(id);
-        if (!block) continue;
-        // The cards of the block and everything below it, per row, as
-        // distances outward from the block's inner edge
+    // The cards of a block and everything below it it moves with, per row,
+    // as distances outward from the block's inner edge
+    const rowsOf = (id: FamilyBlockId, block: FamilyBlock): Map<number, { near: number; far: number }> => {
         const inner = outward === 'RIGHT' ? block.xLeft : block.xRight;
         const rows = new Map<number, { near: number; far: number }>();
         for (const b of collectBlockSubtree(id, blocks)) {
+            if (b.generation >= -1) continue;
             const cards = getBlockCardExtent(b, model, config);
             const near = outward === 'RIGHT' ? cards.left - inner : inner - cards.right;
             const far = outward === 'RIGHT' ? cards.right - inner : inner - cards.left;
@@ -999,11 +1020,40 @@ function packSiblingRun(
                 : { near, far });
         }
         if (rows.size === 0) rows.set(block.generation, { near: 0, far: block.width });
+        return rows;
+    };
+    const firstFree = (rows: Map<number, { near: number; far: number }>): number => {
         let offset = -Infinity;
         for (const [gen, row] of rows) offset = Math.max(offset, (frontier.get(gen) ?? 0) + config.horizontalGap - row.near);
+        return offset;
+    };
+    const put = (id: FamilyBlockId, rows: Map<number, { near: number; far: number }>, offset: number): void => {
         offsets.set(id, offset);
         for (const [gen, row] of rows) frontier.set(gen, Math.max(frontier.get(gen) ?? 0, offset + row.far));
+    };
+    const pins = run
+        .filter(id => want.has(id) && blocks.has(id))
+        .map(id => ({ id, rows: rowsOf(id, blocks.get(id)!), at: want.get(id)! }))
+        .sort((a, b) => a.at - b.at);
+    for (const id of run) {
+        const block = blocks.get(id);
+        if (!block || want.has(id)) continue;
+        const rows = rowsOf(id, block);
+        // A pinned member whose place this one would reach goes first
+        while (pins.length > 0) {
+            const offset = firstFree(rows);
+            const pin = pins[0];
+            const clash = [...rows].some(([gen, row]) => {
+                const pinRow = pin.rows.get(gen);
+                return !!pinRow && offset + row.far + config.horizontalGap > pin.at + pinRow.near;
+            });
+            if (!clash) break;
+            put(pin.id, pin.rows, Math.max(pin.at, firstFree(pin.rows)));
+            pins.shift();
+        }
+        put(id, rows, firstFree(rows));
     }
+    for (const pin of pins) put(pin.id, pin.rows, Math.max(pin.at, firstFree(pin.rows)));
     const reach = frontier.size > 0 ? Math.max(0, ...frontier.values()) : 0;
     return { offsets, reach, rowReach: frontier.get(rowGeneration) ?? 0 };
 }
@@ -1150,18 +1200,39 @@ function placeSiblingRuns(
         if (!block) return;
         const delta = left - block.xLeft;
         for (const b of collectBlockSubtree(id, blocks)) {
+            // A pinned sibling's children stay where Phase A locked them
+            if (b.generation >= -1) continue;
             if (!guardAncestorOnly(b, 'placeSiblingRuns')) continue;
             shiftBlock(b, delta);
             claimed?.add(b.id);
             transferred?.add(b.id);
         }
     };
-    const left = packSiblingRun([...node.runLeft].reverse(), 'LEFT', node.generation, blocks, model, config);
+    // Where each pinned sibling stands over its children: the couple's cards
+    // centred over the children's cards, as an offset from the couple
+    const wantOf = (outward: 'LEFT' | 'RIGHT'): Map<FamilyBlockId, number> => {
+        const want = new Map<FamilyBlockId, number>();
+        for (const id of node.pinned) {
+            const block = blocks.get(id);
+            if (!block) continue;
+            const kids = block.childBlockIds
+                .map(c => blocks.get(c))
+                .filter((b): b is FamilyBlock => !!b)
+                .map(b => getBlockCardExtent(b, model, config));
+            if (kids.length === 0) continue;
+            const own = getBlockCardExtent(block, model, config);
+            const delta = (Math.min(...kids.map(k => k.left)) + Math.max(...kids.map(k => k.right))) / 2
+                - (own.left + own.right) / 2;
+            want.set(id, outward === 'RIGHT' ? block.xLeft + delta - cards.right : cards.left - (block.xRight + delta));
+        }
+        return want;
+    };
+    const left = packSiblingRun([...node.runLeft].reverse(), 'LEFT', node.generation, blocks, model, config, wantOf('LEFT'));
     for (const [id, offset] of left.offsets) {
         const block = blocks.get(id);
         if (block) moveTo(id, cards.left - offset - block.width);
     }
-    const right = packSiblingRun(node.runRight, 'RIGHT', node.generation, blocks, model, config);
+    const right = packSiblingRun(node.runRight, 'RIGHT', node.generation, blocks, model, config, wantOf('RIGHT'));
     for (const [id, offset] of right.offsets) moveTo(id, cards.right + offset);
     placeSiblingRuns(node.hSubtree, blocks, model, unionToBlock, config, claimed, transferred);
     placeSiblingRuns(node.wSubtree, blocks, model, unionToBlock, config, claimed, transferred);
@@ -1687,6 +1758,12 @@ export function applyConstraints(input: ConstraintsInput): ConstrainedModel {
         resolveParentCoupleOverlaps(blocks, model, fbm.unionToBlock, input.focusPersonId, config);
     }
 
+    // Children of an ancestor's sibling drawn in the parents' row move up to
+    // the focus family, so the sibling can stand over them in its run
+    if (input.focusPersonId) {
+        pullAncestorSiblingChildren(blocks, model, fbm.unionToBlock, input.focusPersonId, new Set(input.expandChildrenOf ?? []), config);
+    }
+
     // Capture locked positions for gen>=0 after Phase A is complete
     // This will be used to verify Phase B doesn't modify descendant positions
     const lockedX = captureLockedPositions(
@@ -2170,6 +2247,109 @@ function relocateSplitSiblingSubtrees(
                 break;
             }
         }
+    }
+}
+
+/**
+ * Children of a grandparent's sibling (or of a grandparent's other marriage)
+ * drawn in the parents' row (gen -1, ancestors' children shown in place):
+ * step 5 leaves them wherever their parent's block stood when the ancestors
+ * were placed, often several card widths beyond the focus family, and Phase A
+ * locks them there. Phase B then stands the parent over them in its sibling
+ * run (placeSiblingRuns, pinned members), so the whole run followed them out
+ * and left the row empty in between.
+ *
+ * Each such group of children (with everything drawn below them) moves
+ * toward the focus parents as one piece, as far as the nearest card in any
+ * of its rows allows (horizontalGap), never past a card and never across the
+ * focus parents. Groups nearer the focus parents move first.
+ */
+function pullAncestorSiblingChildren(
+    blocks: Map<FamilyBlockId, FamilyBlock>,
+    model: LayoutModel,
+    unionToBlock: Map<UnionId, FamilyBlockId>,
+    focusPersonId: PersonId,
+    shown: ReadonlySet<PersonId>,
+    config: LayoutConfig
+): void {
+    const anchorUnionId = model.childToParentUnion.get(focusPersonId);
+    const anchorBlock = anchorUnionId ? blocks.get(unionToBlock.get(anchorUnionId) ?? ('' as FamilyBlockId)) : undefined;
+    if (!anchorBlock) return;
+    const anchorX = anchorBlock.xCenter;
+
+    // The focus and their ancestors
+    const line = new Set<PersonId>([focusPersonId]);
+    const todo: PersonId[] = [focusPersonId];
+    while (todo.length > 0) {
+        const unionId = model.childToParentUnion.get(todo.pop()!);
+        const union = unionId ? model.unions.get(unionId) : undefined;
+        for (const p of [union?.partnerA, union?.partnerB]) {
+            if (p && !line.has(p)) { line.add(p); todo.push(p); }
+        }
+    }
+    const onLine = (block: FamilyBlock): boolean => {
+        if (block.chainInfo) return block.chainInfo.personOrder.some(p => line.has(p));
+        const union = model.unions.get(block.rootUnionId);
+        return !!union && [union.partnerA, union.partnerB].some(p => !!p && line.has(p));
+    };
+
+    // Child-block sets to pull: the children of a grandparent's sibling, and
+    // (when a grandparent's children are shown) the children of the
+    // grandparent's other marriages, i.e. the half-siblings of a parent
+    const sets: FamilyBlockId[][] = [];
+    for (const [, parent] of blocks) {
+        if (parent.generation !== -2 || parent.childBlockIds.length === 0) continue;
+        if (!onLine(parent)) {
+            const grand = parent.parentBlockId ? blocks.get(parent.parentBlockId) : undefined;
+            if (grand && onLine(grand)) sets.push(parent.childBlockIds);
+            continue;
+        }
+        const chain = parent.chainInfo;
+        if (!chain || !chain.personOrder.some(p => line.has(p) && shown.has(p))) continue;
+        for (const unionId of chain.unionIds) {
+            const union = model.unions.get(unionId);
+            if (!union || union.childIds.some(c => line.has(c))) continue;
+            const childIds = chain.unionChildBlockIds.get(unionId) ?? [];
+            if (childIds.length > 0) sets.push(childIds);
+        }
+    }
+
+    const groups: Array<{ ids: Set<FamilyBlockId>; rows: Map<number, { left: number; right: number }>; toLeft: boolean; distance: number }> = [];
+    for (const childBlockIds of sets) {
+        const ids = new Set<FamilyBlockId>();
+        for (const childId of childBlockIds) for (const b of collectBlockSubtree(childId, blocks)) ids.add(b.id);
+        const rows = new Map<number, { left: number; right: number }>();
+        let below = true;
+        for (const id of ids) {
+            const b = blocks.get(id)!;
+            if (b.generation < -1) { below = false; break; }
+            const cards = getBlockCardExtent(b, model, config);
+            const row = rows.get(b.generation);
+            rows.set(b.generation, row
+                ? { left: Math.min(row.left, cards.left), right: Math.max(row.right, cards.right) }
+                : { left: cards.left, right: cards.right });
+        }
+        if (!below || rows.size === 0) continue;
+        const left = Math.min(...[...rows.values()].map(r => r.left));
+        const right = Math.max(...[...rows.values()].map(r => r.right));
+        if (left > anchorX) groups.push({ ids, rows, toLeft: true, distance: left - anchorX });
+        else if (right < anchorX) groups.push({ ids, rows, toLeft: false, distance: anchorX - right });
+    }
+    groups.sort((a, b) => a.distance - b.distance);
+
+    for (const group of groups) {
+        let room = Infinity;
+        for (const [, other] of blocks) {
+            if (group.ids.has(other.id)) continue;
+            const row = group.rows.get(other.generation);
+            if (!row) continue;
+            const cards = getBlockCardExtent(other, model, config);
+            if (group.toLeft && cards.right <= row.left + 0.5) room = Math.min(room, row.left - cards.right - config.horizontalGap);
+            if (!group.toLeft && cards.left >= row.right - 0.5) room = Math.min(room, cards.left - row.right - config.horizontalGap);
+        }
+        if (!isFinite(room) || room < 0.5) continue;
+        const delta = group.toLeft ? -room : room;
+        for (const id of group.ids) shiftBlock(blocks.get(id)!, delta);
     }
 }
 

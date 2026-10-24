@@ -85,9 +85,35 @@ mother's second husband right of her) and the direct-line partner has parents
 in view, that union's children cannot hang under the extra partner: the couple
 below is locked after Phase A and the partner's family stands beyond it. Step 5
 (`placeAncestorChainBlockChildren`) puts them on the person's own side, beyond
-the full siblings, nearest union first; their line would cross the line to the
-person, so step 7 leaves it out and the cards link instead (`omittedEdges`).
-With a partner without parents they stand beyond the partner as before.
+the full siblings, nearest union first. With a partner without parents they
+stand beyond the partner (`beyondPartnerSide`, the side Phase B gives the
+siblings, C below), so the rows Phase A locks keep them there too.
+
+The other partners face the siblings. While a person of an ancestor chain at
+gen <= -2 has children shown, step 4 (`faceLineSiblings`, in
+`buildAncestorBlocks`) mirrors the chain's person order when the other
+partners would stand on the far side of the couple from the line child's
+siblings: `[extras..., A, B]` becomes `[A, B, extras nearest first...]` (and
+the mirror for a husband's siblings). The siblings' side follows Phase B's
+sibling runs: a wife's to the right, a husband's to the left; beyond the
+partner on the inner side when the partner has no parents in view; a line
+child without a partner on the tree's outer side. In the grandparents' row
+(the line child is a focus parent, placed by Phase A) it applies only with a
+partner who has parents in view. Each other marriage's children then hang
+under their own parent beside the full siblings and every line is drawn;
+before, those lines crossed the line to the line child and were left out
+(`omittedEdges`). Only with an other marriage that has children in view and
+with the children shown; without `expandChildrenOf` the order is unchanged.
+
+Children of an ancestor's sibling or other marriage in the parents' row.
+Step 5 leaves the children of a grandparent's sibling (and, while a
+grandparent on the line with other marriages has children shown, the
+children of those marriages: the parents' half-siblings) where their parent's
+block stood when the ancestors were placed, often several card widths beyond
+the focus family. Before Phase A locks the row, `pullAncestorSiblingChildren`
+moves each such group of children, with everything drawn below them, toward
+the focus parents as one piece, as far as the nearest card in any of its rows
+allows (horizontalGap), never across the focus parents; nearer groups first.
 
 Folded ancestors (`PipelineInput.foldAncestorsOf`, applied only together with
 `expandChildrenOf`): after `withChildrenShown`, `foldAncestorsInSelection`
@@ -338,6 +364,16 @@ resolveAncestorTreeOverlap(hTree, wTree)
 transferAncestorTreeToBlocks(hTree)
 transferAncestorTreeToBlocks(wTree)
 placeSiblingRuns(hTree); placeSiblingRuns(wTree)
+//    A run is packed by its rows' outline (packSiblingRun), not by block
+//    widths: each sibling's block and everything below it moves as one piece,
+//    from the couple outward, only as far as its cards need to clear the
+//    cards already placed in the same rows (horizontalGap). A childless
+//    sibling stands right beside the sibling before it, not a children row
+//    away. A sibling in the grandparents' row whose children stand in the
+//    parents' row (locked by Phase A) is pinned: it asks for the place over
+//    its children; the free siblings fill the room before it in their order
+//    while they fit, the rest go beyond. The parents centre over the siblings
+//    in their own row.
 
 // 8. Handle collateral ancestors (passes until nothing moves, at most 20;
 //    ancestors' children shown in place can need more than a few)
@@ -781,10 +817,27 @@ with two adaptations: `computeAncestorTreeWidth` uses the chain block's real
   couple centers over its one child.
 - Children shown in place, remaining gaps (measured on a real 1,300-state
   sweep and the two-clicks test in `childrenShownFull.test.ts`):
-  - Phase B packs sibling runs and leftovers as rectangles (block widths, not
-    contours). Two runs side by side can keep up to about 4 card widths of
-    empty row between their children when a wide subtree hangs under one of
-    them. Contour packing would close these gaps.
+  - Phase B packs a sibling run by its rows' outline, but neighbouring
+    clusters still stand apart where a rule fixes them. Gaps of more than one
+    card width left beside the cards a click concerns, by class (the sweep's
+    states, normal cards): (P) the parents centre over a wide row of their
+    children (invariant 6) and the neighbour belongs to another anchor's
+    cluster, which cluster separation only pushes outward (invariant 10);
+    (Q) a whole cluster moves rigidly (invariant 4) because a wider row
+    elsewhere pushes it, leaving a hole in a narrower row; (S) the line's
+    lower row is offset from its ancestor already without children shown
+    (staircase), the new children stand under their parents and the line is
+    locked. Measured maximum about 3.4 card widths.
+  - A lone parent's other marriage (the other partner not in view) gets a
+    line from the parent's card. When its children stand beyond the line
+    child's partner (C), that line would run along the couple's bus, and
+    when its child is married to someone drawn by another line (the child
+    stands with that family), it would cross; step 7 leaves it out and the
+    cards link (`omittedEdges`).
+  - The children of a lone parent's other marriage stand beside the main
+    family's run (invariant 5) with the line from the parent's card, which
+    stays in the couple centred over the main children: about 3 to 4 card
+    widths when the main family is wide.
   - Children shown in the parents' row (gen -1) stand compactly under their
     parents now, and can be placed where the focus's parents stand.
     `resolveParentCoupleOverlaps` then moves the other block's whole
@@ -794,15 +847,27 @@ with two adaptations: `computeAncestorTreeWidth` uses the chain block's real
     the parents' block hangs under one parent's parents only, and the walk
     would otherwise drag the other parent's siblings into the couple.
   - Children shown in the parents' row (gen -1, Phase A, locked) still yield
-    to the focus family. A step-parent's children can stand about 6 card
-    widths from their parent's line, because their bus may not overlap the
-    focus family's bus, and step 6 can put half-siblings on the far side of
-    the direct-line parent. The two-clicks test therefore checks distances
-    and contiguity only for children drawn in rows gen <= -2.
+    to the focus family. In the expanded display a parent's chain slot is
+    sized for the primary children, so a focus parent with another marriage
+    can stand 3 to 6 card widths from that partner, as without the click.
+    The two-clicks test checks distances and contiguity for children drawn
+    in rows gen <= -2, and for the children of a grandparent's other
+    marriage in the parents' row: their line is drawn and comes down within
+    two card widths of them, except where the line child's family is locked
+    under the couple and several other marriages stand in the partners'
+    order beside it (up to 4 card widths, `KNOWN_HALF_SIBLING_STEMS`), or
+    a half-sibling's husband stands between her and the line (a couple's
+    order follows gender, invariant 3).
   - Half-siblings of a direct-line ancestor (an ancestor's other marriage)
-    stand beside that ancestor as its sibling run, so their distance from
-    the other parent follows how far the ancestor tree places the direct
-    line from that parent. The click does not set it.
+    stand beside that ancestor as its sibling run (children of one person
+    side by side), so their distance from the other parent follows how far
+    the ancestor tree places the direct line from that parent (up to about
+    6 card widths in a staircase). The click does not set it.
+  - A grandparent's other partners on the siblings' side (`faceLineSiblings`)
+    can stand several card widths from the grandparent: each stands over her
+    own children beside the half-siblings, while the couple centres over its
+    own wide row of children (invariant 6). Before, these lines were left
+    out.
   - Forced cases: a couple centered over many children with the direct-line
     child at the end of the run (invariants 5 and 6), and a person standing
     over their own child next to a couple centered over a wide run. A bus

@@ -404,7 +404,8 @@ function placeAncestorChain(
     model: LayoutModel,
     unionToBlock: Map<UnionId, FamilyBlockId>,
     config: LayoutConfig,
-    placedBlocks: Set<FamilyBlockId>
+    placedBlocks: Set<FamilyBlockId>,
+    lineChildIsWife: boolean | null = null
 ): void {
     const blockId = unionToBlock.get(ancestorUnionId);
     if (!blockId) return;
@@ -490,7 +491,8 @@ function placeAncestorChain(
     } else {
         // Determine sibling direction based on anchor person's role in their couple.
         // Ancestor Side Ownership (ASO): siblings of a husband fan LEFT, siblings of a wife fan RIGHT.
-        const sibDir = siblingSideOf(directLineChild, anchorPersonId, model);
+        const sibDir = beyondPartnerSide(directLineChild, anchorPersonId, lineChildIsWife, model)
+            ?? siblingSideOf(directLineChild, anchorPersonId, model);
 
         // Place sibling blocks around the direct-line child
         placeSiblingsAround(block, directLineChild, blocks, model, unionToBlock, config, placedBlocks, sibDir);
@@ -527,6 +529,11 @@ function placeAncestorChain(
         }
     }
 
+    // Whether the person whose parents the next blocks are is a wife
+    const anchorUnion = model.unions.get(model.personToUnion.get(anchorPersonId) ?? ('' as UnionId));
+    const anchorIsWife = anchorUnion?.partnerB === anchorPersonId ? true
+        : anchorUnion?.partnerB && anchorUnion.partnerA === anchorPersonId ? false
+        : null;
     for (const { personId, anchorX: upAnchorX } of upAnchorPersons) {
         const parentUnionId = model.childToParentUnion.get(personId);
         if (!parentUnionId) continue;
@@ -540,9 +547,36 @@ function placeAncestorChain(
             model,
             unionToBlock,
             config,
-            placedBlocks
+            placedBlocks,
+            anchorIsWife
         );
     }
+}
+
+/**
+ * Siblings of an ancestor in the grandparents' rows and above (gen <= -2)
+ * that Phase B stands beyond the partner (attachSiblingRuns, "inner side"):
+ * a husband whose child on the line is a wife, or a wife whose child on the
+ * line is a husband, faces the rest of the pedigree with his siblings; when
+ * the partner has no parents in view they stand beyond the partner instead.
+ * Placing them there already here keeps what hangs below them in the rows
+ * Phase A locks (their children in the parents' row) on that side too:
+ * placed on the inner side, those children stayed between the two halves of
+ * the pedigree, under the other half's lines, and their parents could not
+ * stand over them. Null when the usual side applies.
+ */
+function beyondPartnerSide(
+    directLineChild: FamilyBlock,
+    anchorPersonId: PersonId,
+    lineChildIsWife: boolean | null,
+    model: LayoutModel
+): 'LEFT' | 'RIGHT' | null {
+    if (lineChildIsWife === null || directLineChild.generation > -2 || directLineChild.chainInfo) return null;
+    const union = model.unions.get(directLineChild.rootUnionId);
+    if (!union?.partnerB) return null;
+    if (union.partnerA === anchorPersonId && lineChildIsWife && !model.childToParentUnion.has(union.partnerB)) return 'RIGHT';
+    if (union.partnerB === anchorPersonId && !lineChildIsWife && !model.childToParentUnion.has(union.partnerA)) return 'LEFT';
+    return null;
 }
 
 /**
