@@ -41,7 +41,10 @@ export interface ShownChildrenSnapshot {
  * of the children shown, the card it concerned (it keeps its place on the
  * screen) and whether it was "Hide shown children" (the first card goes back
  * where it stood) with where that card stood on the screen before it (back
- * puts it there again); for a jump, the pan and zoom.
+ * puts it there again); for a jump, the pan and zoom; for a new focus, the
+ * pan and zoom the view had when the step left it (`leftView`: going back
+ * over a new focus centres on the focus, and this view stands in for the
+ * centred one, so a jump before it is retraced to where it landed).
  */
 export interface ViewHistoryEntry {
     readonly focus: PersonId;
@@ -50,6 +53,17 @@ export interface ViewHistoryEntry {
     readonly restoreView?: boolean;
     readonly anchorAt?: { readonly x: number; readonly y: number };
     readonly view?: ViewTransform;
+    readonly leftView?: ViewTransform;
+}
+
+/**
+ * The pan and zoom a step back or forward over a new focus left (`view`),
+ * standing in for the centred view it landed on (`landed`) while the view
+ * stays there.
+ */
+export interface ViewStandIn {
+    readonly view: ViewTransform;
+    readonly landed: ViewTransform;
 }
 
 export interface ViewHistory {
@@ -85,13 +99,23 @@ export function sameTransform(a: ViewTransform, b: ViewTransform): boolean {
 }
 
 /**
+ * The pan and zoom the history takes the current view for: the stand-in's
+ * view while the view still stands where the step over a new focus put it
+ * (nothing moved it since), else the current one.
+ */
+export function historyView(current: ViewTransform, standIn: ViewStandIn | null): ViewTransform {
+    return standIn && sameTransform(current, standIn.landed) ? standIn.view : current;
+}
+
+/**
  * One step back (`dir` 'back') or forward: pops the nearest entry still
  * valid (a deleted focus is skipped; `usable` may skip more, e.g. a step of
  * the children shown outside the family view), and puts the current view on
  * the other stack with the popped step's details — the card it concerned,
- * "hide all" (with where `screenOf` says that card stands now), and for a
- * jump the current pan and zoom — so the way back retraces it. Returns the
- * entry to apply, or null when there is none.
+ * "hide all" (with where `screenOf` says that card stands now), for a jump
+ * the current pan and zoom, for a new focus the pan and zoom it leaves — so
+ * the way back retraces it. `currentView` is the history's view
+ * (historyView). Returns the entry to apply, or null when there is none.
  */
 export function stepViewHistory(
     history: ViewHistory,
@@ -115,6 +139,7 @@ export function stepViewHistory(
             ...(target.restoreView ? { restoreView: true } : {}),
             ...(anchorAt ? { anchorAt } : {}),
             ...(target.view ? { view: currentView } : {}),
+            ...(target.focus !== current.focus ? { leftView: currentView } : {}),
         });
         if (to.length > VIEW_HISTORY_LIMIT) to.splice(0, to.length - VIEW_HISTORY_LIMIT);
         return target;

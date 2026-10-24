@@ -261,6 +261,44 @@ test.describe('desktop 1440 × 900', () => {
         expect(f.ty).toBeCloseTo(jumped.ty, 0);
         await expect(fwd(page)).toBeHidden();
     });
+
+    test('a jump, then a new focus: back twice, forward retraces the jump (its pan and zoom), not the view before it', async ({ page }) => {
+        await setupFixture(page, 'etalon-inlaw-loop', 'eJ_focus_kid');
+        await page.evaluate(id => window.Strom.ZoomPan.glideToPerson(id as never, 2.5, 0), 'eJ_p_mo');
+        const transform = () => page.evaluate(() => window.Strom.ZoomPan.getTransform());
+        const expectTransform = async (want: { scale: number; tx: number; ty: number }, label: string) => {
+            await expect.poll(async () => (await transform()).tx, label).toBeCloseTo(want.tx, 0);
+            const t = await transform();
+            expect(t.scale, label).toBeCloseTo(want.scale, 6);
+            expect(t.tx, label).toBeCloseTo(want.tx, 0);
+            expect(t.ty, label).toBeCloseTo(want.ty, 0);
+        };
+        const before = await transform();
+        await cardOf(page, 'eJ_p_mo').locator('.branch-tab.line-link[data-action="jump-child"]').click();
+        await expect(cardOf(page, 'eJ_partner_sib')).toHaveClass(/highlighted/);
+        await expect.poll(async () => (await transform()).tx).not.toBeCloseTo(before.tx, 0);
+        await settled(page);
+        const jumped = await transform();
+        await page.evaluate(() => window.Strom.TreeRenderer.setFocus('eJ_p_mo' as never));
+        await expect.poll(() => focusOf(page)).toBe('eJ_p_mo');
+
+        for (const round of [1, 2]) {
+            // Back over the new focus: centred on the focus (the view of a new focus)
+            await page.keyboard.press('Alt+ArrowLeft');
+            await expect.poll(() => focusOf(page)).toBe('eJ_focus_kid');
+            // Back over the jump: the pan and zoom before it
+            await page.keyboard.press('Alt+ArrowLeft');
+            await expect(back(page)).toBeHidden();
+            await expectTransform(before, `round ${round}: back over the jump`);
+            // Forward over the jump: where the jump landed
+            await page.keyboard.press('Alt+ArrowRight');
+            await expectTransform(jumped, `round ${round}: forward over the jump`);
+            // Forward over the new focus
+            await page.keyboard.press('Alt+ArrowRight');
+            await expect.poll(() => focusOf(page)).toBe('eJ_p_mo');
+            await expect(fwd(page)).toBeHidden();
+        }
+    });
 });
 
 test.describe('phone 390 × 844', () => {

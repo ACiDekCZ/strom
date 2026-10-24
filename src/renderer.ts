@@ -84,7 +84,7 @@ import {
 } from './children-transition.js';
 import type { LayoutViewLayer, ViewLineFlag } from './layout/index.js';
 import { buildViewLayer } from './layout/index.js';
-import { ViewHistory, ViewHistoryEntry, ViewTransform, ShownChildrenSnapshot, emptyViewHistory, pushViewStep, stepViewHistory, sameShown, sameTransform } from './view-history.js';
+import { ViewHistory, ViewHistoryEntry, ViewTransform, ViewStandIn, ShownChildrenSnapshot, emptyViewHistory, pushViewStep, stepViewHistory, sameShown, sameTransform, historyView } from './view-history.js';
 
 /**
  * One generation band's world-space geometry, consumed by the sticky HTML
@@ -259,6 +259,8 @@ class TreeRendererClass {
     private historySeq = 0;
     /** The children a focus from the history shows again (setFocus applies them with the new focus). */
     private pendingShown: readonly ShownChildrenSnapshot[] | null = null;
+    /** After a step back or forward over a new focus (centred on it): the pan and zoom that focus left, while the view stays. */
+    private viewStandIn: ViewStandIn | null = null;
     /** Search highlight: hits get 'search-hit', everyone else 'search-dim'. */
     private highlightIds: Set<PersonId> | null = null;
     /** People the last live-research change touched: 'live-changed' glow. */
@@ -1048,7 +1050,8 @@ class TreeRendererClass {
         // can manage the stacks themselves.
         if (!this.suppressHistoryPush && this.focusPersonId && personId
             && this.focusPersonId !== personId) {
-            this.pushHistoryStep(this.currentHistoryEntry());
+            const before = this.currentHistoryEntry();
+            this.pushHistoryStep(before && { ...before, leftView: this.historyTransform() });
         }
 
         // Children shown in place belong to the view they were shown in
@@ -1792,6 +1795,7 @@ class TreeRendererClass {
      */
     resetFocusHistory(): void {
         this.history = emptyViewHistory();
+        this.viewStandIn = null;
         this.historySeq++;
         this.updateNavButtons();
     }
@@ -1828,8 +1832,14 @@ class TreeRendererClass {
     private pushHistoryStep(before: ViewHistoryEntry | null): void {
         if (!before) return;
         pushViewStep(this.history, before);
+        this.viewStandIn = null;
         this.historySeq++;
         this.updateNavButtons();
+    }
+
+    /** The pan and zoom the history takes the view for (historyView: the stand-in after a step over a new focus). */
+    private historyTransform(): ViewTransform {
+        return historyView(ZoomPan.getTransform(), this.viewStandIn);
     }
 
     /** Set the children shown in place as a history entry has them (no render). */
@@ -1845,7 +1855,9 @@ class TreeRendererClass {
     /**
      * Navigate one step through the view history. A view with another focus
      * comes back with the children it showed (centred on the focus, as a new
-     * focus is); within the focus the children shown change as a click
+     * focus is; the pan and zoom it had when it was left stand in for the
+     * centred view while it stays, so a jump before it goes forward to where
+     * it landed); within the focus the children shown change as a click
      * changes them (the transition of §1, the step's card in place, the zoom
      * of §5 back); a jump's pan and zoom come back as they were. Outside the
      * family view a step of the children shown alone is skipped. Skips
@@ -1859,7 +1871,8 @@ class TreeRendererClass {
         }
         this.finishChildrenTransition();
         const family = this.viewMode === 'family';
-        const target = stepViewHistory(this.history, dir, current, ZoomPan.getTransform(),
+        const currentView = this.historyTransform();
+        const target = stepViewHistory(this.history, dir, current, currentView,
             id => !!DataManager.getPerson(id),
             // outside the family view a step of the children alone is skipped; so is a view that is the current one
             e => e.focus !== current.focus || (family && (!sameShown(e.shown, current.shown) || !!e.view)),
@@ -1869,6 +1882,7 @@ class TreeRendererClass {
             return;
         }
         this.historySeq++;
+        this.viewStandIn = null;
         if (target.focus !== current.focus) {
             this.pendingShown = target.shown;
             this.suppressHistoryPush = true;
@@ -1878,6 +1892,8 @@ class TreeRendererClass {
                 this.suppressHistoryPush = false;
                 this.pendingShown = null;
             }
+            // Centred on the focus: the view the focus had when it was left stands in for this one
+            if (target.leftView) this.viewStandIn = { view: target.leftView, landed: ZoomPan.getTransform() };
             return;
         }
         if (!sameShown(target.shown, current.shown)) {

@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     ViewHistoryEntry, ShownChildrenSnapshot, emptyViewHistory, pushViewStep, stepViewHistory, liveEntry, sameShown,
-    sameTransform, VIEW_HISTORY_LIMIT,
+    sameTransform, historyView, VIEW_HISTORY_LIMIT,
 } from '../view-history.js';
 import type { PersonId } from '../types.js';
 
@@ -108,6 +108,37 @@ describe('view history', () => {
         pushViewStep(h, entry('f'));
         stepViewHistory(h, 'back', entry('g'), after, all);
         expect(last(h.forward).view).toBeUndefined();
+    });
+
+    it('a jump, a new focus, back twice: forward retraces the jump, though back over the focus centred the view', () => {
+        // The renderer's flow: a new focus is a step with the view it left; back over it
+        // centres on the focus, and the view it left stands in for the centred one
+        const h = emptyViewHistory();
+        const before = { scale: 2.5, tx: 10, ty: 20 };
+        const jumped = { scale: 1.2, tx: -400, ty: 90 };
+        const centred = { scale: 1.2, tx: -960, ty: 40 };
+        const other = { scale: 1.2, tx: 300, ty: -80 };
+        pushViewStep(h, { ...entry('f', 'a'), view: before });
+        pushViewStep(h, { ...entry('f', 'a'), leftView: jumped });
+        for (let round = 0; round < 2; round++) {
+            const toFocus = stepViewHistory(h, 'back', entry('g'), other, all)!;
+            expect(toFocus.focus).toBe('f');
+            expect(toFocus.leftView).toEqual(jumped);
+            // the forward entry keeps the view the new focus had, for going back over it later
+            expect(last(h.forward).leftView).toEqual(other);
+            const standIn = { view: toFocus.leftView!, landed: centred };
+            const toJump = stepViewHistory(h, 'back', entry('f', 'a'), historyView(centred, standIn), all)!;
+            expect(toJump.view).toEqual(before);
+            const fwdJump = stepViewHistory(h, 'forward', entry('f', 'a'), before, all)!;
+            expect(fwdJump.view).toEqual(jumped);
+            const fwdFocus = stepViewHistory(h, 'forward', entry('f', 'a'), jumped, all)!;
+            expect(fwdFocus.focus).toBe('g');
+            expect(last(h.back).leftView).toEqual(jumped);
+            expect(h.forward).toEqual([]);
+        }
+        // A view moved by hand since: the stand-in no longer holds
+        expect(historyView(other, { view: jumped, landed: centred })).toEqual(other);
+        expect(historyView(centred, null)).toEqual(centred);
     });
 
     it('skips an entry whose focus was deleted and drops shown children of deleted persons', () => {
