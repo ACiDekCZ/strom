@@ -3188,16 +3188,16 @@
             color: var(--on-primary);
         }
         .hidden-partners-btn { font-variant-numeric: tabular-nums; }
-        /* "▸ ∞ n" after a click on one name (round 6 §42): part of the
-           partners shown, the rest offered; a primary outline, unfilled. */
-        .hidden-partners-btn.partial { border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); }
         .hidden-partners-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
         .hidden-partners-btn:focus-visible .badge-tooltip { display: block; }
 
-        /* "▸ parents" dashed: the parents folded away while children are shown
-           in place (§2, src/renderer.ts foldedFor); a click hides those
-           children and brings the parents back. */
-        .branch-tab.folded {
+        /* The tab's half states, one look: "▸ parents" dashed, the parents
+           folded away while children are shown in place (§2, src/renderer.ts
+           foldedFor; a click hides those children and brings the parents
+           back), and "▸ ∞ n" after a click on one name (round 6 §42, round 7
+           §49: part of the partners shown, the rest offered). */
+        .branch-tab.folded,
+        .hidden-partners-btn.partial {
             border: 1px dashed var(--text-faint);
             background: var(--bg);
             box-shadow: none;

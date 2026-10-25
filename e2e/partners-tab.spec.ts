@@ -319,6 +319,60 @@ test.describe('the standard display: a name in the "▸ ∞" bubble shows that p
         await expect(cardOf(page, 'sib_w1')).toHaveCount(0);
     });
 
+    /**
+     * Round 7 §49: the half state "▸ ∞ n" wears the outline of the tab's
+     * other half state (the dashed "▸ parents", .folded), not a look of its
+     * own; its bubble names only the partners this pill brought, and
+     * "▾ Hide …" hides only those: a partner who stood at the card before
+     * (Lena, brought with Kai by "▸ children") stays.
+     */
+    test('mouse 1440: "▸ ∞ n" dashed as the folded "▸ parents"; "▾ Hide …" hides only the partners it brought, not the one who stood there before (round 7 §49)', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await setupTeo(page);
+        await cardOf(page, 'sib').locator('.edge-top-right .branch-tab.children-tab').click();
+        for (const id of ['sib_w2', 'sib_c2']) await expect(cardOf(page, id), id).toBeVisible();
+        const pill = partnersPill(page, 'sib');
+        await pill.hover();
+        await pick(page, 'sib', 'Zoe').click();
+        await page.mouse.move(5, 500);
+        await expect(cardOf(page, 'sib_w3')).toBeVisible();
+        await expect(pill).toHaveClass(/partial/);
+        await expect(pill).toHaveText(/▸\s*∞\s*1/);
+        // The outline of the folded "▸ parents": dashed in the faint text colour, on the canvas's ground, no shadow
+        const look = await pill.evaluate(el => {
+            const cs = getComputedStyle(el);
+            const probe = document.createElement('span');
+            probe.style.color = 'var(--text-faint)';
+            const bg = document.createElement('span');
+            bg.style.color = 'var(--bg)';
+            el.parentElement!.append(probe, bg);
+            const faint = getComputedStyle(probe).color, ground = getComputedStyle(bg).color;
+            probe.remove();
+            bg.remove();
+            return { style: cs.borderTopStyle, width: cs.borderTopWidth, color: cs.borderTopColor, faint, background: cs.backgroundColor, ground, shadow: cs.boxShadow };
+        });
+        expect(look.style).toBe('dashed');
+        expect(look.width).toBe('1px');
+        expect(look.color).toBe(look.faint);
+        expect(look.background).toBe(look.ground);
+        expect(look.shadow).toBe('none');
+        // Its bubble: the rest offered, then only the partner this pill brought
+        await pill.hover();
+        const bubble = partnersBubble(page, 'sib');
+        await expect(bubble).toBeVisible();
+        await expect(bubble.locator('.partner-pick .badge-tooltip-name')).toHaveText(['Mira Holt']);
+        await expect(bubble.locator('.badge-tooltip-group')).toHaveText(['Partners shown here']);
+        await expect(bubble.locator('[data-name-group="1"] .badge-tooltip-name')).toHaveText(['Zoe Arden']);
+        // "▾ Hide …": Zoe goes, Lena and Kai (there before the pill) stay
+        await bubble.locator('.partner-hide-row').click();
+        await page.mouse.move(5, 500);
+        await expect(cardOf(page, 'sib_w3')).toHaveCount(0);
+        for (const id of ['sib_w2', 'sib_c2']) await expect(cardOf(page, id), id).toBeVisible();
+        expect(await page.evaluate(() => window.Strom.TreeRenderer.isChildrenShown('sib' as never))).toBe(true);
+        await expect(pill).toHaveText(/▸\s*∞\s*2/);
+        await expect(pill).not.toHaveClass(/partial/);
+    });
+
     test.describe('touch 390 × 844', () => {
         test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
