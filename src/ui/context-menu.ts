@@ -8,7 +8,7 @@
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings } from '../strings.js';
-import { Person, PersonId, RelationType } from '../types.js';
+import { PartnershipId, Person, PersonId, RelationType } from '../types.js';
 import { uiModule } from './module.js';
 import { isCoarsePointer } from './bottom-sheet.js';
 import { isTabletOrMobile } from '../breakpoints.js';
@@ -22,6 +22,8 @@ const CHILD_ELSEWHERE_ACTION = 'child-elsewhere:';
 /** The menu actions of the "↗ Go to …" rows (a card's line-link tabs, round 6 §40). */
 const LINE_JUMP_PARENTS_ACTION = 'line-jump-parents';
 const LINE_JUMP_CHILDREN_ACTION = 'line-jump-children';
+/** The menu action of a name under "∞ Other partners" (+ the marriage's id, round 7 §50). */
+const PARTNER_HERE_ACTION = 'partner-here:';
 
 /** One entry in the person action menu (context menu / bottom sheet). */
 export interface PersonMenuAction {
@@ -195,6 +197,7 @@ export const contextMenuMethods = uiModule({
                 label: TreeRenderer.isChildrenShown(personId) ? strings.focus.hideChildrenHere : c.showChildrenHere,
                 kind: TreeRenderer.isChildrenShown(personId) ? 'placeOpen' as const : 'place' as const,
             }] : []),
+            ...this.otherPartnersRows(personId),
         ];
         const children: PersonMenuAction[] = [...inPlace, ...this.elsewhereRows(personId)];
         if (isViewMode) {
@@ -309,6 +312,28 @@ export const contextMenuMethods = uiModule({
     },
 
     /**
+     * "∞ Other partners ›" (round 7 §50): where the card carries "▸ ∞", a
+     * row that opens the names its bubble offers, with the count of each
+     * marriage's children ("Anna Nováková · 2 children"); a name does what
+     * a click on it in the bubble does (showPartnerHere). Always a second
+     * level, one name too, so the row reads the same as the card's tab.
+     */
+    otherPartnersRows(personId: PersonId): PersonMenuAction[] {
+        const items = TreeRenderer.partnersMenuOffers(personId).flatMap(o => {
+            const partner = DataManager.getPerson(o.partnerId);
+            if (!partner) return [];
+            const name = shownName(partner, '?');
+            return [{
+                action: `${PARTNER_HERE_ACTION}${o.partnershipId}`, kind: 'place' as const,
+                label: o.childCount > 0 ? `${name} · ${strings.tooltip.childrenCount(o.childCount)}` : name,
+                ariaLabel: strings.focus.partnerShowOneAria(shownNameFull(partner, '?'), o.childCount > 0),
+            }];
+        });
+        if (items.length === 0) return [];
+        return [{ action: 'other-partners', label: strings.focus.menuOtherPartners, kind: 'place', sheetTop: true, submenu: items }];
+    },
+
+    /**
      * Under the rows in place: the person's siblings (with the siblings tab)
      * and children (with the children tab) the view draws elsewhere in the
      * tree, in the tabs' order, each once ("Already in the tree elsewhere"),
@@ -343,6 +368,10 @@ export const contextMenuMethods = uiModule({
         }
         if (action === LINE_JUMP_PARENTS_ACTION || action === LINE_JUMP_CHILDREN_ACTION) {
             TreeRenderer.jumpAlongLine(personId, action === LINE_JUMP_PARENTS_ACTION);
+            return;
+        }
+        if (action.startsWith(PARTNER_HERE_ACTION)) {
+            void TreeRenderer.showPartnerHere(personId, action.slice(PARTNER_HERE_ACTION.length) as PartnershipId);
             return;
         }
         if (action.startsWith(CHILD_ELSEWHERE_ACTION)) {

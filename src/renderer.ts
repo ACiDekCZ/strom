@@ -1548,6 +1548,18 @@ class TreeRendererClass {
     }
 
     /**
+     * The names the person menu's "∞ Other partners" offers (round 7 §50):
+     * the ones the card's "▸ ∞" bubble offers as buttons (partnersToShow) —
+     * before a click every marriage the pill shows, after a click on one
+     * name the rest — each with the count of the marriage's children; none
+     * when the card has no such pill.
+     */
+    partnersMenuOffers(personId: PersonId): OfferedPartner[] {
+        if (!this.positions.has(personId)) return [];
+        return this.partnersToShow(personId).filter(o => DataManager.getPerson(o.partnerId) !== null);
+    }
+
+    /**
      * Show the other partners of `personId` in one render and one step of
      * the history (PipelineInput.showPartnersOf): the card keeps its place
      * on the screen, the partners carry the hatch of the cards shown here

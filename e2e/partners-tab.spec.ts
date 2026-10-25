@@ -422,8 +422,73 @@ test.describe('the standard display: a name in the "▸ ∞" bubble shows that p
         await expect(pill).not.toHaveClass(/partial/);
     });
 
+    test('mouse 1440: the person menu\'s "∞ Other partners ›" offers the bubble\'s names with their children; a name brings only that partner, the row then offers the rest (round 7 §50)', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await setupTeo(page);
+        // No row on a card without "▸ ∞"
+        await cardOf(page, 'focus').click({ position: { x: 60, y: 40 } });
+        await expect(page.locator('.context-menu')).toBeVisible();
+        await expect(page.locator('.context-menu [data-menu="other-partners"]')).toHaveCount(0);
+        await page.keyboard.press('Escape');
+        await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), 'sib');
+        await cardOf(page, 'sib').click({ position: { x: 60, y: 40 } });
+        const row = page.locator('.context-menu [data-menu="other-partners"]');
+        await expect(row).toContainText('∞ Other partners');
+        await expect(row.locator('.menu-item-kind')).toHaveAttribute('data-kind', 'place');
+        // Right after the children row (the card's tabs in their order), above "Edit"
+        const rows = await page.locator('.context-menu > .context-menu-item').evaluateAll(els => els.map(e => (e as HTMLElement).dataset.action ?? (e as HTMLElement).dataset.menu));
+        expect(rows.indexOf('other-partners')).toBe(rows.indexOf('toggle-children') + 1);
+        expect(rows.indexOf('other-partners')).toBeLessThan(rows.indexOf('edit'));
+        await row.click();
+        const sub = page.locator('.context-submenu');
+        await expect(sub).toBeVisible();
+        // The bubble's names, with the count of the marriage's children
+        await expect(sub.locator('.context-menu-item .menu-item-label')).toHaveText(['Lena Fross · 1 child', 'Zoe Arden']);
+        await expect(sub.locator('[data-action="partner-here:u_sib_3"]')).toHaveAttribute('aria-label', /^Show .*Zoe.* here$/);
+        await sub.locator('[data-action="partner-here:u_sib_3"]').click();
+        await expect(page.locator('.context-menu')).toHaveCount(0);
+        await expect(cardOf(page, 'sib_w3')).toBeVisible();
+        await expect(cardOf(page, 'sib_w3')).toHaveClass(/shown-here/);
+        await expect(cardOf(page, 'sib_w1')).toBeVisible();
+        for (const id of ['sib_w2', 'sib_c2']) await expect(cardOf(page, id), id).toHaveCount(0);
+        await expect(partnersPill(page, 'sib')).toHaveClass(/partial/);
+        // The rest: Lena with Kai
+        await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), 'sib');
+        await cardOf(page, 'sib').click({ position: { x: 60, y: 40 } });
+        await page.locator('.context-menu [data-menu="other-partners"]').click();
+        await expect(page.locator('.context-submenu .context-menu-item .menu-item-label')).toHaveText(['Lena Fross · 1 child']);
+        await page.locator('.context-submenu [data-action="partner-here:u_sib_2"]').click();
+        for (const id of ['sib_w2', 'sib_c2', 'sib_w3']) await expect(cardOf(page, id), id).toBeVisible();
+        await expect(partnersPill(page, 'sib')).toHaveText(/▾\s*∞\s*2/);
+        // Everything shown: no row any more
+        await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), 'sib');
+        await cardOf(page, 'sib').click({ position: { x: 60, y: 40 } });
+        await expect(page.locator('.context-menu')).toBeVisible();
+        await expect(page.locator('.context-menu [data-menu="other-partners"]')).toHaveCount(0);
+    });
+
     test.describe('touch 390 × 844', () => {
         test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+        test('the bottom sheet: "∞ Other partners ›" under the tiles opens the names; a tap on one brings only that partner with the children (round 7 §50)', async ({ page }) => {
+            await setupTeo(page);
+            await cardOf(page, 'sib').tap({ position: { x: 40, y: 30 } });
+            const sheet = page.locator('.bottom-sheet-person');
+            await expect(sheet).toBeVisible();
+            const row = sheet.locator('.sheet-submenu-row[data-menu="other-partners"]');
+            await expect(row).toContainText('∞ Other partners');
+            await row.tap();
+            const sub = sheet.locator('.sheet-page-sub');
+            await expect(sub).toBeVisible();
+            await expect(sub.locator('.sheet-subhead-title')).toHaveText('∞ Other partners');
+            await expect(sub.locator('.bottom-sheet-item .menu-item-label')).toHaveText(['Lena Fross · 1 child', 'Zoe Arden']);
+            for (const b of await sub.locator('.bottom-sheet-item').all()) expect((await b.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+            await sub.locator('[data-action="partner-here:u_sib_2"]').tap();
+            await expect(sheet).toHaveCount(0);
+            for (const id of ['sib_w2', 'sib_c2']) await expect(cardOf(page, id), id).toBeVisible();
+            await expect(cardOf(page, 'sib_w3')).toHaveCount(0);
+            await expect(partnersPill(page, 'sib')).toHaveText(/▸\s*∞\s*1/);
+        });
 
         test('a press held on the pill opens the bubble; a tap on Zoe brings only her, a tap on the pill then the rest', async ({ page }) => {
             await setupTeo(page);
