@@ -725,6 +725,91 @@ test.describe('touch, phone 390 × 844', () => {
         await expectTouchBubble(page, tab, bubble, 'below');
     });
 
+    /**
+     * ↩ and ⛶ float over the tree; a bubble opened by touch may cover them
+     * (round 6 §47). Once it is closed (a tap on it, a tap elsewhere) the
+     * very next tap on them does what they do: nothing left over them (a
+     * layer, a fading bubble) takes it.
+     */
+    test('↩ and ⛶ under a bubble: right after it closes the next tap on them works (§47)', async ({ page }) => {
+        await setup(page);
+        // a step to go back to: ↩ shows
+        await page.evaluate(async f => {
+            await window.Strom.TreeRenderer.setFocus('father' as never);
+            await window.Strom.TreeRenderer.setFocus(f as never);
+        }, FOCUS);
+        const back = page.locator('#focus-back-btn');
+        const fit = page.locator('.zoom-controls button[onclick*="fitToScreen"]');
+        await expect(back).toBeVisible();
+        await expect(fit).toBeVisible();
+        await page.evaluate(() => {
+            const zp = window.Strom.ZoomPan as unknown as { fitToScreen: () => void };
+            const real = zp.fitToScreen.bind(zp);
+            (window as unknown as { __fits: number }).__fits = 0;
+            zp.fitToScreen = () => { (window as unknown as { __fits: number }).__fits++; real(); };
+        });
+        const tab = siblingsTab(page, PERSON);
+        const bubble = tab.locator(':scope > .badge-tooltip');
+        const nav = await page.evaluate(() => document.querySelector('.bottom-bar')!.getBoundingClientRect().top);
+        /** Open the bubble low in the window over the control (its tab `left` px from the card's left), checked to cover it. */
+        const openOver = async (control: ReturnType<Page['locator']>, left: number): Promise<{ x: number; y: number }> => {
+            await page.evaluate(id => window.Strom.ZoomPan.glideToPerson(id as never, 1, 0), PERSON);
+            await expect.poll(() => page.evaluate(() => window.Strom.ZoomPan.getScale())).toBeCloseTo(1, 2);
+            await tabBottomAt(page, PERSON, nav - 280, left);
+            await hold(page, tab);
+            await expect(bubble).toBeVisible();
+            const c = (await control.boundingBox())!;
+            const at = { x: c.x + c.width / 2, y: c.y + c.height / 2 };
+            expect(await bubble.evaluate((el, p) => el.contains(document.elementFromPoint(p.x, p.y)), at), 'the bubble covers the control').toBe(true);
+            return at;
+        };
+        /** A tap on the bare tree (no card, no button, not the bubble), away from the controls. */
+        const tapElsewhere = async (): Promise<void> => {
+            const spot = await page.evaluate(() => {
+                const tree = document.getElementById('tree-container')!.getBoundingClientRect();
+                for (let y = tree.top + 40; y < tree.top + 400; y += 9) {
+                    for (let x = tree.left + 100; x < tree.right - 100; x += 9) {
+                        const el = document.elementFromPoint(x, y);
+                        if (el && (el.id === 'tree-container' || el.id === 'tree-canvas')) return { x, y };
+                    }
+                }
+                return null;
+            });
+            expect(spot, 'a bare spot of the tree').not.toBeNull();
+            await page.touchscreen.tap(spot!.x, spot!.y);
+        };
+
+        // ↩: the bubble closed by a tap on it, then a tap on ↩ goes back
+        let at = await openOver(back, -20);
+        await page.touchscreen.tap(at.x, at.y);
+        await expect(bubble).toBeHidden();
+        await page.touchscreen.tap(at.x, at.y);
+        await expect.poll(() => page.evaluate(() => window.Strom.TreeRenderer.getFocusPersonId())).toBe('father');
+        await page.evaluate(() => window.Strom.TreeRenderer.goForward());
+        await expect.poll(() => page.evaluate(() => window.Strom.TreeRenderer.getFocusPersonId())).toBe(FOCUS);
+
+        // ↩: the bubble closed by a tap elsewhere on the tree
+        at = await openOver(back, -20);
+        await tapElsewhere();
+        await expect(bubble).toBeHidden();
+        await page.touchscreen.tap(at.x, at.y);
+        await expect.poll(() => page.evaluate(() => window.Strom.TreeRenderer.getFocusPersonId())).toBe('father');
+        await page.evaluate(() => window.Strom.TreeRenderer.goForward());
+        await expect.poll(() => page.evaluate(() => window.Strom.TreeRenderer.getFocusPersonId())).toBe(FOCUS);
+
+        // ⛶: the same
+        at = await openOver(fit, 150);
+        await page.touchscreen.tap(at.x, at.y);
+        await expect(bubble).toBeHidden();
+        await page.touchscreen.tap(at.x, at.y);
+        await expect.poll(() => page.evaluate(() => (window as unknown as { __fits: number }).__fits)).toBe(1);
+        at = await openOver(fit, 150);
+        await tapElsewhere();
+        await expect(bubble).toBeHidden();
+        await page.touchscreen.tap(at.x, at.y);
+        await expect.poll(() => page.evaluate(() => (window as unknown as { __fits: number }).__fits)).toBe(2);
+    });
+
     test('a bubble shown whole has no "More in the person menu" (§41)', async ({ page }) => {
         await setup(page);
         const tab = siblingsTab(page, PERSON);
