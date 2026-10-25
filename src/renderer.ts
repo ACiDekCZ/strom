@@ -200,7 +200,7 @@ function bubbleOwnHeight(bubble: HTMLElement): number {
  * elsewhere, "◎ Focus on …") a low window leaves out (placeTouchBubble).
  */
 function isEssentialBubbleRow(el: HTMLElement): boolean {
-    return el.matches('.badge-tooltip-header, [data-name-group], [data-group-head], .badge-tooltip-more, .badge-tooltip-action');
+    return el.matches('.badge-tooltip-header, [data-name-group], [data-group-head], .badge-tooltip-more, .bubble-menu-more, .badge-tooltip-action');
 }
 
 /** Whether two layouts give each of `ids` the same card box (no new layout needed). */
@@ -2598,11 +2598,12 @@ class TreeRendererClass {
     private placeBubble(tab: HTMLElement, bubble: HTMLElement, touch = false): boolean {
         bubble.classList.remove('below', 'beside-right', 'beside-left');
         bubble.style.maxHeight = '';
-        // The lines a low window left out by touch come back (placeTouchBubble)
+        // The lines a low window left out by touch come back, "More in the person menu" goes (placeTouchBubble)
         for (const el of bubble.querySelectorAll<HTMLElement>(':scope > [data-dropped]')) {
             el.hidden = false;
             delete el.dataset.dropped;
         }
+        bubble.querySelectorAll(':scope > .bubble-menu-more').forEach(el => el.remove());
         const layered = bubble.hasAttribute('popover') && bubble.matches(':popover-open');
         const cardEl = tab.closest<HTMLElement>('.person-card');
         // The card grows under the pointer (:hover scale), its tab with it:
@@ -2627,7 +2628,7 @@ class TreeRendererClass {
             top: Math.max(roomTop, m), bottom: Math.min(container?.bottom ?? vh, vh - m),
             left: Math.max(container?.left ?? 0, m), right: Math.min(container?.right ?? vw, vw - m),
         };
-        if (layered && touch) return this.placeTouchBubble(bubble, r, room.top);
+        if (layered && touch) return this.placeTouchBubble(bubble, r, room.top, cardEl?.dataset.id as PersonId | undefined);
         // In the top layer whole in the window: as many names as fit there
         if (layered) this.fitBubbleNames(bubble, vh - 2 * m);
         const measure = (): DOMRect => {
@@ -2671,11 +2672,14 @@ class TreeRendererClass {
      * over the app's top bar nor the bars over the tree (`barsTop`, the
      * room's top) nor the bottom navigation (8 px over its top edge, its
      * safe area included; touchBubbleBounds). It lists 8 names at most, in a
-     * low window (500 px high or less, whatever its width) 4. False where not
-     * even one name fits on either side: no bubble, the person's menu opens
-     * instead (openBubbleByTouch).
+     * low window (500 px high or less, whatever its width) 4. A bubble that
+     * lists fewer names than it has or leaves lines out carries one more
+     * line under its names, "More in the person menu" (round 6 §41,
+     * menuMoreRow), measured with the rest. False where not even one name
+     * fits on either side: no bubble, the person's menu opens instead
+     * (openBubbleByTouch).
      */
-    private placeTouchBubble(bubble: HTMLElement, tab: DOMRect, barsTop: number): boolean {
+    private placeTouchBubble(bubble: HTMLElement, tab: DOMRect, barsTop: number, personId?: PersonId): boolean {
         const vw = window.innerWidth, vh = window.innerHeight;
         const toolbar = document.querySelector<HTMLElement>('.toolbar');
         const barsBottom = Math.max(barsTop, toolbar && toolbar.getClientRects().length > 0 ? toolbar.getBoundingClientRect().bottom : 0);
@@ -2685,9 +2689,19 @@ class TreeRendererClass {
         const maxNames = vh <= BUBBLE_LOW_WINDOW_HEIGHT ? BUBBLE_LOW_WINDOW_NAMES : undefined;
         bubble.classList.remove('bubble-clipped');
         // All the names it lists at most, then the least it may show (one name)
-        this.fitBubbleNames(bubble, Infinity, maxNames);
-        const height = bubbleOwnHeight(bubble);
-        const { side, room } = touchBubbleSide(tab, height, this.bubbleLeastHeight(bubble, maxNames), bounds);
+        const sideOf = (): { side: ReturnType<typeof touchBubbleSide>['side']; room: number; namesCut: boolean } => {
+            this.fitBubbleNames(bubble, Infinity, maxNames);
+            const namesCut = [...bubble.querySelectorAll<HTMLElement>('[data-name-group]')].some(el => el.hidden);
+            const height = bubbleOwnHeight(bubble);
+            const fit = touchBubbleSide(tab, height, this.bubbleLeastHeight(bubble, maxNames), bounds);
+            return { ...fit, namesCut: namesCut || (fit.side !== 'menu' && height > fit.room + 0.5) };
+        };
+        let { side, room, namesCut } = sideOf();
+        // Shortened (fewer names, or lines left out): the way to the rest, measured with it
+        if (namesCut && side !== 'menu' && personId) {
+            this.insertMenuMoreRow(bubble, personId);
+            ({ side, room } = sideOf());
+        }
         if (side === 'menu') return false;
         this.fitBubbleNames(bubble, room, maxNames, 1);
         const optional = [...bubble.children].filter((el): el is HTMLElement => el instanceof HTMLElement && !el.hidden && !isEssentialBubbleRow(el));
@@ -2709,6 +2723,31 @@ class TreeRendererClass {
         bubble.classList.toggle('below', side === 'below');
         bubble.classList.toggle('no-arrow', box.noArrow === true);
         return true;
+    }
+
+    /**
+     * "More in the person menu" (round 6 §41): a line of a bubble opened by
+     * touch that is shortened (placeTouchBubble), under its last name ("and
+     * n more"), over its last line; a tap closes the bubble and opens the
+     * person's menu, as a long press on the card does. Placed anew each time
+     * the bubble opens (placeBubble takes it out).
+     */
+    private insertMenuMoreRow(bubble: HTMLElement, personId: PersonId): void {
+        const row = document.createElement('div');
+        row.className = 'bubble-menu-more';
+        row.setAttribute('role', 'button');
+        row.textContent = strings.focus.bubbleMoreInMenu;
+        row.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            closeOpenBubble();
+            UI.showPersonBottomSheet(personId, true);
+        });
+        const more = bubble.querySelector<HTMLElement>(':scope > .badge-tooltip-more');
+        const names = [...bubble.querySelectorAll<HTMLElement>(':scope > [data-name-group]')];
+        const after = more ?? names[names.length - 1] ?? null;
+        if (after) after.after(row);
+        else bubble.insertBefore(row, bubble.querySelector(':scope > .badge-tooltip-action'));
     }
 
     /**
@@ -3293,6 +3332,23 @@ class TreeRendererClass {
     }
 
     /**
+     * The line-link tabs of a card ("parents ↗", "child ↗", "children ↗"),
+     * in the card's order, each with the people at the other end of its
+     * left-out line (the person menu's "↗ Go to …" rows, round 6 §40).
+     */
+    lineJumpsOf(personId: PersonId): Array<{ kind: 'linkParents' | 'linkChild' | 'linkChildren'; ids: PersonId[] }> {
+        const links = this.lineLinks.get(personId);
+        return lineLinkTabs(links).map(kind => ({ kind, ids: [...(kind === 'linkParents' ? links!.parentIds : links!.childIds)] }));
+    }
+
+    /** What a card's line-link tab does (lineLinkTabHtml): the view to the other end, as a step of the history; the focus stays. */
+    jumpAlongLine(personId: PersonId, toParents: boolean): void {
+        const links = this.lineLinks.get(personId);
+        if (!links) return;
+        this.jumpStep(() => this.jumpToPersons(toParents ? links.parentIds : links.childIds));
+    }
+
+    /**
      * A focus set from a card's tab (§2: ◎ parents / siblings / family,
      * "+ family"): the tree is rebuilt around the person and the confirmation
      * "◎ Focused on {name} | ↩ Back" offers the previous view. A focus from
@@ -3332,23 +3388,6 @@ class TreeRendererClass {
     /** @deprecated use updateNavButtons */
     updateBackButton(): void {
         this.updateNavButtons();
-    }
-
-    /**
-     * The line-link tabs of a card ("parents ↗", "child ↗", "children ↗"),
-     * in the card's order, each with the people at the other end of its
-     * left-out line (the person menu's "↗ Go to …" rows, round 6 §40).
-     */
-    lineJumpsOf(personId: PersonId): Array<{ kind: 'linkParents' | 'linkChild' | 'linkChildren'; ids: PersonId[] }> {
-        const links = this.lineLinks.get(personId);
-        return lineLinkTabs(links).map(kind => ({ kind, ids: [...(kind === 'linkParents' ? links!.parentIds : links!.childIds)] }));
-    }
-
-    /** What a card's line-link tab does (lineLinkTabHtml): the view to the other end, as a step of the history; the focus stays. */
-    jumpAlongLine(personId: PersonId, toParents: boolean): void {
-        const links = this.lineLinks.get(personId);
-        if (!links) return;
-        this.jumpStep(() => this.jumpToPersons(toParents ? links.parentIds : links.childIds));
     }
 
     /**

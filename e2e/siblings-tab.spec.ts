@@ -724,6 +724,17 @@ test.describe('touch, phone 390 × 844', () => {
         await hold(page, tab);
         await expectTouchBubble(page, tab, bubble, 'below');
     });
+
+    test('a bubble shown whole has no "More in the person menu" (§41)', async ({ page }) => {
+        await setup(page);
+        const tab = siblingsTab(page, PERSON);
+        const bubble = tab.locator(':scope > .badge-tooltip');
+        await cardUnderBars(page, PERSON, 8, 150);
+        await hold(page, tab);
+        await expectTouchBubble(page, tab, bubble, 'below');
+        expect(await bubble.evaluate(el => [...el.children].filter(c => (c as HTMLElement).hidden).map(c => c.className))).toEqual(['badge-tooltip-more']);
+        await expect(bubble.locator('.bubble-menu-more')).toHaveCount(0);
+    });
 });
 
 /**
@@ -767,6 +778,74 @@ test.describe('touch, phone held sideways 844 × 390', () => {
         await hold(page, tab);
         await expectTouchBubble(page, tab, bubble, 'above');
         expect(await shortened()).toBe(true);
+    });
+
+    /**
+     * A shortened bubble (fewer names, or lines left out) carries one line
+     * more under its names, "More in the person menu" (round 6 §41), over
+     * its last line, measured with the rest (the bubble still whole); a tap
+     * on it closes the bubble and opens the person's menu. A bubble shown
+     * whole has no such line, also when it opens again after a shortened one.
+     */
+    test('a shortened bubble: "More in the person menu" under its names opens the person\'s menu; a whole one has none (§41)', async ({ page }) => {
+        await setup(page);
+        const tab = siblingsTab(page, PERSON);
+        const bubble = tab.locator(':scope > .badge-tooltip');
+        const more = bubble.locator(':scope > .bubble-menu-more');
+        const shortened = () => bubble.evaluate(el => [...el.children].some(c => (c as HTMLElement).hidden && !c.classList.contains('badge-tooltip-more'))
+            || !(el.querySelector(':scope > .badge-tooltip-more') as HTMLElement).hidden);
+        // whole below the tab: no such line
+        await cardUnderBars(page, PERSON, 8, 300);
+        await hold(page, tab);
+        await expectTouchBubble(page, tab, bubble, 'below');
+        expect(await shortened()).toBe(false);
+        await expect(more).toHaveCount(0);
+        await pressElsewhere(page);
+        await expect(bubble).toBeHidden();
+        // shortened on the side with more room: the line under the names, over the last line, the bubble whole
+        await cardAt(page, PERSON, 175);
+        await hold(page, tab);
+        await expectTouchBubble(page, tab, bubble, 'below');
+        expect(await shortened()).toBe(true);
+        await expect(more).toHaveCount(1);
+        await expect(more).toBeVisible();
+        await expect(more).toHaveText('More in the person menu');
+        expect(await more.evaluate(el => {
+            const prev = [...el.parentElement!.children].slice(0, [...el.parentElement!.children].indexOf(el));
+            return prev.some(p => p.matches('[data-name-group]')) && el.nextElementSibling !== null
+                && [...el.parentElement!.children].indexOf(el) < [...el.parentElement!.children].findIndex(c => c.matches('.badge-tooltip-action'));
+        })).toBe(true);
+        expect((await more.boundingBox())!.height).toBeGreaterThanOrEqual(32);
+        await more.tap();
+        await expect(bubble).toBeHidden();
+        const sheet = page.locator('.bottom-sheet-person');
+        await expect(sheet).toBeVisible();
+        const name = await page.evaluate(pid => window.Strom.DataManager.getPerson(pid as never)!.firstName, PERSON);
+        await expect(sheet).toHaveAttribute('aria-label', new RegExp(name));
+        // nothing else happened: the siblings were not shown
+        expect(await page.evaluate(id => window.Strom.TreeRenderer.isSiblingsShown(id as never), PERSON)).toBe(false);
+        await page.evaluate(() => window.Strom.UI.hideBottomSheet());
+        await expect(sheet).toHaveCount(0);
+        // whole again: the line goes
+        await cardUnderBars(page, PERSON, 8, 300);
+        await hold(page, tab);
+        await expectTouchBubble(page, tab, bubble, 'below');
+        await expect(more).toHaveCount(0);
+    });
+
+    test('4 names of 12 in a low window: shortened, "More in the person menu" (§41)', async ({ page }) => {
+        await setupFixture(page, 'edge-ancestor-children', 'focus');
+        await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), 'f_m_f_m_f');
+        await page.evaluate(() => window.Strom.ZoomPan.finishAnimation());
+        await cardUnderBars(page, 'f_m_f_m_f', 8, 300);
+        const tab = siblingsTab(page, 'f_m_f_m_f');
+        const bubble = tab.locator(':scope > .badge-tooltip');
+        await hold(page, tab);
+        await expectTouchBubble(page, tab, bubble, 'below');
+        await expect(bubble.locator(':scope > .badge-tooltip-more + .bubble-menu-more')).toHaveText('More in the person menu');
+        await bubble.locator('.bubble-menu-more').tap();
+        await expect(page.locator('.bottom-sheet-person')).toBeVisible();
+        await expect(bubble).toBeHidden();
     });
 
     test('a low window lists 4 names at most, "and n more" the rest', async ({ page }) => {

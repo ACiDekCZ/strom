@@ -2966,6 +2966,8 @@ const stringsEN = {
         hideAllShownAria: (n: number) => `Hide everything shown here (${nEn(n, 'expansion', 'expansions')})`,
         // A bubble's list of names cut at its maximum (8): the line after the names it shows.
         tabMoreNames: (n: number) => `and ${n} more`,
+        // A bubble by touch that leaves out names or lines (round 6 §41): the person menu has the rest.
+        bubbleMoreInMenu: 'More in the person menu',
         // Short labels inside the card branch-tab pills (glyph + text).
         branchTabParents: 'parents',
         branchTabSiblings: 'siblings',
@@ -7918,6 +7920,7 @@ const stringsCZ: StringsType = {
         hideAllShown: (n: number) => `Skrýt ukázané · ${n}`,
         hideAllShownAria: (n: number) => `Skrýt vše ukázané tady (${n} rozbalení)`,
         tabMoreNames: (n: number) => `a další ${n}`,
+        bubbleMoreInMenu: 'Víc v menu osoby',
         // Short labels inside the card branch-tab pills (glyph + text).
         branchTabParents: 'rodiče',
         branchTabSiblings: 'sourozenci',
@@ -12824,6 +12827,7 @@ const stringsDE: StringsType = {
         hideAllShown: (n: number) => `Gezeigte ausblenden · ${n}`,
         hideAllShownAria: (n: number) => `Alles hier Gezeigte ausblenden (${nDe(n, 'Aufklappung', 'Aufklappungen')})`,
         tabMoreNames: (n: number) => `und ${n} weitere`,
+        bubbleMoreInMenu: 'Mehr im Personenmenü',
         branchTabParents: 'Eltern',
         branchTabSiblings: 'Geschwister',
         branchTabChildren: 'Kinder',

@@ -3541,6 +3541,24 @@
             font-size: 12px;
             line-height: 1.4;
         }
+        /* A bubble by touch that lists fewer names or leaves lines out (round 6 §41,
+           TreeRenderer.insertMenuMoreRow): one line under its names that opens the
+           person's menu, quiet as "and n more", in the link colour; 32 px to tap. */
+        .bubble-menu-more {
+            display: flex;
+            align-items: center;
+            min-height: 32px;
+            margin: 0 -6px;
+            padding: 0 6px;
+            border-radius: 6px;
+            color: var(--primary-dark);
+            font-size: 12px;
+            font-weight: 600;
+            line-height: 1.4;
+            cursor: pointer;
+        }
+        .bubble-menu-more:active { background: var(--primary-soft); }
+        @media (hover: hover) { .bubble-menu-more:hover { background: var(--primary-soft); } }
         .badge-tooltip-group {
             padding-top: 5px;
             color: var(--text-faint);
