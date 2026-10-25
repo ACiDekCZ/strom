@@ -9024,6 +9024,8 @@
             transform: translateX(-50%);
             max-width: min(92vw, 480px);
             pointer-events: none;
+            /* Over an open bubble and back (round 6 §44, src/bubble-layer.ts) it glides */
+            transition: bottom 0.3s ease;
         }
         .focus-toast-box {
             pointer-events: auto;
@@ -9084,21 +9086,48 @@
                 max-width: calc(100vw - var(--side-bar-w) - 248px);
             }
         }
-        /* One toast at a time (round 5 §39, src/focus-toast.ts): a message on
-           the screen with the confirmation takes its place (.at-focus-toast)
-           and carries its "↩ Back" while its time runs; the box steps aside. */
+        /* One toast at a time (round 5 §39, round 6 §43, src/toast-slot.ts):
+           the newest message shows, one under it waits hidden (.toast-held);
+           the undo pill's "Undo" and the confirmation's "↩ Back" ride in the
+           message that shows while their time runs (the box steps aside). It
+           stands at the place of the first toast of the run: .at-focus-toast,
+           .at-undo-toast, .at-message-toast (the kinds stand apart only on a
+           tablet, a phone and a phone held sideways, below). */
         .focus-toast-box[hidden] { display: none; }
-        .toast > .focus-toast-sep {
+        body > .toast-held { visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }
+        .undo-toast > .undo-toast-sep { display: none; }
+        .toast > .focus-toast-sep,
+        .toast > .undo-toast-sep {
             display: inline-block; vertical-align: middle; width: 1px; height: 1.2em; margin: 0 4px 0 12px;
             background: color-mix(in srgb, var(--surface) 40%, transparent);
         }
-        .toast > .focus-toast-back {
+        .toast > .focus-toast-back,
+        .toast > .undo-toast-btn {
             height: auto; min-width: 0; margin: -6px 0; padding: 6px 8px; vertical-align: baseline;
-            color: inherit; text-decoration: underline;
+            border: none; border-radius: var(--r-md); background: transparent; cursor: pointer;
+            font: inherit; font-weight: 600; color: inherit; text-decoration: underline;
         }
-        @media (hover: hover) { .toast > .focus-toast-back:hover { background: color-mix(in srgb, var(--surface) 15%, transparent); } }
-        .toast > .focus-toast-back:focus-visible { outline-color: var(--surface); }
+        @media (hover: hover) {
+            .toast > .focus-toast-back:hover,
+            .toast > .undo-toast-btn:hover { background: color-mix(in srgb, var(--surface) 15%, transparent); }
+        }
+        .toast > .focus-toast-back:focus-visible,
+        .toast > .undo-toast-btn:focus-visible { outline: 2px solid var(--surface); outline-offset: 1px; }
         .undo-toast > .focus-toast-sep { margin: 4px 0; }
+        /* The other kinds' places where they stand apart: a tablet (the focus
+           confirmation 4px higher), a phone (the undo pill low, the others
+           above ↩ ↪ and the zoom stack), a phone held sideways (the focus
+           confirmation clear of the home indicator). */
+        @media (max-width: 1024px) {
+            .focus-toast.at-message-toast,
+            .focus-toast.at-undo-toast { bottom: calc(var(--bottom-bar-h) + 12px); }
+        }
+        @media (max-width: 640px) {
+            body > .toast.at-undo-toast,
+            .focus-toast.at-undo-toast { bottom: calc(var(--bottom-bar-h) + 12px); }
+            .focus-toast.at-message-toast,
+            body > .undo-toast.at-message-toast { bottom: calc(var(--bottom-bar-h) + 68px); }
+        }
         /* A toast lifted over an open bubble into the top layer (src/bubble-layer.ts):
            it stays where it stands, none of a popover's own box (no specificity:
            the toasts' own rules win). */
@@ -13867,7 +13896,8 @@
             /* Above the family offer (250), below dialog overlays. */
             z-index: 260;
             opacity: 0;
-            transition: opacity 0.2s ease, transform 0.2s ease;
+            /* bottom: over an open bubble and back (round 6 §44, src/bubble-layer.ts) */
+            transition: opacity 0.2s ease, transform 0.2s ease, bottom 0.3s ease;
         }
         .undo-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
         .undo-toast-msg {
@@ -13884,25 +13914,22 @@
         @media (hover: hover) { .undo-toast-btn:hover { background: color-mix(in srgb, var(--primary) 12%, transparent); } }
         /* Hidden while a modal is open (the toast would sit behind the overlay). */
         body:has(.modal-overlay.active) .undo-toast { display: none; }
-        /* Lift the family offer and a message toast above the undo toast when both are showing. */
-        body:has(.undo-toast) .family-offer,
-        body:has(.undo-toast) .toast { bottom: 84px; }
+        /* Lift the family offer above the undo toast when both are showing. A message toast is not lifted:
+           one toast at a time (round 6 §43, src/toast-slot.ts), the newer one shows in the older one's place. */
+        body:has(.undo-toast) .family-offer { bottom: 84px; }
         /* :has() fallback (older Safari) — body classes kept in sync by JS. */
         @supports not (selector(:has(*))) {
             body.has-active-modal .undo-toast { display: none; }
-            body.has-undo-toast .family-offer,
-            body.has-undo-toast .toast { bottom: 84px; }
+            body.has-undo-toast .family-offer { bottom: 84px; }
         }
         /* Mobile regime (bottom bar ≤1024px): sit above the bar. */
         @media (max-width: 1024px) {
             .undo-toast { bottom: calc(var(--bottom-bar-h) + 12px); }
             /* "On this day" never covers the bottom bar (its More tab). */
             .otd-card { bottom: calc(var(--bottom-bar-h) + 12px); }
-            body:has(.undo-toast) .family-offer,
-            body:has(.undo-toast) .toast { bottom: calc(var(--bottom-bar-h) + 72px); }
+            body:has(.undo-toast) .family-offer { bottom: calc(var(--bottom-bar-h) + 72px); }
             @supports not (selector(:has(*))) {
-                body.has-undo-toast .family-offer,
-                body.has-undo-toast .toast { bottom: calc(var(--bottom-bar-h) + 72px); }
+                body.has-undo-toast .family-offer { bottom: calc(var(--bottom-bar-h) + 72px); }
             }
         }
         /* Map view: its status bar (Look up, Places) and time bar sit
@@ -13912,19 +13939,15 @@
         body.map-view .undo-toast,
         body.map-view .family-offer,
         body.map-view .tour-offer { bottom: max(24px, calc(var(--map-floor, 0px) + 12px)); }
-        body.map-view:has(.undo-toast) .family-offer,
-        body.map-view:has(.undo-toast) .toast { bottom: calc(max(24px, calc(var(--map-floor, 0px) + 12px)) + 60px); }
-        body.map-view.has-undo-toast .family-offer,
-        body.map-view.has-undo-toast .toast { bottom: calc(max(24px, calc(var(--map-floor, 0px) + 12px)) + 60px); }
+        body.map-view:has(.undo-toast) .family-offer { bottom: calc(max(24px, calc(var(--map-floor, 0px) + 12px)) + 60px); }
+        body.map-view.has-undo-toast .family-offer { bottom: calc(max(24px, calc(var(--map-floor, 0px) + 12px)) + 60px); }
         @media (max-width: 1024px) {
             body.map-view .toast,
             body.map-view .undo-toast,
             body.map-view .family-offer,
             body.map-view .tour-offer { bottom: max(calc(var(--bottom-bar-h) + 12px), calc(var(--map-floor, 0px) + 12px)); }
-            body.map-view:has(.undo-toast) .family-offer,
-            body.map-view:has(.undo-toast) .toast { bottom: calc(max(calc(var(--bottom-bar-h) + 12px), calc(var(--map-floor, 0px) + 12px)) + 60px); }
-            body.map-view.has-undo-toast .family-offer,
-            body.map-view.has-undo-toast .toast { bottom: calc(max(calc(var(--bottom-bar-h) + 12px), calc(var(--map-floor, 0px) + 12px)) + 60px); }
+            body.map-view:has(.undo-toast) .family-offer { bottom: calc(max(calc(var(--bottom-bar-h) + 12px), calc(var(--map-floor, 0px) + 12px)) + 60px); }
+            body.map-view.has-undo-toast .family-offer { bottom: calc(max(calc(var(--bottom-bar-h) + 12px), calc(var(--map-floor, 0px) + 12px)) + 60px); }
         }
         /* Phone (≤640px): full width minus 24px, no centre transform. */
         @media (max-width: 640px) {

@@ -5,15 +5,14 @@
  * goes at the next action in the tree: a click, a pan of more than 8 px or
  * another focus. "↩ Back" returns to the previous view, as ↩ in the corner.
  *
- * One toast at a time (round 5 §39): while a message (UI.showToast's
- * `.toast`, the `.undo-toast` pill) is on the screen together with it, the
- * confirmation's box steps aside and its "↩ Back" goes into the message,
- * which takes the confirmation's place (`.at-focus-toast`; not while two
- * messages stand stacked). "↩ Back" keeps the confirmation's own time: when
- * that runs out it leaves the message, which runs its own time to the end;
- * a message gone sooner gives the box back for the time left. The time of
- * "↩ Back" is the focus step's (it stands while a pointer or the keyboard
- * is on the message carrying it), the message's is the message's.
+ * One toast at a time (round 5 §39, round 6 §43, src/toast-slot.ts): while
+ * a message (UI.showToast's `.toast`, the `.undo-toast` pill) is on the
+ * screen together with it, the confirmation's box steps aside and its
+ * "↩ Back" rides in the message that shows, which takes the place of the
+ * first toast of the run. "↩ Back" keeps the confirmation's own time (it
+ * stands while a pointer or the keyboard is on the message carrying it):
+ * when that runs out it leaves the message, which runs its own time to the
+ * end; a message gone sooner gives the box back for the time left.
  *
  * The container `#focus-toast` is static in index.html (a polite live
  * region, so a screen reader hears the message); the box is put in and
@@ -21,28 +20,16 @@
  */
 
 import { strings } from './strings.js';
+import { addLender, removeLender } from './toast-slot.js';
 
 export const FOCUS_TOAST_MS = 5000;
 const PAN_SLOP = 8;
-
-/** The messages that take the confirmation's place. */
-const MESSAGE_SELECTOR = 'body > .toast, body > .undo-toast';
 
 let box: HTMLElement | null = null;
 let timer: ReturnType<typeof setTimeout> | null = null;
 let left = FOCUS_TOAST_MS;
 let startedAt = 0;
 let detach: (() => void) | null = null;
-
-/** The message carrying "↩ Back" now (null: the box shows it). */
-let host: HTMLElement | null = null;
-let detachHost: (() => void) | null = null;
-/** "↩ Back" and its separator, moved between the box and a message. */
-let backParts: HTMLElement[] = [];
-/** Watches the messages coming and going while the confirmation stands. */
-let watch: MutationObserver | null = null;
-/** Messages seen shown: one of them without `.show` again is on its way out. */
-const shownOnce = new WeakSet<Element>();
 
 function container(): HTMLElement | null {
     return document.getElementById('focus-toast');
@@ -65,15 +52,9 @@ function pauseTimer(): void {
     stopTimer();
 }
 
-/** The messages on the screen, the newest last (one on its way out does not count). */
-function liveMessages(): HTMLElement[] {
-    return [...document.querySelectorAll<HTMLElement>(MESSAGE_SELECTOR)].filter(t => {
-        if (t.classList.contains('show')) {
-            shownOnce.add(t);
-            return true;
-        }
-        return !shownOnce.has(t);
-    });
+/** The time runs again (a message carrying "↩ Back" let go), unless a pointer or the keyboard is on the box. */
+function resumeTimer(): void {
+    if (box && !timer && !box.matches(':hover') && !box.contains(document.activeElement)) runTimer();
 }
 
 /** The time stands while a pointer or the keyboard focus is on `el`. */
@@ -95,78 +76,15 @@ function pauseOn(el: HTMLElement): () => void {
     };
 }
 
-/** "↩ Back" into the message `t` (before its × when it has one). */
-function attach(t: HTMLElement): void {
-    host = t;
-    const close = t.querySelector(':scope > .toast-close');
-    for (const part of backParts) t.insertBefore(part, close);
-    detachHost = pauseOn(t);
-    if (box) box.hidden = true;
-}
-
-/**
- * "↩ Back" out of the message carrying it: back into the box (`toBox`), or
- * gone with the confirmation. The message keeps its place
- * (`.at-focus-toast`) while it stays, unless it goes on carrying nothing.
- */
-function release(toBox: boolean): void {
-    if (!host) return;
-    detachHost?.();
-    detachHost = null;
-    if (toBox) host.classList.remove('at-focus-toast');
-    host = null;
-    if (toBox && box) {
-        for (const part of backParts) box.appendChild(part);
-        box.hidden = false;
-        // A pointer that stood on the message paused the time: it runs again
-        if (!timer && !box.matches(':hover') && !box.contains(document.activeElement)) runTimer();
-    } else {
-        for (const part of backParts) part.remove();
-    }
-}
-
-/**
- * A message left at the confirmation's place without "↩ Back" runs its time
- * there (it does not jump); another message coming meanwhile stacks with it,
- * so it goes back to its own place then.
- */
-function keepPlace(t: HTMLElement): void {
-    if (typeof MutationObserver === 'undefined' || !t.classList.contains('at-focus-toast')) return;
-    const stay = new MutationObserver(() => {
-        if (t.isConnected && liveMessages().every(m => m === t)) return;
-        t.classList.remove('at-focus-toast');
-        stay.disconnect();
-    });
-    stay.observe(document.body, { childList: true });
-}
-
-/** One toast on the screen: the newest message carries "↩ Back", else the box. */
-function reconcile(): void {
-    if (!box) return;
-    const messages = liveMessages();
-    for (const t of messages) watch?.observe(t, { attributes: true, attributeFilter: ['class'] });
-    const next = messages[messages.length - 1] ?? null;
-    if (next !== host) {
-        release(true);
-        if (next) attach(next);
-    }
-    // At the confirmation's place, unless it stands stacked with another message
-    if (host) host.classList.toggle('at-focus-toast', messages.length === 1);
-}
-
-/** Take the confirmation away (at once); a message carrying "↩ Back" stays without it. */
+/** Take the confirmation away (at once); a message carrying "↩ Back" stays without it, at its place. */
 export function hideFocusToast(): void {
     stopTimer();
     detach?.();
     detach = null;
-    watch?.disconnect();
-    watch = null;
-    const carrying = host;
-    release(false);
-    if (carrying) keepPlace(carrying);
-    backParts = [];
-    box?.remove();
+    const was = box;
     box = null;
+    if (was) removeLender('focus');
+    was?.remove();
 }
 
 /** Whether the confirmation is on screen (in its box or as "↩ Back" in a message). */
@@ -200,7 +118,7 @@ export function showFocusToast(name: string, back: () => void): void {
         hideFocusToast();
         back();
     });
-    backParts = [...el.querySelectorAll<HTMLElement>('.focus-toast-sep, .focus-toast-back')];
+    const parts = [...el.querySelectorAll<HTMLElement>('.focus-toast-sep, .focus-toast-back')];
     // The time stands while a pointer or the keyboard focus is on it
     const detachBox = pauseOn(el);
     container_.appendChild(el);
@@ -212,10 +130,13 @@ export function showFocusToast(name: string, back: () => void): void {
     // The next action in the tree takes it away: a click, a pan of more
     // than 8 px. It is shown after the focus has been set (the click that
     // set it is over), so it listens at once; on the window, ahead of the
-    // canvas's own listeners (a pan stops a click's propagation). The
-    // message carrying "↩ Back" is not outside.
+    // canvas's own listeners (a pan stops a click's propagation). A message
+    // (the one carrying "↩ Back") is not outside.
     let down: { x: number; y: number } | null = null;
-    const outside = (e: Event) => !el.contains(e.target as Node) && !(host?.contains(e.target as Node));
+    const outside = (e: Event) => {
+        const target = e.target as Element | null;
+        return !el.contains(target) && !target?.closest?.('body > .toast, body > .undo-toast');
+    };
     const onDown = (e: PointerEvent) => { down = outside(e) ? { x: e.clientX, y: e.clientY } : null; };
     const onMove = (e: PointerEvent) => {
         if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) > PAN_SLOP) hideFocusToast();
@@ -234,10 +155,10 @@ export function showFocusToast(name: string, back: () => void): void {
         window.removeEventListener('wheel', onWheel, true);
     };
 
-    // One toast at a time: a message on the screen now or coming takes its place
-    if (typeof MutationObserver !== 'undefined') {
-        watch = new MutationObserver(reconcile);
-        watch.observe(document.body, { childList: true });
-    }
-    reconcile();
+    // One toast at a time: a message on the screen now or coming shows, carrying "↩ Back"
+    addLender({
+        kind: 'focus', el: container_, home: el, parts,
+        pause: pauseTimer, resume: resumeTimer,
+        shown: (on) => { el.hidden = !on; },
+    });
 }

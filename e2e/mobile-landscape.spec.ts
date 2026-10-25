@@ -179,13 +179,17 @@ for (const size of [{ width: 640, height: 360 }, { width: 844, height: 390 }]) {
         await page.setViewportSize(size);
         await openApp(page);
         await createFirstPerson(page, 'Jan', 'Novak');
-        await page.evaluate(() => window.Strom.UI.showToast('Sent to the research with a longer message', 6000));
         const undo = page.locator('.undo-toast.show');
-        const toast = page.locator('.toast.show');
         await expect(undo).toBeVisible();
-        await expect(toast).toBeVisible();
         const bar = (await page.locator('#bottom-bar').boundingBox())!;
-        for (const el of [undo, toast]) {
+        await expect.poll(() => undo.evaluate(e => e.getBoundingClientRect().x)).toBeGreaterThanOrEqual(bar.x + bar.width);
+        await page.evaluate(() => window.Strom.UI.showToast('Sent to the research with a longer message', 6000));
+        const toast = page.locator('.toast.show');
+        // One toast at a time (round 6 §43): the message in the pill's place, carrying its "Undo"
+        await expect(toast).toBeVisible();
+        await expect(undo).toBeHidden();
+        await expect(toast.locator('.undo-toast-btn')).toBeVisible();
+        for (const el of [toast]) {
             // Measured once it has slid in.
             await expect.poll(() => el.evaluate(e => e.getBoundingClientRect().x)).toBeGreaterThanOrEqual(bar.x + bar.width);
             const r = (await el.boundingBox())!;

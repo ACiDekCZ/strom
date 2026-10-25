@@ -75,7 +75,7 @@ test.describe('a part of a documented fact deleted in the app', () => {
         decide.replies.push(reply('X0011', 'user', { janDeath: '', janDeathPlace: 'Lipnice', janConflicts: DATE_GONE('decided') }));
         await side(page, 'user', 'X0011').locator('.prc-choice').click();
         await expect(c).toHaveAttribute('data-state', 'kept');
-        await expect(toast(page)).toHaveText('Conflict decided: Lipnice');
+        await expect(toast(page)).toHaveText(/^Conflict decided: Lipnice(Undo)?$/);
         expect(decide.asks).toEqual([{ id: 'X0011', body: { do: 'decide', take: 'user' } }]);
         expect(await jan(page)).toMatchObject({ deathDate: '', deathPlace: 'Lipnice' });
     });

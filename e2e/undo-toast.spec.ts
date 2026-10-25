@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, Page } from '@playwright/test';
 import { openApp, createFirstPerson, card } from './helpers.js';
 
 /**
@@ -72,19 +72,138 @@ test('Undo / Redo live in the toolbar, not in the ⋯ menu: description and disa
     await expect(undo).toBeEnabled();
 });
 
-test('a message toast while the Undo toast shows sits above it, not over it (desktop and phone)', async ({ page }) => {
-    for (const size of [{ width: 1440, height: 900 }, { width: 390, height: 800 }]) {
-        await page.setViewportSize(size);
+/**
+ * One toast at a time (GitHub #4, round 6 §43): a message replaces the one
+ * before it at the same place; the undo pill is a message as the others. A
+ * message coming while the pill stands shows in its place and carries its
+ * "Undo" for the pill's own time (6 s), then "Undo" goes and the message runs
+ * its own time; a message gone sooner gives the pill back for the time left.
+ * Invented names.
+ */
+test.describe('one toast at a time, the undo pill a message as the others', () => {
+    /** The toasts a person sees now (a message, the undo pill, the focus toast's box). */
+    const toastsOnScreen = (page: Page) => page.evaluate(() => [...document.querySelectorAll<HTMLElement>('body > .toast, body > .undo-toast, #focus-toast .focus-toast-box')]
+        .filter(el => {
+            const r = el.getBoundingClientRect();
+            return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden' && Number(getComputedStyle(el).opacity) > 0;
+        }).length);
+
+    /** The bottom edge of the element once it has slid in. */
+    const settledBottom = async (page: Page, sel: string): Promise<number> => {
+        await expect.poll(() => page.evaluate(s => document.querySelector(s)?.getAnimations().length ?? -1, sel)).toBe(0);
+        return page.evaluate(s => document.querySelector(s)!.getBoundingClientRect().bottom, sel);
+    };
+
+    const hasHaldewin = (page: Page) => page.evaluate(() =>
+        window.Strom.DataManager.getAllPersons().some((p: { firstName: string }) => p.firstName === 'Haldewin'));
+
+    /** Jan in the tree, his father Haldewin deleted: the undo pill for the deletion stands. */
+    async function deleteWithPill(page: Page): Promise<void> {
         await openApp(page);
-        await createFirstPerson(page, 'Jan', 'Novak');
-        await expect(page.locator('.undo-toast')).toBeVisible();
-        await page.evaluate(() => window.Strom.UI.showToast('Sent to the research', 6000));
-        const message = page.locator('.toast');
-        await expect(message).toHaveClass(/show/);
-        await expect.poll(async () => {
-            const a = await page.locator('.undo-toast').boundingBox();
-            const b = await message.boundingBox();
-            return !!a && !!b && b.y + b.height <= a.y;
-        }).toBe(true);
+        await createFirstPerson(page, 'Jan', 'Zwolbrack');
+        await page.evaluate(() => {
+            const dm = window.Strom.DataManager;
+            const jan = dm.getAllPersons()[0];
+            const o = dm.createPerson({ firstName: 'Haldewin', lastName: 'Zwolbrack', gender: 'male' });
+            dm.addParentChild(o.id, jan.id);
+        });
+        await page.evaluate(() => {
+            const o = window.Strom.DataManager.getAllPersons().find((p: { firstName: string }) => p.firstName === 'Haldewin');
+            void window.Strom.UI.confirmDelete(o.id);
+        });
+        await page.locator('#confirm-ok-btn').click();
+        expect(await hasHaldewin(page)).toBe(false);
+        await expect(page.locator('body > .undo-toast.show .undo-toast-msg')).toContainText('Haldewin');
+        await page.mouse.move(8, 300);
     }
+
+    for (const size of [{ width: 1440, height: 900 }, { width: 390, height: 800 }]) {
+        test(`${size.width}: a message replaces the message before it at the same place`, async ({ page }) => {
+            await page.setViewportSize(size);
+            await openApp(page);
+            await page.evaluate(() => window.Strom.UI.showToast('Alpha', 10000));
+            const a = await settledBottom(page, 'body > .toast.show');
+            await page.evaluate(() => window.Strom.UI.showToast('Beta', 10000));
+            await expect(page.locator('body > .toast')).toHaveCount(1);
+            await expect(page.locator('body > .toast')).toHaveText('Beta');
+            expect(Math.abs(await settledBottom(page, 'body > .toast.show') - a)).toBeLessThanOrEqual(1);
+            await expect.poll(() => toastsOnScreen(page)).toBe(1);
+        });
+
+        test(`${size.width}: a message while the undo pill stands shows in its place and carries "Undo", which works`, async ({ page }) => {
+            await page.setViewportSize(size);
+            await deleteWithPill(page);
+            const pill = page.locator('body > .undo-toast.show');
+            const pillBottom = await settledBottom(page, 'body > .undo-toast.show');
+            await page.evaluate(() => window.Strom.UI.showToast('Copied', 10000));
+            const message = page.locator('body > .toast');
+            await expect(message).toContainText('Copied');
+            const undo = message.getByRole('button', { name: 'Undo' });
+            await expect(undo).toBeVisible();
+            await expect(pill).toBeHidden();
+            await expect.poll(() => toastsOnScreen(page)).toBe(1);
+            // At the pill's place (its bottom edge)
+            expect(Math.abs(await settledBottom(page, 'body > .toast.show') - pillBottom)).toBeLessThanOrEqual(1);
+            await undo.click();
+            await expect.poll(() => hasHaldewin(page)).toBe(true);
+            await expect(page.locator('body > .toast')).toContainText('Undone');
+            await expect(page.locator('body > .toast .undo-toast-btn')).toHaveCount(0);
+            await expect.poll(() => toastsOnScreen(page)).toBe(1);
+        });
+    }
+
+    test('"Undo" leaves the message when the pill\'s time runs out; the message runs its own time', async ({ page }) => {
+        await deleteWithPill(page);
+        await page.evaluate(() => window.Strom.UI.showToast('Copied', 10000));
+        const message = page.locator('body > .toast');
+        await expect(message.locator('.undo-toast-btn')).toHaveCount(1);
+        await expect(message.locator('.undo-toast-btn')).toHaveCount(0, { timeout: 7000 });
+        await expect(message).toBeVisible();
+        await expect(message).toHaveText('Copied');
+        await expect(page.locator('body > .undo-toast.show')).toHaveCount(0);
+        expect(await hasHaldewin(page)).toBe(false);
+    });
+
+    test('a message gone before the pill\'s time gives the pill back with "Undo"', async ({ page }) => {
+        await deleteWithPill(page);
+        await page.evaluate(() => window.Strom.UI.showToast('Copied', 800));
+        await expect(page.locator('body > .toast .undo-toast-btn')).toHaveCount(1);
+        const pill = page.locator('body > .undo-toast.show');
+        await expect(pill).toBeVisible({ timeout: 3000 });
+        await expect(page.locator('body > .toast')).toHaveCount(0);
+        await expect(pill.locator('.undo-toast-btn')).toBeVisible();
+        await expect.poll(() => toastsOnScreen(page)).toBe(1);
+        await pill.locator('.undo-toast-btn').click();
+        await expect.poll(() => hasHaldewin(page)).toBe(true);
+    });
+
+    test('a pointer on the message carrying "Undo" holds the pill\'s time', async ({ page }) => {
+        await deleteWithPill(page);
+        await page.evaluate(() => window.Strom.UI.showToast('Copied', 20000));
+        const message = page.locator('body > .toast');
+        await expect(message.locator('.undo-toast-btn')).toHaveCount(1);
+        await message.hover();
+        await page.waitForTimeout(7000);
+        await expect(message.locator('.undo-toast-btn')).toHaveCount(1);
+        await page.mouse.move(8, 300);
+        await expect(message.locator('.undo-toast-btn')).toHaveCount(0, { timeout: 7000 });
+    });
+
+    test('390: the undo pill coming while a message stands shows in the message\'s place; gone, the message comes back', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 800 });
+        await openApp(page);
+        await page.evaluate(() => window.Strom.UI.showToast('Copied', 30000));
+        const at = await settledBottom(page, 'body > .toast.show');
+        await createFirstPerson(page, 'Jan', 'Zwolbrack');
+        const pill = page.locator('body > .undo-toast.show');
+        await expect(pill).toBeVisible();
+        await expect(page.locator('body > .toast')).toBeHidden();
+        await expect.poll(() => toastsOnScreen(page)).toBe(1);
+        expect(Math.abs(await settledBottom(page, 'body > .undo-toast.show') - at)).toBeLessThanOrEqual(1);
+        await page.locator('#tree-container').click({ position: { x: 5, y: 5 } });
+        await page.keyboard.press('Escape');
+        await expect(page.locator('body > .toast')).toBeVisible();
+        await expect(page.locator('body > .toast')).toHaveText('Copied');
+        await expect.poll(() => toastsOnScreen(page)).toBe(1);
+    });
 });

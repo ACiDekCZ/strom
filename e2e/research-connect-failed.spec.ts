@@ -91,8 +91,9 @@ test.describe('couldn\'t connect to the research', () => {
         await page.unroute(`${BRIDGE}/**`);
         await page.route(`${BRIDGE}/**`, () => { /* never answered */ });
         void page.evaluate((b) => window.Strom.UI.openExternalRequest(new URLSearchParams({ live: b })), BRIDGE);
+        // ("Undo" of the change before it may ride along: one toast at a time)
         await expect(page.locator('.toast[data-kind="research-connect"]')).toHaveText(
-            'Connecting to Strom Research… If the browser asks about “Access other apps and services on this device”, choose Allow.');
+            /^Connecting to Strom Research… If the browser asks about “Access other apps and services on this device”, choose Allow\.(Undo)?$/);
     });
 
     test('allowed and still unreachable: the research is not responding, Try again asks again', async ({ page }) => {

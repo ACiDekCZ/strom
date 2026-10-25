@@ -619,7 +619,8 @@ test.describe('installing the research from the app', () => {
         await expect(banner).toContainText('“My Family Tree” is moving to another browser for the research.');
         const reminder = page.locator('.toast', { hasText: 'This is an older copy of “My Family Tree”' });
         await addRelation(page, 'Jan', 'child', 'Petr', 'Novak');
-        await expect(reminder).toBeVisible();
+        // One toast at a time: the undo pill of the edit after it, the reminder waiting under it
+        await expect(reminder).toHaveCount(1);
         await page.evaluate(() => document.querySelectorAll('.toast').forEach(t => t.remove()));
         await addRelation(page, 'Jan', 'child', 'Pavel', 'Novak');
         await expect(card(page, 'Pavel')).toBeVisible();

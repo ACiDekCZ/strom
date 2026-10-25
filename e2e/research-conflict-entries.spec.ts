@@ -99,7 +99,7 @@ test.describe('the panel by the edit form\'s field', () => {
         await expect(panel(page)).toHaveCount(0);
         await expect(tag(page)).toHaveCount(0);
         expect(await activeId(page)).toBe('input-birthdate');
-        await expect(page.locator('.toast')).toHaveText('Conflict decided: 1865');
+        await expect(page.locator('.toast')).toHaveText(/^Conflict decided: 1865(Undo)?$/);
         await expect(page.locator('#input-birthdate')).toHaveValue('1865');
         expect(await page.evaluate(() => window.Strom.UI.hasPersonModalChanges())).toBe(false);
         expect(decide.asks).toEqual([{ id: 'X0007', body: { do: 'decide', take: 'user' } }]);

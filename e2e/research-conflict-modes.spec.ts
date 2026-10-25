@@ -348,7 +348,7 @@ test.describe('the bridge\'s answers from the panel', () => {
         await choice(page, 'research').click();
         await expect(panel(page)).toHaveCount(0);
         await expect(tag(page)).toHaveCount(0);
-        await expect(page.locator('.toast')).toHaveText('Already decided in the research: 1865');
+        await expect(page.locator('.toast')).toHaveText(/^Already decided in the research: 1865(Undo)?$/);
         await expect(page.locator('#input-birthdate')).toHaveValue('1865');
         expect(await janBirth(page)).toBe('1865');
         expect(await page.evaluate(id => window.Strom.TreeManager.getTreeMetadata(id)?.research?.head, treeId)).not.toBe(NEW_HEAD);

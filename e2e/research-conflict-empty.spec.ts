@@ -60,7 +60,7 @@ test.describe('a value deleted on one side: still decidable', () => {
         await side(page, 'user', 'X0013').locator('.prc-choice').click();
         await expect(c).toHaveAttribute('data-state', 'kept');
         await expect(c.locator('.prc-decided-row .prc-value')).toHaveText('(empty)');
-        await expect(page.locator('.toast').filter({ hasText: 'Conflict decided' })).toHaveText('Conflict decided: (empty)');
+        await expect(page.locator('.toast').filter({ hasText: 'Conflict decided' })).toHaveText(/^Conflict decided: \(empty\)(Undo)?$/);
         expect(decide.asks).toEqual([{ id: 'X0013', body: { do: 'decide', take: 'user' } }]);
         expect(await janTitle(page)).toBe('');
     });

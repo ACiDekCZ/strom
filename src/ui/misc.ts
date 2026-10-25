@@ -50,6 +50,7 @@ import { twoFiguresSvg } from '../icons.js';
 import { shownNameOrEmpty, nameHtml } from '../person-name.js';
 import { forgetCardTypeCopy } from './card-fields-ui.js';
 import { syncControlBlock } from './minimap.js';
+import { addLender, removeLender, watchToasts } from '../toast-slot.js';
 
 
 /** The sample name under Settings > Surname display (no titles shown). */
@@ -1510,9 +1511,13 @@ export const miscMethods = uiModule({
      */
     /**
      * A short message at the bottom. `duration` Infinity keeps it until it is
-     * replaced or (with `closable`) closed with its ×.
+     * replaced or (with `closable`) closed with its ×. One toast at a time
+     * (round 6 §43, src/toast-slot.ts): it replaces the message before it at
+     * the same place; an undo pill or a focus confirmation standing waits
+     * under it, its button riding in it for its own time.
      */
     showToast(message: string, duration = 3000, opts: { title?: string; spinner?: boolean; closable?: boolean; kind?: string; action?: { label: string; run: () => void }; hold?: boolean } = {}): void {
+        watchToasts();
         // Remove existing toast
         const existing = document.querySelector('.toast');
         if (existing) existing.remove();
@@ -1571,11 +1576,12 @@ export const miscMethods = uiModule({
             toast.classList.add('show');
         });
 
-        // Auto-hide; a toast with an action stays while the keyboard is on it
-        // (reached with Tab) and goes once focus leaves (`hold`: also under the pointer).
+        // Auto-hide; a toast with a button (its action, or "Undo" / "↩ Back" riding
+        // in it) stays while the keyboard is on it (reached with Tab) and goes
+        // once focus leaves (`hold`: also under the pointer).
         if (!Number.isFinite(duration)) return;
         const hide = (): void => {
-            if (opts.action && toast.isConnected && toast.contains(document.activeElement)) {
+            if (toast.isConnected && toast.contains(document.activeElement)) {
                 toast.addEventListener('focusout', () => setTimeout(hide, 0), { once: true });
                 return;
             }
@@ -1615,6 +1621,13 @@ export const miscMethods = uiModule({
      * hides after 6 s; hovering pauses the countdown; Esc closes; a new action
      * replaces it. Clicking Undo runs the same path as Ctrl+Z. Never shown for
      * bulk import/merge (those pass silent through commitMutation).
+     *
+     * One toast at a time (round 6 §43, src/toast-slot.ts): the pill is a
+     * message as the others. A message coming while it stands shows in its
+     * place and carries its "Undo" for the pill's own time (it stands while
+     * the pointer or the keyboard is on that message); then "Undo" goes and
+     * the message runs its own time. A message gone sooner gives the pill
+     * back for the time left.
      */
     showUndoToast(description: string): void {
         this.dismissUndoToast();
@@ -1637,7 +1650,13 @@ export const miscMethods = uiModule({
             this.performUndo();
         });
 
+        // Riding in another message, a separator before "Undo" (hidden at home)
+        const sep = document.createElement('span');
+        sep.className = 'undo-toast-sep';
+        sep.setAttribute('aria-hidden', 'true');
+
         el.appendChild(msg);
+        el.appendChild(sep);
         el.appendChild(btn);
         document.body.appendChild(el);
         this.undoToastEl = el;
@@ -1653,9 +1672,16 @@ export const miscMethods = uiModule({
             startedAt = Date.now();
             this.undoToastTimer = setTimeout(() => this.dismissUndoToast(), remaining);
         };
-        el.addEventListener('mouseenter', () => { remaining -= Date.now() - startedAt; clear(); });
-        el.addEventListener('mouseleave', () => { arm(); });
+        const pause = () => {
+            if (this.undoToastEl !== el || !this.undoToastTimer) return;
+            remaining -= Date.now() - startedAt;
+            clear();
+        };
+        const resume = () => { if (this.undoToastEl === el && !this.undoToastTimer) arm(); };
+        el.addEventListener('mouseenter', pause);
+        el.addEventListener('mouseleave', resume);
         arm();
+        addLender({ kind: 'undo', el, home: el, parts: [sep, btn], pause, resume });
 
         // An open "What will be sent" panel ends above the pill.
         this.positionResearchChanges();
@@ -1670,6 +1696,8 @@ export const miscMethods = uiModule({
         const el = this.undoToastEl;
         this.undoToastEl = null;
         if (!el) return;
+        // "Undo" leaves a message carrying it; the message (or what waits under it) shows on
+        removeLender('undo');
         el.classList.remove('show');
         setTimeout(() => {
             el.remove();

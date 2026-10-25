@@ -158,7 +158,7 @@ test.describe('after deciding a conflict in the app', () => {
             then: { head: NEW_HEAD, janState: 'decided' } });
         await side(page, 'research').locator('.prc-choice').click();
         await expect(cardOf(page)).toHaveAttribute('data-state', 'elsewhere');
-        await expect(toast(page)).toHaveText('Already decided in the research: 1865');
+        await expect(toast(page)).toHaveText(/^Already decided in the research: 1865(Undo)?$/);
         await expect(card(page, 'Jan').locator('.card-signal')).toHaveCount(0);
         expect(await linkHead(page, treeId)).toBe(HEAD);
         expect(await page.evaluate(() => JSON.stringify(window.Strom.DataManager.getData().persons))).toBe(before);
