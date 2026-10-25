@@ -216,3 +216,89 @@ test.describe('tour offer and a toast, desktop', () => {
     test.use({ viewport: { width: 1440, height: 900 } });
     test('1440: the tour offer leaves the toast and its action free', async ({ page }) => { await offerAndToast(page); });
 });
+
+/**
+ * Clear of the floating controls (round 7 §55): the undo pill and a message at its place (carrying
+ * its "Undo") stand between ↩ / ↪ and the zoom stack's ⛶, 8px from each, never over them; a
+ * message's actions are one group that wraps whole to the next line, a separator only between two
+ * of them (none at a line's end, none before the first).
+ */
+const DE_LONG = 'Gespeichert: die Änderungen gehen mit der nächsten Kopie hinaus';
+
+/** The pill, then (its 3 s over) a message with an action at its place carrying its "Undo". */
+async function pillThenMessage(page: Page, text: string, action: string): Promise<{ pill: Box; msg: Locator }> {
+    // The sample tree's message put away: the pill at its own place, low in the row of ↩ and ⛶
+    await page.evaluate(() => document.querySelectorAll('body > .toast').forEach(t => t.remove()));
+    await expect(page.locator('body > .toast')).toHaveCount(0);
+    await page.evaluate(() => window.Strom.UI.showUndoToast('deleting the person Wolfbrecht Zwolbrack'));
+    const pillEl = page.locator('body > .undo-toast.show');
+    await expect(pillEl).toBeVisible();
+    await expect(pillEl).not.toHaveClass(/at-message-toast/);
+    await expect.poll(() => pillEl.evaluate(e => e.getAnimations().length)).toBe(0);
+    const pill = (await pillEl.boundingBox())!;
+    await page.evaluate(([t, a]) => window.Strom.UI.showToast(t, 10000, { action: { label: a, run: () => undefined } }), [text, action] as const);
+    const msg = page.locator('body > .toast.show');
+    await expect(msg).toBeVisible({ timeout: 5000 });
+    await expect(msg.locator('.undo-toast-btn')).toBeVisible();
+    await expect.poll(() => msg.evaluate(e => e.getAnimations().length)).toBe(0);
+    return { pill, msg };
+}
+
+/** The box between ↩ / ↪ and ⛶, 8px from each where they show in its row; how many are in its row. */
+async function clearOfControls(page: Page, box: Box, what: string): Promise<number> {
+    let inRow = 0;
+    for (const sel of ['#focus-back-btn', '#focus-forward-btn', '.zoom-controls > button']) {
+        for (const el of await page.locator(sel).all()) {
+            if (!await el.isVisible()) continue;
+            const b = (await el.boundingBox())!;
+            if (b.y >= box.y + box.height || box.y >= b.y + b.height) continue;
+            inRow++;
+            if (b.x + b.width / 2 < box.x + box.width / 2) expect(box.x, `${what} 8px right of ${sel}`).toBeGreaterThanOrEqual(b.x + b.width + 8 - 0.5);
+            else expect(box.x + box.width, `${what} 8px left of ${sel}`).toBeLessThanOrEqual(b.x - 8 + 0.5);
+        }
+    }
+    return inRow;
+}
+
+/** The message's actions in one group on one line, its first shown item a button. */
+async function actionsWhole(msg: Locator, count: number): Promise<void> {
+    const group = msg.locator(':scope > .toast-actions');
+    await expect(group).toHaveCount(1);
+    const items = await group.evaluate(g => [...g.children].filter(c => (c as HTMLElement).checkVisibility())
+        .map(c => { const r = c.getBoundingClientRect(); return { tag: c.tagName, mid: r.top + r.height / 2 }; }));
+    expect(items.filter(i => i.tag === 'BUTTON')).toHaveLength(count);
+    expect(items[0].tag).toBe('BUTTON');
+    expect(items[items.length - 1].tag).toBe('BUTTON');
+    for (const i of items) expect(Math.abs(i.mid - items[0].mid)).toBeLessThanOrEqual(2);
+}
+
+test.describe('clear of the floating controls, phone', () => {
+    test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+    test('390: the undo pill and a message at its place stand between ↩ and ⛶, 8px from each (round 7 §55)', async ({ page }) => {
+        await sampleWithBack(page);
+        const { pill, msg } = await pillThenMessage(page, 'Saved: the changes go out with the next copy', 'Open');
+        // Both in the row of ↩ and ⛶
+        expect(await clearOfControls(page, pill, 'the pill')).toBe(2);
+        expect(await clearOfControls(page, (await msg.boundingBox())!, 'the message')).toBe(2);
+        await actionsWhole(msg, 2);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    });
+});
+
+test.describe('clear of the floating controls, phone held sideways (de)', () => {
+    test.use({ viewport: { width: 844, height: 390 }, hasTouch: true, isMobile: true });
+
+    test('844 × 390 de: the actions wrap whole to the next line, no separator at its end; clear of ↩ and ⛶ (round 7 §55)', async ({ page }) => {
+        await sampleWithBack(page);
+        await page.evaluate(() => window.Strom.UI.setLanguage('de'));
+        const { pill, msg } = await pillThenMessage(page, DE_LONG, 'Öffnen');
+        await clearOfControls(page, pill, 'the pill');
+        const m = (await msg.boundingBox())!;
+        await clearOfControls(page, m, 'the message');
+        // Two lines: the sentence, then the group of both actions under it
+        expect(m.height).toBeGreaterThan(50);
+        await actionsWhole(msg, 2);
+        expect(await msg.evaluate(e => e.scrollWidth <= e.clientWidth)).toBe(true);
+    });
+});

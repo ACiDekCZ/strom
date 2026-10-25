@@ -357,7 +357,8 @@ test.describe('a toast over a bubble', () => {
 
         test('a toast coming while a bubble opened by a long press is open where it stands: above the bubble, the bubble open (round 6 §44)', async ({ page }) => {
             const { own, bubble } = await phoneBubble(page);
-            await bubbleTo(page, own.bottom - 10);
+            // a low bubble: the toast raised above it stays clear of the bubble's tab (round 7 §55)
+            await bubbleTo(page, own.bottom - 10, 150);
             const b = (await bubble.boundingBox())!;
             await page.evaluate(() => window.Strom.UI.showToast('Saved', 10000));
             const t = await settledRect(page, '.toast.show');
@@ -373,6 +374,20 @@ test.describe('a toast over a bubble', () => {
             await expect(bubble).toBeHidden();
             const t = await settledRect(page, '.toast.show');
             expect(Math.abs(t.bottom - own.bottom)).toBeLessThanOrEqual(1);
+        });
+
+        test('raised above the bubble it would cover the bubble\'s own tab: the toast closes the bubble and stands at its place (round 7 §55)', async ({ page }) => {
+            const { own, bubble } = await phoneBubble(page);
+            const tab = (await rowOf(page, 'g1').locator('.branch-tab.kind-focus').boundingBox())!;
+            // the bubble right under its tab, down over the toast's place: raised above it, a toast
+            // as wide as the phone would lie on the tab
+            const top = tab.y + tab.height + 4;
+            await bubbleTo(page, own.bottom - 10, own.bottom - 10 - top);
+            await page.evaluate(() => window.Strom.UI.showToast('Saved to the tree file, the next copy goes out with the research changes', 10000));
+            await expect(bubble).toBeHidden();
+            const t = await settledRect(page, '.toast.show');
+            expect(Math.abs(t.bottom - own.bottom)).toBeLessThanOrEqual(1);
+            await expect(page.locator('.toast')).not.toHaveAttribute('style', /bottom/);
         });
     });
 

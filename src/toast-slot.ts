@@ -108,7 +108,7 @@ function hold(on: boolean): void {
     carrierHeld = on;
     if (on) {
         for (const l of lenders) {
-            if (!paused.has(l) && carrier && l.el !== carrier && l.parts[0]?.parentElement === carrier) {
+            if (!paused.has(l) && carrier && l.el !== carrier && carrier.contains(l.parts[0] ?? null)) {
                 paused.add(l);
                 l.pause();
             }
@@ -152,11 +152,59 @@ function putParts(target: HTMLElement, parts: HTMLElement[], before: Element | n
     for (const p of parts) target.insertBefore(p, before);
 }
 
+/**
+ * Where the buttons stand in the toast `host`: in a message its group of
+ * actions (round 7 §55: one piece that wraps whole to the next line, its
+ * separators only between two actions), made before its × where it has
+ * none yet; the undo pill itself.
+ */
+function actionsOf(host: HTMLElement): HTMLElement {
+    if (!host.classList.contains('toast')) return host;
+    const own = host.querySelector<HTMLElement>(':scope > .toast-actions');
+    if (own) return own;
+    const group = document.createElement('span');
+    group.className = 'toast-actions';
+    host.insertBefore(group, host.querySelector(':scope > .toast-close'));
+    return group;
+}
+
+/**
+ * The room the floating controls take at the bottom of the window (round 7
+ * §55): `--toast-clear-l` up to the right edge of ↩ / ↪ where they show,
+ * `--toast-clear-r` from the left edge of the zoom stack (⛶), each with 8 px
+ * more; 0 where none shows. The stylesheet keeps a toast in their row
+ * between them (where they float: a phone, a tablet, a phone held sideways).
+ */
+function measureClearance(): void {
+    const root = document.documentElement;
+    const vw = window.innerWidth;
+    let left = 0, right = 0;
+    for (const id of ['focus-back-btn', 'focus-forward-btn']) {
+        const r = document.getElementById(id)?.getBoundingClientRect();
+        if (r && r.width > 0) left = Math.max(left, Math.ceil(r.right + 8));
+    }
+    for (const b of document.querySelectorAll<HTMLElement>('.zoom-controls > button')) {
+        const r = b.getBoundingClientRect();
+        if (r.width > 0) right = Math.max(right, Math.ceil(vw - r.left + 8));
+    }
+    const l = `${left}px`, r = `${right}px`;
+    if (root.style.getPropertyValue('--toast-clear-l') !== l) root.style.setProperty('--toast-clear-l', l);
+    if (root.style.getPropertyValue('--toast-clear-r') !== r) root.style.setProperty('--toast-clear-r', r);
+}
+
 function install(): void {
     if (watch || typeof MutationObserver === 'undefined' || typeof document === 'undefined') return;
     // A message coming or going (one put away, or its `.show` taken: on its way out)
     watch = new MutationObserver(() => reconcile());
     watch.observe(document.body, { childList: true });
+    // ↩ / ↪ showing or going, the window turned or resized: the floating controls' room again
+    const controls = new MutationObserver(() => { if (top) measureClearance(); });
+    for (const id of ['focus-back-btn', 'focus-forward-btn']) {
+        const el = document.getElementById(id);
+        if (el) controls.observe(el, { attributes: true, attributeFilter: ['style', 'class'] });
+    }
+    controls.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+    window.addEventListener('resize', () => { if (top) measureClearance(); });
 }
 
 /** Lay the toasts out again: the newest one shows, at the run's place, carrying the lenders' buttons. */
@@ -183,7 +231,7 @@ export function reconcile(): void {
         if (host) lent.push(...l.parts);
         else putParts(l.home, l.parts, null);
     }
-    if (host) putParts(host, lent, host.querySelector(':scope > .toast-close'));
+    if (host) putParts(actionsOf(host), lent, null);
     const carrying = host && lenders.some(l => l.el !== host) ? host : null;
     if (carrying !== carrier) {
         detachCarrier?.();
@@ -202,6 +250,7 @@ export function reconcile(): void {
         const own = kindOf(next);
         for (const cls of PLACE_CLASSES) toggle(next, cls, cls === `at-${place}-toast` && place !== own);
     }
+    if (next && next !== top) measureClearance();
     const key = next ? keyOf(next) : null;
     if (key && !shownAt.has(key)) shownAt.set(key, Date.now());
     const changed = next !== top;
@@ -220,7 +269,7 @@ function keyOf(t: HTMLElement): HTMLElement {
 function toBeRead(t: HTMLElement): boolean {
     if (t.classList.contains('undo-toast')) return true;
     if (!t.classList.contains('toast')) return lenders.some(l => l.kind === 'focus' && l.el === t);
-    return t.dataset.notice !== undefined || t.querySelector(':scope > .toast-action') !== null;
+    return t.dataset.notice !== undefined || t.querySelector(':scope > .toast-actions > .toast-action') !== null;
 }
 
 /** How long a newer toast waits before it may take the place of the toast on the screen (0: at once). */

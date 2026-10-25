@@ -1577,7 +1577,11 @@ export const miscMethods = uiModule({
                 setTimeout(() => toast.remove(), 300);
                 run();
             };
-            toast.appendChild(act);
+            // In the group of actions: an "Undo" or "↩ Back" riding along joins it, the group wraps whole
+            const actions = document.createElement('span');
+            actions.className = 'toast-actions';
+            actions.appendChild(act);
+            toast.appendChild(actions);
         }
         if (opts.closable) {
             const close = document.createElement('button');

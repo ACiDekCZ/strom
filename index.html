@@ -9099,23 +9099,34 @@
         body > .toast-under-bubble,
         #focus-toast.toast-under-bubble { visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }
         .undo-toast > .undo-toast-sep { display: none; }
-        .toast > .focus-toast-sep,
-        .toast > .undo-toast-sep {
-            display: inline-block; vertical-align: middle; width: 1px; height: 1.2em; margin: 0 4px 0 12px;
+        /* A message's actions (its own, "Undo", "↩ Back") are one group (round 7 §55): never broken
+           between them, the whole group goes to the next line where the row is too short, and a
+           separator stands only between two actions (none before the first, none at a line's end). */
+        .toast-actions {
+            display: inline-flex; align-items: center; vertical-align: middle;
+            margin-left: 12px; white-space: nowrap;
+        }
+        .toast-actions:empty { display: none; }
+        .toast-actions > .toast-action { margin-left: 0; }
+        .toast-actions > .focus-toast-sep:first-child,
+        .toast-actions > .undo-toast-sep:first-child { display: none; }
+        .toast-actions > .focus-toast-sep,
+        .toast-actions > .undo-toast-sep {
+            display: inline-block; flex: none; width: 1px; height: 1.2em; margin: 0 4px 0 12px;
             background: color-mix(in srgb, var(--surface) 40%, transparent);
         }
-        .toast > .focus-toast-back,
-        .toast > .undo-toast-btn {
+        .toast-actions > .focus-toast-back,
+        .toast-actions > .undo-toast-btn {
             height: auto; min-width: 0; margin: -6px 0; padding: 6px 8px; vertical-align: baseline;
             border: none; border-radius: var(--r-md); background: transparent; cursor: pointer;
             font: inherit; font-weight: 600; color: inherit; text-decoration: underline;
         }
         @media (hover: hover) {
-            .toast > .focus-toast-back:hover,
-            .toast > .undo-toast-btn:hover { background: color-mix(in srgb, var(--surface) 15%, transparent); }
+            .toast-actions > .focus-toast-back:hover,
+            .toast-actions > .undo-toast-btn:hover { background: color-mix(in srgb, var(--surface) 15%, transparent); }
         }
-        .toast > .focus-toast-back:focus-visible,
-        .toast > .undo-toast-btn:focus-visible { outline: 2px solid var(--surface); outline-offset: 1px; }
+        .toast-actions > .focus-toast-back:focus-visible,
+        .toast-actions > .undo-toast-btn:focus-visible { outline: 2px solid var(--surface); outline-offset: 1px; }
         .undo-toast > .focus-toast-sep { margin: 4px 0; }
         /* The other kinds' places where they stand apart: a tablet (the focus
            confirmation 4px higher), a phone (the undo pill low, the others
@@ -13392,7 +13403,7 @@
            whole under the sentence, never broken word by word beside it (017 j). */
         @media (max-width: 1024px) {
             .toast--closable:not(.toast--rich) { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 10px; align-items: start; }
-            .toast--closable:not(.toast--rich) > .toast-action { grid-column: 1; grid-row: 2; justify-self: start; margin: 8px 0 0; }
+            .toast--closable:not(.toast--rich) > .toast-actions { grid-column: 1; grid-row: 2; justify-self: start; margin: 8px 0 0; }
             .toast--closable:not(.toast--rich) > .toast-close { grid-column: 2; grid-row: 1; }
         }
 
@@ -13983,6 +13994,37 @@
             .toast { width: max-content; }
             .undo-toast { right: auto; width: auto; transform: translateX(-50%) translateY(12px); }
             .undo-toast.show { transform: translateX(-50%) translateY(0); }
+        }
+        /* Clear of the floating controls (round 7 §55): a toast in the row of ↩ ↪ (left) and the zoom
+           stack's ⛶ (right) stands between them, 8px from each (--toast-clear-l / -r: their room,
+           measured by src/toast-slot.ts, 0 where none shows), never over them. A tablet keeps it in the
+           middle, narrower where it would reach them. */
+        @media (min-width: 641px) and (max-width: 1024px) {
+            .toast, .toast--rich { max-width: calc(100vw - 2 * max(16px, var(--toast-clear-l, 0px), var(--toast-clear-r, 0px))); }
+            .undo-toast { max-width: min(92vw, 420px, calc(100vw - 2 * max(16px, var(--toast-clear-l, 0px), var(--toast-clear-r, 0px)))); }
+            .focus-toast,
+            body > .at-focus-toast { max-width: min(calc(100vw - 248px), calc(100vw - 2 * max(16px, var(--toast-clear-l, 0px), var(--toast-clear-r, 0px)))); }
+        }
+        /* A phone: the undo pill low in their row, from ↩ ↪ to ⛶ (its right edge 8px left of ⛶), and a
+           message or the focus confirmation at the pill's place in the same room (not held sideways:
+           there the rule below). */
+        @media (max-width: 640px) and (orientation: portrait), (max-width: 640px) and (min-height: 501px) {
+            body > .undo-toast:not(.at-message-toast):not(.at-focus-toast) {
+                left: max(12px, var(--toast-clear-l, 0px)); right: max(12px, var(--toast-clear-r, 0px));
+            }
+            body > .toast.at-undo-toast,
+            .focus-toast.at-undo-toast {
+                left: calc(max(16px, var(--toast-clear-l, 0px)) + (100vw - max(16px, var(--toast-clear-l, 0px)) - max(16px, var(--toast-clear-r, 0px))) / 2);
+                max-width: calc(100vw - max(16px, var(--toast-clear-l, 0px)) - max(16px, var(--toast-clear-r, 0px)));
+            }
+        }
+        /* A phone held sideways: in the middle beside the side bar as before, narrower where it would reach them. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .undo-toast, .toast {
+                max-width: min(420px, calc(2 * min(
+                    (100vw - var(--side-bar-w)) / 2 + var(--side-bar-w) - max(calc(var(--side-bar-w) + 12px), var(--toast-clear-l, 0px)),
+                    (100vw - var(--side-bar-w)) / 2 - max(12px, var(--toast-clear-r, 0px)))));
+            }
         }
 
         /* Pending merge dialog */

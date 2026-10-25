@@ -22,7 +22,8 @@
  * its bottom edge 8 px over the bubble's top edge, the bubble open, gliding
  * there, and back to its place when the bubble closes. A toast that comes
  * (or comes back) while a bubble is open and finds no room above it (under
- * the bars over the tree, 8 px) closes the bubble and stands at its place.
+ * the bars over the tree, 8 px) closes the bubble and stands at its place,
+ * as one that would cover the bubble's own tab there (round 7 §55).
  *
  * The newer one wins (round 7 §52): a bubble opened over a toast standing
  * where the bubble opens (the toast at its place would cover it) hides the
@@ -135,7 +136,8 @@ function roomTop(): number {
 
 /**
  * The toast on the screen above the open bubble where at its own place it
- * would cover it (round 6 §44). No room above: a toast `coming` closes the
+ * would cover it (round 6 §44). No room above (or raised it would cover the
+ * tab the bubble belongs to, round 7 §55): a toast `coming` closes the
  * bubble; else (the same bubble shown again) it stays at its place, over the
  * bubble. A toast hidden under the bubble (round 7 §52) waits for it to close.
  */
@@ -153,7 +155,11 @@ function placeToasts(coming: boolean): void {
     }
     const own = ownBox(t);
     const edge = b.top - TOAST_GAP;
-    if (edge - own.height >= roomTop() + TOAST_GAP) {
+    // Raised, it covers neither the bars over the tree nor the tab the bubble belongs to (round 7 §55)
+    const tab = at.owner.getBoundingClientRect();
+    const overTab = tab.width > 0 && own.left < tab.right && own.right > tab.left
+        && edge - own.height < tab.bottom && edge > tab.top;
+    if (edge - own.height >= roomTop() + TOAST_GAP && !overTab) {
         t.style.bottom = `${Math.round(window.innerHeight - edge)}px`;
         raised.add(t);
         return;
