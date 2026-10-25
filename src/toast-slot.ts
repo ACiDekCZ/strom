@@ -22,6 +22,16 @@
  * the kinds stand apart: the undo pill low on a phone, the focus
  * confirmation a little higher beside a phone's bars), until the screen is
  * empty again. A toast on its way out (fading) is left as it is.
+ *
+ * A toast to be read is not replaced too soon (round 7 §53): a message with
+ * its own action or a notice (`data-notice`, e.g. the older-copy reminder),
+ * the undo pill ("Vrátit") and the focus confirmation ("↩ Back") stand at
+ * least 3 s from when they first showed. A message or an undo pill coming
+ * sooner waits (`whenFree`) and shows the moment those 3 s are over (or the
+ * toast went sooner), with its own full time; of several waiting, the newest
+ * of each kind. A message carrying a lent button is not held for it (the
+ * button rides on in the newer message), and other messages are replaced at
+ * once, as before.
  */
 
 export type ToastKind = 'message' | 'undo' | 'focus';
@@ -46,7 +56,15 @@ export interface ToastLender {
 const MESSAGES = 'body > .toast, body > .undo-toast';
 const PLACE_CLASSES = ['at-message-toast', 'at-undo-toast', 'at-focus-toast'];
 
+/** How long a toast to be read stands before a newer one may take its place (round 7 §53). */
+export const TOAST_MIN_MS = 3000;
+
 const lenders: ToastLender[] = [];
+/** When a toast first showed (a message, the pill; the focus confirmation's box). */
+const shownAt = new WeakMap<HTMLElement, number>();
+/** A message and an undo pill waiting for the toast on the screen to have stood its 3 s, in the order they came. */
+const waiting = new Map<'message' | 'undo', () => void>();
+let waitTimer: ReturnType<typeof setTimeout> | null = null;
 /** Messages seen shown: one of them without `.show` again is on its way out. */
 const shownOnce = new WeakSet<Element>();
 /** The kind whose place the run of toasts keeps (null: the screen is empty). */
@@ -184,9 +202,76 @@ export function reconcile(): void {
         const own = kindOf(next);
         for (const cls of PLACE_CLASSES) toggle(next, cls, cls === `at-${place}-toast` && place !== own);
     }
+    const key = next ? keyOf(next) : null;
+    if (key && !shownAt.has(key)) shownAt.set(key, Date.now());
     const changed = next !== top;
     top = next;
     if (changed) for (const fn of listeners) fn();
+    if (changed && waiting.size > 0) flushWaiting();
+}
+
+/** What a toast's first showing is kept by: the focus confirmation's box (its container stays), else the toast. */
+function keyOf(t: HTMLElement): HTMLElement {
+    const focus = lenders.find(l => l.kind === 'focus');
+    return focus && t === focus.el ? focus.home : t;
+}
+
+/** A toast to be read (round 7 §53): the undo pill, the focus confirmation, a message with its own action or a notice. */
+function toBeRead(t: HTMLElement): boolean {
+    if (t.classList.contains('undo-toast')) return true;
+    if (!t.classList.contains('toast')) return lenders.some(l => l.kind === 'focus' && l.el === t);
+    return t.dataset.notice !== undefined || t.querySelector(':scope > .toast-action') !== null;
+}
+
+/** How long a newer toast waits before it may take the place of the toast on the screen (0: at once). */
+export function waitBeforeReplace(): number {
+    // A toast put on the screen just now (the slot hears of it a moment later)
+    reconcile();
+    const t = shownToast();
+    if (!t || !toBeRead(t)) return 0;
+    const since = shownAt.get(keyOf(t));
+    return since === undefined ? 0 : Math.max(0, since + TOAST_MIN_MS - Date.now());
+}
+
+/**
+ * Show a message or the undo pill (`show`) now, or, while the toast on the
+ * screen has not stood its 3 s yet (round 7 §53), as soon as it has; a newer
+ * one of the same kind waiting takes the older one's turn.
+ */
+export function whenFree(kind: 'message' | 'undo', show: () => void): void {
+    waiting.delete(kind);
+    if (waiting.size === 0 && waitBeforeReplace() === 0) {
+        show();
+        return;
+    }
+    waiting.set(kind, show);
+    flushWaiting();
+}
+
+/** A waiting message or pill (of `kind`) no longer comes (the pill dismissed, Escape). */
+export function cancelWaiting(kind: 'message' | 'undo'): void {
+    if (!waiting.delete(kind) || waiting.size > 0) return;
+    if (waitTimer) clearTimeout(waitTimer);
+    waitTimer = null;
+}
+
+/** Whether a message or pill of `kind` waits for its turn. */
+export function isWaiting(kind: 'message' | 'undo'): boolean {
+    return waiting.has(kind);
+}
+
+/** The waiting ones show once the toast on the screen has stood its 3 s (the newest last, so on top). */
+function flushWaiting(): void {
+    if (waitTimer) clearTimeout(waitTimer);
+    waitTimer = null;
+    const wait = waitBeforeReplace();
+    if (wait > 0) {
+        waitTimer = setTimeout(flushWaiting, wait);
+        return;
+    }
+    const due = [...waiting.values()];
+    waiting.clear();
+    for (const show of due) show();
 }
 
 /** The toast on the screen now (a message, the undo pill, the focus toast's container), or null. */

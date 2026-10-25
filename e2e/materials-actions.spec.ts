@@ -341,6 +341,8 @@ test.describe('Assign to a person', () => {
         await dialog(page).locator('.mdlg-btn.is-danger').click();
         await expect.poll(() => material.assigns.length).toBe(2);
         expect(material.assigns[1]).toEqual({ batch: 'b-box', remove: ['P0002'] });
+        // The first toast with its Undo stands its 3 s before this one shows (round 7 §53)
+        await expect(toast(page)).not.toContainText('Assigned:');
         await toast(page).locator('.toast-action').click();
         await expect.poll(() => material.assigns.length).toBe(3);
         expect(material.assigns[2]).toEqual({ batch: 'b-box', add: ['P0002'] });
@@ -483,6 +485,7 @@ test.describe('Hide and Restore', () => {
         await expect(check).not.toBeChecked();
         await dialog(page).getByRole('button', { name: 'Hide', exact: true }).click();
         await expect(toast(page)).toBeVisible();
+        await toast(page).evaluate(el => { el.dataset.first = ''; });
         expect(await janAttachments(page)).toBe(2);
 
         await page.keyboard.press('ArrowRight');
@@ -492,6 +495,8 @@ test.describe('Hide and Restore', () => {
         await dialog(page).getByRole('button', { name: 'Hide', exact: true }).click();
         await expect.poll(() => janAttachments(page)).toBe(1);
         expect(material.hides.at(-1)).toEqual({ files: ['I0002'], hidden: true, reason: 'unrelated' });
+        // The first toast with its Undo stands its 3 s before this one shows (round 7 §53)
+        await expect(page.locator('.toast[data-kind="materials"]:not([data-first])')).toBeVisible();
         await toast(page).locator('.toast-action').click();
         await expect.poll(() => janAttachments(page)).toBe(2);
         await expect.poll(() => material.hides.at(-1)).toEqual({ files: ['I0002'], hidden: false });

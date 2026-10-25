@@ -614,7 +614,7 @@ export const researchInstallMethods = uiModule({
         const tree = TreeManager.getTreeMetadata(treeId);
         if (!tree?.researchTransfer || tree.research || remindedNow.has(treeId)) return;
         remindedNow.add(treeId);
-        this.showToast(strings.research.oldCopyReminder(tree.name), 8000);
+        this.showToast(strings.research.oldCopyReminder(tree.name), 8000, { notice: true });
     },
 
     /** The transfer banner follows the open tree (at start and at every switch); Safari's notice where a tree begins. */

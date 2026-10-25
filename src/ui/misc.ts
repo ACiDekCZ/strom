@@ -50,8 +50,20 @@ import { twoFiguresSvg } from '../icons.js';
 import { shownNameOrEmpty, nameHtml } from '../person-name.js';
 import { forgetCardTypeCopy } from './card-fields-ui.js';
 import { syncControlBlock } from './minimap.js';
-import { addLender, removeLender, watchToasts } from '../toast-slot.js';
+import { addLender, cancelWaiting, removeLender, watchToasts, whenFree } from '../toast-slot.js';
 
+
+/** How a message shows (UI.showToast). */
+interface ToastOptions {
+    title?: string;
+    spinner?: boolean;
+    closable?: boolean;
+    kind?: string;
+    action?: { label: string; run: () => void };
+    hold?: boolean;
+    /** A notice to be read: it stands 3 s at least before a newer toast takes its place (round 7 §53). */
+    notice?: boolean;
+}
 
 /** The sample name under Settings > Surname display (no titles shown). */
 const SURNAME_SAMPLE = { firstName: 'Marie', lastName: 'Dvořáková', marriedSurname: 'Nováková' };
@@ -1515,9 +1527,19 @@ export const miscMethods = uiModule({
      * (round 6 §43, src/toast-slot.ts): it replaces the message before it at
      * the same place; an undo pill or a focus confirmation standing waits
      * under it, its button riding in it for its own time.
+     *
+     * A toast to be read on the screen (one with its own action or a notice,
+     * the undo pill, the focus confirmation) stands 3 s at least (round 7
+     * §53): a message coming sooner waits and shows then, with its full time.
+     * `notice`: this message is such a toast as well (a warning to be read).
      */
-    showToast(message: string, duration = 3000, opts: { title?: string; spinner?: boolean; closable?: boolean; kind?: string; action?: { label: string; run: () => void }; hold?: boolean } = {}): void {
+    showToast(message: string, duration = 3000, opts: ToastOptions = {}): void {
         watchToasts();
+        whenFree('message', () => this.putToast(message, duration, opts));
+    },
+
+    /** Put the message on the screen now (showToast, its turn come). */
+    putToast(message: string, duration: number, opts: ToastOptions): void {
         // Remove existing toast
         const existing = document.querySelector('.toast');
         if (existing) existing.remove();
@@ -1526,6 +1548,7 @@ export const miscMethods = uiModule({
         toast.className = opts.title || opts.spinner ? 'toast toast--rich' : 'toast';
         toast.setAttribute('role', 'status');
         if (opts.kind) toast.dataset.kind = opts.kind;
+        if (opts.notice) toast.dataset.notice = '';
         if (opts.spinner) {
             const spin = document.createElement('span');
             spin.className = 'toast-spinner';
@@ -1630,8 +1653,14 @@ export const miscMethods = uiModule({
      * back for the time left.
      */
     showUndoToast(description: string): void {
+        // A newer pill replaces the one standing at once (its "Undo" would undo the newer change);
+        // over another toast to be read it waits for that toast's 3 s (round 7 §53)
         this.dismissUndoToast();
+        whenFree('undo', () => this.putUndoToast(description));
+    },
 
+    /** Put the undo pill on the screen now (showUndoToast, its turn come). */
+    putUndoToast(description: string): void {
         const el = document.createElement('div');
         el.className = 'undo-toast';
         el.setAttribute('role', 'status');
@@ -1692,6 +1721,7 @@ export const miscMethods = uiModule({
 
     /** Remove the Undo toast (if any) and cancel its countdown. */
     dismissUndoToast(): void {
+        cancelWaiting('undo');
         if (this.undoToastTimer) { clearTimeout(this.undoToastTimer); this.undoToastTimer = null; }
         const el = this.undoToastEl;
         this.undoToastEl = null;

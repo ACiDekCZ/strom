@@ -207,3 +207,77 @@ test.describe('one toast at a time, the undo pill a message as the others', () =
         await expect.poll(() => toastsOnScreen(page)).toBe(1);
     });
 });
+
+/**
+ * A toast to be read stands 3 s at least (GitHub #4, round 7 §53): a message
+ * with its own action or a notice, the undo pill and the focus confirmation
+ * are not replaced sooner. An undo pill or a message coming sooner waits and
+ * shows the moment those 3 s are over, with its own full time; a message
+ * without an action is still replaced at once. Invented names.
+ */
+test.describe('a toast to be read stands 3 s at least', () => {
+    /** Milliseconds since the page's own clock read `t0`. */
+    const since = (page: Page, t0: number) => page.evaluate(t => performance.now() - t, t0);
+    const now = (page: Page) => page.evaluate(() => performance.now());
+
+    test('the undo pill coming 1 s after a message with an action waits until that message has stood 3 s, then stands its own 6 s', async ({ page }) => {
+        await openApp(page);
+        await createFirstPerson(page, 'Jan', 'Zwolbrack');
+        await page.locator('#tree-container').click({ position: { x: 5, y: 5 } });
+        await page.keyboard.press('Escape');
+        await expect(page.locator('body > .undo-toast')).toHaveCount(0);
+        const t0 = await now(page);
+        await page.evaluate(() => window.Strom.UI.showToast('Older copy of the tree', 8000, { action: { label: 'Open', run: () => {} } }));
+        await expect(page.locator('body > .toast.show')).toBeVisible();
+        await page.waitForTimeout(1000);
+        await page.evaluate(() => window.Strom.UI.showUndoToast('adding Wolfbrecht'));
+        // Not yet: the message with its action stands, the pill is not there
+        await page.waitForTimeout(1200);
+        await expect(page.locator('body > .undo-toast')).toHaveCount(0);
+        await expect(page.locator('body > .toast')).toContainText('Older copy of the tree');
+        // Its 3 s over: the pill shows in its place, the message waits under it
+        const pill = page.locator('body > .undo-toast.show');
+        await expect(pill).toBeVisible({ timeout: 2000 });
+        const shownAfter = await since(page, t0);
+        expect(shownAfter).toBeGreaterThanOrEqual(2900);
+        expect(shownAfter).toBeLessThan(4200);
+        await expect(pill.locator('.undo-toast-btn')).toBeVisible();
+        // Its own full time: still there 5 s after it came
+        await page.waitForTimeout(5000);
+        await expect(page.locator('body > .undo-toast.show')).toHaveCount(1);
+    });
+
+    test('a message without an action coming 1 s after a notice waits for the notice\'s 3 s; one after a plain message replaces it at once', async ({ page }) => {
+        await openApp(page);
+        const t0 = await now(page);
+        await page.evaluate(() => window.Strom.UI.showToast('This is an older copy of the tree', 8000, { notice: true }));
+        await page.waitForTimeout(1000);
+        await page.evaluate(() => window.Strom.UI.showToast('Copied', 8000));
+        await page.waitForTimeout(1200);
+        await expect(page.locator('body > .toast')).toHaveText('This is an older copy of the tree');
+        await expect(page.locator('body > .toast')).toHaveText('Copied', { timeout: 2000 });
+        expect(await since(page, t0)).toBeGreaterThanOrEqual(2900);
+        await expect(page.locator('body > .toast')).toHaveCount(1);
+        // A plain message: the next one at once
+        await page.evaluate(() => window.Strom.UI.showToast('Saved', 8000));
+        await expect(page.locator('body > .toast')).toHaveText('Saved', { timeout: 500 });
+    });
+
+    test('the waiting message shows at once when the toast to be read goes sooner (its action used)', async ({ page }) => {
+        await openApp(page);
+        await page.evaluate(() => window.Strom.UI.showToast('Assigned', 8000, { action: { label: 'Open', run: () => {} } }));
+        await expect(page.locator('body > .toast.show .toast-action')).toBeVisible();
+        await page.evaluate(() => window.Strom.UI.showToast('Copied', 8000));
+        await expect(page.locator('body > .toast')).toHaveText('AssignedOpen');
+        await page.locator('body > .toast .toast-action').click();
+        await expect(page.locator('body > .toast.show')).toHaveText('Copied', { timeout: 1000 });
+    });
+
+    test('a newer undo pill replaces the pill standing at once (its "Undo" would undo the newer change)', async ({ page }) => {
+        await openApp(page);
+        await page.evaluate(() => window.Strom.UI.showUndoToast('adding Wolfbrecht'));
+        await expect(page.locator('body > .undo-toast.show')).toBeVisible();
+        await page.evaluate(() => window.Strom.UI.showUndoToast('adding Sigwulf'));
+        await expect(page.locator('body > .undo-toast.show .undo-toast-msg')).toHaveText('adding Sigwulf', { timeout: 1000 });
+    });
+});
