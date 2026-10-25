@@ -211,6 +211,29 @@ test.describe('a toast over a bubble', () => {
         await expect(page.locator('.toast')).not.toHaveAttribute('style', /bottom/);
     });
 
+    test('reduced motion: the toast stands over the bubble and back at once, no glide (round 6 §44)', async ({ page }) => {
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+        await setup(page);
+        await page.evaluate(() => window.Strom.UI.showToast('Saved', 800));
+        const own = await settledRect(page, '.toast.show');
+        await expect(page.locator('.toast')).toHaveCount(0, { timeout: 3000 });
+        const family = rowOf(page, 'g1').locator('.branch-tab.kind-focus');
+        await family.hover();
+        const bubble = family.locator('.badge-tooltip');
+        await expect(bubble).toBeVisible();
+        await bubbleTo(page, own.bottom - 10);
+        await page.evaluate(() => window.Strom.UI.showToast('Saved', 10000));
+        await settledRect(page, '.toast.show');
+        /** Whether the toast's `bottom` glides now. */
+        const glides = () => page.evaluate(() => document.querySelector('.toast')!.getAnimations()
+            .some(a => (a as CSSTransition).transitionProperty === 'bottom'));
+        await expect(page.locator('.toast')).toHaveAttribute('style', /bottom/);
+        await page.mouse.move(8, 450);
+        await expect(bubble).toBeHidden();
+        expect(await glides()).toBe(false);
+        expect(Math.round((await page.locator('.toast').boundingBox())!.y + (await page.locator('.toast').boundingBox())!.height)).toBe(Math.round(own.bottom));
+    });
+
     test('no room above the bubble (8 px under the bars): the toast coming closes the bubble and stands at its place (round 6 §44)', async ({ page }) => {
         await setup(page);
         const family = rowOf(page, 'g1').locator('.branch-tab.kind-focus');

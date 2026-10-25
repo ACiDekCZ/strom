@@ -13900,6 +13900,11 @@
             transition: opacity 0.2s ease, transform 0.2s ease, bottom 0.3s ease;
         }
         .undo-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        /* Reduced motion: a toast over an open bubble and back (round 6 §44) stands at once where it goes */
+        @media (prefers-reduced-motion: reduce) {
+            .focus-toast { transition: none; }
+            body > .toast, body > .undo-toast { transition-property: opacity, transform; }
+        }
         .undo-toast-msg {
             font-family: var(--font-serif); font-weight: 600;
             min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
