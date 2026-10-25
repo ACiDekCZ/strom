@@ -15,9 +15,13 @@ import { isTabletOrMobile } from '../breakpoints.js';
 import { fitFlyout, FLYOUT_MARGIN } from './flyout.js';
 import { shownName, shownNameFull, nameHtml } from '../person-name.js';
 import { displayYear } from '../dates.js';
+import { menuOffersLineJumps } from '../card-tap.js';
 
 /** The menu action of a row that moves the view to a child drawn elsewhere (+ the child's id). */
 const CHILD_ELSEWHERE_ACTION = 'child-elsewhere:';
+/** The menu actions of the "↗ Go to …" rows (a card's line-link tabs, round 6 §40). */
+const LINE_JUMP_PARENTS_ACTION = 'line-jump-parents';
+const LINE_JUMP_CHILDREN_ACTION = 'line-jump-children';
 
 /** One entry in the person action menu (context menu / bottom sheet). */
 export interface PersonMenuAction {
@@ -124,9 +128,15 @@ export const contextMenuMethods = uiModule({
      * → "Add" (a grid of buttons) → kinship and archives → "Research ›" and
      * "More ›" (lock, merge, delete) — about ten rows on the first level.
      */
-    getPersonMenuActions(personId: PersonId): PersonMenuAction[] {
+    getPersonMenuActions(personId: PersonId, fromCard = false): PersonMenuAction[] {
         const person = DataManager.getPerson(personId);
         if (!person) return [];
+        // Opened from the card by touch zoomed out below 0.6 (its jump tabs do not jump there): the jumps on top.
+        const jumps = fromCard && menuOffersLineJumps() ? this.lineJumpRows(personId) : [];
+        if (jumps.length > 0) {
+            const rest = this.getPersonMenuActions(personId);
+            return [...jumps, ...rest.map((a, i) => (i === 0 ? { ...a, divider: true } : a))];
+        }
         const c = strings.contextMenu;
         // Read-only: an embedded file's view mode or locked local data.
         const isViewMode = DataManager.isReadOnly();
@@ -244,6 +254,29 @@ export const contextMenuMethods = uiModule({
     },
 
     /**
+     * "↗ Go to {names}" (round 6 §40): a row for each of the card's
+     * line-link tabs, in the card's order ("parents ↗" before "child ↗"),
+     * that does what the tab does from 0.6 on — the view glides to the
+     * other end of the left-out line, the tree stays. On top of the menu,
+     * the bottom sheet's tiles too.
+     */
+    lineJumpRows(personId: PersonId): PersonMenuAction[] {
+        const person = DataManager.getPerson(personId);
+        if (!person) return [];
+        const self = shownNameFull(person, '?');
+        return TreeRenderer.lineJumpsOf(personId).flatMap(({ kind, ids }) => {
+            const names = ids.map(id => DataManager.getPerson(id)).filter((p): p is Person => p !== null).map(p => shownName(p, '?'));
+            if (names.length === 0) return [];
+            const aria = kind === 'linkParents' ? strings.focus.linkParentsAria
+                : kind === 'linkChild' ? strings.focus.linkChildAria : strings.focus.linkChildrenAria;
+            return [{
+                action: kind === 'linkParents' ? LINE_JUMP_PARENTS_ACTION : LINE_JUMP_CHILDREN_ACTION,
+                label: strings.focus.menuJumpTo(names), ariaLabel: aria(self), lead: true,
+            }];
+        });
+    },
+
+    /**
      * The parents in place (the card's "▸ parents" of an ancestor at the edge
      * of the depth, §4): "Show parents here", or once they are shown "Hide
      * the parents shown here".
@@ -306,6 +339,10 @@ export const contextMenuMethods = uiModule({
     runPersonMenuAction(personId: PersonId, action: string): void {
         if (action.startsWith('view-link-')) {
             this.runViewLinkMenuAction(personId, action);
+            return;
+        }
+        if (action === LINE_JUMP_PARENTS_ACTION || action === LINE_JUMP_CHILDREN_ACTION) {
+            TreeRenderer.jumpAlongLine(personId, action === LINE_JUMP_PARENTS_ACTION);
             return;
         }
         if (action.startsWith(CHILD_ELSEWHERE_ACTION)) {
@@ -453,12 +490,12 @@ export const contextMenuMethods = uiModule({
         // A floating menu there collided with the bottom bar and the FAB.
         if (isCoarsePointer() || isTabletOrMobile()) {
             this.hideContextMenu();
-            this.showPersonBottomSheet(personId);
+            this.showPersonBottomSheet(personId, true);
             return;
         }
 
         this.hideContextMenu();
-        const actions = this.getPersonMenuActions(personId);
+        const actions = this.getPersonMenuActions(personId, true);
         if (actions.length === 0) return;
 
         const menu = document.createElement('div');

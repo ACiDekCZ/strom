@@ -2991,6 +2991,8 @@ const stringsEN = {
         linkParentsAria: (name: string) => `Move the view to the parents of ${name}`,
         linkChildAria: (name: string) => `Move the view to the child of ${name}`,
         linkChildrenAria: (name: string) => `Move the view to the children of ${name}`,
+        // The person menu below 0.6 by touch (round 6 §40): a row for each jump tab of the card.
+        menuJumpTo: (names: string[]) => `↗ Go to ${names.length > 2 ? `${names.slice(0, 2).join(', ')} and ${names.length - 2} more` : joinAnd('en', names)}`,
         crossTreeHint: 'A click switches to another tree; the ↩ history starts over.',
         // After a focus from a tab: what happened and the way back.
         focusToast: (name: string) => `Focused on ${name}`,
@@ -7936,6 +7938,7 @@ const stringsCZ: StringsType = {
         linkParentsAria: (name: string) => `Posunout pohled k rodičům osoby ${name}`,
         linkChildAria: (name: string) => `Posunout pohled k dítěti osoby ${name}`,
         linkChildrenAria: (name: string) => `Posunout pohled k dětem osoby ${name}`,
+        menuJumpTo: (names: string[]) => `↗ Přejít na ${names.length > 2 ? `${names.slice(0, 2).join(', ')} a další ${names.length - 2}` : joinAnd('cs', names)}`,
         crossTreeHint: 'Kliknutí přepne do jiného stromu; historie ↩ začne znovu.',
         focusToast: (name: string) => `Zaměřeno na ${name}`,
         focusToastBack: '↩ Zpět',
@@ -12840,6 +12843,7 @@ const stringsDE: StringsType = {
         linkParentsAria: (name: string) => `Ansicht zu den Eltern von ${name} verschieben`,
         linkChildAria: (name: string) => `Ansicht zum Kind von ${name} verschieben`,
         linkChildrenAria: (name: string) => `Ansicht zu den Kindern von ${name} verschieben`,
+        menuJumpTo: (names: string[]) => `↗ Zu ${names.length > 2 ? `${names.slice(0, 2).join(', ')} und ${names.length - 2} weitere` : joinAnd('de', names)}`,
         crossTreeHint: 'Ein Klick wechselt in einen anderen Baum; der ↩-Verlauf beginnt neu.',
         focusToast: (name: string) => `Fokus auf ${name}`,
         focusToastBack: '↩ Zurück',

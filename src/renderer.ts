@@ -3335,6 +3335,23 @@ class TreeRendererClass {
     }
 
     /**
+     * The line-link tabs of a card ("parents ↗", "child ↗", "children ↗"),
+     * in the card's order, each with the people at the other end of its
+     * left-out line (the person menu's "↗ Go to …" rows, round 6 §40).
+     */
+    lineJumpsOf(personId: PersonId): Array<{ kind: 'linkParents' | 'linkChild' | 'linkChildren'; ids: PersonId[] }> {
+        const links = this.lineLinks.get(personId);
+        return lineLinkTabs(links).map(kind => ({ kind, ids: [...(kind === 'linkParents' ? links!.parentIds : links!.childIds)] }));
+    }
+
+    /** What a card's line-link tab does (lineLinkTabHtml): the view to the other end, as a step of the history; the focus stays. */
+    jumpAlongLine(personId: PersonId, toParents: boolean): void {
+        const links = this.lineLinks.get(personId);
+        if (!links) return;
+        this.jumpStep(() => this.jumpToPersons(toParents ? links.parentIds : links.childIds));
+    }
+
+    /**
      * Refill the shared place suggestions from the tree's own places, so typing
      * a place offers what this family already uses (see src/places.ts — nothing
      * is downloaded). Most-used first: the browser keeps datalist order.
@@ -4332,9 +4349,7 @@ class TreeRendererClass {
             card.querySelectorAll<HTMLElement>('.branch-tab.line-link').forEach(tab => {
                 tab.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    const links = this.lineLinks.get(id);
-                    if (!links) return;
-                    this.jumpStep(() => this.jumpToPersons(tab.dataset.action === 'jump-parents' ? links.parentIds : links.childIds));
+                    this.jumpAlongLine(id, tab.dataset.action === 'jump-parents');
                 });
             });
 

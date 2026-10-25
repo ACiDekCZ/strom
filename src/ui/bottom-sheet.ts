@@ -94,10 +94,10 @@ export const bottomSheetMethods = uiModule({
      * "Add" grid, then the rows; a row with a second level ("Research ›",
      * "More ›") turns the sheet into that page (‹ Back returns).
      */
-    showPersonBottomSheet(personId: PersonId): void {
+    showPersonBottomSheet(personId: PersonId, fromCard = false): void {
         this.noteBottomSheetTrigger();
         this.hideBottomSheet();
-        const actions = this.getPersonMenuActions(personId);
+        const actions = this.getPersonMenuActions(personId, fromCard);
         if (actions.length === 0) return;
 
         const person = DataManager.getPerson(personId);
@@ -887,7 +887,7 @@ export const bottomSheetMethods = uiModule({
                 fired = true;
                 ZoomPan.releaseTouch();   // the finger moving on now must not pan under the sheet (the bubble)
                 if (onTab?.(startX, startY)) return;
-                this.showPersonBottomSheet(personId);
+                this.showPersonBottomSheet(personId, true);
             }, LONG_PRESS_MS);
         }, { passive: true });
 

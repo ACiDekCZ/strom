@@ -58,6 +58,18 @@ function cardTargetAt(pill: Element, x: number, y: number): Element | null {
 }
 
 /**
+ * Whether the person menu opening now offers the card's line-link jumps
+ * ("↗ Go to …", round 6 §40): it opens from a touch (a tap or a long press
+ * just now) zoomed out below 60 %, where the card's jump tabs are the
+ * card's and do not jump. With a mouse, a pen or the keyboard the tabs
+ * jump at any zoom.
+ */
+export function menuOffersLineJumps(): boolean {
+    return !!lastTouch && performance.now() - lastTouch.at <= TAP_CLICK_MS
+        && ZoomPan.getScale() < PILL_OVER_CARD_MIN_SCALE;
+}
+
+/**
  * The edge pill a long press at (x, y) is for (its bubble opens): the finger
  * on the pill itself from 60 % zoom; else null, the press is the card's (the
  * person's menu). Below 60 % a long press is the card's wherever on its
