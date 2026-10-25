@@ -2685,10 +2685,13 @@ class TreeRendererClass {
      * room's top) nor the bottom navigation (8 px over its top edge, its
      * safe area included; touchBubbleBounds). It lists 8 names at most, in a
      * low window (500 px high or less, whatever its width) 4. A bubble that
-     * lists fewer names than it has or leaves lines out carries one more
-     * line under its names, "More in the person menu" (round 6 §41,
-     * menuMoreRow), measured with the rest. False where not even one name
-     * fits on either side: no bubble, the person's menu opens instead
+     * lists fewer names than it has (by the room, or by that cap: "and n
+     * more", round 7 §54) or leaves lines out carries one more line under
+     * its names, "More in the person menu" (round 6 §41, insertMenuMoreRow).
+     * That line counts in its height always, also where the bubble then
+     * shows whole and goes without it, so whether the menu opens in its
+     * place does not hang on it. False where not even one name fits on
+     * either side: no bubble, the person's menu opens instead
      * (openBubbleByTouch).
      */
     private placeTouchBubble(bubble: HTMLElement, tab: DOMRect, barsTop: number, personId?: PersonId): boolean {
@@ -2703,15 +2706,20 @@ class TreeRendererClass {
         // All the names it lists at most, then the least it may show (one name)
         const sideOf = (): { side: ReturnType<typeof touchBubbleSide>['side']; room: number; namesCut: boolean } => {
             this.fitBubbleNames(bubble, Infinity, maxNames);
-            const namesCut = [...bubble.querySelectorAll<HTMLElement>('[data-name-group]')].some(el => el.hidden);
+            // Fewer names than it has: some hidden, or "and n more" (also the cap of 8 names, round 7 §54)
+            const more = bubble.querySelector<HTMLElement>(':scope > .badge-tooltip-more');
+            const namesCut = (!!more && !more.hidden && more.textContent !== '')
+                || [...bubble.querySelectorAll<HTMLElement>('[data-name-group]')].some(el => el.hidden);
             const height = bubbleOwnHeight(bubble);
             const fit = touchBubbleSide(tab, height, this.bubbleLeastHeight(bubble, maxNames), bounds);
             return { ...fit, namesCut: namesCut || (fit.side !== 'menu' && height > fit.room + 0.5) };
         };
+        // The way to the rest, measured with the bubble always (round 7 §54)
+        if (personId) this.insertMenuMoreRow(bubble, personId);
         let { side, room, namesCut } = sideOf();
-        // Shortened (fewer names, or lines left out): the way to the rest, measured with it
-        if (namesCut && side !== 'menu' && personId) {
-            this.insertMenuMoreRow(bubble, personId);
+        // Shown whole (all the names, no line left out): without it
+        if (!namesCut && side !== 'menu' && personId) {
+            bubble.querySelectorAll(':scope > .bubble-menu-more').forEach(el => el.remove());
             ({ side, room } = sideOf());
         }
         if (side === 'menu') return false;

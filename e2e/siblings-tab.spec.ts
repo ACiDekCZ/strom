@@ -820,6 +820,32 @@ test.describe('touch, phone 390 × 844', () => {
         expect(await bubble.evaluate(el => [...el.children].filter(c => (c as HTMLElement).hidden).map(c => c.className))).toEqual(['badge-tooltip-more']);
         await expect(bubble.locator('.bubble-menu-more')).toHaveCount(0);
     });
+
+    /**
+     * Round 7 §54: a bubble cut by the cap of 8 names ("and n more"), with
+     * room for all 8 of them, also carries "More in the person menu", as
+     * one cut by the room or by the 4 names of a low window does.
+     */
+    test('8 names of 12 with room for them: "and 4 more" and "More in the person menu" under it (round 7 §54)', async ({ page }) => {
+        await setupFixture(page, 'edge-ancestor-children', 'focus');
+        await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), 'f_m_f_m_f');
+        await page.evaluate(() => window.Strom.ZoomPan.finishAnimation());
+        await cardUnderBars(page, 'f_m_f_m_f', 8, 150);
+        const tab = siblingsTab(page, 'f_m_f_m_f');
+        const bubble = tab.locator(':scope > .badge-tooltip');
+        await hold(page, tab);
+        await expectTouchBubble(page, tab, bubble, 'below');
+        // All 8 names it lists, none hidden by the room
+        expect(await bubble.evaluate(el => [...el.querySelectorAll<HTMLElement>('[data-name-group]')].filter(c => c.hidden).length)).toBe(0);
+        await expect(bubble.locator('.badge-tooltip-item:visible')).toHaveCount(8);
+        await expect(bubble.locator(':scope > .badge-tooltip-more')).toHaveText('and 4 more');
+        const more = bubble.locator(':scope > .badge-tooltip-more + .bubble-menu-more');
+        await expect(more).toHaveText('More in the person menu');
+        await expect(more).toBeVisible();
+        await more.tap();
+        await expect(bubble).toBeHidden();
+        await expect(page.locator('.bottom-sheet-person')).toBeVisible();
+    });
 });
 
 /**
