@@ -21,6 +21,7 @@ const PARTNER = 'gf_x';
 
 const cardOf = (page: Page, id: string) => page.locator(`#tree-canvas .person-card[data-id="${id}"]`);
 const partnersPill = (page: Page, id: string) => cardOf(page, id).locator('.edge-bottom-left .hidden-partners-btn');
+const partnersBubble = (page: Page, id: string) => cardOf(page, id).locator('.children-bubble[data-bubble="partners"]');
 const shownCount = (page: Page) => page.evaluate(() => window.Strom.TreeRenderer.shownChildrenCount());
 
 async function setup(page: Page): Promise<void> {
@@ -70,10 +71,11 @@ test('"▸ ∞" shows the other partners in place; the card stays; a second clic
     await expect(pill.locator('.pill-count')).toHaveText('1');
     await expect(pill).toHaveAttribute('aria-pressed', 'false');
     await expect(pill).toHaveAttribute('aria-label', /^Show the other partners of .+ here$/);
-    await expect(pill.locator('.badge-tooltip-header')).toHaveText('Other partners');
+    const offer = partnersBubble(page, PERSON);
+    await expect(offer.locator('.badge-tooltip-header')).toHaveText('Other partners');
     // The partner with the marriage, numbered as the marriage-order pill counts (by date: the first)
-    await expect(pill.locator('.badge-tooltip-item')).toHaveText(['GF-X CP 1st ∞ 1910']);
-    await expect(pill.locator('.badge-tooltip-action')).toHaveText('A click shows them here; the view stays.');
+    await expect(offer.locator('.badge-tooltip-item')).toHaveText(['GF-X CP 1st ∞ 1910']);
+    await expect(offer.locator('.badge-tooltip-action')).toHaveText('A click shows them here; the view stays.');
 
     const layoutBefore = await positions(page);
     const before = await screenCenters(page);
@@ -91,8 +93,8 @@ test('"▸ ∞" shows the other partners in place; the card stays; a second clic
     await expect(hide).toHaveAttribute('aria-pressed', 'true');
     await expect(hide.locator('.pill-glyph').first()).toHaveText('▾');
     await expect(hide).toHaveAttribute('aria-label', /^Hide the partners of .+ shown here$/);
-    await expect(hide.locator('.badge-tooltip-header')).toHaveText('Partners shown here');
-    await expect(hide.locator('.badge-tooltip-action')).toHaveText('A click on the tab hides them again.');
+    await expect(partnersBubble(page, PERSON).locator('.badge-tooltip-header')).toHaveText('Partners shown here');
+    await expect(partnersBubble(page, PERSON).locator('.badge-tooltip-action')).toHaveText('A click on the tab hides them again.');
     expect(await shownCount(page)).toBe(1);
     await expect(page.locator('#hide-shown-children')).toBeVisible();
 
@@ -128,6 +130,54 @@ test('↩ after "▸ ∞" is one step back; ↪ brings the partners again; "Hide
     await expect(cardOf(page, PARTNER)).toBeVisible();
     await page.evaluate(() => window.Strom.TreeRenderer.setFocus('c1' as never));
     await expect.poll(() => shownCount(page)).toBe(0);
+});
+
+/**
+ * Round 7 §50: in the expanded display too each name in the "▸ ∞" bubble is
+ * a button that shows that partner alone; the pill then offers the rest
+ * ("▸ ∞ n") and shows them. The grandfather gets a second partner without
+ * children (invented, "gf_y", 1912) beside "gf_x".
+ */
+test('the expanded display: a name in the "▸ ∞" bubble shows that partner alone; the pill then shows the rest (round 7 §50)', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openApp(page);
+    const data = JSON.parse(readFileSync(join(process.cwd(), 'test', 'edge-childless-partners.json'), 'utf-8'));
+    data.persons.gf_y = { ...data.persons.gf_x, id: 'gf_y', firstName: 'GF-Y', partnerships: ['u_gf_gf_y'] };
+    data.persons.gf.partnerships.push('u_gf_gf_y');
+    data.partnerships.u_gf_gf_y = { ...data.partnerships.u_gf_gf_x, id: 'u_gf_gf_y', person2Id: 'gf_y', startDate: '1912' };
+    await page.evaluate(async tree => {
+        await window.Strom.DataManager.importAsNewTree(tree as never, 'Partners');
+        await window.Strom.TreeRenderer.setFocus('f' as never);
+    }, data);
+    await expect(cardOf(page, PERSON)).toBeVisible();
+    for (const id of [PARTNER, 'gf_y']) await expect(cardOf(page, id), id).toHaveCount(0);
+    await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), PERSON);
+    const layoutBefore = await positions(page);
+    const pill = partnersPill(page, PERSON);
+    await expect(pill.locator('.pill-count')).toHaveText('2');
+    await pill.hover();
+    const bubble = partnersBubble(page, PERSON);
+    await expect(bubble).toBeVisible();
+    await expect(bubble.locator('.partner-pick .badge-tooltip-name')).toHaveText(['GF-X CP', 'GF-Y CP']);
+    await expect(bubble.locator('.badge-tooltip-action')).toHaveText('A click shows them all here, a click on a name only that person; the view stays.');
+    await bubble.locator('.partner-pick', { hasText: 'GF-Y CP' }).click();
+    await page.mouse.move(5, 500);
+    await expect(cardOf(page, 'gf_y')).toBeVisible();
+    await expect(cardOf(page, 'gf_y')).toHaveClass(/shown-here/);
+    await expect(cardOf(page, PARTNER)).toHaveCount(0);
+    const rest = partnersPill(page, PERSON);
+    await expect(rest).toHaveClass(/partial/);
+    await expect(rest).toHaveAttribute('aria-pressed', 'mixed');
+    await expect(rest.locator('.pill-count')).toHaveText('1');
+    // The pill brings the rest
+    await rest.click();
+    await page.mouse.move(5, 500);
+    for (const id of [PARTNER, 'gf_y']) await expect(cardOf(page, id), id).toBeVisible();
+    await expect(partnersPill(page, PERSON)).toHaveClass(/active/);
+    // Closing: the layout as before
+    await partnersPill(page, PERSON).click();
+    for (const id of [PARTNER, 'gf_y']) await expect(cardOf(page, id), id).toHaveCount(0);
+    expect(await positions(page)).toEqual(layoutBefore);
 });
 
 test('"▸ children" of a person with children of two marriages out of view: the bubble groups them by marriage', async ({ page }) => {
@@ -196,7 +246,6 @@ async function setupTeo(page: Page): Promise<void> {
     await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), 'sib');
 }
 
-const partnersBubble = (page: Page, id: string) => cardOf(page, id).locator('.children-bubble[data-bubble="partners"]');
 const pick = (page: Page, id: string, name: string) => partnersBubble(page, id).locator('.partner-pick', { hasText: name });
 
 test.describe('the standard display: a name in the "▸ ∞" bubble shows that partner alone (round 6 §42)', () => {

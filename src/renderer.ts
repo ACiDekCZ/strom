@@ -5677,9 +5677,9 @@ class TreeRendererClass {
      * them with their marriage ("2. ∞ 1890", numbered as the marriage-order
      * pill counts) and ends with what a click does.
      *
-     * In the standard display (round 6 §42) the bubble stands beside the
-     * pill and each name it offers is a button of its own: it shows that
-     * partner alone (showPartnerHere). After such a click, while any of the
+     * The bubble stands beside the pill and each name it offers is a
+     * button of its own (round 6 §42, the expanded display too since round
+     * 7 §50): it shows that partner alone (showPartnerHere). After such a click, while any of the
      * offered marriages is left, the pill offers the rest ("▸ ∞ n", half
      * pressed) and its bubble names them, then the partners shown here and
      * a row that hides those again.
@@ -5689,7 +5689,6 @@ class TreeRendererClass {
         const data = DataManager.getData();
         const order = marriagesInOrder(data, id);
         const shownUnions = this.partnersShownUnions.get(id);
-        const picking = !this.showAllPartnerships;
         const partial = pill.shown && !!pill.remaining?.length;
         const item = (q: PersonId, offer: OfferedPartner | undefined): string => {
             const partner = DataManager.getPerson(q)!;
@@ -5707,7 +5706,7 @@ class TreeRendererClass {
             const children = childCount > 0 ? ` · ${strings.tooltip.childrenCount(childCount)}` : '';
             const inner = `<span class="badge-tooltip-name">${this.escapeHtml(shownName(partner, '?') + children)}</span>`
                 + `${marriage ? `<span class="badge-tooltip-detail"> ${this.escapeHtml(marriage)}</span>` : ''}`;
-            if (!offer || !picking) return `<div class="badge-tooltip-item">${inner}</div>`;
+            if (!offer) return `<div class="badge-tooltip-item">${inner}</div>`;
             // A name offered: a button that shows this partner alone (round 6 §42)
             const aria = strings.focus.partnerShowOneAria(shownNameFull(partner, '?'), childCount > 0);
             return `<div class="badge-tooltip-item"><button type="button" class="partner-pick" data-partnership-id="${this.escapeHtml(offer.partnershipId)}"`
@@ -5725,7 +5724,7 @@ class TreeRendererClass {
         const header = pill.shown && !partial ? strings.focus.partnersShownTooltip : strings.focus.hiddenPartnersTooltip;
         const hint = partial ? strings.focus.partnersRestHint
             : pill.shown ? strings.focus.placeHideHint
-                : picking && offered.length > 1 ? strings.focus.partnersPickHint : strings.focus.placeShowHint;
+                : offered.length > 1 ? strings.focus.partnersPickHint : strings.focus.placeShowHint;
         const aria = (partial ? strings.focus.partnersTabRestAria : pill.shown ? strings.focus.partnersTabHideAria : strings.focus.partnersTabShowAria)(fullTitle);
         const active = pill.shown && !partial;
         const button = `<button type="button" class="hidden-partners-btn kind-place${active ? ' active' : ''}${partial ? ' partial' : ''}" data-action="toggle-partners"`
@@ -5736,11 +5735,8 @@ class TreeRendererClass {
         // A part shown: a row that hides the partners shown here (the whole step, as "▾ ∞" would)
         const hideRow = partial ? `<div class="badge-tooltip-nested"><button type="button" class="partner-hide-row">`
             + `<span class="nested-focus-glyph" aria-hidden="true">▾</span><span class="nested-focus-label">${this.escapeHtml(strings.focus.hidePartnersHere)}</span></button></div>` : '';
-        // Nested (§6): its "◎ Focus on …" a button of its own; the standard display's names are buttons too
-        if (nested || picking) {
-            return `${button}</button><div class="badge-tooltip children-bubble" data-bubble="partners">${body}${hideRow}${nested ? this.nestedFocusHtml(id) : ''}${action}</div>`;
-        }
-        return `${button}<div class="badge-tooltip" aria-hidden="true">${body}${action}</div></button>`;
+        // Beside the pill: its names are buttons (§42, §50), nested (§6) its "◎ Focus on …" too
+        return `${button}</button><div class="badge-tooltip children-bubble" data-bubble="partners">${body}${hideRow}${nested ? this.nestedFocusHtml(id) : ''}${action}</div>`;
     }
 
     /**

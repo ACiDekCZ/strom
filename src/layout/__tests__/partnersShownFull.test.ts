@@ -347,3 +347,68 @@ describe('Every marriage of a person in the plain depth (showPartnerUnions, roun
         }
     }
 });
+
+describe('One marriage at a time in the expanded mode (showPartnerUnions, round 7 §50)', () => {
+    // The expanded mode's "▸ ∞" offers the marriages without children out of
+    // view (offeredPartners); a click on one name in its bubble (or in the
+    // person menu's "∞ Other partners") brings that marriage alone, a later
+    // click on the pill the rest (the union picked first, then the others).
+    // For every drawn person with such a marriage, each one alone and each
+    // one followed by the rest: the strict checks hold, the person
+    // stays, each partner picked stands in the person's row, the ones not
+    // picked stay out, nobody drawn before leaves, and closing (the input
+    // without the unions) gives the layout back, position for position.
+    for (const fixture of FIXTURES) {
+        for (const heights of [false, true]) {
+            it(`${fixture}${heights ? ' [v3]' : ''}`, () => {
+                const data = loadFixture(fixture);
+                normalizeSingleParents(data);
+                const before = JSON.stringify(data);
+                const ids = (Object.keys(data.persons) as PersonId[]).filter(id => !data.persons[id].isPlaceholder);
+                const config: LayoutConfig = heights
+                    ? { ...DEFAULT_LAYOUT_CONFIG, spouseLineY: 25, personHeights: syntheticPersonHeights(ids) }
+                    : DEFAULT_LAYOUT_CONFIG;
+                const failures: string[] = [];
+                let checked = 0;
+                const same = (a: LayoutResult, b: LayoutResult, where: string) => {
+                    if (a.positions.size !== b.positions.size) { failures.push(`${where}: other cards`); return; }
+                    for (const [id, p] of a.positions) {
+                        const q = b.positions.get(id);
+                        if (!q || q.x !== p.x || q.y !== p.y) { failures.push(`${where}: ${id} moved`); return; }
+                    }
+                };
+                for (const depth of [2, 3]) for (const focus of ids) {
+                    const base = layout(data, focus, config, depth, true);
+                    for (const pid of base.positions.keys()) {
+                        const offers = offeredPartners(data, pid, id => base.positions.has(id), false);
+                        if (offers.length === 0) continue;
+                        for (const one of offers) {
+                            const rest = offers.filter(o => o !== one);
+                            for (const pick of rest.length > 0 ? [[one], [one, ...rest]] : [[one]]) {
+                                checked++;
+                                const where = `${focus} d${depth} ${pick.length === 1 ? 'marriage' : 'rest after'} ${one.partnershipId} of ${pid}`;
+                                const r = layout(data, focus, config, depth, true, [], [], pick.map(o => o.partnershipId));
+                                strict(r, config, heights, where, failures);
+                                if (!r.positions.has(pid)) { failures.push(`${where}: the person left the view`); continue; }
+                                const g = genOf(r, pid);
+                                for (const o of pick) {
+                                    if (!r.positions.has(o.partnerId)) failures.push(`${where}: partner ${o.partnerId} not drawn`);
+                                    else if (genOf(r, o.partnerId) !== g) failures.push(`${where}: partner ${o.partnerId} not in the person's row`);
+                                }
+                                for (const o of offers) {
+                                    if (!pick.includes(o) && r.positions.has(o.partnerId)) failures.push(`${where}: partner ${o.partnerId} not picked came in`);
+                                }
+                                const lost = [...base.positions.keys()].filter(id => !r.positions.has(id));
+                                if (lost.length) failures.push(`${where}: left the view ${lost.slice(0, 5).join(',')}`);
+                            }
+                        }
+                        same(base, layout(data, focus, config, depth, true), `${focus} d${depth} ${pid} closed`);
+                    }
+                }
+                expect(failures.slice(0, 20), `${fixture}${heights ? ' [v3]' : ''}, ${failures.length} failures of ${checked}`).toEqual([]);
+                if (process.env.PARTNERS_SHOWN_COUNTS) console.log(`${fixture}${heights ? ' [v3]' : ''} expanded one by one ${checked}`);
+                expect(JSON.stringify(data)).toBe(before);
+            }, 900_000);
+        }
+    }
+});
