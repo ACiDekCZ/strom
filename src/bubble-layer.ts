@@ -22,9 +22,13 @@
  * its bottom edge 8 px over the bubble's top edge, the bubble open, gliding
  * there, and back to its place when the bubble closes. A toast that comes
  * (or comes back) while a bubble is open and finds no room above it (under
- * the bars over the tree, 8 px) closes the bubble and stands at its place; a
- * bubble opened over a toast standing without that room stays open, the
- * toast over it.
+ * the bars over the tree, 8 px) closes the bubble and stands at its place.
+ *
+ * The newer one wins (round 7 §52): a bubble opened over a toast standing
+ * where the bubble opens (the toast at its place would cover it) hides the
+ * toast while the bubble is open. Its time runs on meanwhile: when the
+ * bubble closes the toast comes back for what is left of it, or, its time
+ * over, it has gone. A toast standing elsewhere stays, over the bubble.
  */
 
 import { ZoomPan } from './zoom.js';
@@ -52,6 +56,10 @@ const TOAST_SELECTOR = 'body > .toast, body > .undo-toast, #focus-toast';
 function toastsShown(): HTMLElement[] {
     return [...document.querySelectorAll<HTMLElement>(TOAST_SELECTOR)].filter(t => t.id !== 'focus-toast' || t.childElementCount > 0);
 }
+
+/** A toast hidden under a bubble opened over it (round 7 §52). */
+const HIDDEN = 'toast-under-bubble';
+let hidden: HTMLElement[] = [];
 
 /** The toasts lifted over the open bubble. */
 let lifted: HTMLElement[] = [];
@@ -128,23 +136,22 @@ function roomTop(): number {
 /**
  * The toast on the screen above the open bubble where at its own place it
  * would cover it (round 6 §44). No room above: a toast `coming` closes the
- * bubble; else (the bubble just opened over it) it stays at its place, over
- * the bubble.
+ * bubble; else (the same bubble shown again) it stays at its place, over the
+ * bubble. A toast hidden under the bubble (round 7 §52) waits for it to close.
  */
 function placeToasts(coming: boolean): void {
     const at = open;
     const t = at ? shownToast() : null;
     for (const r of [...raised]) if (r !== t) unraise(r);
-    if (!at || !t) return;
+    // A toast hidden under the bubble waits for it to close
+    if (!at || !t || t.classList.contains(HIDDEN)) return;
     const b = at.bubble.getBoundingClientRect();
     if (b.width === 0 && b.height === 0) return;
-    const own = ownBox(t);
-    const apart = own.right <= b.left || own.left >= b.right
-        || own.bottom <= b.top - TOAST_GAP || own.top >= b.bottom + TOAST_GAP;
-    if (apart) {
+    if (apartFrom(ownBox(t), b)) {
         unraise(t);
         return;
     }
+    const own = ownBox(t);
     const edge = b.top - TOAST_GAP;
     if (edge - own.height >= roomTop() + TOAST_GAP) {
         t.style.bottom = `${Math.round(window.innerHeight - edge)}px`;
@@ -153,6 +160,30 @@ function placeToasts(coming: boolean): void {
     }
     unraise(t);
     if (coming) closeOpenBubble();
+}
+
+/** Whether the toast at its own place leaves the bubble (8 px around it) free. */
+function apartFrom(own: { left: number; right: number; top: number; bottom: number }, b: DOMRect): boolean {
+    return own.right <= b.left || own.left >= b.right
+        || own.bottom <= b.top - TOAST_GAP || own.top >= b.bottom + TOAST_GAP;
+}
+
+/** The bubble just opened: the toasts standing where it opens hide while it is open (round 7 §52). */
+function hideCovering(bubble: HTMLElement): void {
+    const b = bubble.getBoundingClientRect();
+    if (b.width === 0 && b.height === 0) return;
+    for (const t of toastsShown()) {
+        if (t.classList.contains(HIDDEN) || apartFrom(ownBox(t), b)) continue;
+        unraise(t);
+        t.classList.add(HIDDEN);
+        hidden.push(t);
+    }
+}
+
+/** The bubble closed: the toasts hidden under it come back (a toast whose time ran out has gone). */
+function showHidden(): void {
+    for (const t of hidden) t.classList.remove(HIDDEN);
+    hidden = [];
 }
 
 /** Another toast shows (one came, went or came back): over an open bubble, above it where it would cover it. */
@@ -194,14 +225,19 @@ export function prepareBubble(bubble: HTMLElement): boolean {
  */
 export function showBubble(bubble: HTMLElement, owner: HTMLElement, close: () => void): void {
     install();
+    const fresh = open?.bubble !== bubble;
     if (open && open.bubble !== bubble) open.close();
     open = { bubble, owner, close };
     if (prepareBubble(bubble) && !bubble.matches(':popover-open') && bubble.isConnected) {
         bubble.showPopover();
         liftToasts();
     }
-    // Once its owner has placed the bubble (right after this call): the toast above it where it would cover it
-    queueMicrotask(() => { if (open?.bubble === bubble) placeToasts(false); });
+    // Once its owner has placed the bubble (right after this call): a toast standing where it opens hides
+    queueMicrotask(() => {
+        if (open?.bubble !== bubble) return;
+        if (fresh) hideCovering(bubble);
+        placeToasts(false);
+    });
 }
 
 /** Take the bubble out of the top layer. */
@@ -211,6 +247,7 @@ export function hideBubble(bubble: HTMLElement): void {
     if (!open) {
         lowerToasts();
         unraiseAll();
+        showHidden();
     }
 }
 

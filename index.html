@@ -9095,6 +9095,9 @@
            tablet, a phone and a phone held sideways, below). */
         .focus-toast-box[hidden] { display: none; }
         body > .toast-held { visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }
+        /* A bubble opened over a standing toast hides it while it is open (round 7 §52, src/bubble-layer.ts) */
+        body > .toast-under-bubble,
+        #focus-toast.toast-under-bubble { visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }
         .undo-toast > .undo-toast-sep { display: none; }
         .toast > .focus-toast-sep,
         .toast > .undo-toast-sep {

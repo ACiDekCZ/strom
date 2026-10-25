@@ -261,6 +261,53 @@ test.describe('a toast over a bubble', () => {
         await expect(bubble).toBeVisible();
     });
 
+    /**
+     * A standing toast (a long one, wide across the middle) right above the
+     * "◎ family" tab of Wolfbrecht: the tab's bubble opens above the tab, over it.
+     */
+    async function toastUnderTab(page: Page, ms: number) {
+        await setup(page);
+        await page.evaluate(t => window.Strom.UI.showToast('Saved to the tree file, the next copy goes out with the research changes', t), ms);
+        const own = await settledRect(page, '.toast.show');
+        const family = rowOf(page, 'g1').locator('.branch-tab.kind-focus');
+        const tab = (await family.boundingBox())!;
+        await page.evaluate(([dy]) => window.Strom.ZoomPan.shiftWorld(0, -dy / window.Strom.ZoomPan.getScale()),
+            [own.bottom + 4 - tab.y] as const);
+        await page.waitForTimeout(100);
+        return { own, family, bubble: family.locator('.badge-tooltip') };
+    }
+
+    /** Whether the toast is seen (not hidden). */
+    const seen = (page: Page, sel: string) => page.evaluate(s => {
+        const el = document.querySelector(s);
+        return !!el && getComputedStyle(el).visibility !== 'hidden' && Number(getComputedStyle(el).opacity) > 0;
+    }, sel);
+
+    test('a bubble opened over a standing toast hides it while it is open; the toast comes back when it closes (round 7 §52)', async ({ page }) => {
+        const { family, bubble } = await toastUnderTab(page, 10000);
+        expect(await seen(page, 'body > .toast')).toBe(true);
+        await family.hover();
+        await expect(bubble).toBeVisible();
+        await expect.poll(() => seen(page, 'body > .toast')).toBe(false);
+        expect(await hitAtMiddle(page, '.badge-tooltip')).toBe(true);
+        // the bubble closes: the toast is back, at its place
+        await page.mouse.move(8, 450);
+        await expect(bubble).toBeHidden();
+        await expect.poll(() => seen(page, 'body > .toast')).toBe(true);
+        await expect(page.locator('body > .toast')).not.toHaveAttribute('style', /bottom/);
+    });
+
+    test('the time of a toast hidden under a bubble runs on: over meanwhile, the toast does not come back (round 7 §52)', async ({ page }) => {
+        const { family, bubble } = await toastUnderTab(page, 2500);
+        await family.hover();
+        await expect(bubble).toBeVisible();
+        await expect.poll(() => seen(page, 'body > .toast')).toBe(false);
+        await expect(page.locator('body > .toast')).toHaveCount(0, { timeout: 4000 });
+        await page.mouse.move(8, 450);
+        await expect(bubble).toBeHidden();
+        await expect(page.locator('body > .toast')).toHaveCount(0);
+    });
+
     test('a press on the toast over the bubble leaves the bubble open: the toast stays under the finger', async ({ page }) => {
         await setup(page);
         await page.evaluate(() => window.Strom.UI.showToast('Saved', 800));
