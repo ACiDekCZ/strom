@@ -158,7 +158,7 @@ test.describe('a toast over a bubble', () => {
 
     /** Wait until the box has come in (its slide over). */
     const settledBox = (page: Page, sel: string) => expect.poll(() => page.evaluate(s =>
-        document.querySelector(s)!.getAnimations({ subtree: true }).length, sel)).toBe(0);
+        document.querySelector(s)?.getAnimations({ subtree: true }).length ?? -1, sel)).toBe(0);
 
     /** Move the open bubble so it covers the middle of the box. */
     const bubbleOver = (page: Page, sel: string) => page.evaluate(s => {
@@ -169,15 +169,141 @@ test.describe('a toast over a bubble', () => {
         b.style.top = `${r.top + r.height / 2 - w.height / 2}px`;
     }, sel);
 
-    test('a toast coming while a bubble is open closes the bubble', async ({ page }) => {
+    /** The open bubble moved (and sized) so its bottom edge stands at `bottom`, its middle at the window's. */
+    const bubbleTo = (page: Page, bottom: number, height?: number) => page.evaluate(([y, h]) => {
+        const b = document.querySelector<HTMLElement>('.badge-tooltip:popover-open')!;
+        if (h) { b.style.maxHeight = 'none'; b.style.height = `${h}px`; }
+        const w = b.getBoundingClientRect();
+        b.style.left = `${window.innerWidth / 2 - w.width / 2}px`;
+        b.style.top = `${y - w.height}px`;
+    }, [bottom, height ?? 0] as const);
+
+    /** The box's rect once nothing on it glides any more. */
+    const settledRect = async (page: Page, sel: string) => {
+        await settledBox(page, sel);
+        return page.evaluate(s => {
+            const r = document.querySelector(s)!.getBoundingClientRect();
+            return { top: r.top, bottom: r.bottom };
+        }, sel);
+    };
+
+    test('a toast coming while a bubble is open where it stands: above the bubble, 8 px over its top edge; the bubble open; back at its place when the bubble closes (round 6 §44)', async ({ page }) => {
+        await setup(page);
+        await page.evaluate(() => window.Strom.UI.showToast('Saved', 800));
+        const own = await settledRect(page, '.toast.show');
+        await expect(page.locator('.toast')).toHaveCount(0, { timeout: 3000 });
+        const family = rowOf(page, 'g1').locator('.branch-tab.kind-focus');
+        await family.hover();
+        const bubble = family.locator('.badge-tooltip');
+        await expect(bubble).toBeVisible();
+        // the bubble over the toast's place
+        await bubbleTo(page, own.bottom - 10);
+        const b = (await bubble.boundingBox())!;
+        await page.evaluate(() => window.Strom.UI.showToast('Saved', 10000));
+        const t = await settledRect(page, '.toast.show');
+        expect(Math.abs(t.bottom - (b.y - 8))).toBeLessThanOrEqual(1.5);
+        await expect(bubble).toBeVisible();
+        expect(await hitAtMiddle(page, '.toast')).toBe(true);
+        // the bubble closes: the toast glides back to its place
+        await page.mouse.move(8, 450);
+        await expect(bubble).toBeHidden();
+        await expect.poll(async () => Math.round((await settledRect(page, '.toast.show')).bottom)).toBe(Math.round(own.bottom));
+        await expect(page.locator('.toast')).not.toHaveAttribute('style', /bottom/);
+    });
+
+    test('no room above the bubble (8 px under the bars): the toast coming closes the bubble and stands at its place (round 6 §44)', async ({ page }) => {
         await setup(page);
         const family = rowOf(page, 'g1').locator('.branch-tab.kind-focus');
         await family.hover();
         const bubble = family.locator('.badge-tooltip');
         await expect(bubble).toBeVisible();
+        // a bubble from just under the bars down over the toast's place
+        await bubbleTo(page, 880, 800);
         await page.evaluate(() => window.Strom.UI.showToast('Saved', 10000));
-        await expect(page.locator('.toast')).toBeVisible();
         await expect(bubble).toBeHidden();
+        const t = await settledRect(page, '.toast.show');
+        expect(Math.round(900 - t.bottom)).toBe(24);
+    });
+
+    test('a toast coming while a bubble is open elsewhere stays at its place, the bubble open', async ({ page }) => {
+        await setup(page);
+        const family = rowOf(page, 'g1').locator('.branch-tab.kind-focus');
+        await family.hover();
+        const bubble = family.locator('.badge-tooltip');
+        await expect(bubble).toBeVisible();
+        await bubbleTo(page, 500);
+        await page.evaluate(() => window.Strom.UI.showToast('Saved', 10000));
+        const t = await settledRect(page, '.toast.show');
+        expect(Math.round(900 - t.bottom)).toBe(24);
+        await expect(bubble).toBeVisible();
+    });
+
+    test('a press on the toast over the bubble leaves the bubble open: the toast stays under the finger', async ({ page }) => {
+        await setup(page);
+        await page.evaluate(() => window.Strom.UI.showToast('Saved', 800));
+        const own = await settledRect(page, '.toast.show');
+        await expect(page.locator('.toast')).toHaveCount(0, { timeout: 3000 });
+        const family = rowOf(page, 'g1').locator('.branch-tab.kind-focus');
+        await family.hover();
+        const bubble = family.locator('.badge-tooltip');
+        await expect(bubble).toBeVisible();
+        await bubbleTo(page, own.bottom - 10);
+        await page.evaluate(() => window.Strom.UI.showToast('Saved', 10000));
+        await settledRect(page, '.toast.show');
+        await page.locator('.toast').dispatchEvent('pointerdown');
+        await expect(bubble).toBeVisible();
+    });
+
+    test.describe('touch, phone 390 × 844', () => {
+        test.use({ hasTouch: true, isMobile: true });
+
+        /** A long press on the element (a tab: its bubble). */
+        async function hold(page: Page, el: ReturnType<Page['locator']>): Promise<void> {
+            for (const type of ['touchstart', 'touchend'] as const) {
+                if (type === 'touchend') await page.waitForTimeout(700);
+                await el.evaluate((e: HTMLElement, kind) => {
+                    const r = e.getBoundingClientRect();
+                    const t = new Touch({ identifier: 1, target: e, clientX: r.x + r.width / 2, clientY: r.y + r.height / 2 });
+                    const on = kind === 'touchstart' ? [t] : [];
+                    e.dispatchEvent(new TouchEvent(kind, { touches: on, targetTouches: on, changedTouches: [t], bubbles: true, cancelable: true }));
+                }, type);
+            }
+        }
+
+        async function phoneBubble(page: Page) {
+            await setup(page);
+            await page.setViewportSize({ width: 390, height: 844 });
+            await page.evaluate(() => window.Strom.ZoomPan.centerOnPerson('g1' as never));
+            await page.waitForTimeout(400);
+            await page.evaluate(() => window.Strom.UI.showToast('Saved', 800));
+            const own = await settledRect(page, '.toast.show');
+            await expect(page.locator('.toast')).toHaveCount(0, { timeout: 3000 });
+            const family = rowOf(page, 'g1').locator('.branch-tab.kind-focus');
+            await hold(page, family);
+            const bubble = family.locator('.badge-tooltip');
+            await expect(bubble).toBeVisible();
+            return { own, bubble };
+        }
+
+        test('a toast coming while a bubble opened by a long press is open where it stands: above the bubble, the bubble open (round 6 §44)', async ({ page }) => {
+            const { own, bubble } = await phoneBubble(page);
+            await bubbleTo(page, own.bottom - 10);
+            const b = (await bubble.boundingBox())!;
+            await page.evaluate(() => window.Strom.UI.showToast('Saved', 10000));
+            const t = await settledRect(page, '.toast.show');
+            expect(Math.abs(t.bottom - (b.y - 8))).toBeLessThanOrEqual(1.5);
+            await expect(bubble).toBeVisible();
+            expect(await hitAtMiddle(page, '.toast')).toBe(true);
+        });
+
+        test('no room above it: the toast closes the bubble and stands at its place (round 6 §44)', async ({ page }) => {
+            const { own, bubble } = await phoneBubble(page);
+            await bubbleTo(page, own.bottom - 10, 700);
+            await page.evaluate(() => window.Strom.UI.showToast('Saved', 10000));
+            await expect(bubble).toBeHidden();
+            const t = await settledRect(page, '.toast.show');
+            expect(Math.abs(t.bottom - own.bottom)).toBeLessThanOrEqual(1);
+        });
     });
 
     test('a message toast on the screen stays over a bubble opened after it', async ({ page }) => {
@@ -292,6 +418,16 @@ test.describe('one toast at a time', () => {
         const pill = page.locator('body > .undo-toast');
         await expect(pill.locator('.focus-toast-back')).toHaveText('↩ Back');
         await expect(page.locator('#focus-toast .focus-toast-box')).toBeHidden();
+        await expect.poll(() => toastsOnScreen(page)).toBe(1);
+    });
+
+    test('a message over the undo pill and the focus toast carries both: "Undo" first, then "↩ Back" (round 6 §43)', async ({ page }) => {
+        await focusWithToast(page);
+        await page.evaluate(() => window.Strom.UI.showUndoToast('adding Wolfbrecht'));
+        await page.evaluate(() => window.Strom.UI.showToast('Saved', 10000));
+        const message = page.locator('body > .toast');
+        await expect(message.locator('.undo-toast-btn, .focus-toast-back')).toHaveText(['Undo', '↩ Back']);
+        await expect(page.locator('body > .undo-toast')).toBeHidden();
         await expect.poll(() => toastsOnScreen(page)).toBe(1);
     });
 
