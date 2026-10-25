@@ -230,7 +230,7 @@ async function pillThenMessage(page: Page, text: string, action: string): Promis
     // The sample tree's message put away: the pill at its own place, low in the row of ↩ and ⛶
     await page.evaluate(() => document.querySelectorAll('body > .toast').forEach(t => t.remove()));
     await expect(page.locator('body > .toast')).toHaveCount(0);
-    await page.evaluate(() => window.Strom.UI.showUndoToast('deleting the person Wolfbrecht Zwolbrack'));
+    await page.evaluate(() => window.Strom.UI.showUndoToast('deleting Ann Berg'));
     const pillEl = page.locator('body > .undo-toast.show');
     await expect(pillEl).toBeVisible();
     await expect(pillEl).not.toHaveClass(/at-message-toast/);
@@ -300,5 +300,58 @@ test.describe('clear of the floating controls, phone held sideways (de)', () => 
         expect(m.height).toBeGreaterThan(50);
         await actionsWhole(msg, 2);
         expect(await msg.evaluate(e => e.scrollWidth <= e.clientWidth)).toBe(true);
+    });
+});
+
+/**
+ * The undo pill's sentence is never cut (prod 3.16 finding 1): after a message has gone, the pill stands
+ * at its own place, between ↩ and ⛶ where its sentence fits there (round 7 §55); a longer sentence (a
+ * person's edit with the name and year) stands above them at the phone's width, whole, covering no button.
+ */
+async function pillAfterClosedMessage(page: Page): Promise<Locator> {
+    await page.evaluate(() => document.querySelectorAll('body > .toast').forEach(t => t.remove()));
+    const toast = await longToast(page);
+    await toast.locator('.toast-close').click();
+    await expect(page.locator('body > .toast')).toHaveCount(0);
+    return page.locator('body > .undo-toast.show');
+}
+
+async function settled(pill: Locator): Promise<Box> {
+    await expect(pill).toBeVisible();
+    await expect.poll(() => pill.evaluate(e => e.getAnimations().length)).toBe(0);
+    return (await pill.boundingBox())!;
+}
+
+test.describe('the undo pill whole, phone', () => {
+    test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+    for (const lang of ['cs', 'de'] as const) {
+        test(`390 ${lang}: after a closed message, a person's edit names the person whole, covering no button`, async ({ page }) => {
+            await sampleWithBack(page);
+            await page.evaluate(l => window.Strom.UI.setLanguage(l), lang);
+            const pill = await pillAfterClosedMessage(page);
+            const name = await page.evaluate(() => {
+                const DM = window.Strom.DataManager;
+                const p = DM.getAllPersons()[5];
+                DM.updatePerson(p.id, { notes: 'x' });
+                return p.firstName;
+            });
+            await settled(pill);
+            await expect(pill).not.toHaveClass(/at-message-toast|at-focus-toast/);
+            const msg = pill.locator('.undo-toast-msg');
+            await expect(msg).toContainText(name);
+            // The whole sentence: nothing hidden behind "…"
+            expect(await msg.evaluate(e => e.scrollWidth <= e.clientWidth && e.scrollHeight <= e.clientHeight + 1)).toBe(true);
+            await coversNothing(page, pill);
+        });
+    }
+
+    test('390: a sentence that fits stays between ↩ and ⛶ (round 7 §55)', async ({ page }) => {
+        await sampleWithBack(page);
+        const pill = await pillAfterClosedMessage(page);
+        await page.evaluate(() => window.Strom.UI.showUndoToast('editing Ann'));
+        const box = await settled(pill);
+        expect(await clearOfControls(page, box, 'the pill')).toBe(2);
+        expect(await pill.locator('.undo-toast-msg').evaluate(e => e.scrollWidth <= e.clientWidth)).toBe(true);
     });
 });

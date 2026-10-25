@@ -192,19 +192,38 @@ function measureClearance(): void {
     if (root.style.getPropertyValue('--toast-clear-r') !== r) root.style.setProperty('--toast-clear-r', r);
 }
 
+/**
+ * The undo pill's sentence is never cut (prod 3.16 finding 1). Where its
+ * place is narrower than the whole sentence (on a phone its own place
+ * between ↩ / ↪ and ⛶, round 7 §55, or the focus confirmation's place) it
+ * turns roomy (`.undo-toast-roomy`): on a phone its own place moves above
+ * those controls at the phone's width, and a sentence longer than the room
+ * there wraps. Where the sentence fits it stays in its place. A pill once
+ * roomy stays so (its sentence does not change); the move is not animated.
+ */
+function fitPill(t: HTMLElement | null): void {
+    if (!t?.classList.contains('undo-toast') || t.classList.contains('undo-toast-roomy')) return;
+    const msg = t.querySelector<HTMLElement>(':scope > .undo-toast-msg');
+    if (!msg || msg.scrollWidth <= msg.clientWidth + 1) return;
+    t.style.transition = 'none';
+    t.classList.add('undo-toast-roomy');
+    void t.offsetWidth;
+    t.style.transition = '';
+}
+
 function install(): void {
     if (watch || typeof MutationObserver === 'undefined' || typeof document === 'undefined') return;
     // A message coming or going (one put away, or its `.show` taken: on its way out)
     watch = new MutationObserver(() => reconcile());
     watch.observe(document.body, { childList: true });
     // ↩ / ↪ showing or going, the window turned or resized: the floating controls' room again
-    const controls = new MutationObserver(() => { if (top) measureClearance(); });
+    const controls = new MutationObserver(() => { if (top) { measureClearance(); fitPill(top); } });
     for (const id of ['focus-back-btn', 'focus-forward-btn']) {
         const el = document.getElementById(id);
         if (el) controls.observe(el, { attributes: true, attributeFilter: ['style', 'class'] });
     }
     controls.observe(document.body, { attributes: true, attributeFilter: ['class'] });
-    window.addEventListener('resize', () => { if (top) measureClearance(); });
+    window.addEventListener('resize', () => { if (top) { measureClearance(); fitPill(top); } });
 }
 
 /** Lay the toasts out again: the newest one shows, at the run's place, carrying the lenders' buttons. */
@@ -251,6 +270,7 @@ export function reconcile(): void {
         for (const cls of PLACE_CLASSES) toggle(next, cls, cls === `at-${place}-toast` && place !== own);
     }
     if (next && next !== top) measureClearance();
+    fitPill(next);
     const key = next ? keyOf(next) : null;
     if (key && !shownAt.has(key)) shownAt.set(key, Date.now());
     const changed = next !== top;

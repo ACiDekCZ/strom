@@ -6460,8 +6460,11 @@
         /* It steps aside while a message toast shows: both sit bottom-centre and the offer, above it, covered
            the toast's action (a phone's wrapped toast entirely). It is back once the toast goes. */
         body:has(.toast.show) .tour-offer { opacity: 0; visibility: hidden; pointer-events: none; }
+        /* The undo pill too (one message at a time, the Undo note included): on a phone it stood over the offer. */
+        body:has(.undo-toast.show) .tour-offer { opacity: 0; visibility: hidden; pointer-events: none; }
         @supports not (selector(:has(*))) {
-            body.has-toast .tour-offer { opacity: 0; visibility: hidden; pointer-events: none; }
+            body.has-toast .tour-offer,
+            body.has-undo-toast .tour-offer { opacity: 0; visibility: hidden; pointer-events: none; }
         }
         /* Small text links and chips are big enough to hit with a finger (44 px,
            the label unchanged): "+ cause, age, house", the card-field chips, the
@@ -13923,6 +13926,8 @@
             font-family: var(--font-serif); font-weight: 600;
             min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
+        /* Longer than its place allows (src/toast-slot.ts fitPill): the sentence wraps, never ends in "…". */
+        .undo-toast.undo-toast-roomy > .undo-toast-msg { white-space: normal; overflow-wrap: anywhere; }
         .undo-toast-btn {
             flex-shrink: 0;
             border: none; background: transparent; cursor: pointer;
@@ -14011,6 +14016,11 @@
         @media (max-width: 640px) and (orientation: portrait), (max-width: 640px) and (min-height: 501px) {
             body > .undo-toast:not(.at-message-toast):not(.at-focus-toast) {
                 left: max(12px, var(--toast-clear-l, 0px)); right: max(12px, var(--toast-clear-r, 0px));
+            }
+            /* A sentence longer than that room (src/toast-slot.ts fitPill): above them at the phone's width,
+               at a message's place, never cut. */
+            body:not(.map-view) > .undo-toast.undo-toast-roomy:not(.at-message-toast):not(.at-focus-toast) {
+                left: 12px; right: 12px; bottom: calc(var(--bottom-bar-h) + 68px);
             }
             body > .toast.at-undo-toast,
             .focus-toast.at-undo-toast {
