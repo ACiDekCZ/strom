@@ -3007,6 +3007,13 @@ const stringsEN = {
         partnersShownTooltip: 'Partners shown here',
         partnersTabShowAria: (name: string) => `Show the other partners of ${name} here`,
         partnersTabHideAria: (name: string) => `Hide the partners of ${name} shown here`,
+        // Round 6 §42: a name in the "▸ ∞" bubble shows that partner alone; the pill then offers the rest
+        partnerShowOneAria: (name: string, withChildren: boolean) => withChildren
+            ? `Show only ${name} here, with the children of this union` : `Show only ${name} here`,
+        partnersPickHint: 'A click shows them all here, a click on a name only that person; the view stays.',
+        partnersRestHint: 'A click shows the others here too; the view stays.',
+        partnersTabRestAria: (name: string) => `Show the other partners of ${name} here too`,
+        hidePartnersHere: 'Hide the partners shown here',
         nestedFocusRow: (name: string) => `Focus on ${name}`,
         nestedFocusHint: 'A new centre of the tree with all its branches.',
         // The same link on the poster and in the book (a static label).
@@ -7943,6 +7950,12 @@ const stringsCZ: StringsType = {
         partnersShownTooltip: 'Partneři ukázaní tady',
         partnersTabShowAria: (name: string) => `Ukázat tady další partnery osoby ${name}`,
         partnersTabHideAria: (name: string) => `Skrýt ukázané partnery osoby ${name}`,
+        partnerShowOneAria: (name: string, withChildren: boolean) => withChildren
+            ? `Ukázat tady jen osobu ${name} s dětmi z tohoto svazku` : `Ukázat tady jen osobu ${name}`,
+        partnersPickHint: 'Kliknutí je ukáže tady všechny, kliknutí na jméno jen tuto osobu; pohled zůstane.',
+        partnersRestHint: 'Kliknutí ukáže tady i ostatní, pohled zůstane.',
+        partnersTabRestAria: (name: string) => `Ukázat tady i ostatní partnery osoby ${name}`,
+        hidePartnersHere: 'Skrýt partnery ukázané tady',
         nestedFocusRow: (name: string) => `Zaměřit na ${name}`,
         nestedFocusHint: 'Nový střed stromu se všemi větvemi.',
         linkPosterParents: (names: string) => `rodiče: ${names}`,
@@ -12841,6 +12854,12 @@ const stringsDE: StringsType = {
         partnersShownTooltip: 'Hier gezeigte Partner',
         partnersTabShowAria: (name: string) => `Weitere Partner von ${name} hier zeigen`,
         partnersTabHideAria: (name: string) => `Hier gezeigte Partner von ${name} ausblenden`,
+        partnerShowOneAria: (name: string, withChildren: boolean) => withChildren
+            ? `Nur ${name} hier zeigen, mit den Kindern dieser Verbindung` : `Nur ${name} hier zeigen`,
+        partnersPickHint: 'Ein Klick zeigt sie alle hier, ein Klick auf einen Namen nur diese Person; die Ansicht bleibt.',
+        partnersRestHint: 'Ein Klick zeigt die übrigen auch hier, die Ansicht bleibt.',
+        partnersTabRestAria: (name: string) => `Auch die übrigen Partner von ${name} hier zeigen`,
+        hidePartnersHere: 'Hier gezeigte Partner ausblenden',
         nestedFocusRow: (name: string) => `Auf ${name} fokussieren`,
         nestedFocusHint: 'Neue Mitte des Baums mit allen Zweigen.',
         linkPosterParents: (names: string) => `Eltern: ${names}`,

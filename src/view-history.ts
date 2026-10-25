@@ -57,6 +57,12 @@ export interface ShownChildrenSnapshot {
      * unions it showed (showPartnerUnions) instead of showPartnersOf.
      */
     readonly partnerUnions?: readonly PartnershipId[];
+    /**
+     * On a `partners` snapshot that went by its unions: the marriages its
+     * first click offered (round 6 §42: a click on one name shows that one,
+     * the pill and the bubble offer the rest of these).
+     */
+    readonly partnerOffered?: readonly PartnershipId[];
 }
 
 /** A shown snapshot's key: children, parents and partners of one person are three steps. */
@@ -118,9 +124,16 @@ export function liveEntry(entry: ViewHistoryEntry, exists: (id: PersonId) => boo
     return shown.length === entry.shown.length ? entry : { ...entry, shown };
 }
 
-/** Whether two entries show the same children, in the same order. */
+/** Whether two entries show the same children, in the same order (and the same marriages of a "▸ ∞" picked one by one). */
 export function sameShown(a: readonly ShownChildrenSnapshot[], b: readonly ShownChildrenSnapshot[]): boolean {
-    return a.length === b.length && a.every((s, i) => shownKey(s) === shownKey(b[i]) && s.siblingsOf === b[i].siblingsOf);
+    return a.length === b.length && a.every((s, i) => shownKey(s) === shownKey(b[i]) && s.siblingsOf === b[i].siblingsOf
+        && samePartnerUnions(s, b[i]));
+}
+
+/** Whether two snapshots of one person show the same marriages (partnerUnions; both without them too). */
+export function samePartnerUnions(a: ShownChildrenSnapshot, b: ShownChildrenSnapshot): boolean {
+    const x = a.partnerUnions ?? [], y = b.partnerUnions ?? [];
+    return x.length === y.length && x.every((u, i) => u === y[i]);
 }
 
 export function sameTransform(a: ViewTransform, b: ViewTransform): boolean {

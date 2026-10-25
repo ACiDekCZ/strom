@@ -169,3 +169,241 @@ test('"▸ children" of a person with children of two marriages out of view: the
     await tab.click();
     for (const id of ['b1', 'c1', 'berta', 'cilka']) await expect(cardOf(page, id)).toBeVisible();
 });
+
+/**
+ * Round 6 §42: in the standard display each name in the "▸ ∞" bubble is a
+ * button of its own that shows that partner alone; the pill still shows them
+ * all. edge-shown-sibling-marriages (invented): the focus Elsa's mother Nora
+ * has a brother Teo out of view, married to Mira (1990, no children), Lena
+ * (1996, their son Kai) and Zoe (2010, no children). At ancestor depth 1
+ * Nora's "▸ siblings" brings her parents and Teo, with Mira.
+ */
+async function setupTeo(page: Page): Promise<void> {
+    await openApp(page);
+    const data = JSON.parse(readFileSync(join(process.cwd(), 'test', 'edge-shown-sibling-marriages.json'), 'utf-8'));
+    await page.evaluate(async tree => {
+        await window.Strom.DataManager.importAsNewTree(tree as never, 'Marriages');
+        await window.Strom.TreeRenderer.setFocus('focus' as never);
+    }, data);
+    await expect(cardOf(page, 'focus')).toBeVisible();
+    // The standard display (one union per person)
+    await page.evaluate(() => window.Strom.TreeRenderer.toggleShowAllPartnerships());
+    await page.evaluate(() => window.Strom.TreeRenderer.setFocusDepth(1, window.Strom.TreeRenderer.getFocusDepthDown()));
+    await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), 'person');
+    await page.evaluate(() => window.Strom.TreeRenderer.toggleSiblingsShown('person' as never));
+    for (const id of ['sib', 'sib_w1']) await expect(cardOf(page, id), id).toBeVisible();
+    for (const id of ['sib_w2', 'sib_w3', 'sib_c2']) await expect(cardOf(page, id), id).toHaveCount(0);
+    await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), 'sib');
+}
+
+const partnersBubble = (page: Page, id: string) => cardOf(page, id).locator('.children-bubble[data-bubble="partners"]');
+const pick = (page: Page, id: string, name: string) => partnersBubble(page, id).locator('.partner-pick', { hasText: name });
+
+test.describe('the standard display: a name in the "▸ ∞" bubble shows that partner alone (round 6 §42)', () => {
+    test('mouse 1440: Zoe alone beside Mira, then Lena with Kai in place of Mira; ↩ retraces each step; closing gives the view back', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await setupTeo(page);
+        await page.mouse.move(5, 500);
+        const layoutBefore = await positions(page);
+        const pill = partnersPill(page, 'sib');
+        await expect(pill).toHaveText(/▸\s*∞\s*2/);
+        await pill.hover();
+        const bubble = partnersBubble(page, 'sib');
+        await expect(bubble).toBeVisible();
+        await expect(bubble.locator('.badge-tooltip-header')).toHaveText('Other partners');
+        await expect(bubble.locator('.partner-pick .badge-tooltip-name')).toHaveText(['Lena Fross · 1 child', 'Zoe Arden']);
+        await expect(pick(page, 'sib', 'Zoe')).toHaveAttribute('aria-label', /^Show only Zoe Arden here$/);
+        await expect(pick(page, 'sib', 'Lena')).toHaveAttribute('aria-label', /^Show only Lena Fross here, with the children of this union$/);
+        await expect(bubble.locator('.badge-tooltip-action')).toHaveText('A click shows them all here, a click on a name only that person; the view stays.');
+        for (const b of await bubble.locator('.partner-pick').all()) expect((await b.boundingBox())!.height).toBeGreaterThanOrEqual(28);
+
+        // Zoe alone: she comes beside the card, Mira stays, Lena and Kai stay out
+        await pick(page, 'sib', 'Zoe').click();
+        await page.mouse.move(5, 500);
+        await expect(cardOf(page, 'sib_w3')).toBeVisible();
+        await expect(cardOf(page, 'sib_w3')).toHaveClass(/shown-here/);
+        await expect(cardOf(page, 'sib_w1')).toBeVisible();
+        for (const id of ['sib_w2', 'sib_c2']) await expect(cardOf(page, id), id).toHaveCount(0);
+        // The pill offers the rest: "▸ ∞ 1", half pressed
+        await expect(pill).toHaveText(/▸\s*∞\s*1/);
+        await expect(pill).toHaveClass(/partial/);
+        await expect(pill).not.toHaveClass(/active/);
+        await expect(pill).toHaveAttribute('aria-pressed', 'mixed');
+        await expect(pill).toHaveAttribute('aria-label', /^Show the other partners of .+ here too$/);
+        await pill.hover();
+        await expect(bubble).toBeVisible();
+        await expect(bubble.locator('.partner-pick .badge-tooltip-name')).toHaveText(['Lena Fross · 1 child']);
+        await expect(bubble.locator('.badge-tooltip-group')).toHaveText(['Partners shown here']);
+        await expect(bubble.locator('.partner-hide-row')).toHaveText(/Hide the partners shown here/);
+        await expect(bubble.locator('.badge-tooltip-action')).toHaveText('A click shows the others here too; the view stays.');
+
+        // Lena with Kai: she takes Mira's place, Zoe stays
+        await pick(page, 'sib', 'Lena').click();
+        await page.mouse.move(5, 500);
+        for (const id of ['sib_w2', 'sib_c2', 'sib_w3']) await expect(cardOf(page, id), id).toBeVisible();
+        await expect(cardOf(page, 'sib_w1')).toHaveCount(0);
+        await expect(pill).toHaveText(/▾\s*∞\s*2/);
+        await expect(pill).toHaveClass(/active/);
+        await expect(pill).toHaveAttribute('aria-pressed', 'true');
+
+        // ↩: Zoe alone again (Mira back), then the view before "▸ ∞"
+        await page.evaluate(() => window.Strom.TreeRenderer.goBack());
+        await expect(cardOf(page, 'sib_w1')).toBeVisible();
+        await expect(cardOf(page, 'sib_w3')).toBeVisible();
+        for (const id of ['sib_w2', 'sib_c2']) await expect(cardOf(page, id), id).toHaveCount(0);
+        await expect(pill).toHaveText(/▸\s*∞\s*1/);
+        await page.evaluate(() => window.Strom.TreeRenderer.goBack());
+        for (const id of ['sib_w2', 'sib_c2', 'sib_w3']) await expect(cardOf(page, id), id).toHaveCount(0);
+        await expect(pill).toHaveText(/▸\s*∞\s*2/);
+        expect(await positions(page)).toEqual(layoutBefore);
+        // ↪ twice: both picks again
+        await page.evaluate(() => window.Strom.TreeRenderer.goForward());
+        await expect(cardOf(page, 'sib_w3')).toBeVisible();
+        await page.evaluate(() => window.Strom.TreeRenderer.goForward());
+        await expect(cardOf(page, 'sib_w2')).toBeVisible();
+        await expect(cardOf(page, 'sib_w1')).toHaveCount(0);
+        // "▾ ∞": the view before "▸ ∞", position for position
+        await pill.click();
+        await page.mouse.move(5, 500);
+        for (const id of ['sib_w2', 'sib_c2', 'sib_w3']) await expect(cardOf(page, id), id).toHaveCount(0);
+        await expect(cardOf(page, 'sib_w1')).toBeVisible();
+        expect(await positions(page)).toEqual(layoutBefore);
+    });
+
+    test('mouse 1440: after one name the bubble\'s last row hides the partners shown here; the layout as before', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await setupTeo(page);
+        await page.mouse.move(5, 500);
+        const layoutBefore = await positions(page);
+        await partnersPill(page, 'sib').hover();
+        await pick(page, 'sib', 'Lena').click();
+        await page.mouse.move(5, 500);
+        for (const id of ['sib_w2', 'sib_c2']) await expect(cardOf(page, id), id).toBeVisible();
+        await expect(cardOf(page, 'sib_w1')).toHaveCount(0);
+        await expect(cardOf(page, 'sib_w3')).toHaveCount(0);
+        await expect(partnersPill(page, 'sib')).toHaveText(/▸\s*∞\s*1/);
+        // Kai came with Lena: "▸ children" has nothing left to show (the two tabs never show one child twice)
+        await expect(cardOf(page, 'sib').locator('.children-tab')).toHaveCount(0);
+        // The keyboard reaches the rows: the pill's focus opens the bubble, Tab goes on to its buttons
+        await partnersPill(page, 'sib').focus();
+        await page.keyboard.press('Shift+Tab');
+        await page.keyboard.press('Tab');
+        const bubble = partnersBubble(page, 'sib');
+        await expect(bubble).toBeVisible();
+        await page.keyboard.press('Tab');
+        await expect(pick(page, 'sib', 'Zoe')).toBeFocused();
+        await page.keyboard.press('Tab');
+        await expect(bubble.locator('.partner-hide-row')).toBeFocused();
+        await page.keyboard.press('Enter');
+        await page.mouse.move(5, 500);
+        for (const id of ['sib_w2', 'sib_c2', 'sib_w3']) await expect(cardOf(page, id), id).toHaveCount(0);
+        await expect(cardOf(page, 'sib_w1')).toBeVisible();
+        expect(await positions(page)).toEqual(layoutBefore);
+        await expect(partnersPill(page, 'sib')).toHaveText(/▸\s*∞\s*2/);
+    });
+
+    test('mouse 1440: after "▸ children" (Lena with Kai in place of Mira) the bubble offers Mira and Zoe, not Lena again', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await setupTeo(page);
+        await cardOf(page, 'sib').locator('.edge-top-right .branch-tab.children-tab').click();
+        for (const id of ['sib_w2', 'sib_c2']) await expect(cardOf(page, id), id).toBeVisible();
+        await expect(cardOf(page, 'sib_w1')).toHaveCount(0);
+        await partnersPill(page, 'sib').hover();
+        const names = partnersBubble(page, 'sib').locator('.partner-pick .badge-tooltip-name');
+        await expect(names).toHaveCount(2);
+        await expect(names.nth(1)).toHaveText('Zoe Arden');
+        await expect(names.first()).not.toContainText('Lena');
+        await pick(page, 'sib', 'Zoe').click();
+        await page.mouse.move(5, 500);
+        for (const id of ['sib_w2', 'sib_c2', 'sib_w3']) await expect(cardOf(page, id), id).toBeVisible();
+        await expect(cardOf(page, 'sib_w1')).toHaveCount(0);
+    });
+
+    test.describe('touch 390 × 844', () => {
+        test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+        test('a press held on the pill opens the bubble; a tap on Zoe brings only her, a tap on the pill then the rest', async ({ page }) => {
+            await setupTeo(page);
+            const pill = partnersPill(page, 'sib');
+            await hold(page, pill);
+            const bubble = partnersBubble(page, 'sib');
+            await expect(bubble).toBeVisible();
+            for (const b of await bubble.locator('.partner-pick').all()) expect((await b.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+            await pick(page, 'sib', 'Zoe').tap();
+            await expect(cardOf(page, 'sib_w3')).toBeVisible();
+            await expect(cardOf(page, 'sib_w1')).toBeVisible();
+            for (const id of ['sib_w2', 'sib_c2']) await expect(cardOf(page, id), id).toHaveCount(0);
+            await expect(page.locator('.bottom-sheet-person')).toHaveCount(0);
+            await expect(pill).toHaveText(/▸\s*∞\s*1/);
+            await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), 'sib');
+            await pill.tap();
+            for (const id of ['sib_w2', 'sib_c2', 'sib_w3']) await expect(cardOf(page, id), id).toBeVisible();
+            await expect(cardOf(page, 'sib_w1')).toHaveCount(0);
+            await expect(pill).toHaveText(/▾\s*∞\s*2/);
+            await page.evaluate(() => window.Strom.TreeRenderer.goBack());
+            await expect(cardOf(page, 'sib_w1')).toBeVisible();
+            for (const id of ['sib_w2', 'sib_c2']) await expect(cardOf(page, id), id).toHaveCount(0);
+        });
+    });
+});
+
+/** A finger held at the middle of the element for 700 ms, then lifted. */
+async function hold(page: Page, el: ReturnType<Page['locator']>): Promise<void> {
+    const touch = (type: 'touchstart' | 'touchend') => el.evaluate((e: HTMLElement, kind) => {
+        const r = e.getBoundingClientRect();
+        const t = new Touch({ identifier: 1, target: e, clientX: r.x + r.width / 2, clientY: r.y + r.height / 2 });
+        const live = kind === 'touchstart' ? [t] : [];
+        e.dispatchEvent(new TouchEvent(kind, { touches: live, targetTouches: live, changedTouches: [t], bubbles: true, cancelable: true }));
+    }, type);
+    await touch('touchstart');
+    await page.waitForTimeout(700);
+    await touch('touchend');
+}
+
+/**
+ * Round 6 §46: in the standard display "▸ ∞" offers every marriage of a
+ * person in the plain depth, not only of one shown in place. comprehensive
+ * (invented), focus on the "focus" person: the father stands with the
+ * mother; his second marriage, the stepmother with a half-sibling, is out
+ * of view. A click on that name brings both; the mother stays.
+ */
+test('the standard display: "▸ ∞" on a person in the plain depth offers a marriage with children, with its count; a click on it brings the partner with the children, the partner beside stays', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openApp(page);
+    const data = JSON.parse(readFileSync(join(process.cwd(), 'test', 'comprehensive.json'), 'utf-8'));
+    await page.evaluate(async tree => {
+        await window.Strom.DataManager.importAsNewTree(tree as never, 'Comprehensive');
+        await window.Strom.TreeRenderer.setFocus('focus' as never);
+    }, data);
+    await page.evaluate(() => window.Strom.TreeRenderer.toggleShowAllPartnerships());
+    await page.evaluate(() => window.Strom.TreeRenderer.setFocusDepth(2, 2));
+    for (const id of ['father', 'mother']) await expect(cardOf(page, id), id).toBeVisible();
+    for (const id of ['stepmother', 'halfsibling_1']) await expect(cardOf(page, id), id).toHaveCount(0);
+    await page.evaluate(id => window.Strom.ZoomPan.centerOnPerson(id as never), 'father');
+    await page.mouse.move(5, 500);
+    const layoutBefore = await positions(page);
+    const pill = partnersPill(page, 'father');
+    await expect(pill).toHaveCount(1);
+    await pill.hover();
+    const bubble = partnersBubble(page, 'father');
+    await expect(bubble).toBeVisible();
+    const names = await page.evaluate(() => {
+        const p = window.Strom.DataManager.getPerson('stepmother' as never)!;
+        return `${p.firstName} ${p.lastName} · 1 child`;
+    });
+    await expect(bubble.locator('.partner-pick .badge-tooltip-name')).toContainText([names]);
+    await bubble.locator('.partner-pick', { hasText: names }).click();
+    await page.mouse.move(5, 500);
+    for (const id of ['stepmother', 'halfsibling_1']) {
+        await expect(cardOf(page, id), id).toBeVisible();
+        await expect(cardOf(page, id), id).toHaveClass(/shown-here/);
+    }
+    for (const id of ['father', 'mother', 'focus']) await expect(cardOf(page, id), id).toBeVisible();
+    // Nothing in view before left it
+    const after = await positions(page);
+    expect(Object.keys(layoutBefore).filter(id => !(id in after))).toEqual([]);
+    // Closing: the layout as before
+    await page.locator('#hide-shown-children').click();
+    for (const id of ['stepmother', 'halfsibling_1']) await expect(cardOf(page, id), id).toHaveCount(0);
+    expect(await positions(page)).toEqual(layoutBefore);
+});

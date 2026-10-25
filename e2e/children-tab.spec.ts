@@ -1079,7 +1079,7 @@ test('the standard display: a sibling of three marriages shown in place comes wi
     await expect(tabOf(page, 'sib')).toHaveCount(1);
     // Round 5 §36: "▸ ∞" offers every marriage out of view, the one with children with its count
     await expect(pill).toHaveText(/▸\s*∞\s*2/);
-    await expect(pill.locator('.badge-tooltip-name')).toHaveText(['Lena Fross · 1 child', 'Zoe Arden']);
+    await expect(cardOf(page, 'sib').locator('.children-bubble[data-bubble="partners"] .badge-tooltip-name')).toHaveText(['Lena Fross · 1 child', 'Zoe Arden']);
     await pill.click();
     await page.mouse.move(5, 500);
     // Lena comes with Kai (as "▸ children" brings that marriage) and takes Mira's place; Zoe beside

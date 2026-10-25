@@ -7,9 +7,9 @@
 import { describe, it, expect } from 'vitest';
 import {
     ViewHistoryEntry, ShownChildrenSnapshot, emptyViewHistory, pushViewStep, stepViewHistory, liveEntry, sameShown, shownKey,
-    sameTransform, historyView, VIEW_HISTORY_LIMIT,
+    sameTransform, historyView, VIEW_HISTORY_LIMIT, samePartnerUnions,
 } from '../view-history.js';
-import type { PersonId } from '../types.js';
+import type { PersonId, PartnershipId } from '../types.js';
 
 const id = (s: string) => s as PersonId;
 const shown = (...ids: string[]): ShownChildrenSnapshot[] =>
@@ -189,6 +189,15 @@ describe('view history', () => {
         expect(sameShown(partnersOfA, parentsOfA)).toBe(false);
         expect(sameShown(partnersOfA, shown('a').map(s => ({ ...s, partners: true as const })))).toBe(true);
         expect(new Set([shownKey(partnersOfA[0]), shownKey(parentsOfA[0]), shownKey(shown('a')[0])]).size).toBe(3);
+        // Round 6 §42: one partner picked and then the next are two steps of the same key
+        const u = (...xs: string[]) => xs as unknown as PartnershipId[];
+        const pickedOne = partnersOfA.map(s => ({ ...s, partnerUnions: u('u1'), partnerOffered: u('u1', 'u2') }));
+        const pickedTwo = partnersOfA.map(s => ({ ...s, partnerUnions: u('u1', 'u2'), partnerOffered: u('u1', 'u2') }));
+        expect(shownKey(pickedOne[0])).toBe(shownKey(pickedTwo[0]));
+        expect(sameShown(pickedOne, pickedTwo)).toBe(false);
+        expect(sameShown(pickedOne, pickedOne.map(s => ({ ...s, partnerUnions: u('u1') })))).toBe(true);
+        expect(samePartnerUnions(pickedOne[0], partnersOfA[0])).toBe(false);
+        expect(samePartnerUnions(partnersOfA[0], shown('a')[0])).toBe(true);
         expect(sameTransform({ scale: 1, tx: 0, ty: 0 }, { scale: 1, tx: 0.2, ty: -0.3 })).toBe(true);
         expect(sameTransform({ scale: 1, tx: 0, ty: 0 }, { scale: 1, tx: 3, ty: 0 })).toBe(false);
         expect(sameTransform({ scale: 1, tx: 0, ty: 0 }, { scale: 0.9, tx: 0, ty: 0 })).toBe(false);

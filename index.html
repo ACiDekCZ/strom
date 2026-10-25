@@ -3188,6 +3188,9 @@
             color: var(--on-primary);
         }
         .hidden-partners-btn { font-variant-numeric: tabular-nums; }
+        /* "▸ ∞ n" after a click on one name (round 6 §42): part of the
+           partners shown, the rest offered; a primary outline, unfilled. */
+        .hidden-partners-btn.partial { border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); }
         .hidden-partners-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
         .hidden-partners-btn:focus-visible .badge-tooltip { display: block; }
 
@@ -3362,6 +3365,35 @@
         }
         .children-elsewhere-row:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; background: var(--primary-soft); }
         .children-bubble > .badge-tooltip-hint:last-child { margin-top: 2px; }
+        /* A name in the standard display's "▸ ∞" bubble (round 6 §42): a row
+           button that shows that partner alone (src/renderer.ts
+           partnersPillHtml); as tall as "◎ Focus on …", 44px by touch. */
+        .partner-pick {
+            display: flex;
+            align-items: baseline;
+            flex-wrap: wrap;
+            gap: 0 2px;
+            width: calc(100% + 12px);
+            min-height: 28px;
+            margin: 0 -6px;
+            padding: 4px 6px;
+            box-sizing: border-box;
+            border: none;
+            border-radius: 6px;
+            background: transparent;
+            font: inherit;
+            text-align: left;
+            color: inherit;
+            cursor: pointer;
+        }
+        .partner-pick .badge-tooltip-detail { white-space: nowrap; }
+        @media (hover: hover) {
+            .partner-pick:hover { background: var(--primary-soft); }
+            .partner-pick:hover .badge-tooltip-name { color: var(--primary-dark); }
+        }
+        .partner-pick:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; background: var(--primary-soft); }
+        @media (pointer: coarse) { .partner-pick { min-height: 44px; align-items: center; } }
+        .children-bubble:has(.partner-pick) { min-width: 200px; }
         /* A nested expansion (§6: its anchor a card shown here, or more than
            three generations from the focus): "◎ Focus on …" in the "▾"
            bubble, a row button in the primary's soft tone, what it does
@@ -3372,7 +3404,8 @@
             padding-top: 8px;
             border-top: 1px solid var(--divider);
         }
-        .nested-focus-row {
+        .nested-focus-row,
+        .partner-hide-row {
             display: flex;
             align-items: center;
             gap: 6px;
@@ -3393,10 +3426,12 @@
         .nested-focus-glyph { flex: none; font-size: 13px; line-height: 1; }
         .nested-focus-label { flex: 1 1 auto; min-width: 0; }
         @media (hover: hover) {
-            .nested-focus-row:hover { background: color-mix(in srgb, var(--primary) 18%, var(--surface)); }
+            .nested-focus-row:hover,
+            .partner-hide-row:hover { background: color-mix(in srgb, var(--primary) 18%, var(--surface)); }
         }
-        .nested-focus-row:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
-        @media (pointer: coarse) { .nested-focus-row { min-height: 44px; } }
+        .nested-focus-row:focus-visible,
+        .partner-hide-row:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        @media (pointer: coarse) { .nested-focus-row, .partner-hide-row { min-height: 44px; } }
         .badge-tooltip-nested > .badge-tooltip-body { padding-top: 6px; }
 
         /* Touch (§6): a pill keeps its 18px look; the tap reaches it on 44 × 44
