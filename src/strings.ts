@@ -7680,7 +7680,7 @@ const stringsCZ: StringsType = {
     // Destructive confirmations: the button says the verb, the title names the
     // object, the message says what goes with it and whether Undo brings it back.
     danger: {
-        undoHint: 'Smazání jde vrátit tlačítkem Zpět.',
+        undoHint: 'Smazání jde vrátit tlačítkem Vrátit.',
         cannotUndo: 'Toto nelze vrátit zpět.',
         deletePersonTitle: (name: string) => `Smazat osobu ${name}?`,
         deletePerson: 'Smazat osobu',
@@ -9461,13 +9461,13 @@ const stringsCZ: StringsType = {
         updatedAttachment: (name: string) => `Upravena příloha u ${name}`,
         setParentRelType: (parent: string, child: string) => `Nastaven typ vztahu ${parent} → ${child}`,
         // Undo / redo
-        undoAction: (desc: string) => `Zpět: ${desc}`,
+        undoAction: (desc: string) => `Vrátit: ${desc}`,
         redoAction: (desc: string) => `Znovu: ${desc}`
     },
 
     // Undo / redo
     undo: {
-        undo: 'Zpět',
+        undo: 'Vrátit',
         redo: 'Znovu',
         addPerson: (name: string) => `přidání osoby ${name}`,
         editPerson: (name: string) => `úprava osoby ${name}`,
@@ -9508,7 +9508,7 @@ const stringsCZ: StringsType = {
 
     // Undo / redo entries in the ⋯ actions menu (labels carry the last change).
     actions: {
-        undoLabel: (desc: string) => `Zpět: ${desc}`,
+        undoLabel: (desc: string) => `Vrátit: ${desc}`,
     },
 
     // Living-person privacy filter for exports
