@@ -12,7 +12,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { loadFixture } from './helpers/loadFixture.js';
 import { selectSubgraph, extendAncestorDepth, expandChildrenInSelection } from '../pipeline/1-select-subgraph.js';
-import { planShownChildrenFolding } from '../pipeline/index.js';
+import { planShownChildrenFolding, runLayoutPipeline } from '../pipeline/index.js';
 import { PersonId, PartnershipId, StromData, DEFAULT_LAYOUT_CONFIG } from '../../types.js';
 import { GraphSelection } from '../pipeline/types.js';
 
@@ -421,5 +421,51 @@ describe('"▸ ∞" on a child shown in place in the standard mode: every marria
     it('a union whose persons are both drawn changes nothing', () => {
         const before = shown([]);
         expect([...shown(unions('u_parents', 'u_nora')).positions]).toEqual([...before.positions]);
+    });
+});
+
+describe('"▸ ∞" on a person in the plain depth: every marriage, one by one (round 6 §46, §42)', () => {
+    const unions = (...xs: string[]) => xs as PartnershipId[];
+    const layout = (fixture: string, focus: string, depth: number, showPartnerUnions: PartnershipId[] = []) => runLayoutPipeline({
+        data: loadFixture(fixture), focusPersonId: focus as PersonId, config: DEFAULT_LAYOUT_CONFIG,
+        ancestorDepth: depth, descendantDepth: depth,
+        includeSpouseAncestors: false, includeParentSiblings: true, includeParentSiblingDescendants: true,
+        displayPolicy: { mode: 'standard', autoExpand: false },
+        ...(showPartnerUnions.length ? { showPartnerUnions } : {}),
+    });
+    const drawn = (r: { positions: ReadonlyMap<PersonId, unknown> }, ...xs: string[]) => xs.filter(id => r.positions.has(id as PersonId));
+    const kept = (before: { positions: ReadonlyMap<PersonId, unknown> }, after: { positions: ReadonlyMap<PersonId, unknown> }) =>
+        [...before.positions.keys()].filter(id => !after.positions.has(id));
+
+    it('the father\'s second marriage (comprehensive): the stepmother comes with the half-sibling, the mother stays', () => {
+        const before = layout('comprehensive', 'focus', 2);
+        expect(drawn(before, 'stepmother', 'halfsibling_1')).toEqual([]);
+        const r = layout('comprehensive', 'focus', 2, unions('part_father_2nd'));
+        expect(drawn(r, 'father', 'mother', 'stepmother', 'halfsibling_1')).toEqual(['father', 'mother', 'stepmother', 'halfsibling_1']);
+        expect(kept(before, r)).toEqual([]);
+        expect(r.positions.get('stepmother' as PersonId)!.y).toBe(r.positions.get('father' as PersonId)!.y);
+        expect(r.diagnostics.validationPassed).toBe(true);
+        // Closing: the input without the union gives the view back, position for position
+        expect([...layout('comprehensive', 'focus', 2).positions]).toEqual([...before.positions]);
+    });
+
+    it('a partner the selection holds undrawn (the standard mode draws one union per person) comes with the children', () => {
+        // Focus a great-grandfather at depth 2: the father stands with the stepmother, the mother is held but not drawn
+        const before = layout('comprehensive', 'ggp_h_h', 2);
+        expect(drawn(before, 'father', 'stepmother', 'mother')).toEqual(['father', 'stepmother']);
+        const r = layout('comprehensive', 'ggp_h_h', 2, unions('part_parents'));
+        expect(drawn(r, 'mother', 'sibling_1', 'focus', 'sibling_2')).toEqual(['mother', 'sibling_1', 'focus', 'sibling_2']);
+        expect(kept(before, r)).toEqual([]);
+    });
+
+    it('one name of several: only that marriage joins the chain, the other partners the selection holds stay undrawn', () => {
+        // The hub of four marriages stands with the first; a click on the second partner's name brings only that one
+        const before = layout('etalon-multi-partners', 'eE_v4_hub', 2);
+        expect(drawn(before, 'eE_v4_p0', 'eE_v4_p1', 'eE_v4_p2', 'eE_v4_p3')).toEqual(['eE_v4_p0']);
+        const r = layout('etalon-multi-partners', 'eE_v4_hub', 2, unions('u_eE_v4_hub_eE_v4_p1'));
+        expect(drawn(r, 'eE_v4_p0', 'eE_v4_p1', 'eE_v4_p2', 'eE_v4_p3', 'eE_v4_k1')).toEqual(['eE_v4_p0', 'eE_v4_p1', 'eE_v4_k1']);
+        const all = layout('etalon-multi-partners', 'eE_v4_hub', 2,
+            unions('u_eE_v4_hub_eE_v4_p1', 'u_eE_v4_hub_eE_v4_p2', 'u_eE_v4_hub_eE_v4_p3'));
+        expect(drawn(all, 'eE_v4_p0', 'eE_v4_p1', 'eE_v4_p2', 'eE_v4_p3')).toEqual(['eE_v4_p0', 'eE_v4_p1', 'eE_v4_p2', 'eE_v4_p3']);
     });
 });

@@ -583,13 +583,14 @@ function leaveOutOtherChildrenOf(
  * is reached in a further pass; persons the selection never holds are
  * skipped.
  *
- * `unions` (PipelineInput.showPartnerUnions, the "▸ ∞" of a child shown in
- * place): each union with children of a person in the selection (the
- * children brought in the same pass included) whose other partner is not in
- * it comes the same way, the partner, the partnership and the union's
- * children, after the persons' own unions and before the children's
- * partners, so the one partner of such a child is the one of that marriage
- * (onePartnerUnion). Returns the persons those unions belong to.
+ * `unions` (PipelineInput.showPartnerUnions, the "▸ ∞" of a person shown
+ * with one partner): each union with children of a person in the selection
+ * (the children brought in the same pass included) comes the same way
+ * (unionOwners: the other partner out of the selection or held by it
+ * undrawn, as the standard mode leaves a person's other marriages): the
+ * partner, the partnership and the union's children, after the persons'
+ * own unions and before the children's partners, so the one partner of
+ * such a child is the one of that marriage (onePartnerUnion). Returns the persons those unions belong to.
  */
 export function expandChildrenInSelection(
     data: StromData,
@@ -606,7 +607,7 @@ export function expandChildrenInSelection(
     const unionReady = (partnershipId: PartnershipId): boolean => {
         const partnership = data.partnerships[partnershipId];
         return !unionsDone.has(partnershipId) && !!partnership && partnership.childIds.length > 0
-            && partnerShownFor(data, selection, partnership) !== null;
+            && unionOwners(data, selection, partnership).length > 0;
     };
     // A person of the list the step itself brings into the selection (a
     // shown child's partner, whose own "▸ children" is a nested click, or a
@@ -642,15 +643,17 @@ export function expandChildrenInSelection(
             for (const partnershipId of unions) {
                 if (!unionReady(partnershipId)) continue;
                 const partnership = data.partnerships[partnershipId]!;
-                const ownerId = partnerShownFor(data, selection, partnership)!;
+                const unionOwnerIds = unionOwners(data, selection, partnership);
                 unionsDone.add(partnershipId);
                 reached = true;
                 selection.persons.add(partnership.person1Id);
                 selection.persons.add(partnership.person2Id);
                 selection.partnerships.add(partnershipId);
                 for (const childId of partnership.childIds) bring(childId);
-                selection.depthLimitPersons?.delete(ownerId);
-                if (!owners.includes(ownerId)) owners.push(ownerId);
+                for (const ownerId of unionOwnerIds) {
+                    selection.depthLimitPersons?.delete(ownerId);
+                    if (!owners.includes(ownerId)) owners.push(ownerId);
+                }
             }
         }
         for (const childId of brought) partnered.add(childId);
@@ -693,17 +696,27 @@ function bringPartnersOfShownChildren(
 }
 
 /**
- * The person a union listed in PipelineInput.showPartnerUnions belongs to:
+ * The persons a union listed in PipelineInput.showPartnerUnions belongs to:
  * the one of its two persons in the selection while the other (the partner
- * the "▸ ∞" brings) is not; null otherwise (both drawn: the union is drawn
- * or the partner stands elsewhere; neither: nothing to show it beside).
+ * the "▸ ∞" brings) is not. With both in the selection (the standard mode
+ * draws one union per person, so a partner of a person's other marriage
+ * the selection holds can stay undrawn) the ones standing in another union
+ * of the selection too, else both. None with neither in the selection
+ * (nothing to show it beside).
  */
-function partnerShownFor(data: StromData, selection: GraphSelection, partnership: Partnership): PersonId | null {
+function unionOwners(data: StromData, selection: GraphSelection, partnership: Partnership): PersonId[] {
     const a = partnership.person1Id, b = partnership.person2Id;
-    if (a === b || !data.persons[a] || !data.persons[b]) return null;
+    if (a === b || !data.persons[a] || !data.persons[b]) return [];
     const hasA = selection.persons.has(a), hasB = selection.persons.has(b);
-    if (hasA === hasB) return null;
-    return hasA ? a : b;
+    if (!hasA && !hasB) return [];
+    if (hasA !== hasB) return [hasA ? a : b];
+    const inOtherUnion = (id: PersonId): boolean => (data.persons[id]?.partnerships ?? []).some(pid => {
+        const u = data.partnerships[pid];
+        return pid !== partnership.id && !!u && selection.partnerships.has(pid)
+            && selection.persons.has(u.person1Id) && selection.persons.has(u.person2Id);
+    });
+    const chained = [a, b].filter(inOtherUnion);
+    return chained.length > 0 ? chained : [a, b];
 }
 
 /**
@@ -729,12 +742,12 @@ export function showPartnerUnionsInSelection(
             }
             continue;
         }
-        const ownerId = partnerShownFor(data, selection, partnership);
-        if (!ownerId) continue;
+        const unionOwnerIds = unionOwners(data, selection, partnership);
+        if (unionOwnerIds.length === 0) continue;
         selection.persons.add(partnership.person1Id);
         selection.persons.add(partnership.person2Id);
         selection.partnerships.add(partnershipId);
-        if (!owners.includes(ownerId)) owners.push(ownerId);
+        for (const ownerId of unionOwnerIds) if (!owners.includes(ownerId)) owners.push(ownerId);
     }
     return owners.filter(id => (data.persons[id]?.partnerships ?? []).filter(pid => {
         const u = data.partnerships[pid];

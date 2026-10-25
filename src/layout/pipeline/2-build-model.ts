@@ -279,7 +279,8 @@ export function buildLayoutModel(input: BuildModelInput): LayoutModel {
             edges,
             personToUnion,
             childToParentUnion,
-            partnerChains
+            partnerChains,
+            displayPolicy.chainPartnershipsOf
         );
     }
 
@@ -491,7 +492,8 @@ function expandPartnerChains(
     edges: ParentChildEdge[],
     personToUnion: Map<PersonId, UnionId>,
     childToParentUnion: Map<PersonId, UnionId>,
-    partnerChains: Map<PersonId, PartnerChain>
+    partnerChains: Map<PersonId, PartnerChain>,
+    chainPartnershipsOf?: ReadonlyMap<PersonId, ReadonlySet<PartnershipId>>
 ): void {
     // Build reverse lookup: partnershipId → existing unionId
     const partnershipToUnion = new Map<PartnershipId, UnionId>();
@@ -517,9 +519,12 @@ function expandPartnerChains(
         // extra partners on one side of the shared person then stand in the
         // order of the marriages, the earliest next to the person
         // (buildChainBlockPersonOrder walks them in this order).
+        // A chain limited to some unions (DisplayPolicy.chainPartnershipsOf)
+        const allowed = chainPartnershipsOf?.get(sharedPersonId);
         const personPartnerships = person.partnerships
             .map((pid, index) => ({ id: pid, index, partnership: data.partnerships[pid] }))
             .filter(p => selection.partnerships.has(p.id))
+            .filter(p => !allowed || allowed.has(p.id) || p.id === primaryUnion.partnershipId)
             .filter(p => p.partnership && selection.persons.has(p.partnership.person1Id) && selection.persons.has(p.partnership.person2Id))
             .sort((a, b) => compareMarriages(
                 { startDate: a.partnership.startDate, index: a.index },

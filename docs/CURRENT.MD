@@ -275,6 +275,33 @@ and nobody lost but the partner the child stood with.
 (`test/edge-shown-sibling-marriages.json`: a sibling of the focus's mother
 with a childless first marriage, a second with a son and a childless third.)
 
+The same unions for any person in the standard mode. Every drawn person's
+"▸ ∞" in the standard mode offers every marriage whose partner is out of view
+(`offeredPartners(data, P, inView, true)`), not only on a child shown in
+place, and a click on one name in its bubble lists that one union alone; the
+pill lists all of them (later clicks add the rest to the same list). The
+person of a listed union is found by `unionOwners`: the one person of the
+union in the selection; with both in it (the standard mode holds partners and
+children it does not draw), the one standing in another selected union, else
+both; with neither the union is skipped. A person in the plain depth has no
+partner taken away: the union comes beside the partner it stands with (only a
+child shown in place exchanges its partner, as above). Such a person becomes a
+chain person, and a chain draws every union of the person the selection
+holds, so `limitChains` (src/layout/pipeline/index.ts) gives the newly
+chained persons `DisplayPolicy.chainPartnershipsOf`: the listed unions and the
+unions whose partner the layout without `showPartnerUnions` draws (a lazy run
+of the same input, `drawnWithoutPartnerUnions`). `expandPartnerChains` (step
+2) keeps only those, besides the model's primary union, so a partner held
+undrawn stays out. Without `showPartnerUnions` the policy has no
+`chainPartnershipsOf` and the layout is bitwise the previous one (checked by
+a hash over every fixture, focus, mode and depth 2 and 8 against the commit
+before). `partnersShownFull.test.ts` checks, for every fixture, every focus,
+depths 2 and 3, the standard and expanded modes, every drawn person in the
+plain depth with a marriage with children among its offers: all offers, then
+each such marriage alone; the strict harness checks, the partner in the
+person's row, the children drawn, the partners not picked not drawn, nobody
+lost, and closing gives the base layout back.
+
 Folded ancestors (`PipelineInput.foldAncestorsOf`, applied only together with
 `expandChildrenOf`): after `withChildrenShown`, `foldAncestorsInSelection`
 cuts the child→parent links of the listed persons and removes from the

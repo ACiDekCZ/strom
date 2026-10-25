@@ -273,3 +273,77 @@ describe('Every marriage of a child shown in place in the standard mode (showPar
         }
     }
 });
+
+describe('Every marriage of a person in the plain depth (showPartnerUnions, round 6 §46, §42)', () => {
+    // A person the view draws without any expansion (an ancestor, the focus,
+    // a sibling, a descendant) whose marriage with children stands out of
+    // view: its "▸ ∞" offers every marriage out of view as on a child shown
+    // in place (offeredPartners). A click on the pill brings them all, a
+    // click on one name that marriage alone (with its children). For every
+    // such person: the strict checks hold, each partner stands in the
+    // person's row, the children of the marriages are drawn, nobody drawn
+    // before leaves (the partner beside the card stays: nothing is
+    // exchanged in the plain depth) and closing (the input without the
+    // unions) gives the layout back, position for position.
+    const MODES46 = [
+        { name: 'standard', heights: false, autoExpand: false },
+        { name: 'expanded', heights: false, autoExpand: true },
+        { name: 'standard-v3', heights: true, autoExpand: false },
+    ];
+    for (const fixture of FIXTURES) {
+        for (const mode of MODES46) {
+            it(`${fixture} [${mode.name}]`, () => {
+                const data = loadFixture(fixture);
+                normalizeSingleParents(data);
+                const before = JSON.stringify(data);
+                const ids = (Object.keys(data.persons) as PersonId[]).filter(id => !data.persons[id].isPlaceholder);
+                const config: LayoutConfig = mode.heights
+                    ? { ...DEFAULT_LAYOUT_CONFIG, spouseLineY: 25, personHeights: syntheticPersonHeights(ids) }
+                    : DEFAULT_LAYOUT_CONFIG;
+                const failures: string[] = [];
+                let checked = 0;
+                const same = (a: LayoutResult, b: LayoutResult, where: string) => {
+                    if (a.positions.size !== b.positions.size) { failures.push(`${where}: other cards`); return; }
+                    for (const [id, p] of a.positions) {
+                        const q = b.positions.get(id);
+                        if (!q || q.x !== p.x || q.y !== p.y) { failures.push(`${where}: ${id} moved`); return; }
+                    }
+                };
+                for (const depth of [2, 3]) for (const focus of ids) {
+                    const base = layout(data, focus, config, depth, mode.autoExpand);
+                    for (const pid of base.positions.keys()) {
+                        const offers = offeredPartners(data, pid, id => base.positions.has(id), true);
+                        if (!offers.some(o => o.childCount > 0)) continue;
+                        // The pill (every marriage) and each marriage with children alone (a name)
+                        const picks = [offers, ...offers.filter(o => o.childCount > 0).map(o => [o])];
+                        for (const pick of picks) {
+                            checked++;
+                            const where = `${focus} d${depth} ${pick.length === offers.length && picks.length > 2 ? 'every marriage' : `marriage ${pick.map(o => o.partnershipId).join(',')}`} of ${pid}`;
+                            const r = layout(data, focus, config, depth, mode.autoExpand, [], [], pick.map(o => o.partnershipId));
+                            strict(r, config, mode.heights, where, failures);
+                            if (!r.positions.has(pid)) { failures.push(`${where}: the person left the view`); continue; }
+                            const g = genOf(r, pid);
+                            for (const o of pick) {
+                                if (!r.positions.has(o.partnerId)) failures.push(`${where}: partner ${o.partnerId} not drawn`);
+                                else if (genOf(r, o.partnerId) !== g) failures.push(`${where}: partner ${o.partnerId} not in the person's row`);
+                                const kids = data.partnerships[o.partnershipId].childIds.filter(k => !data.persons[k]?.isPlaceholder);
+                                const missing = kids.filter(k => !r.positions.has(k));
+                                if (missing.length) failures.push(`${where}: children of ${o.partnershipId} not drawn ${missing.join(',')}`);
+                            }
+                            // Only the marriages picked: the others stay out of view
+                            for (const o of offers) {
+                                if (!pick.includes(o) && r.positions.has(o.partnerId)) failures.push(`${where}: partner ${o.partnerId} not picked came in`);
+                            }
+                            const lost = [...base.positions.keys()].filter(id => !r.positions.has(id));
+                            if (lost.length) failures.push(`${where}: left the view ${lost.slice(0, 5).join(',')}`);
+                        }
+                        same(base, layout(data, focus, config, depth, mode.autoExpand), `${focus} d${depth} ${pid} closed`);
+                    }
+                }
+                expect(failures.slice(0, 20), `${fixture} [${mode.name}], ${failures.length} failures of ${checked}`).toEqual([]);
+                if (process.env.PARTNERS_SHOWN_COUNTS) console.log(`${fixture} [${mode.name}] plain depth ${checked}`);
+                expect(JSON.stringify(data)).toBe(before);
+            }, 900_000);
+        }
+    }
+});

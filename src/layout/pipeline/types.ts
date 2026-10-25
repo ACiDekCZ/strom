@@ -19,6 +19,14 @@ export interface DisplayPolicy {
      * selection, but the extra union's children are NOT pulled in.
      */
     appendagePersonIds?: Set<PersonId>;
+    /**
+     * Chain persons whose chain takes only some of their unions of the
+     * selection (the "▸ ∞" of a person shown with one partner,
+     * PipelineInput.showPartnerUnions): besides the union drawn before, only
+     * the listed partnerships join the chain; the others stay undrawn, as
+     * the standard mode leaves them.
+     */
+    chainPartnershipsOf?: Map<PersonId, Set<PartnershipId>>;
     /** Auto-expand all partnerships for direct-line persons at every generation (default: true) */
     autoExpand?: boolean;
     /**

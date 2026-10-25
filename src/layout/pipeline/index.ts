@@ -386,7 +386,8 @@ function withChildrenShown(
     selection: GraphSelection,
     policy: DisplayPolicy,
     personIds: readonly PersonId[] | undefined,
-    unions: readonly PartnershipId[] | undefined
+    unions: readonly PartnershipId[] | undefined,
+    drawnBefore: () => ReadonlySet<PersonId> = () => new Set()
 ): DisplayPolicy {
     if (!personIds?.length && !unions?.length) return policy;
     const before = new Set(selection.persons);
@@ -399,10 +400,51 @@ function withChildrenShown(
     const chained = [...new Set([...(personIds ?? []), ...owners, ...brought])].filter(id => selection.persons.has(id)
         && (data.persons[id]?.partnerships ?? []).filter(pid => selection.partnerships.has(pid)).length > 1);
     if (chained.length === 0) return policy;
+    // A person chained only for marriages a "▸ ∞" picked takes only those
+    const limited = limitChains(data, policy, chained.filter(id => owners.includes(id)
+        && !personIds?.includes(id) && !brought.includes(id)), unions ?? [], drawnBefore);
     const expanded = new Set(policy.expandedPersonIds ?? []);
     for (const id of chained) expanded.add(id);
     const appendage = policy.appendagePersonIds && new Set([...policy.appendagePersonIds].filter(id => !expanded.has(id)));
-    return { ...policy, mode: 'expanded', expandedPersonIds: expanded, ...(appendage ? { appendagePersonIds: appendage } : {}) };
+    return {
+        ...policy, mode: 'expanded', expandedPersonIds: expanded,
+        ...(appendage ? { appendagePersonIds: appendage } : {}),
+        ...(limited ? { chainPartnershipsOf: limited } : {}),
+    };
+}
+
+/**
+ * The chains limited to the marriages a "▸ ∞" picked (PipelineInput
+ * showPartnerUnions, DisplayPolicy.chainPartnershipsOf): each of `owners`
+ * not chained before (or chained before only so) takes only its listed
+ * unions and the ones whose partner the view draws without them
+ * (`drawnBefore`, the same input without showPartnerUnions). The standard
+ * mode leaves a person's other unions undrawn even when the selection holds
+ * them (a focus's other marriages, a partner's other spouse), and a chain
+ * would draw them all: a click on one name brings that marriage alone.
+ * Undefined when nothing is limited (the policy keeps no map).
+ */
+function limitChains(
+    data: StromData,
+    policy: DisplayPolicy,
+    owners: readonly PersonId[],
+    unions: readonly PartnershipId[],
+    drawnBefore: () => ReadonlySet<PersonId>
+): Map<PersonId, Set<PartnershipId>> | undefined {
+    const limited = new Map(policy.chainPartnershipsOf ?? []);
+    for (const id of owners) {
+        const chainedBefore = policy.expandedPersonIds?.has(id) || policy.appendagePersonIds?.has(id);
+        if (chainedBefore && !policy.chainPartnershipsOf?.has(id)) continue;
+        const allowed = new Set(policy.chainPartnershipsOf?.get(id) ?? []);
+        for (const pid of data.persons[id]?.partnerships ?? []) {
+            const u = data.partnerships[pid];
+            if (!u) continue;
+            const partnerId = u.person1Id === id ? u.person2Id : u.person1Id;
+            if (unions.includes(pid) || drawnBefore().has(partnerId)) allowed.add(pid);
+        }
+        limited.set(id, allowed);
+    }
+    return limited.size > 0 ? limited : undefined;
 }
 
 /**
@@ -418,22 +460,23 @@ function withPartnersShown(
     selection: GraphSelection,
     policy: DisplayPolicy,
     personIds: readonly PersonId[] | undefined,
-    unions: readonly PartnershipId[] | undefined
+    unions: readonly PartnershipId[] | undefined,
+    drawnBefore: () => ReadonlySet<PersonId> = () => new Set()
 ): DisplayPolicy {
     if (!personIds?.length && !unions?.length) return policy;
-    const chained = [...new Set([
-        ...(personIds?.length ? showPartnersInSelection(data, selection, personIds) : []),
-        // The marriages a "▸ ∞" of a child shown in place shows (PipelineInput.showPartnerUnions)
-        ...(unions?.length ? showPartnerUnionsInSelection(data, selection, unions) : []),
-    ])];
+    const shownOf = personIds?.length ? showPartnersInSelection(data, selection, personIds) : [];
+    // The marriages a "▸ ∞" shows one by one (PipelineInput.showPartnerUnions)
+    const unionOwners = unions?.length ? showPartnerUnionsInSelection(data, selection, unions) : [];
+    const chained = [...new Set([...shownOf, ...unionOwners])];
     if (chained.length === 0) return policy;
+    const limited = limitChains(data, policy, unionOwners.filter(id => !shownOf.includes(id) && !personIds?.includes(id)), unions ?? [], drawnBefore);
     // Chained after every chain person before: merged chains are kept by
     // their first person (mergeOverlappingChains), whose generation the
     // chain's unions take, and a partner shown on an appendage spouse of a
     // deep ancestor has no generation of its own (the ancestor has).
     const appendage = new Set(policy.appendagePersonIds ?? []);
     for (const id of chained) if (!policy.expandedPersonIds?.has(id)) appendage.add(id);
-    return { ...policy, mode: 'expanded', appendagePersonIds: appendage };
+    return { ...policy, mode: 'expanded', appendagePersonIds: appendage, ...(limited ? { chainPartnershipsOf: limited } : {}) };
 }
 
 /**
@@ -463,6 +506,22 @@ function ancestorDepthEdge(data: StromData, selection: GraphSelection, result: L
 function drawnWithoutExtraDepth(input: PipelineInput): ReadonlySet<PersonId> {
     const { extraDepthFor: _extra, ...without } = input;
     return new Set(runLayoutPipeline(without).positions.keys());
+}
+
+/**
+ * The persons the view draws without the marriages a "▸ ∞" picked (the
+ * same input without showPartnerUnions), worked out once and only when a
+ * chain is limited to them (limitChains).
+ */
+function drawnWithoutPartnerUnions(input: PipelineInput): () => ReadonlySet<PersonId> {
+    let drawn: ReadonlySet<PersonId> | undefined;
+    return () => {
+        if (!drawn) {
+            const { showPartnerUnions: _unions, ...without } = input;
+            drawn = new Set(runLayoutPipeline(without).positions.keys());
+        }
+        return drawn;
+    };
 }
 
 /**
@@ -542,9 +601,10 @@ export function runLayoutPipeline(input: PipelineInput): LayoutResult {
     // Expand selection for expanded persons (add missing partners/children)
     expandSelectionForDisplay(data, selection, effectivePolicy);
     // Children shown in place (the card's "children" tab)
-    effectivePolicy = withChildrenShown(data, selection, effectivePolicy, input.expandChildrenOf, input.showPartnerUnions);
+    const drawnBeforeUnions = drawnWithoutPartnerUnions(input);
+    effectivePolicy = withChildrenShown(data, selection, effectivePolicy, input.expandChildrenOf, input.showPartnerUnions, drawnBeforeUnions);
     // Other partners shown in place (the "▸ ∞" pill)
-    effectivePolicy = withPartnersShown(data, selection, effectivePolicy, input.showPartnersOf, input.showPartnerUnions);
+    effectivePolicy = withPartnersShown(data, selection, effectivePolicy, input.showPartnersOf, input.showPartnerUnions, drawnBeforeUnions);
     // Ancestors folded for now to make room for the children shown
     if (input.expandChildrenOf?.length && input.foldAncestorsOf?.length) {
         foldAncestorsInSelection(data, selection, input.foldAncestorsOf, focusPersonId);
@@ -740,8 +800,9 @@ export function runLayoutPipelineWithDebug(
 
     // Expand selection for expanded persons (add missing partners/children)
     expandSelectionForDisplay(data, selection, effectivePolicyDebug);
-    effectivePolicyDebug = withChildrenShown(data, selection, effectivePolicyDebug, input.expandChildrenOf, input.showPartnerUnions);
-    effectivePolicyDebug = withPartnersShown(data, selection, effectivePolicyDebug, input.showPartnersOf, input.showPartnerUnions);
+    const drawnBeforeUnionsDebug = drawnWithoutPartnerUnions(input);
+    effectivePolicyDebug = withChildrenShown(data, selection, effectivePolicyDebug, input.expandChildrenOf, input.showPartnerUnions, drawnBeforeUnionsDebug);
+    effectivePolicyDebug = withPartnersShown(data, selection, effectivePolicyDebug, input.showPartnersOf, input.showPartnerUnions, drawnBeforeUnionsDebug);
     if (input.expandChildrenOf?.length && input.foldAncestorsOf?.length) {
         foldAncestorsInSelection(data, selection, input.foldAncestorsOf, focusPersonId);
     }
