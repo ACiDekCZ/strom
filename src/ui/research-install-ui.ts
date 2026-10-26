@@ -352,7 +352,8 @@ export const researchInstallMethods = uiModule({
                     <code class="install-line" tabindex="0" data-line="${esc(line)}">${lineHtml(line, record.token)}</code>
                     <button type="button" class="install-copy${st.copied ? ' copied' : ''}" data-act="copy">${esc(st.copied ? s.copied : s.copy)}</button>
                 </div>
-                <p class="install-after">${esc(transfer ? (st.copied ? s.afterCopiedTransfer : s.afterTransfer) : st.copied ? s.afterCopied : s.after)}</p>` : `<div class="install-line-row"><p class="install-line-later">${esc(s.transferLineAfter)}</p></div>`}
+                <p class="install-after">${esc(transfer ? (st.copied ? s.afterCopiedTransfer : s.afterTransfer) : st.copied ? s.afterCopied : s.after)}</p>
+                ${os === 'mac' ? this.researchPasteBlockedHtml() : ''}` : `<div class="install-line-row"><p class="install-line-later">${esc(s.transferLineAfter)}</p></div>`}
                 ${lineShown ? `<details class="install-other"${st.otherOpen ? ' open' : ''}>
                     <summary>${esc(s.other)}</summary>
                     <p>${esc(s.npmIntro)}</p>
@@ -373,6 +374,17 @@ export const researchInstallMethods = uiModule({
                 <button type="button" class="secondary" data-dismiss>${esc(strings.buttons.close)}</button>
                 <button type="button" class="primary" data-act="pasted"${lineShown ? '' : ' disabled'}>${esc(s.pasted)}</button>
             </div>`;
+    },
+
+    /**
+     * Newer macOS (26.4+) may stop a command pasted into Terminal ("Possible
+     * malware, Paste blocked"): the note says where the line comes from and
+     * which button lets it in, with Apple's page in the UI language.
+     */
+    researchPasteBlockedHtml(): string {
+        const s = strings.install;
+        return `<p class="install-paste-blocked">${esc(s.pasteBlocked)}
+            <a href="${esc(s.pasteBlockedUrl)}" target="_blank" rel="noopener">${esc(s.pasteBlockedLink)}</a></p>`;
     },
 
     /** Safari: the tree moves to another browser — said first, then downloaded for the research to find. */
@@ -899,7 +911,8 @@ export const researchInstallMethods = uiModule({
                     <button type="button" class="install-copy${st.copied ? ' copied' : ''}" data-act="copy">${esc(st.copied ? s.copied : s.copy)}</button>
                 </div>
                 ${canShare ? `<button type="button" class="primary install-send-line" data-act="send-line">${esc(s.sendLine)}</button>` : ''}
-                <p class="install-note">${esc(s.mobileFileNote)}</p>`;
+                <p class="install-note">${esc(s.mobileFileNote)}</p>
+                ${st.os === 'mac' ? this.researchPasteBlockedHtml() : ''}`;
         }
         return `
             <div class="install-mobile-box install-transfer">

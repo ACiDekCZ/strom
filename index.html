@@ -5414,6 +5414,9 @@
         }
         .install-copy.copied { background: var(--primary-soft); color: var(--primary-dark); border-color: transparent; font-weight: 600; }
         .install-body .install-after { font-size: 13px; color: var(--text-light); }
+        /* Newer macOS may block the pasted line: where it comes from, Apple's page (research-install-ui.ts). */
+        .install-paste-blocked { font-size: 13px; line-height: 1.45; color: var(--text-light); }
+        .install-paste-blocked a { color: inherit; text-decoration: underline; }
         .install-other { margin: 4px 0 0; font-size: 13px; }
         .install-other summary { cursor: pointer; color: var(--text-light); padding: 4px 0; }
         .install-other p { font-size: 13px; color: var(--text-light); margin: 6px 0 8px; }

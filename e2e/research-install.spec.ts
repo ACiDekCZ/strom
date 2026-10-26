@@ -180,12 +180,20 @@ test.describe('installing the research from the app', () => {
         expect((await d.locator('.install-line').first().getAttribute('data-line'))!.length).toBeLessThanOrEqual(259);
         await expect(d.locator('.install-howto li').first()).toContainText('Win + R');
         await expect(d.locator('.install-apple')).toHaveCount(0);
+        await expect(d.locator('.install-paste-blocked')).toHaveCount(0);
 
         await d.locator('.install-os-btn[data-os="linux"]').click();
         await expect(d.locator('.install-howto li').first()).toContainText('Ctrl + Alt + T');
+        await expect(d.locator('.install-paste-blocked')).toHaveCount(0);
         expect(await d.locator('.install-line').first().getAttribute('data-line')).toContain(`STROM_FROM='1|${token}|chromium||${appUrlOf(page)}|My Family Tree' sh`);
         await d.locator('.install-os-btn[data-os="mac"]').click();
         await expect(d.locator('.install-apple')).toContainText('Command Line Tools');
+        // Newer macOS may block the pasted line: the note names the source and the button, with Apple's page.
+        const blocked = d.locator('.install-paste-blocked');
+        await expect(blocked).toContainText('“Possible malware, Paste blocked”');
+        await expect(blocked).toContainText('GitHub (ACiDekCZ/strom-research); “Paste Anyway” pastes it.');
+        await expect(blocked.locator('a')).toHaveAttribute('href', 'https://support.apple.com/en-us/127377');
+        await expect(blocked.locator('a')).toHaveAttribute('target', '_blank');
         expect((await installRecord(page))!.os).toBe('mac');
         // The same token for every system.
         expect((await installRecord(page))!.token).toBe(token);
@@ -1113,10 +1121,13 @@ test.describe('installing the research from a phone', () => {
         await expect(d.locator('.install-transfer-done')).toHaveText('✓ Downloaded');
         await expect(d.locator('.install-mobile-line-label')).toHaveText('The line for the computer’s terminal:');
         await d.locator('.install-os-btn[data-os="mac"]').click();
+        // The line reaches the Mac by a message: newer macOS may block the paste, the note says so.
+        await expect(d.locator('.install-paste-blocked')).toContainText('“Paste Anyway” pastes it.');
         expect(await d.locator('.install-line').getAttribute('data-line')).toContain(`STROM_FROM='1|${record.token}|mobile|${record.token.slice(0, 8)}|${appUrlOf(page)}|My Family Tree' sh`);
         // Windows: everything but the name fits Win + R's 259 characters.
         await d.locator('.install-os-btn[data-os="win"]').click();
         const win = (await d.locator('.install-line').getAttribute('data-line'))!;
+        await expect(d.locator('.install-paste-blocked')).toHaveCount(0);
         expect(win).toContain(`si env:STROM_FROM '1|${record.token}|mobile|${record.token.slice(0, 8)}|${appUrlOf(page)}|`);
         expect(win.length).toBeLessThanOrEqual(259);
         // The file carries this copy's address too (for the research's link from a file).
