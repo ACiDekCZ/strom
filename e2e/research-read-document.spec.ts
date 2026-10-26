@@ -322,6 +322,48 @@ test.describe('Read a document', () => {
         await expect(dialog(page).locator('#read-result')).toBeVisible();
     });
 
+    test('the notice comes once in a reading\'s life: not again after a reload', async ({ page }) => {
+        const b = await setup(page);
+        const d = await startReading(page, b);
+        await d.locator('.read-footer [data-act="close"]').last().click();
+        await step(page, b, 'done', 1);
+        await expect(page.locator('.toast', { hasText: 'Document read' })).toBeVisible();
+
+        await page.reload();
+        await expect(card(page, 'Jan')).toBeVisible();
+        await poll(page);
+        // Still read and not opened: the menu says so; no notice again.
+        await openResearchMenu(page, { expandMore: true });
+        await expect(item(page)).toContainText('Document read');
+        await page.keyboard.press('Escape');
+        await poll(page);
+        await expect(page.locator('.toast[data-kind="read"]')).toHaveCount(0);
+    });
+
+    test('readings that ended long ago (kept from before): no notice at the start', async ({ page }) => {
+        const older = 'D20261019153012-a1b2';
+        const newer = 'D20261020091500-c3d4';
+        const reading = (id: string, state: string, at: string) => ({
+            id, state, version: 1, at, since: at, files: 1, pages: 1, readers: 1, done: 1, entries: 1, name: 'rodny-list.jpg', person: '', from: 'app' as const,
+        });
+        const b = await fakeBridge(page, {
+            accepts: accepts(readAccepts()), features: ['read.now'],
+            read: fakeRead({ reads: [reading(newer, 'done', '2026-10-20T09:15:00Z'), reading(older, 'unreadable', '2026-10-19T15:30:12Z')] }),
+        });
+        b.read!.results.set(newer, result(newer));
+        // As an older app kept them: the readings, nothing about their notice.
+        await page.addInitScript(({ older, newer }) => localStorage.setItem('read.recent', JSON.stringify([
+            { id: newer, opened: false, research: '' }, { id: older, opened: false, research: '' },
+        ])), { older, newer });
+        await openResearch(page, { media: true });
+        await poll(page);
+        await openResearchMenu(page, { expandMore: true });
+        await expect(item(page)).toContainText('Document read');
+        await page.keyboard.press('Escape');
+        await poll(page);
+        await expect(page.locator('.toast[data-kind="read"]')).toHaveCount(0);
+    });
+
     test('cancel: asked of the bridge at once, the dialog says it was cancelled', async ({ page }) => {
         const b = await setup(page);
         const d = await startReading(page, b);

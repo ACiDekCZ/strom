@@ -8,6 +8,7 @@ import { describe, it, expect } from 'vitest';
 import {
     sanitizeReadAccepts, sanitizeReads, sanitizeLiveRead, sanitizeReadResult, readFailure, retryAfter,
     readFileRefusals, readFileMime, readFileKind, readPageImageUrl, readDocYear, readUsualMinutes, readRunning, readSlow, cleanBlock,
+    readEndsToAnnounce, readSuperseded, LiveRead, ReadMemo, ReadState,
 } from '../research-read.js';
 import { sanitizeLiveStatus, sanitizeAccepts } from '../research-link.js';
 
@@ -96,6 +97,79 @@ describe('/status.reads', () => {
     it('which states still run', () => {
         expect(['queued', 'reading', 'checking'].every(x => readRunning(x as never))).toBe(true);
         expect(['done', 'unreadable', 'failed', 'cancelled'].some(x => readRunning(x as never))).toBe(false);
+    });
+});
+
+describe('the notice when a reading ends', () => {
+    const OLD = 'D20261019153012-a1b2';
+    const NEW = 'D20261020091500-c3d4';
+    const DOC = `${'a'.repeat(64)},${'b'.repeat(64)}`;
+    const read = (id: string, state: ReadState, at: string, extra: Partial<LiveRead> = {}): LiveRead => ({
+        id, state, version: 1, at, since: at, files: 1, pages: 1, readers: 1, done: 1, entries: 1, name: 'rodny-list.jpg', person: '', from: 'app', ...extra,
+    });
+    const memo = (id: string, extra: Partial<ReadMemo> = {}): ReadMemo => ({ id, opened: false, announced: false, doc: DOC, ...extra });
+    const map = (...reads: LiveRead[]) => new Map(reads.map(r => [r.id, r]));
+    const none = new Map<string, LiveRead>();
+    const ids = (out: { announce: LiveRead[] }) => out.announce.map(r => r.id);
+
+    it('a start with readings announced before: no notice', () => {
+        const reads = map(read(OLD, 'unreadable', '2026-10-19T15:30:12Z'), read(NEW, 'done', '2026-10-20T09:15:00Z'));
+        const out = readEndsToAnnounce(reads, none, [memo(NEW, { announced: true }), memo(OLD, { announced: true })]);
+        expect(out).toEqual({ announce: [], settle: [], rearm: [] });
+    });
+
+    it('a start with readings opened before: no notice', () => {
+        const reads = map(read(OLD, 'unreadable', '2026-10-19T15:30:12Z'), read(NEW, 'done', '2026-10-20T09:15:00Z'));
+        expect(ids(readEndsToAnnounce(reads, none, [memo(NEW, { opened: true }), memo(OLD, { opened: true })]))).toEqual([]);
+    });
+
+    it('unreadable, then read again as another reading, both ended with the app closed: only the newer says it, the older is settled', () => {
+        const reads = map(read(OLD, 'unreadable', '2026-10-19T15:30:12Z'), read(NEW, 'done', '2026-10-20T09:15:00Z'));
+        const memos = [memo(NEW), memo(OLD)];
+        const out = readEndsToAnnounce(reads, none, memos);
+        expect(ids(out)).toEqual([NEW]);
+        expect(out.settle).toEqual([OLD]);
+        // Remembered: the next start (a restart, a reload) says nothing.
+        const after = memos.map(m => ({ ...m, announced: true }));
+        expect(ids(readEndsToAnnounce(reads, none, after))).toEqual([]);
+    });
+
+    it('the same document without its pages known: the first file and page count tell it', () => {
+        const reads = map(read(OLD, 'unreadable', '2026-10-19T15:30:12Z'), read(NEW, 'done', '2026-10-20T09:15:00Z'));
+        expect(ids(readEndsToAnnounce(reads, none, [memo(NEW, { doc: '' }), memo(OLD, { doc: '' })]))).toEqual([NEW]);
+        // Other pages: another document, each says its own end.
+        const other = readEndsToAnnounce(reads, none, [memo(NEW), memo(OLD, { doc: 'c'.repeat(64) })]);
+        expect(ids(other).sort()).toEqual([OLD, NEW]);
+    });
+
+    it('a newer reading cancelled leaves the older one its word', () => {
+        const reads = map(read(OLD, 'done', '2026-10-19T15:30:12Z'), read(NEW, 'cancelled', '2026-10-20T09:15:00Z'));
+        const r = reads.get(OLD)!;
+        expect(readSuperseded(r, reads, [memo(NEW), memo(OLD)])).toBe(false);
+        expect(readSuperseded(reads.get(OLD)!, map(r, read(NEW, 'done', '2026-10-20T09:15:00Z')), [memo(NEW), memo(OLD)])).toBe(true);
+    });
+
+    it('ending while the app follows it: one notice; the next status none', () => {
+        const running = map(read(NEW, 'reading', '2026-10-20T09:15:00Z', { done: 0 }));
+        const ended = map(read(NEW, 'done', '2026-10-20T09:15:00Z'));
+        const memos = [memo(NEW)];
+        expect(ids(readEndsToAnnounce(running, none, memos))).toEqual([]);
+        expect(ids(readEndsToAnnounce(ended, running, memos))).toEqual([NEW]);
+        expect(ids(readEndsToAnnounce(ended, ended, memos))).toEqual([]);
+        expect(ids(readEndsToAnnounce(ended, none, [memo(NEW, { announced: true })]))).toEqual([]);
+    });
+
+    it('not the app’s readings, nor the one the dialog shows', () => {
+        const running = map(read(NEW, 'reading', '2026-10-20T09:15:00Z'));
+        const ended = map(read(NEW, 'done', '2026-10-20T09:15:00Z'));
+        expect(ids(readEndsToAnnounce(ended, running, []))).toEqual([]);
+        expect(ids(readEndsToAnnounce(ended, running, [memo(NEW)], NEW))).toEqual([]);
+    });
+
+    it('a reading remembered as announced but seen running is due its notice again', () => {
+        const running = map(read(NEW, 'checking', '2026-10-20T09:15:00Z'));
+        expect(readEndsToAnnounce(running, none, [memo(NEW, { announced: true })]).rearm).toEqual([NEW]);
+        expect(readEndsToAnnounce(running, none, [memo(NEW)]).rearm).toEqual([]);
     });
 });
 

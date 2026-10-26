@@ -22,7 +22,7 @@ import { storedResearchBridge, announcedResearchScheme, researchLinksEnabled } f
 import {
     ReadAccepts, LiveRead, ReadResult, ReadFailure, ReadFileRefusal, ReadState, ReadPage, ReadEntry, ReadRegion,
     readRunning, readSlow, readFileMime, readFileKind, readFileRefusals, readUsualMinutes, readDocYear, readPageImageUrl,
-    putReadPage, startRead, fetchReadResult, readAgain, cancelRead, sanitizeLiveRead, READ_FEATURE,
+    putReadPage, startRead, fetchReadResult, readAgain, cancelRead, sanitizeLiveRead, readEndsToAnnounce, readSuperseded, READ_FEATURE,
 } from '../research-read.js';
 import {
     LineSeg, parseTranscript, parseBlock, lineRegion, lineAt, defaultEntryIndex, canPropose, resultSections, glossFlavor,
@@ -102,8 +102,11 @@ export interface DialogState {
     entryId: string;
 }
 
-/** A reading the app started: shown as done in the menu and the panel until opened. */
-interface RecentRead { id: string; opened: boolean; research: string }
+/**
+ * A reading the app started: shown as done in the menu and the panel until opened, its end announced once
+ * (`announced`, kept over restarts); `doc` tells the same document read again.
+ */
+interface RecentRead { id: string; opened: boolean; announced: boolean; research: string; doc: string }
 
 let st: DialogState | null = null;
 
@@ -120,8 +123,6 @@ const results = new Map<string, ReadResult>();
 const historyReads = new Map<string, LiveRead>();
 /** Why a reading's result could not be fetched last (by id). */
 const lastFailure = new Map<string, ReadFailure>();
-/** Readings whose end was announced (once). */
-const announced = new Set<string>();
 let listening = false;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let tickTimer: ReturnType<typeof setInterval> | null = null;
@@ -142,7 +143,11 @@ function readRecent(): RecentRead[] {
         const raw = JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]');
         if (!Array.isArray(raw)) return [];
         return raw.filter((r): r is RecentRead => !!r && typeof r === 'object' && typeof r.id === 'string')
-            .map(r => ({ id: r.id, opened: !!r.opened, research: typeof r.research === 'string' ? r.research : '' }))
+            // Kept before `announced` was: their end was announced at every start already.
+            .map(r => ({
+                id: r.id, opened: !!r.opened, announced: typeof r.announced === 'boolean' ? r.announced : true,
+                research: typeof r.research === 'string' ? r.research : '', doc: typeof r.doc === 'string' ? r.doc : '',
+            }))
             .slice(0, RECENT_MAX);
     } catch {
         return [];
@@ -153,8 +158,19 @@ function writeRecent(list: RecentRead[]): void {
     try { localStorage.setItem(RECENT_KEY, JSON.stringify(list.slice(0, RECENT_MAX))); } catch { /* not remembered */ }
 }
 
-function rememberRead(id: string, research: string): void {
-    writeRecent([{ id, opened: false, research }, ...readRecent().filter(r => r.id !== id)]);
+/** A reading started (or started again: its document stays when `doc` is not given). */
+function rememberRead(id: string, research: string, doc: string): void {
+    const list = readRecent();
+    const known = list.find(r => r.id === id)?.doc ?? '';
+    writeRecent([{ id, opened: false, announced: false, research, doc: doc || known }, ...list.filter(r => r.id !== id)]);
+}
+
+/** Readings whose notice came or is no longer due (`true`), or is due again when they end (`false`). */
+function markAnnounced(ids: readonly string[], value = true): void {
+    if (ids.length === 0) return;
+    const list = readRecent();
+    for (const r of list) if (ids.includes(r.id)) r.announced = value;
+    writeRecent(list);
 }
 
 function markOpened(id: string): void {
@@ -337,10 +353,11 @@ export const readDocumentMethods = uiModule({
         if (!link) return null;
         const reads = readsByResearch.get(link.researchId);
         if (!reads) return null;
-        for (const rec of readRecent()) {
+        const memos = readRecent();
+        for (const rec of memos) {
             if (rec.opened) continue;
             const r = reads.get(rec.id);
-            if (r && (r.state === 'done' || r.state === 'unreadable')) return r;
+            if (r && (r.state === 'done' || r.state === 'unreadable') && !readSuperseded(r, reads, memos)) return r;
         }
         return null;
     },
@@ -413,20 +430,17 @@ export const readDocumentMethods = uiModule({
     /** After new readings: announce what ended, follow it in the dialog, redraw the menu, the strip and the button. */
     readsChanged(researchId: string, prev: Map<string, LiveRead>): void {
         const reads = readsByResearch.get(researchId)!;
-        const mine = new Set(readRecent().map(r => r.id));
-        for (const r of reads.values()) {
-            const before = prev.get(r.id);
-            const shownHere = !!st && st.readId === r.id && !!document.getElementById(DIALOG_ID);
-            if (shownHere) {
-                if (!before || before.state !== r.state || before.done !== r.done || before.version !== r.version || before.entries !== r.entries) this.followReadInDialog(r);
-                continue;
-            }
-            // Ended with the dialog closed (or showing something else): the notice, once.
-            if (mine.has(r.id) && finalState(r.state) && (!before || readRunning(before.state)) && !announced.has(r.id)) {
-                announced.add(r.id);
-                void this.announceReadEnd(researchId, r);
-            }
+        const shownId = st && document.getElementById(DIALOG_ID) ? st.readId : '';
+        const shown = shownId ? reads.get(shownId) : undefined;
+        if (shown) {
+            const before = prev.get(shownId);
+            if (!before || before.state !== shown.state || before.done !== shown.done || before.version !== shown.version || before.entries !== shown.entries) this.followReadInDialog(shown);
         }
+        // Ended with the dialog closed (or showing something else): the notice, once in the reading's life.
+        const { announce, settle, rearm } = readEndsToAnnounce(reads, prev, readRecent(), shownId);
+        markAnnounced(rearm, false);
+        markAnnounced([...announce.map(r => r.id), ...settle]);
+        for (const r of announce) void this.announceReadEnd(researchId, r);
         this.watchReads();
         this.refreshReadSurfaces();
     },
@@ -1058,7 +1072,6 @@ export const readDocumentMethods = uiModule({
         if (r.state === 'done') { void this.openReadResult(r.id); return; }
         st.second = false;
         markOpened(r.id);
-        announced.add(r.id);
         st.phase = 'error';
         st.error = r.state === 'unreadable' ? { kind: 'unreadable' } : r.state === 'cancelled' ? { kind: 'cancelled' } : { kind: 'failed' };
         if (r.state === 'unreadable') {
@@ -1082,7 +1095,6 @@ export const readDocumentMethods = uiModule({
         const res = await this.loadReadResult(link.researchId, id);
         if (!st || st.readId !== id) return;
         markOpened(id);
-        announced.add(id);
         const failure = lastFailure.get(id);
         if (!res && st.sourceId) {
             // The source's own transcription stands in for what the research cannot give.
@@ -1945,14 +1957,13 @@ export const readDocumentMethods = uiModule({
             this.readFailed(f);
             return;
         }
-        this.readStarted(link.researchId, reply.value.read, reply.value.state, pages.length, pages[0]?.file.name ?? '');
+        this.readStarted(link.researchId, reply.value.read, reply.value.state, pages.length, pages[0]?.file.name ?? '', pages.map(p => p.sha).join(','));
     },
 
     /** A reading started (or started again): remembered, followed. */
-    readStarted(researchId: string, id: string, state: ReadState, pages: number, name: string): void {
+    readStarted(researchId: string, id: string, state: ReadState, pages: number, name: string, doc = ''): void {
         const s = st;
-        rememberRead(id, researchId);
-        announced.delete(id);
+        rememberRead(id, researchId, doc);
         const now = new Date().toISOString();
         const reads = new Map(readsByResearch.get(researchId) ?? []);
         const prev = reads.get(id);
@@ -2020,7 +2031,6 @@ export const readDocumentMethods = uiModule({
         const prev = reads.get(id);
         if (prev) reads.set(id, { ...prev, state: reply.value.state, version: reply.value.version, since: new Date().toISOString() });
         readsByResearch.set(link.researchId, reads);
-        announced.add(id);
         markOpened(id);
         if (reply.value.state === 'done') {
             // A reading again cancelled: the previous version stands.

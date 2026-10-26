@@ -192,6 +192,72 @@ export function sanitizeReads(value: unknown): LiveRead[] | null {
     return out;
 }
 
+// ==================== The notice when a reading ends ====================
+
+/** What the app keeps of a reading it started (`read.recent`), as far as its notice goes. */
+export interface ReadMemo {
+    id: string;
+    /** Its result (or why not) was shown: no notice any more. */
+    opened: boolean;
+    /** Its end was announced (or passed over): no notice again, not after a restart either. */
+    announced: boolean;
+    /** Its pages' SHA-256s, comma-joined ('' = not known): the same document read again has the same. */
+    doc: string;
+}
+
+/** Two readings of the same document: the same pages, or (pages not known) the same first file and page count. */
+function sameDocument(a: LiveRead, am: ReadMemo, b: LiveRead, bm: ReadMemo): boolean {
+    if (am.doc && bm.doc) return am.doc === bm.doc;
+    return !!a.name && a.name === b.name && a.pages === b.pages;
+}
+
+/** `a` was asked for after `b`. */
+function askedLater(a: LiveRead, b: LiveRead): boolean {
+    if (a.at && b.at && a.at !== b.at) return a.at > b.at;
+    return a.id > b.id;
+}
+
+/** A newer reading of the same document stands over this one (one cancelled does not). */
+export function readSuperseded(r: LiveRead, reads: ReadonlyMap<string, LiveRead>, memos: readonly ReadMemo[]): boolean {
+    const m = memos.find(x => x.id === r.id);
+    if (!m) return false;
+    return [...reads.values()].some(o => {
+        const om = o.id !== r.id && o.state !== 'cancelled' ? memos.find(x => x.id === o.id) : undefined;
+        return !!om && askedLater(o, r) && sameDocument(o, om, r, m);
+    });
+}
+
+/**
+ * Which ends of the app's readings to announce now. A notice comes once in a
+ * reading's life: when it ends while the app follows it, or at the first
+ * status after it ended with the app closed; never for one announced or opened
+ * before (a restart, a reload). Of one document read more than once only the
+ * newest says how it ended (a cancelled newer reading leaves the older one's
+ * word). `settle`: ends passed over, to be remembered as announced; `rearm`:
+ * readings seen running again, due a notice when they end.
+ */
+export function readEndsToAnnounce(
+    reads: ReadonlyMap<string, LiveRead>, prev: ReadonlyMap<string, LiveRead>, memos: readonly ReadMemo[], shownId = '',
+): { announce: LiveRead[]; settle: string[]; rearm: string[] } {
+    const memo = new Map(memos.map(m => [m.id, m]));
+    const announce: LiveRead[] = [];
+    const settle: string[] = [];
+    const rearm: string[] = [];
+    for (const r of reads.values()) {
+        const m = memo.get(r.id);
+        if (!m || m.opened || r.id === shownId) continue;
+        if (readRunning(r.state)) {
+            if (m.announced) rearm.push(r.id);
+            continue;
+        }
+        const before = prev.get(r.id);
+        if (m.announced || (before && !readRunning(before.state))) continue;
+        if (readSuperseded(r, reads, memos)) settle.push(r.id);
+        else announce.push(r);
+    }
+    return { announce, settle, rearm };
+}
+
 // ==================== The history (GET reads) ====================
 
 /** One reading in `GET reads`: a `/status.reads` entry plus whether a source of the tree carries it. */
