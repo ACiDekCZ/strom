@@ -2,6 +2,12 @@
 
 [English](CHANGELOG.md) · [Čeština](CHANGELOG.cs.md) · Deutsch
 
+## 3.17.0
+
+*Diese Version ist in Vorbereitung; dieser Abschnitt wächst mit jeder Testversion.*
+
+- **Dokument lesen**: das Ende eines Lesens wird einmal gemeldet: ein Start der App zeigt *Dokument gelesen* oder *Das Dokument ist nicht lesbar* nicht mehr erneut für Lesevorgänge, die längst beendet sind, und bei einem mehrmals gelesenen Dokument sagt nur das neueste Lesen, wie es endete, auch im Menü und im Panel.
+
 ## 3.16.0
 
 *Veröffentlicht am 25. Oktober 2026.*

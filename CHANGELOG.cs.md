@@ -2,6 +2,12 @@
 
 [English](CHANGELOG.md) · Čeština · [Deutsch](CHANGELOG.de.md)
 
+## 3.17.0
+
+*Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
+
+- **Přečíst dokument**: konec čtení se oznámí jednou: start aplikace už znovu neukazuje *Dokument přečten* ani *Dokument nejde přečíst* u čtení, která skončila dávno, a u dokumentu přečteného víckrát říká, jak čtení skončilo, jen to nejnovější, i v nabídce a v panelu.
+
 ## 3.16.0
 
 *Vydáno 25. října 2026.*

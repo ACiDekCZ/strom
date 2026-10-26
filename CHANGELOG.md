@@ -2,6 +2,12 @@
 
 English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md)
 
+## 3.17.0
+
+*This version is in preparation; this section grows with every test version.*
+
+- **Read a document**: the end of a reading is announced once: a start of the app no longer brings *Document read* or *The document can’t be read* again for readings that ended long ago, and of a document read more than once only the newest reading says how it ended, also in the menu and the panel.
+
 ## 3.16.0
 
 *Released 25 October 2026.*
