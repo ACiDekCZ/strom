@@ -13693,7 +13693,7 @@ const stringsDE: StringsType = {
         groupNotifications: 'Hinweise',
         groupCard: 'Personenkarte',
         groupExperiments: 'Experimentelle Funktionen',
-        experimentsNote: 'Funktionen in Erprobung. Sie können sich ändern oder wegfallen.',
+        experimentsNote: 'Funktionen in Erprobung. Änderungen oder Wegfall sind möglich.',
         groupData: 'Daten und Datenschutz',
         groupLanguage: 'Sprache und Erscheinungsbild',
         title: 'Einstellungen',
