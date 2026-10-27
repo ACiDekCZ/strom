@@ -2339,10 +2339,11 @@
         .modal button.settings-row-link {
             display: flex; width: 100%; justify-content: space-between; align-items: center;
             background: none; border: 0; border-top: 1px solid var(--divider); border-radius: 0; font: inherit; font-size: 13px;
-            color: var(--text); text-align: left; cursor: pointer; min-height: 0;
+            color: var(--text); text-align: left; cursor: pointer; min-height: 0; padding-left: 44px;
         }
         .modal button.settings-row-link::after { content: '\203A'; color: var(--text-faint); }
         .modal .history-setting-status[hidden], .modal button.settings-row-link[hidden] { display: none; }
+        @media (max-width: 640px) { .modal button.settings-row-link { padding-left: 42px; } }
         @media (hover: hover) { .modal button.settings-row-link:hover { background: var(--hover-bg); } }
         @media (pointer: coarse) {
             .modal button.settings-row-link { min-height: 44px; }
