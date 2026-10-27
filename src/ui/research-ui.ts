@@ -2485,6 +2485,11 @@ export const researchUiMethods = uiModule({
             this.noteReadEvent(s.researchId, payload(e));
             this.liveStatusSoon(s);
         });
+        // The research's events of the time changed without a commit (spec 020): read them by their rev.
+        es.addEventListener('history', (e) => {
+            this.liveBridgeBack(s);
+            this.noteHistoryEvent(s.researchId, payload(e));
+        });
         es.addEventListener('working', (e) => {
             s.working = sanitizeWorking(payload(e));
             this.renderLivePanel();

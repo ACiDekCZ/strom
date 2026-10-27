@@ -369,6 +369,7 @@ export const miscMethods = uiModule({
         if (advancedToggle) advancedToggle.checked = SettingsManager.isAdvancedFields();
 
         this.syncSettingsDependents();
+        this.renderHistorySettings(true);
         modal.classList.add('active');
         this.fitSurnameDisplaySetting();
     },

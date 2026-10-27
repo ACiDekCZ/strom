@@ -126,6 +126,103 @@ export interface FakeBridge {
     material?: FakeMaterial;
     /** Writes the research committed so far (each moved `head`, see moveHead). */
     headMoves?: number;
+    /**
+     * History in the life timeline (spec 020): `GET /history`, `POST /history/hide`,
+     * `POST /experiments`, and `/status.history.rev` + `/status.experiments.history`.
+     * Gated by `features` like the research (HISTORY_FEATURES).
+     */
+    history?: FakeHistory;
+}
+
+/** Everything the research says of the history layer (`/status.features`). */
+export const HISTORY_FEATURES = ['history.events', 'history.hide', 'experiments', 'experiments.off', 'experiments.link', 'tree.state'];
+
+/** The research's events of the time for the tree, and what it was asked. */
+export interface FakeHistory {
+    /** The `GET /history` body (its `hidden` follows the hidings). */
+    payload: { state: Record<string, unknown>; events: unknown[]; places: Record<string, unknown>; hidden: Record<string, unknown>[]; lang?: string };
+    /** `/status.history.rev` (a hiding or a switch-off changes it). */
+    rev: string;
+    /** `/status.experiments.history`: the research looks for events for the tree. */
+    searching: boolean;
+    /** Every `GET /history`. */
+    reads: number;
+    /** Every `POST /history/hide` body. */
+    hides: Record<string, unknown>[];
+    /** Every `POST /experiments` body. */
+    offs: Record<string, unknown>[];
+    /** `POST /history/hide` answers this instead. */
+    hideReply?: { status: number; body: unknown };
+    /** `POST /experiments` answers this instead. */
+    offReply?: { status: number; body: unknown };
+}
+
+/**
+ * Invented events of the time for the research tree (historyGed: Jan lived in
+ * Čáslav 1860–1910): two for Čáslav, one already hidden there.
+ */
+export function fakeHistory(init: Partial<FakeHistory> = {}): FakeHistory {
+    return {
+        payload: {
+            state: { on: true, search: 'done', at: '2026-10-20T09:00:00Z', rev: 'h1' },
+            lang: 'cs',
+            events: [
+                { id: 'E1', from: 1866, kind: 'war', scope: 'region',
+                    text: { cs: 'Prusko-rakouská válka; boje v okolí Čáslavi.', en: 'Austro-Prussian War; fighting around Čáslav.' },
+                    source: { title: 'Invented encyclopedia', url: 'https://example.org/war-1866', checked: '2026-10-01' } },
+                { id: 'E2', from: 1873, kind: 'economy', scope: 'region',
+                    text: { cs: 'Krach na vídeňské burze.', en: 'Vienna stock exchange crash.' },
+                    source: { title: 'Invented encyclopedia', url: 'https://example.org/crash-1873', checked: '2026-10-01' } },
+            ],
+            places: { 'Čáslav': { events: ['E1', 'E2'] } },
+            hidden: [{ event: 'E2', place: 'Čáslav', at: '2026-10-21T08:00:00Z' }],
+        },
+        rev: 'h1',
+        searching: true,
+        reads: 0,
+        hides: [],
+        offs: [],
+        ...init,
+    };
+}
+
+/** The research tree with Jan born in Čáslav in 1860, died there in 1910 (places and years the events match). */
+export function historyGed(head = HEAD): string {
+    return researchGed(head).replace('1 NAME Jan /Fíšek/', '1 NAME Jan /Fíšek/\n1 BIRT\n2 DATE 1860\n2 PLAC Čáslav\n1 DEAT\n2 DATE 1910\n2 PLAC Čáslav');
+}
+
+/** The answer to `/history*` and `/experiments` (null: not one of them, or not said in `features`). */
+function serveHistory(b: FakeBridge, method: string, url: URL, postData: string | null): { status: number; body: unknown } | null {
+    const h = b.history;
+    const rest = url.pathname.replace(/^\/[^/]+/, '');
+    if (!h || !/^\/(history|history\/hide|experiments)$/.test(rest)) return null;
+    const features = b.features ?? [];
+    let body: Record<string, unknown> = {};
+    try { body = JSON.parse(postData ?? '{}'); } catch { /* keep empty */ }
+    if (rest === '/history') {
+        if (method !== 'GET' || !features.includes('history.events')) return { status: 404, body: { error: 'unknown' } };
+        h.reads++;
+        return { status: 200, body: h.payload };
+    }
+    if (rest === '/history/hide') {
+        if (method !== 'POST' || !features.includes('history.hide')) return { status: 404, body: { error: 'unknown' } };
+        h.hides.push(body);
+        if (h.hideReply) return h.hideReply;
+        const same = (x: Record<string, unknown>) => x.event === body.event && (body.place ? x.place === body.place : x.person === body.person);
+        h.payload.hidden = h.payload.hidden.filter(x => !same(x));
+        if (body.do !== 'show') {
+            h.payload.hidden.push({ event: body.event, ...(body.place ? { place: body.place } : { person: body.person }), at: new Date().toISOString() });
+        }
+        h.rev = `h${h.hides.length + 1}`;
+        h.payload.state.rev = h.rev;
+        return { status: 200, body: { ok: true, hidden: h.payload.hidden, ...commitWrite(b) } };
+    }
+    if (method !== 'POST' || !features.includes('experiments.off')) return { status: 404, body: { error: 'unknown' } };
+    h.offs.push(body);
+    if (h.offReply) return h.offReply;
+    h.searching = false;
+    h.payload.state.on = false;
+    return { status: 200, body: { ok: true, history: false, ...commitWrite(b) } };
 }
 
 /** A reading as `/status.reads` lists it. */
@@ -675,6 +772,8 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
                 ? route.fulfill({ status: material.status, headers: cors, body: '' })
                 : route.fulfill({ status: material.status, headers: { ...cors, 'content-type': 'application/json', ...(material.headers ?? {}) }, body: JSON.stringify(material.body) });
         }
+        const hist = serveHistory(b, method, url, route.request().postData());
+        if (hist) return json(hist.status, hist.body);
         const rd = b.read;
         // A read page's image (`read/<id>/page/<n>.jpg`): a drawn sheet with ruled lines (invented, no real document).
         const pageImg = /\/read\/([^/]+)\/page\/(\d+)\.jpg$/.exec(url.pathname);
@@ -744,6 +843,7 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
                 ...(b.accepts ? { sends: b.sends } : {}),
                 ...(b.read ? { reads: b.read.reads } : {}),
                 ...(b.phone ? { phone: { state: b.phone.state === 'on' || b.phone.state === 'error' ? b.phone.state : 'off', phones: b.phone.phones.length } } : {}),
+                ...(b.history ? { history: { rev: b.history.rev }, experiments: { history: b.history.searching } } : {}),
                 ...(b.statusExtra ?? {}),
             });
         }
