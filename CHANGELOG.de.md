@@ -8,6 +8,7 @@
 
 - **Dokument lesen**: das Ende eines Lesens wird einmal gemeldet: ein Start der App zeigt *Dokument gelesen* oder *Das Dokument ist nicht lesbar* nicht mehr erneut für Lesevorgänge, die längst beendet sind, und bei einem mehrmals gelesenen Dokument sagt nur das neueste Lesen, wie es endete, auch im Menü und im Panel.
 - **Forschung auf einem Mac installieren**: unter der Zeile sagt ein Hinweis, dass ein neueres macOS das Einfügen mit *Möglicherweise schädliche Software, Einsetzen blockiert* anhalten kann, dass die Zeile aus der Strom-App Strom Research von GitHub (ACiDekCZ/strom-research) installiert und dass *Trotzdem einsetzen* sie einfügt, mit Apples Seite zu dieser Meldung; auch unter der Zeile für einen Mac, die von einem Telefon geschickt wird.
+- **Links zu einem Stammbaum**: ein Link, der eine Forschung nennt (*?research=…*), öffnet den mit dieser Forschung verbundenen Stammbaum, auch unter mehreren Stammbäumen gleichen Namens; eine hier unbekannte Forschung überlässt die Wahl wie bisher dem Namen des Stammbaums.
 
 ## 3.16.0
 
