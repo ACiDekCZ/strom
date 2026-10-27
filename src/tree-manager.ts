@@ -28,7 +28,8 @@ import { AuditLogManager } from './audit-log.js';
 import { StorageManager } from './storage.js';
 import { createSnapshot, SnapshotResearchBase } from './snapshots.js';
 import { researchAutoState, patchResearchAutoState } from './research-device.js';
-import { researchBaseKey, historyCacheKey, historyQueueKey, isHistoryKey } from './storage-keys.js';
+import { researchBaseKey, isHistoryKey } from './storage-keys.js';
+import { deleteHistoryStore } from './history-store.js';
 import { VIEW_LINK_KEY_PREFIXES, forgetViewLinks } from './view-links.js';
 import { unknownSexFromTie, fingerprintLike, normalizeResearchId } from './research-link.js';
 import { unknownSexInResearchCopies } from './research-copy.js';
@@ -471,8 +472,7 @@ class TreeManagerClass {
         await StorageManager.delete('trees', researchBaseKey(id)).catch(() => undefined);
         // The research's events of the time (spec 020), unless another tree of the same research still shows them.
         if (researchId && !this.index.trees.some(t => t.research?.id === researchId)) {
-            await StorageManager.delete('trees', historyCacheKey(researchId)).catch(() => undefined);
-            await StorageManager.delete('trees', historyQueueKey(researchId)).catch(() => undefined);
+            await deleteHistoryStore(researchId);
         }
         forgetPoolScope(id);
 

@@ -121,3 +121,23 @@ export async function reencodeAllBaselines(): Promise<number> {
     }
     return failed;
 }
+
+/**
+ * A side record of the app kept like a baseline (spec 020: the research's
+ * events of the time, the hidings waiting for its bridge): encrypted with the
+ * session when encryption is on, re-encoded with the baselines, its own key
+ * as its retention group. False: not kept (encryption on, session locked).
+ */
+export async function saveSideRecord(key: string, value: unknown, now: number): Promise<boolean> {
+    return saveBaseline(key, key, value as StromData, now);
+}
+
+/** A side record (any JSON), or null (none, or encryption locked). */
+export async function loadSideRecord(key: string): Promise<unknown> {
+    return loadBaseline(key);
+}
+
+/** Forget a side record. */
+export async function deleteSideRecord(key: string): Promise<void> {
+    await StorageManager.delete('shareBaselines', key);
+}

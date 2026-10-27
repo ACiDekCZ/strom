@@ -163,6 +163,26 @@ class SettingsManagerClass {
         this.save();
     }
 
+    /** Experiment (spec 020): the research's events of the time in the person card's life timeline. Off by default. */
+    isHistoryLayer(): boolean {
+        return this.settings.historyLayer === true;
+    }
+
+    setHistoryLayer(enabled: boolean): void {
+        this.settings.historyLayer = enabled;
+        this.save();
+    }
+
+    /** The card's "History" chip (only while the experiment is on). On by default. */
+    isLifelineHistory(): boolean {
+        return this.settings.lifelineHistory !== false;
+    }
+
+    setLifelineHistory(enabled: boolean): void {
+        this.settings.lifelineHistory = enabled;
+        this.save();
+    }
+
     /** Floating zoom buttons default ON (undefined = enabled). */
     /**
      * Has the user allowed the map to look place names up online? Default is

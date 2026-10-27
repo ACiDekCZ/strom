@@ -1281,6 +1281,8 @@ export interface AppSettings {
     crossTreeBadges?: boolean;  // default: true - show cross-tree connection badges
     fanKekule?: boolean;  // default: false - show Kekule (ahnentafel) numbers in the fan chart
     lifelineChildEvents?: boolean;  // default: false - person card's life timeline also lists the children's events
+    historyLayer?: boolean;  // default: false - experiment: the research's events of the time in the life timeline (spec 020)
+    lifelineHistory?: boolean;  // default: true - the card's "History" chip (shown only while historyLayer is on)
     cardDensity?: CardDensity;  // default: 'normal' - how much detail a card shows
     exportScope?: 'tree' | 'view';  // default: 'tree' - the export dialog's whole tree / current view switch
     /** The custom density's lines (src/card-fields.ts); set the first time "Custom" is chosen. */
