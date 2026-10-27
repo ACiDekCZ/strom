@@ -86,16 +86,11 @@ function parseDebugOptions(): DebugOptions {
 }
 
 /**
- * Get tree ID from URL parameter (by tree slug)
+ * Get tree ID from URL parameters (`?research=` UUID, else the tree slug)
  * @returns tree ID or null if not found
  */
 function getTreeIdFromUrl(): string | null {
-    const params = new URLSearchParams(window.location.search);
-    const treeSlug = params.get('tree');
-    if (!treeSlug) return null;
-
-    // Find tree by slug
-    const tree = TreeManager.getTreeBySlug(treeSlug);
+    const tree = TreeManager.getTreeFromUrl(new URLSearchParams(window.location.search));
     return tree?.id || null;
 }
 
@@ -141,12 +136,15 @@ function syncUrlTreeParam(): void {
     const url = new URL(window.location.href);
     const currentUrlSlug = url.searchParams.get('tree');
     const treeSlug = currentTreeId ? TreeManager.getTreeSlug(currentTreeId) : null;
+    // `?research=` only picks the startup tree; the slug names it from then on.
+    const hadResearch = url.searchParams.has('research');
+    url.searchParams.delete('research');
     if (treeSlug) {
         // Only update if slug changed
-        if (currentUrlSlug === treeSlug) return;
+        if (currentUrlSlug === treeSlug && !hadResearch) return;
         url.searchParams.set('tree', treeSlug);
     } else {
-        if (currentUrlSlug === null || DataManager.isViewMode()) return;
+        if ((currentUrlSlug === null && !hadResearch) || DataManager.isViewMode()) return;
         url.searchParams.delete('tree');
     }
     history.replaceState(null, '', url.toString());

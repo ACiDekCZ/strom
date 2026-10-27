@@ -30,7 +30,7 @@ import { createSnapshot, SnapshotResearchBase } from './snapshots.js';
 import { researchAutoState, patchResearchAutoState } from './research-device.js';
 import { researchBaseKey } from './storage-keys.js';
 import { VIEW_LINK_KEY_PREFIXES, forgetViewLinks } from './view-links.js';
-import { unknownSexFromTie, fingerprintLike } from './research-link.js';
+import { unknownSexFromTie, fingerprintLike, normalizeResearchId } from './research-link.js';
 import { unknownSexInResearchCopies } from './research-copy.js';
 import { requestPersistentStorage } from './persistence.js';
 import { newTieSendMode } from './research-sync.js';
@@ -1240,6 +1240,23 @@ class TreeManagerClass {
         const normalizedSlug = (sepIdx >= 0 ? param.slice(0, sepIdx) : param).replace(/^-+|-+$/g, '');
         if (!normalizedSlug) return null;
         return this.index.trees.find(t => slugify(t.name) === normalizedSlug) || null;
+    }
+
+    /**
+     * The tree a start URL names. `?research=<uuid>` (the macOS widget) wins:
+     * the tree updated from that research, else its newest copy; with none
+     * (or not a UUID) `?tree=` decides as before.
+     */
+    getTreeFromUrl(params: URLSearchParams): TreeMetadata | null {
+        const researchId = normalizeResearchId(params.get('research'));
+        if (researchId) {
+            const tree = this.findTreeByResearchId(researchId)
+                ?? this.findTreesByResearchId(researchId)
+                    .sort((a, b) => (b.research?.syncedAt ?? '').localeCompare(a.research?.syncedAt ?? ''))[0];
+            if (tree) return tree;
+        }
+        const treeSlug = params.get('tree');
+        return treeSlug ? this.getTreeBySlug(treeSlug) : null;
     }
 
     /**

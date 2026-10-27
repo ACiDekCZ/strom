@@ -311,6 +311,49 @@ describe('S19 unambiguous tree URL parameter', () => {
     });
 });
 
+// ---------- ?research= (macOS widget, 1027) ----------
+describe('?research= picks the research tree among trees of one name', () => {
+    const R = '0f8e2c4a-1b3d-4e5f-8a9b-0c1d2e3f4a5b';
+    const link = (syncedAt: string, copy?: boolean) => ({ id: R, fingerprint: 'f', syncedAt, ...(copy ? { copy } : {}) });
+    const pick = (q: string) => TreeManager.getTreeFromUrl(new URLSearchParams(q))?.id;
+
+    it('opens the tree with the research, not the first of that name', () => {
+        resetTreeManager([
+            meta('tree_1_own', 'Kalinovi'),
+            meta('tree_2_res', 'Kalinovi', { research: link('2026-10-01') }),
+        ]);
+        expect(pick('tree=kalinovi')).toBe('tree_1_own');
+        expect(pick(`tree=kalinovi&research=${R}`)).toBe('tree_2_res');
+        expect(pick(`tree=kalinovi&research=${R.toUpperCase()}`)).toBe('tree_2_res');
+    });
+
+    it('prefers the original over a copy, else the newest copy', () => {
+        resetTreeManager([
+            meta('tree_1_old', 'Kalinovi', { research: link('2026-10-20', true) }),
+            meta('tree_2_res', 'Kalinovi', { research: link('2026-10-01') }),
+            meta('tree_3_new', 'Kalinovi', { research: link('2026-10-25', true) }),
+        ]);
+        expect(pick(`tree=kalinovi&research=${R}`)).toBe('tree_2_res');
+        resetTreeManager([
+            meta('tree_1_old', 'Kalinovi', { research: link('2026-10-20', true) }),
+            meta('tree_3_new', 'Kalinovi', { research: link('2026-10-25', true) }),
+        ]);
+        expect(pick(`tree=kalinovi&research=${R}`)).toBe('tree_3_new');
+    });
+
+    it('falls back to ?tree= for an unknown research and ignores what is not a UUID', () => {
+        resetTreeManager([
+            meta('tree_1_own', 'Kalinovi'),
+            meta('tree_2_res', 'Kalinovi', { research: link('2026-10-01') }),
+        ]);
+        expect(pick('tree=kalinovi&research=11111111-2222-4333-8444-555555555555')).toBe('tree_1_own');
+        expect(pick('research=11111111-2222-4333-8444-555555555555')).toBeUndefined();
+        expect(pick('tree=kalinovi&research=tree_2_res')).toBe('tree_1_own');
+        expect(pick(`tree=kalinovi&research=${R}x`)).toBe('tree_1_own');
+        expect(pick(`research=${R}`)).toBe('tree_2_res');
+    });
+});
+
 // ---------- S21 ----------
 describe('S21 undo/redo respect the tree lock', () => {
     it('refuses to undo on a locked tree', () => {
