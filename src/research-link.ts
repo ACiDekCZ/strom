@@ -41,7 +41,7 @@ export function researchLinkScheme(value: unknown): string {
 export const RESEARCH_LINK_ACTIONS = [
     'send', 'excerpt', 'app', 'open', 'chat', 'task', 'review', 'research',
     'new', 'update', 'sessions', 'conflict', 'story', 'sync-undo', 'setup', 'live',
-    'direction', 'finish', 'media', 'archive', 'seal',
+    'direction', 'finish', 'media', 'archive', 'seal', 'experiment',
 ] as const;
 export type ResearchLinkAction = typeof RESEARCH_LINK_ACTIONS[number];
 
@@ -138,7 +138,17 @@ export interface ResearchLinkParams {
     partner?: string;
     /** An archive by its host name (`archive`: the research's question about downloading from it). */
     host?: string;
+    /** An experiment (`experiment`): its name and whether to switch it on or off for the tree. */
+    experiment?: ResearchExperiment;
+    experimentDo?: ResearchExperimentDo;
 }
+
+/** Experiments the research can switch for a tree (spec 020: `history` = events of the time). */
+export type ResearchExperiment = 'history';
+const EXPERIMENTS: readonly string[] = ['history'];
+/** Switch an experiment on (the research asks in its terminal) or off. */
+export type ResearchExperimentDo = 'on' | 'off';
+const EXPERIMENT_DOS: readonly string[] = ['on', 'off'];
 
 /** A story: approve (the draft, or the new version in place of the approved one) / keep the approved one. */
 export type ResearchStoryDo = 'final' | 'keep';
@@ -223,6 +233,11 @@ export function researchSchemeUrl(action: ResearchLinkAction, p: ResearchLinkPar
         case 'archive': {
             const host = researchArchiveHost(p.host);
             return host ? `${base}&host=${host}` : null;
+        }
+        case 'experiment': {
+            // Fixed values only: the research asks before spending its agent's time.
+            return p.experiment && EXPERIMENTS.includes(p.experiment) && p.experimentDo && EXPERIMENT_DOS.includes(p.experimentDo)
+                ? `${base}&name=${p.experiment}&do=${p.experimentDo}` : null;
         }
         case 'media': {
             const sha = typeof p.sha === 'string' && /^[0-9a-f]{64}$/.test(p.sha) ? p.sha : null;
@@ -1289,6 +1304,10 @@ export interface LiveStatus {
     seal?: 'here' | 'elsewhere';
     /** `notDownloaded` (with `tree.notDownloaded` in `features`): files of the tree a cloud folder has not brought down yet. */
     notDownloaded?: number;
+    /** `experiments` (with `experiments` in `features`): `history` = the research looks for events of the time for this tree. */
+    experiments?: { history: boolean };
+    /** `history.rev` (with `history.events` in `features`): a print of what `GET /history` returns; read it again when it changes. */
+    historyRev?: string;
 }
 
 /** What a tree is to the app (`/status.tree.kind`). */
@@ -1306,6 +1325,16 @@ export const SEAL_FOREIGN_FEATURE = 'seal.foreign';
 export const NOT_DOWNLOADED_FEATURE = 'tree.notDownloaded';
 /** `/status.features`: the bridge refuses a write when its disk is full (507 `disk.full`). */
 export const DISK_FULL_FEATURE = 'disk.full';
+/** `/status.features`: `GET /history` gives the events of the time for the tree's places (spec 020). */
+export const HISTORY_EVENTS_FEATURE = 'history.events';
+/** `/status.features`: `POST /history/hide` hides an event for a place or a person (and shows it again). */
+export const HISTORY_HIDE_FEATURE = 'history.hide';
+/** `/status.features`: the status says the research's experiments for the tree (`experiments.history`). */
+export const EXPERIMENTS_FEATURE = 'experiments';
+/** `/status.features`: `POST /experiments {"history": false}` switches the search off for the tree. */
+export const EXPERIMENTS_OFF_FEATURE = 'experiments.off';
+/** `/status.features`: the `experiment` link switches an experiment on (or off) in the research's terminal. */
+export const EXPERIMENTS_LINK_FEATURE = 'experiments.link';
 
 /** The tree's kind as the status said it, or null (an older research). */
 export function sanitizeTreeKind(value: unknown): ResearchTreeKind | null {
@@ -2012,6 +2041,18 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         ...treeSaid(tree, features),
         ...(features?.includes(SEAL_FOREIGN_FEATURE) && (r.seal === 'here' || r.seal === 'elsewhere') ? { seal: r.seal } : {}),
         ...(features?.includes(NOT_DOWNLOADED_FEATURE) && asCount(r.notDownloaded) !== null ? { notDownloaded: asCount(r.notDownloaded)! } : {}),
+        ...experimentsSaid(r, features),
+    };
+}
+
+/** `experiments` and `history.rev`, each read only when `features` names it. */
+function experimentsSaid(r: Record<string, unknown>, features: string[] | null): Pick<LiveStatus, 'experiments' | 'historyRev'> {
+    const ex = features?.includes(EXPERIMENTS_FEATURE) ? asRecord(r.experiments) : null;
+    const hist = features?.includes(HISTORY_EVENTS_FEATURE) ? asRecord(r.history) : null;
+    const rev = hist ? cleanText(hist.rev, 128) : '';
+    return {
+        ...(ex && typeof ex.history === 'boolean' ? { experiments: { history: ex.history } } : {}),
+        ...(rev ? { historyRev: rev } : {}),
     };
 }
 

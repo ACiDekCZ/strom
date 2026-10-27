@@ -28,7 +28,7 @@ import { AuditLogManager } from './audit-log.js';
 import { StorageManager } from './storage.js';
 import { createSnapshot, SnapshotResearchBase } from './snapshots.js';
 import { researchAutoState, patchResearchAutoState } from './research-device.js';
-import { researchBaseKey } from './storage-keys.js';
+import { researchBaseKey, historyCacheKey, historyQueueKey, isHistoryKey } from './storage-keys.js';
 import { VIEW_LINK_KEY_PREFIXES, forgetViewLinks } from './view-links.js';
 import { unknownSexFromTie, fingerprintLike, normalizeResearchId } from './research-link.js';
 import { unknownSexInResearchCopies } from './research-copy.js';
@@ -455,6 +455,7 @@ class TreeManagerClass {
     async deleteTree(id: TreeId): Promise<boolean> {
         const idx = this.index.trees.findIndex(t => t.id === id);
         if (idx === -1) return false;
+        const researchId = this.index.trees[idx].research?.id;
 
         // Remove from the index FIRST: a save still queued for this tree
         // checks the index and skips, so it cannot resurrect the record after
@@ -468,6 +469,11 @@ class TreeManagerClass {
         await StorageManager.delete('trees', id);
         // The research base stored beside it goes with it.
         await StorageManager.delete('trees', researchBaseKey(id)).catch(() => undefined);
+        // The research's events of the time (spec 020), unless another tree of the same research still shows them.
+        if (researchId && !this.index.trees.some(t => t.research?.id === researchId)) {
+            await StorageManager.delete('trees', historyCacheKey(researchId)).catch(() => undefined);
+            await StorageManager.delete('trees', historyQueueKey(researchId)).catch(() => undefined);
+        }
         forgetPoolScope(id);
 
         // Remove audit log for this tree
@@ -1579,7 +1585,7 @@ export const TreeManager = new TreeManagerClass();
 registerPoolReferences('trees', async () => {
     const ids: string[] = [];
     for (const key of await StorageManager.keys('trees')) {
-        if (key === INDEX_KEY) continue;
+        if (key === INDEX_KEY || isHistoryKey(key)) continue;
         const raw = await StorageManager.get<unknown>('trees', key);
         if (isPooledTree(raw)) ids.push(...Object.keys(raw.media ?? {}));
     }
