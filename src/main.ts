@@ -530,6 +530,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             await DataManager.reloadCurrentTree();
             const treeId = DataManager.getCurrentTreeId();
             if (treeId) await AuditLogManager.loadForTree(treeId);
+            // The history layer's device copy is encrypted too: read it again now.
+            void UI.reloadHistoryAfterUnlock();
         }
         if (!dataInitDone) {
             await finishDataInit();

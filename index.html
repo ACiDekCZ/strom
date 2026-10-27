@@ -4761,6 +4761,193 @@
             .modal button.pm-lifeline-childtoggle { height: 32px; }
         }
 
+        /* History in the life timeline (spec 020, experiment): the research's
+           events of the time between the person's rows — tinted rows with a
+           mark on the line (◇ regional history, ■ from research records), the
+           head's "History" chip and its legend, the "⋯" menu, "Hidden: n" and
+           the state row. With the experiment off none of this is in the card. */
+        .pm-lifeline-head.has-history { flex-wrap: wrap; row-gap: 6px; }
+        .pm-lifeline-chips {
+            margin-left: auto; display: flex; flex-wrap: wrap; justify-content: flex-end;
+            align-items: center; gap: 6px; min-width: 0;
+        }
+        .modal .pm-lifeline-chips button.pm-lifeline-childtoggle { margin-left: 0; }
+        .modal button.pm-lifeline-hinfo {
+            position: relative; flex: none; width: 22px; height: 22px; min-height: 0; padding: 0; box-sizing: border-box;
+            border: 1px solid var(--border); border-radius: 50%; background: transparent; color: var(--text-light);
+            font: inherit; font-family: var(--font-serif, Georgia, serif); font-size: 12px; font-style: italic; font-weight: 600;
+            line-height: 1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+        }
+        .modal button.pm-lifeline-hinfo[hidden] { display: none; }
+        .modal button.pm-lifeline-hinfo[aria-expanded="true"] { border-color: var(--primary); color: var(--primary-dark); background: var(--primary-soft); }
+        .pm-lifeline-hinfo::after {
+            content: ''; position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%);
+        }
+        .pm-lifeline-hinfo:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+        .pm-lifeline-row.k-history, .pm-lifeline-row.k-historyGroup, .pm-lifeline-row.k-historyState {
+            margin: 3px 0 3px 8px; padding: 6px 6px 7px; background: var(--hist-bg); border-radius: var(--r-sm); position: relative;
+        }
+        .pm-lifeline-row.k-historyGroup { padding: 5px 8px 5px 6px; align-items: center; cursor: pointer; }
+        .pm-lifeline-row.k-historyGroup:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        .k-history .pm-lifeline-year, .k-historyGroup .pm-lifeline-year, .k-historyState .pm-lifeline-year {
+            font-size: 12px; font-weight: 400; color: var(--hist-meta); padding-top: 1px;
+        }
+        .k-history .pm-lifeline-glyph, .k-historyGroup .pm-lifeline-glyph, .k-historyState .pm-lifeline-glyph { width: 14px; }
+        .k-history .pm-lifeline-desc, .k-historyGroup .pm-lifeline-desc, .k-historyState .pm-lifeline-desc { min-width: 0; }
+        .k-historyState .pm-lifeline-desc { font-size: 12.5px; line-height: 1.4; color: var(--hist-text); }
+        .pm-lifeline-htext { display: block; font-size: 12.5px; line-height: 1.4; color: var(--hist-text); overflow-wrap: anywhere; }
+        .k-historyGroup .pm-lifeline-desc {
+            font-size: 12.5px; color: var(--hist-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .pm-lifeline-hchev { flex: none; font-size: 11px; color: var(--hist-meta); }
+        .pm-lifeline-hmeta {
+            display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; margin-top: 3px;
+            font-size: 11.5px; line-height: 1.45; color: var(--hist-meta); min-width: 0;
+        }
+        .pm-lifeline-hmeta > * + *::before { content: '·'; margin-right: 6px; }
+        .pm-lifeline-htag { font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+        .is-local .pm-lifeline-htag { color: var(--hist-local-text); }
+        .pm-lifeline-hregion { overflow-wrap: anywhere; }
+        .pm-lifeline-hsrc { display: inline-flex; align-items: baseline; flex: none; max-width: 100%; min-width: 0; white-space: nowrap; }
+        .pm-lifeline-hsrc a { display: inline-flex; min-width: 0; }
+        .pm-lifeline-hsrc-name { display: inline-block; max-width: 40ch; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+        .pm-lifeline-hsrc a, .modal button.pm-lifeline-link.is-cite {
+            color: var(--text-light); text-decoration: underline dotted; text-decoration-color: var(--text-faint); text-underline-offset: 2px;
+        }
+        .modal button.pm-lifeline-link.is-cite { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+        .pm-lifeline-hsrc a:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; border-radius: 2px; }
+        .modal button.pm-lifeline-hquote {
+            padding: 0; margin: 0; min-height: 0; border: none; background: none; font: inherit; color: var(--text-light);
+            cursor: pointer; border-radius: 2px; white-space: nowrap;
+        }
+        .modal button.pm-lifeline-hquote:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        .pm-lifeline-hquotebox { display: block; margin-top: 4px; padding-left: 10px; }
+        .pm-lifeline-hquotetext { display: block; font-size: 12px; line-height: 1.45; color: var(--hist-text); overflow-wrap: anywhere; }
+        .pm-lifeline-hquotefrom { display: block; margin-top: 2px; font-size: 11px; color: var(--hist-meta); }
+        .pm-lifeline-htip {
+            display: block; margin-top: 4px; padding-left: 10px; font-size: 12px; line-height: 1.45;
+            font-style: italic; color: var(--hist-text); overflow-wrap: anywhere;
+        }
+        .pm-lifeline-htip b { font-style: normal; font-weight: 600; color: var(--hist-meta); }
+        .pm-lifeline-hmark {
+            position: absolute; left: -13px; top: 11px; width: 5px; height: 5px; box-sizing: content-box;
+            border: 1.5px solid var(--hist-mark); background: var(--surface); transform: rotate(45deg);
+        }
+        .is-local > .pm-lifeline-hmark { left: -12px; top: 12px; width: 6px; height: 6px; border: 0; background: var(--hist-local); transform: none; }
+        .k-historyGroup > .pm-lifeline-hmark { top: calc(50% - 4px); }
+        .k-history .pm-lifeline-desc { padding-right: 26px; }
+        .modal button.pm-lifeline-hmore {
+            position: absolute; top: 3px; right: 3px; width: 24px; height: 22px; min-height: 0; padding: 0;
+            border: none; border-radius: var(--r-sm); background: transparent; color: var(--hist-meta);
+            font: inherit; font-size: 14px; line-height: 1; cursor: pointer;
+            display: inline-flex; align-items: center; justify-content: center;
+        }
+        .modal button.pm-lifeline-hmore::after {
+            content: ''; position: absolute; left: 50%; top: 50%; width: 28px; height: 28px; transform: translate(-50%, -50%);
+        }
+        .modal button.pm-lifeline-hmore:focus-visible { outline: 2px solid var(--primary); outline-offset: 0; }
+        .modal button.pm-lifeline-henable, .modal button.pm-lifeline-hrestore {
+            display: inline; padding: 0; margin: 0; min-height: 0; border: none; background: none; font: inherit;
+            color: var(--primary); font-weight: 500; cursor: pointer; border-radius: 2px;
+        }
+        .modal button.pm-lifeline-henable:focus-visible, .modal button.pm-lifeline-hrestore:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        .modal button.pm-lifeline-hidden {
+            display: inline-flex; align-items: center; gap: 4px; margin: 6px 0 2px 14px; padding: 2px 0; min-height: 0;
+            border: none; background: none; font: inherit; font-size: 12px; color: var(--hist-meta); cursor: pointer; border-radius: 2px;
+        }
+        .modal button.pm-lifeline-hidden:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        .pm-lifeline-hiddenlist { padding: 2px 0 4px 14px; }
+        .pm-lifeline-hiddenlist[hidden] { display: none; }
+        .pm-lifeline-hiddennote { margin: 0 0 6px; font-size: 12px; line-height: 1.45; color: var(--hist-meta); }
+        .pm-lifeline-hiddenitem { display: flex; align-items: flex-start; gap: 10px; padding: 3px 0; font-size: 12.5px; color: var(--text-faint); }
+        .pm-lifeline-hiddenitem .pm-lifeline-year { font-size: 12px; font-weight: 400; color: var(--text-faint); }
+        .pm-lifeline-hiddenitem .pm-lifeline-glyph { width: 14px; }
+        .pm-lifeline-hiddentext { flex: 1 1 auto; min-width: 0; line-height: 1.4; overflow-wrap: anywhere; }
+        .pm-lifeline-hiddentext small { display: block; font-size: 11.5px; color: var(--hist-meta); }
+
+        /* The "⋯" menu and the legend: a popover by the row / the "i" (> 640 px). */
+        .pm-lifeline-hmenu, .pm-lifeline-legend-pop {
+            position: fixed; z-index: 10050; box-sizing: border-box; max-width: calc(100vw - 16px);
+            background: var(--surface-modal, var(--surface)); color: var(--text); border: 1px solid var(--border);
+            border-radius: var(--r-lg); box-shadow: var(--shadow-lg);
+        }
+        .pm-lifeline-hmenu { width: 300px; padding: 4px; display: flex; flex-direction: column; }
+        .pm-lifeline-hmenu-head {
+            padding: 6px 10px 6px; font-size: 12px; color: var(--text-faint);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-bottom: 1px solid var(--divider); margin-bottom: 4px;
+        }
+        .pm-lifeline-hmenu-item {
+            display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; box-sizing: border-box;
+            text-align: left; border: none; background: none; color: var(--text); font: inherit; padding: 8px 10px;
+            border-radius: var(--r-sm); cursor: pointer;
+        }
+        .pm-lifeline-hmenu-item:focus-visible, .pm-lifeline-hmenu-item:focus { outline: none; background: var(--hover-bg); }
+        .pm-lifeline-hmenu-label { font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; }
+        .pm-lifeline-hmenu-hint { font-size: 12px; line-height: 1.35; color: var(--text-faint); }
+        .pm-lifeline-legend-pop { width: 320px; padding: 12px 14px; }
+        .pm-lifeline-legend-pop:focus { outline: none; }
+        .pm-lifeline-legend-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
+        .pm-lifeline-legend-row { display: flex; align-items: flex-start; gap: 10px; padding: 4px 0; font-size: 12.5px; line-height: 1.4; }
+        .pm-lifeline-legend-name { display: block; font-weight: 600; color: var(--text); }
+        .pm-lifeline-legend-hint { display: block; color: var(--text-light); }
+        .pm-lifeline-legend-mark { flex: none; position: relative; width: 14px; height: 14px; margin-top: 2px; }
+        .pm-lifeline-legend-mark.is-region::before {
+            content: ''; position: absolute; left: 3px; top: 3px; width: 5px; height: 5px;
+            border: 1.5px solid var(--hist-mark); background: var(--surface); transform: rotate(45deg);
+        }
+        .pm-lifeline-legend-mark.is-local::before {
+            content: ''; position: absolute; left: 4px; top: 4px; width: 6px; height: 6px; background: var(--hist-local);
+        }
+        .pm-lifeline-legend-mark.is-tip { font-size: 11px; font-weight: 700; font-style: italic; color: var(--hist-meta); text-align: center; line-height: 14px; }
+        .pm-lifeline-legend-foot { margin: 8px 0 0; padding-top: 8px; border-top: 1px solid var(--divider); font-size: 12px; line-height: 1.45; color: var(--text-faint); }
+
+        /* The same as a bottom sheet (≤ 640 px): the head wraps, rows ≥ 56 px, "Cancel" last. */
+        .pm-lifeline-hsheet-head {
+            padding: 2px 16px 8px; font-size: 13px; line-height: 1.4; color: var(--text-faint);
+            overflow-wrap: anywhere; border-bottom: 1px solid var(--divider); margin-bottom: 4px;
+        }
+        .pm-lifeline-hsheet .bottom-sheet-item.pm-lifeline-hsheet-item {
+            flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; min-height: 56px;
+        }
+        .pm-lifeline-hsheet .pm-lifeline-hmenu-label { font-size: 15px; }
+        .pm-lifeline-hsheet .pm-lifeline-hmenu-hint { font-size: 13px; }
+        .pm-lifeline-hsheet .bottom-sheet-item.pm-lifeline-hsheet-cancel {
+            justify-content: center; margin-top: 4px; border-top: 1px solid var(--divider); border-radius: 0 0 8px 8px;
+            font-size: 15px; color: var(--text-light);
+        }
+        .pm-lifeline-hsheet .bottom-sheet-item:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        .pm-lifeline-legend-sheet .pm-lifeline-legend { padding: 0 16px 8px; }
+        .pm-lifeline-legend-sheet .pm-lifeline-legend-row, .pm-lifeline-legend-sheet .pm-lifeline-legend-foot { font-size: 13px; }
+        .pm-lifeline-legend-sheet .pm-lifeline-legend-title { font-size: 15px; }
+
+        @media (hover: hover) and (pointer: fine) {
+            .modal button.pm-lifeline-hmore { opacity: 0; }
+            .modal .k-history:hover button.pm-lifeline-hmore,
+            .modal .k-history:focus-within button.pm-lifeline-hmore,
+            .modal button.pm-lifeline-hmore[aria-expanded="true"] { opacity: 1; }
+        }
+        @media (hover: hover) {
+            .modal button.pm-lifeline-hmore:hover { background: var(--hover-bg); color: var(--text); }
+            .modal button.pm-lifeline-hinfo:hover { border-color: var(--primary); }
+            .pm-lifeline-hmenu-item:hover { background: var(--hover-bg); }
+            .pm-lifeline-row.k-historyGroup:hover { box-shadow: inset 0 0 0 1px var(--border); }
+            .pm-lifeline-hsrc a:hover, .modal button.pm-lifeline-link.is-cite:hover { text-decoration-style: solid; text-decoration-color: currentColor; }
+            .modal button.pm-lifeline-hquote:hover, .modal button.pm-lifeline-hidden:hover { color: var(--text); }
+            .modal button.pm-lifeline-henable:hover, .modal button.pm-lifeline-hrestore:hover { text-decoration: underline; }
+        }
+        @media (pointer: coarse) {
+            .modal button.pm-lifeline-hmore { width: 44px; height: 44px; top: -2px; right: -4px; }
+            .k-history .pm-lifeline-desc { padding-right: 36px; }
+            .pm-lifeline-row.k-historyGroup, .modal button.pm-lifeline-hidden { min-height: 44px; }
+            .modal button.pm-lifeline-hinfo { width: 44px; height: 44px; margin: 0 -10px; border-color: transparent; }
+            .modal button.pm-lifeline-hinfo::before {
+                content: ''; position: absolute; inset: 11px; border: 1px solid var(--border); border-radius: 50%;
+            }
+            .modal button.pm-lifeline-hquote, .modal button.pm-lifeline-hrestore, .modal button.pm-lifeline-henable { min-height: 44px; }
+            .modal button.pm-lifeline-hquote { display: inline-flex; align-items: center; }
+        }
+
         .form-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -16697,6 +16884,8 @@
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) { .ppm-list { max-height: 140px; } }
         /* Material toasts stay above the viewer and its dialogs. */
         .toast[data-kind="materials"] { z-index: 3200; }
+        /* A hiding's "Undo" is made in the person card: its toast is above the card's overlay. */
+        .toast[data-kind="history-hide"] { z-index: 250; }
 
         /* Duplicate suggestions */
         .duplicate-suggest {

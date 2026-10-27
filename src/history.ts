@@ -773,6 +773,30 @@ function cardState(
 
 // ─── Year groups ───────────────────────────────────────────────────────────
 
+/** One place in the card's merged order: a row of the person, or a year group of the layer. */
+export type HistoryTimelineSlot = { point: number } | { group: number };
+
+/**
+ * The person's rows and the layer's year groups in one order: a group goes
+ * after the person's last row of a year ≤ its own (the person's rows first
+ * within a year); groups after the person's last row go at the end.
+ */
+export function interleaveHistory(pointYears: readonly number[], groupYears: readonly number[]): HistoryTimelineSlot[] {
+    const out: HistoryTimelineSlot[] = [];
+    let g = 0;
+    pointYears.forEach((year, point) => {
+        while (g < groupYears.length && groupYears[g] < year) out.push({ group: g++ });
+        out.push({ point });
+    });
+    while (g < groupYears.length) out.push({ group: g++ });
+    return out;
+}
+
+/** What a source link of a row says: the publisher, else the page's title. */
+export function historySourceLabel(source: Pick<HistorySource, 'title' | 'publisher'>): string {
+    return source.publisher || source.title;
+}
+
 export interface HistoryYearGroup {
     year: number;
     items: LifelineHistoryItem[];

@@ -183,6 +183,30 @@ export const historyMethods = uiModule({
     },
 
     /**
+     * Local data unlocked: the device's copies read while it was locked came
+     * back empty, so they are read again now (not at the bridge's next
+     * status — the bridge may not run at all). Hidings made meanwhile stay.
+     */
+    async reloadHistoryAfterUnlock(): Promise<void> {
+        for (const rid of [...cache.keys()]) {
+            await loading.get(rid);
+            if (cache.get(rid)) continue;
+            const kept = queues.get(rid) ?? [];
+            cache.delete(rid);
+            loadedRev.delete(rid);
+            queues.delete(rid);
+            await this.ensureHistoryCache(rid);
+            if (kept.length) {
+                let q = queues.get(rid) ?? [];
+                for (const op of kept) q = queueHideOp(q, op, cache.get(rid) ?? null);
+                queues.set(rid, q);
+                await saveHideQueue(rid, displayQueue(rid));
+            }
+        }
+        await this.refreshHistoryForActiveTree();
+    },
+
+    /**
      * A status of a research's bridge: read its events when the layer is on,
      * the tree is open, `history.events` is said and its `history.rev` is not
      * the one read; send the waiting hidings; redraw the Settings row.
@@ -316,7 +340,9 @@ export const historyMethods = uiModule({
 
     /** Something the layer shows may have changed: the open card, Settings and the hidden list follow. */
     historyChanged(): void {
-        if (SettingsManager.isHistoryLayer() && this.currentId && document.getElementById('person-modal')?.classList.contains('active')) {
+        // Switched off: the card drops its chip too (the head as it was).
+        const shown = SettingsManager.isHistoryLayer() || !!document.querySelector('#pm-lifeline-head .pm-lifeline-chips');
+        if (shown && this.currentId && document.getElementById('person-modal')?.classList.contains('active')) {
             this.renderPersonLifeline(this.currentId, true);
         }
         this.renderHistorySettingsIfOpen();
@@ -376,7 +402,7 @@ export const historyMethods = uiModule({
         void this.applyHistoryHide(op);
         const person = DataManager.getPerson(personId as Parameters<typeof DataManager.getPerson>[0]);
         const text = scope === 'place' ? h.toastPlace(item.place) : h.toastPerson(person ? shownName(person) : '');
-        this.showToast(text, 8000, { kind: 'history-hide', action: { label: h.undo, run: () => { void this.applyHistoryHide(reverseOp(op)); } } });
+        this.showToast(text, 8000, { kind: 'history-hide', clearOf: '#person-modal.active .pm-footer', action: { label: h.undo, run: () => { void this.applyHistoryHide(reverseOp(op)); } } });
     },
 
     /** "Restore" of a hidden event in the card ("Hidden: n"). */

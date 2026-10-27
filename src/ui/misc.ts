@@ -63,6 +63,9 @@ interface ToastOptions {
     hold?: boolean;
     /** A notice to be read: it stands 3 s at least before a newer toast takes its place (round 7 §53). */
     notice?: boolean;
+    /** A dialog's footer (selector) the toast stands above while it is on the screen: shown over a
+     *  dialog, the toast must not cover the dialog's action buttons. */
+    clearOf?: string;
 }
 
 /** The sample name under Settings > Surname display (no titles shown). */
@@ -1598,6 +1601,11 @@ export const miscMethods = uiModule({
             toast.appendChild(close);
         }
         document.body.appendChild(toast);
+        if (opts.clearOf) {
+            const foot = document.querySelector<HTMLElement>(opts.clearOf);
+            const top = foot?.offsetParent ? foot.getBoundingClientRect().top : 0;
+            if (top > 0) toast.style.bottom = `${Math.max(0, window.innerHeight - top) + 8}px`;
+        }
 
         // Trigger animation
         requestAnimationFrame(() => {

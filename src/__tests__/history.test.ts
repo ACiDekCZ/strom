@@ -9,7 +9,7 @@ import {
     parseHistoryPayload, parseHistoryText, parseHistoryEvent, isHistoryLang, matchHistoryPlace,
     residencePoints, placesInYear, computePersonHistory, effectiveHidden, queueHideOp,
     groupHistoryByYear, historyClusterLabel, historySettingsStatus, historyHiddenList, historyHiddenCount,
-    sanitizeHideQueue, sanitizeCachedHistory, HISTORY_LIMITS,
+    sanitizeHideQueue, sanitizeCachedHistory, HISTORY_LIMITS, interleaveHistory, historySourceLabel,
     type HistoryPayload, type HistorySettingsInput, type HistoryHideOp,
 } from '../history.js';
 import { computePersonLifeline } from '../timeline.js';
@@ -376,6 +376,26 @@ describe('year groups', () => {
         expect(historyClusterLabel(g[0].items, 'cs', true)).toBe('3 události');
         expect(historyClusterLabel(g[0].items, 'en')).toBe('3 events: war, epidemic, from records');
         expect(historyClusterLabel(g[1].items, 'cs')).toBe('Místní L2');
+    });
+});
+
+describe('the layer among the person\'s rows', () => {
+    it('puts a year group after the person\'s last row of a year up to its own', () => {
+        // Points 1838, 1860, 1866, 1900; groups 1850, 1866, 1880, 1905.
+        expect(interleaveHistory([1838, 1860, 1866, 1900], [1850, 1866, 1880, 1905])).toEqual([
+            { point: 0 }, { group: 0 }, { point: 1 }, { point: 2 }, { group: 1 }, { group: 2 }, { point: 3 }, { group: 3 },
+        ]);
+    });
+    it('keeps the person\'s rows of the same year before the group', () => {
+        expect(interleaveHistory([1866, 1866], [1866])).toEqual([{ point: 0 }, { point: 1 }, { group: 0 }]);
+    });
+    it('puts groups before the first row when they are earlier, and works without groups', () => {
+        expect(interleaveHistory([1900], [1850])).toEqual([{ group: 0 }, { point: 0 }]);
+        expect(interleaveHistory([1800, 1900], [])).toEqual([{ point: 0 }, { point: 1 }]);
+    });
+    it('names a source by its publisher, else its title', () => {
+        expect(historySourceLabel({ title: 'Prusko-rakouská válka', publisher: 'Wikipedie' })).toBe('Wikipedie');
+        expect(historySourceLabel({ title: 'Prusko-rakouská válka' })).toBe('Prusko-rakouská válka');
     });
 });
 

@@ -56,6 +56,7 @@ import { suggestMarriedSurname, MarriedSurnameSuggestion } from '../married-sugg
 import { isValidDateInput, normalizeDateInput, formatDateForInput } from '../dates.js';
 import { autoGrowAll } from './autogrow.js';
 import { computePersonLifeline, LifelinePoint } from '../timeline.js';
+import { interleaveHistory } from '../history.js';
 import { storyWithDraft } from './story-compare-ui.js';
 import { offeredDetails, resetDetailGroup, renderAgeCheck, ageBirthDate, eventDetailLine } from './event-details-ui.js';
 
@@ -857,6 +858,11 @@ export const personModalMethods = uiModule({
             toggle.hidden = !hasChildEvents;
             toggle.setAttribute('aria-checked', String(showChildEvents));
         }
+        // History in the life timeline (spec 020): null with the experiment
+        // off — then nothing below touches the card.
+        if (!keepState) this.resetLifelineHistoryMemory();
+        const historyView = this.historyForPerson(id);
+        this.syncLifelineHistoryChip(historyView);
         if (points.length < 2 && !(hasChildEvents && all.length >= 2)) {
             section.style.display = 'none';
             body.innerHTML = '';
@@ -872,8 +878,11 @@ export const personModalMethods = uiModule({
 
         // A couple's event opens its editor (over this dialog) unless the tree is locked.
         const editable = !DataManager.isTreeLocked();
-        body.classList.toggle('has-ranges', points.some(pt => pt.yearLabel));
-        body.innerHTML = points.map(pt => {
+        const layer = historyView?.chipOn && historyView.history ? this.lifelineHistoryLayer(historyView.history) : null;
+        body.classList.toggle('has-ranges', points.some(pt => pt.yearLabel) || !!layer?.ranges);
+        // A redraw keeps the focus on the layer's button it was on (or the head when that row went).
+        const focusKey = (document.activeElement as HTMLElement | null)?.closest?.('#pm-lifeline-body [data-hfocus]')?.getAttribute('data-hfocus');
+        const rows = points.map(pt => {
             const desc = this.lifelineDescription(pt);
             let extra = eventDetailLine(pt.details, true);
             if (pt.kind === 'coupleEvent' && pt.participants?.length) {
@@ -888,7 +897,20 @@ export const personModalMethods = uiModule({
                 + `<span class="pm-lifeline-desc">${desc}${extra
                     ? `<span class="event-details-line">${this.escapeHtml(extra)}</span>` : ''}</span>`
                 + `</div>`;
-        }).join('');
+        });
+        body.innerHTML = layer
+            ? interleaveHistory(points.map(pt => pt.year), layer.groups.map(g => g.year))
+                .map(slot => 'point' in slot ? rows[slot.point] : layer.groups[slot.group].html).join('') + layer.tail
+            : rows.join('');
+        if (historyView) {
+            this.bindLifelineHistory(body);
+            this.relinkLifelineHistoryPopup(body);
+        }
+        if (focusKey) {
+            const again = body.querySelector<HTMLElement>(`[data-hfocus="${CSS.escape(focusKey)}"]`)
+                ?? document.getElementById('pm-lifeline-head');
+            again?.focus({ preventScroll: true });
+        }
         // A name or a place inside a row is its own link (T17); it must not
         // also open the row's couple event.
         const fromLink = (e: Event): boolean => !!(e.target as HTMLElement).closest('.pm-lifeline-link');
@@ -1616,6 +1638,8 @@ export const personModalMethods = uiModule({
 
     forceCloseModal(): void {
         this.closeResearchConflictPanel({ focus: false });
+        this.closeLifelineHistoryPopups();
+        this.dropLifelineHistoryToastLift();
         document.getElementById('person-modal')?.classList.remove('active');
         this.currentId = null;
         this.personModalSnapshot = null;
