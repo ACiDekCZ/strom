@@ -468,6 +468,7 @@ export const historyMethods = uiModule({
             layerOn,
             linked: !!rid,
             bridgeUp: !!status,
+            noHistory: !!status && !features.includes(HISTORY_EVENTS_FEATURE),
             payload,
             ...(status?.experiments ? { statusSearching: status.experiments.history } : {}),
             ...(status?.treeState ? { treeState: status.treeState } : {}),

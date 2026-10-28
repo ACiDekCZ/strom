@@ -846,6 +846,8 @@ export interface HistorySettingsInput {
     linked: boolean;
     /** The tree's research bridge answers now. */
     bridgeUp: boolean;
+    /** The bridge answers but its `features` lack `history.events` (an older research without the layer). */
+    noHistory?: boolean;
     /** The cached (or fresh) payload, if any. */
     payload: HistoryPayload | null;
     /** `/status.experiments.history` (true = searching for this tree), when the bridge says it. */
@@ -887,6 +889,7 @@ export function historySettingsStatus(input: HistorySettingsInput, lang: Languag
         return { text: h.statusStillSearching, action };
     }
     if (!input.linked) return { text: h.statusNoResearch, action: null };
+    if (input.bridgeUp && input.noHistory) return { text: h.statusNoHistory, action: null };
     if (!input.bridgeUp && !input.payload) return { text: h.statusNoDevice, action: null };
 
     const p = input.payload;

@@ -452,6 +452,20 @@ describe('historySettingsStatus', () => {
         expect(historySettingsStatus({ ...base, bridgeUp: false, payload: p, canLinkOn: true }, 'cs'))
             .toEqual({ text: 'Výzkum události nehledá. Hledání se zapíná ve výzkumu stromu. Stav z T(14:05).', action: null });
     });
+    it('a research without history.events: says its version does not offer history, no link', () => {
+        const noHist = { ...base, noHistory: true, canLinkOn: true };
+        expect(historySettingsStatus(noHist, 'cs'))
+            .toEqual({ text: 'Tato verze výzkumu dějiny zatím neumí. Přinese je aktualizace výzkumu.', action: null });
+        expect(historySettingsStatus(noHist, 'en')!.text)
+            .toBe('This version of the research does not offer history yet. An update of the research brings it.');
+        expect(historySettingsStatus(noHist, 'de')!.text)
+            .toBe('Diese Version der Forschung bietet das Zeitgeschehen noch nicht. Ein Update der Forschung bringt es.');
+        // Not linked wins; bridge down keeps the cached state (the flag is about the live bridge).
+        expect(historySettingsStatus({ ...noHist, linked: false }, 'en')!.text).toMatch(/not linked/);
+        expect(historySettingsStatus({ ...noHist, bridgeUp: false }, 'cs')!.text).toMatch(/^Události k místům dodává výzkum/);
+        // Layer off: the row stays hidden.
+        expect(historySettingsStatus({ ...noHist, layerOn: false }, 'cs')).toBeNull();
+    });
     it('bridge up without a payload (an older research): from the status', () => {
         expect(historySettingsStatus({ ...base, statusSearching: true }, 'cs')!.text).toBe('Výzkum události hledá.');
         expect(historySettingsStatus({ ...base }, 'cs')!.text).toBe('Výzkum události nehledá. Hledání se zapíná ve výzkumu stromu.');

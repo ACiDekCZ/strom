@@ -151,4 +151,12 @@ test.describe('History in the life timeline: Settings', () => {
         await expect(status(page)).toHaveText("The research does not look for events. The search is switched on in the tree's research.");
         await expect(status(page).getByRole('button')).toHaveCount(0);
     });
+
+    test('an older research without history.events: its version does not offer history, nothing read', async ({ page }) => {
+        const { history } = await setup(page, { layerOn: true, features: HISTORY_FEATURES.filter(f => f !== 'history.events') });
+        await openSettings(page);
+        await expect(status(page)).toHaveText('This version of the research does not offer history yet. An update of the research brings it.');
+        await expect(status(page).getByRole('button')).toHaveCount(0);
+        expect(history.reads).toBe(0);
+    });
 });
