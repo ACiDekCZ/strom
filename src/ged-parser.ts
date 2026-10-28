@@ -1828,7 +1828,12 @@ export function parseGedcom(content: string): ParsedGedcom {
     let inHeader = false;
     /** The current header NOTE is the surname-groups marker note. */
     let inSurnameNote = false;
-    const surnameGroups: string[][] = [];
+    /**
+     * One line per group, as written: a `2 CONT` starts a group, and the
+     * exporter wraps a long one onto `3 CONC` lines (pushWrapped) — those
+     * continue the same group, never start another.
+     */
+    const surnameLines: string[] = [];
     /** Header `1 SOUR STROM_RESEARCH` / `1 _STROM_ASOF`. */
     let stromResearch = false;
     /** Written by the Strom app itself (HEAD > SOUR STROM). */
@@ -2053,9 +2058,11 @@ export function parseGedcom(content: string): ParsedGedcom {
             } else if (level === 2 && inStromSour && tag === 'VERS') {
                 stromAppVersion = value.trim();
             } else if (level === 2 && inSurnameNote && (tag === 'CONT' || tag === 'CONC')) {
-                const group = value.split(SURNAME_GROUP_SEP.trim())
-                    .map(s => s.trim()).filter(Boolean);
-                if (group.length >= 2) surnameGroups.push(group);
+                surnameLines.push(value);
+            } else if (level === 3 && inSurnameNote && surnameLines.length > 0 && (tag === 'CONC' || tag === 'CONT')) {
+                // CONC glues on as it is (a cut may fall inside a name); a line
+                // break inside one group line means no more than a space.
+                surnameLines[surnameLines.length - 1] += tag === 'CONT' ? ` ${value}` : value;
             }
         } else if (currentRepoId !== null && level === 1 && tag === 'NAME') {
             repositories.set(currentRepoId, value);
@@ -2951,6 +2958,12 @@ export function parseGedcom(content: string): ParsedGedcom {
     const places = new Map<string, PlaceGeo>();
     for (const [key, geo] of placeCoords) {
         if (Number.isFinite(geo.lat) && Number.isFinite(geo.lon)) places.set(key, geo);
+    }
+
+    const surnameGroups: string[][] = [];
+    for (const line of surnameLines) {
+        const group = line.split(SURNAME_GROUP_SEP.trim()).map(s => s.trim()).filter(Boolean);
+        if (group.length >= 2) surnameGroups.push(group);
     }
 
     return {
