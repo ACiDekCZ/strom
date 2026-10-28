@@ -8,7 +8,8 @@
 import { describe, it, expect } from 'vitest';
 import {
     foldSearch, matchesQuery, manageRegions, regionParents, regionGroups, placeGroups, hiddenRows,
-    deletedRows, manageHeader, manageCan, gapsLabel, waitingPlaces, manageSummaries, type ManageEnv, type ManageNames,
+    deletedRows, manageHeader, manageCan, gapsLabel, waitingPlaces, regionPicker, pickerCheck, pickerBody, pickerYear,
+    mapResultText, placesHistoryLine, manageSummaries, type ManageEnv, type ManageNames,
     detailOwner, detailEvents, filterDetailEvents, detailFacets, detailCenturies, centuryGroups, emptyDetailFilter,
     detailFilterActive, historyAudience, audiencePlaces,
 } from '../history-manage.js';
@@ -455,5 +456,91 @@ describe('who sees an event', () => {
         // A queued hiding counts at once.
         const q = historyAudience(data, p, 'en', { queue: [{ event: 'w1', place: 'Kounice', at: '2026-10-28T08:00:00Z' }] });
         expect(q.get('w1')!.sees.map(e => e.personId).sort()).toEqual(['eva', 'jan']);
+    });
+});
+
+describe('region of a place by hand (R5)', () => {
+    const regions = {
+        empire: region('empire', { state: 'covered', covered: ['bohemia', 'moravia'] }),
+        bohemia: region('bohemia', { state: 'done', places: 87 }),
+        moravia: region('moravia', { state: 'running', places: 12 }),
+        silesia: region('silesia', { state: 'queued', places: 4 }),
+        bavaria: region('bavaria', { state: 'skipped', places: 2 }),
+    };
+    const p = payload({
+        regions,
+        places: {
+            lhotka: { events: [], state: 'unlocated', why: 'several places of that name', persons: 3 },
+            hora: { events: [], regions: [{ id: 'moravia', to: 1850 }, { id: 'bohemia', from: 1850 }], manual: true, persons: 1 },
+            redo: { events: [], state: 'pending', redo: true, note: 'Lhotka near Benešov', persons: 2 },
+            done: { events: ['x'], regions: [{ id: 'bohemia' }], persons: 4 },
+        },
+    });
+
+    it('lists a state with its lands indented, the chosen regions and the why', () => {
+        const pk = regionPicker(p, 'en', names, 'lhotka')!;
+        expect(pk.list.map(r => [r.id, r.indent])).toEqual([
+            ['empire', false], ['bohemia', true], ['moravia', true], ['silesia', false], ['bavaria', false]]);
+        expect(pk.list[0].meta).toBe('state');
+        expect(pk.list[1].meta).toBe('87 places');
+        expect(pk.list[1].parent).toBe('Empire');
+        expect(pk.why).toBe('Research: several places of that name · 3 people');
+        expect(pk.chosen).toEqual([]);
+        const hora = regionPicker(p, 'en', names, 'hora')!;
+        expect(hora.chosen).toEqual([{ id: 'moravia', from: '', to: '1850' }, { id: 'bohemia', from: '1850', to: '' }]);
+        expect(hora.why).toContain('Moravia until 1850 · Bohemia from 1850');
+        expect(regionPicker(payload({ places: { a: { events: [] } } }), 'en', names, 'a')).toBeNull();
+    });
+
+    it('checks the years: 100–9999, from ≤ to, no overlap (touching ends and a state with its land are fine)', () => {
+        expect(pickerYear('')).toBeUndefined();
+        expect(pickerYear('99')).toBeNull();
+        expect(pickerYear('1850')).toBe(1850);
+        expect(pickerYear('18a0')).toBeNull();
+        expect(pickerCheck(p, [{ id: 'moravia', from: '', to: '1850' }, { id: 'bohemia', from: '1850', to: '' }]).ok).toBe(true);
+        expect(pickerCheck(p, [{ id: 'moravia', from: '', to: '1860' }, { id: 'bohemia', from: '1850', to: '' }]).rows).toEqual(['overlap', 'overlap']);
+        expect(pickerCheck(p, [{ id: 'moravia', from: '', to: '' }, { id: 'silesia', from: '', to: '' }]).ok).toBe(false);
+        expect(pickerCheck(p, [{ id: 'empire', from: '', to: '' }, { id: 'bohemia', from: '', to: '' }]).ok).toBe(true);
+        expect(pickerCheck(p, [{ id: 'bohemia', from: '1900', to: '1850' }]).rows).toEqual(['years']);
+        expect(pickerCheck(p, [{ id: 'bohemia', from: '50', to: '' }]).rows).toEqual(['years']);
+        expect(pickerCheck(p, []).ok).toBe(false);
+        expect(pickerBody([{ id: 'moravia', from: '', to: '1850' }, { id: 'bohemia', from: '1850', to: '' }]))
+            .toEqual([{ id: 'moravia', to: 1850 }, { id: 'bohemia', from: 1850 }]);
+    });
+
+    it('says what happens by the regions\' states', () => {
+        expect(mapResultText(p, ['bohemia'], 'en')).toMatch(/^The history of Bohemia is done/);
+        expect(mapResultText(p, ['moravia', 'bohemia'], 'en')).toMatch(/Moravia right now.*Bohemia is done/);
+        expect(mapResultText(p, ['silesia'], 'cs')).toBe('Region silesia je ve frontě, místo se do ní přidá.');
+        expect(mapResultText(p, ['bavaria'], 'en')).toContain('not searched');
+    });
+
+    it('place rows: by hand with the way back, redo with its note and no way back', () => {
+        const groups = placeGroups(p, env(), names);
+        const unassigned = groups.find(g => g.key === 'unassigned')!.rows;
+        expect(unassigned.map(r => r.key)).toEqual(['lhotka', 'redo']);
+        const redo = unassigned[1];
+        expect(redo.meta).toBe('The research will decide again · 2 people');
+        expect(redo.why).toBe('Note for the research: “Lhotka near Benešov”');
+        expect(redo.link).toBeNull();
+        expect(redo.assign).toBe(false);
+        const all = groups.find(g => g.key === 'all')!.rows;
+        const hora = all.find(r => r.key === 'hora')!;
+        expect(hora.meta).toContain('(manual)');
+        expect(hora.link).toBe('auto');
+        expect(hora.why).toMatch(/Moravia right now/);
+        expect(all.find(r => r.key === 'redo')!.link).toBeNull();
+        expect(all.find(r => r.key === 'done')!.link).toBeNull();
+        expect(placeGroups(p, env({ features: ['history.events'] }), names).find(g => g.key === 'all')!.rows.find(r => r.key === 'hora')!.link).toBeNull();
+    });
+
+    it('the History line in Places', () => {
+        expect(placesHistoryLine(p, env(), 'done')).toEqual({ text: 'Bohemia · done · 1 event', action: 'manage', legacy: false });
+        expect(placesHistoryLine(p, env(), 'lhotka')).toEqual({ text: 'unassigned: several places of that name', action: 'assign', legacy: false });
+        expect(placesHistoryLine(p, env({ features: [] }), 'lhotka')!.action).toBe('manage');
+        expect(placesHistoryLine(p, env(), 'hora')!.text).toBe('Moravia until 1850 · Bohemia from 1850 (manual) · being searched · 0 events');
+        expect(placesHistoryLine(p, env(), 'nowhere')).toBeNull();
+        const old = payload({ places: { a: { events: ['x', 'y'] } } });
+        expect(placesHistoryLine(old, env(), 'a')).toEqual({ text: 'History: 2 events', action: 'manage', legacy: true });
     });
 });

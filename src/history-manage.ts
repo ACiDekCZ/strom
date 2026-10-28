@@ -13,7 +13,7 @@ import {
     computePersonHistory, HISTORY_KINDS, type PersonHistoryEnv,
     effectiveHidden, historyHiddenCount, historyWaiting, pickHistoryText,
     type HistoryPayload, type HistoryRegion, type HistoryHideOp, type HistoryEvent, type HistoryText,
-    type EffectiveHidden, type HistoryPlace,
+    type EffectiveHidden, type HistoryPlace, type HistoryPlaceRegion,
 } from './history.js';
 import {
     HISTORY_FIRST_FEATURE, HISTORY_HIDE_ALL_FEATURE, HISTORY_SKIP_FEATURE, HISTORY_DELETE_FEATURE,
@@ -385,7 +385,8 @@ export interface PlaceRow {
     persons: number;
     state: string;
     tone: ManageTone;
-    link: 'searchAgain' | null;
+    /** searchAgain: skipped; auto: regions set by hand, back to the research's choice (R5 `do: "auto"`). */
+    link: 'searchAgain' | 'auto' | null;
     /** Events through the place (null: not shown). */
     events: number | null;
     dim: boolean;
@@ -443,6 +444,11 @@ export function placeGroups(p: HistoryPayload, env: ManageEnv, names: ManageName
             row.tone = 'faint';
             row.dim = true;
             if (canSkip) row.link = 'searchAgain';
+        } else if (r1 && place.redo) {
+            // Waits to be placed again (§4.2): no way back — the research keeps no earlier choice.
+            row.state = s.redoState;
+            row.tone = 'accent';
+            if (place.note) row.why = s.redoNoteShown(place.note);
         } else if (!r1) {
             if (place.state === 'pending') row.state = s.placeStatePending;
             else if (place.state === 'unlocated') row.state = s.placeStateUnlocated;
@@ -462,6 +468,11 @@ export function placeGroups(p: HistoryPayload, env: ManageEnv, names: ManageName
                 default: break;
             }
         }
+        if (r1 && place.manual && place.regions?.length && !place.skip) {
+            // Set by hand (§4.3): what happens next, and the way back to the research's choice.
+            if (!place.events.length) row.why = mapResultText(p, place.regions.map(r => r.id), lang);
+            if (canMap) row.link = 'auto';
+        }
         if (r1) {
             if (canMap && !place.skip) row.actions.push('changeRegion');
             if (canPlace && place.id && (!place.history || place.history === 'none') && !place.skip) row.actions.push('placeFind');
@@ -474,9 +485,15 @@ export function placeGroups(p: HistoryPayload, env: ManageEnv, names: ManageName
     const entries = Object.entries(p.places);
     const groups: PlaceGroup[] = [];
     if (r1) {
-        const unassigned = entries.filter(([, pl]) => pl.state === 'unlocated' && !pl.skip)
+        const unassigned = entries.filter(([, pl]) => (pl.state === 'unlocated' || (pl.state === 'pending' && pl.redo)) && !pl.skip)
             .map(([k, pl]) => {
                 const row = rowOf(k, pl);
+                if (pl.redo) {
+                    // "The research will decide again · 3 people", the note below (§4.2, 4e).
+                    row.meta = [s.redoState, row.meta].filter(Boolean).join(' · ');
+                    row.state = '';
+                    return row;
+                }
                 row.why = pl.why ?? '';
                 row.state = '';
                 row.assign = canMap;
@@ -510,6 +527,192 @@ export function placeGroups(p: HistoryPayload, env: ManageEnv, names: ManageName
     else all.sort((a, b) => b.persons - a.persons || collator.compare(a.name, b.name));
     if (all.length) groups.push({ key: 'all', rows: all });
     return groups;
+}
+
+// ─── Region of a place by hand (R5, §4) ────────────────────────────────────
+
+/** A region in the picker's list: a state over its lands first, its lands indented under it. */
+export interface PickerRegion {
+    id: string;
+    name: string;
+    /** The parent's name ('' a top region). */
+    parent: string;
+    /** "state" / "87 places". */
+    meta: string;
+    indent: boolean;
+    search: string;
+}
+
+/** A chosen region with its years as typed. */
+export interface PickerChoice {
+    id: string;
+    from: string;
+    to: string;
+}
+
+export interface RegionPicker {
+    /** The tree's spelling of the place. */
+    place: string;
+    /** "Research: several places of that name · 3 people". */
+    why: string;
+    list: PickerRegion[];
+    /** The place's regions now. */
+    chosen: PickerChoice[];
+    /** The note's placeholder (the research's sentence). */
+    notePh: string;
+}
+
+/** The picker for a place (null: no R1 regions or no such place). */
+export function regionPicker(p: HistoryPayload, lang: Language, names: ManageNames, key: string): RegionPicker | null {
+    const place = p.places[key];
+    if (!place || !p.regions) return null;
+    const s = getStringsForLang(lang).history;
+    const regions = Object.values(p.regions);
+    const parents = regionParents(regions);
+    const byId = new Map(regions.map(r => [r.id, r]));
+    const collator = new Intl.Collator(lang);
+    const children = new Map<string, HistoryRegion[]>();
+    for (const r of regions) {
+        const parent = parents.get(r.id);
+        if (parent && byId.has(parent)) children.set(parent, [...(children.get(parent) ?? []), r]);
+    }
+    const weight = (r: HistoryRegion): number => (r.places ?? 0) + (children.get(r.id) ?? []).reduce((n, c) => n + (c.places ?? 0), 0);
+    const order = (a: HistoryRegion, b: HistoryRegion) => weight(b) - weight(a) || collator.compare(regionName(a, lang), regionName(b, lang));
+    const item = (r: HistoryRegion, indent: boolean): PickerRegion => {
+        const name = regionName(r, lang);
+        const parentId = parents.get(r.id);
+        const parent = parentId && byId.has(parentId) ? regionName(byId.get(parentId)!, lang) : '';
+        const isState = (children.get(r.id) ?? []).length > 0 || r.state === 'covered';
+        return {
+            id: r.id, name, parent, indent,
+            meta: isState ? s.mapStateRegion : r.places !== undefined ? s.mapPlaces(r.places) : '',
+            search: searchText(name, ...allTexts(r.name), parent, r.id),
+        };
+    };
+    const list: PickerRegion[] = [];
+    for (const r of regions.filter(x => !parents.has(x.id) || !byId.has(parents.get(x.id)!)).sort(order)) {
+        list.push(item(r, false));
+        for (const c of (children.get(r.id) ?? []).sort(order)) list.push(item(c, true));
+    }
+    const label = place.regions?.length ? placeRegionsLabel({ ...place, manual: false }, byId, lang) : '';
+    const persons = place.persons ?? 0;
+    const why = label ? s.mapWhy(label, persons)
+        : place.why ? s.mapWhy(place.why, persons)
+            : persons ? s.mapWhyPersons(persons) : '';
+    return {
+        place: names.place(key),
+        why,
+        list,
+        chosen: (place.regions ?? []).filter(r => byId.has(r.id))
+            .map(r => ({ id: r.id, from: r.from !== undefined ? String(r.from) : '', to: r.to !== undefined ? String(r.to) : '' })),
+        notePh: place.note ?? place.why ?? '',
+    };
+}
+
+/** A typed year: undefined empty, null not a year of 100–9999 (3–4 digits). */
+export function pickerYear(v: string): number | undefined | null {
+    const t = v.trim();
+    if (!t) return undefined;
+    if (!/^\d{3,4}$/.test(t)) return null;
+    const n = Number(t);
+    return n >= 100 && n <= 9999 ? n : null;
+}
+
+export type PickerProblem = 'years' | 'overlap' | null;
+
+/**
+ * The chosen regions' years (§4.1): each a year of 100–9999 with from ≤ to;
+ * two regions (not a state and its land) must not share a period — touching
+ * ends ("Moravia until 1850 · Bohemia from 1850") do not overlap.
+ */
+export function pickerCheck(p: HistoryPayload, chosen: readonly PickerChoice[]): { rows: PickerProblem[]; ok: boolean } {
+    const parents = regionParents(Object.values(p.regions ?? {}));
+    const related = (a: string, b: string) => parents.get(a) === b || parents.get(b) === a;
+    const spans = chosen.map(c => ({ from: pickerYear(c.from), to: pickerYear(c.to) }));
+    const rows: PickerProblem[] = spans.map(x =>
+        x.from === null || x.to === null || (x.from !== undefined && x.to !== undefined && x.from > x.to) ? 'years' : null);
+    for (let i = 0; i < chosen.length; i++) {
+        for (let j = i + 1; j < chosen.length; j++) {
+            if (rows[i] === 'years' || rows[j] === 'years' || related(chosen[i].id, chosen[j].id)) continue;
+            const a = spans[i], b = spans[j];
+            const lo = (y: number | null | undefined) => y ?? -Infinity;
+            const hi = (y: number | null | undefined) => y ?? Infinity;
+            if (lo(a.from) < hi(b.to) && lo(b.from) < hi(a.to)) {
+                rows[i] = rows[i] ?? 'overlap';
+                rows[j] = rows[j] ?? 'overlap';
+            }
+        }
+    }
+    return { rows, ok: chosen.length > 0 && rows.every(r => r === null) };
+}
+
+/** The body of `POST /history/map` for the chosen regions (valid years only). */
+export function pickerBody(chosen: readonly PickerChoice[]): HistoryPlaceRegion[] {
+    return chosen.map(c => {
+        const from = pickerYear(c.from), to = pickerYear(c.to);
+        return { id: c.id, ...(typeof from === 'number' ? { from } : {}), ...(typeof to === 'number' ? { to } : {}) };
+    });
+}
+
+/** What happens to the place with these regions (§4.1): done, searched now, queued; not searched for the tree. */
+export function mapResultText(p: HistoryPayload, ids: readonly string[], lang: Language): string {
+    const s = getStringsForLang(lang).history;
+    const byState = new Map<string, string[]>();
+    for (const id of ids) {
+        const r = p.regions?.[id];
+        if (!r) continue;
+        const k = r.state === 'done' || r.state === 'covered' ? 'done' : r.state === 'running' ? 'running'
+            : r.state === 'skipped' ? 'skipped' : 'queued';
+        byState.set(k, [...(byState.get(k) ?? []), regionName(r, lang)]);
+    }
+    const out: string[] = [];
+    const done = byState.get('done'), running = byState.get('running'), queued = byState.get('queued'), skipped = byState.get('skipped');
+    if (running) out.push(s.mapResultRunning(joinAnd(lang, running)));
+    if (done) out.push(s.mapResultDone(joinAnd(lang, done), done.length));
+    if (queued) out.push(s.mapResultQueued(joinAnd(lang, queued), queued.length));
+    for (const r of skipped ?? []) out.push(s.toastSkipped(r));
+    return out.join(' ');
+}
+
+// ─── The History line of a place in Places (§4.6) ──────────────────────────
+
+export interface PlacesHistoryLine {
+    /** "Bohemia · done · 52 events · Local history: done · 12". */
+    text: string;
+    /** manage: the manager on this place; assign: the region picker at once. */
+    action: 'manage' | 'assign';
+    /** An older research: the whole line is the link "History: 64 events ›". */
+    legacy: boolean;
+}
+
+/** The History line for a payload place (null: the payload has no such place). */
+export function placesHistoryLine(p: HistoryPayload, env: ManageEnv, key: string): PlacesHistoryLine | null {
+    const place = p.places[key];
+    if (!place) return null;
+    const s = getStringsForLang(env.lang).history;
+    const lang = env.lang;
+    const n = place.events.length;
+    if (!p.regions) return { text: s.placesRowLegacy(n), action: 'manage', legacy: true };
+    if (place.state === 'unlocated' && !place.skip) {
+        return { text: s.placesRowUnassigned(place.why ?? ''), action: manageCan(env, 'map') ? 'assign' : 'manage', legacy: false };
+    }
+    const byId = new Map(Object.entries(p.regions));
+    const lower = (t: string) => t.charAt(0).toLocaleLowerCase(lang) + t.slice(1);
+    let state: string;
+    if (place.skip) state = lower(s.rsSkipped);
+    else if (place.redo) state = lower(s.redoState);
+    else if (place.state === 'pending') state = lower(place.regions?.length ? s.placeStateRegionWaits : s.placeStateMapping);
+    else {
+        const states = (place.regions ?? []).map(r => byId.get(r.id)?.state);
+        state = states.includes('running') ? s.placesRowRunning
+            : states.some(x => x === 'queued' || x === 'waiting' || x === 'none') ? s.placesRowQueued : s.placesRowDone;
+    }
+    const own = p.events.filter(e => e.scope === 'place' && e.place?.key === key).length;
+    const parts = [placeRegionsLabel(place, byId, lang), state, s.placeEvents(Math.max(0, n - own))];
+    const hist = place.history === 'done' ? s.placeHistDone(own) : place.history === 'first' ? s.placeHistFirst
+        : place.history === 'running' ? s.placeHistRunning : place.history === 'empty' ? s.placeHistEmpty
+            : place.history === 'waiting' ? s.placeHistWaiting : '';
+    return { text: [...parts.filter(Boolean), hist].filter(Boolean).join(' · '), action: 'manage', legacy: false };
 }
 
 // ─── Hidden ────────────────────────────────────────────────────────────────
