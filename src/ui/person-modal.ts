@@ -898,14 +898,17 @@ export const personModalMethods = uiModule({
                     ? `<span class="event-details-line">${this.escapeHtml(extra)}</span>` : ''}</span>`
                 + `</div>`;
         });
+        // Spec 020 K1.6: without the layer, a line when the research does not search yet.
+        const strip = historyView ? '' : this.lifelineHistoryStripHtml();
         body.innerHTML = layer
             ? interleaveHistory(points.map(pt => pt.year), layer.groups.map(g => g.year))
                 .map(slot => 'point' in slot ? rows[slot.point] : layer.groups[slot.group].html).join('') + layer.tail
-            : rows.join('');
+            : rows.join('') + strip;
         if (historyView) {
             this.bindLifelineHistory(body);
             this.relinkLifelineHistoryPopup(body);
         }
+        if (strip) this.bindLifelineHistoryStrip(body);
         if (focusKey) {
             const again = body.querySelector<HTMLElement>(`[data-hfocus="${CSS.escape(focusKey)}"]`)
                 ?? document.getElementById('pm-lifeline-head');

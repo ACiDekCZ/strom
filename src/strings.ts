@@ -5364,6 +5364,11 @@ const stringsEN = {
         findMore: 'More in the manager',
         findShort: (r: string) => `${r} not searched yet.`,
         findShortLink: 'Find first',
+        // The card's line for a tree whose research does not search yet (spec 020 K1.6).
+        stripNoSearch: "The research does not look for the history of the ancestors' places yet.",
+        stripClose: 'Close this note',
+        stripShort: 'History not searched yet.',
+        stripShortLink: 'Turn on',
         // Kinds of history in Settings → Person card and the legend (§6).
         kindsLastNote: 'One kind stays on. All can be turned off with the main option.',
         legendKindOff: 'Off in Settings.',
@@ -10651,6 +10656,11 @@ const stringsCZ: StringsType = {
         findMore: 'Další ve správě',
         findShort: (r: string) => `${r} ještě nebyla hledaná.`,
         findShortLink: 'Najít jako první',
+        // Řádek karty u stromu, jehož výzkum zatím nehledá (spec 020 K1.6).
+        stripNoSearch: 'Dějiny k místům předků výzkum zatím nehledá.',
+        stripClose: 'Zavřít upozornění',
+        stripShort: 'Dějiny výzkum zatím nehledá.',
+        stripShortLink: 'Zapnout',
         // Druhy dějin v Nastavení → Karta osoby a v legendě (§6).
         kindsLastNote: 'Jeden druh zůstává zapnutý. Vypnout všechny jde hlavní volbou.',
         legendKindOff: 'Vypnuto v Nastavení.',
@@ -15864,6 +15874,11 @@ const stringsDE: StringsType = {
         findMore: 'Weitere in der Verwaltung',
         findShort: (r: string) => `${r} noch nicht gesucht.`,
         findShortLink: 'Als Erstes suchen',
+        // Zeile der Karte bei einem Stammbaum, dessen Forschung noch nicht sucht (Spec 020 K1.6).
+        stripNoSearch: 'Die Forschung sucht noch kein Zeitgeschehen zu den Orten der Vorfahren.',
+        stripClose: 'Hinweis schließen',
+        stripShort: 'Zeitgeschehen noch nicht gesucht.',
+        stripShortLink: 'Einschalten',
         // Arten des Zeitgeschehens in Einstellungen → Personenkarte und in der Legende (§6).
         kindsLastNote: 'Eine Art bleibt eingeschaltet. Alle lassen sich mit der Hauptoption ausschalten.',
         legendKindOff: 'In den Einstellungen aus.',

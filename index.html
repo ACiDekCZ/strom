@@ -5396,6 +5396,19 @@
         .k-historyState.is-find-one .pm-lifeline-desc { display: flex; align-items: baseline; gap: 6px; white-space: nowrap; }
         .pm-lifeline-hfind-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
         .k-historyState.is-find-one .pm-lifeline-hfind { flex: none; }
+        /* "Not searched yet" with its close button (spec 020 K1.6); a phone: one line like the find row. */
+        .k-historyState.is-strip .pm-lifeline-desc { padding-right: 26px; }
+        .k-historyState.is-find-one .pm-lifeline-hstrip-on { flex: none; white-space: nowrap; }
+        .modal button.pm-lifeline-hstrip-close {
+            position: absolute; top: 3px; right: 3px; width: 24px; height: 22px; min-height: 0; padding: 0;
+            border: none; border-radius: var(--r-sm); background: transparent; color: var(--hist-meta);
+            font: inherit; font-size: 16px; line-height: 1; cursor: pointer;
+            display: inline-flex; align-items: center; justify-content: center;
+        }
+        .modal button.pm-lifeline-hstrip-close::after {
+            content: ''; position: absolute; left: 50%; top: 50%; width: 28px; height: 28px; transform: translate(-50%, -50%);
+        }
+        .modal button.pm-lifeline-hstrip-close:focus-visible { outline: 2px solid var(--primary); outline-offset: 0; }
         /* "All hidden ›" under the card's hidden list, "Manage history of places ›" under the legend (spec 1028 §1.1). */
         .modal button.pm-lifeline-hall, button.pm-lifeline-legend-manage {
             display: inline-flex; align-items: center; padding: 0; margin: 4px 0 0; min-height: 0; border: none; background: none; font: inherit;
@@ -5483,6 +5496,7 @@
         }
         @media (hover: hover) {
             .modal button.pm-lifeline-hmore:hover { background: var(--hover-bg); color: var(--text); }
+            .modal button.pm-lifeline-hstrip-close:hover { background: var(--hover-bg); color: var(--text); }
             .modal button.pm-lifeline-hinfo:hover { border-color: var(--primary); }
             .pm-lifeline-hmenu-item:hover { background: var(--hover-bg); }
             .pm-lifeline-row.k-historyGroup:hover { box-shadow: inset 0 0 0 1px var(--border); }
@@ -5496,6 +5510,8 @@
         @media (pointer: coarse) {
             .modal button.pm-lifeline-hmore { width: 44px; height: 44px; top: -2px; right: -4px; }
             .k-history .pm-lifeline-desc { padding-right: 36px; }
+            .modal button.pm-lifeline-hstrip-close { width: 44px; height: 44px; top: 50%; right: -4px; transform: translateY(-50%); }
+            .k-historyState.is-strip .pm-lifeline-desc { padding-right: 36px; }
             .pm-lifeline-row.k-historyGroup, .modal button.pm-lifeline-hidden { min-height: 44px; }
             /* Its tap area reaches the chip before it, never over it (the chips' gap is 6 px). */
             .modal button.pm-lifeline-hinfo { width: 44px; height: 44px; margin: 0 -10px 0 -6px; border-color: transparent; }

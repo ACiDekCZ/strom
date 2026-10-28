@@ -187,6 +187,16 @@ class SettingsManagerClass {
         this.save();
     }
 
+    /** The card's line "the research does not look for history yet" was closed (spec 020 K1.6): this browser, every tree. */
+    isHistoryStripClosed(): boolean {
+        return this.settings.historyStripClosed === true;
+    }
+
+    setHistoryStripClosed(closed: boolean): void {
+        this.settings.historyStripClosed = closed;
+        this.save();
+    }
+
     /** The kinds of history the card's timeline shows (spec 1028 §6): each on by default, this browser only. */
     getHistoryKinds(): { region: boolean; place: boolean; local: boolean } {
         return {

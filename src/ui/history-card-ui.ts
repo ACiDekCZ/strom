@@ -348,6 +348,37 @@ export const historyCardMethods = uiModule({
     },
 
     /**
+     * Spec 020 K1.6: the last row of a timeline without the layer when the
+     * research does not search yet — the sentence, "Turn on the search in the
+     * research" and a close button ('' none). A phone: one line, the sentence
+     * ellipsized, the link whole.
+     */
+    lifelineHistoryStripHtml(): string {
+        if (!this.historyStripWanted()) return '';
+        const h = strings.history;
+        // A phone: the short sentence and link, as the find row (§5).
+        const phone = media(MQ_MOBILE);
+        return `<div class="pm-lifeline-row k-historyState is-region is-strip${phone ? ' is-find-one' : ''}" data-history-strip="">`
+            + '<span class="pm-lifeline-hmark" aria-hidden="true"></span><span class="pm-lifeline-year"></span>'
+            + '<span class="pm-lifeline-glyph" aria-hidden="true"></span>'
+            + `<span class="pm-lifeline-desc"><span class="pm-lifeline-hfind-text">${esc(phone ? h.stripShort : h.stripNoSearch)}</span>`
+            + ` <button type="button" class="link pm-lifeline-henable pm-lifeline-hstrip-on" data-hfocus="stripOn">${esc(phone ? h.stripShortLink : h.enableSearch)}</button></span>`
+            + `<button type="button" class="pm-lifeline-hstrip-close" data-hfocus="stripClose" aria-label="${esc(h.stripClose)}" title="${esc(h.stripClose)}">`
+            + '<span aria-hidden="true">×</span></button></div>';
+    },
+
+    /** The strip's link and close button (the body is redrawn whole, so no listener stays behind). */
+    bindLifelineHistoryStrip(body: HTMLElement): void {
+        const strip = body.querySelector<HTMLElement>('[data-history-strip]');
+        if (!strip) return;
+        strip.querySelector('.pm-lifeline-hstrip-on')?.addEventListener('click', () => this.historyEnableSearch());
+        strip.querySelector('.pm-lifeline-hstrip-close')?.addEventListener('click', () => {
+            this.closeHistoryStrip();
+            document.getElementById('pm-lifeline-head')?.focus({ preventScroll: true });
+        });
+    },
+
+    /**
      * §6a.2 / §6a.4 (M1, M5): the last row for the person's main place — the
      * offer "… not looked for yet" + "Find local history…" (a phone: one
      * line), or the state of its own history.

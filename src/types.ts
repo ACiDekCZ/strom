@@ -1286,6 +1286,7 @@ export interface AppSettings {
     historyKindRegion?: boolean;  // default: true - the card's timeline shows regional history (spec 1028 §6)
     historyKindPlace?: boolean;   // default: true - the card's timeline shows the history of a place (with history.place)
     historyKindLocal?: boolean;   // default: true - the card's timeline shows findings from the research's sources
+    historyStripClosed?: boolean;  // default: false - the card's "history not searched yet" line was closed (spec 020 K1.6)
     historyPlacesSort?: 'persons' | 'alpha';  // default: 'persons' - History of places → Places: all places by people or alphabetically
     cardDensity?: CardDensity;  // default: 'normal' - how much detail a card shows
     exportScope?: 'tree' | 'view';  // default: 'tree' - the export dialog's whole tree / current view switch

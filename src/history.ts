@@ -1134,6 +1134,39 @@ export function historyCardShows(p: HistoryPayload | null, env: { searchOn?: boo
     return env.searchOn ?? p?.state.on ?? false;
 }
 
+/** What decides the card's line "the research does not look for history yet" (spec 020 K1.6). */
+export interface HistoryStripEnv {
+    /** The layer is on in Settings. */
+    layerOn: boolean;
+    /** The line was closed in this browser. */
+    closed: boolean;
+    /** The open tree follows a live research (read-only). */
+    following: boolean;
+    /** The bridge of the tree's research runs and offers history (`history.events`). */
+    bridgeHistory: boolean;
+    /** The research's answer whether it searches (`/status.experiments.history`); undefined = an older research that does not say. */
+    searchOn: boolean | undefined;
+    /** The search was switched off from here this session. */
+    offDone: boolean;
+    /** "Turn on the search in the research" can be offered (§1.3 canLinkOn). */
+    canLinkOn: boolean;
+    payload: HistoryPayload | null;
+    treeState?: string;
+}
+
+/**
+ * The card's line "the research does not look for history yet" with the
+ * link to switch the search on (K1.6): only where the card shows no layer
+ * at all, the research says its search is off and the link can be offered.
+ */
+export function historyStripShows(env: HistoryStripEnv): boolean {
+    if (!env.layerOn || env.closed || env.following || !env.bridgeHistory) return false;
+    if (env.offDone || env.searchOn !== false || !env.canLinkOn) return false;
+    if (historyWaiting(env.payload, env.treeState)) return false;
+    // With events already found the layer itself says the search is off.
+    return !historyCardShows(env.payload, { searchOn: false, ...(env.treeState ? { treeState: env.treeState } : {}) });
+}
+
 /** Whether the research is waiting (archive, waits for its agent): no search, no link to turn it on. */
 export function historyWaiting(p: HistoryPayload | null, treeState?: string): boolean {
     return (!!treeState && treeState !== 'research') || p?.state.search === 'waiting';

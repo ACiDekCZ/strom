@@ -228,7 +228,7 @@ test.describe('History in the life timeline: the person card', () => {
         await expect(list.locator('.hm-row.hm-hidden', { hasText: 'Austro-Prussian War' })).toContainText('for Jan Fíšek only');
     });
 
-    test('on by default, the research not searching and without events: the card shows nothing', async ({ page }) => {
+    test('on by default, the research not searching and without events: no layer, only the line to switch it on (K1.6)', async ({ page }) => {
         const { history } = await setup(page, { history: {
             searching: false,
             payload: { state: { on: false, search: 'none', rev: 'h1' }, lang: 'cs', events: [], places: {}, hidden: [] },
@@ -237,9 +237,10 @@ test.describe('History in the life timeline: the person card', () => {
         await openCard(page, 'Jan');
         await expect(page.locator('#pm-lifeline-head .pm-lifeline-chips')).toHaveCount(0);
         await expect(chip(page)).toHaveCount(0);
-        await expect(page.locator('#pm-lifeline-body [class*="k-history"]')).toHaveCount(0);
+        await expect(page.locator('#pm-lifeline-body [class*="k-history"]:not([data-history-strip])')).toHaveCount(0);
+        await expect(page.locator('#pm-lifeline-body [data-history-strip]')).toHaveCount(1);
         await closeCard(page);
-        // The state is Settings' only.
+        // Settings says the state too.
         await page.evaluate(() => window.Strom.UI.showSettingsDialog());
         await expect(page.locator('#history-setting-status')).toContainText('The research does not look for events.');
     });

@@ -10,6 +10,7 @@
 - **Instalace výzkumu na Macu**: pod řádkem je poznámka, že novější macOS může vložení zastavit hláškou *Možný malware, vložení bylo zablokováno*, že řádek z aplikace Strom instaluje Strom Research z GitHubu (ACiDekCZ/strom-research) a že *Přesto vložit* ho vloží, s odkazem na stránku Apple o této hlášce; i pod řádkem pro Mac poslaným z telefonu.
 - **Strom z odkazu**: odkaz, který uvádí výzkum (*?research=…*), otevře strom navázaný na ten výzkum, i mezi několika stromy stejného jména; výzkum, který tu není známý, nechá volbu na názvu stromu jako dřív.
 - **Dějiny v časové ose života** (výchozí zapnutá, vypíná se v Nastavení pod *Karta osoby*): časová osa na kartě osoby ukazuje události doby a míst, kde osoba žila, s jejím tehdejším věkem; hledá je výzkum a každá má svůj zdroj (bez takových událostí zůstává karta jako dřív), značky vysvětluje *Co znamenají značky*. Událost jde skrýt u místa nebo jen u jedné osoby, s možností *Vrátit*, a *Skryté události* v Nastavení ji ukážou znovu. Nastavení také říká, jak daleko je hledání výzkumu, a kdy verze výzkumu dějiny ještě nenabízí.
+- **Zapnutí hledání dějin**: dějiny k místům výzkum hledá, až když se hledání zapne ve výzkumu (při jeho nastavení nebo v jeho Nastavení), případně odkazem *Zapnout hledání ve výzkumu* v Nastavení pod *Karta osoby*. Do té doby to časová osa na kartě osoby u stromu propojeného s výzkumem řekne jedním řádkem s tímto odkazem; × řádek v tomto prohlížeči zavře natrvalo.
 
 ## 3.16.0
 

@@ -29,7 +29,7 @@ import {
 } from '../research-link.js';
 import { storedResearchBridge, announcedResearchScheme } from '../research-device.js';
 import {
-    computePersonHistory, historyCardShows, historyFindRegions, historyMainPlace, historyPlaceRow, historyWaiting, historySettingsStatus, queueHideOp,
+    computePersonHistory, historyCardShows, historyStripShows, historyFindRegions, historyMainPlace, historyPlaceRow, historyWaiting, historySettingsStatus, queueHideOp,
     historyKindsShown, historyKindLocked, HISTORY_SCOPE_KINDS, type HistoryKinds,
     type HistoryPayload, type HistoryDeleted, type HistoryHideOp, type PersonHistory, type LifelineHistoryItem, type HiddenHistoryItem,
     type HistorySettingsAction, type EffectiveHidden,
@@ -233,6 +233,7 @@ export const historyMethods = uiModule({
                 if (stale) void this.readBridgeHistory(rid, rev);
             }
             if (features.includes(HISTORY_HIDE_FEATURE)) void this.flushHistoryQueue(rid);
+            this.syncHistoryStrip();
             this.renderHistorySettingsIfOpen();
             // The manager's header and actions follow the status (search on/off, pace, features).
             if (document.getElementById(HISTORY_MANAGE_DIALOG_ID)?.classList.contains('active')) this.renderHistoryManage();
@@ -421,6 +422,45 @@ export const historyMethods = uiModule({
             if (row) history.placeRow = row;
         }
         return { researchId: rid, chipOn, history, canLinkOn };
+    },
+
+    /**
+     * The card's line "the research does not look for history yet" (spec 020
+     * K1.6), for a card whose timeline shows no layer: the tree tied to its
+     * research, the bridge running, the search off there.
+     */
+    historyStripWanted(): boolean {
+        const rid = activeResearchId();
+        if (!rid || !SettingsManager.isHistoryLayer() || SettingsManager.isHistoryStripClosed()) return false;
+        // Not read yet (historyForPerson asks): its events may still put the layer there instead.
+        if (!cache.has(rid)) return false;
+        const status = this.researchBridgeUp(rid) ? this.researchStatusOf(rid) : null;
+        return historyStripShows({
+            layerOn: true,
+            closed: false,
+            following: DataManager.isLiveFollowing(),
+            bridgeHistory: !!status && (status.features ?? []).includes(HISTORY_EVENTS_FEATURE),
+            searchOn: status?.experiments?.history,
+            offDone: offDone.has(rid),
+            canLinkOn: this.historyCanLinkOn(rid),
+            payload: cache.get(rid) ?? null,
+            ...(status?.treeState ? { treeState: status.treeState } : {}),
+        });
+    },
+
+    /** An open card redraws its timeline when the strip's answer changed (the search switched on, the bridge up or gone). */
+    syncHistoryStrip(): void {
+        if (!this.currentId || !document.getElementById('person-modal')?.classList.contains('active')) return;
+        const body = document.getElementById('pm-lifeline-body');
+        if (document.getElementById('pm-lifeline-section')?.style.display === 'none') return;
+        if (!body || body.querySelector('.k-history, .k-historyGroup, .k-historyState:not(.is-strip)')) return;
+        if (!!body.querySelector('[data-history-strip]') !== this.historyStripWanted()) this.renderPersonLifeline(this.currentId, true);
+    },
+
+    /** The card's line closed: it does not come back in this browser (Settings keeps the switch). */
+    closeHistoryStrip(): void {
+        SettingsManager.setHistoryStripClosed(true);
+        this.historyChanged();
     },
 
     /** The card's "History" chip (remembered for every card). */
