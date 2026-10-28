@@ -24,3 +24,8 @@ export function isHistoryKey(key: string): boolean {
 export function qualityBridgeKey(researchId: string): string {
     return `quality:${researchId.toLowerCase()}`;
 }
+
+/** The research's last spelling suggestions on this device (spec 021 §4.2): in 'shareBaselines', keyed by the research's id. */
+export function surnamesBridgeKey(researchId: string): string {
+    return `surnames:${researchId.toLowerCase()}`;
+}

@@ -49,7 +49,7 @@ import { AuditLogManager } from './audit-log.js';
 import { extractSubtree } from './subtree.js';
 import { collectPlaces, renamePlace, placeKey, orphanedPlaceKeys } from './places.js';
 import { StorageManager } from './storage.js';
-import { surnameForms, addSurnameGroup, removeSurnameGroup } from './surnames.js';
+import { surnameForms, addSurnameGroup, removeSurnameGroup, surnameKey } from './surnames.js';
 import { sanitizeQualityDismissed, sanitizeSurnameRejections, dismissalKey, surnameRejectionKey } from './quality-dismiss.js';
 import { ChangePacket, applyPacketOntoData } from './share-diff.js';
 import { createSnapshot, getSnapshotPayload, SnapshotReason, hasAutoSnapshotOnDay } from './snapshots.js';
@@ -1509,6 +1509,60 @@ class DataManagerClass {
         this.commitMutation(strings.undo.unrejectSurnameGroup(forms.join(', ')), true);
         if (this.currentTreeId) {
             AuditLogManager.log(this.currentTreeId, 'surname.unreject', strings.auditLog.surnameUnrejected(forms.join(', ')));
+        }
+        return true;
+    }
+
+    /**
+     * Accept spelling groups the research suggested (spec 021 §4.4): each
+     * goes into the tree's groups (merged into the one it extends), all in
+     * one undo step, a change-log entry each. Returns the forms each one
+     * added to the tree (what its "Undo" takes out again), or null when none
+     * changed anything.
+     */
+    acceptSurnameGroups(groups: readonly (readonly string[])[]): string[][] | null {
+        let variants = this.data.surnameVariants ?? [];
+        const added: string[][] = [];
+        for (const forms of groups) {
+            const keys = new Set(forms.map(surnameKey));
+            const had = new Set(variants.filter(g => g.some(n => keys.has(surnameKey(n)))).flat().map(surnameKey));
+            const fresh = forms.filter(f => f.trim() && !had.has(surnameKey(f)));
+            // Two spellings that differ only in diacritics share a key: both are new to a new group.
+            if (fresh.length === 0 && had.size > 0) { added.push([]); continue; }
+            variants = addSurnameGroup({ ...this.data, surnameVariants: variants }, [...forms]);
+            added.push(had.size > 0 ? fresh : forms.map(f => f.trim()).filter(Boolean));
+        }
+        if (added.every(a => a.length === 0)) return null;
+        this.beginMutation();
+        this.data.surnameVariants = variants;
+        const names = groups.map(g => g.join(', '));
+        this.commitMutation(strings.undo.acceptSurnameGroups(names.join('; ')), true);
+        if (this.currentTreeId) {
+            for (const n of names) AuditLogManager.log(this.currentTreeId, 'surname.accept', strings.auditLog.surnameAccepted(n));
+        }
+        return added;
+    }
+
+    /**
+     * Take accepted spellings out of the tree's groups again (the "Undo" of an
+     * accept): each form out of its group, a group left with one form gone.
+     * One undo step. Returns false when none of them is in a group.
+     */
+    removeSurnameForms(forms: readonly string[]): boolean {
+        const drop = new Set(forms.map(f => f.normalize('NFC').trim().toLowerCase()));
+        const groups = this.data.surnameVariants ?? [];
+        let changed = false;
+        const next = groups.map(g => {
+            const kept = g.filter(n => !drop.has(n.normalize('NFC').trim().toLowerCase()));
+            if (kept.length !== g.length) changed = true;
+            return kept;
+        }).filter(g => g.length >= 2);
+        if (!changed) return false;
+        this.beginMutation();
+        this.data.surnameVariants = next.length > 0 ? next : undefined;
+        this.commitMutation(strings.undo.unacceptSurnameGroups(forms.join(', ')), true);
+        if (this.currentTreeId) {
+            AuditLogManager.log(this.currentTreeId, 'surname.unaccept', strings.auditLog.surnameUnaccepted(forms.join(', ')));
         }
         return true;
     }

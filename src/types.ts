@@ -1239,6 +1239,8 @@ export type AuditAction =
     | 'quality.restore'
     | 'surname.reject'
     | 'surname.unreject'
+    | 'surname.accept'
+    | 'surname.unaccept'
     | 'undo'
     | 'redo';
 

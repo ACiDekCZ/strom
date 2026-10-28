@@ -17,13 +17,14 @@ import { formatLiveClock } from '../live-time.js';
 import {
     ChangeKind, PersonChange, diffByPerson, baseCopy, diffOther, otherRowCount, previewInexact, OtherChanges, SourceChange, CoupleChange,
     SourceChangeKind, CoupleChangeKind, PlaceChange, VariantChange, SentOtherRow, sentOtherRows, sanitizeSentOtherRow,
-    sourceAppOnly, coupleAppOnly, placesAppOnly, variantsAppOnly, pairNotWritten,
+    sourceAppOnly, coupleAppOnly, placesAppOnly, variantsAppOnly, pairNotWritten, RESEARCH_UNREAD_KINDS,
 } from '../research-changes.js';
 import { saveResearchCopy, loadResearchCopy, saveResearchPrevCopy, loadResearchPrevCopy } from '../research-copy.js';
 import { researchAutoState, patchResearchAutoState, noteResearchSendPreviewSkipped } from '../research-device.js';
 import { researchSendMode, personsByResearchRefs } from './research-sync-ui.js';
 import { researchFactLabel } from './person-research-ui.js';
 import { uiModule } from './module.js';
+import { surnamesReadByResearch } from './surname-suggest-ui.js';
 import { returnFocusAfterViewer } from './sources.js';
 import { shownNameOrEmpty } from '../person-name.js';
 
@@ -180,6 +181,17 @@ function coordText(p: PlaceChange): string {
 }
 
 /** The one row of places / surname variants: a summary and a toggle expanding its list. */
+/**
+ * The kinds of change the research does not read: the spelling groups are
+ * read by a research that says `surnames.read` (spec 021 §4.4).
+ */
+function researchUnread(readsSurnames: boolean): ReadonlySet<string> {
+    if (!readsSurnames) return RESEARCH_UNREAD_KINDS;
+    const out = new Set(RESEARCH_UNREAD_KINDS);
+    out.delete('variants');
+    return out;
+}
+
 function summaryRow(key: 'places' | 'variants', labelHtml: string, context: string, toggle: string, appOnly = false): string {
     return `<li class="research-changes-row is-summary" data-kind="${key}"><span class="research-changes-icon is-ring" aria-hidden="true"></span>`
         + `<span class="research-changes-text">${rowLine(`<span class="research-changes-name">${labelHtml}</span>`, '', appOnly)}`
@@ -380,7 +392,7 @@ export const researchChangesMethods = uiModule({
     /** A send is about to go: what it carries (for "What was written" once written). */
     researchNoteSending(treeId: TreeId, data: StromData, fingerprint: string): void {
         const list = DataManager.getCurrentTreeId() === treeId ? this.researchChangesNow() : null;
-        const other = list ? sentOtherRows(this.researchOtherNow()) : [];
+        const other = list ? sentOtherRows(this.researchOtherNow(), researchUnread(surnamesReadByResearch(treeId))) : [];
         const link = TreeManager.getTreeMetadata(treeId)?.research;
         const stands = [link?.fingerprint ?? '', link?.sent?.state === 'written' ? link.sent.fingerprint : ''].filter(Boolean);
         pendingSent.set(treeId, { fingerprint, data: baseCopy(data), list, other, stands });
@@ -634,7 +646,7 @@ export const researchChangesMethods = uiModule({
                 const label = [added ? c.variantsRow(added) : '', removed ? c.variantsRemovedRow(removed) : ''].filter(Boolean).join(' · ');
                 const surnames = new Set(variants.items.map(v => v.surname));
                 const of = surnames.size === 1 ? c.variantsOf([...surnames][0]) : c.variantsOfN(surnames.size);
-                return summaryRow('variants', esc(label), of, c.show, variantsAppOnly());
+                return summaryRow('variants', esc(label), of, c.show, variantsAppOnly(researchUnread(surnamesReadByResearch())));
             }] : [];
             const others = sourceRows.length + coupleRows.length + placesRow.length + variantsRow.length;
             bodyHtml = (inexact ? `<p class="research-changes-inexact">${esc(c.inexact)}</p>` : '')

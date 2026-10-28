@@ -4540,6 +4540,128 @@
             .surnames-picker { gap: 8px; }
         }
 
+        /* ---- Surname spellings suggested by the research (spec 021 §4) ---- */
+        .surnames-suggest {
+            margin: 0 0 16px; padding: 14px;
+            border: 1px solid var(--border); border-radius: 10px;
+        }
+        .ss-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+        .ss-title { margin: 0; font-size: 14px; font-weight: 600; }
+        .ss-counts { font-size: 12.5px; color: var(--text-light); }
+        .modal button.ss-reload { margin-left: auto; }
+        .ss-note { margin: 8px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--text-light); }
+        .ss-error { margin: 10px 0 8px; font-size: 13px; color: var(--danger); }
+        .modal button.ss-suggest { margin-top: 10px; min-height: 28px; }
+        .ss-progress {
+            position: relative; height: 4px; margin-top: 12px; overflow: hidden;
+            border-radius: 2px; background: var(--surface-2);
+        }
+        .ss-progress span {
+            position: absolute; inset: 0 auto 0 0; width: 40%;
+            border-radius: 2px; background: var(--primary);
+            animation: ss-bar 1.2s ease-in-out infinite;
+        }
+        @keyframes ss-bar { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+        @media (prefers-reduced-motion: reduce) { .ss-progress span { animation: none; width: 100%; opacity: 0.5; } }
+        .ss-level { margin-top: 16px; }
+        .ss-level-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; }
+        .ss-level-head h4 {
+            margin: 0; font-size: 12px; font-weight: 600; color: var(--text-light);
+            text-transform: uppercase; letter-spacing: 0.04em;
+        }
+        .ss-level-count { font-weight: 400; margin-left: 4px; }
+        .modal button.ss-accept-all { padding: 5px 12px; font-size: 12.5px; }
+        .ss-card {
+            margin-top: 8px; padding: 12px 14px;
+            border: 1px solid var(--border); border-radius: 10px; background: var(--surface-modal);
+        }
+        .ss-extends { margin-bottom: 6px; font-size: 12px; color: var(--text-faint); }
+        .ss-forms { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+        /* "=" wraps together with the form after it. */
+        .ss-form-next { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+        .ss-eq { color: var(--text-faint); }
+        .ss-form {
+            display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; min-width: 0;
+            padding: 3px 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2);
+        }
+        .ss-form.is-group { color: var(--text-light); }
+        .ss-form.is-new { background: var(--primary-soft); border-color: var(--primary); }
+        .ss-form.is-empty { border-style: dashed; }
+        .ss-form-name { font-family: var(--font-serif); font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+        .ss-form-count { font-size: 11.5px; color: var(--text-light); white-space: nowrap; }
+        .ss-reason { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 8px; font-size: 12.5px; color: var(--text-light); }
+        .ss-tag { padding: 2px 8px; border-radius: 10px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+        .ss-tag.is-documented { background: var(--primary-soft); color: var(--primary-dark); }
+        .ss-tag.is-rules { background: var(--info-soft); color: var(--text-light); }
+        .ss-evidence { margin-top: 8px; padding: 8px 10px; border-radius: 8px; background: var(--surface-2); font-size: 12.5px; line-height: 1.5; }
+        .ss-evidence ul { margin: 0; padding: 0; list-style: none; }
+        .ss-evidence li { margin: 2px 0; overflow-wrap: anywhere; }
+        .ss-evidence-more { display: inline-block; margin-right: 8px; color: var(--text-light); }
+        .modal button.ss-evidence-toggle, .modal button.ss-source { font-size: 12.5px; text-align: left; }
+        .ss-meta { margin-top: 8px; font-size: 12.5px; line-height: 1.5; color: var(--text-light); }
+        .ss-years { white-space: nowrap; }
+        .ss-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+        .modal .ss-actions button { padding: 6px 14px; white-space: nowrap; }
+        .modal button.ss-more { margin-top: 8px; }
+        .ss-agent-hint { margin: 10px 0 0; font-size: 12px; line-height: 1.5; color: var(--text-faint); }
+        /* Folded rows: "Link manually", "Rejected suggestions". */
+        .modal button.ss-fold {
+            display: flex; align-items: center; gap: 8px; width: 100%;
+            margin-top: 12px; padding: 12px 2px;
+            border: none; border-top: 1px solid var(--border); border-radius: 0;
+            background: none; color: var(--text); font-size: 13px; font-weight: 600; text-align: left; cursor: pointer;
+        }
+        .ss-manual-count { font-weight: 400; color: var(--text-light); }
+        .ss-chevron { margin-left: auto; color: var(--text-light); }
+        .surnames-manual-toggle:not([hidden]) + .surnames-add { margin-top: 0; padding-top: 4px; border-top: none; }
+        .surnames-manual-toggle:not([hidden]) + .surnames-add .surnames-add-title { display: none; }
+        .surnames-add.is-folded { display: none; }
+        .modal input.surnames-filter { width: 100%; margin-bottom: 8px; }
+        .surnames-picker { max-height: 280px; overflow-y: auto; }
+        .surname-group-text { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; min-width: 0; }
+        .surname-group.is-new { border-color: var(--primary); }
+        .ss-marks { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+        .ss-badge {
+            padding: 1px 7px; border-radius: 8px; font-size: 11px; font-weight: 600;
+            background: var(--primary-soft); color: var(--primary-dark);
+        }
+        .ss-quiet { font-size: 11.5px; color: var(--text-faint); }
+        .ss-rejected-list { margin: 0; padding: 0; list-style: none; }
+        .ss-rejected-row {
+            display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px;
+            padding: 8px 2px; border-top: 1px solid var(--border);
+        }
+        .ss-rejected-forms { font-family: var(--font-serif); font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+        .modal .ss-rejected-row button { margin-left: auto; padding: 4px 10px; font-size: 12px; }
+        @media (hover: hover) {
+            .modal button.ss-fold:hover { background: var(--surface-2); }
+        }
+        /* Touch: finger-sized targets (rows 40px on a tablet, buttons 44px). */
+        @media (pointer: coarse) {
+            .modal button.ss-suggest, .modal .ss-actions button, .modal button.ss-accept-all,
+            .modal .ss-rejected-row button, .modal button.ss-fold { min-height: 44px; }
+            .modal button.ss-reload, .modal button.ss-more, .modal button.ss-evidence-toggle { min-height: 40px; }
+            .modal button.surname-chip { min-height: 40px; align-items: center; }
+        }
+        /* Phone: cards full width, Reject / Accept and the footer as two halves, bulk accept full width above the cards. */
+        @media (max-width: 640px) {
+            .surnames-suggest { padding: 12px; }
+            .ss-card { padding: 12px; }
+            .ss-actions button { flex: 1; min-height: 44px; }
+            .modal button.ss-accept-all { width: 100%; min-height: 44px; }
+            .modal button.ss-evidence-toggle { display: block; min-height: 44px; }
+            .surnames-modal.is-suggest .buttons { flex-direction: row; }
+            .surnames-modal.is-suggest .buttons > button { flex: 1; width: auto; }
+        }
+        /* A phone held sideways: a low header, only the footer stays put. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .surnames-modal.is-suggest .modal-header { min-height: 44px; }
+            .surnames-modal.is-suggest .buttons {
+                position: sticky; bottom: 0; min-height: 56px; z-index: 1;
+                background: var(--surface-2);
+            }
+        }
+
         /* ---- Split a tree into the families it holds (N3) ---- */
         .split-modal { max-width: 560px; }
         .split-intro { margin: 4px 0 14px; font-size: 13px; color: var(--text-light); line-height: 1.5; }

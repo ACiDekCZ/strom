@@ -2453,6 +2453,8 @@ export const researchSyncMethods = uiModule({
         this.researchImagesBridgeChanged();
         // Materials: the research's capabilities remembered, the person's section and the cards' counts.
         this.materialsBridgeChanged();
+        // The spelling suggestions of the research (spec 021 §4): the dialog's state follows the bridge.
+        this.surnameSuggestBridgeChanged();
     },
 
     /**

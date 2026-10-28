@@ -31,6 +31,7 @@ import { researchAutoState, patchResearchAutoState } from './research-device.js'
 import { researchBaseKey, isHistoryKey } from './storage-keys.js';
 import { deleteHistoryStore } from './history-store.js';
 import { deleteQualityBridgeRecord } from './quality-bridge.js';
+import { deleteSurnamesBridgeRecord } from './surname-suggest-bridge.js';
 import { VIEW_LINK_KEY_PREFIXES, forgetViewLinks } from './view-links.js';
 import { unknownSexFromTie, fingerprintLike, normalizeResearchId } from './research-link.js';
 import { unknownSexInResearchCopies } from './research-copy.js';
@@ -475,6 +476,7 @@ class TreeManagerClass {
         if (researchId && !this.index.trees.some(t => t.research?.id === researchId)) {
             await deleteHistoryStore(researchId);
             await deleteQualityBridgeRecord(researchId);
+            await deleteSurnamesBridgeRecord(researchId);
         }
         forgetPoolScope(id);
 

@@ -64,7 +64,9 @@ export function baseCopy(data: StromData): StromData {
     const kept = older
         ? { persons: data.persons, partnerships: data.partnerships, sources: data.sources ?? {}, olderCopy: true }
         : { persons: data.persons, partnerships: data.partnerships, sources: data.sources ?? {},
-            places: data.places ?? {}, surnameVariants: data.surnameVariants ?? [] };
+            places: data.places ?? {}, surnameVariants: data.surnameVariants ?? [],
+            // The rejected spelling suggestions: what the research holds of them (its "not sent yet").
+            surnameRejections: data.surnameRejections ?? [] };
     return JSON.parse(JSON.stringify(kept,
         (_k, v) => typeof v === 'string' && v.length >= 256 && v.startsWith('data:') ? `img:${v.length}` : v)) as StromData;
 }

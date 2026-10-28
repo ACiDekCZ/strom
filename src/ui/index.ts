@@ -114,6 +114,7 @@ import { mapMethods, MapScope } from './map-ui.js';
 import { splitMethods } from './split-ui.js';
 import { splitFamiliesMethods } from './split-families-ui.js';
 import { surnamesMethods } from './surnames-ui.js';
+import { surnameSuggestMethods } from './surname-suggest-ui.js';
 import { shareUiMethods } from './share-ui.js';
 import { researchPromoMethods } from './research-promo-ui.js';
 import { familyWizardMethods } from './family-wizard.js';
@@ -749,6 +750,9 @@ Object.assign(UIClass.prototype, splitFamiliesMethods);
 type SurnamesMethods = typeof surnamesMethods;
 export interface UIClass extends SurnamesMethods {}
 Object.assign(UIClass.prototype, surnamesMethods);
+type SurnameSuggestMethods = typeof surnameSuggestMethods;
+export interface UIClass extends SurnameSuggestMethods {}
+Object.assign(UIClass.prototype, surnameSuggestMethods);
 
 type FamilyWizardMethods = typeof familyWizardMethods;
 export interface UIClass extends FamilyWizardMethods {}

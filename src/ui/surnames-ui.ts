@@ -45,10 +45,14 @@ export const surnamesMethods = uiModule({
                         <p>${strings.surnames.intro}</p>
                     </details>
                 </div>
+                <div id="surnames-suggest" class="surnames-suggest" hidden></div>
                 <div id="surnames-groups"></div>
+                <button type="button" class="ss-fold surnames-manual-toggle" id="surnames-manual-toggle" hidden></button>
                 <div class="surnames-add">
                     <div class="surnames-add-title">${strings.surnames.addTitle}</div>
                     <p class="surnames-hint">${strings.surnames.addHint}</p>
+                    <input type="search" id="surnames-filter" class="surnames-filter" placeholder="${strings.surnameSuggest.filter}"
+                           aria-label="${strings.surnameSuggest.filter}" autocomplete="off">
                     <div id="surnames-picker" class="surnames-picker"></div>
                     <div class="surnames-add-row">
                         <input type="text" id="surname-other" placeholder="${strings.surnames.addOther}"
@@ -56,6 +60,7 @@ export const surnamesMethods = uiModule({
                         <button type="button" class="secondary" id="surname-other-add">${strings.surnames.addSpelling}</button>
                     </div>
                 </div>
+                <div id="surnames-rejected" class="surnames-rejected" hidden></div>
                 <div class="buttons">
                     <button type="button" class="secondary" id="surnames-close" data-dismiss>${strings.buttons.close}</button>
                     <button type="button" class="primary" id="surnames-link" disabled>${strings.surnames.link}</button>
@@ -83,9 +88,12 @@ export const surnamesMethods = uiModule({
         };
         (overlay.querySelector('#surname-other-add') as HTMLButtonElement).onclick = addOther;
         other.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); addOther(); } };
+        const filter = overlay.querySelector('#surnames-filter') as HTMLInputElement;
+        filter.oninput = () => this.setSurnameFilter(filter.value);
 
-        this.renderSurnameGroups();
-        this.renderSurnamePicker();
+        // Suggestions from the research (spec 021 §4): only for a research that makes them.
+        this.resetSurnameSuggestView();
+        this.renderSurnamesDialogParts();
 
         this.clearDialogStack();
         if (this.surnamesParentDialog) {
@@ -109,20 +117,25 @@ export const surnamesMethods = uiModule({
             });
             return;
         }
+        const ro = DataManager.isReadOnly() || DataManager.isTreeLocked();
         box.innerHTML = `<div class="surnames-groups-title">${strings.surnames.groupsTitle}</div>`
-            + groups.map(group => `
-                <div class="surname-group">
-                    <span class="surname-group-names">${group.map(n => this.escapeHtml(n)).join('  =  ')}</span>
-                    <button type="button" class="secondary surname-unlink" data-name="${this.escapeHtml(group[0])}">
+            + groups.map(group => {
+                const marks = this.surnameGroupMarks(group);
+                return `
+                <div class="surname-group${marks.isNew ? ' is-new' : ''}">
+                    <span class="surname-group-text">
+                        <span class="surname-group-names">${group.map(n => this.escapeHtml(n)).join('  =  ')}</span>${marks.html}
+                    </span>
+                    ${ro ? '' : `<button type="button" class="secondary surname-unlink" data-name="${this.escapeHtml(group[0])}">
                         ${strings.surnames.unlink}
-                    </button>
-                </div>`).join('');
+                    </button>`}
+                </div>`;
+            }).join('');
 
         box.querySelectorAll('.surname-unlink').forEach(btn => {
             (btn as HTMLButtonElement).onclick = () => {
                 DataManager.removeSurnameGroup(btn.getAttribute('data-name') ?? '');
-                this.renderSurnameGroups();
-                this.renderSurnamePicker();
+                this.renderSurnamesDialogParts();
                 TreeRenderer.render();
             };
         });
@@ -138,8 +151,11 @@ export const surnamesMethods = uiModule({
             .map(surname => ({ surname, count: 0 }));
 
         const data = DataManager.getData();
-        box.innerHTML = [...inTree, ...typed].map(({ surname, count }) => {
-            const picked = this.surnamePicks.some(p => surnameKey(p) === surnameKey(surname));
+        // The filter narrows the chips (by surnameKey, as search compares); a picked one always stays.
+        const want = surnameKey(this.surnameFilterValue());
+        const isPicked = (surname: string): boolean => this.surnamePicks.some(p => surnameKey(p) === surnameKey(surname));
+        box.innerHTML = [...inTree, ...typed].filter(({ surname }) => !want || isPicked(surname) || surnameKey(surname).includes(want)).map(({ surname, count }) => {
+            const picked = isPicked(surname);
             const chip = `
                 <button type="button" class="surname-chip${picked ? ' picked' : ''}"
                         data-surname="${this.escapeHtml(surname)}">
@@ -200,6 +216,9 @@ export const surnamesMethods = uiModule({
 
         const link = document.getElementById('surnames-link') as HTMLButtonElement | null;
         if (link) link.disabled = this.surnamePicks.length < 2;
+        // The filter only once there are enough chips to look for one.
+        const filter = document.getElementById('surnames-filter') as HTMLInputElement | null;
+        if (filter) filter.hidden = inTree.length < 8 && !filter.value;
     },
 
     linkSurnames(): void {
@@ -207,8 +226,7 @@ export const surnamesMethods = uiModule({
         DataManager.addSurnameGroup(this.surnamePicks);
         this.surnamePicks = [];
         this.showToast(strings.surnames.linked);
-        this.renderSurnameGroups();
-        this.renderSurnamePicker();
+        this.renderSurnamesDialogParts();
         TreeRenderer.render();
     },
 
