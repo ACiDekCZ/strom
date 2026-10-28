@@ -32,6 +32,7 @@ import { COUPLE_EVENT_TAG, eventValueIsOnTag, sortCoupleEvents } from './events.
 import { placeKey } from './places.js';
 import { noName } from './gedcom-names.js';
 import { gedcomAge } from './recorded-age.js';
+import { isGedcomDateForm } from './gedcom-date-form.js';
 import { applyContentOptions, ContentOptions } from './privacy.js';
 
 /** What to leave out of a GEDCOM export (the export dialog's Content section). */
@@ -134,12 +135,14 @@ const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', '
  * Preserves precision and qualifiers: "~1900" -> "ABT 1900",
  * "1900-06" -> "JUN 1900", "<1900-06-03" -> "BEF 3 JUN 1900",
  * a period "1871/1882" -> "FROM 1871 TO 1882". `asWritten` (Person /
- * Partnership gedcomDates) gives the form the imported file wrote the value in.
+ * Partnership gedcomDates) gives the form the imported file wrote the value in
+ * (used only when it is a valid one-line keyword form).
  */
 export function formatGedcomDate(isoDate: string | undefined, asWritten?: Record<string, string>): string | null {
     if (!isoDate) return null;
+    // Only a one-line keyword form: a value from loaded data may hold anything.
     const kept = asWritten?.[isoDate];
-    if (kept) return kept;
+    if (isGedcomDateForm(kept)) return kept;
 
     // Period 'a/b' -> FROM a TO b, 'a/' -> FROM a, '/b' -> TO b
     const slash = isoDate.indexOf('/');

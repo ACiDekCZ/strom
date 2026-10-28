@@ -65,6 +65,7 @@ import {
 import { dateSortKey, formatFlexDate, normalizeDateInput } from './dates';
 import { readDateWords } from './date-words';
 import { localAge } from './recorded-age';
+import { isGedcomDateForm } from './gedcom-date-form';
 import { placeKey } from './places';
 import { coupleEventTypeOfTag, eventValueIsOnTag } from './events';
 import { strings, getStringsForLang } from './strings';
@@ -1138,10 +1139,6 @@ export function parseGedcomDate(dateStr: string): string {
     return readGedcomDate(dateStr).date;
 }
 
-/** A GEDCOM 5.5.1 date in its keyword form ('§' is a day, month and year, a dual year "1699/00" too). */
-const GEDCOM_DATE_FORM = new RegExp('^(?:(?:(?:ABT|CAL|EST|BEF|AFT|INT|TO) )?§|FROM §(?: TO §)?|BET § AND §)$'
-    .replace(/§/g, '(?:\\d{1,2} )?(?:(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC) )?\\d{3,4}(?:/\\d{2})?'));
-
 /**
  * Remember how a record wrote a date (Person / Partnership `gedcomDates`).
  * Every DATE counts, so a value written in two ways in one record is known
@@ -1160,7 +1157,7 @@ function noteDateForm(record: { dateForms?: Record<string, string> }, raw: strin
  */
 function keptDateForms(forms: Record<string, string> | undefined): Record<string, string> | undefined {
     const kept = Object.entries(forms ?? {})
-        .filter(([date, v]) => v && GEDCOM_DATE_FORM.test(v) && formatGedcomDate(date) !== v);
+        .filter(([date, v]) => isGedcomDateForm(v) && formatGedcomDate(date) !== v);
     return kept.length > 0 ? Object.fromEntries(kept) : undefined;
 }
 

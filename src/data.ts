@@ -41,6 +41,7 @@ import {
     SurnameRejection,
 } from './types.js';
 import { isCoupleEventType } from './events.js';
+import { sanitizeGedcomDates } from './gedcom-date-form.js';
 import { strings, getCurrentLanguage, getStringsForLang, SUPPORTED_LANGUAGES } from './strings.js';
 import { TreeManager } from './tree-manager.js';
 import { isEncrypted, EncryptedData, decrypt } from './crypto.js';
@@ -138,6 +139,18 @@ export function unlinkExcerptsFromAttachment(data: StromData, attachmentId: stri
 }
 
 /**
+ * v13: the date forms a record wrote (gedcomDates) go back into a GEDCOM file
+ * as they are, so only one-line keyword forms stay; a crafted or broken file
+ * may carry anything there.
+ */
+function keepValidGedcomDates(record: { gedcomDates?: Record<string, string> }): void {
+    if (!('gedcomDates' in record)) return;
+    const kept = sanitizeGedcomDates(record.gedcomDates);
+    if (kept) record.gedcomDates = kept;
+    else delete record.gedcomDates;
+}
+
+/**
  * Bring loaded data to the current shape. EVERY load goes through here — tree
  * switch, app restart, import, snapshot restore, opening a shared file.
  *
@@ -164,6 +177,7 @@ export function migrateData(data: unknown): StromData {
         if (!partnership.status) {
             partnership.status = 'married';
         }
+        keepValidGedcomDates(partnership);
     }
 
     // v1 -> v2: Person.events was added. v2 -> v3: the per-tree source
@@ -180,6 +194,7 @@ export function migrateData(data: unknown): StromData {
     // never a guess (an older app drew such a person as a man).
     for (const person of Object.values(result.persons)) {
         if (person && typeof person === 'object' && !isGender(person.gender)) person.gender = 'unknown';
+        if (person && typeof person === 'object') keepValidGedcomDates(person);
         // The surname after marriage is text or nothing (a crafted or broken
         // file may carry anything there); an empty one means none.
         if (person && typeof person === 'object' && 'marriedSurname' in person
