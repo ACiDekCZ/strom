@@ -851,7 +851,7 @@ export const personModalMethods = uiModule({
         // only appears when there is something for it to show.
         const all = computePersonLifeline(DataManager.getData(), id, { childEvents: true });
         const hasChildEvents = all.some(pt => pt.kind === 'childEvent');
-        const showChildEvents = SettingsManager.isLifelineChildEvents();
+        const showChildEvents = SettingsManager.isLifelineChildEvents(DataManager.getCurrentTreeId());
         const points = showChildEvents ? all : all.filter(pt => pt.kind !== 'childEvent');
         const toggle = document.getElementById('pm-lifeline-child-toggle');
         if (toggle) {
@@ -1002,9 +1002,10 @@ export const personModalMethods = uiModule({
         return ` <span class="pm-lifeline-place">· ${inner}</span>`;
     },
 
-    /** The head's chip (T15): the children's events on or off, for every person. */
+    /** The head's chip (T15): the children's events on or off, for every person of this tree (K4.5). */
     toggleLifelineChildEvents(): void {
-        SettingsManager.setLifelineChildEvents(!SettingsManager.isLifelineChildEvents());
+        const treeId = DataManager.getCurrentTreeId();
+        SettingsManager.setLifelineChildEvents(treeId, !SettingsManager.isLifelineChildEvents(treeId));
         const id = this.currentId;
         if (id) this.renderPersonLifeline(id, true);
     },

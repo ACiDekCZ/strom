@@ -497,6 +497,7 @@ class TreeManagerClass {
         // What the tree showed linked in the view only (a device setting of the tree).
         forgetViewLinks(id);
         SettingsManager.forgetRecentSources(id);
+        SettingsManager.forgetLifelineChoices(id);
 
         // If this was the active tree, switch to another VISIBLE one (never
         // land on a hidden tree) or null

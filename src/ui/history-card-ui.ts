@@ -1,8 +1,8 @@
 /**
  * History in the life timeline (spec 020, the person card's layer): the
  * research's events of the time between the person's own rows, the "History"
- * chip with its legend, the "⋯" menu that hides an event (for the place or
- * for the person only), "Hidden: n" with "Show again", and the state row.
+ * chip with its legend, the "⋯" menu that hides an event (in the whole tree
+ * or for the person only), "Hidden: n" with "Show again", and the state row.
  *
  * The data, the hidings and the bridge are history-ui.ts; the pure model is
  * src/history.ts. With the layer off historyForPerson() says null and
@@ -21,14 +21,14 @@ import {
     groupHistoryByYear, historyClusterLabel, historySourceLabel, isHistoryLang,
     type LifelineHistoryItem, type HiddenHistoryItem, type PersonHistory, type HistoryEvent, type HistoryFindRegion, type HistoryPlaceRow,
 } from '../history.js';
-import { regionName } from '../history-manage.js';
+import { regionName, manageCan } from '../history-manage.js';
 import { postBridgeFirst, postBridgeSkip, type HistoryWriteRefusal } from '../history-bridge.js';
 import { HISTORY_SKIP_FEATURE } from '../research-link.js';
 import { announcedResearchScheme } from '../research-device.js';
 import { shownExcerpts } from '../research-images.js';
 import { excerptImageUrl } from '../excerpts.js';
 import type { Source } from '../types.js';
-import type { PersonHistoryView } from './history-ui.js';
+import type { PersonHistoryView, HistoryHideScope } from './history-ui.js';
 import { uiModule } from './module.js';
 
 /** A year group of the layer, ready to go between the person's rows. */
@@ -212,7 +212,7 @@ export const historyCardMethods = uiModule({
             chip.innerHTML = '<span class="pm-lifeline-childtoggle-box" aria-hidden="true"></span><span class="pm-lifeline-history-label"></span>';
             chip.addEventListener('click', (e) => {
                 e.stopPropagation();
-                this.toggleLifelineHistory(!SettingsManager.isLifelineHistory());
+                this.toggleLifelineHistory(!SettingsManager.isLifelineHistory(DataManager.getCurrentTreeId()));
             });
             chip.addEventListener('keydown', (e) => e.stopPropagation());
             const info = document.createElement('button');
@@ -625,7 +625,7 @@ export const historyCardMethods = uiModule({
         const view = this.historyForPerson(personId);
         const item = view?.history?.items.find(i => i.ev.id === id);
         if (!view || !item) return;
-        if (!view.chipOn) SettingsManager.setLifelineHistory(true);
+        if (!view.chipOn) SettingsManager.setLifelineHistory(DataManager.getCurrentTreeId(), true);
         openYears.add(item.year);
         this.renderPersonLifeline(personId, true);
         const row = document.querySelector<HTMLElement>(`#pm-lifeline-body .pm-lifeline-row[data-history-id="${CSS.escape(id)}"]`);
@@ -647,9 +647,11 @@ export const historyCardMethods = uiModule({
     },
 
     /**
-     * "⋯" of an event: hide it for the place it matched through (first) or
-     * for this person only. A menu by the row; on a phone a bottom sheet with
-     * "Cancel". No confirmation; a locked tree may hide too.
+     * "⋯" of an event: hide it in this whole tree (spec 020 K4.1a; a research
+     * with `history.hide.all`) or for this person only. Not for a place: that
+     * is History of places' (an earlier hiding at a place stays in "Hidden"
+     * and can be shown again). A menu by the row; on a phone a bottom sheet
+     * with "Cancel". No confirmation; a locked tree may hide too.
      */
     showLifelineHistoryMenu(index: number, anchor: HTMLElement): void {
         const item = rowItems[index];
@@ -661,11 +663,13 @@ export const historyCardMethods = uiModule({
         const person = DataManager.getPerson(personId);
         const name = person ? shownName(person) : '';
         const head = `${item.yearLabel ?? item.year} · ${item.text}`;
-        const rows: { scope: 'place' | 'person'; label: string; hint: string }[] = [
-            { scope: 'place', label: h.hidePlace(item.place), hint: h.hidePlaceHint },
+        const ctx = this.historyManageContext();
+        const treeOn = !!ctx && manageCan({ features: ctx.features, bridgeUp: !!ctx.status }, 'hideAll');
+        const rows: { scope: HistoryHideScope; label: string; hint: string }[] = [
+            ...(treeOn ? [{ scope: 'tree' as const, label: h.hideTreeCard, hint: h.hideTreeCardHint }] : []),
             { scope: 'person', label: h.hidePerson(name), hint: h.hidePersonHint },
         ];
-        const run = (scope: 'place' | 'person'): void => this.hideHistoryItem(personId, item, scope);
+        const run = (scope: HistoryHideScope): void => this.hideHistoryItem(personId, item, scope);
 
         if (media(MQ_MOBILE)) {
             const items = rows.map(r => `<button type="button" role="menuitem" class="bottom-sheet-item pm-lifeline-hsheet-item" data-scope="${r.scope}">`
@@ -678,7 +682,7 @@ export const historyCardMethods = uiModule({
                 const row = target.closest<HTMLElement>('[data-scope]');
                 if (row) {
                     this.hideBottomSheet();
-                    run(row.dataset.scope as 'place' | 'person');
+                    run(row.dataset.scope as HistoryHideScope);
                 } else if (target.closest('.pm-lifeline-hsheet-cancel')) {
                     this.hideBottomSheet();
                 }
@@ -700,7 +704,7 @@ export const historyCardMethods = uiModule({
             if (!row) return;
             e.stopPropagation();
             closePopup(true);
-            run(row.dataset.scope as 'place' | 'person');
+            run(row.dataset.scope as HistoryHideScope);
         });
         this.openLifelineHistoryPopup(menu, anchor, (e) => this.lifelineHistoryMenuKeys(e, menu));
         menu.querySelector<HTMLElement>('[data-scope]')?.focus();

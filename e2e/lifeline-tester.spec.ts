@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, card } from './helpers.js';
+import { openApp, card, seedSetting } from './helpers.js';
 
 /**
  * The person card's life timeline after the 3.10 tester round: a divorce as
@@ -33,13 +33,17 @@ async function dropFile(page: Page, content: string): Promise<void> {
     for (const type of ['dragenter', 'dragover', 'drop']) await page.dispatchEvent('#tree-container', type, { dataTransfer });
 }
 
-async function setup(page: Page, width = 1440, height = 900): Promise<void> {
-    await page.setViewportSize({ width, height });
-    await openApp(page);
+async function importTree(page: Page): Promise<void> {
     await dropFile(page, ged());
     await page.locator('.modal-overlay.active').getByText('Import as a new tree', { exact: true }).first().click();
     await page.locator('.modal-overlay.active button.primary', { hasText: 'Import' }).click();
     await expect(card(page, 'Jan')).toBeVisible();
+}
+
+async function setup(page: Page, width = 1440, height = 900): Promise<void> {
+    await page.setViewportSize({ width, height });
+    await openApp(page);
+    await importTree(page);
 }
 
 const idOf = (page: Page, first: string) => page.evaluate((first) =>
@@ -82,12 +86,46 @@ test.describe('T15: divorce and the children\'s events in the life timeline', ()
         const indented = await child.first().evaluate(el => parseFloat(getComputedStyle(el).paddingLeft));
         expect(indented - own).toBe(16);
 
-        // One choice for everybody, kept over a reload.
+        // One choice for every person of the tree, kept over a reload.
         await page.reload();
         await expect(card(page, 'Jan')).toBeVisible();
         await openCard(page, 'Anna');
         await expect(page.locator('#pm-lifeline-child-toggle')).toHaveAttribute('aria-checked', 'true');
         await expect(page.locator('#pm-lifeline-body .pm-lifeline-row.k-childEvent')).toHaveCount(4);
+    });
+
+    test('the chip is remembered per tree; the former choice for every tree is each tree\'s default (K4.5)', async ({ page }) => {
+        // Chosen before the choice was per tree: on.
+        await seedSetting(page, 'lifelineChildEvents', true);
+        await setup(page);
+        const first = await page.evaluate(() => window.Strom.DataManager.getCurrentTreeId());
+        await openCard(page, 'Jan');
+        const chip = page.locator('#pm-lifeline-child-toggle');
+        await expect(chip).toHaveAttribute('aria-checked', 'true');
+        await chip.click();
+        await expect(chip).toHaveAttribute('aria-checked', 'false');
+        await page.evaluate(() => window.Strom.UI.forceCloseModal());
+
+        // Another tree keeps the former choice.
+        await importTree(page);
+        const second = await page.evaluate(() => window.Strom.DataManager.getCurrentTreeId());
+        expect(second).not.toBe(first);
+        await openCard(page, 'Jan');
+        await expect(chip).toHaveAttribute('aria-checked', 'true');
+        await expect(page.locator('#pm-lifeline-body .pm-lifeline-row.k-childEvent')).toHaveCount(4);
+        await page.evaluate(() => window.Strom.UI.forceCloseModal());
+
+        // Back in the first tree: its own choice, also after a reload.
+        await page.evaluate((id) => window.Strom.UI.switchToTree(id!), first);
+        await expect.poll(() => page.evaluate(() => window.Strom.DataManager.getCurrentTreeId())).toBe(first);
+        await openCard(page, 'Jan');
+        await expect(chip).toHaveAttribute('aria-checked', 'false');
+        await expect(page.locator('#pm-lifeline-body .pm-lifeline-row.k-childEvent')).toHaveCount(0);
+        await page.reload();
+        await expect(card(page, 'Jan')).toBeVisible();
+        expect(await page.evaluate(() => window.Strom.DataManager.getCurrentTreeId())).toBe(first);
+        await openCard(page, 'Jan');
+        await expect(chip).toHaveAttribute('aria-checked', 'false');
     });
 
     test('no chip without any child event', async ({ page }) => {

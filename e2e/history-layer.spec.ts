@@ -8,7 +8,8 @@ import {
  * History in the life timeline (spec 020) — the person card's
  * layer: the research's events of the time between the person's rows (with
  * the age then, the kind, the source), a year's cluster, the "⋯" menu that
- * hides an event for the place or for the person only (toast with Undo),
+ * hides an event in this whole tree or for the person only (toast with
+ * Undo; no longer for a place, spec 020 K4.1a),
  * "Hidden: n" with "Show again", the state rows, the phone's bottom sheet and
  * the device's copy read again after the local data is unlocked. Invented
  * data (fakeHistory): Jan lived in Čáslav 1860–1910, Josef 1830–1890, Anna's
@@ -16,6 +17,8 @@ import {
  */
 
 const LINKS = ['send', 'open', 'live', 'app', 'setup', 'experiment'];
+/** A research that hides in the whole tree (R2). */
+const TREE_FEATURES = [...HISTORY_FEATURES, 'history.hide.all'];
 
 function layerGed(): string {
     return historyGed()
@@ -96,6 +99,13 @@ test.describe('History in the life timeline: the person card', () => {
         await expect(page.locator('.pm-lifeline-hidden')).toHaveCount(0);
         await expect(page.locator('.pm-lifeline-hinfo')).toBeHidden();
         await expect(page.locator('#pm-lifeline-section')).not.toHaveClass(/collapsed/);
+        // Remembered for this tree only (K4.5): the choice for every tree stays as it was.
+        const kept = await page.evaluate(() => {
+            const s = JSON.parse(localStorage.getItem('strom-settings') ?? '{}');
+            return { tree: window.Strom.DataManager.getCurrentTreeId(), byTree: s.lifelineByTree, all: s.lifelineHistory };
+        });
+        expect(kept.byTree).toEqual({ [kept.tree!]: { history: false } });
+        expect(kept.all).toBeUndefined();
         await chip(page).click();
         await expect(warRow(page)).toBeVisible();
     });
@@ -134,15 +144,16 @@ test.describe('History in the life timeline: the person card', () => {
         await expect(body(page).locator('.k-historyGroup')).toHaveAttribute('aria-expanded', 'false');
     });
 
-    test('hide for the place: gone for everyone from Čáslav, sent to the research; Undo brings it back', async ({ page }) => {
-        const { history } = await setup(page);
+    test('hide in the whole tree: gone for everyone, sent to the research; Undo brings it back (K4.1a)', async ({ page }) => {
+        const { history } = await setup(page, { features: TREE_FEATURES });
         await openCard(page, 'Jan');
         const more = warRow(page).locator('.pm-lifeline-hmore');
         await more.click();
         const menu = page.locator('.pm-lifeline-hmenu');
         await expect(menu).toBeVisible();
         await expect(menu.locator('.pm-lifeline-hmenu-head')).toHaveText('1866 · Austro-Prussian War; fighting around Čáslav.');
-        await expect(menu.getByRole('menuitem')).toHaveText([/Hide for Čáslav/, /Hide for Jan Fíšek only/]);
+        // Two choices, no place (that is History of places').
+        await expect(menu.getByRole('menuitem')).toHaveText([/^Hide in this whole tree/, /^Hide for Jan Fíšek only/]);
         await expect(menu.getByRole('menuitem').first()).toBeFocused();
         // Keyboard: arrows move, Esc closes and returns to "⋯".
         await page.keyboard.press('ArrowDown');
@@ -153,16 +164,18 @@ test.describe('History in the life timeline: the person card', () => {
         await expect(page.locator('#person-modal')).toHaveClass(/active/);
 
         await more.click();
-        await menu.getByRole('menuitem', { name: /Hide for Čáslav/ }).click();
+        await menu.getByRole('menuitem', { name: /Hide in this whole tree/ }).click();
         await expect(warRow(page)).toHaveCount(0);
-        const toast = page.locator('.toast', { hasText: 'Event hidden for Čáslav.' });
+        const toast = page.locator('.toast', { hasText: 'The event is hidden in the whole tree.' });
         await expect(toast).toBeVisible();
         // Over the card, the toast stands above its footer: the card's buttons stay free.
         const footTop = await page.locator('#person-modal .pm-footer').evaluate(el => el.getBoundingClientRect().top);
         await expect.poll(() => toast.evaluate(el => el.getBoundingClientRect().bottom)).toBeLessThanOrEqual(footTop);
-        await expect.poll(() => history.hides).toEqual([{ event: 'E1', place: 'Čáslav' }]);
+        await expect.poll(() => history.hides).toEqual([{ event: 'E1', tree: true }]);
         await expect(page.locator('.pm-lifeline-hidden')).toHaveText(/Hidden: 2/);
-        // Josef lived in Čáslav too: hidden for him as well.
+        await page.locator('.pm-lifeline-hidden').click();
+        await expect(page.locator('.pm-lifeline-hiddenitem', { hasText: 'Austro-Prussian War' })).toContainText('in the whole tree');
+        // Josef: hidden for him as well.
         await closeCard(page);
         await openCard(page, 'Josef');
         await expect(warRow(page)).toHaveCount(0);
@@ -171,11 +184,18 @@ test.describe('History in the life timeline: the person card', () => {
         await toast.getByRole('button', { name: 'Undo' }).click();
         await expect(warRow(page)).toBeVisible();
         await expect.poll(() => history.hides.length).toBe(2);
-        expect(history.hides[1]).toEqual({ event: 'E1', place: 'Čáslav', do: 'show' });
+        expect(history.hides[1]).toEqual({ event: 'E1', tree: true, do: 'show' });
+    });
+
+    test('a research without history.hide.all: only "for this person"', async ({ page }) => {
+        await setup(page);
+        await openCard(page, 'Jan');
+        await warRow(page).locator('.pm-lifeline-hmore').click();
+        await expect(page.locator('.pm-lifeline-hmenu').getByRole('menuitem')).toHaveText([/^Hide for Jan Fíšek only/]);
     });
 
     test('hide for the person only: the other person of the place keeps it', async ({ page }) => {
-        const { history } = await setup(page);
+        const { history } = await setup(page, { features: TREE_FEATURES });
         await openCard(page, 'Jan');
         await warRow(page).locator('.pm-lifeline-hmore').click();
         await page.locator('.pm-lifeline-hmenu').getByRole('menuitem', { name: /Hide for Jan Fíšek only/ }).click();
@@ -188,7 +208,7 @@ test.describe('History in the life timeline: the person card', () => {
         await expect(warRow(page).locator('.pm-lifeline-hmeta')).toContainText('age 36');
     });
 
-    test('"Hidden: n" lists the person\'s hidden events; "Show again" returns one', async ({ page }) => {
+    test('"Hidden: n" lists the person\'s hidden events, one hidden earlier at a place too; "Show again" returns it', async ({ page }) => {
         const { history } = await setup(page);
         await openCard(page, 'Jan');
         const toggle = page.locator('.pm-lifeline-hidden');
@@ -298,7 +318,7 @@ test.describe('History in the life timeline: the person card', () => {
     });
 
     test('phone (390 px): the hide menu is a bottom sheet with Cancel', async ({ page }) => {
-        const { history } = await setup(page, { width: 390, height: 844 });
+        const { history } = await setup(page, { width: 390, height: 844, features: TREE_FEATURES });
         await openCard(page, 'Jan');
         const more = warRow(page).locator('.pm-lifeline-hmore');
         await expect(more).toBeVisible();
@@ -306,15 +326,15 @@ test.describe('History in the life timeline: the person card', () => {
         const sheet = page.locator('.bottom-sheet.pm-lifeline-hmenu-sheet');
         await expect(sheet).toBeVisible();
         await expect(sheet.locator('.pm-lifeline-hsheet-head')).toHaveText('1866 · Austro-Prussian War; fighting around Čáslav.');
-        await expect(sheet.getByRole('menuitem')).toHaveCount(2);
+        await expect(sheet.getByRole('menuitem')).toHaveText([/^Hide in this whole tree/, /^Hide for Jan Fíšek only/]);
         await sheet.getByRole('button', { name: 'Cancel' }).click();
         await expect(sheet).toHaveCount(0);
         await expect(warRow(page)).toBeVisible();
         expect(history.hides).toEqual([]);
         await more.click();
-        await page.locator('.bottom-sheet.pm-lifeline-hmenu-sheet').getByRole('menuitem', { name: /Hide for Čáslav/ }).click();
+        await page.locator('.bottom-sheet.pm-lifeline-hmenu-sheet').getByRole('menuitem', { name: /Hide in this whole tree/ }).click();
         await expect(warRow(page)).toHaveCount(0);
-        await expect.poll(() => history.hides).toEqual([{ event: 'E1', place: 'Čáslav' }]);
+        await expect.poll(() => history.hides).toEqual([{ event: 'E1', tree: true }]);
     });
 
     test('unlocking the local data reads the device\'s copy again at once', async ({ page }) => {

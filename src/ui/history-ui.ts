@@ -46,6 +46,9 @@ export const HISTORY_MANAGE_DIALOG_ID = 'history-modal';
 export const HISTORY_CHANGED_EVENT = 'strom:history-changed';
 
 /** What the person card's layer gets (null from historyForPerson: the card stays as it was — states 1, 2, 10). */
+/** Where the card's "⋯" hides an event: this whole tree or the person only. */
+export type HistoryHideScope = 'tree' | 'person';
+
 export interface PersonHistoryView {
     /** The research of the open tree. */
     researchId: string;
@@ -397,7 +400,7 @@ export const historyMethods = uiModule({
             ...(status?.treeState ? { treeState: status.treeState } : {}),
         })) return null;
         const canLinkOn = this.historyCanLinkOn(rid);
-        const chipOn = SettingsManager.isLifelineHistory();
+        const chipOn = SettingsManager.isLifelineHistory(DataManager.getCurrentTreeId());
         if (!payload) return { researchId: rid, chipOn, history: null, canLinkOn };
         const history = computePersonHistory(DataManager.getData(), personId, payload, lang(), {
             queue: displayQueue(rid),
@@ -463,26 +466,24 @@ export const historyMethods = uiModule({
         this.historyChanged();
     },
 
-    /** The card's "History" chip (remembered for every card). */
+    /** The card's "History" chip (remembered for every card of this tree, K4.5). */
     toggleLifelineHistory(on: boolean): void {
-        SettingsManager.setLifelineHistory(on);
+        SettingsManager.setLifelineHistory(DataManager.getCurrentTreeId(), on);
         this.historyChanged();
     },
 
     /**
-     * Hide an event of the card: for the place it matched through (every
-     * person of that place in the tree) or for this person only (by REFN).
-     * At once on the device, then to the research; a toast with "Undo".
-     * Allowed in a locked tree (not an edit of the tree).
+     * Hide an event of the card: in this whole tree (spec 020 K4.1a) or for
+     * this person only (by REFN). At once on the device, then to the research;
+     * a toast with "Undo". Allowed in a locked tree (not an edit of the tree).
      */
-    hideHistoryItem(personId: string, item: LifelineHistoryItem, scope: 'place' | 'person'): void {
+    hideHistoryItem(personId: string, item: LifelineHistoryItem, scope: HistoryHideScope): void {
         const h = strings.history;
-        const op: HistoryHideOp = scope === 'place'
-            ? { event: item.ev.id, place: item.place, at: nowIso() }
+        const op: HistoryHideOp = scope === 'tree' ? { event: item.ev.id, tree: true, at: nowIso() }
             : { event: item.ev.id, personId, ...(this.historyPersonRefn(personId) ? { personRefn: this.historyPersonRefn(personId) } : {}), at: nowIso() };
         void this.applyHistoryHide(op);
         const person = DataManager.getPerson(personId as Parameters<typeof DataManager.getPerson>[0]);
-        const text = scope === 'place' ? h.toastPlace(item.place) : h.toastPerson(person ? shownName(person) : '');
+        const text = scope === 'tree' ? h.toastHiddenTree : h.toastPerson(person ? shownName(person) : '');
         this.showToast(text, 8000, { kind: 'history-hide', clearOf: '#person-modal.active .pm-footer', action: { label: h.undo, run: () => { void this.applyHistoryHide(reverseOp(op)); } } });
     },
 

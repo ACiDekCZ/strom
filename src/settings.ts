@@ -152,14 +152,35 @@ class SettingsManagerClass {
 
     /**
      * Does the person card's life timeline list the children's deaths,
-     * burials, marriages and divorces? Default OFF; one choice for everybody.
+     * burials, marriages and divorces? Default OFF. Remembered per tree in
+     * this browser (spec 020 K4.5); a tree never chosen in follows the former
+     * one choice for every tree (`lifelineChildEvents`), so nothing is lost.
      */
-    isLifelineChildEvents(): boolean {
-        return this.settings.lifelineChildEvents === true;
+    isLifelineChildEvents(treeId: string | null): boolean {
+        const own = treeId ? this.settings.lifelineByTree?.[treeId]?.childEvents : undefined;
+        return own ?? this.settings.lifelineChildEvents === true;
     }
 
-    setLifelineChildEvents(enabled: boolean): void {
-        this.settings.lifelineChildEvents = enabled;
+    setLifelineChildEvents(treeId: string | null, enabled: boolean): void {
+        this.setLifelineChoice(treeId, 'childEvents', enabled);
+    }
+
+    /** A timeline chip's choice for one tree (without a tree: the fallback of every tree). */
+    private setLifelineChoice(treeId: string | null, key: 'childEvents' | 'history', enabled: boolean): void {
+        if (!treeId) {
+            if (key === 'childEvents') this.settings.lifelineChildEvents = enabled;
+            else this.settings.lifelineHistory = enabled;
+        } else {
+            const all = (this.settings.lifelineByTree ??= {});
+            all[treeId] = { ...all[treeId], [key]: enabled };
+        }
+        this.save();
+    }
+
+    /** Forget a tree's timeline chips (the tree was deleted). */
+    forgetLifelineChoices(treeId: string): void {
+        if (!this.settings.lifelineByTree?.[treeId]) return;
+        delete this.settings.lifelineByTree[treeId];
         this.save();
     }
 
@@ -177,14 +198,17 @@ class SettingsManagerClass {
         this.save();
     }
 
-    /** The card's "History" chip (only while the experiment is on). On by default. */
-    isLifelineHistory(): boolean {
-        return this.settings.lifelineHistory !== false;
+    /**
+     * The card's "History" chip (only while the experiment is on). On by
+     * default; per tree like the children's events (K4.5).
+     */
+    isLifelineHistory(treeId: string | null): boolean {
+        const own = treeId ? this.settings.lifelineByTree?.[treeId]?.history : undefined;
+        return own ?? this.settings.lifelineHistory !== false;
     }
 
-    setLifelineHistory(enabled: boolean): void {
-        this.settings.lifelineHistory = enabled;
-        this.save();
+    setLifelineHistory(treeId: string | null, enabled: boolean): void {
+        this.setLifelineChoice(treeId, 'history', enabled);
     }
 
     /** The card's line "the research does not look for history yet" was closed (spec 020 K1.6): this browser, every tree. */
