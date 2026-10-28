@@ -10,6 +10,7 @@ import {
     residencePoints, placesInYear, computePersonHistory, effectiveHidden, queueHideOp,
     groupHistoryByYear, historyClusterLabel, historySettingsStatus, historyHiddenCount,
     sanitizeHideQueue, sanitizeCachedHistory, HISTORY_LIMITS, interleaveHistory, historySourceLabel,
+    historyFindRegions,
     type HistoryPayload, type HistorySettingsInput, type HistoryHideOp,
 } from '../history.js';
 import { computePersonLifeline } from '../timeline.js';
@@ -548,5 +549,53 @@ describe('history manager payload (1028)', () => {
         expect(effectiveHidden(p, queueHideOp(q, { region: 'cz-bohemia', do: 'show', at: AT }))).toEqual([]);
         expect(sanitizeHideQueue([{ region: 'cz-bohemia', at: AT }, { event: 'E1', tree: true, at: AT }, { region: 'bad id!', at: AT }]))
             .toHaveLength(2);
+    });
+});
+
+describe('historyFindRegions (1028 §5)', () => {
+    // Lhota (birth 1838, marriage 1862, death) and Horní Lhota (1870): three facts in Lhota, one in Horní Lhota.
+    const anna = person('anna', {
+        birthDate: '1838', birthPlace: 'Lhota', events: [residence('1870', 'Horní Lhota')],
+        deathDate: '1872', deathPlace: 'Lhota',
+    });
+    const d = data([anna]);
+    const raw = (regions: Record<string, unknown>, places?: Record<string, unknown>) => payload({
+        state: { on: true, search: 'running', at: AT },
+        places: places ?? {
+            Lhota: { events: [], regions: [{ id: 'cz-bohemia' }, { id: 'at-empire', from: 1867 }] },
+            'Horní Lhota': { events: [], regions: [{ id: 'cz-moravia' }, { id: 'at-empire' }] },
+        },
+        regions,
+    });
+
+    it('offers the regions of the person\'s places not searched yet, most facts first', () => {
+        const p = raw({ 'cz-bohemia': { state: 'queued', order: 3 }, 'cz-moravia': { state: 'waiting', order: 1 }, 'at-empire': { state: 'queued', order: 2 } });
+        // at-empire: Lhota only from 1867 (the death in 1872) + Horní Lhota 1870 = 2, cz-bohemia 2: the tie by order
+        expect(historyFindRegions(d, 'anna', p)).toEqual([
+            { id: 'at-empire', facts: 2, first: false },
+            { id: 'cz-bohemia', facts: 2, first: false },
+            { id: 'cz-moravia', facts: 1, first: false },
+        ]);
+    });
+
+    it('a tie goes to the lower order; first is carried', () => {
+        const p = raw({ 'cz-bohemia': { state: 'queued', order: 5 }, 'at-empire': { state: 'queued', order: 1, first: true } });
+        expect(historyFindRegions(d, 'anna', p).map(r => [r.id, r.first])).toEqual([['at-empire', true], ['cz-bohemia', false]]);
+    });
+
+    it('never offers a region searched, running, done, skipped or covered', () => {
+        for (const state of ['running', 'done', 'skipped', 'covered', 'none']) {
+            const p = raw({ 'cz-bohemia': { state }, 'cz-moravia': { state }, 'at-empire': { state } });
+            expect(historyFindRegions(d, 'anna', p)).toEqual([]);
+        }
+    });
+
+    it('nothing without regions, in an archived tree, or for places skipped', () => {
+        expect(historyFindRegions(d, 'anna', payload({ state: { on: true, search: 'running', at: AT } }))).toEqual([]);
+        const p = raw({ 'cz-bohemia': { state: 'queued' } });
+        expect(historyFindRegions(d, 'anna', p, { treeState: 'archive' })).toEqual([]);
+        const skipped = raw({ 'cz-bohemia': { state: 'queued' } }, { Lhota: { events: [], skip: true, regions: [{ id: 'cz-bohemia' }] } });
+        expect(historyFindRegions(d, 'anna', skipped)).toEqual([]);
+        expect(historyFindRegions(d, 'nobody', p)).toEqual([]);
     });
 });

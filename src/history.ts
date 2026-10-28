@@ -947,6 +947,8 @@ export interface PersonHistory {
     hasPlaces: boolean;
     /** The research search state the card goes by. */
     state: HistoryCardState;
+    /** §5: regions not searched yet to offer instead of "still looking" (set by the caller: feature, bridge). */
+    find?: HistoryFindRegion[];
 }
 
 function lifeBounds(person: Person, points: readonly LifelinePoint[]): { birth: number | null; death: number | null; lo: number | null; hi: number | null } {
@@ -1116,6 +1118,53 @@ function cardState(
     if (r.placesPending || ((p.state.search === 'none' || p.state.search === 'running') && r.placesMissing)) return { kind: 'searching' };
     if (p.state.truncated && r.placesMissing) return { kind: 'silent' };
     return { kind: 'none' };
+}
+
+// ─── "Find the history of the region" in the card (§5) ─────────────────────
+
+/** A region the research has not searched yet for a place of the person (§5). */
+export interface HistoryFindRegion {
+    id: string;
+    /** The person's facts in places of the region (in its years). */
+    facts: number;
+    /** The region was asked to go first already (the sentence of §5.2 right away). */
+    first: boolean;
+}
+
+/**
+ * §5: the regions of the person's places that the research has not searched
+ * yet (`queued` / `waiting`; never `skipped`, never an archive), the one with
+ * most of the person's facts first — a fact counts for the regions its place
+ * has in its year; a tie goes to the lower `order`, then the id. Places not
+ * searched (`skip`) do not count. Without R1 regions: none.
+ */
+export function historyFindRegions(data: StromData, personId: string, p: HistoryPayload,
+    env: { treeState?: string } = {}): HistoryFindRegion[] {
+    const regions = p.regions;
+    if (!regions) return [];
+    if (historyWaiting(p, env.treeState)) return [];
+    if (!data.persons[personId as keyof typeof data.persons]) return [];
+    const residence = residencePoints(computePersonLifeline(data, personId));
+    const facts = new Map<string, number>();
+    const matched = new Map<string, string | null>();
+    for (const r of residence) {
+        const k = placeKey(r.place);
+        if (!matched.has(k)) matched.set(k, matchHistoryPlace(p, r.place));
+        const key = matched.get(k);
+        const place = key ? p.places[key] : undefined;
+        if (!place || place.skip || !place.regions) continue;
+        for (const pr of place.regions) {
+            if (pr.from !== undefined && r.year < pr.from) continue;
+            if (pr.to !== undefined && r.year > pr.to) continue;
+            const region = regions[pr.id];
+            if (!region || (region.state !== 'queued' && region.state !== 'waiting')) continue;
+            facts.set(pr.id, (facts.get(pr.id) ?? 0) + 1);
+        }
+    }
+    const order = (id: string) => regions[id].order ?? Number.MAX_SAFE_INTEGER;
+    return [...facts]
+        .sort(([a, x], [b, y]) => y - x || order(a) - order(b) || (a < b ? -1 : a > b ? 1 : 0))
+        .map(([id, n]) => ({ id, facts: n, first: regions[id].first === true }));
 }
 
 // ─── Year groups ───────────────────────────────────────────────────────────

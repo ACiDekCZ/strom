@@ -5300,11 +5300,21 @@
             content: ''; position: absolute; left: 50%; top: 50%; width: 28px; height: 28px; transform: translate(-50%, -50%);
         }
         .modal button.pm-lifeline-hmore:focus-visible { outline: 2px solid var(--primary); outline-offset: 0; }
-        .modal button.pm-lifeline-henable, .modal button.pm-lifeline-hrestore {
+        .modal button.pm-lifeline-henable, .modal button.pm-lifeline-hrestore,
+        .modal button.pm-lifeline-hfind, .modal button.pm-lifeline-hfind-more, .modal button.pm-lifeline-hfind-note {
             display: inline; padding: 0; margin: 0; min-height: 0; border: none; background: none; font: inherit;
             color: var(--primary); font-weight: 500; cursor: pointer; border-radius: 2px;
         }
-        .modal button.pm-lifeline-henable:focus-visible, .modal button.pm-lifeline-hrestore:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        .modal button.pm-lifeline-henable:focus-visible, .modal button.pm-lifeline-hrestore:focus-visible,
+        .modal button.pm-lifeline-hfind:focus-visible, .modal button.pm-lifeline-hfind-more:focus-visible,
+        .modal button.pm-lifeline-hfind-note:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        /* "Find the history of {region}" (spec 1028 §5): inactive while asked; "· More in the manager ›" quieter. */
+        .modal button.pm-lifeline-hfind[aria-disabled="true"] { color: var(--text-secondary); cursor: default; }
+        .modal button.pm-lifeline-hfind-more { color: var(--text-secondary); font-weight: 400; }
+        /* Phone: one line, the sentence ellipsized and the link whole. */
+        .k-historyState.is-find-one .pm-lifeline-desc { display: flex; align-items: baseline; gap: 6px; white-space: nowrap; }
+        .pm-lifeline-hfind-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+        .k-historyState.is-find-one .pm-lifeline-hfind { flex: none; }
         /* "All hidden ›" under the card's hidden list, "Manage history of places ›" under the legend (spec 1028 §1.1). */
         .modal button.pm-lifeline-hall, button.pm-lifeline-legend-manage {
             display: inline-flex; align-items: center; padding: 0; margin: 4px 0 0; min-height: 0; border: none; background: none; font: inherit;
@@ -5394,7 +5404,9 @@
             .pm-lifeline-row.k-historyGroup:hover { box-shadow: inset 0 0 0 1px var(--border); }
             .pm-lifeline-hsrc a:hover, .modal button.pm-lifeline-link.is-cite:hover { text-decoration-style: solid; text-decoration-color: currentColor; }
             .modal button.pm-lifeline-hquote:hover, .modal button.pm-lifeline-hidden:hover { color: var(--text); }
-            .modal button.pm-lifeline-henable:hover, .modal button.pm-lifeline-hrestore:hover { text-decoration: underline; }
+            .modal button.pm-lifeline-henable:hover, .modal button.pm-lifeline-hrestore:hover,
+            .modal button.pm-lifeline-hfind:not([aria-disabled="true"]):hover, .modal button.pm-lifeline-hfind-more:hover,
+            .modal button.pm-lifeline-hfind-note:hover { text-decoration: underline; }
             .modal button.pm-lifeline-hall:hover, button.pm-lifeline-legend-manage:hover { text-decoration: underline; }
         }
         @media (pointer: coarse) {
@@ -5407,6 +5419,9 @@
             }
             .modal button.pm-lifeline-hquote, .modal button.pm-lifeline-hrestore, .modal button.pm-lifeline-henable,
             .modal button.pm-lifeline-hall, button.pm-lifeline-legend-manage { min-height: 44px; }
+            .modal button.pm-lifeline-hfind, .modal button.pm-lifeline-hfind-more, .modal button.pm-lifeline-hfind-note {
+                display: inline-flex; align-items: center; min-height: 44px; vertical-align: middle;
+            }
             .modal button.pm-lifeline-hquote { display: inline-flex; align-items: center; }
         }
 

@@ -25,11 +25,11 @@ import { TreeManager } from '../tree-manager.js';
 import { shownName } from '../person-name.js';
 import {
     parseLiveBridge, researchSchemeUrl, cleanText, type LiveStatus,
-    HISTORY_EVENTS_FEATURE, HISTORY_HIDE_FEATURE, EXPERIMENTS_OFF_FEATURE, EXPERIMENTS_LINK_FEATURE,
+    HISTORY_EVENTS_FEATURE, HISTORY_HIDE_FEATURE, HISTORY_FIRST_FEATURE, EXPERIMENTS_OFF_FEATURE, EXPERIMENTS_LINK_FEATURE,
 } from '../research-link.js';
 import { storedResearchBridge, announcedResearchScheme } from '../research-device.js';
 import {
-    computePersonHistory, historyCardShows, historySettingsStatus, queueHideOp,
+    computePersonHistory, historyCardShows, historyFindRegions, historySettingsStatus, queueHideOp,
     type HistoryPayload, type HistoryDeleted, type HistoryHideOp, type PersonHistory, type LifelineHistoryItem, type HiddenHistoryItem,
     type HistorySettingsAction, type EffectiveHidden,
 } from '../history.js';
@@ -402,6 +402,12 @@ export const historyMethods = uiModule({
             ...(status?.treeState ? { treeState: status.treeState } : {}),
         });
         if (history.state.kind === 'noSearch') history.state = { kind: 'noSearch', link: canLinkOn };
+        // §5: "Find the history of the region" in place of "still looking" — `history.first`, R1 regions, the bridge running.
+        const looking = history.state.kind === 'searching' || (history.state.kind === 'events' && history.state.somePending);
+        if (looking && status && (status.features ?? []).includes(HISTORY_FIRST_FEATURE) && payload.regions) {
+            const find = historyFindRegions(DataManager.getData(), personId, payload, status.treeState ? { treeState: status.treeState } : {});
+            if (find.length) history.find = find;
+        }
         return { researchId: rid, chipOn, history, canLinkOn };
     },
 

@@ -5335,6 +5335,23 @@ const stringsEN = {
         firstPaceIdle: 'when the research has nothing else to do',
         findArchive: (why: string) => why ? `The research does not search here: ${why}.` : 'The research does not search here.',
         findMapping: 'The places of this person are still being matched to regions.',
+        // "Find the history of the region" in the card's timeline (§5).
+        findOne: (r: string) => `The research has not looked for the history of ${r} yet.`,
+        findRegion: (r: string) => `Find the history of ${r}`,
+        findMany: (a: string, b: string, more: number) => more > 0
+            ? `The research has not looked for the history of ${a}, ${b} and ${more} more yet.`
+            : `The research has not looked for the history of ${a} and ${b} yet.`,
+        findMore: 'More in the manager',
+        findShort: (r: string) => `${r} not searched yet.`,
+        findShortLink: 'Find first',
+        // Kinds of history in Settings → Person card and the legend (§6).
+        kindsLastNote: 'One kind stays on. All can be turned off with the main option.',
+        legendKindOff: 'Off in Settings.',
+        legendPlace: 'Local history',
+        legendPlaceHint: 'Events of the place and its surroundings, requested for this tree.',
+        // History in stories, Research for this tree → Stories (§7).
+        storiesTitle: 'History in stories',
+        storiesDesc: 'The research may use the history of places as a source when writing stories; finished stories are not rewritten for it.',
         hideAllMenu: 'Hide all in this tree',
         hideAllSub: 'also events the research finds later',
         hideAllTitle: (r: string) => `Hide everything from ${r}?`,
@@ -10583,6 +10600,23 @@ const stringsCZ: StringsType = {
         firstPaceIdle: 'až výzkum nebude mít nic jiného',
         findArchive: (why: string) => why ? `Výzkum tu nic nehledá: ${why}.` : 'Výzkum tu nic nehledá.',
         findMapping: 'Místa osoby se teprve přiřazují k regionům.',
+        // „Najít dějiny regionu …“ v Časové ose života (§5).
+        findOne: (r: string) => `Dějiny regionu ${r} výzkum ještě nehledal.`,
+        findRegion: (r: string) => `Najít dějiny regionu ${r}`,
+        findMany: (a: string, b: string, more: number) => more > 0
+            ? `Výzkum ještě nehledal dějiny regionů ${a}, ${b} a ${more === 1 ? 'jednoho dalšího' : `dalších ${more}`}.`
+            : `Výzkum ještě nehledal dějiny regionů ${a} a ${b}.`,
+        findMore: 'Další ve správě',
+        findShort: (r: string) => `${r} ještě nebyla hledaná.`,
+        findShortLink: 'Najít jako první',
+        // Druhy dějin v Nastavení → Karta osoby a v legendě (§6).
+        kindsLastNote: 'Jeden druh zůstává zapnutý. Vypnout všechny jde hlavní volbou.',
+        legendKindOff: 'Vypnuto v Nastavení.',
+        legendPlace: 'Dějiny místa',
+        legendPlaceHint: 'Události obce a okolí, které si strom vyžádal.',
+        // Dějiny ve vyprávění, Výzkum pro tento strom → Vyprávění (§7).
+        storiesTitle: 'Dějiny ve vyprávění',
+        storiesDesc: 'Výzkum smí při psaní vyprávění použít dějiny míst jako zdroj; hotová vyprávění se kvůli tomu nepřepisují.',
         hideAllMenu: 'Skrýt vše v tomto stromu',
         hideAllSub: 'i události, které výzkum najde později',
         hideAllTitle: (r: string) => `Skrýt vše z regionu ${r}?`,
@@ -15757,6 +15791,23 @@ const stringsDE: StringsType = {
         firstPaceIdle: 'wenn die Forschung nichts anderes zu tun hat',
         findArchive: (why: string) => why ? `Die Forschung sucht hier nicht: ${why}.` : 'Die Forschung sucht hier nicht.',
         findMapping: 'Die Orte dieser Person werden noch Regionen zugeordnet.',
+        // „Geschichte der Region suchen“ in der Lebenszeitleiste (§5).
+        findOne: (r: string) => `Die Forschung hat für ${r} noch nicht gesucht.`,
+        findRegion: (r: string) => `Geschichte von ${r} suchen`,
+        findMany: (a: string, b: string, more: number) => more > 0
+            ? `Die Forschung hat für ${a}, ${b} und ${more} weitere noch nicht gesucht.`
+            : `Die Forschung hat für ${a} und ${b} noch nicht gesucht.`,
+        findMore: 'Weitere in der Verwaltung',
+        findShort: (r: string) => `${r} noch nicht gesucht.`,
+        findShortLink: 'Als Erstes suchen',
+        // Arten des Zeitgeschehens in Einstellungen → Personenkarte und in der Legende (§6).
+        kindsLastNote: 'Eine Art bleibt eingeschaltet. Alle lassen sich mit der Hauptoption ausschalten.',
+        legendKindOff: 'In den Einstellungen aus.',
+        legendPlace: 'Ortsgeschichte',
+        legendPlaceHint: 'Ereignisse des Ortes und der Umgebung, für diesen Stammbaum angefragt.',
+        // Zeitgeschehen in Erzählungen, Forschung für diesen Stammbaum → Erzählungen (§7).
+        storiesTitle: 'Zeitgeschehen in Erzählungen',
+        storiesDesc: 'Die Forschung darf beim Schreiben von Erzählungen die Geschichte der Orte als Quelle nutzen; fertige Erzählungen werden dafür nicht neu geschrieben.',
         hideAllMenu: 'Alles in diesem Stammbaum ausblenden',
         hideAllSub: 'auch später gefundene',
         hideAllTitle: (r: string) => `Alles aus ${r} ausblenden?`,

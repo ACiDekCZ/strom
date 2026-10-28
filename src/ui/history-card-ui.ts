@@ -19,9 +19,12 @@ import { shownName } from '../person-name.js';
 import { MQ_MOBILE, MQ_PHONE_LANDSCAPE } from '../breakpoints.js';
 import {
     groupHistoryByYear, historyClusterLabel, historySourceLabel, isHistoryLang,
-    type LifelineHistoryItem, type HiddenHistoryItem, type PersonHistory, type HistoryEvent,
+    type LifelineHistoryItem, type HiddenHistoryItem, type PersonHistory, type HistoryEvent, type HistoryFindRegion,
 } from '../history.js';
 import { regionName } from '../history-manage.js';
+import { postBridgeFirst, postBridgeSkip, type HistoryWriteRefusal } from '../history-bridge.js';
+import { HISTORY_SKIP_FEATURE } from '../research-link.js';
+import { announcedResearchScheme } from '../research-device.js';
 import { shownExcerpts } from '../research-images.js';
 import { excerptImageUrl } from '../excerpts.js';
 import type { Source } from '../types.js';
@@ -51,6 +54,13 @@ let hiddenOpen = false;
 /** The rows drawn last, by the index their buttons carry. */
 let rowItems: LifelineHistoryItem[] = [];
 let rowHidden: HiddenHistoryItem[] = [];
+
+/** §5: what the card said after "Find the history of …", by region (kept across cards: it is the research's answer). */
+const findNotes = new Map<string, { text: string; link?: { label: string; run: () => void } }>();
+/** §5: regions whose "first" is on its way (the link inactive; `slow`: after 300 ms it says "…"). */
+const findBusy = new Map<string, { slow: boolean }>();
+/** §5: regions done meanwhile (409 history.done): no offer until the copy says otherwise. */
+const findGone = new Set<string>();
 
 /** The timeline bodies with the layer's listeners (a mark in the DOM would change the card). */
 const boundBodies = new WeakSet<HTMLElement>();
@@ -263,15 +273,16 @@ export const historyCardMethods = uiModule({
             + '<span class="pm-lifeline-glyph" aria-hidden="true"></span>'
             + `<span class="pm-lifeline-desc">${esc(text)}${extra}</span></div>`;
         const st = history.state;
+        const find = this.lifelineHistoryFindRow(history.find ?? [], stateRow);
         switch (st.kind) {
-            case 'events': if (st.somePending) tail += stateRow(h.stateSomePending); break;
+            case 'events': if (st.somePending) tail += find || stateRow(h.stateSomePending); break;
             case 'noPlace': tail += stateRow(h.stateNoPlace); break;
             case 'waiting': tail += stateRow(h.statusWaiting(st.why)); break;
             case 'noSearch':
                 tail += stateRow(h.stateNoSearch, st.link
                     ? ` <button type="button" class="link pm-lifeline-henable" data-hfocus="enable">${esc(h.enableSearch)}</button>` : '');
                 break;
-            case 'searching': tail += stateRow(h.stateSearching); break;
+            case 'searching': tail += find || stateRow(h.stateSearching); break;
             case 'none': tail += stateRow(h.stateNone); break;
             // 9 (all hidden): only "Hidden: n"; 11 (incomplete, a place missing): nothing.
             default: break;
@@ -299,6 +310,128 @@ export const historyCardMethods = uiModule({
                 + '</div>';
         }
         return { groups, tail, ranges: history.items.some(i => !!i.yearLabel) };
+    },
+
+    /**
+     * §5: the last row offering "Find the history of {region}" for the region
+     * with most of the person's facts ('' none): one region, several (the
+     * first one's link + "More in the manager ›"), on a phone one short line;
+     * a region asked first already or answered says the answer instead.
+     */
+    lifelineHistoryFindRow(regions: readonly HistoryFindRegion[], stateRow: (text: string, extra?: string) => string): string {
+        const list = regions.filter(r => !findGone.has(r.id));
+        const top = list[0];
+        if (!top) return '';
+        const h = strings.history;
+        const name = (id: string) => this.historyCardRegionName(id);
+        const note = findNotes.get(top.id);
+        if (note) {
+            return stateRow(note.text, note.link
+                ? ` <button type="button" class="link pm-lifeline-hfind-note" data-hfocus="findNote:${esc(top.id)}" data-find-note="${esc(top.id)}">${esc(note.link.label)}</button>` : '');
+        }
+        if (top.first) return stateRow(h.firstDone(name(top.id), this.historyCardPace()));
+        const busy = findBusy.get(top.id);
+        const link = (label: string) => `<button type="button" class="link pm-lifeline-hfind" data-hfocus="find" data-find="${esc(top.id)}"`
+            + `${busy ? ' aria-disabled="true"' : ''}>${esc(label)}${busy?.slow ? '…' : ''}</button>`;
+        if (media(MQ_MOBILE)) {
+            // One line: the sentence ellipsized, the link whole.
+            return '<div class="pm-lifeline-row k-historyState is-region is-find-one">'
+                + '<span class="pm-lifeline-hmark" aria-hidden="true"></span><span class="pm-lifeline-year"></span>'
+                + '<span class="pm-lifeline-glyph" aria-hidden="true"></span>'
+                + `<span class="pm-lifeline-desc"><span class="pm-lifeline-hfind-text">${esc(h.findShort(name(top.id)))}</span>${link(h.findShortLink)}</span></div>`;
+        }
+        if (list.length === 1) return stateRow(h.findOne(name(top.id)), ` ${link(h.findRegion(name(top.id)))}`);
+        return stateRow(h.findMany(name(list[0].id), name(list[1].id), list.length - 2),
+            ` ${link(h.findRegion(name(top.id)))} <button type="button" class="link pm-lifeline-hfind-more" data-hfocus="findMore">· ${esc(h.findMore)} ›</button>`);
+    },
+
+    /** A region's name in the UI language from the open tree's copy (its id when unnamed). */
+    historyCardRegionName(id: string): string {
+        const p = this.historyManageContext()?.payload;
+        const r = p?.regions?.[id] ?? p?.events.find(e => e.region?.id === id)?.region ?? { id };
+        return regionName(r, getCurrentLanguage());
+    },
+
+    /** "about every 5th research session" by the research's pace ('' not said). */
+    historyCardPace(): string {
+        const h = strings.history;
+        const pace = this.historyManageContext()?.status?.historyPace;
+        return pace === 'rare' ? h.firstPaceRare : pace === 'idle' ? h.firstPaceIdle : pace ? h.firstPaceSometimes : '';
+    },
+
+    /** §5.2: `POST /history/first {region}` from the card; the answer in the last row. */
+    async lifelineHistoryFind(region: string): Promise<void> {
+        const ctx = this.historyManageContext();
+        if (!ctx?.base || findBusy.has(region)) return;
+        const h = strings.history;
+        const rid = ctx.researchId;
+        const busy = { slow: false };
+        findBusy.set(region, busy);
+        findNotes.delete(region);
+        this.historyChanged();
+        const slow = setTimeout(() => { busy.slow = true; this.historyChanged(); }, 300);
+        const before = this.researchHeadNow(rid);
+        const scheme = announcedResearchScheme();
+        const r = await postBridgeFirst(ctx.base, region, ctx.features, { tree: rid, ...(scheme ? { scheme } : {}) });
+        clearTimeout(slow);
+        findBusy.delete(region);
+        if (r.ok) {
+            findNotes.set(region, { text: h.firstDone(this.historyCardRegionName(region), this.historyCardPace()) });
+            this.historyManageWritten(rid, before, r);
+        } else {
+            this.lifelineHistoryFindRefused(rid, region, r);
+        }
+        this.historyChanged();
+    },
+
+    /** §5.2's refusals: off with the link to switch it on, archive, done (the offer goes), places still matched, skipped, busy. */
+    lifelineHistoryFindRefused(rid: string, region: string, r: HistoryWriteRefusal): void {
+        const h = strings.history;
+        const ctx = this.historyManageContext();
+        const reread = () => { void this.readBridgeHistory(rid); };
+        if (r.code === 'off') {
+            const can = !!r.link || !!ctx?.canLinkOn;
+            findNotes.set(region, {
+                text: h.manageOff,
+                ...(can ? { link: { label: h.enableSearch, run: () => (r.link ? this.launchResearchLink(r.link, 'terminal') : this.historyEnableSearch()) } } : {}),
+            });
+        } else if (r.code === 'archive') {
+            findNotes.set(region, { text: h.findArchive(r.reason) });
+        } else if (r.code === 'done') {
+            findGone.add(region);
+            reread();
+        } else if (r.code === 'gone' && r.bridgeCode === 'history.region') {
+            findNotes.set(region, { text: h.findMapping });
+        } else if (r.code === 'skipped') {
+            // Skipped meanwhile: "Search again" first (the bridge never undoes the choice itself).
+            const canSkip = !!ctx?.base && ctx.features.includes(HISTORY_SKIP_FEATURE);
+            findNotes.set(region, {
+                text: h.toastSkipped(this.historyCardRegionName(region)),
+                ...(canSkip ? { link: { label: h.searchAgain, run: () => { void this.lifelineHistorySearchAgain(region); } } } : {}),
+            });
+            reread();
+        } else if (r.code === 'busy') {
+            findNotes.set(region, { text: h.errBusy });
+        } else {
+            findNotes.set(region, { text: r.reason || (r.held ? this.researchWriteHeldText(r.held, false).toast : strings.live.waitingWrite.writeFailed) });
+        }
+    },
+
+    /** "Search again" of a region skipped meanwhile (`/history/skip do:"undo"`); then the offer is back. */
+    async lifelineHistorySearchAgain(region: string): Promise<void> {
+        const ctx = this.historyManageContext();
+        if (!ctx?.base || findBusy.has(region)) return;
+        findBusy.set(region, { slow: false });
+        const before = this.researchHeadNow(ctx.researchId);
+        const r = await postBridgeSkip(ctx.base, { region, do: 'undo' }, ctx.features);
+        findBusy.delete(region);
+        if (r.ok) {
+            findNotes.delete(region);
+            this.historyManageWritten(ctx.researchId, before, r);
+        } else {
+            this.lifelineHistoryFindRefused(ctx.researchId, region, r);
+        }
+        this.historyChanged();
     },
 
     /** One event of the layer (§2.3): text, label · age · region · source, excerpt, tip, "⋯". */
@@ -372,6 +505,20 @@ export const historyCardMethods = uiModule({
             }
             if (target.closest('.pm-lifeline-henable')) {
                 this.historyEnableSearch();
+                return;
+            }
+            const find = target.closest<HTMLElement>('[data-find]');
+            if (find) {
+                if (find.getAttribute('aria-disabled') !== 'true') void this.lifelineHistoryFind(find.dataset.find ?? '');
+                return;
+            }
+            const findNote = target.closest<HTMLElement>('[data-find-note]');
+            if (findNote) {
+                findNotes.get(findNote.dataset.findNote ?? '')?.link?.run();
+                return;
+            }
+            if (target.closest('.pm-lifeline-hfind-more')) {
+                this.openHistoryManage({ tab: 'regions' });
                 return;
             }
             const group = target.closest<HTMLElement>('.k-historyGroup');
