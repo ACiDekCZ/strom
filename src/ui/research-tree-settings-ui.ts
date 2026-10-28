@@ -14,13 +14,14 @@ import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { strings } from '../strings.js';
 import { TreeId, ResearchTranscripts, ResearchSendMode, StromData } from '../types.js';
-import { researchSchemeUrl, TERMINAL_CHOICE_FEATURE } from '../research-link.js';
+import { researchSchemeUrl, TERMINAL_CHOICE_FEATURE, STORIES_HISTORY_FEATURE } from '../research-link.js';
+import { postBridgeStories } from '../history-bridge.js';
 import { researchAutoState, patchResearchAutoState, researchSendPreviewSkipped, noteResearchSendPreviewSkipped, announcedResearchScheme } from '../research-device.js';
 import { sourceReadingHash, unverifiedOlderSources, newTieSendMode } from '../research-sync.js';
 import { uiModule } from './module.js';
 import { normalizeModal } from './modal-skeleton.js';
 import { onComputer, readTree } from './research-ui.js';
-import { researchDisplayName, researchSendMode } from './research-sync-ui.js';
+import { researchDisplayName, researchSendMode, onBridgeStatus } from './research-sync-ui.js';
 import { SettingsManager } from '../settings.js';
 import { formatBytesShort } from './originals-ui.js';
 import { isBetaBuildHere } from '../pwa.js';
@@ -30,6 +31,14 @@ const ASK_ID = 'research-mode-ask-modal';
 const ASK_GROUP = 'research-ask-send-mode';
 /** Trees whose one-time question was closed unanswered: asked again the next time the tree is opened. */
 const askLater = new Set<TreeId>();
+
+/**
+ * "History in stories" (spec 1028 §7): the research's answer under the row
+ * (`link`: its way on), the value asked until the research's status says it
+ * (`want`), a write on its way (`busy`). Per research; forgotten with the dialog.
+ */
+const stories: { rid: string; note?: { text: string; link?: { label: string; run: () => void } }; want?: boolean; busy?: boolean } = { rid: '' };
+let storiesListening = false;
 
 /** A phone-sized or touch screen: short card texts, and a note instead of the effect box and the status line. */
 function compactScreen(): boolean {
@@ -260,6 +269,7 @@ export const researchTreeSettingsMethods = uiModule({
                 ${sendingHtml}
                 ${originalsHtml}
                 <div class="research-images-host" id="research-images-host"></div>
+                <div class="research-stories-host" id="research-stories-host"></div>
                 <button type="button" class="link-button research-read-history" id="research-read-history" hidden></button>
                 ${modeWhereHtml}
                 ${terminalWhereHtml}
@@ -380,10 +390,91 @@ export const researchTreeSettingsMethods = uiModule({
             this.showOriginalsQueue();
         });
         normalizeModal(overlay.querySelector('.modal') as HTMLElement);
+        stories.rid = link.id;
+        delete stories.note; delete stories.want; delete stories.busy;
+        this.renderResearchStoriesRow();
+        if (!storiesListening) {
+            storiesListening = true;
+            onBridgeStatus((rid) => { if (rid === stories.rid) this.renderResearchStoriesRow(); });
+        }
         const historyBtn = overlay.querySelector<HTMLButtonElement>('#research-read-history');
         if (historyBtn) void this.fillReadHistoryRow(historyBtn, treeId);
         await renderOlder();
         overlay.querySelector<HTMLInputElement>('input[name="research-transcripts"]:checked')?.focus();
+    },
+
+    /**
+     * §7: the Stories section's last row "History in stories" — only with
+     * `stories.history`; the switch follows `/status.stories.history`; without
+     * the bridge inactive with its sentence.
+     */
+    renderResearchStoriesRow(): void {
+        const host = document.querySelector<HTMLElement>(`#${SETTINGS_ID} #research-stories-host`);
+        if (!host) return;
+        const rid = stories.rid;
+        // The research's features as last known (the bridge may be down now: the row stays, at rest).
+        const ctx = this.historyManageContext();
+        const last = ctx?.researchId === rid ? ctx.lastStatus : this.researchStatusOf(rid);
+        const features = ctx?.researchId === rid ? ctx.features : last?.features ?? [];
+        if (!features.includes(STORIES_HISTORY_FEATURE)) {
+            host.innerHTML = '';
+            return;
+        }
+        const h = strings.history;
+        const up = this.researchBridgeUp(rid);
+        const said = last?.storiesHistory === true;
+        if (stories.want !== undefined && last?.storiesHistory === stories.want) delete stories.want;
+        const on = stories.want ?? said;
+        const note = !up ? { text: h.storiesBridgeDown } : stories.note;
+        const focused = document.activeElement?.id === 'research-stories-history';
+        host.innerHTML = `
+            <fieldset class="research-transcripts research-stories">
+                <legend>${esc(h.storiesSection)}</legend>
+                <label class="settings-checkbox research-stories-row">
+                    <input type="checkbox" id="research-stories-history"${on ? ' checked' : ''}${up && !stories.busy ? '' : ' disabled'}>
+                    <span class="settings-text">
+                        <span class="settings-name">${esc(h.storiesTitle)}</span>
+                        <span class="settings-desc">${esc(h.storiesDesc)}</span>
+                    </span>
+                </label>
+                ${note ? `<p class="research-stories-note" id="research-stories-note"><span>${esc(note.text)}</span>${'link' in note && note.link
+                    ? ` <button type="button" class="link-button" id="research-stories-note-link">${esc(note.link.label)}</button>` : ''}</p>` : ''}
+            </fieldset>`;
+        const input = host.querySelector<HTMLInputElement>('#research-stories-history');
+        input?.addEventListener('change', () => { void this.setResearchStoriesHistory(input.checked); });
+        host.querySelector<HTMLButtonElement>('#research-stories-note-link')?.addEventListener('click', () => stories.note?.link?.run());
+        if (focused) input?.focus({ preventScroll: true });
+    },
+
+    /** §7: `POST /stories {history}` at once; a refusal says why (with the way on), the switch stays as the research says. */
+    async setResearchStoriesHistory(on: boolean): Promise<void> {
+        const rid = stories.rid;
+        const ctx = this.historyManageContext();
+        const base = ctx?.researchId === rid ? ctx.base : null;
+        if (!base || stories.busy) { this.renderResearchStoriesRow(); return; }
+        const h = strings.history;
+        stories.busy = true;
+        delete stories.note;
+        this.renderResearchStoriesRow();
+        const scheme = announcedResearchScheme();
+        const r = await postBridgeStories(base, on, ctx!.features, { tree: rid, ...(scheme ? { scheme } : {}) });
+        if (stories.rid !== rid) return;
+        delete stories.busy;
+        if (r.ok) {
+            stories.want = on;
+        } else if (r.link && (r.code === 'link' || r.code === 'off')) {
+            // The research asks in its terminal: the switch follows its status later.
+            this.launchResearchLink(r.link, 'terminal');
+            stories.note = { text: strings.research.opening };
+        } else if (r.code === 'off') {
+            // The research not looking for history: the sentence with the way to switch it on.
+            stories.note = { text: h.manageOff, ...(ctx?.canLinkOn ? { link: { label: h.enableSearch, run: () => this.historyEnableSearch() } } : {}) };
+        } else if (r.code === 'busy') {
+            stories.note = { text: h.errBusy };
+        } else {
+            stories.note = { text: r.reason || (r.held ? this.researchWriteHeldText(r.held, false).toast : strings.live.waitingWrite.writeFailed) };
+        }
+        this.renderResearchStoriesRow();
     },
 
     /** Save the choice at once (it goes with the next send). */

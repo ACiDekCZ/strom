@@ -5352,6 +5352,8 @@ const stringsEN = {
         // History in stories, Research for this tree → Stories (§7).
         storiesTitle: 'History in stories',
         storiesDesc: 'The research may use the history of places as a source when writing stories; finished stories are not rewritten for it.',
+        storiesSection: 'Stories',
+        storiesBridgeDown: "The research isn't running. This can be changed once it runs.",
         hideAllMenu: 'Hide all in this tree',
         hideAllSub: 'also events the research finds later',
         hideAllTitle: (r: string) => `Hide everything from ${r}?`,
@@ -10617,6 +10619,8 @@ const stringsCZ: StringsType = {
         // Dějiny ve vyprávění, Výzkum pro tento strom → Vyprávění (§7).
         storiesTitle: 'Dějiny ve vyprávění',
         storiesDesc: 'Výzkum smí při psaní vyprávění použít dějiny míst jako zdroj; hotová vyprávění se kvůli tomu nepřepisují.',
+        storiesSection: 'Vyprávění',
+        storiesBridgeDown: 'Výzkum neběží. Změnit to půjde, až poběží.',
         hideAllMenu: 'Skrýt vše v tomto stromu',
         hideAllSub: 'i události, které výzkum najde později',
         hideAllTitle: (r: string) => `Skrýt vše z regionu ${r}?`,
@@ -15808,6 +15812,8 @@ const stringsDE: StringsType = {
         // Zeitgeschehen in Erzählungen, Forschung für diesen Stammbaum → Erzählungen (§7).
         storiesTitle: 'Zeitgeschehen in Erzählungen',
         storiesDesc: 'Die Forschung darf beim Schreiben von Erzählungen die Geschichte der Orte als Quelle nutzen; fertige Erzählungen werden dafür nicht neu geschrieben.',
+        storiesSection: 'Erzählungen',
+        storiesBridgeDown: 'Die Forschung läuft nicht. Ändern lässt es sich, sobald sie läuft.',
         hideAllMenu: 'Alles in diesem Stammbaum ausblenden',
         hideAllSub: 'auch später gefundene',
         hideAllTitle: (r: string) => `Alles aus ${r} ausblenden?`,

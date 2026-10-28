@@ -16371,6 +16371,13 @@
         .sources-bulk-panel.is-paused .sources-bulk-bar > span { background: var(--text-faint); }
         .sources-bulk-buttons { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 10px; }
         .research-images-host:empty { display: none; }
+        /* Research for this tree → Stories, "History in stories" (spec 1028 §7, 7a): the section's last row. */
+        .research-stories-host:empty { display: none; }
+        .research-stories { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--divider, var(--border)); }
+        .research-stories legend { float: left; width: 100%; }
+        .modal .research-stories .settings-checkbox.research-stories-row { padding: 4px 0; margin: 0; clear: both; }
+        .research-stories-note { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--text-light); }
+        @media (pointer: coarse) { .research-stories-note .link-button { min-height: 44px; } }
         .research-images { margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--divider, var(--border)); }
         .research-images-title { margin: 0 0 8px; font-size: 14px; font-weight: 600; }
         .research-images-grid {
