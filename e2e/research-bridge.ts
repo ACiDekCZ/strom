@@ -280,6 +280,79 @@ export function fakeHistoryR1(init: Partial<FakeHistory> = {}): FakeHistory {
     return { ...base, ...init };
 }
 
+/** People of the detail's tree besides Jan: 12 of Čáslav (1840–1900) and 2 of Kutná Hora (1845–1895). */
+export const DETAIL_CASLAV = ['Adam /Bárta/', 'Bedřich /Černý/', 'Cyril /Dvořák/', 'Daniel /Erben/', 'Emil /Fiala/', 'František /Hora/',
+    'Gustav /Jelínek/', 'Hugo /Kára/', 'Ivan /Lukeš/', 'Jakub /Malý/', 'Karel /Novák/', 'Ludvík /Orel/'];
+export const DETAIL_KUTNA_HORA = ['Marie /Pokorná/', 'Nina /Růžičková/'];
+
+/** The history tree with the detail's people (historyGed plus DETAIL_CASLAV and DETAIL_KUTNA_HORA). */
+export function historyDetailGed(head = HEAD): string {
+    let n = 10;
+    const person = (name: string, place: string, born: number, died: number): string[] => {
+        const id = `P${String(n++).padStart(4, '0')}`;
+        return [`0 @${id}@ INDI`, `1 NAME ${name}`, `1 SEX ${name.endsWith('á/') ? 'F' : 'M'}`, `1 REFN ${id}`, '2 TYPE strom-research',
+            '1 BIRT', `2 DATE ${born}`, `2 PLAC ${place}`, '1 DEAT', `2 DATE ${died}`, `2 PLAC ${place}`];
+    };
+    const extra = [
+        ...DETAIL_CASLAV.flatMap(name => person(name, 'Čáslav', 1840, 1900)),
+        ...DETAIL_KUTNA_HORA.flatMap(name => person(name, 'Kutná Hora', 1845, 1895)),
+    ];
+    return researchGed(head, extra).replace('1 NAME Jan /Fíšek/', '1 NAME Jan /Fíšek/\n1 BIRT\n2 DATE 1860\n2 PLAC Čáslav\n1 DEAT\n2 DATE 1910\n2 PLAC Čáslav');
+}
+
+/**
+ * fakeHistoryR1 for the detail (spec 1028 §2, §3): Bohemia with seven events
+ * of six kinds over three centuries — E1 1866 war also for Kutná Hora (15
+ * people see it), E2 1873 hidden at Čáslav, E10 1755 epidemic (nobody sees
+ * it), E11 1848 law with an excerpt, E12 1850 census only in German, E13 1880
+ * emigration, E14 1914–1918 war; local findings E4, L0031 (Čáslav) and L0032
+ * (Kutná Hora). `many`: 45 more events of Bohemia (10 in the 18th century,
+ * 30 in the 19th, 5 in the 20th) at Kolín, so its centuries fold.
+ */
+export function fakeHistoryDetail(opts: { many?: boolean } = {}, init: Partial<FakeHistory> = {}): FakeHistory {
+    const h = fakeHistoryR1(init);
+    const p = h.payload;
+    const bohemia = { id: 'cz-bohemia', name: BOHEMIA };
+    const src = (slug: string, extra: Record<string, unknown> = {}) =>
+        ({ title: 'Invented chronicle', url: `https://example.org/${slug}`, checked: '2026-10-01', ...extra });
+    const events = p.events as Record<string, unknown>[];
+    events.push(
+        { id: 'E10', from: 1755, kind: 'epidemic', scope: 'region', region: bohemia,
+            text: { cs: 'Mor v kraji.', en: 'Plague in the region.' }, source: src('plague-1755') },
+        { id: 'E11', from: 1848, kind: 'law', scope: 'region', region: bohemia,
+            text: { cs: 'Zrušení roboty.', en: 'The abolition of serfdom.' },
+            source: src('serfdom-1848', { quote: 'Robota se ruší na věčné časy.', lang: 'cs' }) },
+        { id: 'E12', from: 1850, kind: 'census', scope: 'region', region: bohemia,
+            text: { de: 'Volkszählung in Böhmen.' }, source: src('census-1850') },
+        { id: 'E13', from: 1880, kind: 'emigration', scope: 'region', region: bohemia,
+            text: { cs: 'Vystěhovalectví do Ameriky.', en: 'Emigration to America.' }, source: src('emigration-1880') },
+        { id: 'E14', from: 1914, to: 1918, kind: 'war', scope: 'region', region: bohemia,
+            text: { cs: 'Velká válka.', en: 'The Great War.' }, source: src('war-1914') },
+        { id: 'L0031', from: 1842, kind: 'disaster', scope: 'local',
+            text: { cs: 'Krupobití zničilo úrodu.', en: 'A hailstorm destroyed the harvest.' },
+            local: { source: 'S0099', cite: 'Kronika Čáslav, s. 12' } },
+        { id: 'L0032', from: 1885, kind: 'other', scope: 'local',
+            text: { cs: 'Otevřena nová škola.', en: 'A new school opened.' },
+            local: { source: 'S0099', cite: 'Kronika Kutné Hory, s. 3' } },
+    );
+    const caslav = p.places['Čáslav'].events as string[];
+    caslav.push('E10', 'E11', 'E12', 'E13', 'E14', 'L0031');
+    p.places['Kutná Hora'].events = ['E1', 'L0032'];
+    if (opts.many) {
+        const years = [
+            ...Array.from({ length: 10 }, (_, i) => 1701 + i * 9),
+            ...Array.from({ length: 30 }, (_, i) => 1801 + i * 3),
+            ...Array.from({ length: 5 }, (_, i) => 1901 + i * 7),
+        ];
+        years.forEach((from, i) => events.push({ id: `M${i + 1}`, from, kind: 'other', scope: 'region', region: bohemia,
+            text: { cs: `Kronikářský záznam ${i + 1}.`, en: `A chronicle entry ${i + 1}.` }, source: src(`entry-${i + 1}`) }));
+        // The app reads only events some place lists: a place of Bohemia nobody of the tree lived in.
+        p.places['Kolín'] = { events: years.map((_, i) => `M${i + 1}`), regions: [{ id: 'cz-bohemia' }], persons: 0, id: 'L0005' };
+    }
+    p.regions!['cz-bohemia'].events = events.filter(e => (e.region as { id?: string } | undefined)?.id === 'cz-bohemia').length;
+    return h;
+}
+
 /** The answer to `/history*`, `/experiments` and `/stories` (null: not one of them; 404 when not said in `features`). */
 function serveHistory(b: FakeBridge, method: string, url: URL, postData: string | null): { status: number; body: unknown } | null {
     const h = b.history;

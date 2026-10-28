@@ -770,9 +770,12 @@ export const historyDetailMethods = uiModule({
     /** A refused delete (§3.7): busy and retracted under the row, gone a toast and a fresh read, the rest the bridge's sentence. */
     historyDetailRefused(rid: string, evId: string, r: HistoryWriteRefusal): void {
         const h = strings.history;
-        if (r.code === 'busy') mem.notes.set(evId, h.errBusy);
-        else if (r.code === 'retracted') mem.notes.set(evId, h.errRetracted);
-        else if (r.code === 'gone') {
+        if (r.code === 'busy' || r.code === 'retracted') {
+            const text = r.code === 'busy' ? h.errBusy : h.errRetracted;
+            // A restore (Undo) of a row deleted here: no row to say it under.
+            if (mem.gone.has(evId)) this.showToast(text, 5000);
+            else mem.notes.set(evId, text);
+        } else if (r.code === 'gone') {
             this.showToast(h.errGone, 5000);
             void this.readBridgeHistory(rid);
         } else {
