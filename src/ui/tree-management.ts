@@ -37,6 +37,7 @@ import {
 import { PersonPicker } from '../person-picker.js';
 import { AppExporter } from '../export.js';
 import { SettingsManager } from '../settings.js';
+import { dropLifelineChips } from '../lifeline-view.js';
 import { ThemeMode, LanguageSetting, AppMode, AuditLog } from '../types.js';
 import { CryptoSession, isEncrypted, encrypt, decrypt, EncryptedData } from '../crypto.js';
 import { validateTreeData, ValidationResult as TreeValidationResult, ValidationIssue } from '../validation.js';
@@ -93,6 +94,9 @@ function focusFirstFlyoutItem(subId: string, rowId: string): void {
     };
     requestAnimationFrame(step);
 }
+
+/** The tree whose card timeline default the dialog edits. */
+let lifelineDefaultsTreeId: TreeId | null = null;
 
 export const treeManagementMethods = uiModule({
     // ---- TREE SWITCHER ----
@@ -484,7 +488,7 @@ export const treeManagementMethods = uiModule({
                 value.textContent = row.value;
                 item.appendChild(value);
             }
-            if (row.key === 'defaultPerson') {
+            if (row.value !== undefined) {
                 const chevron = document.createElement('span');
                 chevron.className = 'actions-tree-chevron';
                 chevron.setAttribute('aria-hidden', 'true');
@@ -1383,6 +1387,44 @@ export const treeManagementMethods = uiModule({
         this.closeRenameTreeDialog();
         this.updateTreeManagerList();
         this.updateTreeSwitcher();
+    },
+
+    // ---- PERSON CARD TIMELINE: THE TREE'S DEFAULT (spec 020 K4.5) ----
+    /** The tree's default of the card timeline's chips; the card changes it only for a while. */
+    showLifelineDefaultsDialog(treeId: string, parentDialogId?: string): void {
+        const modal = document.getElementById('lifeline-defaults-modal');
+        const child = document.getElementById('lifeline-default-child') as HTMLInputElement | null;
+        const history = document.getElementById('lifeline-default-history') as HTMLInputElement | null;
+        if (!modal || !child || !history) return;
+        lifelineDefaultsTreeId = treeId as TreeId;
+        const d = SettingsManager.getLifelineDefaults(treeId);
+        child.checked = d.childEvents;
+        history.checked = d.history;
+        this.clearDialogStack();
+        if (parentDialogId) {
+            this.pushDialog(parentDialogId);
+            this.closeDialogById(parentDialogId);
+        }
+        this.pushDialog('lifeline-defaults-modal');
+        modal.classList.add('active');
+        child.focus();
+    },
+
+    closeLifelineDefaultsDialog(): void {
+        document.getElementById('lifeline-defaults-modal')?.classList.remove('active');
+        lifelineDefaultsTreeId = null;
+        this.returnToParentDialog();
+    },
+
+    /** Saved for the tree in this browser; a card's change of that tree gives way to it. */
+    confirmLifelineDefaults(): void {
+        const treeId = lifelineDefaultsTreeId;
+        if (!treeId) return;
+        const child = document.getElementById('lifeline-default-child') as HTMLInputElement | null;
+        const history = document.getElementById('lifeline-default-history') as HTMLInputElement | null;
+        SettingsManager.setLifelineDefaults(treeId, { childEvents: !!child?.checked, history: !!history?.checked });
+        dropLifelineChips(treeId);
+        this.closeLifelineDefaultsDialog();
     },
 
     // ---- DUPLICATE TREE ----

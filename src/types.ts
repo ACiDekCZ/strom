@@ -1283,7 +1283,7 @@ export interface AppSettings {
     lifelineChildEvents?: boolean;  // default: false - person card's life timeline also lists the children's events (fallback of every tree, see lifelineByTree)
     historyLayer?: boolean;  // default: true (undefined = never chosen) - the research's events of the time in the life timeline (spec 020)
     lifelineHistory?: boolean;  // default: true - the card's "History" chip (shown only while historyLayer is on; fallback of every tree)
-    /** Per tree (spec 020 K4.5): the timeline chips chosen in that tree; absent = the two values above. */
+    /** Per tree (spec 020 K4.5): the card timeline's default set in the tree's settings; absent = the two values above. */
     lifelineByTree?: Record<string, { childEvents?: boolean; history?: boolean }>;
     historyKindRegion?: boolean;  // default: true - the card's timeline shows regional history (spec 1028 §6)
     historyKindPlace?: boolean;   // default: true - the card's timeline shows the history of a place (with history.place)

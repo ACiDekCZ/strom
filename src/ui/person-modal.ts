@@ -45,6 +45,7 @@ import {
 import { PersonPicker } from '../person-picker.js';
 import { AppExporter } from '../export.js';
 import { SettingsManager } from '../settings.js';
+import { lifelineChips, setLifelineChip } from '../lifeline-view.js';
 import { ThemeMode, LanguageSetting, AppMode, AuditLog, personSourceIds } from '../types.js';
 import { CryptoSession, isEncrypted, encrypt, decrypt, EncryptedData } from '../crypto.js';
 import { validateTreeData, ValidationResult as TreeValidationResult, ValidationIssue } from '../validation.js';
@@ -851,7 +852,7 @@ export const personModalMethods = uiModule({
         // only appears when there is something for it to show.
         const all = computePersonLifeline(DataManager.getData(), id, { childEvents: true });
         const hasChildEvents = all.some(pt => pt.kind === 'childEvent');
-        const showChildEvents = SettingsManager.isLifelineChildEvents(DataManager.getCurrentTreeId());
+        const showChildEvents = lifelineChips(DataManager.getCurrentTreeId()).childEvents;
         const points = showChildEvents ? all : all.filter(pt => pt.kind !== 'childEvent');
         const toggle = document.getElementById('pm-lifeline-child-toggle');
         if (toggle) {
@@ -1002,10 +1003,10 @@ export const personModalMethods = uiModule({
         return ` <span class="pm-lifeline-place">· ${inner}</span>`;
     },
 
-    /** The head's chip (T15): the children's events on or off, for every person of this tree (K4.5). */
+    /** The head's chip (T15): the children's events on or off, for every card of the open tree, for a while (K4.5). */
     toggleLifelineChildEvents(): void {
         const treeId = DataManager.getCurrentTreeId();
-        SettingsManager.setLifelineChildEvents(treeId, !SettingsManager.isLifelineChildEvents(treeId));
+        setLifelineChip(treeId, 'childEvents', !lifelineChips(treeId).childEvents);
         const id = this.currentId;
         if (id) this.renderPersonLifeline(id, true);
     },

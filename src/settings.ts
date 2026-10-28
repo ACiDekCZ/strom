@@ -26,6 +26,12 @@ export interface CardSignals {
 
 export const CARD_SIGNAL_KEYS: (keyof CardSignals)[] = ['evidence', 'story', 'waiting', 'conflict', 'question', 'agent'];
 
+/** The person card timeline's default in a tree (spec 020 K4.5). */
+export interface LifelineDefaults {
+    childEvents: boolean;
+    history: boolean;
+}
+
 /** Per device, apart from the other settings. */
 const CARD_SIGNALS_KEY = 'strom-card-signals';
 
@@ -151,34 +157,30 @@ class SettingsManagerClass {
     }
 
     /**
-     * Does the person card's life timeline list the children's deaths,
-     * burials, marriages and divorces? Default OFF. Remembered per tree in
-     * this browser (spec 020 K4.5); a tree never chosen in follows the former
-     * one choice for every tree (`lifelineChildEvents`), so nothing is lost.
+     * What the person card's life timeline shows by default in a tree (spec
+     * 020 K4.5, set in the tree's settings, this browser): the children's
+     * deaths, burials, marriages and divorces (default off) and history (the
+     * "History" chip, default on). A tree never set follows the former one
+     * choice for every tree (`lifelineChildEvents`, `lifelineHistory`), so
+     * nothing is lost. Only the card's timeline reads it; its chips change it
+     * for a while only (src/lifeline-view.ts).
      */
-    isLifelineChildEvents(treeId: string | null): boolean {
-        const own = treeId ? this.settings.lifelineByTree?.[treeId]?.childEvents : undefined;
-        return own ?? this.settings.lifelineChildEvents === true;
+    getLifelineDefaults(treeId: string | null): LifelineDefaults {
+        const own = treeId ? this.settings.lifelineByTree?.[treeId] : undefined;
+        return {
+            childEvents: own?.childEvents ?? this.settings.lifelineChildEvents === true,
+            history: own?.history ?? this.settings.lifelineHistory !== false,
+        };
     }
 
-    setLifelineChildEvents(treeId: string | null, enabled: boolean): void {
-        this.setLifelineChoice(treeId, 'childEvents', enabled);
-    }
-
-    /** A timeline chip's choice for one tree (without a tree: the fallback of every tree). */
-    private setLifelineChoice(treeId: string | null, key: 'childEvents' | 'history', enabled: boolean): void {
-        if (!treeId) {
-            if (key === 'childEvents') this.settings.lifelineChildEvents = enabled;
-            else this.settings.lifelineHistory = enabled;
-        } else {
-            const all = (this.settings.lifelineByTree ??= {});
-            all[treeId] = { ...all[treeId], [key]: enabled };
-        }
+    setLifelineDefaults(treeId: string, defaults: LifelineDefaults): void {
+        const all = (this.settings.lifelineByTree ??= {});
+        all[treeId] = { childEvents: defaults.childEvents, history: defaults.history };
         this.save();
     }
 
-    /** Forget a tree's timeline chips (the tree was deleted). */
-    forgetLifelineChoices(treeId: string): void {
+    /** Forget a tree's timeline defaults (the tree was deleted). */
+    forgetLifelineDefaults(treeId: string): void {
         if (!this.settings.lifelineByTree?.[treeId]) return;
         delete this.settings.lifelineByTree[treeId];
         this.save();
@@ -196,19 +198,6 @@ class SettingsManagerClass {
     setHistoryLayer(enabled: boolean): void {
         this.settings.historyLayer = enabled;
         this.save();
-    }
-
-    /**
-     * The card's "History" chip (only while the experiment is on). On by
-     * default; per tree like the children's events (K4.5).
-     */
-    isLifelineHistory(treeId: string | null): boolean {
-        const own = treeId ? this.settings.lifelineByTree?.[treeId]?.history : undefined;
-        return own ?? this.settings.lifelineHistory !== false;
-    }
-
-    setLifelineHistory(treeId: string | null, enabled: boolean): void {
-        this.setLifelineChoice(treeId, 'history', enabled);
     }
 
     /** The card's line "the research does not look for history yet" was closed (spec 020 K1.6): this browser, every tree. */

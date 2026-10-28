@@ -14,6 +14,7 @@
 
 import { strings, getCurrentLanguage } from '../strings.js';
 import { SettingsManager } from '../settings.js';
+import { lifelineChips, setLifelineChip } from '../lifeline-view.js';
 import { DataManager } from '../data.js';
 import { shownName } from '../person-name.js';
 import { MQ_MOBILE, MQ_PHONE_LANDSCAPE } from '../breakpoints.js';
@@ -212,7 +213,7 @@ export const historyCardMethods = uiModule({
             chip.innerHTML = '<span class="pm-lifeline-childtoggle-box" aria-hidden="true"></span><span class="pm-lifeline-history-label"></span>';
             chip.addEventListener('click', (e) => {
                 e.stopPropagation();
-                this.toggleLifelineHistory(!SettingsManager.isLifelineHistory(DataManager.getCurrentTreeId()));
+                this.toggleLifelineHistory(!lifelineChips(DataManager.getCurrentTreeId()).history);
             });
             chip.addEventListener('keydown', (e) => e.stopPropagation());
             const info = document.createElement('button');
@@ -625,7 +626,7 @@ export const historyCardMethods = uiModule({
         const view = this.historyForPerson(personId);
         const item = view?.history?.items.find(i => i.ev.id === id);
         if (!view || !item) return;
-        if (!view.chipOn) SettingsManager.setLifelineHistory(DataManager.getCurrentTreeId(), true);
+        if (!view.chipOn) setLifelineChip(DataManager.getCurrentTreeId(), 'history', true);
         openYears.add(item.year);
         this.renderPersonLifeline(personId, true);
         const row = document.querySelector<HTMLElement>(`#pm-lifeline-body .pm-lifeline-row[data-history-id="${CSS.escape(id)}"]`);

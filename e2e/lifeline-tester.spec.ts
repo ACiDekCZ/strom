@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { openApp, card, seedSetting } from './helpers.js';
+import { openApp, card, seedSetting, openTreeActions } from './helpers.js';
 
 /**
  * The person card's life timeline after the 3.10 tester round: a divorce as
@@ -86,41 +86,83 @@ test.describe('T15: divorce and the children\'s events in the life timeline', ()
         const indented = await child.first().evaluate(el => parseFloat(getComputedStyle(el).paddingLeft));
         expect(indented - own).toBe(16);
 
-        // One choice for every person of the tree, kept over a reload.
-        await page.reload();
-        await expect(card(page, 'Jan')).toBeVisible();
+        // One choice for every card of the open tree, for a while (K4.5): a reload brings the tree's default back.
+        await page.evaluate(() => window.Strom.UI.forceCloseModal());
         await openCard(page, 'Anna');
         await expect(page.locator('#pm-lifeline-child-toggle')).toHaveAttribute('aria-checked', 'true');
         await expect(page.locator('#pm-lifeline-body .pm-lifeline-row.k-childEvent')).toHaveCount(4);
+        await page.reload();
+        await expect(card(page, 'Jan')).toBeVisible();
+        await openCard(page, 'Anna');
+        await expect(page.locator('#pm-lifeline-child-toggle')).toHaveAttribute('aria-checked', 'false');
+        await expect(page.locator('#pm-lifeline-body .pm-lifeline-row.k-childEvent')).toHaveCount(0);
     });
 
-    test('the chip is remembered per tree; the former choice for every tree is each tree\'s default (K4.5)', async ({ page }) => {
-        // Chosen before the choice was per tree: on.
+    test('each tree has its default in its settings; the card changes it until another tree or a reload (K4.5)', async ({ page }) => {
+        // Chosen before the default was per tree: on, taken over by every tree.
         await seedSetting(page, 'lifelineChildEvents', true);
         await setup(page);
         const first = await page.evaluate(() => window.Strom.DataManager.getCurrentTreeId());
-        await openCard(page, 'Jan');
         const chip = page.locator('#pm-lifeline-child-toggle');
+        const childRows = page.locator('#pm-lifeline-body .pm-lifeline-row.k-childEvent');
+        await openCard(page, 'Jan');
         await expect(chip).toHaveAttribute('aria-checked', 'true');
-        await chip.click();
-        await expect(chip).toHaveAttribute('aria-checked', 'false');
         await page.evaluate(() => window.Strom.UI.forceCloseModal());
 
-        // Another tree keeps the former choice.
+        // Tree settings: the row says the default, its dialog sets it for this tree.
+        const sub = await openTreeActions(page);
+        const row = sub.locator('[data-action="lifeline"]');
+        await expect(row.locator('.actions-tree-action-label')).toHaveText('Person card timeline – default');
+        await expect(row.locator('.actions-tree-value')).toHaveText("Children's events, History");
+        await row.click();
+        const dialog = page.locator('#lifeline-defaults-modal');
+        await expect(dialog).toBeVisible();
+        await expect(dialog).toContainText('Nothing else in the app follows this.');
+        await expect(dialog.locator('#lifeline-default-child')).toBeChecked();
+        await dialog.locator('label', { hasText: "Children's events" }).click();
+        await dialog.getByRole('button', { name: 'Save' }).click();
+        await expect(dialog).toBeHidden();
+        await openCard(page, 'Jan');
+        await expect(chip).toHaveAttribute('aria-checked', 'false');
+        await expect(childRows).toHaveCount(0);
+        // Stored for this tree only.
+        const byTree = await page.evaluate(() => JSON.parse(localStorage.getItem('strom-settings') ?? '{}').lifelineByTree);
+        expect(byTree).toEqual({ [first!]: { childEvents: false, history: true } });
+        await page.evaluate(() => window.Strom.UI.forceCloseModal());
+
+        // Another tree keeps the former choice; its card's change lasts only while it stays open.
         await importTree(page);
         const second = await page.evaluate(() => window.Strom.DataManager.getCurrentTreeId());
         expect(second).not.toBe(first);
         await openCard(page, 'Jan');
         await expect(chip).toHaveAttribute('aria-checked', 'true');
-        await expect(page.locator('#pm-lifeline-body .pm-lifeline-row.k-childEvent')).toHaveCount(4);
+        await expect(childRows).toHaveCount(4);
+        await chip.click();
+        await expect(chip).toHaveAttribute('aria-checked', 'false');
         await page.evaluate(() => window.Strom.UI.forceCloseModal());
 
-        // Back in the first tree: its own choice, also after a reload.
+        // The first tree: its own default.
         await page.evaluate((id) => window.Strom.UI.switchToTree(id!), first);
         await expect.poll(() => page.evaluate(() => window.Strom.DataManager.getCurrentTreeId())).toBe(first);
         await openCard(page, 'Jan');
         await expect(chip).toHaveAttribute('aria-checked', 'false');
-        await expect(page.locator('#pm-lifeline-body .pm-lifeline-row.k-childEvent')).toHaveCount(0);
+        await chip.click();
+        await expect(chip).toHaveAttribute('aria-checked', 'true');
+        await page.evaluate(() => window.Strom.UI.forceCloseModal());
+
+        // Back in the second tree: the card's change is gone, its default is back.
+        await page.evaluate((id) => window.Strom.UI.switchToTree(id!), second);
+        await expect.poll(() => page.evaluate(() => window.Strom.DataManager.getCurrentTreeId())).toBe(second);
+        await openCard(page, 'Jan');
+        await expect(chip).toHaveAttribute('aria-checked', 'true');
+        await page.evaluate(() => window.Strom.UI.forceCloseModal());
+
+        // A reload: the first tree opens with its default (no card change kept).
+        await page.evaluate((id) => window.Strom.UI.switchToTree(id!), first);
+        await expect.poll(() => page.evaluate(() => window.Strom.DataManager.getCurrentTreeId())).toBe(first);
+        await openCard(page, 'Jan');
+        await chip.click();
+        await expect(chip).toHaveAttribute('aria-checked', 'true');
         await page.reload();
         await expect(card(page, 'Jan')).toBeVisible();
         expect(await page.evaluate(() => window.Strom.DataManager.getCurrentTreeId())).toBe(first);

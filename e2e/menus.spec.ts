@@ -3,7 +3,7 @@ import { openApp, createFirstPerson, openTreeActions, openTreeStructure } from '
 
 /** The flyout "Tree: {name} ›" of a one-person tree (menu 1020 §3.1), Change structure folded. */
 const DESKTOP_TREE_KEYS = ['overview', 'overview-quality', 'snapshots', 'researchInfo',
-    'rename', 'defaultPerson', 'startup', 'places', 'surnames', 'structure',
+    'rename', 'defaultPerson', 'startup', 'lifeline', 'places', 'surnames', 'structure',
     'visibility', 'lock', 'delete', 'manageTrees'];
 
 /**
@@ -454,6 +454,7 @@ test.describe('actions menu "Tree:" submenu', () => {
         await run('snapshots', modal('snapshots-modal'));
         await run('rename', modal('rename-tree-modal'));
         await run('defaultPerson', modal('default-person-modal'));
+        await run('lifeline', modal('lifeline-defaults-modal'));
         // No place filled in yet: the action says so instead of an empty list.
         await run('places', async () => {
             await expect(page.locator('.toast', { hasText: 'This tree has no places filled in yet.' })).toBeVisible();

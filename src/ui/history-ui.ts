@@ -20,6 +20,7 @@
 
 import { strings, getCurrentLanguage, type Language } from '../strings.js';
 import { SettingsManager } from '../settings.js';
+import { lifelineChips, setLifelineChip } from '../lifeline-view.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { shownName } from '../person-name.js';
@@ -52,7 +53,7 @@ export type HistoryHideScope = 'tree' | 'person';
 export interface PersonHistoryView {
     /** The research of the open tree. */
     researchId: string;
-    /** The card's "History" chip is on (SettingsManager.isLifelineHistory). */
+    /** The card's "History" chip is on (lifelineChips: the tree's default or the card's change). */
     chipOn: boolean;
     /** The person's history; null while nothing is read yet (the chip shows, the body says nothing). */
     history: PersonHistory | null;
@@ -400,7 +401,7 @@ export const historyMethods = uiModule({
             ...(status?.treeState ? { treeState: status.treeState } : {}),
         })) return null;
         const canLinkOn = this.historyCanLinkOn(rid);
-        const chipOn = SettingsManager.isLifelineHistory(DataManager.getCurrentTreeId());
+        const chipOn = lifelineChips(DataManager.getCurrentTreeId()).history;
         if (!payload) return { researchId: rid, chipOn, history: null, canLinkOn };
         const history = computePersonHistory(DataManager.getData(), personId, payload, lang(), {
             queue: displayQueue(rid),
@@ -466,9 +467,9 @@ export const historyMethods = uiModule({
         this.historyChanged();
     },
 
-    /** The card's "History" chip (remembered for every card of this tree, K4.5). */
+    /** The card's "History" chip: for every card of the open tree, for a while (K4.5; the default is the tree's settings). */
     toggleLifelineHistory(on: boolean): void {
-        SettingsManager.setLifelineHistory(DataManager.getCurrentTreeId(), on);
+        setLifelineChip(DataManager.getCurrentTreeId(), 'history', on);
         this.historyChanged();
     },
 

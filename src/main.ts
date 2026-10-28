@@ -26,6 +26,7 @@ import { PERSISTENCE_EVENT } from './persistence.js';
 import { FILE_COPY_EVENT, RESEARCH_BASE_EVENT } from './tree-manager.js';
 import { SNAPSHOTS_TRIMMED_EVENT, SNAPSHOT_CREATED_EVENT, SnapshotTrim } from './snapshots.js';
 import { collectPoolGarbage } from './media-pool.js';
+import { keepLifelineChipsFor } from './lifeline-view.js';
 import { shouldRegisterServiceWorker, registerServiceWorker, linkManifest, isBetaBuild, appModeFor, captureInstallPrompt, INSTALL_AVAILABILITY_EVENT, isSafariOnComputer, safariAppName } from './pwa.js';
 
 // Make modules available globally for HTML event handlers
@@ -154,6 +155,8 @@ function syncUrlTreeParam(): void {
 function registerAppListeners(): void {
     // Listen for data changes (e.g., after import)
     window.addEventListener('strom:data-changed', () => {
+        // The card timeline's chips change the open tree's default for a while only (K4.5): another tree, its default.
+        keepLifelineChipsFor(DataManager.getCurrentTreeId());
         // Locked ↔ readable flips with every tree (re)load: sync the
         // read-only gating before the render reads it.
         UI.syncLockedState();

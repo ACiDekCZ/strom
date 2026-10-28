@@ -1,11 +1,12 @@
 /**
- * The person card's timeline chips ("Children's events", "History") are
- * remembered per tree in this browser (spec 020 K4.5). The former one choice
- * for every tree stays the default of each tree (nothing lost on the move);
- * a tree's own choice does not touch the other trees; a deleted tree's
- * choices are forgotten.
+ * The person card timeline's chips ("Children's events", "History"), spec
+ * 020 K4.5: each tree has its default, set in the tree's settings and kept in
+ * this browser; the former one choice for every tree is each tree's default
+ * (nothing lost on the move). A chip on the card changes the open tree's
+ * default for a while only: in memory, gone when another tree is opened or
+ * the app is loaded again (a new module), or when the tree's default is set.
  */
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { SettingsManager } from '../settings.js';
 
 /** SettingsManager over a stored settings object (its constructor default, then `load`). */
@@ -25,67 +26,100 @@ function loadSettings(stored: Record<string, unknown> | null): Map<string, strin
 
 const saved = (store: Map<string, string>): Record<string, unknown> => JSON.parse(store.get('strom-settings') ?? '{}');
 
-describe('timeline chips per tree', () => {
+/** A fresh copy of the in-memory chips (as after loading the app again). */
+async function freshView(): Promise<typeof import('../lifeline-view.js')> {
+    vi.resetModules();
+    const { SettingsManager: sm } = await import('../settings.js');
+    // The fresh module's SettingsManager reads the same stubbed storage.
+    (sm as unknown as { load(): void }).load();
+    return import('../lifeline-view.js');
+}
+
+describe('the card timeline default per tree', () => {
     afterEach(() => vi.unstubAllGlobals());
 
     it('defaults: children\'s events off, history on, in every tree', () => {
         loadSettings(null);
-        expect(SettingsManager.isLifelineChildEvents('lhotak')).toBe(false);
-        expect(SettingsManager.isLifelineHistory('lhotak')).toBe(true);
-        expect(SettingsManager.isLifelineChildEvents(null)).toBe(false);
-        expect(SettingsManager.isLifelineHistory(null)).toBe(true);
+        expect(SettingsManager.getLifelineDefaults('lhotak')).toEqual({ childEvents: false, history: true });
+        expect(SettingsManager.getLifelineDefaults(null)).toEqual({ childEvents: false, history: true });
     });
 
-    it('the former choice for every tree is taken over by each tree', () => {
+    it('the former choice for every tree is each tree\'s default', () => {
         loadSettings({ lifelineChildEvents: true, lifelineHistory: false });
         for (const tree of ['lhotak', 'novak', null]) {
-            expect(SettingsManager.isLifelineChildEvents(tree)).toBe(true);
-            expect(SettingsManager.isLifelineHistory(tree)).toBe(false);
+            expect(SettingsManager.getLifelineDefaults(tree)).toEqual({ childEvents: true, history: false });
         }
     });
 
-    it('a choice in one tree stays in that tree; the others keep the former one', () => {
+    it('a tree\'s default is its own; the other trees keep the former choice; kept in this browser', () => {
         const store = loadSettings({ lifelineChildEvents: true });
-        SettingsManager.setLifelineChildEvents('lhotak', false);
-        SettingsManager.setLifelineHistory('lhotak', false);
-        expect(SettingsManager.isLifelineChildEvents('lhotak')).toBe(false);
-        expect(SettingsManager.isLifelineHistory('lhotak')).toBe(false);
-        expect(SettingsManager.isLifelineChildEvents('novak')).toBe(true);
-        expect(SettingsManager.isLifelineHistory('novak')).toBe(true);
-        // Kept in this browser across a reload; the former value untouched.
+        SettingsManager.setLifelineDefaults('lhotak', { childEvents: false, history: false });
+        expect(SettingsManager.getLifelineDefaults('lhotak')).toEqual({ childEvents: false, history: false });
+        expect(SettingsManager.getLifelineDefaults('novak')).toEqual({ childEvents: true, history: true });
         const s = saved(store);
         expect(s.lifelineChildEvents).toBe(true);
         expect(s.lifelineHistory).toBeUndefined();
         expect(s.lifelineByTree).toEqual({ lhotak: { childEvents: false, history: false } });
         loadSettings(s);
-        expect(SettingsManager.isLifelineChildEvents('lhotak')).toBe(false);
-        expect(SettingsManager.isLifelineChildEvents('novak')).toBe(true);
+        expect(SettingsManager.getLifelineDefaults('lhotak')).toEqual({ childEvents: false, history: false });
     });
 
-    it('one chip chosen keeps the other chip following the former choice', () => {
-        loadSettings({ lifelineHistory: false });
-        SettingsManager.setLifelineChildEvents('lhotak', true);
-        expect(SettingsManager.isLifelineHistory('lhotak')).toBe(false);
-        SettingsManager.setLifelineHistory('lhotak', true);
-        expect(SettingsManager.isLifelineChildEvents('lhotak')).toBe(true);
-        expect(SettingsManager.isLifelineHistory('lhotak')).toBe(true);
-        expect(SettingsManager.isLifelineHistory('novak')).toBe(false);
-    });
-
-    it('a deleted tree\'s choices are forgotten', () => {
+    it('a deleted tree\'s default is forgotten', () => {
         const store = loadSettings(null);
-        SettingsManager.setLifelineChildEvents('lhotak', true);
-        SettingsManager.forgetLifelineChoices('lhotak');
-        expect(SettingsManager.isLifelineChildEvents('lhotak')).toBe(false);
+        SettingsManager.setLifelineDefaults('lhotak', { childEvents: true, history: true });
+        SettingsManager.forgetLifelineDefaults('lhotak');
+        expect(SettingsManager.getLifelineDefaults('lhotak')).toEqual({ childEvents: false, history: true });
         expect(saved(store).lifelineByTree).toEqual({});
     });
 
     it('the Settings switch of the history layer stays one for every tree', () => {
         loadSettings(null);
-        SettingsManager.setLifelineHistory('lhotak', false);
+        SettingsManager.setLifelineDefaults('lhotak', { childEvents: false, history: false });
         expect(SettingsManager.isHistoryLayer()).toBe(true);
         SettingsManager.setHistoryLayer(false);
         expect(SettingsManager.isHistoryLayer()).toBe(false);
-        expect(SettingsManager.isLifelineHistory('novak')).toBe(true);
+        expect(SettingsManager.getLifelineDefaults('novak').history).toBe(true);
+    });
+});
+
+describe('the card\'s chips change the default for a while', () => {
+    beforeEach(() => { loadSettings(null); });
+    afterEach(() => vi.unstubAllGlobals());
+
+    it('a chip changes the open tree only, and is never stored', async () => {
+        const store = loadSettings({ lifelineChildEvents: false });
+        const v = await freshView();
+        v.setLifelineChip('lhotak', 'childEvents', true);
+        expect(v.lifelineChips('lhotak')).toEqual({ childEvents: true, history: true });
+        expect(v.lifelineChips('novak')).toEqual({ childEvents: false, history: true });
+        expect(saved(store).lifelineByTree).toBeUndefined();
+        expect(saved(store).lifelineChildEvents).toBe(false);
+    });
+
+    it('another tree opened: the change is gone, also after coming back', async () => {
+        const v = await freshView();
+        v.setLifelineChip('lhotak', 'history', false);
+        v.keepLifelineChipsFor('lhotak');
+        expect(v.lifelineChips('lhotak').history).toBe(false);
+        v.keepLifelineChipsFor('novak');
+        v.keepLifelineChipsFor('lhotak');
+        expect(v.lifelineChips('lhotak').history).toBe(true);
+    });
+
+    it('the app loaded again: the tree\'s default', async () => {
+        let v = await freshView();
+        v.setLifelineChip('lhotak', 'childEvents', true);
+        v = await freshView();
+        expect(v.lifelineChips('lhotak').childEvents).toBe(false);
+    });
+
+    it('the tree\'s default set anew: the card shows it', async () => {
+        const v = await freshView();
+        const { SettingsManager: sm } = await import('../settings.js');
+        v.setLifelineChip('lhotak', 'childEvents', false);
+        sm.setLifelineDefaults('lhotak', { childEvents: true, history: true });
+        expect(v.lifelineChips('lhotak').childEvents).toBe(false);
+        v.dropLifelineChips('lhotak');
+        expect(v.lifelineChips('lhotak').childEvents).toBe(true);
     });
 });

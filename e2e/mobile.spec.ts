@@ -4,7 +4,7 @@ import { openApp, createFirstPerson, card, openTreeStructure } from './helpers.j
 /** The open tree's sheet (More → Tree: {name}), menu 1020 §3.1: headings and rows (Change structure folded). */
 const TREE_SHEET_HEADERS = ['Research', 'Tree settings'];
 const TREE_SHEET_KEYS = ['overview', 'overview-quality', 'snapshots', 'researchInfo',
-    'rename', 'defaultPerson', 'startup', 'places', 'surnames', 'structure',
+    'rename', 'defaultPerson', 'startup', 'lifeline', 'places', 'surnames', 'structure',
     'visibility', 'lock', 'delete', 'manageTrees'];
 
 test('the phone search: the magnifier opens the field over the bar; a long name fits the dropdown, on screen', { tag: '@smoke' }, async ({ page }) => {

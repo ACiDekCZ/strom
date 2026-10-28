@@ -3,7 +3,8 @@
  * §3). The ⋯ actions menu's flyout (desktop), More → "Tree: {name}" (the
  * sheet) and the tree manager's ⋯ (its menu, its sheet on touch) all render
  * it, so the actions and their order never drift apart:
- *   Overview · [Export… — manager] · Research · Tree settings ·
+ *   Overview · [Export… — manager] · Research · Tree settings (with the
+ *   person card timeline's default, K4.5) ·
  *   "Change structure ⌄" (collapsed) · Manage · [Manage trees… — not manager]
  * A tree that is not open gets the list without the rows that need the open
  * tree; a read-only tree (locked, followed live, locked data) only the rows
@@ -20,6 +21,14 @@ import { formatFileSize, formatRelativeDateTime } from '../format.js';
 import { uiModule } from './module.js';
 import { shownNameOrEmpty } from '../person-name.js';
 import { onComputer } from './research-ui.js';
+import { SettingsManager } from '../settings.js';
+
+/** The tree's default of the person card timeline, as its settings row says it (K4.5). */
+function lifelineDefaultsSummary(treeId: TreeId): string {
+    const d = SettingsManager.getLifelineDefaults(treeId);
+    const on = [d.childEvents ? strings.personModal.lifelineChildEvents : '', d.history ? strings.history.chip : ''].filter(Boolean);
+    return on.length ? on.join(', ') : strings.treeManager.lifelineDefaultsNone;
+}
 
 /** Drag on the sheet's head: this far up expands it, this far down closes it. */
 const SHEET_EXPAND_PX = 40;
@@ -184,6 +193,7 @@ export const treeActionsMethods = uiModule({
                 { key: 'rename', label: s.rename, editOnly: true, run: () => this.showRenameTreeDialog(id, parent) },
                 { key: 'defaultPerson', label: s.defaultPerson, value: defaultPerson || s.defaultPersonFirstPerson, editOnly: true, run: () => void this.showDefaultPersonDialog(id, parent) },
                 { key: 'startup', label: s.openAtStartup, checked: TreeManager.getDefaultTree() === id, editOnly: true, run: () => this.toggleStartupTree(id) },
+                { key: 'lifeline', label: s.lifelineDefaults, value: lifelineDefaultsSummary(id), editOnly: true, run: () => this.showLifelineDefaultsDialog(id, parent) },
                 ...(isActive ? [
                     { key: 'places', label: strings.map.placesMenu, editOnly: true, run: () => this.showPlacesManager(undefined, parent) },
                     { key: 'surnames', label: strings.surnames.menu, editOnly: true, run: () => this.showSurnamesDialog(parent) },

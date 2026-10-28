@@ -20012,6 +20012,33 @@
         </div>
     </div>
 
+    <!-- Person card timeline: the tree's default (spec 020 K4.5) -->
+    <div class="modal-overlay" id="lifeline-defaults-modal">
+        <div class="modal modal--sm" role="dialog" data-dialog-kind="form" aria-modal="true" aria-labelledby="lifeline-defaults-title">
+            <div class="modal-header">
+                <h2 id="lifeline-defaults-title" data-i18n="treeManager.lifelineDefaultsTitle">Person card timeline</h2>
+                <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeLifelineDefaultsDialog()">&times;</button>
+            </div>
+            <p class="field-hint" data-i18n="treeManager.lifelineDefaultsNote"></p>
+            <div class="form-group">
+                <div class="settings-group-body">
+                    <label class="settings-checkbox settings-row">
+                        <input type="checkbox" id="lifeline-default-child">
+                        <span data-i18n="personModal.lifelineChildEvents"></span>
+                    </label>
+                    <label class="settings-checkbox settings-row">
+                        <input type="checkbox" id="lifeline-default-history">
+                        <span data-i18n="history.chip"></span>
+                    </label>
+                </div>
+            </div>
+            <div class="buttons">
+                <button class="secondary" data-dismiss onclick="window.Strom.UI.closeLifelineDefaultsDialog()" data-i18n="buttons.cancel">Cancel</button>
+                <button class="primary" onclick="window.Strom.UI.confirmLifelineDefaults()" data-i18n="buttons.save">Save</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Duplicate Tree Dialog -->
     <div class="modal-overlay" id="duplicate-tree-modal">
         <div class="modal modal--sm" role="dialog" data-dialog-kind="form" aria-modal="true">

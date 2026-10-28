@@ -99,15 +99,37 @@ test.describe('History in the life timeline: the person card', () => {
         await expect(page.locator('.pm-lifeline-hidden')).toHaveCount(0);
         await expect(page.locator('.pm-lifeline-hinfo')).toBeHidden();
         await expect(page.locator('#pm-lifeline-section')).not.toHaveClass(/collapsed/);
-        // Remembered for this tree only (K4.5): the choice for every tree stays as it was.
+        // The card changes the tree's default for a while only (K4.5): nothing stored, a reload brings the default back.
         const kept = await page.evaluate(() => {
             const s = JSON.parse(localStorage.getItem('strom-settings') ?? '{}');
-            return { tree: window.Strom.DataManager.getCurrentTreeId(), byTree: s.lifelineByTree, all: s.lifelineHistory };
+            return { byTree: s.lifelineByTree, all: s.lifelineHistory };
         });
-        expect(kept.byTree).toEqual({ [kept.tree!]: { history: false } });
-        expect(kept.all).toBeUndefined();
+        expect(kept).toEqual({ byTree: undefined, all: undefined });
         await chip(page).click();
         await expect(warRow(page)).toBeVisible();
+        await chip(page).click();
+        await expect(historyRows(page)).toHaveCount(0);
+        await closeCard(page);
+        await page.reload();
+        await expect(page.locator('html')).not.toHaveClass(/app-loading/);
+        await poll(page);
+        await openCard(page, 'Jan');
+        await expect(chip(page)).toHaveAttribute('aria-checked', 'true');
+        await expect(warRow(page)).toBeVisible();
+    });
+
+    test('the tree\'s default without History (its settings): the card starts without it (K4.5)', async ({ page }) => {
+        await setup(page);
+        await page.evaluate(() => window.Strom.UI.showLifelineDefaultsDialog(window.Strom.DataManager.getCurrentTreeId()!));
+        const dialog = page.locator('#lifeline-defaults-modal');
+        await expect(dialog).toBeVisible();
+        await expect(dialog.locator('#lifeline-default-history')).toBeChecked();
+        await dialog.locator('label', { hasText: 'History' }).click();
+        await dialog.getByRole('button', { name: 'Save' }).click();
+        await expect(dialog).toBeHidden();
+        await openCard(page, 'Jan');
+        await expect(chip(page)).toHaveAttribute('aria-checked', 'false');
+        await expect(historyRows(page)).toHaveCount(0);
     });
 
     test('a year with two events is one folded row; Enter and Space unfold it', async ({ page }) => {
