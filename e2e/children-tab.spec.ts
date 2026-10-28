@@ -84,7 +84,12 @@ test('a direct-line ancestor: children shown in place, the card stays, a second 
     // The focus and zoom stay; the clicked card keeps its place on the screen
     expect(await page.evaluate(() => window.Strom.TreeRenderer.getFocusPersonId())).toBe(FOCUS);
     expect(await page.evaluate(() => window.Strom.ZoomPan.getScale())).toBe(scale);
-    await expect.poll(async () => (await screenPositions(page))[ANCESTOR]).toEqual(before[ANCESTOR]);
+    // To a pixel: the world shifts by the layout's move times the scale (a fraction of a pixel), the canvas
+    // stands on whole pixels (ZoomPan rounds its translate), so the rounded left edge may differ by one
+    await expect.poll(async () => {
+        const [x, y] = (await screenPositions(page))[ANCESTOR];
+        return Math.max(Math.abs(x - before[ANCESTOR][0]), Math.abs(y - before[ANCESTOR][1]));
+    }).toBeLessThanOrEqual(1);
     // The tab is now the hide control
     const hide = tabOf(page, ANCESTOR);
     await expect(hide).toHaveClass(/active/);
