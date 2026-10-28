@@ -9,6 +9,7 @@ import { collectPlaces } from './places.js';
 import { godparentLeads } from './godparents.js';
 import { strings } from './strings.js';
 import { shownNameOrEmpty } from './person-name.js';
+import { readRecordedAge } from './recorded-age.js';
 
 // ==================== ISSUE TYPES ====================
 
@@ -28,6 +29,12 @@ export interface ValidationIssue {
      * the recurring godparent's name, the place written several ways.
      */
     subject?: string;
+    /**
+     * The year of the dated fact the finding is about, where the type has one
+     * (eventAfterDeath: the event, weddingAfterDeath: the wedding): the earliest
+     * year its date can mean. Part of the finding's key (qualityFinding).
+     */
+    year?: number;
 }
 
 export interface ValidationResult {
@@ -56,7 +63,8 @@ export function validateTreeData(data: StromData): ValidationResult {
         personIds?: PersonId[],
         partnershipIds?: PartnershipId[],
         detail?: string,
-        subject?: string
+        subject?: string,
+        extra?: Pick<ValidationIssue, 'year'>
     ) => {
         issues.push({
             id: `issue_${++issueId}`,
@@ -66,7 +74,8 @@ export function validateTreeData(data: StromData): ValidationResult {
             personIds,
             partnershipIds,
             ...(detail ? { detail } : {}),
-            ...(subject ? { subject } : {})
+            ...(subject ? { subject } : {}),
+            ...(extra?.year !== undefined ? { year: extra.year } : {})
         });
     };
 
@@ -800,7 +809,8 @@ function checkPhotoData(data: StromData, addIssue: AddIssue): void {
 
 type AddIssue = (
     s: IssueSeverity, t: string, m: string,
-    p?: PersonId[], pp?: PartnershipId[], detail?: string, subject?: string
+    p?: PersonId[], pp?: PartnershipId[], detail?: string, subject?: string,
+    extra?: Pick<ValidationIssue, 'year'>
 ) => void;
 
 /**
@@ -829,6 +839,19 @@ function monthRange(d: FlexDate): { min: number; max: number } {
 function certainlyBefore(a: FlexDate | null, b: FlexDate | null, gapMonths = 0): boolean {
     if (!a || !b) return false;
     return monthRange(a).max + gapMonths < monthRange(b).min;
+}
+
+/**
+ * A person's events that come after the death by their nature: burial,
+ * cremation, probate and the will (read and proved after it). The research's
+ * `strom check` after-death warning leaves out the same four (BURI, CREM, PROB,
+ * WILL), so both report the same events.
+ */
+export const AFTER_DEATH_EVENT_TYPES: ReadonlySet<string> = new Set(['burial', 'cremation', 'probate', 'will']);
+
+/** The earliest year a date can mean: "~1861" → 1861, "1860..1862" → 1860. */
+function earliestYear(d: FlexDate): number {
+    return Math.min(d.year, d.end?.year ?? d.year);
 }
 
 /**
@@ -867,10 +890,12 @@ function checkDateConsistency(data: StromData, addIssue: AddIssue): void {
                 addIssue('warning', 'eventBeforeBirth', `${name}: event dated before birth`,
                     [personId], undefined, `${label} ${ev.date} < * ${person.birthDate}`);
             }
-            // Burial is naturally after death; everything else is suspicious.
-            if (ev.type !== 'burial' && certainlyBefore(death, evDate)) {
+            // Burial, cremation, probate and a will's reading naturally come
+            // after death; anything else is suspicious.
+            if (!AFTER_DEATH_EVENT_TYPES.has(ev.type) && certainlyBefore(death, evDate)) {
                 addIssue('warning', 'eventAfterDeath', `${name}: event dated after death`,
-                    [personId], undefined, `${label} ${ev.date} > † ${person.deathDate}`);
+                    [personId], undefined, `${label} ${ev.date} > † ${person.deathDate}`,
+                    undefined, { year: earliestYear(evDate) });
             }
         }
 
@@ -926,7 +951,8 @@ function checkDateConsistency(data: StromData, addIssue: AddIssue): void {
                 if (certainlyBefore(death, wedding)) {
                     addIssue('warning', 'weddingAfterDeath',
                         `${getPersonName(p)}: wedding dated after death`,
-                        [p.id], [partnershipId], `⚭ ${partnership.startDate} > † ${p.deathDate}`);
+                        [p.id], [partnershipId], `⚭ ${partnership.startDate} > † ${p.deathDate}`,
+                        undefined, { year: earliestYear(wedding) });
                 }
             }
         }
@@ -1021,52 +1047,140 @@ function checkPlaceSpellings(
     }
 }
 
+/** Where the year a person was born comes from: the birth, the baptism, or the death and the age at it. */
+export type BirthYearSource = 'birth' | 'baptism' | 'death';
+
+/** The years a person can have been born in, and what says so. */
+export interface BirthYears {
+    min: number;
+    max: number;
+    from: BirthYearSource;
+    /** Language-neutral words for the detail line: "* 1850", "~ 1851", "† 1922, 72 let". */
+    shown: string;
+}
+
+/** The person's death, else burial or cremation, as a date and the age the record gives with it. */
+function deathRecord(p: Person): { date: FlexDate; text: string; age?: string } | null {
+    const death = parseFlexDate(p.deathDate);
+    if (death) {
+        const burialAge = (p.events ?? []).find(e => e.type === 'burial' && e.age)?.age;
+        return { date: death, text: p.deathDate!, age: p.deathAge || burialAge };
+    }
+    for (const type of ['burial', 'cremation'] as const) {
+        const ev = (p.events ?? []).find(e => e.type === type && parseFlexDate(e.date));
+        if (ev) return { date: parseFlexDate(ev.date)!, text: ev.date!, age: ev.age || p.deathAge };
+    }
+    return null;
+}
+
 /**
- * Flag likely-accidental DUPLICATE persons within one tree: same gender, very
- * similar name and the same birth year (or, without any birth date, an exact
- * normalized name). Info-level — it never blocks; it just surfaces pairs the
- * user may want to merge. Bucketed by birth year / normalized name so it stays
- * linear-ish instead of comparing every pair.
+ * The year a person was born, or a stand-in when the birth is not known
+ * (spec 021 K1.3): research trees often know only the baptism, or only the
+ * burial with the age the priest wrote. The baptism follows the birth within
+ * days (so the birth is that year or the one before); the age at death gives
+ * the birth within a year — and a register's age is often a year or two off,
+ * which the comparison allows for.
  */
-function checkPossibleDuplicates(
-    data: StromData,
-    addIssue: (s: IssueSeverity, t: string, m: string, p?: PersonId[], pp?: PartnershipId[], d?: string) => void
-): void {
+export function birthYears(p: Person): BirthYears | null {
+    const year = parseYear(p.birthDate);
+    if (year !== null) return { min: year, max: year, from: 'birth', shown: `* ${year}` };
+    const baptism = (p.events ?? []).find(e => e.type === 'baptism' && parseYear(e.date) !== null);
+    if (baptism) {
+        const y = parseYear(baptism.date)!;
+        return { min: y - 1, max: y, from: 'baptism', shown: `~ ${y}` };
+    }
+    const death = deathRecord(p);
+    const age = death?.age ? readRecordedAge(death.age) : null;
+    if (death && age) {
+        const d = death.date.year;
+        if (age.kind === 'word') {
+            if (age.word === 'CHILD') return null;
+            return { min: d - 1, max: d, from: 'death', shown: `† ${d}, ${death.age}` };
+        }
+        if (age.qualifier === '>') return null;   // "over 60": no birth year to speak of
+        if (age.qualifier === '<') {
+            return { min: d - Math.max(age.years, 1) - 1, max: d, from: 'death', shown: `† ${d}, ${death.age!.trim()}` };
+        }
+        return { min: d - age.years - 1, max: d - age.years, from: 'death', shown: `† ${d}, ${death.age!.trim()}` };
+    }
+    return null;
+}
+
+/** How far apart two stand-in birth years may be and still be the same person. */
+const STAND_IN_YEARS_SLACK = 2;
+
+/**
+ * Flag likely-accidental DUPLICATE persons within one tree: same sex, the
+ * same surname, the same given name (or none on one side) and the same birth
+ * year. Info-level — it never blocks; it surfaces pairs worth a look.
+ *
+ * Spec 021 K1.3:
+ * - Without a birth date the year comes from the baptism, else from the death
+ *   or burial and the age at it (birthYears); a stand-in year allows a little
+ *   slack. Two people with no year at all are compared only by their exact
+ *   name, as before; a dated person is never paired with an undated one.
+ * - A parent and their child of the same name are two people.
+ * - So are siblings when one died before the other was born: the second child
+ *   was given the name of the one who died, as was the custom.
+ * - So are two people when one certainly died before the other was born.
+ */
+function checkPossibleDuplicates(data: StromData, addIssue: AddIssue): void {
     const norm = (s: string): string => s.trim().toLowerCase()
         .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    const persons = Object.values(data.persons).filter(p => !p.isPlaceholder);
-
-    // Bucket key: birth year when known, else "noyear". Only compare within a
-    // bucket (same year => plausible dup; different year => almost never).
-    const buckets = new Map<string, Person[]>();
-    for (const p of persons) {
-        const name = `${p.firstName}${p.lastName}`.trim();
-        if (!name) continue;                       // unnamed people never flagged
-        const year = parseYear(p.birthDate);
-        const key = year !== null ? `y${year}` : `n:${norm(p.firstName)}|${norm(p.lastName)}`;
-        (buckets.get(key) ?? buckets.set(key, []).get(key)!).push(p);
+    interface Entry { p: Person; first: string; years: BirthYears | null; order: number }
+    // Compared within one surname (it has to match anyway): the dated ones by
+    // a window over their years, the undated ones by their exact given name.
+    const dated = new Map<string, Entry[]>();
+    const undated = new Map<string, Entry[]>();
+    let order = 0;
+    for (const p of Object.values(data.persons)) {
+        if (p.isPlaceholder) continue;
+        if (!`${p.firstName}${p.lastName}`.trim()) continue;   // unnamed people never flagged
+        const e: Entry = { p, first: norm(p.firstName), years: birthYears(p), order: order++ };
+        const key = e.years ? norm(p.lastName) : `${norm(p.lastName)}|${e.first}`;
+        const into = e.years ? dated : undated;
+        (into.get(key) ?? into.set(key, []).get(key)!).push(e);
     }
 
-    const reported = new Set<string>();
-    for (const group of buckets.values()) {
-        if (group.length < 2) continue;
+    /** The earliest the person can have been born: the birth, else the baptism. */
+    const bornBy = (p: Person): FlexDate | null => parseFlexDate(p.birthDate)
+        ?? parseFlexDate((p.events ?? []).find(e => e.type === 'baptism' && parseFlexDate(e.date))?.date);
+    const diedBeforeBorn = (a: Person, b: Person): boolean =>
+        certainlyBefore(deathRecord(a)?.date ?? null, bornBy(b));
+
+    const report = (first: Entry, second: Entry): void => {
+        // The pair in the tree's order, whichever was born first.
+        const [x, y] = first.order < second.order ? [first, second] : [second, first];
+        const a = x.p, b = y.p;
+        if (!gendersCompatible(a.gender, b.gender)) return;
+        if (a.parentIds.includes(b.id) || b.parentIds.includes(a.id)
+            || a.childIds.includes(b.id) || b.childIds.includes(a.id)) return;
+        if (diedBeforeBorn(a, b) || diedBeforeBorn(b, a)) return;
+        const detail = x.years && y.years
+            ? (x.years.shown === y.years.shown ? x.years.shown : `${x.years.shown} / ${y.years.shown}`)
+            : undefined;
+        addIssue('info', 'possibleDuplicate',
+            `${getPersonName(a)} and ${getPersonName(b)} look like the same person`,
+            [a.id, b.id], undefined, detail);
+    };
+
+    for (const group of undated.values()) {
         for (let i = 0; i < group.length; i++) {
+            for (let j = i + 1; j < group.length; j++) report(group[i], group[j]);
+        }
+    }
+    for (const group of dated.values()) {
+        group.sort((x, y) => x.years!.min - y.years!.min);
+        for (let i = 0; i < group.length; i++) {
+            const x = group[i], ya = x.years!;
             for (let j = i + 1; j < group.length; j++) {
-                const a = group[i], b = group[j];
-                if (!gendersCompatible(a.gender, b.gender)) continue;
-                const firstEq = norm(a.firstName) === norm(b.firstName);
-                const lastEq = norm(a.lastName) === norm(b.lastName);
-                // Require the surname to match and the given name to match or be
-                // empty on one side (initials / partial records).
-                const givenOk = firstEq || !norm(a.firstName) || !norm(b.firstName);
-                if (!lastEq || !givenOk) continue;
-                const pairKey = [a.id, b.id].sort().join('|');
-                if (reported.has(pairKey)) continue;
-                reported.add(pairKey);
-                const yr = parseYear(a.birthDate);
-                addIssue('info', 'possibleDuplicate',
-                    `${getPersonName(a)} and ${getPersonName(b)} look like the same person`,
-                    [a.id, b.id], undefined, yr !== null ? `* ${yr}` : undefined);
+                const y = group[j], yb = y.years!;
+                if (yb.min - ya.max > STAND_IN_YEARS_SLACK) break;   // sorted: no one later is closer
+                // Same given name, or none on one side (initials, partial records).
+                if (x.first !== y.first && x.first && y.first) continue;
+                const gap = Math.max(0, ya.min - yb.max, yb.min - ya.max);
+                const slack = ya.from === 'birth' && yb.from === 'birth' ? 0 : STAND_IN_YEARS_SLACK;
+                if (gap <= slack) report(x, y);
             }
         }
     }
@@ -1207,4 +1321,109 @@ export function translateValidationType(type: string): string {
     const key = VALIDATION_TYPE_KEYS[type];
     const val = key ? s[key] : undefined;
     return typeof val === 'string' ? val : type;
+}
+
+// ==================== PROBLEMS AND LEADS (spec 021 K1.4) ====================
+
+/**
+ * Which part of the validation a finding belongs to: a PROBLEM (errors and
+ * warnings: a contradiction to fix) or a TRACE — a lead that may help the
+ * research and is not an error (info: a recurring godparent, a possible
+ * duplicate, a place written several ways).
+ */
+export type IssueCategory = 'problem' | 'trace';
+
+export function issueCategory(issue: Pick<ValidationIssue, 'severity'>): IssueCategory {
+    return issue.severity === 'info' ? 'trace' : 'problem';
+}
+
+const SEVERITY_RANK: Record<IssueSeverity, number> = { error: 0, warning: 1, info: 2 };
+
+/** All findings of one type (`ValidationIssue.type`), the unit the dialog shows. */
+export interface ValidationGroup {
+    /** The `ValidationIssue.type` every finding of the group has. */
+    type: string;
+    /** The most severe of the group's findings. */
+    severity: IssueSeverity;
+    category: IssueCategory;
+    issues: ValidationIssue[];
+    /** Shown open by default: the group holds at least one error. */
+    expanded: boolean;
+}
+
+/** Problems or Traces, with their groups in the order the dialog shows them. */
+export interface ValidationSection {
+    category: IssueCategory;
+    /** Findings in the section (sum over its groups). */
+    count: number;
+    groups: ValidationGroup[];
+}
+
+/**
+ * The findings grouped by type and split into Problems and Traces
+ * (ZADANI_DEV §1.2–§1.3): Problems first, a section with no findings left
+ * out. Within a section the error groups come first, then warnings, then the
+ * rest; within one severity the larger group first, then by its title.
+ * Findings keep their order inside a group. Pass the findings that are to be
+ * shown (those marked "not an error" already left out).
+ */
+export function groupValidationIssues(
+    issues: readonly ValidationIssue[],
+    title: (type: string) => string = translateValidationType,
+): ValidationSection[] {
+    const byType = new Map<string, ValidationIssue[]>();
+    for (const issue of issues) {
+        (byType.get(issue.type) ?? byType.set(issue.type, []).get(issue.type)!).push(issue);
+    }
+    const groups: ValidationGroup[] = [...byType].map(([type, list]) => {
+        const severity = list.reduce<IssueSeverity>(
+            (worst, i) => SEVERITY_RANK[i.severity] < SEVERITY_RANK[worst] ? i.severity : worst, 'info');
+        return { type, severity, category: issueCategory({ severity }), issues: list, expanded: severity === 'error' };
+    });
+    const titles = new Map(groups.map(g => [g.type, title(g.type)]));
+    groups.sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity]
+        || b.issues.length - a.issues.length
+        || titles.get(a.type)!.localeCompare(titles.get(b.type)!));
+    const sections: ValidationSection[] = [];
+    for (const category of ['problem', 'trace'] as const) {
+        const inSection = groups.filter(g => g.category === category);
+        if (inSection.length === 0) continue;
+        sections.push({ category, count: inSection.reduce((n, g) => n + g.issues.length, 0), groups: inSection });
+    }
+    return sections;
+}
+
+/** The counts the summary sentence is made of (ZADANI_DEV §1.1). */
+export function validationCounts(issues: readonly ValidationIssue[]): { errors: number; warnings: number; traces: number } {
+    let errors = 0, warnings = 0, traces = 0;
+    for (const i of issues) {
+        if (i.severity === 'error') errors++;
+        else if (i.severity === 'warning') warnings++;
+        else traces++;
+    }
+    return { errors, warnings, traces };
+}
+
+/**
+ * What a finding is, the same way the research names it (ZADANI_DEV §2.4,
+ * ZADANI_VYZKUM "Reakce aplikace" (3)): the type, the sorted ids of its
+ * people, and the subject where the type has one — the year of the event or
+ * the wedding after death (four digits), the godparent's name (NFC, trimmed);
+ * none for a possible duplicate. A finding marked "not an error" is matched by
+ * this, so the same finding found again stays hidden.
+ */
+export function qualityFinding(issue: ValidationIssue): { kind: string; persons: string[]; subject?: string } {
+    const persons = [...new Set((issue.personIds ?? []).map(String))].sort();
+    let subject: string | undefined;
+    if (issue.type === 'eventAfterDeath' || issue.type === 'weddingAfterDeath') {
+        subject = issue.year !== undefined ? String(issue.year).padStart(4, '0') : undefined;
+    } else if (issue.type !== 'possibleDuplicate') {
+        subject = issue.subject?.normalize('NFC').trim() || undefined;
+    }
+    return { kind: issue.type, persons, ...(subject ? { subject } : {}) };
+}
+
+/** One string for a finding (qualityFinding), to look it up in a set. */
+export function qualityFindingKey(f: { kind: string; persons: readonly string[]; subject?: string }): string {
+    return JSON.stringify([f.kind, [...f.persons].sort(), f.subject ?? '']);
 }
