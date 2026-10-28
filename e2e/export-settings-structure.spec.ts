@@ -141,7 +141,7 @@ test.describe('grouped settings', () => {
 
         const titles = await settings.locator('.settings-group-title').allInnerTexts();
         expect(titles.map((t) => t.toLowerCase())).toEqual([
-            'tree view', 'notifications', 'person card', 'data and privacy', 'language and appearance',
+            'tree view', 'notifications', 'person card', 'experimental features', 'data and privacy', 'language and appearance',
         ]);
         // No per-option heading repeating the row text any more.
         await expect(settings.locator('.settings-label')).toHaveCount(0);
