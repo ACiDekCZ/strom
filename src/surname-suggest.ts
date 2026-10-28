@@ -269,6 +269,18 @@ export function peopleWithForm(form: string, data: StromData): number {
 }
 
 /**
+ * The records in the order the card shows them: the first one with a form
+ * other than the usual one leads (1029) — only the first record is in sight,
+ * and one with the usual form shows nothing new. The rest keep the research's
+ * order; with one form throughout nothing moves.
+ */
+export function evidenceInOrder(evidence: readonly SuggestionEvidence[], usual: (form: string) => boolean): SuggestionEvidence[] {
+    const at = evidence.findIndex(e => !usual(e.form));
+    if (at <= 0) return [...evidence];
+    return [evidence[at], ...evidence.slice(0, at), ...evidence.slice(at + 1)];
+}
+
+/**
  * What accepting a suggestion links (§4.3): `main` is the form (or the
  * extended group's form) most people carry; `m` the people linked with it
  * today (the whole group when it extends one); `n` the people with the

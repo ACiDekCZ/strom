@@ -13,7 +13,7 @@ import { AuditLogManager } from '../audit-log.js';
 import { UndoManager } from '../undo.js';
 import {
     parseSurnamesReply, visibleSuggestions, suggestionGroup, isRejected, isDiacriticsOnly, newlyLinked, peopleWithForm,
-    reasonText, decidedInResearch, type SurnameSuggestion,
+    reasonText, decidedInResearch, evidenceInOrder, type SurnameSuggestion,
 } from '../surname-suggest.js';
 import { fetchSurnameSuggestions, retryAfterMs, sanitizeSurnamesBridgeRecord } from '../surname-suggest-bridge.js';
 import { StromData, Person, PersonId, TreeId } from '../types.js';
@@ -155,6 +155,23 @@ describe('how many people a suggestion newly links', () => {
         expect(peopleWithForm('Lhoták', data)).toBe(3); // Jan, Josef and Marie Lhotáková
         expect(peopleWithForm('Lhotak', data)).toBe(1);
         expect(peopleWithForm('Lhotteck', data)).toBe(0);
+    });
+});
+
+describe('the records shown first (1029)', () => {
+    const rec = (person: string, form: string) => ({ person, name: `Anna ${form}`, form, citation: `S1 ${person}` });
+
+    it('a record with a differing form leads, the rest keep their order', () => {
+        const list = [rec('P1', 'Lhoták'), rec('P2', 'Lhoták'), rec('P3', 'Lhottekk'), rec('P4', 'Lhotack')];
+        expect(evidenceInOrder(list, f => f === 'Lhoták').map(e => e.person)).toEqual(['P3', 'P1', 'P2', 'P4']);
+    });
+
+    it('nothing moves with one form throughout or a differing form already first', () => {
+        const same = [rec('P1', 'Lhoták'), rec('P2', 'Lhoták')];
+        expect(evidenceInOrder(same, f => f === 'Lhoták').map(e => e.person)).toEqual(['P1', 'P2']);
+        const first = [rec('P3', 'Lhottekk'), rec('P1', 'Lhoták')];
+        expect(evidenceInOrder(first, f => f === 'Lhoták').map(e => e.person)).toEqual(['P3', 'P1']);
+        expect(evidenceInOrder([], () => true)).toEqual([]);
     });
 });
 

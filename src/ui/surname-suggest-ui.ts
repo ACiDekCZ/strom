@@ -24,7 +24,7 @@ import { surnameKey } from '../surnames.js';
 import { surnameRejectionKey } from '../quality-dismiss.js';
 import type { BaseCopy } from '../research-changes.js';
 import {
-    SURNAMES_SUGGEST_FEATURE, SURNAMES_READ_FEATURE, visibleSuggestions, isDiacriticsOnly, peopleWithForm, newlyLinked,
+    SURNAMES_SUGGEST_FEATURE, SURNAMES_READ_FEATURE, visibleSuggestions, isDiacriticsOnly, peopleWithForm, newlyLinked, evidenceInOrder,
     reasonText, formsKey, decidedInResearch, type ShownSuggestion, type SurnameSuggestion, type SuggestionEvidence,
 } from '../surname-suggest.js';
 import {
@@ -349,10 +349,13 @@ export const surnameSuggestMethods = uiModule({
         const levelTag = s.level === 'documented'
             ? `<span class="ss-tag is-documented">${esc(t.levelDocumented)}</span>`
             : `<span class="ss-tag is-rules">${esc(t.levelRulesTag)}</span>`;
+        const linked = newlyLinked(s.forms, group, data);
         let evidence = '';
         if (s.level === 'documented' && s.evidence.length > 0) {
             const open = view.evidenceOpen.has(s.id);
-            const list = open ? s.evidence : s.evidence.slice(0, 1);
+            // A record with a differing form first: the usual one (or the extended group's) proves nothing new.
+            const ordered = evidenceInOrder(s.evidence, group ? f => inGroup.has(surnameKey(f)) : f => exact(f) === exact(linked.main));
+            const list = open ? ordered : ordered.slice(0, 1);
             const hidden = s.evidence.length - 1;
             const rows = list.map(e => this.surnameEvidenceHtml(e)).join('');
             let tail = '';
@@ -366,7 +369,6 @@ export const surnameSuggestMethods = uiModule({
             }
             evidence = `<div class="ss-evidence"><ul>${rows}</ul>${tail}</div>`;
         }
-        const linked = newlyLinked(s.forms, group, data);
         const span = s.from !== undefined ? (s.to !== undefined && s.to !== s.from ? `${s.from}–${s.to}` : String(s.from)) : '';
         const meta = [
             linked.n > 0 ? esc(t.newlyLinked(linked.n, linked.m, linked.main)) : esc(t.newlyLinkedNone),
