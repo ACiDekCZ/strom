@@ -354,8 +354,10 @@ export const historyManageMethods = uiModule({
                         + `<option value="persons"${SettingsManager.getHistoryPlacesSort() === 'persons' ? ' selected' : ''}>${esc(h.sortPersons)}</option>`
                         + `<option value="alpha"${SettingsManager.getHistoryPlacesSort() === 'alpha' ? ' selected' : ''}>${esc(h.sortAlpha)}</option></select></label>`
                     : '';
+                // A street under its municipality only while the municipality's row is listed too (a search may leave it out).
+                const listed = new Set(rs.map(r => r.key));
                 return `<section class="hm-group" data-group="${g.key}"><div class="hm-group-head"><h3 class="hm-group-title">${esc(title)}</h3>${note}${sort}</div>`
-                    + `<div class="hm-rows">${page(g.key, rs.map(r => this.historyManagePlaceRow(r, g.key)))}</div></section>`;
+                    + `<div class="hm-rows">${page(g.key, rs.map(r => this.historyManagePlaceRow(r.under && !listed.has(r.under.key) ? { ...r, under: undefined } : r, g.key)))}</div></section>`;
             }).join('');
         }
         if (view.tab === 'hidden') {
@@ -419,8 +421,11 @@ export const historyManageMethods = uiModule({
         const assign = r.assign && this.historyManagePlaceHook('assign');
         const find = r.find && this.historyManagePlaceHook('find');
         const note = view.notes.get(`place:${r.key}`);
-        return `<div class="hm-row hm-place${r.dim ? ' is-dim' : ''}" data-place="${esc(r.key)}" data-group="${esc(group)}">`
-            + `<div class="hm-p-main"><span class="hm-p-name">${esc(r.name)}</span>`
+        const name = r.under
+            ? `<span class="hm-p-name" title="${esc(r.name)}"><span class="hm-p-under" aria-hidden="true">↳</span>${esc(r.under.name)}<span class="sr-only">, ${esc(r.name)}</span></span>`
+            : `<span class="hm-p-name">${esc(r.name)}</span>`;
+        return `<div class="hm-row hm-place${r.dim ? ' is-dim' : ''}${r.under ? ' is-under' : ''}" data-place="${esc(r.key)}" data-group="${esc(group)}">`
+            + `<div class="hm-p-main">${name}`
             + (r.meta ? `<span class="hm-p-meta">${esc(r.meta)}</span>` : '')
             + (group === 'unassigned' && !r.meta && r.persons ? `<span class="hm-p-meta">${esc(h.placePersons(r.persons))}</span>` : '')
             + (r.why ? `<span class="hm-p-why">${esc(r.why)}</span>` : '') + '</div>'

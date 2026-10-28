@@ -213,18 +213,19 @@ export const historyMapMethods = uiModule({
         const h = strings.history;
         if (!st.chosen.length) return `<p class="hmp-none">${esc(h.mapNone)}</p>`;
         const byId = new Map(st.picker.list.map(r => [r.id, r]));
-        return st.chosen.map(c => {
+        // By position: a region may be chosen twice, each time with its own period.
+        return st.chosen.map((c, i) => {
             const r = byId.get(c.id);
             const name = r?.name ?? c.id;
             const year = (which: 'from' | 'to', value: string) =>
                 `<label class="hmp-year-wrap"><span>${esc(which === 'from' ? h.mapFrom : h.mapTo)}</span>`
-                + `<input type="text" class="hmp-year" data-hmp="${which}" data-id="${esc(c.id)}" inputmode="numeric" maxlength="4" autocomplete="off"`
+                + `<input type="text" class="hmp-year" data-hmp="${which}" data-id="${esc(c.id)}" data-i="${i}" inputmode="numeric" maxlength="4" autocomplete="off"`
                 + ` pattern="[0-9]{3,4}" placeholder="${esc(h.periodYear)}" value="${esc(value)}"`
                 + ` aria-label="${esc(h.mapYearLabel(name, which === 'from' ? h.mapFrom : h.mapTo))}"></label>`;
-            return `<div class="hmp-sel" data-id="${esc(c.id)}">`
+            return `<div class="hmp-sel" data-id="${esc(c.id)}" data-i="${i}">`
                 + `<span class="hmp-sel-name">${esc(name)}${r?.parent ? ` <span class="hmp-sel-parent">${esc(r.parent)}</span>` : ''}</span>`
                 + `<span class="hmp-years">${year('from', c.from)}${year('to', c.to)}</span>`
-                + `<button type="button" class="hmp-x" data-hmp="remove" data-id="${esc(c.id)}" aria-label="${esc(h.mapRemove(name))}">&times;</button>`
+                + `<button type="button" class="hmp-x" data-hmp="remove" data-id="${esc(c.id)}" data-i="${i}" aria-label="${esc(h.mapRemove(name))}">&times;</button>`
                 + `<p class="hmp-sel-err" hidden></p></div>`;
         }).join('');
     },
@@ -238,7 +239,7 @@ export const historyMapMethods = uiModule({
         const d = this.historyManageDrawn();
         const check = d?.payload ? pickerCheck(d.payload, st.chosen) : { rows: [], ok: false };
         st.chosen.forEach((c, i) => {
-            const row = root.querySelector<HTMLElement>(`.hmp-sel[data-id="${CSS.escape(c.id)}"]`);
+            const row = root.querySelector<HTMLElement>(`.hmp-sel[data-i="${i}"]`);
             if (!row) return;
             const problem = check.rows[i];
             row.classList.toggle('is-bad', !!problem);
@@ -271,9 +272,10 @@ export const historyMapMethods = uiModule({
             case 'cancel': this.closeHistoryRegionPicker(); return;
             case 'remove': {
                 const id = el.dataset.id ?? '';
-                st.chosen = st.chosen.filter(c => c.id !== id);
+                const at = Number(el.dataset.i);
+                st.chosen = st.chosen.filter((c, i) => i !== at);
                 const box = document.querySelector<HTMLInputElement>(`#${HISTORY_MAP_DIALOG_ID} input[data-hmp="pick"][value="${CSS.escape(id)}"]`);
-                if (box) box.checked = false;
+                if (box) box.checked = st.chosen.some(c => c.id === id);
                 this.historyMapRedrawChosen();
                 document.querySelector<HTMLElement>(`#${HISTORY_MAP_DIALOG_ID} input.hmp-q`)?.focus({ preventScroll: true });
                 return;
@@ -313,7 +315,7 @@ export const historyMapMethods = uiModule({
         } else if (which === 'from' || which === 'to') {
             const digits = el.value.replace(/\D/g, '').slice(0, 4);
             if (digits !== el.value) el.value = digits;
-            const c = st.chosen.find(x => x.id === el.dataset.id);
+            const c = st.chosen[Number(el.dataset.i)];
             if (c) c[which] = digits;
             this.historyMapValidate();
         } else if (which === 'note') {
@@ -357,7 +359,7 @@ export const historyMapMethods = uiModule({
         if (!pickerCheck(d.payload, st.chosen).ok) return;
         const regions = pickerBody(st.chosen);
         const undo = mapUndoBody(st.key, d.payload.places[st.key]);
-        const names = joinAnd(d.env.lang, regions.map(r => regionName(d.payload!.regions?.[r.id] ?? { id: r.id }, d.env.lang)));
+        const names = joinAnd(d.env.lang, [...new Set(regions.map(r => r.id))].map(id => regionName(d.payload!.regions?.[id] ?? { id }, d.env.lang)));
         st.busy = true;
         st.error = '';
         this.historyMapValidate();

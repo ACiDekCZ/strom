@@ -396,6 +396,13 @@ export interface PlaceRow {
     find: boolean;
     actions: PlaceRowAction[];
     search: string;
+    /** All places: listed under its municipality ("Česká Kamenice, Pivovarská" under "Česká Kamenice"). */
+    under?: {
+        /** The municipality's payload key. */
+        key: string;
+        /** The rest of the name ("Pivovarská"). */
+        name: string;
+    };
 }
 
 export interface PlaceGroup {
@@ -455,18 +462,22 @@ export function placeGroups(p: HistoryPayload, env: ManageEnv, names: ManageName
         } else if (place.state === 'unlocated') {
             row.state = s.placeStateUnlocated;
             row.tone = 'faint';
-        } else if (place.state === 'pending') {
-            if (place.regions?.length) { row.state = s.placeStateRegionWaits; row.tone = 'accent'; }
-            else row.state = s.placeStateMapping;
         } else {
+            // A region still waiting and the place's own history are two things: both are said.
+            const parts: string[] = [];
+            if (place.state === 'pending') {
+                if (place.regions?.length) { parts.push(s.placeStateRegionWaits); row.tone = 'accent'; }
+                else parts.push(s.placeStateMapping);
+            }
             switch (place.history) {
-                case 'first': row.state = s.placeHistFirst; row.tone = 'primary'; break;
-                case 'running': row.state = s.placeHistRunning; row.tone = 'primary'; break;
-                case 'done': row.state = s.placeHistDone(placeEvents.get(key) ?? 0); break;
-                case 'empty': row.state = s.placeHistEmpty; row.tone = 'faint'; break;
-                case 'waiting': row.state = s.placeHistWaiting; row.tone = 'accent'; break;
+                case 'first': parts.push(s.placeHistFirst); row.tone = 'primary'; break;
+                case 'running': parts.push(s.placeHistRunning); row.tone = 'primary'; break;
+                case 'done': parts.push(s.placeHistDone(placeEvents.get(key) ?? 0)); break;
+                case 'empty': parts.push(s.placeHistEmpty); if (parts.length === 1) row.tone = 'faint'; break;
+                case 'waiting': parts.push(s.placeHistWaiting); row.tone = 'accent'; break;
                 default: break;
             }
+            row.state = parts.join(' · ');
         }
         if (r1 && place.manual && place.regions?.length && !place.skip) {
             // Set by hand (§4.3): what happens next, and the way back to the research's choice.
@@ -525,8 +536,37 @@ export function placeGroups(p: HistoryPayload, env: ManageEnv, names: ManageName
     if (!r1) all.sort((a, b) => (b.events ?? 0) - (a.events ?? 0) || collator.compare(a.name, b.name));
     else if (sort === 'alpha') all.sort((a, b) => collator.compare(a.name, b.name));
     else all.sort((a, b) => b.persons - a.persons || collator.compare(a.name, b.name));
-    if (all.length) groups.push({ key: 'all', rows: all });
+    if (all.length) groups.push({ key: 'all', rows: groupUnderMunicipality(all) });
     return groups;
+}
+
+/**
+ * Places that differ only by a street ("Česká Kamenice, Pivovarská") follow
+ * their municipality's row when the tree has that place on its own ("Česká
+ * Kamenice"), in the list's order; the data stays as it is. Without that
+ * place nothing moves.
+ */
+export function groupUnderMunicipality(rows: readonly PlaceRow[]): PlaceRow[] {
+    const byKey = new Map(rows.map(r => [r.key, r]));
+    const children = new Map<string, PlaceRow[]>();
+    const top: PlaceRow[] = [];
+    for (const row of rows) {
+        const comma = row.key.indexOf(',');
+        const parentKey = comma > 0 ? row.key.slice(0, comma).trim() : '';
+        const parent = parentKey && parentKey !== row.key ? byKey.get(parentKey) : undefined;
+        const rest = parent ? restAfter(row.name, parent.name) : '';
+        if (!parent || !rest) { top.push(row); continue; }
+        const child = { ...row, under: { key: parent.key, name: rest } };
+        children.set(parent.key, [...(children.get(parent.key) ?? []), child]);
+    }
+    return top.flatMap(r => [r, ...(children.get(r.key) ?? [])]);
+}
+
+/** "Pivovarská" of "Česká Kamenice, Pivovarská" under "Česká Kamenice" ('' when the name does not start so). */
+function restAfter(name: string, parent: string): string {
+    if (!name.startsWith(parent)) return '';
+    const rest = name.slice(parent.length);
+    return /^\s*,/.test(rest) ? rest.replace(/^\s*,\s*/, '').trim() : '';
 }
 
 // ─── Region of a place by hand (R5, §4) ────────────────────────────────────
@@ -658,7 +698,7 @@ export function pickerBody(chosen: readonly PickerChoice[]): HistoryPlaceRegion[
 export function mapResultText(p: HistoryPayload, ids: readonly string[], lang: Language): string {
     const s = getStringsForLang(lang).history;
     const byState = new Map<string, string[]>();
-    for (const id of ids) {
+    for (const id of new Set(ids)) {
         const r = p.regions?.[id];
         if (!r) continue;
         const k = r.state === 'done' || r.state === 'covered' ? 'done' : r.state === 'running' ? 'running'

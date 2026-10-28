@@ -394,7 +394,11 @@ export function parseHistoryEvent(v: unknown): HistoryEvent | null {
     return ev;
 }
 
-/** A place's regions with their years (R1 `places[x].regions`, R5 `map.regions`): valid ids, each once. */
+/**
+ * A place's regions with their years (R1 `places[x].regions`, R5 `map.regions`):
+ * valid ids, each period once — a region may come back with another period
+ * (Czechoslovakia 1918–1938 and 1945–1992); one without years stands alone.
+ */
 export function parsePlaceRegions(v: unknown): HistoryPlaceRegion[] {
     const regions: HistoryPlaceRegion[] = [];
     if (!Array.isArray(v)) return regions;
@@ -402,12 +406,15 @@ export function parsePlaceRegions(v: unknown): HistoryPlaceRegion[] {
         if (regions.length >= HISTORY_LIMITS.placeRegions) break;
         if (!isObj(r)) continue;
         const id = str(r.id, 64);
-        if (!id || !HISTORY_REGION_RE.test(id) || regions.some(x => x.id === id)) continue;
+        if (!id || !HISTORY_REGION_RE.test(id)) continue;
         const pr: HistoryPlaceRegion = { id };
         const from = year(r.from);
         const to = year(r.to);
         if (from !== undefined) pr.from = from;
         if (to !== undefined && (from === undefined || to >= from)) pr.to = to;
+        // The same period again, or a period beside the whole time (no years): once.
+        const whole = (x: HistoryPlaceRegion) => x.from === undefined && x.to === undefined;
+        if (regions.some(x => x.id === id && ((x.from === pr.from && x.to === pr.to) || whole(x) || whole(pr)))) continue;
         regions.push(pr);
     }
     return regions;
