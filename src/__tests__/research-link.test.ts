@@ -20,6 +20,7 @@ import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import {
     isResearchHead, parseSendBridge, pickSendDefault, researchHeaderLines, sanitizeResearchField,
     sanitizeSyncReply, isFaithfulExport, readResearchHeader as readHeader, sanitizeLiveStatus as liveStatus, unknownSexFromTie,
+    MAX_STATUS_FEATURES,
 } from '../research-link.js';
 import { exportToGedcom } from '../ged-exporter.js';
 import { StromData, PersonId } from '../types.js';
@@ -558,6 +559,17 @@ describe('bridge messages are untrusted', () => {
         expect(s.families).toBeNull();
         expect(s.working).toEqual([{ who: 'agent-1', since: '2026-09-23T10:00:00Z', task: 'Matriky Lučice' }]);
         expect(s.waiting).toEqual([{ id: 'T1', what: 'Potvrďte otce', on: 'user', at: '2026-09-26T12:10:00Z' }]);
+    });
+
+    it('keeps the features at the end of a long list (the research adds new ones last)', () => {
+        const early = Array.from({ length: 50 }, (_, i) => `feature.n${i}`);
+        const late = ['history.map', 'history.delete', 'history.delete.restore', 'stories.history'];
+        const s = sanitizeLiveStatus({ tree: { id: UUID, name: 'T' }, features: [...early, ...late] })!;
+        expect(s.features).toHaveLength(54);
+        expect(s.features!.slice(-4)).toEqual(late);
+        // Still bounded: a flood is cut at the limit.
+        const flood = Array.from({ length: MAX_STATUS_FEATURES + 50 }, (_, i) => `x.f${i}`);
+        expect(sanitizeLiveStatus({ tree: { id: UUID, name: 'T' }, features: flood })!.features).toHaveLength(MAX_STATUS_FEATURES);
     });
 
     it('a run waiting for its gate is paused (a bad time is dropped)', () => {

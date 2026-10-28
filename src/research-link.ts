@@ -2039,6 +2039,12 @@ export function recentAddsCount(recent: LiveRecent | null, adds: readonly LiveCo
     return sum(adds.filter(a => now - (Date.parse(a.at) || 0) < windowMs));
 }
 
+/**
+ * How many `/status.features` are read (untrusted input stays bounded). The
+ * research adds new features at the end of its list, so this leaves room to grow.
+ */
+export const MAX_STATUS_FEATURES = 200;
+
 /** The bridge status. Untrusted input: every field is checked. */
 export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
     const r = asRecord(value);
@@ -2047,7 +2053,7 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
     // name beside it (the send bridge).
     const tree = asRecord(r.tree);
     const features = Array.isArray(r.features)
-        ? r.features.slice(0, 50).filter((f): f is string => typeof f === 'string' && /^[a-z][a-zA-Z0-9.-]{0,40}$/.test(f)) : null;
+        ? r.features.slice(0, MAX_STATUS_FEATURES).filter((f): f is string => typeof f === 'string' && /^[a-z][a-zA-Z0-9.-]{0,40}$/.test(f)) : null;
     return {
         treeId: normalizeResearchId(tree ? tree.id : r.tree),
         name: cleanText(tree?.name ?? r.name, MAX_NAME),
