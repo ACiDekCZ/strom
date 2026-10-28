@@ -132,3 +132,36 @@ test.describe('loading the research version', () => {
         expect(await anna()).toBe('Nováková');
     });
 });
+
+test.describe('loading the research version: surname-variant groups', () => {
+    const withGroups = (ged: string, groups: string[]) =>
+        ged.replace('1 NOTE Fíškovi', ['1 NOTE Fíškovi', '1 NOTE Strom surname-variant groups', ...groups.map(g => `2 CONT ${g}`)].join('\n'));
+    const groups = (page: Page) => page.evaluate(() => window.Strom.DataManager.getData().surnameVariants ?? null);
+
+    test('a version without the groups keeps those of the tree; a version with groups brings its own', async ({ page }) => {
+        await page.clock.install();
+        await openResearch(page, { ged: withGroups(researchGed(), ['Fíšek | Fyšek']) });
+        const bridge = await fakeBridge(page, { accepts: ACCEPTS });
+        await poll(page);
+        expect(await groups(page)).toEqual([['Fíšek', 'Fyšek']]);
+        // A research that does not read the groups' NOTE sends its version without it.
+        bridge.head = NEW_HEAD;
+        bridge.treeGed = researchGed(NEW_HEAD, ['1 OCCU tesař']);
+        await poll(page);
+        await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+        await dialog(page).locator('#research-load-ok').click();
+        await expect.poll(() => head(page)).toBe(NEW_HEAD);
+        expect(await groups(page)).toEqual([['Fíšek', 'Fyšek']]);
+        // Kept, the tree is still in step with the research: nothing waits to be sent.
+        await expect(page.locator('#research-menu-btn')).toHaveAttribute('aria-label', 'Research');
+        // A version with groups is the research's word.
+        const third = 'a1b2c3d4e5f6';
+        bridge.head = third;
+        bridge.treeGed = withGroups(researchGed(third, ['1 OCCU tesař']), ['Fíšek | Fyšek | Fischek', 'Svobodová | Swobodova']);
+        await poll(page);
+        await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
+        await dialog(page).locator('#research-load-ok').click();
+        await expect.poll(() => head(page)).toBe(third);
+        expect(await groups(page)).toEqual([['Fíšek', 'Fyšek', 'Fischek'], ['Svobodová', 'Swobodova']]);
+    });
+});

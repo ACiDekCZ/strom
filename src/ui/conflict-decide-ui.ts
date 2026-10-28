@@ -16,7 +16,7 @@ import { PersonId, ResearchConflict, ResearchConflictValue, StromData } from '..
 import { formatFlexDate } from '../dates.js';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import {
-    researchConflictRef, ResearchConflictTake, ResearchHeader, parseLiveBridge, readResearchHeader, stabilizeIds, keepTitles, keepMarriedSurname, researchHasTitles,
+    researchConflictRef, ResearchConflictTake, ResearchHeader, parseLiveBridge, readResearchHeader, stabilizeIds, keepTitles, keepMarriedSurname, keepSurnameVariants, researchHasTitles,
 } from '../research-link.js';
 import { storedResearchBridge, researchAutoState } from '../research-device.js';
 import { diffValues } from '../research-changes.js';
@@ -605,7 +605,7 @@ export const conflictDecideMethods = uiModule({
         const link = this.researchSyncLink()?.link;
         const here = DataManager.getData();
         const features = link ? this.researchStatusOf(link.id)?.features : null;
-        return stabilizeIds(keepMarriedSurname(keepTitles(data, here, features, researchHasTitles(link, features)), here, features), here);
+        return stabilizeIds(keepSurnameVariants(keepMarriedSurname(keepTitles(data, here, features, researchHasTitles(link, features)), here, features), here), here);
     },
 
     /** A card's notice action: try the same side again, send the tree, load the research's version, decide in the research. */

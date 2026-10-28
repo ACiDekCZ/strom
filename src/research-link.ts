@@ -836,6 +836,22 @@ export function keepDismissedMarriedSuggestions(next: StromData, previous: Strom
 }
 
 /**
+ * The surname-variant groups (StromData.surnameVariants) are the tree's own
+ * and go to the research in the header NOTE (ged-exporter.ts), but a research
+ * that does not read that NOTE sends a version without them, and loading it
+ * dropped every group. A version that carries groups is the research's word
+ * (it merged them with what it got) and is taken as it is; one that carries
+ * none keeps the previous state's. Returns `next` itself when nothing is
+ * carried; neither input is changed.
+ */
+export function keepSurnameVariants(next: StromData, previous: StromData): StromData {
+    if (next.surnameVariants?.length) return next;
+    const groups = previous.surnameVariants;
+    if (!groups?.length) return next;
+    return { ...next, surnameVariants: groups.map(g => [...g]) };
+}
+
+/**
  * `name` without every copy of `title` at its start (or end), compared word
  * by word (a comma after a word aside: GEDCOM lists titles with commas,
  * "Prof., Dr."); never down to no word. `name` as it was when none is there.
