@@ -24,9 +24,10 @@ import {
     type HiddenRow, type DeletedRow, type PlaceSort,
 } from '../history-manage.js';
 import {
-    postBridgeFirst, postBridgeSkip, postBridgeDelete, type HistoryWriteRefusal, type HistorySkipBody,
+    postBridgeFirst, postBridgeSkip, postBridgeDelete, postBridgeMap, type HistoryWriteRefusal, type HistorySkipBody,
 } from '../history-bridge.js';
 import { HISTORY_MANAGE_DIALOG_ID } from './history-ui.js';
+import { mapUndoBody } from './history-map-ui.js';
 import { uiModule } from './module.js';
 
 /** Rows drawn at once per group; "Show n more rows" adds as many again. */
@@ -424,7 +425,7 @@ export const historyManageMethods = uiModule({
             + (group === 'unassigned' && !r.meta && r.persons ? `<span class="hm-p-meta">${esc(h.placePersons(r.persons))}</span>` : '')
             + (r.why ? `<span class="hm-p-why">${esc(r.why)}</span>` : '') + '</div>'
             + (r.state || r.link ? `<span class="hm-p-state tone-${r.tone}">${esc(r.state)}`
-                + (r.link ? ` <button type="button" class="link hm-row-link" data-hm="searchAgainPlace" data-key="${esc(r.key)}"${busy ? ' disabled' : ''}>${esc(h.searchAgain)}</button>` : '')
+                + (r.link ? ` <button type="button" class="link hm-row-link" data-hm="${r.link === 'auto' ? 'mapAuto' : 'searchAgainPlace'}" data-key="${esc(r.key)}"${busy ? ' disabled' : ''}>${esc(r.link === 'auto' ? h.mapAuto : h.searchAgain)}</button>` : '')
                 + '</span>' : '')
             + (r.events !== null && group === 'all' ? `<span class="hm-p-count">${r.events}</span>` : '')
             + (assign ? `<button type="button" class="hm-assign" data-hm="assign" data-key="${esc(r.key)}">${esc(h.assign)}</button>` : '')
@@ -648,6 +649,7 @@ export const historyManageMethods = uiModule({
             case 'menu': this.historyManageMenu(el.dataset.kind as 'region' | 'place', key, el); return;
             case 'searchAgain': void this.historyManageSkip({ region: key, do: 'undo' }, key); return;
             case 'searchAgainPlace': void this.historyManageSkip({ place: key, do: 'undo' }, `place:${key}`); return;
+            case 'mapAuto': void this.historyManageMapAuto(key); return;
             case 'showAgain': this.historyManageShowAgain(key); return;
             case 'assign': this.historyManagePlaceHook('assign')?.(key); return;
             case 'find': this.historyManagePlaceHook('find')?.(key); return;
@@ -737,6 +739,28 @@ export const historyManageMethods = uiModule({
     },
 
     // ─── Row actions (§3.3–§3.5, §5.2) ─────────────────────────────────────
+
+    /** "Back to the research's choice" (§4.3): `{place, do: 'auto'}`, Undo puts the regions by hand back. */
+    async historyManageMapAuto(key: string): Promise<void> {
+        const d = this.historyManageDrawn();
+        const rowKey = `place:${key}`;
+        if (!d?.base || !d.payload || view.busy.has(rowKey)) return;
+        const undo = mapUndoBody(key, d.payload.places[key]);
+        const name = d.names.place(key);
+        view.busy.add(rowKey);
+        view.notes.delete(rowKey);
+        this.renderHistoryManage();
+        const before = this.researchHeadNow(d.rid);
+        const r = await postBridgeMap(d.base, { place: key, do: 'auto' }, d.features);
+        view.busy.delete(rowKey);
+        if (!r.ok) { this.historyManageRefused(rowKey, r); return; }
+        this.historyManageWritten(d.rid, before, r);
+        this.renderHistoryManage();
+        this.showToast(strings.history.toastAuto(name), 8000, {
+            kind: 'history-map',
+            action: { label: strings.history.undo, run: () => { void this.historyMapWrite(undo); } },
+        });
+    },
 
     /** A region's name in the UI language (its id when the payload has none). */
     historyManageRegionName(key: string): string {

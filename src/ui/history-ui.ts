@@ -352,6 +352,7 @@ export const historyMethods = uiModule({
         }
         this.renderHistorySettingsIfOpen();
         if (document.getElementById(HISTORY_MANAGE_DIALOG_ID)?.classList.contains('active')) this.renderHistoryManage();
+        this.refreshPlacesHistoryRows();
         window.dispatchEvent(new CustomEvent(HISTORY_CHANGED_EVENT));
     },
 

@@ -68,7 +68,8 @@ test.describe('History of places: the manager', () => {
         await page.locator('#history-manage-link').click();
         await expect(modal(page)).toBeVisible();
         await expect(tab(page, 'regions')).toHaveAttribute('aria-selected', 'true');
-        await expect(stateText(page)).toHaveText('The research is looking for history, now for the region Silesia; 2 places of the tree are still waiting.');
+        // Waiting: Brno only (Opava is not searched, Lhotka waits for its region, not for the search).
+        await expect(stateText(page)).toHaveText('The research is looking for history, now for the region Silesia; 1 place of the tree is still waiting.');
         await expect(page.locator('#history-manage-state .hm-state-summary')).toHaveText('7 regions · 5 places · 4 events · 1 hidden');
         // Pace (experiments.pace not said by this bridge yet): none.
         await expect(page.locator('#history-manage-state .hm-state-pace')).toHaveCount(0);
@@ -321,7 +322,7 @@ test.describe('History of places: the manager', () => {
         // A place: from its "⋯".
         await tab(page, 'places').click();
         await place(page, 'Brno').locator('[data-hm="menu"]').click();
-        await expect(page.locator('.hm-menu [data-scope]')).toHaveText(['Do not search for this place', 'Open in Places ›']);
+        await expect(page.locator('.hm-menu [data-scope]')).toHaveText(['Change region…', 'Do not search for this place', 'Open in Places ›']);
         await page.locator('.hm-menu [data-scope="skipPlace"]').click();
         await expect(page.locator('#confirm-title')).toHaveText('Do not search history for Brno?');
         await confirmModal(page).locator('#confirm-ok-btn').click();

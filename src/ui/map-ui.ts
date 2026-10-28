@@ -933,7 +933,12 @@ export const mapMethods = uiModule({
         normalizeModal(overlay.querySelector('.modal') as HTMLElement);
 
         const close = (): void => this.closePlacesManager();
-        overlay.onclick = (e) => { if (e.target === overlay) close(); };
+        overlay.onclick = (e) => {
+            if (e.target === overlay) { close(); return; }
+            const hist = (e.target as HTMLElement).closest<HTMLElement>('[data-place-hist]');
+            if (hist) this.placesHistoryAction(hist.dataset.placeHist ?? '', hist.dataset.hkey ?? '');
+        };
+        this.refreshPlacesHistoryRows();
         (overlay.querySelector('#places-close-x') as HTMLButtonElement).onclick = close;
         (overlay.querySelector('#places-close') as HTMLButtonElement).onclick = close;
         (overlay.querySelector('#places-clean-orphans') as HTMLButtonElement).onclick = () => void this.cleanOrphanPlaces();
