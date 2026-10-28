@@ -19,6 +19,7 @@ import {
 import {
     postQualityDismiss, fetchQualityMarks, loadQualityBridgeRecord, saveQualityBridgeRecord, type QualityBridgeRecord,
 } from '../quality-bridge.js';
+import { DUPLICATES_JUDGE_FEATURE } from '../duplicate-verdicts.js';
 import type { QualityDismissal, TreeId } from '../types.js';
 import { onBridgeStatus } from './research-sync-ui.js';
 import { uiModule } from './module.js';
@@ -101,6 +102,17 @@ export const qualityMethods = uiModule({
         return records.get(rid)?.dismiss === true;
     },
 
+    /**
+     * Did the research judge possible duplicates at its last connection (its
+     * last status in this page, else what this device remembers of it)?
+     */
+    async researchJudgedDuplicates(researchId: string): Promise<boolean> {
+        const rid = researchId.toLowerCase();
+        const said = lastFeatures.get(rid);
+        if (said) return said.includes(DUPLICATES_JUDGE_FEATURE);
+        return (await recordOf(rid)).judge;
+    },
+
     /** A status: send the waiting marks, read the research's when its rev moved. */
     noteQualityStatus(researchId: string, status: LiveStatus): void {
         const rid = researchId.toLowerCase();
@@ -108,8 +120,10 @@ export const qualityMethods = uiModule({
         lastFeatures.set(rid, features);
         void recordOf(rid).then(async (record) => {
             const dismiss = features.includes(QUALITY_DISMISS_FEATURE);
-            if (record.dismiss !== dismiss) {
+            const judge = features.includes(DUPLICATES_JUDGE_FEATURE);
+            if (record.dismiss !== dismiss || record.judge !== judge) {
                 record.dismiss = dismiss;
+                record.judge = judge;
                 await saveQualityBridgeRecord(rid, record);
             }
             if (rid !== activeResearchId()) return;

@@ -1,6 +1,9 @@
 import { test, expect, type Page, type Locator, type Browser } from '@playwright/test';
 import { openApp } from './helpers.js';
-import { fakeBridge, fakeQuality, openResearch, poll, UUID, HEAD } from './research-bridge.js';
+import {
+    fakeBridge, fakeQuality, fakeDuplicates, openResearch, poll, acceptLoad, touchScreenNow, UUID, HEAD, NEW_HEAD,
+    type FakeBridge, type FakeDuplicates,
+} from './research-bridge.js';
 
 /**
  * The tree validation as Problems and Leads (spec 021 K1.4, K1.5): one
@@ -393,4 +396,250 @@ test('phone sideways: the heads 44 px or more, nothing too wide', async ({ brows
     await group(modal, 'eventAfterDeath').locator('.vq-group-head').click();
     await expectNoOverflow(page);
     await close();
+});
+
+// ---------------------------------------------------------------- the research's verdicts on possible duplicates
+
+/**
+ * A research tree of the Lhoták family (invented) with five possible
+ * duplicates among the sons of Jan and Marie, in the app's order (by year):
+ * Antonín 1850, Tomáš 1852, František 1854, Josef 1856, Karel 1858 — each
+ * twice. `mergedKarel`: the research's newer version, Karel once.
+ */
+function researchDuplicatesGed(head = HEAD, mergedKarel = false): string {
+    const indi = (ref: string, name: string, sex: 'M' | 'F', birth: string, extra: string[] = []): string[] => [
+        `0 @${ref}@ INDI`, `1 NAME ${name}`, `1 SEX ${sex}`, '1 BIRT', `2 DATE ${birth}`, ...extra,
+        `1 REFN ${ref}`, '2 TYPE strom-research',
+    ];
+    const sons: Array<[string, string, string]> = [
+        ['P0003', 'Antonín', '1850'], ['P0004', 'Antonín', '1850'],
+        ['P0005', 'Tomáš', '1852'], ['P0006', 'Tomáš', '1852'],
+        ['P0007', 'František', '1854'], ['P0008', 'František', '1854'],
+        ['P0009', 'Josef', '1856'], ['P0010', 'Josef', '1856'],
+        ['P0011', 'Karel', '1858'], ...(mergedKarel ? [] : [['P0012', 'Karel', '1858'] as [string, string, string]]),
+    ];
+    return [
+        '0 HEAD', '1 SOUR STROM_RESEARCH', '2 NAME Strom Research', '1 DATE 27 SEP 2026',
+        `1 _STROM_TREE ${UUID}`, `1 _STROM_HEAD ${head}`, '1 _STROM_LINKS send open live app setup', '1 CHAR UTF-8', '1 NOTE Lhotákovi',
+        ...indi('P0001', 'Jan /Lhoták/', 'M', '1820', ['1 FAMS @F0001@']),
+        ...indi('P0002', 'Marie /Lhotáková/', 'F', '1825', ['1 FAMS @F0001@']),
+        ...sons.flatMap(([ref, first, year]) => indi(ref, `${first} /Lhoták/`, 'M', year, ['1 FAMC @F0001@'])),
+        '0 @F0001@ FAM', '1 HUSB @P0001@', '1 WIFE @P0002@', ...sons.map(([ref]) => `1 CHIL @${ref}@`),
+        '0 TRLR',
+    ].join('\n');
+}
+
+const JUDGE_FEATURES = ['duplicates.judge', 'quality.dismiss', 'quality.read'];
+
+/** The research's verdicts on the five pairs; Tomáš has none (`unknown-person`). */
+function lhotakVerdicts(init: Partial<FakeDuplicates> = {}): FakeDuplicates {
+    return fakeDuplicates({
+        verdicts: {
+            'P0003|P0004': { verdict: 'unsure', reason: 'names-differ' },
+            'P0007|P0008': { verdict: 'different', reason: 'siblings' },
+            'P0009|P0010': { verdict: 'same', reason: 'same-parents', years: [1856, 1856] },
+            'P0011|P0012': { verdict: 'same', reason: 'merged', into: 'P0011' },
+        },
+        ...init,
+    });
+}
+
+const dupRows = (modal: Locator): Locator => group(modal, 'possibleDuplicate').locator('.vq-row');
+/** The first given name of each row of possible duplicates, in the order shown. */
+const dupOrder = (modal: Locator): Promise<string[]> => dupRows(modal).evaluateAll(rows =>
+    rows.map(r => (r.querySelector('.vq-person a')?.textContent ?? '').split(' ')[0]));
+
+async function openGroup(modal: Locator, type: string): Promise<void> {
+    const head = group(modal, type).locator('.vq-group-head');
+    if (await head.getAttribute('aria-expanded') !== 'true') await head.click();
+    await expect(head).toHaveAttribute('aria-expanded', 'true');
+}
+
+async function researchWithVerdicts(page: Page, init: Partial<FakeBridge> = {}): Promise<FakeBridge> {
+    const b = await fakeBridge(page, { features: JUDGE_FEATURES, quality: fakeQuality(), duplicates: lhotakVerdicts(), ...init });
+    await openResearch(page, { ged: researchDuplicatesGed() });
+    await poll(page);
+    return b;
+}
+
+test.describe('validation: the research\'s verdicts on possible duplicates', () => {
+    test.beforeEach(async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+    });
+
+    test('verdicts: probably the same and merged first, then uncertain, then none; two people set aside and not counted; reasons in words', async ({ page }) => {
+        const b = await researchWithVerdicts(page);
+        const modal = await openResearchValidation(page);
+        const dup = group(modal, 'possibleDuplicate');
+        await expect(dup.locator('.vq-group-note')).toHaveText('Assessed by the research');
+        // One request with the five pairs, each by the research's REFN.
+        expect(b.duplicates!.asks.length).toBe(1);
+        expect(b.duplicates!.asks[0].map(p => [...p].sort().join('|')).sort())
+            .toEqual(['P0003|P0004', 'P0005|P0006', 'P0007|P0008', 'P0009|P0010', 'P0011|P0012']);
+
+        await openGroup(modal, 'possibleDuplicate');
+        expect(await dupOrder(modal)).toEqual(['Josef', 'Karel', 'Antonín', 'Tomáš']);
+        await expect(dup.locator('.vq-group-count')).toHaveText('4');
+        await expect(sectionHead(modal, 'trace').locator('.vq-section-count')).not.toHaveText('5');
+
+        const rows = dupRows(modal);
+        await expect(rows.nth(0).locator('.vq-verdict-tag')).toHaveText('Probably the same person');
+        await expect(rows.nth(0).locator('.vq-verdict-tag')).toHaveClass(/vq-verdict-tag--same/);
+        await expect(rows.nth(0).locator('.vq-verdict-reason')).toHaveText('same parents, born 1856 and born 1856');
+        await expect(rows.nth(0).locator('.vq-verdict-action')).toHaveText('Merge…');
+        await expect(rows.nth(1).locator('.vq-verdict-tag')).toHaveText('Merged in the research');
+        await expect(rows.nth(1).locator('.vq-verdict-reason')).toHaveText('already one person in the research; the tree in the app is an older version');
+        await expect(rows.nth(1).locator('.vq-verdict-action')).toHaveText('Load the new version');
+        await expect(rows.nth(2).locator('.vq-verdict-tag')).toHaveText('Uncertain');
+        await expect(rows.nth(2).locator('.vq-verdict-reason')).toHaveText('the names differ in the research');
+        await expect(rows.nth(2).locator('.vq-verdict-action')).toHaveCount(0);
+        // No verdict: the app's own row, its detail kept.
+        await expect(rows.nth(3).locator('.vq-verdict')).toHaveCount(0);
+        await expect(rows.nth(3).locator('.validation-issue-detail')).toHaveText('* 1852');
+        // A verdict hides the app's monospace detail.
+        await expect(rows.nth(0).locator('.validation-issue-detail')).toHaveCount(0);
+
+        // Told apart: a closed row at the group's end, open its rows without actions.
+        const aside = dup.locator('.vq-aside-head');
+        await expect(aside).toHaveText(/Told apart by the research: 1/);
+        await expect(aside).toHaveAttribute('aria-expanded', 'false');
+        await expect(dup.locator('.vq-aside-row')).toHaveCount(0);
+        await aside.click();
+        const told = dup.locator('.vq-aside-row');
+        await expect(told).toHaveCount(1);
+        await expect(told.locator('.vq-verdict-tag')).toHaveText('Two people');
+        await expect(told.locator('.vq-verdict-reason')).toHaveText('siblings – the second child was given the name of the one who died');
+        await expect(told.locator('.vq-person a').first()).toHaveText('František Lhoták');
+        await expect(told.locator('button:not(.vq-aside-head)')).toHaveCount(0);
+
+        // Kept between openings for the same head: not asked again.
+        await page.evaluate(() => window.Strom.UI.closeTreeValidationDialog());
+        const again = await openResearchValidation(page);
+        await expect(group(again, 'possibleDuplicate').locator('.vq-group-note')).toHaveText('Assessed by the research');
+        expect(b.duplicates!.asks.length).toBe(1);
+    });
+
+    test('an answer while the group is open adds only the labels; the order follows at the next toggle', async ({ page }) => {
+        let release!: () => void;
+        const hold = new Promise<void>(r => { release = r; });
+        await researchWithVerdicts(page, { duplicates: lhotakVerdicts({ hold }) });
+        const modal = await openResearchValidation(page);
+        const dup = group(modal, 'possibleDuplicate');
+        await expect(dup.locator('.vq-group-note')).toHaveText('The research is assessing…');
+        await openGroup(modal, 'possibleDuplicate');
+        const before = ['Antonín', 'Tomáš', 'František', 'Josef', 'Karel'];
+        expect(await dupOrder(modal)).toEqual(before);
+
+        release();
+        await expect(dup.locator('.vq-group-note')).toHaveText('Assessed by the research');
+        await expect(dupRows(modal).nth(0).locator('.vq-verdict-tag')).toHaveText('Uncertain');
+        expect(await dupOrder(modal)).toEqual(before);
+        await expect(dupRows(modal).nth(2).locator('.vq-verdict-tag')).toHaveText('Two people');
+        await expect(dup.locator('.vq-aside')).toHaveCount(0);
+
+        await dup.locator('.vq-group-head').click();
+        await openGroup(modal, 'possibleDuplicate');
+        expect(await dupOrder(modal)).toEqual(['Josef', 'Karel', 'Antonín', 'Tomáš']);
+        await expect(dup.locator('.vq-aside-head')).toHaveText(/Told apart by the research: 1/);
+    });
+
+    test('Merge… opens the person merge with both chosen; Cancel comes back to the check', async ({ page }) => {
+        await researchWithVerdicts(page);
+        const modal = await openResearchValidation(page);
+        await openGroup(modal, 'possibleDuplicate');
+        await dupRows(modal).nth(0).locator('.vq-verdict-action').click();
+        const merge = page.locator('#person-merge-modal');
+        await expect(merge).toHaveClass(/active/);
+        await expect(modal).not.toHaveClass(/active/);
+        await expect(merge.locator('#person-merge-keep')).toContainText('Josef');
+        await expect(merge.locator('#person-merge-preview')).toBeVisible();
+        await expect(merge.locator('#person-merge-other')).toContainText('Josef');
+        await expect(merge.locator('#person-merge-btn')).toBeEnabled();
+
+        await merge.locator('button[data-dismiss]').click();
+        await expect(merge).not.toHaveClass(/active/);
+        await expect(modal).toHaveClass(/active/);
+        await expect(dupRows(modal)).toHaveCount(4);
+
+        // Merged: back in the check, the pair is one person now.
+        await dupRows(modal).nth(0).locator('.vq-verdict-action').click();
+        await expect(merge).toHaveClass(/active/);
+        await merge.locator('#person-merge-btn').click();
+        await expect(modal).toHaveClass(/active/);
+        await expect.poll(() => dupOrder(modal)).not.toContain('Josef');
+        expect(await page.evaluate(() => Object.values(window.Strom.DataManager.getData().persons)
+            .filter(p => p.firstName === 'Josef').length)).toBe(1);
+    });
+
+    test('"Load the new version": the research\'s version loaded, Karel once', async ({ page }) => {
+        const b = await researchWithVerdicts(page);
+        b.treeGed = researchDuplicatesGed(NEW_HEAD, true);
+        b.head = NEW_HEAD;
+        const modal = await openResearchValidation(page);
+        await openGroup(modal, 'possibleDuplicate');
+        await dupRows(modal).nth(1).locator('.vq-verdict-action').click();
+        await expect(modal).not.toHaveClass(/active/);
+        await acceptLoad(page);
+        await expect.poll(() => page.evaluate(() => Object.values(window.Strom.DataManager.getData().persons)
+            .filter(p => p.firstName === 'Karel').length)).toBe(1);
+    });
+
+    test('read-only: the verdicts shown, no Merge… nor Load', async ({ page }) => {
+        await researchWithVerdicts(page);
+        await page.evaluate(() => { (window.Strom.DataManager as unknown as { viewMode: boolean }).viewMode = true; });
+        const modal = await openResearchValidation(page);
+        await expect(group(modal, 'possibleDuplicate').locator('.vq-group-note')).toHaveText('Assessed by the research');
+        await openGroup(modal, 'possibleDuplicate');
+        await expect(dupRows(modal).nth(0).locator('.vq-verdict-tag')).toHaveText('Probably the same person');
+        await expect(modal.locator('.vq-verdict-action')).toHaveCount(0);
+        await expect(modal.locator('.vq-dismiss')).toHaveCount(0);
+    });
+
+    test('a bridge that does not judge: nothing asked, nothing said', async ({ page }) => {
+        const b = await researchWithVerdicts(page, { features: ['quality.dismiss', 'quality.read'] });
+        const modal = await openResearchValidation(page);
+        await openGroup(modal, 'possibleDuplicate');
+        expect(await dupOrder(modal)).toEqual(['Antonín', 'Tomáš', 'František', 'Josef', 'Karel']);
+        await expect(group(modal, 'possibleDuplicate').locator('.vq-group-note')).toHaveCount(0);
+        await expect(modal.locator('.vq-verdict, .vq-aside')).toHaveCount(0);
+        await expect(dupRows(modal).nth(0).locator('.validation-issue-detail')).toHaveText('* 1850');
+        await poll(page);
+        expect(b.duplicates!.asks).toEqual([]);
+    });
+
+    test('the research not running: one quiet sentence, no verdicts; a refused request says the same', async ({ page }) => {
+        const b = await researchWithVerdicts(page);
+        b.down = true;
+        await poll(page);
+        const modal = await openResearchValidation(page);
+        const note = group(modal, 'possibleDuplicate').locator('.vq-group-note');
+        await expect(note).toHaveText('Not assessed by the research – the research is not running.');
+        await openGroup(modal, 'possibleDuplicate');
+        await expect(modal.locator('.vq-verdict, .vq-aside')).toHaveCount(0);
+        expect(b.duplicates!.asks).toEqual([]);
+        await page.evaluate(() => window.Strom.UI.closeTreeValidationDialog());
+
+        // Running again, but the research turns the request down (busy): the same sentence, asked once.
+        b.down = false;
+        b.duplicates!.reply = { status: 503, body: { error: 'busy', code: 'research.busy' } };
+        await poll(page);
+        const again = await openResearchValidation(page);
+        await expect(group(again, 'possibleDuplicate').locator('.vq-group-note')).toHaveText('Not assessed by the research – the research is not running.');
+        await expect(again.locator('.vq-verdict')).toHaveCount(0);
+        expect(b.duplicates!.asks.length).toBe(1);
+    });
+
+    test('phone (390 px): the verdicts fit, Merge… 44 px to tap, the told-apart row 44 px or more', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await researchWithVerdicts(page);
+        const modal = await openResearchValidation(page);
+        await expect(group(modal, 'possibleDuplicate').locator('.vq-group-note')).toHaveText('Assessed by the research');
+        await touchScreenNow(page);
+        await openGroup(modal, 'possibleDuplicate');
+        await group(modal, 'possibleDuplicate').locator('.vq-aside-head').click();
+        await expect(group(modal, 'possibleDuplicate').locator('.vq-aside-row')).toHaveCount(1);
+        expect((await dupRows(modal).nth(0).locator('.vq-verdict-action').boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        expect((await group(modal, 'possibleDuplicate').locator('.vq-aside-head').boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        await expectNoOverflow(page);
+    });
 });

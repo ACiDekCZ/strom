@@ -138,6 +138,8 @@ export interface FakeBridge {
      * (with `quality.read`).
      */
     quality?: FakeQuality;
+    /** Verdicts on possible duplicates (spec 021 §C): `POST /duplicates` with `duplicates.judge` in `features`. */
+    duplicates?: FakeDuplicates;
 }
 
 /** The research's marks of the tree check (`/quality`). */
@@ -152,6 +154,50 @@ export interface FakeQuality {
 
 export function fakeQuality(init: Partial<FakeQuality> = {}): FakeQuality {
     return { rev: 'q1', dismissed: [], posts: [], ...init };
+}
+
+/** The research's verdicts on pairs of its people (`POST /duplicates`). */
+export interface FakeDuplicates {
+    /** By the pair as "Pa|Pb" (sorted): the verdict's fields (`verdict`, `reason`, `years`, …); others: `unknown-person`. */
+    verdicts: Record<string, Record<string, unknown>>;
+    /** The pairs of every request. */
+    asks: string[][][];
+    /** A request answers this instead (e.g. 503 research.busy). */
+    reply?: { status: number; body: unknown };
+    /** The answer comes this much later (ms). */
+    delayMs?: number;
+    /** Until this resolves, no answer goes (the app waits). */
+    hold?: Promise<void>;
+}
+
+export function fakeDuplicates(init: Partial<FakeDuplicates> = {}): FakeDuplicates {
+    return { verdicts: {}, asks: [], ...init };
+}
+
+/** The answer to `POST /duplicates` (null: not it; 404 when not said in `features`). */
+async function serveDuplicates(b: FakeBridge, method: string, url: URL, posted: string | null): Promise<{ status: number; body: unknown } | null> {
+    const d = b.duplicates;
+    const rest = url.pathname.replace(/^\/[^/]+/, '');
+    if (!d || rest !== '/duplicates') return null;
+    if (method !== 'POST' || !(b.features ?? []).includes('duplicates.judge')) {
+        return { status: 404, body: { error: 'Not found.', code: 'route.unknown' } };
+    }
+    let pairs: string[][] = [];
+    try { pairs = (JSON.parse(posted ?? '{}') as { pairs?: string[][] }).pairs ?? []; } catch { /* keep empty */ }
+    d.asks.push(pairs);
+    if (d.hold) await d.hold;
+    if (d.delayMs) await new Promise(r => setTimeout(r, d.delayMs));
+    if (d.reply) return d.reply;
+    return {
+        status: 200,
+        body: {
+            rev: b.head,
+            verdicts: pairs.map(pair => {
+                const v = d.verdicts[[...pair].sort().join('|')];
+                return v ? { pair, ...v } : { pair, reason: 'unknown-person' };
+            }),
+        },
+    };
 }
 
 /** The answer to `/quality*` (null: not one of them; 404 when not said in `features`). */
@@ -1140,6 +1186,8 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
         }
         const hist = serveHistory(b, method, url, route.request().postData());
         if (hist) return json(hist.status, hist.body);
+        const dups = await serveDuplicates(b, method, url, route.request().postData());
+        if (dups) return json(dups.status, dups.body);
         const qual = serveQuality(b, method, url, route.request().postData());
         if (qual) return json(qual.status, qual.body);
         const rd = b.read;

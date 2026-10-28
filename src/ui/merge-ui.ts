@@ -187,9 +187,10 @@ export const mergeUiMethods = uiModule({
 
     // ---- PERSON MERGE (DUPLICATE RESOLUTION) ----
     /**
-     * Show person merge dialog
+     * Show person merge dialog. `otherId`: the person to merge with already
+     * chosen (a possible duplicate the research takes for one person).
      */
-    showPersonMergeDialog(keepId: PersonId): void {
+    showPersonMergeDialog(keepId: PersonId, otherId?: PersonId): void {
         const person = DataManager.getPerson(keepId);
         if (!person) return;
 
@@ -240,6 +241,10 @@ export const mergeUiMethods = uiModule({
             placeholder: strings.personMerge.selectPerson,
             persons: allPersons
         });
+        if (otherId && allPersons.some(p => p.id === otherId)) {
+            this.personMergePicker.setValue(otherId);
+            this.updatePersonMergePreview(otherId);
+        }
 
         modal.classList.add('active');
     },
@@ -479,6 +484,13 @@ export const mergeUiMethods = uiModule({
         }
         if (this.dialogStack.length > 0) {
             const parentDialog = this.dialogStack[this.dialogStack.length - 1];
+            if (parentDialog === 'tree-validation-modal') {
+                // Back to the tree check it was opened from (it stays on the stack), redrawn: the pair may be one person now.
+                this.openDialogById(parentDialog);
+                const treeId = this.treeValidationOpenFor();
+                if (treeId) void this.refreshTreeValidationDialog(treeId);
+                return;
+            }
             this.dialogStack.pop();
             this.openDialogById(parentDialog);
         }

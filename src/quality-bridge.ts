@@ -13,6 +13,7 @@ import { writeHeldOfRefusal } from './research-write-held.js';
 import { parseQualityReply, researchMarkKey, type ResearchQualityMark } from './quality-dismiss.js';
 import { saveSideRecord, loadSideRecord, deleteSideRecord } from './share-baselines.js';
 import { qualityBridgeKey } from './storage-keys.js';
+import { parseDuplicatesReply } from './duplicate-verdicts.js';
 
 export const QUALITY_WRITE_TIMEOUT_MS = 15_000;
 export const QUALITY_READ_TIMEOUT_MS = 15_000;
@@ -119,6 +120,11 @@ export async function fetchQualityMarks(base: string, opts: { timeoutMs?: number
  */
 export interface QualityBridgeRecord {
     dismiss: boolean;
+    /**
+     * The bridge judged possible duplicates (`duplicates.judge`) the last time
+     * it said: while it does not run, the tree check says it is not assessed.
+     */
+    judge: boolean;
     acked: QualityDismissBody[];
 }
 
@@ -137,14 +143,14 @@ export function sanitizeQualityBridgeRecord(raw: unknown): QualityBridgeRecord {
         seen.add(key);
         acked.push(body);
     }
-    return { dismiss: r?.dismiss === true, acked };
+    return { dismiss: r?.dismiss === true, judge: r?.judge === true, acked };
 }
 
 export async function loadQualityBridgeRecord(researchId: string): Promise<QualityBridgeRecord> {
     try {
         return sanitizeQualityBridgeRecord(await loadSideRecord(qualityBridgeKey(researchId)));
     } catch {
-        return { dismiss: false, acked: [] };
+        return { dismiss: false, judge: false, acked: [] };
     }
 }
 
@@ -159,4 +165,22 @@ export async function saveQualityBridgeRecord(researchId: string, record: Qualit
 /** Forget it (the last tree of the research deleted). */
 export async function deleteQualityBridgeRecord(researchId: string): Promise<void> {
     await deleteSideRecord(qualityBridgeKey(researchId)).catch(() => undefined);
+}
+
+// ==================== Verdicts on possible duplicates ====================
+
+export const DUPLICATES_TIMEOUT_MS = 15_000;
+
+/**
+ * The research's verdicts on pairs of its people (`POST <token>/duplicates`,
+ * a read: nothing is written). Null: no answer, refused (400, 503 busy) or
+ * not a reply the app reads.
+ */
+export async function postDuplicates(base: string, pairs: ReadonlyArray<readonly [string, string]>,
+    opts: { timeoutMs?: number } = {}): Promise<ReturnType<typeof parseDuplicatesReply>> {
+    const res = await request(`${base}/duplicates`, {
+        method: 'POST', headers: { 'Content-Type': 'text/plain; charset=utf-8' }, body: JSON.stringify({ pairs }),
+    }, opts.timeoutMs ?? DUPLICATES_TIMEOUT_MS);
+    if (!res || res.status < 200 || res.status >= 300) return null;
+    return parseDuplicatesReply(jsonOf(res.text));
 }

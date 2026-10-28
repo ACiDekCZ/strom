@@ -59,8 +59,8 @@ import { shownNameOrEmpty } from '../person-name.js';
 
 /**
  * What a finding of the tree check shows besides the app's own word: the
- * research's verdict on a possible duplicate (ZADANI_DEV §3). The hook
- * `validationRowExtra` gives none today; the verdicts fill it in.
+ * research's verdict on a possible duplicate (ZADANI_DEV §3), filled in by
+ * duplicate-verdicts-ui.ts through `validationRowExtra`.
  */
 export interface ValidationRowExtra {
     /** A label (and its reason) above the row's people, as trusted HTML. */
@@ -91,6 +91,8 @@ interface ValidationView {
     /** Rows shown of a long group. */
     shown: Map<string, number>;
     dismissedOpen: boolean;
+    /** Groups whose findings set aside ("Told apart by the research") are open. */
+    asideOpen: Set<string>;
     /** Watches the toast with Undo (the body's room under the last row ends with it). */
     toastTimer: number | null;
 }
@@ -159,12 +161,12 @@ export const treeStatsMethods = uiModule({
         this.listenForQualityMarks();
         this.endDismissToastRoom();
         view = {
-            treeId, sections: {}, groups: new Map(), shown: new Map(), dismissedOpen: false, toastTimer: null,
+            treeId, sections: {}, groups: new Map(), shown: new Map(), dismissedOpen: false, asideOpen: new Set(), toastTimer: null,
         };
         if (opts.leads) view.sections = { problem: false, trace: true };
 
+        const result = validateTreeData(treeData);
         if (content) {
-            const result = validateTreeData(treeData);
             content.innerHTML = this.generateTreeValidationHtml(result, treeData, treeId);
             this.bindTreeValidationActions(content, result, treeId);
         }
@@ -178,11 +180,18 @@ export const treeStatsMethods = uiModule({
         this.pushDialog('tree-validation-modal');
 
         modal?.classList.add('active');
+        // The research's verdicts on the possible duplicates (§3): asked now, the dialog does not wait.
+        void this.startDuplicateVerdicts(treeId, treeData, result.issues);
         if (opts.leads && content) {
             requestAnimationFrame(() => {
                 content.querySelector<HTMLElement>('.vq-section[data-section="trace"]')?.scrollIntoView({ block: 'start' });
             });
         }
+    },
+
+    /** The tree whose check is open now, or null. */
+    treeValidationOpenFor(): string | null {
+        return view && document.getElementById('tree-validation-modal')?.classList.contains('active') ? view.treeId : null;
     },
 
     closeTreeValidationDialog(): void {
@@ -294,15 +303,34 @@ export const treeStatsMethods = uiModule({
                 case 'section': {
                     const cat = el.dataset.section as IssueCategory;
                     view.sections[cat] = el.getAttribute('aria-expanded') !== 'true';
+                    // The research's verdicts that came while the group was open take their place now.
+                    if (cat === 'trace') this.settleDuplicateVerdicts(treeId);
                     redraw();
                     return;
                 }
                 case 'group': {
                     const type = el.dataset.type ?? '';
                     view.groups.set(type, el.getAttribute('aria-expanded') !== 'true');
+                    if (type === 'possibleDuplicate') this.settleDuplicateVerdicts(treeId);
                     redraw();
                     return;
                 }
+                case 'aside': {
+                    const type = el.dataset.type ?? '';
+                    if (view.asideOpen.has(type)) view.asideOpen.delete(type); else view.asideOpen.add(type);
+                    redraw();
+                    return;
+                }
+                case 'merge': {
+                    const a = el.dataset.a ?? '';
+                    const b = el.dataset.b ?? '';
+                    if (!a || !b || this.treeValidationReadOnly(treeId)) return;
+                    void this.mergeDuplicateFromValidation(treeId, a, b);
+                    return;
+                }
+                case 'loadNew':
+                    void this.loadNewVersionFromValidation(treeId);
+                    return;
                 case 'more': {
                     const type = el.dataset.type ?? '';
                     view.shown.set(type, (view.shown.get(type) ?? GROUP_STEP) + GROUP_STEP);
@@ -403,21 +431,21 @@ export const treeStatsMethods = uiModule({
     },
 
     /**
-     * Hook for the research's verdict on a finding (§3): extra label, actions,
-     * order, or "told apart" (set aside). None today.
+     * The research's verdict on a finding (§3): a label, actions, the order,
+     * or "told apart" (set aside).
      */
-    validationRowExtra(_issue: ValidationIssue, _treeId: string): ValidationRowExtra | null {
-        return null;
+    validationRowExtra(issue: ValidationIssue, treeId: string, data: StromData): ValidationRowExtra | null {
+        return this.duplicateVerdictRowExtra(issue, treeId, data);
     },
 
-    /** Hook (§3): a line under a group's title ("Assessed by the research"). None today. */
-    validationGroupNote(_type: string, _treeId: string): string {
-        return '';
+    /** A line under a group's title (§3: "Assessed by the research"). */
+    validationGroupNote(type: string, treeId: string): string {
+        return this.duplicateVerdictNote(type, treeId);
     },
 
-    /** Hook (§3): the end of a group — the findings set aside ("Told apart by the research: n"), as trusted HTML. None today. */
-    validationAsideHtml(_type: string, _aside: readonly ValidationIssue[], _treeId: string): string {
-        return '';
+    /** The end of a group — the findings set aside ("Told apart by the research: n"), as trusted HTML. */
+    validationAsideHtml(type: string, aside: readonly ValidationIssue[], treeId: string, data: StromData, open: boolean): string {
+        return this.duplicateVerdictAsideHtml(type, aside, treeId, data, open);
     },
 
     /**
@@ -429,7 +457,7 @@ export const treeStatsMethods = uiModule({
         const issues: ValidationIssue[] = [];
         const aside = new Map<string, ValidationIssue[]>();
         for (const issue of visibleValidation(result, data).issues) {
-            if (this.validationRowExtra(issue, treeId)?.setAside) {
+            if (this.validationRowExtra(issue, treeId, data)?.setAside) {
                 (aside.get(issue.type) ?? aside.set(issue.type, []).get(issue.type)!).push(issue);
             } else {
                 issues.push(issue);
@@ -447,7 +475,7 @@ export const treeStatsMethods = uiModule({
         const s = strings.treeManager;
         const esc = (t: string): string => this.escapeHtml(t);
         const v: ValidationView = view && view.treeId === treeId ? view
-            : { treeId, sections: {}, groups: new Map(), shown: new Map(), dismissedOpen: false, toastTimer: null };
+            : { treeId, sections: {}, groups: new Map(), shown: new Map(), dismissedOpen: false, asideOpen: new Set(), toastTimer: null };
         const ro = this.treeValidationReadOnly(treeId);
         const shown = this.treeValidationShown(result, treeData, treeId);
         const counts = validationCounts(shown.issues);
@@ -522,7 +550,7 @@ export const treeStatsMethods = uiModule({
         const esc = (t: string): string => this.escapeHtml(t);
         const open = v.groups.get(group.type) ?? group.expanded;
         const note = this.validationGroupNote(group.type, treeId);
-        const extras = new Map(group.issues.map(i => [i, this.validationRowExtra(i, treeId)]));
+        const extras = new Map(group.issues.map(i => [i, this.validationRowExtra(i, treeId, treeData)]));
         // The hook's order first (a verdict), the app's order kept otherwise.
         const rows = group.issues.some(i => extras.get(i)?.rank !== undefined)
             ? group.issues.map((issue, at) => ({ issue, at }))
@@ -551,7 +579,7 @@ export const treeStatsMethods = uiModule({
                 html += `<button type="button" class="vq-more" data-vq="more" data-type="${esc(group.type)}"
                     data-focus-key="more:${esc(group.type)}">${esc(s.valShowMore(Math.min(GROUP_STEP, rest), rest))}</button>`;
             }
-            if (aside.length > 0) html += this.validationAsideHtml(group.type, aside, treeId);
+            if (aside.length > 0) html += this.validationAsideHtml(group.type, aside, treeId, treeData, v.asideOpen.has(group.type));
             html += '</div>';
         }
         return html + '</div>';
@@ -563,15 +591,7 @@ export const treeStatsMethods = uiModule({
         const s = strings.treeManager;
         const esc = (t: string): string => this.escapeHtml(t);
         const dup = issue.type === 'possibleDuplicate';
-        const ids = issue.personIds ?? [];
-        const people = ids.map((id, k) => {
-            const person = treeData.persons[id];
-            const name = person ? (shownNameOrEmpty(person) || id) : id;
-            const years = lifeYears(person);
-            const sep = k < ids.length - 1 ? (dup ? ' ×' : ',') : '';
-            return `<span class="vq-person"><a href="#" class="validation-person-link" data-tree-id="${esc(treeId)}" data-person-id="${esc(id)}">${esc(name)}</a>`
-                + `${years ? `<span class="vq-years">(${esc(years)})</span>` : ''}${sep ? `<span class="vq-sep">${sep}</span>` : ''}</span>`;
-        }).join(' ');
+        const people = this.validationPeopleHtml(issue, treeData, treeId);
         // The godparent's detail begins with the name the row already shows in bold.
         let detail = issue.detail ?? '';
         if (issue.subject && detail.startsWith(`${issue.subject} — `)) detail = detail.slice(issue.subject.length + 3);
@@ -594,6 +614,21 @@ export const treeStatsMethods = uiModule({
             </div>
             ${actions.length ? `<div class="vq-actions">${actions.join('')}</div>` : ''}
         </div>`;
+    },
+
+    /** The people of a finding: links with their years, "×" between a pair. */
+    validationPeopleHtml(issue: ValidationIssue, treeData: StromData, treeId: string): string {
+        const esc = (t: string): string => this.escapeHtml(t);
+        const dup = issue.type === 'possibleDuplicate';
+        const ids = issue.personIds ?? [];
+        return ids.map((id, k) => {
+            const person = treeData.persons[id];
+            const name = person ? (shownNameOrEmpty(person) || id) : id;
+            const years = lifeYears(person);
+            const sep = k < ids.length - 1 ? (dup ? ' ×' : ',') : '';
+            return `<span class="vq-person"><a href="#" class="validation-person-link" data-tree-id="${esc(treeId)}" data-person-id="${esc(id)}">${esc(name)}</a>`
+                + `${years ? `<span class="vq-years">(${esc(years)})</span>` : ''}${sep ? `<span class="vq-sep">${sep}</span>` : ''}</span>`;
+        }).join(' ');
     },
 
     /**
