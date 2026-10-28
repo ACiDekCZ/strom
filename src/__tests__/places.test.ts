@@ -4,7 +4,8 @@
  * one place; renaming rewrites every field that used it.
  */
 import { describe, it, expect } from 'vitest';
-import { placeKey, collectPlaces, placeList, placesWithVariants, renamePlace, orphanedPlaceKeys } from '../places.js';
+import { placeKey, collectPlaces, placeList, placesWithVariants, renamePlace, orphanedPlaceKeys,
+    sortPlacesByName, placeFilterText, placeMatchesFilter } from '../places.js';
 import { StromData, Person, PersonId, PartnershipId } from '../types.js';
 
 function person(id: string, o: Partial<Person> = {}): Person {
@@ -136,5 +137,35 @@ describe('orphanedPlaceKeys', () => {
 
     it('returns nothing when there is no places registry', () => {
         expect(orphanedPlaceKeys(tree([person('a', { birthPlace: 'Brno' })]))).toEqual([]);
+    });
+});
+
+describe('the Places dialog: order and search', () => {
+    const row = (display: string, extra: string[] = []) => ({
+        key: placeKey(display),
+        usage: {
+            display, count: 1, personIds: [],
+            variants: new Map<string, number>([[display, 1], ...extra.map(v => [v, 1] as [string, number])]),
+        },
+    });
+    const names = (rows: { usage: { display: string } }[]) => rows.map(r => r.usage.display);
+
+    it('sorts by name as the UI language does: Czech puts "Ch" after "H", numbers by value', () => {
+        const rows = [row('Chotěboř'), row('Hlinsko'), row('Čáslav'), row('Cerhenice'), row('Ivančice'), row('Praha 10'), row('Praha 2')];
+        expect(names(sortPlacesByName(rows, 'cs')))
+            .toEqual(['Cerhenice', 'Čáslav', 'Hlinsko', 'Chotěboř', 'Ivančice', 'Praha 2', 'Praha 10']);
+        // English keeps "Ch" among the C's.
+        const en = names(sortPlacesByName(rows, 'en'));
+        expect(en.indexOf('Chotěboř')).toBeLessThan(en.indexOf('Hlinsko'));
+    });
+
+    it('finds a place without diacritics, by any of its spellings and by its other names', () => {
+        const caslav = row('Čáslav', ['Caslav']);
+        const text = placeFilterText(caslav.key, caslav.usage, ['Tschaslau']);
+        expect(placeMatchesFilter(text, 'caslav')).toBe(true);
+        expect(placeMatchesFilter(text, 'ČÁS')).toBe(true);
+        expect(placeMatchesFilter(text, 'tschaslau')).toBe(true);
+        expect(placeMatchesFilter(text, 'kolin')).toBe(false);
+        expect(placeMatchesFilter(text, '  ')).toBe(true);   // an empty query hides nothing
     });
 });

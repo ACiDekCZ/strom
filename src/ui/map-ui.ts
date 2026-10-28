@@ -17,9 +17,11 @@
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
 import { SettingsManager } from '../settings.js';
-import { strings } from '../strings.js';
+import { strings, getCurrentLanguage } from '../strings.js';
 import { PersonId, PlaceGeo } from '../types.js';
-import { collectPlaces, orphanedPlaceKeys, placeKey, PlaceUsage } from '../places.js';
+import {
+    collectPlaces, orphanedPlaceKeys, placeKey, PlaceUsage, sortPlacesByName, placeFilterText, placeMatchesFilter,
+} from '../places.js';
 import { collectDatedPlacePoints, DatedPlaceHarvest } from '../map-time.js';
 import { yearOf } from '../dates.js';
 import {
@@ -44,6 +46,9 @@ export type MapScope = 'view' | 'tree';
 
 /** Recomputes --map-floor for the current map canvas (see watchMapFloor). */
 let mapFloorUpdate: (() => void) | null = null;
+
+/** The Places dialog's places by key, as last drawn (what its search looks in). */
+let managerPlaces = new Map<string, PlaceUsage>();
 
 export const mapMethods = uiModule({
     /**
@@ -876,12 +881,10 @@ export const mapMethods = uiModule({
         const data = DataManager.getData();
         const filter: ReadonlySet<PersonId> | undefined =
             scope === 'tree' ? undefined : TreeRenderer.getVisiblePersonIds();
-        return [...collectPlaces(data, filter)]
-            .map(([key, usage]) => ({ key, usage, geo: data.places?.[key] }))
-            // Unplaced first — those are the ones asking for attention.
-            .sort((a, b) => Number(!!a.geo) - Number(!!b.geo)
-                || b.usage.count - a.usage.count
-                || a.usage.display.localeCompare(b.usage.display));
+        // By name, as the UI language sorts — a long list is read like an index.
+        // The places without coordinates have their own chip (and stay marked).
+        return sortPlacesByName([...collectPlaces(data, filter)]
+            .map(([key, usage]) => ({ key, usage, geo: data.places?.[key] })), getCurrentLanguage());
     },
 
     /**
@@ -892,7 +895,7 @@ export const mapMethods = uiModule({
      * Opened from the map it follows the map's scope; opened from anywhere else
      * "this view" would mean nothing, so it covers the whole tree.
      */
-    showPlacesManager(focusKey?: string, parentDialogId?: string, scope?: MapScope): void {
+    showPlacesManager(focusKey?: string, parentDialogId?: string, scope?: MapScope, opts: { keepFilter?: boolean } = {}): void {
         this.placesManagerScope = scope ?? (parentDialogId ? 'tree' : this.mapScope);
         this.placesManagerParent = parentDialogId ?? null;
         const places = this.placesForManager(this.placesManagerScope);
@@ -900,6 +903,13 @@ export const mapMethods = uiModule({
             this.showToast(strings.map.noPlacesAtAll);
             return;
         }
+        managerPlaces = new Map(places.map(p => [p.key, p.usage]));
+        // A fresh open starts with the whole list; a redraw (a rename, a pin) keeps the search.
+        if (!opts.keepFilter) this.placesFilter = { query: '', unplacedOnly: false };
+        const unplaced = places.filter(p => !p.geo).length;
+        if (!unplaced) this.placesFilter.unplacedOnly = false;
+        const f = this.placesFilter;
+        const m = strings.map;
         // Coordinate entries no person/event/partnership refers to any more. They
         // never appear as rows (the list is built from used places), so the
         // footer action is the only handle on them.
@@ -920,6 +930,7 @@ export const mapMethods = uiModule({
                 <div class="places-list">
                     ${places.map(p => this.renderPlaceRow(p)).join('')}
                 </div>
+                <p class="places-empty" id="places-filter-none" hidden>${m.filterNone}</p>
                 <div class="buttons places-footer">
                     <button type="button" class="secondary places-clean-orphans" id="places-clean-orphans"
                         ${orphanCount === 0 ? 'disabled' : ''}>${strings.map.cleanOrphans(orphanCount)}</button>
@@ -930,7 +941,48 @@ export const mapMethods = uiModule({
         // Wrap the body into its scroll container now, not in the skeleton's
         // observer later: moving the rows there afterwards would drop the
         // scroll to the focused place and the focus in its search (N9).
-        normalizeModal(overlay.querySelector('.modal') as HTMLElement);
+        const modal = overlay.querySelector('.modal') as HTMLElement;
+        normalizeModal(modal);
+        // The search stays put over the scrolling list (as in History of places).
+        const bar = document.createElement('div');
+        bar.className = 'places-bar';
+        bar.innerHTML = `
+            <div class="hm-search">
+                <svg class="hm-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="M16 16l4.5 4.5"></path></svg>
+                <input type="search" id="places-filter" autocomplete="off" spellcheck="false" enterkeyhint="search"
+                       placeholder="${this.escapeHtml(m.filterPh)}" aria-label="${this.escapeHtml(m.filterPh)}" value="${this.escapeHtml(f.query)}">
+                <span class="hm-search-count" id="places-filter-count" aria-live="polite"></span>
+                <button type="button" class="hm-search-clear" id="places-filter-clear" hidden aria-label="${this.escapeHtml(m.filterClear)}">&times;</button>
+            </div>
+            ${unplaced ? `<button type="button" class="hd-chip places-unplaced-chip" id="places-unplaced" aria-pressed="${f.unplacedOnly}"
+                title="${this.escapeHtml(m.filterUnplacedLabel)}">${this.escapeHtml(m.filterUnplaced)} <span class="hd-chip-n">${unplaced}</span></button>` : ''}`;
+        modal.insertBefore(bar, modal.querySelector(':scope > .modal-content'));
+        const input = bar.querySelector('#places-filter') as HTMLInputElement;
+        const setQuery = (q: string): void => {
+            this.placesFilter.query = q;
+            this.applyPlacesFilter();
+        };
+        input.addEventListener('input', () => setQuery(input.value));
+        input.addEventListener('keydown', (e) => {
+            // Escape empties the search first; the next one closes the dialog.
+            if (e.key === 'Escape' && input.value) {
+                e.preventDefault();
+                e.stopPropagation();
+                input.value = '';
+                setQuery('');
+            }
+        });
+        (bar.querySelector('#places-filter-clear') as HTMLButtonElement).onclick = () => {
+            input.value = '';
+            setQuery('');
+            input.focus();
+        };
+        const chip = bar.querySelector('#places-unplaced') as HTMLButtonElement | null;
+        if (chip) chip.onclick = () => {
+            this.placesFilter.unplacedOnly = !this.placesFilter.unplacedOnly;
+            chip.setAttribute('aria-pressed', String(this.placesFilter.unplacedOnly));
+            this.applyPlacesFilter();
+        };
 
         const close = (): void => this.closePlacesManager();
         overlay.onclick = (e) => {
@@ -946,6 +998,13 @@ export const mapMethods = uiModule({
 
         if (focusKey) {
             const row = overlay.querySelector(`.place-row[data-key="${CSS.escape(focusKey)}"]`) as HTMLElement | null;
+            // Opened on a place the search or the chip hides: the whole list again.
+            if (row?.hidden) {
+                this.placesFilter = { query: '', unplacedOnly: false };
+                input.value = '';
+                chip?.setAttribute('aria-pressed', 'false');
+                this.applyPlacesFilter();
+            }
             // Open its search first (it focuses the query), then bring the
             // whole, now taller row into view.
             (row?.querySelector('.place-change') as HTMLButtonElement | null)?.click();
@@ -960,6 +1019,42 @@ export const mapMethods = uiModule({
             this.closeDialogById(parentDialogId);
         }
         this.pushDialog('places-modal');
+    },
+
+    /** What each row's search looks in: its names in the tree and, with a history of places, its other names. */
+    refreshPlacesFilterText(): void {
+        const modal = document.getElementById('places-modal');
+        if (!modal) return;
+        const rows = [...modal.querySelectorAll<HTMLElement>('.place-row[data-key]')];
+        const aliases = this.placesHistoryAliases(rows.map(r => r.dataset.key ?? ''));
+        for (const row of rows) {
+            const key = row.dataset.key ?? '';
+            const usage = managerPlaces.get(key);
+            row.dataset.search = usage ? placeFilterText(key, usage, aliases.get(key)) : placeKey(key);
+        }
+        this.applyPlacesFilter();
+    },
+
+    /** Show the rows the search and the "No location" chip let through; the count and the empty state. */
+    applyPlacesFilter(): void {
+        const modal = document.getElementById('places-modal');
+        if (!modal) return;
+        const f = this.placesFilter;
+        const rows = [...modal.querySelectorAll<HTMLElement>('.place-row[data-key]')];
+        let found = 0;
+        for (const row of rows) {
+            const shown = (!f.unplacedOnly || row.classList.contains('place-row-unplaced'))
+                && placeMatchesFilter(row.dataset.search ?? '', f.query);
+            row.hidden = !shown;
+            if (shown) found++;
+        }
+        const filtering = !!f.query.trim() || f.unplacedOnly;
+        const count = modal.querySelector('#places-filter-count');
+        if (count) count.textContent = filtering ? strings.map.filterCount(found, rows.length) : '';
+        const clear = modal.querySelector<HTMLElement>('#places-filter-clear');
+        if (clear) clear.hidden = !f.query;
+        const none = modal.querySelector<HTMLElement>('#places-filter-none');
+        if (none) none.hidden = found > 0;
     },
 
     renderPlaceRow(p: { key: string; usage: PlaceUsage; geo?: PlaceGeo }): string {
@@ -1033,7 +1128,7 @@ export const mapMethods = uiModule({
         this.mapCenter = null;  // what is on the map changed — reframe it
         TreeRenderer.render();
         if (document.getElementById('places-modal')) {
-            this.showPlacesManager(focusKey, this.placesManagerParent ?? undefined, this.placesManagerScope);
+            this.showPlacesManager(focusKey, this.placesManagerParent ?? undefined, this.placesManagerScope, { keepFilter: true });
         }
     },
 

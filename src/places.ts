@@ -88,6 +88,31 @@ export function placeList(data: StromData): PlaceUsage[] {
         .sort((a, b) => b.count - a.count || a.display.localeCompare(b.display));
 }
 
+/**
+ * The Places dialog's order: by name as the UI language sorts it (Czech puts
+ * "Ch" after "H", "Č" after "C"; numbers by value, "Praha 2" before "Praha 10"),
+ * ties by key so the order never depends on the input.
+ */
+export function sortPlacesByName<T extends { key: string; usage: PlaceUsage }>(rows: readonly T[], lang: string): T[] {
+    const collator = new Intl.Collator(lang, { numeric: true });
+    return [...rows].sort((a, b) => collator.compare(a.usage.display, b.usage.display)
+        || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+}
+
+/**
+ * What the Places dialog's search looks in, folded like a key: the shown name,
+ * every spelling the tree uses, and other names of the place (`also`: the
+ * research's name and other forms from the history of places, when there are).
+ */
+export function placeFilterText(key: string, usage: PlaceUsage, also: readonly string[] = []): string {
+    return [usage.display, key, ...usage.variants.keys(), ...also].map(placeKey).filter(Boolean).join(' | ');
+}
+
+/** Every word of the query (folded: no case, no diacritics) is in the place's filter text. */
+export function placeMatchesFilter(text: string, query: string): boolean {
+    return placeKey(query).split(' ').filter(Boolean).every(w => text.includes(w));
+}
+
 /** Places written in more than one way — candidates for unification. */
 export function placesWithVariants(data: StromData): PlaceUsage[] {
     return [...collectPlaces(data).values()].filter(p => p.variants.size > 1);

@@ -39,6 +39,16 @@ interface PickerState {
 
 let state: PickerState | null = null;
 
+/** The payload's place key by the Places dialog's key (the research's name first, then the key itself). */
+function placesHistoryKeys(places: Record<string, HistoryPlace>, nameOf: (k: string) => string): Map<string, string> {
+    const byTreeKey = new Map<string, string>();
+    for (const k of Object.keys(places)) {
+        byTreeKey.set(placeKey(nameOf(k)), k);
+        if (!byTreeKey.has(placeKey(k))) byTreeKey.set(placeKey(k), k);
+    }
+    return byTreeKey;
+}
+
 function esc(text: string): string {
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
@@ -416,11 +426,7 @@ export const historyMapMethods = uiModule({
         const d = this.historyManageDrawn();
         const p = d?.payload;
         if (!d || !p) return out;
-        const byTreeKey = new Map<string, string>();
-        for (const k of Object.keys(p.places)) {
-            byTreeKey.set(placeKey(d.names.place(k)), k);
-            if (!byTreeKey.has(placeKey(k))) byTreeKey.set(placeKey(k), k);
-        }
+        const byTreeKey = placesHistoryKeys(p.places, d.names.place);
         const h = strings.history;
         const canAssign = manageCan(d.env, 'map');
         for (const treeKey of keys) {
@@ -436,6 +442,22 @@ export const historyMapMethods = uiModule({
                     + `<button type="button" class="link place-history-link" data-place-hist="${action}" data-hkey="${esc(k)}">`
                     + `${esc(action === 'assign' ? h.placesRowAssign : h.placesRowManage)} ›</button></div>`;
             out.set(treeKey, html);
+        }
+        return out;
+    },
+
+    /** Other names of the Places dialog's places for its search: the research's name and other forms (`also`). */
+    placesHistoryAliases(keys: readonly string[]): Map<string, string[]> {
+        const out = new Map<string, string[]>();
+        if (!this.historyManageAvailable()) return out;
+        const d = this.historyManageDrawn();
+        const p = d?.payload;
+        if (!d || !p) return out;
+        const byTreeKey = placesHistoryKeys(p.places, d.names.place);
+        for (const treeKey of keys) {
+            const k = byTreeKey.get(treeKey);
+            const place = k ? p.places[k] : undefined;
+            if (k && place) out.set(treeKey, [d.names.place(k), k, ...(place.also ?? [])]);
         }
         return out;
     },
@@ -457,6 +479,8 @@ export const historyMapMethods = uiModule({
             const html = lines.get(row.dataset.key ?? '');
             if (html) row.querySelector('.place-head')?.insertAdjacentHTML('afterend', html);
         }
+        // Other names came (or went) with the history: the search looks in them too.
+        this.refreshPlacesFilterText();
     },
 });
 

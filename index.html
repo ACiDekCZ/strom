@@ -4711,6 +4711,35 @@
         /* Footer: housekeeping (clean orphans) on the left, Close on the right. */
         .modal .places-footer { justify-content: space-between; flex-wrap: wrap; }
         .places-clean-orphans:disabled { opacity: 0.45; cursor: not-allowed; }
+        /* The search over the list and the "No location" chip: the search field of
+           History of places (.hm-search) and its chip (.hd-chip), pinned between the
+           header and the scrolling list. */
+        .places-bar {
+            flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px;
+            padding: 10px 24px; border-bottom: 1px solid var(--divider);
+        }
+        #places-filter {
+            flex: 1 1 auto; min-width: 0; height: 100%; padding: 0; border: 0; background: transparent; color: var(--text);
+            font: inherit; font-size: 13px; outline: none; -webkit-appearance: none; appearance: none;
+        }
+        #places-filter::placeholder { color: var(--text-faint); }
+        #places-filter::-webkit-search-cancel-button { display: none; }
+        #places-modal button.hm-search-clear {
+            flex: none; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 6px; background: transparent;
+            color: var(--text-faint); font-size: 16px; line-height: 1; cursor: pointer;
+        }
+        #places-modal button.hm-search-clear[hidden] { display: none; }
+        #places-modal button.hd-chip {
+            flex: none; display: inline-flex; align-items: center; gap: 5px; height: 34px; padding: 0 12px; border: 1px solid var(--border);
+            border-radius: 999px; background: transparent; color: var(--text); font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer;
+        }
+        #places-modal button.hd-chip[aria-pressed="true"] { border-color: var(--primary); background: var(--primary-soft); font-weight: 600; }
+        @media (hover: hover) {
+            #places-modal button.hm-search-clear:hover, #places-modal button.hd-chip:hover { background: var(--hover-bg); color: var(--text); }
+            #places-modal button.hd-chip[aria-pressed="true"]:hover { background: var(--primary-soft); }
+        }
+        .places-empty { margin: 0; padding: 14px 0 6px; font-size: 13px; color: var(--text-faint); }
+        .places-empty[hidden], .place-row[hidden] { display: none; }
         .place-row {
             padding: 10px 12px;
             border: 1px solid var(--border-color, #ddd);
@@ -4782,6 +4811,17 @@
             .place-name { flex-basis: 100%; }
             .place-search { flex-direction: column; }
             .place-search-go { width: 100%; }
+            /* The search and the chip share the row (.hm-search alone takes it whole in History of places). */
+            .places-bar { padding: 10px 16px; }
+            #places-modal .hm-search { flex: 1 1 160px; }
+        }
+        /* A phone held sideways: little height — a low bar, the list keeps the room. */
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .places-bar { padding: 6px 16px; }
+        }
+        @media (pointer: coarse) {
+            #places-modal button.hm-search-clear { width: 44px; height: 44px; }
+            #places-modal button.hd-chip { min-height: 44px; }
         }
 
         /* ---- Godparents & witnesses on an event (K2) ---- */

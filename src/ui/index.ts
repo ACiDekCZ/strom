@@ -343,6 +343,8 @@ export class UIClass {
     /** Places dialog: which places it lists, and what to return to on close. */
     placesManagerScope: MapScope = 'tree';
     placesManagerParent: string | null = null;
+    /** Places dialog: its search and the "No location" chip (kept over a redraw, cleared on a fresh open). */
+    placesFilter: { query: string; unplacedOnly: boolean } = { query: '', unplacedOnly: false };
 
     // Migration-over-time (P5): the time slider on the map. All in-memory —
     // nothing is persisted (no settings key, no per-tree state).
