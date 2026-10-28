@@ -1,6 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import {
-    fakeBridge, fakeHistoryDetail, historyDetailGed, openResearch, poll,
+    fakeBridge, fakeHistoryDetail, historyDetailGed, openResearch, poll, touchScreenNow,
     HISTORY_R1_FEATURES, FakeBridge, FakeHistory,
 } from './research-bridge.js';
 
@@ -292,6 +292,29 @@ test.describe('History of places: a detail', () => {
         await menu.locator('[data-scope="cancel"]').click();
         await expect(menu).toHaveCount(0);
         expect(history.hides).toEqual([]);
+    });
+
+    test('phone with a touch screen: a long name wraps under its mark, the Filter sheet\'s chips are 44 px', async ({ page }) => {
+        const history = fakeHistoryDetail();
+        const bohemia = history.payload.regions!['cz-bohemia'];
+        bohemia.name = { ...(bohemia.name as Record<string, string>), en: 'Kingdom of Bohemia and County of Kladsko' };
+        await setup(page, { history, width: 390, height: 844 });
+        await touchScreenNow(page);
+        await openDetail(page, 'cz-bohemia');
+        // The mark sits on the name's first line, never alone on a line above it.
+        const lines = await modal(page).locator('.hm-detail-title').evaluate(el => {
+            const mark = el.querySelector('.hm-mark')!.getBoundingClientRect();
+            const name = el.querySelector('.hm-detail-name')!.getClientRects();
+            return { markMid: mark.top + mark.height / 2, first: { top: name[0].top, bottom: name[0].bottom }, lines: name.length };
+        });
+        expect(lines.lines).toBeGreaterThan(1);
+        expect(lines.markMid).toBeGreaterThan(lines.first.top);
+        expect(lines.markMid).toBeLessThan(lines.first.bottom);
+        await modal(page).locator('[data-hd="sheet"]').click();
+        const chips = page.locator('.bottom-sheet.hd-fsheet button.hd-chip');
+        await expect(chips.first()).toBeVisible();
+        const heights = await chips.evaluateAll(els => els.map(e => Math.round(e.getBoundingClientRect().height)));
+        expect(Math.min(...heights)).toBeGreaterThanOrEqual(44);
     });
 
     test('who sees it: the first six and "n more"; a person opens the card on the event, flashing', async ({ page }) => {

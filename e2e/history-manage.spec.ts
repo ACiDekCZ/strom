@@ -1,6 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import {
-    fakeBridge, fakeHistory, fakeHistoryR1, historyGed, openResearch, openResearchMenu, poll, links,
+    fakeBridge, fakeHistory, fakeHistoryR1, historyGed, openResearch, openResearchMenu, poll, links, touchScreenNow,
     HISTORY_FEATURES, HISTORY_R1_FEATURES, FakeBridge, FakeHistory,
 } from './research-bridge.js';
 
@@ -227,6 +227,13 @@ test.describe('History of places: the manager', () => {
         await expect(opava).toHaveClass(/is-dim/);
         await expect(opava.locator('.hm-p-state')).toContainText('Not searched');
         await expect(opava.locator('.hm-p-meta')).toHaveText('Silesia from 1742 · 1 person');
+        // The sort keeps its own small box: the dialogs' select padding (10 px) left no room for its text (regression).
+        const sortBox = await modal(page).locator('select[data-hm="sort"]').evaluate((s) => {
+            const cs = getComputedStyle(s);
+            return { padTop: parseFloat(cs.paddingTop), width: s.getBoundingClientRect().width, head: s.closest('.hm-group-head')!.getBoundingClientRect().width };
+        });
+        expect(sortBox.padTop).toBeLessThanOrEqual(2);
+        expect(sortBox.width).toBeLessThan(sortBox.head / 2);
         await modal(page).locator('select[data-hm="sort"]').selectOption('alpha');
         await expect(all).toHaveText(['Brno', 'Čáslav', 'Kutná Hora', 'Lhotka', 'Opava']);
         expect(await page.evaluate(() => window.Strom.SettingsManager.getHistoryPlacesSort())).toBe('alpha');
@@ -456,6 +463,42 @@ test.describe('History of places: the manager', () => {
         await page.locator('.bottom-sheet.hm-menu-sheet [data-scope="first"]').click();
         await expect(modal(page).locator('.hm-row-note[data-note="at-lower-austria"]')).toContainText('The history of Lower Austria comes first of the regions');
         expect(history.writes.first).toEqual([{ region: 'at-lower-austria' }]);
+    });
+
+    test('touch screen (tablet): a row\'s "⋯" takes taps 44 px wide, a row\'s link is 44 px high', async ({ page }) => {
+        await setup(page, { width: 1024, height: 768 });
+        await touchScreenNow(page);
+        await openManager(page, { tab: 'places' });
+        // Opava (not searched): "Search again" in its row — `#history-modal button.link` took its min-height away.
+        const again = place(page, 'Opava').locator('[data-hm="searchAgainPlace"]');
+        await expect(again).toBeVisible();
+        expect((await again.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        const dots = place(page, 'Čáslav').locator('[data-hm="menu"]');
+        const box = (await dots.boundingBox())!;
+        expect(box.height).toBeGreaterThanOrEqual(44);
+        // 4 px left and right of the 36 px button still hit it.
+        const hits = await dots.evaluate((el, b) => [b.x - 3, b.x + b.width + 3].map(x => {
+            const hit = document.elementFromPoint(x, b.y + b.height / 2);
+            return !!hit && (hit === el || el.contains(hit));
+        }), box);
+        expect(hits).toEqual([true, true]);
+    });
+
+    test('phone held sideways: "Status ▾" beside the sentence, a low footer, room for the list', async ({ page }) => {
+        await setup(page, { width: 844, height: 390 });
+        await touchScreenNow(page);
+        await openManager(page);
+        const m = await modal(page).evaluate(el => {
+            const r = (s: string) => el.querySelector(s)!.getBoundingClientRect();
+            const text = r('.hm-state-text'), toggle = r('.hm-state-toggle'), foot = r('.history-manage-modal > .buttons'), body = r('#history-manage-body');
+            return { sameLine: toggle.top < text.bottom && toggle.bottom > text.top, foot: foot.height, body: body.height };
+        });
+        expect(m.sameLine).toBe(true);
+        expect(m.foot).toBeLessThanOrEqual(60);
+        expect(m.body).toBeGreaterThanOrEqual(140);
+        await modal(page).locator('.hm-state-toggle').click();
+        await expect(modal(page).locator('.hm-state-extra')).toBeVisible();
+        await expect(modal(page).locator('.hm-state-summary')).toBeVisible();
     });
 
     test('an older payload from a research without R1 keeps the old Settings sentence (regression)', async ({ page }) => {

@@ -134,7 +134,6 @@ export const historyMapMethods = uiModule({
             return;
         }
         const title = st.chosen.length > 1 ? h.mapTitleMany(st.picker.place) : h.mapTitle(st.picker.place);
-        const on = new Set(st.chosen.map(c => c.id));
         modal.innerHTML = `<div class="modal-header hmp-header"><div class="hmp-heading"><h2 id="hmp-title">${esc(title)}</h2>`
             + (st.picker.why ? `<p class="hmp-why">${esc(st.picker.why)}</p>` : '') + `</div>${close}</div>`
             + '<div class="modal-content hmp-body">'
@@ -143,13 +142,7 @@ export const historyMapMethods = uiModule({
             + `<p class="hmp-note">${esc(h.mapYearsNote)}</p>`
             + '<div class="hmp-search"><svg class="hmp-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="M16 16l4.5 4.5"></path></svg>'
             + `<input type="search" class="hmp-q" data-hmp="q" autocomplete="off" spellcheck="false" placeholder="${esc(h.mapSearchPh)}" aria-label="${esc(h.mapSearchPh)}" value="${esc(st.query)}"></div>`
-            + `<div class="hmp-list" role="group" aria-label="${esc(h.mapRegions)}">`
-            + st.picker.list.map(r => `<label class="hmp-opt${r.indent ? ' is-indent' : ''}" data-id="${esc(r.id)}"${matchesQuery(r.search, st.query) ? '' : ' hidden'}>`
-                + `<input type="checkbox" data-hmp="pick" value="${esc(r.id)}"${on.has(r.id) ? ' checked' : ''}>`
-                + `<span class="hmp-opt-name">${esc(r.name)}</span>`
-                + (r.meta ? `<span class="hmp-opt-meta">${esc(r.meta)}</span>` : '') + '</label>').join('')
-            + `<p class="hmp-empty"${st.picker.list.some(r => matchesQuery(r.search, st.query)) ? ' hidden' : ''}>${esc(h.searchNone)}</p>`
-            + '</div>'
+            + `<div class="hmp-list" role="group" aria-label="${esc(h.mapRegions)}">${this.historyMapListHtml()}</div>`
             + '<p class="hmp-result" aria-live="polite"></p>'
             + `<p class="hmp-error" role="alert"${st.error ? '' : ' hidden'}>${esc(st.error)}</p>`
             + '</div>'
@@ -159,6 +152,48 @@ export const historyMapMethods = uiModule({
             + `<button type="button" class="primary" data-hmp="assign">${esc(h.mapConfirm)}</button>`
             + '</div>';
         this.historyMapValidate();
+    },
+
+    /** The regions to choose from (the search's filter, the chosen ones ticked). */
+    historyMapListHtml(): string {
+        if (!state) return '';
+        const st = state;
+        const on = new Set(st.chosen.map(c => c.id));
+        return st.picker.list.map(r => `<label class="hmp-opt${r.indent ? ' is-indent' : ''}" data-id="${esc(r.id)}"${matchesQuery(r.search, st.query) ? '' : ' hidden'}>`
+                + `<input type="checkbox" data-hmp="pick" value="${esc(r.id)}"${on.has(r.id) ? ' checked' : ''}>`
+                + `<span class="hmp-opt-name">${esc(r.name)}</span>`
+                + (r.meta ? `<span class="hmp-opt-meta">${esc(r.meta)}</span>` : '') + '</label>').join('')
+            + `<p class="hmp-empty"${st.picker.list.some(r => matchesQuery(r.search, st.query)) ? ' hidden' : ''}>${esc(strings.history.searchNone)}</p>`;
+    },
+
+    /**
+     * The research's data changed while the picker is open (a read after a write elsewhere,
+     * the research's agent): the regions to choose from and the place's line follow; what is
+     * chosen, the typed years, the search and the note stay, and so does the focus.
+     */
+    refreshHistoryRegionPicker(): void {
+        if (!state || state.busy) return;
+        const d = this.historyManageDrawn();
+        if (!d?.payload || d.rid !== state.rid) return;
+        const picker = regionPicker(d.payload, d.env.lang, d.names, state.key);
+        if (!picker) return;
+        state.picker = { ...picker, chosen: state.picker.chosen };
+        const modal = document.querySelector<HTMLElement>(`#${HISTORY_MAP_DIALOG_ID} .hmp-modal`);
+        if (!modal) return;
+        const why = modal.querySelector<HTMLElement>('.hmp-why');
+        if (state.step === 'redo') {
+            if (why) why.textContent = [picker.place, d.payload.places[state.key]?.why ?? ''].filter(Boolean).join(' · ');
+            return;
+        }
+        if (why) { why.textContent = picker.why; why.hidden = !picker.why; }
+        const list = modal.querySelector<HTMLElement>('.hmp-list');
+        if (!list) return;
+        const active = document.activeElement;
+        const focused = active instanceof HTMLInputElement && list.contains(active) ? active.value : null;
+        const scroll = list.scrollTop;
+        list.innerHTML = this.historyMapListHtml();
+        list.scrollTop = scroll;
+        if (focused !== null) list.querySelector<HTMLInputElement>(`input[data-hmp="pick"][value="${CSS.escape(focused)}"]`)?.focus({ preventScroll: true });
     },
 
     /** The chosen regions with their years and ×. */

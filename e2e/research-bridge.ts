@@ -1353,3 +1353,14 @@ export const signal = (page: Page) => page.evaluate(() => {
 export async function acceptLoad(page: Page): Promise<void> {
     await page.locator('#research-load-modal #research-load-ok').click();
 }
+
+/**
+ * A touch screen from here on (`(pointer: coarse)`), after the bridge's data came in: the
+ * app never reaches the bridge on a touch screen (onComputer), so a context made with
+ * hasTouch would have no research data to lay out.
+ */
+export async function touchScreenNow(page: Page): Promise<void> {
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+    await expect.poll(() => page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
+}

@@ -221,6 +221,30 @@ test.describe('History of places: a place\'s region by hand', () => {
         expect(history.writes.map).toEqual([{ place: 'Lhotka', regions: [{ id: 'cz-bohemia' }] }]);
     });
 
+    test('the research\'s data changes while the picker is open: the regions follow, the choice and its years stay', async ({ page }) => {
+        const { history } = await setup(page);
+        await openPlaces(page);
+        await place(page, 'Lhotka', 'unassigned').locator('[data-hm="assign"]').click();
+        await option(page, 'cz-moravia').locator('input').check();
+        await chosen(page, 'cz-moravia').locator('input[data-hmp="from"]').fill('1850');
+        await expect(option(page, 'sk-upper-hungary')).toHaveCount(0);
+        // The research finds a new region and another place of Moravia (a read after its agent's work).
+        const reads = history.reads;
+        const regions = history.payload.regions!;
+        regions['sk-upper-hungary'] = { name: { cs: 'Horní Uhry', en: 'Upper Hungary', de: 'Oberungarn' }, state: 'queued', order: 5, events: 0, places: 1, persons: 1 };
+        regions['cz-moravia'] = { ...regions['cz-moravia'], places: 3 };
+        history.rev = 'h2';
+        history.payload.state.rev = 'h2';
+        await poll(page);
+        await expect.poll(() => history.reads).toBeGreaterThan(reads);
+        await expect(option(page, 'sk-upper-hungary')).toContainText('Upper Hungary');
+        await expect(option(page, 'cz-moravia')).toContainText('3 places');
+        await expect(option(page, 'cz-moravia').locator('input')).toBeChecked();
+        await expect(chosen(page, 'cz-moravia').locator('input[data-hmp="from"]')).toHaveValue('1850');
+        await assignBtn(page).click();
+        await expect.poll(() => history.writes.map).toEqual([{ place: 'Lhotka', regions: [{ id: 'cz-moravia', from: 1850 }] }]);
+    });
+
     test('Places: a place\'s History line; Manage opens the manager at it, an unassigned place\'s Assign region the picker', async ({ page }) => {
         const { history } = await setup(page);
         await page.evaluate(() => window.Strom.UI.showPlacesManager());

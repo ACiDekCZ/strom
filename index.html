@@ -2442,8 +2442,8 @@
         .hm-sort .sr-only {
             position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
         }
-        .hm-sort select {
-            height: 28px; padding: 0 6px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface);
+        .modal .hm-sort select {
+            width: auto; height: 28px; padding: 0 6px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface);
             color: var(--text); font: inherit; font-size: 12.5px; max-width: 100%;
         }
         .hm-row { border-top: 1px solid var(--divider); }
@@ -2560,7 +2560,11 @@
                 width: 100vw; max-width: 100vw; height: 100vh; height: 100dvh; max-height: none; border-radius: 0;
             }
             #history-modal .hm-header { padding: 8px 16px 6px; }
-            .hm-state { padding: 6px 16px; gap: 2px; }
+            /* "Status ▾" after the sentence when it fits, not on a line of its own. */
+            .hm-state { padding: 6px 16px; gap: 2px 12px; flex-direction: row; flex-wrap: wrap; align-items: center; }
+            .hm-state > *, .hm-state-extra { flex: 1 1 100%; min-width: 0; }
+            .hm-state > .hm-state-text { flex: 0 1 auto; }
+            #history-modal .hm-state > button.hm-state-toggle { flex: none; }
             #history-modal button.hm-state-toggle {
                 display: inline-flex; align-self: flex-start; align-items: center; gap: 4px; padding: 0; border: 0; background: none;
                 font: inherit; font-size: 12.5px; color: var(--text-light); cursor: pointer;
@@ -2570,16 +2574,22 @@
             .hm-state-extra.is-open { display: flex; }
             .hm-bar { padding: 6px 16px; }
             .hm-region { padding: 7px 16px; }
+            /* The list keeps room for rows: a low footer (the header's × closes too). */
+            .modal.history-manage-modal > .buttons { padding: 6px 16px 8px; }
         }
         @media (pointer: coarse) {
             #history-modal button.hm-back, #history-modal button.hm-state-toggle, #history-modal button.hm-h-act,
             #history-modal .hm-row-link, #history-modal .hm-state-link, #history-modal button.hm-more { min-height: 44px; }
+            /* `#history-modal button.link` (1,1,1) takes min-height away: these say it again with the same weight. */
+            #history-modal button.link.hm-row-link, #history-modal button.link.hm-state-link { min-height: 44px; }
             #history-modal button.hm-tab { min-height: 44px; }
-            #history-modal button.hm-dots { width: 36px; height: 44px; }
+            /* The tap area is 44 px wide over the row's padding and the chevron; the button keeps its 36 px. */
+            #history-modal button.hm-dots { position: relative; width: 36px; height: 44px; }
+            #history-modal button.hm-dots::after { content: ''; position: absolute; left: 50%; top: 0; width: 44px; height: 44px; transform: translateX(-50%); }
             #history-modal button.hm-assign { height: 44px; }
             #history-modal button.hm-search-clear { width: 44px; height: 44px; }
             .hm-search { height: 44px; }
-            .hm-sort select { min-height: 44px; }
+            .modal .hm-sort select { min-height: 44px; }
         }
         /* History of places — a place's region by hand (spec 1028 §4): the picker over the manager
            or Places (560px; a bottom sheet on a phone), the step "decide again" with a note, and
@@ -2751,11 +2761,13 @@
            filters (two rows; on a phone one row of chips and a bottom sheet), centuries, the
            card layer's event rows with place, audience and hiding, the event menu and "who sees it". */
         .hm-detail-line { display: flex; align-items: flex-start; gap: 10px; }
-        .hm-detail-title { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 10px; outline: none; }
+        /* One flow of text: a long name wraps under its mark, the mark never stands alone on a line. */
+        .hm-detail-title { flex: 1 1 auto; min-width: 0; outline: none; }
         .hm-detail-title:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 2px; }
-        .hm-detail-title .hm-mark { align-self: baseline; }
+        .hm-detail-title .hm-mark { display: inline-block; margin-right: 10px; vertical-align: middle; }
+        .hm-detail-title .hm-detail-sub { display: inline-block; max-width: 100%; margin-left: 10px; vertical-align: baseline; }
         .hm-detail-title .hm-mark.is-region {
-            width: 7px; height: 7px; box-sizing: border-box; border: 1.5px solid var(--hist-mark); transform: rotate(45deg) translateY(-2px);
+            width: 7px; height: 7px; box-sizing: border-box; border: 1.5px solid var(--hist-mark); transform: rotate(45deg) translateY(-1px);
         }
         .hm-detail-title .hm-mark.is-local { width: 8px; height: 8px; }
         .hm-detail-title .hm-mark.is-place { font-size: 10px; }
@@ -2899,7 +2911,7 @@
             .hd-fsheet-body { max-height: 85vh; }
         }
         @media (pointer: coarse) {
-            #history-modal button.hd-chip, #history-modal button.hd-mchip, #history-modal button.hd-century-head,
+            #history-modal button.hd-chip, .hd-fsheet button.hd-chip, #history-modal button.hd-mchip, #history-modal button.hd-century-head,
             #history-modal button.hd-mclose, #history-modal button.hd-sees, #history-modal button.hd-unhide { min-height: 44px; }
             #history-modal button.hd-mclose { width: 44px; }
             #history-modal .hd-period select, #history-modal .hd-range input, .hd-fsheet .hd-range input, #history-modal input.hd-search, input.hd-menu-search { height: 44px; }
@@ -3242,6 +3254,8 @@
             color: var(--on-primary);
         }
         .close-btn {
+            /* Never squeezed by a long title beside it (a 44 px target stays 44 px). */
+            flex: none;
             width: 32px;
             height: 32px;
             border: none;
@@ -5483,7 +5497,8 @@
             .modal button.pm-lifeline-hmore { width: 44px; height: 44px; top: -2px; right: -4px; }
             .k-history .pm-lifeline-desc { padding-right: 36px; }
             .pm-lifeline-row.k-historyGroup, .modal button.pm-lifeline-hidden { min-height: 44px; }
-            .modal button.pm-lifeline-hinfo { width: 44px; height: 44px; margin: 0 -10px; border-color: transparent; }
+            /* Its tap area reaches the chip before it, never over it (the chips' gap is 6 px). */
+            .modal button.pm-lifeline-hinfo { width: 44px; height: 44px; margin: 0 -10px 0 -6px; border-color: transparent; }
             .modal button.pm-lifeline-hinfo::before {
                 content: ''; position: absolute; inset: 11px; border: 1px solid var(--border); border-radius: 50%;
             }

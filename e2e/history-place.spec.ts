@@ -1,6 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import {
-    fakeBridge, fakeHistoryR1, historyGed, openResearch, poll, links,
+    fakeBridge, fakeHistoryR1, historyGed, openResearch, poll, links, touchScreenNow,
     HISTORY_R1_FEATURES, FakeBridge, FakeHistory,
 } from './research-bridge.js';
 
@@ -274,5 +274,25 @@ test.describe('History of places: a place\'s own history on request (§6a)', () 
         expect(Math.abs(box!.y + box!.height - 844)).toBeLessThan(2);
         await expect(dialog(page).locator('#hpf-cost')).toBeVisible();
         await expect(dialog(page).locator('[data-hpf="go"]')).toBeInViewport();
+    });
+
+    test.describe('German', () => {
+        // The longest chip and title of the three languages.
+        test.use({ locale: 'de-DE' });
+        test('phone with a touch screen: the card head\'s "i" does not reach over the History chip; the confirmation\'s × is 44 px', async ({ page }) => {
+            await setup(page, { width: 390 });
+            await touchScreenNow(page);
+            await openCard(page);
+            const gap = await page.locator('#pm-lifeline-head').evaluate(head => {
+                const chip = head.querySelector('#pm-lifeline-history-toggle')!.getBoundingClientRect();
+                const info = head.querySelector('.pm-lifeline-hinfo')!.getBoundingClientRect();
+                return Math.round(info.left - chip.right);
+            });
+            expect(gap).toBeGreaterThanOrEqual(0);
+            await offerLink(page).click();
+            const close = (await dialog(page).locator('.hpf-header .close-btn').boundingBox())!;
+            expect(Math.round(close.width)).toBeGreaterThanOrEqual(44);
+            expect(Math.round(close.height)).toBeGreaterThanOrEqual(44);
+        });
     });
 });

@@ -1,6 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import {
-    fakeBridge, fakeHistoryR1, historyGed, openResearch, poll, links,
+    fakeBridge, fakeHistoryR1, historyGed, openResearch, poll, links, touchScreenNow,
     HISTORY_R1_FEATURES, FakeBridge, FakeHistory,
 } from './research-bridge.js';
 
@@ -92,5 +92,20 @@ test.describe('History in stories: Research for this tree', () => {
         await openTreeSettings(page);
         await expect(page.locator('#research-tree-settings-modal .research-tree-settings')).toBeVisible();
         await expect(section(page)).toHaveCount(0);
+    });
+
+    test.describe('German', () => {
+        test.use({ locale: 'de-DE' });
+        test('phone with a touch screen: the dialog\'s × keeps 44 px beside the title, the Stories row fits', async ({ page }) => {
+            await page.setViewportSize({ width: 390, height: 844 });
+            await setup(page, { history: { stories: true } });
+            await touchScreenNow(page);
+            await openTreeSettings(page);
+            const close = (await page.locator('#research-tree-settings-x').boundingBox())!;
+            expect(Math.round(close.width)).toBeGreaterThanOrEqual(44);
+            await section(page).scrollIntoViewIfNeeded();
+            expect(await section(page).evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+            expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+        });
     });
 });

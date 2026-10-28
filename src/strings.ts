@@ -15900,7 +15900,7 @@ const stringsDE: StringsType = {
         errGoneRow: 'Nicht mehr vorhanden.',
         // Detail einer Region / der Funde aus Forschungsquellen / einer Ortsgeschichte (Spec 1028 Teil B).
         detailDoneOn: (d: string) => `abgeschlossen ${d}`,
-        detailLocalNote: (n: number) => `${nDe(n, 'Ereignis', 'Ereignisse')} aus Matriken und Chroniken, die die Forschung im Stammbaum gelesen hat. Sie gelten nur für diesen Stammbaum.`,
+        detailLocalNote: (n: number) => `${nDe(n, 'Ereignis', 'Ereignisse')} aus Matriken und Chroniken, die die Forschung im Stammbaum gelesen hat. Diese Ereignisse gelten nur für diesen Stammbaum.`,
         detailLocalSub: 'lokale Funde des Stammbaums',
         detailEmpty: 'Kein Ereignis entspricht dem Filter.',
         filterAll: 'Alle',
@@ -15925,7 +15925,7 @@ const stringsDE: StringsType = {
         seesNobody: 'auf keiner Karte zu sehen',
         textLang: (l: string) => `Text auf ${langName('de', l)}`,
         whoTitle: (n: number) => `Auf der Karte sichtbar für ${nDe(n, 'Person', 'Personen')}`,
-        whoNote: (r: string, y: string) => `Sie lebten ${y} in ${r}.`,
+        whoNote: (r: string, y: string) => `Diese Personen lebten ${y} in ${r}.`,
         whoMore: (n: number) => `${n} weitere ›`,
         whoMenu: 'Wer es sieht',
         whoMenuSub: (n: number) => `${nDe(n, 'Person', 'Personen')} des Stammbaums`,
