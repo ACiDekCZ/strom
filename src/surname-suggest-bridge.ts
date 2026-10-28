@@ -65,9 +65,11 @@ function isBusy(res: Raw): boolean {
     return body?.code === 'research.busy';
 }
 
+/** The research's own sentence (`text`), else its `error`, as the other bridge reads do. */
 function errorText(res: Raw): string | undefined {
-    const body = res ? jsonOf(res.text) as { error?: unknown } | null : null;
-    const text = typeof body?.error === 'string' ? body.error.replace(/\s+/g, ' ').trim().slice(0, 300) : '';
+    const body = res ? jsonOf(res.text) as { error?: unknown; text?: unknown } | null : null;
+    const raw = typeof body?.text === 'string' && body.text.trim() ? body.text : body?.error;
+    const text = typeof raw === 'string' ? raw.replace(/\s+/g, ' ').trim().slice(0, 300) : '';
     return text || undefined;
 }
 

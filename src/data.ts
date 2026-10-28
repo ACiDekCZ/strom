@@ -1523,14 +1523,17 @@ class DataManagerClass {
     acceptSurnameGroups(groups: readonly (readonly string[])[]): string[][] | null {
         let variants = this.data.surnameVariants ?? [];
         const added: string[][] = [];
+        // Forms compared as written (diacritics count): what the Undo takes out is exactly what came in.
+        const exact = (s: string): string => s.normalize('NFC').trim().toLowerCase();
         for (const forms of groups) {
             const keys = new Set(forms.map(surnameKey));
-            const had = new Set(variants.filter(g => g.some(n => keys.has(surnameKey(n)))).flat().map(surnameKey));
-            const fresh = forms.filter(f => f.trim() && !had.has(surnameKey(f)));
+            const touched = variants.filter(g => g.some(n => keys.has(surnameKey(n))));
+            const had = new Set(touched.flat().map(exact));
+            const fresh = forms.filter(f => f.trim() && !had.has(exact(f)));
             // Two spellings that differ only in diacritics share a key: both are new to a new group.
-            if (fresh.length === 0 && had.size > 0) { added.push([]); continue; }
+            if (fresh.length === 0 && touched.length > 0) { added.push([]); continue; }
             variants = addSurnameGroup({ ...this.data, surnameVariants: variants }, [...forms]);
-            added.push(had.size > 0 ? fresh : forms.map(f => f.trim()).filter(Boolean));
+            added.push(touched.length > 0 ? fresh : forms.map(f => f.trim()).filter(Boolean));
         }
         if (added.every(a => a.length === 0)) return null;
         this.beginMutation();

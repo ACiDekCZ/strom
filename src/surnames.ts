@@ -231,11 +231,14 @@ export function addSurnameGroup(data: StromData, names: string[]): string[][] {
     const groups = data.surnameVariants ?? [];
     const untouched: string[][] = [];
     const merged: string[] = [...cleaned];
+    // A group's own forms are kept as written: two that differ only in diacritics
+    // (Lhoták = Lhotak, linked on purpose) stay both when the group grows.
+    const exact = (s: string): string => s.normalize('NFC').trim().toLowerCase();
 
     for (const group of groups) {
         if (group.some(n => keys.has(surnameKey(n)))) {
             for (const name of group) {
-                if (!merged.some(m => surnameKey(m) === surnameKey(name))) merged.push(name);
+                if (!merged.some(m => exact(m) === exact(name))) merged.push(name);
             }
         } else {
             untouched.push(group);

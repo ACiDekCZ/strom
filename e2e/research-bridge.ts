@@ -140,6 +140,48 @@ export interface FakeBridge {
     quality?: FakeQuality;
     /** Verdicts on possible duplicates (spec 021 §C): `POST /duplicates` with `duplicates.judge` in `features`. */
     duplicates?: FakeDuplicates;
+    /**
+     * Surname spellings the research suggests (spec 021 §A): `GET /surnames` with
+     * `surnames.suggest` in `features` (`surnames.read`: it reads the groups' NOTEs).
+     */
+    surnames?: FakeSurnames;
+}
+
+/** The research's spelling suggestions (`GET /surnames`, R1). */
+export interface FakeSurnames {
+    rev: string;
+    groups: { forms: string[]; at?: string; by?: 'app' | 'research'; id?: string }[];
+    rejected: { forms: string[]; at?: string; by?: 'app' | 'research'; id?: string }[];
+    suggestions: Record<string, unknown>[];
+    truncated?: boolean;
+    /** How many times `GET /surnames` was asked. */
+    asks: number;
+    /** The next answers instead (e.g. 503 research.busy with Retry-After), one per request, taken in turn. */
+    replies?: { status: number; body: unknown; retryAfter?: string }[];
+    /** Until this resolves, no answer goes (the app shows it is loading). */
+    hold?: Promise<void>;
+}
+
+export function fakeSurnames(init: Partial<FakeSurnames> = {}): FakeSurnames {
+    return { rev: 's1', groups: [], rejected: [], suggestions: [], asks: 0, ...init };
+}
+
+/** The answer to `GET /surnames` (null: not it; 404 when not said in `features`). */
+async function serveSurnames(b: FakeBridge, method: string, url: URL): Promise<{ status: number; body: unknown; retryAfter?: string } | null> {
+    const s = b.surnames;
+    const rest = url.pathname.replace(/^\/[^/]+/, '');
+    if (!s || rest !== '/surnames') return null;
+    if (method !== 'GET' || !(b.features ?? []).includes('surnames.suggest')) {
+        return { status: 404, body: { error: 'Not found.', code: 'route.unknown' } };
+    }
+    s.asks += 1;
+    if (s.hold) await s.hold;
+    const next = s.replies?.shift();
+    if (next) return next;
+    return {
+        status: 200,
+        body: { rev: s.rev, groups: s.groups, rejected: s.rejected, suggestions: s.suggestions, state: { truncated: !!s.truncated } },
+    };
 }
 
 /** The research's marks of the tree check (`/quality`). */
@@ -1190,6 +1232,11 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
         if (dups) return json(dups.status, dups.body);
         const qual = serveQuality(b, method, url, route.request().postData());
         if (qual) return json(qual.status, qual.body);
+        const names = await serveSurnames(b, method, url);
+        if (names) {
+            return route.fulfill({ status: names.status, headers: { ...cors, 'content-type': 'application/json',
+                ...(names.retryAfter ? { 'retry-after': names.retryAfter, 'access-control-expose-headers': 'Retry-After' } : {}) }, body: JSON.stringify(names.body) });
+        }
         const rd = b.read;
         // A read page's image (`read/<id>/page/<n>.jpg`): a drawn sheet with ruled lines (invented, no real document).
         const pageImg = /\/read\/([^/]+)\/page\/(\d+)\.jpg$/.exec(url.pathname);

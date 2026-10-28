@@ -210,6 +210,12 @@ describe('the bridge: GET /surnames', () => {
         expect((await fetchSurnameSuggestions('http://127.0.0.1:1/t', { wait: async () => {} })).ok).toBe(true);
     });
 
+    it('an error shows the research\'s own sentence (`text`) over its short `error`', async () => {
+        vi.stubGlobal('fetch', vi.fn(async () => answer(500, { error: 'busy', code: 'surnames.failed', text: 'The research could not compare the entries.' })));
+        expect(await fetchSurnameSuggestions('http://127.0.0.1:1/t'))
+            .toEqual({ ok: false, code: 'error', text: 'The research could not compare the entries.' });
+    });
+
     it('no answer is an error; Retry-After stays within bounds', async () => {
         vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('down'); }));
         expect(await fetchSurnameSuggestions('http://127.0.0.1:1/t')).toEqual({ ok: false, code: 'error' });
@@ -257,6 +263,16 @@ describe('DataManager: accepting suggestions and their Undo', () => {
         expect(DataManager.getData().surnameVariants).toHaveLength(2);
         DataManager.undo();
         expect(DataManager.getData().surnameVariants).toEqual([['Lhoták', 'Lhottak']]);
+    });
+
+    it('extending a diacritics-only group keeps both its forms; the Undo leaves the group as it was', () => {
+        const dm = DataManager as unknown as { data: StromData };
+        dm.data = { ...dm.data, surnameVariants: [['Lhoták', 'Lhotak']] };
+        const added = DataManager.acceptSurnameGroups([['Lhoták', 'Lhottak']]);
+        expect(added).toEqual([['Lhottak']]);
+        expect(DataManager.getData().surnameVariants).toEqual([['Lhotak', 'Lhoták', 'Lhottak']]);
+        expect(DataManager.removeSurnameForms(added!.flat())).toBe(true);
+        expect(DataManager.getData().surnameVariants).toEqual([['Lhotak', 'Lhoták']]);
     });
 
     it('a diacritics-only group is new with both forms; nothing new is no step', () => {

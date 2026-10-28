@@ -34,6 +34,9 @@ import { onBridgeStatus } from './research-sync-ui.js';
 import type { TreeId } from '../types.js';
 import { uiModule } from './module.js';
 
+/** The accept / reject toast (its Undo stands above the dialog, index.html). */
+const SUGGEST_TOAST_KIND = 'surname-suggest';
+
 /** Cards shown per level before "Show more" (and added by each click). */
 const PAGE = 10;
 
@@ -329,9 +332,10 @@ export const surnameSuggestMethods = uiModule({
         const data = DataManager.getData();
         const group = shown.extendsGroup;
         const inGroup = new Set((group ?? []).map(surnameKey));
-        // The extended group's forms first, then the new ones.
+        // The extended group's forms first (each as written: Lhoták and Lhotak both), then the new ones.
+        const exact = (f: string): string => f.normalize('NFC').trim().toLowerCase();
         const forms = group
-            ? [...s.forms.filter(f => inGroup.has(surnameKey(f))), ...group.filter(g => !s.forms.some(f => surnameKey(f) === surnameKey(g))),
+            ? [...s.forms.filter(f => inGroup.has(surnameKey(f))), ...group.filter(g => !s.forms.some(f => exact(f) === exact(g))),
                 ...s.forms.filter(f => !inGroup.has(surnameKey(f)))]
             : s.forms;
         const tags = forms.map((f, i) => {
@@ -475,6 +479,8 @@ export const surnameSuggestMethods = uiModule({
         const message = bulk ? t.acceptedAllToast(list.length) : t.acceptedToast(list[0].suggestion.forms.join(' = '));
         this.showToast(message, 6000, {
             clearOf: '#surnames-modal .buttons',
+            // Above the dialog's overlay: its Undo takes a click.
+            kind: SUGGEST_TOAST_KIND,
             action: {
                 label: t.undo,
                 run: () => {
@@ -495,6 +501,8 @@ export const surnameSuggestMethods = uiModule({
         const t = strings.surnameSuggest;
         this.showToast(t.rejectedToast, 6000, {
             clearOf: '#surnames-modal .buttons',
+            // Above the dialog's overlay: its Undo takes a click.
+            kind: SUGGEST_TOAST_KIND,
             action: {
                 label: t.undo,
                 run: () => {
@@ -513,8 +521,12 @@ export const surnameSuggestMethods = uiModule({
         const reply = rid ? records.get(rid)?.reply : undefined;
         const marks: string[] = [];
         if (isNew) marks.push(`<span class="ss-badge">${esc(t.newGroupBadge)}</span>`);
-        if (reply && decidedInResearch(group, reply.groups)) marks.push(`<span class="ss-quiet">${esc(t.decidedInResearch)}</span>`);
-        if (this.surnamePendingSend()?.group(group)) marks.push(`<span class="ss-quiet ss-pending">${esc(t.pendingSend)}</span>`);
+        const decided = !!reply && decidedInResearch(group, reply.groups);
+        if (decided) marks.push(`<span class="ss-quiet">${esc(t.decidedInResearch)}</span>`);
+        // The quiet send state, as with other changes: not sent yet, or in the research.
+        const pending = this.surnamePendingSend();
+        if (pending?.group(group)) marks.push(`<span class="ss-quiet ss-pending">${esc(t.pendingSend)}</span>`);
+        else if (pending && !decided) marks.push(`<span class="ss-quiet ss-in-research">${esc(t.inResearch)}</span>`);
         return { isNew, html: marks.length ? `<span class="ss-marks">${marks.join('')}</span>` : '' };
     },
 
@@ -576,10 +588,12 @@ export const surnameSuggestMethods = uiModule({
         const reply = rid ? records.get(rid)?.reply : undefined;
         const pending = this.surnamePendingSend();
         const rows = view.rejectedOpen ? `<ul class="ss-rejected-list">${list.map((r, i) => {
+            const decided = r.by === 'research' || (!!reply && decidedInResearch(r.forms, reply.rejected));
             const marks = [
                 r.at ? `<span class="ss-quiet">${esc(t.rejectedOn(formatDay(r.at)))}</span>` : '',
-                r.by === 'research' || (reply && decidedInResearch(r.forms, reply.rejected)) ? `<span class="ss-quiet">${esc(t.decidedInResearch)}</span>` : '',
-                pending?.rejection(r.forms) ? `<span class="ss-quiet ss-pending">${esc(t.pendingSend)}</span>` : '',
+                decided ? `<span class="ss-quiet">${esc(t.decidedInResearch)}</span>` : '',
+                pending?.rejection(r.forms) ? `<span class="ss-quiet ss-pending">${esc(t.pendingSend)}</span>`
+                    : pending && !decided ? `<span class="ss-quiet ss-in-research">${esc(t.inResearch)}</span>` : '',
             ].filter(Boolean).join('');
             return `<li class="ss-rejected-row">
                 <span class="ss-rejected-forms">${esc(r.forms.join(' = '))}</span>
