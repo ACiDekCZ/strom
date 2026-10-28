@@ -10,6 +10,8 @@
 - **Forschung auf einem Mac installieren**: unter der Zeile sagt ein Hinweis, dass ein neueres macOS das Einfügen mit *Möglicherweise schädliche Software, Einsetzen blockiert* anhalten kann, dass die Zeile aus der Strom-App Strom Research von GitHub (ACiDekCZ/strom-research) installiert und dass *Trotzdem einsetzen* sie einfügt, mit Apples Seite zu dieser Meldung; auch unter der Zeile für einen Mac, die von einem Telefon geschickt wird.
 - **Links zu einem Stammbaum**: ein Link, der eine Forschung nennt (*?research=…*), öffnet den mit dieser Forschung verbundenen Stammbaum, auch unter mehreren Stammbäumen gleichen Namens; eine hier unbekannte Forschung überlässt die Wahl wie bisher dem Namen des Stammbaums.
 
+- **Zeitgeschehen im Lebenslauf** (eine Funktion in Erprobung, standardmäßig aus, in den Einstellungen unter *Experimentelle Funktionen*): der Lebenslauf in der Personenkarte zeigt Ereignisse der Zeit und der Orte, an denen die Person lebte, mit ihrem damaligen Alter, gesucht von der Forschung und jedes mit seiner Quelle; *Was die Zeichen bedeuten* erklärt die Zeichen. Ein Ereignis lässt sich für einen Ort oder nur für eine Person ausblenden, mit *Rückgängig*, und *Ausgeblendete Ereignisse* in den Einstellungen zeigt es wieder. Die Einstellungen sagen auch, wie weit die Suche der Forschung ist und wann die Version der Forschung noch kein Zeitgeschehen bietet.
+
 ## 3.16.0
 
 *Veröffentlicht am 25. Oktober 2026.*
