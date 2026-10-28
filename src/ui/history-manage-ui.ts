@@ -17,7 +17,7 @@ import { shownName } from '../person-name.js';
 import { placeKey } from '../places.js';
 import { MQ_MOBILE, MQ_DESKTOP } from '../breakpoints.js';
 import { announcedResearchScheme } from '../research-device.js';
-import { treePlaceNames, type HistoryPayload, type EffectiveHidden } from '../history.js';
+import { treePlaceNames, type HistoryPayload, type HistoryDeleted, type EffectiveHidden } from '../history.js';
 import {
     regionGroups, placeGroups, hiddenRows, deletedRows, manageHeader, manageCan, matchesQuery, regionName, manageSearchOn,
     type ManageEnv, type ManageNames, type ManageTab, type RegionRow, type PlaceRow, type RegionGroup, type PlaceGroup,
@@ -783,6 +783,17 @@ export const historyManageMethods = uiModule({
             });
         } else if (r.code === 'archive') {
             view.notes.set(rowKey, { text: h.findArchive(r.reason), tone: 'info' });
+        } else if (r.code === 'skipped') {
+            // R4: "first" of a region not searched for this tree — "Search again" first (the bridge never undoes the choice itself).
+            const d = this.historyManageDrawn();
+            view.notes.set(rowKey, {
+                text: h.toastSkipped(this.historyManageRegionName(rowKey)), tone: 'info',
+                ...(d && manageCan(d.env, 'skip') ? {
+                    link: { label: h.searchAgain, run: () => { void this.historyManageSkip({ region: rowKey, do: 'undo' }, rowKey); } },
+                } : {}),
+            });
+            const ctx = this.historyManageContext();
+            if (ctx) void this.readBridgeHistory(ctx.researchId);
         } else if (r.code === 'gone' || r.code === 'done') {
             const ctx = this.historyManageContext();
             if (ctx) void this.readBridgeHistory(ctx.researchId);
@@ -793,9 +804,15 @@ export const historyManageMethods = uiModule({
         this.renderHistoryManage();
     },
 
-    /** A write accepted: the research's head is the app's own, the history is read again. */
-    historyManageWritten(rid: string, before: string | null | undefined, r: { head: string; parent: string }): void {
-        if (r.head) this.researchTakeOwnWriteHead(rid, before ?? '', r.head, r.parent);
+    /**
+     * A write accepted: the research's head is the app's own, the history is
+     * read again. A regional delete (R4) changes only the shared catalogue:
+     * `head` equals `parent`, no new version of the tree — still a done write
+     * (its `deleted` is taken at once, the read brings the rest).
+     */
+    historyManageWritten(rid: string, before: string | null | undefined, r: { head: string; parent: string; deleted?: HistoryDeleted[] }): void {
+        if (r.head && r.head !== r.parent) this.researchTakeOwnWriteHead(rid, before ?? '', r.head, r.parent);
+        if (r.deleted) this.historyTakeDeleted(rid, r.deleted);
         void this.readBridgeHistory(rid);
     },
 
@@ -812,7 +829,7 @@ export const historyManageMethods = uiModule({
         const r = await postBridgeFirst(d.base, key, d.features, { tree: d.rid, ...(scheme ? { scheme } : {}) });
         view.busy.delete(key);
         if (!r.ok) {
-            if (r.code === 'invalid' && r.bridgeCode === 'history.region') view.notes.set(key, { text: h.findMapping, tone: 'info' });
+            if (r.code === 'gone' && r.bridgeCode === 'history.region') view.notes.set(key, { text: h.findMapping, tone: 'info' });
             else { this.historyManageRefused(key, r); return; }
             this.renderHistoryManage();
             return;

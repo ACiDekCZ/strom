@@ -251,18 +251,23 @@ test.describe('History of places: the manager', () => {
         expect(h.hides[1]).toEqual({ event: 'E2', place: 'Čáslav', do: 'show' });
     });
 
-    test('Deleted: newest first, a copy-less one by its id; Restore goes to the research', async ({ page }) => {
-        const { history } = await setup(page);
+    test('Deleted: newest first, year · text · region or place (R4 rows); Restore goes to the research', async ({ page }) => {
+        const { history, bridge } = await setup(page);
         await openManager(page, { tab: 'deleted' });
         await expect(tab(page, 'deleted')).toHaveAttribute('aria-selected', 'true');
         const rows = modal(page).locator('.hm-deleted');
-        await expect(rows.locator('.hm-h-text')).toHaveText(['A flood on the Doubrava.', 'E8']);
-        await expect(rows.nth(0).locator('.hm-h-year')).toHaveText('1882');
+        await expect(rows.locator('.hm-h-text')).toHaveText(['A flood on the Doubrava.', 'A fire in the village.']);
+        await expect(rows.locator('.hm-h-year')).toHaveText(['1882', '1842']);
         await expect(rows.nth(0).locator('.hm-h-meta')).toHaveText(/^Bohemia · deleted .+ · from all trees on this computer$/);
+        // A local finding names its place by the key (a string).
+        await expect(rows.nth(1).locator('.hm-h-meta')).toHaveText(/^From research sources · Čáslav · deleted .+ · in this tree only$/);
+        // A regional restore: head == parent (no commit), still a done write — the row goes at once from the answer's `deleted`.
+        const head = bridge.head;
         await rows.nth(0).locator('[data-hm="restoreDeleted"]').click();
         await expect(toast(page, 'The event is restored.')).toBeVisible();
         expect(history.writes.delete).toEqual([{ event: 'E9', do: 'restore' }]);
-        await expect(rows.locator('.hm-h-text')).toHaveText(['E8']);
+        expect(bridge.head).toBe(head);
+        await expect(rows.locator('.hm-h-text')).toHaveText(['A fire in the village.']);
         await expect(tab(page, 'deleted').locator('.hm-tab-count')).toHaveText('1');
     });
 
@@ -280,6 +285,19 @@ test.describe('History of places: the manager', () => {
         // A done region and the running one never offer it.
         await page.keyboard.press('Escape');
         expect(await rowMenu(page, 'cz-bohemia')).toEqual(['hideAll']);
+    });
+
+    test('Find first of a region skipped meanwhile: 409 history.skipped, the sentence with "Search again" (R4)', async ({ page }) => {
+        const { history } = await setup(page);
+        await openManager(page);
+        await rowMenu(page, 'at-lower-austria');
+        // Skipped elsewhere before the app read it again.
+        history.payload.regions!['at-lower-austria'].state = 'skipped';
+        await page.locator('.hm-menu [data-scope="first"]').click();
+        const note = modal(page).locator('.hm-row-note[data-note="at-lower-austria"]');
+        await expect(note).toContainText('Lower Austria is not searched for this tree.');
+        await note.locator('button', { hasText: 'Search again' }).click();
+        await expect.poll(() => history.writes.skip).toEqual([{ region: 'at-lower-austria', do: 'undo' }]);
     });
 
     test('Hide all: confirmed, the region dimmed with "Show again"; Undo in the toast', async ({ page }) => {

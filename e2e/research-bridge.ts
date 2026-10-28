@@ -233,8 +233,8 @@ const EMPIRE = region('Rakouské císařství', 'Austrian Empire', 'Kaisertum Ö
  * years without events and their filling queued (one hidden), the Austrian
  * Empire covered by Bohemia and Moravia, Prussia not searched; places with
  * regions, people and record ids (Lhotka unlocated, Opava not searched,
- * Kutná Hora suggested), two events deleted on this computer (one without its
- * copy), and a local finding without region.
+ * Kutná Hora suggested), two events deleted on this computer (R4: a regional
+ * one and a local finding naming its place by key), and a local finding without region.
  */
 export function fakeHistoryR1(init: Partial<FakeHistory> = {}): FakeHistory {
     const base = fakeHistory();
@@ -273,7 +273,8 @@ export function fakeHistoryR1(init: Partial<FakeHistory> = {}): FakeHistory {
         deleted: [
             { event: 'E9', scope: 'region', at: '2026-10-25T10:00:00Z', from: 1882, region: { id: 'cz-bohemia', name: BOHEMIA },
                 text: { cs: 'Povodeň na Doubravě.', en: 'A flood on the Doubrava.' } },
-            { event: 'E8', scope: 'region', at: '2026-10-24T10:00:00Z' },
+            { event: 'E8', scope: 'local', at: '2026-10-24T10:00:00Z', from: 1842, kind: 'disaster',
+                text: { cs: 'Požár vsi.', en: 'A fire in the village.' }, local: { source: 'S0002', cite: 'Kronika obce, s. 12' }, place: 'Čáslav' },
         ],
         suggest: ['L0003'],
     };
@@ -419,6 +420,8 @@ function serveHistory(b: FakeBridge, method: string, url: URL, postData: string 
             const r = regions?.[id];
             if (!r) return noRegion;
             if (r.state === 'done') return refuse(409, 'history.done', 'The region is done.');
+            // R4: a region not searched for this tree is "searched again" first; the bridge never undoes the choice itself.
+            if (r.state === 'skipped') return refuse(409, 'history.skipped', 'The region is not searched for this tree.');
             r.first = true;
             if (r.state !== 'running') r.state = 'queued';
             bump();
@@ -450,29 +453,39 @@ function serveHistory(b: FakeBridge, method: string, url: URL, postData: string 
             if (typeof id !== 'string' || !id) return bodyError;
             const removed = (h.removed ??= new Map());
             const events = h.payload.events as Record<string, unknown>[];
+            if (h.retracted?.includes(id)) return refuse(409, 'history.retracted', 'Deleted by the research; it cannot be restored here.');
+            const listed = (h.payload.deleted ?? []).find(d => d.event === id);
+            const live = events.find(e => e.id === id);
+            if (!listed && !live) return noEvent;
+            // R4: a regional event lives in the shared catalogue — no commit, head == parent (only the rev moves);
+            // a local one is the tree's own (a commit). Repeating changes nothing (200).
+            const scope = ((live ?? listed)?.scope as string) === 'local' ? 'local' : 'region';
+            let changed = false;
             if (body.do === 'restore') {
-                if (h.retracted?.includes(id)) return refuse(409, 'history.retracted', 'Deleted by the research; it cannot be restored here.');
                 const was = removed.get(id);
-                const listed = (h.payload.deleted ?? []).some(d => d.event === id);
-                if (!was && !listed) return noEvent;
-                h.payload.deleted = (h.payload.deleted ?? []).filter(d => d.event !== id);
+                if (listed) {
+                    h.payload.deleted = (h.payload.deleted ?? []).filter(d => d.event !== id);
+                    changed = true;
+                }
                 if (was) {
                     events.push(was.event);
                     for (const k of was.places) (places[k]?.events as string[] | undefined)?.push(id);
                     removed.delete(id);
                 }
-            } else {
-                const at = events.findIndex(e => e.id === id);
-                if (at < 0) return noEvent;
-                const [event] = events.splice(at, 1);
+            } else if (live) {
+                events.splice(events.indexOf(live), 1);
                 const inPlaces = Object.entries(places).filter(([, pl]) => (pl.events as string[]).includes(id)).map(([k]) => k);
                 for (const k of inPlaces) places[k].events = (places[k].events as string[]).filter(x => x !== id);
-                removed.set(id, { event, places: inPlaces });
-                const { id: _id, kind: _k, source: _s, local: _l, ...copy } = event;
-                (h.payload.deleted ??= []).unshift({ event: id, ...copy, at: new Date().toISOString() });
+                removed.set(id, { event: live, places: inPlaces });
+                // R4 `deleted`: the event's whole row, `id` as `event`, with `at`; a local finding names its place by the key.
+                const { id: _id, place: livePlace, ...row } = live;
+                const place = scope === 'local' ? inPlaces[0] : livePlace;
+                (h.payload.deleted ??= []).unshift({ event: id, at: new Date().toISOString(), ...row, ...(place ? { place } : {}) });
+                changed = true;
             }
-            bump();
-            return { status: 200, body: { ok: true, ...commitWrite(b) } };
+            if (changed) bump();
+            const heads = scope === 'local' && changed ? commitWrite(b) : { head: b.head, parent: b.head };
+            return { status: 200, body: { event: id, scope, deleted: h.payload.deleted ?? [], ...heads } };
         }
         case 'map': {
             const key = body.place as string;

@@ -268,6 +268,16 @@ describe('hidden and deleted', () => {
         expect(rows[1].year).toBe('1866');
         expect(rows[1].meta).toMatch(/^Bohemia · .*2026-10-01/);
     });
+
+    it('deleted rows: a local finding with its place (R4 names it by the key)', () => {
+        const p = payload({
+            deleted: [{ event: 'L0003', scope: 'local', at: '2026-10-05T00:00:00Z', from: 1842, text: { en: 'A fire' }, place: { key: 'Lhota' } }],
+        });
+        const [row] = deletedRows(p, env(), names);
+        expect(row.year).toBe('1842');
+        expect(row.text).toBe('A fire');
+        expect(row.meta).toMatch(/^From research sources · Lhota · .*in this tree only$/);
+    });
 });
 
 describe('header', () => {

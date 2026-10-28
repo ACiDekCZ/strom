@@ -804,7 +804,7 @@ export interface DeletedRow {
     search: string;
 }
 
-/** The Deleted tab (§3.2 A): newest first; without the event's copy only its id and the date. */
+/** The Deleted tab (§3.2 A): newest first, year · text · region or place; without the event's copy only its id and the date. */
 export function deletedRows(p: HistoryPayload, env: ManageEnv, names: ManageNames): DeletedRow[] {
     const s = getStringsForLang(env.lang).history;
     const lang = env.lang;
@@ -815,7 +815,9 @@ export function deletedRows(p: HistoryPayload, env: ManageEnv, names: ManageName
         .sort((a, b) => (Number.isFinite(b.at) ? b.at : -Infinity) - (Number.isFinite(a.at) ? a.at : -Infinity) || a.i - b.i)
         .map(({ d }) => {
             const t = pickHistoryText(d.text, lang, p.lang);
-            const group = eventGroupName(d, lang, regions, names, p.lang);
+            // A local finding with its place (R4 names it by the place key): "From research sources · {place}".
+            const group = [eventGroupName(d, lang, regions, names, p.lang), d.scope === 'local' && d.place ? names.place(d.place.key) : '']
+                .filter(Boolean).join(' · ');
             const meta = [group, d.at ? s.deletedAt(env.formatDate(d.at)) : '', d.scope === 'local' ? s.deleteSubLocal : s.deleteSub]
                 .filter(Boolean).join(' · ');
             return {

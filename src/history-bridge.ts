@@ -14,8 +14,8 @@
 import { cleanText, isResearchHead, researchPersonRef, researchSchemeUrl, withAppVersion } from './research-link.js';
 import { writeHeldOfRefusal, type ResearchWriteHeld } from './research-write-held.js';
 import {
-    HISTORY_LIMITS, HISTORY_PLACE_ID_RE, HISTORY_REGION_RE, parseHistoryPayload, parseHistoryText, parsePlaceRegions,
-    type HistoryHidden, type HistoryHideOp, type HistoryPayload, type HistoryPlaceRegion,
+    HISTORY_LIMITS, HISTORY_PLACE_ID_RE, HISTORY_REGION_RE, parseHistoryDeleted, parseHistoryPayload, parseHistoryText, parsePlaceRegions,
+    type HistoryDeleted, type HistoryHidden, type HistoryHideOp, type HistoryPayload, type HistoryPlaceRegion,
 } from './history.js';
 
 /** How long a read of the events may take (a large tree: up to 8 MB). */
@@ -226,11 +226,12 @@ export async function postBridgeExperimentsOff(base: string, features: readonly 
  * - `archive`: 409 history.archive — an archive or a research waiting for its agent (`reason` = its sentence);
  * - `done`: 409 history.done — the region is done already (read again);
  * - `retracted`: 409 history.retracted — deleted by the research's agent, not restorable;
+ * - `skipped`: 409 history.skipped — the region is not searched for this tree (R4: "first" waits for "Search again");
  * - `link`: 403 history.link — the research's terminal decides (`link`);
  * - `held`: sealed elsewhere / not downloaded / disk full; `busy`: 503 research.busy (or 409 busy);
  * - `network`: no answer; `unknown`: anything else (an older bridge).
  */
-export type HistoryWriteError = 'invalid' | 'gone' | 'off' | 'archive' | 'done' | 'retracted' | 'link' | 'held' | 'busy' | 'network' | 'unknown';
+export type HistoryWriteError = 'invalid' | 'gone' | 'off' | 'archive' | 'done' | 'retracted' | 'skipped' | 'link' | 'held' | 'busy' | 'network' | 'unknown';
 
 export interface HistoryWriteRefusal {
     ok: false;
@@ -290,6 +291,7 @@ export function historyWriteRefusal(status: number, body: unknown, features: rea
     if (status === 409 && code === 'history.archive') return out('archive');
     if (status === 409 && code === 'history.done') return out('done');
     if (status === 409 && code === 'history.retracted') return out('retracted');
+    if (status === 409 && code === 'history.skipped') return out('skipped');
     if (status === 503 || code === 'research.busy' || code === 'busy') return out('busy');
     return out('unknown');
 }
@@ -377,16 +379,41 @@ export interface HistoryDeleteBody {
     do?: 'restore';
 }
 
-export function deleteReply(status: number, body: unknown, features: readonly string[] | null | undefined): HistoryWriteResult {
+/**
+ * R4's answer `{event, scope, deleted, head, parent}`. A regional event lives
+ * in the shared catalogue, not in the tree: `head` equals `parent` (no commit,
+ * only `/status.history.rev` moves) — still a done write. `deleted`: the whole
+ * list as `GET /history` has it now (absent: an older bridge).
+ */
+export interface HistoryDeleteOk {
+    event?: string;
+    scope?: 'region' | 'local' | 'place';
+    deleted?: HistoryDeleted[];
+}
+
+export function deleteReply(status: number, body: unknown, features: readonly string[] | null | undefined): HistoryWriteResult<HistoryDeleteOk> {
     if (status >= 200 && status < 300) {
-        if (!asRecord(body)) return { ...NETWORK, code: 'unknown', status };
-        return { ok: true, ...headsOf(body) };
+        const r = asRecord(body);
+        if (!r) return { ...NETWORK, code: 'unknown', status };
+        const out: { ok: true; head: string; parent: string } & HistoryDeleteOk = { ok: true, ...headsOf(body) };
+        if (typeof r.event === 'string' && /^[A-Za-z0-9-]{1,32}$/.test(r.event)) out.event = r.event;
+        if (r.scope === 'region' || r.scope === 'local' || r.scope === 'place') out.scope = r.scope;
+        if (Array.isArray(r.deleted)) {
+            const deleted: HistoryDeleted[] = [];
+            for (const d of r.deleted) {
+                if (deleted.length >= HISTORY_LIMITS.deleted) break;
+                const x = parseHistoryDeleted(d);
+                if (x && !deleted.some(y => y.event === x.event)) deleted.push(x);
+            }
+            out.deleted = deleted;
+        }
+        return out;
     }
     return historyWriteRefusal(status, body, features);
 }
 
 /** Delete an event (from all trees on this computer; a local one from this tree), or restore it. */
-export async function postBridgeDelete(base: string, body: HistoryDeleteBody, features: readonly string[] | null | undefined): Promise<HistoryWriteResult> {
+export async function postBridgeDelete(base: string, body: HistoryDeleteBody, features: readonly string[] | null | undefined): Promise<HistoryWriteResult<HistoryDeleteOk>> {
     if (!/^[A-Za-z0-9-]{1,32}$/.test(body.event)) return { ...NETWORK, code: 'invalid' };
     const res = await postWrite(base, '/history/delete', body);
     return res ? deleteReply(res.status, res.body, features) : NETWORK;

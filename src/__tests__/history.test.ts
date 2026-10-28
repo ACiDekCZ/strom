@@ -509,6 +509,16 @@ describe('history manager payload (1028)', () => {
         expect(p.deleted).toHaveLength(1);
         expect(p.deleted![0]).toMatchObject({ event: 'cz-bohemia-0009', scope: 'region', from: 1850 });
         expect(p.deleted![0].to).toBeUndefined();
+        // R4: the whole row; a local finding's place as the key (a string), a place's own history's as an object.
+        const full = payload({ deleted: [
+            { event: 'cz-bohemia-0007', scope: 'region', at: AT, from: 1866, date: '1866-07', kind: 'epidemic', region: { id: 'cz-bohemia', name: { en: 'Bohemia' } },
+                text: { en: 'Cholera' }, source: { title: 'Encyclopedia', url: 'https://example.org/c', checked: '2026-10-01' }, tip: { text: { en: 'Look' } }, sensitive: true },
+            { event: 'L0003', scope: 'local', at: AT, from: 1842, kind: 'disaster', text: { cs: 'Požár vsi' }, local: { source: 'S0002', cite: 'Kronika' }, place: 'Lhota' },
+            { event: 'P0001', scope: 'place', from: 1900, text: { en: 'A mill' }, place: { key: 'Lhota', id: 'L0001' } },
+        ] }).deleted!;
+        expect(full[0]).toMatchObject({ kind: 'epidemic', region: { id: 'cz-bohemia' }, source: { title: 'Encyclopedia' }, tip: { text: { en: 'Look' } }, sensitive: true });
+        expect(full[1]).toMatchObject({ scope: 'local', kind: 'disaster', place: { key: 'Lhota' }, local: { source: 'S0002' } });
+        expect(full[2].place).toEqual({ key: 'Lhota', id: 'L0001' });
         // P3: only `state.mapping`, and only a consistent one; "search": "mapping" is not a state of the research.
         expect(payload({ state: { on: true, search: 'running', mapping: { mapped: 50, mappable: 40 } } }).state.mapping).toBeUndefined();
         expect(payload({ state: { on: true, search: 'running', mapped: 3, mappable: 40 } }).state.mapping).toBeUndefined();

@@ -59,6 +59,8 @@ describe('history manager writes (1028)', () => {
         expect(firstReply(409, { code: 'history.archive' }, [])).toMatchObject({ ok: false, code: 'archive' });
         expect(firstReply(409, { code: 'history.done' }, [])).toMatchObject({ ok: false, code: 'done' });
         expect(deleteReply(409, { code: 'history.retracted' }, [])).toMatchObject({ ok: false, code: 'retracted' });
+        // R4: "first" of a region skipped for this tree.
+        expect(firstReply(409, { code: 'history.skipped' }, [])).toMatchObject({ ok: false, code: 'skipped' });
         expect(skipReply(503, { code: 'research.busy' }, [])).toMatchObject({ ok: false, code: 'busy' });
         expect(mapReply(500, {}, [])).toMatchObject({ ok: false, code: 'unknown' });
     });
@@ -85,6 +87,11 @@ describe('history manager writes (1028)', () => {
             .toEqual({ ok: true, ...HEAD, place: 'Lhota', map: { regions: [{ id: 'cz-bohemia' }], manual: false } });
         expect(mapReply(200, 'x', [])).toMatchObject({ ok: false, code: 'unknown' });
         expect(deleteReply(200, HEAD, [])).toEqual({ ok: true, ...HEAD });
+        // R4: {event, scope, deleted, head, parent}; a regional one has head == parent (no commit) and is still done.
+        const same = { head: HEAD.head, parent: HEAD.head };
+        expect(deleteReply(200, { event: 'cz-bohemia-0007', scope: 'region', deleted: [{ event: 'cz-bohemia-0007', scope: 'region', at: AT, from: 1866 }, { scope: 'x' }], ...same }, []))
+            .toEqual({ ok: true, ...same, event: 'cz-bohemia-0007', scope: 'region', deleted: [{ event: 'cz-bohemia-0007', scope: 'region', at: AT, from: 1866 }] });
+        expect(deleteReply(200, { event: 'L0003', scope: 'local', deleted: [], ...HEAD }, [])).toEqual({ ok: true, ...HEAD, event: 'L0003', scope: 'local', deleted: [] });
         expect(deleteReply(200, 'x', [])).toMatchObject({ ok: false, code: 'unknown' });
     });
 

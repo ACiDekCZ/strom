@@ -151,8 +151,14 @@ export interface HistoryDeleted {
     from?: number;
     to?: number;
     text?: HistoryText;
+    kind?: HistoryKind;
     region?: { id: string; name?: HistoryText };
+    /** A local finding's place (R4 says it as the place key, a string), or a place's own history's place. */
     place?: HistoryEventPlace;
+    source?: HistorySource;
+    local?: HistoryLocal;
+    tip?: { text: HistoryText };
+    sensitive?: boolean;
 }
 
 /**
@@ -480,7 +486,8 @@ function parseRegion(id: string, v: unknown): HistoryRegion | null {
     return out;
 }
 
-function parseDeleted(v: unknown): HistoryDeleted | null {
+/** An item of R4 `deleted` (the event's whole row, `id` as `event`, with `at`); null when it has no valid id. */
+export function parseHistoryDeleted(v: unknown): HistoryDeleted | null {
     if (!isObj(v)) return null;
     const event = typeof v.event === 'string' && ID_RE.test(v.event) ? v.event : undefined;
     if (!event) return null;
@@ -498,8 +505,20 @@ function parseDeleted(v: unknown): HistoryDeleted | null {
     if (text) out.text = text;
     const region = regionRef(v.region);
     if (region) out.region = region;
-    const place = eventPlaceRef(v.place);
+    // R4: a local finding names its place by the payload's key (a string); a place's own history by an object.
+    const placeId = typeof v.place === 'string' ? str(v.place, 500) : '';
+    const place = placeId ? { key: placeId } : eventPlaceRef(v.place);
     if (place) out.place = place;
+    if ((HISTORY_KINDS as readonly string[]).includes(v.kind as string)) out.kind = v.kind as HistoryKind;
+    const source = parseSource(v.source);
+    if (source) out.source = source;
+    const local = parseLocal(v.local);
+    if (local) out.local = local;
+    if (isObj(v.tip)) {
+        const tip = langText(v.tip.text, HISTORY_LIMITS.text);
+        if (tip) out.tip = { text: tip };
+    }
+    if (v.sensitive === true) out.sensitive = true;
     return out;
 }
 
@@ -610,7 +629,7 @@ export function parseHistoryPayload(raw: unknown, cachedAt: string, rev?: string
         const deleted: HistoryDeleted[] = [];
         for (const d of raw.deleted) {
             if (deleted.length >= HISTORY_LIMITS.deleted) break;
-            const x = parseDeleted(d);
+            const x = parseHistoryDeleted(d);
             if (x && !deleted.some(y => y.event === x.event)) deleted.push(x);
         }
         if (deleted.length) out.deleted = deleted;

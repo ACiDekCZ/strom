@@ -30,7 +30,7 @@ import {
 import { storedResearchBridge, announcedResearchScheme } from '../research-device.js';
 import {
     computePersonHistory, historyCardShows, historySettingsStatus, queueHideOp,
-    type HistoryPayload, type HistoryHideOp, type PersonHistory, type LifelineHistoryItem, type HiddenHistoryItem,
+    type HistoryPayload, type HistoryDeleted, type HistoryHideOp, type PersonHistory, type LifelineHistoryItem, type HiddenHistoryItem,
     type HistorySettingsAction, type EffectiveHidden,
 } from '../history.js';
 import { manageSummaries } from '../history-manage.js';
@@ -341,6 +341,18 @@ export const historyMethods = uiModule({
     historyPersonRefn(personId: string): string {
         const person = DataManager.getData().persons[personId as keyof ReturnType<typeof DataManager.getData>['persons']];
         return person?.refn ?? '';
+    },
+
+    /** R4: the bridge's `deleted` after a delete or restore, in use at once (deleted events leave the events; the next read brings the rest). */
+    historyTakeDeleted(researchId: string, deleted: HistoryDeleted[]): void {
+        const rid = researchId.toLowerCase();
+        const p = cache.get(rid);
+        if (!p) return;
+        const gone = new Set(deleted.map(d => d.event));
+        const next: HistoryPayload = { ...p, events: p.events.filter(e => !gone.has(e.id)) };
+        if (deleted.length) next.deleted = deleted; else delete next.deleted;
+        cache.set(rid, next);
+        this.historyChanged();
     },
 
     /** Something the layer shows may have changed: the open card, Settings and the hidden list follow. */
