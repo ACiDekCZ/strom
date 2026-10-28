@@ -403,7 +403,11 @@ export const researchActionsMethods = uiModule({
             if (first.length < FIRST_LEVEL_MAX) first.push(row);
             else more = [row, ...more];
         }
-        more = [...readRow, ...more];
+        // "History of places" (spec 1028 §1.1): right after reading documents, its summary under it.
+        const historySub = this.historyManageAvailable() ? this.historyManageMenuSub() : null;
+        const historyRow: SubmenuItem[] = historySub === null ? []
+            : [{ id: 'research-item-history', label: strings.history.manage, method: 'openHistoryManageFrom', args: ['menu'], ...(historySub ? { sub: historySub } : {}) }];
+        more = [...readRow, ...historyRow, ...more];
         // Following live (the tree locked meanwhile): a block of its own in place of the state.
         const followingBlock = !syncBlock && following
             ? `<div class="research-sync-block research-sync-block--live" id="research-menu-following" role="group" aria-label="${esc(r.followingTitle)}">`

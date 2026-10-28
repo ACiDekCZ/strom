@@ -249,6 +249,8 @@
             --hist-mark: #746c5c;       /* regional history mark */
             --hist-local: #b5772a;      /* local finding mark (= --read-amber-dot) */
             --hist-local-text: #7f5500; /* "from research records" (= --read-amber-text) */
+            --hist-place: #3d7a8c;      /* history of a place and its surroundings: ▲ */
+            --hist-place-text: #245868; /* its label: 6.9:1 on --hist-bg */
             --read-illegible-bg: #e3ddd0;
             --read-illegible-text: #5c5546;
             --read-line-bg: #eef3ef;    /* the transcription line shown on the scan */
@@ -395,6 +397,8 @@
             --hist-mark: #a89f8d;
             --hist-local: #d19a4a;
             --hist-local-text: #e9c77f;
+            --hist-place: #6fb3c6;
+            --hist-place-text: #9fd2e0; /* 9:1 on --hist-bg */
             --read-illegible-bg: #3e3a30;
             --read-illegible-text: #cfc6b4;
             --read-line-bg: #2c3830;
@@ -2330,7 +2334,7 @@
         }
         /* Experimental features: one note under the group title. History in the
            life timeline (spec 020, Person card): its status row and its
-           "Hidden events (n) ›" row. */
+           "History of places ›" row (spec 1028). */
         .settings-group-note { font-size: 12px; line-height: 1.4; color: var(--text-faint); margin: -2px 0 6px 2px; }
         .history-setting-status { font-size: 13px; line-height: 1.45; color: var(--text-light); padding-top: 9px; padding-bottom: 11px; }
         .history-setting-status a, .history-setting-status button.link {
@@ -2350,62 +2354,211 @@
             .modal button.settings-row-link { min-height: 44px; }
             .history-setting-status button.link { min-height: 44px; }
         }
-        /* The tree's hidden events (spec 020 §4.4): over Settings, back "‹" and "×". */
-        .history-hidden-header { display: flex; align-items: flex-start; gap: 6px; }
-        .history-hidden-heading { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
-        .history-hidden-subtitle { font-size: 12px; color: var(--text-faint); overflow-wrap: anywhere; }
-        .modal .history-hidden-back {
-            width: 32px; height: 32px; flex: 0 0 auto; margin-left: -8px; border: none; background: transparent;
-            font-size: 24px; line-height: 1; color: var(--text-light); cursor: pointer; padding: 0; min-height: 0;
+        /* History of places — the manager (spec 1028, #history-modal): over Settings and the
+           person card. Header with the tree's name, the research's state, the switch and the
+           search pinned; the list scrolls. A region's detail replaces the state and the switch. */
+        #history-modal { z-index: 215; }
+        body:has(#history-modal.active) .toast:not([data-kind="materials"]) { z-index: 250; }
+        .modal.modal--lg.history-manage-modal { width: 880px; max-width: min(880px, 94vw); height: min(780px, 88vh); max-height: 88vh; }
+        #history-modal .hm-header { gap: 10px; padding: 16px 20px 12px; }
+        #history-modal.is-detail .hm-header { padding-top: 10px; padding-bottom: 6px; border-bottom: 0; }
+        .hm-heading { flex: 1 1 auto; min-width: 0; display: flex; align-items: baseline; gap: 10px; }
+        .hm-heading h2 { font-size: 20px; font-weight: 600; white-space: nowrap; margin: 0; }
+        .hm-tree { min-width: 0; font-size: 13px; color: var(--text-light); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        #history-modal.is-detail .hm-heading, #history-modal.is-detail .hm-top { display: none; }
+        #history-modal button.hm-back {
+            flex: 1 1 auto; display: inline-flex; align-items: center; justify-content: flex-start; min-height: 28px; padding: 0;
+            background: none; border: 0; font: inherit; font-size: 13px; color: var(--primary); cursor: pointer; text-align: left;
         }
-        @media (hover: hover) { .modal .history-hidden-back:hover { color: var(--text); } }
-        .history-hidden-note { font-size: 12.5px; line-height: 1.45; color: var(--text-light); margin: 0 0 12px; }
-        .history-hidden-group { margin-bottom: 14px; }
-        .history-hidden-group-title {
-            font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase;
-            color: var(--accent-text); margin: 0 0 4px 2px; overflow-wrap: anywhere;
+        #history-modal button.hm-back[hidden] { display: none; }
+        .hm-top { flex: none; }
+        .hm-state { display: flex; flex-direction: column; gap: 4px; padding: 12px 20px; border-bottom: 1px solid var(--divider); }
+        .hm-state p { margin: 0; }
+        .hm-state-text { font-size: 14px; line-height: 1.45; color: var(--text); text-wrap: pretty; }
+        .hm-state-note { font-size: 12.5px; line-height: 1.4; color: var(--accent-text); text-wrap: pretty; }
+        .hm-state-extra { display: flex; flex-direction: column; gap: 4px; }
+        .hm-state-pace { font-size: 12.5px; line-height: 1.4; color: var(--text-faint); text-wrap: pretty; }
+        .hm-state-summary { font-size: 12.5px; color: var(--text-light); font-variant-numeric: tabular-nums; }
+        #history-modal button.hm-state-toggle { display: none; }
+        #history-modal button.link {
+            background: none; border: 0; padding: 0; font: inherit; color: var(--primary); cursor: pointer;
+            text-decoration: underline; text-underline-offset: 2px; border-radius: 2px; min-height: 0;
         }
-        .history-hidden-items { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface); }
-        .history-hidden-item {
-            display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: baseline; column-gap: 10px;
-            padding: 9px 12px; font-size: 13px; line-height: 1.4;
+        #history-modal .hm-state-link { white-space: nowrap; }
+        .hm-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 20px; border-bottom: 1px solid var(--divider); }
+        .hm-tabs { flex: none; display: flex; gap: 2px; padding: 2px; background: var(--surface-2); border: 1px solid var(--divider); border-radius: 9px; max-width: 100%; }
+        #history-modal button.hm-tab {
+            flex: 1 1 auto; padding: 5px 12px; border: 0; border-radius: 7px; background: transparent; color: var(--text);
+            font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer;
         }
-        .history-hidden-item + .history-hidden-item { border-top: 1px solid var(--divider); }
-        .history-hidden-year { grid-column: 1; grid-row: 1; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
-        .history-hidden-year-inline { display: none; font-weight: 600; }
-        .history-hidden-text { grid-column: 2; grid-row: 1; color: var(--text); min-width: 0; overflow-wrap: anywhere; }
-        .history-hidden-scope { grid-column: 2; grid-row: 2; font-size: 12px; color: var(--text-faint); min-width: 0; overflow-wrap: anywhere; }
-        .modal .history-hidden-restore {
-            background: none; border: 0; padding: 0 2px; font: inherit; font-size: 13px; font-weight: 500;
-            color: var(--primary); cursor: pointer; min-height: 0; white-space: nowrap;
-            grid-column: 3; grid-row: 1 / span 2; align-self: center;
+        #history-modal button.hm-tab.is-active { background: var(--surface); font-weight: 600; box-shadow: 0 1px 3px rgba(20,16,8,0.15); }
+        .hm-tab-count { color: var(--text-faint); font-variant-numeric: tabular-nums; font-weight: 400; }
+        .hm-search {
+            flex: 1 1 200px; min-width: 0; height: 34px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding: 0 4px 0 10px;
+            border: 1px solid var(--border); border-radius: 8px; background: var(--surface);
         }
-        @media (hover: hover) { .modal .history-hidden-restore:hover { text-decoration: underline; } }
-        .history-hidden-empty { font-size: 13px; color: var(--text-faint); margin: 8px 2px; }
-        @media (pointer: coarse) {
-            .modal .history-hidden-back { width: 44px; height: 44px; }
-            .modal .history-hidden-restore { min-height: 44px; padding: 0 8px; }
+        .hm-search:focus-within { outline: 2px solid var(--primary); outline-offset: -1px; }
+        .hm-search-icon { flex: none; color: var(--text-faint); }
+        #history-manage-search {
+            flex: 1 1 auto; min-width: 0; height: 100%; padding: 0; border: 0; background: transparent; color: var(--text);
+            font: inherit; font-size: 13px; outline: none; -webkit-appearance: none; appearance: none;
+        }
+        #history-manage-search::placeholder { color: var(--text-faint); }
+        #history-manage-search::-webkit-search-cancel-button { display: none; }
+        .hm-search-count { flex: none; font-size: 12px; color: var(--text-faint); white-space: nowrap; font-variant-numeric: tabular-nums; }
+        #history-modal button.hm-search-clear {
+            flex: none; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 6px; background: transparent;
+            color: var(--text-faint); font-size: 16px; line-height: 1; cursor: pointer;
+        }
+        #history-modal button.hm-search-clear[hidden] { display: none; }
+        #history-modal .modal-content.hm-body { padding: 0 0 14px; }
+        .hm-empty, .hm-note { margin: 0; padding: 14px 20px 6px; font-size: 12.5px; line-height: 1.45; color: var(--text-faint); text-wrap: pretty; }
+        .hm-empty { font-size: 13px; padding-top: 16px; }
+        .hm-group-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; padding: 14px 20px 6px; }
+        .hm-group-title { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent-text); }
+        .hm-group-note { font-size: 12px; color: var(--text-faint); }
+        .hm-sort { margin-left: auto; }
+        .hm-sort .sr-only {
+            position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+        }
+        .hm-sort select {
+            height: 28px; padding: 0 6px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface);
+            color: var(--text); font: inherit; font-size: 12.5px; max-width: 100%;
+        }
+        .hm-row { border-top: 1px solid var(--divider); }
+        .hm-row.is-dim { opacity: 0.75; }
+        .hm-row.is-focus { background: var(--hover-bg); }
+        .hm-row:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        /* A region: name · state · events · ⋯ › */
+        .hm-region { display: grid; grid-template-columns: minmax(0, 1fr) 230px 70px 48px; align-items: center; gap: 12px; padding: 9px 20px; }
+        .hm-region.is-plain { grid-template-columns: minmax(0, 1fr) 70px 24px; }
+        .hm-region.is-plain .hm-r-state:empty { display: none; }
+        .hm-region.is-open { cursor: pointer; }
+        .hm-r-name { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+        .hm-r-title-line { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 7px; min-width: 0; }
+        .hm-r-title { min-width: 0; font-size: 14px; font-weight: 500; color: var(--text); overflow-wrap: anywhere; }
+        .hm-r-parent { min-width: 0; font-size: 12.5px; color: var(--text-faint); overflow-wrap: anywhere; }
+        .hm-r-meta, .hm-r-gaps { font-size: 12px; line-height: 1.4; color: var(--text-faint); overflow-wrap: anywhere; }
+        .hm-mark { flex: none; align-self: center; }
+        .hm-mark.is-local { width: 7px; height: 7px; background: var(--hist-local); }
+        .hm-mark.is-place { font-size: 9px; line-height: 1; color: var(--hist-place); }
+        .hm-r-state { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+        .hm-r-state-line { display: flex; align-items: baseline; gap: 6px; font-size: 13px; min-width: 0; }
+        .hm-glyph { flex: none; width: 12px; text-align: center; font-size: 11px; }
+        .hm-r-why { font-size: 12px; line-height: 1.4; color: var(--text-faint); padding-left: 18px; text-wrap: pretty; overflow-wrap: anywhere; }
+        #history-modal .hm-r-state .hm-row-link { margin-left: 18px; font-size: 12.5px; text-align: left; }
+        .tone-primary .hm-r-state-line, .hm-p-state.tone-primary { color: var(--primary); }
+        .tone-light .hm-r-state-line, .hm-p-state.tone-light { color: var(--text-light); }
+        .tone-accent .hm-r-state-line, .hm-p-state.tone-accent { color: var(--accent-text); }
+        .tone-faint .hm-r-state-line, .hm-p-state.tone-faint { color: var(--text-faint); }
+        .hm-r-count { display: flex; flex-direction: column; gap: 1px; text-align: right; }
+        .hm-r-events { font-size: 14px; color: var(--text); font-variant-numeric: tabular-nums; }
+        .hm-r-hidden { font-size: 11.5px; color: var(--text-faint); }
+        .hm-r-act { display: flex; align-items: center; justify-content: flex-end; gap: 2px; color: var(--text-faint); }
+        .hm-chev { flex: none; width: 12px; text-align: center; }
+        #history-modal button.hm-dots {
+            flex: none; width: 28px; height: 26px; padding: 0; border: 0; border-radius: 6px; background: transparent;
+            display: inline-flex; align-items: center; justify-content: center; color: var(--text-faint); font-size: 15px; line-height: 1; cursor: pointer;
+        }
+        #history-modal button.hm-dots[aria-expanded="true"] { background: var(--hover-bg); }
+        #history-modal button.hm-dots:disabled { opacity: 0.5; cursor: default; }
+        /* A place: name, regions · persons, the research's sentence; state, events, action, ⋯ */
+        .hm-place { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 10px 20px; }
+        .hm-p-main { flex: 1 1 240px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+        .hm-p-name { font-size: 14px; font-weight: 500; line-height: 1.35; color: var(--text); overflow-wrap: anywhere; text-wrap: pretty; }
+        .hm-p-meta { font-size: 12px; line-height: 1.4; color: var(--text-faint); overflow-wrap: anywhere; }
+        .hm-p-why { font-size: 12.5px; line-height: 1.4; color: var(--text-light); text-wrap: pretty; overflow-wrap: anywhere; }
+        .hm-p-state { flex: 0 1 auto; min-width: 0; font-size: 12.5px; }
+        .hm-p-count { flex: none; width: 54px; text-align: right; font-size: 14px; font-variant-numeric: tabular-nums; }
+        #history-modal button.hm-assign {
+            flex: none; height: 32px; padding: 0 12px; border: 1px solid var(--primary); border-radius: 7px; background: transparent;
+            color: var(--primary); font: inherit; font-size: 13px; font-weight: 500; white-space: nowrap; cursor: pointer;
+        }
+        #history-modal .hm-row-link { font-size: 13px; text-align: left; }
+        /* Hidden and deleted: year · text, scope · Restore */
+        .hm-hidden { display: flex; align-items: flex-start; gap: 12px; padding: 10px 20px; }
+        .hm-h-year { flex: none; min-width: 44px; font-size: 12.5px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+        .hm-h-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+        .hm-h-text { font-size: 13.5px; line-height: 1.4; color: var(--text-light); text-wrap: pretty; overflow-wrap: anywhere; }
+        .hm-h-meta { font-size: 12px; line-height: 1.4; color: var(--text-faint); overflow-wrap: anywhere; }
+        #history-modal button.hm-h-act { flex: none; min-height: 28px; font-weight: 500; font-size: 13px; text-decoration: none; white-space: nowrap; }
+        #history-modal button.hm-h-act:disabled, #history-modal button.link:disabled { opacity: 0.5; cursor: default; }
+        .hm-row-note { margin: -4px 0 0; padding: 0 20px 10px 38px; font-size: 12.5px; line-height: 1.4; text-wrap: pretty; }
+        .hm-row-note.is-info { color: var(--text-light); }
+        .hm-row-note.is-error { color: var(--danger); }
+        #history-modal button.hm-more { display: block; margin: 8px 20px 0; font-size: 13px; }
+        /* A region's detail (§2): its name and state; the events below are drawn by the detail. */
+        .hm-detail-head { display: flex; flex-direction: column; gap: 6px; padding: 0 20px 12px; border-bottom: 1px solid var(--divider); }
+        .hm-detail-title { margin: 0; font-family: var(--font-serif); font-size: 20px; font-weight: 600; overflow-wrap: anywhere; }
+        .hm-detail-sub { font-family: var(--font-sans); font-size: 13px; font-weight: 400; color: var(--text-light); }
+        .hm-detail-state { margin: 0; font-size: 13px; line-height: 1.45; color: var(--text-light); text-wrap: pretty; }
+        @media (hover: hover) {
+            .hm-region.is-open:hover { background: var(--hover-bg); }
+            #history-modal button.hm-dots:not(:disabled):hover, #history-modal button.hm-search-clear:hover { background: var(--hover-bg); color: var(--text); }
+            #history-modal button.hm-tab:not(.is-active):hover { background: var(--hover-bg); }
+            #history-modal button.hm-assign:hover { background: var(--hover-bg); }
+            #history-modal button.hm-h-act:not(:disabled):hover, #history-modal button.hm-back:hover { text-decoration: underline; }
         }
         @media (min-width: 641px) and (max-width: 1024px) {
-            .modal.history-hidden-modal { max-height: 86vh; }
+            .modal.modal--lg.history-manage-modal { width: 94vw; height: min(780px, 90vh); max-height: 90vh; }
+            .hm-region { grid-template-columns: minmax(0, 1fr) 190px 60px 48px; gap: 10px; }
         }
         @media (max-width: 640px) {
-            /* Full screen on a phone; the year pulled into the text, scope and "Restore" on a second line. */
-            .modal.modal--md.history-hidden-modal {
-                min-width: 100vw; max-width: 100vw; width: 100vw; height: 100vh; height: 100dvh; max-height: none; border-radius: 0;
+            /* Full screen; a region in two lines (name … events / state), ⋯ beside them. */
+            .modal.modal--lg.history-manage-modal {
+                width: 100vw; max-width: 100vw; height: 100vh; height: 100dvh; max-height: none; border-radius: 0;
             }
-            .modal .history-hidden-back { width: 44px; height: 44px; }
-            .history-hidden-item { grid-template-columns: minmax(0, 1fr) auto; padding: 8px 12px; }
-            .history-hidden-year { display: none; }
-            .history-hidden-year-inline { display: inline; }
-            .history-hidden-item .history-hidden-text { grid-column: 1 / -1; grid-row: 1; }
-            .history-hidden-item .history-hidden-scope { grid-column: 1; grid-row: 2; align-self: center; }
-            .modal .history-hidden-item .history-hidden-restore { grid-column: 2; grid-row: 2; min-height: 44px; }
+            #history-modal .hm-header { padding: 14px 14px 10px; }
+            .hm-state { padding: 12px 14px; }
+            .hm-bar { padding: 10px 14px; }
+            .hm-tabs { flex: 1 1 100%; }
+            #history-modal button.hm-tab { padding: 8px 6px; min-height: 40px; }
+            .hm-search { flex: 1 1 100%; }
+            .hm-empty, .hm-note { padding-left: 14px; padding-right: 14px; }
+            .hm-group-head { padding: 14px 14px 6px; }
+            .hm-region, .hm-region.is-plain {
+                grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "name count act" "state state act";
+                gap: 3px 10px; padding: 10px 14px; min-height: 56px; box-sizing: border-box;
+            }
+            .hm-r-name { grid-area: name; }
+            .hm-r-state { grid-area: state; }
+            .hm-r-count { grid-area: count; align-self: baseline; }
+            .hm-r-act { grid-area: act; }
+            .hm-r-title { font-size: 15px; }
+            .hm-r-meta, .hm-r-gaps, .hm-r-hidden { display: none; }
+            .hm-r-state-line { font-size: 12.5px; }
+            .hm-r-events { font-size: 13px; color: var(--text-light); }
+            .hm-place, .hm-hidden { padding: 10px 14px; }
+            .hm-row-note { padding: 0 14px 10px 32px; }
+            #history-modal button.hm-more { margin: 8px 14px 0; }
+            .hm-detail-head { padding: 0 14px 10px; }
         }
         @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
-            .modal.modal--md.history-hidden-modal { max-height: calc(100dvh - 16px); }
-            .history-hidden-note { margin-bottom: 8px; }
-            .history-hidden-item { padding: 6px 12px; }
+            /* Little height: full screen, pace and summary folded under "Status ▾". */
+            .modal.modal--lg.history-manage-modal {
+                width: 100vw; max-width: 100vw; height: 100vh; height: 100dvh; max-height: none; border-radius: 0;
+            }
+            #history-modal .hm-header { padding: 8px 16px 6px; }
+            .hm-state { padding: 6px 16px; gap: 2px; }
+            #history-modal button.hm-state-toggle {
+                display: inline-flex; align-self: flex-start; align-items: center; gap: 4px; padding: 0; border: 0; background: none;
+                font: inherit; font-size: 12.5px; color: var(--text-light); cursor: pointer;
+            }
+            #history-modal button.hm-state-toggle[aria-expanded="true"] span { display: inline-block; transform: rotate(180deg); }
+            .hm-state-extra { display: none; }
+            .hm-state-extra.is-open { display: flex; }
+            .hm-bar { padding: 6px 16px; }
+            .hm-region { padding: 7px 16px; }
+        }
+        @media (pointer: coarse) {
+            #history-modal button.hm-back, #history-modal button.hm-state-toggle, #history-modal button.hm-h-act,
+            #history-modal .hm-row-link, #history-modal .hm-state-link, #history-modal button.hm-more { min-height: 44px; }
+            #history-modal button.hm-tab { min-height: 44px; }
+            #history-modal button.hm-dots { width: 36px; height: 44px; }
+            #history-modal button.hm-assign { height: 44px; }
+            #history-modal button.hm-search-clear { width: 44px; height: 44px; }
+            .hm-search { height: 44px; }
+            .hm-sort select { min-height: 44px; }
         }
         /* Audit Log modal */
         .audit-log-modal {
@@ -4854,6 +5007,13 @@
             color: var(--primary); font-weight: 500; cursor: pointer; border-radius: 2px;
         }
         .modal button.pm-lifeline-henable:focus-visible, .modal button.pm-lifeline-hrestore:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        /* "All hidden ›" under the card's hidden list, "Manage history of places ›" under the legend (spec 1028 §1.1). */
+        .modal button.pm-lifeline-hall, button.pm-lifeline-legend-manage {
+            display: inline-flex; align-items: center; padding: 0; margin: 4px 0 0; min-height: 0; border: none; background: none; font: inherit;
+            font-size: 12.5px; color: var(--primary); font-weight: 500; cursor: pointer; border-radius: 2px; text-align: left;
+        }
+        button.pm-lifeline-legend-manage { display: flex; margin-top: 8px; }
+        .modal button.pm-lifeline-hall:focus-visible, button.pm-lifeline-legend-manage:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
         .modal button.pm-lifeline-hidden {
             display: inline-flex; align-items: center; gap: 4px; margin: 6px 0 2px 14px; padding: 2px 0; min-height: 0;
             border: none; background: none; font: inherit; font-size: 12px; color: var(--hist-meta); cursor: pointer; border-radius: 2px;
@@ -4937,6 +5097,7 @@
             .pm-lifeline-hsrc a:hover, .modal button.pm-lifeline-link.is-cite:hover { text-decoration-style: solid; text-decoration-color: currentColor; }
             .modal button.pm-lifeline-hquote:hover, .modal button.pm-lifeline-hidden:hover { color: var(--text); }
             .modal button.pm-lifeline-henable:hover, .modal button.pm-lifeline-hrestore:hover { text-decoration: underline; }
+            .modal button.pm-lifeline-hall:hover, button.pm-lifeline-legend-manage:hover { text-decoration: underline; }
         }
         @media (pointer: coarse) {
             .modal button.pm-lifeline-hmore { width: 44px; height: 44px; top: -2px; right: -4px; }
@@ -4946,7 +5107,8 @@
             .modal button.pm-lifeline-hinfo::before {
                 content: ''; position: absolute; inset: 11px; border: 1px solid var(--border); border-radius: 50%;
             }
-            .modal button.pm-lifeline-hquote, .modal button.pm-lifeline-hrestore, .modal button.pm-lifeline-henable { min-height: 44px; }
+            .modal button.pm-lifeline-hquote, .modal button.pm-lifeline-hrestore, .modal button.pm-lifeline-henable,
+            .modal button.pm-lifeline-hall, button.pm-lifeline-legend-manage { min-height: 44px; }
             .modal button.pm-lifeline-hquote { display: inline-flex; align-items: center; }
         }
 
@@ -18446,7 +18608,7 @@
                             <span class="settings-desc" data-i18n="advanced.settingHint"></span>
                         </span>
                     </label>
-                    <!-- History in the life timeline (spec 020): the toggle, its status row and "Hidden events (n)". -->
+                    <!-- History in the life timeline (spec 020): the toggle, its status row and "History of places ›" (spec 1028). -->
                     <label class="settings-checkbox settings-row">
                         <input type="checkbox" id="history-setting-toggle" onchange="window.Strom.UI.toggleHistoryLayer(this.checked)">
                         <span class="settings-text">
@@ -18455,8 +18617,13 @@
                         </span>
                     </label>
                     <div class="settings-row settings-row-dependent history-setting-status" id="history-setting-status" hidden></div>
-                    <button type="button" class="settings-row settings-row-dependent settings-row-link" id="history-hidden-link" hidden
-                            onclick="window.Strom.UI.showHistoryHidden()"></button>
+                    <button type="button" class="settings-row settings-row-dependent settings-row-link history-manage-link" id="history-manage-link" hidden
+                            onclick="window.Strom.UI.openHistoryManageFrom('settings')">
+                        <span class="settings-text">
+                            <span class="settings-name" data-i18n="history.manage"></span>
+                            <span class="settings-desc" id="history-manage-link-sub"></span>
+                        </span>
+                    </button>
                 </div>
             </section>
             <!-- Experimental features: a group for features on trial, shown only while it has a row
@@ -18700,21 +18867,34 @@
         </div>
     </div>
 
-    <!-- The tree's hidden events of the time (spec 020), over Settings -->
-    <div class="modal-overlay" id="history-hidden-modal">
-        <div class="modal history-hidden-modal modal--md" role="dialog" data-dialog-kind="info" aria-modal="true" aria-labelledby="history-hidden-title">
-            <div class="modal-header history-hidden-header">
-                <button type="button" class="history-hidden-back" aria-label="Back" data-i18n-aria-label="history.backToSettings" data-i18n-title="history.backToSettings" onclick="window.Strom.UI.closeHistoryHidden()">&lsaquo;</button>
-                <div class="history-hidden-heading">
-                    <h2 id="history-hidden-title" data-i18n="history.hiddenTitle"></h2>
-                    <div class="history-hidden-subtitle" id="history-hidden-subtitle"></div>
+    <!-- History of places — the manager (spec 1028): regions, places, hidden and deleted events; a region's
+         detail nests in it. Over Settings and the person card; Close returns there. -->
+    <div class="modal-overlay" id="history-modal">
+        <div class="modal history-manage-modal modal--lg" role="dialog" data-dialog-kind="info" aria-modal="true" aria-labelledby="history-manage-title">
+            <div class="modal-header hm-header">
+                <button type="button" class="hm-back" data-hm="back" hidden>&lsaquo;&nbsp;<span data-i18n="history.manage"></span></button>
+                <div class="hm-heading">
+                    <h2 id="history-manage-title" data-i18n="history.manage"></h2>
+                    <span class="hm-tree" id="history-manage-tree"></span>
                 </div>
-                <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeHistoryHidden(true)">&times;</button>
+                <button class="close-btn" aria-label="Close" data-i18n-aria-label="buttons.close" onclick="window.Strom.UI.closeHistoryManage()">&times;</button>
             </div>
-            <p class="history-hidden-note" data-i18n="history.hiddenListNote"></p>
-            <div class="history-hidden-list" id="history-hidden-list"></div>
+            <div class="hm-top">
+                <div class="hm-state" id="history-manage-state"></div>
+                <div class="hm-bar">
+                    <div class="hm-tabs" id="history-manage-tabs" role="tablist" aria-labelledby="history-manage-title"></div>
+                    <div class="hm-search">
+                        <svg class="hm-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="M16 16l4.5 4.5"></path></svg>
+                        <input type="search" id="history-manage-search" autocomplete="off" spellcheck="false" enterkeyhint="search"
+                               data-i18n-placeholder="history.searchPh" data-i18n-aria-label="history.searchPh">
+                        <span class="hm-search-count" id="history-manage-count" aria-live="polite"></span>
+                        <button type="button" class="hm-search-clear" id="history-manage-clear" hidden aria-label="Clear search" data-i18n-aria-label="history.searchClear">&times;</button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-content hm-body" id="history-manage-body"></div>
             <div class="buttons">
-                <button type="button" class="secondary" data-dismiss onclick="window.Strom.UI.closeHistoryHidden(true)" data-i18n="buttons.close"></button>
+                <button type="button" class="secondary" data-dismiss onclick="window.Strom.UI.closeHistoryManage()" data-i18n="buttons.close"></button>
             </div>
         </div>
     </div>

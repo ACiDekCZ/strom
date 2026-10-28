@@ -30,7 +30,9 @@ async function setup(page: Page, opts: { history?: Partial<FakeHistory>; feature
 const openSettings = (page: Page) => page.evaluate(() => window.Strom.UI.showSettingsDialog());
 const toggle = (page: Page) => page.locator('#history-setting-toggle');
 const status = (page: Page) => page.locator('#history-setting-status');
-const hiddenLink = (page: Page) => page.locator('#history-hidden-link');
+const manageLink = (page: Page) => page.locator('#history-manage-link');
+const manageSub = (page: Page) => page.locator('#history-manage-link-sub');
+const manager = (page: Page) => page.locator('#history-modal');
 
 test.describe('History in the life timeline: Settings', () => {
     test('on by default: the toggle is checked and the events are read', async ({ page }) => {
@@ -56,7 +58,7 @@ test.describe('History in the life timeline: Settings', () => {
         await openSettings(page);
         await expect(toggle(page)).not.toBeChecked();
         await expect(status(page)).toBeHidden();
-        await expect(hiddenLink(page)).toBeHidden();
+        await expect(manageLink(page)).toBeHidden();
         await poll(page);
         expect(history.reads).toBe(0);
         const view = await page.evaluate(() => {
@@ -78,7 +80,8 @@ test.describe('History in the life timeline: Settings', () => {
         await openSettings(page);
         await toggle(page).check();
         await expect(status(page)).toContainText('The research looks for events. Last search:');
-        await expect(hiddenLink(page)).toHaveText('Hidden events (1)');
+        await expect(manageLink(page)).toBeVisible();
+        await expect(manageSub(page)).toHaveText(/ · 1 hidden$/);
         expect(history.reads).toBe(1);
         // The same rev: not read again.
         await poll(page);
@@ -93,48 +96,49 @@ test.describe('History in the life timeline: Settings', () => {
         expect(view).toEqual({ chipOn: true, items: ['E1'], hidden: ['E2'] });
     });
 
-    test('hidden list: "Show again" goes to the research; back returns to Settings', async ({ page }) => {
+    test('History of places, Hidden tab: "Show again" goes to the research; Close returns to Settings', async ({ page }) => {
         const { history } = await setup(page, { layerOn: true });
         await openSettings(page);
-        await expect(hiddenLink(page)).toHaveText('Hidden events (1)');
-        await hiddenLink(page).click();
-        const modal = page.locator('#history-hidden-modal');
+        await expect(manageSub(page)).toHaveText(/ · 1 hidden$/);
+        await manageLink(page).click();
+        const modal = manager(page);
         await expect(modal).toBeVisible();
-        await expect(page.locator('#settings-modal')).toBeHidden();
-        await expect(page.locator('#history-hidden-subtitle')).toHaveText('Fíškovi · 1 event');
-        const item = modal.locator('.history-hidden-item');
+        await expect(page.locator('#hm-tab-regions')).toHaveAttribute('aria-selected', 'true');
+        await page.locator('#hm-tab-hidden').click();
+        const item = modal.locator('.hm-row.hm-hidden');
         await expect(item).toHaveCount(1);
         await expect(item).toContainText('Vienna stock exchange crash.');
-        await expect(item.locator('.history-hidden-scope')).toHaveText('for Čáslav');
-        await item.locator('.history-hidden-restore').click();
-        await expect(modal.locator('.history-hidden-empty')).toHaveText('No hidden events.');
+        await expect(item.locator('.hm-h-meta')).toContainText('for Čáslav');
+        await item.locator('[data-hm="restoreHidden"]').click();
+        await expect(modal.locator('.hm-empty')).toHaveText('Nothing is hidden in this tree.');
         await expect.poll(() => history.hides).toEqual([{ event: 'E2', place: 'Čáslav', do: 'show' }]);
-        await modal.locator('.history-hidden-back').click();
+        await modal.locator('.buttons [data-dismiss]').click();
         await expect(modal).toBeHidden();
         await expect(page.locator('#settings-modal')).toBeVisible();
-        await expect(hiddenLink(page)).toBeHidden();
+        await expect(manageSub(page)).not.toContainText('hidden');
     });
 
     test('a hiding from the card waits in the browser while the bridge refuses, then goes', async ({ page }) => {
         const { history } = await setup(page, { layerOn: true, history: { hideReply: { status: 503, body: { error: 'busy', code: 'research.busy' } } } });
         await openSettings(page);
-        await expect(hiddenLink(page)).toHaveText('Hidden events (1)');
+        await expect(manageSub(page)).toHaveText(/ · 1 hidden$/);
         await page.evaluate(() => {
             const ui = window.Strom.UI;
             const jan = (Object.values(window.Strom.DataManager.getData().persons) as { id: string; firstName: string }[]).find(p => p.firstName === 'Jan')!;
             const item = ui.historyForPerson(jan.id)!.history!.items[0];
             ui.hideHistoryItem(jan.id, item, 'person');
         });
-        await expect(hiddenLink(page)).toHaveText('Hidden events (2)');
+        await expect(manageSub(page)).toHaveText(/ · 2 hidden$/);
         await expect.poll(() => history.hides.length).toBe(1);
-        await hiddenLink(page).click();
-        await expect(page.locator('#history-hidden-modal .history-hidden-scope').filter({ hasText: 'so far only in this browser' })).toHaveCount(1);
-        await page.locator('#history-hidden-modal .history-hidden-back').click();
+        await manageLink(page).click();
+        await page.locator('#hm-tab-hidden').click();
+        await expect(manager(page).locator('.hm-hidden .hm-h-meta').filter({ hasText: 'so far only in this browser' })).toHaveCount(1);
+        await manager(page).locator('.buttons [data-dismiss]').click();
         history.hideReply = undefined;
         await poll(page);
         await expect.poll(() => history.hides.length).toBe(2);
         expect(history.hides[1]).toEqual({ event: 'E1', person: 'P0003' });
-        await expect(hiddenLink(page)).toHaveText('Hidden events (2)');
+        await expect(manageSub(page)).toHaveText(/ · 2 hidden$/);
     });
 
     test('switched off while the research still searches: the search goes off through the bridge', async ({ page }) => {

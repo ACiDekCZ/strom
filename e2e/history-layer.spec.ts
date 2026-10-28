@@ -212,7 +212,7 @@ test.describe('History in the life timeline: the person card', () => {
         await expect.poll(() => history.hides).toEqual([{ event: 'E2', place: 'Čáslav', do: 'show' }]);
     });
 
-    test('a hiding from the card shows in the tree\'s list in Settings', async ({ page }) => {
+    test('a hiding from the card shows in History of places, Hidden tab', async ({ page }) => {
         await setup(page);
         await openCard(page, 'Jan');
         await warRow(page).locator('.pm-lifeline-hmore').click();
@@ -220,11 +220,12 @@ test.describe('History in the life timeline: the person card', () => {
         await expect(warRow(page)).toHaveCount(0);
         await closeCard(page);
         await page.evaluate(() => window.Strom.UI.showSettingsDialog());
-        await expect(page.locator('#history-hidden-link')).toHaveText('Hidden events (2)');
-        await page.locator('#history-hidden-link').click();
-        const list = page.locator('#history-hidden-list');
-        await expect(list.locator('.history-hidden-item')).toHaveCount(2);
-        await expect(list.locator('.history-hidden-item', { hasText: 'Austro-Prussian War' })).toContainText('for Jan Fíšek only');
+        await expect(page.locator('#history-manage-link-sub')).toHaveText(/ · 2 hidden$/);
+        await page.locator('#history-manage-link').click();
+        await page.locator('#hm-tab-hidden').click();
+        const list = page.locator('#history-modal #history-manage-body');
+        await expect(list.locator('.hm-row.hm-hidden')).toHaveCount(2);
+        await expect(list.locator('.hm-row.hm-hidden', { hasText: 'Austro-Prussian War' })).toContainText('for Jan Fíšek only');
     });
 
     test('on by default, the research not searching and without events: the card shows nothing', async ({ page }) => {

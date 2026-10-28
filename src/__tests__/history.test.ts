@@ -8,7 +8,7 @@ import { describe, it, expect } from 'vitest';
 import {
     parseHistoryPayload, parseHistoryText, parseHistoryEvent, isHistoryLang, matchHistoryPlace,
     residencePoints, placesInYear, computePersonHistory, effectiveHidden, queueHideOp,
-    groupHistoryByYear, historyClusterLabel, historySettingsStatus, historyHiddenList, historyHiddenCount,
+    groupHistoryByYear, historyClusterLabel, historySettingsStatus, historyHiddenCount,
     sanitizeHideQueue, sanitizeCachedHistory, HISTORY_LIMITS, interleaveHistory, historySourceLabel,
     type HistoryPayload, type HistorySettingsInput, type HistoryHideOp,
 } from '../history.js';
@@ -469,26 +469,6 @@ describe('historySettingsStatus', () => {
     it('bridge up without a payload (an older research): from the status', () => {
         expect(historySettingsStatus({ ...base, statusSearching: true }, 'cs')!.text).toBe('Výzkum události hledá.');
         expect(historySettingsStatus({ ...base }, 'cs')!.text).toBe('Výzkum události nehledá. Hledání se zapíná ve výzkumu stromu.');
-    });
-});
-
-describe('historyHiddenList', () => {
-    const anna = person('anna', { refn: 'P0012', firstName: 'Anna', birthDate: '1838', birthPlace: 'lhota', deathDate: '1900', deathPlace: 'Lhota' });
-    const d = data([anna]);
-    const p = payload({
-        events: [regionEvent('a-1', 1880), regionEvent('a-2', 1866), localEvent('L1', 1870)],
-        places: { Lhota: { events: ['a-1', 'a-2', 'L1'] }, Lhotka: { events: ['a-1'] } },
-        hidden: [{ event: 'a-1', place: 'Lhota' }, { event: 'a-2', place: 'Lhota' }, { event: 'L1', person: 'P0012' }, { event: 'gone', place: 'Lhota' }, { event: 'a-1', place: 'Lhotka' }],
-    });
-    it('groups by the tree spelling of the place, by name then year; person hidings under their place; withdrawn left out', () => {
-        const queue = [{ event: 'a-1', place: 'Lhotka', do: 'show' as const, at: AT }];
-        const g = historyHiddenList(d, p, queue, 'cs');
-        expect(g.map(x => x.place)).toEqual(['lhota']);
-        expect(g[0].entries.map(e => [e.event.id, e.year, e.personId ?? null])).toEqual([
-            ['a-2', 1866, null], ['L1', 1870, 'anna'], ['a-1', 1880, null],
-        ]);
-        const q2 = historyHiddenList(d, p, [{ event: 'a-2', place: 'Lhotka', at: AT }], 'cs');
-        expect(q2.find(x => x.place === 'Lhotka')!.entries.map(e => [e.event.id, e.hide.queued])).toEqual([['a-2', true], ['a-1', false]]);
     });
 });
 

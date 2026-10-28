@@ -21,6 +21,7 @@ import {
     groupHistoryByYear, historyClusterLabel, historySourceLabel, isHistoryLang,
     type LifelineHistoryItem, type HiddenHistoryItem, type PersonHistory,
 } from '../history.js';
+import { regionName } from '../history-manage.js';
 import { shownExcerpts } from '../research-images.js';
 import { excerptImageUrl } from '../excerpts.js';
 import type { Source } from '../types.js';
@@ -222,7 +223,10 @@ export const historyCardMethods = uiModule({
         if (history.hidden.length) {
             rowHidden = history.hidden;
             const items = history.hidden.map((item, j) => {
-                const scope = item.hiddenBy.place ? h.scopePlace(item.place) : h.scopePerson;
+                const by = item.hiddenBy;
+                const scope = by.region && !by.event ? h.scopeRegion(regionName(item.ev.region?.id === by.region ? item.ev.region : { id: by.region }, getCurrentLanguage()))
+                    : by.tree ? h.hiddenScopeTree
+                        : by.place ? h.scopePlace(item.place) : h.scopePerson;
                 return '<div class="pm-lifeline-hiddenitem">'
                     + `<span class="pm-lifeline-year">${esc(item.yearLabel ?? String(item.year))}</span>`
                     + '<span class="pm-lifeline-glyph" aria-hidden="true"></span>'
@@ -233,7 +237,10 @@ export const historyCardMethods = uiModule({
             tail += `<button type="button" class="pm-lifeline-hidden" aria-expanded="${hiddenOpen}" data-hfocus="hidden">`
                 + `${esc(h.hiddenCount(history.hidden.length))} <span aria-hidden="true">${hiddenOpen ? '▾' : '▸'}</span></button>`
                 + `<div class="pm-lifeline-hiddenlist"${hiddenOpen ? '' : ' hidden'}>`
-                + `<p class="pm-lifeline-hiddennote">${esc(h.hiddenNote)}</p>${items}</div>`;
+                + `<p class="pm-lifeline-hiddennote">${esc(h.hiddenNote)}</p>${items}`
+                + (this.historyManageAvailable()
+                    ? `<button type="button" class="pm-lifeline-hall" data-hfocus="allHidden">${esc(h.allHidden)} ›</button>` : '')
+                + '</div>';
         }
         return { groups, tail, ranges: history.items.some(i => !!i.yearLabel) };
     },
@@ -324,6 +331,10 @@ export const historyCardMethods = uiModule({
             if (restore) {
                 const item = rowHidden[Number(restore.dataset.restore)];
                 if (item) this.restoreHistoryItem(item);
+                return;
+            }
+            if (target.closest('.pm-lifeline-hall')) {
+                this.openHistoryManageFrom('hidden');
                 return;
             }
             if (target.closest('.pm-lifeline-henable')) {
@@ -445,13 +456,20 @@ export const historyCardMethods = uiModule({
             + row('is-region', h.legendRegion, h.legendRegionHint)
             + row('is-local', h.legendLocal, h.legendLocalHint)
             + row('is-tip', h.legendTip, h.legendTipHint)
-            + `<p class="pm-lifeline-legend-foot">${esc(h.legendFoot)}</p>`;
+            + `<p class="pm-lifeline-legend-foot">${esc(h.legendFoot)}</p>`
+            + (this.historyManageAvailable()
+                ? `<button type="button" class="pm-lifeline-legend-manage" data-legend="manage">${esc(h.manageOpen)} ›</button>` : '');
         if (media(MQ_MOBILE)) {
             const sheet = this.showLifelineHistorySheet('pm-lifeline-legend-sheet', 'dialog', h.legendTitle,
                 `<div class="pm-lifeline-legend">${content}</div>`
                 + `<button type="button" class="bottom-sheet-item pm-lifeline-hsheet-cancel">${esc(strings.buttons.close)}</button>`);
             sheet.addEventListener('click', (e) => {
-                if ((e.target as HTMLElement).closest('.pm-lifeline-hsheet-cancel')) this.hideBottomSheet();
+                const target = e.target as HTMLElement;
+                if (target.closest('.pm-lifeline-hsheet-cancel')) this.hideBottomSheet();
+                else if (target.closest('[data-legend="manage"]')) {
+                    this.hideBottomSheet();
+                    this.openHistoryManageFrom('legend');
+                }
             });
             sheet.querySelector<HTMLElement>('.pm-lifeline-hsheet-cancel')?.focus({ preventScroll: true });
             return;
@@ -462,6 +480,9 @@ export const historyCardMethods = uiModule({
         pop.setAttribute('aria-label', h.legendTitle);
         pop.tabIndex = -1;
         pop.innerHTML = content;
+        pop.addEventListener('click', (e) => {
+            if ((e.target as HTMLElement).closest('[data-legend="manage"]')) this.openHistoryManageFrom('legend');
+        });
         this.openLifelineHistoryPopup(pop, anchor);
         pop.focus({ preventScroll: true });
     },

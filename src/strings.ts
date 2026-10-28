@@ -5207,10 +5207,6 @@ const stringsEN = {
         stateSearching: 'The research is still looking for events for the places of this tree.',
         stateNone: 'The research found no events for the places of this person.',
         stateNoPlace: 'Without a place with a year, no events of the time can be matched to this person.',
-        hiddenLink: (n: number) => `Hidden events (${n})`,
-        hiddenTitle: 'Hidden events',
-        backToSettings: 'Back to Settings',
-        hiddenSubtitle: (t: string, n: number) => `${t} · ${nEn(n, 'event', 'events')}`,
         // History of places — the manager (#history-modal, spec 1028 part A).
         manage: 'History of places',
         manageOpen: 'Manage history of places',
@@ -10353,10 +10349,6 @@ const stringsCZ: StringsType = {
         stateSearching: 'Výzkum události k místům tohoto stromu ještě hledá.',
         stateNone: 'Pro místa této osoby výzkum žádné události nenašel.',
         stateNoPlace: 'Bez místa s rokem nejde události doby k osobě přiřadit.',
-        hiddenLink: (n: number) => `Skryté události (${n})`,
-        hiddenTitle: 'Skryté události',
-        backToSettings: 'Zpět do Nastavení',
-        hiddenSubtitle: (t: string, n: number) => `${t} · ${nCs(n, 'událost', 'události', 'událostí')}`,
         // Dějiny míst — správa (#history-modal, spec 1028 část A).
         manage: 'Dějiny míst',
         manageOpen: 'Spravovat dějiny míst',
@@ -15425,10 +15417,6 @@ const stringsDE: StringsType = {
         stateSearching: 'Die Forschung sucht noch Ereignisse zu den Orten dieses Stammbaums.',
         stateNone: 'Für die Orte dieser Person hat die Forschung keine Ereignisse gefunden.',
         stateNoPlace: 'Ohne Ort mit Jahr lassen sich dieser Person keine Ereignisse der Zeit zuordnen.',
-        hiddenLink: (n: number) => `Ausgeblendete Ereignisse (${n})`,
-        hiddenTitle: 'Ausgeblendete Ereignisse',
-        backToSettings: 'Zurück zu den Einstellungen',
-        hiddenSubtitle: (t: string, n: number) => `${t} · ${nDe(n, 'Ereignis', 'Ereignisse')}`,
         // Geschichte der Orte — Verwaltung (#history-modal, Spezifikation 1028 Teil A).
         manage: 'Geschichte der Orte',
         manageOpen: 'Geschichte der Orte verwalten',

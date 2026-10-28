@@ -15,7 +15,7 @@ import { TreeManager } from '../tree-manager.js';
 import { SettingsManager } from '../settings.js';
 import { shownName } from '../person-name.js';
 import { placeKey } from '../places.js';
-import { MQ_MOBILE } from '../breakpoints.js';
+import { MQ_MOBILE, MQ_DESKTOP } from '../breakpoints.js';
 import { announcedResearchScheme } from '../research-device.js';
 import { treePlaceNames, type HistoryPayload, type EffectiveHidden } from '../history.js';
 import {
@@ -219,6 +219,8 @@ export const historyManageMethods = uiModule({
         if (!stateEl || !body || !top) return;
         const d = this.historyManageDrawn();
         modal.classList.toggle('is-detail', !!view.detail);
+        const back = modal.querySelector<HTMLElement>('.hm-back');
+        if (back) back.hidden = !view.detail;
         if (!d || !d.payload) {
             stateEl.innerHTML = `<p class="hm-state-text">${esc(d && d.payload === null && !d.env.bridgeUp ? h.manageNoBridge : h.manageLoading)}</p>`;
             this.renderHistoryManageTabs(null);
@@ -474,21 +476,19 @@ export const historyManageMethods = uiModule({
     },
 
     /**
-     * A region's detail (§2), nested: "‹ History of places", its name and
-     * state. The events (filters, list, menus) are drawn into `.hm-detail-body`
+     * A region's detail (§2), nested: its name and state under the header's
+     * "‹ History of places" (the header's own title and the switch step aside). The events (filters, list, menus) are drawn into `.hm-detail-body`
      * by the detail's own module.
      */
     renderHistoryManageDetail(d: Drawn, rows: TabRows): void {
         const body = document.getElementById('history-manage-body');
         if (!body || !view.detail) return;
-        const h = strings.history;
         const row = rows.regions.flatMap(g => g.rows).find(r => r.key === view.detail);
         const title = row?.name ?? regionName({ id: view.detail }, lang());
         const sub = row?.parent ?? '';
         const state = row ? [row.state, row.why].filter(Boolean).join(' · ') : '';
         body.innerHTML = `<div class="hm-detail" data-key="${esc(view.detail)}">`
-            + `<div class="hm-detail-head"><button type="button" class="link hm-back" data-hm="back">‹ ${esc(h.manage)}</button>`
-            + `<h3 class="hm-detail-title">${esc(title)}${sub ? ` <span class="hm-detail-sub">${esc(sub)}</span>` : ''}</h3>`
+            + `<div class="hm-detail-head"><h3 class="hm-detail-title">${esc(title)}${sub ? ` <span class="hm-detail-sub">${esc(sub)}</span>` : ''}</h3>`
             + (state ? `<p class="hm-detail-state">${esc(state)}</p>` : '') + '</div>'
             + '<div class="hm-detail-body"></div></div>';
         const hook = (this as unknown as Record<string, unknown>).renderHistoryRegionDetail;
@@ -500,6 +500,15 @@ export const historyManageMethods = uiModule({
         view.detail = key;
         this.renderHistoryManage();
         document.querySelector<HTMLElement>(`#${HISTORY_MANAGE_DIALOG_ID} .hm-back`)?.focus({ preventScroll: true });
+    },
+
+    /**
+     * Escape (§2.1): on a desktop it closes the dialog, detail or not; on a
+     * tablet or a phone it leaves a detail first.
+     */
+    historyManageEscape(): void {
+        if (view.detail && !media(MQ_DESKTOP)) this.closeHistoryManageDetail();
+        else this.closeHistoryManage();
     },
 
     /** "‹ History of places": back to the list, its row focused. */

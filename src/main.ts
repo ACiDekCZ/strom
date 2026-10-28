@@ -362,6 +362,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Initialize tree switcher
     UI.initTreeSwitcher();
 
+    // "History of places": its static dialog's handlers
+    UI.initHistoryManage();
+
     // The add button folds to ＋ where the desktop toolbar does not fit its labels
     initToolbarFit();
 

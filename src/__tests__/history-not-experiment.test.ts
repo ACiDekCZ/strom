@@ -26,9 +26,9 @@ function texts(o: unknown): string[] {
 }
 
 describe('history in the life timeline is not experimental', () => {
-    it('the toggle, its status row and the hidden events row are in Person card', () => {
+    it('the toggle, its status row and the History of places row are in Person card', () => {
         const card = group('settings-group-card');
-        for (const id of ['history-setting-toggle', 'history-setting-status', 'history-hidden-link']) {
+        for (const id of ['history-setting-toggle', 'history-setting-status', 'history-manage-link', 'history-manage-link-sub']) {
             expect(card).toContain(`id="${id}"`);
         }
     });
