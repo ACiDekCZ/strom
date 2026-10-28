@@ -139,10 +139,12 @@ test.describe('grouped settings', () => {
         const settings = page.locator('#settings-modal');
         await expect(settings).toBeVisible();
 
-        const titles = await settings.locator('.settings-group-title').allInnerTexts();
+        const titles = await settings.locator('.settings-group:not([hidden]) .settings-group-title').allInnerTexts();
         expect(titles.map((t) => t.toLowerCase())).toEqual([
-            'tree view', 'notifications', 'person card', 'experimental features', 'data and privacy', 'language and appearance',
+            'tree view', 'notifications', 'person card', 'data and privacy', 'language and appearance',
         ]);
+        // Experimental features: no feature on trial at the moment, so no group.
+        await expect(settings.locator('#settings-experiments')).toBeHidden();
         // No per-option heading repeating the row text any more.
         await expect(settings.locator('.settings-label')).toHaveCount(0);
 

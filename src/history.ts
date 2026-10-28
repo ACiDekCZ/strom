@@ -1,5 +1,5 @@
 /**
- * History in the life timeline (experimental, spec 020 "Co předek zažil").
+ * History in the life timeline (spec 020 "Co předek zažil").
  *
  * The research finds events of the time (regional history, local findings from
  * its records) for the places of a tree and hands them over by `GET /history`.

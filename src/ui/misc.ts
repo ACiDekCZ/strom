@@ -373,8 +373,15 @@ export const miscMethods = uiModule({
 
         this.syncSettingsDependents();
         this.renderHistorySettings(true);
+        this.syncExperimentsGroup();
         modal.classList.add('active');
         this.fitSurnameDisplaySetting();
+    },
+
+    /** Experimental features: the group shows only while it has a row (none at the moment). */
+    syncExperimentsGroup(): void {
+        const group = document.getElementById('settings-experiments');
+        if (group) group.hidden = !group.querySelector('.settings-group-body > *');
     },
 
     /** Surname display: the checked option and the name samples. */

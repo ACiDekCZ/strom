@@ -1,12 +1,12 @@
 /**
- * History in the life timeline (spec 020, experiment) — the DOM half and the
+ * History in the life timeline (spec 020) — the DOM half and the
  * page's state: the research's events of the time per research (read from its
  * bridge, kept on the device), the hidings waiting for the bridge, the
- * Settings section "Experimental features" with its status row, and the
+ * Settings row in "Person card" with its status row, and the
  * tree's list of hidden events (#history-hidden-modal).
  *
  * The pure model is src/history.ts, the bridge's routes src/history-bridge.ts,
- * the device's copy src/history-store.ts. Off (the default) = the person card
+ * the device's copy src/history-store.ts. Off (the user's choice) = the person card
  * is as it was: nothing is read, not even the device's copy.
  *
  * Reads go by `/status.history.rev` (or the stream's `history {rev}` event),
@@ -432,7 +432,7 @@ export const historyMethods = uiModule({
 
     // ─── Settings (§1) ─────────────────────────────────────────────────────
 
-    /** The experiment switched on or off in Settings. Switching it on reads; it never writes to the research. */
+    /** The layer switched on or off in Settings. Switching it on reads; it never writes to the research. */
     toggleHistoryLayer(on: boolean): void {
         SettingsManager.setHistoryLayer(on);
         if (on) void this.refreshHistoryForActiveTree();
@@ -451,7 +451,7 @@ export const historyMethods = uiModule({
         if (document.getElementById('settings-modal')?.classList.contains('active')) this.renderHistorySettings();
     },
 
-    /** The experiment's toggle, status row and "Hidden events (n)" (`fresh`: Settings just opened). */
+    /** The layer's toggle, status row and "Hidden events (n)" (`fresh`: Settings just opened). */
     renderHistorySettings(fresh = false): void {
         if (fresh) offError = null;
         const toggle = document.getElementById('history-setting-toggle') as HTMLInputElement | null;

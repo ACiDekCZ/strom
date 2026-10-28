@@ -2328,8 +2328,9 @@
             .settings-segment .settings-radio { padding: 9px 4px; }
             .settings-segment .settings-radio span { font-size: 12px; }
         }
-        /* Experimental features (spec 020): one note under the group title; the
-           history layer's status row and its "Hidden events (n) ›" row. */
+        /* Experimental features: one note under the group title. History in the
+           life timeline (spec 020, Person card): its status row and its
+           "Hidden events (n) ›" row. */
         .settings-group-note { font-size: 12px; line-height: 1.4; color: var(--text-faint); margin: -2px 0 6px 2px; }
         .history-setting-status { font-size: 13px; line-height: 1.45; color: var(--text-light); padding-top: 9px; padding-bottom: 11px; }
         .history-setting-status a, .history-setting-status button.link {
@@ -18445,13 +18446,7 @@
                             <span class="settings-desc" data-i18n="advanced.settingHint"></span>
                         </span>
                     </label>
-                </div>
-            </section>
-            <!-- Experimental features (spec 020): what changes the card's drawing, before the system settings. -->
-            <section class="settings-group" aria-labelledby="settings-group-experiments" id="settings-experiments">
-                <h3 class="settings-group-title" id="settings-group-experiments" data-i18n="settings.groupExperiments"></h3>
-                <p class="settings-group-note" data-i18n="settings.experimentsNote"></p>
-                <div class="settings-group-body">
+                    <!-- History in the life timeline (spec 020): the toggle, its status row and "Hidden events (n)". -->
                     <label class="settings-checkbox settings-row">
                         <input type="checkbox" id="history-setting-toggle" onchange="window.Strom.UI.toggleHistoryLayer(this.checked)">
                         <span class="settings-text">
@@ -18463,6 +18458,13 @@
                     <button type="button" class="settings-row settings-row-dependent settings-row-link" id="history-hidden-link" hidden
                             onclick="window.Strom.UI.showHistoryHidden()"></button>
                 </div>
+            </section>
+            <!-- Experimental features: a group for features on trial, shown only while it has a row
+                 (syncExperimentsGroup); none at the moment. -->
+            <section class="settings-group" aria-labelledby="settings-group-experiments" id="settings-experiments" hidden>
+                <h3 class="settings-group-title" id="settings-group-experiments" data-i18n="settings.groupExperiments"></h3>
+                <p class="settings-group-note" data-i18n="settings.experimentsNote"></p>
+                <div class="settings-group-body"></div>
             </section>
             <section class="settings-group" aria-labelledby="settings-group-data">
                 <h3 class="settings-group-title" id="settings-group-data" data-i18n="settings.groupData"></h3>

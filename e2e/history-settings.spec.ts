@@ -6,8 +6,8 @@ import {
 } from './research-bridge.js';
 
 /**
- * History in the life timeline (spec 020, experiment) — Settings' section
- * "Experimental features": the toggle (on by default; a user's "off" stays), its
+ * History in the life timeline (spec 020) — its Settings rows in "Person
+ * card": the toggle (on by default; a user's "off" stays), its
  * status row by the research's bridge (`/status.features`, `history.rev`,
  * `experiments.history`), switching the search off through the bridge or on
  * through the research's `experiment` link, and the tree's list of hidden
@@ -37,7 +37,9 @@ test.describe('History in the life timeline: Settings', () => {
         const { history } = await setup(page);
         expect(await page.evaluate(() => JSON.parse(localStorage.getItem('strom-settings') ?? '{}').historyLayer)).toBeUndefined();
         await openSettings(page);
-        await expect(page.locator('#settings-experiments')).toBeVisible();
+        // Not experimental any more (K1.5): the row is in "Person card", the empty Experimental features group hidden.
+        await expect(page.locator('section[aria-labelledby="settings-group-card"] #history-setting-toggle')).toBeVisible();
+        await expect(page.locator('#settings-experiments')).toBeHidden();
         await expect(toggle(page)).toBeChecked();
         await expect(status(page)).toContainText('The research looks for events.');
         expect(history.reads).toBe(1);

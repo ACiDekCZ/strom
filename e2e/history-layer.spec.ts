@@ -5,7 +5,7 @@ import {
 } from './research-bridge.js';
 
 /**
- * History in the life timeline (spec 020, experiment) — the person card's
+ * History in the life timeline (spec 020) — the person card's
  * layer: the research's events of the time between the person's rows (with
  * the age then, the kind, the source), a year's cluster, the "⋯" menu that
  * hides an event for the place or for the person only (toast with Undo),
@@ -280,6 +280,9 @@ test.describe('History in the life timeline: the person card', () => {
         await expect(legend).toContainText('History in the timeline');
         await expect(legend).toContainText('Regional history');
         await expect(legend).toContainText('From research records');
+        // Not a feature on trial any more (K1.5).
+        await expect(legend).toContainText('History is switched off in Settings.');
+        await expect(legend).not.toContainText('on trial');
         await expect(info).toHaveAttribute('aria-expanded', 'true');
         await page.keyboard.press('Escape');
         await expect(legend).toHaveCount(0);

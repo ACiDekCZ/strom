@@ -5140,7 +5140,7 @@ const stringsEN = {
         sentOff: 'The changes are in the tree. Sending to the research is off.',
         showPerson: (name: string) => `Show in the tree: ${name}`,
     },
-    /** History in the life timeline (experimental, spec 020): events of the time and places a person lived in. */
+    /** History in the life timeline (spec 020): events of the time and places a person lived in. */
     history: {
         settingLabel: 'History in the life timeline',
         settingHint: 'Events of the time and places where a person lived, with their age then. Found by the research, each with a source.',
@@ -5171,7 +5171,7 @@ const stringsEN = {
         legendLocalHint: 'A finding from a register or chronicle that was read. The citation opens the scan.',
         legendTip: 'Research tip',
         legendTipHint: 'Where to look further in the records.',
-        legendFoot: "The age is the person's age in the year of the event. A feature on trial, switched off in Settings.",
+        legendFoot: "The age is the person's age in the year of the event. History is switched off in Settings.",
         age: (a: string) => `age ${a}`,
         kinds: {
             war: 'war', epidemic: 'epidemic', census: 'census', state: 'state and borders', emigration: 'emigration',
@@ -10184,7 +10184,7 @@ const stringsCZ: StringsType = {
         legendLocalHint: 'Nález z přečtené matriky nebo kroniky. Citace otevře sken.',
         legendTip: 'Tip pro výzkum',
         legendTipHint: 'Kde v pramenech hledat dál.',
-        legendFoot: 'Věk je věk osoby v roce události. Funkce ve zkoušce, vypíná se v Nastavení.',
+        legendFoot: 'Věk je věk osoby v roce události. Dějiny se vypínají v Nastavení.',
         age: (a: string) => `věk ${a}`,
         kinds: {
             war: 'válka', epidemic: 'epidemie', census: 'sčítání', state: 'stát a hranice', emigration: 'vystěhovalectví',
@@ -15123,7 +15123,7 @@ const stringsDE: StringsType = {
         legendLocalHint: 'Ein Fund aus einem gelesenen Kirchenbuch oder einer Chronik. Das Zitat öffnet den Scan.',
         legendTip: 'Forschungstipp',
         legendTipHint: 'Wo in den Quellen weiter zu suchen ist.',
-        legendFoot: 'Das Alter ist das Alter der Person im Jahr des Ereignisses. Funktion in Erprobung, wird in den Einstellungen ausgeschaltet.',
+        legendFoot: 'Das Alter ist das Alter der Person im Jahr des Ereignisses. Das Zeitgeschehen wird in den Einstellungen ausgeschaltet.',
         age: (a: string) => `Alter ${a}`,
         kinds: {
             war: 'Krieg', epidemic: 'Epidemie', census: 'Volkszählung', state: 'Staat und Grenzen', emigration: 'Auswanderung',

@@ -5,7 +5,7 @@
  * for the person only), "Hidden: n" with "Show again", and the state row.
  *
  * The data, the hidings and the bridge are history-ui.ts; the pure model is
- * src/history.ts. With the experiment off historyForPerson() says null and
+ * src/history.ts. With the layer off historyForPerson() says null and
  * nothing here touches the card.
  *
  * What is open (a year's cluster, an excerpt, the hidden list) is remembered

@@ -858,7 +858,7 @@ export const personModalMethods = uiModule({
             toggle.hidden = !hasChildEvents;
             toggle.setAttribute('aria-checked', String(showChildEvents));
         }
-        // History in the life timeline (spec 020): null with the experiment
+        // History in the life timeline (spec 020): null with the layer
         // off — then nothing below touches the card.
         if (!keepState) this.resetLifelineHistoryMemory();
         const historyView = this.historyForPerson(id);
