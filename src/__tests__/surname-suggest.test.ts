@@ -27,12 +27,12 @@ function person(id: string, firstName: string, lastName: string, gender: 'male' 
     };
 }
 
-/** Lhoták ×3 (one written Lhotak), a Lhotáková, Lhottak ×2, Lhotack ×1, Lhotka ×2, Lhottka ×1. */
+/** Lhoták ×3 (one written Lhotak), a Lhotáková, Lhottekk ×2, Lhotack ×1, Lhotka ×2, Lhottka ×1. */
 function lhotakTree(): StromData {
     const list = [
         person('p1', 'Jan', 'Lhoták'), person('p2', 'Josef', 'Lhoták'), person('p3', 'Václav', 'Lhotak'),
         person('p4', 'Marie', 'Lhotáková', 'female'),
-        person('p5', 'Karel', 'Lhottak'), person('p6', 'Anna', 'Lhottak', 'female'),
+        person('p5', 'Karel', 'Lhottekk'), person('p6', 'Anna', 'Lhottekk', 'female'),
         person('p7', 'Matěj', 'Lhotack'),
         person('p8', 'Jiří', 'Lhotka'), person('p9', 'Petr', 'Lhotka'), person('p10', 'Tomáš', 'Lhottka'),
     ];
@@ -41,12 +41,12 @@ function lhotakTree(): StromData {
 
 const REPLY = {
     rev: 'e331685-3f9a',
-    groups: [{ id: 'lhotak|lhottak', forms: ['Lhoták', 'Lhottak'], at: '2026-10-28T12:00:00Z', by: 'research' }],
+    groups: [{ id: 'lhotak|lhottak', forms: ['Lhoták', 'Lhottekk'], at: '2026-10-28T12:00:00Z', by: 'research' }],
     rejected: [{ id: 'lhota|lhotak', forms: ['Lhoták', 'Lhota'], at: '2026-10-28T12:05:00Z', by: 'app' }],
     suggestions: [
         {
-            id: 'lhotack|lhotak|lhottak', forms: ['Lhoták', 'Lhottak', 'Lhotack'], level: 'documented',
-            extends: ['Lhoták', 'Lhottak'], rule: 'same-person', keys: ['ck-k'], persons: 41,
+            id: 'lhotack|lhotak|lhottak', forms: ['Lhoták', 'Lhottekk', 'Lhotack'], level: 'documented',
+            extends: ['Lhoták', 'Lhottekk'], rule: 'same-person', keys: ['ck-k'], persons: 41,
             places: ['Lhota', 'Lhotka'], from: 1780, to: 1881,
             evidence: [{ person: 'P0012', name: 'Jan Lhoták', form: 'Lhotack', citation: 'Matrika narozených Lhota 1810–1830, s. 45', source: 'S0004', quote: 'Joannes Lhotack' }],
             evidenceMore: 3,
@@ -60,9 +60,9 @@ describe('the reply of GET /surnames', () => {
     it('is read as the research sends it', () => {
         const r = parseSurnamesReply(REPLY)!;
         expect(r.rev).toBe('e331685-3f9a');
-        expect(r.groups).toEqual([{ id: 'lhotak|lhottak', forms: ['Lhoták', 'Lhottak'], at: '2026-10-28T12:00:00Z', by: 'research' }]);
+        expect(r.groups).toEqual([{ id: 'lhotak|lhottak', forms: ['Lhoták', 'Lhottekk'], at: '2026-10-28T12:00:00Z', by: 'research' }]);
         expect(r.suggestions).toHaveLength(2);
-        expect(r.suggestions[0]).toMatchObject({ level: 'documented', extends: ['Lhoták', 'Lhottak'], keys: ['ck-k'], evidenceMore: 3 });
+        expect(r.suggestions[0]).toMatchObject({ level: 'documented', extends: ['Lhoták', 'Lhottekk'], keys: ['ck-k'], evidenceMore: 3 });
         expect(r.suggestions[0].evidence[0]).toEqual({ person: 'P0012', name: 'Jan Lhoták', form: 'Lhotack',
             citation: 'Matrika narozených Lhota 1810–1830, s. 45', source: 'S0004', quote: 'Joannes Lhotack' });
         expect(r.suggestions[1].evidence).toEqual([]);
@@ -99,14 +99,14 @@ describe('which suggestions the app offers', () => {
     });
 
     it('it extends the one group of the tree it touches', () => {
-        const data = { ...lhotakTree(), surnameVariants: [['Lhoták', 'Lhottak']] };
-        expect(visibleSuggestions(reply, data).documented[0].extendsGroup).toEqual(['Lhoták', 'Lhottak']);
+        const data = { ...lhotakTree(), surnameVariants: [['Lhoták', 'Lhottekk']] };
+        expect(visibleSuggestions(reply, data).documented[0].extendsGroup).toEqual(['Lhoták', 'Lhottekk']);
     });
 
     it('never offers one whose forms are all in one group, nor one that would join two groups', () => {
         expect(suggestionGroup(['Lhotka', 'Lhottka'], [['Lhottka', 'Lhotka', 'Lhoteka']])).toBe('inside');
-        expect(suggestionGroup(['Lhoták', 'Lhotka'], [['Lhoták', 'Lhottak'], ['Lhotka', 'Lhottka']])).toBe('two');
-        const data = { ...lhotakTree(), surnameVariants: [['Lhotka', 'Lhottka'], ['Lhoták', 'Lhotack'], ['Lhottak', 'Lhotak2']] };
+        expect(suggestionGroup(['Lhoták', 'Lhotka'], [['Lhoták', 'Lhottekk'], ['Lhotka', 'Lhottka']])).toBe('two');
+        const data = { ...lhotakTree(), surnameVariants: [['Lhotka', 'Lhottka'], ['Lhoták', 'Lhotack'], ['Lhottekk', 'Lhotak2']] };
         const shown = visibleSuggestions(reply, data);
         expect(shown.documented).toEqual([]);
         expect(shown.rules).toEqual([]);
@@ -124,12 +124,12 @@ describe('which suggestions the app offers', () => {
 
     it('a diacritics-only suggestion is recognised', () => {
         expect(isDiacriticsOnly(['Lhoták', 'Lhotak'])).toBe(true);
-        expect(isDiacriticsOnly(['Lhoták', 'Lhottak'])).toBe(false);
+        expect(isDiacriticsOnly(['Lhoták', 'Lhottekk'])).toBe(false);
         expect(isDiacriticsOnly(['Lhoták'])).toBe(false);
     });
 
     it('the research\'s decisions are recognised by their forms', () => {
-        expect(decidedInResearch(['Lhottak', 'Lhoták'], reply.groups)).toBe(true);
+        expect(decidedInResearch(['Lhottekk', 'Lhoták'], reply.groups)).toBe(true);
         expect(decidedInResearch(['Lhota', 'Lhoták'], reply.rejected)).toBe(false);
     });
 });
@@ -138,12 +138,12 @@ describe('how many people a suggestion newly links', () => {
     it('a new group: the form most people carry is the main one; a woman\'s form counts with the man\'s', () => {
         const data = lhotakTree();
         // Lhoták: Jan, Josef, Václav (Lhotak: the same in search) and Marie Lhotáková.
-        expect(newlyLinked(['Lhoták', 'Lhottak', 'Lhotack'], null, data)).toEqual({ n: 3, m: 4, main: 'Lhoták' });
+        expect(newlyLinked(['Lhoták', 'Lhottekk', 'Lhotack'], null, data)).toEqual({ n: 3, m: 4, main: 'Lhoták' });
     });
 
     it('an extended group: m is the whole group, n only the new form\'s people', () => {
-        const data = { ...lhotakTree(), surnameVariants: [['Lhoták', 'Lhottak']] };
-        expect(newlyLinked(['Lhoták', 'Lhottak', 'Lhotack'], ['Lhoták', 'Lhottak'], data)).toEqual({ n: 1, m: 6, main: 'Lhoták' });
+        const data = { ...lhotakTree(), surnameVariants: [['Lhoták', 'Lhottekk']] };
+        expect(newlyLinked(['Lhoták', 'Lhottekk', 'Lhotack'], ['Lhoták', 'Lhottekk'], data)).toEqual({ n: 1, m: 6, main: 'Lhoták' });
     });
 
     it('a diacritics-only suggestion links nobody new (search already finds both)', () => {
@@ -240,7 +240,7 @@ describe('DataManager: accepting suggestions and their Undo', () => {
         vi.spyOn(TreeManager, 'saveTreeData').mockImplementation(() => {});
         vi.spyOn(AuditLogManager, 'log').mockImplementation(() => {});
         const dm = DataManager as unknown as { data: StromData; currentTreeId: TreeId | null; viewMode: boolean; pendingBefore: StromData | null };
-        dm.data = { ...lhotakTree(), surnameVariants: [['Lhoták', 'Lhottak']] };
+        dm.data = { ...lhotakTree(), surnameVariants: [['Lhoták', 'Lhottekk']] };
         dm.currentTreeId = TREE;
         dm.viewMode = false;
         dm.pendingBefore = null;
@@ -249,36 +249,36 @@ describe('DataManager: accepting suggestions and their Undo', () => {
     });
 
     it('extends a group and adds a new one in one undo step; the Undo takes out only what was added', () => {
-        const added = DataManager.acceptSurnameGroups([['Lhoták', 'Lhottak', 'Lhotack'], ['Lhotka', 'Lhottka']]);
+        const added = DataManager.acceptSurnameGroups([['Lhoták', 'Lhottekk', 'Lhotack'], ['Lhotka', 'Lhottka']]);
         expect(added).toEqual([['Lhotack'], ['Lhotka', 'Lhottka']]);
-        expect(DataManager.getData().surnameVariants).toEqual([['Lhotack', 'Lhoták', 'Lhottak'], ['Lhotka', 'Lhottka']]);
+        expect(DataManager.getData().surnameVariants).toEqual([['Lhotack', 'Lhoták', 'Lhottekk'], ['Lhotka', 'Lhottka']]);
         expect(AuditLogManager.log).toHaveBeenCalledWith(TREE, 'surname.accept', expect.stringContaining('Lhotack'));
 
         expect(DataManager.removeSurnameForms(added!.flat())).toBe(true);
-        expect(DataManager.getData().surnameVariants).toEqual([['Lhoták', 'Lhottak']]);
+        expect(DataManager.getData().surnameVariants).toEqual([['Lhoták', 'Lhottekk']]);
         expect(DataManager.removeSurnameForms(['Lhotack'])).toBe(false);
 
         // The tree's undo brings the accept back.
         DataManager.undo();
         expect(DataManager.getData().surnameVariants).toHaveLength(2);
         DataManager.undo();
-        expect(DataManager.getData().surnameVariants).toEqual([['Lhoták', 'Lhottak']]);
+        expect(DataManager.getData().surnameVariants).toEqual([['Lhoták', 'Lhottekk']]);
     });
 
     it('extending a diacritics-only group keeps both its forms; the Undo leaves the group as it was', () => {
         const dm = DataManager as unknown as { data: StromData };
         dm.data = { ...dm.data, surnameVariants: [['Lhoták', 'Lhotak']] };
-        const added = DataManager.acceptSurnameGroups([['Lhoták', 'Lhottak']]);
-        expect(added).toEqual([['Lhottak']]);
-        expect(DataManager.getData().surnameVariants).toEqual([['Lhotak', 'Lhoták', 'Lhottak']]);
+        const added = DataManager.acceptSurnameGroups([['Lhoták', 'Lhottekk']]);
+        expect(added).toEqual([['Lhottekk']]);
+        expect(DataManager.getData().surnameVariants).toEqual([['Lhotak', 'Lhoták', 'Lhottekk']]);
         expect(DataManager.removeSurnameForms(added!.flat())).toBe(true);
         expect(DataManager.getData().surnameVariants).toEqual([['Lhotak', 'Lhoták']]);
     });
 
     it('a diacritics-only group is new with both forms; nothing new is no step', () => {
         expect(DataManager.acceptSurnameGroups([['Lhotka', 'Lhotká']])).toEqual([['Lhotka', 'Lhotká']]);
-        expect(DataManager.acceptSurnameGroups([['Lhoták', 'Lhottak']])).toBeNull();
+        expect(DataManager.acceptSurnameGroups([['Lhoták', 'Lhottekk']])).toBeNull();
         expect(DataManager.removeSurnameForms(['Lhotka', 'Lhotká'])).toBe(true);
-        expect(DataManager.getData().surnameVariants).toEqual([['Lhoták', 'Lhottak']]);
+        expect(DataManager.getData().surnameVariants).toEqual([['Lhoták', 'Lhottekk']]);
     });
 });

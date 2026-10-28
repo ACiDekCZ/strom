@@ -56,7 +56,7 @@ function* groupsAroundCut(ch: string): Generator<string[]> {
         // `ch` inside a name, right at the byte limit.
         yield ['x'.repeat(pad) + ch + 'ová', 'Lhoták', 'Lhota' + ch];
         // `ch` beside the separator.
-        yield ['y'.repeat(pad - 3) + ch, ch + 'Lhotak', 'Lhottak'];
+        yield ['y'.repeat(pad - 3) + ch, ch + 'Lhotak', 'Lhottekk'];
         // Two-byte letters before it: the cut lands at another character offset.
         yield ['ř'.repeat(Math.floor(pad / 2)) + ch + ch, 'Lhoták'];
         // Long enough for several cuts, `ch` around each.
@@ -66,7 +66,7 @@ function* groupsAroundCut(ch: string): Generator<string[]> {
 
 describe('surname-variant groups: a wrapped group line reads back whole', () => {
     it('a long group goes out on 3 CONC lines (the case the reader missed)', () => {
-        const long = ['Lhoták', 'Lhotak', 'Lhottak', ...Array.from({ length: 30 }, (_, i) => `Lhotáková${i}`)];
+        const long = ['Lhoták', 'Lhotak', 'Lhottekk', ...Array.from({ length: 30 }, (_, i) => `Lhotáková${i}`)];
         const ged = exportToGedcom(tree([long, ['Novák', 'Nowak']])).content;
         expect(ged).toMatch(/^3 CONC /m);
         expect(roundTrip([long, ['Novák', 'Nowak']])).toEqual([long, ['Novák', 'Nowak']]);
@@ -88,11 +88,11 @@ describe('surname-variant groups: a wrapped group line reads back whole', () => 
     it('a 3 CONT under a group line continues the same group (a line break is only a space)', () => {
         const ged = [
             '0 HEAD', '1 CHAR UTF-8', `1 NOTE ${SURNAME_GROUPS_MARKER}`,
-            '2 CONT Lhoták | Lhotak |', '3 CONT Lhottak', '3 CONC ová | Lhota', '2 CONT Novák | Nowak',
+            '2 CONT Lhoták | Lhotak |', '3 CONT Lhottekk', '3 CONC ová | Lhota', '2 CONT Novák | Nowak',
             '0 @I1@ INDI', '1 NAME Jan /Lhoták/', '0 TRLR',
         ].join('\n');
         expect(convertToStrom(parseGedcom(ged)).data.surnameVariants).toEqual([
-            ['Lhoták', 'Lhotak', 'Lhottaková', 'Lhota'], ['Novák', 'Nowak'],
+            ['Lhoták', 'Lhotak', 'Lhottekková', 'Lhota'], ['Novák', 'Nowak'],
         ]);
     });
 

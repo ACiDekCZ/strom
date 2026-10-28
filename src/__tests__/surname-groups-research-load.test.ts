@@ -29,13 +29,13 @@ const asLoaded = (next: StromData, previous: StromData): StromData =>
 describe('surname-variant groups through a research update', () => {
     const here = (): StromData => {
         const d = load(GED());
-        d.surnameVariants = [['Lhoták', 'Lhotak', 'Lhottak']];
+        d.surnameVariants = [['Lhoták', 'Lhotak', 'Lhottekk']];
         return d;
     };
 
     it('a version without the groups NOTE keeps the groups of the tree', () => {
         const out = asLoaded(load(GED()), here());
-        expect(out.surnameVariants).toEqual([['Lhoták', 'Lhotak', 'Lhottak']]);
+        expect(out.surnameVariants).toEqual([['Lhoták', 'Lhotak', 'Lhottekk']]);
     });
 
     it('the round trip the research makes without reading the NOTE: the tree stays in step', () => {
@@ -67,8 +67,8 @@ describe('surname-variant groups through a research update', () => {
         const next = load(GED());
         const out = keepSurnameVariants(next, previous);
         expect(next.surnameVariants).toBeUndefined();
-        out.surnameVariants![0].push('Lhotta');
-        expect(previous.surnameVariants).toEqual([['Lhoták', 'Lhotak', 'Lhottak']]);
+        out.surnameVariants![0].push('Lhottek');
+        expect(previous.surnameVariants).toEqual([['Lhoták', 'Lhotak', 'Lhottekk']]);
     });
 });
 
@@ -114,7 +114,7 @@ describe('rejected spelling suggestions through a research update (like the grou
         const previous = here();
         const out = keepSurnameVariants(next, previous);
         expect(next.surnameRejections).toBeUndefined();
-        out.surnameRejections![0].forms.push('Lhotta');
+        out.surnameRejections![0].forms.push('Lhottek');
         expect(previous.surnameRejections![0].forms).toEqual(['Lhoták', 'Lhota']);
     });
 });

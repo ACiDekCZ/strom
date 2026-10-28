@@ -417,7 +417,7 @@ export const treeStatsMethods = uiModule({
         return `${validationGroupTitle(mark.kind)}: ${this.qualityMarkWhat(mark, data, false)}`;
     },
 
-    /** What a mark is about, as text: the subject and the people ("Václav Hrubeš – Jan Lhoták, Marie Lhotáková"). */
+    /** What a mark is about, as text: the subject and the people ("Václav Zvonek – Jan Lhoták, Marie Lhotáková"). */
     qualityMarkWhat(mark: Pick<QualityDismissal, 'kind' | 'persons' | 'subject'>, data: StromData, years = true): string {
         const dup = mark.kind === 'possibleDuplicate';
         const people = mark.persons.map(id => {

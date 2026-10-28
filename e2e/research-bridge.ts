@@ -26,7 +26,7 @@ export function researchGed(head = HEAD, extra: string[] = []): string {
         '0 @P0003@ INDI', '1 NAME Jan /Fíšek/', '1 SEX M', '1 REFN P0003', '2 TYPE strom-research', '1 FAMC @F0001@',
         ...extra,
         '0 @F0001@ FAM', '1 HUSB @P0001@', '1 WIFE @P0002@', '1 CHIL @P0003@',
-        '0 @S0001@ SOUR', '1 TITL Oddací matrika Čáslav', '1 PAGE fol. 41', '1 REFN S0001', '1 TEXT Josef Fíšek a Anna', '1 _STROM_READ research',
+        '0 @S0001@ SOUR', '1 TITL Oddací matrika Čapkov', '1 PAGE fol. 41', '1 REFN S0001', '1 TEXT Josef Fíšek a Anna', '1 _STROM_READ research',
         '0 TRLR',
     ].join('\n');
 }
@@ -316,7 +316,7 @@ export type FakeHistoryWrite = 'first' | 'skip' | 'delete' | 'map' | 'place' | '
 
 /**
  * Invented events of the time for the research tree (historyGed: Jan lived in
- * Čáslav 1860–1910): two for Čáslav, one already hidden there.
+ * Čapkov 1860–1910): two for Čapkov, one already hidden there.
  */
 export function fakeHistory(init: Partial<FakeHistory> = {}): FakeHistory {
     return {
@@ -325,14 +325,14 @@ export function fakeHistory(init: Partial<FakeHistory> = {}): FakeHistory {
             lang: 'cs',
             events: [
                 { id: 'E1', from: 1866, kind: 'war', scope: 'region',
-                    text: { cs: 'Prusko-rakouská válka; boje v okolí Čáslavi.', en: 'Austro-Prussian War; fighting around Čáslav.' },
+                    text: { cs: 'Prusko-rakouská válka; boje v okolí Čapkovi.', en: 'Austro-Prussian War; fighting around Čapkov.' },
                     source: { title: 'Invented encyclopedia', url: 'https://example.org/war-1866', checked: '2026-10-01' } },
                 { id: 'E2', from: 1873, kind: 'economy', scope: 'region',
                     text: { cs: 'Krach na vídeňské burze.', en: 'Vienna stock exchange crash.' },
                     source: { title: 'Invented encyclopedia', url: 'https://example.org/crash-1873', checked: '2026-10-01' } },
             ],
-            places: { 'Čáslav': { events: ['E1', 'E2'] } },
-            hidden: [{ event: 'E2', place: 'Čáslav', at: '2026-10-21T08:00:00Z' }],
+            places: { 'Čapkov': { events: ['E1', 'E2'] } },
+            hidden: [{ event: 'E2', place: 'Čapkov', at: '2026-10-21T08:00:00Z' }],
         },
         rev: 'h1',
         searching: true,
@@ -344,9 +344,9 @@ export function fakeHistory(init: Partial<FakeHistory> = {}): FakeHistory {
     };
 }
 
-/** The research tree with Jan born in Čáslav in 1860, died there in 1910 (places and years the events match). */
+/** The research tree with Jan born in Čapkov in 1860, died there in 1910 (places and years the events match). */
 export function historyGed(head = HEAD): string {
-    return researchGed(head).replace('1 NAME Jan /Fíšek/', '1 NAME Jan /Fíšek/\n1 BIRT\n2 DATE 1860\n2 PLAC Čáslav\n1 DEAT\n2 DATE 1910\n2 PLAC Čáslav');
+    return researchGed(head).replace('1 NAME Jan /Fíšek/', '1 NAME Jan /Fíšek/\n1 BIRT\n2 DATE 1860\n2 PLAC Čapkov\n1 DEAT\n2 DATE 1910\n2 PLAC Čapkov');
 }
 
 /** Everything of R1–R7 besides HISTORY_FEATURES (`history.place.direct` never: the research starts it only in its terminal). */
@@ -380,8 +380,8 @@ export function fakeHistoryR1(init: Partial<FakeHistory> = {}): FakeHistory {
             text: { cs: 'Rakousko-uherské vyrovnání.', en: 'The Austro-Hungarian Compromise.' },
             source: { title: 'Invented encyclopedia', url: 'https://example.org/compromise-1867', checked: '2026-10-01' } },
         { id: 'E4', from: 1880, kind: 'disaster', scope: 'local',
-            text: { cs: 'Požár v Čáslavi.', en: 'A fire in Čáslav.' },
-            local: { source: 'S0001', cite: 'Oddací matrika Čáslav, fol. 41' } },
+            text: { cs: 'Požár v Čapkovi.', en: 'A fire in Čapkov.' },
+            local: { source: 'S0001', cite: 'Oddací matrika Čapkov, fol. 41' } },
     );
     base.payload = {
         state: { on: true, search: 'running', pending: 2, at: '2026-10-20T09:00:00Z', rev: 'h1' },
@@ -398,25 +398,25 @@ export function fakeHistoryR1(init: Partial<FakeHistory> = {}): FakeHistory {
             'de-prussia': { name: region('Prusko', 'Prussia', 'Preußen'), state: 'skipped', events: 0, places: 1, persons: 1 },
         },
         places: {
-            'Čáslav': { events: ['E1', 'E2', 'E3', 'E4'], regions: [{ id: 'cz-bohemia' }, { id: 'at-empire', to: 1918 }], persons: 3, id: 'L0001' },
+            'Čapkov': { events: ['E1', 'E2', 'E3', 'E4'], regions: [{ id: 'cz-bohemia' }, { id: 'at-empire', to: 1918 }], persons: 3, id: 'L0001' },
             'Kutná Hora': { events: [], regions: [{ id: 'cz-bohemia' }], persons: 5, id: 'L0003' },
             'Brno': { events: [], state: 'pending', regions: [{ id: 'cz-moravia' }], persons: 2, id: 'L0002' },
             'Lhotka': { events: [], state: 'unlocated', why: 'several places of that name', persons: 1 },
             'Opava': { events: [], regions: [{ id: 'cz-silesia', from: 1742 }], persons: 1, skip: true, id: 'L0004' },
         },
-        hidden: [{ event: 'E2', place: 'Čáslav', at: '2026-10-21T08:00:00Z' }],
+        hidden: [{ event: 'E2', place: 'Čapkov', at: '2026-10-21T08:00:00Z' }],
         deleted: [
             { event: 'E9', scope: 'region', at: '2026-10-25T10:00:00Z', from: 1882, region: { id: 'cz-bohemia', name: BOHEMIA },
                 text: { cs: 'Povodeň na Doubravě.', en: 'A flood on the Doubrava.' } },
             { event: 'E8', scope: 'local', at: '2026-10-24T10:00:00Z', from: 1842, kind: 'disaster',
-                text: { cs: 'Požár vsi.', en: 'A fire in the village.' }, local: { source: 'S0002', cite: 'Kronika obce, s. 12' }, place: 'Čáslav' },
+                text: { cs: 'Požár vsi.', en: 'A fire in the village.' }, local: { source: 'S0002', cite: 'Kronika obce, s. 12' }, place: 'Čapkov' },
         ],
         suggest: ['L0003'],
     };
     return { ...base, ...init };
 }
 
-/** People of the detail's tree besides Jan: 12 of Čáslav (1840–1900) and 2 of Kutná Hora (1845–1895). */
+/** People of the detail's tree besides Jan: 12 of Čapkov (1840–1900) and 2 of Kutná Hora (1845–1895). */
 export const DETAIL_CASLAV = ['Adam /Bárta/', 'Bedřich /Černý/', 'Cyril /Dvořák/', 'Daniel /Erben/', 'Emil /Fiala/', 'František /Hora/',
     'Gustav /Jelínek/', 'Hugo /Kára/', 'Ivan /Lukeš/', 'Jakub /Malý/', 'Karel /Novák/', 'Ludvík /Orel/'];
 export const DETAIL_KUTNA_HORA = ['Marie /Pokorná/', 'Nina /Růžičková/'];
@@ -430,18 +430,18 @@ export function historyDetailGed(head = HEAD): string {
             '1 BIRT', `2 DATE ${born}`, `2 PLAC ${place}`, '1 DEAT', `2 DATE ${died}`, `2 PLAC ${place}`];
     };
     const extra = [
-        ...DETAIL_CASLAV.flatMap(name => person(name, 'Čáslav', 1840, 1900)),
+        ...DETAIL_CASLAV.flatMap(name => person(name, 'Čapkov', 1840, 1900)),
         ...DETAIL_KUTNA_HORA.flatMap(name => person(name, 'Kutná Hora', 1845, 1895)),
     ];
-    return researchGed(head, extra).replace('1 NAME Jan /Fíšek/', '1 NAME Jan /Fíšek/\n1 BIRT\n2 DATE 1860\n2 PLAC Čáslav\n1 DEAT\n2 DATE 1910\n2 PLAC Čáslav');
+    return researchGed(head, extra).replace('1 NAME Jan /Fíšek/', '1 NAME Jan /Fíšek/\n1 BIRT\n2 DATE 1860\n2 PLAC Čapkov\n1 DEAT\n2 DATE 1910\n2 PLAC Čapkov');
 }
 
 /**
  * fakeHistoryR1 for the detail (spec 1028 §2, §3): Bohemia with seven events
  * of six kinds over three centuries — E1 1866 war also for Kutná Hora (15
- * people see it), E2 1873 hidden at Čáslav, E10 1755 epidemic (nobody sees
+ * people see it), E2 1873 hidden at Čapkov, E10 1755 epidemic (nobody sees
  * it), E11 1848 law with an excerpt, E12 1850 census only in German, E13 1880
- * emigration, E14 1914–1918 war; local findings E4, L0031 (Čáslav) and L0032
+ * emigration, E14 1914–1918 war; local findings E4, L0031 (Čapkov) and L0032
  * (Kutná Hora). `many`: 45 more events of Bohemia (10 in the 18th century,
  * 30 in the 19th, 5 in the 20th) at Kolín, so its centuries fold.
  */
@@ -466,13 +466,13 @@ export function fakeHistoryDetail(opts: { many?: boolean } = {}, init: Partial<F
             text: { cs: 'Velká válka.', en: 'The Great War.' }, source: src('war-1914') },
         { id: 'L0031', from: 1842, kind: 'disaster', scope: 'local',
             text: { cs: 'Krupobití zničilo úrodu.', en: 'A hailstorm destroyed the harvest.' },
-            local: { source: 'S0099', cite: 'Kronika Čáslav, s. 12' } },
+            local: { source: 'S0099', cite: 'Kronika Čapkov, s. 12' } },
         { id: 'L0032', from: 1885, kind: 'other', scope: 'local',
             text: { cs: 'Otevřena nová škola.', en: 'A new school opened.' },
             local: { source: 'S0099', cite: 'Kronika Kutné Hory, s. 3' } },
     );
-    const caslav = p.places['Čáslav'].events as string[];
-    caslav.push('E10', 'E11', 'E12', 'E13', 'E14', 'L0031');
+    const capkov = p.places['Čapkov'].events as string[];
+    capkov.push('E10', 'E11', 'E12', 'E13', 'E14', 'L0031');
     p.places['Kutná Hora'].events = ['E1', 'L0032'];
     if (opts.many) {
         const years = [

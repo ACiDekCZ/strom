@@ -18,7 +18,7 @@ type P = Record<string, unknown>;
 /**
  * The Lhoták family (invented): Václav died before he was born (an error),
  * Marie has a residence after her death (a warning), two Jan Lhoták born the
- * same year (a possible duplicate, a lead) and Čáslav written two ways (a lead).
+ * same year (a possible duplicate, a lead) and Čapkov written two ways (a lead).
  */
 function lhotak(): { persons: Record<string, P>; partnerships: Record<string, P> } {
     const person = (id: string, firstName: string, lastName: string, gender: 'male' | 'female', extra: P = {}): P => ({
@@ -26,11 +26,11 @@ function lhotak(): { persons: Record<string, P>; partnerships: Record<string, P>
     });
     return {
         persons: {
-            vaclav: person('vaclav', 'Václav', 'Lhoták', 'male', { birthDate: '1850', deathDate: '1840', birthPlace: 'Čáslav' }),
+            vaclav: person('vaclav', 'Václav', 'Lhoták', 'male', { birthDate: '1850', deathDate: '1840', birthPlace: 'Čapkov' }),
             marie: person('marie', 'Marie', 'Lhotáková', 'female', {
-                birthDate: '1825', deathDate: '1881', birthPlace: 'Caslav', events: [{ id: 'e_marie', type: 'residence', date: '1890' }],
+                birthDate: '1825', deathDate: '1881', birthPlace: 'Capkov', events: [{ id: 'e_marie', type: 'residence', date: '1890' }],
             }),
-            jan1: person('jan1', 'Jan', 'Lhoták', 'male', { birthDate: '1852', birthPlace: 'Čáslav' }),
+            jan1: person('jan1', 'Jan', 'Lhoták', 'male', { birthDate: '1852', birthPlace: 'Čapkov' }),
             jan2: person('jan2', 'Jan', 'Lhoták', 'male', { birthDate: '1852' }),
         },
         partnerships: {},
@@ -365,7 +365,7 @@ async function expectNoOverflow(page: Page): Promise<void> {
 
 test('phone (390 px): the Leads closed while there are Problems, the actions under the text, 44 px to tap, nothing too wide', async ({ browser }) => {
     const { page, close } = await phone(browser, 390, 844);
-    const treeId = await importTree(page, lhotak(), 'Lhotákovi z Čáslavi a Kutné Hory');
+    const treeId = await importTree(page, lhotak(), 'Lhotákovi z Čapkovi a Kutné Hory');
     const modal = await openValidation(page, treeId);
     await expect(sectionHead(modal, 'trace')).toHaveAttribute('aria-expanded', 'false');
     await expect(sectionHead(modal, 'trace').locator('.vq-section-count')).toHaveText('2');
@@ -388,7 +388,7 @@ test('phone (390 px): the Leads closed while there are Problems, the actions und
 
 test('phone sideways: the heads 44 px or more, nothing too wide', async ({ browser }) => {
     const { page, close } = await phone(browser, 844, 390);
-    const treeId = await importTree(page, lhotak(), 'Lhotákovi z Čáslavi a Kutné Hory');
+    const treeId = await importTree(page, lhotak(), 'Lhotákovi z Čapkovi a Kutné Hory');
     const modal = await openValidation(page, treeId);
     for (const type of ['deathBeforeBirth', 'eventAfterDeath']) {
         expect((await group(modal, type).locator('.vq-group-head').boundingBox())!.height).toBeGreaterThanOrEqual(44);

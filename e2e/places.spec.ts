@@ -111,14 +111,14 @@ test.describe('the Places dialog: order, search and the "No location" chip', () 
         await page.evaluate(() => {
             const dm = window.Strom.DataManager;
             const jan = dm.getAllPersons()[0];
-            dm.updatePerson(jan.id, { birthPlace: 'Chotěboř', deathPlace: 'Hlinsko' });
-            for (const [firstName, birthPlace] of [['Marie', 'Čáslav'], ['Petra', 'Cerhenice'], ['Anna', 'Ivančice'], ['Hana', 'Chrudim']]) {
+            dm.updatePerson(jan.id, { birthPlace: 'Chmelník', deathPlace: 'Hlinsko' });
+            for (const [firstName, birthPlace] of [['Marie', 'Čapkov'], ['Petra', 'Cetkovice'], ['Anna', 'Ivančice'], ['Hana', 'Chvojkov']]) {
                 const p = dm.createPerson({ firstName, lastName: 'Lhotáková', gender: 'female' });
                 dm.updatePerson(p.id, { birthPlace });
             }
             dm.setPlaceGeos(new Map([
                 ['hlinsko', { lat: 49.76, lon: 15.9, label: 'Hlinsko' }],
-                ['cerhenice', { lat: 50.07, lon: 15.07, label: 'Cerhenice' }],
+                ['cetkovice', { lat: 50.07, lon: 15.07, label: 'Cetkovice' }],
             ]));
             window.Strom.UI.setLanguage('cs' as never);
             window.Strom.TreeRenderer.render();
@@ -134,10 +134,10 @@ test.describe('the Places dialog: order, search and the "No location" chip', () 
         await setup(page);
         await open(page);
         await expect(modal(page)).toBeVisible();
-        expect(await shownKeys(page)).toEqual(['cerhenice', 'caslav', 'hlinsko', 'chotebor', 'chrudim', 'ivancice']);
+        expect(await shownKeys(page)).toEqual(['cetkovice', 'capkov', 'hlinsko', 'chmelnik', 'chvojkov', 'ivancice']);
         // Without coordinates still marked.
         await expect(modal(page).locator('.place-row-unplaced')).toHaveCount(4);
-        await expect(modal(page).locator('.place-row[data-key="caslav"] .place-hint')).toHaveText('Zatím není na mapě');
+        await expect(modal(page).locator('.place-row[data-key="capkov"] .place-hint')).toHaveText('Zatím není na mapě');
     });
 
     test('the search finds a place without diacritics, counts and says when nothing matches', async ({ page }) => {
@@ -145,8 +145,8 @@ test.describe('the Places dialog: order, search and the "No location" chip', () 
         await open(page);
         const search = modal(page).locator('#places-filter');
         await expect(search).toHaveAttribute('placeholder', 'Hledat místo');
-        await search.fill('caslav');
-        await expect.poll(() => shownKeys(page)).toEqual(['caslav']);
+        await search.fill('capkov');
+        await expect.poll(() => shownKeys(page)).toEqual(['capkov']);
         await expect(modal(page).locator('#places-filter-count')).toHaveText('1 ze 6');
         await expect(modal(page).locator('#places-filter-none')).toBeHidden();
 
@@ -162,7 +162,7 @@ test.describe('the Places dialog: order, search and the "No location" chip', () 
 
         // Escape empties the search first and the dialog stays; the next one closes it.
         await search.fill('ch');
-        await expect.poll(() => shownKeys(page)).toEqual(['chotebor', 'chrudim']);
+        await expect.poll(() => shownKeys(page)).toEqual(['chmelnik', 'chvojkov']);
         await search.press('Escape');
         await expect(search).toHaveValue('');
         await expect(modal(page)).toBeVisible();
@@ -179,25 +179,25 @@ test.describe('the Places dialog: order, search and the "No location" chip', () 
         await expect(chip).toHaveAttribute('aria-pressed', 'false');
         await chip.click();
         await expect(chip).toHaveAttribute('aria-pressed', 'true');
-        await expect.poll(() => shownKeys(page)).toEqual(['caslav', 'chotebor', 'chrudim', 'ivancice']);
+        await expect.poll(() => shownKeys(page)).toEqual(['capkov', 'chmelnik', 'chvojkov', 'ivancice']);
         await expect(modal(page).locator('#places-filter-count')).toHaveText('4 ze 6');
         // Together with the search.
         await modal(page).locator('#places-filter').fill('ch');
-        await expect.poll(() => shownKeys(page)).toEqual(['chotebor', 'chrudim']);
+        await expect.poll(() => shownKeys(page)).toEqual(['chmelnik', 'chvojkov']);
     });
 
     test('a redraw keeps the filter; opening on a place the filter hides shows the whole list', async ({ page }) => {
         await setup(page);
         await open(page);
         await modal(page).locator('#places-unplaced').click();
-        await modal(page).locator('#places-filter').fill('caslav');
-        await expect.poll(() => shownKeys(page)).toEqual(['caslav']);
+        await modal(page).locator('#places-filter').fill('capkov');
+        await expect.poll(() => shownKeys(page)).toEqual(['capkov']);
 
         // A rename or a pin redraws the dialog: the filter stays.
         await page.evaluate(() => window.Strom.UI.refreshPlacesManager());
-        await expect(modal(page).locator('#places-filter')).toHaveValue('caslav');
+        await expect(modal(page).locator('#places-filter')).toHaveValue('capkov');
         await expect(modal(page).locator('#places-unplaced')).toHaveAttribute('aria-pressed', 'true');
-        await expect.poll(() => shownKeys(page)).toEqual(['caslav']);
+        await expect.poll(() => shownKeys(page)).toEqual(['capkov']);
 
         // Opened on Hlinsko (it has coordinates and the search hides it): the filter goes, its row is open.
         await page.evaluate(() => window.Strom.UI.refreshPlacesManager('hlinsko'));
@@ -211,8 +211,8 @@ test.describe('the Places dialog: order, search and the "No location" chip', () 
         // A fresh open on a place starts with the whole list too.
         await modal(page).locator('#places-filter').fill('ivan');
         await page.evaluate(() => window.Strom.UI.closePlacesManager());
-        await open(page, 'chrudim');
-        await expect(modal(page).locator('.place-row[data-key="chrudim"] .place-search')).toBeVisible();
+        await open(page, 'chvojkov');
+        await expect(modal(page).locator('.place-row[data-key="chvojkov"] .place-search')).toBeVisible();
         await expect(modal(page).locator('#places-filter')).toHaveValue('');
         await expect.poll(() => shownKeys(page)).toHaveLength(6);
     });

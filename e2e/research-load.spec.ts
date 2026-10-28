@@ -157,11 +157,11 @@ test.describe('loading the research version: surname-variant groups', () => {
         // A version with groups is the research's word.
         const third = 'a1b2c3d4e5f6';
         bridge.head = third;
-        bridge.treeGed = withGroups(researchGed(third, ['1 OCCU tesař']), ['Fíšek | Fyšek | Fischek', 'Svobodová | Swobodova']);
+        bridge.treeGed = withGroups(researchGed(third, ['1 OCCU tesař']), ['Fíšek | Fyšek | Fischek', 'Kmínková | Kminkowa']);
         await poll(page);
         await page.evaluate(() => { void window.Strom.UI.researchLoadNewer(); });
         await dialog(page).locator('#research-load-ok').click();
         await expect.poll(() => head(page)).toBe(third);
-        expect(await groups(page)).toEqual([['Fíšek', 'Fyšek', 'Fischek'], ['Svobodová', 'Swobodova']]);
+        expect(await groups(page)).toEqual([['Fíšek', 'Fyšek', 'Fischek'], ['Kmínková', 'Kminkowa']]);
     });
 });

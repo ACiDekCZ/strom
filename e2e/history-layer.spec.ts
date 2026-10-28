@@ -12,7 +12,7 @@ import {
  * Undo; no longer for a place, spec 020 K4.1a),
  * "Hidden: n" with "Show again", the state rows, the phone's bottom sheet and
  * the device's copy read again after the local data is unlocked. Invented
- * data (fakeHistory): Jan lived in Čáslav 1860–1910, Josef 1830–1890, Anna's
+ * data (fakeHistory): Jan lived in Čapkov 1860–1910, Josef 1830–1890, Anna's
  * dates have no place.
  */
 
@@ -22,7 +22,7 @@ const TREE_FEATURES = [...HISTORY_FEATURES, 'history.hide.all'];
 
 function layerGed(): string {
     return historyGed()
-        .replace('1 NAME Josef /Fíšek/', '1 NAME Josef /Fíšek/\n1 BIRT\n2 DATE 1830\n2 PLAC Čáslav\n1 DEAT\n2 DATE 1890\n2 PLAC Čáslav')
+        .replace('1 NAME Josef /Fíšek/', '1 NAME Josef /Fíšek/\n1 BIRT\n2 DATE 1830\n2 PLAC Čapkov\n1 DEAT\n2 DATE 1890\n2 PLAC Čapkov')
         .replace('1 NAME Anna /Svobodová/', '1 NAME Anna /Svobodová/\n1 BIRT\n2 DATE 1835\n1 DEAT\n2 DATE 1900');
 }
 
@@ -54,7 +54,7 @@ async function closeCard(page: Page): Promise<void> {
 
 const body = (page: Page) => page.locator('#pm-lifeline-body');
 const historyRows = (page: Page) => page.locator('#pm-lifeline-body .pm-lifeline-row.k-history');
-const warRow = (page: Page) => historyRows(page).filter({ hasText: 'Austro-Prussian War; fighting around Čáslav.' });
+const warRow = (page: Page) => historyRows(page).filter({ hasText: 'Austro-Prussian War; fighting around Čapkov.' });
 const chip = (page: Page) => page.locator('#pm-lifeline-history-toggle');
 
 test.describe('History in the life timeline: the person card', () => {
@@ -90,7 +90,7 @@ test.describe('History in the life timeline: the person card', () => {
         // Between the birth (1860) and the death (1910): the timeline's order.
         const years = await body(page).locator('.pm-lifeline-row .pm-lifeline-year').allTextContents();
         expect(years).toEqual(['1860', '1866', '1910']);
-        // The crash of 1873 is hidden at Čáslav.
+        // The crash of 1873 is hidden at Čapkov.
         await expect(page.locator('.pm-lifeline-hidden')).toHaveText(/Hidden: 1/);
         // The chip off: the timeline as it was, the chip stays; on again: back.
         await chip(page).click();
@@ -137,7 +137,7 @@ test.describe('History in the life timeline: the person card', () => {
         base.payload.events.push({ id: 'E3', from: 1866, kind: 'epidemic', scope: 'region',
             text: { cs: 'Epidemie cholery.', en: 'Cholera epidemic.' },
             source: { title: 'Invented chronicle', url: 'https://example.org/cholera', checked: '2026-10-01', quote: 'Cholera came with the armies.' } });
-        (base.payload.places['Čáslav'] as { events: string[] }).events.push('E3');
+        (base.payload.places['Čapkov'] as { events: string[] }).events.push('E3');
         await setup(page, { history: base });
         await openCard(page, 'Jan');
         const group = body(page).locator('.k-historyGroup');
@@ -173,7 +173,7 @@ test.describe('History in the life timeline: the person card', () => {
         await more.click();
         const menu = page.locator('.pm-lifeline-hmenu');
         await expect(menu).toBeVisible();
-        await expect(menu.locator('.pm-lifeline-hmenu-head')).toHaveText('1866 · Austro-Prussian War; fighting around Čáslav.');
+        await expect(menu.locator('.pm-lifeline-hmenu-head')).toHaveText('1866 · Austro-Prussian War; fighting around Čapkov.');
         // Two choices, no place (that is History of places').
         await expect(menu.getByRole('menuitem')).toHaveText([/^Hide in this whole tree/, /^Hide for Jan Fíšek only/]);
         await expect(menu.getByRole('menuitem').first()).toBeFocused();
@@ -245,13 +245,13 @@ test.describe('History in the life timeline: the person card', () => {
         await expect(item).toHaveCount(1);
         await expect(item).toContainText('1873');
         await expect(item).toContainText('Vienna stock exchange crash.');
-        await expect(item).toContainText('for Čáslav');
+        await expect(item).toContainText('for Čapkov');
         await item.getByRole('button', { name: 'Show again' }).click();
         const crash = historyRows(page).filter({ hasText: 'Vienna stock exchange crash.' });
         await expect(crash).toBeVisible();
         await expect(crash.locator('.pm-lifeline-hmeta')).toContainText('age 13');
         await expect(page.locator('.pm-lifeline-hidden')).toHaveCount(0);
-        await expect.poll(() => history.hides).toEqual([{ event: 'E2', place: 'Čáslav', do: 'show' }]);
+        await expect.poll(() => history.hides).toEqual([{ event: 'E2', place: 'Čapkov', do: 'show' }]);
     });
 
     test('a hiding from the card shows in History of places, Hidden tab', async ({ page }) => {
@@ -297,7 +297,7 @@ test.describe('History in the life timeline: the person card', () => {
 
     test('the research searching, no events yet: the chip and the "still looking" row', async ({ page }) => {
         await setup(page, { history: {
-            payload: { state: { on: true, search: 'running', pending: 1, rev: 'h1' }, lang: 'cs', events: [], places: { 'Čáslav': { events: [], state: 'pending' } }, hidden: [] },
+            payload: { state: { on: true, search: 'running', pending: 1, rev: 'h1' }, lang: 'cs', events: [], places: { 'Čapkov': { events: [], state: 'pending' } }, hidden: [] },
         } });
         await openCard(page, 'Jan');
         await expect(chip(page)).toBeVisible();
@@ -347,7 +347,7 @@ test.describe('History in the life timeline: the person card', () => {
         await more.click();
         const sheet = page.locator('.bottom-sheet.pm-lifeline-hmenu-sheet');
         await expect(sheet).toBeVisible();
-        await expect(sheet.locator('.pm-lifeline-hsheet-head')).toHaveText('1866 · Austro-Prussian War; fighting around Čáslav.');
+        await expect(sheet.locator('.pm-lifeline-hsheet-head')).toHaveText('1866 · Austro-Prussian War; fighting around Čapkov.');
         await expect(sheet.getByRole('menuitem')).toHaveText([/^Hide in this whole tree/, /^Hide for Jan Fíšek only/]);
         await sheet.getByRole('button', { name: 'Cancel' }).click();
         await expect(sheet).toHaveCount(0);

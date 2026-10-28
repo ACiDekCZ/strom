@@ -151,20 +151,20 @@ describe('the Places dialog: order and search', () => {
     const names = (rows: { usage: { display: string } }[]) => rows.map(r => r.usage.display);
 
     it('sorts by name as the UI language does: Czech puts "Ch" after "H", numbers by value', () => {
-        const rows = [row('Chotěboř'), row('Hlinsko'), row('Čáslav'), row('Cerhenice'), row('Ivančice'), row('Praha 10'), row('Praha 2')];
+        const rows = [row('Chmelník'), row('Hlinsko'), row('Čapkov'), row('Cetkovice'), row('Ivančice'), row('Praha 10'), row('Praha 2')];
         expect(names(sortPlacesByName(rows, 'cs')))
-            .toEqual(['Cerhenice', 'Čáslav', 'Hlinsko', 'Chotěboř', 'Ivančice', 'Praha 2', 'Praha 10']);
+            .toEqual(['Cetkovice', 'Čapkov', 'Hlinsko', 'Chmelník', 'Ivančice', 'Praha 2', 'Praha 10']);
         // English keeps "Ch" among the C's.
         const en = names(sortPlacesByName(rows, 'en'));
-        expect(en.indexOf('Chotěboř')).toBeLessThan(en.indexOf('Hlinsko'));
+        expect(en.indexOf('Chmelník')).toBeLessThan(en.indexOf('Hlinsko'));
     });
 
     it('finds a place without diacritics, by any of its spellings and by its other names', () => {
-        const caslav = row('Čáslav', ['Caslav']);
-        const text = placeFilterText(caslav.key, caslav.usage, ['Tschaslau']);
-        expect(placeMatchesFilter(text, 'caslav')).toBe(true);
-        expect(placeMatchesFilter(text, 'ČÁS')).toBe(true);
-        expect(placeMatchesFilter(text, 'tschaslau')).toBe(true);
+        const capkov = row('Čapkov', ['Capkov']);
+        const text = placeFilterText(capkov.key, capkov.usage, ['Tschapkau']);
+        expect(placeMatchesFilter(text, 'capkov')).toBe(true);
+        expect(placeMatchesFilter(text, 'ČAP')).toBe(true);
+        expect(placeMatchesFilter(text, 'tschapkau')).toBe(true);
         expect(placeMatchesFilter(text, 'kolin')).toBe(false);
         expect(placeMatchesFilter(text, '  ')).toBe(true);   // an empty query hides nothing
     });

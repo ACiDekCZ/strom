@@ -237,10 +237,10 @@ test.describe('what will be sent beyond the people', () => {
         await page.evaluate((extra) => {
             const dm = window.Strom.DataManager;
             dm.addSource({ title: 'Sčítání lidu 1921' });
-            dm.addSource({ title: 'Pozemková kniha Čáslav', transcript: 'Josef Fíšek, chalupník' });
+            dm.addSource({ title: 'Pozemková kniha Čapkov', transcript: 'Josef Fíšek, chalupník' });
             for (let i = 1; i <= extra; i++) dm.addSource({ title: `Urbář ${String(i).padStart(2, '0')}` });
-            const s1 = Object.values(dm.getData().sources ?? {}).find((s: any) => s.title === 'Oddací matrika Čáslav') as any;
-            dm.updateSource(s1.id, { title: 'Oddací matrika Čáslav 1880–1890' });
+            const s1 = Object.values(dm.getData().sources ?? {}).find((s: any) => s.title === 'Oddací matrika Čapkov') as any;
+            dm.updateSource(s1.id, { title: 'Oddací matrika Čapkov 1880–1890' });
             const u = Object.values(dm.getData().partnerships)[0] as any;
             dm.updatePartnership(u.id, { isPrimary: true });
             dm.setPlaceGeos(new Map([['kolin', { lat: 50.0281, lon: 15.2006 }]]));
@@ -264,7 +264,7 @@ test.describe('what will be sent beyond the people', () => {
         await expect(panel.locator('.research-changes-section')).toHaveText(['People · 1', 'Sources · 3', 'Couples · 1', 'Places · 1', 'Surname variants · 1']);
         const sources = panel.locator('[data-kind="source"]');
         await expect(sources).toHaveCount(3);
-        await expect(sources.nth(0)).toContainText('Oddací matrika Čáslav 1880–1890');
+        await expect(sources.nth(0)).toContainText('Oddací matrika Čapkov 1880–1890');
         await expect(sources.nth(0).locator('.research-changes-kinds')).toHaveText('title');
         await expect(sources.nth(0).locator('.research-changes-ctx')).toHaveText('not cited');
         await expect(sources.nth(1).locator('.research-changes-kinds')).toHaveText('new · transcript');
@@ -340,7 +340,7 @@ test.describe('what will be sent beyond the people', () => {
         // The research names a source by its number, one new source by the sent file's xref, a place by its name.
         b.onWrite = () => ({ head: 'd6d6d6d6d6d6', ged: researchGed('d6d6d6d6d6d6') });
         b.replyExtra = (posted) => {
-            const xref = /0 (@[^@]+@) SOUR\n1 TITL Pozemková kniha Čáslav/.exec(posted)?.[1] ?? '@X@';
+            const xref = /0 (@[^@]+@) SOUR\n1 TITL Pozemková kniha Čapkov/.exec(posted)?.[1] ?? '@X@';
             return { notWritten: [
                 { kind: 'source.title', source: 'S0001', why: 'report' },
                 { kind: 'source.new', source: xref, why: 'pick' },
@@ -357,9 +357,9 @@ test.describe('what will be sent beyond the people', () => {
         const not = panel.locator('.research-changes-row.is-not-written');
         await expect(not).toHaveCount(4);
         await expect(not.nth(0).locator('.research-changes-type')).toHaveText('source');
-        await expect(not.nth(0).locator('.research-changes-name')).toHaveText('Oddací matrika Čáslav 1880–1890');
+        await expect(not.nth(0).locator('.research-changes-name')).toHaveText('Oddací matrika Čapkov 1880–1890');
         await expect(not.nth(0).locator('.research-changes-kinds')).toHaveText('title');
-        await expect(not.nth(1).locator('.research-changes-name')).toHaveText('Pozemková kniha Čáslav');
+        await expect(not.nth(1).locator('.research-changes-name')).toHaveText('Pozemková kniha Čapkov');
         await expect(not.nth(1)).toContainText('no common ground: choose in the research');
         await expect(not.nth(2).locator('.research-changes-type')).toHaveText('places');
         await expect(not.nth(2).locator('.research-changes-name')).toHaveText('Kolín');

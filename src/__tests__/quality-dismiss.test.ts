@@ -86,7 +86,7 @@ describe('data version 13', () => {
             qualityDismissed: [
                 { kind: 'possibleDuplicate', persons: ['p_jan2', 'p_jan1'], at: '2026-10-01T00:00:00.000Z' },
                 { kind: 'possibleDuplicate', persons: ['p_jan1', 'p_jan2'], at: '2026-10-02T00:00:00.000Z', sync: 'sent' },
-                { kind: 'recurringGodparent', persons: ['p_marie'], subject: '  Václav Hrubeš ', at: '2026-10-03T00:00:00.000Z', sync: 'bogus' },
+                { kind: 'recurringGodparent', persons: ['p_marie'], subject: '  Václav Zvonek ', at: '2026-10-03T00:00:00.000Z', sync: 'bogus' },
                 { kind: '', persons: ['p_marie'] },
                 { kind: 'eventAfterDeath', persons: [] },
                 'junk',
@@ -99,7 +99,7 @@ describe('data version 13', () => {
         });
         expect(loaded.qualityDismissed).toEqual([
             { kind: 'possibleDuplicate', persons: ['p_jan1', 'p_jan2'], at: '2026-10-02T00:00:00.000Z', sync: 'sent' },
-            { kind: 'recurringGodparent', persons: ['p_marie'], subject: 'Václav Hrubeš', at: '2026-10-03T00:00:00.000Z' },
+            { kind: 'recurringGodparent', persons: ['p_marie'], subject: 'Václav Zvonek', at: '2026-10-03T00:00:00.000Z' },
         ]);
         expect(loaded.surnameRejections).toEqual([{ forms: ['Lhoták', 'Lhota'], id: 'sg1', at: '2026-10-04T00:00:00.000Z' }]);
     });
@@ -152,9 +152,9 @@ describe('which findings a mark hides', () => {
     });
 
     it('a finding with another subject or other people is still reported', () => {
-        const issue: ValidationIssue = { id: 'i1', severity: 'info', type: 'recurringGodparent', message: '', personIds: ['p_jan1' as PersonId, 'p_jan2' as PersonId], subject: 'Václav Hrubeš' };
+        const issue: ValidationIssue = { id: 'i1', severity: 'info', type: 'recurringGodparent', message: '', personIds: ['p_jan1' as PersonId, 'p_jan2' as PersonId], subject: 'Václav Zvonek' };
         const mark = dismissalFor(issue);
-        const otherGodparent = { ...issue, subject: 'Josef Hrubeš' };
+        const otherGodparent = { ...issue, subject: 'Josef Zvonek' };
         const newChild = { ...issue, personIds: [...issue.personIds!, 'p_marie' as PersonId] };
         expect(visibleIssues([issue, otherGodparent, newChild], { qualityDismissed: [mark] })).toEqual([otherGodparent, newChild]);
     });

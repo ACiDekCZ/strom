@@ -68,13 +68,13 @@ describe('recurring godparents: who is a lead (K1.1)', () => {
     function twoFamilies(part: Partial<EventParticipant>, part2: Partial<EventParticipant> = part): StromData {
         return tree(
             person('a', 'Jan', 'Lhoták', { events: [baptism('1850', part)] }),
-            person('b', 'Josef', 'Hrubeš', { events: [baptism('1852', part2)] }),
+            person('b', 'Josef', 'Zvonek', { events: [baptism('1852', part2)] }),
         );
     }
 
     it('a godparent in two unrelated families stays a lead', () => {
-        const d = twoFamilies({ name: 'Václav Kubát' });
-        expect(godparentLeads(d).map(l => l.name)).toEqual(['Václav Kubát']);
+        const d = twoFamilies({ name: 'Václav Kmínek' });
+        expect(godparentLeads(d).map(l => l.name)).toEqual(['Václav Kmínek']);
         expect(issuesOf(d, 'recurringGodparent')).toHaveLength(1);
         expect(issuesOf(d, 'recurringGodparent')[0].severity).toBe('info');
     });
@@ -88,7 +88,7 @@ describe('recurring godparents: who is a lead (K1.1)', () => {
     it('a priest written as a witness (older entries) is not a lead either', () => {
         const d = twoFamilies({ role: 'witness', name: 'P. Antonín Kříž, kaplan' });
         expect(godparentLeads(d)).toEqual([]);
-        const d2 = twoFamilies({ role: 'other', name: 'Antonín Kříž', note: 'farář v Lhotce' });
+        const d2 = twoFamilies({ role: 'other', name: 'Antonín Kříž', note: 'farář v Dubince' });
         expect(godparentLeads(d2)).toEqual([]);
     });
 
@@ -101,9 +101,9 @@ describe('recurring godparents: who is a lead (K1.1)', () => {
         const otec = person('f', 'Josef', 'Lhoták');
         const matka = person('m', 'Anna', 'Lhotáková', { gender: 'female' });
         const kids = [
-            person('c1', 'Jan', 'Lhoták', { events: [baptism('1850', { name: 'Václav Kubát' })] }),
-            person('c2', 'Marie', 'Lhotáková', { gender: 'female', events: [baptism('1852', { name: 'Václav Kubát' })] }),
-            person('c3', 'Petr', 'Lhoták', { events: [baptism('1855', { name: 'Václav Kubát' })] }),
+            person('c1', 'Jan', 'Lhoták', { events: [baptism('1850', { name: 'Václav Kmínek' })] }),
+            person('c2', 'Marie', 'Lhotáková', { gender: 'female', events: [baptism('1852', { name: 'Václav Kmínek' })] }),
+            person('c3', 'Petr', 'Lhoták', { events: [baptism('1855', { name: 'Václav Kmínek' })] }),
         ];
         siblings(otec, matka, ...kids);
         const d = tree(otec, matka, ...kids);
@@ -115,14 +115,14 @@ describe('recurring godparents: who is a lead (K1.1)', () => {
         const otec = person('f', 'Josef', 'Lhoták');
         const prvni = person('m1', 'Anna', 'Lhotáková', { gender: 'female' });
         const druha = person('m2', 'Marie', 'Lhotáková', { gender: 'female' });
-        const c1 = person('c1', 'Jan', 'Lhoták', { events: [baptism('1850', { name: 'Václav Kubát' })] });
-        const c2 = person('c2', 'Petr', 'Lhoták', { events: [baptism('1860', { name: 'Václav Kubát' })] });
+        const c1 = person('c1', 'Jan', 'Lhoták', { events: [baptism('1850', { name: 'Václav Kmínek' })] });
+        const c2 = person('c2', 'Petr', 'Lhoták', { events: [baptism('1860', { name: 'Václav Kmínek' })] });
         siblings(otec, prvni, c1);
         siblings(otec, druha, c2);
         expect(godparentLeads(tree(otec, prvni, druha, c1, c2))).toEqual([]);
 
-        const soused = person('s', 'Karel', 'Hrubeš', { events: [baptism('1861', { name: 'Václav Kubát' })] });
-        expect(godparentLeads(tree(otec, prvni, druha, c1, c2, soused)).map(l => l.name)).toEqual(['Václav Kubát']);
+        const soused = person('s', 'Karel', 'Zvonek', { events: [baptism('1861', { name: 'Václav Kmínek' })] });
+        expect(godparentLeads(tree(otec, prvni, druha, c1, c2, soused)).map(l => l.name)).toEqual(['Václav Kmínek']);
     });
 
     it('counts families by shared parents', () => {
@@ -130,7 +130,7 @@ describe('recurring godparents: who is a lead (K1.1)', () => {
         const matka = person('m', 'Anna', 'Lhotáková', { gender: 'female' });
         const a = person('a', 'Jan', 'Lhoták');
         const b = person('b', 'Petr', 'Lhoták');
-        const c = person('c', 'Karel', 'Hrubeš');
+        const c = person('c', 'Karel', 'Zvonek');
         siblings(otec, matka, a, b);
         const d = tree(otec, matka, a, b, c);
         expect(siblingGroupCount([a.id, b.id], d)).toBe(1);
@@ -141,8 +141,8 @@ describe('recurring godparents: who is a lead (K1.1)', () => {
     it('attendsByOffice: a godparent stays one even when the note says priest', () => {
         expect(attendsByOffice({ id: 'x', role: 'officiant', name: 'Antonín Kříž' })).toBe(true);
         expect(attendsByOffice({ id: 'x', role: 'godparent', name: 'Antonín Kříž', note: 'farář' })).toBe(false);
-        expect(attendsByOffice({ id: 'x', role: 'witness', name: 'Václav Kubát, sedlák z Lhotky' })).toBe(false);
-        expect(attendsByOffice({ id: 'x', role: 'other', name: 'Marie Kubátová', note: 'Hebamme' })).toBe(true);
+        expect(attendsByOffice({ id: 'x', role: 'witness', name: 'Václav Kmínek, sedlák z Lhotky' })).toBe(false);
+        expect(attendsByOffice({ id: 'x', role: 'other', name: 'Marie Kmínková', note: 'Hebamme' })).toBe(true);
     });
 });
 
@@ -151,44 +151,44 @@ describe('recurring godparents: who is a lead (K1.1)', () => {
 describe('godparents compared by the name alone (K1.2)', () => {
     it('the estate, the village and the house number do not split one godparent in two', () => {
         const d = tree(
-            person('a', 'Jan', 'Lhoták', { events: [baptism('1850', { name: 'Václav Kubát, sedlák z Lhotky čp. 12' })] }),
-            person('b', 'Josef', 'Hrubeš', { events: [baptism('1852', { name: 'Václav Kubát', note: 'sedlák, Lhotka č. 12' })] }),
-            person('c', 'Karel', 'Novotný', { events: [baptism('1853', { name: 'Václav Kubát z Lhotky' })] }),
+            person('a', 'Jan', 'Lhoták', { events: [baptism('1850', { name: 'Václav Kmínek, sedlák z Lhotky čp. 12' })] }),
+            person('b', 'Josef', 'Zvonek', { events: [baptism('1852', { name: 'Václav Kmínek', note: 'sedlák, Lhotka č. 12' })] }),
+            person('c', 'Karel', 'Novotný', { events: [baptism('1853', { name: 'Václav Kmínek z Lhotky' })] }),
         );
         const leads = godparentLeads(d);
         expect(leads).toHaveLength(1);
         expect(leads[0].count).toBe(3);
         // The name shown and kept as the finding's subject is the name alone.
-        expect(leads[0].name).toBe('Václav Kubát');
-        expect(issuesOf(d, 'recurringGodparent')[0].subject).toBe('Václav Kubát');
+        expect(leads[0].name).toBe('Václav Kmínek');
+        expect(issuesOf(d, 'recurringGodparent')[0].subject).toBe('Václav Kmínek');
     });
 
     it('a lone given name names nobody: two "Anna, his wife" are not one woman', () => {
         const d = tree(
             person('a', 'Jan', 'Lhoták', { events: [baptism('1850', { name: 'Anna, jeho manželka' })] }),
-            person('b', 'Josef', 'Hrubeš', { events: [baptism('1852', { name: 'Anna, jeho manželka' })] }),
+            person('b', 'Josef', 'Zvonek', { events: [baptism('1852', { name: 'Anna, jeho manželka' })] }),
         );
         expect(godparentLeads(d)).toEqual([]);
     });
 
     it('participantName reads the name out of what the register wrote', () => {
         const read = (s: string) => participantName(s);
-        expect(read('Václav Kubát, sedlák z Lhotky čp. 12')).toMatchObject({ name: 'Václav Kubát', key: 'vaclav kubat' });
-        expect(read('Václav Kubát z Lhotky čp. 12').name).toBe('Václav Kubát');
-        expect(read('Václav Kubát ze Lhotky').name).toBe('Václav Kubát');
-        expect(read('Marie Kubátová roz. Lhotáková').name).toBe('Marie Kubátová');
-        expect(read('Marie Kubátová, manželka Václava Kubáta').name).toBe('Marie Kubátová');
-        expect(read('Václav Kubát[?]').key).toBe('vaclav kubat');
-        expect(read('Václav Kubát(?)').key).toBe('vaclav kubat');
-        expect(read('Václav Ku[bát]').key).toBe('vaclav kubat');
-        expect(read('kmotr Václav Kubát').name).toBe('Václav Kubát');
+        expect(read('Václav Kmínek, sedlák z Lhotky čp. 12')).toMatchObject({ name: 'Václav Kmínek', key: 'vaclav kminek' });
+        expect(read('Václav Kmínek z Lhotky čp. 12').name).toBe('Václav Kmínek');
+        expect(read('Václav Kmínek ze Lhotky').name).toBe('Václav Kmínek');
+        expect(read('Marie Kmínková roz. Lhotáková').name).toBe('Marie Kmínková');
+        expect(read('Marie Kmínková, manželka Václava Kmínka').name).toBe('Marie Kmínková');
+        expect(read('Václav Kmínek[?]').key).toBe('vaclav kminek');
+        expect(read('Václav Kmínek(?)').key).toBe('vaclav kminek');
+        expect(read('Václav Kmí[nek]').key).toBe('vaclav kminek');
+        expect(read('kmotr Václav Kmínek').name).toBe('Václav Kmínek');
         expect(read('P. Antonín Kříž, kaplan')).toMatchObject({ name: 'Antonín Kříž', rest: 'kaplan' });
         expect(read('Karl von Berg, Bauer').name).toBe('Karl von Berg');
         expect(read('Anna uxor Josefa Lhotáka').key).toBeNull();
         expect(read('Anna, jeho manželka').key).toBeNull();
-        expect(read('václav kubát, sedlák').key).toBe('vaclav kubat');
+        expect(read('václav kmínek, sedlák').key).toBe('vaclav kminek');
         // Diacritics and case do not matter.
-        expect(read('VACLAV KUBAT').key).toBe(read('Václav Kubát').key);
+        expect(read('VACLAV KMINEK').key).toBe(read('Václav Kmínek').key);
     });
 });
 
@@ -343,13 +343,13 @@ describe('Problems and Traces (K1.4)', () => {
     });
 
     it('a finding is named by type, sorted people and subject; a duplicate has no subject', () => {
-        const g1 = qualityFinding(issue('1', 'info', 'recurringGodparent', ['b', 'a'], { subject: ' Václav Kubát ' }));
-        expect(g1).toEqual({ kind: 'recurringGodparent', persons: ['a', 'b'], subject: 'Václav Kubát' });
+        const g1 = qualityFinding(issue('1', 'info', 'recurringGodparent', ['b', 'a'], { subject: ' Václav Kmínek ' }));
+        expect(g1).toEqual({ kind: 'recurringGodparent', persons: ['a', 'b'], subject: 'Václav Kmínek' });
         const dup = qualityFinding(issue('2', 'info', 'possibleDuplicate', ['b', 'a'], { detail: '* 1850' }));
         expect(dup).toEqual({ kind: 'possibleDuplicate', persons: ['a', 'b'] });
         expect(qualityFindingKey(dup)).toBe(qualityFindingKey({ kind: 'possibleDuplicate', persons: ['b', 'a'] }));
         // NFD and NFC spellings of one name are one key.
-        const nfd = qualityFinding(issue('3', 'info', 'recurringGodparent', ['a', 'b'], { subject: 'Václav Kubát'.normalize('NFD') }));
+        const nfd = qualityFinding(issue('3', 'info', 'recurringGodparent', ['a', 'b'], { subject: 'Václav Kmínek'.normalize('NFD') }));
         expect(qualityFindingKey(nfd)).toBe(qualityFindingKey(g1));
     });
 });
