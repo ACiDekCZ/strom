@@ -8,7 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     foldSearch, matchesQuery, manageRegions, regionParents, regionGroups, placeGroups, hiddenRows,
-    deletedRows, manageHeader, manageCan, gapsLabel, manageSummaries, type ManageEnv, type ManageNames,
+    deletedRows, manageHeader, manageCan, gapsLabel, waitingPlaces, manageSummaries, type ManageEnv, type ManageNames,
     detailOwner, detailEvents, filterDetailEvents, detailFacets, detailCenturies, centuryGroups, emptyDetailFilter,
     detailFilterActive, historyAudience, audiencePlaces,
 } from '../history-manage.js';
@@ -110,6 +110,33 @@ describe('regions', () => {
         expect(h.parent).toBe('');
         expect(i.dim).toBe(true);
         expect(i.link).toBe('searchAgain');
+    });
+
+    it('a done region with a fill task but no gaps says more years are coming (cs/en/de)', () => {
+        const p = payload({ regions: {
+            a: region('a', { state: 'done', fill: 'queued' }),
+            b: region('b', { state: 'done', fill: 'running' }),
+            c: region('c', { state: 'done', fill: 'running', gaps: [{ from: 1870, to: 1913 }] }),
+            d: region('d', { state: 'done' }),
+        } });
+        const rows = (lang: 'en' | 'cs' | 'de') => regionGroups(p, env({ lang }), names)[0].rows;
+        const [a, b, c, d] = rows('en');
+        expect(a.gaps).toBe('more years queued');
+        expect(b.gaps).toBe('more years being searched');
+        expect(c.gaps).toBe('years without events 1870–1913 · being filled');
+        expect(d.gaps).toBe('');
+        expect(rows('cs').map(r => r.gaps).slice(0, 2)).toEqual(['další roky na řadě', 'hledají se další roky']);
+        expect(rows('de').map(r => r.gaps).slice(0, 2)).toEqual(['weitere Jahre geplant', 'weitere Jahre werden gesucht']);
+    });
+
+    it('never offers find first for a skipped, covered or done region', () => {
+        const p = payload({ regions: {
+            s: region('s', { state: 'skipped' }), c: region('c', { state: 'covered', covered: ['x'] }), d: region('d', { state: 'done' }),
+            q: region('q', { state: 'queued', order: 2 }), w: region('w', { state: 'waiting' }),
+        } });
+        const rows = regionGroups(p, env(), names).flatMap(g => g.rows);
+        const first = rows.filter(r => r.actions.includes('first')).map(r => r.key).sort();
+        expect(first).toEqual(['q', 'w']);
     });
 
     it('without the bridge offers only hide all; an archive shows the queue waiting', () => {
@@ -271,6 +298,25 @@ describe('header', () => {
         expect(off.link).toBe('enable');
         expect(manageHeader(p, env({ searchOn: false })).link).toBeNull();
         expect(manageHeader(p, env({ treeState: 'archive' })).text).not.toContain('Bohemia');
+    });
+
+    it('the running sentence counts waiting places without skipped ones (state.pending without R1 places)', () => {
+        const regions = { bohemia: region('bohemia', { state: 'running' }), moravia: region('moravia', { state: 'skipped' }), silesia: region('silesia', { state: 'queued' }) };
+        const q = payload({
+            regions, state: { on: true, search: 'running', pending: 9 },
+            places: {
+                a: { events: [], state: 'pending', regions: [{ id: 'silesia' }], persons: 2 },
+                b: { events: [], state: 'pending', regions: [{ id: 'moravia' }], persons: 1 },
+                c: { events: [], state: 'pending', regions: [{ id: 'moravia', to: 1850 }, { id: 'silesia', from: 1850 }], persons: 1 },
+                d: { events: [], state: 'pending', persons: 1 },
+                e: { events: [], state: 'pending', skip: true, regions: [{ id: 'silesia' }], persons: 1 },
+                f: { events: [], regions: [{ id: 'bohemia' }], persons: 4 },
+            },
+        });
+        expect(waitingPlaces(q)).toBe(3);
+        expect(manageHeader(q, env()).text).toContain('3 places');
+        const old = payload({ regions, state: { on: true, search: 'running', pending: 9 }, places: { a: { events: [], state: 'pending' } } });
+        expect(waitingPlaces(old)).toBe(9);
     });
 
     it('summaries count regions, places, events and hidden', () => {

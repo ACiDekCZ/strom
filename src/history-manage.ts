@@ -271,6 +271,9 @@ export function regionGroups(p: HistoryPayload, env: ManageEnv, names: ManageNam
         if (r.state === 'done' && r.gaps?.length) {
             row.gaps = s.regionGaps(gapsLabel(r.gaps))
                 + (r.fill === 'queued' ? ` ${s.gapsFillQueued}` : r.fill === 'running' ? ` ${s.gapsFillRunning}` : '');
+        } else if (r.state === 'done' && r.fill) {
+            // A task for new years without gaps: the region is not complete yet.
+            row.gaps = r.fill === 'running' ? s.fillOnlyRunning : s.fillOnlyQueued;
         }
         const set = (glyph: string, tone: ManageTone, state: string) => { row.glyph = glyph; row.tone = tone; row.state = state; };
         if (hiddenAll) {
@@ -643,6 +646,24 @@ export function manageCounts(p: HistoryPayload, queue: readonly HistoryHideOp[] 
     };
 }
 
+/**
+ * Places of the tree still waiting for the search: pending, not skipped, with a
+ * region that is not skipped for the tree (`state.pending` counts those too).
+ * Without R1 places (no regions on any place) the research's own count.
+ */
+export function waitingPlaces(p: HistoryPayload): number {
+    const places = Object.values(p.places);
+    if (!p.regions || !places.some(pl => pl.regions !== undefined || pl.persons !== undefined)) return p.state.pending ?? 0;
+    let n = 0;
+    for (const pl of places) {
+        if (pl.state !== 'pending' || pl.skip) continue;
+        const ids = pl.regions ?? [];
+        if (ids.length && ids.every(r => p.regions![r.id]?.state === 'skipped')) continue;
+        n++;
+    }
+    return n;
+}
+
 /** The header (§1.2): the state, the pace while it searches, the notes and the summary. */
 export function manageHeader(p: HistoryPayload, env: ManageEnv): ManageHeader {
     const s = getStringsForLang(env.lang).history;
@@ -671,7 +692,7 @@ export function manageHeader(p: HistoryPayload, env: ManageEnv): ManageHeader {
         const running = list.find(r => r.state === 'running');
         const next = list.filter(r => r.state === 'queued')
             .sort((a, b) => Number(!!b.first) - Number(!!a.first) || (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER))[0];
-        if (running) text = s.manageRunning(regionName(running, lang), p.state.pending ?? 0);
+        if (running) text = s.manageRunning(regionName(running, lang), waitingPlaces(p));
         else if (next) text = s.manageQueued(regionName(next, lang));
         else if (list.some(r => r.state === 'waiting')) text = s.stateSearching;
         else text = s.manageDone;
