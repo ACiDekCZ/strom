@@ -19,3 +19,8 @@ export function historyQueueKey(researchId: string): string {
 export function isHistoryKey(key: string): boolean {
     return key.startsWith('history:') || key.startsWith('historyHide:');
 }
+
+/** What this device knows of a research's "not an error" marks (spec 021 §D): in 'shareBaselines', keyed by the research's id. */
+export function qualityBridgeKey(researchId: string): string {
+    return `quality:${researchId.toLowerCase()}`;
+}

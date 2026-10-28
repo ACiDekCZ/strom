@@ -30,6 +30,7 @@ import { createSnapshot, SnapshotResearchBase } from './snapshots.js';
 import { researchAutoState, patchResearchAutoState } from './research-device.js';
 import { researchBaseKey, isHistoryKey } from './storage-keys.js';
 import { deleteHistoryStore } from './history-store.js';
+import { deleteQualityBridgeRecord } from './quality-bridge.js';
 import { VIEW_LINK_KEY_PREFIXES, forgetViewLinks } from './view-links.js';
 import { unknownSexFromTie, fingerprintLike, normalizeResearchId } from './research-link.js';
 import { unknownSexInResearchCopies } from './research-copy.js';
@@ -473,6 +474,7 @@ class TreeManagerClass {
         // The research's events of the time (spec 020), unless another tree of the same research still shows them.
         if (researchId && !this.index.trees.some(t => t.research?.id === researchId)) {
             await deleteHistoryStore(researchId);
+            await deleteQualityBridgeRecord(researchId);
         }
         forgetPoolScope(id);
 

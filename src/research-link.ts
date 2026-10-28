@@ -1344,6 +1344,8 @@ export interface LiveStatus {
     experiments?: { history: boolean };
     /** `history.rev` (with `history.events` in `features`): a print of what `GET /history` returns; read it again when it changes. */
     historyRev?: string;
+    /** `quality.rev` (with `quality.read` in `features`): a print of what `GET /quality` returns (spec 021 §D). */
+    qualityRev?: string;
     /** `experiments.historyPace` (with `experiments.pace` in `features`): how often the research looks for history. */
     historyPace?: HistoryPace;
     /** `history.placeEstimate` (with `history.place` in `features`): one place's own history, minutes and (measured) USD. */
@@ -2113,7 +2115,15 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
         ...(features?.includes(SEAL_FOREIGN_FEATURE) && (r.seal === 'here' || r.seal === 'elsewhere') ? { seal: r.seal } : {}),
         ...(features?.includes(NOT_DOWNLOADED_FEATURE) && asCount(r.notDownloaded) !== null ? { notDownloaded: asCount(r.notDownloaded)! } : {}),
         ...experimentsSaid(r, features),
+        ...qualitySaid(r, features),
     };
+}
+
+/** `quality.rev`, read only when `features` names `quality.read`. */
+function qualitySaid(r: Record<string, unknown>, features: string[] | null): Pick<LiveStatus, 'qualityRev'> {
+    const q = features?.includes('quality.read') ? asRecord(r.quality) : null;
+    const rev = q ? cleanText(q.rev, 128) : '';
+    return rev ? { qualityRev: rev } : {};
 }
 
 /** `experiments` and `history.rev`, each read only when `features` names it. */

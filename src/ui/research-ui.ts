@@ -2491,6 +2491,11 @@ export const researchUiMethods = uiModule({
             this.liveBridgeBack(s);
             this.noteHistoryEvent(s.researchId, payload(e));
         });
+        // The research's "not an error" marks changed (spec 021 §D): read them by their rev.
+        es.addEventListener('quality', (e) => {
+            this.liveBridgeBack(s);
+            this.noteQualityEvent(s.researchId, payload(e));
+        });
         es.addEventListener('working', (e) => {
             s.working = sanitizeWorking(payload(e));
             this.renderLivePanel();
