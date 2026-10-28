@@ -10,7 +10,7 @@ import {
     residencePoints, placesInYear, computePersonHistory, effectiveHidden, queueHideOp,
     groupHistoryByYear, historyClusterLabel, historySettingsStatus, historyHiddenCount,
     sanitizeHideQueue, sanitizeCachedHistory, HISTORY_LIMITS, interleaveHistory, historySourceLabel,
-    historyFindRegions, historyKindsShown, historyKindLocked,
+    historyFindRegions, historyKindsShown, historyKindLocked, historyMainPlace, historyPlaceRow,
     type HistoryPayload, type HistorySettingsInput, type HistoryHideOp,
 } from '../history.js';
 import { computePersonLifeline } from '../timeline.js';
@@ -633,5 +633,73 @@ describe('kinds of history in the card (1028 §6)', () => {
         expect(historyKindLocked({ region: true, place: true, local: false }, 'region', true)).toBe(false);
         expect(historyKindLocked({ region: true, place: true, local: false }, 'local', false)).toBe(false);
         expect(historyKindLocked(all, 'local', true)).toBe(false);
+    });
+});
+
+describe('local history on request in the card (1028 §6a)', () => {
+    // Lhota 1838–1862 (birth, marriage), Horní Lhota from 1870 to the death in 1900: Horní Lhota is the longer stay.
+    const josef = person('josef', {
+        birthDate: '1838', birthPlace: 'Lhota', events: [residence('1862', 'Lhota'), residence('1870', 'Horní Lhota')],
+        deathDate: '1900', deathPlace: 'Horní Lhota',
+    });
+    const d = data([josef]);
+    const raw = (places: Record<string, unknown>) => payload({
+        state: { on: true, search: 'done', at: AT }, places,
+        regions: { 'cz-bohemia': { state: 'done' } },
+    });
+    const both = (lhota: Record<string, unknown> = {}, horni: Record<string, unknown> = {}) => raw({
+        Lhota: { events: [], regions: [{ id: 'cz-bohemia' }], id: 'L0001', history: 'none', ...lhota },
+        'Horní Lhota': { events: [], regions: [{ id: 'cz-bohemia' }], id: 'L0002', history: 'none', ...horni },
+    });
+
+    it('the main place is the one of the longest stay', () => {
+        const main = historyMainPlace(d, 'josef', both());
+        expect(main?.key).toBe('Horní Lhota');
+        expect(main?.name).toBe('Horní Lhota');
+        expect(main!.years).toBeGreaterThan(30);
+    });
+
+    it('a tie in years goes to more facts there', () => {
+        // Born in A 1800, B 1801, A 1802, died in A 1803: A has more years and facts; with only A and B known in turn.
+        const p = person('p', {
+            birthDate: '1800', birthPlace: 'Ves', events: [residence('1801', 'Město')], deathDate: '1802', deathPlace: 'Ves',
+        });
+        const main = historyMainPlace(data([p]), 'p', raw({ Ves: { events: [] }, Město: { events: [] } }));
+        expect(main?.key).toBe('Ves');
+        expect(main?.facts).toBe(2);
+    });
+
+    it('only places the research knows; none: no main place', () => {
+        expect(historyMainPlace(d, 'josef', raw({ Lhota: { events: [] } }))?.key).toBe('Lhota');
+        expect(historyMainPlace(d, 'josef', raw({}))).toBeNull();
+        expect(historyMainPlace(data([person('x')]), 'x', both())).toBeNull();
+    });
+
+    it('offers the main place with no history of its own and a record', () => {
+        const p = both();
+        expect(historyPlaceRow(p, historyMainPlace(d, 'josef', p), true)).toEqual({ kind: 'offer', key: 'Horní Lhota', name: 'Horní Lhota' });
+        // Not offerable (gates): nothing.
+        expect(historyPlaceRow(p, historyMainPlace(d, 'josef', p), false)).toBeNull();
+        // No record (`id`): never offered.
+        const noId = raw({ 'Horní Lhota': { events: [], regions: [{ id: 'cz-bohemia' }], history: 'none' } });
+        expect(historyPlaceRow(noId, historyMainPlace(d, 'josef', noId), true)).toBeNull();
+        // Not searched for the tree: nothing.
+        const skip = both({}, { skip: true });
+        expect(historyPlaceRow(skip, historyMainPlace(d, 'josef', skip), true)).toBeNull();
+        // Still being matched to its regions: that comes first, no offer yet.
+        const pending = raw({ 'Horní Lhota': { events: [], state: 'pending', regions: [{ id: 'cz-bohemia' }], id: 'L0001' } });
+        expect(historyPlaceRow(pending, historyMainPlace(d, 'josef', pending), true)).toBeNull();
+    });
+
+    it('says the state of the main place (M5); done says nothing', () => {
+        const row = (history: string, extra: Record<string, unknown> = {}) => {
+            const p = both({}, { history, ...extra });
+            return historyPlaceRow(p, historyMainPlace(d, 'josef', p), false);
+        };
+        expect(row('first')?.kind).toBe('first');
+        expect(row('running')?.kind).toBe('running');
+        expect(row('empty')?.kind).toBe('empty');
+        expect(row('waiting', { why: 'no agent' })).toEqual({ kind: 'waiting', key: 'Horní Lhota', name: 'Horní Lhota', why: 'no agent' });
+        expect(row('done')).toBeNull();
     });
 });

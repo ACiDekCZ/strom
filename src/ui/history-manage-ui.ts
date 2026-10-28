@@ -511,12 +511,17 @@ export const historyManageMethods = uiModule({
         const dots = row?.actions.length
             ? `<button type="button" class="hm-dots hm-detail-dots" data-hm="menu" data-kind="region" data-key="${esc(key)}" aria-haspopup="menu" aria-expanded="false"`
                 + ` aria-label="${esc(strings.history.more)}" data-hfocus="dots"${view.busy.has(key) ? ' disabled' : ''}>⋯</button>` : '';
+        // §6a.6: a place done — "Search again in the research" opens the research's terminal (nothing starts here).
+        const placeKeyOf = owner === 'place' ? key.slice('place:'.length) : '';
+        const again = placeKeyOf && this.historyPlaceSearchAgainShown(placeKeyOf)
+            ? `${state ? ' · ' : ''}<button type="button" class="link hm-detail-again" data-hm="placeAgain" data-key="${esc(placeKeyOf)}" data-hfocus="placeAgain">${esc(strings.history.placeSearchAgain)}</button>`
+            : '';
         const note = view.notes.get(key);
         body.innerHTML = `<div class="hm-detail" data-key="${esc(key)}">`
             + '<div class="hm-detail-head"><div class="hm-detail-line">'
             + `<h3 class="hm-detail-title" tabindex="-1" data-hfocus="title">${mark}<span class="hm-detail-name">${esc(title)}</span>`
             + (head.sub ? ` <span class="hm-detail-sub">${esc(head.sub)}</span>` : '') + '</h3>' + dots + '</div>'
-            + (state ? `<p class="hm-detail-state">${esc(state)}</p>` : '')
+            + (state || again ? `<p class="hm-detail-state">${esc(state)}${again}</p>` : '')
             + (note ? `<p class="hm-detail-note is-${note.tone}" role="status">${esc(note.text)}</p>` : '')
             + '</div><div class="hm-detail-body"></div></div>';
         this.renderHistoryRegionDetail(body.querySelector('.hm-detail-body') as HTMLElement, key, d);
@@ -653,6 +658,7 @@ export const historyManageMethods = uiModule({
             case 'showAgain': this.historyManageShowAgain(key); return;
             case 'assign': this.historyManagePlaceHook('assign')?.(key); return;
             case 'find': this.historyManagePlaceHook('find')?.(key); return;
+            case 'placeAgain': void this.historyPlaceSearchAgain(key); return;
             case 'restoreHidden': this.historyManageRestoreHidden(Number(el.dataset.index)); return;
             case 'restoreDeleted': void this.historyManageRestoreDeleted(key); return;
             case 'noteLink': view.notes.get(key)?.link?.run(); return;

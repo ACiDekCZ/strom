@@ -211,12 +211,12 @@ test.describe('History of places: the manager', () => {
         await setup(page);
         await openManager(page, { tab: 'places' });
         await expect(tab(page, 'places')).toHaveAttribute('aria-selected', 'true');
-        await expect(modal(page).locator('.hm-group-title')).toHaveText(['Unassigned places', 'All places · 5']);
+        await expect(modal(page).locator('.hm-group-title')).toHaveText(['Unassigned places', 'Places with the most people of the tree', 'All places · 5']);
         const unassigned = modal(page).locator('.hm-group[data-group="unassigned"] .hm-place');
         await expect(unassigned.locator('.hm-p-name')).toHaveText(['Lhotka']);
         await expect(unassigned.locator('.hm-p-why')).toHaveText('several places of that name');
-        // The suggestions lead only to "Find local history…" (a later part): not shown without it.
-        await expect(modal(page).locator('.hm-group[data-group="suggest"]')).toHaveCount(0);
+        // The research's suggestions (R6), each with "Find local history…" (history-place.spec.ts).
+        await expect(modal(page).locator('.hm-group[data-group="suggest"] .hm-p-name')).toHaveText(['Kutná Hora']);
         const all = modal(page).locator('.hm-group[data-group="all"] .hm-p-name');
         await expect(all).toHaveText(['Kutná Hora', 'Čáslav', 'Brno', 'Lhotka', 'Opava']);
         const caslav = modal(page).locator('.hm-group[data-group="all"] .hm-place[data-place="Čáslav"]');

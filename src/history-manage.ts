@@ -11,7 +11,7 @@
 
 import {
     computePersonHistory, HISTORY_KINDS, type PersonHistoryEnv,
-    effectiveHidden, historyHiddenCount, historyWaiting, pickHistoryText,
+    effectiveHidden, historyHiddenCount, historyPlaceOfferable, historyWaiting, pickHistoryText,
     type HistoryPayload, type HistoryRegion, type HistoryHideOp, type HistoryEvent, type HistoryText,
     type EffectiveHidden, type HistoryPlace, type HistoryPlaceRegion,
 } from './history.js';
@@ -475,7 +475,7 @@ export function placeGroups(p: HistoryPayload, env: ManageEnv, names: ManageName
         }
         if (r1) {
             if (canMap && !place.skip) row.actions.push('changeRegion');
-            if (canPlace && place.id && (!place.history || place.history === 'none') && !place.skip) row.actions.push('placeFind');
+            if (canPlace && historyPlaceOfferable(place)) row.actions.push('placeFind');
             if (canSkip && !place.skip) row.actions.push('skip');
             row.actions.push('openInPlaces');
         }
@@ -509,7 +509,7 @@ export function placeGroups(p: HistoryPayload, env: ManageEnv, names: ManageName
                 const k = byId.get(id);
                 if (!k) continue;
                 const pl = p.places[k];
-                if ((pl.history && pl.history !== 'none') || pl.skip) continue;
+                if (!historyPlaceOfferable(pl)) continue;
                 const row = rowOf(k, pl);
                 row.find = true;
                 row.state = '';

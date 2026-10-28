@@ -19,7 +19,7 @@ import { shownName } from '../person-name.js';
 import { MQ_MOBILE, MQ_PHONE_LANDSCAPE } from '../breakpoints.js';
 import {
     groupHistoryByYear, historyClusterLabel, historySourceLabel, isHistoryLang,
-    type LifelineHistoryItem, type HiddenHistoryItem, type PersonHistory, type HistoryEvent, type HistoryFindRegion,
+    type LifelineHistoryItem, type HiddenHistoryItem, type PersonHistory, type HistoryEvent, type HistoryFindRegion, type HistoryPlaceRow,
 } from '../history.js';
 import { regionName } from '../history-manage.js';
 import { postBridgeFirst, postBridgeSkip, type HistoryWriteRefusal } from '../history-bridge.js';
@@ -287,6 +287,8 @@ export const historyCardMethods = uiModule({
             // 9 (all hidden): only "Hidden: n"; 11 (incomplete, a place missing): nothing.
             default: break;
         }
+        // §6a: the main place's own history, only when §5 offers nothing.
+        if (!find && history.placeRow) tail += this.lifelineHistoryPlaceRow(history.placeRow);
         if (history.hidden.length) {
             rowHidden = history.hidden;
             const items = history.hidden.map((item, j) => {
@@ -343,6 +345,40 @@ export const historyCardMethods = uiModule({
         if (list.length === 1) return stateRow(h.findOne(name(top.id)), ` ${link(h.findRegion(name(top.id)))}`);
         return stateRow(h.findMany(name(list[0].id), name(list[1].id), list.length - 2),
             ` ${link(h.findRegion(name(top.id)))} <button type="button" class="link pm-lifeline-hfind-more" data-hfocus="findMore">· ${esc(h.findMore)} ›</button>`);
+    },
+
+    /**
+     * §6a.2 / §6a.4 (M1, M5): the last row for the person's main place — the
+     * offer "… not looked for yet" + "Find local history…" (a phone: one
+     * line), or the state of its own history.
+     */
+    lifelineHistoryPlaceRow(row: HistoryPlaceRow): string {
+        const h = strings.history;
+        const line = (inner: string, cls = ''): string =>
+            `<div class="pm-lifeline-row k-historyState is-place is-place-row${cls}" data-place-row="${esc(row.kind)}">`
+            + '<span class="pm-lifeline-hmark" aria-hidden="true"></span><span class="pm-lifeline-year"></span>'
+            + '<span class="pm-lifeline-glyph" aria-hidden="true"></span>'
+            + `<span class="pm-lifeline-desc">${inner}</span></div>`;
+        switch (row.kind) {
+            case 'offer': {
+                const link = (label: string) => `<button type="button" class="link pm-lifeline-hfind pm-lifeline-hplace" data-hfocus="placeFind"`
+                    + ` data-place-find="${esc(row.key)}" aria-haspopup="dialog">${esc(label)}</button>`;
+                if (media(MQ_MOBILE)) {
+                    return line(`<span class="pm-lifeline-hfind-text">${esc(h.placeOfferShort(row.name))}</span> ${link(h.placeFindShort)}`, ' is-find-one');
+                }
+                return line(`${esc(h.placeOffer(row.name))} ${link(h.placeFind)}`);
+            }
+            case 'first': return line(esc(h.placeFirst(row.name)));
+            case 'running': return line(esc(h.placeRunning(row.name)));
+            case 'empty': return line(esc(h.placeEmpty(row.name)));
+            case 'waiting': return line(esc(h.statusWaiting(row.why)));
+        }
+    },
+
+    /** §6a.1: the place of an event of a place's own history (its name in the UI language, else the tree's spelling). */
+    historyCardPlaceName(item: LifelineHistoryItem): string {
+        const n = item.ev.place?.name;
+        return (n && (n[getCurrentLanguage()] || n.en || Object.values(n).find(Boolean))) || item.place;
     },
 
     /** A region's name in the UI language from the open tree's copy (its id when unnamed). */
@@ -441,7 +477,8 @@ export const historyCardMethods = uiModule({
         const i = rowItems.push(item) - 1;
         const meta: string[] = [];
         if (item.age) meta.push(`<span>${esc(item.age)}</span>`);
-        if (item.regionLabel) meta.push(`<span class="pm-lifeline-hregion">${esc(item.regionLabel)}</span>`);
+        if (ev.scope === 'place') meta.push(`<span class="pm-lifeline-hregion pm-lifeline-hplace-name">${esc(strings.history.placeAround(this.historyCardPlaceName(item)))}</span>`);
+        else if (item.regionLabel) meta.push(`<span class="pm-lifeline-hregion">${esc(item.regionLabel)}</span>`);
         const desc = historyEventDescHtml(ev, item, {
             meta, quoteOpen: openQuotes.has(ev.id),
             cite: `data-cite="${i}" data-hfocus="cite:${esc(ev.id)}"`,
@@ -510,6 +547,11 @@ export const historyCardMethods = uiModule({
             const find = target.closest<HTMLElement>('[data-find]');
             if (find) {
                 if (find.getAttribute('aria-disabled') !== 'true') void this.lifelineHistoryFind(find.dataset.find ?? '');
+                return;
+            }
+            const placeFind = target.closest<HTMLElement>('[data-place-find]');
+            if (placeFind) {
+                this.openHistoryPlaceFind(placeFind.dataset.placeFind ?? '');
                 return;
             }
             const findNote = target.closest<HTMLElement>('[data-find-note]');

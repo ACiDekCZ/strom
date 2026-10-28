@@ -29,7 +29,7 @@ import {
 } from '../research-link.js';
 import { storedResearchBridge, announcedResearchScheme } from '../research-device.js';
 import {
-    computePersonHistory, historyCardShows, historyFindRegions, historySettingsStatus, queueHideOp,
+    computePersonHistory, historyCardShows, historyFindRegions, historyMainPlace, historyPlaceRow, historyWaiting, historySettingsStatus, queueHideOp,
     historyKindsShown, historyKindLocked, HISTORY_SCOPE_KINDS, type HistoryKinds,
     type HistoryPayload, type HistoryDeleted, type HistoryHideOp, type PersonHistory, type LifelineHistoryItem, type HiddenHistoryItem,
     type HistorySettingsAction, type EffectiveHidden,
@@ -409,6 +409,15 @@ export const historyMethods = uiModule({
         if (looking && status && (status.features ?? []).includes(HISTORY_FIRST_FEATURE) && payload.regions) {
             const find = historyFindRegions(DataManager.getData(), personId, payload, status.treeState ? { treeState: status.treeState } : {});
             if (find.length) history.find = find;
+        }
+        // §6a: the main place's own history as the last row, only when §5 offers nothing (always one offer).
+        const { kinds, placeShown } = this.historyKindsNow();
+        const placeState = ['events', 'searching', 'none', 'allHidden'].includes(history.state.kind);
+        if (placeShown && kinds.place && placeState && !history.find?.length && payload.regions) {
+            const canOffer = !!status && (status.features ?? []).includes(HISTORY_PLACE_FEATURE)
+                && (searchOn ?? payload.state.on) && !historyWaiting(payload, status.treeState);
+            const row = historyPlaceRow(payload, historyMainPlace(DataManager.getData(), personId, payload), canOffer);
+            if (row) history.placeRow = row;
         }
         return { researchId: rid, chipOn, history, canLinkOn };
     },

@@ -977,6 +977,8 @@ export interface PersonHistory {
     state: HistoryCardState;
     /** §5: regions not searched yet to offer instead of "still looking" (set by the caller: feature, bridge). */
     find?: HistoryFindRegion[];
+    /** §6a: the last row for the person's main place's own history (set by the caller: feature, bridge). */
+    placeRow?: HistoryPlaceRow;
 }
 
 function lifeBounds(person: Person, points: readonly LifelinePoint[]): { birth: number | null; death: number | null; lo: number | null; hi: number | null } {
@@ -1198,6 +1200,104 @@ export function historyFindRegions(data: StromData, personId: string, p: History
     return [...facts]
         .sort(([a, x], [b, y]) => y - x || order(a) - order(b) || (a < b ? -1 : a > b ? 1 : 0))
         .map(([id, n]) => ({ id, facts: n, first: regions[id].first === true }));
+}
+
+// ─── Local history on request in the card (§6a) ───────────────────────────
+
+/** The place a person lived in longest (§6a.2), as the payload knows it. */
+export interface HistoryMainPlace {
+    /** The payload's place key. */
+    key: string;
+    /** The tree's spelling of the place. */
+    name: string;
+    /** Years of the person's life spent there (by `placesInYear`). */
+    years: number;
+    /** The person's dated points there. */
+    facts: number;
+}
+
+/** At most this many years are walked for "lived longest" (a life is shorter). */
+const MAIN_PLACE_MAX_YEARS = 150;
+
+/**
+ * §6a.2: the person's place of the longest stay among the places the payload
+ * knows — every year of the life (birth to death, else the first to the last
+ * dated point) counts for the places `placesInYear` gives; a tie goes to more
+ * of the person's facts there, then to the place met first. Null: no place.
+ */
+export function historyMainPlace(data: StromData, personId: string, p: HistoryPayload): HistoryMainPlace | null {
+    const person = data.persons[personId as keyof typeof data.persons] as Person | undefined;
+    if (!person) return null;
+    const points = computePersonLifeline(data, personId);
+    const residence = residencePoints(points);
+    if (!residence.length) return null;
+    const matched = new Map<string, string | null>();
+    const out = new Map<string, HistoryMainPlace & { first: number }>();
+    const keyOf = (place: string): string | null => {
+        const k = placeKey(place);
+        if (!matched.has(k)) matched.set(k, matchHistoryPlace(p, place));
+        return matched.get(k) ?? null;
+    };
+    residence.forEach((r, i) => {
+        const key = keyOf(r.place);
+        if (!key) return;
+        const cur = out.get(key);
+        if (cur) cur.facts++;
+        else out.set(key, { key, name: r.place, years: 0, facts: 1, first: i });
+    });
+    if (!out.size) return null;
+    const { lo, hi } = lifeBounds(person, points);
+    if (lo !== null && hi !== null) {
+        const end = Math.min(hi, lo + MAIN_PLACE_MAX_YEARS);
+        for (let y = lo; y <= end; y++) {
+            const seen = new Set<string>();
+            for (const place of placesInYear(residence, y)) {
+                const key = keyOf(place);
+                if (!key || seen.has(key)) continue;
+                seen.add(key);
+                const cur = out.get(key);
+                if (cur) cur.years++;
+            }
+        }
+    }
+    const best = [...out.values()].sort((a, b) => b.years - a.years || b.facts - a.facts || a.first - b.first)[0];
+    return { key: best.key, name: best.name, years: best.years, facts: best.facts };
+}
+
+/** The card's last row for the main place's own history (§6a.4, M5). */
+export type HistoryPlaceRow =
+    /** none (with an `id`): "… not looked for yet" + "Find local history…". */
+    | { kind: 'offer'; key: string; name: string }
+    | { kind: 'first' | 'running' | 'empty'; key: string; name: string }
+    | { kind: 'waiting'; key: string; name: string; why?: string };
+
+/**
+ * §6a.4: what the card says of the main place's own history: its state, or
+ * the offer — only when it may be offered (`canOffer`: `history.place`, the
+ * bridge running, the research searching, no archive) and the place has the
+ * research's record (`id`; links take only that). Done: its events speak
+ * (no row); a place not searched for the tree (`skip`): nothing.
+ */
+/**
+ * A place whose own history may be asked for (R6, §6a.2): its record id, not
+ * left out, matched to its regions (a place still being matched waits for
+ * that first) and no history of its own yet.
+ */
+export function historyPlaceOfferable(place: HistoryPlace | undefined): boolean {
+    return !!place?.id && !place.skip && !place.state && (!place.history || place.history === 'none');
+}
+
+export function historyPlaceRow(p: HistoryPayload, main: HistoryMainPlace | null, canOffer: boolean): HistoryPlaceRow | null {
+    if (!main) return null;
+    const place = p.places[main.key];
+    if (!place || place.skip) return null;
+    const base = { key: main.key, name: main.name };
+    switch (place.history) {
+        case 'first': case 'running': case 'empty': return { kind: place.history, ...base };
+        case 'waiting': return { kind: 'waiting', ...base, ...(place.why ? { why: place.why } : {}) };
+        case 'done': return null;
+        default: return canOffer && historyPlaceOfferable(place) ? { kind: 'offer', ...base } : null;
+    }
 }
 
 // ─── Year groups ───────────────────────────────────────────────────────────

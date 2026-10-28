@@ -126,6 +126,7 @@ import { historyMethods } from './history-ui.js';
 import { historyManageMethods } from './history-manage-ui.js';
 import { historyDetailMethods } from './history-detail-ui.js';
 import { historyMapMethods } from './history-map-ui.js';
+import { historyPlaceMethods } from './history-place-ui.js';
 import { historyCardMethods } from './history-card-ui.js';
 import { researchOthersMethods } from './research-others-ui.js';
 import { researchFollowMethods } from './research-follow-ui.js';
@@ -639,6 +640,10 @@ Object.assign(UIClass.prototype, historyDetailMethods);
 type HistoryMapMethods = typeof historyMapMethods;
 export interface UIClass extends HistoryMapMethods {}
 Object.assign(UIClass.prototype, historyMapMethods);
+
+type HistoryPlaceMethods = typeof historyPlaceMethods;
+export interface UIClass extends HistoryPlaceMethods {}
+Object.assign(UIClass.prototype, historyPlaceMethods);
 
 type HistoryCardMethods = typeof historyCardMethods;
 export interface UIClass extends HistoryCardMethods {}

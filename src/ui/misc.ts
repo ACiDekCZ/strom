@@ -1004,6 +1004,10 @@ export const miscMethods = uiModule({
                         this.closePlacesManager();
                         return;
                     }
+                    if (currentDialog === 'history-place-modal') {
+                        this.closeHistoryPlaceFind();
+                        return;
+                    }
                     if (currentDialog === 'history-map-modal') {
                         this.historyMapEscape();
                         return;
