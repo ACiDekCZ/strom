@@ -340,6 +340,28 @@ test.describe('History of places: the manager', () => {
         await expect(modal(page).locator('.hm-row-note[data-note="de-prussia"]')).toHaveCount(0);
     });
 
+    test('a region\'s detail opens on its row: title focused, state with the gaps, the events by centuries; back to the row', async ({ page }) => {
+        await setup(page);
+        await openManager(page);
+        await region(page, 'cz-bohemia').click();
+        await expect(modal(page)).toHaveClass(/is-detail/);
+        const title = modal(page).locator('.hm-detail-title');
+        await expect(title.locator('.hm-detail-name')).toHaveText('Bohemia');
+        await expect(title).toBeFocused();
+        await expect(modal(page).locator('.hm-detail-state')).toContainText('years without events 1870–1913 · filling queued');
+        const events = modal(page).locator('.hd-ev');
+        await expect(events).toHaveCount(2);
+        await expect(events.locator('.pm-lifeline-htext')).toHaveText(['Austro-Prussian War; fighting around Čáslav.', 'Vienna stock exchange crash.']);
+        await expect(modal(page).locator('.hd-century-head')).toHaveText([/1800–1899 · 2/]);
+        // The event's menu opens by its "⋯".
+        await events.nth(0).locator('[data-hd="menu"]').click();
+        await expect(page.locator('.hd-menu [data-scope]').first()).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(page.locator('.hd-menu')).toHaveCount(0);
+        await modal(page).locator('.hm-back').click();
+        await expect(region(page, 'cz-bohemia')).toBeFocused();
+    });
+
     test('gates: an action without its feature is not in the menu; without any, no "⋯"', async ({ page }) => {
         const { bridge } = await setup(page, { features: [...HISTORY_FEATURES, 'history.regions', 'history.first'] });
         await openManager(page);

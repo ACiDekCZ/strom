@@ -2560,6 +2560,170 @@
             .hm-search { height: 44px; }
             .hm-sort select { min-height: 44px; }
         }
+        /* History of places — a detail's events (spec 1028 §2, §3.1): the head's mark and "⋯",
+           filters (two rows; on a phone one row of chips and a bottom sheet), centuries, the
+           card layer's event rows with place, audience and hiding, the event menu and "who sees it". */
+        .hm-detail-line { display: flex; align-items: flex-start; gap: 10px; }
+        .hm-detail-title { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 10px; outline: none; }
+        .hm-detail-title:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 2px; }
+        .hm-detail-title .hm-mark { align-self: baseline; }
+        .hm-detail-title .hm-mark.is-region {
+            width: 7px; height: 7px; box-sizing: border-box; border: 1.5px solid var(--hist-mark); transform: rotate(45deg) translateY(-2px);
+        }
+        .hm-detail-title .hm-mark.is-local { width: 8px; height: 8px; }
+        .hm-detail-title .hm-mark.is-place { font-size: 10px; }
+        .hm-detail-name { min-width: 0; overflow-wrap: anywhere; }
+        #history-modal button.hm-detail-dots { width: 30px; height: 28px; margin-top: 2px; border: 1px solid var(--border); border-radius: 7px; }
+        .hm-detail-note { margin: 0; font-size: 12.5px; line-height: 1.4; text-wrap: pretty; }
+        .hm-detail-note.is-info { color: var(--text-light); }
+        .hm-detail-note.is-error { color: var(--danger); }
+        .hd-filters { display: flex; flex-direction: column; gap: 8px; padding: 10px 20px; border-bottom: 1px solid var(--divider); }
+        .hd-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+        #history-modal button.hd-chip, .hd-fsheet button.hd-chip {
+            display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px; border: 1px solid var(--border); border-radius: 999px;
+            background: transparent; color: var(--text); font: inherit; font-size: 12px; white-space: nowrap; cursor: pointer;
+        }
+        #history-modal button.hd-chip[aria-pressed="true"], .hd-fsheet button.hd-chip[aria-pressed="true"] {
+            border-color: var(--primary); background: var(--primary-soft); font-weight: 600;
+        }
+        .hd-chip-n { color: var(--text-faint); font-weight: 400; font-variant-numeric: tabular-nums; }
+        .hd-filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+        #history-modal label.hd-period { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-size: 12.5px; font-weight: 400; color: var(--text-light); }
+        #history-modal .hd-period select, #history-modal .hd-range input, .hd-fsheet .hd-range input, #history-modal input.hd-search {
+            height: 30px; box-sizing: border-box; padding: 0 8px; border: 1px solid var(--border); border-radius: 7px;
+            background: var(--surface); color: var(--text); font: inherit; font-size: 12.5px; min-width: 0; width: auto;
+        }
+        #history-modal .hd-period select { padding-right: 24px; }
+        .hd-range { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-light); }
+        #history-modal .hd-range input, .hd-fsheet .hd-range input { width: 72px; }
+        #history-modal input.hd-search { flex: 1 1 180px; }
+        #history-modal input.hd-search::placeholder, .hd-range input::placeholder { color: var(--text-faint); }
+        #history-modal label.hd-hidden-only { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-size: 12.5px; font-weight: 400; color: var(--text); cursor: pointer; }
+        .hd-hidden-only input { width: 14px; height: 14px; margin: 0; accent-color: var(--primary); }
+        .hd-mfilters { display: none; }
+        .hd-list { padding-bottom: 8px; }
+        .hd-list > .hm-empty { padding-top: 16px; }
+        #history-modal button.hd-century-head {
+            display: flex; align-items: baseline; gap: 8px; width: 100%; box-sizing: border-box; padding: 12px 20px 4px; border: 0; background: none;
+            color: var(--text); font: inherit; font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; text-align: left; cursor: pointer;
+        }
+        #history-modal button.hd-century-head:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        .hd-century-chev { order: 2; margin-left: auto; font-size: 11px; font-weight: 400; color: var(--text-faint); }
+        /* An event: year 64 px · mark 9 px · text and meta · ⋯ (always there in the detail). */
+        #history-modal .pm-lifeline-row.hd-ev { margin: 3px 16px; padding: 7px 6px 8px 8px; gap: 9px; border-radius: 6px; }
+        #history-modal .hd-ev .pm-lifeline-year { min-width: 64px; }
+        #history-modal .hd-ev.is-dim { opacity: 0.6; }
+        #history-modal .hd-ev.is-busy { opacity: 0.75; }
+        #history-modal .hd-ev .pm-lifeline-desc { flex: 1 1 auto; padding-right: 30px; }
+        .hd-mark { flex: none; position: relative; width: 9px; height: 14px; }
+        .hd-mark::before { content: ''; position: absolute; }
+        .is-region > .hd-mark::before {
+            left: 1px; top: 5px; width: 5px; height: 5px; border: 1.5px solid var(--hist-mark); background: var(--surface); transform: rotate(45deg);
+        }
+        .is-local > .hd-mark::before { left: 1.5px; top: 5px; width: 6px; height: 6px; background: var(--hist-local); }
+        .is-place > .hd-mark::before { content: '▲'; left: 0; top: 2px; width: 9px; text-align: center; font-size: 8px; line-height: 1; color: var(--hist-place); }
+        .is-place .pm-lifeline-htag { color: var(--hist-place-text); }
+        #history-modal .hd-ev button.pm-lifeline-hmore { opacity: 1; top: 4px; right: 4px; width: 28px; height: 24px; }
+        #history-modal .hd-ev button.pm-lifeline-hmore[aria-expanded="true"] { background: var(--hover-bg); }
+        #history-modal .hd-ev button.pm-lifeline-hmore:disabled { opacity: 0.5; cursor: default; }
+        .hd-place { overflow-wrap: anywhere; }
+        #history-modal button.hd-sees {
+            padding: 0; margin: 0; min-height: 0; border: 0; background: none; font: inherit; color: var(--text-light); cursor: pointer;
+            text-decoration: underline dotted; text-decoration-color: var(--text-faint); text-underline-offset: 2px; border-radius: 2px;
+        }
+        #history-modal button.hd-sees:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        .hd-hide-note, .hd-ev-note { display: block; margin-top: 3px; font-size: 12px; line-height: 1.4; color: var(--hist-meta); overflow-wrap: anywhere; }
+        .hd-ev-note { color: var(--danger); }
+        #history-modal button.hd-unhide { font-weight: 500; text-decoration: none; }
+        /* The event menu (popover) and its second level; "who sees it" as a popover. */
+        .pm-lifeline-hmenu.hd-menu, .pm-lifeline-hmenu.hd-who-pop { max-height: min(460px, calc(100vh - 16px)); overflow-y: auto; }
+        .pm-lifeline-hmenu-item.is-danger .pm-lifeline-hmenu-label, .hd-menu-sheet .is-danger .pm-lifeline-hmenu-label { color: var(--danger); }
+        .hd-menu-sep { height: 1px; margin: 4px 6px; background: var(--divider); }
+        .hd-menu-note { margin: 0; padding: 6px 10px 4px; font-size: 12px; line-height: 1.4; color: var(--text-faint); text-wrap: pretty; }
+        button.hd-menu-back, button.hd-who-more {
+            display: flex; align-items: center; width: 100%; box-sizing: border-box; min-height: 30px; padding: 4px 10px; border: 0; border-radius: var(--r-sm);
+            background: none; color: var(--primary); font: inherit; font-size: 13px; text-align: left; cursor: pointer;
+        }
+        button.hd-menu-back:focus-visible, button.hd-who-more:focus-visible, button.hd-who-person:focus-visible,
+        button.hd-menu-back:focus, button.hd-who-more:focus, button.hd-who-person:focus { outline: none; background: var(--hover-bg); }
+        input.hd-menu-search {
+            display: block; width: calc(100% - 12px); box-sizing: border-box; height: 32px; margin: 2px 6px 6px; padding: 0 8px;
+            border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px;
+        }
+        .hd-menu-people { max-height: 260px; overflow-y: auto; }
+        .hd-who-pop { padding: 8px 6px 6px; }
+        .hd-who-title { padding: 4px 10px 6px; font-size: 13px; font-weight: 600; color: var(--text); }
+        .hd-who-note { margin: 0; padding: 0 10px 6px; font-size: 12px; line-height: 1.4; color: var(--text-faint); text-wrap: pretty; }
+        .hd-who-list { display: flex; flex-direction: column; }
+        button.hd-who-person {
+            display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; width: 100%; box-sizing: border-box; padding: 7px 10px; border: 0;
+            border-radius: var(--r-sm); background: none; font: inherit; text-align: left; cursor: pointer;
+        }
+        .hd-who-name { font-size: 13.5px; font-weight: 500; color: var(--primary); overflow-wrap: anywhere; }
+        .hd-who-meta { margin-left: auto; font-size: 12px; color: var(--text-faint); }
+        /* Phone sheets: the menu, "who sees it" and the filter. */
+        .hd-menu-sheet .hd-who-title { padding: 2px 16px 4px; font-size: 15px; }
+        .hd-menu-sheet .hd-who-note { padding: 0 16px 8px; font-size: 13px; }
+        .hd-menu-sheet button.hd-who-person, .hd-menu-sheet button.hd-menu-back, .hd-menu-sheet button.hd-who-more { min-height: 44px; padding: 8px 16px; }
+        .hd-menu-sheet .hd-menu-people, .hd-menu-sheet .hd-who-list { max-height: 50vh; overflow-y: auto; }
+        .hd-menu-sheet .hd-menu-note { padding: 8px 16px; font-size: 13px; }
+        .hd-fsheet-body { display: flex; flex-direction: column; gap: 12px; padding: 0 8px 4px; max-height: 75vh; overflow-y: auto; }
+        .hd-fsheet-body > .pm-lifeline-hsheet-head { font-size: 16px; font-weight: 600; color: var(--text); margin: 0 -8px; }
+        .hd-fs-section { display: flex; flex-direction: column; gap: 8px; }
+        .hd-fs-title { font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent-text); }
+        .hd-fsheet button.hd-chip { height: 34px; padding: 0 12px; font-size: 13px; }
+        .hd-fsheet .hd-range { margin-top: 4px; }
+        .hd-fsheet .hd-range input { width: 80px; height: 36px; padding: 0 8px; }
+        .hd-fsheet button.hd-fs-show { width: 100%; min-height: 44px; border-radius: 10px; font-size: 14.5px; }
+        @media (hover: hover) {
+            #history-modal button.hd-chip:hover, .hd-fsheet button.hd-chip:hover { background: var(--hover-bg); }
+            #history-modal button.hd-chip[aria-pressed="true"]:hover { background: var(--primary-soft); }
+            #history-modal button.hd-century-head:hover .hd-century-chev { color: var(--text); }
+            #history-modal button.hd-sees:hover { text-decoration-style: solid; text-decoration-color: currentColor; }
+            button.hd-menu-back:hover, button.hd-who-more:hover, button.hd-who-person:hover { background: var(--hover-bg); }
+            #history-modal button.hm-detail-dots:not(:disabled):hover { background: var(--hover-bg); }
+        }
+        @media (max-width: 640px) {
+            /* One row of chips pinned under the head; year 40 px. */
+            .hd-filters { display: none; }
+            .hd-mfilters {
+                display: flex; gap: 6px; padding: 8px 14px; overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid var(--divider);
+                position: sticky; top: 0; z-index: 1; background: var(--card-bg);
+            }
+            .hd-mfilters::-webkit-scrollbar { display: none; }
+            #history-modal button.hd-mchip {
+                flex: none; height: 32px; padding: 0 11px; border: 1px solid var(--border); border-radius: 999px; background: transparent;
+                color: var(--text); font: inherit; font-size: 12.5px; white-space: nowrap; cursor: pointer;
+            }
+            #history-modal button.hd-mchip.is-on { border-color: var(--primary); background: var(--primary-soft); font-weight: 600; }
+            .hd-mfilters.is-search { align-items: center; }
+            #history-modal .hd-mfilters input.hd-search { flex: 1 1 auto; height: 32px; }
+            #history-modal button.hd-mclose {
+                flex: none; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 6px; background: none;
+                color: var(--text-faint); font-size: 18px; line-height: 1; cursor: pointer;
+            }
+            #history-modal button.hd-century-head { padding: 12px 14px 4px; }
+            #history-modal .pm-lifeline-row.hd-ev { margin: 3px 8px; }
+            #history-modal .hd-ev .pm-lifeline-year { min-width: 40px; }
+        }
+        @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .hd-filters { padding: 6px 16px; gap: 6px; }
+            #history-modal button.hd-century-head { padding: 8px 16px 2px; }
+            .hd-fsheet-body { max-height: 85vh; }
+        }
+        @media (pointer: coarse) {
+            #history-modal button.hd-chip, #history-modal button.hd-mchip, #history-modal button.hd-century-head,
+            #history-modal button.hd-mclose, #history-modal button.hd-sees, #history-modal button.hd-unhide { min-height: 44px; }
+            #history-modal button.hd-mclose { width: 44px; }
+            #history-modal .hd-period select, #history-modal .hd-range input, .hd-fsheet .hd-range input, #history-modal input.hd-search, input.hd-menu-search { height: 44px; }
+            #history-modal label.hd-hidden-only { min-height: 44px; }
+            .hd-hidden-only input { width: 20px; height: 20px; }
+            #history-modal .hd-ev button.pm-lifeline-hmore { width: 44px; height: 44px; top: -2px; right: -4px; }
+            #history-modal .hd-ev .pm-lifeline-desc { padding-right: 38px; }
+            #history-modal button.hm-detail-dots { width: 44px; height: 44px; margin-top: -6px; }
+            button.hd-menu-back, button.hd-who-more, button.hd-who-person { min-height: 44px; }
+            #history-modal button.hd-sees { display: inline-flex; align-items: center; }
+        }
         /* Audit Log modal */
         .audit-log-modal {
             min-width: 350px;
@@ -4985,6 +5149,15 @@
             font-style: italic; color: var(--hist-text); overflow-wrap: anywhere;
         }
         .pm-lifeline-htip b { font-style: normal; font-weight: 600; color: var(--hist-meta); }
+        /* "text in German" by an event's text in another language (the manager's detail). */
+        .pm-lifeline-hlang {
+            display: inline-block; margin-left: 4px; padding: 0 5px; border: 1px solid var(--hist-meta); border-radius: 4px;
+            font-size: 10.5px; line-height: 1.4; color: var(--hist-meta); white-space: nowrap; vertical-align: 1px;
+        }
+        /* The event a person of "who sees it" opened the card for (1.5 s). */
+        .pm-lifeline-row.is-flash, .pm-lifeline-row.k-history.is-flash { background: var(--hover-bg); box-shadow: inset 0 0 0 1px var(--border); }
+        .pm-lifeline-row.k-history { transition: background-color 0.3s ease, box-shadow 0.3s ease; }
+        @media (prefers-reduced-motion: reduce) { .pm-lifeline-row.k-history { transition: none; } }
         .pm-lifeline-hmark {
             position: absolute; left: -13px; top: 11px; width: 5px; height: 5px; box-sizing: content-box;
             border: 1.5px solid var(--hist-mark); background: var(--surface); transform: rotate(45deg);

@@ -106,7 +106,7 @@ function treeNames(p: HistoryPayload): ManageNames {
 }
 
 /** What the manager draws now (null: no tree with a research). */
-interface Drawn {
+export interface Drawn {
     rid: string;
     payload: HistoryPayload | null | undefined;
     env: ManageEnv;
@@ -134,6 +134,7 @@ export const historyManageMethods = uiModule({
         if (!modal) return;
         const reopen = modal.classList.contains('active');
         view = freshView();
+        this.resetHistoryDetail();
         if (opts.tab) view.tab = opts.tab;
         if (opts.place) {
             view.tab = 'places';
@@ -159,7 +160,7 @@ export const historyManageMethods = uiModule({
         }
         this.renderHistoryManage();
         const first = view.detail
-            ? modal.querySelector<HTMLElement>('.hm-back')
+            ? modal.querySelector<HTMLElement>('.hm-detail-title')
             : modal.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
         first?.focus({ preventScroll: true });
     },
@@ -176,6 +177,7 @@ export const historyManageMethods = uiModule({
         document.getElementById(HISTORY_MANAGE_DIALOG_ID)?.classList.remove('active');
         this.dialogStack = this.dialogStack.filter(d => d !== HISTORY_MANAGE_DIALOG_ID);
         view = freshView();
+        this.resetHistoryDetail();
         this.renderHistorySettingsIfOpen();
     },
 
@@ -480,30 +482,57 @@ export const historyManageMethods = uiModule({
     },
 
     /**
-     * A region's detail (§2), nested: its name and state under the header's
-     * "‹ History of places" (the header's own title and the switch step aside). The events (filters, list, menus) are drawn into `.hm-detail-body`
-     * by the detail's own module.
+     * A detail (§2), nested: its mark, name, sub-line, state (with the gaps)
+     * and the region's "⋯" under the header's "‹ History of places" (the
+     * header's own title and the switch step aside). The events (filters,
+     * list, menus) are drawn into `.hm-detail-body` by history-detail-ui.ts.
+     * A redraw of the same detail keeps its scroll and the focused control
+     * (`data-hfocus`, with the caret of a text field).
      */
     renderHistoryManageDetail(d: Drawn, rows: TabRows): void {
         const body = document.getElementById('history-manage-body');
         if (!body || !view.detail) return;
-        const row = rows.regions.flatMap(g => g.rows).find(r => r.key === view.detail);
-        const title = row?.name ?? regionName({ id: view.detail }, lang());
-        const sub = row?.parent ?? '';
-        const state = row ? [row.state, row.why].filter(Boolean).join(' · ') : '';
-        body.innerHTML = `<div class="hm-detail" data-key="${esc(view.detail)}">`
-            + `<div class="hm-detail-head"><h3 class="hm-detail-title">${esc(title)}${sub ? ` <span class="hm-detail-sub">${esc(sub)}</span>` : ''}</h3>`
-            + (state ? `<p class="hm-detail-state">${esc(state)}</p>` : '') + '</div>'
-            + '<div class="hm-detail-body"></div></div>';
-        const hook = (this as unknown as Record<string, unknown>).renderHistoryRegionDetail;
-        if (typeof hook === 'function') (hook as (el: HTMLElement, key: string, d: Drawn) => void).call(this, body.querySelector('.hm-detail-body') as HTMLElement, view.detail, d);
+        const key = view.detail;
+        const same = body.querySelector<HTMLElement>('.hm-detail')?.dataset.key === key;
+        const active = document.activeElement as HTMLElement | null;
+        const focusKey = same && active && body.contains(active) ? active.closest<HTMLElement>('[data-hfocus]')?.dataset.hfocus ?? null : null;
+        const caret = active instanceof HTMLInputElement && active.type === 'search' ? [active.selectionStart, active.selectionEnd] as const : null;
+        const scrollTop = same ? body.scrollTop : 0;
+
+        const row = rows.regions.flatMap(g => g.rows).find(r => r.key === key);
+        const owner = row?.kind ?? (key === 'local' ? 'local' : key.startsWith('place:') ? 'place' : 'region');
+        const title = row?.name ?? regionName({ id: key }, lang());
+        const head = this.historyDetailHead(d, key, row);
+        const state = [head.state, head.gaps].filter(Boolean).join(' · ');
+        const mark = owner === 'local' ? '<span class="hm-mark is-local" aria-hidden="true"></span>'
+            : owner === 'place' ? '<span class="hm-mark is-place" aria-hidden="true">▲</span>'
+                : '<span class="hm-mark is-region" aria-hidden="true"></span>';
+        const dots = row?.actions.length
+            ? `<button type="button" class="hm-dots hm-detail-dots" data-hm="menu" data-kind="region" data-key="${esc(key)}" aria-haspopup="menu" aria-expanded="false"`
+                + ` aria-label="${esc(strings.history.more)}" data-hfocus="dots"${view.busy.has(key) ? ' disabled' : ''}>⋯</button>` : '';
+        const note = view.notes.get(key);
+        body.innerHTML = `<div class="hm-detail" data-key="${esc(key)}">`
+            + '<div class="hm-detail-head"><div class="hm-detail-line">'
+            + `<h3 class="hm-detail-title" tabindex="-1" data-hfocus="title">${mark}<span class="hm-detail-name">${esc(title)}</span>`
+            + (head.sub ? ` <span class="hm-detail-sub">${esc(head.sub)}</span>` : '') + '</h3>' + dots + '</div>'
+            + (state ? `<p class="hm-detail-state">${esc(state)}</p>` : '')
+            + (note ? `<p class="hm-detail-note is-${note.tone}" role="status">${esc(note.text)}</p>` : '')
+            + '</div><div class="hm-detail-body"></div></div>';
+        this.renderHistoryRegionDetail(body.querySelector('.hm-detail-body') as HTMLElement, key, d);
+        body.scrollTop = scrollTop;
+        if (!focusKey) return;
+        const target = body.querySelector<HTMLElement>(`[data-hfocus="${CSS.escape(focusKey)}"]`);
+        target?.focus({ preventScroll: true });
+        if (caret && target instanceof HTMLInputElement) {
+            try { target.setSelectionRange(caret[0], caret[1]); } catch { /* not a text field */ }
+        }
     },
 
     /** Open a row's detail (a click on the row). */
     openHistoryManageDetail(key: string): void {
         view.detail = key;
         this.renderHistoryManage();
-        document.querySelector<HTMLElement>(`#${HISTORY_MANAGE_DIALOG_ID} .hm-back`)?.focus({ preventScroll: true });
+        document.querySelector<HTMLElement>(`#${HISTORY_MANAGE_DIALOG_ID} .hm-detail-title`)?.focus({ preventScroll: true });
     },
 
     /**
