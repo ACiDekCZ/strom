@@ -97,6 +97,9 @@ export interface HistoryPlace {
     why?: string;
     /** R5: the regions were set by hand. */
     manual?: boolean;
+    /** R5: the place waits to be placed again (`state: "pending"`), with the user's note for the research. */
+    redo?: boolean;
+    note?: string;
     /** R3: the place is not searched for this tree. */
     skip?: boolean;
     /** R1: the research's place record ("L0001"); R6 links take only this. */
@@ -169,7 +172,7 @@ export interface HistoryHidden {
     at?: string;
 }
 
-export type HistorySearch = 'none' | 'running' | 'done' | 'waiting' | 'mapping';
+export type HistorySearch = 'none' | 'running' | 'done' | 'waiting';
 
 export interface HistoryState {
     on: boolean;
@@ -179,9 +182,8 @@ export interface HistoryState {
     why?: string;
     rev?: string;
     truncated?: boolean;
-    /** search = mapping (P3): places matched to regions so far, of how many. */
-    mapped?: number;
-    mappable?: number;
+    /** P3: a session matching places to regions runs now — places matched so far, of how many (search stays "running"). */
+    mapping?: { mapped: number; mappable: number };
 }
 
 export interface HistoryPayload {
@@ -386,6 +388,25 @@ export function parseHistoryEvent(v: unknown): HistoryEvent | null {
     return ev;
 }
 
+/** A place's regions with their years (R1 `places[x].regions`, R5 `map.regions`): valid ids, each once. */
+export function parsePlaceRegions(v: unknown): HistoryPlaceRegion[] {
+    const regions: HistoryPlaceRegion[] = [];
+    if (!Array.isArray(v)) return regions;
+    for (const r of v) {
+        if (regions.length >= HISTORY_LIMITS.placeRegions) break;
+        if (!isObj(r)) continue;
+        const id = str(r.id, 64);
+        if (!id || !HISTORY_REGION_RE.test(id) || regions.some(x => x.id === id)) continue;
+        const pr: HistoryPlaceRegion = { id };
+        const from = year(r.from);
+        const to = year(r.to);
+        if (from !== undefined) pr.from = from;
+        if (to !== undefined && (from === undefined || to >= from)) pr.to = to;
+        regions.push(pr);
+    }
+    return regions;
+}
+
 function parsePlace(v: unknown, known: Set<string>): HistoryPlace | null {
     if (!isObj(v)) return null;
     const events = Array.isArray(v.events)
@@ -400,27 +421,18 @@ function parsePlace(v: unknown, known: Set<string>): HistoryPlace | null {
         if (also.length) out.also = also;
     }
     if (v.state === 'pending' || v.state === 'unlocated') out.state = v.state;
-    if (Array.isArray(v.regions)) {
-        const regions: HistoryPlaceRegion[] = [];
-        for (const r of v.regions) {
-            if (regions.length >= HISTORY_LIMITS.placeRegions) break;
-            if (!isObj(r)) continue;
-            const id = str(r.id, 64);
-            if (!id || !HISTORY_REGION_RE.test(id) || regions.some(x => x.id === id)) continue;
-            const pr: HistoryPlaceRegion = { id };
-            const from = year(r.from);
-            const to = year(r.to);
-            if (from !== undefined) pr.from = from;
-            if (to !== undefined && (from === undefined || to >= from)) pr.to = to;
-            regions.push(pr);
-        }
-        if (regions.length) out.regions = regions;
-    }
+    const regions = parsePlaceRegions(v.regions);
+    if (regions.length) out.regions = regions;
     const persons = count(v.persons);
     if (persons !== undefined) out.persons = persons;
     const why = str(v.why, 300);
     if (why) out.why = why;
     if (v.manual === true) out.manual = true;
+    if (v.redo === true) {
+        out.redo = true;
+        const note = str(v.note, 400); // 200 code points at most (R5)
+        if (note) out.note = note;
+    }
     if (v.skip === true) out.skip = true;
     if (typeof v.id === 'string' && HISTORY_PLACE_ID_RE.test(v.id)) out.id = v.id;
     const area = langText(v.area, HISTORY_LIMITS.title);
@@ -493,7 +505,7 @@ function parseDeleted(v: unknown): HistoryDeleted | null {
 
 function parseState(v: unknown): HistoryState {
     const o = isObj(v) ? v : {};
-    const search: HistorySearch = o.search === 'running' || o.search === 'done' || o.search === 'waiting' || o.search === 'mapping'
+    const search: HistorySearch = o.search === 'running' || o.search === 'done' || o.search === 'waiting'
         ? o.search : 'none';
     const out: HistoryState = { on: o.on === true, search };
     const at = str(o.at, 40);
@@ -504,11 +516,10 @@ function parseState(v: unknown): HistoryState {
     const rev = str(o.rev, 128);
     if (rev) out.rev = rev;
     if (o.truncated === true) out.truncated = true;
-    const mapped = count(o.mapped);
-    const mappable = count(o.mappable);
-    if (mapped !== undefined && mappable !== undefined && mapped <= mappable) {
-        out.mapped = mapped;
-        out.mappable = mappable;
+    if (isObj(o.mapping)) {
+        const mapped = count(o.mapping.mapped);
+        const mappable = count(o.mapping.mappable);
+        if (mapped !== undefined && mappable !== undefined && mapped <= mappable) out.mapping = { mapped, mappable };
     }
     return out;
 }

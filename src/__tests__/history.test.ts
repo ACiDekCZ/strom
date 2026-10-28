@@ -475,7 +475,7 @@ describe('historySettingsStatus', () => {
 describe('history manager payload (1028)', () => {
     it('parses regions, place fields, deleted, suggest and the mapping state', () => {
         const p = payload({
-            state: { on: true, search: 'mapping', mapped: 12, mappable: 40 },
+            state: { on: true, search: 'running', mapping: { mapped: 12, mappable: 40 } },
             events: [regionEvent('cz-bohemia-0001', 1866)],
             places: {
                 Lhota: {
@@ -484,26 +484,35 @@ describe('history manager payload (1028)', () => {
                     history: 'done', area: { cs: 'Lhota a okolí' },
                 },
                 Lhotka: { events: [], skip: true, history: 'often', id: 'Lhotka' },
+                'Nová Lhota': { events: [], state: 'pending', redo: true, note: '  the one by the river  ', persons: 1 },
+                'Horní Ves': { events: [], note: 'a note without redo' },
             },
             regions: {
                 'cz-bohemia': { state: 'running', name: { cs: 'Čechy' }, covered: ['cz-bohemia', 'at-empire'], events: 3, gaps: [{ from: 1700, to: 1750 }, { from: 9, to: 1 }], fill: 'queued', order: 1, first: true },
                 'cz-moravia': { state: 'strange' },
+                'cz-silesia': { state: 'none' },
                 'bad id!': { state: 'done' },
             },
             suggest: ['L0042', 'Lhota', 'L0042'],
             deleted: [{ event: 'cz-bohemia-0009', scope: 'region', at: AT, from: 1850, to: 1840, region: { id: 'cz-bohemia' } }, { scope: 'region' }],
         });
-        expect(p.state).toMatchObject({ search: 'mapping', mapped: 12, mappable: 40 });
+        expect(p.state).toMatchObject({ search: 'running', mapping: { mapped: 12, mappable: 40 } });
         expect(p.places.Lhota).toMatchObject({ events: ['cz-bohemia-0001'], id: 'L0042', persons: 7, manual: true, history: 'done', regions: [{ id: 'cz-bohemia', from: 1800 }] });
         expect(p.places.Lhotka).toEqual({ events: [], skip: true });
-        expect(Object.keys(p.regions!)).toEqual(['cz-bohemia', 'cz-moravia']);
+        expect(p.places['Nová Lhota']).toEqual({ events: [], state: 'pending', redo: true, note: 'the one by the river', persons: 1 });
+        expect(p.places['Horní Ves']).toEqual({ events: [] });
+        expect(Object.keys(p.regions!)).toEqual(['cz-bohemia', 'cz-moravia', 'cz-silesia']);
+        expect(p.regions!['cz-silesia'].state).toBe('none');
         expect(p.regions!['cz-bohemia']).toMatchObject({ state: 'running', covered: ['at-empire'], gaps: [{ from: 1700, to: 1750 }], fill: 'queued', order: 1, first: true });
         expect(p.regions!['cz-moravia'].state).toBe('none');
         expect(p.suggest).toEqual(['L0042']);
         expect(p.deleted).toHaveLength(1);
         expect(p.deleted![0]).toMatchObject({ event: 'cz-bohemia-0009', scope: 'region', from: 1850 });
         expect(p.deleted![0].to).toBeUndefined();
-        expect(payload({ state: { on: true, search: 'mapping', mapped: 50, mappable: 40 } }).state.mapped).toBeUndefined();
+        // P3: only `state.mapping`, and only a consistent one; "search": "mapping" is not a state of the research.
+        expect(payload({ state: { on: true, search: 'running', mapping: { mapped: 50, mappable: 40 } } }).state.mapping).toBeUndefined();
+        expect(payload({ state: { on: true, search: 'running', mapped: 3, mappable: 40 } }).state.mapping).toBeUndefined();
+        expect(payload({ state: { on: true, search: 'mapping' } }).state.search).toBe('none');
     });
 
     it('hides a whole region and an event in the whole tree', () => {

@@ -660,8 +660,8 @@ export function manageHeader(p: HistoryPayload, env: ManageEnv): ManageHeader {
         if (env.offDone) text = s.manageTreeOff;
         else if (env.canLinkOn) { text = s.manageOff; link = 'enable'; }
         else text = s.manageOffElsewhere;
-    } else if (p.state.search === 'mapping' && p.state.mapped !== undefined && p.state.mappable !== undefined) {
-        text = s.manageMapping(p.state.mapped, p.state.mappable);
+    } else if (p.state.mapping) {
+        text = s.manageMapping(p.state.mapping.mapped, p.state.mapping.mappable);
         searching = true;
     } else if (p.regions) {
         const list = Object.values(p.regions);

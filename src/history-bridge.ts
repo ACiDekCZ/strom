@@ -14,7 +14,7 @@
 import { cleanText, isResearchHead, researchPersonRef, researchSchemeUrl, withAppVersion } from './research-link.js';
 import { writeHeldOfRefusal, type ResearchWriteHeld } from './research-write-held.js';
 import {
-    HISTORY_LIMITS, HISTORY_PLACE_ID_RE, HISTORY_REGION_RE, parseHistoryPayload, parseHistoryText,
+    HISTORY_LIMITS, HISTORY_PLACE_ID_RE, HISTORY_REGION_RE, parseHistoryPayload, parseHistoryText, parsePlaceRegions,
     type HistoryHidden, type HistoryHideOp, type HistoryPayload, type HistoryPlaceRegion,
 } from './history.js';
 
@@ -407,12 +407,30 @@ export type HistoryMapBody =
     | { place: string; redo: true; note?: string }
     | { place: string; do: 'auto' };
 
-export function mapReply(status: number, body: unknown, features: readonly string[] | null | undefined): HistoryWriteResult {
-    return deleteReply(status, body, features);
+/** R5's answer: the place as its facts write it, and its regions now (null: it waits to be placed). */
+export interface HistoryMapOk {
+    place: string;
+    map: { regions: HistoryPlaceRegion[]; manual: boolean; at?: string } | null;
+}
+
+export function mapReply(status: number, body: unknown, features: readonly string[] | null | undefined): HistoryWriteResult<HistoryMapOk> {
+    if (status >= 200 && status < 300) {
+        const r = asRecord(body);
+        if (!r) return { ...NETWORK, code: 'unknown', status };
+        const place = typeof r.place === 'string' && r.place.length <= 500 ? r.place : '';
+        const m = asRecord(r.map);
+        const map = m ? {
+            regions: parsePlaceRegions(m.regions),
+            manual: m.manual === true,
+            ...(typeof m.at === 'string' && !Number.isNaN(Date.parse(m.at)) ? { at: m.at } : {}),
+        } : null;
+        return { ok: true, ...headsOf(r), place, map };
+    }
+    return historyWriteRefusal(status, body, features);
 }
 
 /** A place's regions by hand, or let the research decide again (with a note), or back to the research's choice. */
-export async function postBridgeMap(base: string, body: HistoryMapBody, features: readonly string[] | null | undefined): Promise<HistoryWriteResult> {
+export async function postBridgeMap(base: string, body: HistoryMapBody, features: readonly string[] | null | undefined): Promise<HistoryWriteResult<HistoryMapOk>> {
     if (!body.place.trim() || body.place.length > 500) return { ...NETWORK, code: 'invalid' };
     let send: HistoryMapBody = body;
     if ('regions' in body) {

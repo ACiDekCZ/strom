@@ -366,7 +366,8 @@ function serveHistory(b: FakeBridge, method: string, url: URL, postData: string 
                 else pl.skip = true;
             } else return bodyError;
             bump();
-            return { status: 200, body: { ok: true, skip: {
+            // R3: a repeated request changes nothing and is no error.
+            return { status: 200, body: { skip: {
                 regions: Object.entries(regions ?? {}).filter(([, x]) => x.state === 'skipped').map(([id]) => id),
                 places: Object.entries(places).filter(([, x]) => x.skip).map(([k]) => k),
             }, ...commitWrite(b) } };
@@ -410,19 +411,28 @@ function serveHistory(b: FakeBridge, method: string, url: URL, postData: string 
                 if (list.some(r => !regions?.[r.id])) return noRegion;
                 pl.regions = list;
                 pl.manual = true;
-                if (pl.state === 'unlocated') delete pl.state;
+                delete pl.state;
                 delete pl.why;
+                delete pl.redo;
+                delete pl.note;
             } else if (body.redo === true) {
                 if (typeof body.note === 'string' && (Array.from(body.note).length > 200 || body.note.includes('�'))) return bodyError;
                 delete pl.regions;
                 delete pl.manual;
                 pl.state = 'pending';
+                pl.redo = true;
+                if (typeof body.note === 'string' && body.note) pl.note = body.note;
+                else delete pl.note;
             } else if (body.do === 'auto') {
+                // Nothing the research decided before: the place waits to be placed.
                 delete pl.manual;
+                delete pl.regions;
                 pl.state = 'pending';
             } else return bodyError;
             bump();
-            return { status: 200, body: { ok: true, ...commitWrite(b) } };
+            // R5: `map` null while the place waits to be placed.
+            const map = pl.regions ? { regions: pl.regions, manual: pl.manual === true, at: new Date().toISOString() } : null;
+            return { status: 200, body: { place: key, map, ...commitWrite(b) } };
         }
         case 'place': {
             // R6: always the research's terminal (it says the estimate and asks); only a record id, never a name.

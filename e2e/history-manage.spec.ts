@@ -127,7 +127,7 @@ test.describe('History of places: the manager', () => {
         await expect(stateText(page)).toHaveText('The research is looking for history. Next up is the region Moravia.');
         await change(() => { for (const r of Object.values(regions)) if (['queued', 'running', 'waiting'].includes(r.state as string)) r.state = 'done'; });
         await expect(stateText(page)).toHaveText('The research has finished all regions of this tree. New places are matched when they are added.');
-        await change(() => { Object.assign(history.payload.state, { search: 'mapping', mapped: 3, mappable: 5 }); });
+        await change(() => { Object.assign(history.payload.state, { search: 'running', mapping: { mapped: 3, mappable: 5 } }); });
         await expect(stateText(page)).toHaveText('The research is matching places to regions: 3 of 5 done.');
         expect(bridge.history).toBe(history);
     });

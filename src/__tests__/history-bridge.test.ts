@@ -77,6 +77,13 @@ describe('history manager writes (1028)', () => {
             .toEqual({ ok: true, ...HEAD, region: 'cz-bohemia', first: [{ region: 'cz-bohemia', at: AT }] });
         expect(skipReply(200, { ...HEAD, skip: { regions: ['cz-moravia', 'cz-moravia', 7], places: ['Lhota', ''] } }, []))
             .toEqual({ ok: true, ...HEAD, skip: { regions: ['cz-moravia'], places: ['Lhota'] } });
+        // R5: the place's regions now, by hand or not; null while it waits to be placed.
+        expect(mapReply(200, { ...HEAD, place: 'Dolní Ves', map: { regions: [{ id: 'cz-bohemia', from: 1850, to: 1918 }, { id: 'bad id!' }], manual: true, at: AT } }, []))
+            .toEqual({ ok: true, ...HEAD, place: 'Dolní Ves', map: { regions: [{ id: 'cz-bohemia', from: 1850, to: 1918 }], manual: true, at: AT } });
+        expect(mapReply(200, { ...HEAD, place: 'Nová Lhota', map: null }, [])).toEqual({ ok: true, ...HEAD, place: 'Nová Lhota', map: null });
+        expect(mapReply(200, { ...HEAD, place: 'Lhota', map: { regions: [{ id: 'cz-bohemia' }], at: 'not a time' } }, []))
+            .toEqual({ ok: true, ...HEAD, place: 'Lhota', map: { regions: [{ id: 'cz-bohemia' }], manual: false } });
+        expect(mapReply(200, 'x', [])).toMatchObject({ ok: false, code: 'unknown' });
         expect(deleteReply(200, HEAD, [])).toEqual({ ok: true, ...HEAD });
         expect(deleteReply(200, 'x', [])).toMatchObject({ ok: false, code: 'unknown' });
     });

@@ -261,7 +261,8 @@ describe('header', () => {
         const done = payload({ regions: { moravia: region('moravia', { state: 'done' }) }, state: { on: true, search: 'done', truncated: true } });
         const hd = manageHeader(done, env());
         expect(hd.notes).toHaveLength(1);
-        const mapping = payload({ regions: {}, state: { on: true, search: 'mapping', mapped: 3, mappable: 10 } });
+        // P3: the matching session says so while the search stays "running".
+        const mapping = payload({ regions: { moravia: region('moravia', { state: 'queued', order: 1 }) }, state: { on: true, search: 'running', mapping: { mapped: 3, mappable: 10 } } });
         expect(manageHeader(mapping, env()).text).toMatch(/3.*10/);
         const off = manageHeader(p, env({ searchOn: false, canLinkOn: true }));
         expect(off.link).toBe('enable');
