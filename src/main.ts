@@ -413,7 +413,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Strom Research in the app: welcome-screen offer + menu item gating.
     UI.initResearchPromo();
 
-    // History in the life timeline (experiment, off by default): bridge statuses, tree switches.
+    // History in the life timeline (experiment, on by default): bridge statuses, tree switches.
     UI.initHistoryLayer();
 
     // Linked in the view only: the live bridge's say, other windows' changes of the shown links.

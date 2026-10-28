@@ -29,7 +29,7 @@ import {
 } from '../research-link.js';
 import { storedResearchBridge, announcedResearchScheme } from '../research-device.js';
 import {
-    computePersonHistory, historySettingsStatus, historyHiddenList, historyHiddenCount, queueHideOp,
+    computePersonHistory, historyCardShows, historySettingsStatus, historyHiddenList, historyHiddenCount, queueHideOp,
     type HistoryPayload, type HistoryHideOp, type PersonHistory, type LifelineHistoryItem, type HiddenHistoryItem,
     type HiddenListEntry, type HistorySettingsAction,
 } from '../history.js';
@@ -355,8 +355,9 @@ export const historyMethods = uiModule({
     /**
      * The person's history for the card, or null when the card stays as it
      * was: the layer off (1), the tree not tied to a research (2), nothing on
-     * this device and the research not saying `history.events` (10). The
-     * chip shows whenever this is not null.
+     * this device and the research not saying `history.events` (10), no
+     * events and no search for the tree (K1.3: the state is Settings' only).
+     * The chip shows whenever this is not null.
      */
     historyForPerson(personId: string): PersonHistoryView | null {
         if (!SettingsManager.isHistoryLayer()) return null;
@@ -369,10 +370,14 @@ export const historyMethods = uiModule({
         const payload = cache.get(rid) ?? null;
         const status = this.researchBridgeUp(rid) ? this.researchStatusOf(rid) : null;
         if (!payload && !(status?.features ?? []).includes(HISTORY_EVENTS_FEATURE)) return null;
+        const searchOn = offDone.has(rid) ? false : status?.experiments ? status.experiments.history : undefined;
+        if (!historyCardShows(payload, {
+            ...(searchOn !== undefined ? { searchOn } : {}),
+            ...(status?.treeState ? { treeState: status.treeState } : {}),
+        })) return null;
         const canLinkOn = this.historyCanLinkOn(rid);
         const chipOn = SettingsManager.isLifelineHistory();
         if (!payload) return { researchId: rid, chipOn, history: null, canLinkOn };
-        const searchOn = offDone.has(rid) ? false : status?.experiments ? status.experiments.history : undefined;
         const history = computePersonHistory(DataManager.getData(), personId, payload, lang(), {
             queue: displayQueue(rid),
             ...(searchOn !== undefined ? { searchOn } : {}),
@@ -488,7 +493,7 @@ export const historyMethods = uiModule({
             const button = (action: HistorySettingsAction | 'errLink', label: string): string =>
                 ` <button type="button" class="link" data-history-action="${action}" onclick="window.Strom.UI.historySettingsAction('${action}')">${esc(label)}</button>`;
             let html = esc(said.text);
-            if (said.action === 'linkOn') html += button('linkOn', h.enableSearch);
+            if (said.action === 'linkOn') html += `${button('linkOn', h.enableSearch)} ${esc(h.enableSearchAlso)}`;
             else if (said.action) html += button(said.action, h.disableSearch);
             else if (err?.link) html += button('errLink', h.disableSearch);
             row.innerHTML = html;

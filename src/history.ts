@@ -752,6 +752,18 @@ export function computePersonHistory(
     return { items, hidden, placesPending, placesMissing, hasPlaces: true, state };
 }
 
+/**
+ * Does the person card show the layer at all (K1.3)? Only when the research
+ * already has events for the tree or searches for them now; otherwise (no
+ * search, waiting, an older research, nothing read) the card stays as it was
+ * and the state is said in Settings only.
+ */
+export function historyCardShows(p: HistoryPayload | null, env: { searchOn?: boolean; treeState?: string } = {}): boolean {
+    if (p && p.events.length > 0) return true;
+    if (historyWaiting(p, env.treeState)) return false;
+    return env.searchOn ?? p?.state.on ?? false;
+}
+
 /** Whether the research is waiting (archive, waits for its agent): no search, no link to turn it on. */
 export function historyWaiting(p: HistoryPayload | null, treeState?: string): boolean {
     return (!!treeState && treeState !== 'research') || p?.state.search === 'waiting';

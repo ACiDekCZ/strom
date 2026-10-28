@@ -7,7 +7,7 @@ import {
 
 /**
  * History in the life timeline (spec 020, experiment) — Settings' section
- * "Experimental features": the toggle (off by default, nothing read), its
+ * "Experimental features": the toggle (on by default; a user's "off" stays), its
  * status row by the research's bridge (`/status.features`, `history.rev`,
  * `experiments.history`), switching the search off through the bridge or on
  * through the research's `experiment` link, and the tree's list of hidden
@@ -22,7 +22,7 @@ async function setup(page: Page, opts: { history?: Partial<FakeHistory>; feature
     const ged = historyGed();
     const bridge = await fakeBridge(page, { features: opts.features ?? HISTORY_FEATURES, history, treeGed: ged, links: LINKS });
     await openResearch(page, { ged });
-    if (opts.layerOn) await page.evaluate(() => window.Strom.SettingsManager.setHistoryLayer(true));
+    if (opts.layerOn !== undefined) await page.evaluate((on) => window.Strom.SettingsManager.setHistoryLayer(on), opts.layerOn);
     await poll(page);
     return { bridge, history };
 }
@@ -33,10 +33,25 @@ const status = (page: Page) => page.locator('#history-setting-status');
 const hiddenLink = (page: Page) => page.locator('#history-hidden-link');
 
 test.describe('History in the life timeline: Settings', () => {
-    test('off by default: nothing is read and the card API says nothing', async ({ page }) => {
-        const { history } = await setup(page, { history: { searching: false } });
+    test('on by default: the toggle is checked and the events are read', async ({ page }) => {
+        const { history } = await setup(page);
+        expect(await page.evaluate(() => JSON.parse(localStorage.getItem('strom-settings') ?? '{}').historyLayer)).toBeUndefined();
         await openSettings(page);
         await expect(page.locator('#settings-experiments')).toBeVisible();
+        await expect(toggle(page)).toBeChecked();
+        await expect(status(page)).toContainText('The research looks for events.');
+        expect(history.reads).toBe(1);
+    });
+
+    test('switched off by the user: it stays off after a reload, nothing is read and the card API says nothing', async ({ page }) => {
+        const { history } = await setup(page, { history: { searching: false } });
+        await openSettings(page);
+        await toggle(page).uncheck();
+        history.reads = 0;
+        await page.reload();
+        await expect(page.locator('html')).not.toHaveClass(/app-loading/);
+        await poll(page);
+        await openSettings(page);
         await expect(toggle(page)).not.toBeChecked();
         await expect(status(page)).toBeHidden();
         await expect(hiddenLink(page)).toBeHidden();
@@ -51,7 +66,6 @@ test.describe('History in the life timeline: Settings', () => {
 
     test('on for a tree without a research: says so', async ({ page }) => {
         await openApp(page);
-        await page.evaluate(() => window.Strom.SettingsManager.setHistoryLayer(true));
         await openSettings(page);
         await expect(toggle(page)).toBeChecked();
         await expect(status(page)).toHaveText('Events for places are found by the research. This tree is not linked to a research.');
@@ -138,7 +152,7 @@ test.describe('History in the life timeline: Settings', () => {
     test('the research not searching: the search is switched on by its terminal (the experiment link)', async ({ page }) => {
         const { history } = await setup(page, { layerOn: true, history: { searching: false } });
         await openSettings(page);
-        await expect(status(page)).toContainText('The research does not look for events.');
+        await expect(status(page)).toHaveText("The research does not look for events. Turn on the search in the research The search can also be switched on in the research's Settings.");
         await status(page).getByRole('button', { name: 'Turn on the search in the research' }).click();
         const opened = await links(page);
         expect(opened.some(u => u.includes('experiment') && u.includes('on'))).toBe(true);

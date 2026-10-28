@@ -163,9 +163,13 @@ class SettingsManagerClass {
         this.save();
     }
 
-    /** Experiment (spec 020): the research's events of the time in the person card's life timeline. Off by default. */
+    /**
+     * Experiment (spec 020): the research's events of the time in the person
+     * card's life timeline. On by default (undefined = never chosen); a user's
+     * own "off" stays.
+     */
     isHistoryLayer(): boolean {
-        return this.settings.historyLayer === true;
+        return this.settings.historyLayer !== false;
     }
 
     setHistoryLayer(enabled: boolean): void {

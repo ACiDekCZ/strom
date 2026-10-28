@@ -23,14 +23,15 @@ function layerGed(): string {
         .replace('1 NAME Anna /Svobodová/', '1 NAME Anna /Svobodová/\n1 BIRT\n2 DATE 1835\n1 DEAT\n2 DATE 1900');
 }
 
-async function setup(page: Page, opts: { history?: Partial<FakeHistory>; layerOn?: boolean; width?: number; height?: number } = {}):
+async function setup(page: Page, opts: { history?: Partial<FakeHistory>; features?: string[]; layerOn?: boolean; width?: number; height?: number } = {}):
     Promise<{ bridge: FakeBridge; history: FakeHistory }> {
     if (opts.width) await page.setViewportSize({ width: opts.width, height: opts.height ?? 844 });
     const history = fakeHistory(opts.history);
     const ged = layerGed();
-    const bridge = await fakeBridge(page, { features: HISTORY_FEATURES, history, treeGed: ged, links: LINKS });
+    const bridge = await fakeBridge(page, { features: opts.features ?? HISTORY_FEATURES, history, treeGed: ged, links: LINKS });
     await openResearch(page, { ged });
-    if (opts.layerOn !== false) await page.evaluate(() => window.Strom.UI.toggleHistoryLayer(true));
+    // On by default (never chosen); `layerOn: false` = the user switched it off.
+    if (opts.layerOn === false) await page.evaluate(() => window.Strom.UI.toggleHistoryLayer(false));
     await poll(page);
     return { bridge, history };
 }
@@ -54,7 +55,7 @@ const warRow = (page: Page) => historyRows(page).filter({ hasText: 'Austro-Pruss
 const chip = (page: Page) => page.locator('#pm-lifeline-history-toggle');
 
 test.describe('History in the life timeline: the person card', () => {
-    test('off (the default): the card is as it was and nothing is read', async ({ page }) => {
+    test('switched off: the card is as it was and nothing is read', async ({ page }) => {
         const { history } = await setup(page, { layerOn: false });
         await openCard(page, 'Jan');
         const before = await page.locator('#pm-lifeline-section').evaluate(el => el.outerHTML);
@@ -224,6 +225,40 @@ test.describe('History in the life timeline: the person card', () => {
         const list = page.locator('#history-hidden-list');
         await expect(list.locator('.history-hidden-item')).toHaveCount(2);
         await expect(list.locator('.history-hidden-item', { hasText: 'Austro-Prussian War' })).toContainText('for Jan Fíšek only');
+    });
+
+    test('on by default, the research not searching and without events: the card shows nothing', async ({ page }) => {
+        const { history } = await setup(page, { history: {
+            searching: false,
+            payload: { state: { on: false, search: 'none', rev: 'h1' }, lang: 'cs', events: [], places: {}, hidden: [] },
+        } });
+        await expect.poll(() => history.reads).toBe(1);
+        await openCard(page, 'Jan');
+        await expect(page.locator('#pm-lifeline-head .pm-lifeline-chips')).toHaveCount(0);
+        await expect(chip(page)).toHaveCount(0);
+        await expect(page.locator('#pm-lifeline-body [class*="k-history"]')).toHaveCount(0);
+        await closeCard(page);
+        // The state is Settings' only.
+        await page.evaluate(() => window.Strom.UI.showSettingsDialog());
+        await expect(page.locator('#history-setting-status')).toContainText('The research does not look for events.');
+    });
+
+    test('an older research without history.events: the card shows nothing, nothing read', async ({ page }) => {
+        const { history } = await setup(page, { features: HISTORY_FEATURES.filter(f => f !== 'history.events') });
+        await openCard(page, 'Jan');
+        await expect(chip(page)).toHaveCount(0);
+        await expect(page.locator('#pm-lifeline-body [class*="k-history"]')).toHaveCount(0);
+        expect(history.reads).toBe(0);
+    });
+
+    test('the research searching, no events yet: the chip and the "still looking" row', async ({ page }) => {
+        await setup(page, { history: {
+            payload: { state: { on: true, search: 'running', pending: 1, rev: 'h1' }, lang: 'cs', events: [], places: { 'Čáslav': { events: [], state: 'pending' } }, hidden: [] },
+        } });
+        await openCard(page, 'Jan');
+        await expect(chip(page)).toBeVisible();
+        await expect(body(page).locator('.k-historyState')).toHaveText('The research is still looking for events for the places of this tree.');
+        await expect(historyRows(page)).toHaveCount(0);
     });
 
     test('a person without a place with a year: the state row says so', async ({ page }) => {
