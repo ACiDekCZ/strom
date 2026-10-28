@@ -49,6 +49,11 @@ describe('surname-variant groups through a research update', () => {
         expect(out.surnameVariants).toEqual([['Lhoták', 'Lhota'], ['Nováková', 'Nowak']]);
     });
 
+    it('the groups marker with nothing under it is the research\'s "none": no group of the tree comes back', () => {
+        const out = asLoaded(load(GED(groupsNote([]))), here());
+        expect(out.surnameVariants ?? []).toEqual([]);
+    });
+
     it('nothing to keep: the version itself, unchanged', () => {
         const next = load(GED());
         expect(keepSurnameVariants(next, load(GED()))).toBe(next);

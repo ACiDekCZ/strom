@@ -845,13 +845,14 @@ export function keepDismissedMarriedSuggestions(next: StromData, previous: Strom
  * The surname-variant groups (StromData.surnameVariants) are the tree's own
  * and go to the research in the header NOTE (ged-exporter.ts), but a research
  * that does not read that NOTE sends a version without them, and loading it
- * dropped every group. A version that carries groups is the research's word
- * (it merged them with what it got) and is taken as it is; one that carries
- * none keeps the previous state's. Returns `next` itself when nothing is
- * carried; neither input is changed.
+ * dropped every group. A version whose file has the groups marker is the
+ * research's word (it merged them with what it got), even an empty list (its
+ * "none"), and is taken as it is; one without the marker keeps the previous
+ * state's. Returns `next` itself when nothing is carried; neither input is
+ * changed.
  */
 export function keepSurnameVariants(next: StromData, previous: StromData): StromData {
-    if (next.surnameVariants?.length) return next;
+    if (next.surnameVariants !== undefined) return next;
     const groups = previous.surnameVariants;
     if (!groups?.length) return next;
     return { ...next, surnameVariants: groups.map(g => [...g]) };
