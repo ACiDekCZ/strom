@@ -11,7 +11,7 @@
 import { describe, it, expect } from 'vitest';
 import { exportToGedcom, formatGedcomDate } from '../ged-exporter.js';
 import { migrateData } from '../data.js';
-import { isGedcomDateForm, sanitizeGedcomDates } from '../gedcom-date-form.js';
+import { isGedcomDateForm, isGedcomDateFormOf, sanitizeGedcomDates } from '../gedcom-date-form.js';
 import { StromData } from '../types.js';
 
 const RESEARCH = { research: { id: '0b4c7a52-1c1f-4d7e-9a53-2f4a3c1e8b10' } };
@@ -89,7 +89,7 @@ describe('gedcomDates from loaded data', () => {
         expect(formatGedcomDate('1850', { '1850': '@X1@' })).toBe('1850');
         expect(formatGedcomDate('1850', { '1850': 'kdysi' })).toBe('1850');
         expect(formatGedcomDate('~1838', { '~1838': 'CAL 1838' })).toBe('CAL 1838');
-        expect(formatGedcomDate('1699', { '1699': '3 MAR 1699/00' })).toBe('3 MAR 1699/00');
+        expect(formatGedcomDate('1699-03-03', { '1699-03-03': '3 MAR 1699/00' })).toBe('3 MAR 1699/00');
     });
 
     it('isGedcomDateForm / sanitizeGedcomDates', () => {
@@ -102,5 +102,64 @@ describe('gedcomDates from loaded data', () => {
         expect(sanitizeGedcomDates(['CAL 1850'])).toBeUndefined();
         expect(sanitizeGedcomDates(null)).toBeUndefined();
         expect(sanitizeGedcomDates({ '': 'CAL 1850', '~1850': 'CAL 1850' })).toEqual({ '~1850': 'CAL 1850' });
+    });
+
+    describe('a valid form of another date', () => {
+        /** Valid one-line forms, but each pair here either reads as its own date or not. */
+        function foreignForms(): unknown {
+            return {
+                persons: {
+                    p1: {
+                        id: 'p1', firstName: 'Matěj', lastName: 'Lhoták', gender: 'male',
+                        birthDate: '1850', deathDate: '~1910',
+                        gedcomDates: { '1850': 'ABT 1999', '~1910': 'CAL 1910' },
+                        partnerships: ['u1'], childIds: [], parentIds: [],
+                    },
+                    p2: {
+                        id: 'p2', firstName: 'Anna', lastName: 'Lhotáková', gender: 'female',
+                        birthDate: '1852-03-03',
+                        gedcomDates: { '1852-03-03': '3 MAR 1853' },
+                        partnerships: ['u1'], childIds: [], parentIds: [],
+                    },
+                },
+                partnerships: {
+                    u1: {
+                        id: 'u1', person1Id: 'p1', person2Id: 'p2', childIds: [], status: 'divorced',
+                        startDate: '~1875', endDate: '1880',
+                        gedcomDates: { '~1875': 'EST 1875', '1880': 'BEF 1880' },
+                    },
+                },
+            };
+        }
+
+        it('is dropped on load, a form of its own date stays', () => {
+            const data = migrateData(foreignForms());
+            expect(data.persons['p1' as never].gedcomDates).toEqual({ '~1910': 'CAL 1910' });
+            expect(data.persons['p2' as never].gedcomDates).toBeUndefined();
+            expect(data.partnerships['u1' as never].gedcomDates).toEqual({ '~1875': 'EST 1875' });
+        });
+
+        for (const loaded of [true, false]) {
+            it(`is not exported in place of the date (${loaded ? 'loaded' : 'not through loading'})`, () => {
+                const data = (loaded ? migrateData(foreignForms()) : foreignForms()) as StromData;
+                const { dates } = dateLines(data, true);
+                expect(dates).toContain('2 DATE 1850');
+                expect(dates).toContain('2 DATE 3 MAR 1852');
+                expect(dates).toContain('2 DATE 1880');
+                expect(dates).toContain('2 DATE CAL 1910');
+                expect(dates).toContain('2 DATE EST 1875');
+                expect(dates.join('\n')).not.toMatch(/1999|1853|BEF 1880/);
+            });
+        }
+
+        it('isGedcomDateFormOf reads the form back with the import reader', () => {
+            expect(isGedcomDateFormOf('~1850', 'ABT 1850')).toBe(true);
+            expect(isGedcomDateFormOf('~1850', 'INT 1850')).toBe(true);
+            expect(isGedcomDateFormOf('1850..1860', 'BET 1850 AND 1860')).toBe(true);
+            expect(isGedcomDateFormOf('1871-03-22/1882', 'FROM 22 MAR 1871 TO 1882')).toBe(true);
+            expect(isGedcomDateFormOf('1850', 'ABT 1999')).toBe(false);
+            expect(isGedcomDateFormOf('1850', 'ABT 1850')).toBe(false);
+            expect(isGedcomDateFormOf('1850', '1850\n0 @X1@ INDI')).toBe(false);
+        });
     });
 });
