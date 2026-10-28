@@ -41,7 +41,7 @@ export function researchLinkScheme(value: unknown): string {
 export const RESEARCH_LINK_ACTIONS = [
     'send', 'excerpt', 'app', 'open', 'chat', 'task', 'review', 'research',
     'new', 'update', 'sessions', 'conflict', 'story', 'sync-undo', 'setup', 'live',
-    'direction', 'finish', 'media', 'archive', 'seal', 'experiment',
+    'direction', 'finish', 'media', 'archive', 'seal', 'experiment', 'history',
 ] as const;
 export type ResearchLinkAction = typeof RESEARCH_LINK_ACTIONS[number];
 
@@ -141,6 +141,10 @@ export interface ResearchLinkParams {
     /** An experiment (`experiment`): its name and whether to switch it on or off for the tree. */
     experiment?: ResearchExperiment;
     experimentDo?: ResearchExperimentDo;
+    /** A place record of the research ("L0001", `history`: its own history and surroundings). */
+    place?: string;
+    /** `history`: search the place's history (the research's terminal says the estimate and asks). */
+    historyDo?: 'search';
 }
 
 /** Experiments the research can switch for a tree (spec 020: `history` = events of the time). */
@@ -238,6 +242,11 @@ export function researchSchemeUrl(action: ResearchLinkAction, p: ResearchLinkPar
             // Fixed values only: the research asks before spending its agent's time.
             return p.experiment && EXPERIMENTS.includes(p.experiment) && p.experimentDo && EXPERIMENT_DOS.includes(p.experimentDo)
                 ? `${base}&name=${p.experiment}&do=${p.experimentDo}` : null;
+        }
+        case 'history': {
+            // Only the place's record id and a fixed value (R6): never a place name.
+            const place = typeof p.place === 'string' && /^L\d{1,7}$/.test(p.place) ? p.place : null;
+            return place && p.historyDo === 'search' ? `${base}&place=${place}&do=search` : null;
         }
         case 'media': {
             const sha = typeof p.sha === 'string' && /^[0-9a-f]{64}$/.test(p.sha) ? p.sha : null;
@@ -1308,7 +1317,16 @@ export interface LiveStatus {
     experiments?: { history: boolean };
     /** `history.rev` (with `history.events` in `features`): a print of what `GET /history` returns; read it again when it changes. */
     historyRev?: string;
+    /** `experiments.historyPace` (with `experiments.pace` in `features`): how often the research looks for history. */
+    historyPace?: HistoryPace;
+    /** `history.placeEstimate` (with `history.place` in `features`): one place's own history, minutes and (measured) USD. */
+    historyPlaceEstimate?: { minutes: [number, number]; usd?: [number, number] };
+    /** `stories.history` (with `stories.history` in `features`): the research may use the history of places in stories. */
+    storiesHistory?: boolean;
 }
+
+/** How often the research looks for history (`/status.experiments.historyPace`). */
+export type HistoryPace = 'sometimes' | 'rare' | 'idle';
 
 /** What a tree is to the app (`/status.tree.kind`). */
 export type ResearchTreeKind = 'archive' | 'research';
@@ -1335,6 +1353,26 @@ export const EXPERIMENTS_FEATURE = 'experiments';
 export const EXPERIMENTS_OFF_FEATURE = 'experiments.off';
 /** `/status.features`: the `experiment` link switches an experiment on (or off) in the research's terminal. */
 export const EXPERIMENTS_LINK_FEATURE = 'experiments.link';
+/** `/status.features`: the status says how often the research looks for history (`experiments.historyPace`). */
+export const EXPERIMENTS_PACE_FEATURE = 'experiments.pace';
+/** `/status.features` (R1): `GET /history` carries `regions` and the places' regions, people and states. */
+export const HISTORY_REGIONS_FEATURE = 'history.regions';
+/** `/status.features`: `POST /history/first {region}` puts a region first. */
+export const HISTORY_FIRST_FEATURE = 'history.first';
+/** `/status.features` (R2): hide an event in the whole tree, or everything of a region. */
+export const HISTORY_HIDE_ALL_FEATURE = 'history.hide.all';
+/** `/status.features` (R3): `POST /history/skip` — do not search a region or a place for this tree. */
+export const HISTORY_SKIP_FEATURE = 'history.skip';
+/** `/status.features` (R4): `POST /history/delete` — delete an event (restorable, `deleted` in `GET /history`). */
+export const HISTORY_DELETE_FEATURE = 'history.delete';
+/** `/status.features` (R5): `POST /history/map` — a place's regions by hand. */
+export const HISTORY_MAP_FEATURE = 'history.map';
+/** `/status.features` (R6): a place's own history and surroundings (started by the research terminal's link). */
+export const HISTORY_PLACE_FEATURE = 'history.place';
+/** `/status.features` (R6, P4): the bridge starts a place's own history itself (no terminal). */
+export const HISTORY_PLACE_DIRECT_FEATURE = 'history.place.direct';
+/** `/status.features` (R7): `/status.stories.history` and `POST /stories {history}`. */
+export const STORIES_HISTORY_FEATURE = 'stories.history';
 
 /** The tree's kind as the status said it, or null (an older research). */
 export function sanitizeTreeKind(value: unknown): ResearchTreeKind | null {
@@ -2046,14 +2084,36 @@ export function sanitizeLiveStatus(value: unknown): LiveStatus | null {
 }
 
 /** `experiments` and `history.rev`, each read only when `features` names it. */
-function experimentsSaid(r: Record<string, unknown>, features: string[] | null): Pick<LiveStatus, 'experiments' | 'historyRev'> {
+function experimentsSaid(r: Record<string, unknown>, features: string[] | null):
+    Pick<LiveStatus, 'experiments' | 'historyRev' | 'historyPace' | 'historyPlaceEstimate' | 'storiesHistory'> {
     const ex = features?.includes(EXPERIMENTS_FEATURE) ? asRecord(r.experiments) : null;
     const hist = features?.includes(HISTORY_EVENTS_FEATURE) ? asRecord(r.history) : null;
     const rev = hist ? cleanText(hist.rev, 128) : '';
+    const pace = features?.includes(EXPERIMENTS_PACE_FEATURE) ? asRecord(r.experiments)?.historyPace : undefined;
+    const estimate = features?.includes(HISTORY_PLACE_FEATURE) ? historyEstimate(asRecord(r.history)?.placeEstimate) : null;
+    const stories = features?.includes(STORIES_HISTORY_FEATURE) ? asRecord(r.stories) : null;
     return {
         ...(ex && typeof ex.history === 'boolean' ? { experiments: { history: ex.history } } : {}),
         ...(rev ? { historyRev: rev } : {}),
+        ...(pace === 'sometimes' || pace === 'rare' || pace === 'idle' ? { historyPace: pace } : {}),
+        ...(estimate ? { historyPlaceEstimate: estimate } : {}),
+        ...(stories && typeof stories.history === 'boolean' ? { storiesHistory: stories.history } : {}),
     };
+}
+
+/** `history.placeEstimate`: `{minutes: [a, b], usd?: [x, y]}` (a ≤ b, sane ranges), else null. */
+function historyEstimate(v: unknown): { minutes: [number, number]; usd?: [number, number] } | null {
+    const o = asRecord(v);
+    const pair = (x: unknown, max: number): [number, number] | null => {
+        if (!Array.isArray(x) || x.length !== 2) return null;
+        const [a, b] = x;
+        return typeof a === 'number' && typeof b === 'number' && Number.isFinite(a) && Number.isFinite(b) && a >= 0 && a <= b && b <= max
+            ? [a, b] : null;
+    };
+    const minutes = o ? pair(o.minutes, 24 * 60) : null;
+    if (!minutes) return null;
+    const usd = pair(o!.usd, 1000);
+    return usd ? { minutes, usd } : { minutes };
 }
 
 /** `tree.kind` and `tree.state`, each read only when `features` names it. */

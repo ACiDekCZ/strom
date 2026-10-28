@@ -46,13 +46,26 @@ export interface HistoryLocal {
     cite: string;
 }
 
+/** region: a region's catalogue; local: the tree's own records; place: the history of a place and its surroundings (R6). */
+export type HistoryScope = 'region' | 'local' | 'place';
+
+/** The place an event of `scope: "place"` belongs to (R6). */
+export interface HistoryEventPlace {
+    /** The payload's place key. */
+    key: string;
+    /** The research's place record ("L0001"). */
+    id?: string;
+    name?: HistoryText;
+}
+
 export interface HistoryEvent {
     id: string;
     from: number;
     to?: number;
     kind: HistoryKind;
-    scope: 'region' | 'local';
+    scope: HistoryScope;
     region?: { id: string; name?: HistoryText };
+    place?: HistoryEventPlace;
     text: HistoryText;
     source?: HistorySource;
     local?: HistoryLocal;
@@ -60,24 +73,103 @@ export interface HistoryEvent {
     sensitive?: boolean;
 }
 
+/** A region of a place, with the years it applies (none: the whole period). */
+export interface HistoryPlaceRegion {
+    id: string;
+    from?: number;
+    to?: number;
+}
+
+/** The state of a place's own history (R6 `places[x].history`). */
+export type HistoryPlaceHistory = 'none' | 'first' | 'running' | 'done' | 'empty' | 'waiting';
+
 export interface HistoryPlace {
     events: string[];
     /** Other names of the same place (other languages, historical names). */
     also?: string[];
     /** Missing = done; pending = waits; unlocated = the research did not place it. */
     state?: 'pending' | 'unlocated';
+    /** R1: the regions of the place (also while pending). */
+    regions?: HistoryPlaceRegion[];
+    /** R1: how many people of the tree have facts in the place. */
+    persons?: number;
+    /** R1: the research's sentence why it could not place it (unlocated); R6: why its own history waits. */
+    why?: string;
+    /** R5: the regions were set by hand. */
+    manual?: boolean;
+    /** R3: the place is not searched for this tree. */
+    skip?: boolean;
+    /** R1: the research's place record ("L0001"); R6 links take only this. */
+    id?: string;
+    /** R6: the surroundings its own history covers. */
+    area?: HistoryText;
+    /** R6: the state of its own history. */
+    history?: HistoryPlaceHistory;
+    /** R6: when its own history was searched (ISO). */
+    at?: string;
 }
 
-export interface HistoryHidden {
+export type HistoryRegionState = 'queued' | 'running' | 'done' | 'waiting' | 'covered' | 'skipped' | 'none';
+
+/** A region of the tree as the research keeps it (R1 `regions`). */
+export interface HistoryRegion {
+    id: string;
+    name?: HistoryText;
+    state: HistoryRegionState;
+    /** When it was done (ISO). */
+    at?: string;
+    /** waiting: the research's sentence. */
+    why?: string;
+    /** covered: the regions whose catalogues hold its places and years (a state over its lands). */
+    covered?: string[];
+    /** Events of its catalogue that are not deleted (hidden ones too). */
+    events?: number;
+    /** Hidden in this tree. */
+    hidden?: number;
+    places?: number;
+    persons?: number;
+    facts?: number;
+    /** Years of the tree's people without events, not searched yet (K2.6). */
+    gaps?: { from: number; to: number }[];
+    /** The task filling the gaps. */
+    fill?: 'queued' | 'running';
+    /** 1-based order among the research's region tasks. */
+    order?: number;
+    /** Asked to go first (`/history/first`). */
+    first?: boolean;
+}
+
+/** An event the user deleted on this computer (R4 `deleted`): what the row needs to be restored. */
+export interface HistoryDeleted {
     event: string;
+    scope: HistoryScope;
+    /** When it was deleted (ISO). */
+    at?: string;
+    from?: number;
+    to?: number;
+    text?: HistoryText;
+    region?: { id: string; name?: HistoryText };
+    place?: HistoryEventPlace;
+}
+
+/**
+ * A hiding: an event for a place, for a person (REFN) or in the whole tree
+ * (`tree`, R2), or everything of a region in this tree (`region`, R2, no event).
+ */
+export interface HistoryHidden {
+    event?: string;
     /** Hidden for a place (the payload's place key). */
     place?: string;
     /** Hidden for one person (the person's REFN). */
     person?: string;
+    /** Hidden in the whole tree (R2). */
+    tree?: true;
+    /** Everything of the region hidden in this tree (R2). */
+    region?: string;
     at?: string;
 }
 
-export type HistorySearch = 'none' | 'running' | 'done' | 'waiting';
+export type HistorySearch = 'none' | 'running' | 'done' | 'waiting' | 'mapping';
 
 export interface HistoryState {
     on: boolean;
@@ -87,6 +179,9 @@ export interface HistoryState {
     why?: string;
     rev?: string;
     truncated?: boolean;
+    /** search = mapping (P3): places matched to regions so far, of how many. */
+    mapped?: number;
+    mappable?: number;
 }
 
 export interface HistoryPayload {
@@ -96,6 +191,12 @@ export interface HistoryPayload {
     events: HistoryEvent[];
     places: Record<string, HistoryPlace>;
     hidden: HistoryHidden[];
+    /** R1 regions by id; absent: an older research (regions are derived from the events). */
+    regions?: Record<string, HistoryRegion>;
+    /** R6: place ids ("L0003") the research suggests for their own history. */
+    suggest?: string[];
+    /** R4: events deleted on this computer (restorable). */
+    deleted?: HistoryDeleted[];
     /** `/status.history.rev` the payload was read for (when the status gave one). */
     rev?: string;
     /** When this copy was read from the bridge (ISO). */
@@ -104,9 +205,14 @@ export interface HistoryPayload {
 
 /** A hiding (or its undo) not yet confirmed by the research (§4.5). */
 export interface HistoryHideOp {
-    event: string;
+    /** Absent only for a region's hiding. */
+    event?: string;
     /** The payload's place key. */
     place?: string;
+    /** In the whole tree (R2). */
+    tree?: true;
+    /** Everything of the region in this tree (R2). */
+    region?: string;
     /** The person's id in the tree (a person without REFN waits for one). */
     personId?: string;
     personRefn?: string;
@@ -127,10 +233,18 @@ export const HISTORY_LIMITS = {
     text: 300,
     title: 200,
     hidden: 20000,
+    regions: 2000,
+    deleted: 5000,
+    suggest: 50,
+    placeRegions: 20,
 } as const;
 
 const LANG_RE = /^[a-z]{2,3}(-[A-Za-z0-9]{1,8})?$/;
 const ID_RE = /^[A-Za-z0-9-]{1,32}$/;
+/** A region's id ("cz-bohemia"). */
+export const HISTORY_REGION_RE = /^[A-Za-z0-9._-]{1,64}$/;
+/** A research place record ("L0001"). */
+export const HISTORY_PLACE_ID_RE = /^L\d{1,7}$/;
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}/;
 
 /** A language code of the shape the bridge may send (`cs`, `en-GB`); others are ignored. */
@@ -151,6 +265,36 @@ function str(v: unknown, max?: number): string | undefined {
 
 function year(v: unknown): number | undefined {
     return typeof v === 'number' && Number.isInteger(v) && v > 0 && v < 3000 ? v : undefined;
+}
+
+function count(v: unknown): number | undefined {
+    return typeof v === 'number' && Number.isInteger(v) && v >= 0 && v < 1e9 ? v : undefined;
+}
+
+function isoTime(v: unknown): string | undefined {
+    const s = str(v, 40);
+    return s && !Number.isNaN(Date.parse(s)) ? s : undefined;
+}
+
+function regionRef(v: unknown): { id: string; name?: HistoryText } | undefined {
+    if (!isObj(v)) return undefined;
+    const id = str(v.id, 64);
+    if (!id || !HISTORY_REGION_RE.test(id)) return undefined;
+    const out: { id: string; name?: HistoryText } = { id };
+    const name = langText(v.name, HISTORY_LIMITS.title);
+    if (name) out.name = name;
+    return out;
+}
+
+function eventPlaceRef(v: unknown): HistoryEventPlace | undefined {
+    if (!isObj(v)) return undefined;
+    const key = str(v.key, 500);
+    if (!key) return undefined;
+    const out: HistoryEventPlace = { key };
+    if (typeof v.id === 'string' && HISTORY_PLACE_ID_RE.test(v.id)) out.id = v.id;
+    const name = langText(v.name, HISTORY_LIMITS.title);
+    if (name) out.name = name;
+    return out;
 }
 
 /** Text by language: valid codes only, each clipped. Empty → undefined. */
@@ -212,7 +356,7 @@ export function parseHistoryEvent(v: unknown): HistoryEvent | null {
     const from = year(v.from);
     const text = langText(v.text, HISTORY_LIMITS.text);
     if (!id || from === undefined || !text) return null;
-    const scope = v.scope === 'local' ? 'local' : v.scope === 'region' ? 'region' : undefined;
+    const scope: HistoryScope | undefined = v.scope === 'local' || v.scope === 'region' || v.scope === 'place' ? v.scope : undefined;
     if (!scope) return null;
     const source = parseSource(v.source);
     const local = parseLocal(v.local);
@@ -230,6 +374,8 @@ export function parseHistoryEvent(v: unknown): HistoryEvent | null {
             if (name) ev.region.name = name;
         }
     }
+    const place = eventPlaceRef(v.place);
+    if (place) ev.place = place;
     if (source) ev.source = source;
     if (local) ev.local = local;
     if (isObj(v.tip)) {
@@ -254,12 +400,101 @@ function parsePlace(v: unknown, known: Set<string>): HistoryPlace | null {
         if (also.length) out.also = also;
     }
     if (v.state === 'pending' || v.state === 'unlocated') out.state = v.state;
+    if (Array.isArray(v.regions)) {
+        const regions: HistoryPlaceRegion[] = [];
+        for (const r of v.regions) {
+            if (regions.length >= HISTORY_LIMITS.placeRegions) break;
+            if (!isObj(r)) continue;
+            const id = str(r.id, 64);
+            if (!id || !HISTORY_REGION_RE.test(id) || regions.some(x => x.id === id)) continue;
+            const pr: HistoryPlaceRegion = { id };
+            const from = year(r.from);
+            const to = year(r.to);
+            if (from !== undefined) pr.from = from;
+            if (to !== undefined && (from === undefined || to >= from)) pr.to = to;
+            regions.push(pr);
+        }
+        if (regions.length) out.regions = regions;
+    }
+    const persons = count(v.persons);
+    if (persons !== undefined) out.persons = persons;
+    const why = str(v.why, 300);
+    if (why) out.why = why;
+    if (v.manual === true) out.manual = true;
+    if (v.skip === true) out.skip = true;
+    if (typeof v.id === 'string' && HISTORY_PLACE_ID_RE.test(v.id)) out.id = v.id;
+    const area = langText(v.area, HISTORY_LIMITS.title);
+    if (area) out.area = area;
+    if (typeof v.history === 'string' && (PLACE_HISTORY as readonly string[]).includes(v.history)) out.history = v.history as HistoryPlaceHistory;
+    const at = isoTime(v.at);
+    if (at) out.at = at;
+    return out;
+}
+
+const PLACE_HISTORY = ['none', 'first', 'running', 'done', 'empty', 'waiting'] as const;
+const REGION_STATES = ['queued', 'running', 'done', 'waiting', 'covered', 'skipped', 'none'] as const;
+
+function parseRegion(id: string, v: unknown): HistoryRegion | null {
+    if (!isObj(v) || !HISTORY_REGION_RE.test(id)) return null;
+    const state = typeof v.state === 'string' && (REGION_STATES as readonly string[]).includes(v.state)
+        ? v.state as HistoryRegionState : 'none';
+    const out: HistoryRegion = { id, state };
+    const name = langText(v.name, HISTORY_LIMITS.title);
+    if (name) out.name = name;
+    const at = isoTime(v.at);
+    if (at) out.at = at;
+    const why = str(v.why, 300);
+    if (why) out.why = why;
+    if (Array.isArray(v.covered)) {
+        const covered = [...new Set(v.covered.filter((c): c is string => typeof c === 'string' && HISTORY_REGION_RE.test(c) && c !== id))].slice(0, 100);
+        if (covered.length) out.covered = covered;
+    }
+    for (const k of ['events', 'hidden', 'places', 'persons', 'facts'] as const) {
+        const n = count(v[k]);
+        if (n !== undefined) out[k] = n;
+    }
+    if (Array.isArray(v.gaps)) {
+        const gaps = v.gaps
+            .filter(isObj)
+            .map(g => ({ from: year(g.from), to: year(g.to) }))
+            .filter((g): g is { from: number; to: number } => g.from !== undefined && g.to !== undefined && g.to >= g.from)
+            .slice(0, 50);
+        if (gaps.length) out.gaps = gaps;
+    }
+    if (v.fill === 'queued' || v.fill === 'running') out.fill = v.fill;
+    const order = count(v.order);
+    if (order !== undefined && order >= 1) out.order = order;
+    if (v.first === true) out.first = true;
+    return out;
+}
+
+function parseDeleted(v: unknown): HistoryDeleted | null {
+    if (!isObj(v)) return null;
+    const event = typeof v.event === 'string' && ID_RE.test(v.event) ? v.event : undefined;
+    if (!event) return null;
+    const scope: HistoryScope = v.scope === 'local' || v.scope === 'place' ? v.scope : 'region';
+    const out: HistoryDeleted = { event, scope };
+    const at = isoTime(v.at);
+    if (at) out.at = at;
+    const from = year(v.from);
+    if (from !== undefined) {
+        out.from = from;
+        const to = year(v.to);
+        if (to !== undefined && to > from) out.to = to;
+    }
+    const text = langText(v.text, HISTORY_LIMITS.text);
+    if (text) out.text = text;
+    const region = regionRef(v.region);
+    if (region) out.region = region;
+    const place = eventPlaceRef(v.place);
+    if (place) out.place = place;
     return out;
 }
 
 function parseState(v: unknown): HistoryState {
     const o = isObj(v) ? v : {};
-    const search: HistorySearch = o.search === 'running' || o.search === 'done' || o.search === 'waiting' ? o.search : 'none';
+    const search: HistorySearch = o.search === 'running' || o.search === 'done' || o.search === 'waiting' || o.search === 'mapping'
+        ? o.search : 'none';
     const out: HistoryState = { on: o.on === true, search };
     const at = str(o.at, 40);
     if (at && !Number.isNaN(Date.parse(at))) out.at = at;
@@ -269,19 +504,33 @@ function parseState(v: unknown): HistoryState {
     const rev = str(o.rev, 128);
     if (rev) out.rev = rev;
     if (o.truncated === true) out.truncated = true;
+    const mapped = count(o.mapped);
+    const mappable = count(o.mappable);
+    if (mapped !== undefined && mappable !== undefined && mapped <= mappable) {
+        out.mapped = mapped;
+        out.mappable = mappable;
+    }
     return out;
 }
 
 function parseHidden(v: unknown): HistoryHidden | null {
     if (!isObj(v)) return null;
     const event = str(v.event, 64);
-    if (!event) return null;
-    const place = str(v.place, 500);
-    const person = str(v.person, 64);
-    if (!place && !person) return null;
-    const out: HistoryHidden = { event };
-    if (place) out.place = place;
-    else if (person) out.person = person;
+    const region = str(v.region, 64);
+    let out: HistoryHidden;
+    if (!event) {
+        // Everything of a region (R2): no event.
+        if (!region || !HISTORY_REGION_RE.test(region)) return null;
+        out = { region };
+    } else {
+        const place = str(v.place, 500);
+        const person = str(v.person, 64);
+        out = { event };
+        if (place) out.place = place;
+        else if (person) out.person = person;
+        else if (v.tree === true) out.tree = true;
+        else return null;
+    }
     const at = str(v.at, 40);
     if (at) out.at = at;
     return out;
@@ -329,6 +578,32 @@ export function parseHistoryPayload(raw: unknown, cachedAt: string, rev?: string
     const state = parseState(raw.state);
     const out: HistoryPayload = { state, events, places, hidden, cachedAt };
     if (isHistoryLang(raw.lang)) out.lang = raw.lang;
+    if (isObj(raw.regions)) {
+        const regions: Record<string, HistoryRegion> = {};
+        let n = 0;
+        for (const [id, v] of Object.entries(raw.regions)) {
+            if (n >= HISTORY_LIMITS.regions) break;
+            const r = parseRegion(id, v);
+            if (!r) continue;
+            regions[id] = r;
+            n++;
+        }
+        out.regions = regions;
+    }
+    if (Array.isArray(raw.suggest)) {
+        const suggest = [...new Set(raw.suggest.filter((x): x is string => typeof x === 'string' && HISTORY_PLACE_ID_RE.test(x)))]
+            .slice(0, HISTORY_LIMITS.suggest);
+        if (suggest.length) out.suggest = suggest;
+    }
+    if (Array.isArray(raw.deleted)) {
+        const deleted: HistoryDeleted[] = [];
+        for (const d of raw.deleted) {
+            if (deleted.length >= HISTORY_LIMITS.deleted) break;
+            const x = parseDeleted(d);
+            if (x && !deleted.some(y => y.event === x.event)) deleted.push(x);
+        }
+        if (deleted.length) out.deleted = deleted;
+    }
     const r = rev ?? state.rev;
     if (r) out.rev = r;
     return out;
@@ -363,17 +638,25 @@ export function sanitizeHideQueue(raw: unknown): HistoryHideOp[] {
     for (const v of raw) {
         if (!isObj(v)) continue;
         const event = str(v.event, 64);
+        const region = str(v.region, 64);
         const at = str(v.at, 40);
-        if (!event || !at) continue;
-        const op: HistoryHideOp = { event, at };
-        const place = str(v.place, 500);
-        const personId = str(v.personId, 64);
-        const personRefn = str(v.personRefn, 64);
-        if (place) op.place = place;
-        else if (personId || personRefn) {
-            if (personId) op.personId = personId;
-            if (personRefn) op.personRefn = personRefn;
-        } else continue;
+        if (!at) continue;
+        let op: HistoryHideOp;
+        if (!event) {
+            if (!region || !HISTORY_REGION_RE.test(region)) continue;
+            op = { region, at };
+        } else {
+            op = { event, at };
+            const place = str(v.place, 500);
+            const personId = str(v.personId, 64);
+            const personRefn = str(v.personRefn, 64);
+            if (place) op.place = place;
+            else if (personId || personRefn) {
+                if (personId) op.personId = personId;
+                if (personRefn) op.personRefn = personRefn;
+            } else if (v.tree === true) op.tree = true;
+            else continue;
+        }
         if (v.do === 'show') op.do = 'show';
         out.push(op);
     }
@@ -482,8 +765,13 @@ export function placesInYear(points: readonly ResidencePoint[], y: number): stri
 
 /** An effective hiding: the research's list plus the local queue on top. */
 export interface EffectiveHidden {
-    event: string;
+    /** Absent only for a region's hiding. */
+    event?: string;
     place?: string;
+    /** In the whole tree (R2). */
+    tree?: true;
+    /** Everything of the region (R2). */
+    region?: string;
     /** REFN of the person. */
     person?: string;
     /** Tree id of the person (a queued hiding of a person without REFN). */
@@ -493,12 +781,20 @@ export interface EffectiveHidden {
     queued: boolean;
 }
 
-function sameHideTarget(
-    p: HistoryPayload | null,
-    a: { event: string; place?: string; person?: string; personRefn?: string; personId?: string },
-    b: { event: string; place?: string; person?: string; personRefn?: string; personId?: string },
-): boolean {
+interface HideTarget {
+    event?: string;
+    place?: string;
+    person?: string;
+    personRefn?: string;
+    personId?: string;
+    tree?: true;
+    region?: string;
+}
+
+function sameHideTarget(p: HistoryPayload | null, a: HideTarget, b: HideTarget): boolean {
+    if (a.region || b.region) return !a.event && !b.event && a.region === b.region;
     if (a.event !== b.event) return false;
+    if (a.tree || b.tree) return !!a.tree && !!b.tree;
     if (a.place || b.place) {
         if (!a.place || !b.place) return false;
         if (placeKey(a.place) === placeKey(b.place)) return true;
@@ -528,11 +824,15 @@ export function queueHideOp(queue: readonly HistoryHideOp[], op: HistoryHideOp, 
 export function effectiveHidden(p: HistoryPayload | null, queue: readonly HistoryHideOp[] = []): EffectiveHidden[] {
     let out: EffectiveHidden[] = (p?.hidden ?? []).map(h => ({ ...h, queued: false }));
     for (const op of queue) {
-        const target = { event: op.event, place: op.place, person: op.personRefn, personId: op.personId };
+        const target: HideTarget = op.region && !op.event
+            ? { region: op.region }
+            : op.tree ? { event: op.event, tree: true } : { event: op.event, place: op.place, person: op.personRefn, personId: op.personId };
+        for (const k of Object.keys(target) as (keyof HideTarget)[]) if (target[k] === undefined) delete target[k];
         if (op.do === 'show') {
             out = out.filter(h => !sameHideTarget(p, h, target));
         } else if (!out.some(h => sameHideTarget(p, h, target))) {
-            out.push({ ...target, ...(op.at ? { at: op.at } : {}), queued: true });
+            const { personRefn: _r, ...rest } = target;
+            out.push({ ...rest, ...(op.at ? { at: op.at } : {}), queued: true });
         }
     }
     return out;
@@ -638,8 +938,12 @@ function ageLabel(lang: Language, ev: HistoryEvent, birth: number | null, death:
 }
 
 function hidingFor(hidden: readonly EffectiveHidden[], p: HistoryPayload, ev: HistoryEvent, key: string, person: Person): EffectiveHidden | undefined {
+    // Wider hidings first: everything of the region, then the whole tree.
+    const wide = hidden.find(h => !h.event && !!h.region && ev.scope === 'region' && ev.region?.id === h.region)
+        ?? hidden.find(h => h.tree && h.event === ev.id);
+    if (wide) return wide;
     return hidden.find(h => {
-        if (h.event !== ev.id) return false;
+        if (h.event !== ev.id || h.tree) return false;
         if (h.place) return placeKey(h.place) === placeKey(key) || matchHistoryPlace(p, h.place) === key;
         if (h.person) return !!person.refn && h.person === person.refn;
         return !!h.personId && h.personId === person.id;
@@ -734,8 +1038,9 @@ export function computePersonHistory(
         }
     }
 
+    const rank = { region: 0, place: 1, local: 2 } as const;
     const order = (a: LifelineHistoryItem, b: LifelineHistoryItem) =>
-        a.year - b.year || (a.ev.scope === b.ev.scope ? 0 : a.ev.scope === 'region' ? -1 : 1);
+        a.year - b.year || rank[a.ev.scope] - rank[b.ev.scope];
     items.sort(order);
     hidden.sort(order);
 
@@ -743,7 +1048,7 @@ export function computePersonHistory(
     const regions = new Set(items.filter(i => i.ev.scope === 'region' && i.ev.region).map(i => i.ev.region!.id));
     if (regions.size >= 2) {
         for (const i of items) {
-            if (i.ev.scope === 'local') i.regionLabel = i.place;
+            if (i.ev.scope !== 'region') i.regionLabel = i.place;
             else if (i.ev.region) i.regionLabel = pickHistoryText(i.ev.region.name, lang, p.lang)?.text ?? i.ev.region.id;
         }
     }
@@ -930,7 +1235,7 @@ export function historySettingsStatus(input: HistorySettingsInput, lang: Languag
     return { text, action };
 }
 
-// ─── The tree's hidden list (Settings → Hidden events) ─────────────────────
+// ─── The tree's hidden list (old Settings list; the manager's Hidden tab replaces it) ───
 
 export interface HiddenListEntry {
     event: HistoryEvent;
@@ -950,33 +1255,6 @@ export interface HiddenListGroup {
     entries: HiddenListEntry[];
 }
 
-/** Tree places by their payload key: the tree's spelling for each matched place. */
-function treePlaceNames(data: StromData, p: HistoryPayload): Map<string, string> {
-    const out = new Map<string, string>();
-    const consider = (raw: string | undefined) => {
-        if (!raw || !raw.trim()) return;
-        const key = matchHistoryPlace(p, raw);
-        if (key !== null && !out.has(key)) out.set(key, raw.trim());
-    };
-    for (const person of Object.values(data.persons)) {
-        consider(person.birthPlace);
-        consider(person.deathPlace);
-        for (const ev of person.events ?? []) consider(ev.place);
-    }
-    for (const u of Object.values(data.partnerships)) {
-        consider(u.startPlace);
-        consider(u.endPlace);
-        for (const ev of u.events ?? []) consider(ev.place);
-    }
-    return out;
-}
-
-/**
- * The tree's hidden events for the list in Settings, grouped by the tree's
- * place (a person-only hiding under the place the event applied to that person
- * through), groups by name, entries by year. A hiding of an event the research
- * no longer sends (withdrawn) is left out.
- */
 export function historyHiddenList(
     data: StromData | null, p: HistoryPayload, queue: readonly HistoryHideOp[], lang: Language,
 ): HiddenListGroup[] {
@@ -994,6 +1272,7 @@ export function historyHiddenList(
         g.entries.push(entry);
     };
     for (const h of hidden) {
+        if (!h.event) continue;
         const ev = byId.get(h.event);
         if (!ev) continue;
         const t = pickHistoryText(ev.text, lang, p.lang);
@@ -1023,9 +1302,33 @@ export function historyHiddenList(
     return out;
 }
 
+// ─── Tree places ───────────────────────────────────────────────────────────
+
+/** Tree places by their payload key: the tree's spelling for each matched place. */
+export function treePlaceNames(data: StromData, p: HistoryPayload): Map<string, string> {
+    const out = new Map<string, string>();
+    const consider = (raw: string | undefined) => {
+        if (!raw || !raw.trim()) return;
+        const key = matchHistoryPlace(p, raw);
+        if (key !== null && !out.has(key)) out.set(key, raw.trim());
+    };
+    for (const person of Object.values(data.persons)) {
+        consider(person.birthPlace);
+        consider(person.deathPlace);
+        for (const ev of person.events ?? []) consider(ev.place);
+    }
+    for (const u of Object.values(data.partnerships)) {
+        consider(u.startPlace);
+        consider(u.endPlace);
+        for (const ev of u.events ?? []) consider(ev.place);
+    }
+    return out;
+}
+
 /** How many hidden events the tree has (withdrawn events not counted). */
 export function historyHiddenCount(p: HistoryPayload | null, queue: readonly HistoryHideOp[] = []): number {
     if (!p) return 0;
     const ids = new Set(p.events.map(e => e.id));
-    return effectiveHidden(p, queue).filter(h => ids.has(h.event)).length;
+    // A region's hiding counts once (§1.2).
+    return effectiveHidden(p, queue).filter(h => (h.event ? ids.has(h.event) : !!h.region)).length;
 }

@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { experimentsOffReply, hideReply, hideRequestBody, historyReadReply } from '../history-bridge.js';
+import {
+    experimentsOffReply, hideReply, hideRequestBody, historyReadReply, deleteReply, firstReply, skipReply, mapReply,
+    storiesReply, placeReply, historyWriteRefusal, historyMapNote, HISTORY_MAP_NOTE_MAX,
+    postBridgeFirst, postBridgePlace, postBridgeDelete, postBridgeMap,
+} from '../history-bridge.js';
 import { researchSchemeUrl } from '../research-link.js';
 
 const TREE = '0b6f5e1c-2d3a-4b5c-8d9e-0f1a2b3c4d5e';
@@ -35,5 +39,59 @@ describe('history bridge replies', () => {
         expect(experimentsOffReply(403, { code: 'experiments.link', link: 'evil://x' }, [], TREE)).toMatchObject({ code: 'link', link: off });
         expect(experimentsOffReply(403, { code: 'experiments.link', link: off }, [], TREE)).toMatchObject({ code: 'link', link: off });
         expect(experimentsOffReply(200, { head: 'abcdef1' }, [], TREE)).toMatchObject({ ok: true, head: 'abcdef1' });
+    });
+});
+
+describe('history manager writes (1028)', () => {
+    const HEAD = { head: 'abcdef1', parent: '1234567' };
+
+    it('builds region and tree hide bodies', () => {
+        expect(hideRequestBody({ region: 'cz-bohemia', at: AT })).toEqual({ region: 'cz-bohemia' });
+        expect(hideRequestBody({ region: 'cz-bohemia', do: 'show', at: AT })).toEqual({ region: 'cz-bohemia', do: 'show' });
+        expect(hideRequestBody({ event: 'E1', tree: true, at: AT })).toEqual({ event: 'E1', tree: true });
+        expect(hideRequestBody({ region: 'bad region!', at: AT })).toBeNull();
+        expect(hideReply(404, { code: 'history.region' }, [])).toMatchObject({ ok: false, code: 'invalid' });
+    });
+
+    it('types the common refusals', () => {
+        expect(deleteReply(404, { code: 'history.event' }, [])).toMatchObject({ ok: false, code: 'gone' });
+        expect(deleteReply(400, { code: 'history.body' }, [])).toMatchObject({ ok: false, code: 'invalid' });
+        expect(firstReply(409, { code: 'history.archive' }, [])).toMatchObject({ ok: false, code: 'archive' });
+        expect(firstReply(409, { code: 'history.done' }, [])).toMatchObject({ ok: false, code: 'done' });
+        expect(deleteReply(409, { code: 'history.retracted' }, [])).toMatchObject({ ok: false, code: 'retracted' });
+        expect(skipReply(503, { code: 'research.busy' }, [])).toMatchObject({ ok: false, code: 'busy' });
+        expect(mapReply(500, {}, [])).toMatchObject({ ok: false, code: 'unknown' });
+    });
+
+    it('accepts only links the app builds itself', () => {
+        const on = researchSchemeUrl('experiment', { tree: TREE, experiment: 'history', experimentDo: 'on' })!;
+        const place = researchSchemeUrl('history', { tree: TREE, place: 'L0042', historyDo: 'search' })!;
+        expect(storiesReply(409, { code: 'history.off', link: 'evil://x' }, [], { tree: TREE })).toMatchObject({ code: 'off', link: on });
+        expect(placeReply(403, { code: 'history.link', link: place }, [], { tree: TREE, place: 'L0042' })).toMatchObject({ code: 'link', link: place });
+        expect(placeReply(403, { code: 'history.link', link: 'https://x' }, [], { tree: TREE, place: 'L0042' })).toMatchObject({ code: 'link', link: place });
+        expect(historyWriteRefusal(403, { code: 'history.link' }, [])).not.toHaveProperty('link');
+    });
+
+    it('parses successful replies', () => {
+        expect(firstReply(200, { ...HEAD, region: 'cz-bohemia', first: [{ region: 'cz-bohemia', at: AT }, { region: 'bad id!' }] }, []))
+            .toEqual({ ok: true, ...HEAD, region: 'cz-bohemia', first: [{ region: 'cz-bohemia', at: AT }] });
+        expect(skipReply(200, { ...HEAD, skip: { regions: ['cz-moravia', 'cz-moravia', 7], places: ['Lhota', ''] } }, []))
+            .toEqual({ ok: true, ...HEAD, skip: { regions: ['cz-moravia'], places: ['Lhota'] } });
+        expect(deleteReply(200, HEAD, [])).toEqual({ ok: true, ...HEAD });
+        expect(deleteReply(200, 'x', [])).toMatchObject({ ok: false, code: 'unknown' });
+    });
+
+    it('cleans the note for the research', () => {
+        expect(historyMapNote('  Lhota u Kolína� ')).toBe('Lhota u Kolína');
+        expect(historyMapNote('é')).toBe('é');
+        const long = '😀'.repeat(HISTORY_MAP_NOTE_MAX + 5);
+        expect(Array.from(historyMapNote(long))).toHaveLength(HISTORY_MAP_NOTE_MAX);
+    });
+
+    it('refuses invalid write arguments without a request', async () => {
+        expect(await postBridgeFirst('http://127.0.0.1:1/t', 'bad id!', [])).toMatchObject({ ok: false, code: 'invalid' });
+        expect(await postBridgePlace('http://127.0.0.1:1/t', 'Lhota', [], { tree: TREE })).toMatchObject({ ok: false, code: 'invalid' });
+        expect(await postBridgeDelete('http://127.0.0.1:1/t', { event: 'bad id!' }, [])).toMatchObject({ ok: false, code: 'invalid' });
+        expect(await postBridgeMap('http://127.0.0.1:1/t', { place: 'Lhota', regions: [{ id: 'bad id!' }] }, [])).toMatchObject({ ok: false, code: 'invalid' });
     });
 });

@@ -1289,3 +1289,35 @@ describe('B-1: titles in the GEDCOM for a research, by what it says of itself', 
         expect(back).toMatchObject({ firstName: 'Josef', lastName: 'Fíšek', titleBefore: 'Ing.', titleAfter: 'st.' });
     });
 });
+
+describe('history manager status fields and link (1028)', () => {
+    it('reads pace, place estimate and stories only when features name them', () => {
+        const raw = {
+            tree: { id: UUID }, experiments: { history: true, historyPace: 'rare' },
+            history: { rev: 'r1', placeEstimate: { minutes: [5, 15], usd: [0.1, 0.4] } }, stories: { history: false },
+        };
+        const none = sanitizeLiveStatus({ ...raw, features: [] })!;
+        expect(none.historyPace).toBeUndefined();
+        expect(none.historyPlaceEstimate).toBeUndefined();
+        expect(none.storiesHistory).toBeUndefined();
+        const all = sanitizeLiveStatus({ ...raw, features: ['experiments.pace', 'history.place', 'stories.history'] })!;
+        expect(all.historyPace).toBe('rare');
+        expect(all.historyPlaceEstimate).toEqual({ minutes: [5, 15], usd: [0.1, 0.4] });
+        expect(all.storiesHistory).toBe(false);
+        const bad = sanitizeLiveStatus({
+            ...raw, experiments: { historyPace: 'often' }, history: { placeEstimate: { minutes: [20, 5] } },
+            features: ['experiments.pace', 'history.place'],
+        })!;
+        expect(bad.historyPace).toBeUndefined();
+        expect(bad.historyPlaceEstimate).toBeUndefined();
+    });
+
+    it('builds the history link only with a place ID', () => {
+        const u = researchSchemeUrl('history', { tree: UUID, place: 'L0042', historyDo: 'search' });
+        expect(u).toContain('history?tree=' + UUID);
+        expect(u).toContain('place=L0042');
+        expect(u).toContain('do=search');
+        expect(researchSchemeUrl('history', { tree: UUID, place: 'Lhota', historyDo: 'search' })).toBeNull();
+        expect(researchSchemeUrl('history', { tree: UUID, place: 'L0042' })).toBeNull();
+    });
+});

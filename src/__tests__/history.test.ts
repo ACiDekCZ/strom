@@ -491,3 +491,63 @@ describe('historyHiddenList', () => {
         expect(q2.find(x => x.place === 'Lhotka')!.entries.map(e => [e.event.id, e.hide.queued])).toEqual([['a-2', true], ['a-1', false]]);
     });
 });
+
+describe('history manager payload (1028)', () => {
+    it('parses regions, place fields, deleted, suggest and the mapping state', () => {
+        const p = payload({
+            state: { on: true, search: 'mapping', mapped: 12, mappable: 40 },
+            events: [regionEvent('cz-bohemia-0001', 1866)],
+            places: {
+                Lhota: {
+                    events: ['cz-bohemia-0001', 'unknown'], id: 'L0042', persons: 7, manual: true,
+                    regions: [{ id: 'cz-bohemia', from: 1800, to: 1700 }, { id: 'cz-bohemia' }, { id: 'bad id!' }],
+                    history: 'done', area: { cs: 'Lhota a okolí' },
+                },
+                Lhotka: { events: [], skip: true, history: 'often', id: 'Lhotka' },
+            },
+            regions: {
+                'cz-bohemia': { state: 'running', name: { cs: 'Čechy' }, covered: ['cz-bohemia', 'at-empire'], events: 3, gaps: [{ from: 1700, to: 1750 }, { from: 9, to: 1 }], fill: 'queued', order: 1, first: true },
+                'cz-moravia': { state: 'strange' },
+                'bad id!': { state: 'done' },
+            },
+            suggest: ['L0042', 'Lhota', 'L0042'],
+            deleted: [{ event: 'cz-bohemia-0009', scope: 'region', at: AT, from: 1850, to: 1840, region: { id: 'cz-bohemia' } }, { scope: 'region' }],
+        });
+        expect(p.state).toMatchObject({ search: 'mapping', mapped: 12, mappable: 40 });
+        expect(p.places.Lhota).toMatchObject({ events: ['cz-bohemia-0001'], id: 'L0042', persons: 7, manual: true, history: 'done', regions: [{ id: 'cz-bohemia', from: 1800 }] });
+        expect(p.places.Lhotka).toEqual({ events: [], skip: true });
+        expect(Object.keys(p.regions!)).toEqual(['cz-bohemia', 'cz-moravia']);
+        expect(p.regions!['cz-bohemia']).toMatchObject({ state: 'running', covered: ['at-empire'], gaps: [{ from: 1700, to: 1750 }], fill: 'queued', order: 1, first: true });
+        expect(p.regions!['cz-moravia'].state).toBe('none');
+        expect(p.suggest).toEqual(['L0042']);
+        expect(p.deleted).toHaveLength(1);
+        expect(p.deleted![0]).toMatchObject({ event: 'cz-bohemia-0009', scope: 'region', from: 1850 });
+        expect(p.deleted![0].to).toBeUndefined();
+        expect(payload({ state: { on: true, search: 'mapping', mapped: 50, mappable: 40 } }).state.mapped).toBeUndefined();
+    });
+
+    it('hides a whole region and an event in the whole tree', () => {
+        const anna = person('anna', { birthDate: '1838', birthPlace: 'Lhota', deathDate: '1890' });
+        const d = data([anna]);
+        const base = {
+            events: [regionEvent('cz-bohemia-0001', 1866), regionEvent('cz-bohemia-0002', 1870), localEvent('L0001', 1866)],
+            places: { Lhota: { events: ['cz-bohemia-0001', 'cz-bohemia-0002', 'L0001'] } },
+        };
+        const region = computePersonHistory(d, 'anna', payload({ ...base, hidden: [{ region: 'cz-bohemia', at: AT }] }), 'cs');
+        expect(region.items.map(i => i.ev.id)).toEqual(['L0001']);
+        expect(region.hidden.map(i => i.ev.id).sort()).toEqual(['cz-bohemia-0001', 'cz-bohemia-0002']);
+        const tree = computePersonHistory(d, 'anna', payload({ ...base, hidden: [{ event: 'L0001', tree: true }] }), 'cs');
+        expect(tree.items.map(i => i.ev.id)).toEqual(['cz-bohemia-0001', 'cz-bohemia-0002']);
+        expect(payload({ hidden: [{ event: 'L0001' }, { region: 'bad id!' }] }).hidden).toEqual([]);
+    });
+
+    it('queues and undoes region hidings', () => {
+        const p = payload({ events: [regionEvent('cz-bohemia-0001', 1866)], places: { Lhota: { events: ['cz-bohemia-0001'] } } });
+        const q = queueHideOp([], { region: 'cz-bohemia', at: AT });
+        expect(effectiveHidden(p, q)).toEqual([expect.objectContaining({ region: 'cz-bohemia' })]);
+        expect(historyHiddenCount(p, q)).toBe(1);
+        expect(effectiveHidden(p, queueHideOp(q, { region: 'cz-bohemia', do: 'show', at: AT }))).toEqual([]);
+        expect(sanitizeHideQueue([{ region: 'cz-bohemia', at: AT }, { event: 'E1', tree: true, at: AT }, { region: 'bad id!', at: AT }]))
+            .toHaveLength(2);
+    });
+});
