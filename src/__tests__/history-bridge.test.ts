@@ -1,8 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
     experimentsOffReply, hideReply, hideRequestBody, historyReadReply, deleteReply, firstReply, skipReply, mapReply,
     storiesReply, placeReply, historyWriteRefusal, historyMapNote, HISTORY_MAP_NOTE_MAX,
-    postBridgeFirst, postBridgePlace, postBridgeDelete, postBridgeMap,
+    postBridgeFirst, postBridgePlace, postBridgeDelete, postBridgeMap, postBridgeExperimentsOff,
 } from '../history-bridge.js';
 import { researchSchemeUrl } from '../research-link.js';
 
@@ -107,5 +107,45 @@ describe('history manager writes (1028)', () => {
         expect(await postBridgePlace('http://127.0.0.1:1/t', 'Lhota', [], { tree: TREE })).toMatchObject({ ok: false, code: 'invalid' });
         expect(await postBridgeDelete('http://127.0.0.1:1/t', { event: 'bad id!' }, [])).toMatchObject({ ok: false, code: 'invalid' });
         expect(await postBridgeMap('http://127.0.0.1:1/t', { place: 'Lhota', regions: [{ id: 'bad id!' }] }, [])).toMatchObject({ ok: false, code: 'invalid' });
+    });
+});
+
+describe('the history of regions and of places apart (experiments.split, 1029)', () => {
+    const link = (experiment: 'history' | 'regions' | 'placeHistory', d: 'on' | 'off') =>
+        researchSchemeUrl('experiment', { tree: TREE, experiment, experimentDo: d })!;
+
+    it('builds the links of both switches', () => {
+        expect(link('regions', 'on')).toContain('name=regions&do=on');
+        expect(link('placeHistory', 'on')).toContain('name=placeHistory&do=on');
+        expect(researchSchemeUrl('experiment', { tree: TREE, experiment: 'places' as never, experimentDo: 'on' })).toBeNull();
+    });
+
+    it('switches one search off with its own key, and offers its own link', async () => {
+        const bodies: unknown[] = [];
+        vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+            bodies.push(JSON.parse(String(init.body)));
+            return new Response(JSON.stringify({ experiments: { regions: false }, head: 'abcdef1', parent: '1234567' }), { status: 200 });
+        });
+        try {
+            expect(await postBridgeExperimentsOff('http://127.0.0.1:1/t', [], TREE, undefined, { which: 'regions' })).toMatchObject({ ok: true, head: 'abcdef1' });
+            await postBridgeExperimentsOff('http://127.0.0.1:1/t', [], TREE, undefined, { which: 'places' });
+            await postBridgeExperimentsOff('http://127.0.0.1:1/t', [], TREE);
+        } finally {
+            vi.unstubAllGlobals();
+        }
+        expect(bodies).toEqual([{ regions: false }, { places: false }, { history: false }]);
+        expect(experimentsOffReply(403, { code: 'experiments.link', link: 'evil://x' }, [], TREE, undefined, 'places'))
+            .toMatchObject({ code: 'link', link: link('placeHistory', 'off') });
+    });
+
+    it('409 history.off of a place or a region keeps the research\'s link of that switch', () => {
+        const places = link('placeHistory', 'on');
+        const regions = link('regions', 'on');
+        expect(placeReply(409, { code: 'history.off', link: places }, [], { tree: TREE, place: 'L0042' })).toMatchObject({ code: 'off', link: places });
+        expect(firstReply(409, { code: 'history.off', params: { link: regions } }, [], { tree: TREE })).toMatchObject({ code: 'off', link: regions });
+        // No link of its own (or a foreign one): the app's own for the switch it names, else both.
+        expect(placeReply(409, { code: 'history.off' }, [], { tree: TREE, place: 'L0042', experiment: 'placeHistory' })).toMatchObject({ link: places });
+        expect(firstReply(409, { code: 'history.off', link: 'evil://x' }, [], { tree: TREE, experiment: 'regions' })).toMatchObject({ link: regions });
+        expect(firstReply(409, { code: 'history.off' }, [], { tree: TREE })).toMatchObject({ link: link('history', 'on') });
     });
 });

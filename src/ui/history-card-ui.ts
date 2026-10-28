@@ -25,7 +25,6 @@ import {
 import { regionName, manageCan } from '../history-manage.js';
 import { postBridgeFirst, postBridgeSkip, type HistoryWriteRefusal } from '../history-bridge.js';
 import { HISTORY_SKIP_FEATURE } from '../research-link.js';
-import { announcedResearchScheme } from '../research-device.js';
 import { shownExcerpts } from '../research-images.js';
 import { excerptImageUrl } from '../excerpts.js';
 import type { Source } from '../types.js';
@@ -439,8 +438,7 @@ export const historyCardMethods = uiModule({
         this.historyChanged();
         const slow = setTimeout(() => { busy.slow = true; this.historyChanged(); }, 300);
         const before = this.researchHeadNow(rid);
-        const scheme = announcedResearchScheme();
-        const r = await postBridgeFirst(ctx.base, region, ctx.features, { tree: rid, ...(scheme ? { scheme } : {}) });
+        const r = await postBridgeFirst(ctx.base, region, ctx.features, this.historyOffCheck(rid, 'regions'));
         clearTimeout(slow);
         findBusy.delete(region);
         if (r.ok) {
@@ -458,11 +456,7 @@ export const historyCardMethods = uiModule({
         const ctx = this.historyManageContext();
         const reread = () => { void this.readBridgeHistory(rid); };
         if (r.code === 'off') {
-            const can = !!r.link || !!ctx?.canLinkOn;
-            findNotes.set(region, {
-                text: h.manageOff,
-                ...(can ? { link: { label: h.enableSearch, run: () => (r.link ? this.launchResearchLink(r.link, 'terminal') : this.historyEnableSearch()) } } : {}),
-            });
+            findNotes.set(region, this.historyOffNote(r, 'regions'));
         } else if (r.code === 'archive') {
             findNotes.set(region, { text: h.findArchive(r.reason) });
         } else if (r.code === 'done') {

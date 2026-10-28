@@ -395,6 +395,60 @@ describe('header', () => {
     });
 });
 
+describe('two searches apart (experiments.split, spec 020 K8, 1029)', () => {
+    const regions = { bohemia: region('bohemia', { state: 'running' }), moravia: region('moravia', { state: 'queued', order: 1 }) };
+    const p = payload({
+        regions, suggest: ['L0002'],
+        places: { kounice: { events: [], id: 'L0002', regions: [{ id: 'bohemia' }], persons: 9, history: 'none' } },
+    });
+    const split = (r: boolean, pl: boolean, o: Partial<ManageEnv> = {}) =>
+        env({ split: { regions: r, places: pl }, canOff: true, canLinkOn: true, ...o });
+
+    it('the header says both: off through the bridge, on by the link', () => {
+        const h = manageHeader(p, split(true, false));
+        expect(h.switches.map(s => [s.key, s.text, s.action])).toEqual([
+            ['regions', 'Regional history: on', 'off'],
+            ['places', 'Local history: off', 'linkOn'],
+        ]);
+        expect(h.text).toContain('Bohemia');
+        // Without experiments.off the bridge cannot switch off: the research's link does; without the link nothing.
+        expect(manageHeader(p, split(true, false, { canOff: false })).switches[0].action).toBe('off');
+        expect(manageHeader(p, split(true, false, { canOff: false, canLinkOn: false })).switches.map(s => s.action)).toEqual([null, null]);
+        const cs = manageHeader(p, split(false, true, { lang: 'cs' })).switches.map(s => s.text);
+        expect(cs).toEqual(['Dějiny regionů: vypnuto', 'Dějiny míst: zapnuto']);
+        const de = manageHeader(p, split(true, true, { lang: 'de' })).switches.map(s => s.text);
+        expect(de).toEqual(['Regionalgeschichte: ein', 'Ortsgeschichte: ein']);
+    });
+
+    it('regions off: the header says so, no region first; places off: no local history offered', () => {
+        const h = manageHeader(p, split(false, true));
+        expect(h.text).toBe('Regional history is not searched for this tree. Events already found stay.');
+        expect(h.link).toBeNull();
+        const firstOf = (e: ManageEnv) => regionGroups(p, e, names).flatMap(g => g.rows).filter(r => r.actions.includes('first')).map(r => r.key);
+        expect(firstOf(split(true, true))).toEqual(['moravia']);
+        expect(firstOf(split(false, true))).toEqual([]);
+        expect(placeGroups(p, split(true, true), names).map(g => g.key)).toEqual(['suggest', 'all']);
+        const off = placeGroups(p, split(true, false), names);
+        expect(off.map(g => g.key)).toEqual(['all']);
+        expect(off[0].rows[0].actions).not.toContain('placeFind');
+        expect(placeGroups(p, split(false, true), names)[1].rows[0].actions).toContain('placeFind');
+    });
+
+    it('both off: the old sentence without its own link (each switch has one)', () => {
+        const h = manageHeader(p, split(false, false));
+        expect(h.text).toBe('The research is not looking for history. Events already found stay.');
+        expect(h.link).toBeNull();
+        expect(h.switches.map(s => s.action)).toEqual(['linkOn', 'linkOn']);
+    });
+
+    it('without split (an older research), no bridge or an archive: no switches, as before', () => {
+        expect(manageHeader(p, env()).switches).toEqual([]);
+        expect(manageHeader(p, env({ searchOn: false, canLinkOn: true })).link).toBe('enable');
+        expect(manageHeader(p, split(true, false, { bridgeUp: false })).switches).toEqual([]);
+        expect(manageHeader(p, split(true, false, { treeState: 'archive' })).switches).toEqual([]);
+    });
+});
+
 describe('labels', () => {
     it('gaps', () => {
         expect(gapsLabel([{ from: 1870, to: 1913 }, { from: 1920, to: 1920 }])).toBe('1870–1913, 1920');

@@ -16,7 +16,6 @@ import { SettingsManager } from '../settings.js';
 import { shownName } from '../person-name.js';
 import { placeKey } from '../places.js';
 import { MQ_MOBILE, MQ_DESKTOP } from '../breakpoints.js';
-import { announcedResearchScheme } from '../research-device.js';
 import { treePlaceNames, type HistoryPayload, type HistoryDeleted, type EffectiveHidden } from '../history.js';
 import {
     regionGroups, placeGroups, hiddenRows, deletedRows, manageHeader, manageCan, matchesQuery, regionName, manageSearchOn,
@@ -197,6 +196,8 @@ export const historyManageMethods = uiModule({
             ...(status?.experiments ? { searchOn: status.experiments.history } : {}),
             offDone: ctx.offDone,
             canLinkOn: ctx.canLinkOn,
+            ...(ctx.split ? { split: ctx.split } : {}),
+            canOff: ctx.canOff,
             ...(status?.historyPace ? { pace: status.historyPace } : {}),
             formatDate,
             formatTime,
@@ -236,9 +237,19 @@ export const historyManageMethods = uiModule({
             ? ` <button type="button" class="link hm-state-link" data-hm="enable">${esc(h.enableSearch)}</button>` : '';
         const extra = (head.pace ? `<p class="hm-state-pace">${esc(head.pace)}</p>` : '')
             + `<p class="hm-state-summary">${esc(head.summary)}</p>`;
+        // K8.5: the history of regions and of places apart — off through the bridge, on only by the research's link.
+        const switches = head.switches.length
+            ? `<ul class="hm-switches">${head.switches.map(sw => `<li class="hm-switch${sw.on ? ' is-on' : ''}" data-switch="${sw.key}">`
+                + `<span class="hm-switch-text">${esc(sw.text)}</span>`
+                + (sw.action === 'off' ? ` <button type="button" class="link hm-state-link" data-hm="switchOff" data-key="${sw.key}">${esc(h.switchOff)}</button>`
+                    : sw.action === 'linkOn' ? ` <button type="button" class="link hm-state-link" data-hm="switchOn" data-key="${sw.key}">${esc(h.switchOnLink)}</button>` : '')
+                + '</li>').join('')}</ul>`
+            : '';
         stateEl.innerHTML = `<p class="hm-state-text">${esc(head.text)}${link}</p>`
             + head.notes.map(n => `<p class="hm-state-note">${esc(n)}</p>`).join('')
             + `<button type="button" class="hm-state-toggle" data-hm="state" aria-expanded="${view.stateOpen}">${esc(h.manageStateToggle)} <span aria-hidden="true">▾</span></button>`
+            // After the toggle: on a phone held sideways "Status ▾" stays beside the sentence.
+            + switches
             + `<div class="hm-state-extra${view.stateOpen ? ' is-open' : ''}">${extra}</div>`;
 
         const rows = this.historyManageRows(d);
@@ -645,6 +656,8 @@ export const historyManageMethods = uiModule({
                 return;
             case 'back': this.closeHistoryManageDetail(); return;
             case 'enable': this.historyEnableSearch(); return;
+            case 'switchOff': if (key === 'regions' || key === 'places') void this.historyDisableSearch(key); return;
+            case 'switchOn': if (key === 'regions' || key === 'places') this.historyLaunchExperiment('on', key); return;
             case 'state':
                 view.stateOpen = !view.stateOpen;
                 this.renderHistoryManage();
@@ -786,12 +799,8 @@ export const historyManageMethods = uiModule({
         if (r.code === 'busy') {
             view.notes.set(rowKey, { text: h.errBusy, tone: 'error' });
         } else if (r.code === 'off') {
-            view.notes.set(rowKey, {
-                text: h.manageOff, tone: 'info',
-                ...(r.link || this.historyManageContext()?.canLinkOn ? {
-                    link: { label: h.enableSearch, run: () => (r.link ? this.launchResearchLink(r.link, 'terminal') : this.historyEnableSearch()) },
-                } : {}),
-            });
+            // Only "Find first" is refused so (the history of regions off).
+            view.notes.set(rowKey, { ...this.historyOffNote(r, 'regions'), tone: 'info' });
         } else if (r.code === 'archive') {
             view.notes.set(rowKey, { text: h.findArchive(r.reason), tone: 'info' });
         } else if (r.code === 'skipped') {
@@ -836,8 +845,7 @@ export const historyManageMethods = uiModule({
         view.notes.delete(key);
         this.renderHistoryManage();
         const before = this.researchHeadNow(d.rid);
-        const scheme = announcedResearchScheme();
-        const r = await postBridgeFirst(d.base, key, d.features, { tree: d.rid, ...(scheme ? { scheme } : {}) });
+        const r = await postBridgeFirst(d.base, key, d.features, this.historyOffCheck(d.rid, 'regions'));
         view.busy.delete(key);
         if (!r.ok) {
             if (r.code === 'gone' && r.bridgeCode === 'history.region') view.notes.set(key, { text: h.findMapping, tone: 'info' });

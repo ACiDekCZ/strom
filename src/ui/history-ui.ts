@@ -27,6 +27,7 @@ import { shownName } from '../person-name.js';
 import {
     parseLiveBridge, researchSchemeUrl, cleanText, type LiveStatus,
     HISTORY_EVENTS_FEATURE, HISTORY_HIDE_FEATURE, HISTORY_FIRST_FEATURE, HISTORY_PLACE_FEATURE, EXPERIMENTS_OFF_FEATURE, EXPERIMENTS_LINK_FEATURE,
+    EXPERIMENTS_SPLIT_FEATURE,
 } from '../research-link.js';
 import { storedResearchBridge, announcedResearchScheme } from '../research-device.js';
 import {
@@ -36,7 +37,9 @@ import {
     type HistorySettingsAction, type EffectiveHidden,
 } from '../history.js';
 import { manageSummaries } from '../history-manage.js';
-import { fetchBridgeHistory, hideRequestBody, postBridgeHide, postBridgeExperimentsOff } from '../history-bridge.js';
+import {
+    fetchBridgeHistory, hideRequestBody, postBridgeHide, postBridgeExperimentsOff, experimentOfSwitch, type ExperimentSwitch,
+} from '../history-bridge.js';
 import { loadHistoryCache, saveHistoryCache, loadHideQueue, saveHideQueue } from '../history-store.js';
 import { onBridgeStatus } from './research-sync-ui.js';
 import { uiModule } from './module.js';
@@ -82,6 +85,8 @@ const readAgain = new Map<string, string | undefined>();
 const flushing = new Set<string>();
 /** The search was switched off from here (until the status agrees or says otherwise): when. */
 const offDone = new Map<string, number>();
+/** `experiments.split`: the history of regions or of places switched off from here (until the status agrees): when. */
+const offDoneSwitch = new Map<string, Map<'regions' | 'places', number>>();
 /** Per research: the features of its last status in this page (they stay while the bridge is down, so hidings can wait in the queue). */
 const lastFeatures = new Map<string, readonly string[]>();
 /** The bridge's sentence after a failed switch-off, and its link (until Settings close). */
@@ -224,6 +229,13 @@ export const historyMethods = uiModule({
         const since = offDone.get(rid);
         if (since !== undefined && status.experiments) {
             if (!status.experiments.history || Date.now() - since > OFF_SETTLE_MS) offDone.delete(rid);
+        }
+        const switched = offDoneSwitch.get(rid);
+        if (switched && status.experiments) {
+            for (const [key, at] of switched) {
+                if (status.experiments[key] === false || Date.now() - at > OFF_SETTLE_MS) switched.delete(key);
+            }
+            if (!switched.size) offDoneSwitch.delete(rid);
         }
         if (!SettingsManager.isHistoryLayer() || rid !== activeResearchId()) {
             this.renderHistorySettingsIfOpen();
@@ -395,7 +407,8 @@ export const historyMethods = uiModule({
         const payload = cache.get(rid) ?? null;
         const status = this.researchBridgeUp(rid) ? this.researchStatusOf(rid) : null;
         if (!payload && !(status?.features ?? []).includes(HISTORY_EVENTS_FEATURE)) return null;
-        const searchOn = offDone.has(rid) ? false : status?.experiments ? status.experiments.history : undefined;
+        const split = this.historySplitNow(rid);
+        const searchOn = this.historySearchOnNow(rid);
         if (!historyCardShows(payload, {
             ...(searchOn !== undefined ? { searchOn } : {}),
             ...(status?.treeState ? { treeState: status.treeState } : {}),
@@ -412,7 +425,8 @@ export const historyMethods = uiModule({
         if (history.state.kind === 'noSearch') history.state = { kind: 'noSearch', link: canLinkOn };
         // §5: "Find the history of the region" in place of "still looking" — `history.first`, R1 regions, the bridge running.
         const looking = history.state.kind === 'searching' || (history.state.kind === 'events' && history.state.somePending);
-        if (looking && status && (status.features ?? []).includes(HISTORY_FIRST_FEATURE) && payload.regions) {
+        // Split: a region first only while the history of regions is on.
+        if (looking && status && (status.features ?? []).includes(HISTORY_FIRST_FEATURE) && payload.regions && split?.regions !== false) {
             const find = historyFindRegions(DataManager.getData(), personId, payload, status.treeState ? { treeState: status.treeState } : {});
             if (find.length) history.find = find;
         }
@@ -421,7 +435,7 @@ export const historyMethods = uiModule({
         const placeState = ['events', 'searching', 'none', 'allHidden'].includes(history.state.kind);
         if (placeShown && kinds.place && placeState && !history.find?.length && payload.regions) {
             const canOffer = !!status && (status.features ?? []).includes(HISTORY_PLACE_FEATURE)
-                && (searchOn ?? payload.state.on) && !historyWaiting(payload, status.treeState);
+                && (searchOn ?? payload.state.on) && split?.places !== false && !historyWaiting(payload, status.treeState);
             const row = historyPlaceRow(payload, historyMainPlace(DataManager.getData(), personId, payload), canOffer);
             if (row) history.placeRow = row;
         }
@@ -444,7 +458,7 @@ export const historyMethods = uiModule({
             closed: false,
             following: DataManager.isLiveFollowing(),
             bridgeHistory: !!status && (status.features ?? []).includes(HISTORY_EVENTS_FEATURE),
-            searchOn: status?.experiments?.history,
+            searchOn: this.historySplitNow(rid) ? this.historySearchOnNow(rid) : status?.experiments?.history,
             offDone: offDone.has(rid),
             canLinkOn: this.historyCanLinkOn(rid),
             payload: cache.get(rid) ?? null,
@@ -512,6 +526,10 @@ export const historyMethods = uiModule({
         researchId: string; payload: HistoryPayload | null | undefined; queue: HistoryHideOp[];
         status: LiveStatus | null; lastStatus: LiveStatus | null; features: readonly string[];
         base: string | null; offDone: boolean; canLinkOn: boolean;
+        /** `experiments.split`: each search alone (a switch-off from here applied); null without it. */
+        split: { regions: boolean; places: boolean } | null;
+        /** `POST /experiments` switches off (`experiments.off`, the bridge running). */
+        canOff: boolean;
     } | null {
         const rid = activeResearchId();
         if (!rid) return null;
@@ -526,7 +544,35 @@ export const historyMethods = uiModule({
             base: status ? bridgeBase(rid) : null,
             offDone: offDone.has(rid),
             canLinkOn: this.historyCanLinkOn(rid),
+            split: this.historySplitNow(rid),
+            canOff: !!status && (status.features ?? []).includes(EXPERIMENTS_OFF_FEATURE),
         };
+    },
+
+    /**
+     * `experiments.split` (the bridge running): the history of regions and of
+     * places each on or off, a switch-off from here applied; null without it
+     * (one search for both, `experiments.history`).
+     */
+    historySplitNow(researchId: string): { regions: boolean; places: boolean } | null {
+        const rid = researchId.toLowerCase();
+        const status = this.researchBridgeUp(rid) ? this.researchStatusOf(rid) : null;
+        const ex = status?.experiments;
+        if (!status || !ex || !(status.features ?? []).includes(EXPERIMENTS_SPLIT_FEATURE)) return null;
+        if (ex.regions === undefined || ex.places === undefined) return null;
+        const off = offDoneSwitch.get(rid);
+        const all = offDone.has(rid);
+        return { regions: ex.regions && !all && !off?.has('regions'), places: ex.places && !all && !off?.has('places') };
+    },
+
+    /** The research searches for the tree as the bridge says now (undefined: not said, or the bridge down). */
+    historySearchOnNow(researchId: string): boolean | undefined {
+        const rid = researchId.toLowerCase();
+        if (offDone.has(rid)) return false;
+        const split = this.historySplitNow(rid);
+        if (split) return split.regions || split.places;
+        const status = this.researchBridgeUp(rid) ? this.researchStatusOf(rid) : null;
+        return status?.experiments ? status.experiments.history : undefined;
     },
 
     /** The manager has an entry (§1.1): the layer on, a tree tied to a research with a copy here or `history.events`. */
@@ -593,7 +639,7 @@ export const historyMethods = uiModule({
             bridgeUp: !!status,
             noHistory: !!status && !features.includes(HISTORY_EVENTS_FEATURE),
             payload,
-            ...(status?.experiments ? { statusSearching: status.experiments.history } : {}),
+            ...(status?.experiments ? { statusSearching: this.historySplitNow(rid!) ? !!this.historySearchOnNow(rid!) : status.experiments.history } : {}),
             ...(status?.treeState ? { treeState: status.treeState } : {}),
             canLinkOn: canLink,
             canOff: !!status && features.includes(EXPERIMENTS_OFF_FEATURE),
@@ -683,38 +729,84 @@ export const historyMethods = uiModule({
         else if (action === 'errLink' && offError?.link) this.launchResearchLink(offError.link, 'terminal');
     },
 
+    /**
+     * A write refused with 409 history.off (a region first, a place's own
+     * history): the sentence and the link switching the search on. With
+     * `experiments.split` it names the switch that is off (`which`) and its link.
+     */
+    historyOffNote(r: { link?: string }, which: 'regions' | 'places'): { text: string; link?: { label: string; run: () => void } } {
+        const h = strings.history;
+        const ctx = this.historyManageContext();
+        const can = !!r.link || !!ctx?.canLinkOn;
+        const split = !!ctx?.split;
+        const run = () => (r.link ? this.launchResearchLink(r.link, 'terminal') : this.historyLaunchExperiment('on', split ? which : 'history'));
+        if (!split) return { text: h.manageOff, ...(can ? { link: { label: h.enableSearch, run } } : {}) };
+        return {
+            text: h.switchOffNote(which === 'regions' ? h.switchRegions : h.switchPlaces),
+            ...(can ? { link: { label: h.switchOnLink, run } } : {}),
+        };
+    },
+
+    /** The 409 history.off check of a write: `experiments.split` names the switch the app's own link turns on. */
+    historyOffCheck(rid: string, which: 'regions' | 'places'): { tree: string; scheme?: string; experiment?: 'regions' | 'placeHistory' } {
+        const scheme = announcedResearchScheme();
+        return {
+            tree: rid,
+            ...(scheme ? { scheme } : {}),
+            ...(this.historySplitNow(rid) ? { experiment: which === 'regions' ? 'regions' as const : 'placeHistory' as const } : {}),
+        };
+    },
+
     /** "Switch the search on in the research": its terminal asks (never through the bridge). Nothing waits for it here. */
     historyEnableSearch(): void {
         this.historyLaunchExperiment('on');
     },
 
-    historyLaunchExperiment(d: 'on' | 'off'): void {
+    /** The `experiment` link: both searches (`history`), or with `experiments.split` the history of regions or of places. */
+    historyLaunchExperiment(d: 'on' | 'off', which: ExperimentSwitch = 'history'): void {
         const rid = activeResearchId();
         if (!rid) return;
-        const url = researchSchemeUrl('experiment', { tree: rid, experiment: 'history', experimentDo: d }, announcedResearchScheme());
+        const url = researchSchemeUrl('experiment', { tree: rid, experiment: experimentOfSwitch(which), experimentDo: d }, announcedResearchScheme());
         if (url) this.launchResearchLink(url, 'terminal');
     },
 
-    /** "Switch the search off for this tree": through the bridge at once when it says `experiments.off`, else its link. */
-    async historyDisableSearch(): Promise<void> {
+    /**
+     * "Switch the search off for this tree" (`which`: both, or with
+     * `experiments.split` the history of regions or of places alone): through
+     * the bridge at once when it says `experiments.off`, else its link. A
+     * refusal of one switch (the manager) is a toast; of both, Settings' row.
+     */
+    async historyDisableSearch(which: ExperimentSwitch = 'history'): Promise<void> {
         const rid = activeResearchId();
         if (!rid) return;
         const status = this.researchBridgeUp(rid) ? this.researchStatusOf(rid) : null;
         const base = bridgeBase(rid);
         if (!status || !base || !(status.features ?? []).includes(EXPERIMENTS_OFF_FEATURE)) {
-            if (this.historyCanLinkOn(rid)) this.historyLaunchExperiment('off');
+            if (this.historyCanLinkOn(rid)) this.historyLaunchExperiment('off', which);
             return;
         }
+        const h = strings.history;
         const before = this.researchHeadNow(rid);
-        const r = await postBridgeExperimentsOff(base, status.features, rid, announcedResearchScheme());
+        const r = await postBridgeExperimentsOff(base, status.features, rid, announcedResearchScheme(), { which });
         if (r.ok) {
-            offDone.set(rid, Date.now());
-            offError = null;
+            if (which === 'history') {
+                offDone.set(rid, Date.now());
+                offError = null;
+            } else {
+                const m = offDoneSwitch.get(rid) ?? new Map<'regions' | 'places', number>();
+                m.set(which, Date.now());
+                offDoneSwitch.set(rid, m);
+            }
             if (r.head) this.researchTakeOwnWriteHead(rid, before, r.head, r.parent);
-            this.showToast(strings.history.toastSearchOff, 4000);
+            this.showToast(which === 'history' ? h.toastSearchOff
+                : h.toastSwitchOff(which === 'regions' ? h.switchRegions : h.switchPlaces), 4000);
         } else {
             const text = r.reason || (r.held ? this.researchWriteHeldText(r.held, false).toast : strings.live.waitingWrite.writeFailed);
-            offError = { researchId: rid, text, ...(r.link ? { link: r.link } : {}) };
+            if (which === 'history') offError = { researchId: rid, text, ...(r.link ? { link: r.link } : {}) };
+            else {
+                const link = r.link;
+                this.showToast(text, 6000, link ? { action: { label: h.switchOff, run: () => this.launchResearchLink(link, 'terminal') } } : {});
+            }
         }
         this.renderHistorySettingsIfOpen();
         this.historyChanged();
@@ -723,6 +815,6 @@ export const historyMethods = uiModule({
     /** Test hook: forget the page's history state (a new page). */
     resetHistoryLayerState(): void {
         cache.clear(); queues.clear(); inFlight.clear(); loadedRev.clear(); readHere.clear();
-        reading.clear(); readAgain.clear(); flushing.clear(); offDone.clear(); offError = null;
+        reading.clear(); readAgain.clear(); flushing.clear(); offDone.clear(); offDoneSwitch.clear(); offError = null;
     },
 });

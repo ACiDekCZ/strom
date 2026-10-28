@@ -2,7 +2,8 @@
  * The research bridge's routes of the history layer (spec 020): read the
  * events of the time (`GET <token>/history`), hide one or show it again
  * (`POST <token>/history/hide`), switch the search off for the tree
- * (`POST <token>/experiments {"history": false}`), and the history manager's
+ * (`POST <token>/experiments {"history": false}`; with `experiments.split` the
+ * history of regions or of places alone: `{"regions": false}` / `{"places": false}`), and the history manager's
  * writes (R1–R7): a region first, not searching a region or a place, deleting
  * an event, a place's regions by hand, a place's own history (always the
  * research terminal's link), history in stories. Never `{"history": true}`:
@@ -11,7 +12,7 @@
  * JSON, no cookies) like the other writes; replies typed; never throws.
  */
 
-import { cleanText, isResearchHead, researchPersonRef, researchSchemeUrl, withAppVersion } from './research-link.js';
+import { cleanText, isResearchHead, researchPersonRef, researchSchemeUrl, withAppVersion, type ResearchExperiment } from './research-link.js';
 import { writeHeldOfRefusal, type ResearchWriteHeld } from './research-write-held.js';
 import {
     HISTORY_LIMITS, HISTORY_PLACE_ID_RE, HISTORY_REGION_RE, parseHistoryDeleted, parseHistoryPayload, parseHistoryText, parsePlaceRegions,
@@ -182,9 +183,17 @@ export type ExperimentsOffResult =
         held?: ResearchWriteHeld;
     };
 
-/** The reply to `POST /experiments {"history": false}`, typed. */
+/** What `POST /experiments` switches off: both searches, or (`experiments.split`) the history of regions or of places alone. */
+export type ExperimentSwitch = 'history' | 'regions' | 'places';
+
+/** The `experiment` link's name of a switch (`places` → `placeHistory`). */
+export function experimentOfSwitch(which: ExperimentSwitch): ResearchExperiment {
+    return which === 'places' ? 'placeHistory' : which;
+}
+
+/** The reply to `POST /experiments {"<which>": false}`, typed. */
 export function experimentsOffReply(status: number, body: unknown, features: readonly string[] | null | undefined,
-    tree: string, scheme?: string): ExperimentsOffResult {
+    tree: string, scheme?: string, which: ExperimentSwitch = 'history'): ExperimentsOffResult {
     const reason = bridgeSentence(body);
     const code = bridgeCode(body);
     const r = asRecord(body) ?? {};
@@ -195,7 +204,7 @@ export function experimentsOffReply(status: number, body: unknown, features: rea
         const params = asRecord(r.params);
         const said = typeof r.link === 'string' ? r.link : typeof params?.link === 'string' ? params.link : '';
         const own = (['off', 'on'] as const)
-            .map(d => researchSchemeUrl('experiment', { tree, experiment: 'history', experimentDo: d }, scheme))
+            .map(d => researchSchemeUrl('experiment', { tree, experiment: experimentOfSwitch(which), experimentDo: d }, scheme))
             .filter((u): u is string => !!u);
         const link = own.includes(said) ? said : own[0];
         return { ok: false, code: 'link', status, reason, ...(link ? { link } : {}) };
@@ -206,14 +215,19 @@ export function experimentsOffReply(status: number, body: unknown, features: rea
     return { ok: false, code: 'unknown', status, reason };
 }
 
-/** Switch the research's search for events off for this tree (never on: that is the research terminal's). */
+/**
+ * Switch the research's search for events off for this tree (never on: that is
+ * the research terminal's): both (`history`), or with `experiments.split` the
+ * history of regions or of places alone.
+ */
 export async function postBridgeExperimentsOff(base: string, features: readonly string[] | null | undefined, tree: string,
-    scheme?: string, opts: { timeoutMs?: number } = {}): Promise<ExperimentsOffResult> {
+    scheme?: string, opts: { timeoutMs?: number; which?: ExperimentSwitch } = {}): Promise<ExperimentsOffResult> {
+    const which = opts.which ?? 'history';
     const res = await request(`${base}/experiments`, {
-        method: 'POST', headers: { 'Content-Type': 'text/plain; charset=utf-8' }, body: JSON.stringify({ history: false }),
+        method: 'POST', headers: { 'Content-Type': 'text/plain; charset=utf-8' }, body: JSON.stringify({ [which]: false }),
     }, opts.timeoutMs ?? HISTORY_WRITE_TIMEOUT_MS);
     if (!res) return { ok: false, code: 'network', status: 0, reason: '' };
-    return experimentsOffReply(res.status, jsonOf(res.text), features, tree, scheme);
+    return experimentsOffReply(res.status, jsonOf(res.text), features, tree, scheme, which);
 }
 
 // ==================== MANAGER WRITES (R1–R7) ====================
@@ -254,13 +268,22 @@ interface LinkCheck {
     scheme?: string;
     /** For 403 history.link (R6): the place record. */
     place?: string;
+    /**
+     * For 409 history.off: the switch the app would offer when the research says no link of its own
+     * (`experiments.split`: `placeHistory` for a place's history, `regions` for a region first); default `history`.
+     */
+    experiment?: ResearchExperiment;
 }
 
 function ownLinks(code: string, check: LinkCheck | undefined): string[] {
     if (!check) return [];
     if (code === 'history.off') {
-        const u = researchSchemeUrl('experiment', { tree: check.tree, experiment: 'history', experimentDo: 'on' }, check.scheme);
-        return u ? [u] : [];
+        // The research names the switch that is off (split: regions or places); the app's own choice first.
+        const first = check.experiment ?? 'history';
+        const names: ResearchExperiment[] = [first, ...(['history', 'regions', 'placeHistory'] as const).filter(n => n !== first)];
+        return names
+            .map(experiment => researchSchemeUrl('experiment', { tree: check.tree, experiment, experimentDo: 'on' }, check.scheme))
+            .filter((u): u is string => !!u);
     }
     if (code === 'history.link' && check.place) {
         const u = researchSchemeUrl('history', { tree: check.tree, place: check.place, historyDo: 'search' }, check.scheme);

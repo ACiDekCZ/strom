@@ -2398,6 +2398,10 @@
         .hm-state-text { font-size: 14px; line-height: 1.45; color: var(--text); text-wrap: pretty; }
         .hm-state-note { font-size: 12.5px; line-height: 1.4; color: var(--accent-text); text-wrap: pretty; }
         .hm-state-extra { display: flex; flex-direction: column; gap: 4px; }
+        /* The history of regions and of places apart (spec 020 K8.5): one line each, the action after the state. */
+        .hm-switches { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 2px 20px; }
+        .hm-switch { font-size: 13px; line-height: 1.45; color: var(--text-light); min-width: 0; overflow-wrap: anywhere; }
+        .hm-switch.is-on .hm-switch-text { color: var(--text); }
         .hm-state-pace { font-size: 12.5px; line-height: 1.4; color: var(--text-faint); text-wrap: pretty; }
         .hm-state-summary { font-size: 12.5px; color: var(--text-light); font-variant-numeric: tabular-nums; }
         #history-modal button.hm-state-toggle { display: none; }

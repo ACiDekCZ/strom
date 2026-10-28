@@ -1324,6 +1324,16 @@ describe('history manager status fields and link (1028)', () => {
         expect(bad.historyPlaceEstimate).toBeUndefined();
     });
 
+    it('reads the history of regions and of places apart only with experiments.split (1029)', () => {
+        const raw = { tree: { id: UUID }, experiments: { history: true, regions: true, places: false } };
+        expect(sanitizeLiveStatus({ ...raw, features: ['experiments'] })!.experiments).toEqual({ history: true });
+        expect(sanitizeLiveStatus({ ...raw, features: ['experiments', 'experiments.split'] })!.experiments)
+            .toEqual({ history: true, regions: true, places: false });
+        // Half said: one search for both, as before.
+        expect(sanitizeLiveStatus({ ...raw, experiments: { history: true, regions: 'yes', places: false }, features: ['experiments', 'experiments.split'] })!
+            .experiments).toEqual({ history: true });
+    });
+
     it('builds the history link only with a place ID', () => {
         const u = researchSchemeUrl('history', { tree: UUID, place: 'L0042', historyDo: 'search' });
         expect(u).toContain('history?tree=' + UUID);

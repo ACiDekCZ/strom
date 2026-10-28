@@ -148,9 +148,13 @@ export interface ResearchLinkParams {
     historyDo?: 'search';
 }
 
-/** Experiments the research can switch for a tree (spec 020: `history` = events of the time). */
-export type ResearchExperiment = 'history';
-const EXPERIMENTS: readonly string[] = ['history'];
+/**
+ * Experiments the research can switch for a tree (spec 020: `history` = events
+ * of the time, both kinds; with `experiments.split` also `regions` = the
+ * history of regions and `placeHistory` = the history of places, each alone).
+ */
+export type ResearchExperiment = 'history' | 'regions' | 'placeHistory';
+const EXPERIMENTS: readonly string[] = ['history', 'regions', 'placeHistory'];
 /** Switch an experiment on (the research asks in its terminal) or off. */
 export type ResearchExperimentDo = 'on' | 'off';
 const EXPERIMENT_DOS: readonly string[] = ['on', 'off'];
@@ -1348,8 +1352,11 @@ export interface LiveStatus {
     seal?: 'here' | 'elsewhere';
     /** `notDownloaded` (with `tree.notDownloaded` in `features`): files of the tree a cloud folder has not brought down yet. */
     notDownloaded?: number;
-    /** `experiments` (with `experiments` in `features`): `history` = the research looks for events of the time for this tree. */
-    experiments?: { history: boolean };
+    /**
+     * `experiments` (with `experiments` in `features`): `history` = the research looks for events of the time for this tree;
+     * with `experiments.split` also each search alone: `regions` (history of regions) and `places` (history of places).
+     */
+    experiments?: { history: boolean; regions?: boolean; places?: boolean };
     /** `history.rev` (with `history.events` in `features`): a print of what `GET /history` returns; read it again when it changes. */
     historyRev?: string;
     /** `quality.rev` (with `quality.read` in `features`): a print of what `GET /quality` returns (spec 021 §D). */
@@ -1388,6 +1395,12 @@ export const HISTORY_HIDE_FEATURE = 'history.hide';
 export const EXPERIMENTS_FEATURE = 'experiments';
 /** `/status.features`: `POST /experiments {"history": false}` switches the search off for the tree. */
 export const EXPERIMENTS_OFF_FEATURE = 'experiments.off';
+/**
+ * `/status.features`: the history of regions and of places are switched apart
+ * (`experiments.regions` / `.places` in the status, `POST /experiments {"regions": false}`
+ * / `{"places": false}`, the links `name=regions` / `name=placeHistory`).
+ */
+export const EXPERIMENTS_SPLIT_FEATURE = 'experiments.split';
 /** `/status.features`: the `experiment` link switches an experiment on (or off) in the research's terminal. */
 export const EXPERIMENTS_LINK_FEATURE = 'experiments.link';
 /** `/status.features`: the status says how often the research looks for history (`experiments.historyPace`). */
@@ -2138,13 +2151,17 @@ function qualitySaid(r: Record<string, unknown>, features: string[] | null): Pic
 function experimentsSaid(r: Record<string, unknown>, features: string[] | null):
     Pick<LiveStatus, 'experiments' | 'historyRev' | 'historyPace' | 'historyPlaceEstimate' | 'storiesHistory'> {
     const ex = features?.includes(EXPERIMENTS_FEATURE) ? asRecord(r.experiments) : null;
+    const split = !!features?.includes(EXPERIMENTS_SPLIT_FEATURE);
     const hist = features?.includes(HISTORY_EVENTS_FEATURE) ? asRecord(r.history) : null;
     const rev = hist ? cleanText(hist.rev, 128) : '';
     const pace = features?.includes(EXPERIMENTS_PACE_FEATURE) ? asRecord(r.experiments)?.historyPace : undefined;
     const estimate = features?.includes(HISTORY_PLACE_FEATURE) ? historyEstimate(asRecord(r.history)?.placeEstimate) : null;
     const stories = features?.includes(STORIES_HISTORY_FEATURE) ? asRecord(r.stories) : null;
     return {
-        ...(ex && typeof ex.history === 'boolean' ? { experiments: { history: ex.history } } : {}),
+        ...(ex && typeof ex.history === 'boolean' ? { experiments: {
+            history: ex.history,
+            ...(split && typeof ex.regions === 'boolean' && typeof ex.places === 'boolean' ? { regions: ex.regions, places: ex.places } : {}),
+        } } : {}),
         ...(rev ? { historyRev: rev } : {}),
         ...(pace === 'sometimes' || pace === 'rare' || pace === 'idle' ? { historyPace: pace } : {}),
         ...(estimate ? { historyPlaceEstimate: estimate } : {}),

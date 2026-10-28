@@ -144,6 +144,59 @@ test.describe('History of places: the manager', () => {
         expect(opened.some(u => u.includes('experiment') && u.includes('do=on'))).toBe(true);
     });
 
+    test('split (K8.5): both searches on their own line; Regional history off through the bridge, on only by the research\'s link', async ({ page }) => {
+        const history = fakeHistoryR1({ split: { regions: true, places: true } });
+        await setup(page, { history, features: [...HISTORY_R1_FEATURES, 'experiments.split'] });
+        await openManager(page);
+        const sw = (key: string) => modal(page).locator(`.hm-switch[data-switch="${key}"]`);
+        await expect(modal(page).locator('.hm-switch-text')).toHaveText(['Regional history: on', 'Local history: on']);
+        await expect(sw('regions').locator('button')).toHaveText('Turn off');
+        await expect(stateText(page)).toHaveText(/^The research is looking for history, now for the region Silesia/);
+        expect(await rowMenu(page, 'at-lower-austria')).toEqual(['first', 'hideAll', 'skip']);
+        await page.keyboard.press('Escape');
+
+        await sw('regions').getByRole('button', { name: 'Turn off' }).click();
+        await expect.poll(() => history.offs).toEqual([{ regions: false }]);
+        await expect(toast(page, 'Regional history is no longer searched for this tree.')).toBeVisible();
+        await expect(modal(page).locator('.hm-switch-text')).toHaveText(['Regional history: off', 'Local history: on']);
+        await expect(stateText(page)).toHaveText('Regional history is not searched for this tree. Events already found stay.');
+        // No region first while the history of regions is off; places stay as they are.
+        expect(await rowMenu(page, 'at-lower-austria')).toEqual(['hideAll', 'skip']);
+        await page.keyboard.press('Escape');
+        await poll(page);
+        await expect(modal(page).locator('.hm-switch-text')).toHaveText(['Regional history: off', 'Local history: on']);
+
+        // On: never through the bridge — the research's terminal (name=regions).
+        await sw('regions').getByRole('button', { name: 'Turn on in the research' }).click();
+        await expect.poll(async () => (await links(page)).at(-1)).toMatch(/^strom-research:\/\/experiment\?tree=.+&name=regions&do=on$/);
+        expect(history.offs).toEqual([{ regions: false }]);
+    });
+
+    test('split: a region first refused with 409 history.off leads to the link of that switch', async ({ page }) => {
+        const history = fakeHistoryR1({ split: { regions: true, places: true } });
+        await setup(page, { history, features: [...HISTORY_R1_FEATURES, 'experiments.split'] });
+        await openManager(page);
+        // Switched off in the research meanwhile (the app has not read its status yet).
+        history.split!.regions = false;
+        expect(await rowMenu(page, 'at-lower-austria')).toContain('first');
+        await page.locator('.hm-menu [data-scope="first"]').click();
+        const note = modal(page).locator('.hm-row-note[data-note="at-lower-austria"]');
+        await expect(note).toHaveText('Regional history is not searched for this tree. Turn on in the research');
+        await note.getByRole('button', { name: 'Turn on in the research' }).click();
+        await expect.poll(async () => (await links(page)).at(-1)).toMatch(/&name=regions&do=on$/);
+    });
+
+    test('an older research without experiments.split: one search, no switches (regression)', async ({ page }) => {
+        // The bridge says regions/places, but not the feature: the app keeps today's behaviour.
+        await setup(page, { history: fakeHistoryR1({ split: { regions: false, places: false } }) });
+        await openManager(page);
+        await expect(modal(page).locator('.hm-switches')).toHaveCount(0);
+        expect(await rowMenu(page, 'at-lower-austria')).toEqual(['first', 'hideAll', 'skip']);
+        await page.keyboard.press('Escape');
+        await tab(page, 'places').click();
+        await expect(modal(page).locator('.hm-group[data-group="suggest"]')).toHaveCount(1);
+    });
+
     test('without the bridge: from the copy with its time; hiding stays, the bridge\'s actions go', async ({ page }) => {
         const { bridge } = await setup(page);
         bridge.down = true;

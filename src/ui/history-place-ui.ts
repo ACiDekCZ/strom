@@ -10,11 +10,10 @@
  */
 
 import { strings, getCurrentLanguage } from '../strings.js';
-import { manageCan, manageSearchOn } from '../history-manage.js';
+import { manageCan, manageSwitchOn } from '../history-manage.js';
 import { historyPlaceOfferable, historyWaiting, pickHistoryText } from '../history.js';
 import { postBridgePlace, type HistoryWriteRefusal } from '../history-bridge.js';
 import { HISTORY_PLACE_DIRECT_FEATURE } from '../research-link.js';
-import { announcedResearchScheme } from '../research-device.js';
 import { uiModule } from './module.js';
 
 export const HISTORY_PLACE_DIALOG_ID = 'history-place-modal';
@@ -80,7 +79,7 @@ export const historyPlaceMethods = uiModule({
         const d = this.historyManageDrawn();
         const place = d?.payload?.places[key];
         if (!d?.payload || !historyPlaceOfferable(place)) return false;
-        return manageCan(d.env, 'place') && manageSearchOn(d.payload, d.env) && !historyWaiting(d.payload, d.env.treeState);
+        return manageCan(d.env, 'place') && manageSwitchOn(d.payload, d.env, 'places') && !historyWaiting(d.payload, d.env.treeState);
     },
 
     closeHistoryPlaceFind(): void {
@@ -164,8 +163,7 @@ export const historyPlaceMethods = uiModule({
         st.note = null;
         this.renderHistoryPlaceFind();
         const before = this.researchHeadNow(st.rid);
-        const scheme = announcedResearchScheme();
-        const r = await postBridgePlace(ctx.base, st.id, ctx.features, { tree: st.rid, ...(scheme ? { scheme } : {}) });
+        const r = await postBridgePlace(ctx.base, st.id, ctx.features, this.historyOffCheck(st.rid, 'places'));
         if (state !== st) return;
         st.busy = false;
         if (r.ok) {
@@ -195,13 +193,7 @@ export const historyPlaceMethods = uiModule({
     /** §6a.4 refusals: off with the link to switch it on, archive with why, busy, anything else in the bridge's words. */
     historyPlaceRefusalNote(r: HistoryWriteRefusal): PlaceFindState['note'] {
         const h = strings.history;
-        if (r.code === 'off') {
-            const can = !!r.link || !!this.historyManageContext()?.canLinkOn;
-            return {
-                text: h.manageOff,
-                ...(can ? { link: { label: h.enableSearch, run: () => (r.link ? this.launchResearchLink(r.link, 'terminal') : this.historyEnableSearch()) } } : {}),
-            };
-        }
+        if (r.code === 'off') return this.historyOffNote(r, 'places');
         if (r.code === 'archive') return { text: h.findArchive(r.reason) };
         if (r.code === 'busy') return { text: h.errBusy };
         return { text: r.reason || (r.held ? this.researchWriteHeldText(r.held, false).toast : strings.live.waitingWrite.writeFailed) };
@@ -213,15 +205,14 @@ export const historyPlaceMethods = uiModule({
         const place = d?.payload?.places[key];
         if (!d?.payload || !place?.id || place.skip) return false;
         if (place.history !== 'done' && place.history !== 'empty') return false;
-        return manageCan(d.env, 'place') && manageSearchOn(d.payload, d.env) && !historyWaiting(d.payload, d.env.treeState);
+        return manageCan(d.env, 'place') && manageSwitchOn(d.payload, d.env, 'places') && !historyWaiting(d.payload, d.env.treeState);
     },
 
     async historyPlaceSearchAgain(key: string): Promise<void> {
         const d = this.historyManageDrawn();
         const id = d?.payload?.places[key]?.id;
         if (!d?.base || !id) return;
-        const scheme = announcedResearchScheme();
-        const r = await postBridgePlace(d.base, id, d.features, { tree: d.rid, ...(scheme ? { scheme } : {}) });
+        const r = await postBridgePlace(d.base, id, d.features, this.historyOffCheck(d.rid, 'places'));
         if (r.ok) {
             this.showToast(strings.history.placeToast(d.names.place(key)), 6000, { kind: 'history-place' });
             this.historyManageWritten(d.rid, this.researchHeadNow(d.rid), r);

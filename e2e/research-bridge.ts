@@ -286,6 +286,12 @@ export interface FakeHistory {
     rev: string;
     /** `/status.experiments.history`: the research looks for events for the tree. */
     searching: boolean;
+    /**
+     * `experiments.split` (spec 020 K8): `/status.experiments.regions` / `.places`, said when both are set;
+     * `POST /experiments {"regions"|"places": false}` switches one off, `/history/first` and
+     * `/history/place` answer 409 history.off while theirs is off.
+     */
+    split?: { regions: boolean; places: boolean };
     /** Every `GET /history`. */
     reads: number;
     /** Every `POST /history/hide` body. */
@@ -534,9 +540,17 @@ function serveHistory(b: FakeBridge, method: string, url: URL, postData: string 
         if (method !== 'POST' || !features.includes('experiments.off')) return unknown;
         h.offs.push(body);
         if (h.offReply) return h.offReply;
-        h.searching = false;
-        h.payload.state.on = false;
-        return { status: 200, body: { ok: true, history: false, ...commitWrite(b) } };
+        if (h.split && (body.regions === false || body.places === false)) {
+            if (body.regions === false) h.split.regions = false;
+            if (body.places === false) h.split.places = false;
+            h.searching = h.split.regions || h.split.places;
+        } else {
+            if (h.split) h.split = { regions: false, places: false };
+            h.searching = false;
+        }
+        h.payload.state.on = h.searching;
+        const key = Object.keys(body)[0] ?? 'history';
+        return { status: 200, body: { ok: true, experiments: { [key]: false }, ...commitWrite(b) } };
     }
     // The manager's writes (R1–R7): each behind its feature.
     const route = (rest === '/stories' ? 'stories' : rest.slice('/history/'.length)) as FakeHistoryWrite;
@@ -549,8 +563,11 @@ function serveHistory(b: FakeBridge, method: string, url: URL, postData: string 
     const noRegion = refuse(404, 'history.region', 'No such region in this tree.');
     const noPlace = refuse(404, 'history.place', 'No such place in the facts of this tree.');
     const noEvent = refuse(404, 'history.event', 'No such event.');
+    const off = (name: string) => refuse(409, 'history.off', 'This search is off for the tree.',
+        { link: `strom-research://experiment?tree=${UUID}&name=${name}&do=on` });
     switch (route) {
         case 'first': {
+            if (h.split && !h.split.regions) return off('regions');
             const id = body.region as string;
             const r = regions?.[id];
             if (!r) return noRegion;
@@ -660,6 +677,7 @@ function serveHistory(b: FakeBridge, method: string, url: URL, postData: string 
             const id = body.place;
             if (typeof id !== 'string' || !/^L\d{1,7}$/.test(id)) return bodyError;
             if (!Object.values(places).some(pl => pl.id === id)) return noPlace;
+            if (h.split && !h.split.places) return off('placeHistory');
             const link = `strom-research://history?tree=${UUID}&place=${id}&do=search`;
             return refuse(403, 'history.link', 'The research terminal decides.', { link });
         }
@@ -1308,7 +1326,10 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
                 ...(b.phone ? { phone: { state: b.phone.state === 'on' || b.phone.state === 'error' ? b.phone.state : 'off', phones: b.phone.phones.length } } : {}),
                 ...(b.history ? {
                     history: { rev: b.history.rev, ...(b.history.placeEstimate ? { placeEstimate: b.history.placeEstimate } : {}) },
-                    experiments: { history: b.history.searching, ...(b.history.pace ? { historyPace: b.history.pace } : {}) },
+                    experiments: {
+                        history: b.history.searching, ...(b.history.split ? { ...b.history.split } : {}),
+                        ...(b.history.pace ? { historyPace: b.history.pace } : {}),
+                    },
                     ...(b.history.stories !== undefined ? { stories: { history: b.history.searching && b.history.stories } } : {}),
                 } : {}),
                 ...(b.quality ? { quality: { rev: b.quality.rev } } : {}),

@@ -237,6 +237,35 @@ test.describe('History of places: a place\'s own history on request (§6a)', () 
         await expect(placeRow(page)).toHaveCount(0);
     });
 
+    test('split (K8.3): Local history off — nothing offers "Find local history…"; a refusal meanwhile leads to its link', async ({ page }) => {
+        const history = fakeHistoryR1({ split: { regions: true, places: false } });
+        await setup(page, { history, features: [...HISTORY_R1_FEATURES, 'experiments.split'] });
+        await openCard(page);
+        await expect(page.locator('#pm-lifeline-body .pm-lifeline-row').first()).toBeVisible();
+        await expect(placeRow(page)).toHaveCount(0);
+        await openManager(page, { tab: 'places' });
+        await expect(modal(page).locator('.hm-switch-text')).toHaveText(['Regional history: on', 'Local history: off']);
+        await expect(modal(page).locator('.hm-group[data-group="suggest"]')).toHaveCount(0);
+        await allPlace(page, 'Čapkov').locator('[data-hm="menu"]').click();
+        await expect(page.locator('.hm-menu [data-scope="find"]')).toHaveCount(0);
+        await page.keyboard.press('Escape');
+        await page.keyboard.press('Escape');
+        await expect(modal(page)).toBeHidden();
+
+        // On in the research: offered again; switched off there before the app reads the status: 409 with its link.
+        history.split = { regions: true, places: true };
+        await poll(page);
+        await openCard(page);
+        await expect(placeRow(page)).toHaveText(OFFER);
+        history.split = { regions: true, places: false };
+        await offerLink(page).click();
+        await dialog(page).locator('[data-hpf="go"]').click();
+        await expect(dialog(page).locator('.hpf-note')).toHaveText('Local history is not searched for this tree. Turn on in the research');
+        await dialog(page).locator('[data-hpf="noteLink"]').click();
+        await expect(dialog(page)).toHaveCount(0);
+        await expect.poll(async () => (await links(page)).at(-1)).toMatch(/^strom-research:\/\/experiment\?tree=.+&name=placeHistory&do=on$/);
+    });
+
     test('history.place.direct: the place comes first over the bridge (Find, toast); a link after all switches to the terminal', async ({ page }) => {
         const history = fakeHistoryR1();
         history.writeReply = { place: { status: 200, body: { ok: true, place: 'L0001' } } };

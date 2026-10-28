@@ -41,6 +41,13 @@ export interface ManageEnv {
     offDone?: boolean;
     /** "Switch the search on" may be offered (the `experiment` link). */
     canLinkOn?: boolean;
+    /**
+     * `/status.experiments.regions` / `.places` while the bridge runs and says
+     * `experiments.split` (a switch-off from here applied): each search alone. Absent: one search for both.
+     */
+    split?: { regions: boolean; places: boolean };
+    /** `POST /experiments` switches a search off (`experiments.off`). */
+    canOff?: boolean;
     /** `/status.experiments.historyPace`. */
     pace?: HistoryPace;
     formatDate: (iso: string) => string;
@@ -73,9 +80,44 @@ export function manageCan(env: Pick<ManageEnv, 'features' | 'bridgeUp'>, action:
 }
 
 /** The research searches for the tree (the status's word while the bridge runs, else the copy's). */
-export function manageSearchOn(p: HistoryPayload, env: Pick<ManageEnv, 'bridgeUp' | 'searchOn' | 'offDone'>): boolean {
+export function manageSearchOn(p: HistoryPayload, env: Pick<ManageEnv, 'bridgeUp' | 'searchOn' | 'offDone' | 'split'>): boolean {
     if (env.offDone) return false;
+    if (env.bridgeUp && env.split) return env.split.regions || env.split.places;
     return env.bridgeUp && env.searchOn !== undefined ? env.searchOn : p.state.on;
+}
+
+/** One of the two searches (`experiments.split`): the history of regions or of places. */
+export type ManageSwitchKey = 'regions' | 'places';
+
+/** That search is on for the tree (without `experiments.split`: the one search for both). */
+export function manageSwitchOn(p: HistoryPayload, env: Pick<ManageEnv, 'bridgeUp' | 'searchOn' | 'offDone' | 'split'>,
+    which: ManageSwitchKey): boolean {
+    if (!manageSearchOn(p, env)) return false;
+    return !(env.bridgeUp && env.split) || env.split[which];
+}
+
+/** A row of the header's switches (K8.5): the state, and switching off through the bridge or on by the research's link. */
+export interface ManageSwitch {
+    key: ManageSwitchKey;
+    /** "Regional history: on". */
+    text: string;
+    on: boolean;
+    action: 'off' | 'linkOn' | null;
+}
+
+/**
+ * The two searches apart (`experiments.split` while the bridge runs; none in an
+ * archive or a research waiting for its agent, whose header says why nothing is searched).
+ */
+export function manageSwitches(p: HistoryPayload, env: ManageEnv): ManageSwitch[] {
+    if (!env.bridgeUp || !env.split || historyWaiting(p, env.treeState)) return [];
+    const s = getStringsForLang(env.lang).history;
+    return (['regions', 'places'] as const).map(key => {
+        const on = manageSwitchOn(p, env, key);
+        // Off through the bridge, or (an older bridge without `experiments.off`) the research's link.
+        const action = on ? (env.canOff || env.canLinkOn ? 'off' : null) : (env.canLinkOn ? 'linkOn' : null);
+        return { key, on, action, text: s.switchState(key === 'regions' ? s.switchRegions : s.switchPlaces, on) };
+    });
 }
 
 // ─── Search ────────────────────────────────────────────────────────────────
@@ -243,8 +285,8 @@ export function regionGroups(p: HistoryPayload, env: ManageEnv, names: ManageNam
     const wholeHidden = new Set(hidden.filter(h => !h.event && h.region).map(h => h.region!));
     const archive = historyWaiting(p, env.treeState);
     const collator = new Intl.Collator(lang);
-    // Search off: "Find first" leads nowhere (the header offers switching it on).
-    const canFirst = manageCan(env, 'first') && !derived && manageSearchOn(p, env);
+    // Search off (split: the history of regions off): "Find first" leads nowhere (the header offers switching it on).
+    const canFirst = manageCan(env, 'first') && !derived && manageSwitchOn(p, env, 'regions');
     const canHideAll = manageCan(env, 'hideAll');
     const canSkip = manageCan(env, 'skip') && !derived;
 
@@ -433,7 +475,8 @@ export function placeGroups(p: HistoryPayload, env: ManageEnv, names: ManageName
     const placeEvents = new Map<string, number>();
     for (const ev of p.events) if (ev.scope === 'place' && ev.place) placeEvents.set(ev.place.key, (placeEvents.get(ev.place.key) ?? 0) + 1);
     const canMap = r1 && manageCan(env, 'map');
-    const canPlace = r1 && manageCan(env, 'place') && manageSearchOn(p, env);
+    // Split: "Find local history…" only while the history of places is on (K8.3).
+    const canPlace = r1 && manageCan(env, 'place') && manageSwitchOn(p, env, 'places');
     const canSkip = r1 && manageCan(env, 'skip');
 
     const rowOf = (key: string, place: HistoryPlace): PlaceRow => {
@@ -879,6 +922,8 @@ export interface ManageHeader {
     /** Notes in the accent colour (no bridge, incomplete result). */
     notes: string[];
     summary: string;
+    /** The two searches apart (`experiments.split`, K8.5): empty without it. */
+    switches: ManageSwitch[];
 }
 
 /** Counts for the summaries: regions, places, events (hidden too), hidden. */
@@ -919,6 +964,7 @@ export function manageHeader(p: HistoryPayload, env: ManageEnv): ManageHeader {
     let link: ManageHeader['link'] = null;
     let searching = false;
     const searchOn = manageSearchOn(p, env);
+    const switches = manageSwitches(p, env);
     if (!env.bridgeUp) {
         text = `${s.statusAsOf(env.formatTime(p.cachedAt))} ${s.manageNoBridge}`;
         notes.push(s.manageNoBridgeNote);
@@ -926,11 +972,17 @@ export function manageHeader(p: HistoryPayload, env: ManageEnv): ManageHeader {
         text = `${s.statusWaiting(p.state.why)} ${s.statusFoundKept}`;
     } else if (!searchOn) {
         if (env.offDone) text = s.manageTreeOff;
-        else if (env.canLinkOn) { text = s.manageOff; link = 'enable'; }
-        else text = s.manageOffElsewhere;
+        else if (env.canLinkOn) {
+            text = s.manageOff;
+            // Split: each switch offers its own link below the sentence.
+            if (!switches.length) link = 'enable';
+        } else text = s.manageOffElsewhere;
     } else if (p.state.mapping) {
         text = s.manageMapping(p.state.mapping.mapped, p.state.mapping.mappable);
         searching = true;
+    } else if (!manageSwitchOn(p, env, 'regions')) {
+        // Split: only the history of places is on; the regions' queue does not move.
+        text = `${s.switchOffNote(s.switchRegions)} ${s.statusFoundKept}`;
     } else if (p.regions) {
         const list = Object.values(p.regions);
         const lang = env.lang;
@@ -952,7 +1004,7 @@ export function manageHeader(p: HistoryPayload, env: ManageEnv): ManageHeader {
     const pace = searching && env.pace
         ? env.pace === 'rare' ? s.paceRare : env.pace === 'idle' ? s.paceIdle : s.paceSometimes
         : '';
-    return { text, link, pace, notes, summary };
+    return { text, link, pace, notes, summary, switches };
 }
 
 /** The row "History of places ›" under Settings → Person card, and the research menu's summary. */
