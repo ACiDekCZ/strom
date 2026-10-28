@@ -190,7 +190,7 @@ test.describe('History in the life timeline: Settings', () => {
             await expect.poll(() => history.reads).toBeGreaterThan(0);
         }
         const kind = (page: Page, k: string) => page.locator(`#history-kind-${k}`);
-        const kindRow = (page: Page, k: string) => page.locator(`.history-kind-row[data-kind="${k}"]`);
+        const kindRow = (page: Page, k: string) => page.locator(`#history-kinds .history-kind-row[data-kind="${k}"]`);
         const note = (page: Page) => page.locator('#history-kinds-note');
         const stored = (page: Page) => page.evaluate(() => {
             const s = JSON.parse(localStorage.getItem('strom-settings') ?? '{}');

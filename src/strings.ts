@@ -3990,6 +3990,7 @@ const stringsEN = {
         lifelineDefaultsTitle: 'Person card timeline',
         lifelineDefaultsNote: 'What the timeline in a person card of this tree shows at first. The switches on a card change it for that card only. Nothing else in the app follows this.',
         lifelineDefaultsNone: 'own events only',
+        lifelineKindsNote: 'Kinds of history: the default is in Settings, a choice here applies to this tree. One kind stays on.',
         defaultPersonLastFocused: 'Last focused',
         defaultPersonSpecific: 'Specific person:',
         // Default tree dialog
@@ -5504,7 +5505,9 @@ const stringsEN = {
         stripShortLink: 'Turn on',
         // Kinds of history in Settings → Person card and the legend (§6).
         kindsLastNote: 'One kind stays on. All can be turned off with the main option.',
+        kindsTreeOwn: 'The open tree has its own choice of kinds (tree settings \u2192 Person card timeline).',
         legendKindOff: 'Off in Settings.',
+        legendKindOffTree: 'Off for this tree.',
         legendPlace: 'Local history',
         legendPlaceHint: 'Events of the place and its surroundings, requested for this tree.',
         // History in stories, Research for this tree → Stories (§7).
@@ -9421,6 +9424,7 @@ const stringsCZ: StringsType = {
         lifelineDefaultsTitle: 'Časová osa v kartě osoby',
         lifelineDefaultsNote: 'Co časová osa v kartě osoby tohoto stromu ukazuje na začátku. Zaškrtávátka v kartě to změní jen pro tu kartu. Nic jiného v aplikaci se tím neřídí.',
         lifelineDefaultsNone: 'jen vlastní události',
+        lifelineKindsNote: 'Druhy dějin: výchozí jsou v Nastavení, volba tady platí pro tento strom. Jeden druh zůstává zapnutý.',
         defaultPersonLastFocused: 'Naposledy zobrazená',
         defaultPersonSpecific: 'Konkrétní osoba:',
         // Default tree dialog
@@ -10929,7 +10933,9 @@ const stringsCZ: StringsType = {
         stripShortLink: 'Zapnout',
         // Druhy dějin v Nastavení → Karta osoby a v legendě (§6).
         kindsLastNote: 'Jeden druh zůstává zapnutý. Vypnout všechny jde hlavní volbou.',
+        kindsTreeOwn: 'Otevřený strom má vlastní výběr druhů (nastavení stromu \u2192 Časová osa v kartě osoby).',
         legendKindOff: 'Vypnuto v Nastavení.',
+        legendKindOffTree: 'Pro tento strom vypnuto.',
         legendPlace: 'Dějiny místa',
         legendPlaceHint: 'Události obce a okolí, které si strom vyžádal.',
         // Dějiny ve vyprávění, Výzkum pro tento strom → Vyprávění (§7).
@@ -14786,6 +14792,7 @@ const stringsDE: StringsType = {
         lifelineDefaultsTitle: 'Zeitleiste in der Personenkarte',
         lifelineDefaultsNote: 'Was die Zeitleiste in einer Personenkarte dieses Stammbaums zuerst zeigt. Die Schalter in einer Karte ändern das nur für diese Karte. Sonst richtet sich nichts in der App danach.',
         lifelineDefaultsNone: 'nur eigene Ereignisse',
+        lifelineKindsNote: 'Arten der Geschichte: Standard in den Einstellungen, die Auswahl hier gilt für diesen Stammbaum. Eine Art bleibt eingeschaltet.',
         defaultPersonLastFocused: 'Zuletzt fokussiert',
         defaultPersonSpecific: 'Bestimmte Person:',
         newTreeMenu: 'Neuer Stammbaum',
@@ -16279,7 +16286,9 @@ const stringsDE: StringsType = {
         stripShortLink: 'Einschalten',
         // Arten des Zeitgeschehens in Einstellungen → Personenkarte und in der Legende (§6).
         kindsLastNote: 'Eine Art bleibt eingeschaltet. Alle lassen sich mit der Hauptoption ausschalten.',
+        kindsTreeOwn: 'Der geöffnete Stammbaum hat eine eigene Auswahl der Arten (Stammbaum-Einstellungen \u2192 Zeitleiste in der Personenkarte).',
         legendKindOff: 'In den Einstellungen aus.',
+        legendKindOffTree: 'Für diesen Stammbaum aus.',
         legendPlace: 'Ortsgeschichte',
         legendPlaceHint: 'Ereignisse des Ortes und der Umgebung, für diesen Stammbaum angefragt.',
         // Zeitgeschehen in Erzählungen, Forschung für diesen Stammbaum → Erzählungen (§7).

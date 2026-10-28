@@ -82,6 +82,37 @@ describe('the card timeline default per tree', () => {
     });
 });
 
+describe('the kinds of history per tree (spec 020 K8.6)', () => {
+    afterEach(() => vi.unstubAllGlobals());
+
+    it('Settings give every tree its default; a tree keeps only the kinds it shows otherwise', () => {
+        const store = loadSettings({ historyKindLocal: false });
+        expect(SettingsManager.getHistoryKinds('lhotak')).toEqual({ region: true, place: true, local: false });
+        SettingsManager.setTreeHistoryKinds('lhotak', { region: false, place: true, local: false });
+        expect(SettingsManager.getHistoryKinds('lhotak')).toEqual({ region: false, place: true, local: false });
+        expect(SettingsManager.getHistoryKinds('novak')).toEqual({ region: true, place: true, local: false });
+        expect(SettingsManager.getHistoryKinds()).toEqual({ region: true, place: true, local: false });
+        expect(SettingsManager.hasTreeHistoryKinds('lhotak')).toBe(true);
+        expect(SettingsManager.hasTreeHistoryKinds('novak')).toBe(false);
+        expect(saved(store).lifelineByTree).toEqual({ lhotak: { kinds: { region: false } } });
+        // A later default reaches the kinds the tree did not change.
+        SettingsManager.setHistoryKind('local', true);
+        expect(SettingsManager.getHistoryKinds('lhotak')).toEqual({ region: false, place: true, local: true });
+    });
+
+    it('the same as the default again: the tree follows Settings; the timeline default keeps the kinds', () => {
+        const store = loadSettings(null);
+        SettingsManager.setTreeHistoryKinds('lhotak', { region: true, place: false, local: true });
+        SettingsManager.setLifelineDefaults('lhotak', { childEvents: true, history: true });
+        expect(saved(store).lifelineByTree).toEqual({ lhotak: { childEvents: true, history: true, kinds: { place: false } } });
+        SettingsManager.setTreeHistoryKinds('lhotak', { region: true, place: true, local: true });
+        expect(SettingsManager.hasTreeHistoryKinds('lhotak')).toBe(false);
+        expect(saved(store).lifelineByTree).toEqual({ lhotak: { childEvents: true, history: true } });
+        SettingsManager.forgetLifelineDefaults('lhotak');
+        expect(saved(store).lifelineByTree).toEqual({});
+    });
+});
+
 describe('the card\'s chips change the default for the open card only', () => {
     beforeEach(() => { loadSettings(null); });
     afterEach(() => vi.unstubAllGlobals());

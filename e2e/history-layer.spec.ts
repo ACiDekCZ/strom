@@ -132,12 +132,51 @@ test.describe('History in the life timeline: the person card', () => {
         const dialog = page.locator('#lifeline-defaults-modal');
         await expect(dialog).toBeVisible();
         await expect(dialog.locator('#lifeline-default-history')).toBeChecked();
-        await dialog.locator('label', { hasText: 'History' }).click();
+        // Without History the kinds below it are muted.
+        await dialog.locator('label:has(#lifeline-default-history)').click();
+        await expect(dialog.locator('.history-kind-row[data-kind="region"]')).toHaveClass(/is-muted/);
         await dialog.getByRole('button', { name: 'Save' }).click();
         await expect(dialog).toBeHidden();
         await openCard(page, 'Jan');
         await expect(chip(page)).toHaveAttribute('aria-checked', 'false');
         await expect(historyRows(page)).toHaveCount(0);
+    });
+
+    test('a kind of history off in the tree\'s settings: off for this tree only, Settings keep the default (K8.6)', async ({ page }) => {
+        await setup(page);
+        const treeId = await page.evaluate(() => window.Strom.DataManager.getCurrentTreeId()!);
+        await page.evaluate((id) => window.Strom.UI.showLifelineDefaultsDialog(id), treeId);
+        const dialog = page.locator('#lifeline-defaults-modal');
+        const region = dialog.locator('#lifeline-default-kind-region');
+        const local = dialog.locator('#lifeline-default-kind-local');
+        await expect(region).toBeChecked();
+        await expect(local).toBeChecked();
+        // The last kind on stays.
+        await dialog.locator('label:has(#lifeline-default-kind-local)').click();
+        await expect(local).not.toBeChecked();
+        await expect(region).toHaveAttribute('aria-disabled', 'true');
+        await dialog.locator('label:has(#lifeline-default-kind-local)').click();
+        await dialog.locator('label:has(#lifeline-default-kind-region)').click();
+        await expect(region).not.toBeChecked();
+        await dialog.getByRole('button', { name: 'Save' }).click();
+        await expect(dialog).toBeHidden();
+        await openCard(page, 'Jan');
+        await expect(warRow(page)).toHaveCount(0);
+        const stored = await page.evaluate((id) => {
+            const s = JSON.parse(localStorage.getItem('strom-settings') ?? '{}');
+            return { tree: s.lifelineByTree?.[id]?.kinds, all: s.historyKindRegion };
+        }, treeId);
+        expect(stored).toEqual({ tree: { region: false }, all: undefined });
+        // Settings show the default for every tree and say the open tree has its own.
+        await closeCard(page);
+        await page.evaluate(() => window.Strom.UI.renderHistoryKinds());
+        await expect(page.locator('#history-kinds-tree')).not.toHaveAttribute('hidden');
+        // Back to the default: the tree follows Settings again.
+        await page.evaluate((id) => window.Strom.UI.showLifelineDefaultsDialog(id), treeId);
+        await dialog.locator('label:has(#lifeline-default-kind-region)').click();
+        await dialog.getByRole('button', { name: 'Save' }).click();
+        await openCard(page, 'Jan');
+        await expect(warRow(page)).toBeVisible();
     });
 
     test('a year with two events is one folded row; Enter and Space unfold it', async ({ page }) => {

@@ -38,6 +38,8 @@ import { PersonPicker } from '../person-picker.js';
 import { AppExporter } from '../export.js';
 import { SettingsManager } from '../settings.js';
 import { dropLifelineChips } from '../lifeline-view.js';
+import { HISTORY_PLACE_FEATURE } from '../research-link.js';
+import { historyKindLocked, historyKindsShown, HISTORY_SCOPE_KINDS, type HistoryKinds } from '../history.js';
 import { ThemeMode, LanguageSetting, AppMode, AuditLog } from '../types.js';
 import { CryptoSession, isEncrypted, encrypt, decrypt, EncryptedData } from '../crypto.js';
 import { validateTreeData, ValidationResult as TreeValidationResult, ValidationIssue } from '../validation.js';
@@ -1400,6 +1402,12 @@ export const treeManagementMethods = uiModule({
         const d = SettingsManager.getLifelineDefaults(treeId);
         child.checked = d.childEvents;
         history.checked = d.history;
+        const kinds = historyKindsShown(SettingsManager.getHistoryKinds(treeId), this.lifelineDefaultPlaceShown(treeId));
+        for (const kind of HISTORY_SCOPE_KINDS) {
+            const input = document.getElementById(`lifeline-default-kind-${kind}`) as HTMLInputElement | null;
+            if (input) input.checked = kinds[kind];
+        }
+        this.renderLifelineDefaultKinds();
         this.clearDialogStack();
         if (parentDialogId) {
             this.pushDialog(parentDialogId);
@@ -1423,8 +1431,58 @@ export const treeManagementMethods = uiModule({
         const child = document.getElementById('lifeline-default-child') as HTMLInputElement | null;
         const history = document.getElementById('lifeline-default-history') as HTMLInputElement | null;
         SettingsManager.setLifelineDefaults(treeId, { childEvents: !!child?.checked, history: !!history?.checked });
+        if (SettingsManager.isHistoryLayer()) SettingsManager.setTreeHistoryKinds(treeId, this.lifelineDefaultKinds());
         dropLifelineChips(treeId);
         this.closeLifelineDefaultsDialog();
+        if (treeId === DataManager.getCurrentTreeId()) this.historyChanged();
+    },
+
+    /** The tree's research offers the history of a place (`history.place` in its last status). */
+    lifelineDefaultPlaceShown(treeId: string): boolean {
+        const rid = TreeManager.getTreeMetadata(treeId as TreeId)?.research?.id?.toLowerCase();
+        return !!rid && (this.researchStatusOf(rid)?.features ?? []).includes(HISTORY_PLACE_FEATURE);
+    },
+
+    /** The kinds as the dialog has them ticked. */
+    lifelineDefaultKinds(): HistoryKinds {
+        const on = (kind: keyof HistoryKinds) => !!(document.getElementById(`lifeline-default-kind-${kind}`) as HTMLInputElement | null)?.checked;
+        return { region: on('region'), place: on('place'), local: on('local') };
+    },
+
+    /**
+     * K8.6: the kinds of history under "History" — only while history is on in
+     * Settings; muted while the tree's "History" is off; the last one on stays
+     * (as in Settings).
+     */
+    renderLifelineDefaultKinds(): void {
+        const box = document.getElementById('lifeline-default-kinds');
+        const history = document.getElementById('lifeline-default-history') as HTMLInputElement | null;
+        const treeId = lifelineDefaultsTreeId;
+        if (!box || !history || !treeId) return;
+        box.hidden = !SettingsManager.isHistoryLayer();
+        const placeShown = this.lifelineDefaultPlaceShown(treeId);
+        const kinds = this.lifelineDefaultKinds();
+        for (const kind of HISTORY_SCOPE_KINDS) {
+            const row = box.querySelector<HTMLElement>(`[data-kind="${kind}"]`);
+            const input = document.getElementById(`lifeline-default-kind-${kind}`) as HTMLInputElement | null;
+            if (!row || !input) continue;
+            row.hidden = kind === 'place' && !placeShown;
+            const locked = history.checked && historyKindLocked(kinds, kind, placeShown);
+            row.classList.toggle('is-muted', !history.checked);
+            row.classList.toggle('is-locked', locked);
+            if (!history.checked || locked) input.setAttribute('aria-disabled', 'true');
+            else input.removeAttribute('aria-disabled');
+        }
+    },
+
+    /** A kind's click in the tree's dialog: the last one on and all while "History" is off stay as they are. */
+    lifelineDefaultKindClick(event: Event): void {
+        const input = event.currentTarget as HTMLInputElement;
+        if (input.getAttribute('aria-disabled') === 'true') {
+            event.preventDefault();
+            return;
+        }
+        this.renderLifelineDefaultKinds();
     },
 
     // ---- DUPLICATE TREE ----

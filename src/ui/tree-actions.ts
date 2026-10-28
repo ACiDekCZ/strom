@@ -26,7 +26,13 @@ import { SettingsManager } from '../settings.js';
 /** The tree's default of the person card timeline, as its settings row says it (K4.5). */
 function lifelineDefaultsSummary(treeId: TreeId): string {
     const d = SettingsManager.getLifelineDefaults(treeId);
-    const on = [d.childEvents ? strings.personModal.lifelineChildEvents : '', d.history ? strings.history.chip : ''].filter(Boolean);
+    // The tree's own kinds of history (K8.6) in brackets: "History (Regional history, From research sources)".
+    const h = strings.history;
+    const kinds = SettingsManager.getHistoryKinds(treeId);
+    const own = SettingsManager.isHistoryLayer() && SettingsManager.hasTreeHistoryKinds(treeId)
+        ? [kinds.region ? h.kindRegion : '', kinds.place ? h.kindPlace : '', kinds.local ? h.kindLocal : ''].filter(Boolean) : [];
+    const history = own.length ? `${h.chip} (${own.join(', ')})` : h.chip;
+    const on = [d.childEvents ? strings.personModal.lifelineChildEvents : '', d.history ? history : ''].filter(Boolean);
     return on.length ? on.join(', ') : strings.treeManager.lifelineDefaultsNone;
 }
 

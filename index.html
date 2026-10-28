@@ -19398,6 +19398,7 @@
                             </span>
                         </label>
                         <div class="settings-row-dependent history-kinds-note" id="history-kinds-note" hidden data-i18n="history.kindsLastNote"></div>
+                        <div class="settings-row-dependent history-kinds-note" id="history-kinds-tree" hidden data-i18n="history.kindsTreeOwn"></div>
                     </div>
                     <button type="button" class="settings-row settings-row-dependent settings-row-link history-manage-link" id="history-manage-link" hidden
                             onclick="window.Strom.UI.openHistoryManageFrom('settings')">
@@ -20326,9 +20327,31 @@
                         <span data-i18n="personModal.lifelineChildEvents"></span>
                     </label>
                     <label class="settings-checkbox settings-row">
-                        <input type="checkbox" id="lifeline-default-history">
+                        <input type="checkbox" id="lifeline-default-history" onchange="window.Strom.UI.renderLifelineDefaultKinds()">
                         <span data-i18n="history.chip"></span>
                     </label>
+                    <!-- The kinds of history for this tree (spec 020 K8.6): the default comes from Settings; the last one on stays. -->
+                    <div class="history-kinds" id="lifeline-default-kinds" role="group" aria-label="History" data-i18n-aria-label="history.chip">
+                        <label class="settings-checkbox settings-row settings-row-dependent history-kind-row" data-kind="region">
+                            <input type="checkbox" id="lifeline-default-kind-region" onclick="window.Strom.UI.lifelineDefaultKindClick(event)">
+                            <span class="settings-text">
+                                <span class="settings-name"><span class="history-kind-mark is-region" aria-hidden="true"></span><span data-i18n="history.kindRegion"></span></span>
+                            </span>
+                        </label>
+                        <label class="settings-checkbox settings-row settings-row-dependent history-kind-row" data-kind="place" hidden>
+                            <input type="checkbox" id="lifeline-default-kind-place" onclick="window.Strom.UI.lifelineDefaultKindClick(event)">
+                            <span class="settings-text">
+                                <span class="settings-name"><span class="history-kind-mark is-place" aria-hidden="true"></span><span data-i18n="history.kindPlace"></span></span>
+                            </span>
+                        </label>
+                        <label class="settings-checkbox settings-row settings-row-dependent history-kind-row" data-kind="local">
+                            <input type="checkbox" id="lifeline-default-kind-local" onclick="window.Strom.UI.lifelineDefaultKindClick(event)">
+                            <span class="settings-text">
+                                <span class="settings-name"><span class="history-kind-mark is-local" aria-hidden="true"></span><span data-i18n="history.kindLocal"></span></span>
+                            </span>
+                        </label>
+                        <div class="settings-row-dependent history-kinds-note" id="lifeline-default-kinds-note" data-i18n="treeManager.lifelineKindsNote"></div>
+                    </div>
                 </div>
             </div>
             <div class="buttons">

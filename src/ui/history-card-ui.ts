@@ -730,11 +730,13 @@ export const historyCardMethods = uiModule({
         const h = strings.history;
         // §6e: four kinds (▲ only with history.place); a kind switched off in Settings muted with its note.
         const { kinds, placeShown } = this.historyKindsNow();
+        // Off for this tree (its own choice, K8.6) or in Settings.
+        const offText = SettingsManager.hasTreeHistoryKinds(DataManager.getCurrentTreeId()) ? h.legendKindOffTree : h.legendKindOff;
         const row = (mark: string, title: string, hint: string, off = false): string =>
             `<div class="pm-lifeline-legend-row${off ? ' is-off' : ''}"><span class="pm-lifeline-legend-mark ${mark}" aria-hidden="true">`
             + `${mark === 'is-tip' ? 'T' : mark === 'is-place' ? '\u25B2' : ''}</span>`
             + `<span><span class="pm-lifeline-legend-name">${esc(title)}</span><span class="pm-lifeline-legend-hint">${esc(hint)}</span>`
-            + `${off ? `<span class="pm-lifeline-legend-hint pm-lifeline-legend-off">${esc(h.legendKindOff)}</span>` : ''}</span></div>`;
+            + `${off ? `<span class="pm-lifeline-legend-hint pm-lifeline-legend-off">${esc(offText)}</span>` : ''}</span></div>`;
         const content = `<div class="pm-lifeline-legend-title">${esc(h.legendTitle)}</div>`
             + row('is-region', h.legendRegion, h.legendRegionHint, !kinds.region)
             + (placeShown ? row('is-place', h.legendPlace, h.legendPlaceHint, !kinds.place) : '')

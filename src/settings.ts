@@ -175,7 +175,8 @@ class SettingsManagerClass {
 
     setLifelineDefaults(treeId: string, defaults: LifelineDefaults): void {
         const all = (this.settings.lifelineByTree ??= {});
-        all[treeId] = { childEvents: defaults.childEvents, history: defaults.history };
+        const kinds = all[treeId]?.kinds;
+        all[treeId] = { childEvents: defaults.childEvents, history: defaults.history, ...(kinds ? { kinds } : {}) };
         this.save();
     }
 
@@ -210,13 +211,39 @@ class SettingsManagerClass {
         this.save();
     }
 
-    /** The kinds of history the card's timeline shows (spec 1028 §6): each on by default, this browser only. */
-    getHistoryKinds(): { region: boolean; place: boolean; local: boolean } {
+    /**
+     * The kinds of history the card's timeline shows (spec 1028 §6): each on
+     * by default, this browser only. Settings hold the default of every tree;
+     * a tree's own choice (spec 020 K8.6, its settings) wins for that tree.
+     */
+    getHistoryKinds(treeId: string | null = null): { region: boolean; place: boolean; local: boolean } {
+        const own = treeId ? this.settings.lifelineByTree?.[treeId]?.kinds : undefined;
         return {
-            region: this.settings.historyKindRegion !== false,
-            place: this.settings.historyKindPlace !== false,
-            local: this.settings.historyKindLocal !== false,
+            region: own?.region ?? this.settings.historyKindRegion !== false,
+            place: own?.place ?? this.settings.historyKindPlace !== false,
+            local: own?.local ?? this.settings.historyKindLocal !== false,
         };
+    }
+
+    /** The tree has its own choice of a kind (K8.6). */
+    hasTreeHistoryKinds(treeId: string | null): boolean {
+        const own = treeId ? this.settings.lifelineByTree?.[treeId]?.kinds : undefined;
+        return !!own && Object.keys(own).length > 0;
+    }
+
+    /**
+     * A tree's kinds (K8.6): a kind equal to the Settings' default is not kept,
+     * so a tree follows a later change of the default until it differs.
+     */
+    setTreeHistoryKinds(treeId: string, kinds: { region: boolean; place: boolean; local: boolean }): void {
+        const all = (this.settings.lifelineByTree ??= {});
+        const entry = (all[treeId] ??= {});
+        const base = this.getHistoryKinds();
+        const own: { region?: boolean; place?: boolean; local?: boolean } = {};
+        for (const k of ['region', 'place', 'local'] as const) if (kinds[k] !== base[k]) own[k] = kinds[k];
+        if (Object.keys(own).length) entry.kinds = own;
+        else delete entry.kinds;
+        this.save();
     }
 
     setHistoryKind(kind: 'region' | 'place' | 'local', on: boolean): void {

@@ -630,15 +630,21 @@ export const historyMethods = uiModule({
     historyKindsNow(): { kinds: HistoryKinds; placeShown: boolean } {
         const rid = activeResearchId();
         const placeShown = !!rid && (this.researchStatusOf(rid)?.features ?? []).includes(HISTORY_PLACE_FEATURE);
-        return { kinds: historyKindsShown(SettingsManager.getHistoryKinds(), placeShown), placeShown };
+        return { kinds: historyKindsShown(SettingsManager.getHistoryKinds(DataManager.getCurrentTreeId()), placeShown), placeShown };
     },
 
-    /** §6: the three sub-options under the main one: muted while it is off, the last one on locked with its sentence. */
+    /**
+     * §6: the three sub-options under the main one: muted while it is off, the last one on locked with its sentence.
+     * They are the default of every tree (K8.6): a sentence says when the open tree has its own choice.
+     */
     renderHistoryKinds(): void {
         const box = document.getElementById('history-kinds');
         if (!box) return;
         const layerOn = SettingsManager.isHistoryLayer();
-        const { kinds, placeShown } = this.historyKindsNow();
+        const { placeShown } = this.historyKindsNow();
+        const kinds = historyKindsShown(SettingsManager.getHistoryKinds(), placeShown);
+        const own = document.getElementById('history-kinds-tree');
+        if (own) own.hidden = !SettingsManager.hasTreeHistoryKinds(DataManager.getCurrentTreeId());
         let locked = false;
         for (const kind of HISTORY_SCOPE_KINDS) {
             const row = box.querySelector<HTMLElement>(`[data-kind="${kind}"]`);
