@@ -7,7 +7,8 @@
 
 import { describe, it, expect } from 'vitest';
 import { parseGedcom, convertToStrom } from '../ged-parser.js';
-import { exportToGedcom, SURNAME_GROUPS_MARKER } from '../ged-exporter.js';
+import { exportToGedcom, SURNAME_GROUPS_MARKER, SURNAME_REJECTIONS_MARKER } from '../ged-exporter.js';
+import { carryOverTreeDecisions } from '../quality-dismiss.js';
 import { keepSurnameVariants, keepMarriedSurname, keepTitles, stabilizeIds, contentFingerprint } from '../research-link.js';
 import { StromData } from '../types.js';
 
@@ -18,6 +19,7 @@ const GED = (header: string[] = []) => [
     '0 TRLR',
 ].join('\n');
 const groupsNote = (lines: string[]) => [`1 NOTE ${SURNAME_GROUPS_MARKER}`, ...lines.map(l => `2 CONT ${l}`)];
+const rejectionsNote = (lines: string[]) => [`1 NOTE ${SURNAME_REJECTIONS_MARKER}`, ...lines.map(l => `2 CONT ${l}`)];
 
 const load = (ged: string): StromData => convertToStrom(parseGedcom(ged)).data;
 /** What a research load does with the version before it goes over the tree (applyResearch). */
@@ -67,5 +69,52 @@ describe('surname-variant groups through a research update', () => {
         expect(next.surnameVariants).toBeUndefined();
         out.surnameVariants![0].push('Lhotta');
         expect(previous.surnameVariants).toEqual([['Lhoták', 'Lhotak', 'Lhottak']]);
+    });
+});
+
+describe('rejected spelling suggestions through a research update (like the groups)', () => {
+    const here = (): StromData => {
+        const d = load(GED());
+        d.surnameRejections = [{ forms: ['Lhoták', 'Lhota'], id: 'sg-7', at: '2026-10-20T10:00:00.000Z' }];
+        return d;
+    };
+
+    it('a version without the rejections NOTE keeps the tree rejections (with their id and date)', () => {
+        const out = asLoaded(load(GED()), here());
+        expect(out.surnameRejections).toEqual([{ forms: ['Lhoták', 'Lhota'], id: 'sg-7', at: '2026-10-20T10:00:00.000Z' }]);
+        expect(carryOverTreeDecisions(load(GED()), here()).surnameRejections).toEqual(here().surnameRejections);
+    });
+
+    it('the rejections marker with nothing under it is the research "none": no rejection comes back', () => {
+        const out = asLoaded(load(GED(rejectionsNote([]))), here());
+        expect(out.surnameRejections ?? []).toEqual([]);
+        expect(carryOverTreeDecisions(load(GED(rejectionsNote([]))), here()).surnameRejections).toBeUndefined();
+    });
+
+    it('a version with rejections is the research list; the same forms keep the tree id and date', () => {
+        const next = load(GED(rejectionsNote(['Lhota | Lhoták', 'Nováková | Nowak'])));
+        const out = asLoaded(next, here());
+        expect(out.surnameRejections).toEqual([
+            { forms: ['Lhota', 'Lhoták'], id: 'sg-7', at: '2026-10-20T10:00:00.000Z' },
+            { forms: ['Nováková', 'Nowak'] },
+        ]);
+        expect(carryOverTreeDecisions(load(GED(rejectionsNote(['Lhota | Lhoták']))), here()).surnameRejections)
+            .toEqual([{ forms: ['Lhota', 'Lhoták'], id: 'sg-7', at: '2026-10-20T10:00:00.000Z' }]);
+    });
+
+    it('the round trip without the NOTE: the tree stays in step', () => {
+        const previous = here();
+        expect(exportToGedcom(previous).content).toContain(SURNAME_REJECTIONS_MARKER);
+        expect(contentFingerprint(asLoaded(load(GED()), previous))).toBe(contentFingerprint(previous));
+    });
+
+    it('nothing to keep: the version itself; the inputs are not changed', () => {
+        const next = load(GED());
+        expect(keepSurnameVariants(next, load(GED()))).toBe(next);
+        const previous = here();
+        const out = keepSurnameVariants(next, previous);
+        expect(next.surnameRejections).toBeUndefined();
+        out.surnameRejections![0].forms.push('Lhotta');
+        expect(previous.surnameRejections![0].forms).toEqual(['Lhoták', 'Lhota']);
     });
 });

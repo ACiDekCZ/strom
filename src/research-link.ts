@@ -10,7 +10,7 @@
 
 import { StromData, Person, PersonId, PartnershipId, Partnership, ResearchLink, Source, APP_VERSION } from './types.js';
 import { withoutConvertedStandIns, isPurePlaceholder } from './single-parent.js';
-import { carryOverTreeDecisions } from './quality-dismiss.js';
+import { carryOverTreeDecisions, withRejectionDetails } from './quality-dismiss.js';
 import { PhoneSummary, sanitizePhoneSummary } from './phone.js';
 import { ReadAccepts, LiveRead, READ_FEATURE, sanitizeReadAccepts, sanitizeReads } from './research-read.js';
 
@@ -852,10 +852,17 @@ export function keepDismissedMarriedSuggestions(next: StromData, previous: Strom
  * changed.
  */
 export function keepSurnameVariants(next: StromData, previous: StromData): StromData {
-    if (next.surnameVariants !== undefined) return next;
+    let out = next;
     const groups = previous.surnameVariants;
-    if (!groups?.length) return next;
-    return { ...next, surnameVariants: groups.map(g => [...g]) };
+    if (next.surnameVariants === undefined && groups?.length) {
+        out = { ...out, surnameVariants: groups.map(g => [...g]) };
+    }
+    // The rejected suggestions the same way: no marker keeps the tree's, a
+    // marker (even empty) is the research's list, which keeps the details
+    // (id, date) the tree knows of the same forms.
+    const rejections = withRejectionDetails(next.surnameRejections, previous.surnameRejections);
+    if (rejections !== next.surnameRejections) out = { ...out, surnameRejections: rejections };
+    return out;
 }
 
 /**

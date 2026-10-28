@@ -339,12 +339,41 @@ export function carryOverTreeDecisions(next: StromData, previous: StromData | nu
     } else if (next.surnameVariants && next.surnameVariants.length === 0) {
         delete next.surnameVariants;
     }
-    if (next.surnameRejections === undefined && previous.surnameRejections?.length) {
-        next.surnameRejections = previous.surnameRejections.map(r => ({ ...r, forms: [...r.forms] }));
-    } else if (next.surnameRejections && next.surnameRejections.length === 0) {
-        delete next.surnameRejections;
-    }
+    const rejections = withRejectionDetails(next.surnameRejections, previous.surnameRejections);
+    if (rejections?.length) next.surnameRejections = rejections;
+    else delete next.surnameRejections;
     return next;
+}
+
+/**
+ * The rejected suggestions of a new version: none told (`next` undefined, no
+ * marker) keeps the tree's; a list told (even empty, the research's "none")
+ * is taken, each rejection with the id and date the tree has for the same
+ * forms (the GEDCOM carries only the forms). Returns `next` itself when
+ * nothing changes.
+ */
+export function withRejectionDetails(
+    next: readonly SurnameRejection[] | undefined,
+    previous: readonly SurnameRejection[] | undefined,
+): SurnameRejection[] | undefined {
+    if (next === undefined) {
+        return previous?.length ? previous.map(r => ({ ...r, forms: [...r.forms] })) : undefined;
+    }
+    if (!previous?.length || next.length === 0) return next as SurnameRejection[];
+    const known = new Map(previous.map(r => [surnameRejectionKey(r.forms), r]));
+    let changed = false;
+    const out = next.map(r => {
+        const had = known.get(surnameRejectionKey(r.forms));
+        if (!had || (r.id && r.at)) return r;
+        const merged: SurnameRejection = { ...r, forms: [...r.forms] };
+        if (!merged.id && had.id) merged.id = had.id;
+        if (!merged.at && had.at) merged.at = had.at;
+        if (!merged.by && had.by) merged.by = had.by;
+        if (merged.id === r.id && merged.at === r.at && merged.by === r.by) return r;
+        changed = true;
+        return merged;
+    });
+    return changed ? out : next as SurnameRejection[];
 }
 
 /**
