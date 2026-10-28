@@ -17,6 +17,7 @@
 - **Zeitleiste in der Personenkarte**: *Stammbaum-Einstellungen* haben *Zeitleiste in der Personenkarte – Standard*, wo jeder Stammbaum festlegt, ob die Zeitleiste zuerst *Ereignisse der Kinder* und *Zeitgeschehen* zeigt; die Schalter in einer Karte ändern das nur für diese Karte. Ein Ereignis des Zeitgeschehens lässt sich *in diesem ganzen Stammbaum* oder *nur für eine Person* ausblenden.
 - **Orte**: der Dialog listet die Orte nach Namen in der Reihenfolge der App-Sprache, hat eine Suche, die keine diakritischen Zeichen braucht, und den Chip *Ohne Position* für die Orte, die nicht auf der Karte sind.
 - **Was geschrieben wurde**: das letzte Schreiben der Forschung ist nur neu, bis es gesehen wurde; wurde seine Liste geöffnet, erscheint es nach einem Neustart oder Update der Forschung nicht wieder.
+- **Zeiträume in Daten**: ein Zeitraum *von … bis …* (GEDCOM *FROM … TO …*, auch *ab …* oder *bis …* allein) bleibt ein Zeitraum: er erscheint als *von 22.3.1871 bis 22.3.1882* und geht so hinaus, wie er kam, getrennt von *zwischen … und …*. An die Forschung gesendete Änderungen lassen unberührte Daten und Altersangaben genau so, wie die Forschung sie schrieb (*CAL 1885*, *EST 1842*, *0y 2m 26d*), sodass sie dort nicht mehr als Bearbeitung erscheinen.
 - **Daten**: Datenversion 13 (der Stammbaum behält die als kein Fehler markierten Befunde und die abgelehnten Schreibweisen-Vorschläge); Stammbäume früherer Versionen öffnen sich ohne Änderung.
 
 ## 3.16.0

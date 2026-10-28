@@ -4,6 +4,9 @@
  * Canonical storage format: `[qualifier]YYYY[-MM[-DD]]`
  *   - qualifier: '' (exact), '~' (about), '<' (before), '>' (after)
  *   - precision by omission: '1880' (year), '1880-05' (month), '1880-05-15' (day)
+ *   - range 'A..B': the date lies somewhere between A and B (GEDCOM BET … AND …)
+ *   - period 'A/B', 'A/', '/B': something lasted from A to B, from A, to B
+ *     (GEDCOM FROM … TO …, FROM …, TO …)
  * Legacy full ISO dates ('YYYY-MM-DD') are valid canonical values, so existing
  * data needs no migration.
  *
@@ -27,7 +30,18 @@ export interface FlexDate {
      * qualifier. Consumers that ignore `end` conservatively see the start.
      */
     end?: { year: number; month?: number; day?: number };
+    /**
+     * A PERIOD (GEDCOM FROM/TO, canonical 'A/B', 'A/', '/B'): how long
+     * something lasted, not when a single moment happened. With `end` it is
+     * FROM start TO end; without, the qualifier tells the side: '>' is FROM
+     * start (open end), '<' is TO start. Consumers that ignore it see the
+     * period as a range or as after/before, as the dates were read before.
+     */
+    period?: true;
 }
+
+/** A canonical date with no qualifier, range or period (one side of 'A/B'). */
+const PLAIN_RE = /^\d{3,4}(?:-\d{1,2}(?:-\d{1,2})?)?$/;
 
 const CANONICAL_RE = /^([~<>]?)(\d{3,4})(?:-(\d{1,2})(?:-(\d{1,2}))?)?$/;
 
@@ -59,6 +73,20 @@ export function parseFlexDate(value?: string): FlexDate | null {
     if (!value) return null;
     const trimmed = value.trim();
 
+    // Period 'A/B', 'A/', '/B' — each side a plain canonical date.
+    const slash = /^([^/]*)\/([^/]*)$/.exec(trimmed);
+    if (slash) {
+        const [, a, b] = slash;
+        if ((a && !PLAIN_RE.test(a)) || (b && !PLAIN_RE.test(b)) || (!a && !b)) return null;
+        const start = parseFlexDate(a || b);
+        if (!start) return null;
+        if (!a) return { ...start, qualifier: '<', period: true };
+        if (!b) return { ...start, qualifier: '>', period: true };
+        const end = parseFlexDate(b);
+        if (!end) return null;
+        return { ...start, end: { year: end.year, month: end.month, day: end.day }, period: true };
+    }
+
     // Range 'A..B' — both sides plain canonical dates (no qualifiers).
     const dots = trimmed.indexOf('..');
     if (dots > 0) {
@@ -84,6 +112,11 @@ export function parseFlexDate(value?: string): FlexDate | null {
 
 /** Build the canonical storage string from components. */
 export function toCanonical(date: FlexDate): string {
+    if (date.period) {
+        const start = toCanonical({ qualifier: '', year: date.year, month: date.month, day: date.day });
+        if (date.end) return `${start}/${toCanonical({ qualifier: '', ...date.end })}`;
+        return date.qualifier === '<' ? `/${start}` : `${start}/`;
+    }
     let s = `${date.qualifier}${date.year}`;
     if (date.month !== undefined) {
         s += `-${String(date.month).padStart(2, '0')}`;
@@ -116,6 +149,18 @@ export function normalizeDateInput(input: string, lang?: 'cs' | 'en' | 'de'): st
     const cur = lang ?? getCurrentLanguage();
     const monthFirstSlash = cur !== 'cs' && cur !== 'de';
 
+    // Period: 'A/B', 'A/', '/B' as stored (the edit field shows it so), and
+    // 'od A do B', 'from A to B', 'von A bis B'. 'od A' alone stays "after".
+    const stored = parseFlexDate(s);
+    if (stored?.period) return toCanonical(stored);
+    const periodMatch = /^(?:od|from|von|ab)\s+(.+?)\s+(?:do|to|bis)\s+(.+)$/i.exec(s);
+    if (periodMatch) {
+        const a = normalizeDateInput(periodMatch[1], lang);
+        const b = normalizeDateInput(periodMatch[2], lang);
+        if (!a || !b || !PLAIN_RE.test(a) || !PLAIN_RE.test(b)) return null;
+        return `${a}/${b}`;
+    }
+
     // Range: 'A..B', 'mezi A a B', 'between A and B' — sides normalize
     // through the single-date path (no qualifiers inside a range).
     const rangeMatch = /^(?:mezi|between|zwischen)\s+(.+?)\s+(?:a|and|und)\s+(.+)$/i.exec(s);
@@ -124,7 +169,7 @@ export function normalizeDateInput(input: string, lang?: 'cs' | 'en' | 'de'): st
     if (sides) {
         const a = normalizeDateInput(sides[0], lang);
         const b = normalizeDateInput(sides[1], lang);
-        if (!a || !b || /^[~<>]/.test(a) || /^[~<>]/.test(b) || a.includes('..') || b.includes('..')) return null;
+        if (!a || !b || !PLAIN_RE.test(a) || !PLAIN_RE.test(b)) return null;
         return `${a}..${b}`;
     }
 
@@ -239,13 +284,20 @@ export function yearFraction(date: string | undefined): number {
 /** Sort key: canonical value without the qualifier (keeps determinism). */
 export function dateSortKey(value?: string): string {
     if (!value) return '';
-    return /^[~<>]/.test(value) ? value.slice(1) : value;
+    return /^[~<>/]/.test(value) ? value.slice(1) : value;
 }
 
 const QUALIFIER_TEXT: Record<'cs' | 'en' | 'de', Record<Exclude<DateQualifier, ''>, string>> = {
     cs: { '~': 'kolem', '<': 'před', '>': 'po' },
     en: { '~': 'about', '<': 'before', '>': 'after' },
     de: { '~': 'um', '<': 'vor', '>': 'nach' },
+};
+
+/** The words of a period (GEDCOM FROM … TO …): 'od 1871 do 1882'. */
+const PERIOD_TEXT: Record<'cs' | 'en' | 'de', { from: string; to: string; since: string }> = {
+    cs: { from: 'od', to: 'do', since: 'od' },
+    en: { from: 'from', to: 'to', since: 'from' },
+    de: { from: 'von', to: 'bis', since: 'ab' },
 };
 
 /** English month abbreviations for display, as GEDCOM writes them ('15 MAY 1880'). */
@@ -278,6 +330,12 @@ export function formatFlexDate(value?: string, lang?: 'cs' | 'en' | 'de'): strin
         core = `${d.year}`;
     }
 
+    if (d.period) {
+        const w = PERIOD_TEXT[locale];
+        if (!d.end) return `${d.qualifier === '<' ? w.to : w.since} ${core}`;
+        return `${w.from} ${core} ${w.to} ${formatFlexDate(toCanonical({ qualifier: '', ...d.end }), locale)}`;
+    }
+
     if (d.end) {
         const endCore = formatFlexDate(toCanonical({ qualifier: '', ...d.end }), locale);
         return locale === 'cs'
@@ -301,7 +359,7 @@ export function formatDateForInput(value?: string): string {
     if (!value) return '';
     const d = parseFlexDate(value);
     if (!d) return value;
-    if (d.end) return value;  // ranges stay canonical ('1880..1885')
+    if (d.end || d.period) return value;  // ranges and periods stay canonical ('1880..1885', '1880/1885')
     // Czech and German both write dates day-first with dots ('15.5.1880').
     // English keeps ISO: unambiguous for readers of either convention.
     const inputLang = getCurrentLanguage();

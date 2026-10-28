@@ -543,22 +543,26 @@ describe('data honesty batch (K1/K4/K6)', () => {
         expect(again.sources![p2.sourceIds![0]].title).toBe('Oddaci matrika Decin');
     });
 
-    it('K4: BET/AND and FROM/TO import as ranges and re-export as BET/AND', () => {
+    it('K4: BET/AND imports as a range, FROM/TO as a period, each going back as it came', () => {
         const data = importGed(GED);
         const jan = Object.values(data.persons).find(p => p.firstName === 'Jan')!;
         expect(jan.birthDate).toBe('1880..1885');
         const resi = jan.events!.find(e => e.type === 'residence')!;
-        expect(resi.date).toBe('1902..1910');
+        expect(resi.date).toBe('1902/1910');
 
         const ged2 = exportGed(data);
         expect(ged2).toContain('DATE BET 1880 AND 1885');
-        expect(ged2).toContain('DATE BET 1902 AND 1910');
+        expect(ged2).toContain('DATE FROM 1902 TO 1910');
     });
 
-    it('K4: one-sided periods degrade to qualifiers', () => {
-        const ged = GED.replace('2 DATE FROM 1902 TO 1910', '2 DATE FROM 1902');
-        const jan = Object.values(importGed(ged).persons).find(p => p.firstName === 'Jan')!;
-        expect(jan.events!.find(e => e.type === 'residence')!.date).toBe('>1902');
+    it('K4: one-sided periods stay periods (FROM x, TO y)', () => {
+        for (const [line, stored] of [['2 DATE FROM 1902', '1902/'], ['2 DATE TO 1910', '/1910']]) {
+            const ged = GED.replace('2 DATE FROM 1902 TO 1910', line);
+            const data = importGed(ged);
+            const jan = Object.values(data.persons).find(p => p.firstName === 'Jan')!;
+            expect(jan.events!.find(e => e.type === 'residence')!.date).toBe(stored);
+            expect(exportGed(data)).toContain(line);
+        }
     });
 
     it('K6: QUAY survives the round-trip (record and citation)', () => {

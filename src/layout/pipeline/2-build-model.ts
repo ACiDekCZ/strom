@@ -381,9 +381,9 @@ function getSelectedChildren(
 }
 
 
-/** Strip a flex-date qualifier prefix ('~', '<', '>') for sorting. */
+/** Strip a flex-date qualifier prefix ('~', '<', '>', or '/' of a period) for sorting. */
 function stripDateQualifier(value: string): string {
-    return /^[~<>]/.test(value) ? value.slice(1) : value;
+    return /^[~<>/]/.test(value) ? value.slice(1) : value;
 }
 
 /**

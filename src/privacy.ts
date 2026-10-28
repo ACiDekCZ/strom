@@ -300,6 +300,7 @@ function stripDetails(person: Person): void {
     delete person.birthPlace;
     delete person.deathDate;
     delete person.deathPlace;
+    delete person.gedcomDates;
     delete person.birthAddress;
     delete person.deathCause;
     delete person.deathAge;
@@ -348,6 +349,7 @@ function stripPartnershipDetails(partnership: Partnership, mode: PrivacyMode): v
     delete partnership.startPlace;
     delete partnership.endDate;
     delete partnership.endPlace;
+    delete partnership.gedcomDates;
     delete partnership.address;
     delete partnership.ages;
     delete partnership.note;

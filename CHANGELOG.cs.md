@@ -17,6 +17,7 @@
 - **Časová osa v kartě osoby**: *Nastavení stromu* má *Časová osa v kartě osoby – výchozí*, kde si každý strom určí, zda časová osa na začátku ukazuje *Události dětí* a *Dějiny*; zaškrtávátka v kartě to změní jen pro tu kartu. Událost dějin jde skrýt *v celém tomto stromu* nebo *jen u jedné osoby*.
 - **Místa**: dialog řadí místa podle názvu v pořadí jazyka aplikace, má hledání, které nepotřebuje diakritiku, a čip *Bez polohy* pro místa, která nejsou na mapě.
 - **Co se zapsalo**: poslední zápis výzkumu je novinkou jen do zobrazení; když se jeho seznam otevřel, po restartu nebo aktualizaci výzkumu se znovu neukáže.
+- **Období v datech**: období *od … do …* (GEDCOM *FROM … TO …*, i samotné *od …* nebo *do …*) zůstává obdobím: ukáže se jako *od 22. 3. 1871 do 22. 3. 1882* a odejde, jak přišlo, odlišené od *mezi … a …*. Změny odeslané do výzkumu nechají nedotčená data a věky přesně tak, jak je výzkum zapsal (*CAL 1885*, *EST 1842*, *0y 2m 26d*), takže se tam už neukážou jako úpravy.
 - **Data**: datová verze 13 (strom si pamatuje nálezy označené jako není chyba a odmítnuté návrhy tvarů příjmení); stromy starších verzí se otevřou beze změny.
 
 ## 3.16.0

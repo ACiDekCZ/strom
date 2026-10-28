@@ -70,18 +70,18 @@ describe('dates written with local words', () => {
         expect(parseGedcomDate('kolem 3.1850')).toBe('~1850-03');
     });
 
-    it('reads between and from-to as a range, from alone as after', () => {
+    it('reads between as a range, from-to as a period, from alone as an open period', () => {
         expect(parseGedcomDate('mezi 1850 a 1855')).toBe('1850..1855');
         expect(parseGedcomDate('medzi rokmi 1850 a 1855')).toBe('1850..1855');
         expect(parseGedcomDate('zwischen 1850 und 1855')).toBe('1850..1855');
         expect(parseGedcomDate('pomiędzy 1850 i 1855')).toBe('1850..1855');
         expect(parseGedcomDate('между 1850 и 1855')).toBe('1850..1855');
         expect(parseGedcomDate('між 1850 та 1855')).toBe('1850..1855');
-        expect(parseGedcomDate('od 1850 do 1855')).toBe('1850..1855');
-        expect(parseGedcomDate('von 1850 bis 1855')).toBe('1850..1855');
-        expect(parseGedcomDate('с 1850 по 1855')).toBe('1850..1855');
-        expect(parseGedcomDate('від 1850 до 1855')).toBe('1850..1855');
-        expect(parseGedcomDate('ab 1850')).toBe('>1850');
+        expect(parseGedcomDate('od 1850 do 1855')).toBe('1850/1855');
+        expect(parseGedcomDate('von 1850 bis 1855')).toBe('1850/1855');
+        expect(parseGedcomDate('с 1850 по 1855')).toBe('1850/1855');
+        expect(parseGedcomDate('від 1850 до 1855')).toBe('1850/1855');
+        expect(parseGedcomDate('ab 1850')).toBe('1850/');
     });
 
     it('needs a date after the word: "after the war" is no date', () => {

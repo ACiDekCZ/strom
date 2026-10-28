@@ -39,7 +39,7 @@ export const slideshowMethods = uiModule({
             .filter((p): p is Person => !!p && !p.isPlaceholder);
 
         const year = (p: Person): number => {
-            const m = /^[~<>]?(\d{3,4})/.exec(p.birthDate ?? '');
+            const m = /^[~<>/]?(\d{3,4})/.exec(p.birthDate ?? '');
             return m ? parseInt(m[1], 10) : Number.MAX_SAFE_INTEGER;
         };
         return visible

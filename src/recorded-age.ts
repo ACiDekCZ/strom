@@ -18,7 +18,9 @@ export type AgeWord = 'INFANT' | 'STILLBORN' | 'CHILD';
 
 /** A recorded age that could be read: a span, or one of GEDCOM's age words. */
 export type RecordedAge =
-    | { kind: 'span'; qualifier: '' | '<' | '>'; years: number; months: number; weeks: number; days: number }
+    | { kind: 'span'; qualifier: '' | '<' | '>'; years: number; months: number; weeks: number; days: number;
+        /** The units the value names, a zero one too ("0y 2m 26d" → 'ymd'), in the order written. */
+        units?: string }
     | { kind: 'word'; word: AgeWord };
 
 /** Unit words (folded, see foldDateWord): exact forms, and stems a form may start with. */
@@ -70,6 +72,7 @@ export function readRecordedAge(text?: string): RecordedAge | null {
     // and joiners between the parts.
     const tokens = rest.replace(/(\d)(\p{L})/gu, '$1 $2').split(/[\s,]+/).filter(Boolean);
     const out = { years: 0, months: 0, weeks: 0, days: 0 };
+    let units = '';
     let any = false;
     for (let i = 0; i < tokens.length; i++) {
         const t = tokens[i];
@@ -82,27 +85,31 @@ export function readRecordedAge(text?: string): RecordedAge | null {
         // A bare number is years ("54"), as GEDCOM reads it too.
         const key = ({ y: 'years', m: 'months', w: 'weeks', d: 'days' } as const)[unit ?? 'y'];
         out[key] += n;
+        if (!units.includes(unit ?? 'y')) units += unit ?? 'y';
         any = true;
         if (unit) i++;
     }
     if (!any) return null;
-    return { kind: 'span', qualifier, ...out };
+    return { kind: 'span', qualifier, ...out, units };
 }
 
 /**
  * The value to write as GEDCOM `AGE`: "54y", "27y 3m", "<1y", "INFANT"; a
  * value that cannot be read goes out as written. GEDCOM 5.5.1 has no weeks, so
- * weeks are written as days.
+ * weeks are written as days. A unit the value names stays even at zero
+ * ("0 let 2 měsíce 26 dní" → "0y 2m 26d"), so an age the file gave goes back
+ * as it came.
  */
 export function gedcomAge(text: string): string {
     const age = readRecordedAge(text);
     if (!age) return text.trim();
     if (age.kind === 'word') return age.word;
     const days = age.days + age.weeks * 7;
+    const named = (u: string) => !!age.units?.includes(u);
     const parts = [
-        age.years ? `${age.years}y` : '',
-        age.months ? `${age.months}m` : '',
-        days ? `${days}d` : '',
+        age.years || named('y') ? `${age.years}y` : '',
+        age.months || named('m') ? `${age.months}m` : '',
+        days || named('d') || named('w') ? `${days}d` : '',
     ].filter(Boolean);
     return `${age.qualifier}${parts.join(' ') || '0y'}`;
 }

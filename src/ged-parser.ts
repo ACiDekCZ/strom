@@ -68,7 +68,7 @@ import { localAge } from './recorded-age';
 import { placeKey } from './places';
 import { coupleEventTypeOfTag, eventValueIsOnTag } from './events';
 import { strings, getStringsForLang } from './strings';
-import { SURNAME_GROUPS_MARKER, SURNAME_REJECTIONS_MARKER, SURNAME_GROUP_SEP } from './ged-exporter';
+import { SURNAME_GROUPS_MARKER, SURNAME_REJECTIONS_MARKER, SURNAME_GROUP_SEP, formatGedcomDate } from './ged-exporter';
 
 /** The groups of a surname marker's lines: spellings split on '|' and trimmed, two or more each. */
 function surnameNoteGroups(noteLines: readonly string[] | null): string[][] {
@@ -893,6 +893,8 @@ interface RawSourceMedia {
 /** Raw GEDCOM individual record */
 interface GedcomIndividual {
     id: string;
+    /** Every DATE of the birth, death and events as written, by flex value (see noteDateForm). */
+    dateForms?: Record<string, string>;
     name: string;
     firstName: string;
     lastName: string;
@@ -986,6 +988,8 @@ interface GedcomIndividual {
 /** Raw GEDCOM family record */
 interface GedcomFamily {
     id: string;
+    /** Every DATE of the wedding, divorce and events as written, by flex value (see noteDateForm). */
+    dateForms?: Record<string, string>;
     /** The couple's events besides the wedding and the divorce (ENGA, MARB, CENS, EVEN…). */
     events: RawCoupleEvent[];
     husb: string | null;
@@ -1134,6 +1138,32 @@ export function parseGedcomDate(dateStr: string): string {
     return readGedcomDate(dateStr).date;
 }
 
+/** A GEDCOM 5.5.1 date in its keyword form ('§' is a day, month and year, a dual year "1699/00" too). */
+const GEDCOM_DATE_FORM = new RegExp('^(?:(?:(?:ABT|CAL|EST|BEF|AFT|INT|TO) )?§|FROM §(?: TO §)?|BET § AND §)$'
+    .replace(/§/g, '(?:\\d{1,2} )?(?:(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC) )?\\d{3,4}(?:/\\d{2})?'));
+
+/**
+ * Remember how a record wrote a date (Person / Partnership `gedcomDates`).
+ * Every DATE counts, so a value written in two ways in one record is known
+ * as such ('') and keeps neither.
+ */
+function noteDateForm(record: { dateForms?: Record<string, string> }, raw: string, date: string): void {
+    if (!date) return;
+    const v = raw.trim().replace(/\s+/g, ' ');
+    const forms = record.dateForms ??= {};
+    forms[date] = forms[date] === undefined || forms[date] === v ? v : '';
+}
+
+/**
+ * The record's dates the app's own form would write differently, in their
+ * GEDCOM keyword form (Person / Partnership `gedcomDates`), or undefined.
+ */
+function keptDateForms(forms: Record<string, string> | undefined): Record<string, string> | undefined {
+    const kept = Object.entries(forms ?? {})
+        .filter(([date, v]) => v && GEDCOM_DATE_FORM.test(v) && formatGedcomDate(date) !== v);
+    return kept.length > 0 ? Object.fromEntries(kept) : undefined;
+}
+
 /**
  * The part of a GEDCOM date the date field cannot hold, to be kept as a note
  * line — or null when the date was read whole. A date phrase ("INT 1900 (per
@@ -1183,24 +1213,25 @@ function readGedcomDate(dateStr: string): { date: string; lossy: boolean; phrase
         if (!dateStr) return { date: '', lossy: !phrase, phrase };
     }
 
-    // Ranges/periods: BET X AND Y, FROM X TO Y -> 'x..y' (both bounds kept —
-    // previously these were mangled and the information silently lost).
-    // One-sided periods degrade to qualifiers: FROM X -> '>x', TO Y -> '<y'.
+    // A range (BET X AND Y: the date lies between) -> 'x..y'; a period (FROM X
+    // TO Y: something lasted from one to the other) -> 'x/y', FROM X -> 'x/',
+    // TO Y -> '/y'. Kept apart, so a period goes back out as FROM/TO.
+    const plain = (d: string) => !!d && !/^[~<>]/.test(d) && !d.includes('..') && !d.includes('/');
     const range = /^(BET|BETWEEN|FROM)\s+(.+?)\s+(AND|TO)\s+(.+)$/i.exec(dateStr.trim());
     if (range) {
         const a = readGedcomDate(range[2]);
         const b = readGedcomDate(range[4]);
         const lossy = a.lossy || b.lossy;
-        if (a.date && b.date && !/^[~<>]/.test(a.date) && !/^[~<>]/.test(b.date)) {
-            return { date: `${a.date}..${b.date}`, lossy, phrase };
+        if (plain(a.date) && plain(b.date)) {
+            return { date: range[1].toUpperCase() === 'FROM' ? `${a.date}/${b.date}` : `${a.date}..${b.date}`, lossy, phrase };
         }
         return { date: a.date || b.date || '', lossy: true, phrase };
     }
     const oneSided = /^(FROM|TO)\s+(.+)$/i.exec(dateStr.trim());
     if (oneSided) {
         const d = readGedcomDate(oneSided[2]);
-        if (d.date && !/^[~<>]/.test(d.date)) {
-            return { date: `${oneSided[1].toUpperCase() === 'FROM' ? '>' : '<'}${d.date}`, lossy: d.lossy, phrase };
+        if (plain(d.date)) {
+            return { date: oneSided[1].toUpperCase() === 'FROM' ? `${d.date}/` : `/${d.date}`, lossy: d.lossy, phrase };
         }
         return { date: d.date, lossy: true, phrase };
     }
@@ -2588,6 +2619,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                         if (tag === 'DATE') {
                             if (isBirth) indi.birthDate = parseGedcomDate(value);
                             else indi.deathDate = parseGedcomDate(value);
+                            noteDateForm(indi, value, isBirth ? indi.birthDate : indi.deathDate);
                         } else if (tag === 'PLAC') {
                             if (isBirth) indi.birthPlace = value; else indi.deathPlace = value;
                         } else if (tag === '_STROM_STATUS') {
@@ -2676,8 +2708,10 @@ export function parseGedcom(content: string): ParsedGedcom {
                         noteQuay(currentCitationId, value);
                     } else if (currentEvent) {
                         currentEventSubTag = tag;
-                        if (tag === 'DATE') currentEvent.date = parseGedcomDate(value);
-                        else if (tag === 'PLAC') currentEvent.place = value;
+                        if (tag === 'DATE') {
+                            currentEvent.date = parseGedcomDate(value);
+                            noteDateForm(indi, value, currentEvent.date);
+                        } else if (tag === 'PLAC') currentEvent.place = value;
                         else if (tag === 'TYPE' && currentEvent.type === 'custom' && value) {
                             // 1 EVEN / 2 TYPE Rychtář — the TYPE is the label.
                             // A value on the EVEN line itself is the fact's
@@ -2731,6 +2765,7 @@ export function parseGedcom(content: string): ParsedGedcom {
                         currentFactSubTag = tag;
                         if (tag === 'DATE') {
                             fam.marriageDate = parseGedcomDate(value);
+                            noteDateForm(fam, value, fam.marriageDate);
                             lastUnionEvent(fam, 'marriage', fam.marriageDate);
                         }
                         // First wins: the union's startDate comes from the FIRST
@@ -2754,13 +2789,16 @@ export function parseGedcom(content: string): ParsedGedcom {
                         if (tag === '_STROM_STATUS' && !fam.divorceStatus) fam.divorceStatus = parseFactStatus(value);
                         if (tag === 'DATE') {
                             fam.divorceDate = parseGedcomDate(value);
+                            noteDateForm(fam, value, fam.divorceDate);
                             lastUnionEvent(fam, 'divorce', fam.divorceDate);
                         }
                     } else if (currentFamEvent) {
                         const ev = currentFamEvent;
                         currentFamEventSubTag = tag;
-                        if (tag === 'DATE') ev.date = parseGedcomDate(value);
-                        else if (tag === 'PLAC') { if (value && !ev.place) ev.place = value; }
+                        if (tag === 'DATE') {
+                            ev.date = parseGedcomDate(value);
+                            noteDateForm(fam, value, ev.date);
+                        } else if (tag === 'PLAC') { if (value && !ev.place) ev.place = value; }
                         else if (tag === '_STROM_STATUS') ev.status = parseFactStatus(value);
                         else if (tag === 'TYPE' && ev.type === 'custom' && value) {
                             // 1 EVEN / 2 TYPE Křest dítěte manželů — the TYPE is
@@ -3138,6 +3176,8 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         if (indi.deathAddress) person.deathAddress = indi.deathAddress;
         if (indi.birthStatus) person.birthStatus = indi.birthStatus;
         if (indi.deathStatus) person.deathStatus = indi.deathStatus;
+        const dateForms = keptDateForms(indi.dateForms);
+        if (dateForms) person.gedcomDates = dateForms;
         // Facts with no field of their own join the note, labelled, ahead of
         // whatever free text the file wrote (see NOTED_INDI_TAGS).
         const factLines = indi.noteFacts.map(factToNoteLine);
@@ -3419,6 +3459,8 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         if (Object.keys(ages).length > 0) partnership.ages = ages;
         if (fam.note) partnership.note = fam.note;
         applyUnionOutcome(partnership, fam);
+        const dateForms = keptDateForms(fam.dateForms);
+        if (dateForms) partnership.gedcomDates = dateForms;
 
         // Banns, a contract, a census…: the couple's own events.
         if (fam.events.length > 0) {
@@ -3469,6 +3511,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
      */
     const joinUnion = (into: Partnership, from: Partnership): void => {
         if (!into.startDate && from.startDate) into.startDate = from.startDate;
+        if (from.gedcomDates) into.gedcomDates = { ...from.gedcomDates, ...(into.gedcomDates ?? {}) };
         if (!into.startPlace && from.startPlace) into.startPlace = from.startPlace;
         if (!into.endDate && from.endDate) into.endDate = from.endDate;
         if (!into.endPlace && from.endPlace) into.endPlace = from.endPlace;

@@ -132,10 +132,23 @@ const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', '
 /**
  * Format a canonical flex date (see src/dates.ts) to GEDCOM format.
  * Preserves precision and qualifiers: "~1900" -> "ABT 1900",
- * "1900-06" -> "JUN 1900", "<1900-06-03" -> "BEF 3 JUN 1900".
+ * "1900-06" -> "JUN 1900", "<1900-06-03" -> "BEF 3 JUN 1900",
+ * a period "1871/1882" -> "FROM 1871 TO 1882". `asWritten` (Person /
+ * Partnership gedcomDates) gives the form the imported file wrote the value in.
  */
-function formatGedcomDate(isoDate: string | undefined): string | null {
+export function formatGedcomDate(isoDate: string | undefined, asWritten?: Record<string, string>): string | null {
     if (!isoDate) return null;
+    const kept = asWritten?.[isoDate];
+    if (kept) return kept;
+
+    // Period 'a/b' -> FROM a TO b, 'a/' -> FROM a, '/b' -> TO b
+    const slash = isoDate.indexOf('/');
+    if (slash >= 0) {
+        const a = formatGedcomDate(isoDate.slice(0, slash));
+        const b = formatGedcomDate(isoDate.slice(slash + 1));
+        if (a && b) return `FROM ${a} TO ${b}`;
+        return a ? `FROM ${a}` : b ? `TO ${b}` : null;
+    }
 
     // Range 'a..b' -> BET a AND b
     const dots = isoDate.indexOf('..');
@@ -656,7 +669,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         if (person.birthDate || person.birthPlace || person.birthAddress || person.birthSourceIds?.length) {
             lines.push('1 BIRT');
             if (person.birthDate) {
-                const date = formatGedcomDate(person.birthDate);
+                const date = formatGedcomDate(person.birthDate, person.gedcomDates);
                 if (date) lines.push(`2 DATE ${date}`);
             }
             if (person.birthPlace) {
@@ -672,7 +685,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         if (person.deathDate || person.deathPlace || deathDetail || person.deathSourceIds?.length) {
             lines.push(person.deathDate || person.deathPlace || deathDetail ? '1 DEAT' : '1 DEAT Y');
             if (person.deathDate) {
-                const date = formatGedcomDate(person.deathDate);
+                const date = formatGedcomDate(person.deathDate, person.gedcomDates);
                 if (date) lines.push(`2 DATE ${date}`);
             }
             if (person.deathPlace) {
@@ -738,7 +751,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
                 if (typeLabel) pushLongValue(lines, 2, 'TYPE', typeLabel);
             }
             if (event.date) {
-                const date = formatGedcomDate(event.date);
+                const date = formatGedcomDate(event.date, person.gedcomDates);
                 if (date) lines.push(`2 DATE ${date}`);
             }
             if (event.place) {
@@ -916,7 +929,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         if (hasMarriage) {
             lines.push('1 MARR');
             if (partnership.startDate) {
-                const date = formatGedcomDate(partnership.startDate);
+                const date = formatGedcomDate(partnership.startDate, partnership.gedcomDates);
                 if (date) lines.push(`2 DATE ${date}`);
             }
             if (partnership.startPlace) {
@@ -954,7 +967,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         if (partnership.status === 'divorced' || partnership.endDate || partnership.endPlace) {
             lines.push('1 DIV');
             if (partnership.endDate) {
-                const date = formatGedcomDate(partnership.endDate);
+                const date = formatGedcomDate(partnership.endDate, partnership.gedcomDates);
                 if (date) lines.push(`2 DATE ${date}`);
             }
             if (partnership.endPlace) pushPlace(lines, 2, partnership.endPlace, data.places);
@@ -970,7 +983,7 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
                 pushLongValue(lines, 2, 'TYPE', event.customLabel || strings.gedcomNotes.genericEvent);
             }
             if (event.date) {
-                const date = formatGedcomDate(event.date);
+                const date = formatGedcomDate(event.date, partnership.gedcomDates);
                 if (date) lines.push(`2 DATE ${date}`);
             }
             if (event.place) pushPlace(lines, 2, event.place, data.places);

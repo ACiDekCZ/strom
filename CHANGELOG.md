@@ -17,6 +17,7 @@ English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md)
 - **Person card timeline**: *Tree settings* has *Person card timeline – default*, where each tree sets whether the timeline first shows *Children's events* and *History*; the switches on a card change it for that card only. An event of history can be hidden *in this whole tree* or *for one person only*.
 - **Places**: the dialog lists the places by name in the order of the app's language, has a search that needs no diacritics and the chip *No location* for the places not on the map.
 - **What was written**: the research's last write is news only until it is seen; once its list has been opened, it does not come back after the research restarts or is updated.
+- **Periods in dates**: a period *from … to …* (GEDCOM *FROM … TO …*, also *from …* or *to …* alone) stays a period: it is shown as *from 22 Mar 1871 to 22 Mar 1882* and goes out as it came, apart from *between … and …*. Changes sent to the research leave untouched dates and ages exactly as the research wrote them (*CAL 1885*, *EST 1842*, *0y 2m 26d*), so they no longer show there as edits.
 - **Data**: data version 13 (the tree keeps the findings marked as not an error and the rejected spelling suggestions); trees of earlier versions open without a change.
 
 ## 3.16.0

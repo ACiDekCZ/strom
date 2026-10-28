@@ -27,7 +27,7 @@ const ABOUT = words('about circa ca c cca kolem okolo asi zhruba přibližně um
 /** "between X and Y": GEDCOM BET … AND …, flex 'x..y'. */
 const BETWEEN = words('between mezi medzi zwischen między pomiędzy между між');
 const BETWEEN_AND = words('and a und i и і та');
-/** "from X to Y": GEDCOM FROM … TO …, flex 'x..y'; "from X" alone is '>x'. */
+/** "from X to Y": GEDCOM FROM … TO …, flex period 'x/y'; "from X" alone is 'x/'. */
 const FROM = words('from od von ab с з від');
 const FROM_TO = words('to do bis по до');
 /** Words that say nothing about the date: "po roce 1919", "kolem r. 1850", "1870 г.". */
@@ -53,7 +53,7 @@ export function readDateWords(text: string, readDate: (s: string) => string | nu
         const d = readDate(kept.join(' ').replace(/\.$/, ''));
         return d || null;
     };
-    const plain = (d: string | null): d is string => !!d && !/^[~<>]/.test(d) && !d.includes('..');
+    const plain = (d: string | null): d is string => !!d && !/^[~<>]/.test(d) && !d.includes('..') && !d.includes('/');
 
     if (BETWEEN.has(first) || FROM.has(first)) {
         const joiners = BETWEEN.has(first) ? BETWEEN_AND : FROM_TO;
@@ -61,12 +61,12 @@ export function readDateWords(text: string, readDate: (s: string) => string | nu
             if (!joiners.has(folded[i])) continue;
             const a = dateOf(1, i);
             const b = dateOf(i + 1, tokens.length);
-            if (plain(a) && plain(b)) return `${a}..${b}`;
+            if (plain(a) && plain(b)) return BETWEEN.has(first) ? `${a}..${b}` : `${a}/${b}`;
         }
-        // "od 1850", "ab 1850": a period with no end is "after".
+        // "od 1850", "ab 1850": a period with no end.
         if (FROM.has(first)) {
             const a = dateOf(1, tokens.length);
-            if (plain(a)) return `>${a}`;
+            if (plain(a)) return `${a}/`;
         }
         // A between-word or from-word that is also a qualifier ("do") falls through.
     }

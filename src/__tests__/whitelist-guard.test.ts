@@ -319,7 +319,8 @@ type OwnedElsewhere =
     | 'refnType'            // GEDCOM import only; updatePerson drops it with a changed refn
     | 'research'            // written by Strom Research only (GEDCOM import), never edited
     | 'birthStatus'         // the research's status of the birth (GEDCOM import), never edited
-    | 'deathStatus';        // …and of the death
+    | 'deathStatus'         // …and of the death
+    | 'gedcomDates';        // GEDCOM import only; a changed date simply has no entry
 
 /**
  * Compile-time proof that the two lists together cover Person exactly. Add a

@@ -434,6 +434,16 @@ export interface Person {
     /** The research's status of the birth and of the death fields (see FactStatus). */
     birthStatus?: FactStatus;
     deathStatus?: FactStatus;
+    /**
+     * Dates as the GEDCOM file wrote them, by their flex value, where the
+     * app's own form would write them differently ('CAL 1885' is '~1885',
+     * which goes out as ABT 1885; '1699/00' is '1699'). A date whose value is
+     * unchanged goes back out as it came, so a research that sent it sees no
+     * edit; a changed date has no entry and goes out in the app's form. Only
+     * standard GEDCOM keyword forms are kept; '' when one value came in two
+     * forms. Covers the birth, the death and the life events.
+     */
+    gedcomDates?: Record<string, string>;
     notes?: string;
     /**
      * User reference number (GEDCOM REFN): the person's id in a paper archive
@@ -799,6 +809,16 @@ export interface Partnership {
     /** The research's status of the wedding and of the divorce fields (see FactStatus). */
     startStatus?: FactStatus;
     endStatus?: FactStatus;
+    /**
+     * Dates as the GEDCOM file wrote them, by their flex value, where the
+     * app's own form would write them differently ('CAL 1885' is '~1885',
+     * which goes out as ABT 1885; '1699/00' is '1699'). A date whose value is
+     * unchanged goes back out as it came, so a research that sent it sees no
+     * edit; a changed date has no entry and goes out in the app's form. Only
+     * standard GEDCOM keyword forms are kept; '' when one value came in two
+     * forms. Covers the wedding, the divorce and the couple's events.
+     */
+    gedcomDates?: Record<string, string>;
     /** House or address of the wedding, usually the bride's (MARR > ADDR). */
     address?: string;
     /** Each partner's age at the wedding as recorded, by person id (MARR > HUSB/WIFE > AGE). */
@@ -948,6 +968,11 @@ export function partnershipParticipants(u: Pick<Partnership, 'participants' | 'e
  *   the user rejected). Both tree-level lists, additive; an older app (v12)
  *   would drop them on a re-save (migrateData builds field by field), so the
  *   bump makes it warn first.
+ *   Also v13 (before it reached production): a period date ('1871/1882',
+ *   '1871/', '/1882' — GEDCOM FROM/TO, before read as the range '..' or as
+ *   '>'/'<') and Person/Partnership.gedcomDates (the file's own form of a
+ *   date, see there). A v12 app reads neither: it shows the period as
+ *   written and drops it from its GEDCOM export — hence under the same warning.
  */
 export const STROM_DATA_VERSION = 13;
 
