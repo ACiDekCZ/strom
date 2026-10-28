@@ -77,6 +77,8 @@ const readAgain = new Map<string, string | undefined>();
 const flushing = new Set<string>();
 /** The search was switched off from here (until the status agrees or says otherwise): when. */
 const offDone = new Map<string, number>();
+/** Per research: the features of its last status in this page (they stay while the bridge is down, so hidings can wait in the queue). */
+const lastFeatures = new Map<string, readonly string[]>();
 /** The bridge's sentence after a failed switch-off, and its link (until Settings close). */
 let offError: { researchId: string; text: string; link?: string } | null = null;
 let listening = false;
@@ -213,6 +215,7 @@ export const historyMethods = uiModule({
      */
     noteHistoryStatus(researchId: string, status: LiveStatus): void {
         const rid = researchId.toLowerCase();
+        lastFeatures.set(rid, status.features ?? []);
         const since = offDone.get(rid);
         if (since !== undefined && status.experiments) {
             if (!status.experiments.history || Date.now() - since > OFF_SETTLE_MS) offDone.delete(rid);
@@ -230,6 +233,8 @@ export const historyMethods = uiModule({
             }
             if (features.includes(HISTORY_HIDE_FEATURE)) void this.flushHistoryQueue(rid);
             this.renderHistorySettingsIfOpen();
+            // The manager's header and actions follow the status (search on/off, pace, features).
+            if (document.getElementById(HISTORY_MANAGE_DIALOG_ID)?.classList.contains('active')) this.renderHistoryManage();
         });
     },
 
@@ -432,7 +437,8 @@ export const historyMethods = uiModule({
      */
     historyManageContext(): {
         researchId: string; payload: HistoryPayload | null | undefined; queue: HistoryHideOp[];
-        status: LiveStatus | null; lastStatus: LiveStatus | null; base: string | null; offDone: boolean; canLinkOn: boolean;
+        status: LiveStatus | null; lastStatus: LiveStatus | null; features: readonly string[];
+        base: string | null; offDone: boolean; canLinkOn: boolean;
     } | null {
         const rid = activeResearchId();
         if (!rid) return null;
@@ -443,6 +449,7 @@ export const historyMethods = uiModule({
             queue: displayQueue(rid),
             status,
             lastStatus: status ?? this.researchStatusOf(rid),
+            features: status?.features ?? this.researchStatusOf(rid)?.features ?? lastFeatures.get(rid) ?? [],
             base: status ? bridgeBase(rid) : null,
             offDone: offDone.has(rid),
             canLinkOn: this.historyCanLinkOn(rid),
@@ -454,7 +461,7 @@ export const historyMethods = uiModule({
         if (!SettingsManager.isHistoryLayer()) return false;
         const ctx = this.historyManageContext();
         if (!ctx) return false;
-        return !!ctx.payload || (ctx.lastStatus?.features ?? []).includes(HISTORY_EVENTS_FEATURE);
+        return !!ctx.payload || ctx.features.includes(HISTORY_EVENTS_FEATURE);
     },
 
     /** A hiding (or its undo) of the open tree's research: into the queue, kept, shown, sent. */

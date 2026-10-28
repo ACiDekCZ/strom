@@ -139,8 +139,14 @@ export const HISTORY_FEATURES = ['history.events', 'history.hide', 'experiments'
 
 /** The research's events of the time for the tree, and what it was asked. */
 export interface FakeHistory {
-    /** The `GET /history` body (its `hidden` follows the hidings). */
-    payload: { state: Record<string, unknown>; events: unknown[]; places: Record<string, unknown>; hidden: Record<string, unknown>[]; lang?: string };
+    /**
+     * The `GET /history` body (its `hidden` follows the hidings). R1 (`fakeHistoryR1`):
+     * `regions`, the places' regions / persons / ids, `deleted`, `suggest`.
+     */
+    payload: {
+        state: Record<string, unknown>; events: unknown[]; places: Record<string, Record<string, unknown>>; hidden: Record<string, unknown>[]; lang?: string;
+        regions?: Record<string, Record<string, unknown>>; deleted?: Record<string, unknown>[]; suggest?: string[];
+    };
     /** `/status.history.rev` (a hiding or a switch-off changes it). */
     rev: string;
     /** `/status.experiments.history`: the research looks for events for the tree. */
@@ -155,7 +161,23 @@ export interface FakeHistory {
     hideReply?: { status: number; body: unknown };
     /** `POST /experiments` answers this instead. */
     offReply?: { status: number; body: unknown };
+    /** `/status.experiments.historyPace` (read by the app with `experiments.pace` in `features`). */
+    pace?: 'sometimes' | 'rare' | 'idle';
+    /** `/status.history.placeEstimate` (R6; read with `history.place`). */
+    placeEstimate?: { minutes: [number, number]; usd?: [number, number] };
+    /** `/status.stories.history` (R7; read with `stories.history`). */
+    stories?: boolean;
+    /** Bodies of the manager's writes (R1–R7), by route: `first`, `skip`, `delete`, `map`, `place`, `stories`. */
+    writes: Record<FakeHistoryWrite, Record<string, unknown>[]>;
+    /** A route answers this instead (busy: `{status: 503, body: {code: 'research.busy'}}`), until taken away. */
+    writeReply?: Partial<Record<FakeHistoryWrite, { status: number; body: unknown }>>;
+    /** Events deleted from here (kept for `do: "restore"`); an event deleted by the research's agent: `retracted`. */
+    removed?: Map<string, { event: Record<string, unknown>; places: string[] }>;
+    retracted?: string[];
 }
+
+/** The manager's write routes of the fake bridge (`POST /history/<route>`, `/stories`). */
+export type FakeHistoryWrite = 'first' | 'skip' | 'delete' | 'map' | 'place' | 'stories';
 
 /**
  * Invented events of the time for the research tree (historyGed: Jan lived in
@@ -182,6 +204,7 @@ export function fakeHistory(init: Partial<FakeHistory> = {}): FakeHistory {
         reads: 0,
         hides: [],
         offs: [],
+        writes: { first: [], skip: [], delete: [], map: [], place: [], stories: [] },
         ...init,
     };
 }
@@ -191,38 +214,235 @@ export function historyGed(head = HEAD): string {
     return researchGed(head).replace('1 NAME Jan /Fíšek/', '1 NAME Jan /Fíšek/\n1 BIRT\n2 DATE 1860\n2 PLAC Čáslav\n1 DEAT\n2 DATE 1910\n2 PLAC Čáslav');
 }
 
-/** The answer to `/history*` and `/experiments` (null: not one of them, or not said in `features`). */
+/** Everything of R1–R7 besides HISTORY_FEATURES (`history.place.direct` never: the research starts it only in its terminal). */
+export const HISTORY_MANAGE_FEATURES = [
+    'history.regions', 'history.first', 'history.hide.all', 'history.skip', 'history.delete', 'history.map', 'history.place',
+    'stories.history', 'experiments.pace',
+];
+/** A research with the whole history manager (R1–R7). */
+export const HISTORY_R1_FEATURES = [...HISTORY_FEATURES, ...HISTORY_MANAGE_FEATURES];
+
+const region = (cs: string, en: string, de: string) => ({ cs, en, de });
+const BOHEMIA = region('Čechy', 'Bohemia', 'Böhmen');
+const EMPIRE = region('Rakouské císařství', 'Austrian Empire', 'Kaisertum Österreich');
+
+/**
+ * An invented R1 `GET /history` (spec 020 K4.3, research answer R1–R7) for the
+ * history tree: regions in every state — Silesia running, Moravia first,
+ * Lower Austria queued 2nd, Nebraska waiting (its sentence), Bohemia done with
+ * years without events and their filling queued (one hidden), the Austrian
+ * Empire covered by Bohemia and Moravia, Prussia not searched; places with
+ * regions, people and record ids (Lhotka unlocated, Opava not searched,
+ * Kutná Hora suggested), two events deleted on this computer (one without its
+ * copy), and a local finding without region.
+ */
+export function fakeHistoryR1(init: Partial<FakeHistory> = {}): FakeHistory {
+    const base = fakeHistory();
+    const ev = base.payload.events as Record<string, unknown>[];
+    for (const e of ev) e.region = { id: 'cz-bohemia', name: BOHEMIA };
+    ev.push(
+        { id: 'E3', from: 1867, kind: 'state', scope: 'region', region: { id: 'at-empire', name: EMPIRE },
+            text: { cs: 'Rakousko-uherské vyrovnání.', en: 'The Austro-Hungarian Compromise.' },
+            source: { title: 'Invented encyclopedia', url: 'https://example.org/compromise-1867', checked: '2026-10-01' } },
+        { id: 'E4', from: 1880, kind: 'disaster', scope: 'local',
+            text: { cs: 'Požár v Čáslavi.', en: 'A fire in Čáslav.' },
+            local: { source: 'S0001', cite: 'Oddací matrika Čáslav, fol. 41' } },
+    );
+    base.payload = {
+        state: { on: true, search: 'running', pending: 2, at: '2026-10-20T09:00:00Z', rev: 'h1' },
+        lang: 'cs',
+        events: ev,
+        regions: {
+            'cz-bohemia': { name: BOHEMIA, state: 'done', at: '2026-10-20T07:40:00Z', events: 2, hidden: 1, places: 2, persons: 8, facts: 30,
+                gaps: [{ from: 1870, to: 1913 }], fill: 'queued', order: 4 },
+            'cz-moravia': { name: region('Morava', 'Moravia', 'Mähren'), state: 'queued', order: 1, first: true, events: 0, places: 2, persons: 2, facts: 6 },
+            'cz-silesia': { name: region('Slezsko', 'Silesia', 'Schlesien'), state: 'running', order: 2, events: 0, places: 1, persons: 1 },
+            'at-lower-austria': { name: region('Dolní Rakousy', 'Lower Austria', 'Niederösterreich'), state: 'queued', order: 3, events: 0, places: 1, persons: 1 },
+            'us-nebraska': { name: region('Nebraska', 'Nebraska', 'Nebraska'), state: 'waiting', why: 'its archive is held by another tree', events: 0 },
+            'at-empire': { name: EMPIRE, state: 'covered', covered: ['cz-bohemia', 'cz-moravia'], events: 1 },
+            'de-prussia': { name: region('Prusko', 'Prussia', 'Preußen'), state: 'skipped', events: 0, places: 1, persons: 1 },
+        },
+        places: {
+            'Čáslav': { events: ['E1', 'E2', 'E3', 'E4'], regions: [{ id: 'cz-bohemia' }, { id: 'at-empire', to: 1918 }], persons: 3, id: 'L0001' },
+            'Kutná Hora': { events: [], regions: [{ id: 'cz-bohemia' }], persons: 5, id: 'L0003' },
+            'Brno': { events: [], state: 'pending', regions: [{ id: 'cz-moravia' }], persons: 2, id: 'L0002' },
+            'Lhotka': { events: [], state: 'unlocated', why: 'several places of that name', persons: 1 },
+            'Opava': { events: [], regions: [{ id: 'cz-silesia', from: 1742 }], persons: 1, skip: true, id: 'L0004' },
+        },
+        hidden: [{ event: 'E2', place: 'Čáslav', at: '2026-10-21T08:00:00Z' }],
+        deleted: [
+            { event: 'E9', scope: 'region', at: '2026-10-25T10:00:00Z', from: 1882, region: { id: 'cz-bohemia', name: BOHEMIA },
+                text: { cs: 'Povodeň na Doubravě.', en: 'A flood on the Doubrava.' } },
+            { event: 'E8', scope: 'region', at: '2026-10-24T10:00:00Z' },
+        ],
+        suggest: ['L0003'],
+    };
+    return { ...base, ...init };
+}
+
+/** The answer to `/history*`, `/experiments` and `/stories` (null: not one of them; 404 when not said in `features`). */
 function serveHistory(b: FakeBridge, method: string, url: URL, postData: string | null): { status: number; body: unknown } | null {
     const h = b.history;
     const rest = url.pathname.replace(/^\/[^/]+/, '');
-    if (!h || !/^\/(history|history\/hide|experiments)$/.test(rest)) return null;
+    if (!h || !/^\/(history|history\/(hide|first|skip|delete|map|place)|experiments|stories)$/.test(rest)) return null;
     const features = b.features ?? [];
     let body: Record<string, unknown> = {};
     try { body = JSON.parse(postData ?? '{}'); } catch { /* keep empty */ }
+    const unknown = { status: 404, body: { error: 'unknown' } };
+    const refuse = (status: number, code: string, error: string, extra: Record<string, unknown> = {}) =>
+        ({ status, body: { error, code, text: error, ...extra } });
+    const bodyError = refuse(400, 'history.body', 'The request is not one the research reads.');
+    // Every write moves the history's rev (the app reads it again).
+    const bump = () => {
+        h.rev = `h${(Number(h.rev.replace(/\D/g, '')) || 1) + 1}`;
+        h.payload.state.rev = h.rev;
+    };
+    const regions = h.payload.regions;
     if (rest === '/history') {
-        if (method !== 'GET' || !features.includes('history.events')) return { status: 404, body: { error: 'unknown' } };
+        if (method !== 'GET' || !features.includes('history.events')) return unknown;
         h.reads++;
         return { status: 200, body: h.payload };
     }
     if (rest === '/history/hide') {
-        if (method !== 'POST' || !features.includes('history.hide')) return { status: 404, body: { error: 'unknown' } };
+        if (method !== 'POST' || !features.includes('history.hide')) return unknown;
         h.hides.push(body);
         if (h.hideReply) return h.hideReply;
-        const same = (x: Record<string, unknown>) => x.event === body.event && (body.place ? x.place === body.place : x.person === body.person);
+        // R2: in the whole tree / everything of a region only with `history.hide.all`.
+        if ((body.tree === true || (body.region && !body.event)) && !features.includes('history.hide.all')) return bodyError;
+        if (body.region && !body.event && regions && !regions[body.region as string]) return refuse(404, 'history.region', 'No such region in this tree.');
+        const same = (x: Record<string, unknown>) => !body.event ? !x.event && x.region === body.region
+            : x.event === body.event && (body.place ? x.place === body.place : body.tree ? x.tree === true : x.person === body.person);
         h.payload.hidden = h.payload.hidden.filter(x => !same(x));
         if (body.do !== 'show') {
-            h.payload.hidden.push({ event: body.event, ...(body.place ? { place: body.place } : { person: body.person }), at: new Date().toISOString() });
+            const target = !body.event ? { region: body.region }
+                : { event: body.event, ...(body.place ? { place: body.place } : body.tree ? { tree: true } : { person: body.person }) };
+            h.payload.hidden.push({ ...target, at: new Date().toISOString() });
         }
-        h.rev = `h${h.hides.length + 1}`;
-        h.payload.state.rev = h.rev;
+        bump();
         return { status: 200, body: { ok: true, hidden: h.payload.hidden, ...commitWrite(b) } };
     }
-    if (method !== 'POST' || !features.includes('experiments.off')) return { status: 404, body: { error: 'unknown' } };
-    h.offs.push(body);
-    if (h.offReply) return h.offReply;
-    h.searching = false;
-    h.payload.state.on = false;
-    return { status: 200, body: { ok: true, history: false, ...commitWrite(b) } };
+    if (rest === '/experiments') {
+        if (method !== 'POST' || !features.includes('experiments.off')) return unknown;
+        h.offs.push(body);
+        if (h.offReply) return h.offReply;
+        h.searching = false;
+        h.payload.state.on = false;
+        return { status: 200, body: { ok: true, history: false, ...commitWrite(b) } };
+    }
+    // The manager's writes (R1–R7): each behind its feature.
+    const route = (rest === '/stories' ? 'stories' : rest.slice('/history/'.length)) as FakeHistoryWrite;
+    const feature = route === 'stories' ? 'stories.history' : route === 'first' ? 'history.first' : `history.${route}`;
+    if (method !== 'POST' || !features.includes(feature)) return unknown;
+    h.writes[route].push(body);
+    const said = h.writeReply?.[route];
+    if (said) return said;
+    const places = h.payload.places;
+    const noRegion = refuse(404, 'history.region', 'No such region in this tree.');
+    const noPlace = refuse(404, 'history.place', 'No such place in the facts of this tree.');
+    const noEvent = refuse(404, 'history.event', 'No such event.');
+    switch (route) {
+        case 'first': {
+            const id = body.region as string;
+            const r = regions?.[id];
+            if (!r) return noRegion;
+            if (r.state === 'done') return refuse(409, 'history.done', 'The region is done.');
+            r.first = true;
+            if (r.state !== 'running') r.state = 'queued';
+            bump();
+            const first = Object.entries(regions!).filter(([, x]) => x.first).map(([region]) => ({ region, at: new Date().toISOString() }));
+            return { status: 200, body: { ok: true, region: id, first, ...commitWrite(b) } };
+        }
+        case 'skip': {
+            const undo = body.do === 'undo';
+            if (typeof body.region === 'string') {
+                const r = regions?.[body.region];
+                if (!r) return noRegion;
+                if (undo) { r.state = (r.wasState as string) ?? 'queued'; delete r.wasState; }
+                else if (r.state !== 'skipped') { r.wasState = r.state; r.state = 'skipped'; }
+            } else if (typeof body.place === 'string') {
+                const pl = places[body.place];
+                if (!pl) return noPlace;
+                if (undo) delete pl.skip;
+                else pl.skip = true;
+            } else return bodyError;
+            bump();
+            return { status: 200, body: { ok: true, skip: {
+                regions: Object.entries(regions ?? {}).filter(([, x]) => x.state === 'skipped').map(([id]) => id),
+                places: Object.entries(places).filter(([, x]) => x.skip).map(([k]) => k),
+            }, ...commitWrite(b) } };
+        }
+        case 'delete': {
+            const id = body.event as string;
+            if (typeof id !== 'string' || !id) return bodyError;
+            const removed = (h.removed ??= new Map());
+            const events = h.payload.events as Record<string, unknown>[];
+            if (body.do === 'restore') {
+                if (h.retracted?.includes(id)) return refuse(409, 'history.retracted', 'Deleted by the research; it cannot be restored here.');
+                const was = removed.get(id);
+                const listed = (h.payload.deleted ?? []).some(d => d.event === id);
+                if (!was && !listed) return noEvent;
+                h.payload.deleted = (h.payload.deleted ?? []).filter(d => d.event !== id);
+                if (was) {
+                    events.push(was.event);
+                    for (const k of was.places) (places[k]?.events as string[] | undefined)?.push(id);
+                    removed.delete(id);
+                }
+            } else {
+                const at = events.findIndex(e => e.id === id);
+                if (at < 0) return noEvent;
+                const [event] = events.splice(at, 1);
+                const inPlaces = Object.entries(places).filter(([, pl]) => (pl.events as string[]).includes(id)).map(([k]) => k);
+                for (const k of inPlaces) places[k].events = (places[k].events as string[]).filter(x => x !== id);
+                removed.set(id, { event, places: inPlaces });
+                const { id: _id, kind: _k, source: _s, local: _l, ...copy } = event;
+                (h.payload.deleted ??= []).unshift({ event: id, ...copy, at: new Date().toISOString() });
+            }
+            bump();
+            return { status: 200, body: { ok: true, ...commitWrite(b) } };
+        }
+        case 'map': {
+            const key = body.place as string;
+            const pl = typeof key === 'string' ? places[key] : undefined;
+            if (!pl) return noPlace;
+            if (Array.isArray(body.regions)) {
+                const list = body.regions as { id: string }[];
+                if (!list.length) return bodyError;
+                if (list.some(r => !regions?.[r.id])) return noRegion;
+                pl.regions = list;
+                pl.manual = true;
+                if (pl.state === 'unlocated') delete pl.state;
+                delete pl.why;
+            } else if (body.redo === true) {
+                if (typeof body.note === 'string' && (Array.from(body.note).length > 200 || body.note.includes('�'))) return bodyError;
+                delete pl.regions;
+                delete pl.manual;
+                pl.state = 'pending';
+            } else if (body.do === 'auto') {
+                delete pl.manual;
+                pl.state = 'pending';
+            } else return bodyError;
+            bump();
+            return { status: 200, body: { ok: true, ...commitWrite(b) } };
+        }
+        case 'place': {
+            // R6: always the research's terminal (it says the estimate and asks); only a record id, never a name.
+            const id = body.place;
+            if (typeof id !== 'string' || !/^L\d{1,7}$/.test(id)) return bodyError;
+            if (!Object.values(places).some(pl => pl.id === id)) return noPlace;
+            const link = `strom-research://history?tree=${UUID}&place=${id}&do=search`;
+            return refuse(403, 'history.link', 'The research terminal decides.', { link });
+        }
+        case 'stories': {
+            if (typeof body.history !== 'boolean') return refuse(400, 'stories.body', 'The request is not one the research reads.');
+            if (body.history && !h.searching) {
+                return refuse(409, 'history.off', 'The research does not look for history.',
+                    { link: `strom-research://experiment?tree=${UUID}&name=history&do=on` });
+            }
+            h.stories = body.history;
+            return { status: 200, body: { ok: true, history: body.history, ...commitWrite(b) } };
+        }
+    }
+    return unknown;
 }
 
 /** A reading as `/status.reads` lists it. */
@@ -843,7 +1063,11 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
                 ...(b.accepts ? { sends: b.sends } : {}),
                 ...(b.read ? { reads: b.read.reads } : {}),
                 ...(b.phone ? { phone: { state: b.phone.state === 'on' || b.phone.state === 'error' ? b.phone.state : 'off', phones: b.phone.phones.length } } : {}),
-                ...(b.history ? { history: { rev: b.history.rev }, experiments: { history: b.history.searching } } : {}),
+                ...(b.history ? {
+                    history: { rev: b.history.rev, ...(b.history.placeEstimate ? { placeEstimate: b.history.placeEstimate } : {}) },
+                    experiments: { history: b.history.searching, ...(b.history.pace ? { historyPace: b.history.pace } : {}) },
+                    ...(b.history.stories !== undefined ? { stories: { history: b.history.stories } } : {}),
+                } : {}),
                 ...(b.statusExtra ?? {}),
             });
         }

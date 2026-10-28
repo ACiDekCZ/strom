@@ -183,7 +183,7 @@ export const historyManageMethods = uiModule({
     historyManageDrawn(): Drawn | null {
         const ctx = this.historyManageContext();
         if (!ctx) return null;
-        const features = ctx.lastStatus?.features ?? [];
+        const features = ctx.features;
         const status = ctx.status;
         const env: ManageEnv = {
             lang: lang(),
@@ -280,7 +280,8 @@ export const historyManageMethods = uiModule({
             ['hidden', h.tabHidden, rows?.hidden.length ?? 0],
         ];
         if (rows && rows.deleted.length) list.push(['deleted', h.tabDeleted, rows.deleted.length]);
-        if (view.tab === 'deleted' && !list.some(t => t[0] === 'deleted')) view.tab = 'hidden';
+        // Nothing deleted (any more): Hidden. While the copy loads the asked tab stays.
+        if (rows && view.tab === 'deleted' && !rows.deleted.length) view.tab = 'hidden';
         tabs.innerHTML = list.map(([tab, label, n]) => {
             const on = tab === view.tab;
             return `<button type="button" role="tab" class="hm-tab${on ? ' is-active' : ''}" id="hm-tab-${tab}" data-tab="${tab}"`
@@ -337,7 +338,10 @@ export const historyManageMethods = uiModule({
         if (view.tab === 'places') {
             if (!Object.keys(d.payload!.places).length) return `<p class="hm-empty">${esc(h.placesEmpty)}</p>`;
             const r1 = !!d.payload!.regions;
-            const groups = rows.places.map(g => ({ g, rows: g.rows.filter(r => matchesQuery(r.search, q)) })).filter(x => x.rows.length);
+            // The suggestions lead only to "Find local history…" (R6): without that flow they are not shown.
+            const canFind = !!this.historyManagePlaceHook('find');
+            const groups = rows.places.filter(g => g.key !== 'suggest' || canFind)
+                .map(g => ({ g, rows: g.rows.filter(r => matchesQuery(r.search, q)) })).filter(x => x.rows.length);
             if (!groups.length) return none;
             return groups.map(({ g, rows: rs }) => {
                 const title = g.key === 'unassigned' ? h.unassigned : g.key === 'suggest' ? h.suggest : `${h.allPlaces} · ${g.rows.length}`;
