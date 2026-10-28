@@ -42,12 +42,16 @@ test('a place written two ways is flagged and unified by the Fix button', async 
     await page.evaluate((id) => window.Strom.UI.showTreeValidationDialog(id), treeId);
     const modal = page.locator('#tree-validation-modal');
     await expect(modal).toBeVisible();
-    const issue = modal.locator('.validation-issue', { hasText: 'written several ways' });
+    // A lead (Leads, its group closed until opened) named after the type.
+    const group = modal.locator('.vq-group[data-type="placeSpelling"]');
+    await expect(group.locator('.vq-group-name')).toContainText('written several ways');
+    await group.locator('.vq-group-head').click();
+    const issue = group.locator('.validation-issue');
     await expect(issue).toBeVisible();
 
     // One click unifies every spelling to the most-used one.
     await issue.locator('.validation-fix-btn').click();
-    await expect(modal.locator('.validation-issue', { hasText: 'written several ways' })).toHaveCount(0);
+    await expect(modal.locator('.vq-group[data-type="placeSpelling"]')).toHaveCount(0);
     const places = await page.evaluate(() => {
         const p = window.Strom.DataManager.getAllPersons()[0];
         return [p.birthPlace, p.deathPlace];

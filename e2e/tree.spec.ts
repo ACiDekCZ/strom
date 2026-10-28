@@ -164,9 +164,13 @@ test('tree validation flags date inconsistencies with details', async ({ page })
 
     const modal = page.locator('#tree-validation-modal');
     await expect(modal).toBeVisible();
-    await expect(modal.locator('.validation-issue.error', { hasText: 'Death date is before birth' })).toBeVisible();
-    await expect(modal.locator('.validation-issue-detail').first()).toContainText('1940');
-    await expect(modal.locator('.validation-issue', { hasText: 'missing source' })).toBeVisible();
+    // The error's group is open; the warning's group opens on a click.
+    const deathGroup = modal.locator('.vq-group--error', { hasText: 'Death date is before birth' });
+    await expect(deathGroup.locator('.validation-issue.error')).toBeVisible();
+    await expect(deathGroup.locator('.validation-issue-detail').first()).toContainText('1940');
+    const sourceGroup = modal.locator('.vq-group', { hasText: 'missing source' });
+    await sourceGroup.locator('.vq-group-head').click();
+    await expect(sourceGroup.locator('.validation-issue.warning')).toBeVisible();
 });
 
 test('a clean tree shows the passed badge as an SVG check, never an emoji', async ({ page }) => {

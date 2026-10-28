@@ -243,10 +243,12 @@ test.describe('tree overview', () => {
         await expect(quality.locator('.tov-sec-head .tov-mark')).toHaveCount(0);
         await expect(quality.locator('.tov-mark')).toHaveCount(2);
         await expect(quality.locator('.tov-sum .tov-sum-err')).toHaveText('2 errors');
-        // Consistency: the counts, the most serious findings first, names lead to the person.
-        await expect(quality.locator('.tov-count-err')).toHaveText('2 errors');
+        // Consistency: the validation dialog's summary sentence, the most serious findings first,
+        // names lead to the person.
+        await expect(quality.locator('.tov-summary')).toHaveText(/^2 errors[,.]/);
         await expect(quality.locator('.tov-finding').first()).toHaveClass(/tov-finding--error/);
-        await expect(quality.locator('.tov-finding').first().locator('.tov-link').first()).toHaveText('Elin Lindqvist');
+        // In the validation dialog's group order: "Child born after mother's death" (Erik, Elin) first.
+        await expect(quality.locator('.tov-finding').first().locator('.tov-link').first()).toHaveText('Erik Lindqvist');
         // Completeness: every birth date, no birthplace (low); the share with a source is the
         // header's number ("13% with a source") and is not repeated here.
         await expect(quality.locator('.tov-comp-row[data-field="birthDate"] .tov-comp-pct')).toHaveText('100%');
@@ -1115,14 +1117,15 @@ test.describe('tree overview: the jump to a section, the findings', () => {
         await context.close();
     });
 
-    test('a finding names the godparent and the place, the comma stays next to the name', async ({ page }) => {
+    test('the leads are one line under the problems; it opens the validation on the Leads; the comma stays next to the name', async ({ page }) => {
         const data = family();
         const baptism = (id: string, date: string): P => ({
             id, type: 'baptism', date, participants: [{ id: `pt_${id}`, role: 'godparent', name: 'Ivar Dahl' }],
         });
+        // Father and son (not only siblings, which is not reported).
         data.persons.r.events = [baptism('e_r', '1955')];
-        data.persons.s.events = [baptism('e_s', '1958')];
-        // The place is named by its most-used spelling.
+        data.persons.f.events = [baptism('e_f', '1920')];
+        // A place written two ways: a lead as well.
         data.persons.r.birthPlace = 'Växjö';
         data.persons.f.birthPlace = 'Växjö';
         data.persons.s.birthPlace = 'vaxjo';
@@ -1132,13 +1135,18 @@ test.describe('tree overview: the jump to a section, the findings', () => {
         const dialog = await openOverview(page, treeId, { section: 'quality', scroll: true });
         const quality = section(dialog, 'quality');
         await expect(quality).toHaveAttribute('data-ready', 'true');
-        const godparent = quality.locator('.tov-finding', { hasText: 'A godparent who keeps turning up' });
-        await expect(godparent.locator('.tov-finding-subject')).toHaveText('Godparent: Ivar Dahl');
-        await expect(godparent.locator('.tov-link')).toHaveText(['Anders Lindqvist', 'Greta Lindqvist']);
-        const place = quality.locator('.tov-finding', { hasText: 'One place written several ways' });
-        await expect(place.locator('.tov-finding-subject')).toHaveText('Place: Växjö');
-        // "Anders Lindqvist, Greta Lindqvist": the comma right after the first name's text.
-        const gap = await godparent.locator('.tov-finding-who').evaluate((who) => {
+        // The top findings are Problems only: the godparent and the place are not among them...
+        await expect(quality.locator('.tov-finding', { hasText: 'A godparent who keeps turning up' })).toHaveCount(0);
+        await expect(quality.locator('.tov-finding', { hasText: 'One place written several ways' })).toHaveCount(0);
+        await expect(quality.locator('.tov-finding.tov-finding--info')).toHaveCount(0);
+        // ...but counted in the sentence and on the one Leads line.
+        await expect(quality.locator('.tov-summary')).toHaveText('2 errors, 2 leads.');
+        const leads = quality.locator('.tov-leads');
+        await expect(leads).toHaveText('2 leads ›');
+
+        // "Oskar Lindqvist, Elin Lindqvist": the comma right after the first name's text.
+        const pair = quality.locator('.tov-finding-who').filter({ has: page.locator('.tov-link ~ .tov-link') }).first();
+        const gap = await pair.evaluate((who) => {
             const link = who.querySelector('.tov-link')!;
             const name = document.createRange();
             name.selectNodeContents(link.firstChild!);
@@ -1149,13 +1157,24 @@ test.describe('tree overview: the jump to a section, the findings', () => {
         });
         expect(Math.abs(gap)).toBeLessThan(1.5);
 
+        // The line opens the validation with the Problems closed and the Leads open.
+        await leads.locator('.tov-link').click();
+        const validation = page.locator('#tree-validation-modal');
+        await expect(validation).toBeVisible();
+        await expect(validation.locator('.vq-section[data-section="problem"] > .vq-section-head')).toHaveAttribute('aria-expanded', 'false');
+        await expect(validation.locator('.vq-section[data-section="trace"] > .vq-section-head')).toHaveAttribute('aria-expanded', 'true');
+        await expect(validation.locator('.vq-section[data-section="trace"] .vq-group')).toHaveCount(2);
+        await expect(validation.locator('.vq-section[data-section="problem"] .vq-group')).toHaveCount(0);
+        await page.keyboard.press('Escape');
+        await expect(validation).toBeHidden();
+
         await page.keyboard.press('Escape');
         await page.evaluate(() => window.Strom.UI.setLanguage('cs' as never));
         const cs = section(await openOverview(page, treeId, { section: 'quality', scroll: true }), 'quality');
-        await expect(cs.locator('.tov-finding-subject')).toHaveText(['Místo: Växjö', 'Kmotr: Ivar Dahl']);
+        await expect(cs.locator('.tov-leads')).toHaveText('2 stopy ›');
         await page.keyboard.press('Escape');
         await page.evaluate(() => window.Strom.UI.setLanguage('de' as never));
         const de = section(await openOverview(page, treeId, { section: 'quality', scroll: true }), 'quality');
-        await expect(de.locator('.tov-finding-subject')).toHaveText(['Ort: Växjö', 'Pate: Ivar Dahl']);
+        await expect(de.locator('.tov-leads')).toHaveText('2 Hinweise ›');
     });
 });

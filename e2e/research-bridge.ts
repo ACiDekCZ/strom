@@ -132,6 +132,53 @@ export interface FakeBridge {
      * Gated by `features` like the research (HISTORY_FEATURES).
      */
     history?: FakeHistory;
+    /**
+     * Findings marked "not an error" (spec 021 §D): `POST /quality/dismiss` (with
+     * `quality.dismiss` in `features`), `GET /quality` and `/status.quality.rev`
+     * (with `quality.read`).
+     */
+    quality?: FakeQuality;
+}
+
+/** The research's marks of the tree check (`/quality`). */
+export interface FakeQuality {
+    rev: string;
+    dismissed: { kind: string; persons: string[]; subject?: string; at?: string; by?: 'research' | 'app' }[];
+    /** Bodies of every `POST /quality/dismiss`. */
+    posts: Record<string, unknown>[];
+    /** A write answers this instead (e.g. 503 research.busy), until taken away. */
+    writeReply?: { status: number; body: unknown };
+}
+
+export function fakeQuality(init: Partial<FakeQuality> = {}): FakeQuality {
+    return { rev: 'q1', dismissed: [], posts: [], ...init };
+}
+
+/** The answer to `/quality*` (null: not one of them; 404 when not said in `features`). */
+function serveQuality(b: FakeBridge, method: string, url: URL, posted: string | null): { status: number; body: unknown } | null {
+    const q = b.quality;
+    const rest = url.pathname.replace(/^\/[^/]+/, '');
+    if (!q || (rest !== '/quality' && rest !== '/quality/dismiss')) return null;
+    const features = b.features ?? [];
+    const unknown = { status: 404, body: { error: 'Not found.', code: 'route.unknown' } };
+    if (rest === '/quality') {
+        if (method !== 'GET' || !features.includes('quality.read')) return unknown;
+        return { status: 200, body: { rev: q.rev, dismissed: q.dismissed } };
+    }
+    if (method !== 'POST' || !features.includes('quality.dismiss')) return unknown;
+    let body: Record<string, unknown> = {};
+    try { body = JSON.parse(posted ?? '{}'); } catch { /* keep empty */ }
+    q.posts.push(body);
+    if (q.writeReply) return q.writeReply;
+    const persons = Array.isArray(body.persons) ? (body.persons as string[]).slice().sort() : [];
+    const same = (m: FakeQuality['dismissed'][number]): boolean =>
+        m.kind === body.kind && JSON.stringify([...m.persons].sort()) === JSON.stringify(persons) && (m.subject ?? '') === (body.subject ?? '');
+    q.dismissed = q.dismissed.filter(m => !same(m));
+    if (body.do !== 'undo') {
+        q.dismissed.push({ kind: String(body.kind), persons, ...(typeof body.subject === 'string' ? { subject: body.subject } : {}), at: new Date().toISOString(), by: 'app' });
+    }
+    q.rev = `q${q.posts.length + 1}`;
+    return { status: 200, body: { ok: true, rev: q.rev } };
 }
 
 /** Everything the research says of the history layer (`/status.features`). */
@@ -1093,6 +1140,8 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
         }
         const hist = serveHistory(b, method, url, route.request().postData());
         if (hist) return json(hist.status, hist.body);
+        const qual = serveQuality(b, method, url, route.request().postData());
+        if (qual) return json(qual.status, qual.body);
         const rd = b.read;
         // A read page's image (`read/<id>/page/<n>.jpg`): a drawn sheet with ruled lines (invented, no real document).
         const pageImg = /\/read\/([^/]+)\/page\/(\d+)\.jpg$/.exec(url.pathname);
@@ -1167,6 +1216,7 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
                     experiments: { history: b.history.searching, ...(b.history.pace ? { historyPace: b.history.pace } : {}) },
                     ...(b.history.stories !== undefined ? { stories: { history: b.history.searching && b.history.stories } } : {}),
                 } : {}),
+                ...(b.quality ? { quality: { rev: b.quality.rev } } : {}),
                 ...(b.statusExtra ?? {}),
             });
         }

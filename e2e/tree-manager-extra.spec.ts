@@ -423,7 +423,7 @@ test('validation of another tree: a person link switches to that tree and focuse
     await qualityAction(page, 'Validation details');
     const validation = page.locator('#tree-validation-modal');
     await expect(validation).toBeVisible();
-    const issue = validation.locator('.validation-issue', { hasText: 'Death date is before birth' });
+    const issue = validation.locator('.vq-group', { hasText: 'Death date is before birth' }).locator('.validation-issue');
     await issue.locator('.validation-person-link', { hasText: 'Petr' }).click();
 
     await expect(validation).toBeHidden();
@@ -455,7 +455,7 @@ test('"Fix all" in the validation dialog repairs every fixable issue of the acti
     await expect(page.locator('#confirmation-modal')).toBeVisible();
     await page.locator('#confirm-ok-btn').click();
     await expect(modal.locator('.validation-fix-all-btn')).toHaveCount(0);
-    await expect(modal.locator('.validation-issue', { hasText: 'written several ways' })).toHaveCount(0);
+    await expect(modal.locator('.vq-group[data-type="placeSpelling"]')).toHaveCount(0);
     const places = await page.evaluate(() => window.Strom.DataManager.getAllPersons()
         .flatMap((p: { birthPlace?: string; deathPlace?: string }) => [p.birthPlace, p.deathPlace]).filter(Boolean));
     expect(new Set(places).size).toBe(1);
@@ -481,10 +481,11 @@ test('Fix in the validation dialog of a non-active tree switches to it and repai
     await rowAction(page, first, 'Tree overview');
     await qualityAction(page, 'Validation details');
     const modal = page.locator('#tree-validation-modal');
-    const issue = modal.locator('.validation-issue', { hasText: 'written several ways' });
-    await issue.locator('.validation-fix-btn').click();
+    const group = modal.locator('.vq-group[data-type="placeSpelling"]');
+    await group.locator('.vq-group-head').click();
+    await group.locator('.validation-issue .validation-fix-btn').click();
 
-    await expect(modal.locator('.validation-issue', { hasText: 'written several ways' })).toHaveCount(0);
+    await expect(modal.locator('.vq-group[data-type="placeSpelling"]')).toHaveCount(0);
     expect(await activeTreeName(page)).toBe(first);
     await expect.poll(() => page.evaluate(async () => {
         const tm = window.Strom.TreeManager;

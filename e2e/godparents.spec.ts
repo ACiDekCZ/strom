@@ -31,8 +31,12 @@ test('a name at several baptisms is reported as a lead', async ({ page }) => {
     // This is the pattern a genealogist follows: she is nobody in the tree yet.
     // The name has to be there — "a godparent keeps turning up" without saying
     // which one is useless.
-    const report = page.locator('#tree-validation-content');
-    await expect(report).toContainText('Marie Dvořáková');
+    // A lead: in the Leads, its group closed until opened.
+    const group = page.locator('#tree-validation-content .vq-section[data-section="trace"] .vq-group[data-type="recurringGodparent"]');
+    await expect(group.locator('.vq-group-count')).toHaveText('1');
+    await group.locator('.vq-group-head').click();
+    const report = group.locator('.vq-row');
+    await expect(report.locator('.vq-subject')).toHaveText('Marie Dvořáková');
     // States exactly what was counted: events across distinct people.
     await expect(report).toContainText('at 3 events of 3 people');
     await expect(report).toContainText('Jan Novak');
@@ -50,5 +54,6 @@ test('a godparent at one baptism is just a neighbour', async ({ page }) => {
     });
     const treeId = await page.evaluate(() => window.Strom.TreeManager.getActiveTreeId());
     await page.evaluate((id) => window.Strom.UI.showTreeValidationDialog(id), treeId);
-    await expect(page.locator('#tree-validation-content')).not.toContainText('Marie Dvořáková');
+    await expect(page.locator('#tree-validation-content .validation-passed')).toBeVisible();
+    await expect(page.locator('#tree-validation-content .vq-group[data-type="recurringGodparent"]')).toHaveCount(0);
 });

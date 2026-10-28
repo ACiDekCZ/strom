@@ -30,7 +30,11 @@ import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { LAST_FOCUSED, Person, PersonId, StromData, TreeId } from '../types.js';
-import { validateTreeData, translateValidationType, ValidationResult, ValidationIssue } from '../validation.js';
+import {
+    validateTreeData, translateValidationType, groupValidationIssues, validationCounts, ValidationResult, ValidationIssue,
+} from '../validation.js';
+import { validationSummaryText, validationGroupTitle } from './tree-stats.js';
+import { QUALITY_CHANGED_EVENT } from './quality-ui.js';
 import {
     AncestorOverview, FocusCard, GrandparentLine, ancestorGenerationLabel, ancestorGenerations, birthYearOf,
     deathDateOf, focusBirthNoSource, grandparentLines, lineEndIds, overviewHeader, selectFocusCards, OverviewHeader,
@@ -524,6 +528,8 @@ export const treeOverviewMethods = uiModule({
         window.addEventListener('strom:user-change', (e) => changed((e as CustomEvent<{ treeId?: string }>).detail?.treeId));
         window.addEventListener('strom:data-changed', () => changed(null));
         window.addEventListener('strom:tree-switched', bump);
+        // A finding marked "not an error" or restored (also by the research).
+        window.addEventListener(QUALITY_CHANGED_EVENT, () => changed(null));
     },
 
     /**
@@ -783,8 +789,17 @@ export const treeOverviewMethods = uiModule({
         requestAnimationFrame(() => setTimeout(run, 0));
     },
 
+    /**
+     * The findings the validation dialog shows (the same counts): those
+     * marked "not an error" and those the dialog sets aside left out.
+     */
     treeOverviewValidation(): ValidationResult {
-        return cached('validation', false, () => validateTreeData(state!.data));
+        return cached('validation', false, () => {
+            const st = state!;
+            const { issues } = this.treeValidationShown(validateTreeData(st.data), st.data, st.treeId);
+            const { errors, warnings, traces } = validationCounts(issues);
+            return { valid: errors === 0, issues, stats: { errors, warnings, infos: traces } };
+        });
     },
 
     treeOverviewAncestorData(): AncestorData {
@@ -1347,15 +1362,16 @@ export const treeOverviewMethods = uiModule({
         const block = (kind: string, title: string, content: string): string =>
             `<div class="tov-block" data-block="${kind}"><span class="tov-block-title">${esc(title)}</span>${content}</div>`;
 
-        // Consistency: the counts, the five most serious findings, "and N more…".
-        const order: Record<ValidationIssue['severity'], number> = { error: 0, warning: 1, info: 2 };
-        const issues = [...q.validation.issues].sort((a, b) => order[a.severity] - order[b.severity]);
-        const strong = (text: string): string => esc(text).replace(/^(\d+)/, '<strong>$1</strong>');
-        const counts = v.errors > 0
-            ? `<div class="tov-counts"><span class="tov-count-err">${strong(t.countErrors(v.errors))}</span>`
-                + `<span>${strong(t.countWarnings(v.warnings))}</span><span>${strong(t.countNotes(v.infos))}</span></div>`
-            : `<p class="tov-muted">${esc(t.noErrors(v.warnings, v.infos))}</p>`;
-        const findings = issues.slice(0, TOP_ISSUES).map(issue => {
+        // Consistency (ZADANI_DEV §1.5): the dialog's summary sentence, the five
+        // most serious Problems in the dialog's group order, "and N more…" (the
+        // other Problems), and the Leads as one line that opens the dialog on them.
+        const sections = groupValidationIssues(q.validation.issues, validationGroupTitle);
+        const problems = sections.find(sec => sec.category === 'problem')?.groups.flatMap(g => g.issues) ?? [];
+        const leads = sections.find(sec => sec.category === 'trace')?.count ?? 0;
+        const counts = problems.length + leads === 0
+            ? `<p class="tov-muted">${esc(t.noErrors(0, 0))}</p>`
+            : `<p class="tov-summary${v.errors > 0 ? ' tov-summary--err' : ''}">${esc(validationSummaryText({ errors: v.errors, warnings: v.warnings, traces: v.infos }))}</p>`;
+        const findings = problems.slice(0, TOP_ISSUES).map(issue => {
             const who = (issue.personIds ?? []).map(id => realPerson(st.data, id)).filter((p): p is Person => !!p)
                 .map(p => `<button type="button" class="tov-link" data-tov="person" data-id="${esc(p.id)}">${esc(shownName(p))}</button>`)
                 .join(', ');
@@ -1368,9 +1384,13 @@ export const treeOverviewMethods = uiModule({
                 + `${who ? `<span class="tov-finding-who">${who}</span>` : ''}<span class="tov-finding-what">${esc(translateValidationType(issue.type))}</span>`
                 + `${subject ? `<span class="tov-finding-subject">${esc(subject)}</span>` : ''}</div>`;
         }).join('');
-        const more = issues.length > TOP_ISSUES
-            ? `<button type="button" class="tov-link tov-more" data-tov="validation">${esc(t.moreIssues(issues.length - TOP_ISSUES))}</button>` : '';
-        const consistency = block('consistency', t.consistencyTitle, counts + (findings ? `<div class="tov-findings">${findings}</div>` : '') + more);
+        const more = problems.length > TOP_ISSUES
+            ? `<button type="button" class="tov-link tov-more" data-tov="validation">${esc(t.moreIssues(problems.length - TOP_ISSUES))}</button>` : '';
+        const leadsRow = leads > 0
+            ? `<div class="tov-leads"><span class="tov-dot" aria-hidden="true"></span>`
+                + `<button type="button" class="tov-link" data-tov="validation-leads">${esc(`${strings.treeManager.overviewLeads(leads)} ›`)}</button></div>`
+            : '';
+        const consistency = block('consistency', t.consistencyTitle, counts + (findings ? `<div class="tov-findings">${findings}</div>` : '') + more + leadsRow);
 
         // Completeness: four bars (the share with a source is the header's
         // number, so it is not repeated here), the tree's content, the media warning.
@@ -1543,6 +1563,9 @@ export const treeOverviewMethods = uiModule({
             }
             case 'validation':
                 void this.showTreeValidationDialog(st.treeId, OVERLAY_ID);
+                return;
+            case 'validation-leads':
+                void this.showTreeValidationDialog(st.treeId, OVERLAY_ID, { leads: true });
                 return;
             case 'research':
                 this.closeTreeOverview();
