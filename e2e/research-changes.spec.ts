@@ -98,6 +98,46 @@ test.describe('changes per person', () => {
         await expect(block(page)).toHaveAttribute('data-state', 'written');
     });
 
+    test('a phone: the write shown on the More sheet\'s research page is seen when the sheet closes or the page is left (1028)', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await openResearch(page);
+        const b = await fakeBridge(page, { syncReply: { status: 200, body: { ok: true, inbox: false, changes: 1, applied: 1, input: 'I0042' } } });
+        await poll(page);
+        const sheet = page.locator('.bottom-sheet-menu');
+        const body = page.locator('#research-sheet-menu');
+        const openSheetPage = async (): Promise<void> => {
+            await page.locator('#bb-view-more').click();
+            await expect(sheet).toBeVisible();
+            await page.locator('#research-sheet-all').click();
+            await expect(body).toBeVisible();
+        };
+        await editJan(page, 'Kolín');
+        await page.evaluate(() => window.Strom.UI.researchSyncAction('send'));
+        await expect.poll(() => b.posts.length).toBe(1);
+        await openSheetPage();
+        await expect(body.locator('#research-sync-block')).toHaveAttribute('data-state', 'written');
+        // Closed by a tap outside the sheet: seen, as when the toolbar's menu closes.
+        await page.mouse.click(195, 20);
+        await expect(sheet).toHaveCount(0);
+        await openSheetPage();
+        await expect(body.locator('#research-sync-block')).toHaveAttribute('data-state', 'inSync');
+        await expect(body.locator('#research-sync-block')).toContainText('In sync with the research');
+        await page.mouse.click(195, 20);
+        await expect(sheet).toHaveCount(0);
+
+        // Another write, its page left by "‹": seen too.
+        b.syncReply = { status: 200, body: { ok: true, inbox: false, changes: 1, applied: 1, input: 'I0043' } };
+        await editJan(page, 'Brno');
+        await page.evaluate(() => window.Strom.UI.researchSyncAction('send'));
+        await expect.poll(() => b.posts.length).toBe(2);
+        await openSheetPage();
+        await expect(body.locator('#research-sync-block')).toHaveAttribute('data-state', 'written');
+        await body.locator('.research-menu-back').click();
+        await expect(body).toBeHidden();
+        await page.locator('#research-sheet-all').click();
+        await expect(body.locator('#research-sync-block')).toHaveAttribute('data-state', 'inSync');
+    });
+
     test('Esc closes What will be sent even when pressed the moment it opens (before any timer of the page ran)', async ({ page }) => {
         await openResearch(page, { edit: true });
         await fakeBridge(page);

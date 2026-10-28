@@ -664,8 +664,7 @@ export const researchActionsMethods = uiModule({
         const wasOpen = !!menu?.classList.contains('active');
         if (wasOpen) {
             // The last write said there was seen: the next opening says the tree is in sync.
-            const ctx = this.researchSyncLink();
-            if (ctx && menu!.querySelector('#research-sync-block[data-state="written"]')) this.researchNoteWrittenSeen(ctx.treeId);
+            this.researchNoteMenuWrittenSeen(menu);
             moreOpen = false;
             menu!.classList.remove('active');
             btn?.setAttribute('aria-expanded', 'false');
@@ -680,6 +679,16 @@ export const researchActionsMethods = uiModule({
             const to = opener?.isConnected && opener.getClientRects().length > 0 ? opener : btn;
             to?.focus();
         }
+    },
+
+    /**
+     * A research menu that showed the last write ("Written to the research") is closing: the write was
+     * seen, the next opening says the tree is in sync. The toolbar dropdown, or (`null`) the More sheet's
+     * research page on a narrow window — the sheet closed, or its page left.
+     */
+    researchNoteMenuWrittenSeen(menu: HTMLElement | null = sheetResearchBody()): void {
+        const ctx = this.researchSyncLink();
+        if (ctx && menu?.querySelector('#research-sync-block[data-state="written"]')) this.researchNoteWrittenSeen(ctx.treeId);
     },
 
     /** Focus the first item (the state block's button, else the first row; not the page's "‹") or the last one. */

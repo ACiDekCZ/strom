@@ -281,6 +281,8 @@ export const bottomSheetMethods = uiModule({
 
     hideBottomSheet(): void {
         if (this.bottomSheet) {
+            // Its research page showed the last write: seen, as when the toolbar's research menu closes.
+            this.researchNoteMenuWrittenSeen();
             this.bottomSheet.remove();
             this.bottomSheet = null;
             this.exportReminderClosed();
@@ -684,6 +686,7 @@ export const bottomSheetMethods = uiModule({
         };
         const hideResearchPage = (): void => {
             if (!researchPage || researchPage.hidden) return;
+            this.researchNoteMenuWrittenSeen();
             this.closeResearchTrialNote();
             researchPage.hidden = true;
             this.setResearchMoreOpen(false);
