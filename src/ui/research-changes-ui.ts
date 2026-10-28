@@ -474,6 +474,7 @@ export const researchChangesMethods = uiModule({
         let other: OtherChanges | null = null;
         let inexact = false;
         if (mode === 'written') {
+            this.researchNoteWrittenSeen(ctx.treeId);
             const w = researchWrittenList(ctx.treeId);
             const st = researchAutoState(ctx.treeId);
             const lw = st.lastWritten;

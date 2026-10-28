@@ -58,6 +58,46 @@ test.describe('changes per person', () => {
         await expect(more).toHaveCount(0);
     });
 
+    test('a write once seen in the menu is no news after a reload or the bridge started again; the next write is (1028)', async ({ page }) => {
+        await openResearch(page);
+        const b = await fakeBridge(page, { syncReply: { status: 200, body: { ok: true, inbox: false, changes: 1, applied: 1, input: 'I0042' } } });
+        await poll(page);
+        await editJan(page, 'Kolín');
+        await page.evaluate(() => window.Strom.UI.researchSyncAction('send'));
+        await expect.poll(() => b.posts.length).toBe(1);
+        await openResearchMenu(page);
+        await expect(block(page)).toHaveAttribute('data-state', 'written');
+        await expect(block(page).getByRole('menuitem', { name: 'What was written ›' })).toBeVisible();
+        // Seen: the menu closed, then opened again — in sync, no "What was written" as news.
+        await page.evaluate(() => window.Strom.UI.closeResearchMenu());
+        await openResearchMenu(page);
+        await expect(block(page)).toHaveAttribute('data-state', 'inSync');
+        await expect(block(page)).toContainText('In sync with the research');
+        await expect(block(page).getByRole('menuitem', { name: 'What was written ›' })).toHaveCount(0);
+        await page.evaluate(() => window.Strom.UI.closeResearchMenu());
+
+        // The bridge started again (an update) and its record closes the same write anew, at the research's time.
+        await page.evaluate(() => {
+            const key = `strom-research-auto:${window.Strom.TreeManager.getActiveTreeId()}`;
+            const st = JSON.parse(localStorage.getItem(key) ?? '{}');
+            st.lastWritten = { ...st.lastWritten, at: '2026-10-24T08:52:00.000Z' };
+            localStorage.setItem(key, JSON.stringify(st));
+        });
+        await page.reload();
+        await poll(page);
+        await openResearchMenu(page);
+        await expect(block(page)).toHaveAttribute('data-state', 'inSync');
+        await page.evaluate(() => window.Strom.UI.closeResearchMenu());
+
+        // Another write: news again.
+        b.syncReply = { status: 200, body: { ok: true, inbox: false, changes: 1, applied: 1, input: 'I0043' } };
+        await editJan(page, 'Brno');
+        await page.evaluate(() => window.Strom.UI.researchSyncAction('send'));
+        await expect.poll(() => b.posts.length).toBe(2);
+        await openResearchMenu(page);
+        await expect(block(page)).toHaveAttribute('data-state', 'written');
+    });
+
     test('Esc closes What will be sent even when pressed the moment it opens (before any timer of the page ran)', async ({ page }) => {
         await openResearch(page, { edit: true });
         await fakeBridge(page);

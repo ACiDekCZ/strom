@@ -663,6 +663,9 @@ export const researchActionsMethods = uiModule({
         const btn = document.getElementById('research-menu-btn');
         const wasOpen = !!menu?.classList.contains('active');
         if (wasOpen) {
+            // The last write said there was seen: the next opening says the tree is in sync.
+            const ctx = this.researchSyncLink();
+            if (ctx && menu!.querySelector('#research-sync-block[data-state="written"]')) this.researchNoteWrittenSeen(ctx.treeId);
             moreOpen = false;
             menu!.classList.remove('active');
             btn?.setAttribute('aria-expanded', 'false');

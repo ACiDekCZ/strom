@@ -44,7 +44,7 @@ import { ResearchWriteHeld, joinSaid, writeHeldOfRefusal, writeHeldOfStatus, wri
 import { forgetOriginalsHeld } from './originals-ui.js';
 import {
     noteResearchLinks, noteResearchWaiting, noteResearchBridgeStatus, researchTreeOfStatus, storedResearchBridge, researchLinksEnabled,
-    researchAutoState, patchResearchAutoState, researchAutoIntroSeen, noteResearchAutoIntroSeen, forgetResearchWaitingItems, anyResearchBridgeKnown,
+    researchAutoState, patchResearchAutoState, researchWriteKey, researchWriteIsNews, researchAutoIntroSeen, noteResearchAutoIntroSeen, forgetResearchWaitingItems, anyResearchBridgeKnown,
     researchSendPreviewSkipped, announcedResearchScheme, RESEARCH_BRIDGE_MOVED_EVENT,
     ResearchHeldConflicts, StoredResearchTree,
 } from '../research-device.js';
@@ -832,7 +832,8 @@ export const researchSyncMethods = uiModule({
             sending: sendingTree === treeId,
             held: this.researchWriteHeldNow(link.id),
             autoDue: autoDue.has(treeId),
-            written: st.lastWritten ?? null,
+            // A write already seen is no news (being in sync), also when its send is remembered again.
+            written: researchWriteIsNews(st) ? st.lastWritten ?? null : null,
             switched: !!st.modeSeen && st.modeSeen !== mode,
             // By hand and written a few times: sending by itself is offered, once (never at once).
             offerDue: researchSendMode(link) === 'manual' && !st.offerSeen && (st.manualWrites ?? 0) >= OFFER_AFTER_WRITES,
@@ -1135,6 +1136,13 @@ export const researchSyncMethods = uiModule({
             await this.researchAfterWrite(treeId, closed,
                 fate.conflicts !== undefined ? { conflicts: fate.conflicts ?? null, refs: fate.conflictPersons ?? [] } : undefined);
         }
+    },
+
+    /** The last write of the tree was seen (its list opened, the menu showing it closed): no news any more. */
+    researchNoteWrittenSeen(treeId: TreeId): void {
+        const st = researchAutoState(treeId);
+        if (!st.lastWritten || st.writtenSeen === researchWriteKey(st.lastWritten)) return;
+        patchResearchAutoState(treeId, { writtenSeen: researchWriteKey(st.lastWritten) });
     },
 
     /** When a send of this tree went, by the research's mark: its record there, else this app's own. */

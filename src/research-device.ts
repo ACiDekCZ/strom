@@ -323,6 +323,12 @@ export interface ResearchAutoState {
     modeNoticed?: 'agent' | 'archive';
     /** The offer to send by itself (an archive, a tree sent by hand) was answered. */
     offerSeen?: true;
+    /**
+     * The last write the user saw (its list opened, or the menu showing it closed), by what names that
+     * write ({@link researchWriteKey}): the same write remembered again (its send closed anew after the
+     * bridge started again, an update) stays seen; another write does not.
+     */
+    writtenSeen?: string;
     /** Edits since the last send ("3 changes waiting"). */
     edits?: number;
     /** When the first of those edits was made (ISO): the "only in browser" pill waits 10 minutes from it. */
@@ -503,6 +509,21 @@ function removedAskFrom(v: unknown): ResearchRemovedAsk | null {
     };
 }
 
+/** What names a write: the research's mark of its send, else when it was written. */
+export function researchWriteKey(written: { at: string; intake?: string }): string {
+    return written.intake || written.at;
+}
+
+/**
+ * The last write is still news (the menu's "Written to the research", "What was written ›"): not seen
+ * yet, or one that left conflicts (they stay in sight until decided). Seen, it is just being in sync.
+ */
+export function researchWriteIsNews(state: Pick<ResearchAutoState, 'lastWritten' | 'writtenSeen'>): boolean {
+    const lw = state.lastWritten;
+    if (!lw) return false;
+    return (lw.conflicts ?? 0) > 0 || state.writtenSeen !== researchWriteKey(lw);
+}
+
 export function researchAutoState(treeId: string): ResearchAutoState {
     try {
         const raw = localStorage.getItem(AUTO_KEY + treeId);
@@ -525,6 +546,7 @@ export function researchAutoState(treeId: string): ResearchAutoState {
         if (typeof p.modeSince === 'string' && Number.isFinite(Date.parse(p.modeSince))) out.modeSince = p.modeSince;
         if (p.modeNoticed === 'agent' || p.modeNoticed === 'archive') out.modeNoticed = p.modeNoticed;
         if (p.offerSeen === true) out.offerSeen = true;
+        if (typeof p.writtenSeen === 'string' && p.writtenSeen.length <= 120) out.writtenSeen = p.writtenSeen;
         if (typeof p.edits === 'number' && p.edits > 0) out.edits = Math.min(Math.floor(p.edits), 99999);
         if (typeof p.unsentSince === 'string' && Number.isFinite(Date.parse(p.unsentSince))) out.unsentSince = p.unsentSince;
         if (Array.isArray(p.toldRefused)) out.toldRefused = p.toldRefused.filter((r): r is string => typeof r === 'string').slice(-10);
