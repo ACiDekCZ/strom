@@ -626,7 +626,7 @@ test.describe('Send material… (beta.10)', () => {
         });
         await page.locator('#source-viewer-material').click();
         const dialog = page.locator('#material-modal');
-        await expect(dialog.locator('.audit-log-subtitle')).toContainText('Oddací matrika Čáslav');
+        await expect(dialog.locator('.audit-log-subtitle')).toContainText('Oddací matrika Čapkov');
         await dialog.locator('#material-input').setInputFiles(AVATAR);
         await dialog.getByRole('button', { name: 'Send 1 file' }).click();
         await expect.poll(() => b.mediaPuts.length).toBe(1);
