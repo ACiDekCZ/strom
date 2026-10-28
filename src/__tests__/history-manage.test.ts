@@ -9,8 +9,11 @@ import { describe, it, expect } from 'vitest';
 import {
     foldSearch, matchesQuery, manageRegions, regionParents, regionGroups, placeGroups, hiddenRows,
     deletedRows, manageHeader, manageCan, gapsLabel, manageSummaries, type ManageEnv, type ManageNames,
+    detailOwner, detailEvents, filterDetailEvents, detailFacets, detailCenturies, centuryGroups, emptyDetailFilter,
+    detailFilterActive, historyAudience, audiencePlaces,
 } from '../history-manage.js';
 import type { HistoryPayload, HistoryEvent, HistoryRegion } from '../history.js';
+import type { StromData, Person, PersonId } from '../types.js';
 
 const ALL = ['history.events', 'history.hide', 'history.regions', 'history.first', 'history.hide.all',
     'history.skip', 'history.delete', 'history.map', 'history.place'];
@@ -281,5 +284,130 @@ describe('header', () => {
 describe('labels', () => {
     it('gaps', () => {
         expect(gapsLabel([{ from: 1870, to: 1913 }, { from: 1920, to: 1920 }])).toBe('1870–1913, 1920');
+    });
+});
+
+describe('detail', () => {
+    const p = payload({
+        lang: 'cs',
+        events: [
+            ev('w1', { from: 1866 }),
+            ev('e1', { from: 1873, kind: 'economy' }),
+            ev('s1', { from: 1914, to: 1918, kind: 'state', text: { de: 'Krieg' } }),
+            ev('m1', { from: 1866, region: { id: 'moravia' } }),
+            ev('l1', { from: 1880, scope: 'local', region: undefined, kind: 'disaster', local: { source: 'S1', cite: 'Matrika Lhota' } }),
+            ev('l2', { from: 1890, scope: 'local', region: undefined, kind: 'epidemic', local: { source: 'S1', cite: 'Kronika' } }),
+            ev('p1', { from: 1762, scope: 'place', region: undefined, place: { key: 'lhota', name: { en: 'Lhota' } } }),
+        ],
+        places: {
+            lhota: { events: ['w1', 'e1', 'l1', 'p1'] },
+            kounice: { events: ['w1', 'l1', 'l2'] },
+        },
+        hidden: [
+            { event: 'e1', place: 'lhota', at: '2026-10-27T10:00:00Z' },
+            { event: 's1', tree: true, at: '2026-10-27T11:00:00Z' },
+        ],
+    });
+
+    it('takes a region, the local findings or a place by key', () => {
+        expect(detailOwner('bohemia')).toEqual({ kind: 'region', id: 'bohemia' });
+        expect(detailOwner('local')).toEqual({ kind: 'local', id: '' });
+        expect(detailOwner('place:lhota')).toEqual({ kind: 'place', id: 'lhota' });
+        expect(detailEvents(p, env(), names, 'bohemia').map(r => r.ev.id)).toEqual(['w1', 'e1', 's1']);
+        expect(detailEvents(p, env(), names, 'local').map(r => r.ev.id)).toEqual(['l1', 'l2']);
+        expect(detailEvents(p, env(), names, 'place:lhota').map(r => r.ev.id)).toEqual(['p1']);
+    });
+
+    it('says how an event is hidden; a range year; the text of another language', () => {
+        const rows = detailEvents(p, env(), names, 'bohemia');
+        expect(rows[0]).toMatchObject({ hide: 'none', hideNote: '', year: '1866' });
+        expect(rows[1]).toMatchObject({ hide: 'partial', hideNote: 'Hidden at Lhota' });
+        expect(rows[2]).toMatchObject({ hide: 'tree', hideNote: 'Hidden in the whole tree', year: '1914–1918', text: 'Krieg', textLang: 'de' });
+        // A queued hiding for a person, and the whole region hidden.
+        const q = env({ queue: [{ event: 'w1', personId: 'x1', at: '2026-10-28T08:00:00Z' }] });
+        const r2 = detailEvents(p, { ...q, }, { ...names, person: () => 'Jan Lhoták' }, 'bohemia');
+        expect(r2[0].hideNote).toBe('Hidden for Jan Lhoták only · so far only in this browser');
+        const all = detailEvents(payload({ ...p, hidden: [{ region: 'bohemia' }] }), env(), names, 'bohemia');
+        expect(all.map(r => r.hide)).toEqual(['region', 'region', 'region']);
+        expect(all[0].hideNote).toBe('All of the region hidden');
+    });
+
+    it('names the places of a local event', () => {
+        const rows = detailEvents(p, env(), names, 'local');
+        expect(rows[0]).toMatchObject({ place: 'Lhota and Kounice', placeKeys: ['lhota', 'kounice'] });
+        expect(rows[1].place).toBe('Kounice');
+    });
+
+    it('filters by kinds, places, period, text and hidden only, counting each chip without its own part', () => {
+        const rows = detailEvents(p, env(), names, 'bohemia');
+        const f = emptyDetailFilter();
+        expect(detailFilterActive(f)).toBe(false);
+        expect(detailFacets(rows, f, 'kinds', names)).toEqual([
+            { key: 'war', label: 'war', count: 1 }, { key: 'state', label: 'state', count: 1 }, { key: 'economy', label: 'economy', count: 1 },
+        ]);
+        f.kinds = ['war', 'economy'];
+        expect(filterDetailEvents(rows, f).map(r => r.ev.id)).toEqual(['w1', 'e1']);
+        expect(detailFacets(rows, f, 'kinds', names).map(c => c.count)).toEqual([1, 1, 1]);
+        f.from = 1870; f.to = 1879;
+        expect(filterDetailEvents(rows, f).map(r => r.ev.id)).toEqual(['e1']);
+        // An event of more years falls in each period it overlaps.
+        expect(filterDetailEvents(rows, { ...emptyDetailFilter(), from: 1916, to: 1920 }).map(r => r.ev.id)).toEqual(['s1']);
+        expect(filterDetailEvents(rows, { ...emptyDetailFilter(), query: 'krieg' }).map(r => r.ev.id)).toEqual(['s1']);
+        expect(filterDetailEvents(rows, { ...emptyDetailFilter(), hiddenOnly: true }).map(r => r.ev.id)).toEqual(['e1', 's1']);
+        const local = detailEvents(p, env(), names, 'local');
+        expect(detailFacets(local, emptyDetailFilter(), 'places', names)).toEqual([
+            { key: 'kounice', label: 'Kounice', count: 2 }, { key: 'lhota', label: 'Lhota', count: 1 },
+        ]);
+        expect(filterDetailEvents(local, { ...emptyDetailFilter(), places: ['lhota'] }).map(r => r.ev.id)).toEqual(['l1']);
+        // The search covers the citation too.
+        expect(filterDetailEvents(local, { ...emptyDetailFilter(), query: 'kronika' }).map(r => r.ev.id)).toEqual(['l2']);
+    });
+
+    it('groups by centuries; above 40 events only the largest century is unfolded', () => {
+        const rows = detailEvents(p, env(), names, 'bohemia');
+        expect(detailCenturies(rows)).toEqual([18, 19]);
+        const g = centuryGroups(rows);
+        expect(g.map(x => [x.label, x.rows.length, x.open])).toEqual([['1800–1899', 2, true], ['1900–1999', 1, true]]);
+        const many = payload({ events: [
+            ...Array.from({ length: 30 }, (_, i) => ev(`a${i}`, { from: 1800 + i })),
+            ...Array.from({ length: 12 }, (_, i) => ev(`b${i}`, { from: 1700 + i })),
+        ] });
+        const big = centuryGroups(detailEvents(many, env(), names, 'bohemia'));
+        expect(big.map(x => [x.century, x.open])).toEqual([[17, false], [18, true]]);
+        expect(centuryGroups(detailEvents(many, env(), names, 'bohemia'), new Set([17, 18])).map(x => x.open)).toEqual([true, false]);
+    });
+});
+
+describe('who sees an event', () => {
+    const person = (id: string, o: Partial<Person> = {}): Person => ({
+        id: id as PersonId, firstName: id, lastName: 'Lhoták', gender: 'male', isPlaceholder: false,
+        parentIds: [], childIds: [], partnerships: [], ...o,
+    } as Person);
+    const data: StromData = {
+        persons: Object.fromEntries([
+            person('jan', { birthDate: '1840', birthPlace: 'Lhota', deathDate: '1900', deathPlace: 'Lhota' }),
+            person('eva', { birthDate: '1850', birthPlace: 'Lhota', deathDate: '1910', deathPlace: 'Lhota' }),
+            person('max', { birthDate: '1845', birthPlace: 'Kounice', deathDate: '1899', deathPlace: 'Kounice' }),
+            person('old', { birthDate: '1700', birthPlace: 'Lhota', deathDate: '1760', deathPlace: 'Lhota' }),
+        ].map(x => [x.id, x])) as StromData['persons'],
+        partnerships: {} as StromData['partnerships'],
+    };
+    const p = payload({
+        events: [ev('w1', { from: 1866 }), ev('w2', { from: 1870 })],
+        places: { Lhota: { events: ['w1', 'w2'] }, Kounice: { events: ['w1'] } },
+        hidden: [{ event: 'w2', place: 'Lhota' }],
+    });
+
+    it('counts the persons whose card shows it, as the card layer does', () => {
+        const a = historyAudience(data, p, 'en');
+        expect(a.get('w1')!.sees.map(e => e.personId).sort()).toEqual(['eva', 'jan', 'max']);
+        expect(a.get('w2')!.sees).toEqual([]);
+        expect(a.get('w2')!.hidden.map(e => e.personId).sort()).toEqual(['eva', 'jan']);
+        expect(audiencePlaces(a.get('w1'), { ...names, place: k => k })).toEqual([
+            { key: 'Lhota', name: 'Lhota', persons: 2 }, { key: 'Kounice', name: 'Kounice', persons: 1 },
+        ]);
+        // A queued hiding counts at once.
+        const q = historyAudience(data, p, 'en', { queue: [{ event: 'w1', place: 'Kounice', at: '2026-10-28T08:00:00Z' }] });
+        expect(q.get('w1')!.sees.map(e => e.personId).sort()).toEqual(['eva', 'jan']);
     });
 });

@@ -10,6 +10,7 @@
  */
 
 import {
+    computePersonHistory, HISTORY_KINDS, type PersonHistoryEnv,
     effectiveHidden, historyHiddenCount, historyWaiting, pickHistoryText,
     type HistoryPayload, type HistoryRegion, type HistoryHideOp, type HistoryEvent, type HistoryText,
     type EffectiveHidden, type HistoryPlace,
@@ -19,6 +20,7 @@ import {
     HISTORY_MAP_FEATURE, HISTORY_PLACE_FEATURE, HISTORY_HIDE_FEATURE, type HistoryPace,
 } from './research-link.js';
 import { getStringsForLang, joinAnd, type Language } from './strings.js';
+import type { StromData } from './types.js';
 
 export type ManageTab = 'regions' | 'places' | 'hidden' | 'deleted';
 
@@ -692,4 +694,248 @@ export function manageSummaries(p: HistoryPayload, lang: Language, queue: readon
     const s = getStringsForLang(lang).history;
     const c = manageCounts(p, queue);
     return { settings: s.manageSettingsSub(c.regions, c.events, c.hidden), menu: s.manageSummary(c.regions, c.events) };
+}
+
+// ─── Detail: a region's, the local findings' or a place's events (§2) ──────
+
+/** What a detail shows: a region id, `local`, or `place:<key>`. */
+export function detailOwner(key: string): { kind: 'region' | 'local' | 'place'; id: string } {
+    if (key === 'local') return { kind: 'local', id: '' };
+    if (key.startsWith('place:')) return { kind: 'place', id: key.slice(6) };
+    return { kind: 'region', id: key };
+}
+
+export type DetailHide = 'none' | 'partial' | 'tree' | 'region';
+
+export interface DetailEvent {
+    ev: HistoryEvent;
+    /** "1866" or "1914–1918". */
+    year: string;
+    text: string;
+    textLang: string;
+    tip?: string;
+    tipLang?: string;
+    /** Local detail: the tree's spelling of the event's place(s). */
+    place?: string;
+    /** Local detail: the payload's place keys of the event. */
+    placeKeys: string[];
+    hide: DetailHide;
+    /** "Hidden at Čáslav" … ('' without a hiding). */
+    hideNote: string;
+    /** The hidings "Undo" takes back (for `region`, the region's hiding). */
+    hidings: EffectiveHidden[];
+    search: string;
+}
+
+/** The payload's place keys of each event. */
+export function eventPlaceKeys(p: HistoryPayload): Map<string, string[]> {
+    const out = new Map<string, string[]>();
+    for (const [key, place] of Object.entries(p.places)) {
+        for (const id of place.events) {
+            const list = out.get(id);
+            if (list) { if (!list.includes(key)) list.push(key); } else out.set(id, [key]);
+        }
+    }
+    return out;
+}
+
+/** The events of a detail in time order, each with its hiding state (§2.2, §2.3). */
+export function detailEvents(p: HistoryPayload, env: ManageEnv, names: ManageNames, key: string): DetailEvent[] {
+    const s = getStringsForLang(env.lang).history;
+    const owner = detailOwner(key);
+    const hidden = effectiveHidden(p, env.queue ?? []);
+    const regionHides = new Map(hidden.filter(h => !h.event && h.region).map(h => [h.region!, h]));
+    const placesOf = eventPlaceKeys(p);
+    const mine = p.events.filter(ev => owner.kind === 'region' ? ev.scope === 'region' && ev.region?.id === owner.id
+        : owner.kind === 'local' ? ev.scope === 'local'
+            : ev.scope === 'place' && ev.place?.key === owner.id);
+    const out: DetailEvent[] = [];
+    for (const ev of mine) {
+        const t = pickHistoryText(ev.text, env.lang, p.lang);
+        if (!t) continue;
+        const tip = pickHistoryText(ev.tip?.text, env.lang, p.lang);
+        const own = hidden.filter(h => h.event === ev.id);
+        const pending = (list: EffectiveHidden[]) => list.some(h => h.queued) ? ` · ${s.pendingSync}` : '';
+        let hide: DetailHide = 'none';
+        let hideNote = '';
+        let hidings: EffectiveHidden[] = [];
+        const tree = own.filter(h => h.tree);
+        const regionHide = ev.scope === 'region' && ev.region ? regionHides.get(ev.region.id) : undefined;
+        if (tree.length) {
+            hide = 'tree'; hidings = tree; hideNote = s.hiddenTree + pending(tree);
+        } else if (regionHide) {
+            hide = 'region'; hidings = [regionHide]; hideNote = s.hiddenRegionAll + pending(hidings);
+        } else if (own.length) {
+            hide = 'partial'; hidings = own;
+            const places = [...new Set(own.filter(h => h.place).map(h => h.place!))];
+            if (places.length === 1) hideNote = s.hiddenAt(names.place(places[0]));
+            else if (places.length > 1) hideNote = s.hiddenAtN(places.length);
+            else {
+                const h = own[0];
+                hideNote = s.hiddenPerson(names.person(h.person, h.personId) || h.person || h.personId || '');
+            }
+            hideNote += pending(own);
+        }
+        const placeKeys = owner.kind === 'local' ? (placesOf.get(ev.id) ?? []) : [];
+        const place = placeKeys.length ? joinAnd(env.lang, placeKeys.map(k => names.place(k))) : undefined;
+        const row: DetailEvent = {
+            ev, year: yearLabel(ev.from, ev.to), text: t.text, textLang: t.lang, placeKeys, hide, hideNote, hidings,
+            search: searchText(...allTexts(ev.text), ev.source?.title, ev.source?.quote, ev.local?.cite, place, ...allTexts(ev.tip?.text)),
+        };
+        if (tip) { row.tip = tip.text; row.tipLang = tip.lang; }
+        if (place) row.place = place;
+        out.push(row);
+    }
+    return out.sort((a, b) => a.ev.from - b.ev.from || (a.ev.to ?? a.ev.from) - (b.ev.to ?? b.ev.from));
+}
+
+/** The detail's filter (kept while the dialog is open). Kinds and places: none = all. */
+export interface DetailFilter {
+    kinds: string[];
+    places: string[];
+    /** A period (a century or a custom range), inclusive. */
+    from?: number;
+    to?: number;
+    query: string;
+    hiddenOnly: boolean;
+}
+
+export function emptyDetailFilter(): DetailFilter {
+    return { kinds: [], places: [], query: '', hiddenOnly: false };
+}
+
+/** The filter narrows anything (Clear filter, active chips). */
+export function detailFilterActive(f: DetailFilter): boolean {
+    return f.kinds.length > 0 || f.places.length > 0 || f.from !== undefined || f.to !== undefined || f.query.trim() !== '' || f.hiddenOnly;
+}
+
+function inPeriod(ev: HistoryEvent, from: number | undefined, to: number | undefined): boolean {
+    const a = ev.from;
+    const b = ev.to !== undefined && ev.to > ev.from ? ev.to : ev.from;
+    return (from === undefined || b >= from) && (to === undefined || a <= to);
+}
+
+/** The events the filter keeps; `skip` leaves one part out (the counts on its own chips). */
+export function filterDetailEvents(rows: readonly DetailEvent[], f: DetailFilter, skip?: 'kinds' | 'places'): DetailEvent[] {
+    const q = f.query.trim();
+    return rows.filter(r =>
+        (skip === 'kinds' || !f.kinds.length || f.kinds.includes(r.ev.kind))
+        && (skip === 'places' || !f.places.length || r.placeKeys.some(k => f.places.includes(k)))
+        && inPeriod(r.ev, f.from, f.to)
+        && (!q || matchesQuery(r.search, q))
+        && (!f.hiddenOnly || r.hide !== 'none'));
+}
+
+/** Chips with counts: kinds in the catalogue's order, or the local detail's places by count. */
+export function detailFacets(rows: readonly DetailEvent[], f: DetailFilter, by: 'kinds' | 'places', names: ManageNames): { key: string; label: string; count: number }[] {
+    const pool = filterDetailEvents(rows, f, by);
+    const counts = new Map<string, number>();
+    for (const r of pool) {
+        const keys = by === 'kinds' ? [r.ev.kind] : r.placeKeys;
+        for (const k of keys) counts.set(k, (counts.get(k) ?? 0) + 1);
+    }
+    // A chosen chip stays even when the rest of the filter leaves none of it.
+    for (const k of by === 'kinds' ? f.kinds : f.places) if (!counts.has(k)) counts.set(k, 0);
+    const keys = [...counts.keys()];
+    if (by === 'kinds') {
+        const order = HISTORY_KINDS as readonly string[];
+        keys.sort((a, b) => order.indexOf(a) - order.indexOf(b));
+    } else {
+        const collator = new Intl.Collator();
+        keys.sort((a, b) => (counts.get(b)! - counts.get(a)!) || collator.compare(names.place(a), names.place(b)));
+    }
+    return keys.map(k => ({ key: k, label: by === 'kinds' ? k : names.place(k), count: counts.get(k)! }));
+}
+
+/** "1800–1899" for the century of a year. */
+export function centuryLabel(c: number): string {
+    return `${c * 100}–${c * 100 + 99}`;
+}
+
+export function centuryOf(year: number): number {
+    return Math.floor(year / 100);
+}
+
+/** The centuries the events fall in (oldest first): the period choices. */
+export function detailCenturies(rows: readonly DetailEvent[]): number[] {
+    return [...new Set(rows.map(r => centuryOf(r.ev.from)))].sort((a, b) => a - b);
+}
+
+export interface CenturyGroup {
+    century: number;
+    label: string;
+    rows: DetailEvent[];
+    /** Unfolded unless the viewer folded it (or, above 40 events, all but the largest). */
+    open: boolean;
+}
+
+/** Folding above this many events (§2.3). */
+export const CENTURY_FOLD_ABOVE = 40;
+
+/**
+ * The list by centuries (§2.3). Above 40 events only the most numerous
+ * century is unfolded; `toggled` holds the centuries the viewer flipped.
+ */
+export function centuryGroups(rows: readonly DetailEvent[], toggled: ReadonlySet<number> = new Set()): CenturyGroup[] {
+    const by = new Map<number, DetailEvent[]>();
+    for (const r of rows) {
+        const c = centuryOf(r.ev.from);
+        const list = by.get(c);
+        if (list) list.push(r); else by.set(c, [r]);
+    }
+    const centuries = [...by.keys()].sort((a, b) => a - b);
+    let largest = centuries[0];
+    for (const c of centuries) if (by.get(c)!.length > by.get(largest)!.length) largest = c;
+    const fold = rows.length > CENTURY_FOLD_ABOVE;
+    return centuries.map(c => {
+        const byDefault = !fold || c === largest;
+        return { century: c, label: centuryLabel(c), rows: by.get(c)!, open: toggled.has(c) ? !byDefault : byDefault };
+    });
+}
+
+// ─── Who sees an event (§2.2, the card layer's computation) ─────────────────
+
+export interface AudienceEntry {
+    personId: string;
+    /** The tree's spelling of the place the event reaches the person through. */
+    place: string;
+    /** The payload's key of that place. */
+    placeKey: string;
+}
+
+export interface EventAudience {
+    /** Persons whose card shows the event now. */
+    sees: AudienceEntry[];
+    /** Persons whose card would show it but a hiding keeps it off. */
+    hidden: AudienceEntry[];
+}
+
+/**
+ * Who sees each event on a card: every person of the tree through
+ * `computePersonHistory`, so the numbers are the card layer's.
+ */
+export function historyAudience(data: StromData, p: HistoryPayload, lang: Language, env: PersonHistoryEnv = {}): Map<string, EventAudience> {
+    const out = new Map<string, EventAudience>();
+    const get = (id: string) => {
+        let a = out.get(id);
+        if (!a) { a = { sees: [], hidden: [] }; out.set(id, a); }
+        return a;
+    };
+    if (!p.events.length) return out;
+    for (const personId of Object.keys(data.persons)) {
+        const h = computePersonHistory(data, personId, p, lang, env);
+        for (const i of h.items) get(i.ev.id).sees.push({ personId, place: i.place, placeKey: i.placeKey });
+        for (const i of h.hidden) get(i.ev.id).hidden.push({ personId, place: i.place, placeKey: i.placeKey });
+    }
+    return out;
+}
+
+/** The places where someone sees the event, most persons first (Hide at a place ›). */
+export function audiencePlaces(a: EventAudience | undefined, names: ManageNames): { key: string; name: string; persons: number }[] {
+    const by = new Map<string, number>();
+    for (const e of a?.sees ?? []) by.set(e.placeKey, (by.get(e.placeKey) ?? 0) + 1);
+    const collator = new Intl.Collator();
+    return [...by.entries()]
+        .map(([key, persons]) => ({ key, name: names.place(key), persons }))
+        .sort((x, y) => y.persons - x.persons || collator.compare(x.name, y.name));
 }
