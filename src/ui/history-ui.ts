@@ -2,8 +2,8 @@
  * History in the life timeline (spec 020) — the DOM half and the
  * page's state: the research's events of the time per research (read from its
  * bridge, kept on the device), the hidings waiting for the bridge, the
- * Settings row in "Person card" with its status row, and the
- * tree's list of hidden events (#history-hidden-modal).
+ * Settings row in "Person card" with its status row and the row opening
+ * the manager "History of places" (#history-modal, history-manage-ui.ts).
  *
  * The pure model is src/history.ts, the bridge's routes src/history-bridge.ts,
  * the device's copy src/history-store.ts. Off (the user's choice) = the person card
@@ -29,16 +29,18 @@ import {
 } from '../research-link.js';
 import { storedResearchBridge, announcedResearchScheme } from '../research-device.js';
 import {
-    computePersonHistory, historyCardShows, historySettingsStatus, historyHiddenList, historyHiddenCount, queueHideOp,
+    computePersonHistory, historyCardShows, historySettingsStatus, queueHideOp,
     type HistoryPayload, type HistoryHideOp, type PersonHistory, type LifelineHistoryItem, type HiddenHistoryItem,
-    type HiddenListEntry, type HistorySettingsAction,
+    type HistorySettingsAction, type EffectiveHidden,
 } from '../history.js';
+import { manageSummaries } from '../history-manage.js';
 import { fetchBridgeHistory, hideRequestBody, postBridgeHide, postBridgeExperimentsOff } from '../history-bridge.js';
 import { loadHistoryCache, saveHistoryCache, loadHideQueue, saveHideQueue } from '../history-store.js';
 import { onBridgeStatus } from './research-sync-ui.js';
 import { uiModule } from './module.js';
 
-export const HISTORY_HIDDEN_DIALOG_ID = 'history-hidden-modal';
+/** The manager "History of places" (history-manage-ui.ts). */
+export const HISTORY_MANAGE_DIALOG_ID = 'history-modal';
 /** Fired on window whenever what the layer shows may have changed (a read, a hiding, the setting). */
 export const HISTORY_CHANGED_EVENT = 'strom:history-changed';
 
@@ -77,8 +79,6 @@ const flushing = new Set<string>();
 const offDone = new Map<string, number>();
 /** The bridge's sentence after a failed switch-off, and its link (until Settings close). */
 let offError: { researchId: string; text: string; link?: string } | null = null;
-/** The entries the open hidden list shows (its "Restore" buttons by index). */
-let shownHidden: HiddenListEntry[] = [];
 let listening = false;
 
 /** A status saying the search is on this soon after a switch-off may have been asked before it. */
@@ -346,7 +346,7 @@ export const historyMethods = uiModule({
             this.renderPersonLifeline(this.currentId, true);
         }
         this.renderHistorySettingsIfOpen();
-        if (document.getElementById(HISTORY_HIDDEN_DIALOG_ID)?.classList.contains('active')) this.renderHistoryHidden();
+        if (document.getElementById(HISTORY_MANAGE_DIALOG_ID)?.classList.contains('active')) this.renderHistoryManage();
         window.dispatchEvent(new CustomEvent(HISTORY_CHANGED_EVENT));
     },
 
@@ -412,11 +412,49 @@ export const historyMethods = uiModule({
 
     /** "Restore" of a hidden event in the card ("Hidden: n"). */
     restoreHistoryItem(item: HiddenHistoryItem): void {
-        const by = item.hiddenBy;
-        const op: HistoryHideOp = by.place
-            ? { event: by.event, place: by.place, do: 'show', at: nowIso() }
-            : { event: by.event, ...(by.personId ? { personId: by.personId } : {}), ...(by.person ? { personRefn: by.person } : {}), do: 'show', at: nowIso() };
+        this.restoreHistoryHide(item.hiddenBy);
+    },
+
+    /** Undo a hiding as it applies (the card's "Restore", the manager's Hidden tab): the same target with `do: "show"`. */
+    restoreHistoryHide(by: EffectiveHidden): void {
+        const at = nowIso();
+        const op: HistoryHideOp = by.region && !by.event ? { region: by.region, do: 'show', at }
+            : by.tree ? { event: by.event, tree: true, do: 'show', at }
+                : by.place ? { event: by.event, place: by.place, do: 'show', at }
+                    : { event: by.event, ...(by.personId ? { personId: by.personId } : {}), ...(by.person ? { personRefn: by.person } : {}), do: 'show', at };
         void this.applyHistoryHide(op);
+    },
+
+    /**
+     * What the manager needs of the open tree's history: its research, the
+     * payload in use (null none; undefined not loaded yet), the hidings as they
+     * apply, the bridge's last status and whether it runs now.
+     */
+    historyManageContext(): {
+        researchId: string; payload: HistoryPayload | null | undefined; queue: HistoryHideOp[];
+        status: LiveStatus | null; lastStatus: LiveStatus | null; base: string | null; offDone: boolean; canLinkOn: boolean;
+    } | null {
+        const rid = activeResearchId();
+        if (!rid) return null;
+        const status = this.researchBridgeUp(rid) ? this.researchStatusOf(rid) : null;
+        return {
+            researchId: rid,
+            payload: cache.has(rid) ? cache.get(rid) ?? null : undefined,
+            queue: displayQueue(rid),
+            status,
+            lastStatus: status ?? this.researchStatusOf(rid),
+            base: status ? bridgeBase(rid) : null,
+            offDone: offDone.has(rid),
+            canLinkOn: this.historyCanLinkOn(rid),
+        };
+    },
+
+    /** The manager has an entry (§1.1): the layer on, a tree tied to a research with a copy here or `history.events`. */
+    historyManageAvailable(): boolean {
+        if (!SettingsManager.isHistoryLayer()) return false;
+        const ctx = this.historyManageContext();
+        if (!ctx) return false;
+        return !!ctx.payload || (ctx.lastStatus?.features ?? []).includes(HISTORY_EVENTS_FEATURE);
     },
 
     /** A hiding (or its undo) of the open tree's research: into the queue, kept, shown, sent. */
@@ -451,12 +489,12 @@ export const historyMethods = uiModule({
         if (document.getElementById('settings-modal')?.classList.contains('active')) this.renderHistorySettings();
     },
 
-    /** The layer's toggle, status row and "Hidden events (n)" (`fresh`: Settings just opened). */
+    /** The layer's toggle, status row and "History of places ›" (`fresh`: Settings just opened). */
     renderHistorySettings(fresh = false): void {
         if (fresh) offError = null;
         const toggle = document.getElementById('history-setting-toggle') as HTMLInputElement | null;
         const row = document.getElementById('history-setting-status');
-        const link = document.getElementById('history-hidden-link');
+        const link = document.getElementById('history-manage-link');
         const layerOn = SettingsManager.isHistoryLayer();
         if (toggle) toggle.checked = layerOn;
         if (!row || !link) return;
@@ -499,9 +537,9 @@ export const historyMethods = uiModule({
             row.innerHTML = html;
             row.hidden = false;
         }
-        const n = layerOn && payload ? historyHiddenCount(payload, displayQueue(rid!)) : 0;
-        link.hidden = n === 0;
-        link.textContent = n ? strings.history.hiddenLink(n) : '';
+        const sub = document.getElementById('history-manage-link-sub');
+        link.hidden = !this.historyManageAvailable();
+        if (sub) sub.textContent = payload ? manageSummaries(payload, lang(), displayQueue(rid!)).settings : '';
     },
 
     /** A link or button of the status row. */
@@ -549,98 +587,9 @@ export const historyMethods = uiModule({
         this.historyChanged();
     },
 
-    // ─── The tree's hidden list (§4.4) ─────────────────────────────────────
-
-    /** Settings → "Hidden events (n)": the list over Settings ("‹" back to it). */
-    showHistoryHidden(): void {
-        const modal = document.getElementById(HISTORY_HIDDEN_DIALOG_ID);
-        if (!modal) return;
-        this.clearDialogStack();
-        if (document.getElementById('settings-modal')?.classList.contains('active')) {
-            this.pushDialog('settings-modal');
-            this.closeDialogById('settings-modal');
-        }
-        this.pushDialog(HISTORY_HIDDEN_DIALOG_ID);
-        this.renderHistoryHidden();
-        modal.classList.add('active');
-        modal.querySelector<HTMLElement>('.history-hidden-back')?.focus();
-    },
-
-    /** "‹" back to Settings; "×" (`all`) closes both. */
-    closeHistoryHidden(all = false): void {
-        document.getElementById(HISTORY_HIDDEN_DIALOG_ID)?.classList.remove('active');
-        shownHidden = [];
-        if (all) {
-            this.clearDialogStack();
-            this.closeSettingsDialog();
-            return;
-        }
-        const back = this.dialogStack.includes('settings-modal');
-        this.returnToParentDialog();
-        if (back) {
-            this.renderHistorySettings();
-            document.getElementById('history-hidden-link')?.focus();
-        }
-    },
-
-    renderHistoryHidden(): void {
-        const list = document.getElementById('history-hidden-list');
-        const subtitle = document.getElementById('history-hidden-subtitle');
-        if (!list) return;
-        const h = strings.history;
-        const rid = activeResearchId();
-        const payload = rid ? cache.get(rid) ?? null : null;
-        const treeId = DataManager.getCurrentTreeId();
-        const treeName = (treeId ? TreeManager.getTreeMetadata(treeId)?.name : '') ?? '';
-        const queue = rid ? displayQueue(rid) : [];
-        const data = DataManager.getData();
-        const groups = payload ? historyHiddenList(data, payload, queue, lang()) : [];
-        const n = payload ? historyHiddenCount(payload, queue) : 0;
-        if (subtitle) subtitle.textContent = h.hiddenSubtitle(treeName, n);
-        shownHidden = [];
-        if (!groups.length) {
-            list.innerHTML = `<p class="history-hidden-empty">${esc(h.hiddenEmpty)}</p>`;
-            return;
-        }
-        const nameOf = (e: HiddenListEntry): string => {
-            const person = e.personId ? data.persons[e.personId as keyof typeof data.persons] : undefined;
-            return person ? shownName(person) : e.personRefn ?? '';
-        };
-        list.innerHTML = groups.map(g => {
-            const items = g.entries.map(e => {
-                const i = shownHidden.push(e) - 1;
-                const scope = (e.hide.place ? h.scopePlace(e.place) : h.scopePersonNamed(nameOf(e)))
-                    + (e.hide.queued ? ` · ${h.pendingSync}` : '');
-                const textLang = e.textLang && e.textLang !== lang() ? ` lang="${esc(e.textLang)}"` : '';
-                return `<li class="history-hidden-item" data-event="${esc(e.event.id)}">`
-                    + `<span class="history-hidden-year">${e.year}</span>`
-                    + `<span class="history-hidden-text"><span class="history-hidden-year-inline">${e.year} · </span><span${textLang}>${esc(e.text)}</span></span>`
-                    + `<span class="history-hidden-scope">${esc(scope)}</span>`
-                    + `<button type="button" class="history-hidden-restore" onclick="window.Strom.UI.restoreHistoryHidden(${i})">${esc(h.restore)}</button>`
-                    + '</li>';
-            }).join('');
-            const title = g.place ? `${g.place} · ${g.entries.length}` : String(g.entries.length);
-            return `<section class="history-hidden-group"><h3 class="history-hidden-group-title">${esc(title)}</h3>`
-                + `<ul class="history-hidden-items">${items}</ul></section>`;
-        }).join('');
-    },
-
-    /** "Restore" in the tree's list. */
-    restoreHistoryHidden(index: number): void {
-        const e = shownHidden[index];
-        if (!e) return;
-        const by = e.hide;
-        const personId = by.personId ?? e.personId;
-        const personRefn = by.person ?? e.personRefn;
-        const op: HistoryHideOp = by.place
-            ? { event: by.event, place: by.place, do: 'show', at: nowIso() }
-            : { event: by.event, ...(personId ? { personId } : {}), ...(personRefn ? { personRefn } : {}), do: 'show', at: nowIso() };
-        void this.applyHistoryHide(op);
-    },
-
     /** Test hook: forget the page's history state (a new page). */
     resetHistoryLayerState(): void {
         cache.clear(); queues.clear(); inFlight.clear(); loadedRev.clear(); readHere.clear();
-        reading.clear(); readAgain.clear(); flushing.clear(); offDone.clear(); offError = null; shownHidden = [];
+        reading.clear(); readAgain.clear(); flushing.clear(); offDone.clear(); offError = null;
     },
 });

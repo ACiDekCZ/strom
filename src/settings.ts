@@ -187,6 +187,16 @@ class SettingsManagerClass {
         this.save();
     }
 
+    /** History of places → Places: all places by people (default) or alphabetically. */
+    getHistoryPlacesSort(): 'persons' | 'alpha' {
+        return this.settings.historyPlacesSort === 'alpha' ? 'alpha' : 'persons';
+    }
+
+    setHistoryPlacesSort(sort: 'persons' | 'alpha'): void {
+        this.settings.historyPlacesSort = sort;
+        this.save();
+    }
+
     /** Floating zoom buttons default ON (undefined = enabled). */
     /**
      * Has the user allowed the map to look place names up online? Default is

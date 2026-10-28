@@ -70,6 +70,12 @@ export function manageCan(env: Pick<ManageEnv, 'features' | 'bridgeUp'>, action:
     }
 }
 
+/** The research searches for the tree (the status's word while the bridge runs, else the copy's). */
+export function manageSearchOn(p: HistoryPayload, env: Pick<ManageEnv, 'bridgeUp' | 'searchOn' | 'offDone'>): boolean {
+    if (env.offDone) return false;
+    return env.bridgeUp && env.searchOn !== undefined ? env.searchOn : p.state.on;
+}
+
 // ─── Search ────────────────────────────────────────────────────────────────
 
 /** Lower case without diacritics ("Čáslav" → "caslav"). */
@@ -235,7 +241,8 @@ export function regionGroups(p: HistoryPayload, env: ManageEnv, names: ManageNam
     const wholeHidden = new Set(hidden.filter(h => !h.event && h.region).map(h => h.region!));
     const archive = historyWaiting(p, env.treeState);
     const collator = new Intl.Collator(lang);
-    const canFirst = manageCan(env, 'first') && !derived;
+    // Search off: "Find first" leads nowhere (the header offers switching it on).
+    const canFirst = manageCan(env, 'first') && !derived && manageSearchOn(p, env);
     const canHideAll = manageCan(env, 'hideAll');
     const canSkip = manageCan(env, 'skip') && !derived;
 
@@ -413,7 +420,7 @@ export function placeGroups(p: HistoryPayload, env: ManageEnv, names: ManageName
     const placeEvents = new Map<string, number>();
     for (const ev of p.events) if (ev.scope === 'place' && ev.place) placeEvents.set(ev.place.key, (placeEvents.get(ev.place.key) ?? 0) + 1);
     const canMap = r1 && manageCan(env, 'map');
-    const canPlace = r1 && manageCan(env, 'place');
+    const canPlace = r1 && manageCan(env, 'place') && manageSearchOn(p, env);
     const canSkip = r1 && manageCan(env, 'skip');
 
     const rowOf = (key: string, place: HistoryPlace): PlaceRow => {
@@ -643,7 +650,7 @@ export function manageHeader(p: HistoryPayload, env: ManageEnv): ManageHeader {
     let text: string;
     let link: ManageHeader['link'] = null;
     let searching = false;
-    const searchOn = env.offDone ? false : env.bridgeUp && env.searchOn !== undefined ? env.searchOn : p.state.on;
+    const searchOn = manageSearchOn(p, env);
     if (!env.bridgeUp) {
         text = `${s.statusAsOf(env.formatTime(p.cachedAt))} ${s.manageNoBridge}`;
         notes.push(s.manageNoBridgeNote);

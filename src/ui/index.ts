@@ -123,6 +123,7 @@ import { fileCopyMethods } from './file-copy-ui.js';
 import { researchUiMethods } from './research-ui.js';
 import { researchSyncMethods } from './research-sync-ui.js';
 import { historyMethods } from './history-ui.js';
+import { historyManageMethods } from './history-manage-ui.js';
 import { historyCardMethods } from './history-card-ui.js';
 import { researchOthersMethods } from './research-others-ui.js';
 import { researchFollowMethods } from './research-follow-ui.js';
@@ -624,6 +625,10 @@ Object.assign(UIClass.prototype, readProposeMethods);
 type HistoryMethods = typeof historyMethods;
 export interface UIClass extends HistoryMethods {}
 Object.assign(UIClass.prototype, historyMethods);
+
+type HistoryManageMethods = typeof historyManageMethods;
+export interface UIClass extends HistoryManageMethods {}
+Object.assign(UIClass.prototype, historyManageMethods);
 
 type HistoryCardMethods = typeof historyCardMethods;
 export interface UIClass extends HistoryCardMethods {}
