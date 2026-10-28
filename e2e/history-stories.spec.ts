@@ -59,6 +59,16 @@ test.describe('History in stories: Research for this tree', () => {
         expect((await links(page)).some(u => u.includes('experiment') && u.includes('do=on'))).toBe(true);
     });
 
+    test('history off: the row off as the research says; history on again brings the choice back without a write', async ({ page }) => {
+        const { history } = await setup(page, { history: { stories: true, searching: false } });
+        await openTreeSettings(page);
+        await expect(toggle(page)).not.toBeChecked();
+        history.searching = true;
+        await poll(page);
+        await expect(toggle(page)).toBeChecked();
+        expect(history.writes.stories).toEqual([]);
+    });
+
     test('busy: the sentence under the row, the switch as it was', async ({ page }) => {
         const { history } = await setup(page, { history: { stories: false } });
         history.writeReply = { stories: { status: 503, body: { error: 'Busy.', code: 'research.busy', text: 'Busy.' } } };

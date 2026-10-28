@@ -534,8 +534,11 @@ function serveHistory(b: FakeBridge, method: string, url: URL, postData: string 
                 return refuse(409, 'history.off', 'The research does not look for history.',
                     { link: `strom-research://experiment?tree=${UUID}&name=history&do=on` });
             }
+            // R7: off while the research does not look for history writes nothing
+            // (head = parent): the choice stays, so history on again brings it back.
+            if (!body.history && !h.searching) return { status: 200, body: { stories: { history: false }, head: b.head, parent: b.head } };
             h.stories = body.history;
-            return { status: 200, body: { ok: true, history: body.history, ...commitWrite(b) } };
+            return { status: 200, body: { stories: { history: body.history }, ...commitWrite(b) } };
         }
     }
     return unknown;
@@ -1162,7 +1165,7 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
                 ...(b.history ? {
                     history: { rev: b.history.rev, ...(b.history.placeEstimate ? { placeEstimate: b.history.placeEstimate } : {}) },
                     experiments: { history: b.history.searching, ...(b.history.pace ? { historyPace: b.history.pace } : {}) },
-                    ...(b.history.stories !== undefined ? { stories: { history: b.history.stories } } : {}),
+                    ...(b.history.stories !== undefined ? { stories: { history: b.history.searching && b.history.stories } } : {}),
                 } : {}),
                 ...(b.statusExtra ?? {}),
             });
