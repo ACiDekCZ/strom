@@ -25,8 +25,8 @@ function person(id: string, gender: unknown, extra: Partial<Person> = {}): Perso
 }
 
 describe('data format 11 -> 12 (Gender unknown)', () => {
-    it('is version 12', () => {
-        expect(STROM_DATA_VERSION).toBe(12);
+    it('is version 12 or later', () => {
+        expect(STROM_DATA_VERSION).toBeGreaterThanOrEqual(12);
     });
 
     it('a v11 tree keeps every male and female; no gender or an invalid one reads as unknown', () => {

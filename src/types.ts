@@ -942,8 +942,59 @@ export function partnershipParticipants(u: Pick<Partnership, 'participants' | 'e
  *   do not give, no longer guessed from the family role (or female). Older
  *   data keeps its male/female; a missing or invalid gender reads as unknown
  *   (migrateData). An older app (v11) warns before it shows 'unknown' as male.
+ * v13 (2026-10, spec 021): StromData.qualityDismissed (findings of the tree
+ *   check marked "not an error" / "two different people") and
+ *   StromData.surnameRejections (spelling groups the research suggested and
+ *   the user rejected). Both tree-level lists, additive; an older app (v12)
+ *   would drop them on a re-save (migrateData builds field by field), so the
+ *   bump makes it warn first.
  */
-export const STROM_DATA_VERSION = 12;
+export const STROM_DATA_VERSION = 13;
+
+/**
+ * A finding of the tree check marked "not an error" ("two different people"
+ * for a possible duplicate): it is not reported again while its key — `kind`
+ * + `persons` + `subject` (qualityFindingKey in validation.ts) — stays.
+ */
+export interface QualityDismissal {
+    /** The finding's type (ValidationIssue.type), e.g. 'possibleDuplicate'. */
+    kind: string;
+    /** The ids of its people in this tree, sorted. */
+    persons: string[];
+    /**
+     * What the finding is about beyond its people (qualityFinding): the year
+     * of an event or a wedding after death (four digits), a godparent's name.
+     */
+    subject?: string;
+    /** When it was marked (ISO time). */
+    at: string;
+    /**
+     * Where the mark stands with the research (a research tree whose bridge
+     * takes `quality.dismiss`): sent and confirmed, waiting for the bridge, or
+     * kept in the app only (a person without the research's REFN, or refused).
+     * Absent: not a matter of the research (no research, an older one).
+     */
+    sync?: 'sent' | 'queued' | 'app';
+    /** Marked in the research itself (its terminal), read from `GET /quality`. */
+    by?: 'research';
+}
+
+/**
+ * A spelling group the research suggested and the user rejected (spec 021
+ * §4.4): not offered again, by the research's `id` of the suggestion or by
+ * the same spellings. Goes to the research with the next send of changes
+ * (GEDCOM header NOTE "Strom surname-variant rejections").
+ */
+export interface SurnameRejection {
+    /** The spellings of the rejected suggestion. */
+    forms: string[];
+    /** The research's id of the suggestion (opaque; never made by the app). */
+    id?: string;
+    /** When it was rejected (ISO time); absent for one read from a file. */
+    at?: string;
+    /** Decided in the research itself (read with its version of the tree). */
+    by?: 'research';
+}
 
 /**
  * Coordinates of one place, kept in the tree's own file so a place is looked up
@@ -987,6 +1038,18 @@ export interface StromData {
      * is the wrong one, and the registers disagree in every direction.
      */
     surnameVariants?: string[][];
+
+    /**
+     * Spelling groups suggested by the research and rejected here (spec 021
+     * §4.4, data version 13). Never offered again.
+     */
+    surnameRejections?: SurnameRejection[];
+
+    /**
+     * Findings of the tree check marked "not an error" (spec 021 K1.5, data
+     * version 13): not reported again. Newest last.
+     */
+    qualityDismissed?: QualityDismissal[];
 
     /**
      * When Strom Research wrote what the people's `research` says (GEDCOM
@@ -1172,6 +1235,10 @@ export type AuditAction =
     | 'attachment.update'
     | 'parentRel.update'
     | 'place.clean'
+    | 'quality.dismiss'
+    | 'quality.restore'
+    | 'surname.reject'
+    | 'surname.unreject'
     | 'undo'
     | 'redo';
 

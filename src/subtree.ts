@@ -12,6 +12,7 @@
 
 import { StromData, Person, PersonId, Partnership, PartnershipId, EventParticipant, personSourceIds, partnershipSourceIds } from './types.js';
 import { placeKey } from './places.js';
+import { dismissalsWithin } from './quality-dismiss.js';
 
 /**
  * Build a deep-copied StromData containing only `seedIds` (plus glue partners),
@@ -116,6 +117,13 @@ export function extractSubtree(data: StromData, seedIds: Set<PersonId>): StromDa
     if (data.surnameVariants && data.surnameVariants.length > 0) {
         result.surnameVariants = structuredClone(data.surnameVariants);
     }
+    // Rejected spelling suggestions are about names, like the groups: whole.
+    // A "not an error" mark goes along when all its people do.
+    if (data.surnameRejections && data.surnameRejections.length > 0) {
+        result.surnameRejections = structuredClone(data.surnameRejections);
+    }
+    const marks = dismissalsWithin(data.qualityDismissed, id => !!persons[id as PersonId]);
+    if (marks) result.qualityDismissed = marks;
     if (data.researchAsOf) result.researchAsOf = data.researchAsOf;
     return result;
 }

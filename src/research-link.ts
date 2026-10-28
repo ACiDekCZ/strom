@@ -10,6 +10,7 @@
 
 import { StromData, Person, PersonId, PartnershipId, Partnership, ResearchLink, Source, APP_VERSION } from './types.js';
 import { withoutConvertedStandIns, isPurePlaceholder } from './single-parent.js';
+import { carryOverTreeDecisions } from './quality-dismiss.js';
 import { PhoneSummary, sanitizePhoneSummary } from './phone.js';
 import { ReadAccepts, LiveRead, READ_FEATURE, sanitizeReadAccepts, sanitizeReads } from './research-read.js';
 
@@ -513,7 +514,12 @@ function fingerprintParts(raw: StromData): unknown[] {
         data.partnerships ?? {},
         data.sources ?? null,
         data.places ?? null,
-        data.surnameVariants ?? null,
+        data.surnameVariants?.length ? data.surnameVariants : null,
+        // Rejected spelling suggestions go to the research with the next send
+        // (spec 021 §4.4). Only when there are some, so a tree without any
+        // keeps the fingerprint it had. The "not an error" marks are not here:
+        // they go by the bridge, never in the file.
+        ...(data.surnameRejections?.length ? [data.surnameRejections.map(r => r.forms)] : []),
     ];
 }
 
@@ -1028,7 +1034,8 @@ export interface MediaCarryOver {
  *   source with the same id: all when the research has none for it, else
  *   only those cut here from an attachment.
  * - a source's reading marks (`reading`, `readingEntry`, `readingSha`) when
- *   the research's source with the same id has none.
+ *   the research's source with the same id has none;
+ * - the tree's decisions on its data quality (carryOverTreeDecisions).
  * What belongs to a person or source missing from `next` is counted as lost.
  * Returns a new object; neither input is changed.
  */
@@ -1104,7 +1111,11 @@ export function carryOverMedia(next: StromData, previous: StromData): MediaCarry
         if (extra.length) sources[id] = { ...cur, excerpts: [...have, ...extra] };
     }
 
-    return { data: { ...next, persons, ...(sources ? { sources } : {}) }, lost };
+    // The tree's own decisions on its data (the "not an error" marks; the
+    // spelling groups and rejections when the research's file says nothing
+    // of them) — the research's GEDCOM does not carry the marks.
+    const data = carryOverTreeDecisions({ ...next, persons, ...(sources ? { sources } : {}) }, previous);
+    return { data, lost };
 }
 
 /**

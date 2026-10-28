@@ -81,6 +81,11 @@ const GEDCOM_STAT: Partial<Record<Partnership['status'], string>> = {
 export const SURNAME_GROUPS_MARKER = 'Strom surname-variant groups';
 /** Separates spellings within one group inside the header NOTE. */
 export const SURNAME_GROUP_SEP = ' | ';
+/**
+ * Spelling suggestions the user rejected (StromData.surnameRejections), in a
+ * header NOTE of the same format: one `2 CONT` per rejected group.
+ */
+export const SURNAME_REJECTIONS_MARKER = 'Strom surname-variant rejections';
 
 /**
  * LifeEvent type -> GEDCOM tag. Types with no GEDCOM equivalent ('military',
@@ -600,10 +605,15 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
     // family", so they ride in a header NOTE (standard, kept by every reader).
     // The marker line lets our own importer read them back; the group lines are
     // human-readable on their own.
+    // The file for the research carries both markers always, an empty one
+    // meaning "none" (the research takes a missing marker as "nothing said");
+    // a plain export only a list that has something in it.
     const surnameGroups = (data.surnameVariants ?? []).filter(g => g.length >= 2);
-    if (surnameGroups.length > 0) {
-        lines.push(`1 NOTE ${SURNAME_GROUPS_MARKER}`);
-        for (const group of surnameGroups) {
+    const rejectedGroups = (data.surnameRejections ?? []).map(r => r.forms).filter(g => g.length >= 2);
+    for (const [marker, groups] of [[SURNAME_GROUPS_MARKER, surnameGroups], [SURNAME_REJECTIONS_MARKER, rejectedGroups]] as const) {
+        if (groups.length === 0 && !options.research) continue;
+        lines.push(`1 NOTE ${marker}`);
+        for (const group of groups) {
             pushWrapped(lines, 2, 'CONT', group.join(SURNAME_GROUP_SEP));
         }
     }

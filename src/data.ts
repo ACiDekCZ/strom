@@ -37,6 +37,8 @@ import {
     PlaceGeo,
     PartnershipUpdates,
     ResearchBase,
+    QualityDismissal,
+    SurnameRejection,
 } from './types.js';
 import { isCoupleEventType } from './events.js';
 import { strings, getCurrentLanguage, getStringsForLang, SUPPORTED_LANGUAGES } from './strings.js';
@@ -48,6 +50,7 @@ import { extractSubtree } from './subtree.js';
 import { collectPlaces, renamePlace, placeKey, orphanedPlaceKeys } from './places.js';
 import { StorageManager } from './storage.js';
 import { surnameForms, addSurnameGroup, removeSurnameGroup } from './surnames.js';
+import { sanitizeQualityDismissed, sanitizeSurnameRejections, dismissalKey, surnameRejectionKey } from './quality-dismiss.js';
 import { ChangePacket, applyPacketOntoData } from './share-diff.js';
 import { createSnapshot, getSnapshotPayload, SnapshotReason, hasAutoSnapshotOnDay } from './snapshots.js';
 import { ValidationIssue, stripUnsafeMediaDataUrls, translateValidationType } from './validation.js';
@@ -205,9 +208,16 @@ export function migrateData(data: unknown): StromData {
         result.places = d.places as StromData['places'];
     }
 
-    if (Array.isArray(d.surnameVariants)) {
+    if (Array.isArray(d.surnameVariants) && d.surnameVariants.length > 0) {
         result.surnameVariants = d.surnameVariants as StromData['surnameVariants'];
     }
+
+    // v13: the rejected spelling suggestions and the findings marked "not an
+    // error" (src/quality-dismiss.ts); anything malformed in them is dropped.
+    const surnameRejections = sanitizeSurnameRejections(d.surnameRejections);
+    if (surnameRejections?.length) result.surnameRejections = surnameRejections;
+    const qualityDismissed = sanitizeQualityDismissed(d.qualityDismissed);
+    if (qualityDismissed?.length) result.qualityDismissed = qualityDismissed;
 
     if (typeof d.researchAsOf === 'string') {
         result.researchAsOf = d.researchAsOf;
@@ -1468,6 +1478,86 @@ class DataManagerClass {
         this.beginMutation();
         this.data.surnameVariants = next.length > 0 ? next : undefined;
         this.commitMutation(strings.undo.removeSurnameGroup(surname));
+    }
+
+    /**
+     * Remember that a suggested spelling group was rejected (spec 021 §4.4):
+     * it is not offered again. One undo step and a change-log entry. Returns
+     * false when the same spellings are rejected already.
+     */
+    addSurnameRejection(rejection: SurnameRejection): boolean {
+        const key = surnameRejectionKey(rejection.forms);
+        const list = this.data.surnameRejections ?? [];
+        if (list.some(r => surnameRejectionKey(r.forms) === key)) return false;
+        this.beginMutation();
+        this.data.surnameRejections = [...list, { ...rejection, forms: [...rejection.forms] }];
+        this.commitMutation(strings.undo.rejectSurnameGroup(rejection.forms.join(', ')), true);
+        if (this.currentTreeId) {
+            AuditLogManager.log(this.currentTreeId, 'surname.reject', strings.auditLog.surnameRejected(rejection.forms.join(', ')));
+        }
+        return true;
+    }
+
+    /** Take a rejection back (the suggestion may be offered again). */
+    removeSurnameRejection(forms: readonly string[]): boolean {
+        const key = surnameRejectionKey(forms);
+        const list = this.data.surnameRejections ?? [];
+        const next = list.filter(r => surnameRejectionKey(r.forms) !== key);
+        if (next.length === list.length) return false;
+        this.beginMutation();
+        this.data.surnameRejections = next.length > 0 ? next : undefined;
+        this.commitMutation(strings.undo.unrejectSurnameGroup(forms.join(', ')), true);
+        if (this.currentTreeId) {
+            AuditLogManager.log(this.currentTreeId, 'surname.unreject', strings.auditLog.surnameUnrejected(forms.join(', ')));
+        }
+        return true;
+    }
+
+    // ==================== DATA QUALITY ====================
+
+    /**
+     * Mark a finding of the tree check "not an error" (spec 021 K1.5): it is
+     * not reported again while its key stays. `label` names the finding in the
+     * undo step and the change log. Silent: the dialog shows its own toast
+     * with "Undo". Returns false when it is marked already.
+     */
+    dismissQualityFinding(dismissal: QualityDismissal, label: string): boolean {
+        const key = dismissalKey(dismissal);
+        const list = this.data.qualityDismissed ?? [];
+        if (list.some(d => dismissalKey(d) === key)) return false;
+        this.beginMutation();
+        this.data.qualityDismissed = [...list, { ...dismissal, persons: [...dismissal.persons] }];
+        this.commitMutation(strings.undo.dismissQualityFinding(label), true);
+        if (this.currentTreeId) {
+            AuditLogManager.log(this.currentTreeId, 'quality.dismiss', strings.auditLog.qualityDismissed(label));
+        }
+        return true;
+    }
+
+    /** Take a mark back: the finding is reported again. Returns false when there was none. */
+    restoreQualityDismissal(key: string, label: string): boolean {
+        const list = this.data.qualityDismissed ?? [];
+        const next = list.filter(d => dismissalKey(d) !== key);
+        if (next.length === list.length) return false;
+        this.beginMutation();
+        this.data.qualityDismissed = next.length > 0 ? next : undefined;
+        this.commitMutation(strings.undo.restoreQualityFinding(label), true);
+        if (this.currentTreeId) {
+            AuditLogManager.log(this.currentTreeId, 'quality.restore', strings.auditLog.qualityRestored(label));
+        }
+        return true;
+    }
+
+    /**
+     * The marks as the research's bridge left them (their send state, marks
+     * made in the research or on another device, marks taken back there).
+     * Not a user's edit: no undo step, no change-log entry, no toast; kept
+     * like any other save of the tree. Ignored while the tree is read-only.
+     */
+    replaceQualityDismissed(next: readonly QualityDismissal[]): void {
+        if (this.viewMode || this.isLocked()) return;
+        this.data.qualityDismissed = next.length > 0 ? next.map(d => ({ ...d, persons: [...d.persons] })) : undefined;
+        this.save();
     }
 
     // ==================== PLACES ====================

@@ -22,6 +22,7 @@ import {
     PERSON_CITATION_FIELDS, isGender,
 } from '../types.js';
 import { addSurnameGroup, surnameKey } from '../surnames.js';
+import { sanitizeQualityDismissed, sanitizeSurnameRejections } from '../quality-dismiss.js';
 import {
     MergeState,
     MergeResult,
@@ -475,6 +476,12 @@ export async function executeMerge(state: MergeState): Promise<MergeResult> {
             }
         }
 
+        // The incoming tree's decisions on its data quality come along too:
+        // rejected spelling suggestions whole, its "not an error" marks with
+        // their people as they are in the merged tree (a mark naming someone
+        // left behind is dropped); the existing tree's own marks stay.
+        mergeTreeDecisions(mergedData, state.incomingData, mapping.persons);
+
         // Citations of a source that was already in the tree now name the kept entry.
         remapSourceReferences(mergedData, sourceRemap);
         unlinkOrphanExcerpts(mergedData);
@@ -714,6 +721,24 @@ function remapParentRelTypes(
  */
 function deepCloneStromData(data: StromData): StromData {
     return structuredClone(data);
+}
+
+function mergeTreeDecisions(merged: StromData, incoming: StromData, personMap: Map<PersonId, PersonId>): void {
+    const rejections = sanitizeSurnameRejections([...(merged.surnameRejections ?? []), ...(incoming.surnameRejections ?? [])]);
+    if (rejections?.length) merged.surnameRejections = rejections;
+    const own = (merged.qualityDismissed ?? []).filter(d => d.persons.every(id => merged.persons[id as PersonId]));
+    const brought = (incoming.qualityDismissed ?? []).flatMap(d => {
+        const persons = d.persons.map(id => personMap.get(id as PersonId) ?? null);
+        if (persons.some(id => !id || !merged.persons[id])) return [];
+        const copy = { ...d, persons: (persons as string[]).sort() };
+        delete copy.sync;
+        delete copy.by;
+        return [copy];
+    });
+    // The existing tree's mark wins where both have one (sanitize keeps the last).
+    const marks = sanitizeQualityDismissed([...brought, ...own]);
+    if (marks?.length) merged.qualityDismissed = marks;
+    else delete merged.qualityDismissed;
 }
 
 /**

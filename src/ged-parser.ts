@@ -68,7 +68,17 @@ import { localAge } from './recorded-age';
 import { placeKey } from './places';
 import { coupleEventTypeOfTag, eventValueIsOnTag } from './events';
 import { strings, getStringsForLang } from './strings';
-import { SURNAME_GROUPS_MARKER, SURNAME_GROUP_SEP } from './ged-exporter';
+import { SURNAME_GROUPS_MARKER, SURNAME_REJECTIONS_MARKER, SURNAME_GROUP_SEP } from './ged-exporter';
+
+/** The groups of a surname marker's lines: spellings split on '|' and trimmed, two or more each. */
+function surnameNoteGroups(noteLines: readonly string[] | null): string[][] {
+    const groups: string[][] = [];
+    for (const line of noteLines ?? []) {
+        const group = line.split(SURNAME_GROUP_SEP.trim()).map(s => s.trim()).filter(Boolean);
+        if (group.length >= 2) groups.push(group);
+    }
+    return groups;
+}
 import { excerptFromDataUrl } from './excerpts';
 import { normalizeSha256 } from './sha256';
 import { ORIGINAL_ONLY_DATA_URL } from './validation';
@@ -1045,6 +1055,14 @@ export interface ParsedGedcom {
     places: Map<string, PlaceGeo>;
     /** Surname-variant groups read from the header NOTE (see exporter marker). */
     surnameGroups: string[][];
+    /** Rejected spelling suggestions read from their header NOTE (SURNAME_REJECTIONS_MARKER). */
+    surnameRejections?: string[][];
+    /**
+     * Which of the two markers the header carried — even with no group under
+     * it ("none", as the research writes it). A file without a marker says
+     * nothing of that list (an older writer): the tree's own list stays.
+     */
+    surnameMarkers?: { groups: boolean; rejections: boolean };
     /** Header `1 SOUR STROM_RESEARCH`: written by Strom Research. */
     stromResearch?: boolean;
     /** Header `1 _STROM_ASOF`: when the research wrote it (as written). */
@@ -1826,14 +1844,10 @@ export function parseGedcom(content: string): ParsedGedcom {
     let currentPlaceValue: string | null = null;
     /** Inside the 0 HEAD record (its NOTE may carry surname-variant groups). */
     let inHeader = false;
-    /** The current header NOTE is the surname-groups marker note. */
-    let inSurnameNote = false;
-    /**
-     * One line per group, as written: a `2 CONT` starts a group, and the
-     * exporter wraps a long one onto `3 CONC` lines (pushWrapped) — those
-     * continue the same group, never start another.
-     */
-    const surnameLines: string[] = [];
+    /** The current header NOTE is one of the surname markers' notes (which one). */
+    let inSurnameNote: 'groups' | 'rejections' | false = false;
+    /** The lines under each marker: `2 CONT` starts one, `2 CONC` / `3 CONC` continue it. */
+    const surnameNoteLines: { groups: string[] | null; rejections: string[] | null } = { groups: null, rejections: null };
     /** Header `1 SOUR STROM_RESEARCH` / `1 _STROM_ASOF`. */
     let stromResearch = false;
     /** Written by the Strom app itself (HEAD > SOUR STROM). */
@@ -2048,7 +2062,11 @@ export function parseGedcom(content: string): ParsedGedcom {
             // (see the exporter's SURNAME_GROUPS_MARKER); everything else in the
             // header is bookkeeping the data model does not carry.
             if (level === 1) {
-                inSurnameNote = tag === 'NOTE' && value.trim() === SURNAME_GROUPS_MARKER;
+                inSurnameNote = tag !== 'NOTE' ? false
+                    : value.trim() === SURNAME_GROUPS_MARKER ? 'groups'
+                    : value.trim() === SURNAME_REJECTIONS_MARKER ? 'rejections'
+                    : false;
+                if (inSurnameNote) surnameNoteLines[inSurnameNote] ??= [];
                 // Strom Research's own lines: who wrote the file, and when
                 // its knowledge about people was current.
                 inStromSour = tag === 'SOUR' && value.trim() === 'STROM';
@@ -2057,12 +2075,16 @@ export function parseGedcom(content: string): ParsedGedcom {
                 else if (tag === '_STROM_ASOF') researchAsOf = value.trim();
             } else if (level === 2 && inStromSour && tag === 'VERS') {
                 stromAppVersion = value.trim();
-            } else if (level === 2 && inSurnameNote && (tag === 'CONT' || tag === 'CONC')) {
-                surnameLines.push(value);
-            } else if (level === 3 && inSurnameNote && surnameLines.length > 0 && (tag === 'CONC' || tag === 'CONT')) {
+            } else if (inSurnameNote && level === 2 && tag === 'CONT') {
+                // One group per line; a long one is wrapped on CONC lines
+                // (the exporter's pushWrapped writes them one level deeper).
+                surnameNoteLines[inSurnameNote]!.push(value);
+            } else if (inSurnameNote && (tag === 'CONC' || (level === 3 && tag === 'CONT')) && (level === 2 || level === 3)) {
                 // CONC glues on as it is (a cut may fall inside a name); a line
                 // break inside one group line means no more than a space.
-                surnameLines[surnameLines.length - 1] += tag === 'CONT' ? ` ${value}` : value;
+                const noteLines = surnameNoteLines[inSurnameNote]!;
+                if (noteLines.length === 0) noteLines.push(value);
+                else noteLines[noteLines.length - 1] += tag === 'CONT' ? ` ${value}` : value;
             }
         } else if (currentRepoId !== null && level === 1 && tag === 'NAME') {
             repositories.set(currentRepoId, value);
@@ -2960,14 +2982,14 @@ export function parseGedcom(content: string): ParsedGedcom {
         if (Number.isFinite(geo.lat) && Number.isFinite(geo.lon)) places.set(key, geo);
     }
 
-    const surnameGroups: string[][] = [];
-    for (const line of surnameLines) {
-        const group = line.split(SURNAME_GROUP_SEP.trim()).map(s => s.trim()).filter(Boolean);
-        if (group.length >= 2) surnameGroups.push(group);
-    }
+    const surnameGroups = surnameNoteGroups(surnameNoteLines.groups);
+    const surnameRejections = surnameNoteGroups(surnameNoteLines.rejections);
+    const surnameMarkers = { groups: surnameNoteLines.groups !== null, rejections: surnameNoteLines.rejections !== null };
 
     return {
         individuals, families, sources, repositories, droppedTags, places, surnameGroups,
+        ...(surnameRejections.length > 0 ? { surnameRejections } : {}),
+        ...(surnameMarkers.groups || surnameMarkers.rejections ? { surnameMarkers } : {}),
         ...(stromResearch ? { stromResearch, ...(researchAsOf ? { researchAsOf } : {}) } : {}),
     };
 }
@@ -3739,7 +3761,13 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
             partnerships,
             ...(Object.keys(sources).length > 0 ? { sources } : {}),
             ...(gedcom.places.size > 0 ? { places: Object.fromEntries(gedcom.places) } : {}),
-            ...(gedcom.surnameGroups.length > 0 ? { surnameVariants: gedcom.surnameGroups } : {}),
+            // A marker with nothing under it (the research's "none") is an
+            // empty list, no marker no list: carryOverTreeDecisions tells the
+            // two apart when a research version is loaded; migrateData drops
+            // an empty one.
+            ...(gedcom.surnameGroups.length > 0 || gedcom.surnameMarkers?.groups ? { surnameVariants: gedcom.surnameGroups } : {}),
+            ...(gedcom.surnameRejections?.length || gedcom.surnameMarkers?.rejections
+                ? { surnameRejections: (gedcom.surnameRejections ?? []).map(forms => ({ forms })) } : {}),
             ...(gedcom.stromResearch && gedcom.researchAsOf && researchIsoDate(gedcom.researchAsOf)
                 ? { researchAsOf: researchIsoDate(gedcom.researchAsOf) } : {}),
         },
