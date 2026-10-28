@@ -2,9 +2,9 @@
  * The person card timeline's chips ("Children's events", "History"), spec
  * 020 K4.5: each tree has its default, set in the tree's settings and kept in
  * this browser; the former one choice for every tree is each tree's default
- * (nothing lost on the move). A chip on the card changes the open tree's
- * default for a while only: in memory, gone when another tree is opened or
- * the app is loaded again (a new module), or when the tree's default is set.
+ * (nothing lost on the move). A chip on the card changes the default for
+ * that card only: in memory, gone when another card opens, another tree is
+ * opened, the app is loaded again (a new module) or the tree's default is set.
  */
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { SettingsManager } from '../settings.js';
@@ -82,7 +82,7 @@ describe('the card timeline default per tree', () => {
     });
 });
 
-describe('the card\'s chips change the default for a while', () => {
+describe('the card\'s chips change the default for the open card only', () => {
     beforeEach(() => { loadSettings(null); });
     afterEach(() => vi.unstubAllGlobals());
 
@@ -94,6 +94,18 @@ describe('the card\'s chips change the default for a while', () => {
         expect(v.lifelineChips('novak')).toEqual({ childEvents: false, history: true });
         expect(saved(store).lifelineByTree).toBeUndefined();
         expect(saved(store).lifelineChildEvents).toBe(false);
+    });
+
+    it('another card opened (or the same person again): the tree\'s default; the open card keeps its change', async () => {
+        const v = await freshView();
+        v.newLifelineCard();
+        v.setLifelineChip('lhotak', 'childEvents', true);
+        v.setLifelineChip('lhotak', 'history', false);
+        // Redraws of the open card ask again: the change stays.
+        expect(v.lifelineChips('lhotak')).toEqual({ childEvents: true, history: false });
+        expect(v.lifelineChips('lhotak')).toEqual({ childEvents: true, history: false });
+        v.newLifelineCard();
+        expect(v.lifelineChips('lhotak')).toEqual({ childEvents: false, history: true });
     });
 
     it('another tree opened: the change is gone, also after coming back', async () => {

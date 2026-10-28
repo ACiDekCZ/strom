@@ -1,31 +1,38 @@
 /**
  * The person card timeline's chips ("Children's events", "History"), spec
  * 020 K4.5: each tree has its default (its settings, SettingsManager
- * .getLifelineDefaults); a chip on the card changes it for a while only —
- * in memory, for the open tree, until another tree is opened or the app is
- * loaded again. Then the tree's default is back.
+ * .getLifelineDefaults); a chip on the card changes it for that card only —
+ * in memory, while the card stays open. Another card (also a link to a
+ * relative from the card, or the same person opened again), another tree, a
+ * reload or a new default brings the tree's default back. A redraw of the
+ * open card (an edit, the research's answer) keeps the change.
  */
 
 import { SettingsManager, type LifelineDefaults } from './settings.js';
 
-/** The card's change of the open tree's default (never stored). */
+/** The open card's change of its tree's default (never stored). */
 let override: { treeId: string; chips: Partial<LifelineDefaults> } | null = null;
 
-/** What the card's timeline shows now in `treeId`: its default, with the card's change while that tree stays open. */
+/** What the card's timeline shows now in `treeId`: its default, with the open card's change. */
 export function lifelineChips(treeId: string | null): LifelineDefaults {
     const defaults = SettingsManager.getLifelineDefaults(treeId);
     if (!override || !treeId || override.treeId !== treeId) return defaults;
     return { ...defaults, ...override.chips };
 }
 
-/** A chip on the card: for the open tree, until it changes or the app is loaded again. */
+/** A chip on the card: for the open card only. */
 export function setLifelineChip(treeId: string | null, chip: keyof LifelineDefaults, on: boolean): void {
     if (!treeId) return;
     if (!override || override.treeId !== treeId) override = { treeId, chips: {} };
     override.chips[chip] = on;
 }
 
-/** Another tree is open (or the tree's default was set anew): the card's change is gone. */
+/** A card opens (another person, or the same one again): it starts from the tree's default. */
+export function newLifelineCard(): void {
+    override = null;
+}
+
+/** Another tree is open: the card's change is gone. */
 export function keepLifelineChipsFor(treeId: string | null): void {
     if (override && override.treeId !== treeId) override = null;
 }

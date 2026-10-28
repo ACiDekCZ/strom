@@ -45,7 +45,7 @@ import {
 import { PersonPicker } from '../person-picker.js';
 import { AppExporter } from '../export.js';
 import { SettingsManager } from '../settings.js';
-import { lifelineChips, setLifelineChip } from '../lifeline-view.js';
+import { lifelineChips, setLifelineChip, newLifelineCard } from '../lifeline-view.js';
 import { ThemeMode, LanguageSetting, AppMode, AuditLog, personSourceIds } from '../types.js';
 import { CryptoSession, isEncrypted, encrypt, decrypt, EncryptedData } from '../crypto.js';
 import { validateTreeData, ValidationResult as TreeValidationResult, ValidationIssue } from '../validation.js';
@@ -110,6 +110,7 @@ export const personModalMethods = uiModule({
         if (DataManager.isTreeLocked() || DataManager.isReadOnly()) return;
 
         this.currentId = null;
+        newLifelineCard();
         const modal = document.getElementById('person-modal');
         const title = document.getElementById('modal-title');
         const deleteBtn = document.getElementById('btn-delete');
@@ -651,6 +652,8 @@ export const personModalMethods = uiModule({
         if (!person) return;
 
         this.currentId = id;
+        // A new card: the timeline's chips start from the tree's default (K4.5).
+        newLifelineCard();
         const modal = document.getElementById('person-modal');
         const title = document.getElementById('modal-title');
         const deleteBtn = document.getElementById('btn-delete');
@@ -1003,7 +1006,7 @@ export const personModalMethods = uiModule({
         return ` <span class="pm-lifeline-place">· ${inner}</span>`;
     },
 
-    /** The head's chip (T15): the children's events on or off, for every card of the open tree, for a while (K4.5). */
+    /** The head's chip (T15): the children's events on or off, for this card only (K4.5). */
     toggleLifelineChildEvents(): void {
         const treeId = DataManager.getCurrentTreeId();
         setLifelineChip(treeId, 'childEvents', !lifelineChips(treeId).childEvents);

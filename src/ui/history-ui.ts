@@ -467,7 +467,7 @@ export const historyMethods = uiModule({
         this.historyChanged();
     },
 
-    /** The card's "History" chip: for every card of the open tree, for a while (K4.5; the default is the tree's settings). */
+    /** The card's "History" chip: for this card only (K4.5; the default is the tree's settings). */
     toggleLifelineHistory(on: boolean): void {
         setLifelineChip(DataManager.getCurrentTreeId(), 'history', on);
         this.historyChanged();

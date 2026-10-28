@@ -99,7 +99,7 @@ test.describe('History in the life timeline: the person card', () => {
         await expect(page.locator('.pm-lifeline-hidden')).toHaveCount(0);
         await expect(page.locator('.pm-lifeline-hinfo')).toBeHidden();
         await expect(page.locator('#pm-lifeline-section')).not.toHaveClass(/collapsed/);
-        // The card changes the tree's default for a while only (K4.5): nothing stored, a reload brings the default back.
+        // The card changes the tree's default for this card only (K4.5): nothing stored.
         const kept = await page.evaluate(() => {
             const s = JSON.parse(localStorage.getItem('strom-settings') ?? '{}');
             return { byTree: s.lifelineByTree, all: s.lifelineHistory };
@@ -109,10 +109,18 @@ test.describe('History in the life timeline: the person card', () => {
         await expect(warRow(page)).toBeVisible();
         await chip(page).click();
         await expect(historyRows(page)).toHaveCount(0);
-        await closeCard(page);
-        await page.reload();
-        await expect(page.locator('html')).not.toHaveClass(/app-loading/);
+        // The research answers again: the card is drawn anew and keeps the change.
         await poll(page);
+        await page.evaluate(() => window.Strom.UI.historyChanged());
+        await expect(chip(page)).toHaveAttribute('aria-checked', 'false');
+        await expect(historyRows(page)).toHaveCount(0);
+        // Another card, and this one opened again: the tree's default.
+        await closeCard(page);
+        await openCard(page, 'Anna');
+        await expect(chip(page)).toHaveAttribute('aria-checked', 'true');
+        await chip(page).click();
+        await expect(chip(page)).toHaveAttribute('aria-checked', 'false');
+        await closeCard(page);
         await openCard(page, 'Jan');
         await expect(chip(page)).toHaveAttribute('aria-checked', 'true');
         await expect(warRow(page)).toBeVisible();
