@@ -438,11 +438,11 @@ export interface PlaceRow {
     find: boolean;
     actions: PlaceRowAction[];
     search: string;
-    /** All places: listed under its municipality ("Česká Kamenice, Pivovarská" under "Česká Kamenice"). */
+    /** All places: listed under its municipality ("Lipnice, Polní" under "Lipnice"). */
     under?: {
         /** The municipality's payload key. */
         key: string;
-        /** The rest of the name ("Pivovarská"). */
+        /** The rest of the name ("Polní"). */
         name: string;
     };
 }
@@ -584,9 +584,9 @@ export function placeGroups(p: HistoryPayload, env: ManageEnv, names: ManageName
 }
 
 /**
- * Places that differ only by a street ("Česká Kamenice, Pivovarská") follow
- * their municipality's row when the tree has that place on its own ("Česká
- * Kamenice"), in the list's order; the data stays as it is. Without that
+ * Places that differ only by a street ("Lipnice, Polní") follow
+ * their municipality's row when the tree has that place on its own
+ * ("Lipnice"), in the list's order; the data stays as it is. Without that
  * place nothing moves.
  */
 export function groupUnderMunicipality(rows: readonly PlaceRow[]): PlaceRow[] {
@@ -605,7 +605,7 @@ export function groupUnderMunicipality(rows: readonly PlaceRow[]): PlaceRow[] {
     return top.flatMap(r => [r, ...(children.get(r.key) ?? [])]);
 }
 
-/** "Pivovarská" of "Česká Kamenice, Pivovarská" under "Česká Kamenice" ('' when the name does not start so). */
+/** "Polní" of "Lipnice, Polní" under "Lipnice" ('' when the name does not start so). */
 function restAfter(name: string, parent: string): string {
     if (!name.startsWith(parent)) return '';
     const rest = name.slice(parent.length);

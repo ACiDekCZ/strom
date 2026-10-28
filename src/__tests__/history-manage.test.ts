@@ -228,23 +228,23 @@ describe('places', () => {
     it('a region with two periods shows both (1029)', () => {
         const raw = {
             state: { on: true, search: 'done' }, events: [], hidden: [],
-            regions: { bohemia: region('bohemia', { state: 'done' }), czechoslovakia: region('czechoslovakia', { state: 'done' }) },
+            regions: { bohemia: region('bohemia', { state: 'done' }), ruritania: region('ruritania', { state: 'done' }) },
             places: {
                 lhota: {
                     events: [], persons: 3, regions: [
-                        { id: 'bohemia' }, { id: 'czechoslovakia', from: 1918, to: 1938 },
-                        { id: 'czechoslovakia', from: 1945, to: 1992 }, { id: 'czechoslovakia', from: 1918, to: 1938 },
+                        { id: 'bohemia' }, { id: 'ruritania', from: 1918, to: 1938 },
+                        { id: 'ruritania', from: 1945, to: 1992 }, { id: 'ruritania', from: 1918, to: 1938 },
                     ],
                 },
             },
         };
         const parsed = parseHistoryPayload(raw, '2026-10-29T00:00:00Z')!;
         expect(parsed.places.lhota.regions).toEqual([
-            { id: 'bohemia' }, { id: 'czechoslovakia', from: 1918, to: 1938 }, { id: 'czechoslovakia', from: 1945, to: 1992 },
+            { id: 'bohemia' }, { id: 'ruritania', from: 1918, to: 1938 }, { id: 'ruritania', from: 1945, to: 1992 },
         ]);
         const row = placeGroups(parsed, env(), names).find(g => g.key === 'all')!.rows[0];
-        expect(row.meta).toBe('Bohemia · Czechoslovakia 1918–1938 · Czechoslovakia 1945–1992 · 3 people');
-        expect(mapResultText(parsed, ['czechoslovakia', 'czechoslovakia'], 'en')).not.toMatch(/Czechoslovakia.*Czechoslovakia/);
+        expect(row.meta).toBe('Bohemia · Ruritania 1918–1938 · Ruritania 1945–1992 · 3 people');
+        expect(mapResultText(parsed, ['ruritania', 'ruritania'], 'en')).not.toMatch(/Ruritania.*Ruritania/);
     });
 
     it('a region waiting and the place\'s own history done: both said (1029)', () => {
@@ -262,10 +262,10 @@ describe('places', () => {
         const q = payload({
             regions: { bohemia: region('bohemia', { state: 'done' }) },
             places: {
-                'kounice, pivovarská': { events: [], regions: [{ id: 'bohemia' }], persons: 1 },
+                'kounice, polní': { events: [], regions: [{ id: 'bohemia' }], persons: 1 },
                 lhota: { events: [], regions: [{ id: 'bohemia' }], persons: 5 },
                 kounice: { events: [], regions: [{ id: 'bohemia' }], persons: 3 },
-                'kounice, havlíčkova': { events: [], regions: [{ id: 'bohemia' }], persons: 2 },
+                'kounice, luční': { events: [], regions: [{ id: 'bohemia' }], persons: 2 },
                 // No "Hora" on its own: stays where it is.
                 'hora, dolní': { events: [], regions: [{ id: 'bohemia' }], persons: 4 },
                 // Only a name that starts the same: not a street of it.
@@ -273,13 +273,13 @@ describe('places', () => {
             },
         });
         const rows = placeGroups(q, env(), names).find(g => g.key === 'all')!.rows;
-        expect(rows.map(r => r.key)).toEqual(['lhota', 'hora, dolní', 'kounice', 'kounice, havlíčkova', 'kounice, pivovarská', 'kounicky']);
-        expect(rows[3].under).toEqual({ key: 'kounice', name: 'havlíčkova' });
-        expect(rows[4].under).toEqual({ key: 'kounice', name: 'pivovarská' });
+        expect(rows.map(r => r.key)).toEqual(['lhota', 'hora, dolní', 'kounice', 'kounice, luční', 'kounice, polní', 'kounicky']);
+        expect(rows[3].under).toEqual({ key: 'kounice', name: 'luční' });
+        expect(rows[4].under).toEqual({ key: 'kounice', name: 'polní' });
         expect(rows[1].under).toBeUndefined();
         expect(rows[2].under).toBeUndefined();
         const alpha = placeGroups(q, env(), names, 'alpha').find(g => g.key === 'all')!.rows.map(r => r.key);
-        expect(alpha).toEqual(['hora, dolní', 'kounice', 'kounice, havlíčkova', 'kounice, pivovarská', 'kounicky', 'lhota']);
+        expect(alpha).toEqual(['hora, dolní', 'kounice', 'kounice, luční', 'kounice, polní', 'kounicky', 'lhota']);
     });
 
     it('caps suggestions at five', () => {

@@ -397,7 +397,7 @@ export function parseHistoryEvent(v: unknown): HistoryEvent | null {
 /**
  * A place's regions with their years (R1 `places[x].regions`, R5 `map.regions`):
  * valid ids, each period once — a region may come back with another period
- * (Czechoslovakia 1918–1938 and 1945–1992); one without years stands alone.
+ * (a state 1918–1938 and again 1945–1992); one without years stands alone.
  */
 export function parsePlaceRegions(v: unknown): HistoryPlaceRegion[] {
     const regions: HistoryPlaceRegion[] = [];
