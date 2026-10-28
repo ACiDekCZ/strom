@@ -11,7 +11,7 @@ import {
  * note (no Undo), "Back to the research's choice" on a place set by hand,
  * refusals, the gate by `history.map`, the phone's bottom sheet, and the
  * History line of a place in Places (§4.6).
- * Invented data (fakeHistoryR1): Jan born in Čáslav, died in Lhotka.
+ * Invented data (fakeHistoryR1): Jan born in Čapkov, died in Lhotka.
  */
 
 const LINKS = ['send', 'open', 'live', 'app', 'setup', 'experiment'];
@@ -21,7 +21,7 @@ async function setup(page: Page, opts: { features?: string[]; width?: number; he
     if (opts.width) await page.setViewportSize({ width: opts.width, height: opts.height ?? 844 });
     const history = fakeHistoryR1();
     // Lhotka (unlocated in the research) a place of the tree too, for the Places dialog.
-    const ged = historyGed().replace('1 DEAT\n2 DATE 1910\n2 PLAC Čáslav', '1 DEAT\n2 DATE 1910\n2 PLAC Lhotka');
+    const ged = historyGed().replace('1 DEAT\n2 DATE 1910\n2 PLAC Čapkov', '1 DEAT\n2 DATE 1910\n2 PLAC Lhotka');
     const features = opts.features ?? HISTORY_R1_FEATURES;
     const bridge = await fakeBridge(page, { features, history, treeGed: ged, links: LINKS });
     await openResearch(page, { ged });
@@ -103,10 +103,10 @@ test.describe('History of places: a place\'s region by hand', () => {
     test('a place set by hand: Change region with its regions and years, Back to the research\'s choice with Undo', async ({ page }) => {
         const { history } = await setup(page);
         await openPlaces(page);
-        await place(page, 'Čáslav').locator('[data-hm="menu"]').click();
+        await place(page, 'Čapkov').locator('[data-hm="menu"]').click();
         await page.locator('.hm-menu [data-scope="assign"]').click();
         await expect(picker(page)).toBeVisible();
-        await expect(picker(page).locator('#hmp-title')).toHaveText('Regions for Čáslav');
+        await expect(picker(page).locator('#hmp-title')).toHaveText('Regions for Čapkov');
         await expect(chosen(page, 'at-empire').locator('input[data-hmp="to"]')).toHaveValue('1918');
         // A state with its own land is no overlap.
         await expect(assignBtn(page)).toBeEnabled();
@@ -114,22 +114,22 @@ test.describe('History of places: a place\'s region by hand', () => {
         await expect(chosen(page, 'at-empire')).toHaveCount(0);
         await expect(option(page, 'at-empire').locator('input')).not.toBeChecked();
         await assignBtn(page).click();
-        expect(history.writes.map).toEqual([{ place: 'Čáslav', regions: [{ id: 'cz-bohemia' }] }]);
-        await expect(toast(page, 'Čáslav belongs to Bohemia.')).toBeVisible();
+        expect(history.writes.map).toEqual([{ place: 'Čapkov', regions: [{ id: 'cz-bohemia' }] }]);
+        await expect(toast(page, 'Čapkov belongs to Bohemia.')).toBeVisible();
 
-        const back = place(page, 'Čáslav').locator('[data-hm="mapAuto"]');
+        const back = place(page, 'Čapkov').locator('[data-hm="mapAuto"]');
         await expect(back).toBeVisible();
         await back.click();
         await expect.poll(() => history.writes.map.length).toBe(2);
-        expect(history.writes.map[1]).toEqual({ place: 'Čáslav', do: 'auto' });
-        const t = toast(page, 'The research decides the region of Čáslav again.');
+        expect(history.writes.map[1]).toEqual({ place: 'Čapkov', do: 'auto' });
+        const t = toast(page, 'The research decides the region of Čapkov again.');
         await expect(t).toBeVisible();
-        await expect(place(page, 'Čáslav').locator('[data-hm="mapAuto"]')).toHaveCount(0);
+        await expect(place(page, 'Čapkov').locator('[data-hm="mapAuto"]')).toHaveCount(0);
         // Undo puts the regions by hand back.
         await t.getByRole('button', { name: 'Undo' }).click();
         await expect.poll(() => history.writes.map.length).toBe(3);
-        expect(history.writes.map[2]).toEqual({ place: 'Čáslav', regions: [{ id: 'cz-bohemia' }] });
-        await expect(place(page, 'Čáslav').locator('[data-hm="mapAuto"]')).toBeVisible();
+        expect(history.writes.map[2]).toEqual({ place: 'Čapkov', regions: [{ id: 'cz-bohemia' }] });
+        await expect(place(page, 'Čapkov').locator('[data-hm="mapAuto"]')).toBeVisible();
     });
 
     test('decide again with a note: no Undo, the place waits with the note; Escape steps back', async ({ page }) => {
@@ -153,16 +153,16 @@ test.describe('History of places: a place\'s region by hand', () => {
         // At most 200 characters.
         await note.fill('x'.repeat(230));
         await expect(note).toHaveValue('x'.repeat(200));
-        await note.fill('Lhotka near Čáslav');
+        await note.fill('Lhotka near Čapkov');
         await picker(page).locator('[data-hmp="redoGo"]').click();
         await expect(picker(page)).toHaveCount(0);
-        expect(history.writes.map).toEqual([{ place: 'Lhotka', redo: true, note: 'Lhotka near Čáslav' }]);
+        expect(history.writes.map).toEqual([{ place: 'Lhotka', redo: true, note: 'Lhotka near Čapkov' }]);
         const t = toast(page, 'The research will decide the region of Lhotka again.');
         await expect(t).toBeVisible();
         await expect(t.getByRole('button', { name: 'Undo' })).toHaveCount(0);
         const row = place(page, 'Lhotka', 'unassigned');
         await expect(row.locator('.hm-p-meta')).toContainText('The research will decide again');
-        await expect(place(page, 'Lhotka').locator('.hm-p-why')).toHaveText('Note for the research: “Lhotka near Čáslav”');
+        await expect(place(page, 'Lhotka').locator('.hm-p-why')).toHaveText('Note for the research: “Lhotka near Čapkov”');
         await expect(place(page, 'Lhotka').locator('[data-hm="mapAuto"]')).toHaveCount(0);
     });
 
@@ -192,7 +192,7 @@ test.describe('History of places: a place\'s region by hand', () => {
         await openPlaces(page);
         await expect(place(page, 'Lhotka', 'unassigned')).toBeVisible();
         await expect(modal(page).locator('[data-hm="assign"]')).toHaveCount(0);
-        await place(page, 'Čáslav').locator('[data-hm="menu"]').click();
+        await place(page, 'Čapkov').locator('[data-hm="menu"]').click();
         await expect(page.locator('.hm-menu [data-scope="assign"]')).toHaveCount(0);
         await page.keyboard.press('Escape');
         await page.evaluate(() => (window.Strom.UI as unknown as { openHistoryRegionPicker(k: string): void }).openHistoryRegionPicker('Lhotka'));
@@ -250,7 +250,7 @@ test.describe('History of places: a place\'s region by hand', () => {
         await page.evaluate(() => window.Strom.UI.showPlacesManager());
         const places = page.locator('#places-modal');
         await expect(places).toBeVisible();
-        const caslav = places.locator('.place-row[data-key="caslav"] .place-history');
+        const caslav = places.locator('.place-row[data-key="capkov"] .place-history');
         await expect(caslav.locator('.place-history-label')).toHaveText('History');
         await expect(caslav.locator('.place-history-text')).toContainText('Bohemia');
         await expect(caslav.locator('.place-history-text')).toContainText('done');

@@ -11,7 +11,7 @@ import {
  * diacritics, the regions grouped as the research takes them, the places,
  * the hidden and the deleted events, the row actions (Find first, Hide all,
  * Do not search and their undo) and their gates by `/status.features`.
- * Invented data (fakeHistoryR1): Jan lived in Čáslav 1860–1910.
+ * Invented data (fakeHistoryR1): Jan lived in Čapkov 1860–1910.
  */
 
 const LINKS = ['send', 'open', 'live', 'app', 'setup', 'experiment'];
@@ -179,7 +179,7 @@ test.describe('History of places: the manager', () => {
         await tab(page, 'places').click();
         await expect(modal(page).locator('select[data-hm="sort"]')).toHaveCount(0);
         await expect(place(page, 'Brno').locator('.hm-p-state')).toHaveText('Waiting for the search');
-        await expect(place(page, 'Čáslav').locator('.hm-p-meta')).toHaveCount(0);
+        await expect(place(page, 'Čapkov').locator('.hm-p-meta')).toHaveCount(0);
     });
 
     test('tabs and a search without diacritics, with its count and clear', async ({ page }) => {
@@ -202,8 +202,8 @@ test.describe('History of places: the manager', () => {
         await page.keyboard.press('ArrowRight');
         await expect(tab(page, 'places')).toHaveAttribute('aria-selected', 'true');
         await expect(tab(page, 'places')).toBeFocused();
-        await search.fill('caslav');
-        await expect(modal(page).locator('.hm-group[data-group="all"] .hm-p-name')).toHaveText(['Čáslav']);
+        await search.fill('capkov');
+        await expect(modal(page).locator('.hm-group[data-group="all"] .hm-p-name')).toHaveText(['Čapkov']);
         await expect(page.locator('#history-manage-count')).toHaveText('1 of 5');
     });
 
@@ -218,8 +218,8 @@ test.describe('History of places: the manager', () => {
         // The research's suggestions (R6), each with "Find local history…" (history-place.spec.ts).
         await expect(modal(page).locator('.hm-group[data-group="suggest"] .hm-p-name')).toHaveText(['Kutná Hora']);
         const all = modal(page).locator('.hm-group[data-group="all"] .hm-p-name');
-        await expect(all).toHaveText(['Kutná Hora', 'Čáslav', 'Brno', 'Lhotka', 'Opava']);
-        const caslav = modal(page).locator('.hm-group[data-group="all"] .hm-place[data-place="Čáslav"]');
+        await expect(all).toHaveText(['Kutná Hora', 'Čapkov', 'Brno', 'Lhotka', 'Opava']);
+        const caslav = modal(page).locator('.hm-group[data-group="all"] .hm-place[data-place="Čapkov"]');
         await expect(caslav.locator('.hm-p-meta')).toHaveText('Bohemia · Austrian Empire until 1918 · 3 people');
         await expect(caslav.locator('.hm-p-count')).toHaveText('4');
         await expect(modal(page).locator('.hm-group[data-group="all"] .hm-place[data-place="Brno"] .hm-p-state')).toHaveText('Region waits for the search');
@@ -235,7 +235,7 @@ test.describe('History of places: the manager', () => {
         expect(sortBox.padTop).toBeLessThanOrEqual(2);
         expect(sortBox.width).toBeLessThan(sortBox.head / 2);
         await modal(page).locator('select[data-hm="sort"]').selectOption('alpha');
-        await expect(all).toHaveText(['Brno', 'Čáslav', 'Kutná Hora', 'Lhotka', 'Opava']);
+        await expect(all).toHaveText(['Brno', 'Čapkov', 'Kutná Hora', 'Lhotka', 'Opava']);
         expect(await page.evaluate(() => window.Strom.SettingsManager.getHistoryPlacesSort())).toBe('alpha');
     });
 
@@ -247,7 +247,7 @@ test.describe('History of places: the manager', () => {
         const rows = modal(page).locator('.hm-row.hm-hidden');
         await expect(rows.locator('.hm-h-text')).toHaveText(['Everything from Silesia', 'Vienna stock exchange crash.']);
         await expect(rows.nth(0).locator('.hm-h-meta')).toHaveText('in this tree · 0 events, future ones too');
-        await expect(rows.nth(1).locator('.hm-h-meta')).toHaveText('Bohemia · for Čáslav');
+        await expect(rows.nth(1).locator('.hm-h-meta')).toHaveText('Bohemia · for Čapkov');
         await rows.nth(0).locator('[data-hm="restoreHidden"]').click();
         await expect(toast(page, 'Events of Silesia show again in this tree.')).toBeVisible();
         await expect.poll(() => h.hides).toEqual([{ region: 'cz-silesia', do: 'show' }]);
@@ -255,7 +255,7 @@ test.describe('History of places: the manager', () => {
         await rows.locator('[data-hm="restoreHidden"]').click();
         await expect(modal(page).locator('.hm-empty')).toHaveText('Nothing is hidden in this tree.');
         await expect.poll(() => h.hides.length).toBe(2);
-        expect(h.hides[1]).toEqual({ event: 'E2', place: 'Čáslav', do: 'show' });
+        expect(h.hides[1]).toEqual({ event: 'E2', place: 'Čapkov', do: 'show' });
     });
 
     test('Deleted: newest first, year · text · region or place (R4 rows); Restore goes to the research', async ({ page }) => {
@@ -267,7 +267,7 @@ test.describe('History of places: the manager', () => {
         await expect(rows.locator('.hm-h-year')).toHaveText(['1882', '1842']);
         await expect(rows.nth(0).locator('.hm-h-meta')).toHaveText(/^Bohemia · deleted .+ · from all trees on this computer$/);
         // A local finding names its place by the key (a string).
-        await expect(rows.nth(1).locator('.hm-h-meta')).toHaveText(/^From research sources · Čáslav · deleted .+ · in this tree only$/);
+        await expect(rows.nth(1).locator('.hm-h-meta')).toHaveText(/^From research sources · Čapkov · deleted .+ · in this tree only$/);
         // A regional restore: head == parent (no commit), still a done write — the row goes at once from the answer's `deleted`.
         const head = bridge.head;
         await rows.nth(0).locator('[data-hm="restoreDeleted"]').click();
@@ -377,7 +377,7 @@ test.describe('History of places: the manager', () => {
         await expect(modal(page).locator('.hm-detail-state')).toContainText('years without events 1870–1913 · filling queued');
         const events = modal(page).locator('.hd-ev');
         await expect(events).toHaveCount(2);
-        await expect(events.locator('.pm-lifeline-htext')).toHaveText(['Austro-Prussian War; fighting around Čáslav.', 'Vienna stock exchange crash.']);
+        await expect(events.locator('.pm-lifeline-htext')).toHaveText(['Austro-Prussian War; fighting around Čapkov.', 'Vienna stock exchange crash.']);
         await expect(modal(page).locator('.hd-century-head')).toHaveText([/1800–1899 · 2/]);
         // The event's menu opens by its "⋯".
         await events.nth(0).locator('[data-hd="menu"]').click();
@@ -473,7 +473,7 @@ test.describe('History of places: the manager', () => {
         const again = place(page, 'Opava').locator('[data-hm="searchAgainPlace"]');
         await expect(again).toBeVisible();
         expect((await again.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-        const dots = place(page, 'Čáslav').locator('[data-hm="menu"]');
+        const dots = place(page, 'Čapkov').locator('[data-hm="menu"]');
         const box = (await dots.boundingBox())!;
         expect(box.height).toBeGreaterThanOrEqual(44);
         // 4 px left and right of the 36 px button still hit it.

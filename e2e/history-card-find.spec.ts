@@ -9,8 +9,8 @@ import {
  * the last row offers the region of the person's places the research has not
  * searched yet (most facts first), `POST /history/first` from the card and
  * each answer in that row; a phone's one line; without `history.first`
- * nothing. Invented data (fakeHistoryR1): Jan lived in Čáslav 1860–1910;
- * Čáslav is still being looked at, so the row replaces "still looking".
+ * nothing. Invented data (fakeHistoryR1): Jan lived in Čapkov 1860–1910;
+ * Čapkov is still being looked at, so the row replaces "still looking".
  */
 
 const LINKS = ['send', 'open', 'live', 'app', 'setup', 'experiment'];
@@ -22,7 +22,7 @@ function unsearched(o: { many?: boolean; pace?: FakeHistory['pace'] } = {}): Fak
     const regions = h.payload.regions!;
     regions['cz-bohemia'].state = 'queued';
     if (o.many) regions['at-empire'].state = 'queued';
-    h.payload.places['Čáslav'].state = 'pending';
+    h.payload.places['Čapkov'].state = 'pending';
     return h;
 }
 

@@ -87,7 +87,7 @@ test.describe('History in the life timeline: Settings', () => {
         await poll(page);
         await expect(status(page)).toContainText('The research looks for events.');
         expect(history.reads).toBe(1);
-        // The card API: Jan (Čáslav 1860–1910) gets the war of 1866; the crash stays hidden.
+        // The card API: Jan (Čapkov 1860–1910) gets the war of 1866; the crash stays hidden.
         const view = await page.evaluate(() => {
             const jan = (Object.values(window.Strom.DataManager.getData().persons) as { id: string; firstName: string }[]).find(p => p.firstName === 'Jan')!;
             const v = window.Strom.UI.historyForPerson(jan.id);
@@ -108,10 +108,10 @@ test.describe('History in the life timeline: Settings', () => {
         const item = modal.locator('.hm-row.hm-hidden');
         await expect(item).toHaveCount(1);
         await expect(item).toContainText('Vienna stock exchange crash.');
-        await expect(item.locator('.hm-h-meta')).toContainText('for Čáslav');
+        await expect(item.locator('.hm-h-meta')).toContainText('for Čapkov');
         await item.locator('[data-hm="restoreHidden"]').click();
         await expect(modal.locator('.hm-empty')).toHaveText('Nothing is hidden in this tree.');
-        await expect.poll(() => history.hides).toEqual([{ event: 'E2', place: 'Čáslav', do: 'show' }]);
+        await expect.poll(() => history.hides).toEqual([{ event: 'E2', place: 'Čapkov', do: 'show' }]);
         await modal.locator('.buttons [data-dismiss]').click();
         await expect(modal).toBeHidden();
         await expect(page.locator('#settings-modal')).toBeVisible();
@@ -250,9 +250,9 @@ test.describe('History in the life timeline: Settings', () => {
                 (Object.values(window.Strom.DataManager.getData().persons) as { id: string; firstName: string }[]).find(p => p.firstName === 'Jan')!.id);
             await page.evaluate((id) => window.Strom.UI.showEditPersonModal(id), id);
             const body = page.locator('#pm-lifeline-body');
-            await expect(body).toContainText('A fire in Čáslav.');
+            await expect(body).toContainText('A fire in Čapkov.');
             await page.evaluate(() => { window.Strom.SettingsManager.setHistoryKind('local', false); window.Strom.UI.historyChanged(); });
-            await expect(body).not.toContainText('A fire in Čáslav.');
+            await expect(body).not.toContainText('A fire in Čapkov.');
             await expect(body).toContainText('The Austro-Hungarian Compromise.');
             await page.locator('.pm-lifeline-hinfo').click();
             const legend = page.locator('.pm-lifeline-legend');

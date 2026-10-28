@@ -12,30 +12,30 @@ import {
  * link opened), the place's states in the card and in Places, the research's
  * suggestions, the place's detail with "Search again in the research", and the
  * gates (`history.place`, a place with its record id, `history.place.direct`).
- * Invented data (fakeHistoryR1): Jan lived in Čáslav (L0001) 1860–1910.
+ * Invented data (fakeHistoryR1): Jan lived in Čapkov (L0001) 1860–1910.
  */
 
 const LINKS = ['send', 'open', 'live', 'app', 'setup', 'experiment'];
-const OFFER = 'The research has not looked for the history of Čáslav and surroundings yet. Find local history…';
-const TITLE = 'Find the history of Čáslav and surroundings?';
+const OFFER = 'The research has not looked for the history of Čapkov and surroundings yet. Find local history…';
+const TITLE = 'Find the history of Čapkov and surroundings?';
 const COST_NONE = "One research session. Uses the subscription of the research's AI agent.";
 const TERMINAL = "The research's terminal window completes the confirmation. All trees on this computer will see the result.";
 const LINK_L0001 = /^strom-research:\/\/history\?tree=.+&place=L0001&do=search$/;
 
-/** Čáslav's own history done: one event of the place (▲) besides the regional ones. */
+/** Čapkov's own history done: one event of the place (▲) besides the regional ones. */
 function placeDone(): FakeHistory {
     const h = fakeHistoryR1();
     (h.payload.events as Record<string, unknown>[]).push({
         id: 'E5', from: 1885, kind: 'economy', scope: 'place',
-        place: { key: 'Čáslav', id: 'L0001', name: { cs: 'Čáslav', en: 'Čáslav' } },
-        text: { cs: 'Otevřen cukrovar u Čáslavi.', en: 'A sugar factory opened near Čáslav.' },
+        place: { key: 'Čapkov', id: 'L0001', name: { cs: 'Čapkov', en: 'Čapkov' } },
+        text: { cs: 'Otevřen cukrovar u Čapkovi.', en: 'A sugar factory opened near Čapkov.' },
         source: { title: 'Invented town chronicle', url: 'https://example.org/caslav-1885', checked: '2026-10-01' },
     });
-    const caslav = h.payload.places['Čáslav'];
+    const caslav = h.payload.places['Čapkov'];
     caslav.events = [...(caslav.events as string[]), 'E5'];
     caslav.history = 'done';
     caslav.at = '2026-10-26T10:00:00Z';
-    caslav.area = { cs: 'Čáslavsko', en: 'the Čáslav district' };
+    caslav.area = { cs: 'Čapkovsko', en: 'the Čapkov district' };
     return h;
 }
 
@@ -109,11 +109,11 @@ test.describe('History of places: a place\'s own history on request (§6a)', () 
 
     test('the estimate: minutes, minutes with USD; the research\'s surroundings; Enter and Escape cancel', async ({ page }) => {
         const history = fakeHistoryR1({ placeEstimate: { minutes: [20, 40] } });
-        history.payload.places['Čáslav'].area = { cs: 'Čáslavsko', en: 'the Čáslav district' };
+        history.payload.places['Čapkov'].area = { cs: 'Čapkovsko', en: 'the Čapkov district' };
         await setup(page, { history });
         await openCard(page);
         await offerLink(page).click();
-        await expect(dialog(page).locator('.hpf-area strong')).toHaveText('Surroundings: the Čáslav district');
+        await expect(dialog(page).locator('.hpf-area strong')).toHaveText('Surroundings: the Čapkov district');
         await expect(dialog(page).locator('#hpf-cost'))
             .toHaveText("One research session, about 20–40 minutes. Uses the subscription of the research's AI agent.");
         await page.keyboard.press('Enter');
@@ -147,46 +147,46 @@ test.describe('History of places: a place\'s own history on request (§6a)', () 
     test('the place\'s states in the card and in Places (M5)', async ({ page }) => {
         const { history } = await setup(page);
         const cases: [string, string, string][] = [
-            ['first', 'The history of Čáslav and surroundings comes first, at the next research session.', 'Local history: first'],
-            ['running', 'The research is looking for the history of Čáslav and surroundings right now.', 'Local history: searching'],
-            ['empty', 'For Čáslav and surroundings the research found no documented event.', 'Local history: nothing documented'],
+            ['first', 'The history of Čapkov and surroundings comes first, at the next research session.', 'Local history: first'],
+            ['running', 'The research is looking for the history of Čapkov and surroundings right now.', 'Local history: searching'],
+            ['empty', 'For Čapkov and surroundings the research found no documented event.', 'Local history: nothing documented'],
             ['waiting', 'The research is not looking for events now: no agent on this computer.', 'Local history: waiting'],
         ];
         for (const [state, card, places] of cases) {
             await changed(page, history, h => {
-                h.payload.places['Čáslav'].history = state;
-                if (state === 'waiting') h.payload.places['Čáslav'].why = 'no agent on this computer';
+                h.payload.places['Čapkov'].history = state;
+                if (state === 'waiting') h.payload.places['Čapkov'].why = 'no agent on this computer';
             });
             await openCard(page);
             await expect(placeRow(page)).toHaveText(card);
             await expect(offerLink(page)).toHaveCount(0);
             await openManager(page, { tab: 'places' });
-            await expect(allPlace(page, 'Čáslav').locator('.hm-p-state')).toHaveText(places);
+            await expect(allPlace(page, 'Čapkov').locator('.hm-p-state')).toHaveText(places);
         }
     });
 
-    test('done: ▲ events with "Čáslav and surroundings" and no row; Without region and the detail with Search again', async ({ page }) => {
+    test('done: ▲ events with "Čapkov and surroundings" and no row; Without region and the detail with Search again', async ({ page }) => {
         const { history } = await setup(page, { history: placeDone() });
         await openCard(page);
-        const ev = page.locator('#pm-lifeline-body .pm-lifeline-row', { hasText: 'A sugar factory opened near Čáslav.' });
+        const ev = page.locator('#pm-lifeline-body .pm-lifeline-row', { hasText: 'A sugar factory opened near Čapkov.' });
         await expect(ev).toHaveClass(/is-place/);
-        await expect(ev.locator('.pm-lifeline-hplace-name')).toHaveText('Čáslav and surroundings');
+        await expect(ev.locator('.pm-lifeline-hplace-name')).toHaveText('Čapkov and surroundings');
         await expect(placeRow(page)).toHaveCount(0);
         await page.locator('.pm-lifeline-hinfo').click();
         await expect(page.locator('.pm-lifeline-legend .pm-lifeline-legend-row .pm-lifeline-legend-mark.is-place')).toHaveCount(1);
         await page.keyboard.press('Escape');
 
         await openManager(page, { tab: 'places' });
-        await expect(allPlace(page, 'Čáslav').locator('.hm-p-state')).toHaveText('Local history: done · 1');
+        await expect(allPlace(page, 'Čapkov').locator('.hm-p-state')).toHaveText('Local history: done · 1');
         await page.locator('#hm-tab-regions').click();
         const group = modal(page).locator('.hm-group[data-group="noRegion"]');
         await expect(group.locator('.hm-group-title')).toHaveText('Without region');
-        const row = group.locator('.hm-region[data-key="place:Čáslav"]');
-        await expect(row).toContainText('Čáslav and surroundings');
+        const row = group.locator('.hm-region[data-key="place:Čapkov"]');
+        await expect(row).toContainText('Čapkov and surroundings');
         await row.click();
         await expect(modal(page)).toHaveClass(/is-detail/);
         await expect(modal(page).locator('.hm-detail-title .hm-mark.is-place')).toHaveCount(1);
-        await expect(modal(page).locator('.hm-detail-body')).toContainText('A sugar factory opened near Čáslav.');
+        await expect(modal(page).locator('.hm-detail-body')).toContainText('A sugar factory opened near Čapkov.');
         const again = modal(page).locator('[data-hm="placeAgain"]');
         await expect(again).toHaveText('Search again in the research');
         await again.click();
@@ -207,7 +207,7 @@ test.describe('History of places: a place\'s own history on request (§6a)', () 
         await expect(dialog(page)).toHaveCount(0);
         await expect(modal(page)).toBeVisible();
 
-        await allPlace(page, 'Čáslav').locator('[data-hm="menu"]').click();
+        await allPlace(page, 'Čapkov').locator('[data-hm="menu"]').click();
         await expect(page.locator('.hm-menu [data-scope]')).toHaveText(['Change region…', 'Find local history…', 'Do not search for this place', 'Open in Places ›']);
         await page.locator('.hm-menu [data-scope="find"]').click();
         await expect(dialog(page).locator('#hpf-title')).toHaveText(TITLE);
@@ -226,12 +226,12 @@ test.describe('History of places: a place\'s own history on request (§6a)', () 
         await expect(placeRow(page)).toHaveCount(0);
         await openManager(page, { tab: 'places' });
         await expect(modal(page).locator('.hm-group[data-group="suggest"]')).toHaveCount(0);
-        await allPlace(page, 'Čáslav').locator('[data-hm="menu"]').click();
+        await allPlace(page, 'Čapkov').locator('[data-hm="menu"]').click();
         await expect(page.locator('.hm-menu [data-scope="find"]')).toHaveCount(0);
         await page.keyboard.press('Escape');
 
         bridge.features = HISTORY_R1_FEATURES;
-        await changed(page, history, h => { delete h.payload.places['Čáslav'].id; });
+        await changed(page, history, h => { delete h.payload.places['Čapkov'].id; });
         await openCard(page);
         await expect(page.locator('#pm-lifeline-body .pm-lifeline-row').first()).toBeVisible();
         await expect(placeRow(page)).toHaveCount(0);
@@ -248,7 +248,7 @@ test.describe('History of places: a place\'s own history on request (§6a)', () 
         await dialog(page).locator('[data-hpf="go"]').click();
         await expect.poll(() => history.writes.place).toEqual([{ place: 'L0001' }]);
         await expect(dialog(page)).toHaveCount(0);
-        await expect(toast(page, 'The history of Čáslav and surroundings comes first.')).toBeVisible();
+        await expect(toast(page, 'The history of Čapkov and surroundings comes first.')).toBeVisible();
 
         // The bridge leaves it to the terminal after all: the dialog stays and its button opens the link.
         history.writeReply = {};
@@ -265,7 +265,7 @@ test.describe('History of places: a place\'s own history on request (§6a)', () 
     test('phone (390 px): the short row; the confirmation is a bottom sheet that fits', { tag: '@smoke' }, async ({ page }) => {
         await setup(page, { width: 390 });
         await openCard(page);
-        await expect(placeRow(page)).toHaveText('Čáslav and surroundings: Find history…');
+        await expect(placeRow(page)).toHaveText('Čapkov and surroundings: Find history…');
         await offerLink(page).click();
         const box = await dialog(page).locator('.hpf-modal').boundingBox();
         expect(box).not.toBeNull();

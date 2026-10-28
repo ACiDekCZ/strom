@@ -11,7 +11,7 @@ import {
  * on a phone (the "Filter" sheet), "who sees it", the event's menu with its
  * gates and second levels, hiding with Undo, deleting (variant A: restorable)
  * with its refusals, and the detail without the bridge.
- * Invented data (fakeHistoryDetail, historyDetailGed): Jan lived in Čáslav
+ * Invented data (fakeHistoryDetail, historyDetailGed): Jan lived in Čapkov
  * 1860–1910, twelve more people there 1840–1900, two in Kutná Hora 1845–1895.
  */
 
@@ -40,7 +40,7 @@ const scopes = (page: Page, root: string) => page.locator(`${root} [data-scope]`
     .evaluateAll(els => els.map(e => (e as HTMLElement).dataset.scope ?? ''));
 
 const BOHEMIA_TEXTS = ['Plague in the region.', 'The abolition of serfdom.', 'Volkszählung in Böhmen. text in German',
-    'Austro-Prussian War; fighting around Čáslav.', 'Vienna stock exchange crash.', 'Emigration to America.', 'The Great War.'];
+    'Austro-Prussian War; fighting around Čapkov.', 'Vienna stock exchange crash.', 'Emigration to America.', 'The Great War.'];
 
 /** The manager on its regions, then a detail by its row (a region id or `local`). */
 async function openDetail(page: Page, key: string): Promise<void> {
@@ -103,9 +103,9 @@ test.describe('History of places: a detail', () => {
 
         // Hidden at a place: the row normal, its sentence with Undo.
         await expect(ev(page, 'E2')).not.toHaveClass(/is-dim/);
-        await expect(ev(page, 'E2').locator('.hd-hide-note')).toContainText('Hidden at Čáslav');
+        await expect(ev(page, 'E2').locator('.hd-hide-note')).toContainText('Hidden at Čapkov');
         await ev(page, 'E2').locator('[data-hd="unhide"]').click();
-        await expect.poll(() => history.hides).toEqual([{ event: 'E2', place: 'Čáslav', do: 'show' }]);
+        await expect.poll(() => history.hides).toEqual([{ event: 'E2', place: 'Čapkov', do: 'show' }]);
         await expect(ev(page, 'E2').locator('.hd-hide-note')).toHaveCount(0);
         await expect(ev(page, 'E2').locator('.hd-sees')).toHaveText('13 people will see it');
 
@@ -140,19 +140,19 @@ test.describe('History of places: a detail', () => {
         await expect(modal(page).locator('.hm-detail-sub')).toHaveText('local findings of the tree');
         await expect(modal(page).locator('.hm-detail-state')).toHaveText('3 events from registers and chronicles the research read in the tree. They apply to this tree only.');
         await expect(modal(page).locator('.hd-century')).toHaveCount(0);
-        await expect(texts(page)).toHaveText(['A hailstorm destroyed the harvest.', 'A fire in Čáslav.', 'A new school opened.']);
-        await expect(rows(page).locator('.hd-place')).toHaveText(['Čáslav', 'Čáslav', 'Kutná Hora']);
+        await expect(texts(page)).toHaveText(['A hailstorm destroyed the harvest.', 'A fire in Čapkov.', 'A new school opened.']);
+        await expect(rows(page).locator('.hd-place')).toHaveText(['Čapkov', 'Čapkov', 'Kutná Hora']);
         await expect(rows(page).first().locator('.pm-lifeline-htag')).toHaveText('from research records');
         // Places instead of kinds, by count.
         const chips = modal(page).locator('.hd-filters .hd-chip');
-        await expect(chips).toHaveText(['All', 'Čáslav 2', 'Kutná Hora 1']);
+        await expect(chips).toHaveText(['All', 'Čapkov 2', 'Kutná Hora 1']);
         await chips.nth(2).click();
         await expect(texts(page)).toHaveText(['A new school opened.']);
         await chips.nth(0).click();
         // The cited source in the tree: a link; one not in the tree: only its text.
-        await expect(ev(page, 'E4').locator('[data-hd="cite"]')).toHaveText('Oddací matrika Čáslav, fol. 41');
+        await expect(ev(page, 'E4').locator('[data-hd="cite"]')).toHaveText('Oddací matrika Čapkov, fol. 41');
         await expect(ev(page, 'L0031').locator('[data-hd="cite"]')).toHaveCount(0);
-        await expect(ev(page, 'L0031').locator('.pm-lifeline-hsrc')).toHaveText('Kronika Čáslav, s. 12');
+        await expect(ev(page, 'L0031').locator('.pm-lifeline-hsrc')).toHaveText('Kronika Čapkov, s. 12');
         // Two people see L0032: hiding for one person has no search.
         await eventMenu(page, 'L0032');
         await page.locator('.hd-menu [data-scope="person"]').click();
@@ -170,7 +170,7 @@ test.describe('History of places: a detail', () => {
         await chip('war').click();
         await expect(chip('war')).toHaveAttribute('aria-pressed', 'true');
         await expect(chips.nth(0)).toHaveAttribute('aria-pressed', 'false');
-        await expect(texts(page)).toHaveText(['Austro-Prussian War; fighting around Čáslav.', 'The Great War.']);
+        await expect(texts(page)).toHaveText(['Austro-Prussian War; fighting around Čapkov.', 'The Great War.']);
         // More kinds at once.
         await chip('law').click();
         await expect(rows(page)).toHaveCount(3);
@@ -190,7 +190,7 @@ test.describe('History of places: a detail', () => {
         await modal(page).locator('input[data-hd="from"]').dispatchEvent('change');
         await modal(page).locator('input[data-hd="to"]').fill('1875');
         await modal(page).locator('input[data-hd="to"]').dispatchEvent('change');
-        await expect(texts(page)).toHaveText(['Austro-Prussian War; fighting around Čáslav.', 'Vienna stock exchange crash.']);
+        await expect(texts(page)).toHaveText(['Austro-Prussian War; fighting around Čapkov.', 'Vienna stock exchange crash.']);
         await expect(modal(page).locator('select[data-hd="period"]')).toHaveValue('custom');
         await modal(page).locator('select[data-hd="period"]').selectOption('');
         await expect(rows(page)).toHaveCount(7);
@@ -250,7 +250,7 @@ test.describe('History of places: a detail', () => {
         await expect(modal(page).locator('[data-hd="sheet"]')).toHaveText('Kind · 1');
         await expect(modal(page).locator('[data-hd="sheet"]')).toHaveClass(/is-on/);
         await expect(modal(page).locator('[data-hd="sheetPeriod"]')).toHaveText('1800–1899');
-        await expect(texts(page)).toHaveText(['Austro-Prussian War; fighting around Čáslav.']);
+        await expect(texts(page)).toHaveText(['Austro-Prussian War; fighting around Čapkov.']);
 
         // A custom range in the sheet.
         await modal(page).locator('[data-hd="sheetPeriod"]').click();
@@ -287,7 +287,7 @@ test.describe('History of places: a detail', () => {
         await expect(menu).toBeVisible();
         expect(await scopes(page, '.bottom-sheet.hd-menu-sheet')).toEqual(['who', 'hideTree', 'place', 'person', 'delete', 'cancel']);
         await menu.locator('[data-scope="place"]').click();
-        expect(await scopes(page, '.bottom-sheet.hd-menu-sheet')).toEqual(['back', 'p:Čáslav', 'p:Kutná Hora']);
+        expect(await scopes(page, '.bottom-sheet.hd-menu-sheet')).toEqual(['back', 'p:Čapkov', 'p:Kutná Hora']);
         await menu.locator('[data-scope="back"]').click();
         await menu.locator('[data-scope="cancel"]').click();
         await expect(menu).toHaveCount(0);
@@ -327,7 +327,7 @@ test.describe('History of places: a detail', () => {
         await expect(pop.locator('.hd-who-note')).toHaveText('They lived in Bohemia in 1866.');
         const people = pop.locator('.hd-who-person .hd-who-name');
         await expect(people).toHaveText(['Adam Bárta', 'Bedřich Černý', 'Cyril Dvořák', 'Daniel Erben', 'Emil Fiala', 'František Hora']);
-        await expect(pop.locator('.hd-who-person').first().locator('.hd-who-meta')).toHaveText('1840–1900 · Čáslav');
+        await expect(pop.locator('.hd-who-person').first().locator('.hd-who-meta')).toHaveText('1840–1900 · Čapkov');
         await pop.locator('.hd-who-more').click();
         await expect(people).toHaveCount(15);
         await expect(pop.locator('.hd-who-more')).toHaveCount(0);
@@ -355,15 +355,15 @@ test.describe('History of places: a detail', () => {
         await openDetail(page, 'cz-bohemia');
         expect(await eventMenu(page, 'E1')).toEqual(['who', 'hideTree', 'place', 'person', 'delete']);
         const menu = page.locator('.hd-menu');
-        await expect(menu.locator('.pm-lifeline-hmenu-head')).toHaveText('1866 · Austro-Prussian War; fighting around Čáslav.');
+        await expect(menu.locator('.pm-lifeline-hmenu-head')).toHaveText('1866 · Austro-Prussian War; fighting around Čapkov.');
         await expect(menu.locator('[data-scope="place"] .pm-lifeline-hmenu-hint')).toHaveText('choose from 2 places');
         await expect(menu.locator('[data-scope="person"] .pm-lifeline-hmenu-hint')).toHaveText('choose from 15 people');
         await expect(menu.locator('[data-scope="delete"]')).toHaveClass(/is-danger/);
 
         // At a place: the places by people; Escape goes back to the first level.
         await menu.locator('[data-scope="place"]').click();
-        expect(await scopes(page, '.hd-menu')).toEqual(['back', 'p:Čáslav', 'p:Kutná Hora']);
-        await expect(menu.locator('[data-scope="p:Čáslav"] .pm-lifeline-hmenu-hint')).toHaveText('13 people');
+        expect(await scopes(page, '.hd-menu')).toEqual(['back', 'p:Čapkov', 'p:Kutná Hora']);
+        await expect(menu.locator('[data-scope="p:Čapkov"] .pm-lifeline-hmenu-hint')).toHaveText('13 people');
         await page.keyboard.press('Escape');
         expect(await scopes(page, '.hd-menu')).toEqual(['who', 'hideTree', 'place', 'person', 'delete']);
         await menu.locator('[data-scope="place"]').click();
@@ -424,7 +424,7 @@ test.describe('History of places: a detail', () => {
         await page.keyboard.press('Escape');
         await expect(ev(page, 'E10').locator('[data-hd="menu"]')).toHaveCount(0);
         // No hiding feature: a hidden event's sentence has no Undo.
-        await expect(ev(page, 'E2').locator('.hd-hide-note')).toContainText('Hidden at Čáslav');
+        await expect(ev(page, 'E2').locator('.hd-hide-note')).toContainText('Hidden at Čapkov');
         await expect(ev(page, 'E2').locator('[data-hd="unhide"]')).toHaveCount(0);
     });
 
@@ -534,14 +534,14 @@ test.describe('History of places: a detail', () => {
         await expect(menu.locator('[data-scope="hideTree"] .pm-lifeline-hmenu-hint')).toHaveText('at all places, also future ones · so far only in this browser');
         await expect(menu.locator('.hd-menu-note')).toHaveText('Deleting needs the research running.');
         await menu.locator('[data-scope="place"]').click();
-        await menu.locator('[data-scope="p:Čáslav"]').click();
-        await expect(toast(page, 'Event hidden for Čáslav.')).toBeVisible();
-        await expect(ev(page, 'E1').locator('.hd-hide-note')).toContainText('Hidden at Čáslav · so far only in this browser');
+        await menu.locator('[data-scope="p:Čapkov"]').click();
+        await expect(toast(page, 'Event hidden for Čapkov.')).toBeVisible();
+        await expect(ev(page, 'E1').locator('.hd-hide-note')).toContainText('Hidden at Čapkov · so far only in this browser');
         await expect(ev(page, 'E1').locator('.hd-sees')).toHaveText('2 people will see it');
         expect(history.hides).toEqual([]);
         // The bridge back: the queue is sent.
         bridge.down = false;
         await poll(page);
-        await expect.poll(() => history.hides).toEqual([expect.objectContaining({ event: 'E1', place: 'Čáslav' })]);
+        await expect.poll(() => history.hides).toEqual([expect.objectContaining({ event: 'E1', place: 'Čapkov' })]);
     });
 });
