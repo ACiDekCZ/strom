@@ -925,9 +925,37 @@ export type HistoryCardState =
     /** 5: nothing found. */
     | { kind: 'none' };
 
+/** The kinds the card shows (§6, Settings → Person card; false: off). */
+export interface HistoryKinds {
+    region: boolean;
+    place: boolean;
+    local: boolean;
+}
+
+export const HISTORY_SCOPE_KINDS = ['region', 'place', 'local'] as const;
+
+/**
+ * §6: the kinds the card shows from the stored choice. The place kind is
+ * offered only with `history.place` (`placeShown`); when no offered kind is
+ * on (a choice made while the place kind was offered), all are shown again —
+ * Settings never lets the last one go, the main option switches all off.
+ */
+export function historyKindsShown(stored: HistoryKinds, placeShown: boolean): HistoryKinds {
+    const offered = HISTORY_SCOPE_KINDS.filter(k => k !== 'place' || placeShown);
+    return offered.some(k => stored[k]) ? { ...stored } : { region: true, place: true, local: true };
+}
+
+/** §6: the kind is the last one on among those offered (its switch cannot go off). */
+export function historyKindLocked(kinds: HistoryKinds, kind: keyof HistoryKinds, placeShown: boolean): boolean {
+    const offered = HISTORY_SCOPE_KINDS.filter(k => k !== 'place' || placeShown);
+    return kinds[kind] && offered.filter(k => kinds[k]).length === 1;
+}
+
 export interface PersonHistoryEnv {
     /** Local hide queue (§4.5). */
     queue?: readonly HistoryHideOp[];
+    /** §6: kinds switched off in Settings stay out of the card (rows, year counts, "Hidden: n"). */
+    kinds?: HistoryKinds;
     /** The research searches for this tree (`/status.experiments.history` while the bridge runs); default `state.on`. */
     searchOn?: boolean;
     /** `tree.state` of the research (`research`, `archive`, …) when known. */
@@ -1020,12 +1048,15 @@ export function computePersonHistory(
     const hidden: HiddenHistoryItem[] = [];
     const done = new Set<string>();
     const candidates: { ev: HistoryEvent; place: string; key: string }[] = [];
+    let kindOff = 0;
     for (const r of residence) {
         const key = matched.get(placeKey(r.place));
         if (!key) continue;
         for (const id of p.places[key].events) {
             const ev = byId.get(id);
-            if (ev) candidates.push({ ev, place: r.place, key });
+            if (!ev) continue;
+            if (env.kinds && !env.kinds[ev.scope]) { kindOff++; continue; }
+            candidates.push({ ev, place: r.place, key });
         }
     }
     // Each event once: the first place of the year it applies through that does not hide it.
@@ -1085,7 +1116,7 @@ export function computePersonHistory(
         }
     }
 
-    const state = cardState(p, env, { items: items.length, hidden: hidden.length, placesPending, placesMissing });
+    const state = cardState(p, env, { items: items.length, hidden: hidden.length, placesPending, placesMissing, kindOff: kindOff > 0 });
     return { items, hidden, placesPending, placesMissing, hasPlaces: true, state };
 }
 
@@ -1108,7 +1139,7 @@ export function historyWaiting(p: HistoryPayload | null, treeState?: string): bo
 
 function cardState(
     p: HistoryPayload, env: PersonHistoryEnv,
-    r: { items: number; hidden: number; placesPending: boolean; placesMissing: boolean },
+    r: { items: number; hidden: number; placesPending: boolean; placesMissing: boolean; kindOff?: boolean },
 ): HistoryCardState {
     if (r.items > 0) return { kind: 'events', somePending: r.placesPending };
     if (r.hidden > 0) return { kind: 'allHidden' };
@@ -1117,6 +1148,8 @@ function cardState(
     if (!searchOn) return { kind: 'noSearch', link: false };
     if (r.placesPending || ((p.state.search === 'none' || p.state.search === 'running') && r.placesMissing)) return { kind: 'searching' };
     if (p.state.truncated && r.placesMissing) return { kind: 'silent' };
+    // Events there, only of kinds switched off (§6): nothing to say ("nothing found" would not be true).
+    if (r.kindOff) return { kind: 'silent' };
     return { kind: 'none' };
 }
 

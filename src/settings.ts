@@ -187,6 +187,22 @@ class SettingsManagerClass {
         this.save();
     }
 
+    /** The kinds of history the card's timeline shows (spec 1028 §6): each on by default, this browser only. */
+    getHistoryKinds(): { region: boolean; place: boolean; local: boolean } {
+        return {
+            region: this.settings.historyKindRegion !== false,
+            place: this.settings.historyKindPlace !== false,
+            local: this.settings.historyKindLocal !== false,
+        };
+    }
+
+    setHistoryKind(kind: 'region' | 'place' | 'local', on: boolean): void {
+        if (kind === 'region') this.settings.historyKindRegion = on;
+        else if (kind === 'place') this.settings.historyKindPlace = on;
+        else this.settings.historyKindLocal = on;
+        this.save();
+    }
+
     /** History of places → Places: all places by people (default) or alphabetically. */
     getHistoryPlacesSort(): 'persons' | 'alpha' {
         return this.settings.historyPlacesSort === 'alpha' ? 'alpha' : 'persons';

@@ -10,7 +10,7 @@ import {
     residencePoints, placesInYear, computePersonHistory, effectiveHidden, queueHideOp,
     groupHistoryByYear, historyClusterLabel, historySettingsStatus, historyHiddenCount,
     sanitizeHideQueue, sanitizeCachedHistory, HISTORY_LIMITS, interleaveHistory, historySourceLabel,
-    historyFindRegions,
+    historyFindRegions, historyKindsShown, historyKindLocked,
     type HistoryPayload, type HistorySettingsInput, type HistoryHideOp,
 } from '../history.js';
 import { computePersonLifeline } from '../timeline.js';
@@ -597,5 +597,41 @@ describe('historyFindRegions (1028 §5)', () => {
         const skipped = raw({ 'cz-bohemia': { state: 'queued' } }, { Lhota: { events: [], skip: true, regions: [{ id: 'cz-bohemia' }] } });
         expect(historyFindRegions(d, 'anna', skipped)).toEqual([]);
         expect(historyFindRegions(d, 'nobody', p)).toEqual([]);
+    });
+});
+
+describe('kinds of history in the card (1028 §6)', () => {
+    const anna = person('anna', { birthDate: '1838', birthPlace: 'Lhota', deathDate: '1890', deathPlace: 'Lhota' });
+    const d = data([anna]);
+    const p = payload({
+        events: [regionEvent('cz-bohemia-0001', 1866), localEvent('L0001', 1866), localEvent('L0002', 1870)],
+        places: { Lhota: { events: ['cz-bohemia-0001', 'L0001', 'L0002'] } },
+        hidden: [{ event: 'L0002', tree: true }],
+    });
+    const all = { region: true, place: true, local: true };
+
+    it('a kind switched off is not in the rows nor among the hidden', () => {
+        const r = computePersonHistory(d, 'anna', p, 'cs', { kinds: { ...all, local: false } });
+        expect(r.items.map(i => i.ev.id)).toEqual(['cz-bohemia-0001']);
+        expect(r.hidden).toEqual([]);
+        const both = computePersonHistory(d, 'anna', p, 'cs', { kinds: all });
+        expect(both.items.map(i => i.ev.id).sort()).toEqual(['L0001', 'cz-bohemia-0001']);
+        expect(both.hidden.map(i => i.ev.id)).toEqual(['L0002']);
+    });
+
+    it('only events of kinds switched off: the card says nothing (not "nothing found")', () => {
+        const r = computePersonHistory(d, 'anna', p, 'cs', { kinds: { region: false, place: true, local: false } });
+        expect(r.items).toEqual([]);
+        expect(r.state).toEqual({ kind: 'silent' });
+    });
+
+    it('the place kind only with history.place; none of the offered on = all shown; the last one locked', () => {
+        expect(historyKindsShown({ region: false, place: true, local: false }, false)).toEqual(all);
+        expect(historyKindsShown({ region: false, place: true, local: false }, true)).toEqual({ region: false, place: true, local: false });
+        expect(historyKindsShown({ region: true, place: false, local: false }, false)).toEqual({ region: true, place: false, local: false });
+        expect(historyKindLocked({ region: true, place: true, local: false }, 'region', false)).toBe(true);
+        expect(historyKindLocked({ region: true, place: true, local: false }, 'region', true)).toBe(false);
+        expect(historyKindLocked({ region: true, place: true, local: false }, 'local', false)).toBe(false);
+        expect(historyKindLocked(all, 'local', true)).toBe(false);
     });
 });

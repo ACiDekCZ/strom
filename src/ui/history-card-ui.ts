@@ -650,12 +650,17 @@ export const historyCardMethods = uiModule({
         if (popup?.anchor === anchor) { closePopup(true); return; }
         closePopup(false);
         const h = strings.history;
-        const row = (mark: string, title: string, hint: string): string =>
-            `<div class="pm-lifeline-legend-row"><span class="pm-lifeline-legend-mark ${mark}" aria-hidden="true">${mark === 'is-tip' ? 'T' : ''}</span>`
-            + `<span><span class="pm-lifeline-legend-name">${esc(title)}</span><span class="pm-lifeline-legend-hint">${esc(hint)}</span></span></div>`;
+        // §6e: four kinds (▲ only with history.place); a kind switched off in Settings muted with its note.
+        const { kinds, placeShown } = this.historyKindsNow();
+        const row = (mark: string, title: string, hint: string, off = false): string =>
+            `<div class="pm-lifeline-legend-row${off ? ' is-off' : ''}"><span class="pm-lifeline-legend-mark ${mark}" aria-hidden="true">`
+            + `${mark === 'is-tip' ? 'T' : mark === 'is-place' ? '\u25B2' : ''}</span>`
+            + `<span><span class="pm-lifeline-legend-name">${esc(title)}</span><span class="pm-lifeline-legend-hint">${esc(hint)}</span>`
+            + `${off ? `<span class="pm-lifeline-legend-hint pm-lifeline-legend-off">${esc(h.legendKindOff)}</span>` : ''}</span></div>`;
         const content = `<div class="pm-lifeline-legend-title">${esc(h.legendTitle)}</div>`
-            + row('is-region', h.legendRegion, h.legendRegionHint)
-            + row('is-local', h.legendLocal, h.legendLocalHint)
+            + row('is-region', h.legendRegion, h.legendRegionHint, !kinds.region)
+            + (placeShown ? row('is-place', h.legendPlace, h.legendPlaceHint, !kinds.place) : '')
+            + row('is-local', h.legendLocal, h.legendLocalHint, !kinds.local)
             + row('is-tip', h.legendTip, h.legendTipHint)
             + `<p class="pm-lifeline-legend-foot">${esc(h.legendFoot)}</p>`
             + (this.historyManageAvailable()

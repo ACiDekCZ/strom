@@ -1,8 +1,8 @@
 import { test, expect, Page } from '@playwright/test';
 import { openApp } from './helpers.js';
 import {
-    fakeBridge, fakeHistory, historyGed, openResearch, poll, links,
-    HISTORY_FEATURES, FakeBridge, FakeHistory,
+    fakeBridge, fakeHistory, fakeHistoryR1, historyGed, openResearch, poll, links,
+    HISTORY_FEATURES, HISTORY_R1_FEATURES, FakeBridge, FakeHistory,
 } from './research-bridge.js';
 
 /**
@@ -178,5 +178,89 @@ test.describe('History in the life timeline: Settings', () => {
         await expect(status(page)).toHaveText('This version of the research does not offer history yet. An update of the research brings it.');
         await expect(status(page).getByRole('button')).toHaveCount(0);
         expect(history.reads).toBe(0);
+    });
+
+    test.describe('the kinds of history (1028 §6)', () => {
+        async function setupKinds(page: Page, features = HISTORY_R1_FEATURES): Promise<void> {
+            const history = fakeHistoryR1();
+            const ged = historyGed();
+            await fakeBridge(page, { features, history, treeGed: ged, links: LINKS });
+            await openResearch(page, { ged });
+            await poll(page);
+            await expect.poll(() => history.reads).toBeGreaterThan(0);
+        }
+        const kind = (page: Page, k: string) => page.locator(`#history-kind-${k}`);
+        const kindRow = (page: Page, k: string) => page.locator(`.history-kind-row[data-kind="${k}"]`);
+        const note = (page: Page) => page.locator('#history-kinds-note');
+        const stored = (page: Page) => page.evaluate(() => {
+            const s = JSON.parse(localStorage.getItem('strom-settings') ?? '{}');
+            return [s.historyKindRegion, s.historyKindPlace, s.historyKindLocal];
+        });
+
+        test('three sub-options on by default; the last one on stays with its sentence; the main option mutes them', async ({ page }) => {
+            await setupKinds(page);
+            await openSettings(page);
+            for (const k of ['region', 'place', 'local']) {
+                await expect(kindRow(page, k)).toBeVisible();
+                await expect(kind(page, k)).toBeChecked();
+            }
+            await expect(kindRow(page, 'region')).toHaveText('Regional history');
+            await expect(kindRow(page, 'place')).toHaveText('Local history');
+            await expect(kindRow(page, 'local')).toHaveText('From research sources');
+            await expect(note(page)).toBeHidden();
+            // 6b: the small switch, the row indented under the main option.
+            const box = await kind(page, 'region').boundingBox();
+            expect([Math.round(box!.width), Math.round(box!.height)]).toEqual([32, 18]);
+
+            await kindRow(page, 'region').click();
+            await kindRow(page, 'place').click();
+            await expect(kind(page, 'region')).not.toBeChecked();
+            await expect(kind(page, 'local')).toHaveAttribute('aria-disabled', 'true');
+            await expect(note(page)).toHaveText('One kind stays on. All can be turned off with the main option.');
+            await kindRow(page, 'local').click({ force: true });
+            await expect(kind(page, 'local')).toBeChecked();
+            expect(await stored(page)).toEqual([false, false, undefined]);
+
+            // The main option off: the sub-options muted and kept, no "History of places ›".
+            await toggle(page).uncheck();
+            for (const k of ['region', 'place', 'local']) {
+                await expect(kindRow(page, k)).toHaveClass(/is-muted/);
+                await expect(kind(page, k)).toHaveAttribute('aria-disabled', 'true');
+            }
+            await expect(manageLink(page)).toBeHidden();
+            await expect(note(page)).toBeHidden();
+            await kindRow(page, 'region').click({ force: true });
+            await expect(kind(page, 'region')).not.toBeChecked();
+            await toggle(page).check();
+            await expect(kind(page, 'region')).not.toBeChecked();
+            await expect(kind(page, 'local')).toBeChecked();
+        });
+
+        test('without history.place there is no place sub-option', async ({ page }) => {
+            await setupKinds(page, HISTORY_R1_FEATURES.filter(f => f !== 'history.place'));
+            await openSettings(page);
+            await expect(kindRow(page, 'region')).toBeVisible();
+            await expect(kindRow(page, 'local')).toBeVisible();
+            await expect(kindRow(page, 'place')).toBeHidden();
+        });
+
+        test('the card: a kind switched off is not in the timeline; the legend mutes it and shows the place kind', async ({ page }) => {
+            await setupKinds(page);
+            const id = await page.evaluate(() =>
+                (Object.values(window.Strom.DataManager.getData().persons) as { id: string; firstName: string }[]).find(p => p.firstName === 'Jan')!.id);
+            await page.evaluate((id) => window.Strom.UI.showEditPersonModal(id), id);
+            const body = page.locator('#pm-lifeline-body');
+            await expect(body).toContainText('A fire in Čáslav.');
+            await page.evaluate(() => { window.Strom.SettingsManager.setHistoryKind('local', false); window.Strom.UI.historyChanged(); });
+            await expect(body).not.toContainText('A fire in Čáslav.');
+            await expect(body).toContainText('The Austro-Hungarian Compromise.');
+            await page.locator('.pm-lifeline-hinfo').click();
+            const legend = page.locator('.pm-lifeline-legend');
+            await expect(legend.locator('.pm-lifeline-legend-name')).toHaveText(['Regional history', 'Local history', 'From research records', 'Research tip']);
+            const local = legend.locator('.pm-lifeline-legend-row', { hasText: 'From research records' });
+            await expect(local).toHaveClass(/is-off/);
+            await expect(local).toContainText('Off in Settings.');
+            await expect(legend.locator('.pm-lifeline-legend-row.is-off')).toHaveCount(1);
+        });
     });
 });

@@ -25,11 +25,12 @@ import { TreeManager } from '../tree-manager.js';
 import { shownName } from '../person-name.js';
 import {
     parseLiveBridge, researchSchemeUrl, cleanText, type LiveStatus,
-    HISTORY_EVENTS_FEATURE, HISTORY_HIDE_FEATURE, HISTORY_FIRST_FEATURE, EXPERIMENTS_OFF_FEATURE, EXPERIMENTS_LINK_FEATURE,
+    HISTORY_EVENTS_FEATURE, HISTORY_HIDE_FEATURE, HISTORY_FIRST_FEATURE, HISTORY_PLACE_FEATURE, EXPERIMENTS_OFF_FEATURE, EXPERIMENTS_LINK_FEATURE,
 } from '../research-link.js';
 import { storedResearchBridge, announcedResearchScheme } from '../research-device.js';
 import {
     computePersonHistory, historyCardShows, historyFindRegions, historySettingsStatus, queueHideOp,
+    historyKindsShown, historyKindLocked, HISTORY_SCOPE_KINDS, type HistoryKinds,
     type HistoryPayload, type HistoryDeleted, type HistoryHideOp, type PersonHistory, type LifelineHistoryItem, type HiddenHistoryItem,
     type HistorySettingsAction, type EffectiveHidden,
 } from '../history.js';
@@ -398,6 +399,7 @@ export const historyMethods = uiModule({
         if (!payload) return { researchId: rid, chipOn, history: null, canLinkOn };
         const history = computePersonHistory(DataManager.getData(), personId, payload, lang(), {
             queue: displayQueue(rid),
+            kinds: this.historyKindsNow().kinds,
             ...(searchOn !== undefined ? { searchOn } : {}),
             ...(status?.treeState ? { treeState: status.treeState } : {}),
         });
@@ -563,9 +565,56 @@ export const historyMethods = uiModule({
             row.innerHTML = html;
             row.hidden = false;
         }
+        this.renderHistoryKinds();
         const sub = document.getElementById('history-manage-link-sub');
         link.hidden = !this.historyManageAvailable();
         if (sub) sub.textContent = payload ? manageSummaries(payload, lang(), displayQueue(rid!)).settings : '';
+    },
+
+    /**
+     * §6: the kinds the card shows and whether the place kind is offered
+     * (`history.place` in the research's last status, the bridge up or not).
+     */
+    historyKindsNow(): { kinds: HistoryKinds; placeShown: boolean } {
+        const rid = activeResearchId();
+        const placeShown = !!rid && (this.researchStatusOf(rid)?.features ?? []).includes(HISTORY_PLACE_FEATURE);
+        return { kinds: historyKindsShown(SettingsManager.getHistoryKinds(), placeShown), placeShown };
+    },
+
+    /** §6: the three sub-options under the main one: muted while it is off, the last one on locked with its sentence. */
+    renderHistoryKinds(): void {
+        const box = document.getElementById('history-kinds');
+        if (!box) return;
+        const layerOn = SettingsManager.isHistoryLayer();
+        const { kinds, placeShown } = this.historyKindsNow();
+        let locked = false;
+        for (const kind of HISTORY_SCOPE_KINDS) {
+            const row = box.querySelector<HTMLElement>(`[data-kind="${kind}"]`);
+            const input = document.getElementById(`history-kind-${kind}`) as HTMLInputElement | null;
+            if (!row || !input) continue;
+            row.hidden = kind === 'place' && !placeShown;
+            const last = layerOn && historyKindLocked(kinds, kind, placeShown);
+            if (last) locked = true;
+            input.checked = kinds[kind];
+            row.classList.toggle('is-muted', !layerOn);
+            row.classList.toggle('is-locked', last);
+            if (!layerOn || last) input.setAttribute('aria-disabled', 'true');
+            else input.removeAttribute('aria-disabled');
+        }
+        const note = document.getElementById('history-kinds-note');
+        if (note) note.hidden = !locked;
+    },
+
+    /** A sub-option's click (§6): the last one on and all while the main option is off stay as they are. */
+    historyKindClick(event: Event, kind: keyof HistoryKinds): void {
+        const input = event.currentTarget as HTMLInputElement;
+        if (input.getAttribute('aria-disabled') === 'true') {
+            event.preventDefault();
+            return;
+        }
+        SettingsManager.setHistoryKind(kind, input.checked);
+        this.renderHistoryKinds();
+        this.historyChanged();
     },
 
     /** A link or button of the status row. */

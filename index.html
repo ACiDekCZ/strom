@@ -2348,6 +2348,27 @@
         }
         .modal button.settings-row-link::after { content: '\203A'; color: var(--text-faint); }
         .modal .history-setting-status[hidden], .modal button.settings-row-link[hidden] { display: none; }
+        /* The kinds of history (spec 1028 §6, 6a–6d): indented 30 px under the main option, a small switch
+           32×18, a row of 36 px (44 px on touch); muted while the main option is off, the last one on locked. */
+        .modal .history-kind-row[hidden], .modal .history-kinds-note[hidden] { display: none; }
+        .settings-checkbox.history-kind-row { min-height: 36px; padding-top: 6px; padding-bottom: 6px; }
+        .settings-checkbox.history-kind-row .settings-name { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; }
+        .settings-checkbox.history-kind-row input[type="checkbox"] { width: 32px; height: 18px; }
+        .settings-checkbox.history-kind-row input[type="checkbox"]::before { top: 2px; left: 2px; width: 12px; height: 12px; }
+        .settings-checkbox.history-kind-row input[type="checkbox"]:checked::before { transform: translateX(14px); }
+        .settings-checkbox.history-kind-row.is-locked input[type="checkbox"] { opacity: 0.5; cursor: default; }
+        .settings-checkbox.history-kind-row.is-muted { opacity: 0.45; }
+        .settings-checkbox.history-kind-row.is-muted, .settings-checkbox.history-kind-row.is-muted input[type="checkbox"] { cursor: default; }
+        .history-kind-mark { flex: none; position: relative; width: 10px; height: 10px; }
+        .history-kind-mark.is-region::before {
+            content: ''; position: absolute; left: 1px; top: 1px; width: 5px; height: 5px;
+            border: 1.5px solid var(--hist-mark); background: var(--surface); transform: rotate(45deg);
+        }
+        .history-kind-mark.is-place::before { content: '\25B2'; position: absolute; inset: 0; font-size: 9px; line-height: 10px; text-align: center; color: var(--hist-place); }
+        .history-kind-mark.is-local::before { content: ''; position: absolute; left: 2px; top: 2px; width: 6px; height: 6px; background: var(--hist-local); }
+        .history-kinds-note { font-size: 12px; line-height: 1.4; color: var(--text-light); padding: 2px 12px 8px 44px; }
+        @media (max-width: 640px) { .history-kinds-note { padding-left: 42px; } }
+        @media (pointer: coarse) { .settings-checkbox.history-kind-row { min-height: 44px; } }
         @media (max-width: 640px) { .modal button.settings-row-link { padding-left: 42px; } }
         @media (hover: hover) { .modal button.settings-row-link:hover { background: var(--hover-bg); } }
         @media (pointer: coarse) {
@@ -5369,6 +5390,9 @@
         .pm-lifeline-legend-mark.is-local::before {
             content: ''; position: absolute; left: 4px; top: 4px; width: 6px; height: 6px; background: var(--hist-local);
         }
+        .pm-lifeline-legend-mark.is-place { font-size: 9px; line-height: 14px; text-align: center; color: var(--hist-place); }
+        .pm-lifeline-legend-row.is-off { opacity: 0.45; }
+        .pm-lifeline-legend-off { display: block; font-style: italic; }
         .pm-lifeline-legend-mark.is-tip { font-size: 11px; font-weight: 700; font-style: italic; color: var(--hist-meta); text-align: center; line-height: 14px; }
         .pm-lifeline-legend-foot { margin: 8px 0 0; padding-top: 8px; border-top: 1px solid var(--divider); font-size: 12px; line-height: 1.45; color: var(--text-faint); }
 
@@ -18925,11 +18949,33 @@
                     <label class="settings-checkbox settings-row">
                         <input type="checkbox" id="history-setting-toggle" onchange="window.Strom.UI.toggleHistoryLayer(this.checked)">
                         <span class="settings-text">
-                            <span class="settings-name" data-i18n="history.settingLabel"></span>
+                            <span class="settings-name" id="history-setting-name" data-i18n="history.settingLabel"></span>
                             <span class="settings-desc" data-i18n="history.settingHint"></span>
                         </span>
                     </label>
                     <div class="settings-row settings-row-dependent history-setting-status" id="history-setting-status" hidden></div>
+                    <!-- The kinds of history in the timeline (spec 1028 §6): each its own sub-option; the last one on stays. -->
+                    <div class="history-kinds" id="history-kinds" role="group" aria-labelledby="history-setting-name">
+                        <label class="settings-checkbox settings-row settings-row-dependent history-kind-row" data-kind="region">
+                            <input type="checkbox" id="history-kind-region" onclick="window.Strom.UI.historyKindClick(event, 'region')">
+                            <span class="settings-text">
+                                <span class="settings-name"><span class="history-kind-mark is-region" aria-hidden="true"></span><span data-i18n="history.kindRegion"></span></span>
+                            </span>
+                        </label>
+                        <label class="settings-checkbox settings-row settings-row-dependent history-kind-row" data-kind="place" hidden>
+                            <input type="checkbox" id="history-kind-place" onclick="window.Strom.UI.historyKindClick(event, 'place')">
+                            <span class="settings-text">
+                                <span class="settings-name"><span class="history-kind-mark is-place" aria-hidden="true"></span><span data-i18n="history.kindPlace"></span></span>
+                            </span>
+                        </label>
+                        <label class="settings-checkbox settings-row settings-row-dependent history-kind-row" data-kind="local">
+                            <input type="checkbox" id="history-kind-local" onclick="window.Strom.UI.historyKindClick(event, 'local')">
+                            <span class="settings-text">
+                                <span class="settings-name"><span class="history-kind-mark is-local" aria-hidden="true"></span><span data-i18n="history.kindLocal"></span></span>
+                            </span>
+                        </label>
+                        <div class="settings-row-dependent history-kinds-note" id="history-kinds-note" hidden data-i18n="history.kindsLastNote"></div>
+                    </div>
                     <button type="button" class="settings-row settings-row-dependent settings-row-link history-manage-link" id="history-manage-link" hidden
                             onclick="window.Strom.UI.openHistoryManageFrom('settings')">
                         <span class="settings-text">

@@ -1283,6 +1283,9 @@ export interface AppSettings {
     lifelineChildEvents?: boolean;  // default: false - person card's life timeline also lists the children's events
     historyLayer?: boolean;  // default: true (undefined = never chosen) - the research's events of the time in the life timeline (spec 020)
     lifelineHistory?: boolean;  // default: true - the card's "History" chip (shown only while historyLayer is on)
+    historyKindRegion?: boolean;  // default: true - the card's timeline shows regional history (spec 1028 §6)
+    historyKindPlace?: boolean;   // default: true - the card's timeline shows the history of a place (with history.place)
+    historyKindLocal?: boolean;   // default: true - the card's timeline shows findings from the research's sources
     historyPlacesSort?: 'persons' | 'alpha';  // default: 'persons' - History of places → Places: all places by people or alphabetically
     cardDensity?: CardDensity;  // default: 'normal' - how much detail a card shows
     exportScope?: 'tree' | 'view';  // default: 'tree' - the export dialog's whole tree / current view switch
