@@ -91,7 +91,7 @@ const CS_LANG_ADVERB: Record<string, string> = {
 
 /** A language's name for "text in …" (cs: the adverb). Unknown codes stay as they are. */
 function langName(ui: 'cs' | 'en' | 'de', code: string): string {
-    const base = code.toLowerCase().split('-')[0];
+    const base = String(code).toLowerCase().split('-')[0];
     if (ui === 'cs' && CS_LANG_ADVERB[base]) return CS_LANG_ADVERB[base];
     try {
         const name = new Intl.DisplayNames([ui], { type: 'language' }).of(base);

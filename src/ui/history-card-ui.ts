@@ -19,7 +19,7 @@ import { shownName } from '../person-name.js';
 import { MQ_MOBILE, MQ_PHONE_LANDSCAPE } from '../breakpoints.js';
 import {
     groupHistoryByYear, historyClusterLabel, historySourceLabel, isHistoryLang,
-    type LifelineHistoryItem, type HiddenHistoryItem, type PersonHistory,
+    type LifelineHistoryItem, type HiddenHistoryItem, type PersonHistory, type HistoryEvent,
 } from '../history.js';
 import { regionName } from '../history-manage.js';
 import { shownExcerpts } from '../research-images.js';
@@ -92,6 +92,62 @@ function closePopup(focusAnchor: boolean): void {
     el.remove();
     anchor.setAttribute('aria-expanded', 'false');
     if (focusAnchor && anchor.isConnected) anchor.focus();
+}
+
+/** What an event's row shows besides the event itself (the card and the manager's detail). */
+export interface HistoryDescOptions {
+    /** Meta after the kind's label (age, region; in the manager place and audience), as HTML. */
+    meta: string[];
+    quoteOpen: boolean;
+    /** Attributes of the citation's button (a local event whose source the tree has). */
+    cite: string;
+    /** Attributes of the "excerpt ▸" button. */
+    quote: string;
+    /** "text in German" by a text in another language than the UI's. */
+    langBadge?: boolean;
+    /** HTML after the tip (a hiding's sentence, an error). */
+    tail?: string;
+}
+
+/**
+ * The text and meta of an event's row (DEV 020 §3): text, kind · meta ·
+ * source ↗ · citation · "excerpt ▸", the excerpt, the tip. Shared by the
+ * person card's layer and the manager's detail.
+ */
+export function historyEventDescHtml(ev: HistoryEvent, t: { text: string; textLang: string; tip?: string; tipLang?: string }, o: HistoryDescOptions): string {
+    const h = strings.history;
+    const tag = ev.scope === 'local' ? h.local : h.kinds[ev.kind];
+    const meta: string[] = [`<span class="pm-lifeline-htag">${esc(tag)}</span>`, ...o.meta];
+    const source = ev.source;
+    const checked = formatDate(source?.checked);
+    if (source) {
+        const title = [source.title, checked ? h.sourceChecked(checked) : ''].filter(Boolean).join(' · ');
+        meta.push(`<span class="pm-lifeline-hsrc">${esc(h.source)}&nbsp;<a href="${esc(source.url)}" target="_blank" rel="noopener"`
+            + ` title="${esc(title)}" data-hfocus="src:${esc(ev.id)}"><span class="pm-lifeline-hsrc-name">${esc(historySourceLabel(source))}</span>&nbsp;↗</a></span>`);
+    }
+    if (ev.local) {
+        // The tree has the cited source: its clip (or scan) opens; else only the citation's text.
+        meta.push(citedSource(ev.local.source)
+            ? `<span class="pm-lifeline-hsrc"><button type="button" class="pm-lifeline-link is-cite" ${o.cite}>${esc(ev.local.cite)}</button></span>`
+            : `<span class="pm-lifeline-hsrc">${esc(ev.local.cite)}</span>`);
+    }
+    const quoteOpen = !!source?.quote && o.quoteOpen;
+    if (source?.quote) {
+        meta.push(`<button type="button" class="pm-lifeline-hquote" aria-expanded="${quoteOpen}" ${o.quote}>`
+            + `${esc(h.quote)} <span aria-hidden="true">${quoteOpen ? '▾' : '▸'}</span></button>`);
+    }
+    const other = o.langBadge && t.textLang && t.textLang !== getCurrentLanguage();
+    let desc = `<span class="pm-lifeline-htext"${langAttr(t.textLang)}>${esc(t.text)}`
+        + (other ? ` <span class="pm-lifeline-hlang">${esc(h.textLang(t.textLang))}</span>` : '') + '</span>'
+        + `<span class="pm-lifeline-hmeta">${meta.join('')}</span>`;
+    if (quoteOpen && source?.quote) {
+        desc += `<span class="pm-lifeline-hquotebox"><span class="pm-lifeline-hquotetext"${langAttr(source.lang)}>${esc(h.quoted(source.quote))}</span>`
+            + `<span class="pm-lifeline-hquotefrom">${esc(h.quoteFrom(historySourceLabel(source), checked || undefined))}</span></span>`;
+    }
+    if (t.tip) {
+        desc += `<span class="pm-lifeline-htip"><b>${esc(h.tip)}:</b> <span${langAttr(t.tipLang)}>${esc(t.tip)}</span></span>`;
+    }
+    return desc + (o.tail ?? '');
 }
 
 export const historyCardMethods = uiModule({
@@ -250,37 +306,14 @@ export const historyCardMethods = uiModule({
         const h = strings.history;
         const ev = item.ev;
         const i = rowItems.push(item) - 1;
-        const meta: string[] = [`<span class="pm-lifeline-htag">${esc(ev.scope === 'local' ? h.local : h.kinds[ev.kind])}</span>`];
+        const meta: string[] = [];
         if (item.age) meta.push(`<span>${esc(item.age)}</span>`);
         if (item.regionLabel) meta.push(`<span class="pm-lifeline-hregion">${esc(item.regionLabel)}</span>`);
-        const source = ev.source;
-        const checked = formatDate(source?.checked);
-        if (source) {
-            const title = [source.title, checked ? h.sourceChecked(checked) : ''].filter(Boolean).join(' · ');
-            meta.push(`<span class="pm-lifeline-hsrc">${esc(h.source)}&nbsp;<a href="${esc(source.url)}" target="_blank" rel="noopener"`
-                + ` title="${esc(title)}" data-hfocus="src:${esc(ev.id)}"><span class="pm-lifeline-hsrc-name">${esc(historySourceLabel(source))}</span>&nbsp;↗</a></span>`);
-        }
-        if (ev.local) {
-            // The tree has the cited source: its clip (or scan) opens; else only the citation's text.
-            meta.push(citedSource(ev.local.source)
-                ? `<span class="pm-lifeline-hsrc"><button type="button" class="pm-lifeline-link is-cite" data-cite="${i}"`
-                    + ` data-hfocus="cite:${esc(ev.id)}">${esc(ev.local.cite)}</button></span>`
-                : `<span class="pm-lifeline-hsrc">${esc(ev.local.cite)}</span>`);
-        }
-        const quoteOpen = !!source?.quote && openQuotes.has(ev.id);
-        if (source?.quote) {
-            meta.push(`<button type="button" class="pm-lifeline-hquote" aria-expanded="${quoteOpen}" data-quote="${i}"`
-                + ` data-hfocus="quote:${esc(ev.id)}">${esc(h.quote)} <span aria-hidden="true">${quoteOpen ? '▾' : '▸'}</span></button>`);
-        }
-        let desc = `<span class="pm-lifeline-htext"${langAttr(item.textLang)}>${esc(item.text)}</span>`
-            + `<span class="pm-lifeline-hmeta">${meta.join('')}</span>`;
-        if (quoteOpen && source?.quote) {
-            desc += `<span class="pm-lifeline-hquotebox"><span class="pm-lifeline-hquotetext"${langAttr(source.lang)}>${esc(h.quoted(source.quote))}</span>`
-                + `<span class="pm-lifeline-hquotefrom">${esc(h.quoteFrom(historySourceLabel(source), checked || undefined))}</span></span>`;
-        }
-        if (item.tip) {
-            desc += `<span class="pm-lifeline-htip"><b>${esc(h.tip)}:</b> <span${langAttr(item.tipLang)}>${esc(item.tip)}</span></span>`;
-        }
+        const desc = historyEventDescHtml(ev, item, {
+            meta, quoteOpen: openQuotes.has(ev.id),
+            cite: `data-cite="${i}" data-hfocus="cite:${esc(ev.id)}"`,
+            quote: `data-quote="${i}" data-hfocus="quote:${esc(ev.id)}"`,
+        });
         // A range keeps its years inside an open cluster too; a single year is the cluster's.
         const year = showYear ? item.yearLabel ?? String(item.year) : item.yearLabel ?? '';
         return `<div class="pm-lifeline-row k-history is-${ev.scope}" data-history-id="${esc(ev.id)}">`
@@ -359,6 +392,27 @@ export const historyCardMethods = uiModule({
         if (!Number.isFinite(year)) return;
         if (!openYears.delete(year)) openYears.add(year);
         if (this.currentId) this.renderPersonLifeline(this.currentId, true);
+    },
+
+    /**
+     * The open card brought to an event's row (the manager's "who sees it"):
+     * the layer on, its year's cluster unfolded, the row in view and lit for
+     * 1.5 s.
+     */
+    highlightHistoryEvent(id: string): void {
+        const personId = this.currentId;
+        if (!personId) return;
+        const view = this.historyForPerson(personId);
+        const item = view?.history?.items.find(i => i.ev.id === id);
+        if (!view || !item) return;
+        if (!view.chipOn) SettingsManager.setLifelineHistory(true);
+        openYears.add(item.year);
+        this.renderPersonLifeline(personId, true);
+        const row = document.querySelector<HTMLElement>(`#pm-lifeline-body .pm-lifeline-row[data-history-id="${CSS.escape(id)}"]`);
+        if (!row) return;
+        row.scrollIntoView({ block: 'center' });
+        row.classList.add('is-flash');
+        setTimeout(() => row.classList.remove('is-flash'), 1500);
     },
 
     /** A local event's citation: its clip in the image viewer (or the source's scan, or the source). */
@@ -492,7 +546,7 @@ export const historyCardMethods = uiModule({
      * it when there is no room below): Esc closes it and returns to the
      * anchor, a press outside closes it, the anchor again closes it.
      */
-    openLifelineHistoryPopup(el: HTMLElement, anchor: HTMLElement, keys?: (e: KeyboardEvent) => void): void {
+    openLifelineHistoryPopup(el: HTMLElement, anchor: HTMLElement, keys?: (e: KeyboardEvent) => void, onEscape?: () => boolean): void {
         document.body.appendChild(el);
         anchor.setAttribute('aria-expanded', 'true');
         const place = (): void => {
@@ -508,6 +562,8 @@ export const historyCardMethods = uiModule({
             if (e.key === 'Escape') {
                 e.preventDefault();
                 e.stopPropagation();
+                // A menu's second level goes back to the first.
+                if (onEscape?.()) return;
                 closePopup(true);
                 return;
             }
