@@ -10,8 +10,8 @@ import {
     residencePoints, placesInYear, computePersonHistory, effectiveHidden, queueHideOp,
     groupHistoryByYear, historyClusterLabel, historySettingsStatus, historyHiddenCount,
     sanitizeHideQueue, sanitizeCachedHistory, HISTORY_LIMITS, interleaveHistory, historySourceLabel,
-    historyFindRegions, historyKindsShown, historyKindLocked, historyMainPlace, historyPlaceRow,
-    type HistoryPayload, type HistorySettingsInput, type HistoryHideOp,
+    historyFindRegions, historyKindsShown, historyKindLocked, historyMainPlace, historyPlaceRow, historyPlaceOfferable,
+    type HistoryPayload, type HistoryPlace, type HistorySettingsInput, type HistoryHideOp,
 } from '../history.js';
 import { computePersonLifeline } from '../timeline.js';
 import { StromData, PersonId, PartnershipId, Person, Partnership, LifeEvent } from '../types.js';
@@ -697,9 +697,43 @@ describe('local history on request in the card (1028 §6a)', () => {
         // Not searched for the tree: nothing.
         const skip = both({}, { skip: true });
         expect(historyPlaceRow(skip, historyMainPlace(d, 'josef', skip), true)).toBeNull();
-        // Still being matched to its regions: that comes first, no offer yet.
+        // Its regions still wait for their history (K7.1a): offered all the same.
         const pending = raw({ 'Horní Lhota': { events: [], state: 'pending', regions: [{ id: 'cz-bohemia' }], id: 'L0001' } });
-        expect(historyPlaceRow(pending, historyMainPlace(d, 'josef', pending), true)).toBeNull();
+        expect(historyPlaceRow(pending, historyMainPlace(d, 'josef', pending), true)).toEqual({ kind: 'offer', key: 'Horní Lhota', name: 'Horní Lhota' });
+        // Still being matched to its regions, placed again or not placed: that comes first, no offer yet.
+        const mapping = raw({ 'Horní Lhota': { events: [], state: 'pending', id: 'L0001' } });
+        expect(historyPlaceRow(mapping, historyMainPlace(d, 'josef', mapping), true)).toBeNull();
+        const redo = raw({ 'Horní Lhota': { events: [], state: 'pending', redo: true, regions: [{ id: 'cz-bohemia' }], id: 'L0001' } });
+        expect(historyPlaceRow(redo, historyMainPlace(d, 'josef', redo), true)).toBeNull();
+        const unlocated = raw({ 'Horní Lhota': { events: [], state: 'unlocated', id: 'L0001' } });
+        expect(historyPlaceRow(unlocated, historyMainPlace(d, 'josef', unlocated), true)).toBeNull();
+    });
+
+    it('a place may be asked for once matched to its regions, whatever they wait for (K7.1a)', () => {
+        const regions = [{ id: 'cz-bohemia' }];
+        const cases: [Record<string, unknown>, boolean][] = [
+            [{ regions }, true],
+            [{ regions, history: 'none' }, true],
+            [{ state: 'pending', regions }, true],
+            [{ state: 'pending', regions, history: 'none' }, true],
+            [{ state: 'pending' }, false],
+            [{ state: 'pending', regions: [] }, false],
+            [{ state: 'pending', regions, redo: true }, false],
+            [{ state: 'unlocated' }, false],
+            [{ state: 'pending', regions, skip: true }, false],
+            [{ regions, skip: true }, false],
+            [{ state: 'pending', regions, history: 'first' }, false],
+            [{ state: 'pending', regions, history: 'running' }, false],
+            [{ state: 'pending', regions, history: 'done' }, false],
+            [{ state: 'pending', regions, history: 'empty' }, false],
+            [{ state: 'pending', regions, history: 'waiting' }, false],
+        ];
+        for (const [extra, offered] of cases) {
+            const place = { events: [], id: 'L0001', ...extra } as HistoryPlace;
+            expect(historyPlaceOfferable(place), JSON.stringify(extra)).toBe(offered);
+            expect(historyPlaceOfferable({ ...place, id: undefined }), `no id ${JSON.stringify(extra)}`).toBe(false);
+        }
+        expect(historyPlaceOfferable(undefined)).toBe(false);
     });
 
     it('says the state of the main place (M5); done says nothing', () => {

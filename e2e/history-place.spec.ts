@@ -213,8 +213,18 @@ test.describe('History of places: a place\'s own history on request (§6a)', () 
         await expect(dialog(page).locator('#hpf-title')).toHaveText(TITLE);
         await dialog(page).locator('[data-hpf="go"]').click();
         await expect.poll(() => history.writes.place).toEqual([{ place: 'L0001' }]);
-        // A place still being matched, or without its record, is not offered.
+        // K7.1a: a place whose region still waits is offered, its state beside it.
         await openManager(page, { tab: 'places' });
+        await expect(allPlace(page, 'Brno').locator('.hm-p-state')).toHaveText('Region waits for the search');
+        await allPlace(page, 'Brno').locator('[data-hm="menu"]').click();
+        await page.locator('.hm-menu [data-scope="find"]').click();
+        await expect(dialog(page).locator('#hpf-title')).toHaveText('Find the history of Brno and surroundings?');
+        await dialog(page).locator('[data-hpf="go"]').click();
+        await expect.poll(() => history.writes.place).toEqual([{ place: 'L0001' }, { place: 'L0002' }]);
+        // A place still being matched to its regions is not offered.
+        await changed(page, history, h => { delete h.payload.places['Brno'].regions; });
+        await openManager(page, { tab: 'places' });
+        await expect(allPlace(page, 'Brno').locator('.hm-p-state')).toHaveText('Waiting to be matched');
         await allPlace(page, 'Brno').locator('[data-hm="menu"]').click();
         await expect(page.locator('.hm-menu [data-scope="find"]')).toHaveCount(0);
     });

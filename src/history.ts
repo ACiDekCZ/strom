@@ -1320,12 +1320,16 @@ export type HistoryPlaceRow =
  * (no row); a place not searched for the tree (`skip`): nothing.
  */
 /**
- * A place whose own history may be asked for (R6, §6a.2): its record id, not
- * left out, matched to its regions (a place still being matched waits for
- * that first) and no history of its own yet.
+ * A place whose own history may be asked for (R6, §6a.2, K7.1a): its record
+ * id, not left out, matched to its regions and no history of its own yet.
+ * A place whose regions wait for their history (`pending` with regions) may
+ * be asked for; one still being matched (`pending` without regions, or placed
+ * again) or not placed (`unlocated`) waits for that first.
  */
 export function historyPlaceOfferable(place: HistoryPlace | undefined): boolean {
-    return !!place?.id && !place.skip && !place.state && (!place.history || place.history === 'none');
+    if (!place?.id || place.skip || place.redo || place.state === 'unlocated') return false;
+    if (place.state === 'pending' && !place.regions?.length) return false;
+    return !place.history || place.history === 'none';
 }
 
 export function historyPlaceRow(p: HistoryPayload, main: HistoryMainPlace | null, canOffer: boolean): HistoryPlaceRow | null {

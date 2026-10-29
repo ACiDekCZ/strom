@@ -400,7 +400,8 @@ test.describe('History of places: the manager', () => {
         // A place: from its "⋯".
         await tab(page, 'places').click();
         await place(page, 'Brno').locator('[data-hm="menu"]').click();
-        await expect(page.locator('.hm-menu [data-scope]')).toHaveText(['Change region…', 'Do not search for this place', 'Open in Places ›']);
+        // Its region still waits: its own history may be asked for all the same (K7.1a).
+        await expect(page.locator('.hm-menu [data-scope]')).toHaveText(['Change region…', 'Find local history…', 'Do not search for this place', 'Open in Places ›']);
         await page.locator('.hm-menu [data-scope="skipPlace"]').click();
         await expect(page.locator('#confirm-title')).toHaveText('Do not search history for Brno?');
         await confirmModal(page).locator('#confirm-ok-btn').click();

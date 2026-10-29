@@ -2,6 +2,10 @@
 
 English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md)
 
+## 3.17.1
+
+- **History of places**: *Find local history…* is offered for a place as soon as the research has matched it to its regions, also while the history of those regions is still waiting (*Region waits for the search* stays beside it), in the place's *⋯* on the *Places* tab and in the research's suggestions; the person card offers it on the last row of the timeline when no region is offered there. Until now the offer waited for the history of all the place's regions.
+
 ## 3.17.0
 
 *Released 29 October 2026.*

@@ -124,10 +124,11 @@ test.describe('History of places: "Find the history of …" in the card', () => 
         expect(one).toBe(true);
     });
 
-    test('without history.first the row says "still looking" and offers nothing', async ({ page }) => {
+    test('without history.first the row says "still looking" and offers no region; the main place is offered (K7.1a)', async ({ page }) => {
         await setup(page, { features: HISTORY_R1_FEATURES.filter(f => f !== 'history.first') });
         await openCard(page, 'Jan');
-        await expect(lastRow(page)).toHaveText(STILL_LOOKING);
-        await expect(findLink(page)).toHaveCount(0);
+        await expect(lastRow(page)).toHaveText([STILL_LOOKING,
+            'The research has not looked for the history of Čapkov and surroundings yet. Find local history…']);
+        await expect(lastRow(page).locator('button[data-find]')).toHaveCount(0);
     });
 });

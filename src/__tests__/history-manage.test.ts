@@ -202,6 +202,29 @@ describe('places', () => {
         expect(groups[2].rows[3].link).toBe('searchAgain');
     });
 
+    it('a place whose regions wait may be asked for, the state said beside it (K7.1a)', () => {
+        const q = payload({
+            regions: { bohemia: region('bohemia', { state: 'queued' }) },
+            suggest: ['L0003'],
+            places: {
+                waits: { events: [], id: 'L0003', state: 'pending', regions: [{ id: 'bohemia' }], persons: 5 },
+                mapping: { events: [], id: 'L0004', state: 'pending', persons: 3 },
+                redo: { events: [], id: 'L0005', state: 'pending', redo: true, regions: [{ id: 'bohemia' }], persons: 2 },
+                lost: { events: [], id: 'L0006', state: 'unlocated', persons: 1 },
+            },
+        });
+        const groups = placeGroups(q, env(), names);
+        expect(groups.find(g => g.key === 'suggest')!.rows.map(r => r.key)).toEqual(['waits']);
+        const rows = new Map(groups.find(g => g.key === 'all')!.rows.map(r => [r.key, r]));
+        expect(rows.get('waits')!.state).toBe('Region waits for the search');
+        expect(rows.get('waits')!.actions).toContain('placeFind');
+        expect(rows.get('mapping')!.state).toBe('Waiting to be matched');
+        for (const k of ['mapping', 'redo', 'lost']) expect(rows.get(k)!.actions, k).not.toContain('placeFind');
+        // K8.3: the history of places off — nothing offered.
+        const off = placeGroups(q, env({ split: { regions: true, places: false }, canOff: true, canLinkOn: true }), names);
+        expect(off.flatMap(g => g.rows).some(r => r.actions.includes('placeFind'))).toBe(false);
+    });
+
     it('sorts alphabetically on request', () => {
         expect(placeGroups(p, env(), names, 'alpha').find(g => g.key === 'all')!.rows.map(r => r.key))
             .toEqual(['kounice', 'lhota', 'nowhere', 'skipped']);
