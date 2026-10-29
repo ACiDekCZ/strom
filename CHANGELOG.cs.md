@@ -6,6 +6,7 @@
 
 *Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
 
+- **Stránka osoby**: hlavička nabídky karty (a tlačítko ve spodním listu na telefonu) otevře *Stránku osoby*, celý život osoby k prohlížení: data slovy, rodina, schválené vyprávění, poznámky, časová osa s dějinami a událostmi dětí (obojí jde vypnout), hlavní výřezy z matrik a sbalené prameny a oddíl *Pro badatele*. Příbuzní se otevřou ve stejném okně se *Zpět*. *Uložit jako HTML* vytvoří jeden samonosný soubor, který se otevře offline v každém prohlížeči i bez JavaScriptu a dá se poslat rodině; skupiny obsahu a ochranu žijících lze zvolit a volba se pamatuje. K dispozici je i tisk a na telefonu sdílení.
 - **Používané příjmení**: osoba s příjmením po sňatku může zase užívat rodné příjmení (třeba po rozvodu): editor osoby má pod vyplněným příjmením po sňatku volbu *Používané příjmení: Rodné | Po sňatku*. Příjmení po sňatku zůstává; karta a strom ukazují jen používané příjmení a detail osoby (nabídka karty, panel vztahů, hlavička editoru) uvádí to druhé jako *(dříve Zástěrová)*. Volba projde GEDCOM (`_STROM_PRIMARY`), JSON i propojením s výzkumem, export CSV má sloupec *Používané příjmení* a rejstřík knihy rodu píše *dříve*. Stromy bez volby se nemění.
 - **Opravy**: dítě osoby se dvěma a více partnery je spojené s oběma rodiči: čára vede ze středu mezi kartami obou rodičů u každého partnera, se sňatkem i bez něj a v jakémkoli pořadí rodin. Dosud bylo dítě druhého partnera spojené jen s kartou toho partnera.
 
