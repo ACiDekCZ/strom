@@ -16620,11 +16620,10 @@
         }
         .pp-titles { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
         .pp-titles h2 {
-            margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
-            color: var(--accent-text);
+            margin: 0; font-family: var(--font-serif); font-size: 17px; font-weight: 600; line-height: 1.25; color: var(--text);
         }
         .pp-sub {
-            font-family: var(--font-serif); font-size: 17px; font-weight: 600; color: var(--text);
+            font-size: 12.5px; color: var(--text-light);
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
         .pp-mtitle { display: none; }
@@ -16668,14 +16667,14 @@
         .pp-toc { flex: 0 0 168px; position: sticky; top: 0; align-self: flex-start; }
         .pp-toc-h {
             font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase;
-            color: var(--text-faint); margin: 4px 0 10px;
+            color: var(--accent-text); margin: 4px 0 10px 10px;
         }
         .pp-toc ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
         .pp-toc-link {
-            display: block; padding: 5px 0 5px 12px; border-left: 2px solid var(--divider);
-            font-size: 13.5px; color: var(--text-light); text-decoration: none;
+            display: block; padding: 5px 10px; border-radius: 6px;
+            font-size: 13.5px; color: var(--text-light); text-decoration: none; overflow-wrap: anywhere;
         }
-        .pp-toc-link[aria-current="true"] { border-left-color: var(--primary); color: var(--text); font-weight: 600; }
+        .pp-toc-link[aria-current="true"] { background: var(--surface-2); color: var(--text); font-weight: 600; }
         /* The ⋯ menu: a popover under its button (a small sheet on a phone). */
         .pp-menu {
             position: absolute; top: 56px; right: 12px; z-index: 2;
@@ -16748,7 +16747,9 @@
         /* "Save as HTML" (§5.1): a small dialog, a bottom sheet on a phone. */
         @media (min-width: 641px) { .modal.modal--sm.pp-export { width: 480px; max-width: min(480px, 94vw); } }
         .pp-export .ppx-sec { margin: 0 0 16px; }
-        .ppx-label { font-size: 12px; font-weight: 600; color: var(--text-light); margin: 0 0 6px; }
+        .ppx-titles { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+        .ppx-sub { font-size: 12.5px; color: var(--text-light); overflow-wrap: anywhere; }
+        .ppx-label { font-size: 12.5px; font-weight: 400; color: var(--text-light); margin: 0 0 6px; }
         .ppx-file {
             font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 13px;
             background: var(--surface-2); border-radius: var(--r-md); padding: 8px 10px;
@@ -16766,15 +16767,19 @@
         @media (hover: hover) { .ppx-check:not(.is-inert):hover { background: var(--hover-bg); } }
         .ppx-note { margin: 6px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--text-light); }
         .ppx-note[hidden] { display: none; }
-        .ppx-privacy { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-        .modal .ppx-privacy .segment-btn {
-            min-height: 40px; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--r-md);
-            font-size: 13.5px; text-align: center; text-wrap: balance;
-            background: var(--surface); color: var(--text);
+        /* A 2 × 2 segment: one frame, hairlines between the options. */
+        .ppx-privacy {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 1px;
+            border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; background: var(--border);
         }
-        .modal .ppx-privacy .segment-btn.active { background: var(--primary); border-color: var(--primary); color: var(--on-primary); font-weight: 600; }
+        .modal .ppx-privacy .segment-btn {
+            min-height: 40px; min-width: 0; padding: 6px 10px; border: 0; border-radius: 0;
+            font-size: 13.5px; text-align: center; text-wrap: balance; overflow-wrap: anywhere;
+            background: var(--surface-2); color: var(--text-light);
+        }
+        .modal .ppx-privacy .segment-btn.active { background: var(--primary); color: var(--on-primary); font-weight: 600; }
         @media (hover: hover) { .modal .ppx-privacy .segment-btn:not(.active):hover { background: var(--hover-bg); } }
-        .ppx-privacy .segment-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        .ppx-privacy .segment-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: -3px; }
         .ppx-size {
             display: flex; flex-direction: column; gap: 2px;
             background: var(--surface-2); border-radius: var(--r-md); padding: 10px 12px; font-size: 13px; color: var(--text-light);
@@ -16827,8 +16832,10 @@
             margin: 0 -8px 4px; padding: 0 16px 4px 24px; border-bottom: 1px solid var(--divider);
         }
         .bottom-sheet-person:has(.bs-person-head) .bottom-sheet-handle { margin-bottom: 2px; }
+        /* A long name wraps; the button stays at the top beside it (§1.2). */
         .bottom-sheet-person .bs-person-head .bottom-sheet-menu-title {
             flex: 1 1 auto; min-width: 0; margin: 0; padding: 8px 0 0; border-bottom: 0;
+            white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; text-wrap: pretty;
         }
         .bs-page-btn {
             flex-shrink: 0; min-height: 44px; padding: 0 12px; margin: -4px 0 -4px;

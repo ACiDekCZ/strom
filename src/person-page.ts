@@ -28,6 +28,7 @@ import { excerptImageUrl } from './excerpts.js';
 import { personSourceRows, lifeEventLabel, coupleEventLabelIn, PersonSourceRow } from './person-sources.js';
 import { personInitials } from './initials.js';
 import { PERSON_PAGE_SCRIPT, personPageFileCss } from './person-page-css.js';
+import { findRelationship } from './kinship.js';
 
 // ─── Interface (ZADANI §2.6) ────────────────────────────────────────────────
 
@@ -720,7 +721,7 @@ function headerHtml(c: Ctx, differs: { birth: boolean; death: boolean } | null):
     if (jobs.length) facts.push([P.occupation, esc(jobs.join(', '))]);
 
     const aka = (person.nameVariants ?? []).map(v => v.trim()).filter(Boolean);
-    return `<header class="pp-hero">${avatar}<div class="pp-hero-main">`
+    return `<header class="pp-hero" id="pp-sec-facts">${avatar}<div class="pp-hero-main">`
         + (c.app ? '' : `<p class="pp-eyebrow">${esc(P.eyebrow)}</p>`)
         + `<h1 class="pp-name">${nameHtml(person, { former: true })}</h1>`
         + (aka.length ? `<p class="pp-aka">${esc(P.alsoKnown)} ${esc(aka.join(', '))}</p>` : '')
@@ -1254,7 +1255,18 @@ export function personPageSizeMb(bytes: number, lang: Language): string {
     return lang === 'en' ? text : text.replace('.', ',');
 }
 
-/** The names of the living people on the page (who the privacy choice is about), in page order. */
-export function personPageLivingNames(page: PersonPageData): string[] {
-    return [...page.living].map(id => page.tree.persons[id]).filter((p): p is Person => !!p).map(p => shownName(p));
+/**
+ * The living people on the page (who the privacy choice is about), in page
+ * order, each with the relation to the page's person: "Eva Fíšková (vnučka)".
+ * The relation is found in `data` (the whole tree, so a grandchild named at
+ * an event is still "vnučka"), else among the page's people; the person
+ * itself, or someone no relation connects, is the name alone.
+ */
+export function personPageLivingNames(page: PersonPageData, data?: StromData): string[] {
+    return [...page.living].map(id => page.tree.persons[id]).filter((p): p is Person => !!p).map(p => {
+        const relation = p.id === page.personId ? null
+            : (data?.persons[page.personId] && data.persons[p.id] ? findRelationship(data, page.personId, p.id) : null)
+                ?? findRelationship(page.tree, page.personId, p.id);
+        return relation ? `${shownName(p)} (${relation.term[page.lang]})` : shownName(p);
+    });
 }

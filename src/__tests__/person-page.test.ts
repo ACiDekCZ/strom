@@ -88,7 +88,7 @@ describe('sections', () => {
     it('come in the agreed order; header first, footer last', () => {
         const html = body(fiskTree(), { open: new Set(['research']) });
         expect(html.startsWith('<article class="pp"')).toBe(true);
-        expect(html.indexOf('<header class="pp-hero">')).toBeLessThan(html.indexOf('pp-sec-family'));
+        expect(html.indexOf('<header class="pp-hero"')).toBeLessThan(html.indexOf('pp-sec-family'));
         expect(sectionIds(html)).toEqual(['pp-sec-family', 'pp-sec-story', 'pp-sec-notes', 'pp-sec-timeline', 'pp-sec-sources', 'pp-sec-research']);
         expect(personPageSections(html, 'cs').map(s => s.key)).toEqual(['family', 'story', 'notes', 'timeline', 'sources', 'research']);
     });
@@ -426,8 +426,22 @@ describe('privacy of the living', () => {
     });
     it('names the living people the privacy choice is about; none on a page of the dead', () => {
         const op = opts({ personId: 'karel' as PersonId, mode: 'file', links: 'plain', privacy: 'full' });
-        expect(personPageLivingNames(preparePersonPageData(living(), op)).sort()).toEqual(['Eva Fíšková', 'Lída Malá']);
+        // Each with the relation to the page's person, in the page's language.
+        expect(personPageLivingNames(preparePersonPageData(living(), op)).sort()).toEqual(['Eva Fíšková (dcera)', 'Lída Malá (manželka / partnerka)']);
+        expect(personPageLivingNames(preparePersonPageData(living(), { ...op, lang: 'de' })).sort()).toEqual(['Eva Fíšková (Tochter)', 'Lída Malá (Ehefrau / Partnerin)']);
+        // A living person's own page: the name alone for the person, the relation for the others.
+        expect(personPageLivingNames(preparePersonPageData(living(), { ...op, personId: 'eva' as PersonId, lang: 'en' })).sort()).toEqual(['Eva Fíšková', 'Lída Malá (mother)']);
         expect(personPageLivingNames(preparePersonPageData(fiskTree(), opts({ personId: 'karel' as PersonId })))).toEqual([]);
+        // A great-grandchild on the page only as a godparent (the grandchild between is not on the page):
+        // the relation comes from the whole tree.
+        const d = living();
+        d.persons['vnuk' as PersonId] = p('vnuk', 'Ota', 'Fíšek', 'male', { birthDate: '1975', parentIds: ids('eva'), childIds: ids('pravnuk') });
+        d.persons['pravnuk' as PersonId] = p('pravnuk', 'Jakub', 'Fíšek', 'male', { birthDate: '2000', parentIds: ids('vnuk') });
+        d.persons['eva' as PersonId].childIds = ids('vnuk');
+        d.persons['karel' as PersonId].events = [{ id: 'e9', type: 'burial', date: '1999', participants: [{ id: 'g9', role: 'witness', name: 'Jakub Fíšek', personId: 'pravnuk' as PersonId }] }];
+        const page = preparePersonPageData(d, op);
+        expect(personPageLivingNames(page, d)).toContain('Jakub Fíšek (pravnuk)');
+        expect(personPageLivingNames(page)).toContain('Jakub Fíšek');
     });
 });
 

@@ -216,9 +216,11 @@ export const personPageMethods = uiModule({
         const page = preparePersonPageData(DataManager.getData(), opts, this.personPageContext(entry.personId));
         const body = buildPersonPageBody(page, opts);
         const sections = personPageSections(body, lang);
+        // The contents start with the header's details (the top of the page), counted apart from the four sections.
+        const tocItems = [{ id: 'pp-sec-facts', label: P.sec.facts }, ...sections];
         const toc = sections.length >= 4
             ? `<nav class="pp-toc" aria-label="${esc(P.toc)}"><div class="pp-toc-h">${esc(P.toc)}</div><ol>`
-                + sections.map(s => `<li><a class="pp-toc-link" href="#${esc(s.id)}" data-pp-toc="${esc(s.id)}">${esc(s.label)}</a></li>`).join('')
+                + tocItems.map(s => `<li><a class="pp-toc-link" href="#${esc(s.id)}" data-pp-toc="${esc(s.id)}">${esc(s.label)}</a></li>`).join('')
                 + '</ol></nav>'
             : '';
 
@@ -603,7 +605,7 @@ export const personPageMethods = uiModule({
                 <div class="ppx-privacy" role="radiogroup" aria-labelledby="ppx-privacy-h">
                     ${PRIVACY_MODES.map(m => `<button type="button" class="segment-btn" role="radio" data-ppx-privacy="${m}" aria-checked="false">${esc(modeLabel[m])}</button>`).join('')}
                 </div>
-                <p class="ppx-note">${esc(X.privacyWho(personPageLivingNames(full).join(', ')))}</p>
+                <p class="ppx-note">${esc(X.privacyWho(personPageLivingNames(full, DataManager.getData()).join(', ')))}</p>
             </div>` : '';
         const footer = deviceShare
             ? `<button type="button" class="secondary" data-dismiss>${esc(X.cancel)}</button>`
@@ -614,7 +616,7 @@ export const personPageMethods = uiModule({
         overlay.innerHTML = `
             <div class="modal modal--sm pp-export" role="dialog" aria-modal="true" aria-labelledby="ppx-title">
                 <div class="modal-header">
-                    <h2 id="ppx-title">${esc(shareOk ? X.titleShare : X.title)}</h2>
+                    <div class="ppx-titles"><h2 id="ppx-title">${esc(shareOk ? X.titleShare : X.title)}</h2><span class="ppx-sub">${esc(personSubtitle(personId))}</span></div>
                     <button type="button" class="close-btn" data-ppx="close" aria-label="${esc(P.close)}">&times;</button>
                 </div>
                 <div class="ppx-sec">

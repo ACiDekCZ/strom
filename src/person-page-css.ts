@@ -29,7 +29,8 @@ export const PERSON_PAGE_CSS = `
 .pp p { margin: 0; }
 .pp a { color: var(--primary); }
 .pp .pn-note { font-size: 0.5em; font-weight: 400; color: var(--text-faint); white-space: nowrap; font-family: var(--font-sans); }
-.pp-eyebrow, .pp-kicker { font-size: 11.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-text); }
+/* Above .pp h2: a kicker or a story title may be an h2. */
+.pp .pp-eyebrow, .pp .pp-kicker { font-family: var(--font-sans); font-size: 11.5px; line-height: 1.4; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-text); }
 .pp-hero { display: flex; gap: 18px; align-items: flex-start; }
 .pp-photo, .pp-initials { flex: 0 0 auto; width: clamp(68px, 13cqi, 104px); height: clamp(68px, 13cqi, 104px); border-radius: 50%; }
 .pp-photo { object-fit: cover; border: 1px solid var(--border); }
@@ -54,20 +55,22 @@ button.pp-card { cursor: pointer; }
 .pp-card-years { font-size: 12.5px; color: var(--text-light); white-space: nowrap; }
 .pp-card-sub { flex-basis: 100%; font-size: 13px; color: var(--text-light); }
 .pp-partner { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.pp-file .pp-card, .pp-card--plain { border-color: transparent; padding-left: 0; padding-right: 0; background: none; }
+.pp-file .pp-card, .pp-card--plain { min-height: 0; border-color: transparent; padding: 2px 0; background: none; }
+.pp-file .pp-fam-cards { gap: 6px 20px; }
+.pp-file .pp-fam-label { padding-top: 2px; }
 .pp-file .pp-card-name, .pp-card--plain .pp-card-name { color: var(--text); }
 .pp-coll > .pp-disc, .pp-coll > summary { list-style: none; cursor: pointer; }
 .pp-coll > summary::-webkit-details-marker, .pp-dtx > summary::-webkit-details-marker, .pp-quote > summary::-webkit-details-marker { display: none; }
 .pp-disc { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 48px; padding: 6px 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; }
 .pp-disc--inline { display: inline-flex; width: auto; min-height: 32px; color: var(--primary); font-weight: 600; font-size: 13.5px; }
-.pp-fold-state { margin-left: auto; font-size: 13px; color: var(--text-faint); white-space: nowrap; }
+.pp-fold-state { margin-left: auto; font-family: var(--font-sans); font-weight: 400; font-size: 13px; color: var(--text-faint); white-space: nowrap; }
 .pp-fold-state .pp-st-open, .pp-coll[open] > summary .pp-st-closed, .pp-disc[aria-expanded="true"] .pp-st-closed { display: none; }
 .pp-coll[open] > summary .pp-st-open, .pp-disc[aria-expanded="true"] .pp-st-open { display: inline; }
 .pp-count { font-size: 13.5px; color: var(--text-faint); font-weight: 400; font-family: var(--font-sans); }
 .pp-peek { display: block; font-size: 13.5px; color: var(--text-light); overflow-wrap: anywhere; }
 .pp-coll[open] > summary .pp-peek, .pp-disc[aria-expanded="true"] .pp-peek { display: none; }
 .pp-sum-main { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; flex: 1 1 auto; min-width: 0; }
-.pp-story-title { font-size: clamp(21px, 3.6cqi, 26px); line-height: 1.25; margin: 6px 0 12px; overflow-wrap: anywhere; hyphens: auto; }
+.pp .pp-story-title { font-size: clamp(21px, 3.6cqi, 26px); line-height: 1.25; margin: 6px 0 12px; overflow-wrap: anywhere; hyphens: auto; }
 .pp-prose { font-family: var(--font-serif); font-size: clamp(16px, 2.5cqi, 17.5px); line-height: 1.65; overflow-wrap: anywhere; }
 .pp-prose p, .pp-prose ul { margin: 0 0 0.9em; }
 .pp-prose .story-subhead { font-size: 1.05em; margin: 1.1em 0 0.4em; }
@@ -118,10 +121,10 @@ button.pp-card { cursor: pointer; }
 .pp-no-history .pp-row--hist, .pp-no-history .pp-legend, .pp-no-kids .pp-row--kid { display: none; }
 .pp-no-kids .pp-seg:not(.pp-seg--own):not(.pp-seg--hist), .pp-no-history .pp-seg:not(.pp-seg--own):not(.pp-seg--kid),
 .pp-no-history.pp-no-kids .pp-seg:not(.pp-seg--own) { display: none; }
-.pp-fig { position: relative; margin: 10px 0 4px; max-width: 460px; }
-.pp-fig img { display: block; width: 100%; height: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); }
-.pp-fig figcaption { margin-top: 4px; font-size: 12.5px; color: var(--text-light); overflow-wrap: anywhere; }
-.pp-zoom { position: absolute; right: 6px; bottom: 30px; width: 28px; height: 28px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font-size: 15px; line-height: 1; cursor: pointer; }
+.pp-fig { display: grid; grid-template-columns: minmax(0, 1fr); margin: 10px 0 4px; max-width: 460px; }
+.pp-fig img { grid-area: 1 / 1; display: block; width: 100%; height: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); }
+.pp-fig figcaption { grid-row: 2; margin-top: 4px; font-size: 12.5px; color: var(--text-light); overflow-wrap: anywhere; }
+.pp-zoom { grid-area: 1 / 1; align-self: end; justify-self: end; margin: 6px; width: 28px; height: 28px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font-size: 15px; line-height: 1; cursor: pointer; }
 .pp-mat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 190px), 1fr)); gap: 12px; margin-top: 12px; }
 .pp-mat { margin: 0; min-width: 0; }
 .pp-mat img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); }
@@ -133,8 +136,8 @@ button.pp-card { cursor: pointer; }
 .pp-src-intro { margin: 4px 0 12px; font-size: 14px; color: var(--text-light); }
 .pp-src-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
 .pp-src { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 0 14px; }
-.pp-src .pp-disc { min-height: 48px; flex-wrap: wrap; align-items: flex-start; padding: 10px 0; }
-.pp-src-lines { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pp-src .pp-disc { min-height: 48px; flex-wrap: nowrap; align-items: flex-start; padding: 10px 0; }
+.pp-src-lines { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .pp-src-title { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
 .pp-src-sup { font-size: 13.5px; color: var(--text-light); overflow-wrap: anywhere; }
 .pp-src-ref { font-size: 12.5px; color: var(--text-faint); overflow-wrap: anywhere; }
