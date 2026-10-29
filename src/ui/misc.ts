@@ -932,6 +932,15 @@ export const miscMethods = uiModule({
                         this.closePersonStoryDialog();
                         return;
                     }
+                    // The person page: Esc closes the whole window, never a step back (spec 025).
+                    if (currentDialog === 'person-page-export-modal') {
+                        this.closePersonPageExport();
+                        return;
+                    }
+                    if (currentDialog === 'person-page-modal') {
+                        this.closePersonPage();
+                        return;
+                    }
                     if (currentDialog === 'research-review-modal') {
                         this.closeResearchReviewDialog();
                         return;

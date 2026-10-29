@@ -34,7 +34,7 @@ import {
     computePersonHistory, historyCardShows, historyStripShows, historyFindRegions, historyMainPlace, historyPlaceRow, historyWaiting, historySettingsStatus, queueHideOp,
     historyKindsShown, historyKindLocked, HISTORY_SCOPE_KINDS, type HistoryKinds,
     type HistoryPayload, type HistoryDeleted, type HistoryHideOp, type PersonHistory, type LifelineHistoryItem, type HiddenHistoryItem,
-    type HistorySettingsAction, type EffectiveHidden,
+    type HistorySettingsAction, type EffectiveHidden, type PersonHistoryEnv,
 } from '../history.js';
 import { manageSummaries } from '../history-manage.js';
 import {
@@ -440,6 +440,31 @@ export const historyMethods = uiModule({
             if (row) history.placeRow = row;
         }
         return { researchId: rid, chipOn, history, canLinkOn };
+    },
+
+    /**
+     * The history the person page (spec 025) reads: the payload and the
+     * environment the card uses, when the card would show a history layer at
+     * all (the page has its own switch, on by default; the card's chip does
+     * not decide). Undefined: no layer, no research or nothing read yet.
+     */
+    personPageHistory(personId: string): { payload: HistoryPayload; env: PersonHistoryEnv } | undefined {
+        const view = this.historyForPerson(personId);
+        if (!view?.history) return undefined;
+        const rid = view.researchId;
+        const payload = cache.get(rid);
+        if (!payload) return undefined;
+        const status = this.researchBridgeUp(rid) ? this.researchStatusOf(rid) : null;
+        const searchOn = this.historySearchOnNow(rid);
+        return {
+            payload,
+            env: {
+                queue: displayQueue(rid),
+                kinds: this.historyKindsNow().kinds,
+                ...(searchOn !== undefined ? { searchOn } : {}),
+                ...(status?.treeState ? { treeState: status.treeState } : {}),
+            },
+        };
     },
 
     /**

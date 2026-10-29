@@ -71,6 +71,7 @@ import { appModeMethods } from './app-mode.js';
 import { kinshipUiMethods } from './kinship-ui.js';
 import { archivesUiMethods } from './archives-ui.js';
 import { personSourcesMethods } from './person-sources-ui.js';
+import { personPageMethods } from './person-page-ui.js';
 import { researchActionsMethods } from './research-actions-ui.js';
 import { storyCompareMethods } from './story-compare-ui.js';
 import { cardFieldsUiMethods } from './card-fields-ui.js';
@@ -556,6 +557,10 @@ Object.assign(UIClass.prototype, archivesUiMethods);
 type PersonSourcesMethods = typeof personSourcesMethods;
 export interface UIClass extends PersonSourcesMethods {}
 Object.assign(UIClass.prototype, personSourcesMethods);
+
+type PersonPageMethods = typeof personPageMethods;
+export interface UIClass extends PersonPageMethods {}
+Object.assign(UIClass.prototype, personPageMethods);
 
 type ResearchActionsMethods = typeof researchActionsMethods;
 export interface UIClass extends ResearchActionsMethods {}

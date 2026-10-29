@@ -13,13 +13,13 @@ const FIRST = ['focus', 'edit', 'sources', 'descendants', 'parent', 'partner', '
     'relationship', 'archives'];
 
 async function actionsOf(page: Page, selector: string): Promise<string[]> {
-    return page.locator(`${selector} [data-action]`).evaluateAll(
+    return page.locator(`${selector} [data-action]:not([data-action="page"])`).evaluateAll(
         (els) => els.map((el) => (el as HTMLElement).dataset.action || ''));
 }
 
 /** The first level row by row: an action, `grid` for the Add buttons, `>name` for a submenu row. */
 async function rowsOf(page: Page, selector: string): Promise<string[]> {
-    return page.locator(`${selector} :is([data-action], [data-menu], .menu-chip-grid)`).evaluateAll((els) => {
+    return page.locator(`${selector} :is([data-action]:not([data-action="page"]), [data-menu], .menu-chip-grid)`).evaluateAll((els) => {
         const out: string[] = [];
         for (const el of els as HTMLElement[]) {
             if (el.closest('.menu-chip-grid') && !el.classList.contains('menu-chip-grid')) continue;
@@ -92,7 +92,9 @@ test('desktop: the keyboard — ↓ to More, → opens it on Lock, ← back to M
     await page.keyboard.press('Enter');
     const menu = page.locator('.context-menu');
     await expect(menu.locator('[data-action="focus"]')).toBeFocused();
-    // Up from the first row wraps to the last one: More ›.
+    // Up from the first row reaches the header (the person page, spec 025), then wraps to the last one: More ›.
+    await page.keyboard.press('ArrowUp');
+    await expect(menu.locator('.context-menu-header--page')).toBeFocused();
     await page.keyboard.press('ArrowUp');
     const more = menu.locator('[data-menu="more"]');
     await expect(more).toBeFocused();
@@ -103,7 +105,9 @@ test('desktop: the keyboard — ↓ to More, → opens it on Lock, ← back to M
     await page.keyboard.press('ArrowLeft');
     await expect(page.locator('.context-submenu')).toHaveCount(0);
     await expect(more).toBeFocused();
-    // Through every first-level row down to More ›.
+    // Down from More › wraps to the header, then the first row.
+    await page.keyboard.press('ArrowDown');
+    await expect(menu.locator('.context-menu-header--page')).toBeFocused();
     await page.keyboard.press('ArrowDown');
     await expect(menu.locator('[data-action="focus"]')).toBeFocused();
 });

@@ -24,7 +24,7 @@ const ACTIVATABLE = [
 
 /** Menu containers whose items take Arrow Up / Down. */
 const MENU = '.tree-switcher-dropdown.active, .context-menu, .bottom-sheet-person, .bottom-sheet-menu';
-const MENU_ITEM = '.tree-switcher-action, .tree-switcher-item, .context-menu-item, .bottom-sheet-person .bottom-sheet-item, '
+const MENU_ITEM = '.tree-switcher-action, .tree-switcher-item, .context-menu-item, .context-menu-header--page, .bottom-sheet-person .bottom-sheet-item, '
     + '.tree-switcher-dropdown [role="menuitem"], .bottom-sheet-menu .bottom-sheet-item, .bottom-sheet-menu [role="menuitem"]';
 
 /** Trigger button → the dropdown it opens. */

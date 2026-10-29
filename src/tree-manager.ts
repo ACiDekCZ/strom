@@ -382,6 +382,20 @@ class TreeManagerClass {
         this.saveIndex();
     }
 
+    /** The last choice of "Save as HTML" on a person page (spec 025), if any. */
+    getPersonPageExport(id: TreeId): TreeMetadata['personPageExport'] {
+        const tree = this.index.trees.find(t => t.id === id);
+        return tree?.personPageExport ? structuredClone(tree.personPageExport) : undefined;
+    }
+
+    /** Remember the person page's "Save as HTML" choice for the tree. */
+    setPersonPageExport(id: TreeId, value: NonNullable<TreeMetadata['personPageExport']>): void {
+        const tree = this.index.trees.find(t => t.id === id);
+        if (!tree) return;
+        tree.personPageExport = { groups: { ...value.groups }, privacy: value.privacy };
+        this.saveIndex();
+    }
+
     /** Whether the "backups too big" advice still needs showing; marks it shown. */
     takeBackupsTooBigNotice(id: TreeId): boolean {
         const tree = this.index.trees.find(t => t.id === id);

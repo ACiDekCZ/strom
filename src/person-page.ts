@@ -1246,3 +1246,15 @@ export function estimatePersonPageSize(page: PersonPageData, opts: PersonPageOpt
     const images = (html.match(/<img\s/g) ?? []).length;
     return { bytes: utf8Length(html), images };
 }
+
+/** "2,4" (cs, de) / "2.4" (en): the saved file's size in MB, one decimal, 0.1 at least (§5.1). */
+export function personPageSizeMb(bytes: number, lang: Language): string {
+    const mb = Math.max(0.1, Math.round(Math.max(0, bytes) / 100_000) / 10);
+    const text = mb.toFixed(1);
+    return lang === 'en' ? text : text.replace('.', ',');
+}
+
+/** The names of the living people on the page (who the privacy choice is about), in page order. */
+export function personPageLivingNames(page: PersonPageData): string[] {
+    return [...page.living].map(id => page.tree.persons[id]).filter((p): p is Person => !!p).map(p => shownName(p));
+}

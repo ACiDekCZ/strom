@@ -121,7 +121,7 @@ test('Birth: the card shows the birth surname alone, the card menu, relationship
 
     // The card menu's header.
     await marie.click();
-    const header = page.locator('.context-menu .context-menu-header');
+    const header = page.locator('.context-menu .context-menu-header .cmh-name');
     await expect(header).toHaveText('Marie Dvořáková (formerly Nováková)');
     await expect(header.locator('.pn-note--former')).toHaveCount(1);
     await page.keyboard.press('Escape');
@@ -215,7 +215,7 @@ test('Settings → Surname display "Birth surname": everyone under the birth sur
     await expect(marie.locator('.name-text')).toHaveAttribute('data-surname', 'Dvořáková');
     await expect(marie.locator('.name-text')).toHaveAttribute('title', 'Marie Dvořáková');
     await marie.click();
-    await expect(page.locator('.context-menu .context-menu-header')).toHaveText('Marie Dvořáková');
+    await expect(page.locator('.context-menu .context-menu-header .cmh-name')).toHaveText('Marie Dvořáková');
     await expect(page.locator('.context-menu .pn-note')).toHaveCount(0);
 
     // "Married surname": the choice wins, the note returns.
@@ -223,7 +223,7 @@ test('Settings → Surname display "Birth surname": everyone under the birth sur
     await page.evaluate(() => window.Strom.UI.setSurnameDisplay('married'));
     await expect(marie.locator('.name-text')).toHaveAttribute('data-surname', 'Dvořáková');
     await marie.click();
-    await expect(page.locator('.context-menu .context-menu-header')).toHaveText('Marie Dvořáková (formerly Nováková)');
+    await expect(page.locator('.context-menu .context-menu-header .cmh-name')).toHaveText('Marie Dvořáková (formerly Nováková)');
 });
 
 test('phone: 44px radios across the column, the bottom sheet says "(formerly …)" and wraps inside the screen', async ({ page }) => {
@@ -281,5 +281,5 @@ test('GEDCOM: a name marked _STROM_PRIMARY shows on the card, the married one as
     await expect(jana.locator('.name-text')).not.toContainText('formerly');
     await expect(jana.locator('.card-birth')).toHaveCount(0);
     await jana.click();
-    await expect(page.locator('.context-menu .context-menu-header')).toHaveText('Jana Lhotová (formerly Zástěrová)');
+    await expect(page.locator('.context-menu .context-menu-header .cmh-name')).toHaveText('Jana Lhotová (formerly Zástěrová)');
 });

@@ -10,7 +10,7 @@ import { describe, it, expect } from 'vitest';
 import {
     preparePersonPageData, buildPersonPageBody, buildPersonPageDocument, personPageFileName, estimatePersonPageSize,
     personPageTimeline, personPageSections, protectPersonPageTree, stripResearchIds, registerKindOf, personPageDate,
-    PERSON_PAGE_ALL_GROUPS, PersonPageOptions,
+    PERSON_PAGE_ALL_GROUPS, PersonPageOptions, personPageSizeMb, personPageLivingNames,
 } from '../person-page.js';
 import { personSourceRows } from '../person-sources.js';
 import { computePersonLifeline } from '../timeline.js';
@@ -424,6 +424,11 @@ describe('privacy of the living', () => {
         expect(buildPersonPageDocument(page, op)).toContain('Eva Fíšková');
         expect(personPageFileName(page)).toBe('eva-fiskova-1952.html');
     });
+    it('names the living people the privacy choice is about; none on a page of the dead', () => {
+        const op = opts({ personId: 'karel' as PersonId, mode: 'file', links: 'plain', privacy: 'full' });
+        expect(personPageLivingNames(preparePersonPageData(living(), op)).sort()).toEqual(['Eva Fíšková', 'Lída Malá']);
+        expect(personPageLivingNames(preparePersonPageData(fiskTree(), opts({ personId: 'karel' as PersonId })))).toEqual([]);
+    });
 });
 
 describe('file name and size', () => {
@@ -445,6 +450,14 @@ describe('file name and size', () => {
         const page = preparePersonPageData(fiskTree(), opts());
         expect(page.counts).toMatchObject({ childEvents: 1, excerpts: 2, sources: 3, materials: 0 });
         expect(page.counts.research).toBeGreaterThan(0);
+    });
+    it('says the size in MB with one decimal, never 0, with the language’s decimal mark', () => {
+        expect(personPageSizeMb(2_340_000, 'en')).toBe('2.3');
+        expect(personPageSizeMb(2_340_000, 'cs')).toBe('2,3');
+        expect(personPageSizeMb(2_360_000, 'de')).toBe('2,4');
+        expect(personPageSizeMb(12_000, 'en')).toBe('0.1');
+        expect(personPageSizeMb(0, 'cs')).toBe('0,1');
+        expect(personPageSizeMb(15_000_000, 'en')).toBe('15.0');
     });
 });
 

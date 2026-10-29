@@ -385,6 +385,9 @@ export const contextMenuMethods = uiModule({
                 this.pushDialog('person-modal');
                 this.showEditPersonModal(personId);
                 break;
+            case 'page':
+                this.showPersonPage(personId);
+                break;
             case 'focus':
                 // "Focus" always returns to the family view so the user is not
                 // stranded inside the descendants chart. Mode first (no render),
@@ -533,8 +536,13 @@ export const contextMenuMethods = uiModule({
         // Header names the person the menu acts on (serif, per the Letopis design).
         const person = DataManager.getPerson(personId);
         const personName = person ? shownName(person) : '';
+        // The header itself opens the person page (spec 025): a menu item of its
+        // own, offered in every mode (read-only, locked tree or person too).
         const header = personName
-            ? `<div class="context-menu-header">${person ? nameHtml(person, { former: true }) : this.escapeHtml(personName)}</div>`
+            ? `<button type="button" class="context-menu-header context-menu-header--page" role="menuitem" data-action="page"`
+                + ` aria-label="${this.escapeHtml(strings.personPage.menuAria(personName))}">`
+                + `<span class="cmh-name">${person ? nameHtml(person, { former: true }) : this.escapeHtml(personName)}</span>`
+                + `<span class="cmh-page" aria-hidden="true">${this.escapeHtml(strings.personPage.menu)} ›</span></button>`
             : '';
         // Items are text-only here (the mobile bottom sheet keeps the glyphs).
         menu.innerHTML = header + this.personSignalsMenuHtml(personId, false, 'context-menu-item') + this.contextMenuItemsHtml(actions);
@@ -549,7 +557,7 @@ export const contextMenuMethods = uiModule({
             this.hideContextMenu();
             if (action) this.runPersonMenuAction(personId, action);
         };
-        menu.querySelectorAll<HTMLElement>('.context-menu-item[data-action]').forEach(item => {
+        menu.querySelectorAll<HTMLElement>('.context-menu-item[data-action], .context-menu-header--page').forEach(item => {
             item.addEventListener('click', () => run(item));
         });
 

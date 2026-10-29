@@ -7,7 +7,7 @@ import { openApp, createFirstPerson, addRelation, card, cardAction, personModal 
  */
 
 async function actionsOf(page: Page): Promise<string[]> {
-    return page.locator('.context-menu [data-action], .bottom-sheet-person [data-action]').evaluateAll(
+    return page.locator('.context-menu [data-action]:not([data-action="page"]), .bottom-sheet-person [data-action]:not([data-action="page"])').evaluateAll(
         (els) => els.map((el) => (el as HTMLElement).dataset.action || ''));
 }
 

@@ -146,7 +146,9 @@ export const bottomSheetMethods = uiModule({
             <div class="bottom-sheet bottom-sheet-person" role="menu"${personName && person ? ` aria-label="${esc(shownNameFull(person))}"` : ''}>
                 <div class="bottom-sheet-handle"></div>
                 <div class="sheet-page sheet-page-root">
-                    ${personName && person ? `<div class="bottom-sheet-menu-title">${nameHtml(person, { former: true })}</div>` : ''}
+                    ${personName && person ? `<div class="bs-person-head"><div class="bottom-sheet-menu-title">${nameHtml(person, { former: true })}</div>`
+                        + `<button type="button" class="bs-page-btn" role="menuitem" data-action="page" aria-label="${esc(strings.personPage.menuAria(shownNameFull(person)))}">`
+                        + `${esc(strings.personPage.menu)} ›</button></div>` : ''}
                     <div class="bottom-sheet-items">
                         ${lead.length > 0 ? `<div class="sheet-view-link-head">${lead.map(r => itemHtml(r.a, r.index)).join('')}</div><div class="bottom-sheet-divider" role="separator"></div>` : ''}
                         ${this.personSignalsMenuHtml(personId, true, 'bottom-sheet-item')}
