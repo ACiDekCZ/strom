@@ -319,37 +319,37 @@ describe('?research= picks the research tree among trees of one name', () => {
 
     it('opens the tree with the research, not the first of that name', () => {
         resetTreeManager([
-            meta('tree_1_own', 'Kalinovi'),
-            meta('tree_2_res', 'Kalinovi', { research: link('2026-10-01') }),
+            meta('tree_1_own', 'Testovi'),
+            meta('tree_2_res', 'Testovi', { research: link('2026-10-01') }),
         ]);
-        expect(pick('tree=kalinovi')).toBe('tree_1_own');
-        expect(pick(`tree=kalinovi&research=${R}`)).toBe('tree_2_res');
-        expect(pick(`tree=kalinovi&research=${R.toUpperCase()}`)).toBe('tree_2_res');
+        expect(pick('tree=testovi')).toBe('tree_1_own');
+        expect(pick(`tree=testovi&research=${R}`)).toBe('tree_2_res');
+        expect(pick(`tree=testovi&research=${R.toUpperCase()}`)).toBe('tree_2_res');
     });
 
     it('prefers the original over a copy, else the newest copy', () => {
         resetTreeManager([
-            meta('tree_1_old', 'Kalinovi', { research: link('2026-10-20', true) }),
-            meta('tree_2_res', 'Kalinovi', { research: link('2026-10-01') }),
-            meta('tree_3_new', 'Kalinovi', { research: link('2026-10-25', true) }),
+            meta('tree_1_old', 'Testovi', { research: link('2026-10-20', true) }),
+            meta('tree_2_res', 'Testovi', { research: link('2026-10-01') }),
+            meta('tree_3_new', 'Testovi', { research: link('2026-10-25', true) }),
         ]);
-        expect(pick(`tree=kalinovi&research=${R}`)).toBe('tree_2_res');
+        expect(pick(`tree=testovi&research=${R}`)).toBe('tree_2_res');
         resetTreeManager([
-            meta('tree_1_old', 'Kalinovi', { research: link('2026-10-20', true) }),
-            meta('tree_3_new', 'Kalinovi', { research: link('2026-10-25', true) }),
+            meta('tree_1_old', 'Testovi', { research: link('2026-10-20', true) }),
+            meta('tree_3_new', 'Testovi', { research: link('2026-10-25', true) }),
         ]);
-        expect(pick(`tree=kalinovi&research=${R}`)).toBe('tree_3_new');
+        expect(pick(`tree=testovi&research=${R}`)).toBe('tree_3_new');
     });
 
     it('falls back to ?tree= for an unknown research and ignores what is not a UUID', () => {
         resetTreeManager([
-            meta('tree_1_own', 'Kalinovi'),
-            meta('tree_2_res', 'Kalinovi', { research: link('2026-10-01') }),
+            meta('tree_1_own', 'Testovi'),
+            meta('tree_2_res', 'Testovi', { research: link('2026-10-01') }),
         ]);
-        expect(pick('tree=kalinovi&research=11111111-2222-4333-8444-555555555555')).toBe('tree_1_own');
+        expect(pick('tree=testovi&research=11111111-2222-4333-8444-555555555555')).toBe('tree_1_own');
         expect(pick('research=11111111-2222-4333-8444-555555555555')).toBeUndefined();
-        expect(pick('tree=kalinovi&research=tree_2_res')).toBe('tree_1_own');
-        expect(pick(`tree=kalinovi&research=${R}x`)).toBe('tree_1_own');
+        expect(pick('tree=testovi&research=tree_2_res')).toBe('tree_1_own');
+        expect(pick(`tree=testovi&research=${R}x`)).toBe('tree_1_own');
         expect(pick(`research=${R}`)).toBe('tree_2_res');
     });
 });
