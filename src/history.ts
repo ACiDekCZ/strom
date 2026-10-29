@@ -991,7 +991,8 @@ export interface PersonHistory {
 function lifeBounds(person: Person, points: readonly LifelinePoint[]): { birth: number | null; death: number | null; lo: number | null; hi: number | null } {
     const birth = yearOf(person.birthDate);
     const death = yearOf(person.deathDate);
-    const years = points.map(p => p.year);
+    // A period (resided FROM 1901 TO 1910) counts up to its last year.
+    const years = points.map(p => Math.max(p.year, p.endYear ?? p.year));
     const first = years.length ? Math.min(...years) : null;
     const last = years.length ? Math.max(...years) : null;
     return { birth, death, lo: birth ?? first, hi: death ?? last };

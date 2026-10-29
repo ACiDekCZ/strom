@@ -255,6 +255,17 @@ describe('computePersonHistory', () => {
         expect(r.items.map(i => i.ev.id)).toEqual(['cz-bohemia-0002', 'L0001']);
     });
 
+    it('without a death year the life ends at the last year of a period (resided FROM … TO …), not at its start', () => {
+        const vaclav = person('v', { birthDate: '1880', birthPlace: 'Ves', events: [residence('1901/1910', 'Horní Lhota')] });
+        const p = payload({
+            events: [regionEvent('cz-bohemia-0005', 1907), regionEvent('cz-bohemia-0006', 1914)],
+            places: { 'Horní Lhota': { events: ['cz-bohemia-0005', 'cz-bohemia-0006'] } },
+        });
+        const r = computePersonHistory(data([vaclav]), 'v', p, 'cs');
+        expect(r.items.map(i => i.ev.id)).toEqual(['cz-bohemia-0005']);
+        expect(r.items[0].age).toBe('věk 27');
+    });
+
     it('hides by place (also through an also-name), by person REFN, and from the local queue', () => {
         const p = payload({
             ...base,

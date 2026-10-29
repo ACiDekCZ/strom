@@ -159,6 +159,8 @@ export interface LifelinePoint {
     eventId?: string;
     /** The year column's text when it is not just `year` — a range ("1890–1900"). */
     yearLabel?: string;
+    /** The last year of a period (FROM … TO …) that ends after `year`. */
+    endYear?: number;
     /** Custom event label (eventType === 'custom'). */
     customLabel?: string;
     /**
@@ -258,11 +260,14 @@ export function computePersonLifeline(
     for (const ev of person.events ?? []) {
         const y = yearOf(ev.date);
         if (y === null) continue;
+        const period = parseFlexDate(ev.date);
+        const end = period?.period ? period.end?.year : undefined;
         points.push({
             year: y,
             sortKey: y + yearFraction(ev.date),
             kind: 'event',
             eventType: ev.type,
+            ...(end !== undefined && end > y ? { endYear: end } : {}),
             ...(ev.customLabel ? { customLabel: ev.customLabel } : {}),
             ...(eventValueIsOnTag(ev.type) && ev.note?.trim()
                 ? { detail: ev.note.trim() } : {}),
@@ -306,6 +311,7 @@ export function computePersonLifeline(
                 partnershipId: u.id,
                 eventId: ev.id,
                 ...(d.end && d.end.year !== d.year ? { yearLabel: `${d.year}–${d.end.year}` } : {}),
+                ...(d.period && d.end && d.end.year > d.year ? { endYear: d.end.year } : {}),
                 ...(ev.customLabel ? { customLabel: ev.customLabel } : {}),
                 ...related(data, otherId),
                 ...(participants ? { participants } : {}),
