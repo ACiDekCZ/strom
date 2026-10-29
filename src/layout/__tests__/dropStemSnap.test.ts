@@ -2,9 +2,9 @@
  * No small step between a stem and its child's drop (T09).
  *
  * Ancestor branches can push a parent couple a few px off its child's axis
- * (comprehensive: union_father_mother 6.5 px). The drop then comes down in
- * the stem's axis, still on the child's card, instead of stem → 6.5 px of
- * bus → drop.
+ * (edge-ancestor-span, focus p_ffm: union_p_fffmf_p_fffmm 6.5 px). The drop
+ * then comes down in the stem's axis, still on the child's card, instead of
+ * stem → 6.5 px of bus → drop.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -14,12 +14,12 @@ import { DROP_STEM_SNAP } from '../pipeline/7-route-edges.js';
 import { DEFAULT_LAYOUT_CONFIG, PersonId, PartnershipId, Person, Partnership, Gender, StromData } from '../../types.js';
 
 describe('stem and drop in one axis (T09)', () => {
-    const data = loadFixture('comprehensive');
+    const data = loadFixture('edge-ancestor-span');
 
     for (const mode of ['standard', 'expanded'] as const) {
-        it(`comprehensive, focus ggp_h_h (${mode}): no connector of a few px`, () => {
+        it(`edge-ancestor-span, focus p_ffm (${mode}): no connector of a few px`, () => {
             const r = runLayoutPipeline({
-                data, focusPersonId: 'ggp_h_h' as PersonId, config: DEFAULT_LAYOUT_CONFIG,
+                data, focusPersonId: 'p_ffm' as PersonId, config: DEFAULT_LAYOUT_CONFIG,
                 ancestorDepth: 40, descendantDepth: 40,
                 includeSpouseAncestors: true, includeParentSiblings: true, includeParentSiblingDescendants: true,
                 displayPolicy: { mode, autoExpand: true } as never,
@@ -28,7 +28,8 @@ describe('stem and drop in one axis (T09)', () => {
                 const step = Math.abs(c.connectorToX - c.connectorFromX);
                 expect(step > 0.5 && step <= DROP_STEM_SNAP, `${c.unionId} step ${step}`).toBe(false);
             }
-            const fm = r.connections.find(c => c.unionId === 'union_father_mother')!;
+            const fm = r.connections.find(c => c.unionId === 'union_p_fffmf_p_fffmm')!;
+            expect(fm.stemPersonId).toBeUndefined();
             // The outermost drop comes down in the stem's axis…
             const drop = fm.drops.find(d => Math.abs(d.x - fm.stemX) < 1e-6);
             expect(drop, 'a drop in the stem axis').toBeDefined();

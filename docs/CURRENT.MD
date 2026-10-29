@@ -805,9 +805,21 @@ For each union with children:
   its partner line (`spouseLineOffset`: `spouseLineY` from the card top, else
   the card's middle). A stem from a card starts at the bottom of that
   person's own card and names the person in `Connection.stemPersonId`: a
-  single parent, a marriage chain's extra partner (the same person whose
-  centre is the union's X, `findChainExtraPartner`), a parent beside a hidden
-  "?" stand-in.
+  single parent, a parent beside a hidden "?" stand-in.
+- **Marriage chain stems**: every union of a chain leads its children from
+  its own partner line, between the two parents (GitHub issue #6: a child of
+  a woman's second partner looked like the child of that partner alone).
+  A secondary union's stem (`chainStemOnSpouseLine`) comes down in the gap
+  beside the extra partner (`findChainExtraPartner`) toward the other partner
+  — with the two side by side, the gap between them — in its middle, unless
+  a line of another family of that generation already runs there (a wide
+  primary subtree reaching under the gap): then in the middle of the free
+  part nearest to the gap's middle, `minEdgeClearance` from the other lines.
+  Secondary unions are routed after all other lines for that. The union's X
+  (children centred under the extra partner's slot) does not change: a
+  connector on the bus joins the stem to the children. Only when no free part
+  of the gap is `partnerGap` wide does the stem leave the extra partner's
+  card bottom (`stemPersonId`), as before.
 - **Bus**: horizontal line at `busY = (parentBandBottom + childBandTop) / 2`,
   where `parentBandBottom = top(parentGen) + height(parentGen)` (see
   Generation bands)
@@ -990,7 +1002,8 @@ sized for that union's children subtree. Placement (step 5,
   primary couple: a childless partner stacks directly adjacent to the previous
   card (MyHeritage style); a partner with children (`personsWithChildren`)
   stops at the inner edge of its own slot so its stem stays above its
-  children span. Route-edges bridges card → bus with a connector.
+  children span. Route-edges bridges the stem (on the union's partner line,
+  see Step 7) → bus with a connector.
 
 ### Chain child placement
 

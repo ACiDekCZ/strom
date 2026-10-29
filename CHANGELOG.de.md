@@ -2,6 +2,12 @@
 
 [English](CHANGELOG.md) · [Čeština](CHANGELOG.cs.md) · Deutsch
 
+## 3.18.0
+
+*Diese Version ist in Vorbereitung; dieser Abschnitt wächst mit jeder Testversion.*
+
+- **Fehlerbehebungen**: Ein Kind einer Person mit zwei oder mehr Partnern ist mit beiden Eltern verbunden: Die Linie führt bei jedem Partner aus der Mitte zwischen den Karten beider Eltern, mit oder ohne Heirat und in jeder Reihenfolge der Familien. Bisher war das Kind eines zweiten Partners nur mit der Karte dieses Partners verbunden.
+
 ## 3.17.1
 
 *Veröffentlicht am 29. Oktober 2026.*

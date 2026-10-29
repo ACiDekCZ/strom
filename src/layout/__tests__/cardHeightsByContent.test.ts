@@ -5,9 +5,9 @@
  * A generation stays one horizontal band: the cards stand top-aligned in
  * it and the band is as tall as its tallest card. The bus runs in the
  * middle of the gap between the parent band's bottom and the child band's
- * top; a stem from a card (single parent, a chain's extra partner, a parent
- * beside a hidden "?" stand-in) starts at the bottom of that person's card,
- * a couple's stem on the partner line. X placement does not change.
+ * top; a stem from a card (single parent, a parent beside a hidden "?"
+ * stand-in) starts at the bottom of that person's card, a couple's stem (also
+ * a chain's second marriage) on the partner line. X placement does not change.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -120,17 +120,16 @@ describe('cards of their own heights (U02 V3)', () => {
         expect(conn.stemTopY).toBe(pos(r, 'A').y + 90);
     });
 
-    it('a chain\'s extra partner leads its children from the bottom of its own card', () => {
-        const extra = [lineTo(r, 'K1'), lineTo(r, 'K3')].filter(c => c.stemPersonId);
-        expect(extra).toHaveLength(1);
-        const conn = extra[0];
-        const partner = conn.stemPersonId!;
-        expect(['W1', 'W2']).toContain(partner);
-        expect(conn.stemX).toBe(pos(r, partner).x + v3.cardWidth / 2);
-        expect(conn.stemTopY).toBe(pos(r, partner).y + HEIGHTS[partner]);
-        // The partners differ in height: the other one's bottom would be wrong
-        const other = partner === 'W1' ? 'W2' : 'W1';
-        expect(conn.stemTopY).not.toBe(pos(r, other).y + HEIGHTS[other]);
+    it('a chain\'s second marriage leads its children from its own partner line, between the two partners', () => {
+        const lines = [lineTo(r, 'K1'), lineTo(r, 'K3')];
+        expect(lines.filter(c => c.stemPersonId)).toEqual([]);
+        for (const conn of lines) {
+            const union = conn.unionId === 'union_F_W1' ? ['F', 'W1'] : ['F', 'W2'];
+            const [left, right] = union.map(id => pos(r, id).x).sort((a, b) => a - b);
+            expect(conn.stemX).toBeGreaterThan(left + v3.cardWidth);
+            expect(conn.stemX).toBeLessThan(right);
+            expect(conn.stemTopY).toBe(r.spouseLines.find(l => l.unionId === conn.unionId)!.y);
+        }
     });
 
     it('X placement and bus lanes stay those of uniform cards; the strict audits pass', () => {

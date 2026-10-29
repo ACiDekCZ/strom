@@ -2,6 +2,12 @@
 
 [English](CHANGELOG.md) · Čeština · [Deutsch](CHANGELOG.de.md)
 
+## 3.18.0
+
+*Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
+
+- **Opravy**: dítě osoby se dvěma a více partnery je spojené s oběma rodiči: čára vede ze středu mezi kartami obou rodičů u každého partnera, se sňatkem i bez něj a v jakémkoli pořadí rodin. Dosud bylo dítě druhého partnera spojené jen s kartou toho partnera.
+
 ## 3.17.1
 
 *Vydáno 29. října 2026.*

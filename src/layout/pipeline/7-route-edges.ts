@@ -90,9 +90,19 @@ export function routeEdges(input: RouteEdgesInput): RoutedModel {
         return null;
     };
 
-    // Create connections for each union with children
+    // Create connections for each union with children. A secondary chain
+    // union's stem comes down from its own spouse line, between the two
+    // parents, like a primary couple's (issue #6): it is placed after the
+    // other lines, clear of the ones already in that gap (chainStemOnLine).
+    const created = new Map<UnionId, Connection>();
+    const deferred: UnionId[] = [];
+    const chainStemOnLine = new Set<UnionId>();
     for (const [unionId, union] of model.unions) {
         if (union.childIds.length === 0) continue;
+        if (chainStemPerson.has(unionId) && union.partnerB && !knownParentOf(union)) {
+            deferred.push(unionId);
+            continue;
+        }
 
         const connection = createConnection(
             unionId,
@@ -108,9 +118,25 @@ export function routeEdges(input: RouteEdgesInput): RoutedModel {
             chainStemPerson.get(unionId) ?? null
         );
 
-        if (connection) {
-            connections.push(connection);
-        }
+        if (connection) created.set(unionId, connection);
+    }
+    for (const unionId of deferred) {
+        const union = model.unions.get(unionId)!;
+        const stemPerson = chainStemPerson.get(unionId)!;
+        const lineX = chainStemOnSpouseLine(union, stemPerson, genModel.personGen, personX, unionGen, created.values(), config);
+        const connection = lineX !== null
+            ? createConnection(unionId, union, model.personToUnion, unionGen, unionX, personX, bands, config,
+                false, null, null, lineX)
+            : createConnection(unionId, union, model.personToUnion, unionGen, unionX, personX, bands, config,
+                true, null, stemPerson);
+        if (!connection) continue;
+        if (lineX !== null) chainStemOnLine.add(unionId);
+        created.set(unionId, connection);
+    }
+    // In the order of the unions (the lane allocation depends on it)
+    for (const unionId of model.unions.keys()) {
+        const connection = created.get(unionId);
+        if (connection) connections.push(connection);
     }
 
     // Create spouse lines
@@ -137,12 +163,13 @@ export function routeEdges(input: RouteEdgesInput): RoutedModel {
     fanOutSpouseLines(spouseLines);
 
     // A couple's stem starts on its own spouse line, wherever the fan-out
-    // put it (secondary chain unions and single parents start at the card
-    // bottom and are left alone).
+    // put it (single parents and a secondary chain union whose gap had no
+    // room start at the card bottom and are left alone).
     const spouseLineY = new Map<UnionId, number>();
     for (const sl of spouseLines) spouseLineY.set(sl.unionId, sl.y);
     for (const conn of connections) {
-        if (secondaryChainUnions.has(conn.unionId) || conn.stemPersonId) continue;
+        if (secondaryChainUnions.has(conn.unionId) && !chainStemOnLine.has(conn.unionId)) continue;
+        if (conn.stemPersonId) continue;
         const y = spouseLineY.get(conn.unionId);
         if (y !== undefined && model.unions.get(conn.unionId)?.partnerB) conn.stemTopY = y;
     }
@@ -569,7 +596,8 @@ function createConnection(
     config: Pick<LayoutConfig, 'cardWidth' | 'cardHeight' | 'verticalGap' | 'spouseLineY' | 'personHeights'>,
     isSecondaryChain: boolean = false,
     soloParentId: PersonId | null = null,
-    chainStemPersonId: PersonId | null = null
+    chainStemPersonId: PersonId | null = null,
+    stemXOnLine: number | null = null
 ): Connection | null {
     const soloParentX = soloParentId ? personX.get(soloParentId) : undefined;
     const parentCenterX = soloParentX !== undefined ? soloParentX + config.cardWidth / 2 : unionX.get(unionId);
@@ -601,10 +629,12 @@ function createConnection(
         return null;
     }
 
-    // Stem position (center of parent union, or extra partner center for secondary chains,
-    // or the known parent's center beside a hidden stand-in)
-    const stemX = parentCenterX;
-    // Secondary chain unions: stem from the extra partner's card bottom (like MyHeritage)
+    // Stem position (center of parent union, or a point on a secondary chain
+    // union's spouse line, or extra partner center for a secondary chain
+    // union without room there, or the known parent's center beside a
+    // hidden stand-in)
+    const stemX = stemXOnLine ?? parentCenterX;
+    // Secondary chain unions without room on their spouse line: stem from the extra partner's card bottom
     // Standard two-partner unions: stem from spouse line level
     // Single-parent unions (and a hidden stand-in's): stem from the parent's card bottom
     let stemPersonId: PersonId | undefined;
@@ -669,8 +699,9 @@ function createConnection(
     // blocks horizontalGap apart, so a chain child sits a multiple of the
     // difference (13, 26, 39 px…) beside its parent; up to a quarter card the
     // drop still comes down in the stem's axis.
+    // The same holds for a stem from a chain union's spouse line.
     alignNearDropToStem(drops, stemX, config.cardWidth,
-        fromCardBottom ? config.cardWidth * DROP_STEM_SNAP_CARD_BOTTOM : DROP_STEM_SNAP);
+        fromCardBottom || stemXOnLine !== null ? config.cardWidth * DROP_STEM_SNAP_CARD_BOTTOM : DROP_STEM_SNAP);
 
     // Bus extends from leftmost to rightmost child drop
     const branchLeftX = Math.min(...drops.map(d => d.x));
@@ -700,6 +731,78 @@ function createConnection(
         drops,
         ...(stemPersonId !== undefined ? { stemPersonId } : {})
     };
+}
+
+/**
+ * Where a secondary chain union's stem leaves its spouse line: in the gap
+ * between the extra partner's card and the next card toward the other
+ * partner (with the two partners side by side, the gap between them), in
+ * the middle of it unless a line of another family of that generation runs
+ * there (a wide subtree of the primary couple reaches under the gap) - then
+ * in the middle of the free part nearest to the gap's middle, minEdgeClearance
+ * from the other lines. Null when no part of the gap at least partnerGap
+ * wide is free: the stem then leaves the extra partner's card bottom.
+ */
+function chainStemOnSpouseLine(
+    union: UnionNode,
+    extraPartner: PersonId,
+    personGen: Map<PersonId, number>,
+    personX: Map<PersonId, number>,
+    unionGen: Map<UnionId, number>,
+    others: Iterable<Connection>,
+    config: Pick<LayoutConfig, 'cardWidth' | 'partnerGap' | 'minEdgeClearance'>
+): number | null {
+    const other = union.partnerA === extraPartner ? union.partnerB : union.partnerA;
+    const xE = personX.get(extraPartner);
+    const xO = other ? personX.get(other) : undefined;
+    const gen = unionGen.get(union.id);
+    if (xE === undefined || xO === undefined || gen === undefined || xE === xO) return null;
+
+    const w = config.cardWidth;
+    let gapLeft: number;
+    let gapRight: number;
+    if (xE > xO) {
+        gapLeft = xO + w;
+        gapRight = xE;
+        for (const [pid, x] of personX) {
+            if (personGen.get(pid) === gen && x > xO && x < xE) gapLeft = Math.max(gapLeft, x + w);
+        }
+    } else {
+        gapLeft = xE + w;
+        gapRight = xO;
+        for (const [pid, x] of personX) {
+            if (personGen.get(pid) === gen && x > xE && x < xO) gapRight = Math.min(gapRight, x);
+        }
+    }
+    if (gapRight - gapLeft < config.partnerGap) return null;
+
+    // The parts of the gap the other lines of this generation leave free
+    const taken: Array<[number, number]> = [];
+    for (const conn of others) {
+        if (unionGen.get(conn.unionId) !== gen) continue;
+        const left = Math.min(conn.stemX, conn.branchLeftX, conn.connectorToX);
+        const right = Math.max(conn.stemX, conn.branchRightX, conn.connectorToX);
+        if (right + config.minEdgeClearance <= gapLeft || left - config.minEdgeClearance >= gapRight) continue;
+        taken.push([left - config.minEdgeClearance, right + config.minEdgeClearance]);
+    }
+    taken.sort((a, b) => a[0] - b[0]);
+    const free: Array<[number, number]> = [];
+    let from = gapLeft;
+    for (const [left, right] of taken) {
+        if (left > from) free.push([from, Math.min(left, gapRight)]);
+        from = Math.max(from, right);
+        if (from >= gapRight) break;
+    }
+    if (from < gapRight) free.push([from, gapRight]);
+
+    const middle = (gapLeft + gapRight) / 2;
+    let best: number | null = null;
+    for (const [left, right] of free) {
+        if (right - left < config.partnerGap) continue;
+        const x = (left + right) / 2;
+        if (best === null || Math.abs(x - middle) < Math.abs(best - middle)) best = x;
+    }
+    return best;
 }
 
 /**

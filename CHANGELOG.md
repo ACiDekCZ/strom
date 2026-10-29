@@ -2,6 +2,12 @@
 
 English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md)
 
+## 3.18.0
+
+*This version is in preparation; this section grows with every test version.*
+
+- **Fixes**: a child of a person with two or more partners is linked to both parents: the line comes down from the middle between the two parents' cards for every partner, with or without a marriage and in any order of the families. Until now the child of a second partner was linked to that partner's card alone.
+
 ## 3.17.1
 
 *Released 29 October 2026.*
