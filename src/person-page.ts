@@ -735,14 +735,16 @@ function cardHtml(c: Ctx, pid: PersonId, sub = ''): string {
     const p = c.tree.persons[pid];
     if (!p) return '';
     const years = yearsOf(p);
+    // The marriage line belongs to the partner's card (inside it), so it is
+    // plain text: a place button would nest a button inside the card's button.
     const inner = `<span class="pp-card-name">${esc(shownNameOrEmpty(p) || '?')}</span>`
-        + (years ? `<span class="pp-card-years">${esc(years)}</span>` : '');
-    const subHtml = sub ? `<span class="pp-card-sub">${sub}</span>` : '';
+        + (years ? `<span class="pp-card-years">${esc(years)}</span>` : '')
+        + (sub ? `<span class="pp-card-sub">${sub}</span>` : '');
     if (linkable(c, pid)) {
-        if (c.opts.links === 'set') return `<span class="pp-partner"><a class="pp-card pp-link-card" href="#${esc(slugOf(c, pid))}">${inner}</a>${subHtml}</span>`;
-        return `<span class="pp-partner"><button type="button" class="pp-card pp-link-card" data-pp-person="${esc(pid)}">${inner}</button>${subHtml}</span>`;
+        if (c.opts.links === 'set') return `<a class="pp-card pp-link-card" href="#${esc(slugOf(c, pid))}">${inner}</a>`;
+        return `<button type="button" class="pp-card pp-link-card" data-pp-person="${esc(pid)}">${inner}</button>`;
     }
-    return `<span class="pp-partner"><span class="pp-card pp-card--plain">${inner}</span>${subHtml}</span>`;
+    return `<span class="pp-card pp-card--plain">${inner}</span>`;
 }
 
 function familyHtml(c: Ctx): string {
@@ -760,7 +762,7 @@ function familyHtml(c: Ctx): string {
         const label = unmarried ? P.partner : partner.gender === 'male' ? P.husband : partner.gender === 'female' ? P.wife : P.partner;
         const subParts: string[] = [];
         if (!unmarried && (u.startDate || u.startPlace)) {
-            subParts.push(esc(P.married(personPageDate(u.startDate, page.lang), '\u0000')).replace('\u0000', placeLink(c, u.startPlace)).replace(/, $/, ''));
+            subParts.push(esc(P.married(personPageDate(u.startDate, page.lang), '\u0000')).replace('\u0000', esc(u.startPlace?.trim() ?? '')).replace(/, $/, ''));
         }
         if (!unmarried && (u.endDate || u.status === 'divorced')) subParts.push(esc(P.divorced(personPageDate(u.endDate, page.lang))));
         rows.push(row(label, cardHtml(c, partner.id, subParts.join(' · '))));

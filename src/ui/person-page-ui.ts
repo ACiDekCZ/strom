@@ -27,12 +27,15 @@ import { PERSON_PAGE_CSS } from '../person-page-css.js';
 import { uiModule } from './module.js';
 import { openImageViewer } from './image-viewer.js';
 import { personSubtitle } from './person-sources-ui.js';
+import { HISTORY_CHANGED_EVENT } from './history-ui.js';
 
 export const PERSON_PAGE_ID = 'person-page-modal';
 export const PERSON_PAGE_EXPORT_ID = 'person-page-export-modal';
 const CSS_ID = 'person-page-css';
 /** Over 15 MB a file may not pass by e-mail (§5.1). */
 const LARGE_BYTES = 15_000_000;
+/** A swipe this far down closes the export dialog shown as a bottom sheet. */
+const SHEET_SWIPE_CLOSE_PX = 80;
 /** The export dialog's groups, in its order. */
 const GROUP_ORDER: (keyof PersonPageGroups)[] = ['history', 'childEvents', 'excerpts', 'materials', 'sources', 'research'];
 /** Groups a privacy other than full data leaves without content (applyLivingPrivacy drops sources and attachments). */
@@ -156,7 +159,7 @@ export const personPageMethods = uiModule({
             this.onPersonPageClick(e);
         });
         overlay.addEventListener('keydown', (e) => this.onPersonPageKey(e));
-        // An edit saved from "Edit person" (or anything else changing the tree) redraws the page in place.
+        // An edit saved from "Edit person" (or anything else changing the tree or its history) redraws the page in place.
         userChangeHandler = () => {
             if (rerenderQueued) return;
             rerenderQueued = true;
@@ -168,6 +171,8 @@ export const personPageMethods = uiModule({
             });
         };
         window.addEventListener('strom:user-change', userChangeHandler);
+        // The history layer read (or changed) after the window opened: its rows come in place.
+        window.addEventListener(HISTORY_CHANGED_EVENT, userChangeHandler);
         // The person editor closed over the page: back to reading.
         const pm = document.getElementById('person-modal');
         if (pm && typeof MutationObserver !== 'undefined') {
@@ -190,7 +195,10 @@ export const personPageMethods = uiModule({
         tocObserver = null;
         editObserver?.disconnect();
         editObserver = null;
-        if (userChangeHandler) window.removeEventListener('strom:user-change', userChangeHandler);
+        if (userChangeHandler) {
+            window.removeEventListener('strom:user-change', userChangeHandler);
+            window.removeEventListener(HISTORY_CHANGED_EVENT, userChangeHandler);
+        }
         userChangeHandler = null;
         this.dialogStack = this.dialogStack.filter(d => d !== PERSON_PAGE_ID);
         if (!overlay) { state = null; return; }
@@ -615,18 +623,19 @@ export const personPageMethods = uiModule({
                 + `<button type="button" class="primary" data-ppx="save">${esc(X.save)}</button>`;
         overlay.innerHTML = `
             <div class="modal modal--sm pp-export" role="dialog" aria-modal="true" aria-labelledby="ppx-title">
+                <span class="ppx-grab" aria-hidden="true"></span>
                 <div class="modal-header">
-                    <div class="ppx-titles"><h2 id="ppx-title">${esc(shareOk ? X.titleShare : X.title)}</h2><span class="ppx-sub">${esc(personSubtitle(personId))}</span></div>
+                    <div class="ppx-titles"><h2 id="ppx-title">${esc(shareOk ? X.titleShare : X.title)}</h2><span class="ppx-sub ppx-sub--who">${esc(personSubtitle(personId))}</span><span class="ppx-sub ppx-sub--file" id="ppx-file-sub"></span></div>
                     <button type="button" class="close-btn" data-ppx="close" aria-label="${esc(P.close)}">&times;</button>
                 </div>
-                <div class="ppx-sec">
+                <div class="ppx-sec ppx-sec--file">
                     <div class="ppx-label">${esc(X.file)}</div>
                     <div class="ppx-file" id="ppx-file"></div>
                 </div>
                 <div class="ppx-sec" role="group" aria-labelledby="ppx-content-h">
                     <div class="ppx-label" id="ppx-content-h">${esc(X.content)}</div>
                     ${checks ? `<div class="ppx-checks">${checks}</div>` : ''}
-                    <p class="ppx-note">${esc(X.always)}</p>
+                    <p class="ppx-note ppx-always">${esc(X.always)}</p>
                     <p class="ppx-note ppx-drops" id="ppx-drops" hidden>${esc(pv.dropsSourcesContent)}</p>
                 </div>
                 ${privacyHtml}
@@ -670,7 +679,9 @@ export const personPageMethods = uiModule({
                 ? preparePersonPageData(data, opts, { ...ctx, protected: fullProt })
                 : preparePersonPageData(data, opts, ctx);
             current = { page, opts };
-            (overlay.querySelector('#ppx-file') as HTMLElement).textContent = personPageFileName(page);
+            const fileName = personPageFileName(page);
+            (overlay.querySelector('#ppx-file') as HTMLElement).textContent = fileName;
+            (overlay.querySelector('#ppx-file-sub') as HTMLElement).textContent = fileName;
             const size = estimatePersonPageSize(page, opts);
             (overlay.querySelector('#ppx-size-mb') as HTMLElement).textContent = X.size(personPageSizeMb(size.bytes, getCurrentLanguage()), size.images);
             (overlay.querySelector('#ppx-size-large') as HTMLElement).hidden = size.bytes <= LARGE_BYTES;
@@ -746,6 +757,25 @@ export const personPageMethods = uiModule({
         });
         refresh();
         const box = overlay.querySelector('.modal') as HTMLElement;
+        // As a phone's bottom sheet: a swipe down from the handle or the title closes it.
+        let dragY: number | null = null;
+        box.addEventListener('touchstart', (e) => {
+            const t = e.target as HTMLElement;
+            dragY = t.closest('.ppx-grab, .modal-header') && getComputedStyle(box.querySelector('.ppx-grab') as HTMLElement).display !== 'none'
+                ? e.touches[0].clientY : null;
+        }, { passive: true });
+        box.addEventListener('touchmove', (e) => {
+            if (dragY === null) return;
+            const dy = e.touches[0].clientY - dragY;
+            box.style.transform = dy > 0 ? `translateY(${dy}px)` : '';
+        }, { passive: true });
+        box.addEventListener('touchend', (e) => {
+            if (dragY === null) return;
+            const dy = e.changedTouches[0].clientY - dragY;
+            dragY = null;
+            box.style.transform = '';
+            if (dy > SHEET_SWIPE_CLOSE_PX) this.closePersonPageExport();
+        });
         box.setAttribute('tabindex', '-1');
         box.focus({ preventScroll: true });
     },

@@ -16749,6 +16749,8 @@
         .pp-export .ppx-sec { margin: 0 0 16px; }
         .ppx-titles { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
         .ppx-sub { font-size: 12.5px; color: var(--text-light); overflow-wrap: anywhere; }
+        /* The sheet's handle and the file name as the subtitle: phone only (5b). */
+        .ppx-grab, .ppx-sub--file { display: none; }
         .ppx-label { font-size: 12.5px; font-weight: 400; color: var(--text-light); margin: 0 0 6px; }
         .ppx-file {
             font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 13px;
@@ -16801,9 +16803,28 @@
             }
             .modal label.ppx-check { min-height: 48px; }
             .modal .ppx-privacy .segment-btn { min-height: 44px; font-size: 14px; }
+            /* A bottom sheet (5b): a handle on top, the file name under the title
+               instead of its own block, rows split by hairlines, the size as a line. */
+            .pp-export .ppx-grab {
+                display: block; flex: none; width: 36px; height: 4px; border-radius: 2px;
+                background: var(--border); margin: 8px auto 2px;
+            }
+            .pp-export .modal-header { padding-top: 6px; padding-bottom: 10px; }
+            .pp-export .ppx-sub--who, .pp-export .ppx-sec--file, .pp-export .modal-header .close-btn,
+            .pp-export #ppx-content-h, .pp-export .ppx-always, .pp-export .ppx-size-hint { display: none; }
+            .pp-export .ppx-sub--file { display: block; font-size: 13px; }
+            .pp-export .ppx-checks { gap: 0; }
+            .modal label.ppx-check {
+                gap: 12px; padding: 0 2px; border-radius: 0; font-size: 15.5px;
+                border-bottom: 1px solid var(--divider);
+            }
+            .ppx-check input { width: 22px; height: 22px; }
+            .pp-export .ppx-size { background: none; padding: 0; }
+            .pp-export .ppx-size strong { font-size: 13px; font-weight: 400; color: var(--text-light); }
         }
         @media (max-width: 640px) {
             .ppx-remember { order: -3; align-self: center; margin: 4px 0 0; }
+            .pp-export .buttons > button { min-height: 48px; font-size: 16px; }
         }
 
         /* Entry points: the person menu's header and the bottom sheet's button (§1.1, §1.2). */

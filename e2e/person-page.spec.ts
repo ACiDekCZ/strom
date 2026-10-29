@@ -1,6 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
 import { readFileSync } from 'fs';
 import { openApp, card } from './helpers.js';
+import { fakeBridge, fakeHistory, historyGed, openResearch, poll, HISTORY_FEATURES } from './research-bridge.js';
 
 /**
  * The person page (spec 025): the window from the person menu's header and
@@ -76,6 +77,8 @@ test.describe('desktop', () => {
         await expect(w.locator('h1')).toContainText('Jan Fisek');
         await expect(w.locator('.pp-sub')).toHaveText('Jan Fisek · 1860–1910');
         await expect(w.locator('.pp-body')).toBeFocused();
+        // The marriage line sits inside the partner's card.
+        await expect(w.locator('[data-pp-person="marie"] .pp-card-sub')).toHaveText('married 2 February 1888, Capkov');
         // Four sections or more: the contents beside the page.
         await expect(w.locator('.pp-toc .pp-toc-link')).not.toHaveCount(0);
 
@@ -260,6 +263,71 @@ test.describe('desktop', () => {
     });
 });
 
+test.describe('a research tree with history', () => {
+    test.use({ viewport: { width: 1280, height: 720 } });
+
+    test('history rows with the legend, the History switch hides them, the file keeps the safe source link', async ({ page, browser }) => {
+        // The research's events of the time: E1 (1866) in Jan's Čapkov, E2 hidden there.
+        const ged = historyGed();
+        await fakeBridge(page, { features: HISTORY_FEATURES, history: fakeHistory(), treeGed: ged, links: ['send', 'open', 'live', 'app', 'setup', 'experiment'] });
+        await openResearch(page, { ged });
+        await poll(page);
+        const jan = await page.evaluate(() =>
+            (Object.values(window.Strom.DataManager.getData().persons) as { id: string; firstName: string }[]).find(p => p.firstName === 'Jan')!.id);
+        await page.evaluate((id) => window.Strom.UI.showPersonPage(id as never), jan);
+        const w = win(page);
+        await expect(w.locator('h1')).toContainText('Jan');
+
+        const rows = w.locator('#pp-sec-timeline .pp-row--hist');
+        await expect(rows).toHaveCount(1);
+        await expect(rows.first()).toContainText('Austro-Prussian War; fighting around Čapkov.');
+        await expect(rows.first().locator('a[href="https://example.org/war-1866"]')).toHaveAttribute('rel', 'noopener noreferrer');
+        await expect(w.locator('#pp-sec-timeline')).not.toContainText('Vienna stock exchange crash');
+        const legend = w.locator('#pp-sec-timeline .pp-legend');
+        await expect(legend).toBeVisible();
+        await expect(legend.locator('.pp-hm')).toHaveCount(3);
+
+        // The switch: on by default; off hides the rows and the legend, on brings them back.
+        const sw = w.locator('[data-pp-switch="history"]');
+        await expect(sw).toHaveAttribute('aria-checked', 'true');
+        await sw.click();
+        await expect(sw).toHaveAttribute('aria-checked', 'false');
+        await expect(rows.first()).toBeHidden();
+        await expect(legend).toBeHidden();
+        await sw.click();
+        await expect(rows.first()).toBeVisible();
+
+        // The file: the history group offered with its count, the row and its link kept.
+        await w.locator('.pp-save').click();
+        const dlg = page.locator('#person-page-export-modal');
+        await expect(dlg.locator('[data-ppx-group="history"]')).toBeChecked();
+        await expect(dlg.locator('[data-ppx-row="history"] .ppx-count')).toHaveText('1');
+        const [download] = await Promise.all([page.waitForEvent('download'), dlg.locator('[data-ppx="save"]').click()]);
+        const html = readFileSync(await download.path(), 'utf-8');
+        expect(html).toContain('Austro-Prussian War; fighting around Čapkov.');
+        expect(html).toContain('href="https://example.org/war-1866" rel="noopener noreferrer" target="_blank"');
+        expect(html).not.toContain('Vienna stock exchange crash');
+        // No other external resource: http(s) only in links that open apart.
+        expect(html).not.toMatch(/<link\b|<script\s+src|<iframe|\bsrc="https?:|url\(\s*['"]?https?:|@import/i);
+        const urls = [...html.matchAll(/https?:\/\/[^"'\s<>)]+/g)].map(m => m[0]);
+        const anchors = [...html.matchAll(/<a\b[^>]*href="(https?:[^"]+)"[^>]*>/g)];
+        for (const a of anchors) expect(a[0]).toContain('rel="noopener noreferrer"');
+        expect(new Set(urls)).toEqual(new Set(anchors.map(a => a[1])));
+
+        // Offline it loads without a single request, the history row in place.
+        const offline = await browser.newContext();
+        const requests: string[] = [];
+        await offline.route('**/*', (route) => { requests.push(route.request().url()); return route.abort(); });
+        const filePage = await offline.newPage();
+        await filePage.setContent(html, { waitUntil: 'load' });
+        await expect(filePage.locator('.pp-row--hist')).toContainText('Austro-Prussian War');
+        await filePage.locator('[data-pp-switch="history"]').click();
+        await expect(filePage.locator('.pp-row--hist')).toBeHidden();
+        expect(requests).toEqual([]);
+        await offline.close();
+    });
+});
+
 test.describe('a phone', () => {
     test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
@@ -289,5 +357,32 @@ test.describe('a phone', () => {
         // Save and Print in ⋯ on a phone.
         await w.locator('.pp-more').click();
         await expect(w.locator('.pp-menu-item:visible')).toHaveText(['Save as HTML', 'Print', 'Edit person', 'Focus in tree']);
+    });
+
+    test('Save as HTML is a bottom sheet: a handle, the file name under the title, the buttons full width', async ({ page }) => {
+        await openApp(page);
+        await seedFisek(page);
+        await page.evaluate(() => window.Strom.UI.showPersonPage('jan' as never));
+        const w = win(page);
+        await w.locator('.pp-more').click();
+        await w.locator('[data-pp-menu="save"]').click();
+        const sheet = page.locator('#person-page-export-modal .pp-export');
+        await expect(sheet).toBeVisible();
+        await expect(sheet.locator('.ppx-grab')).toBeVisible();
+        await expect(sheet.locator('#ppx-file-sub')).toHaveText('jan-fisek-1860-1910.html');
+        await expect(sheet.locator('.ppx-sub--who')).toBeHidden();
+        await expect(sheet.locator('.ppx-sec--file')).toBeHidden();
+        await expect(sheet.locator('.modal-header .close-btn')).toBeHidden();
+        const box = (await sheet.boundingBox())!;
+        expect(Math.round(box.width)).toBe(390);
+        expect(Math.round(box.y + box.height)).toBe(844);
+        const save = (await sheet.locator('[data-ppx="save"]').boundingBox())!;
+        expect(save.width).toBeGreaterThan(300);
+        expect(save.height).toBeGreaterThanOrEqual(48);
+        const fits = await sheet.evaluate((el) => el.scrollWidth <= el.clientWidth);
+        expect(fits).toBe(true);
+        // A tap beside the sheet closes it.
+        await page.mouse.click(195, 40);
+        await expect(sheet).toHaveCount(0);
     });
 });

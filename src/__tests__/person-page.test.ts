@@ -125,6 +125,19 @@ describe('sections', () => {
     });
 });
 
+describe('family', () => {
+    it('the marriage line sits inside the partner\'s card, in the window and in the file', () => {
+        const card = (html: string) => html.match(/<button [^>]*class="pp-card[^"]*"[^>]*>(?:(?!<\/button>).)*Marie(?:(?!<\/button>).)*<\/button>/)?.[0] ?? '';
+        const app = card(body(fiskTree()));
+        expect(app).toContain('data-pp-person="marie"');
+        expect(app).toMatch(/<span class="pp-card-sub">sňatek 2\. února 1888, Čapkov<\/span><\/button>$/);
+        // No button inside the card's button.
+        expect(app.match(/<button/g)).toHaveLength(1);
+        expect(doc(fiskTree())).toContain('<span class="pp-card pp-card--plain"><span class="pp-card-name">Marie Dvořáková</span>'
+            + '<span class="pp-card-years">1865–1930</span><span class="pp-card-sub">sňatek 2. února 1888, Čapkov</span></span>');
+    });
+});
+
 describe('default folds', () => {
     it('siblings, sources, each source, the basis and the researchers section start closed', () => {
         const html = body(fiskTree());

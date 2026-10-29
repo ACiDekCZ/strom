@@ -53,8 +53,7 @@ a.pp-link { color: inherit; }
 button.pp-card { cursor: pointer; }
 .pp-card-name { font-size: 15px; font-weight: 600; color: var(--primary); }
 .pp-card-years { font-size: 12.5px; color: var(--text-light); white-space: nowrap; }
-.pp-card-sub { flex-basis: 100%; font-size: 13px; color: var(--text-light); }
-.pp-partner { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.pp-card-sub { margin-top: 1px; font-size: 12.5px; font-weight: 400; color: var(--text-light); overflow-wrap: anywhere; }
 .pp-file .pp-card, .pp-card--plain { min-height: 0; border-color: transparent; padding: 2px 0; background: none; }
 .pp-file .pp-fam-cards { gap: 6px 20px; }
 .pp-file .pp-fam-label { padding-top: 2px; }
@@ -180,8 +179,11 @@ button.pp-card { cursor: pointer; }
   .pp-head, .pp-toc, .pp-toggles, .pp-zoom, .pp-fold-state, .pp-differs, .pp-act, .pp-more, .pp-zoom-layer, .js-only { display: none !important; }
   .pp-body { overflow: visible !important; height: auto !important; }
   .pp { font-size: 11pt; gap: 18pt; max-width: none; }
-  .pp-aka, .pp-dt, .pp-hist-meta, .pp-card-years, .pp-src-sup, .pp-src-ref, .pp-foot, .pp-fig figcaption { font-size: 10pt; }
+  .pp-aka, .pp-dt, .pp-hist-meta, .pp-card-years, .pp-card-sub, .pp-src-sup, .pp-src-ref, .pp-foot, .pp-fig figcaption { font-size: 10pt; }
   #pp-sec-timeline { break-before: page; }
+  .pp-card { min-height: 0 !important; border-color: transparent; padding: 2px 0; background: none; }
+  .pp-card-name { color: var(--text); }
+  .pp-fam-cards { gap: 6px 20px; }
   .pp-row, .pp-fig, .pp-src { break-inside: avoid; }
   .pp-fig { max-width: 100%; }
   .pp-dtx .pp-dt { display: block; overflow: visible; }
