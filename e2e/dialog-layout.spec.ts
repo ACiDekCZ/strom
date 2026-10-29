@@ -295,8 +295,8 @@ test('segment switches in dialogs: square inner buttons, the rounded container c
     await openApp(page);
     await page.evaluate(() => window.Strom.UI.showAddPersonModal());
     await expect(page.locator('#person-modal')).toBeVisible();
-    const m = await page.evaluate(() => {
-        const seg = document.querySelector('#person-modal .segment') as HTMLElement;
+    const m = await page.evaluate(() => ['#gender-segment', '#person-modal .primary-name-segment'].map(sel => {
+        const seg = document.querySelector(sel) as HTMLElement;
         const radii = (el: Element) => {
             const cs = getComputedStyle(el);
             return [cs.borderTopLeftRadius, cs.borderTopRightRadius, cs.borderBottomRightRadius, cs.borderBottomLeftRadius];
@@ -306,9 +306,14 @@ test('segment switches in dialogs: square inner buttons, the rounded container c
             container: radii(seg).every(r => parseFloat(r) > 0),
             clips: getComputedStyle(seg).overflow === 'hidden',
         };
-    });
-    // Male | Female | Unknown (U01)
-    expect(m).toEqual({ buttons: ['0px 0px 0px 0px', '0px 0px 0px 0px', '0px 0px 0px 0px'], container: true, clips: true });
+    }));
+    const square = '0px 0px 0px 0px';
+    expect(m).toEqual([
+        // Male | Female | Unknown (U01)
+        { buttons: [square, square, square], container: true, clips: true },
+        // Surname in use: Birth | Married (spec 024)
+        { buttons: [square, square], container: true, clips: true },
+    ]);
 });
 
 /** Where the person card's footer buttons are (edit mode of a saved person). */

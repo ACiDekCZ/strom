@@ -46,7 +46,7 @@ import { PersonPicker } from '../person-picker.js';
 import { AppExporter } from '../export.js';
 import { SettingsManager } from '../settings.js';
 import { lifelineChips, setLifelineChip, newLifelineCard } from '../lifeline-view.js';
-import { ThemeMode, LanguageSetting, AppMode, AuditLog, personSourceIds } from '../types.js';
+import { ThemeMode, LanguageSetting, AppMode, AuditLog, personSourceIds, isPrimaryName } from '../types.js';
 import { CryptoSession, isEncrypted, encrypt, decrypt, EncryptedData } from '../crypto.js';
 import { validateTreeData, ValidationResult as TreeValidationResult, ValidationIssue } from '../validation.js';
 import * as CrossTree from '../cross-tree.js';
@@ -360,10 +360,12 @@ export const personModalMethods = uiModule({
             ? marriedInput.value.trim()
             : (this.currentId ? DataManager.getPerson(this.currentId)?.marriedSurname?.trim() ?? '' : '');
         // With its titles, as the cards show it — the titles only beside a name.
+        // The surname the person goes by as chosen in the form: under the
+        // birth one, the person's detail says "(dříve …)".
         const named = { firstName: first, lastName: last, titleBefore: val('input-title-before'), titleAfter: val('input-title-after'),
-            ...(married ? { marriedSurname: married } : {}) };
+            ...(married ? { marriedSurname: married, primaryName: this.primaryNameDraft } : {}) };
         if (nameEl) {
-            if (first || last) nameEl.innerHTML = nameHtml(named);
+            if (first || last) nameEl.innerHTML = nameHtml(named, { former: true });
             else nameEl.textContent = strings.personModal.newPersonName;
         }
         this.updateHeaderAvatar();
@@ -1271,6 +1273,9 @@ export const personModalMethods = uiModule({
         // The married surname: a fresh form has hidden no suggestion yet.
         this.marriedSuggestionDismissed = null;
         this.marriedSurnameOpened = !!person?.marriedSurname?.trim();
+        // Which surname the person goes by: the person's own until chosen.
+        this.primaryNameInitial = person?.marriedSurname?.trim() && isPrimaryName(person.primaryName) ? person.primaryName : undefined;
+        this.primaryNameDraft = this.primaryNameInitial;
         this.setupMarriedSurname();
         this.refreshMarriedSurname();
         resetDetailGroup(document.getElementById('birth-details'), offeredDetails('birth'), readOnly);
@@ -1330,7 +1335,10 @@ export const personModalMethods = uiModule({
         row.hidden = !show;
         link.hidden = show || readOnly;
 
-        const suggestion = show && !readOnly ? this.currentMarriedSuggestion() : null;
+        // The suggestion only under the empty field, the choice of the
+        // surname in use only under the filled one: never both.
+        const suggestion = show && !readOnly && !filled ? this.currentMarriedSuggestion() : null;
+        this.refreshPrimaryNameChoice(show && filled, readOnly);
         const chip = document.getElementById('married-suggestion');
         const main = document.getElementById('married-suggestion-main');
         const source = document.getElementById('married-suggestion-source');
@@ -1344,6 +1352,64 @@ export const personModalMethods = uiModule({
             strings.person.suggestionSource(shownName(suggestion.husband)),
             ...(suggestion.inNameVariants ? [strings.person.suggestionOtherForm] : []),
         ].join(' · ');
+    },
+
+    /**
+     * The choice of the surname in use (Person.primaryName, spec 024): Birth |
+     * Married under the filled married surname. Emptying the field drops the
+     * choice (typed again, it starts at Married, as the person shows then). A
+     * locked person sees it, disabled, without the hint.
+     */
+    refreshPrimaryNameChoice(visible: boolean, readOnly: boolean): void {
+        const box = document.getElementById('primary-name-choice');
+        if (!box) return;
+        if (!visible && !readOnly) {
+            const input = document.getElementById('input-married-surname') as HTMLInputElement | null;
+            if (input && !input.value.trim()) this.primaryNameDraft = undefined;
+        }
+        box.hidden = !visible;
+        const active = this.primaryNameDraft ?? 'married';
+        box.querySelectorAll<HTMLButtonElement>('.segment-btn[data-primary]').forEach(btn => {
+            const on = btn.dataset.primary === active;
+            btn.classList.toggle('active', on);
+            btn.setAttribute('aria-checked', String(on));
+            btn.tabIndex = on ? 0 : -1;
+            btn.disabled = readOnly;
+        });
+        const hint = box.querySelector<HTMLElement>('.primary-name-hint');
+        if (hint) hint.hidden = readOnly;
+    },
+
+    /** Choose the surname in use in the open form (said outright, Married too). */
+    choosePrimaryName(value: 'birth' | 'married', focus = false): void {
+        const person = this.currentId ? DataManager.getPerson(this.currentId) : null;
+        if (person && DataManager.isPersonLocked(person.id)) return;
+        this.primaryNameDraft = value;
+        this.refreshPrimaryNameChoice(true, false);
+        if (focus) document.querySelector<HTMLButtonElement>(`#primary-name-choice .segment-btn[data-primary="${value}"]`)?.focus();
+        this.updatePersonModalName();
+    },
+
+    /** Wire the Birth | Married radios once: click, ←/→ and Space (listeners survive reopening). */
+    setupPrimaryNameChoice(): void {
+        const box = document.getElementById('primary-name-choice');
+        if (!box || box.dataset.wired) return;
+        box.dataset.wired = '1';
+        box.querySelectorAll<HTMLButtonElement>('.segment-btn[data-primary]').forEach(btn => {
+            const value = btn.dataset.primary;
+            if (!isPrimaryName(value)) return;
+            btn.addEventListener('click', () => this.choosePrimaryName(value));
+            btn.addEventListener('keydown', (e: KeyboardEvent) => {
+                if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    // Two options: an arrow either way moves to the other one.
+                    this.choosePrimaryName(value === 'birth' ? 'married' : 'birth', true);
+                } else if (e.key === ' ' || e.key === 'Enter') {
+                    e.preventDefault();
+                    this.choosePrimaryName(value);
+                }
+            });
+        });
     },
 
     /** The suggestion for the form as it is now (sex, surnames, spellings as typed), or null. */
@@ -1366,6 +1432,7 @@ export const personModalMethods = uiModule({
         const input = document.getElementById('input-married-surname') as HTMLInputElement | null;
         if (!input || input.dataset.marriedWired) return;
         input.dataset.marriedWired = '1';
+        this.setupPrimaryNameChoice();
         const refresh = () => this.refreshMarriedSurname();
         for (const id of ['input-married-surname', 'input-lastname', 'input-name-variants']) {
             document.getElementById(id)?.addEventListener('input', refresh);
@@ -1503,6 +1570,9 @@ export const personModalMethods = uiModule({
                     deathDate,
                     deathPlace,
                     ...this.collectPersonDetails(),
+                    // The surname in use only when the form changed it (absent
+                    // keeps the person's; the core drops it with the married surname).
+                    ...(this.primaryNameDraft !== this.primaryNameInitial ? { primaryName: this.primaryNameDraft } : {}),
                     // The suggestion hidden with × is not offered again (app-local).
                     ...(this.marriedSuggestionDismissed ? { dismissedMarriedSuggestion: this.marriedSuggestionDismissed } : {}),
                     notes,
@@ -1533,6 +1603,7 @@ export const personModalMethods = uiModule({
                 const created = DataManager.createPerson({
                     firstName, lastName, gender, titleBefore: details.titleBefore, titleAfter: details.titleAfter,
                     marriedSurname: details.marriedSurname,
+                    ...(details.marriedSurname && this.primaryNameDraft ? { primaryName: this.primaryNameDraft } : {}),
                 });
                 // Update with extended info if provided
                 if (birthDate || birthPlace || deathDate || deathPlace || notes || refn || question
@@ -1695,7 +1766,8 @@ export const personModalMethods = uiModule({
             || story.storyTitle !== s.storyTitle || story.storyText !== s.storyText
             || this.personDetailsSnapshot() !== s.details
             // A suggestion hidden with × is kept only by saving.
-            || this.marriedSuggestionDismissed !== null;
+            || this.marriedSuggestionDismissed !== null
+            || this.primaryNameDraft !== this.primaryNameInitial;
     },
 
     /**
@@ -1732,6 +1804,10 @@ export const personModalMethods = uiModule({
         });
         snap.details = PERSON_DETAIL_FIELDS.map(([, key]) => person[key] ?? '').join('\u0000');
         if (person.marriedSurname?.trim()) this.marriedSurnameOpened = true;
+        // The surname in use likewise: an untouched choice takes the new value.
+        const primaryNow = person.marriedSurname?.trim() && isPrimaryName(person.primaryName) ? person.primaryName : undefined;
+        if (this.primaryNameDraft === this.primaryNameInitial) this.primaryNameDraft = primaryNow;
+        this.primaryNameInitial = primaryNow;
         this.syncGenderSegment();
         this.refreshMarriedSurname();
         this.updateBirthEstimate(person);

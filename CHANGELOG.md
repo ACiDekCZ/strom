@@ -6,6 +6,7 @@ English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md)
 
 *This version is in preparation; this section grows with every test version.*
 
+- **Surname in use**: a person with a married surname can go by the birth surname again (for example after a divorce): the person editor has the choice *Surname in use: Birth | Married* under the filled married surname. The married surname stays; the card and the tree show only the surname in use, and the person's detail (card menu, relationships panel, editor header) says the other one as *(formerly Zástěrová)*. The choice travels through GEDCOM (`_STROM_PRIMARY`), JSON and the research link, the CSV export has a *Surname in use* column and the family book index says *formerly*. Trees without the choice are unchanged.
 - **Fixes**: a child of a person with two or more partners is linked to both parents: the line comes down from the middle between the two parents' cards for every partner, with or without a marriage and in any order of the families. Until now the child of a second partner was linked to that partner's card alone.
 
 ## 3.17.1

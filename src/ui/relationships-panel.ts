@@ -86,11 +86,12 @@ export const relationshipsPanelMethods = uiModule({
         if (!modal || !title || !content) return;
 
         const name = shownNameOrEmpty(person);
-        // The name with its birth-surname note (nameHtml escapes); the rest of the title as text.
+        // The name with its note, "(roz. …)" or "(dříve …)" (nameHtml escapes); the rest of the title as text.
         const mark = '\u0000';
         const titleParts = strings.relationships.title(mark).split(mark);
-        if (name && titleParts.length === 2 && nameHtml(person) !== this.escapeHtml(name)) {
-            title.innerHTML = `${this.escapeHtml(titleParts[0])}${nameHtml(person)}${this.escapeHtml(titleParts[1])}`;
+        const nameMarkup = nameHtml(person, { former: true });
+        if (name && titleParts.length === 2 && nameMarkup !== this.escapeHtml(name)) {
+            title.innerHTML = `${this.escapeHtml(titleParts[0])}${nameMarkup}${this.escapeHtml(titleParts[1])}`;
         } else title.textContent = strings.relationships.title(name);
 
         // Build relationships content

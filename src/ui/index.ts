@@ -39,7 +39,7 @@ import {
 import { PersonPicker } from '../person-picker.js';
 import { AppExporter } from '../export.js';
 import { SettingsManager } from '../settings.js';
-import { ThemeMode, LanguageSetting, AppMode, AuditLog, ViewMode } from '../types.js';
+import { ThemeMode, LanguageSetting, AppMode, AuditLog, ViewMode, PrimaryName } from '../types.js';
 import { CryptoSession, isEncrypted, encrypt, decrypt, EncryptedData } from '../crypto.js';
 import { validateTreeData, ValidationResult as TreeValidationResult, ValidationIssue } from '../validation.js';
 import * as CrossTree from '../cross-tree.js';
@@ -241,6 +241,13 @@ export class UIClass {
     marriedSuggestionDismissed: string | null = null;
     /** Person modal: the married-surname field was opened in this form ("+ married surname", or it held a value). */
     marriedSurnameOpened: boolean = false;
+    /**
+     * Person modal: which surname the person goes by, as chosen in the open
+     * form (Person.primaryName); undefined = no choice. Starts as the
+     * person's own (primaryNameInitial) — only a change of it is saved.
+     */
+    primaryNameDraft: PrimaryName | undefined = undefined;
+    primaryNameInitial: PrimaryName | undefined = undefined;
 
     // Debounce timer for the live search filter/highlight.
     searchFilterTimer: ReturnType<typeof setTimeout> | null = null;

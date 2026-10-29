@@ -6,6 +6,7 @@
 
 *Diese Version ist in Vorbereitung; dieser Abschnitt wächst mit jeder Testversion.*
 
+- **Geführter Nachname**: Eine Person mit Ehenamen kann wieder den Geburtsnamen führen (etwa nach einer Scheidung): Der Personeneditor hat unter dem ausgefüllten Ehenamen die Wahl *Geführter Nachname: Geburtsname | Ehename*. Der Ehename bleibt; Karte und Stammbaum zeigen nur den geführten Nachnamen, und die Personendetails (Kartenmenü, Beziehungsbereich, Kopf des Editors) nennen den anderen als *(früher Zástěrová)*. Die Wahl geht über GEDCOM (`_STROM_PRIMARY`), JSON und die Verbindung zur Forschung, der CSV-Export hat eine Spalte *Geführter Nachname*, und das Register des Familienbuchs schreibt *früher*. Stammbäume ohne diese Wahl bleiben unverändert.
 - **Fehlerbehebungen**: Ein Kind einer Person mit zwei oder mehr Partnern ist mit beiden Eltern verbunden: Die Linie führt bei jedem Partner aus der Mitte zwischen den Karten beider Eltern, mit oder ohne Heirat und in jeder Reihenfolge der Familien. Bisher war das Kind eines zweiten Partners nur mit der Karte dieses Partners verbunden.
 
 ## 3.17.1

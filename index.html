@@ -3083,6 +3083,8 @@
             /* The hairline under the name spans the sheet edge to edge. */
             margin: 0 -8px 6px; padding: 2px 24px 8px; border-bottom: 1px solid var(--divider);
         }
+        /* With a note ("roz. …", "dříve …") the name wraps, the note as one piece. */
+        .bottom-sheet-person .bottom-sheet-menu-title:has(.pn-note) { white-space: normal; text-wrap: pretty; }
         .bottom-sheet-sub { display: block; font-size: 12px; color: var(--text-faint); font-weight: 400; }
         .bottom-sheet-menu .bottom-sheet-label { flex: 1; }
         .bottom-sheet-pair { display: flex; gap: 8px; padding: 0 8px; }
@@ -5817,6 +5819,24 @@
         .married-suggestion[hidden] { display: none !important; }
         @media (hover: hover) { .detail-group .married-surname-more:hover { color: var(--primary-dark); background: none; } }
         .married-surname-row { margin-bottom: 12px; }
+        /* Which surname the person goes by (Person.primaryName, spec 024):
+           Birth | Married under the filled married surname, the width of the
+           column, two equal halves (src/ui/person-modal.ts). */
+        .primary-name[hidden] { display: none !important; }
+        .primary-name { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; }
+        .primary-name-label { font-size: 12.5px; font-weight: 500; color: var(--text-light); }
+        .primary-name-segment { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+        .primary-name-segment .segment-btn { min-height: 36px; padding: 4px 10px; font-size: 13.5px; text-align: center; text-wrap: balance; }
+        .primary-name-segment .segment-btn.active { font-weight: 600; }
+        .primary-name-hint { font-size: 12px; line-height: 1.4; color: var(--text-faint); text-wrap: pretty; }
+        @media (hover: hover) {
+            .primary-name-segment .segment-btn:not(.active):not(:disabled):hover { background: var(--hover-bg); color: var(--text); }
+        }
+        @media (pointer: coarse) { .primary-name-segment .segment-btn { min-height: 44px; } }
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .primary-name-segment .segment-btn { min-height: 44px; font-size: 15px; }
+            .primary-name-hint { font-size: 12.5px; }
+        }
         /* The suggestion from the husband's surname: a quiet chip under the
            empty field, never a placeholder (that would read as a value). */
         .married-suggestion {
@@ -8391,6 +8411,14 @@
         }
         .pn-fit .pn-main { white-space: nowrap; flex: none; }
         .pn-fit .pn-note { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+        /* Where a name with its note wraps (the person's detail): a note longer
+           than the whole line ("(früher Kolowrat-Krakowská)" in a phone's
+           editor header) breaks inside itself instead of being cut; a shorter
+           one still moves to the next line as one piece. */
+        .pm-name .pn-note, .context-menu-header .pn-note,
+        .bottom-sheet-person .bottom-sheet-menu-title .pn-note, #relationships-title .pn-note {
+            display: inline-block; max-width: 100%; white-space: normal;
+        }
         /* Header names the person the menu acts on (serif). */
         .context-menu-header {
             font-family: var(--font-serif);
@@ -18544,6 +18572,16 @@
                                 </div>
                                 <button type="button" class="married-suggestion-use" id="married-suggestion-use" data-i18n="person.useSuggestion"></button>
                                 <button type="button" class="married-suggestion-dismiss" id="married-suggestion-dismiss" data-i18n-title="person.dismissSuggestion" data-i18n-aria-label="person.dismissSuggestion">&times;</button>
+                            </div>
+                            <!-- Which surname the person goes by (Person.primaryName): only
+                                 under a filled married surname, never with the suggestion. -->
+                            <div class="primary-name" id="primary-name-choice" hidden>
+                                <span class="primary-name-label" id="primary-name-label" data-i18n="person.primaryName"></span>
+                                <div class="segment primary-name-segment" role="radiogroup" aria-labelledby="primary-name-label">
+                                    <button type="button" class="segment-btn" role="radio" data-primary="birth" data-i18n="person.primaryBirth"></button>
+                                    <button type="button" class="segment-btn" role="radio" data-primary="married" data-i18n="person.primaryMarried"></button>
+                                </div>
+                                <span class="primary-name-hint" data-i18n="person.primaryHint"></span>
                             </div>
                         </div>
                     </div>
