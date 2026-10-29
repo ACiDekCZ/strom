@@ -206,6 +206,11 @@ test.describe('History of places: a place\'s own history on request (§6a)', () 
         await dialog(page).locator('.hpf-foot [data-hpf="cancel"]').click();
         await expect(dialog(page)).toHaveCount(0);
         await expect(modal(page)).toBeVisible();
+        // A suggested place is listed in All places too: its "⋯" there opens the row's own menu.
+        await allPlace(page, 'Kutná Hora').locator('[data-hm="menu"]').click();
+        await expect(page.locator('.hm-menu [data-scope]')).toHaveText(['Change region…', 'Find local history…', 'Do not search for this place', 'Open in Places ›']);
+        await page.keyboard.press('Escape');
+        await expect(page.locator('.hm-menu')).toHaveCount(0);
 
         await allPlace(page, 'Čapkov').locator('[data-hm="menu"]').click();
         await expect(page.locator('.hm-menu [data-scope]')).toHaveText(['Change region…', 'Find local history…', 'Do not search for this place', 'Open in Places ›']);

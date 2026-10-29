@@ -697,7 +697,9 @@ export const historyManageMethods = uiModule({
             head = [r.name, r.state].filter(Boolean).join(' · ');
             items = this.historyManageRegionActions(r);
         } else {
-            const r = rows.places.flatMap(g => g.rows).find(x => x.key === key);
+            // A place can be listed in several groups (a suggestion and All places): take the button's own row.
+            const group = anchor.closest<HTMLElement>('.hm-place[data-group]')?.dataset.group;
+            const r = rows.places.find(g => g.key === group)?.rows.find(x => x.key === key);
             if (!r) return;
             head = [r.name, r.meta].filter(Boolean).join(' · ');
             items = this.historyManagePlaceActions(r);
