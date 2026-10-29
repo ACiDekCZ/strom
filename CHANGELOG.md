@@ -4,7 +4,7 @@ English · [Čeština](CHANGELOG.cs.md) · [Deutsch](CHANGELOG.de.md)
 
 ## 3.17.0
 
-*This version is in preparation; this section grows with every test version.*
+*Released 29 October 2026.*
 
 - **Read a document**: the end of a reading is announced once: a start of the app no longer brings *Document read* or *The document can’t be read* again for readings that ended long ago, and of a document read more than once only the newest reading says how it ended, also in the menu and the panel.
 - **Installing the research on a Mac**: under the line a note says that a newer macOS may stop the paste with *Possible malware, Paste blocked*, that the line from the Strom app installs Strom Research from GitHub (ACiDekCZ/strom-research) and that *Paste Anyway* pastes it, with Apple's page about the message; also under the line for a Mac sent from a phone.

@@ -4,7 +4,7 @@
 
 ## 3.17.0
 
-*Tato verze se připravuje; oddíl se doplňuje s každou testovací verzí.*
+*Vydáno 29. října 2026.*
 
 - **Přečíst dokument**: konec čtení se oznámí jednou: start aplikace už znovu neukazuje *Dokument přečten* ani *Dokument nejde přečíst* u čtení, která skončila dávno, a u dokumentu přečteného víckrát říká, jak čtení skončilo, jen to nejnovější, i v nabídce a v panelu.
 - **Instalace výzkumu na Macu**: pod řádkem je poznámka, že novější macOS může vložení zastavit hláškou *Možný malware, vložení bylo zablokováno*, že řádek z aplikace Strom instaluje Strom Research z GitHubu (ACiDekCZ/strom-research) a že *Přesto vložit* ho vloží, s odkazem na stránku Apple o této hlášce; i pod řádkem pro Mac poslaným z telefonu.
