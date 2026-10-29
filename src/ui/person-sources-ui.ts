@@ -9,12 +9,11 @@ import { DataManager } from '../data.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { PersonId, Source } from '../types.js';
 import { yearOf } from '../dates.js';
-import { coupleEventLabel, sortCoupleEvents, sortLifeEvents } from '../events.js';
+import { personSourceRows as personSourceRowsOf, PersonSourceRow } from '../person-sources.js';
 import { storyProseHtml } from '../story-text.js';
 import { uiModule } from './module.js';
 import { normalizeModal } from './modal-skeleton.js';
 import { storyWithDraft, draftDate } from './story-compare-ui.js';
-import { eventTypeLabel } from './person-events.js';
 import { CitationContext, qualityLabel, sourceThumbHtml, hydrateThumbs } from './sources.js';
 import { shownName } from '../person-name.js';
 
@@ -43,84 +42,9 @@ export function personSubtitle(personId: PersonId): string {
     return [fullName(personId), years].filter(Boolean).join(' · ');
 }
 
-/** One thing a source supports for this person ("Person", "Baptism 1865", "Marriage 1890"). */
-interface Cite {
-    label: string;
-    ctx: CitationContext;
-    year: number | null;
-    /** Tooltip telling two marriages apart. */
-    title?: string;
-}
-
-/** One row of the sources dialog: a source and everything it supports here. */
-interface SourceRow {
-    source: Source;
-    cites: Cite[];
-}
-
-/**
- * The person's citations merged per source: person, events, marriages. Each
- * source is one row whose labels say what it supports; rows are ordered by
- * the earliest year they document (else the record date), so the list reads
- * like a life; undated ones last, then by title.
- */
-function personSourceRows(personId: PersonId): SourceRow[] {
-    const data = DataManager.getData();
-    const catalog = data.sources ?? {};
-    const person = data.persons[personId];
-    if (!person) return [];
-    const rows = new Map<string, SourceRow>();
-    const add = (ids: string[] | undefined, cite: Cite) => {
-        for (const id of new Set(ids ?? [])) {
-            const source = catalog[id];
-            if (!source) continue;
-            const row = rows.get(id) ?? { source, cites: [] };
-            if (!row.cites.some(c => c.label === cite.label)) row.cites.push(cite);
-            rows.set(id, row);
-        }
-    };
-    const withYear = (label: string, year: number | null) => (year !== null ? `${label} ${year}` : label);
-    add(person.sourceIds, { label: strings.personSources.citePerson, ctx: { personId }, year: null });
-    // The birth and death entries (GEDCOM BIRT.SOUR / DEAT.SOUR).
-    for (const fact of ['birth', 'death'] as const) {
-        const year = yearOf(fact === 'birth' ? person.birthDate : person.deathDate);
-        add(fact === 'birth' ? person.birthSourceIds : person.deathSourceIds,
-            { label: withYear(strings.events.types[fact], year), ctx: { personId, fact }, year });
-    }
-    for (const ev of sortLifeEvents(person.events ?? [])) {
-        const year = yearOf(ev.date);
-        add(ev.sourceIds, { label: withYear(eventTypeLabel(ev), year), ctx: { personId, eventId: ev.id }, year });
-    }
-    for (const u of Object.values(data.partnerships)) {
-        if (u.person1Id !== personId && u.person2Id !== personId) continue;
-        const year = yearOf(u.startDate);
-        add(u.sourceIds, {
-            label: strings.personSources.citeUnion(year), ctx: { partnershipId: u.id }, year,
-            title: strings.sources.citedPartnership(fullName(u.person1Id), fullName(u.person2Id)),
-        });
-        // The couple's events (banns, a census): "Banns 1888".
-        for (const ev of sortCoupleEvents(u.events ?? [])) {
-            const evYear = yearOf(ev.date);
-            add(ev.sourceIds, {
-                label: withYear(coupleEventLabel(ev), evYear), ctx: { partnershipId: u.id, eventId: ev.id }, year: evYear,
-                title: strings.partnerEvents.cited(coupleEventLabel(ev),
-                    strings.partnerEvents.couple(fullName(u.person1Id), fullName(u.person2Id))),
-            });
-        }
-    }
-    const byYear = (a: number | null, b: number | null) => (a ?? Infinity) - (b ?? Infinity);
-    const list = [...rows.values()];
-    for (const row of list) {
-        // Collected person → events → marriages: the first is what a click opens.
-        const person = row.cites.filter(c => 'personId' in c.ctx && !c.ctx.eventId && !c.ctx.fact);
-        const rest = row.cites.filter(c => !person.includes(c)).sort((a, b) => byYear(a.year, b.year));
-        row.cites = [...person, ...rest];
-    }
-    const rowYear = (r: SourceRow): number | null => {
-        const years = r.cites.map(c => c.year).filter((y): y is number => y !== null);
-        return years.length > 0 ? Math.min(...years) : yearOf(r.source.recordDate);
-    };
-    return list.sort((a, b) => byYear(rowYear(a), rowYear(b)) || a.source.title.localeCompare(b.source.title));
+/** The person's sources, one row per source (see src/person-sources.ts). */
+function personSourceRows(personId: PersonId): PersonSourceRow[] {
+    return personSourceRowsOf(DataManager.getData(), personId, strings);
 }
 
 export const personSourcesMethods = uiModule({
@@ -207,7 +131,7 @@ export const personSourcesMethods = uiModule({
 
         // Rows new or with a new label since the last draw get a short highlight.
         const before = this.personSourcesShown;
-        const key = (r: SourceRow): string => `${r.source.id}\u0000${r.cites.map(c => c.label).join('\u0000')}`;
+        const key = (r: PersonSourceRow): string => `${r.source.id}\u0000${r.cites.map(c => c.label).join('\u0000')}`;
         this.personSourcesShown = new Set(rows.map(key));
 
         if (rows.length === 0) {

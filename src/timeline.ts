@@ -155,7 +155,9 @@ export interface LifelinePoint {
     eventType?: LifeEventType;
     /** A couple's event (kind === 'coupleEvent'): its type and where it lives. */
     coupleType?: CoupleEventType;
+    /** The couple (marriage, divorce, coupleEvent). */
     partnershipId?: PartnershipId;
+    /** The event's id (a person's event, a couple's event). */
     eventId?: string;
     /** The year column's text when it is not just `year` — a range ("1890–1900"). */
     yearLabel?: string;
@@ -267,6 +269,7 @@ export function computePersonLifeline(
             sortKey: y + yearFraction(ev.date),
             kind: 'event',
             eventType: ev.type,
+            ...(ev.id ? { eventId: ev.id } : {}),
             ...(end !== undefined && end > y ? { endYear: end } : {}),
             ...(ev.customLabel ? { customLabel: ev.customLabel } : {}),
             ...(eventValueIsOnTag(ev.type) && ev.note?.trim()
@@ -288,6 +291,7 @@ export function computePersonLifeline(
             year: y,
             sortKey: y + yearFraction(u.startDate),
             kind: 'marriage',
+            partnershipId: u.id,
             ...related(data, otherId),
             ...(u.startPlace ? { place: u.startPlace } : {}),
             ...detailsOf({ address: u.address, age: u.ages?.[personId] }),
@@ -333,6 +337,7 @@ export function computePersonLifeline(
             year: y,
             sortKey: y + yearFraction(u.endDate),
             kind: 'divorce',
+            partnershipId: u.id,
             ...(isUnmarried(u.status) ? { unmarried: true } : {}),
             ...related(data, otherId),
             ...(u.endPlace ? { place: u.endPlace } : {}),

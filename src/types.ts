@@ -1534,6 +1534,11 @@ export interface TreeMetadata {
     fileCopyAt?: string;
     /** The "changes only in the browser" notice was closed for this tree (ISO); it returns after the next file copy. */
     fileCopyNoticeClosedAt?: string;
+    /** The last choice of "Save as HTML" on a person page (spec 025): content groups and privacy. */
+    personPageExport?: {
+        groups: import('./person-page.js').PersonPageGroups;
+        privacy: import('./privacy.js').PrivacyMode;
+    };
 }
 
 /** How much of the research edge the tree shows (Settings → Tree). */
