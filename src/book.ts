@@ -407,7 +407,9 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
     // A person with a married surname (Person.marriedSurname) stands under the
     // birth surname with "married name Nováková" after the name, and a
     // cross-reference under the married one ("Nováková, Marie → see Dvořáková,
-    // Marie", no chapters), whatever the surname display setting.
+    // Marie", no chapters), whatever the surname display setting; a person
+    // who goes by the birth surname (Person.primaryName 'birth') has
+    // "formerly Nováková" there instead.
     const indexEntries: { key: string; html: string }[] = [];
     for (const p of Object.values(persons)) {
         if (p.isPlaceholder || !inBook(p)) continue;
@@ -418,7 +420,9 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
         const refStr = [...refs].sort((a, b) => a - b).join(', ');
         const indexName = p.lastName ? `${p.lastName}, ${p.firstName}` : p.firstName;
         const married = p.marriedSurname?.trim();
-        const marriedNote = married ? `<span class="book-muted">, ${esc(B.indexMarried(married))}</span>` : '';
+        // A person who goes by the birth surname again: "formerly Zástěrová".
+        const marriedText = married ? (p.primaryName === 'birth' ? B.indexFormer : B.indexMarried)(married) : '';
+        const marriedNote = married ? `<span class="book-muted">, ${esc(marriedText)}</span>` : '';
         indexEntries.push({
             key: `${p.lastName} ${p.firstName}`,
             html: `<div class="book-index-row"><span>${esc(indexName)}${marriedNote}</span><span class="book-dots"></span><span class="book-muted">${esc(dates(p)) || '—'}</span>${refStr ? `<span class="book-index-ref">${B.chapterShort} ${refStr}</span>` : ''}</div>`,

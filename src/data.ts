@@ -29,7 +29,7 @@ import {
     generatePartnershipId,
     LAST_FOCUSED,
     LastFocusedMarker,
-    STROM_DATA_VERSION, PERSON_CITATION_FIELDS, PersonCitationField, isGender, oppositeGender,
+    STROM_DATA_VERSION, PERSON_CITATION_FIELDS, PersonCitationField, isGender, oppositeGender, isPrimaryName, PrimaryName, mergedPrimaryName,
     EmbeddedDataEnvelope,
     isEmbeddedEnvelope,
     FamilyWizardSpec,
@@ -200,6 +200,12 @@ export function migrateData(data: unknown): StromData {
         if (person && typeof person === 'object' && 'marriedSurname' in person
             && (typeof person.marriedSurname !== 'string' || !person.marriedSurname.trim())) {
             delete person.marriedSurname;
+        }
+        // Which surname the person goes by: 'birth' or 'married', and only
+        // with a married surname (anything else means no choice).
+        if (person && typeof person === 'object' && 'primaryName' in person
+            && (!isPrimaryName(person.primaryName) || !person.marriedSurname)) {
+            delete person.primaryName;
         }
         if (person && typeof person === 'object' && 'dismissedMarriedSuggestion' in person
             && (typeof person.dismissedMarriedSuggestion !== 'string' || !person.dismissedMarriedSuggestion.trim())) {
@@ -1793,6 +1799,8 @@ class DataManagerClass {
             const v = isPlaceholder ? undefined : personData[key]?.trim();
             if (v) person[key] = v;
         }
+        // Which surname the person goes by: only with a married surname.
+        if (person.marriedSurname && isPrimaryName(personData.primaryName)) person.primaryName = personData.primaryName;
 
         this.data.persons[person.id] = person;
         this.commitMutation(strings.undo.addPerson(auditPersonName(person)));
@@ -1965,6 +1973,17 @@ class DataManagerClass {
         if (updates.titleBefore !== undefined && (updates.titleBefore.trim() || undefined) !== person.titleBefore) diff(strings.labels.titleBefore, person.titleBefore, updates.titleBefore);
         if (updates.titleAfter !== undefined && (updates.titleAfter.trim() || undefined) !== person.titleAfter) diff(strings.labels.titleAfter, person.titleAfter, updates.titleAfter);
         if (updates.marriedSurname !== undefined && (updates.marriedSurname.trim() || undefined) !== person.marriedSurname) diff(strings.labels.marriedSurname, person.marriedSurname, updates.marriedSurname);
+        // Which surname the person goes by: `primaryName` in the updates sets
+        // it ('birth' / 'married'; present but undefined clears it), absent
+        // keeps it; it goes whenever the married surname does.
+        const marriedAfter = updates.marriedSurname !== undefined ? updates.marriedSurname.trim() || undefined : person.marriedSurname;
+        const primaryAsked = 'primaryName' in updates ? (isPrimaryName(updates.primaryName) ? updates.primaryName : undefined) : person.primaryName;
+        const primaryAfter = marriedAfter ? primaryAsked : undefined;
+        if (primaryAfter !== person.primaryName) {
+            const h = strings.auditLog;
+            const word = (v: PrimaryName | undefined): string => v === 'birth' ? h.primaryBirth : v === 'married' ? h.primaryMarried : h.primaryNone;
+            changedFields.push(h.primaryName(word(person.primaryName), word(primaryAfter)));
+        }
         if (updates.gender !== undefined && updates.gender !== person.gender) diff(strings.labels.gender, strings.gender[person.gender], strings.gender[updates.gender]);
         if (updates.birthDate !== undefined && (updates.birthDate || undefined) !== person.birthDate) diff(strings.labels.birthDate, person.birthDate, updates.birthDate);
         if (updates.birthPlace !== undefined && (updates.birthPlace || undefined) !== person.birthPlace) diff(strings.labels.birthPlace, person.birthPlace, updates.birthPlace);
@@ -2000,6 +2019,8 @@ class DataManagerClass {
             const v = updates[key];
             if (v !== undefined) person[key] = v.trim() || undefined;
         }
+        if (primaryAfter) person.primaryName = primaryAfter;
+        else delete person.primaryName;
         // The married-surname suggestion hidden in the editor (app-local, no
         // audit line: it is not a fact about the person).
         if (updates.dismissedMarriedSuggestion !== undefined) {
@@ -3570,9 +3591,15 @@ class DataManagerClass {
         // What the register adds to the birth and death: the kept person's own
         // wins, the removed one's fills a gap.
         // The titles of the name and the surname after marriage likewise.
+        const keptMarried = keepPerson.marriedSurname;
         for (const key of ['birthAddress', 'deathCause', 'deathAge', 'deathAddress', 'titleBefore', 'titleAfter', 'marriedSurname'] as const) {
             if (!keepPerson[key] && removePerson[key]) keepPerson[key] = removePerson[key];
         }
+        // Which surname the person goes by travels with the married surname:
+        // the removed one's choice comes along when its married surname did,
+        // or is the kept one's too and the kept one made no choice.
+        keepPerson.primaryName = mergedPrimaryName(keepPerson, removePerson, keptMarried);
+        if (!keepPerson.primaryName) delete keepPerson.primaryName;
 
         // Clear placeholder status if we have a real name now
         if (keepPerson.firstName && keepPerson.firstName !== '?') {

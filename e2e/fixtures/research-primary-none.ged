@@ -1,0 +1,36 @@
+0 HEAD
+1 SOUR STROM_RESEARCH
+2 VERS 1.22.1
+2 NAME Strom Research
+1 DATE 29 OCT 2026
+1 _STROM_TREE 2e4f0f5c-391c-4f79-81c6-ce625bc411ff
+1 _STROM_HEAD 3a0c48d510000a4193963fbf12a03b88091032af
+1 _STROM_ASOF 2026-10-29
+1 SUBM @U1@
+1 GEDC
+2 VERS 5.5.1
+2 FORM LINEAGE-LINKED
+1 CHAR UTF-8
+1 NOTE Lhotovi
+2 CONT Vygenerováno programem Strom Research z evidence výzkumu. Údaje bez citace pramene nejsou doloženy záznamem.
+2 CONT Soubor je generovaný – needitovat ručně; změny se dělají ve výzkumu.
+0 @P0001@ INDI
+1 NAME Jana /Lhotová/
+1 NAME Jana /Zástěrová/
+2 TYPE married
+1 SEX F
+1 REFN P0001
+2 TYPE strom-research
+1 FAMS @F0001@
+0 @P0002@ INDI
+1 NAME Karel /Zástěra/
+1 SEX M
+1 REFN P0002
+2 TYPE strom-research
+1 FAMS @F0001@
+0 @F0001@ FAM
+1 HUSB @P0002@
+1 WIFE @P0001@
+0 @U1@ SUBM
+1 NAME Strom Research
+0 TRLR

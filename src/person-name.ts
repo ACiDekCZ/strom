@@ -5,6 +5,21 @@
  * "Surname display" picks: the birth surname (lastName), or the married one
  * (Person.marriedSurname) when the person has it — by default with the birth
  * surname as a quiet note after it ("Marie Nováková (roz. Dvořáková)").
+ * A person can go by the birth surname although she has a married one
+ * (Person.primaryName 'birth', e.g. back to it after a divorce): then she
+ * shows the birth surname, and the person's detail says "(dříve Zástěrová)".
+ * This file is the single place of that rule:
+ *
+ *   setting  primaryName      surname   note
+ *   birth    any              birth     none
+ *   both     none / married   married   "(roz. birth)"
+ *   both     birth            birth     "(dříve married)"
+ *   married  none / married   married   none
+ *   married  birth            birth     "(dříve married)"
+ *
+ * Without a married surname primaryName means nothing; with the married
+ * surname equal to the birth one there is no note. "roz." and "dříve" never
+ * come together; cards never show "dříve" (only the detail asks for it).
  *
  * Only for showing. Search, duplicate and merge matching, initials and the
  * GEDCOM name read firstName / lastName alone: a title says nothing about who
@@ -20,7 +35,7 @@ import { Person, SurnameDisplay } from './types.js';
 import { SettingsManager } from './settings.js';
 import { strings } from './strings.js';
 
-type Named = Pick<Person, 'firstName' | 'lastName' | 'titleBefore' | 'titleAfter' | 'marriedSurname'> & { isPlaceholder?: boolean };
+type Named = Pick<Person, 'firstName' | 'lastName' | 'titleBefore' | 'titleAfter' | 'marriedSurname' | 'primaryName'> & { isPlaceholder?: boolean };
 
 /** Whether titles are shown with names (the setting; default on). */
 export function titlesShown(): boolean {
@@ -39,27 +54,42 @@ function titlesOf(person: Named, show: boolean): { before: string; after: string
 }
 
 /**
+ * Whether a person's shown surname is the birth one although she has a
+ * married surname: the setting is 'birth', or the person goes by the birth
+ * surname (Person.primaryName 'birth'). False without a married surname (or
+ * for a placeholder) — nothing is hidden then.
+ */
+export function shownSurnameIsBirth(person: Named, display = surnameDisplay()): boolean {
+    const married = person.isPlaceholder ? '' : person.marriedSurname?.trim() ?? '';
+    return !!married && (display === 'birth' || person.primaryName === 'birth');
+}
+
+/**
  * The name's shown parts: the given name with the title before it ("Ing.
  * Jan"), the surname with the title after it ("Novák ml.") — the two lines
- * of a card whose name breaks in two — and the birth surname as a note
- * (`birthNote`, '' unless the setting is 'both' and the person has a married
- * surname). The surname is the married one with 'both' / 'married' when the
- * person has it, the birth surname (lastName) otherwise. `emptyGiven` stands
- * in for a missing given name ('?' on a card).
+ * of a card whose name breaks in two — and two notes, never both set: the
+ * birth surname (`birthNote`, '' unless the setting is 'both' and the married
+ * surname is shown) and the married surname the person no longer goes by
+ * (`formerNote`, '' unless Person.primaryName is 'birth' and the setting is
+ * not 'birth'). The surname is the married one with 'both' / 'married' when
+ * the person has it and does not go by the birth one, the birth surname
+ * (lastName) otherwise. `emptyGiven` stands in for a missing given name
+ * ('?' on a card).
  */
 export function shownNameParts(person: Named, emptyGiven = '', show = titlesShown(), display = surnameDisplay()): {
-    given: string; surname: string; birthNote: string;
+    given: string; surname: string; birthNote: string; formerNote: string;
 } {
     const { before, after } = titlesOf(person, show);
     const given = person.firstName || emptyGiven;
     const birth = person.lastName ?? '';
     const married = person.isPlaceholder ? '' : person.marriedSurname?.trim() ?? '';
-    const useMarried = !!married && display !== 'birth';
+    const useMarried = !!married && display !== 'birth' && person.primaryName !== 'birth';
     const surname = useMarried ? married : birth;
     return {
         given: [before, given].filter(Boolean).join(' '),
         surname: [surname, after].filter(Boolean).join(' '),
         birthNote: useMarried && display === 'both' && birth.trim() && birth.trim() !== married ? birth.trim() : '',
+        formerNote: !!married && person.primaryName === 'birth' && display !== 'birth' && married !== birth.trim() ? married : '',
     };
 }
 
@@ -78,15 +108,27 @@ export function birthNoteText(birthNote: string): string {
     return birthNote ? `${strings.name.birthAbbr} ${birthNote}` : '';
 }
 
+/** The former-surname note as written after a name: "dříve Zástěrová" ('' for none). */
+export function formerNoteText(formerNote: string): string {
+    return formerNote ? `${strings.name.formerAbbr} ${formerNote}` : '';
+}
+
+/** The note after a name as text — "roz. Dvořáková" or "dříve Zástěrová" — '' for none. */
+function noteText(parts: { birthNote: string; formerNote: string }, former: boolean): string {
+    if (parts.birthNote) return birthNoteText(parts.birthNote);
+    return former ? formerNoteText(parts.formerNote) : '';
+}
+
 /**
- * The whole name with the birth-surname note in brackets: "Marie Nováková
- * (roz. Dvořáková)", "Ing. Marie Nováková ml. (roz. Dvořáková)" — tooltips,
- * screen readers. Without a note it is shownName().
+ * The whole name with its note in brackets: "Marie Nováková (roz.
+ * Dvořáková)", "Ing. Marie Nováková ml. (roz. Dvořáková)", "Jana Lhotová
+ * (dříve Zástěrová)" — tooltips, screen readers. Without a note it is
+ * shownName().
  */
 export function shownNameFull(person: Named, emptyGiven = '', show = titlesShown(), display = surnameDisplay()): string {
     const name = shownName(person, emptyGiven, show, display);
-    const { birthNote } = shownNameParts(person, emptyGiven, show, display);
-    return birthNote ? `${name} (${birthNoteText(birthNote)})` : name;
+    const note = noteText(shownNameParts(person, emptyGiven, show, display), true);
+    return note ? `${name} (${note})` : name;
 }
 
 /**
@@ -110,6 +152,13 @@ export interface NameHtmlOptions {
      * left out.
      */
     note?: 'inline' | 'line' | 'fit' | 'none';
+    /**
+     * Also the married surname the person no longer goes by, "(dříve
+     * Zástěrová)" (Person.primaryName 'birth') — the person's detail only
+     * (relationships panel, card menu, bottom sheet, editor header); cards
+     * and lists leave it out. Default false.
+     */
+    former?: boolean;
     emptyGiven?: string;
     show?: boolean;
     display?: SurnameDisplay;
@@ -117,20 +166,23 @@ export interface NameHtmlOptions {
 
 /**
  * The shown name as HTML (escaped): with a note, the name in
- * `<span class="pn-main">` and "(roz. Dvořáková)" in `<span class="pn-note">`;
- * without one the escaped name alone, exactly what was written before notes
- * existed.
+ * `<span class="pn-main">` and "(roz. Dvořáková)" in `<span class="pn-note">`
+ * — with `former`, "(dříve Zástěrová)" likewise, its span also carrying
+ * `pn-note--former` (a hook for tests, no style of its own); without one the
+ * escaped name alone, exactly what was written before notes existed.
  */
 export function nameHtml(person: Named, opts: NameHtmlOptions = {}): string {
     const note = opts.note ?? 'inline';
     const show = opts.show ?? titlesShown();
     const display = opts.display ?? surnameDisplay();
     const name = shownName(person, opts.emptyGiven ?? '', show, display);
-    const { birthNote } = shownNameParts(person, opts.emptyGiven ?? '', show, display);
-    if (!birthNote || note === 'none') return escapeHtml(name);
+    const parts = shownNameParts(person, opts.emptyGiven ?? '', show, display);
+    const text = noteText(parts, !!opts.former);
+    if (!text || note === 'none') return escapeHtml(name);
+    const cls = parts.birthNote ? 'pn-note' : 'pn-note pn-note--former';
     const main = `<span class="pn-main">${escapeHtml(name)}</span>`;
-    if (note === 'line') return `${main}<span class="pn-note pn-note--line">${escapeHtml(birthNoteText(birthNote))}</span>`;
-    const noteSpan = `<span class="pn-note">(${escapeHtml(birthNoteText(birthNote))})</span>`;
+    if (note === 'line') return `${main}<span class="${cls} pn-note--line">${escapeHtml(text)}</span>`;
+    const noteSpan = `<span class="${cls}">(${escapeHtml(text)})</span>`;
     if (note === 'fit') return `<span class="pn-fit">${main}${noteSpan}</span>`;
     return `${main} ${noteSpan}`;
 }

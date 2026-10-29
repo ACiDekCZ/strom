@@ -30,7 +30,7 @@ import { regionHeader, regionToStored } from './originals.js';
 import { strings } from './strings.js';
 import { COUPLE_EVENT_TAG, eventValueIsOnTag, sortCoupleEvents } from './events.js';
 import { placeKey } from './places.js';
-import { noName } from './gedcom-names.js';
+import { noName, PRIMARY_NAME_TAG } from './gedcom-names.js';
 import { gedcomAge } from './recorded-age.js';
 import { isGedcomDateFormOf } from './gedcom-date-form.js';
 import { applyContentOptions, ContentOptions } from './privacy.js';
@@ -653,12 +653,17 @@ export function exportToGedcom(data: StromData, treeName?: string, options: Gedc
         } else {
             pushName(lines, person, options.titles);
         }
+        // Which surname the person goes by (Person.primaryName), Strom's mark
+        // under the chosen NAME: the birth name (the first one) or the married
+        // one; none without a choice or a married surname.
+        const married = person.marriedSurname?.trim();
+        if (married && person.primaryName === 'birth') lines.push(`2 ${PRIMARY_NAME_TAG} Y`);
         // The surname after marriage as the name she had after it, right
         // after the primary one (the birth name), as the research writes it.
-        const married = person.marriedSurname?.trim();
         if (married) {
             pushWrapped(lines, 1, 'NAME', formatGedcomName(person.firstName, married));
             lines.push('2 TYPE married');
+            if (person.primaryName === 'married') lines.push(`2 ${PRIMARY_NAME_TAG} Y`);
         }
         // Other spellings as further NAME lines — the first one above stays the
         // primary, which is what every reader expects.

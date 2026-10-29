@@ -8,7 +8,7 @@
  * in src/ui/research-ui.ts. Nothing here touches the DOM or storage.
  */
 
-import { StromData, Person, PersonId, PartnershipId, Partnership, ResearchLink, Source, APP_VERSION } from './types.js';
+import { StromData, Person, PersonId, PartnershipId, Partnership, ResearchLink, Source, APP_VERSION, isPrimaryName } from './types.js';
 import { withoutConvertedStandIns, isPurePlaceholder } from './single-parent.js';
 import { carryOverTreeDecisions, withRejectionDetails } from './quality-dismiss.js';
 import { PhoneSummary, sanitizePhoneSummary } from './phone.js';
@@ -779,11 +779,44 @@ export const MARRIED_SURNAME_FEATURE = 'person.marriedSurname';
  * such; then `next` comes back as it is.
  * The suggestion the person editor was told not to offer again
  * (Person.dismissedMarriedSuggestion) is the app's own and always carried
- * over (keepDismissedMarriedSuggestions), whatever the research knows.
+ * over (keepDismissedMarriedSuggestions), whatever the research knows; which
+ * surname the person goes by (Person.primaryName) is carried over from a
+ * research that does not keep it (keepPrimaryName).
  * Returns a new object when any person changed; neither input is changed.
  */
 export function keepMarriedSurname(next: StromData, previous: StromData, features: readonly string[] | null | undefined, received = false): StromData {
-    return keepDismissedMarriedSuggestions(keepMarriedSurnameField(next, previous, features, received), previous);
+    return keepPrimaryName(keepDismissedMarriedSuggestions(keepMarriedSurnameField(next, previous, features, received), previous), previous, features);
+}
+
+/** The bridge feature of a research that keeps the name a person goes by (`2 _STROM_PRIMARY Y` under a NAME). */
+export const PRIMARY_NAME_FEATURE = 'person.primary';
+
+/**
+ * Which surname a person goes by (Person.primaryName) that a research version
+ * lacks. A research without `person.primary` in its `features` (not known =
+ * an older research) does not keep the mark the app sends and gives the names
+ * back without it: each person keeps the previous state's choice, matched by
+ * REFN (as keepMarriedSurname matches them), as long as it still has a
+ * married surname (none without one); a choice the version has stays. With
+ * the feature the research decides (a removed mark included) and `next`
+ * comes back as it is. Returns a new object when any person changed; neither
+ * input is changed.
+ */
+export function keepPrimaryName(next: StromData, previous: StromData, features: readonly string[] | null | undefined): StromData {
+    if (features?.includes(PRIMARY_NAME_FEATURE)) return next;
+    const prevByRefn = uniqueRefns(previous);
+    if (prevByRefn.size === 0) return next;
+    let persons: StromData['persons'] | null = null;
+    for (const [refn, id] of uniqueRefns(next)) {
+        const prevId = prevByRefn.get(refn);
+        const was = prevId ? previous.persons[prevId] : undefined;
+        if (!was || !isPrimaryName(was.primaryName)) continue;
+        const p = next.persons[id];
+        if (!p || !p.marriedSurname?.trim() || isPrimaryName(p.primaryName)) continue;
+        persons ??= { ...next.persons };
+        persons[id] = { ...p, primaryName: was.primaryName };
+    }
+    return persons ? { ...next, persons } : next;
 }
 
 function keepMarriedSurnameField(next: StromData, previous: StromData, features: readonly string[] | null | undefined, received: boolean): StromData {

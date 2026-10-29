@@ -229,7 +229,7 @@ function factFields(fact: string, scope: ConflictScope): { fields: ValueField[];
     const pick = (date: ValueField, ...place: ValueField[]): ValueField[] =>
         scope === 'date' ? [date] : scope === 'place' ? place : [date, ...place];
     switch (tag) {
-        case 'NAME': return { fields: ['name', 'marriedSurname'] };
+        case 'NAME': return { fields: ['name', 'marriedSurname', 'primaryName'] };
         case 'NPFX': case 'NSFX': return { fields: ['name'] };
         case 'SEX': return { fields: ['gender'] };
         case 'BIRT': return { fields: pick('birthDate', 'birthPlace') };

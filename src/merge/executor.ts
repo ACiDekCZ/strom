@@ -19,7 +19,7 @@ import {
     Source,
     generatePersonId,
     generatePartnershipId,
-    PERSON_CITATION_FIELDS, isGender,
+    PERSON_CITATION_FIELDS, isGender, mergedPrimaryName,
 } from '../types.js';
 import { addSurnameGroup, surnameKey } from '../surnames.js';
 import { sanitizeQualityDismissed, sanitizeSurnameRejections } from '../quality-dismiss.js';
@@ -769,6 +769,7 @@ export function mergePersonData(
     personIdMap?: Map<PersonId, PersonId>,
     incomingPersons?: Record<PersonId, Person>
 ): void {
+    const marriedBefore = existing.marriedSurname;
     // Merge non-conflicting data (fill in missing values). An unknown sex is
     // a missing value: the other side's known one fills it.
     if (existing.gender === 'unknown' && incoming.gender !== 'unknown' && isGender(incoming.gender)) {
@@ -871,6 +872,11 @@ export function mergePersonData(
         }
         // 'keep_existing' on non-name fields - do nothing
     }
+    // Which surname the person goes by travels with the married surname she
+    // ends up with (never one without it).
+    const primary = mergedPrimaryName(existing, incoming, marriedBefore);
+    if (primary) existing.primaryName = primary;
+    else delete existing.primaryName;
 
     // Narrative: fill when missing (two different texts are not merged).
     if (!existing.story && incoming.story) existing.story = structuredClone(incoming.story);

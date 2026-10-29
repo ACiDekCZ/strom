@@ -26,6 +26,14 @@
  */
 
 /**
+ * Strom's mark of the name a person goes by (Person.primaryName), shared with
+ * the research: `2 _STROM_PRIMARY Y` under that `1 NAME` — the first one (the
+ * birth name) or the married one (`2 TYPE married`). At most one per person;
+ * `Y` or `yes` in any case, the first mark counts.
+ */
+export const PRIMARY_NAME_TAG = '_STROM_PRIMARY';
+
+/**
  * What a record or another program writes where it has no name (folded): the
  * person's given name is "?".
  *

@@ -288,6 +288,7 @@ const stringsEN = {
     book: {
         indexSee: (a: string, b: string) => `${a} → see ${b}`,
         indexMarried: (surname: string) => `married name ${surname}`,
+        indexFormer: (surname: string) => `formerly ${surname}`,
         menu: 'Family book',
         menuDesc: 'Printable book: chapters by family, photos, sources and a person index',
         toolbarPrint: 'Print',
@@ -867,6 +868,8 @@ const stringsEN = {
     // A name's birth-surname note after the married surname: "Mary Smith (née Brown)".
     name: {
         birthAbbr: 'née',
+        // A married surname the person no longer goes by (Person.primaryName 'birth').
+        formerAbbr: 'formerly',
     },
 
     // The person editor's married surname (Person.marriedSurname) and its suggestion from the husband's surname.
@@ -878,6 +881,11 @@ const stringsEN = {
         suggestionOtherForm: 'also among other spellings of the name',
         useSuggestion: 'Use',
         dismissSuggestion: 'Hide suggestion',
+        // Which surname the person goes by (Person.primaryName).
+        primaryName: 'Surname in use',
+        primaryBirth: 'Birth',
+        primaryMarried: 'Married',
+        primaryHint: 'For example after a divorce, with a return to the birth surname.',
     },
 
     titles: {
@@ -2431,6 +2439,7 @@ const stringsEN = {
         menuTitle: 'Export CSV',
         menuDesc: 'Person table for Excel / Google Sheets',
         firstName: 'First name', lastName: 'Last name', marriedSurname: 'Married surname', gender: 'Gender',
+        primaryName: 'Surname in use', primaryBirth: 'birth', primaryMarried: 'married',
         birthDate: 'Born', birthPlace: 'Birth place',
         birthAddress: 'Birth house / address',
         deathDate: 'Died', deathPlace: 'Death place',
@@ -3341,6 +3350,7 @@ const stringsEN = {
     search: {
         married: (surname: string) => `married name ${surname}`,
         birth: (surname: string) => `née ${surname}`,
+        former: (surname: string) => `formerly ${surname}`,
         placeholder: 'Search person...',
         noResults: 'No results',
         multipleResults: 'Multiple results found',
@@ -3796,7 +3806,7 @@ const stringsEN = {
         optBirth: 'Birth surname',
         optBoth: 'Married (née birth surname)',
         optMarried: 'Married surname',
-        surnameHint: 'Without a married surname, the birth surname is shown.',
+        surnameHint: 'The birth surname is shown when there is no married surname or when the birth surname is chosen for the person.',
         groupTree: 'Tree view',
         groupNotifications: 'Notifications',
         groupCard: 'Person card',
@@ -4627,6 +4637,11 @@ const stringsEN = {
         createdPerson: (name: string) => `Created person: ${name}`,
         createdPlaceholder: (gender: string) => `Created placeholder (${gender})`,
         updatedPerson: (name: string, fields: string) => `Updated ${name}: ${fields}`,
+        // A line of an edit: which surname the person goes by (Person.primaryName).
+        primaryName: (a: string, b: string) => `Surname in use: ${a} → ${b}`,
+        primaryBirth: 'birth',
+        primaryMarried: 'married',
+        primaryNone: '–',
         deletedPerson: (name: string) => `Deleted person: ${name}`,
         createdPartnership: (p1: string, p2: string, status: string) => `Created partnership: ${p1} & ${p2} (${status})`,
         updatedPartnership: (p1: string, p2: string) => `Updated partnership: ${p1} & ${p2}`,
@@ -5776,6 +5791,7 @@ const stringsCZ: StringsType = {
     book: {
         indexSee: (a: string, b: string) => `${a} → viz ${b}`,
         indexMarried: (surname: string) => `po sňatku ${surname}`,
+        indexFormer: (surname: string) => `dříve ${surname}`,
         menu: 'Kniha rodu',
         toolbarPrint: 'Tisk',
         toolbarClose: 'Zavřít',
@@ -6349,6 +6365,8 @@ const stringsCZ: StringsType = {
     // Rodné příjmení za příjmením po sňatku: „Marie Nováková (roz. Dvořáková)“.
     name: {
         birthAbbr: 'roz.',
+        // A married surname the person no longer goes by (Person.primaryName 'birth').
+        formerAbbr: 'dříve',
     },
 
     // Příjmení po sňatku v editoru osoby (Person.marriedSurname) a návrh z příjmení manžela.
@@ -6360,6 +6378,11 @@ const stringsCZ: StringsType = {
         suggestionOtherForm: 'i v Dalších tvarech jména',
         useSuggestion: 'Použít',
         dismissSuggestion: 'Skrýt návrh',
+        // Which surname the person goes by (Person.primaryName).
+        primaryName: 'Používané příjmení',
+        primaryBirth: 'Rodné',
+        primaryMarried: 'Po sňatku',
+        primaryHint: 'Např. po rozvodu s návratem k rodnému příjmení.',
     },
 
     titles: {
@@ -7896,6 +7919,7 @@ const stringsCZ: StringsType = {
         menuTitle: 'Export CSV',
         menuDesc: 'Tabulka osob pro Excel / Google Sheets',
         firstName: 'Jméno', lastName: 'Příjmení', marriedSurname: 'Příjmení po sňatku', gender: 'Pohlaví',
+        primaryName: 'Používané příjmení', primaryBirth: 'rodné', primaryMarried: 'po sňatku',
         birthDate: 'Narození', birthPlace: 'Místo narození',
         birthAddress: 'Dům narození',
         deathDate: 'Úmrtí', deathPlace: 'Místo úmrtí',
@@ -8778,6 +8802,7 @@ const stringsCZ: StringsType = {
     search: {
         married: (surname: string) => `po sňatku ${surname}`,
         birth: (surname: string) => `roz. ${surname}`,
+        former: (surname: string) => `dříve ${surname}`,
         placeholder: 'Hledat osobu...',
         noResults: 'Nic nenalezeno',
         multipleResults: 'Nalezeno více výsledků',
@@ -9238,7 +9263,7 @@ const stringsCZ: StringsType = {
         optBirth: 'Rodné',
         optBoth: 'Po sňatku (roz. rodné)',
         optMarried: 'Po sňatku',
-        surnameHint: 'Bez příjmení po sňatku se ukáže rodné.',
+        surnameHint: 'Bez příjmení po sňatku, nebo když je u osoby zvolené rodné, se ukazuje rodné příjmení.',
         groupTree: 'Zobrazení stromu',
         groupNotifications: 'Upozornění',
         groupCard: 'Karta osoby',
@@ -10071,6 +10096,11 @@ const stringsCZ: StringsType = {
         createdPerson: (name: string) => `Vytvořena osoba: ${name}`,
         createdPlaceholder: (gender: string) => `Vytvořen zástupce (${gender})`,
         updatedPerson: (name: string, fields: string) => `Aktualizace ${name}: ${fields}`,
+        // A line of an edit: which surname the person goes by (Person.primaryName).
+        primaryName: (a: string, b: string) => `Používané příjmení: ${a} → ${b}`,
+        primaryBirth: 'rodné',
+        primaryMarried: 'po sňatku',
+        primaryNone: '–',
         deletedPerson: (name: string) => `Smazána osoba: ${name}`,
         createdPartnership: (p1: string, p2: string, status: string) => `Vytvořen vztah: ${p1} & ${p2} (${status})`,
         updatedPartnership: (p1: string, p2: string) => `Aktualizován vztah: ${p1} & ${p2}`,
@@ -11207,6 +11237,7 @@ const stringsDE: StringsType = {
     book: {
         indexSee: (a: string, b: string) => `${a} → siehe ${b}`,
         indexMarried: (surname: string) => `verh. ${surname}`,
+        indexFormer: (surname: string) => `früher ${surname}`,
         menu: 'Familienbuch',
         menuDesc: 'Druckbares Buch: Kapitel nach Familien, Fotos, Quellen und ein Personenregister',
         toolbarPrint: 'Drucken',
@@ -11771,6 +11802,8 @@ const stringsDE: StringsType = {
     // Geburtsname nach dem Ehenamen: „Anna Müller (geb. Schmidt)“.
     name: {
         birthAbbr: 'geb.',
+        // A married surname the person no longer goes by (Person.primaryName 'birth').
+        formerAbbr: 'früher',
     },
 
     // Der Ehename im Personeneditor (Person.marriedSurname) und sein Vorschlag aus dem Nachnamen des Ehemanns.
@@ -11782,6 +11815,11 @@ const stringsDE: StringsType = {
         suggestionOtherForm: 'auch unter anderen Schreibweisen des Namens',
         useSuggestion: 'Übernehmen',
         dismissSuggestion: 'Vorschlag ausblenden',
+        // Which surname the person goes by (Person.primaryName).
+        primaryName: 'Geführter Nachname',
+        primaryBirth: 'Geburtsname',
+        primaryMarried: 'Ehename',
+        primaryHint: 'Etwa nach einer Scheidung mit Rückkehr zum Geburtsnamen.',
     },
 
     titles: {
@@ -13317,6 +13355,7 @@ const stringsDE: StringsType = {
         menuTitle: 'CSV exportieren',
         menuDesc: 'Personentabelle für Excel / Google Sheets',
         firstName: 'Vorname', lastName: 'Nachname', marriedSurname: 'Ehename', gender: 'Geschlecht',
+        primaryName: 'Geführter Nachname', primaryBirth: 'Geburtsname', primaryMarried: 'Ehename',
         birthDate: 'Geboren', birthPlace: 'Geburtsort',
         birthAddress: 'Geburtshaus / Adresse',
         deathDate: 'Gestorben', deathPlace: 'Sterbeort',
@@ -14180,6 +14219,7 @@ const stringsDE: StringsType = {
     search: {
         married: (surname: string) => `Ehename ${surname}`,
         birth: (surname: string) => `geb. ${surname}`,
+        former: (surname: string) => `früher ${surname}`,
         placeholder: 'Person suchen...',
         noResults: 'Keine Ergebnisse',
         multipleResults: 'Mehrere Ergebnisse gefunden',
@@ -14616,7 +14656,7 @@ const stringsDE: StringsType = {
         optBirth: 'Geburtsname',
         optBoth: 'Ehename (geb. Geburtsname)',
         optMarried: 'Ehename',
-        surnameHint: 'Ohne Ehenamen wird der Geburtsname angezeigt.',
+        surnameHint: 'Der Geburtsname wird angezeigt, wenn kein Ehename vorhanden ist oder bei der Person der Geburtsname gewählt ist.',
         groupTree: 'Stammbaumansicht',
         groupNotifications: 'Hinweise',
         groupCard: 'Personenkarte',
@@ -15438,6 +15478,11 @@ const stringsDE: StringsType = {
         createdPerson: (name: string) => `Person angelegt: ${name}`,
         createdPlaceholder: (gender: string) => `Platzhalter angelegt (${gender})`,
         updatedPerson: (name: string, fields: string) => `${name} aktualisiert: ${fields}`,
+        // A line of an edit: which surname the person goes by (Person.primaryName).
+        primaryName: (a: string, b: string) => `Geführter Nachname: ${a} → ${b}`,
+        primaryBirth: 'Geburtsname',
+        primaryMarried: 'Ehename',
+        primaryNone: '–',
         deletedPerson: (name: string) => `Person gelöscht: ${name}`,
         createdPartnership: (p1: string, p2: string, status: string) => `Partnerschaft angelegt: ${p1} & ${p2} (${status})`,
         updatedPartnership: (p1: string, p2: string) => `Partnerschaft aktualisiert: ${p1} & ${p2}`,

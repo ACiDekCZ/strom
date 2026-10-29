@@ -59,7 +59,7 @@ describe('the shown name and Settings → Surname display', () => {
         it(`${display}: without one the name is what it always was`, () => {
             expect(shownName(plain, '', true, display)).toBe('Jana Dvořáková');
             expect(shownNameFull(plain, '', true, display)).toBe('Jana Dvořáková');
-            expect(shownNameParts(plain, '?', true, display)).toEqual({ given: 'Jana', surname: 'Dvořáková', birthNote: '' });
+            expect(shownNameParts(plain, '?', true, display)).toEqual({ given: 'Jana', surname: 'Dvořáková', birthNote: '', formerNote: '' });
             expect(nameHtml(plain, { display })).toBe('Jana Dvořáková');
         });
 

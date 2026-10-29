@@ -44,6 +44,7 @@ function fieldLabel(row: ValueChange): string {
     switch (row.field) {
         case 'name': return s.fieldName;
         case 'marriedSurname': return strings.labels.marriedSurname;
+        case 'primaryName': return strings.person.primaryName;
         case 'gender': return s.fieldGender;
         case 'birthDate': return `${birth} · ${e.date}`;
         case 'birthPlace': return `${birth} · ${e.place}`;
@@ -64,6 +65,7 @@ function fieldLabel(row: ValueChange): string {
 function valueText(row: ValueChange, value: string): string {
     if (!value) return row.field === 'person' ? '' : '–';
     if (row.field === 'gender') return isGender(value) ? strings.gender[value] : value;
+    if (row.field === 'primaryName') return value === 'birth' ? strings.auditLog.primaryBirth : value === 'married' ? strings.auditLog.primaryMarried : value;
     return row.date ? formatFlexDate(value) || value : value;
 }
 

@@ -295,8 +295,8 @@ describe('the surname after marriage across trees', () => {
     it('the CSV has a column of its own', () => {
         initLanguage('en');
         const [header, row] = buildPersonsCsv(tree(person('p1', 'Marie', 'Dvořáková', { marriedSurname: 'Nováková' }))).split('\r\n');
-        expect(header).toContain('First name;Last name;Married surname;Gender');
-        expect(row).toContain('Marie;Dvořáková;Nováková;');
+        expect(header).toContain('First name;Last name;Married surname;Surname in use;Gender');
+        expect(row).toContain('Marie;Dvořáková;Nováková;;');
     });
 });
 

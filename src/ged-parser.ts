@@ -61,6 +61,7 @@ import {
     YearSpan,
     SourceImageHeld,
     uniqueIdSuffix,
+    PrimaryName,
 } from './types';
 import { dateSortKey, formatFlexDate } from './dates';
 import { gedcomDatePhrase, parseGedcomDate } from './gedcom-date-read';
@@ -84,7 +85,7 @@ import { excerptFromDataUrl } from './excerpts';
 import { normalizeSha256 } from './sha256';
 import { ORIGINAL_ONLY_DATA_URL } from './validation';
 import { parseRegion, regionFromStored } from './originals';
-import { parseName, readGedcomName, type GedcomNameParts } from './gedcom-names';
+import { parseName, readGedcomName, PRIMARY_NAME_TAG, type GedcomNameParts } from './gedcom-names';
 import { appUnknownIsNoSurname } from './app-version';
 
 /** The name parser lives with the rules it shares with the research (gedcom-names.ts). */
@@ -921,6 +922,14 @@ interface GedcomIndividual {
     marnm: string[];
     /** The surname after marriage (Person.marriedSurname), set after the names are read. */
     marriedSurname?: string;
+    /**
+     * The NAME with Strom's mark of the name the person goes by
+     * (`2 _STROM_PRIMARY Y`, the first one counts): -1 the primary name, k the
+     * variant k; follows the swap of a married name put first.
+     */
+    primaryMark?: number;
+    /** Which surname the person goes by (Person.primaryName), set with the married surname. */
+    primaryName?: PrimaryName;
     /** A description the file wrote instead of the given name — goes to the note. */
     nameDescription?: string;
     /** The app's own file names a person it knows without a name ("? //"): no stand-in. */
@@ -1382,14 +1391,23 @@ function readMarriedSurname(
 ): void {
     if (indi.primaryNameType === 'married') return;
     let married = '';
+    // The mark of the name the person goes by: on the birth name (the
+    // primary one), on the married name taken here, or elsewhere (nothing).
+    let markedMarried = false;
+    const dropVariant = (k: number): void => {
+        indi.nameVariants.splice(k, 1);
+        indi.variantNameTypes.splice(k, 1);
+        indi.variantNameParts.splice(k, 1);
+        if (indi.primaryMark === undefined || indi.primaryMark < k) return;
+        if (indi.primaryMark === k) { markedMarried = true; indi.primaryMark = undefined; }
+        else indi.primaryMark--;
+    };
     for (let k = indi.variantNameTypes.length - 1; k >= 0; k--) {
         if (indi.variantNameTypes[k] !== 'married') continue;
         const read = readGedcomName(indi.nameVariants[k], indi.variantNameParts[k], { ...opts, descriptions: false });
         if (!read.lastName) continue;
         married = read.lastName;
-        indi.nameVariants.splice(k, 1);
-        indi.variantNameTypes.splice(k, 1);
-        indi.variantNameParts.splice(k, 1);
+        dropVariant(k);
         break;
     }
     if (!married) {
@@ -1405,10 +1423,11 @@ function readMarriedSurname(
     const repeat = key(`${indi.firstName} ${married}`);
     for (let k = indi.nameVariants.length - 1; k >= 0; k--) {
         if (key(indi.nameVariants[k]) !== repeat) continue;
-        indi.nameVariants.splice(k, 1);
-        indi.variantNameTypes.splice(k, 1);
-        indi.variantNameParts.splice(k, 1);
+        // A mark there is on the married name too (it is that name).
+        dropVariant(k);
     }
+    if (indi.primaryMark === -1) indi.primaryName = 'birth';
+    else if (markedMarried) indi.primaryName = 'married';
 }
 
 /** Level-1 INDI tags the parser understands (everything else is counted as dropped). */
@@ -2526,6 +2545,13 @@ export function parseGedcom(content: string): ParsedGedcom {
                         } else if (tag === '_MARNM' && value.trim()) {
                             // 2 _MARNM under a NAME: the married surname.
                             indi.marnm.push(value.trim());
+                        } else if (tag === PRIMARY_NAME_TAG) {
+                            // 2 _STROM_PRIMARY Y: the name the person goes by
+                            // (Person.primaryName, resolved with the married
+                            // surname). The first mark counts.
+                            if (currentNameSlot !== null && indi.primaryMark === undefined && /^(y|yes)$/i.test(value.trim())) {
+                                indi.primaryMark = currentNameSlot;
+                            }
                         } else if (NAME_PART_TAGS.has(tag) && currentNameSlot !== null && value.trim()) {
                             // 2 GIVN / SURN / SPFX / NPFX / NSFX: the name's own parts.
                             const parts = currentNameSlot === -1 ? indi.primaryNameParts : indi.variantNameParts[currentNameSlot];
@@ -2787,6 +2813,9 @@ export function parseGedcom(content: string): ParsedGedcom {
         indi.name = birthName;
         indi.primaryNameType = 'birth';
         indi.primaryNameParts = birthParts;
+        // The mark goes with its name.
+        if (indi.primaryMark === -1) indi.primaryMark = k;
+        else if (indi.primaryMark === k) indi.primaryMark = -1;
     }
 
     // The primary name into the two name fields, by the rules shared with the
@@ -3018,6 +3047,7 @@ export function convertToStrom(gedcom: ParsedGedcom): GedcomConversionResult {
         if (indi.titleBefore) person.titleBefore = indi.titleBefore;
         if (indi.titleAfter) person.titleAfter = indi.titleAfter;
         if (indi.marriedSurname) person.marriedSurname = indi.marriedSurname;
+        if (indi.marriedSurname && indi.primaryName) person.primaryName = indi.primaryName;
 
         // Add extended info if present
         if (indi.birthDate) person.birthDate = indi.birthDate;

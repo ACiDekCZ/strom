@@ -407,6 +407,18 @@ export interface Person {
      */
     marriedSurname?: string;
     /**
+     * Which surname the person goes by (the user's choice, never derived from
+     * a divorce or the order of names): 'birth' = the birth surname
+     * (lastName), the married one stays and shows as "formerly B" in the
+     * person's detail; 'married' = the married surname, said outright (shown
+     * as with no choice, but sent to the research). Missing = no choice: the
+     * married surname shows when there is one. Only with a non-empty
+     * marriedSurname — without it the field is dropped (load and save).
+     * GEDCOM: `2 _STROM_PRIMARY Y` under the chosen NAME. Settings →
+     * "Surname display" 'birth' overrides it (src/person-name.ts).
+     */
+    primaryName?: PrimaryName;
+    /**
      * The married surname the person editor suggested (from the husband's
      * surname) and the user hid with ×: that suggestion is not offered again;
      * a different one (another husband, his surname changed) is. App-local:
@@ -951,6 +963,10 @@ export function partnershipParticipants(u: Pick<Partnership, 'participants' | 'e
  * so it keeps the titles on a re-save; it only shows the name without them.
  * Person.marriedSurname (3.13) likewise came without a bump: an older app keeps
  * it on a re-save and reads the married name as another spelling meanwhile.
+ * Person.primaryName (3.18) came without a bump too: an older app keeps it on a
+ * re-save (persons carried whole) and shows the married surname meanwhile; its
+ * GEDCOM import skips `_STROM_PRIMARY` under a NAME silently and its export
+ * does not write it (the research takes the missing mark as no change).
  * Person.dismissedMarriedSuggestion (3.13, app-local) the same way.
  * Source.reading / readingEntry / readingSha (3.14) came without a bump too: an
  * older app loads sources whole (migrateData) and edits them in place
@@ -1124,6 +1140,8 @@ export interface NewPersonData {
     titleAfter?: string;
     /** The surname after marriage (Person.marriedSurname). */
     marriedSurname?: string;
+    /** Which surname the person goes by (Person.primaryName); only with a married surname. */
+    primaryName?: PrimaryName;
 }
 
 // ==================== RENDERING TYPES ====================
@@ -1354,6 +1372,35 @@ export type ThemeMode = 'light' | 'dark' | 'system';
  * person without a married surname shows the birth surname in all three.
  */
 export type SurnameDisplay = 'birth' | 'both' | 'married';
+/** Which surname a person goes by (Person.primaryName): the birth one or the married one. */
+export type PrimaryName = 'birth' | 'married';
+/** Whether a value is a valid Person.primaryName. */
+export function isPrimaryName(v: unknown): v is PrimaryName {
+    return v === 'birth' || v === 'married';
+}
+
+/**
+ * Which surname a person kept by a merge goes by (Person.primaryName): the
+ * choice travels with the married surname the kept person ends up with.
+ * `keptMarriedBefore` is the kept person's married surname before the merge.
+ * When it stayed, her own choice stays, and without one the other person's
+ * comes along if its married surname is the same; when the other person's
+ * married surname replaced it (filled a gap or won a conflict), the other's
+ * choice comes along, her own one stays without it. Never one without a
+ * married surname.
+ */
+export function mergedPrimaryName(
+    kept: Pick<Person, 'marriedSurname' | 'primaryName'>,
+    other: Pick<Person, 'marriedSurname' | 'primaryName'>,
+    keptMarriedBefore: string | undefined,
+): PrimaryName | undefined {
+    const married = kept.marriedSurname?.trim();
+    if (!married) return undefined;
+    const own = isPrimaryName(kept.primaryName) ? kept.primaryName : undefined;
+    const theirs = isPrimaryName(other.primaryName) && other.marriedSurname?.trim() === married ? other.primaryName : undefined;
+    if (keptMarriedBefore?.trim() === married) return own ?? theirs;
+    return theirs ?? own;
+}
 export const SURNAME_DISPLAYS: readonly SurnameDisplay[] = ['birth', 'both', 'married'];
 export type LanguageSetting = 'en' | 'cs' | 'de' | 'system';
 

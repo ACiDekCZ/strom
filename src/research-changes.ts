@@ -5,7 +5,7 @@
  * Pure: no DOM, no storage.
  */
 
-import { StromData, Person, Partnership, Source, EventParticipant, PersonId, LifeEvent, Attachment, PlaceGeo } from './types.js';
+import { StromData, Person, Partnership, Source, EventParticipant, PersonId, LifeEvent, Attachment, PlaceGeo, isPrimaryName } from './types.js';
 import { isPurePlaceholder } from './single-parent.js';
 import { collectPlaces } from './places.js';
 
@@ -27,7 +27,7 @@ export interface PersonChange {
     refn?: string;
 }
 
-const NAME_FIELDS: (keyof Person)[] = ['firstName', 'lastName', 'titleBefore', 'titleAfter', 'marriedSurname', 'nameVariants'];
+const NAME_FIELDS: (keyof Person)[] = ['firstName', 'lastName', 'titleBefore', 'titleAfter', 'marriedSurname', 'primaryName', 'nameVariants'];
 const BIRTH_FIELDS: (keyof Person)[] = ['birthDate', 'birthPlace', 'birthAddress'];
 const DEATH_FIELDS: (keyof Person)[] = ['deathDate', 'deathPlace', 'deathCause', 'deathAge', 'deathAddress', 'isDeceased'];
 const CITATION_FIELDS: (keyof Person)[] = ['sourceIds', 'birthSourceIds', 'deathSourceIds'];
@@ -648,7 +648,7 @@ export function pairNotWritten(items: readonly NotWrittenItem[], data: StromData
 
 /** Which value a row is about (the UI names it). */
 export type ValueField =
-    | 'name' | 'marriedSurname' | 'gender' | 'birthDate' | 'birthPlace' | 'deathDate' | 'deathPlace' | 'deathCause' | 'notes'
+    | 'name' | 'marriedSurname' | 'primaryName' | 'gender' | 'birthDate' | 'birthPlace' | 'deathDate' | 'deathPlace' | 'deathCause' | 'notes'
     | 'person' | 'event' | 'eventDate' | 'eventPlace' | 'eventValue' | 'citation' | 'marriageDate' | 'marriagePlace';
 
 /** One value here that loading the research's version replaces or removes. */
@@ -687,6 +687,8 @@ export interface ValueDiff {
 }
 
 const str = (v: unknown): string => typeof v === 'string' ? v.trim() : '';
+/** Which surname a person goes by as a row value: 'birth' / 'married', '' for no choice (or no married surname). */
+const primaryOf = (p: Person): string => str(p.marriedSurname) && isPrimaryName(p.primaryName) ? p.primaryName : '';
 
 /** The open conflicts of a person in the research's version, by fact tag. */
 function openConflictFacts(p: Person | undefined): Set<string> {
@@ -768,8 +770,9 @@ export function diffValues(here: StromData, there: StromData): ValueDiff {
         const row: ValueChange = { personId: p.id, name: fullName(p), field: f, here: a, there: b, ...extra };
         // A married surname coming into an empty field changes the name the
         // card shows (emptied in the app, the research still has it): said
-        // as a row ("– → Nováková"), not counted among the added facts.
-        if (!a && f !== 'marriedSurname') {
+        // as a row ("– → Nováková"), not counted among the added facts. The
+        // surname the person goes by likewise ("– → birth").
+        if (!a && f !== 'marriedSurname' && f !== 'primaryName') {
             addedFacts++;
             filled.push(row);
             return;
@@ -787,6 +790,8 @@ export function diffValues(here: StromData, there: StromData): ValueDiff {
         field(h, 'name', fullName(h) === '?' ? '' : titledName(h), fullName(t) === '?' ? '' : titledName(t),
             open.has('NAME') || open.has('NPFX') || open.has('NSFX') ? { conflict: true } : {});
         field(h, 'marriedSurname', str(h.marriedSurname), str(t.marriedSurname), open.has('NAME') ? { conflict: true } : {});
+        // Which surname the person goes by ('birth' / 'married', '' = no choice; only with a married surname).
+        field(h, 'primaryName', primaryOf(h), primaryOf(t), open.has('NAME') ? { conflict: true } : {});
         if (h.gender !== t.gender && h.gender && t.gender) rows.push({ personId: h.id, name: fullName(h), field: 'gender', here: h.gender, there: t.gender, ...(open.has('SEX') ? { conflict: true } : {}) });
         const birth = open.has('BIRT') ? { conflict: true } : {};
         const death = open.has('DEAT') ? { conflict: true } : {};
