@@ -4,6 +4,8 @@
 
 ## 3.17.1
 
+*Veröffentlicht am 29. Oktober 2026.*
+
 - **Geschichte der Orte**: *Ortsgeschichte suchen…* wird für einen Ort angeboten, sobald die Forschung ihm seine Regionen zugeordnet hat, auch wenn die Geschichte dieser Regionen noch wartet (*Region wartet auf die Suche* bleibt daneben), im *⋯* des Ortes im Reiter *Orte* und in den Vorschlägen der Forschung; die Personenkarte bietet es in der letzten Zeile des Lebenslaufs an, wenn dort keine Region angeboten wird. Bisher wartete das Angebot auf die Geschichte aller Regionen des Ortes.
 
 ## 3.17.0

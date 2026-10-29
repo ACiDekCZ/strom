@@ -4,6 +4,8 @@
 
 ## 3.17.1
 
+*Vydáno 29. října 2026.*
+
 - **Dějiny míst**: *Najít dějiny místa a okolí…* se u místa nabízí, jakmile mu výzkum přiřadil regiony, i když dějiny těch regionů ještě čekají (*Region čeká na hledání* zůstává vedle), v nabídce *⋯* místa na kartě *Místa* i v návrzích výzkumu; karta osoby to nabízí na posledním řádku časové osy, když tam není nabídka regionu. Dosud nabídka čekala na dějiny všech regionů místa.
 
 ## 3.17.0
