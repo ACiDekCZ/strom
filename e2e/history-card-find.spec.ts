@@ -98,7 +98,7 @@ test.describe('History of places: "Find the history of …" in the card', () => 
         await openCard(page, 'Jan');
         await findLink(page).click();
         await expect(lastRow(page)).toContainText('The research is not looking for history. Events already found stay.');
-        await expect(lastRow(page).locator('button.pm-lifeline-hfind-note')).toHaveText('Turn on the search in the research');
+        await expect(lastRow(page).locator('button.pm-lifeline-hfind-note')).toHaveText('Turn on the search in the research, opens in the research');
     });
 
     test('busy: the row says so', async ({ page }) => {

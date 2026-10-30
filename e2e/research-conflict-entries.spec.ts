@@ -186,7 +186,7 @@ test.describe('the panel by the edit form\'s field', () => {
         expect(decide.asks.map(a => a.body)).toEqual([{ do: 'decide', take: 'user' }, { do: 'decide', take: 'user' }]);
     });
 
-    test('not decidable from the app (422 conflict.no-edit) with the panel open: its own sentence in the panel, no "Try again", the choices off, "Decide in the research ↗"', async ({ page }) => {
+    test('not decidable from the app (422 conflict.no-edit) with the panel open: its own sentence in the panel, no "Try again", the choices off, "Decide in the research"', async ({ page }) => {
         const { decide } = await setup(page);
         await editJan(page);
         await tag(page).click();
@@ -201,7 +201,7 @@ test.describe('the panel by the edit form\'s field', () => {
         await expect(p.locator('.prc-panel-note')).toHaveCount(0);
         await expect(page.locator('.toast').filter({ hasText: 'cannot decide' })).toHaveCount(0);
         const decideLink = p.locator('.prc-notice-action');
-        await expect(decideLink).toHaveText('Decide in the research ↗');
+        await expect(decideLink).toHaveText('Decide in the research, opens in the research');
         await expect(decideLink).toBeFocused();
         await decideLink.click();
         expect(await page.evaluate(() => (window.Strom.UI as unknown as { __links: string[] }).__links)).toEqual([
@@ -227,13 +227,13 @@ test.describe('the panel by the edit form\'s field', () => {
         await expect(panel(page).locator('.prc-panel-close')).toBeFocused();
     });
 
-    test('without the bridge\'s decision: the choices are links into the research (↗), taking a side', async ({ page }) => {
+    test('without the bridge\'s decision: the choices are links into the research, taking a side', async ({ page }) => {
         const { decide } = await setup(page, {}, undefined, { features: [] });
         await editJan(page);
         await tag(page).click();
         await expect(panel(page)).toHaveAttribute('data-state', 'link');
-        await expect(choice(page, 'research')).toHaveText('Take ↗');
-        await expect(choice(page, 'research')).toHaveAttribute('aria-label', "Take the research's value ↗");
+        await expect(choice(page, 'research')).toHaveText('Take');
+        await expect(choice(page, 'research')).toHaveAttribute('aria-label', "Take the research's value, opens in the research");
         await expect(panel(page).locator('.prc-link-note')).toHaveText('Opens the research; it only asks to confirm.');
         await choice(page, 'research').click();
         const opened = await page.evaluate(() => (window.Strom.UI as unknown as { __links: string[] }).__links);
@@ -290,7 +290,7 @@ test.describe('the panel on a phone: a bottom sheet', () => {
         await expect(tag(page)).toHaveCount(0);
     });
 
-    test('phone (360 px): not decidable from the app (422) — the sheet says so with "Decide in the research ↗" 44 px, the choices off', async ({ page }) => {
+    test('phone (360 px): not decidable from the app (422) — the sheet says so with "Decide in the research" 44 px, the choices off', async ({ page }) => {
         await page.setViewportSize({ width: 360, height: 740 });
         const { decide } = await setup(page);
         await editJan(page);
@@ -306,7 +306,7 @@ test.describe('the panel on a phone: a bottom sheet', () => {
         const [action, sheet] = await partBoxes(p, ['.prc-notice-action', ':scope']);
         expect(action.height).toBeGreaterThanOrEqual(44);
         expect(action.x + action.width).toBeLessThanOrEqual(sheet.x + sheet.width);
-        await expect(p.locator('.prc-notice-action')).toHaveText('Decide in the research ↗');
+        await expect(p.locator('.prc-notice-action')).toHaveText('Decide in the research, opens in the research');
         await expect(p.getByRole('button', { name: 'Try again' })).toHaveCount(0);
     });
 
@@ -410,7 +410,7 @@ test.describe('the Research menu, the ≠ and the dialog at the card', () => {
         expect(await c.evaluate(el => getComputedStyle(el).transitionDuration)).toBe('0s');
     });
 
-    test('a conflict of the sources: the menu keeps "Decide in the research ↗", no "Show"', async ({ page }) => {
+    test('a conflict of the sources: the menu keeps "Decide in the research", no "Show"', async ({ page }) => {
         const { bridge, treeId } = await setup(page, { sources: true });
         await writtenWithConflict(page, bridge, treeId, { sources: true });
         await openResearchMenu(page);

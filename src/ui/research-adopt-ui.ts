@@ -8,6 +8,7 @@
  * (Research menu, the person menu's "Research ›" …). Nothing changes in the app's data.
  */
 
+import { researchOpenLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
@@ -467,7 +468,7 @@ export const researchAdoptMethods = uiModule({
                 </div>
                 <div class="buttons">
                     ${hasPeople
-                        ? `${open ? `<button type="button" class="link-button" data-act="open">${esc(s.openResearch)}</button>` : ''}
+                        ? `${open ? `<button type="button" class="link-button" data-act="open">${researchOpenLabel(s.openResearch)}</button>` : ''}
                            <button type="button" class="primary" data-act="done" data-dismiss>${esc(s.done)}</button>`
                         : `<button type="button" class="secondary" data-act="gedcom">${esc(s.openGedcom)}</button>
                            <button type="button" class="primary" data-act="first" data-dismiss>${esc(s.addFirst)}</button>`}

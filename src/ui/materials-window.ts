@@ -17,6 +17,7 @@
  * See src/ui/module.ts for the composition pattern.
  */
 
+import { researchOpenLabel } from './research-open-mark.js';
 import type { UIClass } from './index.js';
 import { DataManager } from '../data.js';
 import { strings, getCurrentLanguage, joinAnd } from '../strings.js';
@@ -567,7 +568,7 @@ export const materialsWindowMethods = uiModule({
         if (!el || !ctx) return;
         const m = strings.materials;
         const rec = cachedMaterials(w.treeId);
-        const start = this.researchStartUrl() ? `<button type="button" class="link-button materials-start" data-mw="start">${esc(strings.sync.startResearch.replace(' ↗', ''))}</button>` : '';
+        const start = this.researchStartUrl() ? `<button type="button" class="link-button materials-start" data-mw="start">${researchOpenLabel(strings.sync.startResearch)}</button>` : '';
         let html = '';
         let state = 'live';
         if (rec && !ctx.caps.bridgeUp) {
@@ -600,7 +601,7 @@ export const materialsWindowMethods = uiModule({
             html = `${head}<div class="mw-skel-row">${square.repeat(5)}</div>${head}${head}`;
         } else if (!rec && !ctx.caps.bridgeUp) {
             kind = 'nocache';
-            const start = this.researchStartUrl() ? `<button type="button" class="primary btn-sm" data-mw="start">${esc(strings.sync.startResearch.replace(' ↗', ''))}</button>` : '';
+            const start = this.researchStartUrl() ? `<button type="button" class="primary btn-sm" data-mw="start">${researchOpenLabel(strings.sync.startResearch)}</button>` : '';
             html = `<p>${esc(m.loadWhenRunning)}</p>${start}`;
         } else if (rec && w.groups.length === 0) {
             kind = 'nomatch';
@@ -1182,7 +1183,7 @@ export const materialsWindowMethods = uiModule({
         pop.innerHTML = actions.map(a => {
             const divider = a.divider ? '<div class="materials-item-menu-divider" role="separator"></div>' : '';
             const off = a.writes && !ctx.caps.bridgeUp ? ` aria-disabled="true" title="${esc(m.actionsWhenRunning)}"` : '';
-            return `${divider}<button type="button" role="menuitem" class="materials-item-menu-row" data-action="${a.id}"${off}>${esc(a.label)}</button>`;
+            return `${divider}<button type="button" role="menuitem" class="materials-item-menu-row" data-action="${a.id}"${off}>${a.id === 'research' ? researchOpenLabel(a.label) : esc(a.label)}</button>`;
         }).join('');
         pop.querySelectorAll<HTMLButtonElement>('[data-action]').forEach(btn => btn.addEventListener('click', (e) => {
             e.stopPropagation();

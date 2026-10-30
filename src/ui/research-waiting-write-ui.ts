@@ -73,7 +73,7 @@ export const researchWaitingWriteMethods = uiModule({
         const seal = result.held ? this.researchSealAction(result.held)[0] : undefined;
         this.showToast(refusedText(result), seal ? 12000 : 6000, {
             kind: 'waiting-failed',
-            ...(seal ? { action: { label: seal.label, run: () => this.researchSyncAction(seal.action) } } : {}),
+            ...(seal ? { action: { label: seal.label, run: () => this.researchSyncAction(seal.action), research: true } } : {}),
         });
     },
 
@@ -412,7 +412,7 @@ export const researchWaitingWriteMethods = uiModule({
         this.showToast(text, 6000, { kind: 'waiting-failed' });
     },
 
-    /** A write button (no ↗: it stays here); one click only. */
+    /** A write button (no research mark: it stays here); one click only. */
     waitingWriteButton(label: string, action: string, run: () => void, cls = 'research-overview__waiting-action'): HTMLButtonElement {
         const btn = el('button', `live-waiting-answer ${cls} research-overview__waiting-write`, label);
         btn.type = 'button';

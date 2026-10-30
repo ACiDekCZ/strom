@@ -3,6 +3,7 @@
  * see src/ui/module.ts for the composition pattern.
  */
 
+import { setResearchOpenLabel } from './research-open-mark.js';
 import { DataManager, auditPersonName } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
@@ -224,13 +225,14 @@ export const dialogsMethods = uiModule({
     showChoice(
         message: string,
         title: string,
-        choices: { id: string; label: string; variant?: 'default' | 'danger' }[],
+        /** `research`: the choice opens the research (its mark at the end, §6). */
+        choices: { id: string; label: string; variant?: 'default' | 'danger'; research?: boolean }[],
         checkbox?: { label: string; checked: boolean; detail?: string },
         extra: {
             /** A destructive answer set apart below the buttons, with a quiet second line. */
             aside?: { id: string; label: string; sub?: string };
             /** A link under the message (it runs and closes the dialog as cancelled). */
-            link?: { label: string; run: () => void };
+            link?: { label: string; run: () => void; research?: boolean };
             /** The Cancel button's text. */
             cancelLabel?: string;
             /** Shown above the message, small (what the dialog is about). */
@@ -280,11 +282,12 @@ export const dialogsMethods = uiModule({
                 resolve(value);
             };
             if (extra.link && optionsEl) {
-                const { label, run } = extra.link;
+                const { label, run, research } = extra.link;
                 const link = document.createElement('button');
                 link.type = 'button';
                 link.className = 'link-button confirm-link';
-                link.textContent = label;
+                if (research) setResearchOpenLabel(link, label);
+                else link.textContent = label;
                 link.onclick = () => { settle(null); run(); };
                 optionsEl.appendChild(link);
             }
@@ -299,7 +302,8 @@ export const dialogsMethods = uiModule({
                 const primary = i === choices.length - 1;
                 btn.className = (primary ? 'primary' : 'secondary') + (choice.variant === 'danger' ? ' is-danger' : '');
                 btn.dataset.choice = choice.id;
-                btn.textContent = choice.label;
+                if (choice.research) setResearchOpenLabel(btn, choice.label);
+                else btn.textContent = choice.label;
                 btn.onclick = () => settle(choice.id);
                 buttonsEl.appendChild(btn);
             });

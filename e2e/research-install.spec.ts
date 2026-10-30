@@ -483,7 +483,7 @@ test.describe('installing the research from the app', () => {
         const file = `strom-prenos-${token.slice(0, 8)}.json`;
         expect(download.suggestedFilename()).toBe(file);
         // The download on its own (WebKit drops one the page leaves at once): the button says so, the link waits.
-        await expect(dialog(page).locator('[data-act="have"]')).toHaveText('✓ Tree downloaded · start the research ↗');
+        await expect(dialog(page).locator('[data-act="have"]')).toHaveText('✓ Tree downloaded · start the research, opens in the research');
         expect(await launched(page)).toEqual([]);
         await dialog(page).locator('[data-act="have"]').click();
         await expect.poll(() => launched(page)).toEqual([`strom-research://new?app=${token}&browser=safari&file=${file}`]);
@@ -930,7 +930,7 @@ test.describe('a research already on this computer: `strom app`, not a new resea
         await toInstallStep(page);
         const d = dialog(page);
         const row = d.locator('.install-have-row');
-        await expect(row).toHaveText(/Strom Research already on this computer:\s*New research from this tree ↗\s*Open a tree from its archive or research/);
+        await expect(row).toHaveText(/Strom Research already on this computer:\s*New research from this tree, opens in the research\s*Open a tree from its archive or research/);
         // The existing way from here: back returns to the Install step, nothing launched.
         await row.locator('[data-act="existing"]').click();
         await expect(d.locator('.install-existing-line')).toHaveText('strom app');

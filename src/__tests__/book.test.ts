@@ -230,12 +230,14 @@ describe('narratives in the book', () => {
         expect(html).not.toContain('návrh');
     });
 
-    it('a research draft carries "Approve in the research ↗" on screen only', () => {
+    it('a research draft carries "Approve in the research" with the research mark (no AI, the meaning on its title) on screen only', () => {
         const withLink = buildFamilyBook(tree, {
             lang: 'cs', privacyMode: 'full',
             approveStoryUrl: (person) => (person.id === 'h' ? 'strom-research://story?tree=x&person=P0001&do=final' : null),
         });
-        expect(withLink).toContain('<p class="book-story-approve"><a href="strom-research://story?tree=x&amp;person=P0001&amp;do=final">Schválit ve výzkumu ↗</a></p>');
+        expect(withLink).toContain('<p class="book-story-approve"><a href="strom-research://story?tree=x&amp;person=P0001&amp;do=final">Schválit ve výzkumu<span class="book-open-mark" title="Otevře se ve výzkumu (terminál Strom Research)"><svg class="research-open-svg" width="12"');
+        expect(withLink).not.toContain('Schválit ve výzkumu ↗');
+        expect(withLink).not.toContain('research-ai-badge');
         expect(withLink).toMatch(/@media print \{\s*\.book-story-approve \{ display: none; \}/);
         // Without the link (not a research tree): nothing.
         expect(html).not.toContain('<p class="book-story-approve">');

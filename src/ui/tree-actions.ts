@@ -11,6 +11,7 @@
  * that read it (overview, quality, history) and Unlock when it is locked.
  */
 
+import { researchOpenMark, researchOpenSrHtml } from './research-open-mark.js';
 import { TreeId, LAST_FOCUSED } from '../types.js';
 import { TreeManager } from '../tree-manager.js';
 import { AuditLogManager } from '../audit-log.js';
@@ -60,6 +61,8 @@ export interface TreeActionRow {
     value?: string;
     /** A quiet hint (tooltip). */
     hint?: string;
+    /** Opens the research: its mark at the row's end. */
+    research?: boolean;
     /** A secondary shortcut drawn muted (the overview's "Data quality" under "Tree overview"). */
     quiet?: boolean;
 }
@@ -231,7 +234,7 @@ export const treeActionsMethods = uiModule({
 
     /**
      * The Research group's one row for a tree (menu 1020 §3.1): its research's
-     * dialog when it has one, else the way in — "Start research ↗" where the
+     * dialog when it has one, else the way in — "Start research" (the research mark) where the
      * research runs on this computer, "Finish installing…" while an
      * installation waits, "Ancestor research" (what it is) otherwise.
      */
@@ -247,7 +250,7 @@ export const treeActionsMethods = uiModule({
                 ? [{ key: 'researchInfo', label: strings.research.menuItem, run: () => this.showResearchInfoDialog() }] : [];
         }
         if (this.researchAdoptAvailable(tree)) {
-            return [{ key: 'researchAdopt', label: strings.research.adoptTree, editOnly: true, run: () => this.treeActionStartResearch(id) }];
+            return [{ key: 'researchAdopt', label: strings.research.adoptTree, editOnly: true, research: true, run: () => this.treeActionStartResearch(id) }];
         }
         if (!isActive || !this.researchMenuItemVisible()) return [];
         if (this.researchInstallPending()) {
@@ -336,6 +339,10 @@ export const treeActionsMethods = uiModule({
             label.className = 'bottom-sheet-label';
             label.textContent = row.label;
             btn.appendChild(label);
+            if (row.research) {
+                label.insertAdjacentHTML('beforeend', researchOpenSrHtml());
+                btn.insertAdjacentHTML('beforeend', researchOpenMark({ size: 16, sr: false }));
+            }
             if (row.checked !== undefined) {
                 btn.setAttribute('role', 'menuitemcheckbox');
                 btn.setAttribute('aria-checked', String(row.checked));

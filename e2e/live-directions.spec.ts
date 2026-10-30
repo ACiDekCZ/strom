@@ -4,10 +4,10 @@ import { card, openPersonSubmenu } from './helpers.js';
 /**
  * Research directions in the Research overview: the Directions section after
  * Now (two or more only), order and the folded "Paused and ended", an empty
- * direction with End ↗, the ⋯ menu by state, one detail at a time
- * (generations for ancestors, Work on it ↗, Show in tree), an older research
+ * direction with End, the ⋯ menu by state, one detail at a time
+ * (generations for ancestors, Work on it, Show in tree), an older research
  * without the new fields, the direction named beside tasks and the queue
- * filter, Finish and stop ↗, the person menu naming an existing direction,
+ * filter, Finish and stop, the person menu naming an existing direction,
  * work outside the directions (its row, its person brought into the tree,
  * or only named when the tree in the app lacks them),
  * and the phone sheet. Invented data only.
@@ -236,7 +236,7 @@ test.describe('research directions', () => {
         await expect(outside.locator('.live-person-link')).toHaveCount(0);
     });
 
-    test('an empty direction: the sentence and End ↗ on its row', async ({ page }) => {
+    test('an empty direction: the sentence and End on its row', async ({ page }) => {
         await follow(page);
         await openOverview(page);
         const empty = row(page, 'G0003');
@@ -250,7 +250,7 @@ test.describe('research directions', () => {
         await openOverview(page);
         await row(page, 'G0002').locator('.research-direction__more').click();
         const menu = page.locator('#live-direction-menu');
-        await expect(menu.locator('.research-direction-menu__label')).toHaveText(['Pause ↗', 'End ↗']);
+        await expect(menu.locator('.research-direction-menu__label')).toHaveText(['Pause, opens in the research', 'End, opens in the research']);
         await expect(menu.locator('.research-direction-menu__hint').first()).toHaveText('Tasks leave the queue, nothing is deleted');
         await page.keyboard.press('Escape');
         await expect(menu).toHaveCount(0);
@@ -259,7 +259,7 @@ test.describe('research directions', () => {
         expect(await launched(page)).toEqual([`strom-research://direction?tree=${UUID}&id=G0002&do=pause`]);
     });
 
-    test('⋯ closed at once (Escape, a redraw) leaves the next menu working: Pause ↗ is not lost', async ({ page }) => {
+    test('⋯ closed at once (Escape, a redraw) leaves the next menu working: Pause is not lost', async ({ page }) => {
         await follow(page);
         await openOverview(page);
         const more = row(page, 'G0002').locator('.research-direction__more');
@@ -271,7 +271,7 @@ test.describe('research directions', () => {
         expect(await launched(page)).toEqual([`strom-research://direction?tree=${UUID}&id=G0002&do=pause`]);
     });
 
-    test('detail: one at a time; generations for ancestors; Work on it ↗; Show in tree', async ({ page }) => {
+    test('detail: one at a time; generations for ancestors; Work on it; Show in tree', async ({ page }) => {
         await follow(page);
         await openOverview(page);
         await row(page, 'G0001').locator('.research-direction__head').click();
@@ -310,7 +310,7 @@ test.describe('research directions', () => {
         await expect(ov(page).locator('.live-queue-row:not(.live-queue-row--more) .live-queue-text')).toHaveText(['Děti Josefa · Potomci: Josef']);
     });
 
-    test('Now: Finish and stop ↗ with the session', async ({ page }) => {
+    test('Now: Finish and stop with the session', async ({ page }) => {
         await follow(page);
         await openOverview(page);
         const finish = ov(page).locator('.research-overview__finish');
@@ -336,7 +336,7 @@ test.describe('research directions', () => {
         expect(await launched(page)).toEqual([`strom-research://direction?tree=${UUID}&id=G0004&do=resume`]);
     });
 
-    test('phone: no ⋯ and no ↗; a tap lights the direction up in the tree', async ({ page }) => {
+    test('phone: no ⋯ and no research links; a tap lights the direction up in the tree', async ({ page }) => {
         await follow(page, DIRECTIONS, { width: 360, height: 740 });
         await page.locator('#live-panel .live-panel-toggle').click();
         await expect(ov(page)).toBeVisible();

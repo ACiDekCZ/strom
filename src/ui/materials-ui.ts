@@ -15,6 +15,7 @@
  * See src/ui/module.ts for the composition pattern.
  */
 
+import { researchOpenLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
 import { Person, PersonId } from '../types.js';
@@ -450,7 +451,7 @@ export const materialsMethods = uiModule({
         lastBridgeKey = `${ctx.caps.list}|${ctx.caps.assign}|${ctx.caps.bridgeUp}`;
 
         // The state above the rows: no REFN, not running (with the time), nothing remembered.
-        const start = this.researchStartUrl() ? `<button type="button" class="link-button materials-start" data-act="start">${esc(strings.sync.startResearch.replace(' ↗', ''))}</button>` : '';
+        const start = this.researchStartUrl() ? `<button type="button" class="link-button materials-start" data-act="start">${researchOpenLabel(strings.sync.startResearch)}</button>` : '';
         let state = 'live';
         let note = '';
         if (!refn) {
@@ -643,7 +644,7 @@ export const materialsMethods = uiModule({
         const ctx = this.materialsContext();
         if (!file || !ctx) return;
         const m = strings.materials;
-        const startAction = this.researchStartUrl() ? { action: { label: strings.sync.startResearch.replace(' ↗', ''), run: () => this.researchSyncAction('startResearch') } } : {};
+        const startAction = this.researchStartUrl() ? { action: { label: strings.sync.startResearch, run: () => this.researchSyncAction('startResearch'), research: true } } : {};
         const mime = (file.mime ?? '').toLowerCase();
         if (!ctx.caps.bridgeUp || !ctx.base) {
             // Not running: a remembered preview of an image, else it opens once the research runs.
@@ -702,7 +703,7 @@ export const materialsMethods = uiModule({
             const divider = i > 0 && DIVIDER_BEFORE.includes(a.id) ? '<div class="materials-item-menu-divider" role="separator"></div>' : '';
             const off = a.disabled ? ` aria-disabled="true" title="${esc(strings.materials.actionsWhenRunning)}"` : '';
             const danger = a.id === 'deleteFromTree' ? ' is-danger' : '';
-            return `${divider}<button type="button" role="menuitem" class="materials-item-menu-row${danger}" data-action="${a.id}"${off}>${esc(ACTION_LABEL[a.id]())}</button>`;
+            return `${divider}<button type="button" role="menuitem" class="materials-item-menu-row${danger}" data-action="${a.id}"${off}>${a.id === 'openSystem' ? researchOpenLabel(ACTION_LABEL[a.id]()) : esc(ACTION_LABEL[a.id]())}</button>`;
         }).join('');
         document.body.appendChild(menu);
         menuAnchor = anchor;

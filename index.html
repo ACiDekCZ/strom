@@ -6378,7 +6378,9 @@
         @media (hover: hover) { .research-sheet-state .research-sync-btn:hover, .research-sheet-body .research-sync-btn:hover { background: var(--primary-dark); } }
         .bottom-sheet-menu .research-sheet-all { color: var(--primary); }
         .bottom-sheet-menu .bottom-sheet-item .research-ai-badge { margin-left: auto; }
-        .bottom-sheet-menu .bottom-sheet-item .research-ai-badge + .research-item-ext { margin-left: 8px; }
+        .bottom-sheet-menu .bottom-sheet-item .research-ai-badge + .research-open-mark { margin-left: 8px; }
+        .bottom-sheet-menu .bottom-sheet-item .research-open-mark { margin-left: auto; }
+        .bottom-sheet-menu .bottom-sheet-item .research-ai-badge + .research-open-mark { margin-left: 8px; }
         .sheet-page-research[hidden], .bottom-sheet-items[hidden], .bottom-sheet-menu-title[hidden] { display: none; }
         .research-sheet-body .research-menu-heading { padding: 0 8px 8px 4px; font-size: 15px; }
         .research-menu-back, .toolbar .research-menu-back {
@@ -6408,7 +6410,20 @@
             .export-reminder .export-reminder-link { display: inline-flex; align-items: center; min-height: 44px; }
         }
         .research-item-label { flex: 1; min-width: 0; }
-        .research-item-ext { flex: none; color: var(--text-faint); }
+        /* "Opens in the research" (§6): a terminal window at the end; the AI badge before it; ↗ only for the web. */
+        .research-open-mark { flex: none; display: inline-flex; color: var(--text-faint); }
+        .research-open-mark svg { display: block; }
+        button .research-open-mark, .btn .research-open-mark { color: inherit; opacity: .75; }
+        button.primary .research-open-mark, .btn.primary .research-open-mark { opacity: 1; }
+        a .research-open-mark, .link-button .research-open-mark { color: inherit; vertical-align: -1px; }
+        .research-open-nowrap { white-space: nowrap; }
+        .research-open-nowrap .research-ai-badge, .research-open-nowrap .research-open-mark { margin-left: 6px; }
+        .research-open-nowrap .research-ai-badge + .research-open-mark { margin-left: 6px; }
+        .research-open-nowrap .research-ai-badge { display: inline-block; vertical-align: 1px; }
+        .tree-switcher-action .research-open-mark { margin-left: 0; }
+        /* Hidden words of the mark: inline, without size (a positioned box would add a space to the button's name). */
+        .research-open-sr { font-size: 0; line-height: 0; }
+        .research-menu-foot-text .research-open-mark { display: inline-flex; vertical-align: -2px; margin-right: 4px; }
         .research-ai-badge {
             flex: none; font-size: 11px; font-weight: 600; line-height: 1.4;
             padding: 1px 6px; border-radius: 999px;
@@ -12935,7 +12950,7 @@
         }
         /* ===== "Read a document" (spec 013): menu item, dialog, drop zones, panel strip ===== */
         .research-item--two { align-items: flex-start; }
-        .research-item--two .research-ai-badge, .research-item--two .research-item-ext { margin-top: 1px; }
+        .research-item--two .research-ai-badge, .research-item--two .research-open-mark { margin-top: 1px; }
         .research-item--two .research-item-sub { white-space: normal; overflow-wrap: anywhere; }
         #research-item-read .research-ai-badge { flex-shrink: 0; }
         .tree-switcher-action.is-disabled { cursor: default; }
@@ -16605,6 +16620,7 @@
         .context-menu-item .menu-item-label, .bottom-sheet-item .menu-item-label { flex: 1; min-width: 0; }
         .menu-item-badge { margin-left: 12px; }
         .menu-item-ext { flex: none; margin-left: 8px; color: var(--text-faint); }
+        .context-menu .research-open-mark { margin-left: 8px; }
         .context-menu .menu-section-header { padding: 6px 16px 2px; }
 
         /* Person menu: the "Add" group as a grid of buttons (2 columns). */

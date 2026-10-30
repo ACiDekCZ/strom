@@ -109,8 +109,8 @@ test.describe('the Research menu', () => {
         const chat = page.locator('#research-item-chat');
         await expect(chat.locator('.research-ai-badge')).toHaveText('AI');
         await expect(chat).toHaveAttribute('aria-label', 'Continue with the agent, AI, opens in the research');
-        await expect(page.locator('#research-item-open .research-item-ext')).toHaveText('↗');
-        await expect(page.locator('#research-item-version .research-item-ext')).toHaveCount(0);
+        await expect(page.locator('#research-item-open .research-open-mark')).toHaveCount(1);
+        await expect(page.locator('#research-item-version .research-open-mark')).toHaveCount(0);
         await expect(page.locator('#research-menu-foot')).toHaveAttribute('title', /^Continues in the research on this computer/);
         await expect(page.locator('#research-item-open')).toHaveAttribute('aria-description', /^Continues in the research on this computer/);
 
@@ -179,7 +179,7 @@ test.describe('the Research menu', () => {
         await expect(panel.locator('.live-waiting')).toContainText('Confirm the father of Jan');
         await expect(panel.locator('.live-waiting-answer')).toHaveCount(0);
         await expect(panel).toContainText('The research is not running.');
-        await panel.getByRole('button', { name: 'Open research ↗' }).click();
+        await panel.getByRole('button', { name: 'Open research, opens in the research' }).click();
         expect(await launched(page)).toEqual([`strom-research://open?tree=${UUID}`]);
         await page.keyboard.press('Escape');
         await expect(panel).toHaveCount(0);
@@ -197,7 +197,7 @@ test.describe('the Research menu', () => {
     test('nothing announced, the research not known here: Start the research, Send changes, and the way to install it', async ({ page }) => {
         await setup(page, []);
         await openResearchMenu(page);
-        await expect(submenuItems(page)).toHaveText(['Start the research↗', 'Send changes', 'Connect phone…', 'Not installed? Install…']);
+        await expect(submenuItems(page)).toHaveText(['Start the research', 'Send changes', 'Connect phone…', 'Not installed? Install…']);
         await page.locator('#research-item-start').click();
         expect(await launched(page)).toEqual([`strom-research://open?tree=${UUID}`]);
         await openResearchMenu(page, { expandMore: true });
@@ -209,7 +209,7 @@ test.describe('the Research menu', () => {
         await setup(page, []);
         await page.evaluate(([uuid, base]) => localStorage.setItem(`strom-research-bridge:${uuid}`, JSON.stringify({ base })), [UUID, BRIDGE]);
         await openResearchMenu(page);
-        await expect(submenuItems(page)).toHaveText(['Start the research↗', 'Send changes', 'Connect phone…', 'What is Strom Research']);
+        await expect(submenuItems(page)).toHaveText(['Start the research', 'Send changes', 'Connect phone…', 'What is Strom Research']);
     });
 
     test('links switched off in Settings: neither start nor install is offered', async ({ page }) => {
@@ -257,7 +257,7 @@ test.describe('the Research menu', () => {
 });
 
 test.describe('live research: Awaiting action', () => {
-    test('above the changes, "Answer ↗" opens the task; the menu opens the panel at the section', async ({ page }) => {
+    test('above the changes, "Answer" opens the task; the menu opens the panel at the section', async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 900 });
         await seed(page, ALL);
         await page.route(`${BRIDGE}/**`, async (route) => {
@@ -355,7 +355,7 @@ test.describe('person menu: Research ›', () => {
         await expect(dialog.getByRole('radio', { name: 'Only this person' })).toBeChecked();
         await expect(dialog.locator('.research-review-living')).toHaveCount(0);
         await dialog.getByText('With family').click();
-        await dialog.getByRole('button', { name: 'Add in the research ↗' }).click();
+        await dialog.getByRole('button', { name: 'Add in the research, opens in the research' }).click();
         await expect(dialog).toHaveCount(0);
         await expect(page.locator('.toast')).toContainText('Opening the research…');
 
@@ -385,7 +385,7 @@ test.describe('person sources: Find a source in the research', () => {
         const jan = await idOf('P0012');
         await page.evaluate((id) => { window.Strom.UI.pushDialog('person-sources-modal'); window.Strom.UI.showPersonSourcesDialog(id); }, jan);
         const dialog = page.locator('#person-sources-modal');
-        const find = dialog.getByRole('button', { name: 'Find a source in the research ↗' });
+        const find = dialog.getByRole('button', { name: 'Find a source in the research, opens in the research' });
         await expect(find).toBeVisible();
         await find.click();
         await expect(dialog).toBeVisible();

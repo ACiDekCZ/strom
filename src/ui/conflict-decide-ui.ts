@@ -9,6 +9,7 @@
  * hypotheses: a conflict is amber and two sides, a hypothesis a ghost.
  */
 
+import { researchOpenLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { strings, getCurrentLanguage } from '../strings.js';
@@ -196,7 +197,7 @@ export const conflictDecideMethods = uiModule({
             notice = `
                 <div class="prc-notice prc-notice--${n.tone}" role="status">
                     <span class="prc-notice-text">${esc(text)}</span>${n.action ? `
-                    <button type="button" class="prc-notice-action" data-notice-action="${n.action}" data-focus="notice">${esc(label)}</button>` : ''}
+                    <button type="button" class="prc-notice-action" data-notice-action="${n.action}" data-focus="notice">${n.action === 'decide' ? researchOpenLabel(label) : esc(label)}</button>` : ''}
                 </div>`;
         }
 
@@ -227,7 +228,7 @@ export const conflictDecideMethods = uiModule({
                         ? `<span class="prc-spinner" aria-hidden="true"></span>${esc(k.busy)}`
                         : esc(which === 'user' ? k.keep : k.take)}</button>`;
                 } else if (view.choices === 'links') {
-                    choice = `<button type="button" class="prc-choice" data-conflict="${esc(id)}" data-do="decide" data-take="${which}" data-focus="choice-${which}"${off ? ' disabled' : ''}${view.notes ? ` aria-describedby="${noteId}"` : ''}>${esc(which === 'user' ? k.keepLink : k.takeLink)}</button>`;
+                    choice = `<button type="button" class="prc-choice" data-conflict="${esc(id)}" data-do="decide" data-take="${which}" data-focus="choice-${which}"${off ? ' disabled' : ''}${view.notes ? ` aria-describedby="${noteId}"` : ''}>${researchOpenLabel(which === 'user' ? k.keepLink : k.takeLink)}</button>`;
                 }
                 const note = view.notes && view.choices !== 'none'
                     ? `<p class="prc-note" id="${noteId}">${esc(which === 'user' ? k.keepNote : this.researchConflictTakeNote(c))}</p>` : '';
@@ -266,10 +267,9 @@ export const conflictDecideMethods = uiModule({
         const toAgent = view.agent;
         const links = view.researchLinks || toAgent ? `
             <div class="person-research-conflict-actions prc-links">${view.researchLinks ? `
-                <button type="button" class="link-button" data-conflict="${esc(id)}" data-do="decide" data-focus="link-decide">${esc(r.decide)}</button>` : ''}${toAgent ? `
+                <button type="button" class="link-button" data-conflict="${esc(id)}" data-do="decide" data-focus="link-decide">${researchOpenLabel(r.decide)}</button>` : ''}${toAgent ? `
                 <button type="button" class="link-button person-research-agent" data-conflict="${esc(id)}" data-do="agent" data-focus="link-agent"
-                    aria-label="${esc(`${r.leaveToAgent}, ${r.aiBadge}, ${r.opensInResearchSr}`)}">${esc(r.leaveToAgent)}
-                    <span class="research-ai-badge" title="${esc(r.aiCostHint)}" aria-hidden="true">${esc(r.aiBadge)}</span> ↗</button>` : ''}
+                    aria-label="${esc(`${r.leaveToAgent}, ${r.aiBadge}, ${r.opensInResearchSr}`)}">${researchOpenLabel(r.leaveToAgent, { ai: true, sr: false })}</button>` : ''}
             </div>` : '';
 
         return `

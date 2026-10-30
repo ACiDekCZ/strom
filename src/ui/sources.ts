@@ -10,6 +10,7 @@
  * See src/ui/module.ts for the composition pattern.
  */
 
+import { researchOpenLabel } from './research-open-mark.js';
 import { DataManager, CitedFact, personCitationField } from '../data.js';
 import { bookReference, entryDateLine } from '../source-page.js';
 import { TreeRenderer } from '../renderer.js';
@@ -399,7 +400,7 @@ export const sourcesMethods = uiModule({
             const alt = exc.caption || s.excerptAlt(src.title);
             const full = fullUrls[i]
                 ? `<button type="button" class="link-button viewer-full-quality" data-full-quality="${i}"
-                    title="${esc(strings.research.fullQualityTitle)}">${esc(strings.research.fullQuality)} ↗</button>` : '';
+                    title="${esc(strings.research.fullQualityTitle)}">${researchOpenLabel(strings.research.fullQuality)}</button>` : '';
             const loaded = fromResearch.has(exc.id);
             chunks.push(`
                 <figure class="viewer-excerpt${loaded ? ' is-from-research' : ''}">

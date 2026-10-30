@@ -16,6 +16,7 @@ import { formatFlexDate, yearOf } from './dates.js';
 import { sortCoupleEvents, sortLifeEvents } from './events.js';
 import { assignGenerations } from './generations.js';
 import { getStringsForLang } from './strings.js';
+import { researchOpenSvg } from './history-symbols.js';
 import { personInitials } from './initials.js';
 import { storyProseHtml, coupleStoryYears } from './story-text.js';
 import { storyCompareHtml, STORY_COMPARE_CSS } from './story-compare.js';
@@ -60,6 +61,8 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
     const lang = options.lang;
     const S = getStringsForLang(lang);
     const B: Book = S.book;
+    // The research's mark on what opens it (a saved file: inline, its meaning on the title; never AI here).
+    const openMark = `<span class="book-open-mark" title="${esc(S.research.opensInResearchTitle)}">${researchOpenSvg(12)}</span>`;
 
     // Privacy + media stripping happen BEFORE anything is rendered. As on the
     // person page, only the living lose their sources: a citation of someone
@@ -218,7 +221,7 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
         const urls = options.storyDraftUrls(owner);
         const close = `<button type="button" class="bc-btn" data-compare-close>${esc(S.buttons.close)}</button>`;
         const foot = urls.final && urls.keep
-            ? `${close}<span class="bc-gap"></span><a class="bc-btn" href="${esc(urls.keep)}" data-compare-do="keep">${esc(L.keepOld)}</a><a class="bc-btn bc-btn--primary" href="${esc(urls.final)}" data-compare-do="final">${esc(L.takeNew)}</a>`
+            ? `${close}<span class="bc-gap"></span><a class="bc-btn" href="${esc(urls.keep)}" data-compare-do="keep">${esc(L.keepOld)}${openMark}</a><a class="bc-btn bc-btn--primary" href="${esc(urls.final)}" data-compare-do="final">${esc(L.takeNew)}${openMark}</a>`
             : `<div class="bc-msg">${esc(L.decideOnDesktop)}</div>${close}`;
         const target = 'person' in owner ? `data-story-person="${esc(owner.person.id)}"` : `data-story-couple="${esc(owner.couple.id)}"`;
         compareDialogs.push(`<dialog class="book-compare" id="${id}" ${target} aria-labelledby="${id}-h">
@@ -243,7 +246,7 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
         // A draft of a research tree can be approved there — on screen only.
         const approve = story.status === 'draft' && person ? options.approveStoryUrl?.(person) : null;
         const approveHtml = approve
-            ? `<p class="book-story-approve"><a href="${esc(approve)}">${esc(S.research.approveStory)}</a></p>` : '';
+            ? `<p class="book-story-approve"><a href="${esc(approve)}">${esc(S.research.approveStory)}${openMark}</a></p>` : '';
         return `<div class="book-story book-story-${kind}${sub ? ' book-story-sub' : ''}">${nv}${head}${paragraphs}${approveHtml}</div>`;
     };
 
@@ -590,6 +593,7 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
     .bc-body .sc-bar { position: sticky; top: -16px; z-index: 1; margin: -16px -24px 20px; padding: 12px 24px; background: #fffdf8; }
     .bc-foot { display: flex; align-items: center; gap: 8px; padding: 14px 24px; background: #f6f2ea; border-top: 1px solid #ece5d6; }
     .bc-foot .bc-btn { padding: 9px 16px; border-color: #ddd4c2; font-size: 14px; }
+    .book-open-mark { display: inline-flex; vertical-align: -2px; margin-left: 6px; opacity: .8; }
     .bc-btn--primary { background: #3f6b4f; border-color: #3f6b4f !important; color: #fff; font-weight: 600; }
     .bc-gap { flex: 1; }
     .bc-msg { flex: 1; display: flex; flex-direction: column; gap: 2px; font-size: 13px; line-height: 1.45; color: #5c5546; }

@@ -95,7 +95,7 @@ test.describe('sending by itself', () => {
         await expect(dot(page)).toBeHidden();
         await page.clock.fastForward(QUIET + 1000);
         await expect(pill(page)).toHaveClass(/is-warn/);
-        await expect(pill(page)).toContainText('Start ↗');
+        await expect(pill(page)).toContainText('Start, opens in the research');
         await expect(dot(page)).toBeVisible();
         expect(bridge.posts).toHaveLength(0);
         expect(await links(page)).toEqual([]);
@@ -1400,7 +1400,7 @@ test.describe('the research as an archive', () => {
         // "Archive" opens the state block's second line (the menu has no heading of its own), once (D17).
         await expect(block(page).locator('.research-sync-sub #research-menu-archive')).toHaveText('Strom archive');
         await expect(sub.locator('.research-sync-tag')).toHaveCount(1);
-        // The footer says what ↗ means in an archive.
+        // The footer says what the research mark means in an archive.
         await expect(sub.locator('#research-menu-foot')).toHaveAttribute('title', 'Continues in the Strom archive on this computer; actions are confirmed there.');
         await page.evaluate(() => window.Strom.UI.closeActionsMenu());
         const actions = await page.evaluate(() => {
@@ -1617,14 +1617,14 @@ test.describe('the research as an archive', () => {
         await poll(page);
         const where = page.locator('#research-tree-settings-modal #research-mode-where');
         await page.evaluate(() => window.Strom.UI.researchActionTreeSettings());
-        await expect(where).toHaveText('The research is switched to a Strom archive in the research: Settings → “Research, or only a Strom archive”. Open the research ↗');
+        await expect(where).toHaveText('The research is switched to a Strom archive in the research: Settings → “Research, or only a Strom archive”. Open the research, opens in the research');
         await where.locator('#research-mode-where-open').click();
         await expect(page.locator('#research-tree-settings-modal')).toHaveCount(0);
         expect(await links(page)).toEqual([`strom-research://open?tree=${UUID}`]);
         bridge.accepts = ARCHIVE;
         await poll(page);
         await page.evaluate(() => window.Strom.UI.researchActionTreeSettings());
-        await expect(where).toHaveText('The Strom archive is switched to research in the research, with the first item of its menu: “Switch research on”. Open the research ↗');
+        await expect(where).toHaveText('The Strom archive is switched to research in the research, with the first item of its menu: “Switch research on”. Open the research, opens in the research');
         await where.locator('#research-mode-where-open').click();
         expect(await links(page)).toEqual([`strom-research://open?tree=${UUID}`, `strom-research://open?tree=${UUID}`]);
     });
@@ -1714,7 +1714,7 @@ test.describe('the research as an archive', () => {
         const panel = page.locator('#research-changes-panel');
         await expect(panel).toContainText('1 conflict');
         await expect(panel).not.toContainText(/doesn't create conflicts/);
-        await expect(panel.locator('[data-act="decide"]')).toHaveText('Decide in the research ↗');
+        await expect(panel.locator('[data-act="decide"]')).toHaveText('Decide in the research, opens in the research');
     });
 });
 
@@ -1755,7 +1755,7 @@ test.describe('a research waiting for its agent (agentHere: false)', () => {
         await expect(sub.locator('#research-menu-archive')).toHaveCount(1);
         await expect(block(page)).not.toHaveAttribute('data-state', 'switched');
         await expect(sub.locator('#research-menu-foot')).toHaveAttribute('title', 'Continues in the research on this computer. The research waits for an AI agent: the first item of its menu installs one.');
-        await expect(sub.locator('#research-menu-foot .research-menu-foot-text')).toHaveText('↗ continues in the research');
+        await expect(sub.locator('#research-menu-foot .research-menu-foot-text')).toHaveText('continues in the research');
         await expect(sub).not.toContainText(/Claude Code|USD|\$/);
         await expect(dot(page)).toBeHidden();
         await page.evaluate(() => window.Strom.UI.closeActionsMenu());
@@ -1778,7 +1778,7 @@ test.describe('a research waiting for its agent (agentHere: false)', () => {
         await expect(dialog.locator('input[name="research-transcripts"]')).toHaveCount(0);
         await expect(dialog.locator('#research-older-sources')).toHaveCount(0);
         await expect(dialog).not.toContainText('My source transcriptions');
-        await expect(dialog.locator('#research-mode-where')).toHaveText('The research waits for an AI agent. At the top of its menu: “Install or choose the AI agent”, or “Keep it only as a Strom archive”. Open the research ↗');
+        await expect(dialog.locator('#research-mode-where')).toHaveText('The research waits for an AI agent. At the top of its menu: “Install or choose the AI agent”, or “Keep it only as a Strom archive”. Open the research, opens in the research');
         await dialog.locator('#research-mode-where-open').click();
         expect(await links(page)).toEqual([`strom-research://open?tree=${UUID}`]);
 

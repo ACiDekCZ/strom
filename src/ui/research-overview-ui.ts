@@ -13,6 +13,7 @@
  * missing. Bridge text is set as text, never HTML. Only while following.
  */
 
+import { researchOpenSrText, setResearchOpenLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
 import { ZoomPan } from '../zoom.js';
@@ -372,11 +373,11 @@ export const researchOverviewMethods = uiModule({
             const url = this.activeResearchLink('sessions');
             let sub: HTMLElement;
             if (url) {
-                sub = el('button', 'link-button research-overview__cell-sub', L.sessions(s.spend.sessions));
+                sub = setResearchOpenLabel(el('button', 'link-button research-overview__cell-sub'), L.sessions(s.spend.sessions));
                 (sub as HTMLButtonElement).type = 'button';
                 sub.onclick = () => this.launchResearchLink(url);
             } else {
-                sub = el('div', 'research-overview__cell-sub', L.sessions(s.spend.sessions).replace(' ↗', ''));
+                sub = el('div', 'research-overview__cell-sub', L.sessions(s.spend.sessions));
             }
             cell(L.thisMonth, amount, sub);
             // Of it the scan readers (a bridge that counts them, when they cost anything).
@@ -524,7 +525,7 @@ export const researchOverviewMethods = uiModule({
 
     /**
      * A whole group's actions beside its heading, outside the fold button
-     * (seen folded too; a click never folds): "Chat ↗" on the place (the task
+     * (seen folded too; a click never folds): "Chat (research)" on the place (the task
      * link of its first item offering a chat; the research's chat takes up
      * the rest of the group) — not on a phone, it opens the research on the
      * computer; through the bridge, where it takes them (a phone too):
@@ -538,10 +539,10 @@ export const researchOverviewMethods = uiModule({
         const task = mode === 'sheet' ? null : waitingGroupChatTask(g.items);
         const url = task ? this.activeResearchLink('task', { task, taskDo: 'chat' }) : null;
         if (url) {
-            const btn = el('button', 'live-waiting-answer research-overview__waiting-groupchat', L.waitingActions.chat);
+            const btn = setResearchOpenLabel(el('button', 'live-waiting-answer research-overview__waiting-groupchat'), L.waitingActions.chat, { ai: true, sr: false });
             btn.type = 'button';
             btn.dataset.task = task!;
-            btn.setAttribute('aria-label', `${L.waitingActions.chat} · ${name}`);
+            btn.setAttribute('aria-label', `${L.waitingActions.chat} · ${name}${researchOpenSrText(true)}`);
             btn.onclick = () => this.launchResearchLink(url);
             box.appendChild(btn);
         }
@@ -629,7 +630,7 @@ export const researchOverviewMethods = uiModule({
         const L = strings.live;
         const detail = el('div', 'research-overview__waiting-detail');
         if (w.kind === 'story') {
-            // A story's new version: the comparison opens here (no ↗).
+            // A story's new version: the comparison opens here (no (research)).
             const text = el('div', 'research-overview__waiting-text');
             const compare = this.appendStoryWaiting(text, w, (id) => this.overviewShowPerson(id, mode));
             const actions = el('div', 'research-overview__waiting-actions');
@@ -664,7 +665,7 @@ export const researchOverviewMethods = uiModule({
         detail.appendChild(meta);
 
         const actions = el('div', 'research-overview__waiting-actions');
-        // The research runs on the computer: a phone gets no ↗ into it, only the bridge's writes.
+        // The research runs on the computer: a phone gets no (research) into it, only the bridge's writes.
         const hint = this.appendWaitingActions(actions, w, s, mode);
         if (w.url) {
             const web = el('a', 'live-waiting-answer research-overview__waiting-web', L.waitingOpenWeb);
@@ -683,8 +684,8 @@ export const researchOverviewMethods = uiModule({
      * The item's actions: "Sent", "Back to To do" and "Add a file" through
      * the bridge where it takes them (waiting.sent, accepts.media.task; a
      * phone too), the other task link's actions it offers (`actions`; only
-     * on a computer whose research takes task links), else "Answer ↗" as
-     * before. True when "Answer ↗" saves the answer with the task (the hint
+     * on a computer whose research takes task links), else "Answer (research)" as
+     * before. True when "Answer (research)" saves the answer with the task (the hint
      * goes under it).
      */
     appendWaitingActions(host: HTMLElement, w: LiveWaiting, s: LiveSession, mode: Mode): boolean {
@@ -713,7 +714,7 @@ export const researchOverviewMethods = uiModule({
                 if (!links) continue;
                 const url = this.activeResearchLink('task', { task, taskDo: waitingActionDo(action) });
                 if (!url) continue;
-                const btn = el('button', 'live-waiting-answer research-overview__waiting-action', L.waitingActions[action]);
+                const btn = setResearchOpenLabel(el('button', 'live-waiting-answer research-overview__waiting-action'), L.waitingActions[action], { ai: action === 'chat' });
                 btn.type = 'button';
                 btn.dataset.action = action;
                 if (action === 'chat' && waitingChatLeads(w)) btn.classList.add('is-primary');
@@ -727,7 +728,7 @@ export const researchOverviewMethods = uiModule({
             appendUnsent();
         }
         if (mode === 'sheet' || !this.canAnswerResearchWaiting(w)) return false;
-        const btn = el('button', 'live-waiting-answer research-overview__waiting-action', strings.research.answer);
+        const btn = setResearchOpenLabel(el('button', 'live-waiting-answer research-overview__waiting-action'), strings.research.answer);
         btn.type = 'button';
         btn.dataset.action = 'answer';
         btn.onclick = () => this.answerResearchTask(w);
@@ -779,10 +780,10 @@ export const researchOverviewMethods = uiModule({
                 show.onclick = () => this.overviewShowPerson(person.id, mode);
                 li.appendChild(show);
             }
-            // Finish and stop ↗: the agent writes up what it found and closes the session.
+            // Finish and stop (in the research): the agent writes up what it found and closes the session.
             const finish = mode !== 'sheet' && w.session && !w.paused ? this.activeResearchLink('finish', { session: w.session }) : null;
             if (finish) {
-                const btn = el('button', 'link-button research-overview__finish', `${L.finishSession} ↗`);
+                const btn = setResearchOpenLabel(el('button', 'link-button research-overview__finish'), L.finishSession);
                 btn.type = 'button';
                 btn.title = L.finishHint;
                 btn.onclick = () => this.launchResearchLink(finish);
@@ -795,7 +796,7 @@ export const researchOverviewMethods = uiModule({
     /**
      * A line in Now: glyph, "name — task", "agent · person · since · how
      * long", Show in tree (the line's people lit up; work outside the
-     * directions: its person), Finish and stop ↗ per session.
+     * directions: its person), Finish and stop (research) per session.
      */
     overviewNowLine(g: WorkingLine, selected: boolean, mode: Mode): HTMLElement {
         const L = strings.live;
@@ -841,7 +842,7 @@ export const researchOverviewMethods = uiModule({
         for (const w of g.workers) {
             const finish = mode !== 'sheet' && w.session && !w.paused ? this.activeResearchLink('finish', { session: w.session }) : null;
             if (!finish) continue;
-            const btn = el('button', 'link-button research-overview__finish', `${L.finishSession} ↗`);
+            const btn = setResearchOpenLabel(el('button', 'link-button research-overview__finish'), L.finishSession);
             btn.type = 'button';
             btn.title = L.finishHint;
             btn.onclick = () => this.launchResearchLink(finish);
@@ -966,12 +967,12 @@ export const researchOverviewMethods = uiModule({
         this.appendOverviewOlder(host, older, mode);
     },
 
-    /** Changes left out of the preview: the research has them (↗ on a computer). */
+    /** Changes left out of the preview: the research has them (on a computer). */
     appendOverviewOlder(host: HTMLElement, older: number, mode: Mode): void {
         if (older <= 0) return;
         const open = mode === 'sheet' ? null : this.activeResearchLink('open');
         if (open) {
-            const btn = el('button', 'link-button research-overview__older', `${strings.live.olderInResearch} ↗`);
+            const btn = setResearchOpenLabel(el('button', 'link-button research-overview__older'), strings.live.olderInResearch);
             btn.type = 'button';
             btn.onclick = () => this.launchResearchLink(open);
             host.appendChild(btn);
@@ -1018,7 +1019,7 @@ export const researchOverviewMethods = uiModule({
         host.appendChild(list);
     },
 
-    /** Foot: where evidence is missing (the tree overview's Data quality), Open the research ↗. */
+    /** Foot: where evidence is missing (the tree overview's Data quality), Open the research (research). */
     appendOverviewFoot(root: HTMLElement, s: LiveSession, mode: Mode): void {
         const L = strings.live;
         const foot = el('div', 'research-overview__foot');
@@ -1032,10 +1033,10 @@ export const researchOverviewMethods = uiModule({
             };
             foot.appendChild(link);
         }
-        // The research runs on the computer: a phone gets no ↗ into it.
+        // The research runs on the computer: a phone gets no (research) into it.
         const open = mode === 'sheet' ? null : this.activeResearchLink('open');
         if (open) {
-            const btn = el('button', 'link-button research-overview__open', `${strings.research.openResearch} ↗`);
+            const btn = setResearchOpenLabel(el('button', 'link-button research-overview__open'), strings.research.openResearch);
             btn.type = 'button';
             btn.onclick = () => this.launchResearchLink(open);
             foot.appendChild(btn);

@@ -2,11 +2,12 @@
  * "What the research knows" about one person: the sources that disagree, the
  * hypotheses the research works with and what it already searched. Written by
  * Strom Research into its GEDCOM (Person.research), read-only here — deciding
- * a conflict or handing it to the agent continues in the research (↗).
+ * a conflict or handing it to the agent continues in the research (its mark).
  * Readable everywhere (phone, locked, read-only); the links only on a
  * computer whose research announced them.
  */
 
+import { researchOpenLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings } from '../strings.js';
@@ -202,10 +203,9 @@ export const personResearchMethods = uiModule({
                     <p class="person-research-sources-only">${esc(strings.conflict.sourcesOnly)}</p>
                     ${canDecide && id ? `
                     <div class="person-research-conflict-actions">
-                        <button type="button" class="link-button" data-conflict="${esc(id)}" data-do="decide">${esc(r.decide)}</button>${toAgent ? `
+                        <button type="button" class="link-button" data-conflict="${esc(id)}" data-do="decide">${researchOpenLabel(r.decide)}</button>${toAgent ? `
                         <button type="button" class="link-button person-research-agent" data-conflict="${esc(id)}" data-do="agent"
-                            aria-label="${esc(`${r.leaveToAgent}, ${r.aiBadge}, ${r.opensInResearchSr}`)}">${esc(r.leaveToAgent)}
-                            <span class="research-ai-badge" title="${esc(r.aiCostHint)}" aria-hidden="true">${esc(r.aiBadge)}</span> ↗</button>` : ''}
+                            aria-label="${esc(`${r.leaveToAgent}, ${r.aiBadge}, ${r.opensInResearchSr}`)}">${researchOpenLabel(r.leaveToAgent, { ai: true, sr: false })}</button>` : ''}
                     </div>` : ''}
                 </div>`;
         }).join('');

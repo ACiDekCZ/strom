@@ -178,7 +178,7 @@ test.describe('Materials viewer', () => {
         await tile(page, 'Sken TIFF').click();
         await expect(card(page)).toBeVisible();
         await expect(card(page).locator('.mv-card-text')).toHaveText('This app cannot show TIF. A program on the computer opens it.');
-        await card(page).getByRole('button', { name: 'Open in system ↗' }).click();
+        await card(page).getByRole('button', { name: 'Open in system, opens in the research' }).click();
         expect((await links(page)).some(l => l.includes(`sha=${materialSha('I0002')}`))).toBe(true);
         // No preview asked of the research for a TIFF (it answers 415).
         expect(material.thumbAsks.filter(a => a.startsWith(materialSha('I0002')))).toEqual([]);

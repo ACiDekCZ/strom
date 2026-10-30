@@ -7,6 +7,7 @@
  * visible) the bridge is asked every 2 s; nothing is asked once it is closed.
  */
 
+import { researchOpenLabel } from './research-open-mark.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { parseLiveBridge, withAppVersion } from '../research-link.js';
 import { storedResearchBridge } from '../research-device.js';
@@ -253,7 +254,7 @@ export const phoneMethods = uiModule({
         this.refreshResearchMenu();
     },
 
-    /** "Start the research ↗" (as the state block's): the dialog waits for it to answer. */
+    /** "Start the research (research)" (as the state block's): the dialog waits for it to answer. */
     phoneStartResearch(): void {
         const d = ph;
         if (!d || d.research !== 'down') return;
@@ -440,7 +441,7 @@ export const phoneMethods = uiModule({
             </div>`;
     },
 
-    /** The research not running: the phone connects through it, "Start the research ↗"; or a version without the phone. */
+    /** The research not running: the phone connects through it, "Start the research (research)"; or a version without the phone. */
     phoneResearchDownHtml(): string {
         const p = strings.phone;
         const d = ph!;
@@ -456,7 +457,7 @@ export const phoneMethods = uiModule({
                 <div class="buttons phone-footer"><span class="phone-foot-note"></span>${close}</div>`;
         }
         const start = this.researchStartUrl()
-            ? `<button type="button" class="primary" data-act="start">${esc(strings.sync.startResearch)}</button>` : '';
+            ? `<button type="button" class="primary" data-act="start">${researchOpenLabel(strings.sync.startResearch)}</button>` : '';
         return `
                 <div class="modal-content phone-content" data-view="down">
                     <div class="phone-body"><div class="phone-state">

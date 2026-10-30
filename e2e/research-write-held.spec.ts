@@ -54,7 +54,7 @@ test.describe('a send the research holds back', () => {
             await expect(dialog(page)).toContainText(KEPT);
             await expect(dialog(page)).not.toContainText("didn't accept");
             await expect(dialog(page).getByRole('button', { name: 'Try again' })).toHaveCount(0);
-            const take = dialog(page).getByRole('button', { name: 'Take over on this computer ↗' });
+            const take = dialog(page).getByRole('button', { name: 'Take over on this computer, opens in the research' });
             if (r.code === 'seal.foreign') {
                 await take.click();
                 expect(await links(page)).toContain(sealUrl);
@@ -69,7 +69,7 @@ test.describe('a send the research holds back', () => {
             await expect(block(page)).toHaveAttribute('data-state', 'writeHeld');
             await expect(block(page)).toContainText(r.title);
             await expect(block(page)).toContainText(r.error);
-            await expect(block(page).getByRole('menuitem', { name: 'Take over on this computer ↗' })).toHaveCount(r.code === 'seal.foreign' ? 1 : 0);
+            await expect(block(page).getByRole('menuitem', { name: 'Take over on this computer, opens in the research' })).toHaveCount(r.code === 'seal.foreign' ? 1 : 0);
             await page.evaluate(() => window.Strom.UI.closeActionsMenu());
             await editJan(page, 'Brno');
             await poll(page);
@@ -92,7 +92,7 @@ test.describe('a send the research holds back', () => {
             await expect(dialog(page)).toContainText("The research didn't accept the changes");
             await expect(dialog(page)).not.toContainText(r.error);
             await expect(dialog(page)).not.toContainText(r.title);
-            await expect(dialog(page).getByRole('button', { name: 'Take over on this computer ↗' })).toHaveCount(0);
+            await expect(dialog(page).getByRole('button', { name: 'Take over on this computer, opens in the research' })).toHaveCount(0);
             await dialog(page).getByRole('button', { name: 'Close' }).click();
             await openResearchMenu(page);
             await expect(block(page)).not.toHaveAttribute('data-state', 'writeHeld');
@@ -109,7 +109,7 @@ test.describe('a send the research holds back', () => {
         await expect(toast).toContainText(KEPT);
         await expect(page.locator('.toast')).not.toContainText('Automatic sending stopped');
         await expect(pill(page)).toContainText('Sealed on another computer');
-        await toast.getByRole('button', { name: 'Take over on this computer ↗' }).click();
+        await toast.getByRole('button', { name: 'Take over on this computer, opens in the research' }).click();
         expect(await links(page)).toContain(sealUrl);
         await editJan(page, 'Brno');
         await page.clock.fastForward(QUIET * 3);
@@ -136,7 +136,7 @@ test.describe('a send the research holds back', () => {
         await openResearchMenu(page);
         await expect(block(page)).toHaveAttribute('data-state', 'unsent');
         await expect(block(page)).not.toContainText('Sealed on another computer');
-        await expect(block(page).getByRole('menuitem', { name: 'Take over on this computer ↗' })).toHaveCount(0);
+        await expect(block(page).getByRole('menuitem', { name: 'Take over on this computer, opens in the research' })).toHaveCount(0);
         await page.evaluate(() => window.Strom.UI.closeActionsMenu());
         await poll(page);
         expect(bridge.posts).toHaveLength(1);
@@ -240,7 +240,7 @@ test.describe('said ahead by /status', () => {
         await expect(block(page)).toHaveAttribute('data-state', 'writeHeld');
         await expect(block(page)).toContainText('This tree was sealed on another computer: nothing can be written to it here until it is taken over on this computer.');
         await expect(block(page)).toContainText('Changes made here wait unsent until then; nothing is lost.');
-        await block(page).getByRole('menuitem', { name: 'Take over on this computer ↗' }).click();
+        await block(page).getByRole('menuitem', { name: 'Take over on this computer, opens in the research' }).click();
         expect(await links(page)).toContain(sealUrl);
         // Taken over there: the next answer says so, the edits go by themselves.
         bridge.statusExtra = { seal: 'here' };
@@ -258,7 +258,7 @@ test.describe('said ahead by /status', () => {
         await expect(block(page)).toHaveAttribute('data-state', 'writeHeld');
         await expect(block(page)).toContainText('Files not downloaded yet');
         await expect(block(page)).toContainText('3 files of the tree are not downloaded from the cloud folder yet: nothing is written until then.');
-        await expect(block(page).getByRole('menuitem', { name: 'Take over on this computer ↗' })).toHaveCount(0);
+        await expect(block(page).getByRole('menuitem', { name: 'Take over on this computer, opens in the research' })).toHaveCount(0);
         await expect(block(page).getByRole('menuitem', { name: 'Send changes' })).toHaveCount(0);
         expect(bridge.posts).toHaveLength(0);
         // Downloaded: the changes are offered again.

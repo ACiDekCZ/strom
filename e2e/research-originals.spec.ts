@@ -225,7 +225,7 @@ test.describe('originals go to the research', () => {
         expect(att.dataUrl).toMatch(/^data:image\/png;base64,/);
         expect(att.dataUrl.length).toBeLessThan(400);
         // In the research now: opened there (a TIFF is not shown in the app).
-        await expect(row.locator('.media-full-quality')).toHaveText(/↗/);
+        await expect(row.locator('.media-full-quality .research-open-mark')).toHaveCount(1);
     });
 
     test('a TIFF for a research that does not take originals: refused as before, no attachment', async ({ page }) => {

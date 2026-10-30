@@ -147,7 +147,7 @@ test.describe('the bridge of Strom Research 1.11.0', () => {
         await expect(line.locator('.research-sync-status')).toHaveAttribute('title', 'The research has an older version (1.11.0). Update it to send changes by itself and take originals.');
         await expect(line).toHaveClass(/research-sync-block--warn/);
         await expect(line.locator('.research-sync-dot.is-error')).toHaveCount(0);
-        // The first level (design 2g has Waiting · Open · Other actions): Send ↗ and the agent stay, both work
+        // The first level (design 2g has Waiting · Open · Other actions): Send and the agent stay, both work
         // with this version (the send goes through the research's link; the agent opens in it).
         await expect(page.locator('#research-menu > .research-menu-group > .tree-switcher-action .research-item-label'))
             .toHaveText(['Continue with the agent', 'Follow live', 'Open research', 'Send changes', 'Other actions']);

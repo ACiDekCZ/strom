@@ -14,6 +14,7 @@
  * interrupted send is simply repeated later.
  */
 
+import { researchOpenLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { SettingsManager } from '../settings.js';
@@ -580,7 +581,7 @@ export const originalsMethods = uiModule({
                 </ul>
                 <div class="media-queue-foot">
                     <button type="button" class="link-button media-queue-discard-all">${esc(q.discardAll)}</button>
-                    ${link ? `<button type="button" class="secondary btn-sm media-queue-send" data-up="${up ? '1' : ''}">${esc(up ? strings.sync.sendNow : strings.sync.startResearch)}</button>` : ''}
+                    ${link ? `<button type="button" class="secondary btn-sm media-queue-send" data-up="${up ? '1' : ''}">${up ? esc(strings.sync.sendNow) : researchOpenLabel(strings.sync.startResearch)}</button>` : ''}
                 </div>
             </div>`;
         row.open = wasOpen;
@@ -845,7 +846,7 @@ export const originalsMethods = uiModule({
         const seal = this.researchSealAction(held)[0];
         this.showToast(text.toast, Infinity, {
             closable: true,
-            ...(seal ? { action: { label: seal.label, run: () => this.researchSyncAction(seal.action) } } : {}),
+            ...(seal ? { action: { label: seal.label, run: () => this.researchSyncAction(seal.action), research: true } } : {}),
         });
     },
 

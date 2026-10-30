@@ -245,7 +245,7 @@ export const materialActionsMethods = uiModule({
         const seal = err.held ? this.researchSealAction(err.held)[0] : undefined;
         const action = act === 'reload' ? { label: m.reload, run: () => void this.reloadMaterialList() }
             : act === 'retry' ? { label: m.retry, run: retry }
-            : seal ? { label: seal.label, run: () => this.researchSyncAction(seal.action) } : undefined;
+            : seal ? { label: seal.label, run: () => this.researchSyncAction(seal.action), research: true } : undefined;
         this.showToast(materialErrorText(err, mc.agent), TOAST_MS, { closable: true, kind: 'materials', ...(action ? { action } : {}) });
     },
 

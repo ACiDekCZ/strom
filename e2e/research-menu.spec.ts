@@ -74,12 +74,12 @@ test.describe('the Research button and menu', () => {
         // What continues in the research says so to a screen reader too.
         await expect(page.locator('#research-item-open')).toHaveAttribute('aria-description', FOOT_SENTENCE);
         await expect(page.locator('#research-item-waiting')).not.toHaveAttribute('aria-description', /./);
-        // The footer: "trial" and what ↗ means (the whole sentence on hover); not an item itself.
+        // The footer: "trial" and what the research mark means (the whole sentence on hover); not an item itself.
         const foot = page.locator('#research-menu-foot');
         await expect(foot).toHaveAttribute('role', 'none');
         await expect(foot).toHaveAttribute('title', FOOT_SENTENCE);
         await expect(foot.locator('.research-trial-tag')).toHaveText('trial');
-        await expect(foot.locator('.research-menu-foot-text')).toHaveText('↗ continues in the research');
+        await expect(foot.locator('.research-menu-foot-text')).toHaveText('continues in the research');
         // "Other actions" by mouse: opens in place, the menu stays open; again: folds.
         await more.click();
         await expect(menu(page)).toBeVisible();
@@ -90,7 +90,7 @@ test.describe('the Research button and menu', () => {
         // Its items stand indented under the row.
         const [rowBox, itemBox] = await Promise.all([more.locator('.research-item-label').boundingBox(), page.locator('#research-item-tree-settings .research-item-label').boundingBox()]);
         expect(itemBox!.x - rowBox!.x).toBeGreaterThanOrEqual(12);
-        // "Settings in the research ↗" is in the Research for this tree dialog, not a row.
+        // "Settings in the research" is in the Research for this tree dialog, not a row.
         await expect(page.locator('#research-item-setup')).toHaveCount(0);
         await more.click();
         await expect(page.locator('#research-menu-more')).toBeHidden();
@@ -111,7 +111,7 @@ test.describe('the Research button and menu', () => {
         await expect(page.locator('#research-menu-more')).toBeHidden();
     });
 
-    test('nothing in the menu continues in the research: the footer has "trial" only, no "↗ continues…" (D8)', async ({ page }) => {
+    test('nothing in the menu continues in the research: the footer has "trial" only, no "continues…" (D8)', async ({ page }) => {
         await researchTree(page);
         const foot = await page.evaluate(() => {
             const host = document.createElement('div');
@@ -126,10 +126,10 @@ test.describe('the Research button and menu', () => {
             return { without: read(false), with: read(true) };
         });
         expect(foot.without).toEqual({ tag: 'trial', text: null, title: null });
-        expect(foot.with).toEqual({ tag: 'trial', text: '↗ continues in the research', title: 'Sentence.' });
+        expect(foot.with).toEqual({ tag: 'trial', text: 'continues in the research', title: 'Sentence.' });
     });
 
-    test('"Research for this tree…" holds "Settings in the research ↗" (no menu row for it)', async ({ page }) => {
+    test('"Research for this tree…" holds "Settings in the research" (no menu row for it)', async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 900 });
         await researchTree(page);
         await openResearchMenu(page, { expandMore: true });

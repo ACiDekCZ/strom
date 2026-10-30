@@ -6,6 +6,7 @@
  * See src/ui/module.ts for the composition pattern.
  */
 
+import { researchOpenLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { Attachment, PersonId } from '../types.js';
@@ -356,7 +357,7 @@ export const attachmentsMethods = uiModule({
                 if (!mode) return { line: line('<span class="media-dot" aria-hidden="true"></span>', m.inResearch, 'is-in'), link: '' };
                 const label = mode === 'app' ? strings.research.fullQuality : strings.research.fullQualityExternal;
                 const title = mode === 'app' ? strings.research.fullQualityAppTitle : strings.research.fullQualityTitle;
-                return { line: '', link: `<button type="button" class="link-button media-full-quality" ${dataAttr} title="${esc(title)}">${esc(label)}</button>` };
+                return { line: '', link: `<button type="button" class="link-button media-full-quality" ${dataAttr} title="${esc(title)}">${mode === 'app' ? esc(label) : researchOpenLabel(label)}</button>` };
             }
         }
     },
@@ -429,7 +430,7 @@ export const attachmentsMethods = uiModule({
         const canStart = this.researchLinkAvailable('open') || this.researchLinkAvailable('live');
         this.showToast(strings.media.originalOnlyNeedsResearch(letters), 10000, {
             closable: true,
-            ...(canStart ? { action: { label: strings.sync.pillStart, run: () => this.researchSyncAction('startResearch') } } : {}),
+            ...(canStart ? { action: { label: strings.sync.pillStart, run: () => this.researchSyncAction('startResearch'), research: true } } : {}),
         });
         return true;
     },

@@ -12,6 +12,7 @@
  * only while the card stays open.
  */
 
+import { researchOpenLabel } from './research-open-mark.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { SettingsManager } from '../settings.js';
 import { lifelineChips, setLifelineChip } from '../lifeline-view.js';
@@ -57,7 +58,7 @@ let rowItems: LifelineHistoryItem[] = [];
 let rowHidden: HiddenHistoryItem[] = [];
 
 /** §5: what the card said after "Find the history of …", by region (kept across cards: it is the research's answer). */
-const findNotes = new Map<string, { text: string; link?: { label: string; run: () => void } }>();
+const findNotes = new Map<string, { text: string; link?: { label: string; run: () => void; research?: boolean } }>();
 /** §5: regions whose "first" is on its way (the link inactive; `slow`: after 300 ms it says "…"). */
 const findBusy = new Map<string, { slow: boolean }>();
 /** §5: regions done meanwhile (409 history.done): no offer until the copy says otherwise. */
@@ -315,7 +316,7 @@ export const historyCardMethods = uiModule({
             case 'waiting': tail += stateRow(h.statusWaiting(st.why)); break;
             case 'noSearch':
                 tail += stateRow(h.stateNoSearch, st.link
-                    ? ` <button type="button" class="link pm-lifeline-henable" data-hfocus="enable">${esc(h.enableSearch)}</button>` : '');
+                    ? ` <button type="button" class="link pm-lifeline-henable" data-hfocus="enable">${researchOpenLabel(h.enableSearch, { size: 12 })}</button>` : '');
                 break;
             case 'searching': tail += find || stateRow(h.stateSearching); break;
             case 'none': tail += stateRow(h.stateNone); break;
@@ -366,7 +367,7 @@ export const historyCardMethods = uiModule({
         const note = findNotes.get(top.id);
         if (note) {
             return stateRow(note.text, note.link
-                ? ` <button type="button" class="link pm-lifeline-hfind-note" data-hfocus="findNote:${esc(top.id)}" data-find-note="${esc(top.id)}">${esc(note.link.label)}</button>` : '');
+                ? ` <button type="button" class="link pm-lifeline-hfind-note" data-hfocus="findNote:${esc(top.id)}" data-find-note="${esc(top.id)}">${note.link.research ? researchOpenLabel(note.link.label, { size: 12 }) : esc(note.link.label)}</button>` : '');
         }
         if (top.first) return stateRow(h.firstDone(name(top.id), this.historyCardPace()));
         const busy = findBusy.get(top.id);
@@ -399,7 +400,7 @@ export const historyCardMethods = uiModule({
             + '<span class="pm-lifeline-hmark" aria-hidden="true"></span><span class="pm-lifeline-year"></span>'
             + '<span class="pm-lifeline-glyph" aria-hidden="true"></span>'
             + `<span class="pm-lifeline-desc"><span class="pm-lifeline-hfind-text">${esc(phone ? h.stripShort : h.stripNoSearch)}</span>`
-            + ` <button type="button" class="link pm-lifeline-henable pm-lifeline-hstrip-on" data-hfocus="stripOn">${esc(phone ? h.stripShortLink : h.enableSearch)}</button></span>`
+            + ` <button type="button" class="link pm-lifeline-henable pm-lifeline-hstrip-on" data-hfocus="stripOn">${researchOpenLabel(phone ? h.stripShortLink : h.enableSearch, { size: 12 })}</button></span>`
             + `<button type="button" class="pm-lifeline-hstrip-close" data-hfocus="stripClose" aria-label="${esc(h.stripClose)}" title="${esc(h.stripClose)}">`
             + '<span aria-hidden="true">×</span></button></div>';
     },

@@ -44,7 +44,7 @@ test.describe('a decision is no change of the tree', () => {
 test.describe('an archive: the choices, no agent', () => {
     test.use({ locale: 'en-US', viewport: { width: 1280, height: 900 } });
 
-    test('through the bridge: the card has its choices and "Decide in the research ↗", never "Leave it to the agent"', async ({ page }) => {
+    test('through the bridge: the card has its choices and "Decide in the research", never "Leave it to the agent"', async ({ page }) => {
         const { decide } = await setupConflict(page, { opened: { archive: true }, accepts: ARCHIVE_ACCEPTS });
         expect(await page.evaluate(() => window.Strom.UI.activeResearchArchive())).toBe(true);
         await openKnows(page);
@@ -65,13 +65,13 @@ test.describe('an archive: the choices, no agent', () => {
         await openKnows(page);
         const c = cardOf(page);
         await expect(c).toHaveAttribute('data-state', 'link');
-        await expect(side(page, 'user').locator('.prc-choice')).toHaveText('Keep the value from the app ↗');
+        await expect(side(page, 'user').locator('.prc-choice')).toHaveText('Keep the value from the app, opens in the research');
         await expect(c.locator('[data-do="agent"], .research-ai-badge')).toHaveCount(0);
         await page.locator('#person-research-close').click();
         await openEdit(page);
         await tag(page).click();
         await expect(panel(page)).toHaveAttribute('data-state', 'link');
-        await expect(choice(page, 'research')).toHaveText('Take ↗');
+        await expect(choice(page, 'research')).toHaveText('Take');
         await expect(panel(page).locator('.research-ai-badge, [data-do="agent"]')).toHaveCount(0);
     });
 
@@ -88,7 +88,7 @@ test.describe('an archive: the choices, no agent', () => {
 test.describe('the phone\'s sheet in every mode', () => {
     test.use({ locale: 'en-US' });
 
-    test('by a link (360 px, no conflict.decide): Keep ↗ and Take ↗ 44 px across the width, the note under them; a choice opens the research taking its side', async ({ page }) => {
+    test('by a link (360 px, no conflict.decide): Keep and Take 44 px across the width, the note under them; a choice opens the research taking its side', async ({ page }) => {
         await page.setViewportSize({ width: 360, height: 740 });
         const { decide } = await setupConflict(page, { features: [] });
         await openEdit(page);
@@ -96,9 +96,9 @@ test.describe('the phone\'s sheet in every mode', () => {
         const p = panel(page);
         await expect(p).toHaveClass(/prc-panel--sheet/);
         await expect(p).toHaveAttribute('data-state', 'link');
-        await expect(choice(page, 'user')).toHaveText('Keep ↗');
-        await expect(choice(page, 'user')).toHaveAttribute('aria-label', 'Keep the value from the app ↗');
-        await expect(choice(page, 'research')).toHaveText('Take ↗');
+        await expect(choice(page, 'user')).toHaveText('Keep');
+        await expect(choice(page, 'user')).toHaveAttribute('aria-label', 'Keep the value from the app, opens in the research');
+        await expect(choice(page, 'research')).toHaveText('Take');
         await expect(p.locator('.prc-link-note')).toHaveText('Opens the research; it only asks to confirm.');
         await expect(choice(page, 'user')).toBeFocused();
         const [row, keep, take, note] = await partBoxes(p, ['.prc-panel-row[data-side="user"]', '.prc-panel-row[data-side="user"] .prc-panel-choice',

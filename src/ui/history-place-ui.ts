@@ -9,6 +9,7 @@
  * says `history.place.direct` takes it over the bridge (200: first in line).
  */
 
+import { researchOpenLabel } from './research-open-mark.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { manageCan, manageSwitchOn } from '../history-manage.js';
 import { historyPlaceOfferable, historyWaiting, pickHistoryText } from '../history.js';
@@ -31,7 +32,7 @@ interface PlaceFindState {
     link: string;
     busy: boolean;
     /** A refusal's sentence, with its link. */
-    note: { text: string; link?: { label: string; run: () => void } } | null;
+    note: { text: string; link?: { label: string; run: () => void; research?: boolean } } | null;
     /** Focus goes back here on close. */
     opener: HTMLElement | null;
 }
@@ -105,7 +106,7 @@ export const historyPlaceMethods = uiModule({
         const terminal = !st.direct || !!st.link;
         const note = st.note
             ? `<p class="hpf-note" role="status">${esc(st.note.text)}`
-                + (st.note.link ? ` <button type="button" class="link hpf-note-link" data-hpf="noteLink">${esc(st.note.link.label)}</button>` : '')
+                + (st.note.link ? ` <button type="button" class="link hpf-note-link" data-hpf="noteLink">${st.note.link.research ? researchOpenLabel(st.note.link.label, { size: 12 }) : esc(st.note.link.label)}</button>` : '')
                 + '</p>'
             : '';
         modal.innerHTML = '<div class="modal-header hpf-header">'
@@ -120,7 +121,8 @@ export const historyPlaceMethods = uiModule({
             + '<div class="buttons hpf-foot">'
             + `<button type="button" class="secondary" data-hpf="cancel">${esc(strings.buttons.cancel)}</button>`
             + `<button type="button" class="primary" data-hpf="go"${st.busy ? ' disabled aria-busy="true"' : ''}>`
-            + `${esc(terminal ? h.placeGoTerminal : h.placeGo)}</button>`
+            // The terminal: the research opens and its agent searches (AI); the direct form writes from here.
+            + `${terminal ? researchOpenLabel(h.placeGoTerminal, { ai: true }) : esc(h.placeGo)}</button>`
             + '</div>';
     },
 

@@ -20,6 +20,7 @@
  * keeps every old path unchanged.
  */
 
+import { researchOpenLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
@@ -76,6 +77,14 @@ const NO_IDS = 'no-ids';
 
 /** A button of the research state block: the action researchSyncAction runs, its label, a link look. */
 export interface ResearchSyncBlockAction { action: string; label: string; asLink?: boolean }
+
+/** The state block's actions that open the research (they carry its mark). */
+export const RESEARCH_OPENING_SYNC_ACTIONS: readonly string[] = ['sealTakeOver', 'startResearch', 'startAndSend', 'openResearch', 'decideInResearch'];
+
+/** A state block action's label as HTML: the research's mark at one that opens it. */
+export function syncActionLabelHtml(action: string, label: string): string {
+    return RESEARCH_OPENING_SYNC_ACTIONS.includes(action) ? researchOpenLabel(label) : esc(label);
+}
 /** The research state block's content (the menu draws it in full, the More sheet as one line). */
 export interface ResearchSyncBlock {
     kind: string;
@@ -1905,7 +1914,7 @@ export const researchSyncMethods = uiModule({
         } else if (!opts.auto) {
             const open = this.researchLinkAvailable('open') ? researchSchemeUrl('open', { tree: link.id }, announcedResearchScheme()) : null;
             this.showToast(s.sentToast(reply.changes), 6000, open
-                ? { action: { label: s.openResearch, run: () => this.launchResearchLink(open) } } : {});
+                ? { action: { label: s.openResearch, run: () => this.launchResearchLink(open), research: true } } : {});
         }
         // Written, but some changes it could not write and skipped (1.12): said in this app's words
         // (the research's `why` is its own text — shown once it sends a code to say it here).
@@ -2074,7 +2083,7 @@ export const researchSyncMethods = uiModule({
         const seal = this.researchSealAction(held)[0];
         this.showToast(text.toast, Infinity, {
             closable: true,
-            ...(seal ? { action: { label: seal.label, run: () => this.researchSyncAction(seal.action) } } : {}),
+            ...(seal ? { action: { label: seal.label, run: () => this.researchSyncAction(seal.action), research: true } } : {}),
         });
     },
 
@@ -2082,7 +2091,7 @@ export const researchSyncMethods = uiModule({
     async showResearchWriteHeld(held: ResearchWriteHeld): Promise<void> {
         const text = this.researchWriteHeldText(held, false);
         const seal = this.researchSealAction(held)[0];
-        const pick = await this.showChoice(text.sub, text.title, seal ? [{ id: 'seal', label: seal.label }] : [], undefined,
+        const pick = await this.showChoice(text.sub, text.title, seal ? [{ id: 'seal', label: seal.label, research: true }] : [], undefined,
             { cancelLabel: strings.buttons.close });
         if (pick === 'seal' && seal) this.researchSyncAction(seal.action);
     },
@@ -2370,7 +2379,7 @@ export const researchSyncMethods = uiModule({
         return persons.filter(id => this.personOpenConflicts(id).length > 0);
     },
 
-    /** "Decide in the research ↗": the one open conflict of the one person, when the research announced the link. */
+    /** "Decide in the research (research)": the one open conflict of the one person, when the research announced the link. */
     researchDecideUrl(treeId: TreeId): string | null {
         if (!this.researchLinkAvailable('conflict')) return null;
         // The one conflict the write's reply named (it may not be in this tree yet).
@@ -2392,7 +2401,7 @@ export const researchSyncMethods = uiModule({
     researchShowConflictTarget(treeId: TreeId): { personId: PersonId; conflictId: string; lead: string } | null {
         const named = researchAutoState(treeId).lastWritten?.conflictIds ?? [];
         if (named.length > 1) return null;
-        // Named by the write: wherever it is shown here; unnamed: one person with one open conflict (as "Decide in the research ↗").
+        // Named by the write: wherever it is shown here; unnamed: one person with one open conflict (as "Decide in the research (research)").
         const persons = named.length === 1 ? Object.keys(DataManager.getData().persons) as PersonId[] : this.researchWrittenConflictPersons(treeId);
         if (named.length === 0 && persons.length !== 1) return null;
         const found = new Map<string, { personId: PersonId; conflict: ResearchConflict }>();
@@ -2765,7 +2774,7 @@ export const researchSyncMethods = uiModule({
     /**
      * The state block as the research menu draws it ('' when there is none): a dot, the title in bold
      * (`tag` beside it: the archive), a short second line (the sentence it leaves out as the tooltip),
-     * and at most one button on the right — the first action, labelled short ("Send…", "Start ↗"). The
+     * and at most one button on the right — the first action, labelled short ("Send…", "Start (research)"). The
      * others stay as quiet links under the text, except "What will be sent": the preview Send opens,
      * or a row of "Other actions" (researchBlockChangesElsewhere). A group named by its title; only
      * the text is a live region, the buttons are items of the menu (the first described by the text).
@@ -2790,9 +2799,9 @@ export const researchSyncMethods = uiModule({
             // The short label is spoken whole ("Send changes"): it starts the same, so voice control finds it.
             const named = label !== a.label && !busy ? ` aria-label="${esc(a.label)}"` : '';
             return a.asLink
-                ? `<button type="button" class="research-sync-link${cls}" role="menuitem" data-action="${a.action}"${describe} onclick="${call('researchSyncAction', `'${a.action}'`)}">${esc(label)}</button>`
+                ? `<button type="button" class="research-sync-link${cls}" role="menuitem" data-action="${a.action}"${describe} onclick="${call('researchSyncAction', `'${a.action}'`)}">${syncActionLabelHtml(a.action, label)}</button>`
                 : `<button type="button" class="primary btn-sm research-sync-btn${cls}" role="menuitem" data-action="${a.action}"${named}${describe}${busy ? ' disabled aria-busy="true"' : ''}`
-                    + ` onclick="${call('researchSyncAction', `'${a.action}'`)}">${busy ? `<span class="research-sync-spinner" aria-hidden="true"></span>${esc(s.sending)}` : esc(label)}</button>`;
+                    + ` onclick="${call('researchSyncAction', `'${a.action}'`)}">${busy ? `<span class="research-sync-spinner" aria-hidden="true"></span>${esc(s.sending)}` : syncActionLabelHtml(a.action, label)}</button>`;
         };
         const note = b.note ? ` title="${esc(b.note)}" aria-description="${esc(b.note)}"` : '';
         return `<div class="research-sync-block research-sync-block--${b.tone}" id="research-sync-block" data-state="${b.kind}" role="group" aria-label="${esc(b.title)}">`
@@ -3164,7 +3173,7 @@ export const researchSyncMethods = uiModule({
             // round: the pill named by the state, its text hidden, had the button in its middle).
             set('is-warn', `<span class="research-sync-pill-mark" title="${esc(tip)}" aria-hidden="true">!</span>`
                 + `<span class="research-sync-pill-label" title="${esc(tip)}">${esc(w.text)}</span>`
-                + `<button type="button" class="research-sync-pill-send" data-action="${w.action}" onclick="event.stopPropagation(); ${call('researchSyncAction', `'${w.action}'`)}">${esc(w.button)}</button>`);
+                + `<button type="button" class="research-sync-pill-send" data-action="${w.action}" onclick="event.stopPropagation(); ${call('researchSyncAction', `'${w.action}'`)}">${syncActionLabelHtml(w.action, w.button)}</button>`);
             pill.onclick = (e) => {
                 if (!(e.target as Element | null)?.closest('button')) this.openResearchSyncMenu();
             };
@@ -3180,7 +3189,7 @@ export const researchSyncMethods = uiModule({
             set('is-warn is-media', '<span class="research-sync-pill-mark" aria-hidden="true">!</span>'
                 + `<span class="research-sync-pill-label" onclick="${call('showOriginalsQueue')}">${esc(strings.mediaQueue.pill)}</span>`
                 + `<button type="button" class="research-sync-pill-send" data-action="${action}" onclick="event.stopPropagation(); ${call('researchSyncAction', `'${action}'`)}">`
-                + `${esc(canStart ? s.pillStart : strings.mediaQueue.show)}</button>`, strings.mediaQueue.pill);
+                + `${canStart ? syncActionLabelHtml(action, s.pillStart) : esc(strings.mediaQueue.show)}</button>`, strings.mediaQueue.pill);
             pill.setAttribute('aria-live', 'polite');
             return;
         }

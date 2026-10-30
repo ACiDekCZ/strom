@@ -18,6 +18,7 @@
  * restoreHistoryItem(), toggleLifelineHistory(), historyEnableSearch().
  */
 
+import { researchOpenLabel } from './research-open-mark.js';
 import { strings, getCurrentLanguage, type Language } from '../strings.js';
 import { SettingsManager } from '../settings.js';
 import { lifelineChips, setLifelineChip } from '../lifeline-view.js';
@@ -680,8 +681,9 @@ export const historyMethods = uiModule({
             row.innerHTML = '';
         } else {
             const h = strings.history;
+            // Switching the search on or off in the research's terminal carries its mark; "off" here goes through the bridge.
             const button = (action: HistorySettingsAction | 'errLink', label: string): string =>
-                ` <button type="button" class="link" data-history-action="${action}" onclick="window.Strom.UI.historySettingsAction('${action}')">${esc(label)}</button>`;
+                ` <button type="button" class="link" data-history-action="${action}" onclick="window.Strom.UI.historySettingsAction('${action}')">${action === 'off' ? esc(label) : researchOpenLabel(label, { size: 12 })}</button>`;
             let html = esc(said.text);
             if (said.action === 'linkOn') html += `${button('linkOn', h.enableSearch)} ${esc(h.enableSearchAlso)}`;
             else if (said.action) html += button(said.action, h.disableSearch);
@@ -760,16 +762,16 @@ export const historyMethods = uiModule({
      * history): the sentence and the link switching the search on. With
      * `experiments.split` it names the switch that is off (`which`) and its link.
      */
-    historyOffNote(r: { link?: string }, which: 'regions' | 'places'): { text: string; link?: { label: string; run: () => void } } {
+    historyOffNote(r: { link?: string }, which: 'regions' | 'places'): { text: string; link?: { label: string; run: () => void; research?: boolean } } {
         const h = strings.history;
         const ctx = this.historyManageContext();
         const can = !!r.link || !!ctx?.canLinkOn;
         const split = !!ctx?.split;
         const run = () => (r.link ? this.launchResearchLink(r.link, 'terminal') : this.historyLaunchExperiment('on', split ? which : 'history'));
-        if (!split) return { text: h.manageOff, ...(can ? { link: { label: h.enableSearch, run } } : {}) };
+        if (!split) return { text: h.manageOff, ...(can ? { link: { label: h.enableSearch, run, research: true } } : {}) };
         return {
             text: h.switchOffNote(which === 'regions' ? h.switchRegions : h.switchPlaces),
-            ...(can ? { link: { label: h.switchOnLink, run } } : {}),
+            ...(can ? { link: { label: h.switchOnLink, run, research: true } } : {}),
         };
     },
 
@@ -831,7 +833,7 @@ export const historyMethods = uiModule({
             if (which === 'history') offError = { researchId: rid, text, ...(r.link ? { link: r.link } : {}) };
             else {
                 const link = r.link;
-                this.showToast(text, 6000, link ? { action: { label: h.switchOff, run: () => this.launchResearchLink(link, 'terminal') } } : {});
+                this.showToast(text, 6000, link ? { action: { label: h.switchOff, run: () => this.launchResearchLink(link, 'terminal'), research: true } } : {});
             }
         }
         this.renderHistorySettingsIfOpen();

@@ -10,6 +10,7 @@
  * readings (`read.recent`) and the number of readers chosen (`read.readers`).
  */
 
+import { researchOpenLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { strings, getCurrentLanguage } from '../strings.js';
@@ -365,7 +366,7 @@ export const readDocumentMethods = uiModule({
     /**
      * The research menu's item, or null (not offered). Running: its state and a
      * dot; done and not opened: "Document read"; not ready: inactive with the
-     * reason and a separate "Open research ↗".
+     * reason and a separate "Open research" (its mark).
      */
     readMenuEntry(): { label: string; sub: string; ai: boolean; disabled: boolean; dot: boolean; link?: { label: string; method: string } } | null {
         const accepts = this.readDocumentAccepts();
@@ -1648,8 +1649,9 @@ export const readDocumentMethods = uiModule({
         const s = st!;
         const t = strings.read;
         const kind = s.error?.kind ?? 'failed';
+        // Opening or updating the research carries its mark.
         const btn = (act: string, label: string, primary = false): string =>
-            `<button type="button" class="${primary ? 'primary' : 'secondary'}" data-act="${act}">${esc(label)}</button>`;
+            `<button type="button" class="${primary ? 'primary' : 'secondary'}" data-act="${act}">${act === 'open-research' || act === 'update-research' || act === 'seal' ? researchOpenLabel(label) : esc(label)}</button>`;
         const close = btn('close', t.close, kind === 'limit' || kind === 'cancelled');
         // A reading started in the research is not read again from here.
         const own = this.readLiveOf(s.readId)?.from !== 'research';

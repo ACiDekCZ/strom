@@ -295,8 +295,8 @@ test.describe('a reader and the keyboard', () => {
             - button "Oddací matrika Čáslav"
             - button "Take the research's value"
             - paragraph: The value here changes to the research's. A backup is saved first.
-            - button "Decide in the research ↗"
-            - button "Leave it to the agent, AI, opens in the research": Leave it to the agent ↗
+            - button "Decide in the research, opens in the research"
+            - button "Leave it to the agent, AI, opens in the research": Leave it to the agent
         `);
         await expect(side(page, 'user').locator('.prc-choice')).toHaveAccessibleDescription("The research writes the value from the app; the record's value stays in its history with the reason.");
         await expect(side(page, 'research').locator('.prc-choice')).toHaveAccessibleDescription("The value here changes to the research's. A backup is saved first.");

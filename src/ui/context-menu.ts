@@ -5,6 +5,7 @@
  * Split from the original UIClass; see src/ui/module.ts for the pattern.
  */
 
+import { researchOpenMark } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
 import { strings } from '../strings.js';
@@ -41,7 +42,7 @@ export interface PersonMenuAction {
     header?: string;
     /** "ai": the AI label (the action starts a paid agent). */
     badge?: 'ai';
-    /** Continues outside the app (↗). */
+    /** Opens the research (its mark, §6: after the AI label). */
     external?: boolean;
     /** A small warm label at the end ("1 conflict"). */
     tag?: string;
@@ -101,7 +102,7 @@ function group(items: PersonMenuAction[]): PersonMenuAction[] {
     return items.map((a, i) => (i === 0 ? { ...a, divider: true } : a));
 }
 
-/** Label (+ the quiet right-aligned meta, AI label, ↗) of a person menu item, escaped. */
+/** Label (+ the quiet right-aligned meta, AI label, the research's mark) of a person menu item, escaped. */
 export function menuItemBody(a: PersonMenuAction): string {
     const e = (t: string): string => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     const tail = (a.meta ? `<span class="menu-item-meta" aria-hidden="true">${e(a.meta)}</span>` : '')
@@ -110,7 +111,7 @@ export function menuItemBody(a: PersonMenuAction): string {
             ? `<span class="research-ai-badge menu-item-badge" title="${e(strings.research.aiCostHint)}" aria-hidden="true">${e(strings.research.aiBadge)}</span>`
             : '')
         + (a.state ? `<span class="menu-item-state">${e(a.state)}</span>` : '')
-        + (a.external ? '<span class="menu-item-ext" aria-hidden="true">↗</span>' : '')
+        + (a.external ? researchOpenMark({ sr: false }) : '')
         + (a.submenu ? '<span class="menu-item-chev" aria-hidden="true">›</span>' : '');
     const label = a.note ? `${e(a.label)}<span class="menu-item-note">${e(a.note)}</span>` : e(a.label);
     // The kind column (§2): an empty span, its mark drawn by the style (index.html .menu-item-kind)

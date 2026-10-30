@@ -5,6 +5,7 @@
  * different markup). Desktop (> 1024px, fine pointer) keeps the floating menu. See src/ui/module.ts for the composition pattern.
  */
 
+import { researchOpenMark, setResearchOpenLabel } from './research-open-mark.js';
 import { iconSvg } from '../icons.js';
 import { PersonId } from '../types.js';
 import { uiModule } from './module.js';
@@ -37,7 +38,7 @@ interface MenuRow {
     warnBadge?: boolean;
     /** Starts an AI agent: the AI label. */
     ai?: boolean;
-    /** Continues in the research: ↗. */
+    /** Continues in the research: its mark. */
     ext?: boolean;
     /** A quiet line with a link under the row (the "Export all" reminder under Export…). */
     after?: { id: string; text: string; link: string; run: () => void };
@@ -521,13 +522,7 @@ export const bottomSheetMethods = uiModule({
                 ai.textContent = strings.research.aiBadge;
                 btn.appendChild(ai);
             }
-            if (row.ext) {
-                const ext = document.createElement('span');
-                ext.className = 'research-item-ext';
-                ext.setAttribute('aria-hidden', 'true');
-                ext.textContent = '↗';
-                btn.appendChild(ext);
-            }
+            if (row.ext) btn.insertAdjacentHTML('beforeend', researchOpenMark({ size: 16, sr: false }));
             if (row.kbd) {
                 const kbd = document.createElement('kbd');
                 kbd.className = 'menu-kbd';
@@ -727,7 +722,8 @@ export const bottomSheetMethods = uiModule({
                 act.className = st.action.asLink ? 'research-sync-link' : 'primary btn-sm research-sync-btn';
                 act.setAttribute('role', 'menuitem');
                 act.setAttribute('aria-describedby', 'research-sheet-state-text');
-                act.textContent = st.action.label;
+                if (st.action.research) setResearchOpenLabel(act, st.action.label, { size: 16 });
+                else act.textContent = st.action.label;
                 act.addEventListener('click', () => {
                     this.hideBottomSheet();
                     st.action.run();

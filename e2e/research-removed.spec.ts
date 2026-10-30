@@ -119,7 +119,7 @@ test.describe('whether a person comes back or goes (PERSON)', () => {
         await expect(d).toContainText('Removed from the tree in another window, edited here meanwhile. Return to the tree?');
         await expect(d).toContainText('From the app: edited in the app since');
         await expect(d).toContainText('In the research: removed by an earlier send (I0042)');
-        await expect(d.locator('[data-choice]')).toHaveText(['Return to the tree ↗', 'Keep removed ↗']);
+        await expect(d.locator('[data-choice]')).toHaveText(['Return to the tree, opens in the research', 'Keep removed, opens in the research']);
         await d.locator('[data-choice="user"]').click();
         expect(await links(page)).toEqual([conflictLink('X0008', 'user')]);
         // Never also told as a conflict among the others (nor its fact conflict).
@@ -195,7 +195,7 @@ test.describe('whether a person comes back or goes (PERSON)', () => {
         await expect(d.locator('#confirm-title')).toHaveText('Edited elsewhere');
         await expect(d).toContainText('Jan Fíšek');
         await expect(d).toContainText('Removed from the tree here, edited elsewhere meanwhile. Remove from the tree?');
-        await expect(d.locator('[data-choice]')).toHaveText(['Remove from the tree ↗', 'Keep in the tree ↗']);
+        await expect(d.locator('[data-choice]')).toHaveText(['Remove from the tree, opens in the research', 'Keep in the tree, opens in the research']);
         await d.locator('[data-choice="research"]').click();
         await openResearchMenu(page);
         await block(page).getByRole('menuitem', { name: 'Decide' }).click();

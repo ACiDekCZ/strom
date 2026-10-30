@@ -5,6 +5,7 @@
  * info dialogs built per open; editing stays in the person dialog.
  */
 
+import { researchOpenLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { PartnershipId, PersonId, Source, Story } from '../types.js';
@@ -136,7 +137,7 @@ export const personSourcesMethods = uiModule({
                 </div>
                 <div class="person-sources-list" id="person-sources-list"></div>
                 <div class="buttons">
-                    <button type="button" class="link-button" id="person-sources-find" hidden>${esc(strings.research.findSource)}</button>
+                    <button type="button" class="link-button" id="person-sources-find" hidden>${researchOpenLabel(strings.research.findSource)}</button>
                     <button type="button" class="secondary" id="person-sources-close" data-dismiss>${esc(strings.buttons.close)}</button>
                     <button type="button" class="primary" id="person-sources-cite">${esc(strings.sources.cite)}</button>
                 </div>
@@ -265,7 +266,7 @@ export const personSourcesMethods = uiModule({
             ? ` <span class="story-nv-tag">${esc(s.nvBadge)}</span>`
             : story.status === 'draft' ? ` <span class="story-draft-tag">${esc(s.statusDraft)}</span>` : '';
         const approveBtn = (attrs: string): string =>
-            `<button type="button" class="secondary story-approve" ${attrs}>${esc(strings.research.approveStory)}</button>`;
+            `<button type="button" class="secondary story-approve" ${attrs}>${researchOpenLabel(strings.research.approveStory)}</button>`;
         const self = shownName(person);
         const chips: { id: string; label: string }[] = [];
 

@@ -242,6 +242,7 @@ span.pp-gal-thumb { cursor: default; }
 .pp-lb .pp-lb-img { flex: 1 1 auto; min-height: 0; margin: 0 12px; background-size: contain; }
 .pp-lb-cap { min-width: 0; color: #c9c2b0; overflow-wrap: anywhere; }
 .pp-lb-navs { flex: 0 0 auto; display: flex; gap: 4px; }
+.pp-open-mark { display: inline-flex; vertical-align: -1px; margin-left: 5px; opacity: .8; }
 .pp-act { display: inline-block; margin-top: 8px; padding: 0; border: 0; background: none; color: var(--primary); font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; }
 .pp .pp-src-intro { margin: 4px 0 12px; font-size: 14px; color: var(--text-light); }
 .pp-src-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }

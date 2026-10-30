@@ -13,6 +13,7 @@
  * token and is known only when the research opens the page with it.
  */
 
+import { researchOpenLabel } from './research-open-mark.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
@@ -365,7 +366,7 @@ export const researchInstallMethods = uiModule({
                 </details>` : ''}
                 <p class="install-have-row">
                     <span class="install-have-lead">${esc(s.haveLead)}</span>
-                    <button type="button" class="link-button" data-act="have">${esc(this.researchHaveItLabel())}</button>
+                    <button type="button" class="link-button" data-act="have">${researchOpenLabel(this.researchHaveItLabel())}</button>
                     <button type="button" class="link-button" data-act="existing">${esc(s.existingLink)}</button>
                 </p>
             </div>
@@ -825,7 +826,7 @@ export const researchInstallMethods = uiModule({
                     <h3 class="install-wait-title">${esc(s.expiredTitle)}</h3>
                     <p>${esc(s.expiredText)}</p>
                     <p class="install-wait-links">
-                        <button type="button" class="link-button" data-act="have">${esc(this.researchHaveItLabel())}</button>
+                        <button type="button" class="link-button" data-act="have">${researchOpenLabel(this.researchHaveItLabel())}</button>
                         <button type="button" class="link-button" data-act="existing">${esc(s.existingLink)}</button>
                     </p>
                 </div>
@@ -843,7 +844,7 @@ export const researchInstallMethods = uiModule({
                 ${isChromium() ? `<p class="install-note">${esc(s.waitLna)}</p>` : ''}
                 <p class="install-wait-links">
                     <button type="button" class="link-button" data-act="again">${esc(s.showAgain)}</button>
-                    <button type="button" class="link-button" data-act="have">${esc(this.researchHaveItLabel())}</button>
+                    <button type="button" class="link-button" data-act="have">${researchOpenLabel(this.researchHaveItLabel())}</button>
                     <button type="button" class="link-button" data-act="existing">${esc(s.existingLink)}</button>
                 </p>
             </div>
@@ -1028,7 +1029,7 @@ export const researchInstallMethods = uiModule({
      * cannot reach it, the tree goes as a file first. A research already
      * holding the tree is the Existing step's (`strom app`), not this.
      */
-    /** "New research from this tree ↗", or — the tree downloaded for a move — that it is, and the start. */
+    /** "New research from this tree (research)", or — the tree downloaded for a move — that it is, and the start. */
     researchHaveItLabel(): string {
         const s = strings.install;
         const plain = hasPeople() ? s.haveIt : s.haveItEmpty;

@@ -96,7 +96,7 @@ test.describe('History of places: a place\'s own history on request (§6a)', () 
         await expect(dialog(page).locator('.hpf-area strong')).toHaveText('Surroundings: suggested by the research');
         await expect(dialog(page).locator('#hpf-cost')).toHaveText(COST_NONE);
         await expect(dialog(page).locator('.hpf-mode')).toHaveText(TERMINAL);
-        await expect(dialog(page).locator('.hpf-foot button')).toHaveText(['Cancel', 'Continue in the research']);
+        await expect(dialog(page).locator('.hpf-foot button')).toHaveText(['Cancel', 'Continue in the research, AI, opens in the researchAI']);
         // Nothing starts without a click: Cancel has the focus.
         await expect(dialog(page).locator('.hpf-foot [data-hpf="cancel"]')).toBeFocused();
         expect(history.writes.place).toEqual([]);
@@ -138,7 +138,7 @@ test.describe('History of places: a place\'s own history on request (§6a)', () 
         await openCard(page);
         await offerLink(page).click();
         await dialog(page).locator('[data-hpf="go"]').click();
-        await expect(dialog(page).locator('.hpf-note')).toHaveText('The research is not looking for history. Events already found stay. Turn on the search in the research');
+        await expect(dialog(page).locator('.hpf-note')).toHaveText('The research is not looking for history. Events already found stay. Turn on the search in the research, opens in the research');
         await dialog(page).locator('[data-hpf="noteLink"]').click();
         await expect(dialog(page)).toHaveCount(0);
         await expect.poll(async () => (await links(page)).at(-1)).toContain('name=history&do=on');
@@ -275,7 +275,7 @@ test.describe('History of places: a place\'s own history on request (§6a)', () 
         history.split = { regions: true, places: false };
         await offerLink(page).click();
         await dialog(page).locator('[data-hpf="go"]').click();
-        await expect(dialog(page).locator('.hpf-note')).toHaveText('Local history is not searched for this tree. Turn on in the research');
+        await expect(dialog(page).locator('.hpf-note')).toHaveText('Local history is not searched for this tree. Turn on in the research, opens in the research');
         await dialog(page).locator('[data-hpf="noteLink"]').click();
         await expect(dialog(page)).toHaveCount(0);
         await expect.poll(async () => (await links(page)).at(-1)).toMatch(/^strom-research:\/\/experiment\?tree=.+&name=placeHistory&do=on$/);
@@ -300,7 +300,7 @@ test.describe('History of places: a place\'s own history on request (§6a)', () 
         await offerLink(page).click();
         await dialog(page).locator('[data-hpf="go"]').click();
         await expect(dialog(page).locator('.hpf-mode')).toHaveText(TERMINAL);
-        await expect(dialog(page).locator('[data-hpf="go"]')).toHaveText('Continue in the research');
+        await expect(dialog(page).locator('[data-hpf="go"]')).toHaveText('Continue in the research, AI, opens in the researchAI');
         await dialog(page).locator('[data-hpf="go"]').click();
         await expect(dialog(page)).toHaveCount(0);
         await expect.poll(async () => (await links(page)).at(-1)).toMatch(LINK_L0001);

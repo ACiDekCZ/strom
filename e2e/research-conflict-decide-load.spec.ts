@@ -283,7 +283,7 @@ test.describe('not decidable from the app with the dialog closed', () => {
         await expect(toast(page).locator('.toast-action')).toHaveText('Show');
         await toast(page).locator('.toast-action').click();
         await expect(cardOf(page)).toHaveAttribute('data-state', 'noEdit');
-        await expect(cardOf(page).locator('.prc-notice-action')).toHaveText('Decide in the research ↗');
+        await expect(cardOf(page).locator('.prc-notice-action')).toHaveText('Decide in the research, opens in the research');
         await expect(cardOf(page).getByRole('button', { name: 'Try again' })).toHaveCount(0);
         expect(decide.asks).toHaveLength(1);
     });

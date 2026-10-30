@@ -10,6 +10,7 @@
  * to weigh them: the setting is not offered there either.
  */
 
+import { researchOpenLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { strings } from '../strings.js';
@@ -37,7 +38,7 @@ const askLater = new Set<TreeId>();
  * (`link`: its way on), the value asked until the research's status says it
  * (`want`), a write on its way (`busy`). Per research; forgotten with the dialog.
  */
-const stories: { rid: string; note?: { text: string; link?: { label: string; run: () => void } }; want?: boolean; busy?: boolean } = { rid: '' };
+const stories: { rid: string; note?: { text: string; link?: { label: string; run: () => void; research?: boolean } }; want?: boolean; busy?: boolean } = { rid: '' };
 let storiesListening = false;
 
 /** A phone-sized or touch screen: short card texts, and a note instead of the effect box and the status line. */
@@ -208,12 +209,12 @@ export const researchTreeSettingsMethods = uiModule({
         const openUrl = modeWhere && this.researchLinkAvailable('open') ? researchSchemeUrl('open', { tree: link.id }, announcedResearchScheme()) : null;
         const modeWhereHtml = modeWhere ? `
                 <p class="research-mode-where" id="research-mode-where"><span>${esc(modeWhere)}</span>${openUrl
-                    ? ` <button type="button" class="link-button" id="research-mode-where-open">${esc(s.openResearch)}</button>` : ''}</p>` : '';
+                    ? ` <button type="button" class="link-button" id="research-mode-where-open">${researchOpenLabel(s.openResearch)}</button>` : ''}</p>` : '';
         // The terminal the research opens in is the research's own setting: one sentence, its settings a click away
         // (a research that chooses it); otherwise the settings stay a button beside Done.
         const terminalWhere = !!setup && !!this.researchStatusOf(link.id)?.features?.includes(TERMINAL_CHOICE_FEATURE);
         const terminalWhereHtml = terminalWhere ? `
-                <p class="research-mode-where research-terminal-where" id="research-terminal-where"><span>${esc(t.terminalWhere)}</span> <button type="button" class="link-button research-settings-in-research" id="research-settings-in-research">${esc(strings.research.settingsInResearch)} ↗</button></p>` : '';
+                <p class="research-mode-where research-terminal-where" id="research-terminal-where"><span>${esc(t.terminalWhere)}</span> <button type="button" class="link-button research-settings-in-research" id="research-settings-in-research">${researchOpenLabel(strings.research.settingsInResearch)}</button></p>` : '';
         const olderLine = sendingShown ? '' : this.researchOlderLineHtml('settings');
         const sendingHtml = !sendingShown ? (olderLine ? `<p class="research-older-line">${olderLine}</p>` : '') : `
                 <fieldset class="research-transcripts research-send-mode">
@@ -274,7 +275,7 @@ export const researchTreeSettingsMethods = uiModule({
                 ${modeWhereHtml}
                 ${terminalWhereHtml}
                 <div class="buttons research-tree-settings-buttons">
-                    ${setup && !terminalWhere ? `<button type="button" class="link-button research-settings-in-research" id="research-settings-in-research">${esc(strings.research.settingsInResearch)} ↗</button>` : ''}
+                    ${setup && !terminalWhere ? `<button type="button" class="link-button research-settings-in-research" id="research-settings-in-research">${researchOpenLabel(strings.research.settingsInResearch)}</button>` : ''}
                     <button type="button" class="primary" id="research-tree-settings-done" data-dismiss>${esc(t.done)}</button>
                 </div>
             </div>`;
@@ -438,7 +439,7 @@ export const researchTreeSettingsMethods = uiModule({
                     </span>
                 </label>
                 ${note ? `<p class="research-stories-note" id="research-stories-note"><span>${esc(note.text)}</span>${'link' in note && note.link
-                    ? ` <button type="button" class="link-button" id="research-stories-note-link">${esc(note.link.label)}</button>` : ''}</p>` : ''}
+                    ? ` <button type="button" class="link-button" id="research-stories-note-link">${note.link.research ? researchOpenLabel(note.link.label, { size: 12 }) : esc(note.link.label)}</button>` : ''}</p>` : ''}
             </fieldset>`;
         const input = host.querySelector<HTMLInputElement>('#research-stories-history');
         input?.addEventListener('change', () => { void this.setResearchStoriesHistory(input.checked); });
@@ -468,7 +469,7 @@ export const researchTreeSettingsMethods = uiModule({
             stories.note = { text: strings.research.opening };
         } else if (r.code === 'off') {
             // The research not looking for history: the sentence with the way to switch it on.
-            stories.note = { text: h.manageOff, ...(ctx?.canLinkOn ? { link: { label: h.enableSearch, run: () => this.historyEnableSearch() } } : {}) };
+            stories.note = { text: h.manageOff, ...(ctx?.canLinkOn ? { link: { label: h.enableSearch, run: () => this.historyEnableSearch(), research: true } } : {}) };
         } else if (r.code === 'busy') {
             stories.note = { text: h.errBusy };
         } else {

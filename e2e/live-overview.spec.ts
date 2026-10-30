@@ -571,8 +571,8 @@ test.describe('Research overview', () => {
         await expect(ov.locator('.research-overview__waiting-detail')).toHaveCount(0);
         await rows.nth(0).locator('.research-overview__waiting-row').click();
         await expect(rows.nth(0).locator('.research-overview__waiting-detail .live-person-link')).toHaveText('Jan Fíšek');
-        // Without actions from the research: only "Answer ↗", as before; no hint.
-        await expect(rows.nth(0).locator('.research-overview__waiting-action')).toHaveText(['Answer ↗']);
+        // Without actions from the research: only "Answer", as before; no hint.
+        await expect(rows.nth(0).locator('.research-overview__waiting-action')).toHaveText(['Answer, opens in the research']);
         await expect(rows.nth(0).locator('.research-overview__waiting-hint')).toHaveCount(0);
         await expect(ov.locator('.research-overview__now-row')).toContainText('agent-matriky — Sčítání 1921');
         await expect(ov.locator('.research-overview__now-row .link-button')).toHaveText('Show in tree');
@@ -791,7 +791,7 @@ test.describe('Awaiting action from a research with waiting.groups', () => {
         await expect(groups.first()).toHaveAttribute('aria-expanded', 'false');
         await expect(ov.locator('.research-overview__waiting-item')).toHaveCount(0);
 
-        // A place's own "Chat ↗", folded or not: the first item in order that offers a chat
+        // A place's own "Chat", folded or not: the first item in order that offers a chat
         // (the check before it does not); none where no item offers one (the family).
         const heads = ov.locator('.research-overview__phase[data-phase="todo"] .research-overview__waiting-grouphead');
         const groupChat = heads.locator('.research-overview__waiting-groupchat');
@@ -818,7 +818,7 @@ test.describe('Awaiting action from a research with waiting.groups', () => {
         const detail = items.first().locator('.research-overview__waiting-detail');
         await expect(detail.locator('.research-overview__waiting-inbox')).toHaveText('saved 3/10');
         // Images are saved by hand: Chat leads, as the detail's main button; nothing to answer, no hint.
-        await expect(detail.locator('.research-overview__waiting-action')).toHaveText(['Chat ↗', 'Folder ↗']);
+        await expect(detail.locator('.research-overview__waiting-action')).toHaveText(['Chat, AI, opens in the researchAI', 'Folder, opens in the research']);
         const imagesChat = detail.locator('.research-overview__waiting-action[data-action="chat"]');
         await expect(imagesChat).toBeVisible();
         await expect(imagesChat).toHaveClass(/is-primary/);
@@ -833,7 +833,7 @@ test.describe('Awaiting action from a research with waiting.groups', () => {
         await letter.locator('.research-overview__waiting-row').click();
         await expect(ov.locator('.research-overview__waiting-detail')).toHaveCount(1);
         const actions = letter.locator('.research-overview__waiting-action');
-        await expect(actions).toHaveText(['Answer ↗', 'Chat ↗', 'Add a file ↗', 'Query text ↗', 'Sent ↗']);
+        await expect(actions).toHaveText(['Answer, opens in the research', 'Chat, AI, opens in the researchAI', 'Add a file, opens in the research', 'Query text, opens in the research', 'Sent, opens in the research']);
         await expect(actions.nth(1)).toBeVisible();
         await expect(actions.nth(1)).not.toHaveClass(/is-primary/);
         await expect(letter.locator('.research-overview__waiting-hint')).toHaveText('The answer is saved with the task; the agent takes it up in its next work.');
@@ -878,7 +878,7 @@ test.describe('Awaiting action from a research with waiting.groups', () => {
         await expect(sentRows.first().locator('.research-overview__waiting-age')).toHaveText('9 days ago');
         await sentRows.first().locator('.research-overview__waiting-row').click();
         // What was sent is not marked sent again.
-        await expect(sentRows.first().locator('.research-overview__waiting-action')).toHaveText(['Answer ↗', 'Chat ↗', 'Add a file ↗']);
+        await expect(sentRows.first().locator('.research-overview__waiting-action')).toHaveText(['Answer, opens in the research', 'Chat, AI, opens in the researchAI', 'Add a file, opens in the research']);
     });
 
     test('a chip filters and unfolds every place; the choice stays; a new item hidden by it dots its chip', async ({ page }) => {
@@ -999,9 +999,9 @@ test.describe('Awaiting action written through the bridge', () => {
         const bridge = await follow(page, { width: 1440, height: 900 }, writable(['waiting.sent']));
         const ov = await openOverview(page);
         const letter = await openLetter(page);
-        // Sent goes through the bridge (no ↗); the file still by the link (no accepts.media.task).
+        // Sent goes through the bridge (no); the file still by the link (no accepts.media.task).
         const actions = letter.locator('.research-overview__waiting-action');
-        await expect(actions).toHaveText(['Answer ↗', 'Chat ↗', 'Add a file ↗', 'Query text ↗', 'Sent']);
+        await expect(actions).toHaveText(['Answer, opens in the research', 'Chat, AI, opens in the researchAI', 'Add a file, opens in the research', 'Query text, opens in the research', 'Sent']);
         const sent = letter.locator('.research-overview__waiting-action[data-action="sent"]');
         await expect(sent).toHaveAttribute('data-write', 'bridge');
         // A double click writes once.
@@ -1028,7 +1028,7 @@ test.describe('Awaiting action written through the bridge', () => {
         await placeHead(page, 'sent', 'MěÚ Vzorov').locator('.research-overview__waiting-group').click();
         const sentItem = ov.locator('.research-overview__phase[data-phase="sent"] .research-overview__waiting-item', { hasText: 'Odeslaný dopis 1' });
         await sentItem.locator('.research-overview__waiting-row').click();
-        await expect(sentItem.locator('.research-overview__waiting-action')).toHaveText(['Answer ↗', 'Chat ↗', 'Add a file ↗', 'Back to To do']);
+        await expect(sentItem.locator('.research-overview__waiting-action')).toHaveText(['Answer, opens in the research', 'Chat, AI, opens in the researchAI', 'Add a file, opens in the research', 'Back to To do']);
         await sentItem.locator('.research-overview__waiting-action[data-action="unsent"]').click();
         await expect(todoHead(page)).toHaveText(/To do · 31/);
         // The row moves at once; the write goes once the research's head right before it is asked.
@@ -1045,7 +1045,7 @@ test.describe('Awaiting action written through the bridge', () => {
         const office = placeHead(page, 'todo', 'MěÚ Vzorov');
         // Only where items offer them: the office (letters with sent and a query text); not the family, web or archive.
         await expect(office.locator('.research-overview__waiting-groupwrite')).toHaveText(['Sent', 'All queries\' text']);
-        await expect(office.locator('.research-overview__waiting-groupchat')).toHaveText('Chat ↗');
+        await expect(office.locator('.research-overview__waiting-groupchat')).toHaveText('ChatAI');
         for (const name of ['Rodina', 'rodokmen.example', 'Archiv Vzorov']) {
             await expect(placeHead(page, 'todo', name).locator('.research-overview__waiting-groupwrite')).toHaveCount(0);
         }
@@ -1186,7 +1186,7 @@ test.describe('Awaiting action written through the bridge', () => {
         const bridge = await follow(page, { width: 1440, height: 900 }, writable([], { media: { task: true } }));
         await openOverview(page);
         const letter = await openLetter(page);
-        await expect(letter.locator('.research-overview__waiting-action')).toHaveText(['Answer ↗', 'Chat ↗', 'Add a file', 'Query text ↗', 'Sent ↗']);
+        await expect(letter.locator('.research-overview__waiting-action')).toHaveText(['Answer, opens in the research', 'Chat, AI, opens in the researchAI', 'Add a file', 'Query text, opens in the research', 'Sent, opens in the research']);
         const chooser = page.waitForEvent('filechooser');
         await letter.locator('.research-overview__waiting-action[data-action="file"]').click();
         await (await chooser).setFiles({ name: 'odpoved-uradu.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 vymyšlená odpověď') });
@@ -1301,7 +1301,7 @@ test.describe('Awaiting action written through the bridge', () => {
         await placeHead(page, 'todo', 'rodokmen.example').locator('.research-overview__waiting-group').click();
         const check = ov.locator('.research-overview__waiting-item', { hasText: 'Ověřit, zda badatelna funguje' });
         await check.locator('.research-overview__waiting-row').click();
-        await expect(check.locator('.research-overview__waiting-action')).toHaveText(['Answer ↗', 'Add a file ↗']);
+        await expect(check.locator('.research-overview__waiting-action')).toHaveText(['Answer, opens in the research', 'Add a file, opens in the research']);
         await expect(check.locator('[data-write="bridge"]')).toHaveCount(0);
         // A letter still adds its file through the bridge.
         const letter = await openLetter(page);

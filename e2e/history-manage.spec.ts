@@ -136,7 +136,7 @@ test.describe('History of places: the manager', () => {
     test('the research not searching: the header says so with the link to switch it on; no "Find first"', async ({ page }) => {
         await setup(page, { history: fakeHistoryR1({ searching: false }) });
         await openManager(page);
-        await expect(stateText(page)).toHaveText('The research is not looking for history. Events already found stay. Turn on the search in the research');
+        await expect(stateText(page)).toHaveText('The research is not looking for history. Events already found stay. Turn on the search in the research, opens in the research');
         expect(await rowMenu(page, 'at-lower-austria')).toEqual(['hideAll', 'skip']);
         await page.keyboard.press('Escape');
         await stateText(page).getByRole('button', { name: 'Turn on the search in the research' }).click();
@@ -181,7 +181,7 @@ test.describe('History of places: the manager', () => {
         expect(await rowMenu(page, 'at-lower-austria')).toContain('first');
         await page.locator('.hm-menu [data-scope="first"]').click();
         const note = modal(page).locator('.hm-row-note[data-note="at-lower-austria"]');
-        await expect(note).toHaveText('Regional history is not searched for this tree. Turn on in the research');
+        await expect(note).toHaveText('Regional history is not searched for this tree. Turn on in the research, opens in the research');
         await note.getByRole('button', { name: 'Turn on in the research' }).click();
         await expect.poll(async () => (await links(page)).at(-1)).toMatch(/&name=regions&do=on$/);
     });

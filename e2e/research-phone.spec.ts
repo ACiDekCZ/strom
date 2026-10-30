@@ -64,7 +64,7 @@ test.describe('Connect phone', () => {
         await expect(dialog.locator('.phone-dialog')).not.toHaveClass(/phone-dialog--wide/);
         await expect(dialog.getByRole('button', { name: 'Turn connection on' })).toHaveCount(0);
         // Started from here as from the state block: the research's link handed over, the dialog waits.
-        await dialog.getByRole('button', { name: 'Start the research ↗' }).click();
+        await dialog.getByRole('button', { name: 'Start the research, opens in the research' }).click();
         await expect(dialog).toBeVisible();
         expect(await links(page)).toEqual([expect.stringMatching(/open\?tree=/)]);
         await expect(content).toContainText('Waiting for the research to start…');

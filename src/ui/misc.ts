@@ -49,6 +49,7 @@ import { yearOf } from '../dates.js';
 import { twoFiguresSvg } from '../icons.js';
 import { shownNameOrEmpty, nameHtml } from '../person-name.js';
 import { forgetCardTypeCopy } from './card-fields-ui.js';
+import { setResearchOpenLabel } from './research-open-mark.js';
 import { syncControlBlock } from './minimap.js';
 import { addLender, cancelWaiting, removeLender, watchToasts, whenFree } from '../toast-slot.js';
 
@@ -59,7 +60,8 @@ interface ToastOptions {
     spinner?: boolean;
     closable?: boolean;
     kind?: string;
-    action?: { label: string; run: () => void };
+    /** `research`: it opens the research (its mark at the end, §6). */
+    action?: { label: string; run: () => void; research?: boolean };
     hold?: boolean;
     /** A notice to be read: it stands 3 s at least before a newer toast takes its place (round 7 §53). */
     notice?: boolean;
@@ -1617,11 +1619,12 @@ export const miscMethods = uiModule({
             toast.appendChild(document.createTextNode(message));
         }
         if (opts.action) {
-            const { label, run } = opts.action;
+            const { label, run, research } = opts.action;
             const act = document.createElement('button');
             act.type = 'button';
             act.className = 'toast-action';
-            act.textContent = label;
+            if (research) setResearchOpenLabel(act, label);
+            else act.textContent = label;
             act.onclick = () => {
                 toast.classList.remove('show');
                 setTimeout(() => toast.remove(), 300);

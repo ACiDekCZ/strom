@@ -111,8 +111,8 @@ test.describe('a story\'s new version', () => {
         await expect(cmp.locator('.sc-panel--old')).toContainText('This text is in the book now.');
 
         const foot = cmp.locator('#story-compare-foot');
-        await expect(foot.locator('button')).toHaveText(['Close', 'Keep approved ↗', 'Use new version ↗']);
-        await foot.getByRole('button', { name: 'Use new version ↗' }).click();
+        await expect(foot.locator('button')).toHaveText(['Close', 'Keep approved, opens in the research', 'Use new version, opens in the research']);
+        await foot.getByRole('button', { name: 'Use new version, opens in the research' }).click();
         expect(await launched(page)).toEqual([`strom-research://story?tree=${UUID}&person=P0001&do=final`]);
         await expect(foot).toContainText('Choice sent to research: use the new version');
         await expect(foot).toContainText('Confirm it in the terminal.');
@@ -124,7 +124,7 @@ test.describe('a story\'s new version', () => {
         // Opened again in the same session: what was sent, and the way to send it again.
         await page.evaluate((id) => window.Strom.UI.showStoryCompare({ personId: id }), jan);
         await expect(foot).toContainText('Sent to research: use the new version.');
-        await foot.getByRole('button', { name: 'Open again ↗' }).click();
+        await foot.getByRole('button', { name: 'Open again, opens in the research' }).click();
         expect(await launched(page)).toHaveLength(2);
 
         // The next load from the research without the new version: no banner, no comparison.
@@ -269,7 +269,7 @@ test.describe('a story\'s new version', () => {
         await expect(reader.locator('.story-reader-couple-title .story-draft-tag')).toHaveText('Draft');
         // A couple's draft is approved in the research at its chapter: the family by both partners.
         const approve = reader.locator('.story-reader-couple [data-approve-partnership]');
-        await expect(approve).toHaveText('Approve in the research ↗');
+        await expect(approve).toHaveText('Approve in the research, opens in the research');
         await approve.click();
         expect(await launched(page)).toEqual([`strom-research://story?tree=${UUID}&person=P0001&partner=P0002&do=final`]);
     });
@@ -297,7 +297,7 @@ test.describe('a story\'s new version', () => {
         await setup(page);
         const jan = await personId(page, 'P0001');
         await page.evaluate((id) => window.Strom.UI.showStoryCompare({ personId: id }), jan);
-        await page.locator('#story-compare-foot').getByRole('button', { name: 'Keep approved ↗' }).click();
+        await page.locator('#story-compare-foot').getByRole('button', { name: 'Keep approved, opens in the research' }).click();
         expect(await launched(page)).toEqual([`strom-research://story?tree=${UUID}&person=P0001&do=keep`]);
         await expect(page.locator('#story-compare-foot')).toContainText('Choice sent to research: keep the approved one');
     });
@@ -342,7 +342,7 @@ test.describe('a story\'s new version', () => {
         const cmp = page.locator('#story-compare-modal');
         await expect(cmp.locator('.audit-log-subtitle')).toHaveText('Jan Vlk and Marie Vlková');
         await expect(cmp.locator('.sc-value--text ins').first()).toHaveText('1845 v Chlumech');
-        await cmp.locator('#story-compare-foot').getByRole('button', { name: 'Use new version ↗' }).click();
+        await cmp.locator('#story-compare-foot').getByRole('button', { name: 'Use new version, opens in the research' }).click();
         expect(await launched(page)).toEqual([`strom-research://story?tree=${UUID}&person=P0001&partner=P0002&do=final`]);
     });
 

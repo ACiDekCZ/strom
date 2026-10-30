@@ -19,11 +19,20 @@ import { onComputer } from './research-ui.js';
 import { PersonMenuAction } from './context-menu.js';
 import { personSubtitle } from './person-sources-ui.js';
 import { normalizeModal } from './modal-skeleton.js';
-import { researchSendMode } from './research-sync-ui.js';
+import { researchSendMode, RESEARCH_OPENING_SYNC_ACTIONS } from './research-sync-ui.js';
 import { researchTrialTagHtml } from './research-tree-settings-ui.js';
 import { researchSendPreviewSkipped, exportReminderDue, lastExportAll, noteExportReminderShown } from '../research-device.js';
 import { exportDate } from './snapshots-ui.js';
 import { waitingTodoCount } from '../research-waiting.js';
+import { researchOpenMark, researchOpenLabel } from './research-open-mark.js';
+import { researchOpenSvg } from '../history-symbols.js';
+
+export { researchOpenMark } from './research-open-mark.js';
+
+/** The mark alone, decorative (the footer's legend: the sentence beside it says it). */
+function researchOpenSvgMark(size: 12 | 14): string {
+    return `<span class="research-open-mark" aria-hidden="true">${researchOpenSvg(size)}</span>`;
+}
 
 const REVIEW_ID = 'research-review-modal';
 const SCOPE_KEY = 'strom-research-review-scope';
@@ -65,8 +74,10 @@ interface SubmenuItem {
     /** The UI method it runs, with its string arguments. */
     method: string;
     args?: string[];
-    /** Continues in the research (↗). */
+    /** Continues in the research: its mark at the end (§6). */
     ext?: boolean;
+    /** Opens a page of its own in the menu ("Research tools ›"). */
+    submenu?: boolean;
     /** Starts an AI agent (costs): the AI label. */
     ai?: boolean;
     /** A count at the end ("Awaiting action  2"). */
@@ -77,7 +88,7 @@ interface SubmenuItem {
     pill?: { text: string; tone: 'on' | 'error' };
     /** Not possible now (`aria-disabled`, grey): its second line says why. */
     disabled?: boolean;
-    /** A separate item right under it ("Open research ↗" beside an inactive item). */
+    /** A separate item right under it ("Open research" beside an inactive item, with the mark). */
     link?: { label: string; method: string };
     /** Something of it runs now: a green dot with a ring. */
     dot?: boolean;
@@ -102,7 +113,7 @@ interface ResearchMenuModel {
     moreQuiet: SubmenuItem[];
     /** Something under "Other actions" asks for attention: said on its row (a dot), not on the button (D7). */
     moreAttention: string;
-    /** The footer's whole sentence: its title and the description of every ↗ item. */
+    /** The footer's whole sentence: its title and the description of every item with the mark. */
     note: string;
     waiting: number;
 }
@@ -123,7 +134,7 @@ export interface ResearchSheetRow {
 /** The More sheet's research group (a narrow window with a mouse): the state in one line and the frequent actions. */
 export interface ResearchSheetGroup {
     /** The state, when its block offers something: its title and first action. */
-    state?: { tone: string; title: string; action: { label: string; asLink: boolean; run: () => void } };
+    state?: { tone: string; title: string; action: { label: string; asLink: boolean; research?: boolean; run: () => void } };
     rows: ResearchSheetRow[];
 }
 
@@ -145,7 +156,7 @@ function itemCall(item: SubmenuItem): string {
     return call(item.method, (item.args ?? []).map(a => `'${a}'`).join(', '));
 }
 
-/** An item's accessible name: label (with its count: "Awaiting action: 2"), AI, second line, ↗. */
+/** An item's accessible name: label (with its count: "Awaiting action: 2"), AI, second line, "opens in the research". */
 function itemAria(item: SubmenuItem): string {
     const r = strings.research;
     const aria = [item.count ? r.waitingCountSr(item.count) : item.label];
@@ -157,20 +168,19 @@ function itemAria(item: SubmenuItem): string {
     return aria.join(', ');
 }
 
-/** The footer's sentence as a description: without its "↗", from a capital. */
+/** The footer's sentence as a description, from a capital (the mark stands before it in the footer). */
 function noteSentence(note: string): string {
-    const text = note.replace(/^↗\s*/, '');
-    return text.charAt(0).toUpperCase() + text.slice(1);
+    return note.charAt(0).toUpperCase() + note.slice(1);
 }
 
-/** `desc`: the description of an item that continues in the research (↗). */
+/** `desc`: the description of an item that continues in the research (its mark). */
 function submenuItemHtml(item: SubmenuItem, desc = ''): string {
     const r = strings.research;
     const described = desc ? ` aria-description="${esc(desc)}"` : '';
     const link = item.link
         ? `<div class="tree-switcher-action research-item-sublink" id="${item.id}-link" role="menuitem" tabindex="0"`
-            + ` aria-label="${esc(item.link.label.replace(' ↗', ''))}, ${esc(r.opensInResearchSr)}"${described} onclick="${call(item.link.method)}">`
-            + `<span class="research-item-label">${esc(item.link.label)}</span></div>`
+            + ` aria-label="${esc(item.link.label)}, ${esc(r.opensInResearchSr)}"${described} onclick="${call(item.link.method)}">`
+            + `<span class="research-item-label">${esc(item.link.label)}</span>${researchOpenMark({ sr: false })}</div>`
         : '';
     return `<div class="tree-switcher-action${item.disabled ? ' is-disabled' : ''}${item.sub ? ' research-item--two' : ''}" id="${item.id}" role="menuitem" tabindex="0"`
         + ` aria-label="${esc(itemAria(item))}"${item.ext ? described : ''}${item.disabled ? ' aria-disabled="true"' : ` onclick="${itemCall(item)}"`}>`
@@ -181,9 +191,10 @@ function submenuItemHtml(item: SubmenuItem, desc = ''): string {
         + (item.count ? `<span class="tree-switcher-badge research-count-badge" aria-hidden="true">${item.count}</span>` : '')
         + (item.val ? `<span class="research-item-val" aria-hidden="true">${esc(item.val)}</span>` : '')
         + (item.pill ? `<span class="research-item-pill is-${item.pill.tone}" aria-hidden="true"><span class="research-item-pill-dot"></span>${esc(item.pill.text)}</span>` : '')
-        + (item.ai ? `<span class="research-ai-badge" title="${esc(r.aiCostHint)}" aria-hidden="true">${esc(r.aiBadge)}</span>` : '')
+        + (item.ai && !item.ext ? `<span class="research-ai-badge" title="${esc(r.aiCostHint)}" aria-hidden="true">${esc(r.aiBadge)}</span>` : '')
         + (item.attn ? '<span class="research-item-attn" aria-hidden="true"></span>' : '')
-        + (item.ext ? '<span class="research-item-ext" aria-hidden="true">↗</span>' : '')
+        + (item.ext ? researchOpenMark({ ai: item.ai, sr: false }) : '')
+        + (item.submenu ? '<span class="research-item-chev" aria-hidden="true">›</span>' : '')
         + '</div>' + link;
 }
 
@@ -279,7 +290,7 @@ export const researchActionsMethods = uiModule({
         // Following live the tree is locked and is the research's own: nothing of it to send (menu 1020 §2.7, 2d).
         const following = DataManager.isLiveFollowing();
         const sendRow: SubmenuItem[] = autoSend || sendOff || blockSends || following ? [] : [
-            // Straight to a running bridge (no ↗); else the research starts it in the terminal.
+            // Straight to a running bridge (no mark); else the research starts it in the terminal.
             { id: 'research-item-send', label: previewFirst ? `${r.sendChanges}…` : r.sendChanges, method: 'researchActionSend', ext: !bridgeUp && this.researchLinkAvailable('send') },
         ];
         // "What will be sent" where the state block's one button does not lead there (Send sends at once, Start).
@@ -319,7 +330,7 @@ export const researchActionsMethods = uiModule({
             const blockInstalls = !!block?.actions.some(a => a.action === 'installResearch');
             const install = !this.researchKnownHere() && (startHere || blockInstalls);
             const startRow: SubmenuItem[] = startHere
-                ? [{ id: 'research-item-start', label: strings.sync.startResearch.replace(' ↗', ''), method: 'researchSyncAction', args: ['startResearch'], ext: true }] : [];
+                ? [{ id: 'research-item-start', label: strings.sync.startResearch, method: 'researchSyncAction', args: ['startResearch'], ext: true }] : [];
             const aboutRow: SubmenuItem[] = install && !blockInstalls
                 ? [{ id: 'research-item-install', label: r.awaitingNotInstalled, method: 'researchSyncAction', args: ['installResearch'] }]
                 : install ? [] : [{ id: 'research-item-about', label: r.whatIs, method: 'researchActionWhatIs' }];
@@ -350,7 +361,7 @@ export const researchActionsMethods = uiModule({
             if (archive) first.push(...materials);
             more.push(...viewLinks, ...(archive ? [] : materials), ...phone);
             const known = this.researchWaiting();
-            // A newer research: "Update the research 1.7 ↗", a dot on it and on "Other actions" (not on the button: it does not stand in the way).
+            // A newer research: "Update the research 1.7" with the mark, a dot on it and on "Other actions" (not on the button: it does not stand in the way).
             if (known?.update) {
                 const version = known.update.version;
                 moreAttention = r.updateAvailable(version);
@@ -374,7 +385,7 @@ export const researchActionsMethods = uiModule({
                     sub: r.sentAt(formatLiveClock(sentAt, Date.now(), getCurrentLanguage())) });
             }
             moreQuiet.push(...treeSettings);
-            // "Settings in the research ↗" is a link in Research for this tree; a row only where that dialog is not offered.
+            // "Settings in the research" is a link in Research for this tree; a row only where that dialog is not offered.
             if (!hasTreeSettings && this.researchLinkAvailable('setup')) {
                 moreQuiet.push({ id: 'research-item-setup', label: capable ? r.settingsInResearch : r.settings, method: 'researchActionSetup', ext: true });
             }
@@ -441,12 +452,12 @@ export const researchActionsMethods = uiModule({
                 + (model.moreQuiet.length ? `<div class="research-menu-group is-quiet" role="group">${items(model.moreQuiet)}</div>` : '')
                 + '</div>'
             : '';
-        // Not an item: "trial" and what ↗ means (the whole sentence as its title) — only "trial"
-        // when nothing in the menu carries ↗ (menu 1020 D8).
-        const anyExt = [...model.first, ...model.more, ...model.moreQuiet].some(i => i.ext || !!i.link) || model.blocks.includes('↗');
+        // Not an item: "trial" and what the mark means (the whole sentence as its title) — only "trial"
+        // when nothing in the menu carries the mark (menu 1020 D8).
+        const anyExt = [...model.first, ...model.more, ...model.moreQuiet].some(i => i.ext || !!i.link) || model.blocks.includes('research-open-mark');
         const foot = model.foot
             ? `<div class="research-menu-foot" id="research-menu-foot" role="none"${anyExt ? ` title="${esc(desc)}"` : ''}>${researchTrialTagHtml(true)}`
-                + (anyExt ? `<span class="research-menu-foot-text">${esc(r.footer)}</span>` : '') + '</div>'
+                + (anyExt ? `<span class="research-menu-foot-text">${researchOpenSvgMark(12)}${esc(r.footer)}</span>` : '') + '</div>'
             : '';
         return heading + model.blocks + first + more + foot;
     },
@@ -731,7 +742,8 @@ export const researchActionsMethods = uiModule({
         return {
             rows,
             state: block && first ? { tone: block.tone, title: block.title,
-                action: { label: first.label, asLink: !!first.asLink, run: () => this.researchSyncAction(first.action) } } : undefined,
+                action: { label: first.label, asLink: !!first.asLink, research: RESEARCH_OPENING_SYNC_ACTIONS.includes(first.action),
+                    run: () => this.researchSyncAction(first.action) } } : undefined,
         };
     },
 
@@ -881,23 +893,25 @@ export const researchActionsMethods = uiModule({
         const r = strings.research;
         const items: PersonMenuAction[] = [];
         if (this.researchLinkAvailable('review')) {
-            items.push({ action: 'research-review', label: r.reviewAction });
+            // Opens "Review again" here first; its button then opens the research.
+            items.push({ action: 'research-review', label: r.reviewAction, external: true, ariaLabel: `${r.reviewAction}, ${r.opensInResearchSr}` });
         }
         if (this.researchLinkAvailable('research')) {
-            items.push({ action: 'research-ancestors', label: r.findAncestors, external: true,
-                ariaLabel: `${r.findAncestors}, ${r.opensInResearchSr}` });
-            items.push({ action: 'research-descendants', label: r.findDescendants, external: true,
-                ariaLabel: `${r.findDescendants}, ${r.opensInResearchSr}` });
+            // A new direction is the agent's work (§6 state 3: AI and the mark).
+            items.push({ action: 'research-ancestors', label: r.findAncestors, external: true, badge: 'ai',
+                ariaLabel: `${r.findAncestors}, ${r.aiBadge}, ${r.opensInResearchSr}` });
+            items.push({ action: 'research-descendants', label: r.findDescendants, external: true, badge: 'ai',
+                ariaLabel: `${r.findDescendants}, ${r.aiBadge}, ${r.opensInResearchSr}` });
         }
         // A direction the person already has: say so instead of starting another.
         for (let i = 0; i < items.length; i++) {
             const d = this.personDirection(personId, items[i].action);
             if (!d) continue;
             if (d.state === 'active') {
-                items[i] = { ...items[i], external: false, state: r.dirRunning, ariaLabel: `${items[i].label}, ${r.dirRunning}` };
+                items[i] = { ...items[i], external: false, badge: undefined, state: r.dirRunning, ariaLabel: `${items[i].label}, ${r.dirRunning}` };
             } else if (this.researchLinkAvailable('direction')) {
                 const note = r.dirResumeNote(d.state === 'paused' ? r.dirStatePaused : r.dirStateDone);
-                items[i] = { ...items[i], external: true, note, ariaLabel: `${items[i].label}, ${note}, ${r.opensInResearchSr}` };
+                items[i] = { ...items[i], external: true, badge: undefined, note, ariaLabel: `${items[i].label}, ${note}, ${r.opensInResearchSr}` };
             }
         }
         if (this.researchLinkAvailable('chat')) {
@@ -970,7 +984,7 @@ export const researchActionsMethods = uiModule({
                 ${mayBeLiving(personId) ? `<p class="research-review-living">${esc(r.maybeLiving)}</p>` : ''}
                 <div class="buttons">
                     <button type="button" class="secondary" id="research-review-cancel" data-dismiss>${esc(strings.buttons.cancel)}</button>
-                    <button type="button" class="primary" id="research-review-submit">${esc(r.reviewSubmit)}</button>
+                    <button type="button" class="primary" id="research-review-submit">${researchOpenLabel(r.reviewSubmit)}</button>
                 </div>
             </div>`;
         document.body.appendChild(overlay);
@@ -1001,7 +1015,7 @@ export const researchActionsMethods = uiModule({
 
     // ==================== F1: APPROVE A DRAFT STORY ====================
 
-    /** "Approve in the research ↗" for a person's draft story, or null (not a draft, not offered). */
+    /** "Approve in the research" for a person's draft story, or null (not a draft, not offered). */
     storyApproveUrl(personId: PersonId): string | null {
         if (DataManager.getPerson(personId)?.story?.status !== 'draft') return null;
         const person = this.personResearchRef(personId);
@@ -1009,7 +1023,7 @@ export const researchActionsMethods = uiModule({
     },
 
     /**
-     * "Approve in the research ↗" for a couple's draft story (Partnership.story),
+     * "Approve in the research" for a couple's draft story (Partnership.story),
      * or null. The research finds the family by both partners (spec 027 §5.3).
      */
     coupleStoryApproveUrl(partnershipId: PartnershipId): string | null {
@@ -1041,7 +1055,7 @@ export const researchActionsMethods = uiModule({
 
     // ==================== PERSON SOURCES: FIND A SOURCE ====================
 
-    /** "Find a source in the research ↗" for a person without sources (null: not offered). */
+    /** "Find a source in the research" for a person without sources (null: not offered). */
     personFindSourceUrl(personId: PersonId): string | null {
         if (this.activeResearchNoAgent()) return null;
         const person = this.personResearchRef(personId);

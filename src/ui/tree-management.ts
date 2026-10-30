@@ -3,6 +3,7 @@
  * see src/ui/module.ts for the composition pattern.
  */
 
+import { researchOpenMark, researchOpenSrHtml } from './research-open-mark.js';
 import { DataManager, auditPersonName } from '../data.js';
 import { countFamilies } from '../ged-exporter.js';
 import { TreeManager } from '../tree-manager.js';
@@ -484,6 +485,10 @@ export const treeManagementMethods = uiModule({
             label.className = 'actions-tree-action-label';
             label.textContent = row.label;
             item.appendChild(label);
+            if (row.research) {
+                label.insertAdjacentHTML('beforeend', researchOpenSrHtml());
+                item.insertAdjacentHTML('beforeend', researchOpenMark({ sr: false }));
+            }
             if (row.value !== undefined) {
                 const value = document.createElement('span');
                 value.className = 'actions-tree-value';
@@ -1050,6 +1055,10 @@ export const treeManagementMethods = uiModule({
             label.className = 'tree-row-menu-label';
             label.textContent = row.label;
             item.appendChild(label);
+            if (row.research) {
+                label.insertAdjacentHTML('beforeend', researchOpenSrHtml());
+                item.insertAdjacentHTML('beforeend', researchOpenMark({ sr: false }));
+            }
             if (row.checked !== undefined) {
                 item.classList.add('tree-startup-toggle');
                 item.setAttribute('role', 'menuitemcheckbox');

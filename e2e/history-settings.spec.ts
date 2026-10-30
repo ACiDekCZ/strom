@@ -158,7 +158,7 @@ test.describe('History in the life timeline: Settings', () => {
     test('the research not searching: the search is switched on by its terminal (the experiment link)', async ({ page }) => {
         const { history } = await setup(page, { layerOn: true, history: { searching: false } });
         await openSettings(page);
-        await expect(status(page)).toHaveText("The research does not look for events. Turn on the search in the research The search can also be switched on in the research's Settings.");
+        await expect(status(page)).toHaveText("The research does not look for events. Turn on the search in the research, opens in the research The search can also be switched on in the research's Settings.");
         await status(page).getByRole('button', { name: 'Turn on the search in the research' }).click();
         const opened = await links(page);
         expect(opened.some(u => u.includes('experiment') && u.includes('on'))).toBe(true);

@@ -51,7 +51,7 @@ test.describe('a conflict decided by a side in the app', () => {
         const [a, b] = await boxes(c.locator('.prc-side'));
         expect(Math.abs(a.y - b.y)).toBeLessThan(1);
         expect(b.x).toBeGreaterThan(a.x + a.width);
-        await expect(c.locator('.prc-links [data-do="decide"]')).toHaveText('Decide in the research ↗');
+        await expect(c.locator('.prc-links [data-do="decide"]')).toHaveText('Decide in the research, opens in the research');
         await expect(c.locator('.prc-links [data-do="agent"]')).toBeVisible();
         expect(await c.locator('.prc-links').evaluate(el => getComputedStyle(el).borderTopStyle)).toBe('solid');
 
@@ -132,7 +132,7 @@ test.describe('a conflict decided by a side in the app', () => {
         ]);
     });
 
-    test('not decidable from the app (422 conflict.no-edit): its own sentence, no "Try again", the choices off; "Decide in the research ↗" opens it at the conflict without a side', async ({ page }) => {
+    test('not decidable from the app (422 conflict.no-edit): its own sentence, no "Try again", the choices off; "Decide in the research" opens it at the conflict without a side', async ({ page }) => {
         await page.setViewportSize({ width: 1280, height: 900 });
         const { decide } = await setup(page);
         await openKnows(page);
@@ -148,9 +148,9 @@ test.describe('a conflict decided by a side in the app', () => {
         await expect(c.locator('.prc-note')).toHaveCount(0);
         // The link once, in the notice; the agent stays under the line. The keyboard on the way left.
         const decideLink = c.locator('.prc-notice-action');
-        await expect(decideLink).toHaveText('Decide in the research ↗');
+        await expect(decideLink).toHaveText('Decide in the research, opens in the research');
         await expect(decideLink).toBeFocused();
-        await expect(c.getByText('Decide in the research ↗')).toHaveCount(1);
+        await expect(c.getByText('Decide in the research, opens in the research')).toHaveCount(1);
         await expect(c.locator('.prc-links .person-research-agent')).toBeVisible();
         // No notice with the card in sight.
         await expect(page.locator('.toast').filter({ hasText: 'cannot decide' })).toHaveCount(0);
@@ -253,14 +253,14 @@ test.describe('a conflict decided by a side in the app', () => {
         await expect(side(page, 'user').locator('.prc-choice')).toBeEnabled();
     });
 
-    test('no bridge deciding (an older research): the choices are links with ↗ and a note; the card stays', async ({ page }) => {
+    test('no bridge deciding (an older research): the choices are links with the research mark and a note; the card stays', async ({ page }) => {
         await page.setViewportSize({ width: 1280, height: 900 });
         const { decide } = await setup(page, { features: [] });
         await openKnows(page);
         const c = cardOf(page);
         await expect(c).toHaveAttribute('data-state', 'link');
-        await expect(side(page, 'user').locator('.prc-choice')).toHaveText('Keep the value from the app ↗');
-        await expect(side(page, 'research').locator('.prc-choice')).toHaveText("Take the research's value ↗");
+        await expect(side(page, 'user').locator('.prc-choice')).toHaveText('Keep the value from the app, opens in the research');
+        await expect(side(page, 'research').locator('.prc-choice')).toHaveText("Take the research's value, opens in the research");
         await expect(c.locator('.prc-link-note')).toHaveText('Opens the research; it only asks to confirm.');
         await side(page, 'user').locator('.prc-choice').click();
         await side(page, 'research').locator('.prc-choice').click();

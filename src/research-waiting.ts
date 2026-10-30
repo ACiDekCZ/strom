@@ -122,7 +122,7 @@ export function waitingTaskActions(w: LiveWaiting): WaitingAction[] | null {
 }
 
 /**
- * The task a group's "Chat ↗" opens: of its items that offer a chat, the one
+ * The task a group's "Chat" opens: of its items that offer a chat, the one
  * first in the research's order (the research's chat takes up the group's
  * other waiting tasks itself); null when none offers one.
  */

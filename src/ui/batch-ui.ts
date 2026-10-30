@@ -7,6 +7,7 @@
  * folder again goes on, the files the research has are skipped.
  */
 
+import { researchOpenLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { strings, getCurrentLanguage } from '../strings.js';
@@ -484,7 +485,7 @@ export const batchMethods = uiModule({
                         <span>${esc(b.progressBytes(formatBytesShort(r.doneBytes), formatBytesShort(r.totalBytes)))}</span></div>
                     <div class="batch-bar"><span style="width:${pct}%"></span></div>
                     ${r.paused ? `<p class="batch-paused-note">${esc(r.held || (r.lost ? b.bridgeLost : b.pausedNote))}${r.held && r.heldSeal && this.activeResearchLink('seal')
-                        ? ` <button type="button" class="link-button" data-act="seal">${esc(strings.sync.held.sealButton)}</button>` : ''}</p>`
+                        ? ` <button type="button" class="link-button" data-act="seal">${researchOpenLabel(strings.sync.held.sealButton)}</button>` : ''}</p>`
                         : cur ? `<p class="batch-now">${esc(b.now(cur.path, formatBytesShort(cur.size)))}</p>` : ''}
                     ${r.skipped + r.skippedAsked ? `<p class="batch-skipped">${esc(b.skipped)} · ${r.skipped + r.skippedAsked}</p>` : ''}
                     ${refused}
@@ -522,10 +523,10 @@ export const batchMethods = uiModule({
                     ${refusedRow}
                     ${!stored && r.result?.tasks ? `<div class="batch-done-row"><span>${esc(b.tasks)}</span><strong>${r.result.tasks}</strong></div>` : ''}
                     <p class="batch-done-text">${esc(materials && stored ? b.doneTextMaterials : archive ? b.doneTextArchive : stored ? b.doneTextStored : b.doneText)}</p>
-                    ${open && !materials ? `<button type="button" class="research-sync-link" data-act="open-research">${esc(b.openInResearch)}</button>` : ''}
+                    ${open && !materials ? `<button type="button" class="research-sync-link" data-act="open-research">${researchOpenLabel(b.openInResearch)}</button>` : ''}
                 </div>
                 <div class="buttons batch-footer">${materials ? `
-                    ${open ? `<button type="button" class="research-sync-link batch-foot-link" data-act="open-research">${esc(b.openInResearch)}</button>` : ''}
+                    ${open ? `<button type="button" class="research-sync-link batch-foot-link" data-act="open-research">${researchOpenLabel(b.openInResearch)}</button>` : ''}
                     <span class="batch-foot-note"></span>
                     <button type="button" class="secondary" data-act="close">${esc(strings.buttons.close)}</button>
                     <button type="button" class="primary" data-act="open-materials">${esc(b.openInMaterials)}</button>` : `

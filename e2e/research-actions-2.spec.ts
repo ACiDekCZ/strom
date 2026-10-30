@@ -102,7 +102,7 @@ async function menuActions(page: Page, name: string): Promise<string[]> {
 }
 
 test.describe('Research menu, second wave', () => {
-    test('"Update the research 1.7.0 ↗" in Other actions (a dot there, none on the button: D7), "Undo last send" with its time, "Research settings"', async ({ page }) => {
+    test('"Update the research 1.7.0" in Other actions (a dot there, none on the button: D7), "Undo last send" with its time, "Research settings"', async ({ page }) => {
         // Earlier today (just after midnight two hours back is yesterday: shown with its date).
         const sentAt = new Date(Math.max(Date.now() - 2 * 3600_000, new Date().setHours(0, 0, 1, 0)));
         const lastIntake = { id: 'I0042', at: sentAt.toISOString() };
@@ -122,7 +122,7 @@ test.describe('Research menu, second wave', () => {
         const update = page.locator('#research-item-update');
         await expect(update.locator('.research-item-label')).toHaveText('Update the research');
         await expect(update.locator('.research-item-val')).toHaveText('1.7.0');
-        await expect(update.locator('.research-item-ext')).toHaveText('↗');
+        await expect(update.locator('.research-open-mark')).toHaveCount(1);
         await expect(update.locator('.research-item-attn')).toBeVisible();
         await expect(update).toHaveAttribute('aria-label', 'Update the research, 1.7.0, opens in the research');
         await expect(page.locator('#research-update-block')).toHaveCount(0);
@@ -171,12 +171,12 @@ test.describe('Research menu, second wave', () => {
 });
 
 test.describe('Follow live from the app', () => {
-    test('announced: "Follow live ↗" asks the research to open the tree live here', async ({ page }) => {
+    test('announced: "Follow live" asks the research to open the tree live here', async ({ page }) => {
         await setup(page, [...ALL, 'live']);
         await openResearchMenu(page, { expandMore: true });
         const item = page.locator('#research-item-live');
         await expect(item).toContainText('Follow live');
-        await expect(item).toContainText('↗');
+        await expect(item.locator('.research-open-mark')).toHaveCount(1);
         await item.click();
         expect(await launched(page)).toEqual([`strom-research://live?tree=${UUID}`]);
         await expect(page.locator('.toast')).toContainText('Opening the research');
@@ -234,7 +234,7 @@ test.describe('live panel: up next, update, spend', () => {
             'Matriky Chlumy 1860–1870', 'Sčítání 1880', 'Pozemková kniha', 'Parked: Oddací matrika',
         ]);
         await expect(panel.locator('.live-queue-num')).toHaveText(['1', '2', '3']);
-        await expect(panel.locator('.live-queue-rest')).toHaveText('and 9 more in the research ↗');
+        await expect(panel.locator('.live-queue-rest')).toHaveText('and 9 more in the research, opens in the research');
         // Order: at work → latest changes → up next (nobody waits here).
         const headings = await panel.locator('.live-section__title').allTextContents();
         expect(headings.map(h => h.trim())).toEqual(['At work', 'Latest changes', 'Up next']);
@@ -246,14 +246,14 @@ test.describe('live panel: up next, update, spend', () => {
         await expect(more).toHaveAttribute('aria-label', 'Task options');
         await more.click();
         const menu = page.locator('#live-task-menu');
-        await expect(menu.locator('.context-menu-item')).toHaveText(['Park ↗', 'Drop ↗']);
+        await expect(menu.locator('.context-menu-item')).toHaveText(['Park, opens in the research', 'Drop, opens in the research']);
         await page.keyboard.press('Escape');
         await expect(menu).toHaveCount(0);
         await expect(panel).toBeVisible();
         await more.click();
-        await menu.getByText('Park ↗').click();
+        await menu.getByText('Park, opens in the research').click();
         await panel.locator('.live-queue-more').nth(1).click();
-        await page.locator('#live-task-menu').getByText('Drop ↗').click();
+        await page.locator('#live-task-menu').getByText('Drop, opens in the research').click();
         await panel.locator('.live-queue-wake').click();
         await panel.locator('.live-queue-rest').click();
         await panel.locator('.live-panel-update-link').click();
@@ -270,7 +270,7 @@ test.describe('live panel: up next, update, spend', () => {
         await expect(rows).toHaveCount(5);
     });
 
-    test('a task menu closed at once (Escape, a redraw) leaves the next one working: Park ↗ is not lost', async ({ page }) => {
+    test('a task menu closed at once (Escape, a redraw) leaves the next one working: Park is not lost', async ({ page }) => {
         await follow(page, { queue: [{ id: 'T0101', text: 'Matriky Chlumy 1860–1870', state: 'next' }] });
         const more = page.locator('#live-panel .live-queue-more').first();
         await expect(more).toBeVisible();
@@ -279,7 +279,7 @@ test.describe('live panel: up next, update, spend', () => {
         await more.evaluate((b: HTMLElement) => { b.click(); b.click(); });
         await expect(page.locator('#live-task-menu')).toHaveCount(0);
         await more.click();
-        await page.locator('#live-task-menu').getByText('Park ↗').click();
+        await page.locator('#live-task-menu').getByText('Park, opens in the research').click();
         expect(await launched(page)).toEqual([`strom-research://task?tree=${UUID}&task=T0101&do=park`]);
     });
 
@@ -414,12 +414,12 @@ test.describe('What the research knows', () => {
 });
 
 test.describe('approve a draft story', () => {
-    test('draft + story announced: "Approve in the research ↗"; an approved story: none', async ({ page }) => {
+    test('draft + story announced: "Approve in the research"; an approved story: none', async ({ page }) => {
         await setup(page);
         const jan = await personId(page, 'P0012');
         await page.evaluate((id) => window.Strom.UI.runPersonMenuAction(id, 'story'), jan);
         const approve = page.locator('#person-story-approve');
-        await expect(approve).toHaveText('Approve in the research ↗');
+        await expect(approve).toHaveText('Approve in the research, opens in the research');
         await approve.click();
         expect(await launched(page)).toEqual([`strom-research://story?tree=${UUID}&person=P0012&do=final`]);
         await page.keyboard.press('Escape');
@@ -453,7 +453,7 @@ test.describe('Start research with this tree (G3)', () => {
         await recordLaunches(page);
     }
 
-    test('the explanation dialog offers "Start research ↗" only when the research announced `new`', async ({ page }) => {
+    test('the explanation dialog offers "Start research" only when the research announced `new`', async ({ page }) => {
         await appTree(page, ['send']);
         await page.evaluate(() => window.Strom.UI.showResearchInfoDialog());
         await expect(page.locator('#research-info-modal')).toBeVisible();
@@ -474,7 +474,7 @@ test.describe('Start research with this tree (G3)', () => {
         await page.evaluate(() => window.Strom.UI.refreshResearchPromo());
         const tree = await openTreeActions(page);
         await expect(page.locator('#research-menu-row')).toBeHidden();
-        await expect(tree.locator('#actions-tree-researchAdopt-row')).toHaveText('Start research ↗');
+        await expect(tree.locator('#actions-tree-researchAdopt-row')).toHaveText('Start research, opens in the research');
         await page.evaluate(() => window.Strom.UI.closeActionsMenu());
         await page.evaluate(() => window.Strom.UI.showResearchInfoDialog());
         const dialog = page.locator('#research-info-modal');
@@ -849,7 +849,7 @@ test.describe('Start research with this tree (G3)', () => {
         expect(before).toEqual({ empty: true, now: true });
     });
 
-    test('an empty tree, not from the research, the research here: "Start research ↗" hands it over (never nothing to do)', async ({ page }) => {
+    test('an empty tree, not from the research, the research here: "Start research" hands it over (never nothing to do)', async ({ page }) => {
         await page.setViewportSize({ width: 1440, height: 900 });
         await seed(page, ALL);
         await openApp(page);
@@ -858,7 +858,7 @@ test.describe('Start research with this tree (G3)', () => {
         await recordLaunches(page);
         // The research is here: no way to its website on the empty screen.
         await expect(page.locator('#empty-state .research-offer')).toBeHidden();
-        // Tree: {name} › Research → Start research ↗ (menu 1020 §3.1).
+        // Tree: {name} › Research → Start research (menu 1020 §3.1).
         const tree = await openTreeActions(page);
         await tree.locator('#actions-tree-researchAdopt-row').click();
         await expect.poll(async () => (await launched(page))[0]).toMatch(TOKEN_RE);
@@ -867,15 +867,15 @@ test.describe('Start research with this tree (G3)', () => {
         await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
         const row = page.locator('.tree-manager-item').first();
         await row.locator('.tree-row-menu-btn').click();
-        await expect(row.locator('.tree-row-menu-item', { hasText: 'Start research ↗' })).toHaveCount(1);
+        await expect(row.locator('.tree-row-menu-item', { hasText: 'Start research, opens in the research' })).toHaveCount(1);
     });
 
-    test('tree manager: "Start research ↗" in the row menu of an app tree', async ({ page }) => {
+    test('tree manager: "Start research" in the row menu of an app tree', async ({ page }) => {
         await appTree(page, ALL);
         await page.evaluate(() => window.Strom.UI.showTreeManagerDialog());
         const row = page.locator('.tree-manager-item', { hasText: 'Dvořákovi' });
         await row.locator('.tree-row-menu-btn').click();
-        const item = row.locator('.tree-row-menu-item', { hasText: 'Start research ↗' });
+        const item = row.locator('.tree-row-menu-item', { hasText: 'Start research, opens in the research' });
         await expect(item).toHaveCount(1);
     });
 });

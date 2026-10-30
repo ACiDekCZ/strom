@@ -324,7 +324,7 @@ test.describe('Materials window: selecting', () => {
         await openWindow(page);
         await win(page).locator('.mw-canvas [data-mw="batch-menu"]').first().click();
         const menu = page.locator('.mw-pop-batchMenu');
-        await expect(menu.locator('[data-action]')).toHaveText(['Select whole batch (6)', 'Assign whole batch to a person…', 'Hide whole batch…', 'Open the batch in the research ↗']);
+        await expect(menu.locator('[data-action]')).toHaveText(['Select whole batch (6)', 'Assign whole batch to a person…', 'Hide whole batch…', 'Open the batch in the research, opens in the research']);
         await menu.locator('[data-action="hide"]').click();
         const acts = await actions(page);
         expect(acts[0]).toMatchObject({ id: 'hide', ctx: { batch: 'b-box', where: 'window' } });

@@ -7,6 +7,7 @@
  * matches the tree's tie (another path moved the base) is not used.
  */
 
+import { researchOpenLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
@@ -575,7 +576,7 @@ export const researchChangesMethods = uiModule({
             appOnlyRows = appOnly.map(r => otherRowOf(r, 'appOnly', data));
             // Conflicts the same in an archive as in a research: a fact changed in both copies is one (F40).
             if (conflicts && this.researchDecideUrl(ctx.treeId)) {
-                foot = `<button type="button" class="research-sync-link" data-act="decide">${esc(s.decideInResearch)}</button>`;
+                foot = `<button type="button" class="research-sync-link" data-act="decide">${researchOpenLabel(s.decideInResearch)}</button>`;
             }
             if (keptHere) foot += `<button type="button" class="research-sync-link" data-act="loadNewer">${esc(s.loadVersion)}</button>`;
         } else {

@@ -109,7 +109,7 @@ export const researchRemovedMethods = uiModule({
         const viaLink = this.researchLinkAvailable('conflict') && !!take('user');
         const message = [back ? p.backAsk : p.removeAsk, sides, viaLink ? k.linkNote : k.remote].join('\n\n');
         const choices = viaLink
-            ? [{ id: 'user', label: back ? p.backTake : p.removeTake }, { id: 'research', label: back ? p.backKeep : p.removeKeep }]
+            ? [{ id: 'user', label: back ? p.backTake : p.removeTake, research: true }, { id: 'research', label: back ? p.backKeep : p.removeKeep, research: true }]
             : [];
         const pick = await this.showChoice(message, back ? p.backTitle : p.removeTitle, choices, undefined,
             { subtitle: a.name || a.person, cancelLabel: viaLink ? k.later : p.close });

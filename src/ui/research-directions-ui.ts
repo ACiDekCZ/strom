@@ -9,6 +9,7 @@
  * already has such a direction. Bridge text is set as text, never HTML.
  */
 
+import { setResearchOpenLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { formatLiveClock } from '../live-time.js';
@@ -435,10 +436,10 @@ export const researchDirectionsMethods = uiModule({
             }
         }
         if (meta.childElementCount > 0) main.appendChild(meta);
-        // Right on the row: End ↗ for an empty direction, Restart ↗ for a paused / ended one.
+        // Right on the row: End for an empty direction, Restart for a paused / ended one (in the research).
         if (canDo && (isEmpty(d) || d.state !== 'active')) {
             const what: ResearchDirectionDo = d.state === 'active' ? 'done' : 'resume';
-            const btn = el('button', 'link-button research-direction__do', `${what === 'done' ? L.dirEnd : L.dirResume} ↗`);
+            const btn = setResearchOpenLabel(el('button', 'link-button research-direction__do'), what === 'done' ? L.dirEnd : L.dirResume);
             btn.type = 'button';
             btn.dataset.do = what;
             btn.onclick = () => this.runDirection(d.id, what);
@@ -499,7 +500,7 @@ export const researchDirectionsMethods = uiModule({
         return row;
     },
 
-    /** The open detail: generations (ancestors), the last session, Work on it ↗, Show in tree. */
+    /** The open detail: generations (ancestors), the last session, Work on it, Show in tree. */
     directionDetail(d: LiveDirection, mode: Mode): HTMLElement {
         const L = strings.live;
         const detail = el('div', 'research-direction__detail');
@@ -524,7 +525,7 @@ export const researchDirectionsMethods = uiModule({
         // Nothing that leads to an agent in an archive or while the research waits for one.
         const work = this.activeResearchNoAgent() ? null : this.activeResearchLink('chat', { research: d.id });
         if (work) {
-            const btn = el('button', 'link-button', `${L.dirWork} ↗`);
+            const btn = setResearchOpenLabel(el('button', 'link-button'), L.dirWork, { ai: true });
             btn.type = 'button';
             btn.dataset.do = 'work';
             btn.onclick = () => this.launchResearchLink(work, 'agent');
@@ -576,7 +577,7 @@ export const researchDirectionsMethods = uiModule({
             item.setAttribute('role', 'menuitem');
             item.tabIndex = -1;
             item.dataset.do = what;
-            item.append(el('span', 'research-direction-menu__label', `${label} ↗`), el('span', 'research-direction-menu__hint', hint));
+            item.append(setResearchOpenLabel(el('span', 'research-direction-menu__label'), label), el('span', 'research-direction-menu__hint', hint));
             item.onclick = () => this.runDirection(d.id, what);
             item.onkeydown = (e) => {
                 if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.runDirection(d.id, what); }

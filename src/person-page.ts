@@ -19,6 +19,7 @@ import {
     computePersonHistory, HistoryPayload, PersonHistoryEnv, LifelineHistoryItem, historySourceLabel, interleaveHistory, residencePoints,
 } from './history.js';
 import { placeKey } from './places.js';
+import { researchOpenSvg } from './history-symbols.js';
 import { getStringsForLang, Language, PersonPageCaptionEvent, PersonPageRegister } from './strings.js';
 import { parseFlexDate, formatFlexDate, yearOf, ageBetween, toCanonical } from './dates.js';
 import { nameHtml, shownName, shownNameOrEmpty } from './person-name.js';
@@ -801,9 +802,12 @@ function researchItems(page: PersonPageData, lang: Language, c?: Ctx): ResearchI
     if (!page.groups.research) return out;
     const person = page.tree.persons[page.personId];
     if (!person) return out;
+    // A link into the research: its mark at the end (12 px, its meaning on the title and the spoken name).
     const act = (kind: 'research:open' | 'research:find', arg: string | undefined, label: string) =>
         c && c.app && !page.readOnly
-            ? ` <button type="button" class="pp-act" data-pp-action="${kind}"${arg ? ` data-pp-arg="${esc(arg)}"` : ''}>${esc(label)} ›</button>`
+            ? ` <button type="button" class="pp-act" data-pp-action="${kind}"${arg ? ` data-pp-arg="${esc(arg)}"` : ''}`
+                + ` aria-label="${esc(`${label}, ${S.research.opensInResearchSr}`)}">${esc(label)}`
+                + `<span class="pp-open-mark" title="${esc(S.research.opensInResearchTitle)}" aria-hidden="true">${researchOpenSvg(12)}</span></button>`
             : '';
     for (const k of person.research?.conflicts ?? []) {
         if (k.status !== 'open') continue;

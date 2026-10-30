@@ -9,6 +9,7 @@
  * See src/ui/module.ts for the composition pattern.
  */
 
+import { researchOpenLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { PersonId, PartnershipId, Story } from '../types.js';
@@ -224,11 +225,11 @@ export const storyCompareMethods = uiModule({
         } else if (choice && urls.final) {
             foot.classList.add('story-compare-foot--note');
             foot.innerHTML = `<div class="story-compare-msg">${esc(L.sentAgain(label(choice)))}</div>`
-                + `<button type="button" class="link-button" data-compare-again>${esc(L.openAgain)}</button>${close}`;
+                + `<button type="button" class="link-button" data-compare-again>${researchOpenLabel(L.openAgain)}</button>${close}`;
         } else if (urls.final && urls.keep) {
             foot.innerHTML = `${close}<span class="story-compare-gap"></span>`
-                + `<button type="button" class="secondary" data-compare-do="keep">${esc(L.keepOld)}</button>`
-                + `<button type="button" class="primary" data-compare-do="final">${esc(L.takeNew)}</button>`;
+                + `<button type="button" class="secondary" data-compare-do="keep">${researchOpenLabel(L.keepOld)}</button>`
+                + `<button type="button" class="primary" data-compare-do="final">${researchOpenLabel(L.takeNew)}</button>`;
         } else {
             foot.classList.add('story-compare-foot--note');
             foot.innerHTML = `<div class="story-compare-msg">${esc(L.decideOnDesktop)}</div>${close}`;

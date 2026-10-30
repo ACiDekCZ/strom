@@ -63,9 +63,9 @@ export interface ConflictCardView {
     tag: 'open' | 'busy' | 'done';
     /** The sides (with or without choices), the decided block, the notice alone, or nothing (gone). */
     body: 'sides' | 'decided' | 'notice' | 'none';
-    /** `decide`: "Decide in the research ↗" (a link into it, without a side). */
+    /** `decide`: "Decide in the research (research)" (a link into it, without a side). */
     notice: { tone: 'warn' | 'info' | 'error'; text: ConflictNoticeText; action: 'send' | 'retry' | 'load' | 'decide' | null } | null;
-    /** The choices: buttons deciding through the bridge, links into the research (↗), or none. */
+    /** The choices: buttons deciding through the bridge, links into the research (the research mark), or none. */
     choices: 'buttons' | 'links' | 'none';
     /** Both choices off (sending comes first); a busy card has the asked one busy, the other off. */
     disabled: boolean;
@@ -75,7 +75,7 @@ export interface ConflictCardView {
     notes: boolean;
     /** "Opens the research; it only asks to confirm." under the sides. */
     linkNote: boolean;
-    /** The links into the research under the line ("Decide in the research ↗"). */
+    /** The links into the research under the line ("Decide in the research (research)"). */
     researchLinks: boolean;
     /** "Leave it to the agent" under the line (with them, or alone when the notice has the other). */
     agent: boolean;

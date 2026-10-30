@@ -20,6 +20,7 @@
  * The pure logic lives in src/research-link.ts.
  */
 
+import { researchOpenMark, setResearchOpenLabel } from './research-open-mark.js';
 import { DataManager, migrateData } from '../data.js';
 import { TreeManager } from '../tree-manager.js';
 import { TreeRenderer } from '../renderer.js';
@@ -1806,7 +1807,7 @@ export const researchUiMethods = uiModule({
         const start = link && this.researchLinkAvailable('open') ? researchSchemeUrl('open', { tree: link.id }, announcedResearchScheme()) : null;
         const pick = await this.showChoice(message, r.editedTitle, [{ id: 'copy', label: r.openCopy }], images, {
             aside: { id: 'update', label: u.overwrite },
-            ...(start ? { link: { label: u.startResearch, run: () => this.launchResearchLink(start) } } : {}),
+            ...(start ? { link: { label: u.startResearch, run: () => this.launchResearchLink(start), research: true } } : {}),
         });
         return pick as 'update' | 'copy' | null;
     },
@@ -2165,7 +2166,7 @@ export const researchUiMethods = uiModule({
         }, FOLLOW_HIGHLIGHT_MS);
     },
 
-    /** "Answer ↗" at a waiting task: that task in the research, else the research itself. */
+    /** "Answer (research)" at a waiting task: that task in the research, else the research itself. */
     answerResearchTask(w: LiveWaiting): void {
         // A story's new version: the research shows both and asks (take it is the default).
         if (w.kind === 'story' && w.person) {
@@ -2185,7 +2186,7 @@ export const researchUiMethods = uiModule({
         if (url) this.launchResearchLink(url);
     },
 
-    /** "Answer ↗" can be offered at this waiting item (a link the research takes leads there). */
+    /** "Answer (research)" can be offered at this waiting item (a link the research takes leads there). */
     canAnswerResearchWaiting(w: LiveWaiting): boolean {
         if (this.researchLinkAvailable('open')) return true;
         return w.kind === 'permission' ? this.researchLinkAvailable('archive') : this.researchLinkAvailable('task');
@@ -2884,7 +2885,7 @@ export const researchUiMethods = uiModule({
     /**
      * The "Waiting for you" section: the first few tasks to do (in the
      * research's order, with their kind), since when, and (while the research
-     * runs) "Answer ↗" into the research; the rest in the overview. Bridge
+     * runs) "Answer (research)" into the research; the rest in the overview. Bridge
      * text is text only. Returns the section's body. Without `fold` the
      * heading does not fold (the panel shown without following).
      */
@@ -2929,7 +2930,7 @@ export const researchUiMethods = uiModule({
             if (at) text.appendChild(at);
             li.appendChild(text);
             if (answerable && this.canAnswerResearchWaiting(w)) {
-                const answer = el('button', 'live-waiting-answer', r.answer);
+                const answer = setResearchOpenLabel(el('button', 'live-waiting-answer'), r.answer);
                 answer.type = 'button';
                 answer.onclick = () => this.answerResearchTask(w);
                 li.appendChild(answer);
@@ -3279,7 +3280,7 @@ export const researchUiMethods = uiModule({
         strip.appendChild(el('span', 'live-panel-update-text', r.updateAvailable(version)));
         const url = this.activeResearchLink('update');
         if (url) {
-            const btn = el('button', 'link-button live-panel-update-link', r.updateResearch);
+            const btn = setResearchOpenLabel(el('button', 'link-button live-panel-update-link'), r.updateResearch);
             btn.type = 'button';
             btn.onclick = () => this.launchResearchLink(url);
             strip.appendChild(btn);
@@ -3289,7 +3290,7 @@ export const researchUiMethods = uiModule({
 
     /**
      * "Up next": the first `limit` tasks of the agent's queue (⋯ parks or
-     * drops one in the research), parked ones below (Resume ↗), the rest as
+     * drops one in the research), parked ones below (Resume (research)), the rest as
      * one link. Nothing changes here after an action: the next status tells.
      */
     appendQueueSection(body: HTMLElement, s: LiveSession,
@@ -3370,7 +3371,7 @@ export const researchUiMethods = uiModule({
             const li = el('li', 'live-queue-row live-queue-row--parked');
             li.appendChild(el('span', 'live-queue-text', `${r.parkedPrefix} ${q.text}`));
             if (canTask) {
-                const wake = el('button', 'link-button live-queue-wake', r.wake);
+                const wake = setResearchOpenLabel(el('button', 'link-button live-queue-wake'), r.wake);
                 wake.type = 'button';
                 wake.onclick = () => this.runLiveTask(q.id, 'wake');
                 li.appendChild(wake);
@@ -3380,7 +3381,7 @@ export const researchUiMethods = uiModule({
         const open = this.activeResearchLink('open');
         if (hidden > 0 && open) {
             const li = el('li', 'live-queue-row live-queue-row--more');
-            const more = el('button', 'link-button live-queue-rest', r.queueMore(hidden));
+            const more = setResearchOpenLabel(el('button', 'link-button live-queue-rest'), r.queueMore(hidden));
             more.type = 'button';
             more.onclick = () => this.launchResearchLink(open);
             li.appendChild(more);
@@ -3395,7 +3396,7 @@ export const researchUiMethods = uiModule({
         if (url) this.launchResearchLink(url);
     },
 
-    /** The small ⋯ menu of a queued task: Park ↗ / Drop ↗. Escape or a click elsewhere closes it. */
+    /** The small ⋯ menu of a queued task: Park / Drop (in the research). Escape or a click elsewhere closes it. */
     openLiveTaskMenu(anchor: HTMLElement, task: string): void {
         const wasOpen = document.getElementById('live-task-menu')?.dataset.task === task;
         this.closeLiveTaskMenu();
@@ -3407,7 +3408,7 @@ export const researchUiMethods = uiModule({
         menu.setAttribute('role', 'menu');
         menu.setAttribute('aria-label', r.taskMenu);
         for (const [what, label] of [['park', r.park], ['drop', r.drop]] as const) {
-            const item = el('div', 'context-menu-item', label);
+            const item = setResearchOpenLabel(el('div', 'context-menu-item'), label);
             item.setAttribute('role', 'menuitem');
             item.tabIndex = -1;
             item.dataset.action = what;
@@ -3461,7 +3462,7 @@ export const researchUiMethods = uiModule({
         document.getElementById('live-task-menu')?.remove();
     },
 
-    /** "Agent this month: 4 sessions · $3.20" at the foot of the panel, ↗ to the sessions. */
+    /** "Agent this month: 4 sessions · $3.20" at the foot of the panel, (research) to the sessions. */
     appendSpendFoot(panel: HTMLElement, spend: LiveSpend): void {
         const r = strings.research;
         let amount: string;
@@ -3474,7 +3475,8 @@ export const researchUiMethods = uiModule({
         foot.appendChild(el('span', 'live-panel-spend-text', r.spend(spend.sessions, amount)));
         const url = this.activeResearchLink('sessions');
         if (url) {
-            const btn = el('button', 'live-panel-spend-link', '↗');
+            const btn = el('button', 'live-panel-spend-link');
+            btn.innerHTML = researchOpenMark({ sr: false });
             btn.type = 'button';
             btn.setAttribute('aria-label', r.spendOpenSr);
             btn.title = r.spendOpenSr;
@@ -3577,7 +3579,7 @@ export const researchUiMethods = uiModule({
                 foot.appendChild(follow);
             }
             if (open) {
-                const btn = el('button', 'primary live-panel-open', r.openResearch + ' ↗');
+                const btn = setResearchOpenLabel(el('button', 'primary live-panel-open'), r.openResearch);
                 btn.type = 'button';
                 btn.onclick = () => this.launchResearchLink(open);
                 foot.appendChild(btn);

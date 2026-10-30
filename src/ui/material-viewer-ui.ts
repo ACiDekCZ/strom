@@ -12,6 +12,7 @@
  * See src/ui/module.ts for the composition pattern.
  */
 
+import { setResearchOpenLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { TreeRenderer } from '../renderer.js';
 import { Person, PersonId } from '../types.js';
@@ -122,7 +123,7 @@ function releaseUrls(state: ViewerState | null): void {
     state.urls = [];
 }
 
-interface CardButton { label: string; run: () => void; primary?: boolean }
+interface CardButton { label: string; run: () => void; primary?: boolean; /** Opens the research: its mark. */ research?: boolean }
 
 /** The card in place of an image: the type's tile (or a preview), a sentence and its buttons. */
 /** An object URL of a downloaded file is let go this long after its click (the save has started by then). */
@@ -181,6 +182,7 @@ function viewerCard(letters: string, text: string, buttons: CardButton[], previe
         const row = h('div', 'mv-card-actions');
         for (const b of buttons) {
             const btn = h('button', b.primary ? 'is-primary' : '', b.label);
+            if (b.research) setResearchOpenLabel(btn, b.label);
             btn.type = 'button';
             btn.addEventListener('click', () => b.run());
             row.appendChild(btn);
@@ -279,9 +281,9 @@ export const materialViewerMethods = uiModule({
         const type = materialType(item.mime, itemName(item));
         const systemLink = inArchive && ctx && sha && ctx.caps.links !== false
             ? materialSystemLink(ctx.researchId, sha, announcedResearchScheme()) : null;
-        const openSystem: CardButton[] = systemLink ? [{ label: m.openSystem, run: () => this.launchResearchLink(systemLink) }] : [];
+        const openSystem: CardButton[] = systemLink ? [{ label: m.openSystem, run: () => this.launchResearchLink(systemLink), research: true }] : [];
         const startUrl = this.researchStartUrl();
-        const start: CardButton[] = startUrl ? [{ label: strings.sync.startResearch.replace(' ↗', ''), run: () => this.researchSyncAction('startResearch'), primary: true }] : [];
+        const start: CardButton[] = startUrl ? [{ label: strings.sync.startResearch, run: () => this.researchSyncAction('startResearch'), primary: true, research: true }] : [];
         const fallback = () => slots.card(viewerCard(letters, m.openSystemText(ext), openSystem));
 
         // Only in the tree: its own copy.
@@ -491,8 +493,9 @@ export const materialViewerMethods = uiModule({
         const foot = h('div', 'mv-foot');
         const actions = h('div', 'mv-actions');
         let writes = false;
-        const action = (label: string, run: () => void, opts: { primary?: boolean; danger?: boolean; write?: boolean; id: string }) => {
+        const action = (label: string, run: () => void, opts: { primary?: boolean; danger?: boolean; write?: boolean; id: string; research?: boolean }) => {
             const b = h('button', `mv-act${opts.primary ? ' is-primary' : ''}${opts.danger ? ' is-danger' : ''}`, label);
+            if (opts.research) setResearchOpenLabel(b, label);
             b.type = 'button';
             b.dataset.action = opts.id;
             const off = !!opts.write && !up;
@@ -527,7 +530,7 @@ export const materialViewerMethods = uiModule({
                 else action(m.hide, () => this.materialAction('hide', [item], { where: 'viewer' }), { write: true, id: 'hide' });
             }
             const link = ctx && sha && ctx.caps.links !== false ? materialSystemLink(ctx.researchId, sha, announcedResearchScheme()) : null;
-            if (link) action(m.openSystem, () => this.launchResearchLink(link), { id: 'openSystem' });
+            if (link) action(m.openSystem, () => this.launchResearchLink(link), { id: 'openSystem', research: true });
             if (up && sha && item.here) download(fileUrl(ctx!.base!, sha), name);
             else if (item.attachment?.dataUrl && !item.attachment.originalOnly) download(item.attachment.dataUrl, item.attachment.name);
         } else if (item.attachment) {

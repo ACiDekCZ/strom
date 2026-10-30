@@ -11,6 +11,7 @@
  * the value the research's version brings.
  */
 
+import { researchOpenLabel } from './research-open-mark.js';
 import { DataManager } from '../data.js';
 import { strings } from '../strings.js';
 import { PersonId, ResearchConflict, ResearchConflictValue } from '../types.js';
@@ -210,7 +211,7 @@ export const conflictPanelMethods = uiModule({
             const label = n.action === 'send' ? strings.sync.barSend : n.action === 'retry' ? k.retry : n.action === 'decide' ? strings.research.decide : '';
             notice = `<div class="prc-notice prc-notice--${n.tone}" role="status">
                     <span class="prc-notice-text">${esc(text)}</span>${label ? `
-                    <button type="button" class="prc-notice-action" data-notice-action="${n.action}" data-focus="notice">${esc(label)}</button>` : ''}
+                    <button type="button" class="prc-notice-action" data-notice-action="${n.action}" data-focus="notice">${n.action === 'decide' ? researchOpenLabel(label) : esc(label)}</button>` : ''}
                 </div>`;
         }
 
@@ -233,7 +234,7 @@ export const conflictPanelMethods = uiModule({
                     ? `<span class="prc-spinner" aria-hidden="true"></span>${esc(k.busyTag)}` : esc(which === 'user' ? k.keepShort : k.takeShort)}</button>`;
             } else if (view.choices === 'links') {
                 choice = `<button type="button" class="prc-panel-choice" data-take="${which}" data-focus="choice-${which}"
-                    aria-label="${esc(which === 'user' ? k.keepLink : k.takeLink)}"${off ? ' disabled' : ''}${notes ? ` aria-describedby="${noteId}"` : ''}>${esc(which === 'user' ? k.keepShort : k.takeShort)} ↗</button>`;
+                    aria-label="${esc(`${which === 'user' ? k.keepLink : k.takeLink}, ${strings.research.opensInResearchSr}`)}"${off ? ' disabled' : ''}${notes ? ` aria-describedby="${noteId}"` : ''}>${researchOpenLabel(which === 'user' ? k.keepShort : k.takeShort, { sr: false })}</button>`;
             }
             const note = notes ? `<p class="prc-panel-note" id="${noteId}">${esc(which === 'user' ? k.keepNote : this.researchConflictTakeNote(c))}</p>` : '';
             return `
