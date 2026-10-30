@@ -51,7 +51,7 @@ export interface PlacePoint {
     /** Life-timeline sort key (`computePersonLifeline`); null for an undated point. */
     sortKey: number | null;
     year: number | null;
-    /** "1890–1900" when the date is a range or period. */
+    /** "1890–1900" when the date is a range or period; "před 1965" when an event's date says so (`yearText`). */
     yearLabel?: string;
     kind: 'birth' | 'death' | 'marriage' | 'divorce' | 'event' | 'coupleEvent' | 'relative';
     eventType?: LifeEventType;
@@ -72,6 +72,11 @@ export interface CollectPlacesOptions {
     protect?: boolean;
     /** The current year (living test without `living`). */
     now?: number;
+    /**
+     * An event's date to the year with its precision ("před 1965", "kolem 1965",
+     * "1950–1960"), as the page's header words it; the bare year without it.
+     */
+    yearText?: (date: string | undefined) => string;
 }
 
 /** Sort order of a point: undated birth first, undated death or burial last, other undated after the dated. */
@@ -126,9 +131,13 @@ export function collectPersonPlacePoints(tree: StromData, personId: PersonId, op
         if (!key) continue;
         if ((pt.kind === 'marriage' || pt.kind === 'divorce' || pt.kind === 'coupleEvent')
             && pt.partnershipId && hidden(partnerOf(pt.partnershipId))) continue;
+        // An event's date that says more than its year ("<1965", a range) keeps it, as in the header.
+        const evDate = pt.kind === 'event' && pt.eventId ? person.events?.find(e => e.id === pt.eventId)?.date : undefined;
+        const precise = evDate && opts.yearText ? opts.yearText(evDate) : '';
         out.push({
             placeKey: key, place, sortKey: pt.sortKey, year: pt.year,
-            ...(pt.yearLabel ? { yearLabel: pt.yearLabel } : pt.endYear ? { yearLabel: `${pt.year}–${pt.endYear}` } : {}),
+            ...(precise && precise !== String(pt.year) ? { yearLabel: precise }
+                : pt.yearLabel ? { yearLabel: pt.yearLabel } : pt.endYear ? { yearLabel: `${pt.year}–${pt.endYear}` } : {}),
             kind: pt.kind,
             ...(pt.eventType ? { eventType: pt.eventType } : {}),
             ...(pt.coupleType ? { coupleType: pt.coupleType } : {}),
@@ -418,12 +427,20 @@ export function placeLabelSides(
     });
 }
 
-/** Years of a place for its label: desktop "1860, 1883" (≤ 3) or first–last; phone first–last. */
+/**
+ * Years of a place for its label: desktop "1860, 1883" (≤ 3) or first–last; phone first–last.
+ * A year whose only points carry one worded date ("před 1965") shows it, except inside first–last.
+ */
 export function labelYears(points: readonly PlacePoint[]): { d: string; p: string } {
     const ys = [...new Set(points.map(p => p.year).filter((y): y is number => y !== null))].sort((a, b) => a - b);
     if (!ys.length) return { d: '', p: '' };
-    const range = ys.length > 1 ? `${ys[0]}–${ys[ys.length - 1]}` : String(ys[0]);
-    return { d: ys.length <= 3 ? ys.join(', ') : range, p: range };
+    const worded = (y: number): string => {
+        const labels = new Set(points.filter(p => p.year === y).map(p => p.yearLabel ?? ''));
+        const only = labels.size === 1 ? [...labels][0] : '';
+        return only && !only.includes('–') ? only : String(y);
+    };
+    const range = ys.length > 1 ? `${ys[0]}–${ys[ys.length - 1]}` : worded(ys[0]);
+    return { d: ys.length <= 3 ? ys.map(worded).join(', ') : range, p: range };
 }
 
 /** Estimated label width in px: name 12.5 px 600 (≈ 7 px a character) + years 11 px (≈ 6 px). */

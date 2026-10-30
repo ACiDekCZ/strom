@@ -484,7 +484,10 @@ export function preparePersonPageData(data: StromData, opts: PersonPageOptions, 
 
     const living = new Set<PersonId>([...Object.keys(tree.persons)].filter(p => prot.living.has(p as PersonId)) as PersonId[]);
     // The places map (§1): points from the whole protected tree, the coordinates of those places alone.
-    const places = collectPersonPlacePoints(full, id, { living: prot.living, protect: opts.privacy !== 'full', now: opts.now.getFullYear() });
+    const places = collectPersonPlacePoints(full, id, {
+        living: prot.living, protect: opts.privacy !== 'full', now: opts.now.getFullYear(),
+        yearText: date => personPageYear(date, opts.lang),
+    });
     const geo: Record<string, PlaceGeo> = {};
     for (const pt of places) {
         const g = full.places?.[pt.placeKey];
@@ -1563,7 +1566,19 @@ export function yearRangeHtml(a: string, b: string, mode: 'cell' | 'inline'): st
 
 function yearCell(label: string): string {
     const range = label.match(/^(.+?)–(.+)$/);
-    return `<span class="pp-y">${range ? yearRangeHtml(range[1], range[2], 'cell') : esc(label)}</span>`;
+    if (range) return `<span class="pp-y">${yearRangeHtml(range[1], range[2], 'cell')}</span>`;
+    // A worded year ("před 1965", "um 1965"): the word small above the year, as a range's end below it.
+    const worded = label.match(/^(\D+?)\s+(\d+)$/);
+    return `<span class="pp-y">${worded ? `<span class="pp-yr"><small>${esc(worded[1])}</small><b>${esc(worded[2])}</b></span>` : esc(label)}</span>`;
+}
+
+/** A timeline row's year: an event's date keeps its precision ("před 1965", "1950–1960"), as in the header. */
+function rowYearText(c: Ctx, pt: LifelinePoint): string {
+    if (pt.kind === 'event') {
+        const precise = personPageYear(pointDate(c, pt), c.page.lang);
+        if (precise && precise !== String(pt.year)) return precise;
+    }
+    return pt.yearLabel ?? String(pt.year);
 }
 
 function eventOf(c: Ctx, pt: LifelinePoint): LifeEvent | undefined {
@@ -1798,7 +1813,7 @@ function timelineHtml(c: Ctx): string {
         // The life chart's and the places list's anchors (#osa-…): the row, and inside it the point merged in.
         const id = anchorAttr(c, chartAnchorId(pt.sortKey));
         const mergedId = r.merged ? anchorAttr(c, chartAnchorId(r.merged.sortKey)) : '';
-        return `<div class="pp-row ${cls}"${id}>${yearCell(pt.yearLabel ?? String(pt.year))}`
+        return `<div class="pp-row ${cls}"${id}>${yearCell(rowYearText(c, pt))}`
             + `<span class="pp-m"><span class="pp-mk" aria-hidden="true">${markOf(pt)}</span></span>`
             + `<div class="pp-t">${mergedId ? `<span class="pp-osa-anchor"${mergedId}></span>` : ''}`
             + `${rowText(c, pt, r.merged)}${detailsLine(c, pt, r.merged)}${fig}</div></div>`;

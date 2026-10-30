@@ -499,6 +499,23 @@ describe('header', () => {
         // A living person's own page in a protected file: the header alone.
         expect(doc(live, { personId: 'marie' as PersonId, privacy: 'initials' })).not.toContain('Jistota údajů');
     });
+    it('an occupation keeps the precision of its date in the places, on the map and on the timeline too (round 3, N1)', () => {
+        const d = fiskTree();
+        d.places = { [placeKey('Čapkov')]: { lat: 49.6, lon: 15.6 }, [placeKey('Vídeň')]: { lat: 48.21, lon: 16.37 }, [placeKey('Brno')]: { lat: 49.19, lon: 16.61 } };
+        d.persons['jan' as PersonId].events!.push(
+            { id: 'o1', type: 'occupation', date: '<1895', note: 'zámečník', place: 'Brno' },
+            { id: 'o2', type: 'occupation', date: '1896/1901', note: 'hostinský' },
+        );
+        const html = body(d);
+        // Timeline: the word small above the year, a range in two lines as elsewhere.
+        expect(html).toContain('<span class="pp-y"><span class="pp-yr"><small>před</small><b>1895</b></span></span>');
+        expect(html).toContain('<span class="pp-y"><span class="pp-yr"><b>1896</b><small>–1901</small></span></span>');
+        // Places list and the map's label.
+        expect(html).toContain('povolání před 1895');
+        expect(html).not.toContain('povolání 1895');
+        expect(html).toMatch(/Brno<span class="pp-map-yr y-d">před 1895<\/span>/);
+        expect(body(d, { lang: 'de' })).toContain('vor 1895');
+    });
     it('an open birth conflict gives the differs badge leading to the researchers section', () => {
         const d = fiskTree();
         d.persons['jan' as PersonId].research = {

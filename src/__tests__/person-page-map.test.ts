@@ -274,6 +274,11 @@ describe('scale bar and labels', () => {
         expect(labelYears([mk(1860), mk(1883)])).toEqual({ d: '1860, 1883', p: '1860–1883' });
         expect(labelYears([mk(1860), mk(1870), mk(1880), mk(1890)])).toEqual({ d: '1860–1890', p: '1860–1890' });
         expect(labelYears([mk(null)])).toEqual({ d: '', p: '' });
+        // A worded date keeps its word ("před 1965"), not inside first–last; a range keeps its first year.
+        const w = (y: number, yearLabel: string): PlacePoint => ({ ...mk(y), yearLabel });
+        expect(labelYears([w(1965, 'před 1965')])).toEqual({ d: 'před 1965', p: 'před 1965' });
+        expect(labelYears([w(1965, 'před 1965'), mk(2001)])).toEqual({ d: 'před 1965, 2001', p: '1965–2001' });
+        expect(labelYears([w(1950, '1950–1960')])).toEqual({ d: '1950', p: '1950' });
     });
 });
 
