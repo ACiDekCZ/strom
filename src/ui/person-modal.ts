@@ -885,7 +885,7 @@ export const personModalMethods = uiModule({
         // A couple's event opens its editor (over this dialog) unless the tree is locked.
         const editable = !DataManager.isTreeLocked();
         const layer = historyView?.chipOn && historyView.history ? this.lifelineHistoryLayer(historyView.history) : null;
-        body.classList.toggle('has-ranges', points.some(pt => pt.yearLabel) || !!layer?.ranges);
+        body.classList.toggle('has-ranges', points.some(pt => pt.yearLabel));
         // A redraw keeps the focus on the layer's button it was on (or the head when that row went).
         const focusKey = (document.activeElement as HTMLElement | null)?.closest?.('#pm-lifeline-body [data-hfocus]')?.getAttribute('data-hfocus');
         const rows = points.map(pt => {

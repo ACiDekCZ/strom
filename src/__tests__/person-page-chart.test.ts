@@ -7,7 +7,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { lifeChartInput, lifeChartHtml, chartAnchorId, chartHistAnchorId, chartSet, CHART_WIDE, CHART_NARROW, historyGlyphs, historyLabelLanes, residenceLabel } from '../person-page-chart.js';
+import { lifeChartInput, lifeChartHtml, chartAnchorId, chartHistAnchorId, chartSet, CHART_WIDE, CHART_NARROW, historyGlyphs, historyLabelLanes, historyTouchHalves, residenceLabel } from '../person-page-chart.js';
+import { PERSON_PAGE_CHART_CSS } from '../person-page-viz-css.js';
 import type { ChartHistory } from '../person-page-chart.js';
 import { computePersonLifeline } from '../timeline.js';
 import { getStringsForLang } from '../strings.js';
@@ -459,6 +460,25 @@ describe('lifeChartHtml', () => {
         expect(html).toMatch(/pp-ch-hist--n/); // the phone set: no labels there
         const narrowSet = html.slice(html.lastIndexOf('pp-ch-hist--n'));
         expect(narrowSet.slice(0, narrowSet.indexOf('</div>'))).not.toContain('pp-ch-hl');
+    });
+
+    it('history (round 4): on touch each glyph and cluster has a 44 x 44 px target, narrowed to half the gap so neighbours never overlap', () => {
+        // 100 px apart: the full 22 px each side; 30 px apart: 15 px towards each other; 9 px: 4.5 px.
+        expect(historyTouchHalves([0, 100, 130, 139])).toEqual([{}, { r: 15 }, { l: 15, r: 4.5 }, { l: 4.5 }]);
+        const xs = [10, 40, 47, 200];
+        const halves = historyTouchHalves(xs);
+        for (let i = 1; i < xs.length; i++) {
+            expect((halves[i - 1].r ?? 22) + (halves[i].l ?? 22)).toBeLessThanOrEqual(xs[i] - xs[i - 1]);
+        }
+        // In the chart: the narrowed sides as CSS variables on the glyph's link.
+        const hist = [1860, 1864, 1900].map((y, i) => ({ ev: { id: `t${i}`, from: y, kind: 'war', scope: 'region', text: { cs: `Válka ${y}` } }, year: y, age: '', place: 'Čapkov', placeKey: 'capkov', text: `Válka ${y}`, textLang: 'cs' })) as unknown as LifelineHistoryItem[];
+        const html = lifeChartHtml(lifeChartInput(tree(), JAN, { now: NOW, history: hist }), { lang: 'cs', mode: 'file' });
+        expect(html).toMatch(/class="pp-ch-hm pp-ch-hm--region" href="#[^"]+" data-pp-osa="[^"]+" style="left:[\d.]+%;--tr:[\d.]+px"/);
+        expect(html).toMatch(/class="pp-ch-hm pp-ch-hm--region" href="#[^"]+" data-pp-osa="[^"]+" style="left:[\d.]+%;--tl:[\d.]+px"/);
+        // The target only on touch, from the variables, 44 px high around the 14 px glyph.
+        const coarse = PERSON_PAGE_CHART_CSS.slice(PERSON_PAGE_CHART_CSS.lastIndexOf('@media (pointer: coarse)'));
+        expect(coarse).toContain(".pp-ch-hm::before { content: ''; position: absolute; top: -15px; left: calc(-1 * var(--tl, 22px)); width: calc(var(--tl, 22px) + var(--tr, 22px)); height: 44px; }");
+        expect(PERSON_PAGE_CHART_CSS.split('.pp-ch-hm::before').length).toBe(2);
     });
 
     it('escapes names', () => {

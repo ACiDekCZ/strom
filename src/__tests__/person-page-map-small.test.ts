@@ -10,9 +10,9 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-    collectPersonPlacePoints, planPlacesMap, placesMapHtml, compassSector, TINY_KM, type PlacePoint,
+    collectPersonPlacePoints, planPlacesMap, placesMapHtml, compassSector, regionWidthPx, TINY_KM, type PlacePoint,
 } from '../person-page-map.js';
-import { towns, regionOf } from '../map-context.js';
+import { towns, rivers, riverName, regionOf } from '../map-context.js';
 import { PERSON_PAGE_MAP_CSS } from '../person-page-viz-css.js';
 import { placeKey } from '../places.js';
 import type { StromData, PersonId, PartnershipId, Person, Gender, PlaceGeo } from '../types.js';
@@ -94,7 +94,7 @@ describe('small neighbourhood: the orientation layer', () => {
         expect(placesMapHtml(three(), KANSAS, { lang: 'en', mode: 'file', kidPlaces: true })).toMatch(/Wichita \d+ km ↓/);
     });
 
-    it('the nearest town in the frame (10 000+) as an anchor, never one of the person\'s places', () => {
+    it('the biggest town in the frame as an anchor, never one of the person\'s places', () => {
         const plan = planPlacesMap(three(), KANSAS, { kidPlaces: true });
         expect(plan.small!.anchor?.name).toBe('Salina');
         const html = placesMapHtml(three(), KANSAS, { lang: 'en', mode: 'file', kidPlaces: true });
@@ -104,18 +104,90 @@ describe('small neighbourhood: the orientation layer', () => {
         const pts = [...three(), mk('Salina', 1900)];
         const geo = { ...KANSAS, [placeKey('Salina')]: { lat: salina.lat, lon: salina.lon } };
         expect(planPlacesMap(pts, geo, { kidPlaces: true }).small?.anchor?.name).not.toBe('Salina');
-        // In the middle of Vysočina there is no town of 10 000+ in the data within the frame.
+        // In the middle of Vysočina there is no town of the data within the frame: no anchor.
         expect(planPlacesMap(three(), VYSOCINA, { kidPlaces: true }).small!.anchor).toBeUndefined();
+    });
+
+    it('round 4: the biggest town in the frame, not the nearest one, and of any size (no 10 000 limit)', () => {
+        // By Stans (Nidwalden, under 10 000 people in the data): Sarnen, a size class bigger, 13 km off.
+        const town = (n: string) => towns().find(t => t.name === n)!;
+        expect(town('Stans').pop).toBeLessThan(40);
+        expect(town('Sarnen').pop).toBeGreaterThan(town('Stans').pop);
+        const byStans = geoOf({ lat: 46.97, lon: 8.42 }, { lat: 46.92, lon: 8.36 }, { lat: 46.90, lon: 8.45 });
+        const plan = planPlacesMap(three(), byStans, { kidPlaces: true });
+        expect(plan.small).toBeDefined();
+        expect(plan.small!.anchor?.name).toBe('Sarnen');
+        // By Altdorf, the only town of the data in the frame, also under 10 000: the anchor all the same.
+        const byAltdorf = geoOf({ lat: 46.86, lon: 8.62 }, { lat: 46.82, lon: 8.66 }, { lat: 46.80, lon: 8.60 });
+        expect(town('Altdorf').pop).toBeLessThan(40);
+        expect(planPlacesMap(three(), byAltdorf, { kidPlaces: true }).small?.anchor?.name).toBe('Altdorf');
     });
 
     it('the region holding the whole frame, in the language of the page (the source name when none)', () => {
         const plan = planPlacesMap(three(), VYSOCINA, { kidPlaces: true });
         expect(plan.small!.region?.name).toBe('Vysočina');
-        expect(placesMapHtml(three(), VYSOCINA, { lang: 'cs', mode: 'file', kidPlaces: true })).toContain('<span class="pp-map-region" aria-hidden="true">VYSOČINA</span>');
+        expect(placesMapHtml(three(), VYSOCINA, { lang: 'cs', mode: 'file', kidPlaces: true })).toContain('<span class="pp-map-region" style="--fd:22px;--fp:15px" aria-hidden="true">VYSOČINA</span>');
         expect(placesMapHtml(three(), VYSOCINA, { lang: 'de', mode: 'file', kidPlaces: true })).toContain('>KRAJ VYSOČINA</span>');
         expect(placesMapHtml(three(), KANSAS, { lang: 'en', mode: 'file', kidPlaces: true })).toContain('>KANSAS</span>');
         // Points in two regions: no name.
         expect(regionOf([{ lon: 15.5, lat: 49.4 }, { lon: 14.5, lat: 50.0 }])).toBeNull();
+    });
+
+    it('round 4: the region at the top centre, never shortened: a smaller size when long, none when it fits no size', () => {
+        const css = PERSON_PAGE_MAP_CSS;
+        expect(css).toMatch(/\.pp-map-region \{[^}]*top: 40px;[^}]*font-size: var\(--fd, 22px\)/);
+        expect(css).toMatch(/@media \(max-width: 640px\) \{[^@]*\.pp-map-region \{ top: 14px; font-size: var\(--fp, 15px\)/);
+        expect(css).not.toContain('pp-map-region--long');
+        // "KRAJ VYSOČINA" (13 letters) fits desktop at 22 px and a phone at 15 px (70 % of 343 px = 240 px).
+        expect(regionWidthPx('KRAJ VYSOČINA', 15)).toBeLessThanOrEqual(240);
+        const de = planPlacesMap(three(), VYSOCINA, { kidPlaces: true, lang: 'de' });
+        expect(de.small!.regionFont).toEqual({ d: 22, p: 15 });
+        const ks = planPlacesMap(three(), KANSAS, { kidPlaces: true, lang: 'en' });
+        expect(ks.small!.regionFont).toEqual({ d: 22, p: 15 });
+        // The size steps by 2 px down to 16 (phone 12) by the width; past them the name is not drawn.
+        const fits = (n: number, sizes: number[], box: number) => sizes.find(z => regionWidthPx('X'.repeat(n), z) <= box * 0.7);
+        expect(fits(20, [22, 20, 18, 16], 680)).toBe(22);
+        expect(fits(25, [22, 20, 18, 16], 680)).toBe(18);
+        expect(fits(40, [22, 20, 18, 16], 680)).toBeUndefined();
+        expect(fits(17, [15, 13, 12], 343)).toBe(13);
+    });
+
+    it('round 4: the region is not drawn where it would cover a place\'s label', () => {
+        // Three places in a row high up, one far below: Mlýnec's label has room only above it, where the name would go.
+        const row = [...three(), mk('Kozákov', 1890)];
+        const geo = {
+            ...geoOf({ lat: 49.52, lon: 15.39 }, { lat: 49.52, lon: 15.45 }, { lat: 49.52, lon: 15.51 }),
+            [placeKey('Kozákov')]: { lat: 49.40, lon: 15.45 },
+        };
+        const plan = planPlacesMap(row, geo, { kidPlaces: true, lang: 'cs' });
+        expect(plan.small?.region?.name).toBe('Vysočina');
+        expect(plan.places.find(p => p.name === 'Mlýnec')!.side).toEqual({ d: 'a', p: 'a' });
+        expect(plan.small!.regionFont).toEqual({});
+        expect(placesMapHtml(row, geo, { lang: 'cs', mode: 'file', kidPlaces: true })).not.toContain('pp-map-region');
+        // Without the row the name is drawn.
+        expect(placesMapHtml(three(), VYSOCINA, { lang: 'cs', mode: 'file', kidPlaces: true })).toContain('pp-map-region');
+    });
+
+    it('round 4: a river is named in the language of the page only (Czech from the dictionary, German from the data, never English instead)', () => {
+        const elbe = rivers().find(r => r.names.en === 'Elbe')!;
+        expect(riverName(elbe, 'cs')).toBe('Labe');
+        expect(riverName(elbe, 'de')).toBe('Elbe');
+        const vltava = rivers().find(r => r.names.en === 'Vltava')!;
+        expect([riverName(vltava, 'cs'), riverName(vltava, 'de'), riverName(vltava, 'en')]).toEqual(['Vltava', 'Moldau', 'Vltava']);
+        // The Czech Morava is "March" in German; the Serbian one is not the Czech Morava.
+        expect(rivers().filter(r => r.names.cs === 'Morava').map(r => r.names.de)).toEqual(['March']);
+        // A river with no Czech name stays unnamed in Czech.
+        const warta = rivers().find(r => r.names.en === 'Warta')!;
+        expect(riverName(warta, 'cs')).toBe('');
+        expect(riverName(warta, 'de')).toBe('Warthe');
+        // On a map by the Vltava south of Prague: "Vltava" in Czech, "Moldau" in German.
+        const byVltava = geoOf({ lat: 49.80, lon: 14.38 }, { lat: 49.86, lon: 14.45 }, { lat: 49.76, lon: 14.46 });
+        const cs = planPlacesMap(three(), byVltava, { kidPlaces: true, lang: 'cs' });
+        const de = planPlacesMap(three(), byVltava, { kidPlaces: true, lang: 'de' });
+        if (cs.small?.river) {
+            expect(cs.small.river.name).toBe('Vltava');
+            expect(de.small!.river!.name).toBe('Moldau');
+        }
     });
 
     it('the "where in the country" inset with the frame, the attribution under it', () => {
@@ -147,18 +219,20 @@ describe('places within 3 km and one place', () => {
         ]);
         expect(plan.where?.dot).toBeDefined();
         const cs = placesMapHtml(three(), TINY, { lang: 'cs', mode: 'file', kidPlaces: true });
-        expect(cs).not.toContain('class="pp-map"');
+        expect(cs).not.toContain('class="pp-map pp-wide');
         expect(cs).toContain('<p class="pp-map-sub">Místa leží do 3 km od sebe.</p>');
-        expect(cs).toContain('<b class="pp-map-name">Mlýnec</b><span class="pp-map-from"> · 2 km SV od místa Zálesí</span>');
-        expect(cs).toContain('<b class="pp-map-name">Rybníčky</b><span class="pp-map-from"> · 1 km J od místa Zálesí</span>');
+        // Round 4: place 1 by its badge, not by an inflected name.
+        expect(cs).toContain('<b class="pp-map-name">Mlýnec</b><span class="pp-map-from"> · 2 km SV od <span class="pp-mini" role="img" aria-label="místa 1">1</span></span>');
+        expect(cs).toContain('<b class="pp-map-name">Rybníčky</b><span class="pp-map-from"> · 1 km J od <span class="pp-mini" role="img" aria-label="místa 1">1</span></span>');
+        expect(cs).not.toContain('od místa Zálesí');
         expect(cs).toMatch(/<div class="pp-map-where pp-map-where--side"><svg[^>]*><path class="pp-map-cty" d="M[^"]+"\/><circle class="pp-map-wdot"/);
         const en = placesMapHtml(three(), TINY, { lang: 'en', mode: 'file', kidPlaces: true });
         expect(en).toContain('The places lie within 3 km of each other.');
-        expect(en).toContain(' · 2 km NE of Zálesí');
-        expect(en).toContain(' · 1 km S of Zálesí');
+        expect(en).toContain(' · 2 km NE of <span class="pp-mini" role="img" aria-label="place 1">1</span>');
+        expect(en).toContain(' · 1 km S of <span class="pp-mini" role="img" aria-label="place 1">1</span>');
         const de = placesMapHtml(three(), TINY, { lang: 'de', mode: 'file', kidPlaces: true });
         expect(de).toContain('Die Orte liegen höchstens 3 km voneinander entfernt.');
-        expect(de).toContain(' · 2 km NO von Zálesí');
+        expect(de).toContain(' · 2 km NO von <span class="pp-mini" role="img" aria-label="Ort 1">1</span>');
         // The window keeps the open button.
         expect(placesMapHtml(three(), TINY, { lang: 'cs', mode: 'app', kidPlaces: true })).toContain('data-pp-action="map:open"');
     });
@@ -247,7 +321,8 @@ describe('living protection through the new elements', () => {
     it('the unprotected page with the living union: its place comes first and is "place 1" of the distances', () => {
         const g = geo(TINY);
         const html = placesMapHtml(collectPersonPlacePoints(tree(true), KID, { now: 2026 }), g, { lang: 'en', mode: 'file', kidPlaces: false });
-        expect(html).toContain(' of Zálesí');
+        expect(html).toMatch(/data-pp-map-place="zalesi"[^>]*><span class="pp-map-badge" aria-hidden="true">1<\/span>/);
+        expect(html).toContain(' of <span class="pp-mini" role="img" aria-label="place 1">1</span>');
         const prot = placesMapHtml(collectPersonPlacePoints(tree(true), KID, { protect: true, now: 2026 }), g, { lang: 'en', mode: 'file', kidPlaces: false });
         expect(prot).not.toContain('Kozákov');
     });

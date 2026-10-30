@@ -24,7 +24,7 @@ import {
     personPageFileName, estimatePersonPageSize, personPageSizeMb, personPageLivingNames, personPageTocCurrent,
     PERSON_PAGE_DEFAULT_PRIVACY, PERSON_PAGE_PRIVACY_MODES, personPageExportPrivacy, personPageChartInput, personPageFileToggles,
 } from '../person-page.js';
-import { selectMapPlace, placeOrderKey, PlacePoint } from '../person-page-map.js';
+import { selectMapPlace, placeOrderKey, PlacePoint, KEY_SEP } from '../person-page-map.js';
 import { lifeChartHtml } from '../person-page-chart.js';
 import { PERSON_PAGE_CSS } from '../person-page-css.js';
 import { uiModule } from './module.js';
@@ -697,7 +697,9 @@ export const personPageMethods = uiModule({
         if (!state) return;
         const geo = DataManager.getData().places ?? {};
         const ordered = [...pagePlaces].filter(p => !p.rel).sort((a, b) => placeOrderKey(a) - placeOrderKey(b));
-        const pick = (state.current.place ? pagePlaces.find(p => p.placeKey === state!.current.place) : undefined)
+        // A selected cluster (its places' keys, tab-separated): its first place.
+        const selected = state.current.place?.split(KEY_SEP)[0];
+        const pick = (selected ? pagePlaces.find(p => p.placeKey === selected) : undefined)
             ?? ordered.find(p => !!geo[p.placeKey]) ?? ordered[0];
         if (pick) this.openPersonPagePlace(pick.place);
     },

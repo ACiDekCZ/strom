@@ -639,6 +639,22 @@ const HIST_CH_PX = 5.6;
 /** The two label lines under the glyphs (px from the row's top). */
 const HIST_LANES = [28, 42];
 
+/** Half the touch target of a history glyph (round 4 §2.4: 44 × 44 px on touch). */
+const HIST_TOUCH_HALF = 22;
+
+/**
+ * The touch target of each history glyph (round 4 §2.4): 22 px to either
+ * side, narrowed to half the gap to the neighbouring glyph so neighbouring
+ * targets never overlap. `undefined`: the full half on that side.
+ */
+export function historyTouchHalves(xs: readonly number[]): { l?: number; r?: number }[] {
+    const half = (gap: number): number | undefined => (gap / 2 < HIST_TOUCH_HALF ? Math.floor((gap / 2) * 10) / 10 : undefined);
+    return xs.map((x, i) => ({
+        ...(i > 0 && half(x - xs[i - 1]) !== undefined ? { l: half(x - xs[i - 1]) } : {}),
+        ...(i < xs.length - 1 && half(xs[i + 1] - x) !== undefined ? { r: half(xs[i + 1] - x) } : {}),
+    }));
+}
+
 /** One glyph of the history row: the events of one year, or a cluster of near years. */
 export interface ChartHistGlyph {
     /** px of the first event. */
@@ -723,11 +739,14 @@ function historyRow(items: readonly ChartHistory[], S: CS, xpx: (y: number) => n
     // Point events: a glyph a year, near ones clustered with the count; their labels in two lines (wide only).
     const glyphs = historyGlyphs(items, S, xpx, narrow ? HIST_CLUSTER_PX_NARROW : HIST_CLUSTER_PX);
     const pc = (n: number): string => `${(Math.round((n / W) * 10000) / 100).toString()}%`;
-    for (const g of glyphs) {
+    const touch = historyTouchHalves(glyphs.map(g => g.x));
+    glyphs.forEach((g, i) => {
         const glyph = g.scope === 'local' ? '■' : g.scope === 'place' ? '▲' : '◇';
-        html += `<a class="pp-ch-hm pp-ch-hm--${g.scope}${g.cluster ? ' pp-ch-hm--c' : ''}" href="#${g.anchor}" data-pp-osa="${g.anchor}" style="left:${pc(g.x)}" title="${esc(g.title)}">`
+        const t = touch[i];
+        const tv = `${t.l !== undefined ? `;--tl:${t.l}px` : ''}${t.r !== undefined ? `;--tr:${t.r}px` : ''}`;
+        html += `<a class="pp-ch-hm pp-ch-hm--${g.scope}${g.cluster ? ' pp-ch-hm--c' : ''}" href="#${g.anchor}" data-pp-osa="${g.anchor}" style="left:${pc(g.x)}${tv}" title="${esc(g.title)}">`
             + `<span class="pp-ch-hg">${glyph}</span>${g.cluster ? `<span class="pp-ch-hn">${g.count}</span>` : ''}</a>`;
-    }
+    });
     if (!narrow) {
         historyLabelLanes(glyphs, W).forEach((l, i) => {
             if (!l) return;

@@ -29,6 +29,7 @@ import { postBridgeFirst, postBridgeSkip, type HistoryWriteRefusal } from '../hi
 import { HISTORY_SKIP_FEATURE } from '../research-link.js';
 import { shownExcerpts } from '../research-images.js';
 import { excerptImageUrl } from '../excerpts.js';
+import { yearRangeHtml } from '../person-page.js';
 import type { Source } from '../types.js';
 import type { PersonHistoryView, HistoryHideScope } from './history-ui.js';
 import { uiModule } from './module.js';
@@ -44,8 +45,6 @@ export interface LifelineHistoryLayer {
     groups: LifelineHistoryGroupHtml[];
     /** The state row and "Hidden: n", after everything. */
     tail: string;
-    /** A row says a range of years (the wider year column). */
-    ranges: boolean;
 }
 
 // ─── Card memory (forgotten when another card opens) ────────────────────────
@@ -68,6 +67,15 @@ const findGone = new Set<string>();
 const boundBodies = new WeakSet<HTMLElement>();
 /** The open "⋯" menu or legend popover (not the bottom sheets: those are this.bottomSheet). */
 let popup: { el: HTMLElement; anchor: HTMLElement; off: () => void } | null = null;
+
+/**
+ * A row's year column (round 4 §2.8): a range on two lines, the start over
+ * "–end" (the column stays narrow), as on the person page; else the label.
+ */
+export function historyYearCellHtml(label: string): string {
+    const range = label.match(/^(.+?)–(.+)$/);
+    return range ? yearRangeHtml(range[1], range[2], 'cell') : esc(label);
+}
 
 function esc(text: string): string {
     return text
@@ -294,7 +302,7 @@ export const historyCardMethods = uiModule({
             let html = `<div class="pm-lifeline-row k-historyGroup is-${g.mark}" role="button" tabindex="0" aria-expanded="${open}"`
                 + ` data-history-year="${g.year}" data-hfocus="group:${g.year}">`
                 + '<span class="pm-lifeline-hmark" aria-hidden="true"></span>'
-                + `<span class="pm-lifeline-year">${esc(year)}</span>`
+                + `<span class="pm-lifeline-year">${historyYearCellHtml(year)}</span>`
                 + '<span class="pm-lifeline-glyph" aria-hidden="true"></span>'
                 + `<span class="pm-lifeline-desc"${single && !open ? langAttr(single.textLang) : ''}>${labelHtml}</span>`
                 + `<span class="pm-lifeline-hchev" aria-hidden="true">${open ? '▾' : '▸'}</span></div>`;
@@ -333,7 +341,7 @@ export const historyCardMethods = uiModule({
                     : by.tree ? h.hiddenScopeTree
                         : by.place ? h.scopePlace(item.place) : h.scopePerson;
                 return '<div class="pm-lifeline-hiddenitem">'
-                    + `<span class="pm-lifeline-year">${esc(item.yearLabel ?? String(item.year))}</span>`
+                    + `<span class="pm-lifeline-year">${historyYearCellHtml(item.yearLabel ?? String(item.year))}</span>`
                     + historyKindGlyph(item.ev.kind)
                     + `<span class="pm-lifeline-hiddentext"><span${langAttr(item.textLang)}>${esc(item.text)}</span>`
                     + `<small>${esc(scope)} · <button type="button" class="link pm-lifeline-hrestore" data-restore="${j}"`
@@ -347,7 +355,7 @@ export const historyCardMethods = uiModule({
                     ? `<button type="button" class="pm-lifeline-hall" data-hfocus="allHidden">${esc(h.allHidden)} ›</button>` : '')
                 + '</div>';
         }
-        return { groups, tail, ranges: history.items.some(i => !!i.yearLabel) };
+        return { groups, tail };
     },
 
     /**
@@ -540,7 +548,8 @@ export const historyCardMethods = uiModule({
         const ev = item.ev;
         const i = rowItems.push(item) - 1;
         const meta: string[] = [];
-        if (item.age) meta.push(`<span>${esc(item.age)}</span>`);
+        // "age 24–39" never breaks inside (round 4 §2.8).
+        if (item.age) meta.push(`<span class="pp-nw">${esc(item.age)}</span>`);
         if (ev.scope === 'place') meta.push(`<span class="pm-lifeline-hregion pm-lifeline-hplace-name">${esc(strings.history.placeAround(this.historyCardPlaceName(item)))}</span>`);
         else if (item.regionLabel) meta.push(`<span class="pm-lifeline-hregion">${esc(item.regionLabel)}</span>`);
         const desc = historyEventDescHtml(ev, item, {
@@ -552,7 +561,7 @@ export const historyCardMethods = uiModule({
         const year = showYear ? item.yearLabel ?? String(item.year) : item.yearLabel ?? '';
         return `<div class="pm-lifeline-row k-history is-${ev.scope}" data-history-id="${esc(ev.id)}">`
             + '<span class="pm-lifeline-hmark" aria-hidden="true"></span>'
-            + `<span class="pm-lifeline-year">${esc(year)}</span>`
+            + `<span class="pm-lifeline-year">${historyYearCellHtml(year)}</span>`
             + historyKindGlyph(ev.kind)
             + `<span class="pm-lifeline-desc">${desc}</span>`
             + `<button type="button" class="pm-lifeline-hmore" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(h.more)}"`

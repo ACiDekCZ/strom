@@ -1304,7 +1304,7 @@ function familyTreeHtml(c: Ctx): string {
     const upright = d.unions.length >= FT_UPRIGHT_UNIONS;
     const core = !(d.parents.length || d.unions.length || d.solo.length) ? ''
         : upright ? familyTreeRailHtml(c, d, true) : familyTreeDesktopHtml(c, d) + familyTreeRailHtml(c, d);
-    return section('family', c.P.sec.family, `<div class="pp-fam">${core}${familyTreeMoreHtml(c, d)}</div>`);
+    return section('family', c.P.sec.family, `<div class="pp-fam pp-wide">${core}${familyTreeMoreHtml(c, d)}</div>`);
 }
 
 function section(key: PersonPageSection['key'], title: string, body: string, head = ''): string {
@@ -1856,7 +1856,7 @@ function timelineHtml(c: Ctx): string {
     const legend = legendItems.length ? `<p class="pp-legend">${legendItems.join('')}</p>` : '';
     // Slot 7 (§2.1): the life chart above the text timeline.
     const chartHtml = chart
-        ? `<div class="pp-chart-host">${lifeChartHtml(chart, { lang: c.page.lang, mode: c.app ? 'app' : 'file', ...(c.opts.chartWidth ? { width: c.opts.chartWidth } : {}) })}</div>`
+        ? `<div class="pp-chart-host pp-wide">${lifeChartHtml(chart, { lang: c.page.lang, mode: c.app ? 'app' : 'file', ...(c.opts.chartWidth ? { width: c.opts.chartWidth } : {}) })}</div>`
         : '';
     return section('timeline', P.sec.timeline, chartHtml + legend + segHtml, head);
 }
@@ -1946,6 +1946,15 @@ interface GalleryItem {
     caption: string;
     sub: string;
     year: number | null;
+    /** A record or document at least twice as wide as high (round 4, K4-31): a tile over two columns. */
+    wide: boolean;
+}
+
+/** Width : height from which a record or document is a wide tile (a register line). */
+const GAL_WIDE_RATIO = 2;
+
+function isWide(kind: GalleryItem['kind'], w: number, h: number): boolean {
+    return kind !== 'photo' && w > 0 && h > 0 && w / h >= GAL_WIDE_RATIO;
 }
 
 interface PdfItem {
@@ -2008,7 +2017,8 @@ function galleryItems(c: Ctx, rows: PersonSourceRow[]): GalleryItem[] {
                 const src = shownExcerpt(e);
                 if (!src) continue;
                 const caption = main || stripResearchIds(e.caption?.trim() ?? '').text || peekTitle(title);
-                out.push({ src, kind, caption, sub: sub === caption ? '' : sub, year });
+                const size = e.width > 0 && e.height > 0 ? { w: e.width, h: e.height } : dataUrlImageSize(src);
+                out.push({ src, kind, caption, sub: sub === caption ? '' : sub, year, wide: !!size && isWide(kind, size.w, size.h) });
             }
         }
     }
@@ -2021,7 +2031,9 @@ function galleryItems(c: Ctx, rows: PersonSourceRow[]): GalleryItem[] {
         const year = m ? Number(m[1]) : null;
         const s = a.sourceId ? c.tree.sources?.[a.sourceId] : undefined;
         const sub = [s ? peekTitle(s.title) : '', year !== null && !caption.includes(String(year)) ? String(year) : ''].filter(Boolean).join(', ');
-        out.push({ src, kind: a.sourceId || DOCUMENT_WORDS.test(`${a.name} ${a.note ?? ''}`) ? 'document' : 'photo', caption, sub, year });
+        const kind: GalleryItem['kind'] = a.sourceId || DOCUMENT_WORDS.test(`${a.name} ${a.note ?? ''}`) ? 'document' : 'photo';
+        const size = dataUrlImageSize(src);
+        out.push({ src, kind, caption, sub, year, wide: !!size && isWide(kind, size.w, size.h) });
     }
     return out
         .map((it, i) => ({ it, i }))
@@ -2073,16 +2085,16 @@ function galleryHtml(c: Ctx): string {
         } else {
             pic = `<span class="pp-gal-thumb"><img class="pp-gal-img" src="${esc(it.src)}" alt="${esc(it.caption)}" loading="lazy"></span>`;
         }
-        return `<figure class="pp-gal-item">${pic}<figcaption>${galleryCaption(it, P)}</figcaption></figure>`;
+        return `<figure class="pp-gal-item pp-gal-item--${it.kind}${it.wide ? ' pp-gal-item--wide' : ''}">${pic}<figcaption>${galleryCaption(it, P)}</figcaption></figure>`;
     };
     const first = c.opts.mode === 'print' ? items : items.slice(0, 6);
     const rest = c.opts.mode === 'print' ? [] : items.slice(6);
-    let body = first.length ? `<div class="pp-gal">${first.map(thumb).join('')}</div>` : '';
+    let body = first.length ? `<div class="pp-gal pp-wide">${first.map(thumb).join('')}</div>` : '';
     if (rest.length) {
         body += fold(c, {
-            key: 'gal', id: 'pp-gal-more', cls: 'pp-gal-more',
+            key: 'gal', id: 'pp-gal-more', cls: 'pp-gal-more pp-wide',
             head: `<span class="pp-disc--inline">${foldState(`${P.gal.more(rest.length)} ▾`, `${P.gal.less} ▴`)}</span>`,
-            body: `<div class="pp-gal">${rest.map((it, i) => thumb(it, i + 6)).join('')}</div>`,
+            body: `<div class="pp-gal pp-wide">${rest.map((it, i) => thumb(it, i + 6)).join('')}</div>`,
         });
     }
     if (pdfs.length) {
@@ -2235,7 +2247,7 @@ function summaryHtml(c: Ctx): string {
     }
 
     if (cells.length < 3) return '';
-    return `<div class="pp-sum${cells.length === 3 ? ' pp-sum--3' : ''}" role="list" aria-label="${esc(P.summary.label)}">`
+    return `<div class="pp-sum${cells.length === 3 ? ' pp-sum--3' : ''} pp-wide" role="list" aria-label="${esc(P.summary.label)}">`
         + cells.map(([big, label]) => `<div class="pp-sum-cell" role="listitem"><span class="pp-sum-big">${esc(big)}</span>`
             + (label ? `<span class="pp-sum-lab">${esc(label)}</span>` : '') + `</div>`).join('')
         + `</div>`;

@@ -34,7 +34,7 @@ import {
     mercator, unmercator, outlinePaths, outlineResolution, outlineLengthInView, viewBounds, linesPath, ringsPath, lengthInView,
     WORLD, type OutlineView, type GeoLine, type GeoBounds,
 } from './map-outlines.js';
-import { towns, rivers, regionOf, regionName, countryAt, ringsBounds, type Region } from './map-context.js';
+import { towns, rivers, riverName, regionOf, regionName, countryAt, ringsBounds, type Region } from './map-context.js';
 import { chartAnchorId } from './person-page-chart.js';
 
 // ─── Points ─────────────────────────────────────────────────────────────────
@@ -255,14 +255,31 @@ export interface PlannedPlace {
     y?: number;
     /** On the world inset (a far relative's place). */
     inset?: { x: number; y: number };
-    /** Label side on desktop/tablet and on a phone. */
+    /** Label side on desktop/tablet and on a phone ('hide' also while the point is in a cluster there). */
     side?: { d: LabelSide; p: LabelSide };
+    /** Index of the point's cluster in `plan.clusters.d` / `.p`, when it has one there (K4-29). */
+    cl?: { d?: number; p?: number };
     /** Places within 3 km (state 'tiny'): distance (km, at least 1) and compass sector (0 = N … 7 = NW) from place 1. */
     from1?: { km: number; dir: number };
 }
 
-export type LabelSide = 'l' | 'r' | 'hide';
+/** Right, left, above, below (above / below aligned to the point's left edge), or none (number only). */
+export type LabelSide = 'l' | 'r' | 'a' | 'b' | 'hide';
 
+/**
+ * A cluster of numbered points (K4-29): points whose centres lie closer than
+ * 26 px (phone 24) in the frame, chained, drawn as one pill at their centroid
+ * ("1–2", "1, 3–4") with one label. Its members' rows are selected together.
+ */
+export interface MapCluster {
+    /** The members in the order of their numbers. */
+    members: PlannedPlace[];
+    x: number;
+    y: number;
+    /** The pill's text: the numbers as ranges. */
+    text: string;
+    side: LabelSide;
+}
 /** The orientation layer of a small neighbourhood (§1.3a); positions in view units. */
 export interface SmallLayer {
     /** Distance rings around place 1 (the second one not on a phone). */
@@ -275,10 +292,15 @@ export interface SmallLayer {
     anchor?: { name: string; x: number; y: number };
     /** The nearest regional city (or 50 000+) when it lies beyond the frame: a label on that edge. */
     arrow?: { name: string; km: number; dir: 'r' | 'l' | 'u' | 'd'; /** y (r, l) or x (u, d) on the edge, view units */ at: number };
-    /** Where the longest river in the frame is named (desktop and tablet). */
+    /** Where the longest river named in the app's language is named (desktop and tablet). */
     river?: { name: string; x: number; y: number };
     /** The first-level region that holds the whole frame. */
     region?: Pick<Region, 'name' | 'en' | 'de'>;
+    /**
+     * The region's name at the top centre: its font size in px on desktop (d) and a phone (p);
+     * missing where it fits no size or would cover a place's label.
+     */
+    regionFont?: { d?: number; p?: number };
 }
 
 /** The "where in the country" inset: the country's outline with the frame (map) or a dot (no map). */
@@ -305,6 +327,10 @@ export interface MapPlan {
     scale?: { km: number; units: number };
     /** Migration path through the numbered places, in view units. */
     route: { x: number; y: number }[];
+    /** The path as drawn on desktop (d) and a phone (p): a cluster's members at its pill, no segment inside it. */
+    routes?: { d: { x: number; y: number }[]; p: { x: number; y: number }[] };
+    /** Clusters of points on desktop and on a phone (K4-29). */
+    clusters?: { d: MapCluster[]; p: MapCluster[] };
     inset?: {
         corner: 'br' | 'tl';
         view: OutlineView;
@@ -394,37 +420,95 @@ function insetHits(pts: readonly { x: number; y: number }[], corner: 'br' | 'tl'
     return n;
 }
 
-export interface LabelInput { x: number; y: number; /** label width in px */ w: number }
+export interface LabelInput {
+    x: number; y: number;
+    /** label width in px */
+    w: number;
+    /** Half the point's width in px (11 for a point, more for a cluster's pill). */
+    hw?: number;
+}
+
+/** A point's (or pill's) box in view units: `hw` half its width in px, 11 px half its height. */
+export function pointRect(p: LabelInput, pxToUnit: number): Rect {
+    const hw = (p.hw ?? 11) * pxToUnit, hh = 11 * pxToUnit;
+    return { x: p.x - hw, y: p.y - hh, w: 2 * hw, h: 2 * hh };
+}
 
 /**
- * Label sides (§1.2): right of the point; left for a point in the right third
- * or when the right side collides with a placed label, a point or an obstacle;
- * when neither side fits (two tries), the label is left out (number only).
- * Units: view units; `pxToUnit` converts the label's px size.
+ * A label's box in view units on a side of its point: beside it 5 px off the point's edge, above or
+ * below it 3 px off, aligned to the point's left edge (as the CSS of `.lb-d-*` / `.lb-p-*`).
+ */
+export function labelRect(p: LabelInput, side: Exclude<LabelSide, 'hide'>, pxToUnit: number): Rect {
+    const u = pxToUnit, w = p.w * u, h = 20 * u, hw = (p.hw ?? 11) * u;
+    if (side === 'r') return { x: p.x + hw + 5 * u, y: p.y - h / 2, w, h };
+    if (side === 'l') return { x: p.x - hw - 5 * u - w, y: p.y - h / 2, w, h };
+    return { x: p.x - hw, y: side === 'a' ? p.y - 14 * u - h : p.y + 14 * u, w, h };
+}
+
+/**
+ * Label sides (§1.2, round 4): right of the point (left first for a point in
+ * the right third), then left, above, below — the first side clear of the view's
+ * edge, a placed label, a point and the obstacles; when none is, the label is
+ * left out (number only). Units: view units; `pxToUnit` converts the px sizes.
  */
 export function placeLabelSides(
     pts: readonly LabelInput[],
     o: { minX: number; maxX: number; minY: number; maxY: number; pxToUnit: number; obstacles?: readonly Rect[] },
 ): LabelSide[] {
-    const off = 16 * o.pxToUnit, h = 20 * o.pxToUnit, pr = 11 * o.pxToUnit;
     const placed: Rect[] = [];
-    const pointBoxes = pts.map(p => ({ x: p.x - pr, y: p.y - pr, w: 2 * pr, h: 2 * pr }));
+    const pointBoxes = pts.map(p => pointRect(p, o.pxToUnit));
     const third = o.minX + (o.maxX - o.minX) * 2 / 3;
     return pts.map((p, i) => {
-        const w = p.w * o.pxToUnit;
-        const rect = (side: 'l' | 'r'): Rect => ({ x: side === 'r' ? p.x + off : p.x - off - w, y: p.y - h / 2, w, h });
         const fits = (r: Rect): boolean =>
             r.x >= o.minX && r.x + r.w <= o.maxX && r.y >= o.minY && r.y + r.h <= o.maxY
             && !placed.some(q => overlaps(q, r))
             && !pointBoxes.some((q, j) => j !== i && overlaps(q, r))
             && !(o.obstacles ?? []).some(q => overlaps(q, r));
         const first: 'l' | 'r' = p.x > third ? 'l' : 'r';
-        for (const side of [first, first === 'r' ? 'l' : 'r'] as const) {
-            const r = rect(side);
+        for (const side of [first, first === 'r' ? 'l' : 'r', 'a', 'b'] as const) {
+            const r = labelRect(p, side, o.pxToUnit);
             if (fits(r)) { placed.push(r); return side; }
         }
         return 'hide';
     });
+}
+
+/** Numbers as ranges: [1, 2] → "1–2", [1, 3, 4] → "1, 3–4". */
+export function numberRanges(nums: readonly number[]): string {
+    const ns = [...nums].sort((a, b) => a - b);
+    const parts: string[] = [];
+    for (let i = 0; i < ns.length;) {
+        let j = i;
+        while (j + 1 < ns.length && ns[j + 1] === ns[j] + 1) j++;
+        parts.push(j > i ? `${ns[i]}–${ns[j]}` : String(ns[i]));
+        i = j + 1;
+    }
+    return parts.join(', ');
+}
+
+/** Groups of points closer than `min` (view units), chained; single points are no group. */
+export function chainClusters<T extends { x: number; y: number }>(pts: readonly T[], min: number): T[][] {
+    const parent = pts.map((_, i) => i);
+    const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+    for (let i = 0; i < pts.length; i++) for (let j = i + 1; j < pts.length; j++) {
+        if (Math.hypot(pts[i].x - pts[j].x, pts[i].y - pts[j].y) < min) parent[find(j)] = find(i);
+    }
+    const groups = new Map<number, T[]>();
+    pts.forEach((p, i) => { const r = find(i); groups.set(r, [...(groups.get(r) ?? []), p]); });
+    return [...groups.values()].filter(g => g.length > 1);
+}
+
+/** The pill's half width in px: 6 px padding, 2 px border, ≈ 6.5 px a character of 11.5 px digits; at least a point's 11. */
+export function pillHalfWidth(text: string): number {
+    return Math.max(11, Math.ceil((16 + text.length * 6.5) / 2));
+}
+
+/** A cluster's label: the members' names (more than two: "first +n") and, on desktop, their years first–last. */
+export function clusterLabel(c: Pick<MapCluster, 'members'>, S: MapStrings): { name: string; years: string } {
+    const name = S.personPage.map.cluster(c.members.map(m => m.name));
+    const ys = c.members.flatMap(m => m.points.map(q => q.year)).filter((y): y is number => y !== null);
+    const lo = Math.min(...ys), hi = Math.max(...ys);
+    return { name, years: !ys.length ? '' : lo === hi ? String(lo) : `${lo}–${hi}` };
 }
 
 /**
@@ -453,8 +537,12 @@ export function labelWidthPx(name: string, years: string): number {
  * pick the state (§1.5), the frame (§1.3), the inset, the scale bar and the
  * label sides.
  */
-export function planPlacesMap(points: readonly PlacePoint[], geo: Readonly<Record<string, PlaceGeo>> | undefined, opts: { kidPlaces: boolean }): MapPlan {
+export function planPlacesMap(
+    points: readonly PlacePoint[], geo: Readonly<Record<string, PlaceGeo>> | undefined, opts: { kidPlaces: boolean; lang?: Language },
+): MapPlan {
     const g = geo ?? {};
+    const lang: Language = opts.lang ?? 'en';
+    const S = getStringsForLang(lang);
     const groups = new Map<string, PlannedPlace>();
     const ordered = [...points].sort((a, b) => placeOrderKey(a) - placeOrderKey(b));
     // The person's own places first (numbered), then relatives' places.
@@ -553,7 +641,7 @@ export function planPlacesMap(points: readonly PlacePoint[], geo: Readonly<Recor
     const scale = frameKm <= 3000 ? scaleBar(unitsPerKm) : undefined;
 
     // Migration path: the numbered places in the order of life, only changes of place.
-    const route: { x: number; y: number }[] = [];
+    const routePlaces: PlannedPlace[] = [];
     let last = '';
     for (const p of ordered) {
         if (p.rel || p.placeKey === last) continue;
@@ -561,9 +649,38 @@ export function planPlacesMap(points: readonly PlacePoint[], geo: Readonly<Recor
         if (!gp?.geo || gp.x === undefined || gp.y === undefined) continue;
         // Undated events other than birth / death have no place in the order of life.
         if (p.sortKey === null && p.kind !== 'birth' && p.kind !== 'death') continue;
-        route.push({ x: gp.x, y: gp.y });
+        routePlaces.push(gp);
         last = p.placeKey;
     }
+    const route = routePlaces.map(p => ({ x: p.x!, y: p.y! }));
+
+    // Clusters (K4-29): numbered points closer than 26 px on desktop, 24 px on a phone, chained.
+    const clusters: { d: MapCluster[]; p: MapCluster[] } = { d: [], p: [] };
+    for (const mode of ['d', 'p'] as const) {
+        const min = mode === 'd' ? 26 * pxD : 24 * pxP;
+        for (const members of chainClusters(ownGeo.map(q => ({ q, x: q.x!, y: q.y! })), min)) {
+            const ms = members.map(m => m.q).sort((a, b) => a.num - b.num);
+            const idx = clusters[mode].length;
+            for (const m of ms) m.cl = { ...m.cl, [mode]: idx };
+            clusters[mode].push({
+                members: ms, side: 'hide', text: numberRanges(ms.map(m => m.num)),
+                x: ms.reduce((t, m) => t + m.x!, 0) / ms.length, y: ms.reduce((t, m) => t + m.y!, 0) / ms.length,
+            });
+        }
+    }
+    // The path as drawn: a member at its cluster's pill, no segment inside a cluster.
+    const routeOf = (mode: 'd' | 'p') => {
+        const out: { x: number; y: number }[] = [];
+        for (const p of routePlaces) {
+            const ci = p.cl?.[mode];
+            const c = ci !== undefined ? clusters[mode][ci] : undefined;
+            const at = c ? { x: c.x, y: c.y } : { x: p.x!, y: p.y! };
+            const prev = out[out.length - 1];
+            if (!prev || prev.x !== at.x || prev.y !== at.y) out.push(at);
+        }
+        return out;
+    };
+    const routes = { d: routeOf('d'), p: routeOf('p') };
 
     // World inset for far places.
     let inset: MapPlan['inset'];
@@ -596,7 +713,7 @@ export function planPlacesMap(points: readonly PlacePoint[], geo: Readonly<Recor
             where = whereInset(centroid, viewBounds({ ...view, margin: 0 }), corner);
         }
         small = smallLayer({
-            view, unitsPerKm, merc, lonOf, p1: ownGeo[0], places: [...ownGeo, ...near],
+            view, unitsPerKm, merc, lonOf, p1: ownGeo[0], places: [...ownGeo, ...near], lang,
             obstacles: where?.corner ? [whereRects(where.corner).d] : inset ? [insetRects(inset.corner).d] : [],
             topRightFree: !!where,
             corner: where?.corner ?? inset?.corner,
@@ -610,28 +727,69 @@ export function planPlacesMap(points: readonly PlacePoint[], geo: Readonly<Recor
     if (small?.anchor) deskObst.push(anchorRect(small.anchor));
     if (small?.arrow) { deskObst.push(arrowRect(small.arrow, 'd')); phoneObst.push(arrowRect(small.arrow, 'p')); }
     const attr: Rect = { x: VIEW_W - 150, y: 0, w: 150, h: 18 };
-    const sideD = placeLabelSides(onMain.map(p => ({ x: p.x!, y: p.y!, w: labelWidthPx(p.name, labelYears(p.points).d) })),
-        { minX: 4, maxX: VIEW_W - 4, minY: 2, maxY: VIEW_H - 2, pxToUnit: UNITS_ACROSS.desk / BOX_PX.desk, obstacles: [...deskObst, attr] });
-    const sideP = placeLabelSides(onMain.map(p => ({ x: p.x!, y: p.y!, w: labelWidthPx(p.name, labelYears(p.points).p) })),
-        { minX: SAFE.x0 + 3, maxX: SAFE.x1 - 3, minY: 2, maxY: VIEW_H - 2, pxToUnit: UNITS_ACROSS.phone / BOX_PX.phone, obstacles: phoneObst });
-    onMain.forEach((p, i) => { p.side = { d: sideD[i], p: sideP[i] }; });
+    // Per mode the labels of the points outside a cluster and of the clusters, in the order of the places.
+    type Item = { input: LabelInput; set: (side: LabelSide) => void };
+    const items = (mode: 'd' | 'p'): Item[] => {
+        const out: Item[] = [];
+        for (const p of onMain) {
+            const ci = p.cl?.[mode];
+            if (ci === undefined) {
+                out.push({ input: { x: p.x!, y: p.y!, w: labelWidthPx(p.name, labelYears(p.points)[mode]) },
+                    set: side => { p.side = { ...(p.side ?? { d: 'hide', p: 'hide' }), [mode]: side }; } });
+                continue;
+            }
+            p.side = { ...(p.side ?? { d: 'hide', p: 'hide' }), [mode]: 'hide' };
+            const c = clusters[mode][ci];
+            if (c.members[0] !== p) continue;
+            const lab = clusterLabel(c, S);
+            out.push({ input: { x: c.x, y: c.y, w: labelWidthPx(lab.name, mode === 'd' ? lab.years : ''), hw: pillHalfWidth(c.text) },
+                set: side => { c.side = side; } });
+        }
+        return out;
+    };
+    const itemsD = items('d'), itemsP = items('p');
+    const sideD = placeLabelSides(itemsD.map(i => i.input),
+        { minX: 4, maxX: VIEW_W - 4, minY: 2, maxY: VIEW_H - 2, pxToUnit: pxD, obstacles: [...deskObst, attr] });
+    const sideP = placeLabelSides(itemsP.map(i => i.input),
+        { minX: SAFE.x0 + 3, maxX: SAFE.x1 - 3, minY: 2, maxY: VIEW_H - 2, pxToUnit: pxP, obstacles: phoneObst });
+    itemsD.forEach((it, i) => it.set(sideD[i]));
+    itemsP.forEach((it, i) => it.set(sideP[i]));
     if (small) {
         const labRects = (mode: 'd' | 'p'): Rect[] => {
-            const u = mode === 'd' ? UNITS_ACROSS.desk / BOX_PX.desk : UNITS_ACROSS.phone / BOX_PX.phone;
-            return onMain.flatMap(p => {
-                const side = p.side![mode];
-                if (side === 'hide') return [];
-                const w = labelWidthPx(p.name, labelYears(p.points)[mode]) * u, off = 16 * u, h = 20 * u, pr = 11 * u;
-                return [{ x: side === 'r' ? p.x! + off : p.x! - off - w, y: p.y! - h / 2, w, h }, { x: p.x! - pr, y: p.y! - pr, w: 2 * pr, h: 2 * pr }];
+            const u = mode === 'd' ? pxD : pxP;
+            return (mode === 'd' ? itemsD : itemsP).flatMap((it, i) => {
+                const side = (mode === 'd' ? sideD : sideP)[i];
+                return side === 'hide' ? [pointRect(it.input, u)] : [labelRect(it.input, side, u), pointRect(it.input, u)];
             });
         };
-        small.rings.lab = ringLabelSpots(small.rings, route, {
-            d: [...labRects('d'), ...deskObst, ...(where ? [] : [attr])], p: [...labRects('p'), ...phoneObst],
-        });
+        const rectsD = [...labRects('d'), ...deskObst, ...(where ? [] : [attr])], rectsP = [...labRects('p'), ...phoneObst];
+        // The region's name at the top centre (round 4): the biggest size that fits 70 % of the box,
+        // none when it would cover a label, a point or an inset.
+        if (small.region) {
+            const name = regionName(small.region as Region, lang).toLocaleUpperCase(lang);
+            const font: { d?: number; p?: number } = {};
+            const fit = (mode: 'd' | 'p', sizes: number[], top: number, rects: Rect[]): void => {
+                const u = mode === 'd' ? pxD : pxP;
+                const boxPx = mode === 'd' ? BOX_PX.desk : BOX_PX.phone;
+                const size = sizes.find(z => regionWidthPx(name, z) <= boxPx * 0.7);
+                if (size === undefined) return;
+                const w = regionWidthPx(name, size) * u;
+                const r = { x: VIEW_W / 2 - w / 2, y: top * u, w, h: size * u };
+                if (rects.some(q => overlaps(q, r))) return;
+                font[mode] = size;
+                rects.push(r);
+            };
+            fit('d', [22, 20, 18, 16], 40, rectsD);
+            fit('p', [15, 13, 12], 14, rectsP);
+            small.regionFont = font;
+        }
+        small.rings.lab = ringLabelSpots(small.rings, route, { d: rectsD, p: rectsP });
     }
 
+    const anyCluster = clusters.d.length > 0 || clusters.p.length > 0;
     return {
         state: 'map', places: [...ownGeo, ...near, ...far], noPos, view, ...(scale ? { scale } : {}), route,
+        ...(anyCluster ? { clusters, routes } : {}),
         ...(inset ? { inset } : {}), ...(small ? { small } : {}), ...(where ? { where } : {}),
     };
 }
@@ -783,7 +941,13 @@ function arrowX(at: number): { d: number; p: number } {
     return { d, p: ((p - SAFE.x0) / (SAFE.x1 - SAFE.x0)) * 100 };
 }
 
+/** The region name's width in px: Strom Serif capitals (about 0.7 em) with 0.32 em letter spacing. */
+export function regionWidthPx(name: string, size: number): number {
+    return Math.ceil(name.length * size * 1.02);
+}
+
 interface SmallInput {
+    lang: Language;
     view: OutlineView;
     unitsPerKm: number;
     merc: (g: PlaceGeo) => { x: number; y: number };
@@ -825,9 +989,10 @@ function smallLayer(o: SmallInput): SmallLayer {
         .map(t => ({ ...t, km: distanceKm(g1, t), v: toView(wrapLon(t.lon), t.lat) }))
         .sort((a, b) => a.km - b.km);
 
-    // 2. The nearest town of 10 000+ inside the frame that is not a place of the person.
+    // 2. The biggest town inside the frame that is not a place of the person (round 4: whatever its size;
+    //    Natural Earth holds only notable towns), the nearer of two of one size class.
     let anchor: SmallLayer['anchor'];
-    for (const t of near) {
+    for (const t of [...near].sort((a, b) => b.pop - a.pop || a.km - b.km)) {
         if (!inView(t.v, 16) || isPlace(t)) continue;
         const a = { name: t.name, x: t.v.x, y: t.v.y };
         const r = anchorRect(a);
@@ -863,7 +1028,9 @@ function smallLayer(o: SmallInput): SmallLayer {
     let river: SmallLayer['river'];
     let best = 60;
     for (const rv of rivers()) {
-        if (!rv.name) continue;
+        // Named in the app's language only (never another language's name).
+        const name = riverName(rv, o.lang);
+        if (!name) continue;
         const len = lengthInView(rv.lines, view);
         if (len <= best) continue;
         const vs: { x: number; y: number }[] = [];
@@ -874,12 +1041,12 @@ function smallLayer(o: SmallInput): SmallLayer {
         const mid = Math.floor(vs.length / 2);
         const order = vs.map((q, i) => ({ q, d: Math.abs(i - mid) })).sort((a, b) => a.d - b.d).map(e => e.q);
         const spot = order.find(q => {
-            const r = { x: q.x - 4, y: q.y - 18, w: rv.name.length * 6 + 8, h: 16 };
+            const r = { x: q.x - 4, y: q.y - 18, w: name.length * 6 + 8, h: 16 };
             return !blocked(r) && !(anchor && overlaps(r, anchorRect(anchor)));
         });
         if (!spot) continue;
         best = len;
-        river = { name: rv.name, x: spot.x, y: spot.y };
+        river = { name, x: spot.x, y: spot.y };
     }
 
     // 5. The region, when it holds the whole frame (a grid of 5 × 3 points and the places).
@@ -1004,7 +1171,7 @@ function osaOf(p: PlannedPlace): string {
  *   - `data-pp-action="map:open"` (app): open the application map.
  */
 export function placesMapHtml(points: readonly PlacePoint[], geo: Readonly<Record<string, PlaceGeo>> | undefined, ctx: PlacesMapCtx): string {
-    const plan = planPlacesMap(points, geo, { kidPlaces: ctx.kidPlaces });
+    const plan = planPlacesMap(points, geo, { kidPlaces: ctx.kidPlaces, lang: ctx.lang });
     if (plan.state === 'none') return '';
     const S = getStringsForLang(ctx.lang);
     const M = S.personPage.map;
@@ -1070,9 +1237,12 @@ function smallHtml(plan: MapPlan, S: MapStrings, lang: Language): { svg: string;
             if (lab.p) html += span(lab.p, 'p');
         }
     });
-    if (sm.region) {
+    // The region at the top centre in the size the plan found, per box (none where it found none).
+    const rf = sm.regionFont ?? {};
+    if (sm.region && (rf.d || rf.p)) {
         const name = regionName(sm.region as Region, lang).toLocaleUpperCase(lang);
-        html += `<span class="pp-map-region${name.length > 14 ? ' pp-map-region--long' : ''}" aria-hidden="true">${esc(name)}</span>`;
+        const cls = `pp-map-region${rf.d ? '' : ' rg-d-hide'}${rf.p ? '' : ' rg-p-hide'}`;
+        html += `<span class="${cls}" style="--fd:${rf.d ?? 16}px;--fp:${rf.p ?? 12}px" aria-hidden="true">${esc(name)}</span>`;
     }
     if (sm.river) {
         html += `<span class="pp-map-rvl" style="left:${pct(sm.river.x, VIEW_W)};top:${pct(sm.river.y, VIEW_H)}" aria-hidden="true">${esc(sm.river.name)}</span>`;
@@ -1112,8 +1282,11 @@ function mapHtml(plan: MapPlan, S: MapStrings, sel: string | null, lang: Languag
         grid += `M-40 ${f1(y)}H680`;
     }
 
-    const route = plan.route.length >= 2
-        ? `<path class="pp-map-route" d="M${plan.route.map(p => `${f1(p.x)} ${f1(p.y)}`).join('L')}"/>` : '';
+    // The path; with clusters as drawn per box (no segment inside a cluster), apart when the boxes differ.
+    const path = (pts: { x: number; y: number }[], cls = '') => (pts.length >= 2
+        ? `<path class="pp-map-route${cls}" d="M${pts.map(p => `${f1(p.x)} ${f1(p.y)}`).join('L')}"/>` : '');
+    const rd = plan.routes?.d ?? plan.route, rp = plan.routes?.p ?? plan.route;
+    const route = path(rd) === path(rp) ? path(rd) : path(rd, ' r-d') + path(rp, ' r-p');
     const svg = `<svg class="pp-map-svg" viewBox="0 0 ${VIEW_W} ${VIEW_H}" preserveAspectRatio="none" aria-hidden="true" focusable="false">`
         + (grid ? `<path class="pp-map-grid" d="${grid}"/>` : '')
         + (small?.svg ?? '')
@@ -1126,12 +1299,14 @@ function mapHtml(plan: MapPlan, S: MapStrings, sel: string | null, lang: Languag
     // Relatives' hollow circles under the numbered points.
     const onMain = plan.places.filter(p => p.x !== undefined && p.y !== undefined);
     for (const p of [...onMain.filter(q => q.rel), ...onMain.filter(q => !q.rel)]) {
-        const isSel = sel === p.placeKey ? ' is-sel' : '';
+        const isSel = isSelected(sel, [p.placeKey]) ? ' is-sel' : '';
         const pos = `left:${pct(p.x!, VIEW_W)};top:${pct(p.y!, VIEW_H)}`;
         if (p.rel) {
             pts += `<button type="button" class="pp-map-pt pp-map-pt--rel${isSel}" style="${pos}" data-pp-map-place="${esc(p.placeKey)}" aria-label="${esc(p.full)}"></button>`;
         } else {
-            pts += `<button type="button" class="pp-map-pt${isSel}" style="${pos}" data-pp-map-place="${esc(p.placeKey)}" aria-label="${p.num} ${esc(p.full)}">${p.num}</button>`;
+            // A point inside a cluster gives way to the cluster's pill in that box.
+            const inCl = `${p.cl?.d !== undefined ? ' cl-d' : ''}${p.cl?.p !== undefined ? ' cl-p' : ''}`;
+            pts += `<button type="button" class="pp-map-pt${inCl}${isSel}" style="${pos}" data-pp-map-place="${esc(p.placeKey)}" aria-label="${p.num} ${esc(p.full)}">${p.num}</button>`;
         }
         const yrs = labelYears(p.points);
         const side = p.side ?? { d: 'r', p: 'r' };
@@ -1140,12 +1315,33 @@ function mapHtml(plan: MapPlan, S: MapStrings, sel: string | null, lang: Languag
             + `${esc(p.name)}${yrs.d ? `<span class="pp-map-yr y-d">${esc(yrs.d)}</span>` : ''}${yrs.p ? `<span class="pp-map-yr y-p">${esc(yrs.p)}</span>` : ''}</span>`;
     }
 
+    // Clusters (K4-29): one pill and one label each, per box; a cluster alike in both boxes once.
+    const cd = plan.clusters?.d ?? [], cp = plan.clusters?.p ?? [];
+    const sameAs = (c: MapCluster, list: MapCluster[]) =>
+        list.find(o => o.members.length === c.members.length && o.members.every((m, i) => m === c.members[i]));
+    const clusterHtml = (c: MapCluster, sides: { d: LabelSide; p: LabelSide }, only: '' | 'd' | 'p') => {
+        const keys = c.members.map(m => m.placeKey);
+        const isSel = isSelected(sel, keys) ? ' is-sel' : '';
+        const pos = `left:${pct(c.x, VIEW_W)};top:${pct(c.y, VIEW_H)}`;
+        const lab = clusterLabel(c, S);
+        const aria = `${c.text} ${c.members.map(m => m.full).join(', ')}`;
+        pts += `<button type="button" class="pp-map-pt pp-map-cl${only ? ` pp-map-cl--${only}` : ''}${isSel}" style="${pos}" data-pp-map-place="${esc(keys.join(KEY_SEP))}" aria-label="${esc(aria)}">${esc(c.text)}</button>`;
+        if (sides.d === 'hide' && sides.p === 'hide') return;
+        labels += `<span class="pp-map-lb pp-map-lb--cl lb-d-${sides.d} lb-p-${sides.p}" style="${pos};--hw:${pillHalfWidth(c.text)}px" aria-hidden="true">`
+            + `${esc(lab.name)}${lab.years ? `<span class="pp-map-yr y-d">${esc(lab.years)}</span>` : ''}</span>`;
+    };
+    for (const c of cd) {
+        const twin = sameAs(c, cp);
+        clusterHtml(c, { d: c.side, p: twin ? twin.side : 'hide' }, twin ? '' : 'd');
+    }
+    for (const c of cp) if (!sameAs(c, cd)) clusterHtml(c, { d: 'hide', p: c.side }, 'p');
+
     const scale = plan.scale
         ? `<div class="pp-map-scale" style="--u:${f1(plan.scale.units)}" aria-hidden="true"><span class="pp-map-scale-bar"></span><span class="pp-map-scale-t">${esc(M.km(plan.scale.km))}</span></div>` : '';
     const inset = plan.inset ? insetHtml(plan, S, sel) : '';
     // The attribution sits under the "where" inset when there is one, else top right.
     const attr = plan.where?.corner ? whereHtml(plan.where, S) : `<div class="pp-map-attr">${esc(M.attr)}</div>`;
-    return `<div class="pp-map${small ? ' pp-map--small' : ''}" role="group" aria-label="${esc(M.aria)}"><div class="pp-map-in">${svg}${small?.html ?? ''}${pts}${labels}</div>`
+    return `<div class="pp-map pp-wide${small ? ' pp-map--small' : ''}" role="group" aria-label="${esc(M.aria)}"><div class="pp-map-in">${svg}${small?.html ?? ''}${pts}${labels}</div>`
         + `${attr}${small?.box ?? ''}${scale}${inset}</div>`;
 }
 
@@ -1154,6 +1350,25 @@ const INSET_PX_WIDE = 210;
 const INSET_PX_PHONE = 140;
 
 type InsetLabel = { x: number; y: number; name: string; side: 'l' | 'r'; v?: 'up' | 'dn'; phone: boolean };
+type InsetDot = { x: number; y: number; name: string; keys: string[] };
+
+/** The inset's dots: far places, those closer than `min` (inset units) chained into one dot at their centroid. */
+function insetDots(far: readonly PlannedPlace[], min: number, S: MapStrings): InsetDot[] {
+    const pts = far.map(p => ({ p, x: p.inset!.x, y: p.inset!.y }));
+    const groups = chainClusters(pts, min);
+    const grouped = new Set(groups.flat());
+    const out: InsetDot[] = [];
+    for (const q of pts) {
+        if (!grouped.has(q)) { out.push({ x: q.x, y: q.y, name: q.p.name, keys: [q.p.placeKey] }); continue; }
+        const g = groups.find(gr => gr[0] === q);
+        if (!g) continue;
+        out.push({
+            x: g.reduce((t, m) => t + m.x, 0) / g.length, y: g.reduce((t, m) => t + m.y, 0) / g.length,
+            name: S.personPage.map.cluster(g.map(m => m.p.name)), keys: g.map(m => m.p.placeKey),
+        });
+    }
+    return out;
+}
 
 /**
  * The inset's labels (at most three), each beside its dot: on the side with room, then above or
@@ -1205,16 +1420,27 @@ function insetHtml(plan: MapPlan, S: MapStrings, sel: string | null): string {
     let arcs = '';
     let dots = '';
     let labels = '';
-    far.forEach((p) => {
-        const a = ins.from, z = p.inset!;
-        const mx = (a.x + z.x) / 2, my = (a.y + z.y) / 2;
-        const lift = Math.max(8, Math.hypot(z.x - a.x, z.y - a.y) * 0.3);
-        arcs += `M${f1(a.x)} ${f1(a.y)}Q${f1(mx)} ${f1(my - lift)} ${f1(z.x)} ${f1(z.y)}`;
-        dots += `<circle class="pp-map-ipt${sel === p.placeKey ? ' is-sel' : ''}" cx="${f1(z.x)}" cy="${f1(z.y)}" r="3.5"/>`;
-    });
-    for (const l of insetLabels(far.map(p => ({ x: p.inset!.x, y: p.inset!.y, name: p.name })))) {
-        labels += `<span class="pp-map-ilb pp-map-ilb--${l.side}${l.v ? ` pp-map-ilb--${l.v}` : ''}${l.phone ? '' : ' pp-map-ilb--wide'}" style="left:${pct(l.x, INSET_W)};top:${pct(l.y, INSET_H)}">${esc(l.name)}</span>`;
-    }
+    // Dots closer than 26 px (phone 24) in the inset are one dot at their centroid with one label (K4-29).
+    const groupsFor = (px: number, min: number): InsetDot[] => insetDots(far, min * INSET_W / px, S);
+    const wide = groupsFor(INSET_PX_WIDE, 26), small = groupsFor(INSET_PX_PHONE, 24);
+    const same = wide.length === small.length && wide.every((d, i) => d.keys.join(KEY_SEP) === small[i].keys.join(KEY_SEP));
+    const drawDots = (list: InsetDot[], only: '' | 'd' | 'p') => {
+        for (const d of list) {
+            const a = ins.from;
+            const mx = (a.x + d.x) / 2, my = (a.y + d.y) / 2;
+            const lift = Math.max(8, Math.hypot(d.x - a.x, d.y - a.y) * 0.3);
+            const arc = `M${f1(a.x)} ${f1(a.y)}Q${f1(mx)} ${f1(my - lift)} ${f1(d.x)} ${f1(d.y)}`;
+            if (only) dots += `<path class="pp-map-arc pp-map-i--${only}" d="${arc}"/>`;
+            else arcs += arc;
+            dots += `<circle class="pp-map-ipt${isSelected(sel, d.keys) ? ' is-sel' : ''}${only ? ` pp-map-i--${only}` : ''}" cx="${f1(d.x)}" cy="${f1(d.y)}" r="3.5"/>`;
+        }
+    };
+    drawDots(wide, same ? '' : 'd');
+    if (!same) drawDots(small, 'p');
+    const label = (l: InsetLabel, extra: string) =>
+        `<span class="pp-map-ilb pp-map-ilb--${l.side}${l.v ? ` pp-map-ilb--${l.v}` : ''}${extra}" style="left:${pct(l.x, INSET_W)};top:${pct(l.y, INSET_H)}">${esc(l.name)}</span>`;
+    for (const l of insetLabels(wide)) labels += label(l, same ? (l.phone ? '' : ' pp-map-ilb--wide') : ' pp-map-i--d');
+    if (!same) for (const l of insetLabels(small)) if (l.phone) labels += label(l, ' pp-map-i--p');
     const svg = `<svg viewBox="0 0 ${INSET_W} ${INSET_H}" preserveAspectRatio="none" aria-hidden="true" focusable="false">`
         + (land ? `<path class="pp-map-land" d="${land}"/>` : '')
         + `<rect class="pp-map-frame" x="${f1(r.x)}" y="${f1(r.y)}" width="${f1(r.w)}" height="${f1(r.h)}"/>`
@@ -1239,10 +1465,12 @@ function listHtml(plan: MapPlan, S: MapStrings, ctx: PlacesMapCtx, sel: string |
         const text = p.rel ? relativeEventsText(p.points, S) : ownEventsText(p.points, S, ctx.lang);
         const osa = p.rel ? '' : osaOf(p);
         const selectable = plan.state === 'map' || plan.state === 'tiny';
-        const from = p.from1 && first ? `<span class="pp-map-from">${esc(M.near(p.from1.km, M.dirs[p.from1.dir], first.name))}</span>` : '';
+        // Distance and direction from place 1, named by its badge (round 4: no inflected place name).
+        const mini = `<span class="pp-mini" role="img" aria-label="${esc(M.placeN(1))}">1</span>`;
+        const from = p.from1 && first ? `<span class="pp-map-from">${M.near(p.from1.km, esc(M.dirs[p.from1.dir]), mini)}</span>` : '';
         const attrs = selectable
             ? ` tabindex="0" data-pp-map-place="${esc(p.placeKey)}"${osa ? ` data-pp-osa="${osa}"` : ''}` : osa ? ` data-pp-osa="${osa}"` : '';
-        rows.push(`<li class="pp-map-row${p.rel ? ' pp-map-row--rel' : ''}${selectable && sel === p.placeKey ? ' is-sel' : ''}"${attrs}>`
+        rows.push(`<li class="pp-map-row${p.rel ? ' pp-map-row--rel' : ''}${selectable && isSelected(sel, [p.placeKey]) ? ' is-sel' : ''}"${attrs}>`
             + `${badge(p)}<span class="pp-map-rt"><b class="pp-map-name">${esc(p.full)}</b>${from}${text ? ` · <span class="pp-map-ev">${esc(text)}</span>` : ''}${plan.state !== 'map' ? ambiguous(p) : ''}</span></li>`);
     }
     if (plan.noPos.length) {
@@ -1259,15 +1487,30 @@ function listHtml(plan: MapPlan, S: MapStrings, ctx: PlacesMapCtx, sel: string |
 }
 
 /**
+ * Separator of the place keys of a cluster's pill in `data-pp-map-place` (a
+ * place key never holds a tab: placeKey collapses white space).
+ */
+export const KEY_SEP = '\t';
+
+/** Whether an element with these place keys is selected by a selection (one key, or a cluster's keys). */
+export function isSelected(sel: string | null | undefined, keys: readonly string[]): boolean {
+    if (!sel) return false;
+    const on = sel.split(KEY_SEP);
+    return keys.some(k => on.includes(k));
+}
+
+/**
  * Select a place in a rendered section (app and saved file): the point and the
- * row get `is-sel`; `null` clears. Returns the selected row (for scrolling).
+ * row get `is-sel`; `null` clears. A cluster's pill selects all its places
+ * (their keys tab-separated); a pill is selected with any of its places.
+ * Returns the first selected row (for scrolling).
  */
 export function selectMapPlace(root: ParentNode, key: string | null): Element | null {
     let row: Element | null = null;
     root.querySelectorAll('.pp-places [data-pp-map-place]').forEach(el => {
-        const on = key !== null && el.getAttribute('data-pp-map-place') === key;
+        const on = isSelected(key, (el.getAttribute('data-pp-map-place') ?? '').split(KEY_SEP));
         el.classList.toggle('is-sel', on);
-        if (on && el.classList.contains('pp-map-row')) row = el;
+        if (on && !row && el.classList.contains('pp-map-row')) row = el;
     });
     return row;
 }
@@ -1280,7 +1523,7 @@ export function selectMapPlace(root: ParentNode, key: string | null): Element | 
  */
 export const PLACES_MAP_SCRIPT = `(function(){
 var root=document.querySelector('.pp-places');if(!root)return;
-function sel(k){root.querySelectorAll('[data-pp-map-place]').forEach(function(el){el.classList.toggle('is-sel',el.getAttribute('data-pp-map-place')===k);});}
+function sel(k){var on=(k||'').split('\\t');root.querySelectorAll('[data-pp-map-place]').forEach(function(el){el.classList.toggle('is-sel',!!k&&el.getAttribute('data-pp-map-place').split('\\t').some(function(x){return on.indexOf(x)>=0;}));});}
 function act(el){var k=el.getAttribute('data-pp-map-place');var was=el.classList.contains('is-sel');sel(k);
 if(was&&el.classList.contains('pp-map-row')){var a=el.getAttribute('data-pp-osa');var t=a&&document.getElementById(a);if(t)t.scrollIntoView({block:'center'});}}
 root.addEventListener('click',function(e){var el=e.target.closest&&e.target.closest('[data-pp-map-place]');if(el)act(el);});
