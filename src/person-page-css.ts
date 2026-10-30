@@ -28,6 +28,7 @@ export const PERSON_PAGE_CSS = `
 .pp > section { border-top: 1px solid var(--divider); padding-top: 22px; scroll-margin-top: 8px; }
 .pp h1, .pp h2, .pp h3 { margin: 0; font-family: var(--font-serif); font-weight: 600; color: var(--text); }
 .pp h2 { font-size: 18px; line-height: 1.3; }
+/* A paragraph's own margin is written as ".pp .pp-x", or this reset wins over it. */
 .pp p { margin: 0; }
 .pp a { color: var(--primary); }
 .pp .pn-note { font-size: 0.5em; font-weight: 400; color: var(--text-faint); white-space: nowrap; font-family: var(--font-sans); }
@@ -158,13 +159,13 @@ button.pp-chip, a.pp-chip { cursor: pointer; }
 .pp-basis-body ul { margin: 0 0 6px; padding-left: 18px; }
 .pp-basis-note { font-style: italic; }
 .pp-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: var(--text-faint); margin-left: 4px; white-space: nowrap; }
-.pp-notes-text { margin-top: 8px; font-size: 15px; white-space: pre-line; overflow-wrap: anywhere; }
+.pp .pp-notes-text { margin-top: 8px; font-size: 15px; white-space: pre-line; overflow-wrap: anywhere; }
 .pp-toggles { display: flex; flex-wrap: wrap; gap: 8px; }
 .pp-toggle { display: inline-flex; align-items: center; gap: 7px; min-height: 34px; padding: 0 12px; border: 1.5px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text); font: inherit; font-size: 13.5px; white-space: nowrap; cursor: pointer; }
 .pp-toggle::before { content: ''; width: 14px; height: 14px; border: 1.5px solid var(--border); border-radius: 3px; background: var(--surface); }
 .pp-toggle[aria-checked="true"] { border-color: var(--primary); background: color-mix(in oklab, var(--primary) 12%, var(--surface)); }
 .pp-toggle[aria-checked="true"]::before { content: '\\2713'; display: flex; align-items: center; justify-content: center; border-color: var(--primary); background: var(--primary); color: var(--on-primary); font-size: 11px; line-height: 1; }
-.pp-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: -4px 0 14px; font-size: 12.5px; color: var(--text-faint); }
+.pp .pp-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: -4px 0 14px; font-size: 12.5px; color: var(--text-faint); }
 .pp-legend .pp-hm { margin-right: 4px; }
 .pp-seg { display: flex; flex-direction: column; }
 .pp-seg + .pp-seg { margin-top: 14px; }
@@ -241,7 +242,7 @@ span.pp-gal-thumb { cursor: default; }
 .pp-lb-cap { min-width: 0; color: #c9c2b0; overflow-wrap: anywhere; }
 .pp-lb-navs { flex: 0 0 auto; display: flex; gap: 4px; }
 .pp-act { display: inline-block; margin-top: 8px; padding: 0; border: 0; background: none; color: var(--primary); font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; }
-.pp-src-intro { margin: 4px 0 12px; font-size: 14px; color: var(--text-light); }
+.pp .pp-src-intro { margin: 4px 0 12px; font-size: 14px; color: var(--text-light); }
 .pp-src-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
 .pp-src { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 0 14px; }
 .pp-src .pp-disc { min-height: 48px; flex-wrap: nowrap; align-items: flex-start; padding: 10px 0; }
@@ -360,7 +361,7 @@ span.pp-gal-thumb { cursor: default; }
 .pp-ch-mono > span { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; box-sizing: border-box; border-radius: 50%; border: 2px solid var(--card-bg-2); background: var(--surface); color: var(--accent-text); font-family: var(--font-sans); font-size: 12px; font-weight: 600; line-height: 1; }
 .pp-ch-mono > span + span { margin-left: -9px; }
 .pp .pp-ch-kicker { margin: 0; }
-.pp-ch-pair { margin: 1px 0 0; font-family: var(--font-sans); font-size: 13px; color: var(--text-light); overflow-wrap: anywhere; }
+.pp .pp-ch-pair { margin: 1px 0 0; font-family: var(--font-sans); font-size: 13px; color: var(--text-light); overflow-wrap: anywhere; }
 .pp .pp-ch-title { font-family: var(--font-serif); font-size: 22px; font-weight: 600; line-height: 1.3; margin: 0 0 10px; overflow-wrap: anywhere; hyphens: manual; }
 .pp-ch-rest[hidden] { display: none; }
 .pp .pp-ch-more { display: inline; padding: 0; border: 0; background: none; font: inherit; font-family: var(--font-sans); font-size: 14px; font-weight: 500; color: var(--primary); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; list-style: none; }
@@ -371,9 +372,9 @@ span.pp-gal-thumb { cursor: default; }
 /* The file: an opened chapter's control is "Collapse ▴" after its last paragraph (the summary hides; without a script it stays). */
 html.js .pp-ch-fold[open] > summary { display: none; }
 .pp-ch-fold:not([open]) ~ .pp-ch-foot .pp-ch-less, .pp-ch-fold:not([open]) ~ .pp-ch-foot--less, html.no-js .pp-ch-foot--less { display: none; }
-.pp-ch-foot { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; margin: 10px 0 0; font-family: var(--font-sans); font-size: 13px; color: var(--text-faint); }
+.pp .pp-ch-foot { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; margin: 10px 0 0; font-family: var(--font-sans); font-size: 13px; color: var(--text-faint); }
 .pp-ch-also { flex: 1 1 auto; min-width: 0; }
-.pp-story-cont { margin: 14px 0 0; font-family: var(--font-sans); font-size: 14px; color: var(--text-light); }
+.pp .pp-story-cont { margin: 14px 0 0; font-family: var(--font-sans); font-size: 14px; color: var(--text-light); }
 .pp-story-cont > span { margin-right: 4px; }
 .pp-story-jump { margin-right: 10px; color: var(--primary); }
 a.pp-story-jump { text-decoration: underline; text-underline-offset: 3px; }

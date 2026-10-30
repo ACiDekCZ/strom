@@ -574,6 +574,37 @@ test.describe('desktop', () => {
         await expect(page.locator('.toolbar').first()).toBeHidden();
         await page.emulateMedia({ media: 'screen' });
     });
+
+    test('paragraphs with their own spacing keep it in the window and the file (the notes, the sources\' intro, a couple chapter\'s foot)', async ({ page, browser }) => {
+        await openApp(page);
+        await page.evaluate(() => window.Strom.UI.loadDemoTree());
+        await page.evaluate(() => window.Strom.UI.showPersonPage('demo_johan' as never));
+        const w = win(page);
+        await expect(w.locator('h1')).toContainText('Johan Berg');
+        // The page's "p { margin: 0 }" reset must not win over a paragraph's own margins.
+        const expected: [string, string, string][] = [
+            ['.pp-notes-text', 'marginTop', '8px'],
+            ['.pp-src-intro', 'marginTop', '4px'],
+            ['.pp-src-intro', 'marginBottom', '12px'],
+            ['.pp-ch-foot', 'marginTop', '10px'],
+            ['.pp-story-cont', 'marginTop', '14px'],
+            ['.pp-ch-pair', 'marginTop', '1px'],
+        ];
+        const margins = (root: Page) => root.evaluate((list) => list.map(([sel, prop]) => {
+            const el = document.querySelector(`.pp p${sel}`);
+            return el ? getComputedStyle(el)[prop as 'marginTop'] : 'missing';
+        }), expected);
+        expect(await margins(page)).toEqual(expected.map(e => e[2]));
+
+        await w.locator('.pp-save').click();
+        const dlg = page.locator('#person-page-export-modal');
+        const [download] = await Promise.all([page.waitForEvent('download'), dlg.locator('[data-ppx="save"]').click()]);
+        const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+        const filePage = await ctx.newPage();
+        await filePage.setContent(readFileSync(await download.path(), 'utf-8'), { waitUntil: 'load' });
+        expect(await margins(filePage)).toEqual(expected.map(e => e[2]));
+        await ctx.close();
+    });
 });
 
 /**
@@ -844,6 +875,8 @@ test.describe('a research tree with history', () => {
         const legend = w.locator('#pp-sec-timeline .pp-legend:not(.pp-chart-legend)');
         await expect(legend).toBeVisible();
         await expect(legend.locator('.pp-hm')).toHaveCount(3);
+        // Its own margin below (the page's paragraph reset does not take it): the first segment's title keeps off.
+        expect(await legend.evaluate((el) => getComputedStyle(el).marginBottom)).toBe('14px');
 
         // The switch: on by default; off hides the rows and the legend, on brings them back.
         const sw = w.locator('[data-pp-switch="history"]');
