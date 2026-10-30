@@ -510,7 +510,7 @@ export const materialsMethods = uiModule({
         if (item.origin === 'tree' && att && !locked) {
             note = `<input type="text" class="attachment-note-input material-note-input" value="${esc(att.note ?? '')}" placeholder="${esc(strings.attachments.notePlaceholder)}" data-attachment-id="${esc(att.id)}" aria-label="${esc(strings.attachments.notePlaceholder)}">`;
         } else if (item.noteUser) {
-            note = `<span class="material-note">„${esc(item.noteUser)}“</span>`;
+            note = `<span class="material-note">${esc(strings.materials.quoted(item.noteUser))}</span>`;
         }
         const at = materialShortDate(item.at);
         return `

@@ -108,11 +108,37 @@ test.describe('the state of the tree and sending straight', () => {
         await expect(block(page)).toHaveAttribute('data-state', 'unsentBridgeDown');
         // Title and facts on the block's two lines; the sentence is its hint (menu 1020 §2.2).
         await expect(block(page).locator('.research-sync-title')).toHaveText("The research isn't running");
-        await expect(block(page).locator('.research-sync-sub')).toHaveText(/^1 person changed · /);
+        await expect(block(page).locator('.research-sync-sub')).toHaveText(/^1 person changed\s·\s/);
         await expect(block(page).locator('.research-sync-status')).toHaveAttribute('title', /The changes will wait, nothing is lost\./);
         await page.evaluate(() => window.Strom.UI.researchSendNow());
         expect(bridge.posts).toHaveLength(0);
         expect(await links(page)).toContain(`strom-research://send?tree=${UUID}`);
+    });
+
+    test('the block\'s facts line: the time stays on the line of the word before it (never alone after a wrap)', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 800 });
+        await openResearch(page, { edit: true });
+        const bridge = await fakeBridge(page);
+        await poll(page);
+        bridge.down = true;
+        await poll(page);
+        await openResearchMenu(page);
+        const sub = block(page).locator('.research-sync-sub');
+        await expect(sub).toHaveText(/^1 person changed\s·\s\d/);
+        // The narrow block wraps the line; "changed", "·" and the time share the last line.
+        const tops = await sub.evaluate((el) => {
+            const text = el.firstChild as Text;
+            const s = text.data;
+            const top = (i: number) => {
+                const r = document.createRange();
+                r.setStart(text, i);
+                r.setEnd(text, i + 1);
+                return Math.round(r.getBoundingClientRect().top);
+            };
+            return { word: top(s.indexOf('changed')), dot: top(s.lastIndexOf('·')), time: top(s.length - 1), first: top(0) };
+        });
+        expect(tops.dot).toBe(tops.word);
+        expect(tops.time).toBe(tops.word);
     });
 
     test('the bridge said "no links" once, then went down: "Start the research" stays (no install line, it ran here)', async ({ page }) => {

@@ -84,10 +84,6 @@ function innerWidth(el: HTMLElement): number {
     return Math.max(0, el.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0));
 }
 
-function quoted(text: string): string {
-    return getCurrentLanguage() === 'en' ? `“${text}”` : `„${text}“`;
-}
-
 function readPrefs(): { group: OverviewGroupMode; view: OverviewView } {
     try {
         return parseViewPrefs(localStorage.getItem(VIEW_KEY));
@@ -711,7 +707,7 @@ export const materialsWindowMethods = uiModule({
         if (group.kind === 'batch' && group.batch) {
             const b = group.batch;
             const people = (b.persons ?? []).map(p => w.names.get(p) ?? p);
-            return [materialShortDate(b.at), people.length ? m.forPersons(people) : '', b.note ? quoted(b.note) : '']
+            return [materialShortDate(b.at), people.length ? m.forPersons(people) : '', b.note ? m.quoted(b.note) : '']
                 .filter(Boolean).join(' · ');
         }
         if (group.kind === 'loose') {

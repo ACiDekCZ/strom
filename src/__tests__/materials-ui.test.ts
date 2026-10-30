@@ -14,8 +14,9 @@ import {
 } from '../materials.js';
 import {
     rememberedMaterialFeatures, rememberMaterialFeatures, forgetMaterialFeatures,
-    shownFileCount, materialsDisconnectNote, forgetTreeMaterials, materialShortDate,
+    shownFileCount, materialsDisconnectNote, forgetTreeMaterials, materialShortDate, materialsMethods, MaterialsContext,
 } from '../ui/materials-ui.js';
+import { MaterialItem } from '../materials.js';
 import { alsoTreeEligible } from '../ui/material-ui.js';
 
 const sha = (n: number) => n.toString(16).padStart(64, '0');
@@ -129,6 +130,23 @@ describe('rows', () => {
         expect(materialShortDate('2025-03-04T10:00:00', now)).toBe('4. 3. 2025');
         expect(materialShortDate(undefined, now)).toBe('');
         expect(materialShortDate('not a date', now)).toBe('');
+        setLanguage('en');
+    });
+
+    it("a sender's note is quoted with the UI language's own marks (no Czech „…“ in English)", () => {
+        const item: MaterialItem = {
+            key: 'm:I0001', origin: 'archive', title: 'Letter from an aunt', persons: ['P0001'], viaBatch: [],
+            noteUser: 'From the attic box', here: true,
+        };
+        const ctx = { treeId: 't1', researchId: 'r1', base: null, agent: true } as unknown as MaterialsContext;
+        const note = (lang: 'en' | 'cs' | 'de') => {
+            setLanguage(lang);
+            const html = materialsMethods.materialRowHtml.call({} as never, item, ctx, null, false);
+            return /<span class="material-note">([^<]*)<\/span>/.exec(html)?.[1];
+        };
+        expect(note('en')).toBe('\u201cFrom the attic box\u201d');
+        expect(note('cs')).toBe('\u201eFrom the attic box\u201c');
+        expect(note('de')).toBe('\u201eFrom the attic box\u201c');
         setLanguage('en');
     });
 });
