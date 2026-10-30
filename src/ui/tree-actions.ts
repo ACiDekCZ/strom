@@ -164,9 +164,10 @@ export const treeActionsMethods = uiModule({
         const parent = source === 'manager' ? 'tree-manager-modal' : undefined;
         const id = tree.id;
         // Read-only: a locked tree, the open tree followed live or locked data
-        // (menu 1020 §10) — only what reads the tree, and Unlock when locked.
+        // (menu 1020 §10), a tree a newer app saved — only what reads the
+        // tree, and Unlock when locked.
         const live = isActive && DataManager.isLiveFollowing();
-        const readOnly = tree.isLocked === true || live || (isActive && DataManager.isReadOnly());
+        const readOnly = tree.isLocked === true || live || (isActive && DataManager.isReadOnly()) || TreeManager.isTreeNewer(id);
 
         const treeData = await TreeManager.getTreeData(id);
         const defaultSetting = treeData?.defaultPersonId;

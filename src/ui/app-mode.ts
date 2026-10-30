@@ -318,25 +318,6 @@ export const appModeMethods = uiModule({
 
     // ---- VERSION COMPATIBILITY ----
     /**
-     * Show newer version warning dialog for storage (blocking - no continue option)
-     */
-    async showNewerVersionStorageDialog(): Promise<void> {
-        const check = await DataManager.checkStorageVersion();
-
-        const yourVersionEl = document.getElementById('storage-your-version');
-        const dataVersionEl = document.getElementById('storage-data-version');
-
-        if (yourVersionEl) {
-            yourVersionEl.textContent = String(check.currentVersion);
-        }
-        if (dataVersionEl) {
-            dataVersionEl.textContent = String(check.dataVersion ?? '?');
-        }
-
-        document.getElementById('newer-version-storage-modal')?.classList.add('active');
-    },
-
-    /**
      * Show newer version warning dialog for view mode (allows viewing, blocks import)
      */
     showNewerVersionViewModeDialog(): void {
@@ -432,16 +413,27 @@ export const appModeMethods = uiModule({
     },
 
     /**
-     * Check storage version on startup
-     * @returns true if OK to continue, false if blocked
+     * A tree a newer app saved is open (at start or switched to): it is
+     * read-only — `data-newer` hides the edit entry points like locked data —
+     * and a bar says why and how to get out (update the app). The bar comes
+     * once per opening of such a tree and goes when another tree opens.
+     * Called on every data change.
      */
-    async checkStorageVersionOnStartup(): Promise<boolean> {
-        const check = await DataManager.checkStorageVersion();
-        if (!check.compatible) {
-            await this.showNewerVersionStorageDialog();
-            return false;
+    syncNewerDataState(): void {
+        const newer = DataManager.isNewerData();
+        const was = document.body.classList.contains('data-newer');
+        document.body.classList.toggle('data-newer', newer);
+        const treeId = newer ? DataManager.getCurrentTreeId() : null;
+        if (newer && !was) {
+            // Close whatever edit surface was open on the previous tree.
+            this.hideContextMenu();
+            this.hideBottomSheet();
         }
-        return true;
+        if (newer !== was) this.refreshUndoRedoToolbar();
+        if (treeId === this.newerNoticeTreeId) return;
+        this.newerNoticeTreeId = treeId;
+        if (treeId) this.showStorageNotice('newer-data-notice', strings.storageSafety.newerReadOnly);
+        else document.getElementById('newer-data-notice')?.remove();
     },
 
     /**

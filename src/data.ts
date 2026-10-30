@@ -535,6 +535,7 @@ class DataManagerClass {
      */
     isTreeLocked(): boolean {
         if (this.liveTreeId !== null && this.liveTreeId === this.currentTreeId) return true;
+        if (this.isNewerData()) return true;
         const meta = TreeManager.getActiveTreeMetadata();
         return meta?.isLocked === true;
     }
@@ -574,9 +575,19 @@ class DataManagerClass {
         return this.currentTreeId !== null && TreeManager.isTreeUnreadable(this.currentTreeId);
     }
 
-    /** No edits allowed: read-only view of an embedded file, or locked data. */
+    /**
+     * The open tree was saved by a newer version of the app: it is shown as
+     * stored but read-only — no edit, no import into it, nothing from the
+     * research — and never saved (this version would drop what it does not
+     * know). Updating the app makes it editable again.
+     */
+    isNewerData(): boolean {
+        return !this.viewMode && this.currentTreeId !== null && TreeManager.isTreeNewer(this.currentTreeId);
+    }
+
+    /** No edits allowed: read-only view of an embedded file, locked data, or a newer app's tree. */
     isReadOnly(): boolean {
-        return this.viewMode || this.isLocked();
+        return this.viewMode || this.isLocked() || this.isNewerData();
     }
 
     /**
@@ -954,34 +965,6 @@ class DataManagerClass {
     }
 
     /**
-     * Check localStorage data version on startup
-     * @returns true if data is compatible, false if newer version detected
-     */
-    async checkStorageVersion(): Promise<{ compatible: boolean; dataVersion?: number; currentVersion: number }> {
-        const activeTreeId = TreeManager.getActiveTreeId();
-        if (!activeTreeId) return { compatible: true, currentVersion: STROM_DATA_VERSION };
-
-        const data = await TreeManager.getTreeData(activeTreeId);
-        if (!data) return { compatible: true, currentVersion: STROM_DATA_VERSION };
-
-        const dataVersion = data.version ?? 1;
-        if (dataVersion > STROM_DATA_VERSION) {
-            this.newerVersionSource = 'storage';
-            this.pendingNewerVersionInfo = {
-                dataVersion,
-                appVersion: 'unknown'
-            };
-            return {
-                compatible: false,
-                dataVersion,
-                currentVersion: STROM_DATA_VERSION
-            };
-        }
-
-        return { compatible: true, currentVersion: STROM_DATA_VERSION };
-    }
-
-    /**
      * Check if JSON data version is compatible before import
      * @returns true if compatible, false if newer version
      */
@@ -1124,7 +1107,7 @@ class DataManagerClass {
 
     /** An edit of the user's reached storage: the tree now differs from its last file copy. */
     private noteUserChange(): void {
-        if (this.viewMode || this.isLocked() || this.editSession || !this.currentTreeId) return;
+        if (this.isReadOnly() || this.editSession || !this.currentTreeId) return;
         TreeManager.noteUserChange(this.currentTreeId);
     }
 
@@ -1134,9 +1117,10 @@ class DataManagerClass {
     }
 
     private save(): void {
-        // Never save in view mode (read-only) or over locked data (the
-        // in-memory tree is a stand-in; TreeManager would refuse it anyway).
-        if (this.viewMode || this.isLocked()) return;
+        // Never save in view mode (read-only), over locked data (the
+        // in-memory tree is a stand-in) or over a newer app's tree
+        // (TreeManager would refuse both anyway).
+        if (this.isReadOnly()) return;
         // A staged dialog persists on commit only; a rollback re-saves.
         if (this.editSession) return;
 
@@ -1152,9 +1136,10 @@ class DataManagerClass {
      * Called at the start of every undoable mutation. No-op in view mode.
      */
     private beginMutation(): void {
-        // Locked data is an empty stand-in: refuse before anything changes
-        // (defense in depth — the UI hides every edit entry point).
-        if (this.isLocked()) throw new DataLockedError();
+        // Locked data is an empty stand-in, a newer app's tree is never
+        // changed here: refuse before anything changes (defense in depth —
+        // the UI hides every edit entry point).
+        if (this.isLocked() || this.isNewerData()) throw new DataLockedError();
         if (this.viewMode) return;
         // Inside a batch the pre-state was captured once by beginBatch; the inner
         // mutations must not re-snapshot (that would split the batch into steps).
@@ -1207,7 +1192,7 @@ class DataManagerClass {
      * family wizard). Non-invasive: no mutation method needs to change.
      */
     beginBatch(): void {
-        if (this.viewMode || this.isLocked()) return;
+        if (this.isReadOnly()) return;
         // Nested batches (e.g. the family wizard inside a UI-level runBatch)
         // join the outermost one: only the outermost commit records the step.
         if (this.batchActive) {
@@ -1436,13 +1421,13 @@ class DataManagerClass {
     }
 
     canUndo(): boolean {
-        if (this.isLocked()) return false;
+        if (this.isLocked() || this.isNewerData()) return false;
         UndoManager.setActiveTree(this.currentTreeId);
         return UndoManager.canUndo();
     }
 
     canRedo(): boolean {
-        if (this.isLocked()) return false;
+        if (this.isLocked() || this.isNewerData()) return false;
         UndoManager.setActiveTree(this.currentTreeId);
         return UndoManager.canRedo();
     }
@@ -1647,7 +1632,7 @@ class DataManagerClass {
      * like any other save of the tree. Ignored while the tree is read-only.
      */
     replaceQualityDismissed(next: readonly QualityDismissal[]): void {
-        if (this.viewMode || this.isLocked()) return;
+        if (this.isReadOnly()) return;
         this.data.qualityDismissed = next.length > 0 ? next.map(d => ({ ...d, persons: [...d.persons] })) : undefined;
         this.save();
     }
@@ -3271,7 +3256,7 @@ class DataManagerClass {
      * @param value undefined = first person, LAST_FOCUSED = where user left off, PersonId = specific
      */
     setDefaultPerson(value: PersonId | LastFocusedMarker | undefined): void {
-        if (!this.currentTreeId || this.isLocked()) return;
+        if (!this.currentTreeId || this.isLocked() || this.isNewerData()) return;
 
         if (value === undefined) {
             delete this.data.defaultPersonId;
@@ -3367,7 +3352,7 @@ class DataManagerClass {
      */
     replaceWithSourceData(newData: StromData): void {
         this.rollbackEditSession();   // whole-data replacement ends a staged dialog
-        if (this.viewMode || this.isLocked() || !this.currentTreeId) return;
+        if (this.isReadOnly() || !this.currentTreeId) return;
         this.data = migrateData(newData);
         this.save();
         UndoManager.setActiveTree(this.currentTreeId);

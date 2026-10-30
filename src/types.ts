@@ -1487,6 +1487,13 @@ export interface TreeMetadata {
     isHidden?: boolean;
     /** Whether tree is locked (all persons read-only) */
     isLocked?: boolean;
+    /**
+     * The data version of the stored record (written with every save, put
+     * right at every read). Above STROM_DATA_VERSION: a newer app saved the
+     * tree, so this one opens it read-only and never writes it — also before
+     * it was read in this window.
+     */
+    dataVersion?: number;
     /** Collaboration: exportId of the file this tree was saved from. */
     receivedExportId?: string;
     /** Collaboration: sender name of the file this tree was saved from. */

@@ -3457,6 +3457,9 @@ const stringsEN = {
     storageSafety: {
         saveBlocked: 'This tree could not be decrypted with the current password, so changes to it are NOT being saved. Unlock with the right password first.',
         lockedBanner: 'The data is encrypted and locked.',
+        // A tree a newer app saved: shown read-only, never written (at start and when switched to).
+        newerReadOnly: 'This tree was saved by a newer version of the app, so it is read-only here. Updating the app makes it editable again.',
+        newerNotSaved: 'Nothing was saved: the tree was saved by a newer version of the app and stays read-only here until the app is updated.',
         unlock: 'Unlock',
         treeOtherKey: 'This tree was encrypted with a different password (set before a password change, or imported). Enter that password — the tree will then be re-encrypted with the current password.',
         treeRecovered: 'Tree unlocked and re-encrypted with the current password.',
@@ -3659,8 +3662,6 @@ const stringsEN = {
         newerDataInImport: 'This file was created with a newer version of the application.',
         newerDataWarning: 'Opening with this older version may cause data loss or errors.',
         newerDataSolution: 'Recommended: Export the data as JSON and import it in the newer version.',
-        // A tree opened by switching (the startup check covers only the tree opened first).
-        newerDataTree: 'This tree was saved by a newer version of the app: some details may not show here, and changes made in this version can lose them.',
         exportAndExit: 'Export JSON & close',
         yourVersion: 'App version',
         dataVersion: 'Data version',
@@ -9254,6 +9255,8 @@ const stringsCZ: StringsType = {
     storageSafety: {
         saveBlocked: 'Tento strom se nepodařilo dešifrovat aktuálním heslem, a proto se jeho změny NEUKLÁDAJÍ. Nejprve je potřeba odemknout data správným heslem.',
         lockedBanner: 'Data jsou zašifrovaná a zamčená.',
+        newerReadOnly: 'Tento strom uložila novější verze aplikace, proto je tu jen ke čtení. Po aktualizaci aplikace půjde zase upravovat.',
+        newerNotSaved: 'Nic se neuložilo: strom uložila novější verze aplikace a do aktualizace aplikace je tu jen ke čtení.',
         unlock: 'Odemknout',
         treeOtherKey: 'Tento strom je zašifrovaný jiným heslem (z doby před změnou hesla nebo z importu). Po zadání tohoto hesla se strom znovu zašifruje současným heslem.',
         treeRecovered: 'Strom je odemčený a znovu zašifrovaný současným heslem.',
@@ -9462,7 +9465,6 @@ const stringsCZ: StringsType = {
         newerDataInImport: 'Tento soubor byl vytvořen novější verzí aplikace.',
         newerDataWarning: 'Otevření ve starší verzi může způsobit ztrátu dat nebo chyby.',
         newerDataSolution: 'Doporučení: exportovat data jako JSON a importovat je v novější verzi.',
-        newerDataTree: 'Tento strom uložila novější verze aplikace: některé údaje se tu nemusí zobrazit a úpravy v této verzi je mohou smazat.',
         exportAndExit: 'Exportovat JSON a zavřít',
         yourVersion: 'Verze této aplikace',
         dataVersion: 'Verze dat',
@@ -15003,6 +15005,8 @@ const stringsDE: StringsType = {
     storageSafety: {
         saveBlocked: 'Dieser Stammbaum konnte mit dem aktuellen Passwort nicht entschlüsselt werden, daher werden Änderungen daran NICHT gespeichert. Zuerst mit dem richtigen Passwort entsperren.',
         lockedBanner: 'Die Daten sind verschlüsselt und gesperrt.',
+        newerReadOnly: 'Dieser Stammbaum wurde von einer neueren Version der App gespeichert und ist hier deshalb schreibgeschützt. Nach einem Update der App lässt er sich wieder bearbeiten.',
+        newerNotSaved: 'Nichts wurde gespeichert: Der Stammbaum wurde von einer neueren Version der App gespeichert und bleibt hier bis zum Update der App schreibgeschützt.',
         unlock: 'Entsperren',
         treeOtherKey: 'Dieser Stammbaum wurde mit einem anderen Passwort verschlüsselt (vor einer Passwortänderung oder beim Import). Dieses Passwort eingeben – danach wird der Stammbaum mit dem aktuellen Passwort neu verschlüsselt.',
         treeRecovered: 'Stammbaum entsperrt und mit dem aktuellen Passwort neu verschlüsselt.',
@@ -15201,7 +15205,6 @@ const stringsDE: StringsType = {
         newerDataInImport: 'Diese Datei wurde mit einer neueren Version der Anwendung erstellt.',
         newerDataWarning: 'Das Öffnen mit dieser älteren Version kann zu Datenverlust oder Fehlern führen.',
         newerDataSolution: 'Empfohlen: Die Daten als JSON exportieren und in der neueren Version importieren.',
-        newerDataTree: 'Dieser Stammbaum wurde von einer neueren Version der App gespeichert: Manche Angaben werden hier womöglich nicht angezeigt, und Änderungen in dieser Version können sie löschen.',
         exportAndExit: 'JSON exportieren & schließen',
         yourVersion: 'Version dieser App',
         dataVersion: 'Datenversion',
