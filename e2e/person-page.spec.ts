@@ -503,7 +503,7 @@ test.describe('desktop', () => {
 });
 
 /**
- * Karl Berger (1900–1975) of Capkov and Wien: his places with positions, a
+ * Karl Hollerbach (1900–1975) of Capkov and Wien: his places with positions, a
  * partner born in Lhota, a son who died in Graz, a LIVING daughter who
  * emigrated to Toronto (far: the world inset).
  */
@@ -511,14 +511,14 @@ async function seedTraveller(page: Page): Promise<void> {
     const P = (id: string, firstName: string, lastName: string, gender: string, extra: Record<string, unknown> = {}) =>
         ({ id, firstName, lastName, gender, isPlaceholder: false, parentIds: [], childIds: [], partnerships: [], ...extra });
     const persons = {
-        karl: P('karl', 'Karl', 'Berger', 'male', {
+        karl: P('karl', 'Karl', 'Hollerbach', 'male', {
             birthDate: '1900-03-03', birthPlace: 'Capkov', deathDate: '1975-08-08', deathPlace: 'Wien',
             partnerships: ['u1'], childIds: ['otto', 'lena'],
             events: [{ id: 'k1', type: 'military', date: '1918', place: 'Graz' }],
         }),
         berta: P('berta', 'Berta', 'Kral', 'female', { birthDate: '1902', birthPlace: 'Lhota', deathDate: '1980', partnerships: ['u1'], childIds: ['otto', 'lena'] }),
-        otto: P('otto', 'Otto', 'Berger', 'male', { birthDate: '1927', deathDate: '1990', deathPlace: 'Linz', parentIds: ['karl', 'berta'] }),
-        lena: P('lena', 'Magdalena', 'Bergerova', 'female', {
+        otto: P('otto', 'Otto', 'Hollerbach', 'male', { birthDate: '1927', deathDate: '1990', deathPlace: 'Hollerau', parentIds: ['karl', 'berta'] }),
+        lena: P('lena', 'Magdalena', 'Hollerbachova', 'female', {
             birthDate: '1950-06-06', birthPlace: 'Wien', parentIds: ['karl', 'berta'],
             events: [{ id: 'l1', type: 'emigration', date: '1975', place: 'Toronto' }],
         }),
@@ -532,7 +532,7 @@ async function seedTraveller(page: Page): Promise<void> {
     };
     await page.evaluate(async ({ persons, partnerships, places }) => {
         window.Strom.SettingsManager.setOnThisDay(false);
-        await window.Strom.DataManager.importAsNewTree({ persons, partnerships, places } as never, 'Berger');
+        await window.Strom.DataManager.importAsNewTree({ persons, partnerships, places } as never, 'Hollerbach');
         await window.Strom.TreeRenderer.setFocus('karl' as never);
     }, { persons, partnerships, places });
     await expect(card(page, 'Karl')).toBeVisible();
@@ -646,7 +646,7 @@ test.describe('person page 2: places of life and the life chart', () => {
         const toast = page.locator('.toast[data-kind="person-page"]');
         await expect(toast).toContainText('Map: Wien');
         await toast.locator('.toast-action').click();
-        await expect(win(page).locator('h1')).toContainText('Karl Berger');
+        await expect(win(page).locator('h1')).toContainText('Karl Hollerbach');
         await expect(win(page).locator('#pp-sec-places .pp-map-row[data-pp-map-place="wien"]')).toHaveClass(/is-sel/);
     });
 
@@ -737,9 +737,9 @@ test.describe('person page 2: the saved file follows the window\'s switches', ()
         await expect(sw).toHaveAttribute('aria-checked', 'false');
         await expect(filePage.locator('.pp-row--kid').first()).toBeHidden();
         await expect(filePage.locator('.pp-chart .pp-ch-kid').first()).toBeHidden();
-        // The children's places are not on the map (Toronto is the living daughter's, Linz the son's).
+        // The children's places are not on the map (Toronto is the living daughter's, Hollerau the son's).
         await expect(filePage.locator('.pp-map-pt--rel')).toHaveCount(0);
-        await expect(filePage.locator('.pp-map-row', { hasText: 'Linz' })).toHaveCount(0);
+        await expect(filePage.locator('.pp-map-row', { hasText: 'Hollerau' })).toHaveCount(0);
         // The file's own switch brings the children's rows back.
         await sw.click();
         await expect(filePage.locator('.pp-row--kid').first()).toBeVisible();

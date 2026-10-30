@@ -1039,7 +1039,7 @@ describe('person page 2: the places map and the life chart wired in (§1, §2)',
         d.persons['tomas' as PersonId] = p('tomas', 'Tomáš', 'Malý', 'male', {
             birthDate: '1890', deathDate: '1960', partnerships: ['u2' as PartnershipId], childIds: ids('eva'),
         });
-        d.persons['jiri' as PersonId] = p('jiri', 'Jiřina', 'Nováková', 'female', {
+        d.persons['jiri' as PersonId] = p('jiri', 'Zbyňka', 'Nováková', 'female', {
             birthDate: '1950-02-02', birthPlace: 'Lhota', partnerships: ['u3' as PartnershipId],
         });
         d.persons['eva' as PersonId] = p('eva', 'Evelína', 'Malá', 'female', {
@@ -1130,7 +1130,7 @@ describe('person page 2: the places map and the life chart wired in (§1, §2)',
         const prot = doc(geoTree(), { ...rosa, privacy: 'initials' });
         expect(prot).toContain('id="pp-sec-places"');
         expect(prot).toContain('class="pp-chart"');
-        for (const word of ['Evelína', 'Toronto', 'Lhota', 'Jiřina', 'Pozdní láska', '1955-04-04']) expect(prot).not.toContain(word);
+        for (const word of ['Evelína', 'Toronto', 'Lhota', 'Zbyňka', 'Pozdní láska', '1955-04-04']) expect(prot).not.toContain(word);
         // The window (full data) has them.
         const app = body(geoTree(), rosa);
         for (const word of ['Evelína', 'Toronto']) expect(app).toContain(word);
