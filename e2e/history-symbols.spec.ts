@@ -200,6 +200,13 @@ test.describe('History symbols by kind', () => {
         await expect(kindChips).toHaveCount(await chips.count() - 1);
         await expect(modal.locator('.hd-filters .hd-chip[data-k="war"]')).toHaveAttribute('title', 'War');
         await expectSymbol(modal.locator('.hd-filters .hd-chip[data-k="war"]'), 12);
+        // The filter is a neutral control: its symbol in --hist-text, also when chosen (the origin is the head's).
+        const warSvg = modal.locator('.hd-filters .hd-chip[data-k="war"] svg');
+        expect(await colorOf(warSvg)).toBe(await tokenColor(page, 'var(--hist-text)'));
+        await modal.locator('.hd-filters .hd-chip[data-k="war"]').click();
+        await expect(modal.locator('.hd-filters .hd-chip[data-k="war"]')).toHaveAttribute('aria-pressed', 'true');
+        expect(await colorOf(warSvg)).toBe(await tokenColor(page, 'var(--hist-text)'));
+        await modal.locator('.hd-filters .hd-chip').first().click();
 
         // The local findings: their own colour, places as chips (no symbol there).
         await modal.locator('.hm-back').click();

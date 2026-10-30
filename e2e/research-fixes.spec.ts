@@ -1,5 +1,5 @@
 import { test, expect, Page, Locator } from '@playwright/test';
-import { fakeBridge, fakeFixes, openResearch, openResearchMenu, poll, links, FakeBridge, FakeFixes, UUID } from './research-bridge.js';
+import { fakeBridge, fakeFixes, fakePhone, openResearch, openResearchMenu, poll, links, FakeBridge, FakeFixes, UUID } from './research-bridge.js';
 
 /**
  * Tree fixes of the research: the bridge lists the bulk data fixes it can apply
@@ -24,11 +24,12 @@ const FIXES: Record<string, unknown>[] = [
     { id: 'nothing-here', title: { en: 'Nothing to do' }, summary: { en: '…' }, unit: 'item', count: 0, state: 'nothing', undoable: false, paid: false },
 ];
 
-async function research(page: Page, init: { features?: string[]; links?: string[]; fixes?: Partial<FakeFixes> } = {}): Promise<FakeBridge> {
+async function research(page: Page, init: { features?: string[]; links?: string[]; fixes?: Partial<FakeFixes>; more?: Partial<FakeBridge> } = {}): Promise<FakeBridge> {
     const b = await fakeBridge(page, {
         features: init.features ?? ['fixes.list'],
         links: init.links ?? LINKS,
         fixes: fakeFixes({ fixes: FIXES, ...init.fixes }),
+        ...init.more,
     });
     await openResearch(page);
     await poll(page);
@@ -87,6 +88,61 @@ test.describe('tree fixes of the research', () => {
         await expect(row(page, 'participant-names').locator('.research-fix-action')).toHaveAttribute('data-fix-act', 'undo');
         await expect(row(page, 'street-places').locator('.research-fix-state')).toHaveText(/^Left unchanged /);
         await expect(row(page, 'nothing-here')).toHaveCount(0);
+    });
+
+    test('left unchanged and undone: faint, "Open in the research", sorted together, newest first; the summary whole', async ({ page }) => {
+        const long = 'Moves streets, house numbers and parts of town out of the place names into the address, so that one place '
+            + 'is written once and the street stays with the event it belongs to; nothing is removed from the tree.';
+        await research(page, { fixes: { fixes: [
+            { ...FIXES[3], summary: { en: long } },
+            { id: 'surname-split', title: { en: 'Split surnames' }, summary: { en: 'Splits the birth name off.' }, unit: 'person', count: 2,
+                state: 'declined', undone: true, undoable: false, at: '2026-10-29T10:00:00.000Z', paid: false },
+            FIXES[0],
+        ] } });
+        await openFixes(page);
+        expect(await modal(page).locator('.research-fix').evaluateAll(els => els.map(e => e.getAttribute('data-fix'))))
+            .toEqual(['places-normalize', 'surname-split', 'street-places']);
+        const faint = await page.evaluate(() => {
+            const probe = document.createElement('span');
+            probe.style.color = 'var(--text-faint)';
+            document.body.appendChild(probe);
+            const c = getComputedStyle(probe).color;
+            probe.remove();
+            return c;
+        });
+        for (const id of ['surname-split', 'street-places']) {
+            const state = row(page, id).locator('.research-fix-state');
+            expect(await state.evaluate(el => getComputedStyle(el).color)).toBe(faint);
+            await expect(row(page, id).locator('.research-fix-action')).toHaveAttribute('data-fix-act', 'open');
+            await expect(row(page, id).getByRole('button', { name: 'Open in the research, opens in the research' })).toBeVisible();
+        }
+        await expect(row(page, 'surname-split').locator('.research-fix-state')).toHaveText(/^Undone /);
+        await expect(row(page, 'street-places').locator('.research-fix-state')).toHaveText(/^Left unchanged /);
+        // The summary whole: no line clamp, every line shown.
+        const summary = row(page, 'street-places').locator('.research-fix-summary');
+        await expect(summary).toHaveText(long);
+        expect(await summary.evaluate(el => {
+            const cs = getComputedStyle(el);
+            return { clamp: cs.webkitLineClamp, cut: el.scrollHeight > el.clientHeight + 1 };
+        })).toEqual({ clamp: 'none', cut: false });
+    });
+
+    test('in "Other actions": an update of the research first, then the phone, Tree fixes, Research tools ›', async ({ page }) => {
+        await research(page, {
+            features: ['fixes.list', 'phone'],
+            links: [...LINKS, 'update', 'doctor'],
+            more: { phone: fakePhone(), statusExtra: { update: { version: '1.7.0' } } },
+        });
+        await openResearchMenu(page, { expandMore: true });
+        await expect(item(page)).toBeVisible();
+        const ids = await page.locator('#research-menu-more > [id^="research-item-"]').evaluateAll(
+            els => els.map(e => e.id).filter(id => !id.endsWith('-link')));
+        const at = (id: string): number => ids.indexOf(id);
+        expect(at('research-item-update'), ids.join(' ')).toBeGreaterThanOrEqual(0);
+        expect(at('research-item-update')).toBeLessThan(at('research-item-phone'));
+        expect(at('research-item-phone')).toBeLessThan(at('research-item-fixes'));
+        expect(at('research-item-fixes')).toBe(at('research-item-tools') - 1);
+        expect(at('research-item-tools')).toBe(ids.length - 1);
     });
 
     test('Open hands over the fix\'s link and the row waits for the research; Undo adds do=undo', async ({ page }) => {

@@ -403,13 +403,10 @@ export const researchActionsMethods = uiModule({
             if (read) readRow = [{ id: 'research-item-read', method: 'showReadDocumentDialog', ...read, link: read.link && this.researchLinkAvailable('open') ? read.link : undefined }];
             if (this.researchLinkAvailable('open')) first.push({ id: 'research-item-open', label: r.openResearch, method: 'researchActionOpen', ext: true });
             first.push(...sendRow);
-            // Now and then: a version to load, materials, the phone, an update.
+            // Now and then: a version to load or an update of the research first.
             more = [...changesRow];
             // The bridge answering: the block above offers a newer version when there is one (never beside "in step").
             if (this.researchLinkAvailable('app') && !bridgeUp && !blockLoads) more.push({ id: 'research-item-version', label: r.loadNewVersion, method: 'researchActionLoadVersion' });
-            // An archive has no agent: its materials are what it takes, first.
-            if (archive) first.push(...materials);
-            more.push(...viewLinks, ...(archive ? [] : materials), ...phone);
             const known = this.researchWaiting();
             // A newer research: "Update the research 1.7" with the mark, a dot on it and on "Other actions" (not on the button: it does not stand in the way).
             if (known?.update) {
@@ -419,6 +416,10 @@ export const researchActionsMethods = uiModule({
                     ? { id: 'research-item-update', label: r.updateRow, val: version, method: 'researchActionUpdate', ext: true, attn: true }
                     : { id: 'research-item-update', label: r.updateRow, sub: r.updateAvailable(version), method: 'researchActionUpdate', disabled: true, attn: true });
             }
+            // Then (symbols of history, round 2, 6b): materials, the phone, the tree fixes, the research tools.
+            // An archive has no agent: its materials are what it takes, first.
+            if (archive) first.push(...materials);
+            more.push(...viewLinks, ...(archive ? [] : materials), ...phone);
             // "Tree fixes" (§7): a list of its own in the app, so here and not among the research tools (§8 rule 5).
             const fixes = this.researchFixesMenuEntry();
             if (fixes) more.push({ id: 'research-item-fixes', method: 'researchActionFixes', ...fixes });
