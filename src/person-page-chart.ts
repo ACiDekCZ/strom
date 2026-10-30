@@ -1,0 +1,599 @@
+/**
+ * Life at a glance — the person page's graphic life chart (spec 025, §2):
+ * one horizontal axis over the life with the periods (childhood and youth,
+ * each marriage, widowhood), the places lived, the milestones, the partners'
+ * and children's lives alongside, and the history of the places above.
+ *
+ * Pure: `lifeChartInput` reads the tree (living protection applied there) and
+ * `lifeChartHtml` returns the HTML. Horizontal positions go out in percent of
+ * the chart's width, vertical ones as rows of fixed height (CSS), so the same
+ * markup holds at any width; the width only decides which labels fit. The
+ * window calls it with the column's width (ResizeObserver); a saved file
+ * carries two sets (≥ 641 and ≤ 640 px) switched by @media, readable without JS.
+ */
+
+import type { Language } from './strings.js';
+import { getStringsForLang } from './strings.js';
+import type { StromData, PersonId, Person, Gender, PartnershipId } from './types.js';
+import { computePersonLifeline, type LifelinePoint } from './timeline.js';
+import { parseFlexDate, yearFraction, displayYear } from './dates.js';
+import { isLivingPerson } from './privacy.js';
+import { residencePoints, type LifelineHistoryItem } from './history.js';
+import { placeKey } from './places.js';
+import { lifeEventLabel } from './person-sources.js';
+
+// ─── Anchors ────────────────────────────────────────────────────────────────
+
+/** The id of the text timeline row of a point (`#osa-{sortKey}`): "osa-1860-001". */
+export function chartAnchorId(sortKey: number): string {
+    return `osa-${sortKey.toFixed(3).replace('.', '-').replace(/^-/, 'm')}`;
+}
+
+/** The id of the text timeline row of a history event: "osa-h-{id}". */
+export function chartHistAnchorId(eventId: string): string {
+    return `osa-h-${eventId.replace(/[^A-Za-z0-9_-]/g, '_')}`;
+}
+
+// ─── Input ──────────────────────────────────────────────────────────────────
+
+/** A date on the axis. */
+export interface ChartDate {
+    /** Position on the axis in years (year + fraction of the year). */
+    at: number;
+    year: number;
+    /** The end of a range ("1901..1905"), in years. */
+    to?: number;
+    /** `~`, before / after, a range or only the year: the bar fades there (§2.5). */
+    uncertain: boolean;
+    /** "1798", "~1798", "1901–1905". */
+    label: string;
+}
+
+export type ChartPeriodKind = 'youth' | 'marriage' | 'partnership' | 'widowed' | 'divorced';
+
+export interface ChartPeriod {
+    kind: ChartPeriodKind;
+    from: number;
+    to: number;
+    /** The partner's first name (marriage, partnership). */
+    name?: string;
+    /** The text timeline anchor of the period's start. */
+    anchor?: string;
+}
+
+export interface ChartResidence { from: number; to: number; place: string; key: string; anchor: string }
+
+export type ChartMarkKind = 'birth' | 'death' | 'marriage' | 'divorce' | 'emigration' | 'event';
+
+export interface ChartMark {
+    kind: ChartMarkKind;
+    at: number;
+    year: number;
+    /** The event type (kind 'event' / 'emigration'). */
+    eventType?: string;
+    /** Full text for the title. */
+    title: string;
+    anchor: string;
+    /** Birth / death: "~1798". */
+    label?: string;
+}
+
+export interface ChartLine {
+    kind: 'partner' | 'child';
+    name: string;
+    from: number;
+    /** The end of the line (death); missing: the life goes on past the axis or is unknown. */
+    to?: number;
+    deathYear?: number;
+    /** A child who died in childhood (under 15): age in whole years. */
+    childAge?: number;
+    anchor: string;
+}
+
+export interface ChartHistory {
+    from: number;
+    to?: number;
+    scope: 'region' | 'place' | 'local';
+    kind: string;
+    text: string;
+    anchor: string;
+}
+
+export interface LifeChartInput {
+    gender: Gender;
+    /** Axis in years. */
+    start: number;
+    end: number;
+    birth?: ChartDate;
+    death?: ChartDate;
+    /** death: a known death; unknown: no death date, not living; living. */
+    endKind: 'death' | 'unknown' | 'living';
+    /** The bar ends here (the death, the last dated point, today). */
+    barEnd: number;
+    /** Unknown death: the last dated year ("after 1871 ?"). */
+    lastYear?: number;
+    periods: ChartPeriod[];
+    residence: ChartResidence[];
+    marks: ChartMark[];
+    lines: ChartLine[];
+    history: ChartHistory[];
+}
+
+export interface LifeChartInputOptions {
+    /** Ids of living people (PersonPageData.living); computed when missing. */
+    living?: ReadonlySet<string>;
+    /** A protected file: nothing for a living person, no line for a living relative. */
+    protect?: boolean;
+    /** The person's history items (only with research data). */
+    history?: readonly LifelineHistoryItem[];
+    /** Current year with its fraction (default: now). */
+    now?: number;
+    /** The life timeline, when the caller has it (else computed). */
+    lifeline?: readonly LifelinePoint[];
+}
+
+function chartDate(raw: string | undefined, closeYear: boolean): ChartDate | undefined {
+    const d = parseFlexDate(raw);
+    if (!d) return undefined;
+    const at = d.month !== undefined ? d.year + yearFraction(raw) : d.year + (closeYear ? 0.9 : 0.05);
+    const to = d.end ? d.end.year + (closeYear ? 0.9 : 0.05) : undefined;
+    return {
+        at, year: d.year,
+        ...(to !== undefined && d.end && d.end.year !== d.year ? { to } : {}),
+        uncertain: !!d.qualifier || !!d.end || d.month === undefined,
+        label: displayYear(raw),
+    };
+}
+
+const CHILDHOOD = 15;
+
+/**
+ * The chart's input for a person, or null when the chart is not drawn (§2.5):
+ * fewer than 2 dated points in different years, or a living person in a
+ * protected file.
+ */
+export function lifeChartInput(tree: StromData, personId: PersonId, opts: LifeChartInputOptions = {}): LifeChartInput | null {
+    const person = tree.persons[personId];
+    if (!person || person.isPlaceholder) return null;
+    const nowDate = new Date();
+    const now = opts.now ?? nowDate.getFullYear() + nowDate.getMonth() / 12;
+    const isLiving = (p: Person): boolean => opts.living ? opts.living.has(p.id) : isLivingPerson(p, Math.floor(now));
+    const living = isLiving(person);
+    if (opts.protect && living) return null;
+    const hidden = (p: Person | undefined): boolean => !!p && !!opts.protect && isLiving(p);
+
+    const lifeline = opts.lifeline ?? computePersonLifeline(tree, personId);
+    const years = new Set(lifeline.map(p => p.year));
+    if (years.size < 2) return null;
+
+    const birth = chartDate(person.birthDate, false);
+    const death = chartDate(person.deathDate, true);
+    const anchorOf = (pred: (p: LifelinePoint) => boolean): string => {
+        const p = lifeline.find(pred);
+        return p ? chartAnchorId(p.sortKey) : '';
+    };
+    const first = lifeline[0];
+    const lastPt = lifeline[lifeline.length - 1];
+    const start = birth ? birth.at : first.year + 0.05;
+
+    let endKind: LifeChartInput['endKind'];
+    let barEnd: number;
+    let lastYear: number | undefined;
+    if (death) { endKind = 'death'; barEnd = death.at; }
+    else if (living && person.isDeceased !== true) { endKind = 'living'; barEnd = Math.max(now, lastPt.year + 0.9); }
+    else { endKind = 'unknown'; lastYear = lastPt.year; barEnd = lastPt.year + 0.9; }
+    // Room for a death range or for the fade of an unknown end.
+    let end = death?.to ?? barEnd;
+    if (endKind === 'unknown') end = barEnd + Math.max(3, (barEnd - start) * 0.06);
+    if (end - start < 1) end = start + 1;
+
+    // Marriages in their order, each ending at its end date, the partner's death, the next marriage or the end.
+    const lifeEnd = barEnd;
+    const unions = person.partnerships
+        .map(id => tree.partnerships[id])
+        .filter(u => !!u)
+        .map(u => {
+            const otherId = u.person1Id === personId ? u.person2Id : u.person1Id;
+            const other = tree.persons[otherId];
+            return { u, other, start: chartDate(u.startDate, false) };
+        })
+        .filter(x => !!x.start && !hidden(x.other))
+        .sort((a, b) => a.start!.at - b.start!.at);
+
+    const periods: ChartPeriod[] = [];
+    const firstStart = unions.length ? unions[0].start!.at : undefined;
+    periods.push({ kind: 'youth', from: start, to: firstStart ?? lifeEnd, anchor: anchorOf(p => p.kind === 'birth') || (first ? chartAnchorId(first.sortKey) : '') });
+    unions.forEach((x, i) => {
+        const from = x.start!.at;
+        const next = unions[i + 1]?.start!.at;
+        const endDate = chartDate(x.u.endDate, true);
+        const partnerDeath = x.other ? chartDate(x.other.deathDate, true) : undefined;
+        const candidates = [lifeEnd, next, endDate?.at, partnerDeath?.at].filter((n): n is number => n !== undefined && n > from);
+        const to = Math.min(...candidates);
+        const unmarried = x.u.status === 'partners' || x.u.status === 'separated';
+        const name = x.other ? (x.other.firstName?.trim() || '') : '';
+        periods.push({ kind: unmarried ? 'partnership' : 'marriage', from, to, ...(name ? { name } : {}),
+            anchor: anchorOf(p => p.kind === 'marriage' && p.partnershipId === x.u.id) });
+        // The gap up to the next marriage or the end of the life.
+        const gapEnd = Math.min(next ?? lifeEnd, lifeEnd);
+        if (gapEnd - to > 0.2) {
+            const byDeath = partnerDeath !== undefined && Math.abs(partnerDeath.at - to) < 0.01;
+            const byEnd = endDate !== undefined && Math.abs(endDate.at - to) < 0.01;
+            if (byDeath || byEnd) {
+                periods.push({ kind: byDeath && !byEnd ? 'widowed' : 'divorced', from: to, to: gapEnd,
+                    anchor: byEnd ? anchorOf(p => p.kind === 'divorce' && p.partnershipId === x.u.id) : '' });
+            }
+        }
+    });
+
+    // Places lived: runs of the same place, each up to the next place (the last one to the end of the bar).
+    const res = residencePoints(lifeline);
+    const residence: ChartResidence[] = [];
+    for (let i = 0; i < res.length; i++) {
+        const key = placeKey(res[i].place);
+        const prev = residence[residence.length - 1];
+        const from = Math.max(start, res[i].sortKey);
+        if (prev && prev.key === key) continue;
+        if (prev) prev.to = from;
+        residence.push({ from, to: lifeEnd, place: res[i].place, key, anchor: chartAnchorId(res[i].sortKey) });
+    }
+    const residenceKept = residence.filter(r => r.to - r.from > 0);
+
+    // Milestones.
+    const marks: ChartMark[] = [];
+    const partnerNameOf = (id: PartnershipId | undefined): string => {
+        if (!id) return '';
+        const u = tree.partnerships[id];
+        if (!u) return '';
+        const other = tree.persons[u.person1Id === personId ? u.person2Id : u.person1Id];
+        return other?.firstName?.trim() ?? '';
+    };
+    const hiddenUnion = (id: PartnershipId | undefined): boolean => {
+        if (!id) return false;
+        const u = tree.partnerships[id];
+        return !!u && hidden(tree.persons[u.person1Id === personId ? u.person2Id : u.person1Id]);
+    };
+    for (const p of lifeline) {
+        const at = p.kind === 'birth' && birth ? birth.at : p.kind === 'death' && death ? death.at : p.sortKey;
+        const base = { at, year: p.year, anchor: chartAnchorId(p.sortKey) };
+        if (p.kind === 'birth') marks.push({ ...base, kind: 'birth', title: '', ...(birth ? { label: birth.label } : {}) });
+        else if (p.kind === 'death') marks.push({ ...base, kind: 'death', title: '', ...(death ? { label: death.label } : {}) });
+        else if (p.kind === 'marriage' && !hiddenUnion(p.partnershipId)) marks.push({ ...base, kind: 'marriage', title: partnerNameOf(p.partnershipId) });
+        else if (p.kind === 'divorce' && !p.unmarried && !hiddenUnion(p.partnershipId)) marks.push({ ...base, kind: 'divorce', title: partnerNameOf(p.partnershipId) });
+        else if (p.kind === 'event' && p.eventType && p.eventType !== 'birth' && p.eventType !== 'death') {
+            marks.push({ ...base, kind: p.eventType === 'emigration' ? 'emigration' : 'event', eventType: p.eventType,
+                title: p.eventType === 'custom' ? (p.customLabel ?? '') : '' });
+        }
+    }
+
+    // Partners' and children's lives alongside.
+    const lines: ChartLine[] = [];
+    for (const x of unions) {
+        if (!x.other || x.other.isPlaceholder) continue;
+        const d = chartDate(x.other.deathDate, true);
+        lines.push({ kind: 'partner', name: x.other.firstName?.trim() || '', from: x.start!.at,
+            ...(d ? { to: d.at, deathYear: d.year } : {}),
+            anchor: anchorOf(p => p.kind === 'marriage' && p.partnershipId === x.u.id) });
+    }
+    const kids = person.childIds
+        .map(id => tree.persons[id])
+        .filter((c): c is Person => !!c && !c.isPlaceholder && !hidden(c))
+        .map(c => ({ c, b: chartDate(c.birthDate, false) }))
+        .filter(x => !!x.b)
+        .sort((a, b) => a.b!.at - b.b!.at);
+    for (const { c, b } of kids) {
+        const d = chartDate(c.deathDate, true);
+        const age = d ? Math.max(0, Math.floor(d.at - b!.at)) : undefined;
+        lines.push({ kind: 'child', name: c.firstName?.trim() || '', from: b!.at,
+            ...(d ? { to: d.at, deathYear: d.year } : {}),
+            ...(age !== undefined && age < CHILDHOOD ? { childAge: age } : {}),
+            anchor: anchorOf(p => p.kind === 'child' && p.relatedId === c.id) });
+    }
+
+    // History of the places (only with research data).
+    const history: ChartHistory[] = (opts.history ?? []).map(h => ({
+        from: h.ev.from,
+        ...(h.ev.to !== undefined && h.ev.to > h.ev.from ? { to: h.ev.to } : {}),
+        scope: h.ev.scope === 'local' ? 'local' as const : h.ev.scope === 'place' ? 'place' as const : 'region' as const,
+        kind: h.ev.kind,
+        text: h.text,
+        anchor: chartHistAnchorId(h.ev.id),
+    }));
+
+    return {
+        gender: person.gender, start, end, ...(birth ? { birth } : {}), ...(death ? { death } : {}),
+        endKind, barEnd, ...(lastYear !== undefined ? { lastYear } : {}),
+        periods, residence: residenceKept, marks, lines, history,
+    };
+}
+
+// ─── HTML ───────────────────────────────────────────────────────────────────
+
+export interface LifeChartCtx {
+    lang: Language;
+    /** 'app': one set for `width`; 'file': two sets switched by @media. */
+    mode: 'app' | 'file';
+    /** The chart's width in px (app; from a ResizeObserver). Default 680. */
+    width?: number;
+}
+
+/** Widths of the saved file's two sets: desktop column and a phone (100vw − 32 at 375). */
+export const CHART_WIDE = 680;
+export const CHART_NARROW = 343;
+/** Below this width (px) the short labels of a phone are used. */
+export const CHART_NARROW_MAX = 560;
+
+function esc(text: string): string {
+    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+type CS = ReturnType<typeof getStringsForLang>;
+
+/** px per character of a label (§2.3: a period label fits when its width > length × 6.4). */
+const CH_PX = 6.4;
+
+/**
+ * The chart, or '' without input. In the window `ctx.width` is the column's
+ * width; a file gets the wide (680 px) and the narrow (343 px) set.
+ *
+ * Interaction hooks: every period, mark and line is an `<a href="#osa-…"
+ * data-pp-osa="osa-…">` (history: `#osa-h-…`); the rows of children's lines
+ * carry `pp-ch-kid` and the history row `pp-ch-hist`, hidden by a
+ * `.pp-no-kids` / `.pp-no-history` class on an ancestor (the switches).
+ */
+export function lifeChartHtml(input: LifeChartInput | null, ctx: LifeChartCtx): string {
+    if (!input) return '';
+    const S = getStringsForLang(ctx.lang);
+    const C = S.personPage.chart;
+    const legend = legendHtml(input, S);
+    if (ctx.mode === 'app') {
+        const w = Math.max(240, ctx.width ?? CHART_WIDE);
+        return `<div class="pp-chart" role="group" aria-label="${esc(C.aria)}">`
+            + `<div class="pp-chart-set pp-chart-set--one">${chartSet(input, S, ctx, w, w <= CHART_NARROW_MAX)}</div>${legend}</div>`;
+    }
+    return `<div class="pp-chart" role="group" aria-label="${esc(C.aria)}">`
+        + `<div class="pp-chart-set pp-chart-set--wide">${chartSet(input, S, ctx, CHART_WIDE, false)}</div>`
+        + `<div class="pp-chart-set pp-chart-set--narrow" aria-hidden="true">${chartSet(input, S, ctx, CHART_NARROW, true)}</div>${legend}</div>`;
+}
+
+const P = (n: number): string => `${(Math.round(n * 100) / 100).toString()}%`;
+
+/** One set of rows for a width `W` (px). */
+export function chartSet(input: LifeChartInput, S: CS, ctx: LifeChartCtx, W: number, narrow: boolean): string {
+    const C = S.personPage.chart;
+    const span = input.end - input.start;
+    const xpx = (y: number): number => 8 + ((Math.min(Math.max(y, input.start), input.end) - input.start) / span) * (W - 16);
+    const x = (y: number): string => P((xpx(y) / W) * 100);
+    const wpx = (a: number, b: number): number => Math.max(0, xpx(b) - xpx(a));
+    const wpc = (a: number, b: number): string => P((wpx(a, b) / W) * 100);
+    const rows: string[] = [];
+    const app = ctx.mode === 'app';
+
+    // Ages: 0, 10, … "50 years" (with a birth date).
+    if (input.birth) {
+        const b = input.birth.at;
+        const maxAge = Math.floor(Math.min(input.barEnd, input.end) - b);
+        const step = (wpx(b, b + 10) < 28) ? 20 : 10;
+        const ages: number[] = [];
+        for (let a = 0; a <= maxAge; a += step) ages.push(a);
+        rows.push(`<div class="pp-ch-row pp-ch-ages" aria-hidden="true">${ages.map((a, i) =>
+            `<span style="left:${x(b + a)}">${esc(i === ages.length - 1 && a > 0 ? C.years(a) : String(a))}</span>`).join('')}</div>`);
+    }
+
+    // History of the places.
+    const hist = input.history.filter(h => (h.to ?? h.from) >= Math.floor(input.start) && h.from <= input.end);
+    if (hist.length) rows.push(historyRow(hist, S, xpx, x, wpc, narrow));
+
+    // Period labels and the bar.
+    const labelParts: string[] = [];
+    const barParts: string[] = [];
+    const single = input.periods.length === 1;
+    for (const p of input.periods) {
+        if (p.to <= p.from) continue;
+        const text = periodLabel(p, S, input.gender, narrow);
+        const title = periodLabel(p, S, input.gender, false);
+        const fits = !single && wpx(p.from, p.to) > text.length * CH_PX;
+        const cls = single ? 'pp-ch-p--life' : `pp-ch-p--${p.kind === 'partnership' ? 'marriage' : p.kind}`;
+        const href = p.anchor ? ` href="#${p.anchor}" data-pp-osa="${p.anchor}"` : '';
+        barParts.push(`<a class="pp-ch-p ${cls}"${href} style="left:${x(p.from)};width:${wpc(p.from, p.to)}"${title ? ` title="${esc(title)}"` : ''}></a>`);
+        if (fits) labelParts.push(`<span class="pp-ch-pl" style="left:${x(p.from)};width:${wpc(p.from, p.to)}">${esc(text)}</span>`);
+    }
+    rows.push(`<div class="pp-ch-row pp-ch-plabels" aria-hidden="true">${labelParts.join('')}</div>`);
+    const fadeStart = !!input.birth?.uncertain || !input.birth;
+    const fadeEnd = input.endKind === 'unknown' || (input.endKind === 'living' && !app) || (input.endKind === 'death' && !!input.death?.uncertain && !input.death?.to);
+    const maskCls = `${fadeStart ? ' pp-ch-fade-s' : ''}${fadeEnd ? ' pp-ch-fade-e' : ''}`;
+    let barExtra = '';
+    if (input.death?.to && input.death.to > input.barEnd) {
+        barExtra += `<span class="pp-ch-dash" style="left:${x(input.barEnd)};width:${wpc(input.barEnd, input.death.to)}"></span>`;
+    }
+    const barLeft = input.start, barRight = input.barEnd;
+    rows.push(`<div class="pp-ch-row pp-ch-bar"><div class="pp-ch-barin${maskCls}" style="left:${x(barLeft)};width:${wpc(barLeft, barRight)}">`
+        + `<div class="pp-ch-bari" style="left:${P(-((xpx(barLeft)) / wpx(barLeft, barRight)) * 100)};width:${P((W / Math.max(1, wpx(barLeft, barRight))) * 100)}">${barParts.join('')}</div></div>${barExtra}</div>`);
+
+    // Places lived.
+    if (input.residence.length) {
+        rows.push(`<div class="pp-ch-row pp-ch-band">${input.residence.map((r, i) => {
+            const name = r.place.split(',')[0].trim() || r.place;
+            const fits = wpx(r.from, r.to) > name.length * CH_PX + 8;
+            return `<a class="pp-ch-res pp-ch-res--${i % 2 ? 2 : 1}" href="#${r.anchor}" data-pp-osa="${r.anchor}" style="left:${x(r.from)};width:${wpc(r.from, r.to)}" title="${esc(r.place)}">${fits ? esc(name) : ''}</a>`;
+        }).join('')}</div>`);
+    }
+
+    // Milestones.
+    rows.push(marksRow(input, S, xpx, x, W, narrow, app));
+
+    // Partners and children alongside.
+    for (const l of input.lines) rows.push(lineRow(l, input, S, xpx, x, wpc, W, narrow));
+
+    // Axis of years.
+    const step = [1, 2, 5, 10, 20, 25, 50, 100].find(s => wpx(input.start, input.start + s) >= (narrow ? 44 : 40)) ?? 100;
+    const ticks: number[] = [];
+    for (let y = Math.ceil(input.start / step) * step; y <= input.end; y += step) ticks.push(y);
+    rows.push(`<div class="pp-ch-row pp-ch-axis" aria-hidden="true">${ticks.map(y => `<span style="left:${x(y)}">${y}</span>`).join('')}</div>`);
+
+    return rows.join('');
+}
+
+function periodLabel(p: ChartPeriod, S: CS, gender: Gender, narrow: boolean): string {
+    const C = S.personPage.chart;
+    const g = gender === 'male' ? 'm' : gender === 'female' ? 'f' : 'u';
+    switch (p.kind) {
+        case 'youth': return C.youth;
+        case 'widowed': return C.widowed[g];
+        case 'divorced': return C.divorced;
+        default: {
+            const base = p.kind === 'marriage' ? C.marriage(p.name ?? '') : C.partnership(p.name ?? '');
+            const n = Math.floor(p.to - p.from);
+            return narrow || n < 1 ? base : `${base} · ${C.years(n)}`;
+        }
+    }
+}
+
+const GLYPH: Record<ChartMarkKind, string> = { birth: '*', death: '†', marriage: '⚭', divorce: '⚮', emigration: '→', event: '' };
+
+function markTitle(m: ChartMark, S: CS): string {
+    const C = S.personPage.chart;
+    switch (m.kind) {
+        case 'birth': return `${C.mk.birth} ${m.label ?? m.year}`;
+        case 'death': return `${C.mk.death} ${m.label ?? m.year}`;
+        case 'marriage': return `${C.mk.marriage(m.title)} ${m.year}`;
+        case 'divorce': return `${C.mk.divorce(m.title)} ${m.year}`;
+        default: {
+            const label = m.title || lifeEventLabel({ type: (m.eventType ?? 'custom') as never }, S);
+            return `${label} ${m.year}`;
+        }
+    }
+}
+
+/** A mark's short label: the year of birth / death, the event kind (a phone: only military and emigration). */
+function markShort(m: ChartMark, S: CS, narrow: boolean): string {
+    const C = S.personPage.chart;
+    if (m.kind === 'birth' || m.kind === 'death') return m.label ?? String(m.year);
+    // A marriage or divorce: the glyph says it, the year is in the title and on the axis.
+    if (m.kind === 'marriage' || m.kind === 'divorce') return '';
+    if (narrow && m.eventType !== 'military' && m.eventType !== 'emigration') return '';
+    return C.ev[m.eventType ?? ''] ?? '';
+}
+
+function marksRow(input: LifeChartInput, S: CS, xpx: (y: number) => number, x: (y: number) => string, W: number, narrow: boolean, app: boolean): string {
+    const C = S.personPage.chart;
+    const prio = (m: ChartMark): number => (m.kind === 'birth' || m.kind === 'death' ? 0 : m.kind === 'marriage' || m.kind === 'divorce' ? 1 : m.kind === 'emigration' ? 2 : 3);
+    // Marks closer than 8 px merge into one (the more important glyph; all texts in the title).
+    const groups: { marks: ChartMark[]; px: number }[] = [];
+    for (const m of [...input.marks].sort((a, b) => a.at - b.at)) {
+        const px = xpx(m.at);
+        const g = groups[groups.length - 1];
+        if (g && px - g.px < 8) g.marks.push(m);
+        else groups.push({ marks: [m], px });
+    }
+    // Labels: most important first, a label left out when it would overlap one already placed.
+    const taken: [number, number][] = [];
+    const labelOf = new Map<number, string>();
+    const order = groups.map((g, i) => ({ g, i })).sort((a, b) => Math.min(...a.g.marks.map(prio)) - Math.min(...b.g.marks.map(prio)) || a.g.px - b.g.px);
+    for (const { g, i } of order) {
+        const lead = [...g.marks].sort((a, b) => prio(a) - prio(b))[0];
+        const text = markShort(lead, S, narrow);
+        if (!text) continue;
+        const w = text.length * 5.8 + 4;
+        const l = Math.max(0, Math.min(W - w, g.px - w / 2));
+        if (taken.some(([a, b]) => l < b + 3 && a < l + w + 3)) continue;
+        taken.push([l, l + w]);
+        labelOf.set(i, text);
+    }
+    let html = '';
+    groups.forEach((g, i) => {
+        const lead = [...g.marks].sort((a, b) => prio(a) - prio(b))[0];
+        const title = g.marks.map(m => markTitle(m, S)).join(' · ');
+        const glyph = GLYPH[lead.kind];
+        const label = labelOf.get(i);
+        const edge = g.px < 30 ? ' pp-ch-mk--s' : g.px > W - 30 ? ' pp-ch-mk--e' : '';
+        html += `<a class="pp-ch-mk pp-ch-mk--${lead.kind}${edge}" href="#${lead.anchor}" data-pp-osa="${lead.anchor}" style="left:${x(lead.at)}" title="${esc(title)}">`
+            + `<span class="pp-ch-tick"></span>${glyph ? `<span class="pp-ch-gl">${glyph}</span>` : ''}${label ? `<span class="pp-ch-ml">${esc(label)}</span>` : ''}</a>`;
+    });
+    // The open end: "after 1871 ?" for an unknown death, "today" for a living person (window only).
+    if (input.endKind === 'unknown' && input.lastYear !== undefined) {
+        html += `<span class="pp-ch-end pp-ch-mk--e" style="left:${x(input.barEnd)}"><span class="pp-ch-ml">${esc(C.after(String(input.lastYear)))} ?</span></span>`;
+    } else if (input.endKind === 'living' && app) {
+        html += `<span class="pp-ch-end pp-ch-end--today pp-ch-mk--e" style="left:${x(input.barEnd)}"><span class="pp-ch-tick"></span><span class="pp-ch-ml">${esc(C.today)}</span></span>`;
+    }
+    return `<div class="pp-ch-row pp-ch-marks">${html}</div>`;
+}
+
+function lineRow(l: ChartLine, input: LifeChartInput, S: CS, xpx: (y: number) => number, x: (y: number) => string,
+    wpc: (a: number, b: number) => string, W: number, narrow: boolean): string {
+    const C = S.personPage.chart;
+    const kidCls = l.kind === 'child' ? ' pp-ch-kid' : '';
+    const from = Math.max(l.from, input.start);
+    let cls = `pp-ch-ln pp-ch-ln--${l.kind}`;
+    let to: number;
+    let label: string;
+    if (l.childAge !== undefined && l.to !== undefined) {
+        // A child who died in childhood: a short line with a rounded end.
+        to = Math.min(l.to, input.end);
+        cls += ' pp-ch-ln--short';
+        label = `${l.name} · ${C.age(l.childAge)}`;
+    } else if (l.to === undefined || l.to > input.end) {
+        // The life goes on past the axis: to the right edge, fading out.
+        to = input.end;
+        cls += ' pp-ch-ln--on';
+        label = narrow || l.deathYear === undefined ? `${l.name} →` : `${l.name} · † ${l.deathYear} →`;
+    } else {
+        to = l.to;
+        label = narrow || l.deathYear === undefined ? l.name : `${l.name} · † ${l.deathYear}`;
+    }
+    const left = xpx(from);
+    const lw = label.length * 6 + 2;
+    const atEnd = left + lw > W - 8;
+    const style = `left:${x(from)};width:${wpc(from, to)}`;
+    return `<div class="pp-ch-row pp-ch-line${kidCls}"><a class="${cls}" href="#${l.anchor}" data-pp-osa="${l.anchor}" style="${style}" title="${esc(label.replace(/ →$/, ''))}">`
+        + `<span class="pp-ch-lb${atEnd ? ' pp-ch-lb--end' : ''}">${esc(label)}</span></a></div>`;
+}
+
+function historyRow(items: readonly ChartHistory[], S: CS, xpx: (y: number) => number, x: (y: number) => string,
+    wpc: (a: number, b: number) => string, narrow: boolean): string {
+    const kinds = S.history.kinds as Record<string, string>;
+    let html = '';
+    // Events of more years: a 6 px bar, text only in the title.
+    for (const h of items.filter(i => i.to !== undefined && i.to - i.from > 1)) {
+        html += `<a class="pp-ch-hbar" href="#${h.anchor}" data-pp-osa="${h.anchor}" style="left:${x(h.from)};width:${wpc(h.from, h.to! + 1)}" title="${esc(`${h.from}–${h.to} ${h.text}`)}"></a>`;
+    }
+    // Point events: one glyph a year, kinds joined.
+    const byYear = new Map<number, ChartHistory[]>();
+    for (const h of items.filter(i => !(i.to !== undefined && i.to - i.from > 1))) {
+        const list = byYear.get(h.from) ?? [];
+        list.push(h);
+        byYear.set(h.from, list);
+    }
+    const scopeRank = { local: 0, place: 1, region: 2 } as const;
+    let lastPx = -Infinity;
+    for (const [year, list] of [...byYear.entries()].sort((a, b) => a[0] - b[0])) {
+        const lead = [...list].sort((a, b) => scopeRank[a.scope] - scopeRank[b.scope])[0];
+        const glyph = lead.scope === 'local' ? '■' : lead.scope === 'place' ? '▲' : '◇';
+        const label = [...new Set(list.map(h => kinds[h.kind] ?? h.kind))].join(', ');
+        const px = xpx(year + 0.5);
+        const showLabel = !narrow && px - lastPx > label.length * 5.8 + 14;
+        if (showLabel) lastPx = px;
+        html += `<a class="pp-ch-hm pp-ch-hm--${lead.scope}" href="#${lead.anchor}" data-pp-osa="${lead.anchor}" style="left:${x(year + 0.5)}" title="${esc(list.map(h => `${year} ${h.text}`).join(' · '))}">`
+            + `<span class="pp-ch-hg">${glyph}</span>${showLabel ? `<span class="pp-ch-hl">${esc(label)}</span>` : ''}</a>`;
+    }
+    return `<div class="pp-ch-row pp-ch-hist">${html}</div>`;
+}
+
+function legendHtml(input: LifeChartInput, S: CS): string {
+    const L = S.personPage.chart.legend;
+    const items: string[] = [];
+    const sw = (cls: string, text: string) => `<span class="pp-ch-lg"><span class="pp-ch-sw ${cls}" aria-hidden="true"></span>${esc(text)}</span>`;
+    const kinds = new Set(input.periods.map(p => p.kind));
+    if (input.periods.length > 1) {
+        items.push(sw('pp-ch-p--youth', L.youth));
+        if (kinds.has('marriage') || kinds.has('partnership')) items.push(sw('pp-ch-p--marriage', L.married));
+        if (kinds.has('widowed') || kinds.has('divorced')) items.push(sw('pp-ch-p--widowed', L.widowed));
+    }
+    if (input.residence.length) items.push(sw('pp-ch-res--1', L.residence));
+    if (input.lines.some(l => l.kind === 'partner')) {
+        const g = input.gender === 'male' ? 'm' : input.gender === 'female' ? 'f' : 'u';
+        items.push(sw('pp-ch-sw--partner', L.spouses[g]));
+    }
+    if (input.lines.some(l => l.kind === 'child')) items.push(`<span class="pp-ch-kid-lg">${sw('pp-ch-sw--child', L.children)}</span>`);
+    return items.length ? `<p class="pp-legend pp-chart-legend">${items.join('')}</p>` : '';
+}
