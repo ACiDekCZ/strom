@@ -207,6 +207,28 @@ describe('planPlacesMap', () => {
         expect(plan2.inset!.corner).toBe('br');
     });
 
+    it('places on both sides of the 180th meridian: one narrow frame, east stays east (round 2, point 7)', () => {
+        const geo = { [placeKey('Anadyr')]: { lat: 64.73, lon: 177.5 }, [placeKey('Nome')]: { lat: 64.5, lon: -165.4 } };
+        const points: PlacePoint[] = [
+            { placeKey: placeKey('Anadyr'), place: 'Anadyr', sortKey: 1860.1, year: 1860, kind: 'birth' },
+            { placeKey: placeKey('Nome'), place: 'Nome', sortKey: 1920.1, year: 1920, kind: 'death' },
+        ];
+        const plan = planPlacesMap(points, geo, { kidPlaces: true });
+        expect(plan.state).toBe('map');
+        const a = plan.places.find(x => x.name === 'Anadyr')!, n = plan.places.find(x => x.name === 'Nome')!;
+        // Nome lies east of Anadyr across the meridian, not on the far side of the world.
+        expect(n.x!).toBeGreaterThan(a.x!);
+        // The frame spans tens of degrees, not the whole world: a scale bar is shown.
+        expect(plan.scale).toBeDefined();
+        for (const p of [a, n]) {
+            expect(p.x!).toBeGreaterThanOrEqual(SAFE.x0 - 0.01);
+            expect(p.x!).toBeLessThanOrEqual(SAFE.x1 + 0.01);
+        }
+        // The map is drawn, not the list.
+        const html = placesMapHtml(points, geo, { lang: 'cs', mode: 'file', kidPlaces: true });
+        expect(html).toContain('class="pp-map"');
+    });
+
     it('states: one place → none; one with a position → list; none with a position → noGeo', () => {
         const one: PlacePoint[] = [{ placeKey: placeKey('Čapkov'), place: 'Čapkov', sortKey: 1860.1, year: 1860, kind: 'birth' },
             { placeKey: placeKey('Čapkov'), place: 'Čapkov', sortKey: 1920.1, year: 1920, kind: 'death' }];
@@ -268,8 +290,8 @@ describe('list texts', () => {
 
     it('a relative\'s row: role, first name, events with years', () => {
         const pts = collectPersonPlacePoints(tree(), JAN, { now: 2026 }).filter(x => x.place === 'Chicago');
-        expect(relativeEventsText(pts, cs)).toBe('syn Václav: vystěhování 1913, úmrtí 1968');
-        expect(relativeEventsText(pts, getStringsForLang('en'))).toBe('son Václav: emigration 1913, death 1968');
+        expect(relativeEventsText(pts, cs)).toBe('Václav (syn): vystěhování 1913, úmrtí 1968');
+        expect(relativeEventsText(pts, getStringsForLang('en'))).toBe('Václav (son): emigration 1913, death 1968');
     });
 });
 
@@ -287,7 +309,7 @@ describe('placesMapHtml', () => {
         expect((html.match(/class="pp-map-pt( is-sel)?"/g) ?? []).length).toBe(3);
         expect(html).toContain('pp-map-pt--rel');
         expect(html).toContain('Bez polohy na mapě: Kutná Hora (povolání)');
-        expect(html).toContain('syn Václav: vystěhování 1913, úmrtí 1968');
+        expect(html).toContain('Václav (syn): vystěhování 1913, úmrtí 1968');
         // No external references (no tiles, no links to map services).
         expect(html).not.toMatch(/https?:\/\//);
     });

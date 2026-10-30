@@ -6,7 +6,8 @@
 
 import { describe, it, expect } from 'vitest';
 import { coupleChapterHtml, coupleChapterId, coupleChapterLinkLabel, CoupleChapterData } from '../person-page.js';
-import { coupleStoryYears, personStoryChapterCount, proseBlocks, splitProseLead } from '../story-text.js';
+import { coupleStoryYears, personStoryChapterCount, proseBlocks, splitProseLead, coupleChipNames } from '../story-text.js';
+import { getStringsForLang } from '../strings.js';
 import { Partnership, Person, PersonId, StromData } from '../types.js';
 
 const chapter = (over: Partial<CoupleChapterData> = {}): CoupleChapterData => ({
@@ -17,8 +18,8 @@ const chapter = (over: Partial<CoupleChapterData> = {}): CoupleChapterData => ({
 
 describe('coupleChapterHtml', () => {
     it('monogram (the page’s person first), kicker with the years, the names as the heading without a title', () => {
-        const html = coupleChapterHtml(chapter(), { lang: 'en', mode: 'app', foldable: false, open: false, partnerHtml: '' });
-        expect(html).toContain('<div class="pp-couple-story" id="pp-story-u_1" tabindex="-1">');
+        const html = coupleChapterHtml(chapter(), { lang: 'en', mode: 'app', foldable: false, open: false, partnerHtml: '', tint: true });
+        expect(html).toContain('<div class="pp-couple-story pp-couple-story--tint" id="pp-story-u_1" tabindex="-1">');
         expect(html).toContain('<span class="pp-ch-mono" aria-hidden="true"><span>JV</span><span>RV</span></span>');
         expect(html).toContain('<p class="pp-kicker pp-ch-kicker">Story of the marriage · 1885–1910</p>');
         expect(html).toContain('<h3 class="pp-ch-title">Jan Vlk and Rozálie Vlková</h3>');
@@ -27,19 +28,19 @@ describe('coupleChapterHtml', () => {
     });
 
     it('a title is the heading, the names go under the kicker; a draft is marked', () => {
-        const html = coupleChapterHtml(chapter({ title: 'The mill', draft: true }), { lang: 'cs', mode: 'file', foldable: false, open: false, partnerHtml: '' });
+        const html = coupleChapterHtml(chapter({ title: 'The mill', draft: true }), { lang: 'cs', mode: 'file', foldable: false, open: false, partnerHtml: '', tint: true });
         expect(html).toContain('<p class="pp-ch-pair">Jan Vlk a Rozálie Vlková</p>');
         expect(html).toContain('<h3 class="pp-ch-title">The mill <span class="pp-draft-tag">Návrh</span></h3>');
     });
 
     it('no years: the kicker alone; the partner line carries the given HTML', () => {
-        const html = coupleChapterHtml(chapter({ years: '' }), { lang: 'de', mode: 'app', foldable: false, open: false, partnerHtml: '<b>Rozálie</b>' });
+        const html = coupleChapterHtml(chapter({ years: '' }), { lang: 'de', mode: 'app', foldable: false, open: false, partnerHtml: '<b>Rozálie</b>', tint: true });
         expect(html).toContain('<p class="pp-kicker pp-ch-kicker">Geschichte der Ehe</p>');
-        expect(html).toContain('<span class="pp-ch-also">Dieselbe Geschichte steht auch auf der Seite von <b>Rozálie</b>.</span>');
+        expect(html).toContain('<span class="pp-ch-also">Dieselbe Geschichte steht auch auf der Seite: <b>Rozálie</b>.</span>');
     });
 
     it('folds only when foldable and longer than one paragraph; print never folds', () => {
-        const cx = { lang: 'en' as const, foldable: true, open: false, partnerHtml: '' };
+        const cx = { lang: 'en' as const, foldable: true, open: false, partnerHtml: '', tint: true };
         expect(coupleChapterHtml(chapter(), { ...cx, mode: 'app' })).toContain('<button type="button" class="pp-ch-more" aria-expanded="false"');
         expect(coupleChapterHtml(chapter(), { ...cx, mode: 'file' })).toContain('<details class="pp-ch-fold">');
         expect(coupleChapterHtml(chapter(), { ...cx, mode: 'print' })).not.toContain('pp-ch-more');
@@ -49,8 +50,22 @@ describe('coupleChapterHtml', () => {
         expect(html).toMatch(/<div class="pp-ch-rest"[^>]*hidden><div class="pp-prose"><p>Druhý\.<\/p><\/div><div class="pp-basis">B<\/div><\/div>/);
     });
 
+    it('a single chapter on the page: no tint, no monogram, the kicker still there (round 2, point 9)', () => {
+        const html = coupleChapterHtml(chapter(), { lang: 'cs', mode: 'app', foldable: false, open: false, partnerHtml: '', tint: false });
+        expect(html).toContain('<div class="pp-couple-story" id="pp-story-u_1" tabindex="-1">');
+        expect(html).not.toContain('pp-couple-story--tint');
+        expect(html).not.toContain('pp-ch-mono');
+        expect(html).toContain('<p class="pp-kicker pp-ch-kicker">Vyprávění manželství · 1885–1910</p>');
+    });
+
+    it('"also on the page": the name stands alone in the nominative (round 2, point 8)', () => {
+        const cx = { mode: 'app' as const, foldable: false, open: false, partnerHtml: '<b>Rozálie</b>', tint: true };
+        expect(coupleChapterHtml(chapter(), { ...cx, lang: 'cs' })).toContain('Stejné vyprávění je i na stránce: <b>Rozálie</b>.');
+        expect(coupleChapterHtml(chapter(), { ...cx, lang: 'en' })).toContain('The same story is also on the page of: <b>Rozálie</b>.');
+    });
+
     it('a partner who is a placeholder: one circle, the person alone named', () => {
-        const html = coupleChapterHtml(chapter({ partnerName: '', partnerInitials: '', partnerShort: '' }), { lang: 'en', mode: 'app', foldable: false, open: false, partnerHtml: '' });
+        const html = coupleChapterHtml(chapter({ partnerName: '', partnerInitials: '', partnerShort: '' }), { lang: 'en', mode: 'app', foldable: false, open: false, partnerHtml: '', tint: true });
         expect(html).toContain('<span class="pp-ch-mono" aria-hidden="true"><span>JV</span></span>');
         expect(html).toContain('<h3 class="pp-ch-title">Jan Vlk</h3>');
     });
@@ -103,5 +118,20 @@ describe('a link to a chapter (the family tree at the wedding, spec 027 §5.1)',
         expect(coupleChapterLinkLabel(u, 'cs')).toBe('vyprávění ↓');
         delete u.story;
         expect(coupleChapterLinkLabel(u, 'en')).toBe('');
+    });
+});
+
+describe('the story reader\'s chapter chip (round 2, point 8)', () => {
+    const person = (first: string, last: string) => ({ id: first, firstName: first, lastName: last, gender: 'male', parentIds: [], childIds: [], partnerships: [] }) as unknown as Person;
+    const full = (p: Person) => `${p.firstName} ${p.lastName}`;
+    it('both first names in the nominative, the full names when they match, "?" for a missing partner', () => {
+        expect(coupleChipNames(person('Jan', 'Vlk'), person('Rozálie', 'Vlková'), full)).toEqual(['Jan', 'Rozálie']);
+        expect(coupleChipNames(person('Jan', 'Vlk'), person('jan', 'Novák'), full)).toEqual(['Jan Vlk', 'jan Novák']);
+        expect(coupleChipNames(person('Jan', 'Vlk'), undefined, full)).toEqual(['Jan', '?']);
+    });
+    it('"Jan a Rozálie · 1883", never "S Rozálií"; without a year no trailing dot', () => {
+        expect(getStringsForLang('cs').personPage.story.chip('Jan', 'Rozálie', '1883')).toBe('Jan a Rozálie · 1883');
+        expect(getStringsForLang('en').personPage.story.chip('Jan', 'Rozálie', '1883')).toBe('Jan and Rozálie · 1883');
+        expect(getStringsForLang('de').personPage.story.chip('Jan', 'Rozálie', '')).toBe('Jan und Rozálie');
     });
 });

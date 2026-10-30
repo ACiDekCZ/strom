@@ -48,6 +48,18 @@ export function coupleStoryYears(data: StromData, u: Partnership): string {
 }
 
 /**
+ * The two names of a couple's chapter chip ("Jan and Rozálie · 1883"): both
+ * first names, never declined; the full names when the first names match.
+ * `full` gives the shown full name; a missing partner is "?".
+ */
+export function coupleChipNames(self: Person, partner: Person | undefined, full: (p: Person) => string): [string, string] {
+    const selfFirst = self.firstName?.trim() || full(self);
+    if (!partner) return [selfFirst, '?'];
+    const partnerFirst = partner.firstName?.trim() || full(partner);
+    return selfFirst.toLocaleLowerCase() === partnerFirst.toLocaleLowerCase() ? [full(self), full(partner)] : [selfFirst, partnerFirst];
+}
+
+/**
  * The top-level blocks of storyProseHtml's output (paragraphs, lists,
  * subheadings), in order. The renderer never nests a block in another of its
  * kind, so the first closing tag of the same name ends a block.

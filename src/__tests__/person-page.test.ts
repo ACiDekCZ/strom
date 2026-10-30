@@ -128,7 +128,8 @@ describe('sections', () => {
         d.partnerships['u1' as PartnershipId].story = { status: 'draft', text: 'Jan a Marie hospodařili na čísle 12. [S0042]' };
         const html = body(d);
         const own = html.indexOf('Oženil se s Marií.');
-        const couple = html.indexOf('<div class="pp-couple-story" id="pp-story-u1" tabindex="-1">');
+        // The own story and one chapter make two: the chapter is tinted (round 2, point 9).
+        const couple = html.indexOf('<div class="pp-couple-story pp-couple-story--tint" id="pp-story-u1" tabindex="-1">');
         expect(own).toBeGreaterThan(0);
         expect(couple).toBeGreaterThan(own);
         expect(html).toContain('<h3 class="pp-ch-title">Jan Fíšek a Marie Dvořáková <span class="pp-draft-tag">Návrh</span></h3>');
@@ -137,7 +138,11 @@ describe('sections', () => {
         // Marie's page tells it too, she first (monogram and names); a title replaces the names as the heading.
         const marie = body(d, { personId: 'marie' as PersonId });
         expect(marie).toContain('<h3 class="pp-ch-title">Marie Dvořáková a Jan Fíšek <span class="pp-draft-tag">Návrh</span></h3>');
-        expect(marie).toContain('<span class="pp-ch-mono" aria-hidden="true"><span>MD</span><span>JF</span></span>');
+        // Her page has the chapter alone: no monogram; with her own story too, the monogram puts her first.
+        expect(marie).not.toContain('pp-ch-mono');
+        d.persons['marie' as PersonId].story = { status: 'final', text: 'Marie byla z mlýna.' };
+        expect(body(d, { personId: 'marie' as PersonId })).toContain('<span class="pp-ch-mono" aria-hidden="true"><span>MD</span><span>JF</span></span>');
+        delete d.persons['marie' as PersonId].story;
         d.partnerships['u1' as PartnershipId].story!.title = 'Dvůr pod kopcem';
         d.partnerships['u1' as PartnershipId].story!.status = 'final';
         const de = body(d, { lang: 'de' });
@@ -146,7 +151,11 @@ describe('sections', () => {
         // Only the couple's story: the section and its place in the contents remain, in the file as well.
         delete d.persons['jan' as PersonId].story;
         const only = body(d);
-        expect(only).toContain('<h2 class="pp-kicker pp-story-kicker">Vyprávění</h2><div class="pp-couple-story"');
+        // A chapter alone is not tinted and has no monogram, but keeps its kicker (round 2, point 9).
+        expect(only).toContain('<h2 class="pp-kicker pp-story-kicker">Vyprávění</h2><div class="pp-couple-story" id="pp-story-u1"');
+        expect(only).not.toContain('pp-couple-story--tint');
+        expect(only).not.toContain('pp-ch-mono');
+        expect(only).toContain('<p class="pp-kicker pp-ch-kicker">Vyprávění manželství');
         expect(personPageSections(only, 'cs').map(x => x.key)).toContain('story');
         expect(doc(d, { lang: 'en' })).toContain('<h3 class="pp-ch-title">Dvůr pod kopcem</h3>');
     });
@@ -157,8 +166,9 @@ describe('sections', () => {
         const html = body(d);
         // 1888 (wedding) → 1910 (Jan, the first to die).
         expect(html).toContain('<p class="pp-kicker pp-ch-kicker">Vyprávění manželství · 1888–1910</p>');
-        expect(html).toContain('<p class="pp-ch-foot"><span class="pp-ch-also">Stejné vyprávění je i na stránce osoby <button type="button" class="pp-link" data-pp-person="marie"');
-        expect(body(d, { lang: 'en' })).toContain('The same story is also on <button');
+        // The partner's name stands alone, in the nominative (round 2, point 8).
+        expect(html).toContain('<p class="pp-ch-foot"><span class="pp-ch-also">Stejné vyprávění je i na stránce: <button type="button" class="pp-link" data-pp-person="marie">Marie Dvořáková</button>.</span></p>');
+        expect(body(d, { lang: 'en' })).toContain('The same story is also on the page of: <button');
     });
 
     it('continued reading: the own story leads on to the chapters; after it a chapter folds to its first paragraph (spec 027 §6.1)', () => {
@@ -249,6 +259,60 @@ describe('family', () => {
         expect(r).toContain('⚭ 2. února 1888, Čapkov');
         expect(r).toContain('Děti (2)');
         expect(r.indexOf('data-pp-person="marie"')).toBeLessThan(r.indexOf('data-pp-person="petr"'));
+    });
+    it('three unions and more: the upright tree on every width, a union a row with the children in a grid (round 2, point 2)', () => {
+        const d = fiskTree();
+        const jan = d.persons['jan' as PersonId];
+        for (const [k, name] of [['u2', 'Ludmila'], ['u3', 'Terezie']] as const) {
+            const w = `w${k}`;
+            d.persons[w as PersonId] = p(w, name, 'Fíšková', 'female', { birthDate: '1866', deathDate: '1931', partnerships: [k as PartnershipId] });
+            d.partnerships[k as PartnershipId] = { id: k as PartnershipId, person1Id: 'jan' as PersonId, person2Id: w as PersonId, status: 'married', childIds: [] };
+            jan.partnerships.push(k as PartnershipId);
+        }
+        const html = body(d);
+        expect(html).not.toContain('<div class="pp-ft"');
+        expect(html).toContain('<div class="pp-rail pp-rail--wide">');
+        expect(html.match(/<div class="pp-rail-u">/g)).toHaveLength(3);
+        expect(html).toContain('<div class="pp-rail-2 pp-rail-kidgrid">');
+        // The file and the print carry it the same way.
+        expect(doc(d)).toContain('<div class="pp-rail pp-rail--wide">');
+        expect(doc(d)).not.toContain('<div class="pp-ft"');
+        // Two unions keep the tree to the sides (and the narrow rail).
+        delete d.partnerships['u3' as PartnershipId];
+        jan.partnerships = jan.partnerships.filter(x => x !== 'u3');
+        const two = body(d);
+        expect(two).toContain('<div class="pp-ft"');
+        expect(two).toContain('<div class="pp-rail">');
+        expect(two).not.toContain('pp-rail--wide');
+    });
+    it('over five children: every row has its own bus with ticks, a trunk runs to the last row\'s bus (round 2, K2-2b)', () => {
+        const d = fiskTree();
+        const kids = ['k1', 'k2', 'k3', 'k4', 'k5', 'k6', 'k7'];
+        for (const [i, k] of kids.entries()) {
+            d.persons[k as PersonId] = p(k, `Dítě${i + 1}`, 'Fíšek', 'male', { birthDate: `${1889 + i}`, deathDate: '1950', parentIds: ids('jan', 'marie') });
+        }
+        d.persons['jan' as PersonId].childIds = ids(...kids);
+        d.persons['marie' as PersonId].childIds = ids(...kids);
+        d.partnerships['u1' as PartnershipId].childIds = ids(...kids);
+        delete d.persons['petr' as PersonId];
+        delete d.persons['rosa' as PersonId];
+        const ft = tree(body(d));
+        const tops = [...new Set(kids.map(k => Number(ft.match(new RegExp(`data-pp-person="${k}" style="[^"]*top:(\\d+)px`))![1])))];
+        expect(tops).toHaveLength(2);
+        const hs = [...ft.matchAll(/<span class="pp-ft-h" style="left:([\d.]+)%;top:(\d+)px;width:([\d.]+)%"/g)].map(m => ({ left: +m[1], top: +m[2], w: +m[3] }));
+        const vs = [...ft.matchAll(/<span class="pp-ft-v" style="left:([\d.]+)%;top:(\d+)px;height:(\d+)px"/g)].map(m => ({ left: +m[1], top: +m[2], h: +m[3] }));
+        for (const t of tops) {
+            // A bus 12 px over the row, a 12 px tick down to each of its cards.
+            expect(hs.some(h => h.top === t - 12)).toBe(true);
+            expect(vs.filter(v => v.top === t - 12 && v.h === 12).length).toBeGreaterThanOrEqual(2);
+        }
+        // The trunk: one vertical line ends on the last row's bus.
+        const lastBus = Math.max(...tops) - 12;
+        expect(vs.some(v => v.top + v.h === lastBus && v.h > 50)).toBe(true);
+        // The shorter last row (2 of 7) is centred under the trunk.
+        const trunk = vs.find(v => v.top + v.h === lastBus && v.h > 50)!;
+        const last = hs.find(h => h.top === lastBus)!;
+        expect(Math.abs(last.left + last.w / 2 - trunk.left)).toBeLessThan(0.5);
     });
     it('a step-parent is labelled and joined by a dashed line; a couple without children says so', () => {
         const d = fiskTree();
@@ -564,6 +628,11 @@ describe('the file holds only the page', () => {
         expect(html).toMatch(/^<!doctype html><html lang="cs"/);
         expect(html).toContain('<meta name="generator" content="Strom">');
         expect(html).toContain('<title>Jan Fíšek (1860–1910)</title>');
+        // Only a birth year: "(* 1860)", as the header has it, never "(1860–)" (round 2, a).
+        const born = fiskTree();
+        delete born.persons['jan' as PersonId].deathDate;
+        born.persons['jan' as PersonId].isDeceased = true;
+        expect(doc(born)).toContain('<title>Jan Fíšek (* 1860)</title>');
         // http(s) links leave with rel + target.
         for (const m of html.matchAll(/<a [^>]*href="https?:[^"]*"[^>]*>/g)) {
             expect(m[0]).toContain('rel="noopener noreferrer"');
@@ -752,6 +821,10 @@ describe('person page 2 (§0, §3, §4)', () => {
         expect(sum).toContain('<span class="pp-sum-big">50 let</span><span class="pp-sum-lab">dožitý věk</span>');
         expect(sum).toContain('<span class="pp-sum-big">2 děti</span>');
         expect(sum).toMatch(/<span class="pp-sum-big">\d+ let manželství<\/span><span class="pp-sum-lab">oženil se ve 27 letech<\/span>/);
+        // An unknown gender: neutral forms, no declined pronoun (round 2, point 8).
+        const u = fiskTree();
+        u.persons['jan' as PersonId].gender = 'unknown';
+        expect(body(u)).toContain('<span class="pp-sum-lab">uzavřel/a sňatek ve 27 letech</span>');
         // Before the family, after the header.
         expect(html.indexOf('pp-sum')).toBeGreaterThan(html.indexOf('</header>'));
         expect(html.indexOf('pp-sum')).toBeLessThan(html.indexOf('pp-sec-family'));
@@ -772,6 +845,9 @@ describe('person page 2 (§0, §3, §4)', () => {
         expect(html.indexOf('pp-sec-question')).toBeGreaterThan(html.indexOf('pp-sec-story'));
         expect(html.indexOf('pp-sec-question')).toBeLessThan(html.indexOf('pp-sec-timeline'));
         expect(doc(d)).toContain('Odkud přišel jeho otec?');
+        // A short block under the story, not an entry of the contents (round 2, point 1).
+        expect(personPageSections(html, 'cs').map(x => x.id)).not.toContain('pp-sec-question');
+        expect(doc(d)).not.toContain('href="#pp-sec-question"');
         // A living person's question stays in the app (even with full data in the file).
         d.persons['rosa' as PersonId].question = 'Kde žije?';
         delete d.persons['rosa' as PersonId].deathDate;
@@ -787,9 +863,11 @@ describe('person page 2 (§0, §3, §4)', () => {
         d.persons['cizi' as PersonId].events = [{ id: 'cb', type: 'baptism', date: '1870', participants: [{ id: 'g2', role: 'godparent', name: 'Jan Fíšek', personId: 'jan' as PersonId }] }];
         const html = body(d);
         const sec = html.match(/<section class="pp-sec pp-sec--people" id="pp-sec-people">.*?<\/section>/)?.[0] ?? '';
-        expect(sec).toContain('<dt>Při křtu 1860</dt><dd><ul><li><strong>Josef Kmotr</strong> <span class="pp-people-role">(kmotr/a)</span></li>');
-        expect(sec).toContain('<dt>Při sňatku 1888</dt><dd><ul><li><strong>František Svědek</strong>, soused <span class="pp-people-role">(svědek)</span></li>');
-        expect(sec).toMatch(/<dt>Byl kmotrem<\/dt><dd><ul><li><strong><button[^>]*data-pp-person="cizi"[^>]*>Tomáš Neznámý<\/button><\/strong> <span class="pp-people-role">\(křest 1870\)<\/span>/);
+        // The role lives in the group's heading; each name stands alone, without a declined role after it (round 2, point 8).
+        expect(sec).toContain('<dt>Kmotři při křtu 1860</dt><dd><ul><li><strong>Josef Kmotr</strong></li></ul></dd>');
+        expect(sec).toContain('<dt>Svědci při sňatku 1888</dt><dd><ul><li><strong>František Svědek</strong>, soused</li></ul></dd>');
+        expect(sec).toMatch(/<dt>Byl kmotrem<\/dt><dd><ul><li><strong><button[^>]*data-pp-person="cizi"[^>]*>Tomáš Neznámý<\/button><\/strong> <span class="pp-people-note">\(křest 1870\)<\/span>/);
+        expect(sec).not.toContain('pp-people-role');
         // After the gallery, before the notes.
         expect(html.indexOf('pp-sec-people')).toBeGreaterThan(html.indexOf('pp-sec-materials'));
         expect(html.indexOf('pp-sec-people')).toBeLessThan(html.indexOf('pp-sec-notes'));
@@ -812,6 +890,20 @@ describe('person page 2 (§0, §3, §4)', () => {
         expect(sec).toContain('<span class="pp-gal-kind">Fotografie</span><span class="pp-gal-cap">Fotografie 1</span>');
         // The print shows them all.
         expect(body(d, { mode: 'print', links: 'plain' })).not.toContain('pp-gal-more');
+    });
+
+    it('the size line\'s image count is the attached images, each once, without the portrait (round 2, b)', () => {
+        const d = withAttachments(2);
+        d.persons['jan' as PersonId].photo = png(300, 400);
+        const op = opts({ mode: 'file', links: 'plain' });
+        const page = preparePersonPageData(d, op);
+        // The excerpts (one image twice) and two photos: 3 images; the portrait and the PDF are not among them.
+        expect(estimatePersonPageSize(page, op).images).toBe(3);
+        // The window counts the same images.
+        expect(estimatePersonPageSize(preparePersonPageData(d, opts()), opts()).images).toBe(3);
+        // Without the images group: none.
+        const noImg = opts({ mode: 'file', links: 'plain', groups: { ...PERSON_PAGE_ALL_GROUPS, excerpts: false, materials: false } });
+        expect(estimatePersonPageSize(preparePersonPageData(d, noImg), noImg).images).toBe(0);
     });
 
     it('the file: one light box per image, each image embedded once, the timeline points to the box', () => {

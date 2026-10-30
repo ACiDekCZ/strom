@@ -176,7 +176,7 @@ test('family book: a childless couple\'s story is a subchapter in the main-line 
     await book.waitForLoadState('domcontentloaded');
     const sub = book.locator('.book-chapter .book-story-sub');
     await expect(sub).toHaveCount(1);
-    await expect(sub.locator('.book-story-head')).toContainText('Marriage to Rozalie Testova · 1730–');
+    await expect(sub.locator('.book-story-head')).toContainText(/^Marriage: .+ and Rozalie Testova · 1730–/);
     await expect(sub).toContainText('The second marriage was short.');
     await book.close();
 });

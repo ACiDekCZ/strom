@@ -317,7 +317,7 @@ const stringsEN = {
         sources: 'Sources',
         chapterShort: 'ch.',
         // A childless couple's story inside the main-line partner's chapter (spec 027).
-        coupleSub: (name: string, years: string) => years ? `Marriage to ${name} · ${years}` : `Marriage to ${name}`,
+        coupleSub: (a: string, b: string, years: string) => years ? `Marriage: ${a} and ${b} · ${years}` : `Marriage: ${a} and ${b}`,
         // A couple's event in the book: "Witnesses Josef Kříž and Václav Dvořák (neighbour)."
         eventWitnesses: (names: string) => `Witnesses ${names}.`,
         and: 'and',
@@ -5718,12 +5718,14 @@ const stringsEN = {
             },
             rel: { son: 'son', daughter: 'daughter', child: 'child', husband: 'husband', wife: 'wife', partner: 'partner', partnerF: 'partner' },
             relEv: { birth: 'birth', death: 'death', emigration: 'emigration', immigration: 'immigration' },
+            // A child's row in the list of children's places: "Václav (son): emigration 1913, death 1968" (the name in the nominative).
+            kidRow: (name: string, rel: string, events: string) => `${name} (${rel}): ${events}`,
         },
         chart: {
             aria: 'Life at a glance',
             youth: 'Childhood and youth',
-            marriage: (name: string) => (name ? `Marriage to ${name}` : 'Marriage'),
-            partnership: (name: string) => (name ? `Partnership with ${name}` : 'Partnership'),
+            marriage: (name: string) => (name ? `Marriage · ${name}` : 'Marriage'),
+            partnership: (name: string) => (name ? `Partnership · ${name}` : 'Partnership'),
             years: (n: number) => nEn(n, 'year', 'years'),
             widowed: { m: 'widowed', f: 'widowed', u: 'widowed' },
             divorced: 'after divorce',
@@ -5741,7 +5743,7 @@ const stringsEN = {
                 divorce: (name: string) => (name ? `divorce from ${name}` : 'divorce'),
             },
             legend: {
-                youth: 'childhood and youth', married: 'marriage', widowed: 'widowhood', residence: 'residence',
+                youth: 'childhood and youth', life: 'life (periods unknown)', married: 'marriage', widowed: 'widowhood', residence: 'residence',
                 spouses: { m: 'wives', f: 'husbands', u: 'partners' }, children: 'children',
             },
         },
@@ -5753,12 +5755,12 @@ const stringsEN = {
             // A couple's story as a chapter of the person page and the story reader (spec 027).
             couple: (years: string) => years ? `Story of the marriage · ${years}` : 'Story of the marriage',
             titleCouple: 'Story of the marriage',
-            also: (name: string) => `The same story is also on ${name}'s page.`,
+            also: (name: string) => `The same story is also on the page of: ${name}.`,
             continues: 'Continued in the story of the marriage:',
             readAll: 'Read all ▾',
             collapse: 'Collapse ▴',
             link: 'story ↓',
-            chip: (name: string, year: string) => year ? `With ${name} · ${year}` : `With ${name}`,
+            chip: (a: string, b: string, year: string) => year ? `${a} and ${b} · ${year}` : `${a} and ${b}`,
             chipsLabel: 'Chapters',
             editInResearch: 'Edited in research.',
             menuSr: (n: number) => `Story, ${nEn(n, 'chapter', 'chapters')}`,
@@ -5902,16 +5904,13 @@ const stringsEN = {
         question: 'Open question',
         people: {
             title: 'People around',
-            baptism: (y: string) => (y ? `At baptism ${y}` : 'At baptism'),
-            marriage: (y: string) => (y ? `At marriage ${y}` : 'At marriage'),
+            // The role stands in the group's heading; the names follow, separated by " · " (round 2).
+            godparents: (y: string) => (y ? `Godparents at baptism ${y}` : 'Godparents at baptism'),
+            othersBaptism: (y: string) => (y ? `Others at baptism ${y}` : 'Others at baptism'),
+            witnesses: (y: string) => (y ? `Witnesses at marriage ${y}` : 'Witnesses at marriage'),
+            others: (y: string) => (y ? `Others at marriage ${y}` : 'Others at marriage'),
             godparentOf: { m: 'Godparent to', f: 'Godparent to', u: 'Godparent to' },
             baptismOf: (y: string) => (y ? `baptism ${y}` : 'baptism'),
-            role: {
-                godparent: { m: 'godfather', f: 'godmother', u: 'godparent' },
-                witness: { m: 'witness', f: 'witness', u: 'witness' },
-                officiant: { m: 'officiant', f: 'officiant', u: 'officiant' },
-                other: { m: 'present', f: 'present', u: 'present' },
-            },
             more: (n: number) => `and ${n} more`,
         },
         gal: {
@@ -6089,7 +6088,7 @@ const stringsCZ: StringsType = {
         sources: 'Prameny',
         chapterShort: 'kap.',
         // A childless couple's story inside the main-line partner's chapter (spec 027); the name stays in the nominative.
-        coupleSub: (name: string, years: string) => years ? `Manželství – ${name} · ${years}` : `Manželství – ${name}`,
+        coupleSub: (a: string, b: string, years: string) => years ? `Manželství: ${a} a ${b} · ${years}` : `Manželství: ${a} a ${b}`,
         eventWitnesses: (names: string) => `Svědci ${names}.`,
         and: 'a',
         born: 'nar.',
@@ -11436,12 +11435,14 @@ const stringsCZ: StringsType = {
             },
             rel: { son: 'syn', daughter: 'dcera', child: 'dítě', husband: 'manžel', wife: 'manželka', partner: 'partner', partnerF: 'partnerka' },
             relEv: { birth: 'narození', death: 'úmrtí', emigration: 'vystěhování', immigration: 'přistěhování' },
+            // A child's row in the list of children's places: "Václav (son): emigration 1913, death 1968" (the name in the nominative).
+            kidRow: (name: string, rel: string, events: string) => `${name} (${rel}): ${events}`,
         },
         chart: {
             aria: 'Život v přehledu',
             youth: 'Dětství a mládí',
-            marriage: (name: string) => (name ? `Manželství – ${name}` : 'Manželství'),
-            partnership: (name: string) => (name ? `Partnerství – ${name}` : 'Partnerství'),
+            marriage: (name: string) => (name ? `Manželství · ${name}` : 'Manželství'),
+            partnership: (name: string) => (name ? `Partnerství · ${name}` : 'Partnerství'),
             years: (n: number) => nCs(n, 'rok', 'roky', 'let'),
             widowed: { m: 'vdovec', f: 'vdova', u: 'ovdovění' },
             divorced: 'po rozvodu',
@@ -11459,7 +11460,7 @@ const stringsCZ: StringsType = {
                 divorce: (name: string) => (name ? `rozvod – ${name}` : 'rozvod'),
             },
             legend: {
-                youth: 'dětství a mládí', married: 'manželství', widowed: 'vdovství', residence: 'bydliště',
+                youth: 'dětství a mládí', life: 'život (období neznámá)', married: 'manželství', widowed: 'vdovství', residence: 'bydliště',
                 spouses: { m: 'manželky', f: 'manželé', u: 'partneři' }, children: 'děti',
             },
         },
@@ -11471,14 +11472,14 @@ const stringsCZ: StringsType = {
             // Vyprávění páru jako kapitola stránky osoby a okna Vyprávění (spec 027).
             couple: (years: string) => years ? `Vyprávění manželství · ${years}` : 'Vyprávění manželství',
             titleCouple: 'Vyprávění manželství',
-            // Neutral construction: names are not declined (no genitive helper).
-            also: (name: string) => `Stejné vyprávění je i na stránce osoby ${name}.`,
+            // Neutral construction: names are not declined (the name stands alone in the nominative).
+            also: (name: string) => `Stejné vyprávění je i na stránce: ${name}.`,
             continues: 'Pokračuje vyprávěním manželství:',
             readAll: 'Číst celé ▾',
             collapse: 'Sbalit ▴',
             link: 'vyprávění ↓',
-            // "S Rozálií" would need the instrumental; the marriage sign keeps the name in the nominative.
-            chip: (name: string, year: string) => year ? `⚭ ${name} · ${year}` : `⚭ ${name}`,
+            // Both first names in the nominative ("Jan a Rozálie · 1883"); no declension needed.
+            chip: (a: string, b: string, year: string) => year ? `${a} a ${b} · ${year}` : `${a} a ${b}`,
             chipsLabel: 'Kapitoly',
             editInResearch: 'Upravuje se ve výzkumu.',
             menuSr: (n: number) => `Vyprávění, ${nCs(n, 'kapitola', 'kapitoly', 'kapitol')}`,
@@ -11605,13 +11606,13 @@ const stringsCZ: StringsType = {
             marriedAt: {
                 m: (ages: number[]) => `oženil se ${ages.map(a => `${veCs(a)} ${a}`).join(' a ')} letech`,
                 f: (ages: number[]) => `vdala se ${ages.map(a => `${veCs(a)} ${a}`).join(' a ')} letech`,
-                u: (ages: number[]) => `sňatek ${ages.map(a => `${veCs(a)} ${a}`).join(' a ')} letech`,
+                u: (ages: number[]) => `uzavřel/a sňatek ${ages.map(a => `${veCs(a)} ${a}`).join(' a ')} letech`,
             },
             children: (n: number) => nCs(n, 'dítě', 'děti', 'dětí'),
             survived: {
                 m: (n: number) => `${n} ho ${plural('cs', n, 'přežilo', 'přežily', 'přežilo')}`,
                 f: (n: number) => `${n} ji ${plural('cs', n, 'přežilo', 'přežily', 'přežilo')}`,
-                u: (n: number) => `${n} ${plural('cs', n, 'přežilo', 'přežily', 'přežilo')} rodiče`,
+                u: (n: number) => `${n} ${plural('cs', n, 'přežilo', 'přežily', 'přežilo')} osobu`,
             },
             fromMarriages: (n: number) => `${zeCs(n)} ${n} manželství`,
             places: (n: number) => nCs(n, 'místo', 'místa', 'míst'),
@@ -11620,16 +11621,13 @@ const stringsCZ: StringsType = {
         question: 'Otevřená otázka',
         people: {
             title: 'Lidé kolem',
-            baptism: (y: string) => (y ? `Při křtu ${y}` : 'Při křtu'),
-            marriage: (y: string) => (y ? `Při sňatku ${y}` : 'Při sňatku'),
+            // The role stands in the group's heading; the names follow, separated by " · " (round 2).
+            godparents: (y: string) => (y ? `Kmotři při křtu ${y}` : 'Kmotři při křtu'),
+            othersBaptism: (y: string) => (y ? `Další při křtu ${y}` : 'Další při křtu'),
+            witnesses: (y: string) => (y ? `Svědci při sňatku ${y}` : 'Svědci při sňatku'),
+            others: (y: string) => (y ? `Další při sňatku ${y}` : 'Další při sňatku'),
             godparentOf: { m: 'Byl kmotrem', f: 'Byla kmotrou', u: 'Kmotr/a' },
             baptismOf: (y: string) => (y ? `křest ${y}` : 'křest'),
-            role: {
-                godparent: { m: 'kmotr', f: 'kmotra', u: 'kmotr/a' },
-                witness: { m: 'svědek', f: 'svědkyně', u: 'svědek' },
-                officiant: { m: 'oddávající', f: 'oddávající', u: 'oddávající' },
-                other: { m: 'přítomen', f: 'přítomna', u: 'přítomen' },
-            },
             more: (n: number) => `a další (${n})`,
         },
         gal: {
@@ -11803,7 +11801,7 @@ const stringsDE: StringsType = {
         sources: 'Quellen',
         chapterShort: 'Kap.',
         // A childless couple's story inside the main-line partner's chapter (spec 027).
-        coupleSub: (name: string, years: string) => years ? `Ehe mit ${name} · ${years}` : `Ehe mit ${name}`,
+        coupleSub: (a: string, b: string, years: string) => years ? `Ehe: ${a} und ${b} · ${years}` : `Ehe: ${a} und ${b}`,
         eventWitnesses: (names: string) => `Zeugen ${names}.`,
         and: 'und',
         born: '*',
@@ -17079,12 +17077,14 @@ const stringsDE: StringsType = {
             },
             rel: { son: 'Sohn', daughter: 'Tochter', child: 'Kind', husband: 'Ehemann', wife: 'Ehefrau', partner: 'Partner', partnerF: 'Partnerin' },
             relEv: { birth: 'Geburt', death: 'Tod', emigration: 'Auswanderung', immigration: 'Einwanderung' },
+            // A child's row in the list of children's places: "Václav (son): emigration 1913, death 1968" (the name in the nominative).
+            kidRow: (name: string, rel: string, events: string) => `${name} (${rel}): ${events}`,
         },
         chart: {
             aria: 'Leben im Überblick',
             youth: 'Kindheit und Jugend',
-            marriage: (name: string) => (name ? `Ehe mit ${name}` : 'Ehe'),
-            partnership: (name: string) => (name ? `Partnerschaft mit ${name}` : 'Partnerschaft'),
+            marriage: (name: string) => (name ? `Ehe · ${name}` : 'Ehe'),
+            partnership: (name: string) => (name ? `Partnerschaft · ${name}` : 'Partnerschaft'),
             years: (n: number) => nDe(n, 'Jahr', 'Jahre'),
             widowed: { m: 'verwitwet', f: 'verwitwet', u: 'verwitwet' },
             divorced: 'nach der Scheidung',
@@ -17102,7 +17102,7 @@ const stringsDE: StringsType = {
                 divorce: (name: string) => (name ? `Scheidung von ${name}` : 'Scheidung'),
             },
             legend: {
-                youth: 'Kindheit und Jugend', married: 'Ehe', widowed: 'Witwenschaft', residence: 'Wohnort',
+                youth: 'Kindheit und Jugend', life: 'Leben (Abschnitte unbekannt)', married: 'Ehe', widowed: 'Witwenschaft', residence: 'Wohnort',
                 spouses: { m: 'Ehefrauen', f: 'Ehemänner', u: 'Partner' }, children: 'Kinder',
             },
         },
@@ -17114,12 +17114,12 @@ const stringsDE: StringsType = {
             // A couple's story as a chapter of the person page and the story reader (spec 027).
             couple: (years: string) => years ? `Geschichte der Ehe · ${years}` : 'Geschichte der Ehe',
             titleCouple: 'Geschichte der Ehe',
-            also: (name: string) => `Dieselbe Geschichte steht auch auf der Seite von ${name}.`,
+            also: (name: string) => `Dieselbe Geschichte steht auch auf der Seite: ${name}.`,
             continues: 'Fortsetzung in der Geschichte der Ehe:',
             readAll: 'Ganz lesen ▾',
             collapse: 'Einklappen ▴',
             link: 'Geschichte ↓',
-            chip: (name: string, year: string) => year ? `Mit ${name} · ${year}` : `Mit ${name}`,
+            chip: (a: string, b: string, year: string) => year ? `${a} und ${b} · ${year}` : `${a} und ${b}`,
             chipsLabel: 'Kapitel',
             editInResearch: 'Wird in der Forschung bearbeitet.',
             menuSr: (n: number) => `Erzählung, ${nDe(n, 'Kapitel', 'Kapitel')}`,
@@ -17261,16 +17261,13 @@ const stringsDE: StringsType = {
         question: 'Offene Frage',
         people: {
             title: 'Menschen im Umfeld',
-            baptism: (y: string) => (y ? `Bei der Taufe ${y}` : 'Bei der Taufe'),
-            marriage: (y: string) => (y ? `Bei der Heirat ${y}` : 'Bei der Heirat'),
+            // The role stands in the group's heading; the names follow, separated by " · " (round 2).
+            godparents: (y: string) => (y ? `Paten bei der Taufe ${y}` : 'Paten bei der Taufe'),
+            othersBaptism: (y: string) => (y ? `Weitere bei der Taufe ${y}` : 'Weitere bei der Taufe'),
+            witnesses: (y: string) => (y ? `Trauzeugen bei der Heirat ${y}` : 'Trauzeugen bei der Heirat'),
+            others: (y: string) => (y ? `Weitere bei der Heirat ${y}` : 'Weitere bei der Heirat'),
             godparentOf: { m: 'Pate von', f: 'Patin von', u: 'Pate/Patin von' },
             baptismOf: (y: string) => (y ? `Taufe ${y}` : 'Taufe'),
-            role: {
-                godparent: { m: 'Pate', f: 'Patin', u: 'Pate/Patin' },
-                witness: { m: 'Trauzeuge', f: 'Trauzeugin', u: 'Zeuge' },
-                officiant: { m: 'Geistlicher', f: 'Geistliche', u: 'Geistliche/r' },
-                other: { m: 'anwesend', f: 'anwesend', u: 'anwesend' },
-            },
             more: (n: number) => `und ${n} weitere`,
         },
         gal: {

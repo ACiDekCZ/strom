@@ -14,7 +14,7 @@
 
 import type { Language } from './strings.js';
 import { getStringsForLang } from './strings.js';
-import type { StromData, PersonId, Person, Gender, PartnershipId } from './types.js';
+import type { StromData, PersonId, Person, Gender, PartnershipId, Partnership } from './types.js';
 import { computePersonLifeline, type LifelinePoint } from './timeline.js';
 import { parseFlexDate, yearFraction, displayYear } from './dates.js';
 import { isLivingPerson } from './privacy.js';
@@ -43,13 +43,14 @@ export interface ChartDate {
     year: number;
     /** The end of a range ("1901..1905"), in years. */
     to?: number;
-    /** `~`, before / after, a range or only the year: the bar fades there (§2.5). */
+    /** `~`, before / after or a range: the bar fades there (§2.5). Only the year is drawn plainly (yearly precision). */
     uncertain: boolean;
     /** "1798", "~1798", "1901–1905". */
     label: string;
 }
 
-export type ChartPeriodKind = 'youth' | 'marriage' | 'partnership' | 'widowed' | 'divorced';
+/** 'life': the bar where no period is known (no marriage date, or before the first dated marriage with an undated union there). */
+export type ChartPeriodKind = 'youth' | 'life' | 'marriage' | 'partnership' | 'widowed' | 'divorced';
 
 export interface ChartPeriod {
     kind: ChartPeriodKind;
@@ -87,6 +88,8 @@ export interface ChartLine {
     deathYear?: number;
     /** A child who died in childhood (under 15): age in whole years. */
     childAge?: number;
+    /** The start is only the first known point (an undated union: the first common child's birth): it fades in. */
+    fadeStart?: boolean;
     anchor: string;
 }
 
@@ -113,6 +116,8 @@ export interface LifeChartInput {
     /** Unknown death: the last dated year ("after 1871 ?"). */
     lastYear?: number;
     periods: ChartPeriod[];
+    /** A union shown on the page has no marriage date: the legend explains the neutral "life" bar. */
+    periodsUnknown?: boolean;
     residence: ChartResidence[];
     marks: ChartMark[];
     lines: ChartLine[];
@@ -140,7 +145,7 @@ function chartDate(raw: string | undefined, closeYear: boolean): ChartDate | und
     return {
         at, year: d.year,
         ...(to !== undefined && d.end && d.end.year !== d.year ? { to } : {}),
-        uncertain: !!d.qualifier || !!d.end || d.month === undefined,
+        uncertain: !!d.qualifier || !!d.end,
         label: displayYear(raw),
     };
 }
@@ -189,7 +194,7 @@ export function lifeChartInput(tree: StromData, personId: PersonId, opts: LifeCh
 
     // Marriages in their order, each ending at its end date, the partner's death, the next marriage or the end.
     const lifeEnd = barEnd;
-    const unions = person.partnerships
+    const shown = person.partnerships
         .map(id => tree.partnerships[id])
         .filter(u => !!u)
         .map(u => {
@@ -197,12 +202,24 @@ export function lifeChartInput(tree: StromData, personId: PersonId, opts: LifeCh
             const other = tree.persons[otherId];
             return { u, other, start: chartDate(u.startDate, false) };
         })
-        .filter(x => !!x.start && !hidden(x.other))
-        .sort((a, b) => a.start!.at - b.start!.at);
+        .filter(x => !hidden(x.other));
+    const unions = shown.filter(x => !!x.start).sort((a, b) => a.start!.at - b.start!.at);
+    // A union without a marriage date (§2.3, round 2): its first known point is the birth of the first common child.
+    const firstChildAt = (u: Partnership): number | undefined => {
+        const ats = u.childIds.map(id => tree.persons[id])
+            .filter((c): c is Person => !!c && !c.isPlaceholder && !hidden(c))
+            .map(c => chartDate(c.birthDate, false)?.at)
+            .filter((n): n is number => n !== undefined);
+        return ats.length ? Math.min(...ats) : undefined;
+    };
+    const undated = shown.filter(x => !x.start).map(x => ({ ...x, firstAt: firstChildAt(x.u) }));
 
     const periods: ChartPeriod[] = [];
     const firstStart = unions.length ? unions[0].start!.at : undefined;
-    periods.push({ kind: 'youth', from: start, to: firstStart ?? lifeEnd, anchor: anchorOf(p => p.kind === 'birth') || (first ? chartAnchorId(first.sortKey) : '') });
+    // Childhood and youth up to the first dated marriage; "life" when no marriage is dated, or when an undated
+    // union belongs before it (its first child born earlier).
+    const lifeBefore = firstStart === undefined || undated.some(x => x.firstAt !== undefined && x.firstAt < firstStart);
+    periods.push({ kind: lifeBefore ? 'life' : 'youth', from: start, to: firstStart ?? lifeEnd, anchor: anchorOf(p => p.kind === 'birth') || (first ? chartAnchorId(first.sortKey) : '') });
     unions.forEach((x, i) => {
         const from = x.start!.at;
         const next = unions[i + 1]?.start!.at;
@@ -266,14 +283,20 @@ export function lifeChartInput(tree: StromData, personId: PersonId, opts: LifeCh
         }
     }
 
-    // Partners' and children's lives alongside.
+    // Partners' and children's lives alongside: in the order of the marriages, an undated union by its first child.
     const lines: ChartLine[] = [];
-    for (const x of unions) {
+    const partnerLines = [
+        ...unions.map(x => ({ x, from: x.start!.at, fade: false })),
+        ...undated.filter(x => x.firstAt !== undefined).map(x => ({ x, from: x.firstAt!, fade: true })),
+    ].sort((a, b) => a.from - b.from);
+    for (const { x, from, fade } of partnerLines) {
         if (!x.other || x.other.isPlaceholder) continue;
         const d = chartDate(x.other.deathDate, true);
-        lines.push({ kind: 'partner', name: x.other.firstName?.trim() || '', from: x.start!.at,
+        lines.push({ kind: 'partner', name: x.other.firstName?.trim() || '', from,
             ...(d ? { to: d.at, deathYear: d.year } : {}),
-            anchor: anchorOf(p => p.kind === 'marriage' && p.partnershipId === x.u.id) });
+            ...(fade ? { fadeStart: true } : {}),
+            anchor: fade ? anchorOf(p => p.kind === 'child' && !!p.relatedId && x.u.childIds.includes(p.relatedId as PersonId))
+                : anchorOf(p => p.kind === 'marriage' && p.partnershipId === x.u.id) });
     }
     const kids = person.childIds
         .map(id => tree.persons[id])
@@ -303,7 +326,7 @@ export function lifeChartInput(tree: StromData, personId: PersonId, opts: LifeCh
     return {
         gender: person.gender, start, end, ...(birth ? { birth } : {}), ...(death ? { death } : {}),
         endKind, barEnd, ...(lastYear !== undefined ? { lastYear } : {}),
-        periods, residence: residenceKept, marks, lines, history,
+        periods, ...(undated.length ? { periodsUnknown: true } : {}), residence: residenceKept, marks, lines, history,
     };
 }
 
@@ -405,7 +428,7 @@ export function chartSet(input: LifeChartInput, S: CS, ctx: LifeChartCtx, W: num
         if (p.to <= p.from) continue;
         const text = periodLabel(p, S, input.gender, narrow);
         const title = periodLabel(p, S, input.gender, false);
-        const fits = !single && wpx(p.from, p.to) > text.length * CH_PX;
+        const fits = !single && !!text && wpx(p.from, p.to) > text.length * CH_PX;
         const cls = single ? 'pp-ch-p--life' : `pp-ch-p--${p.kind === 'partnership' ? 'marriage' : p.kind}`;
         const href = p.anchor ? ` href="#${p.anchor}" data-pp-osa="${p.anchor}"` : '';
         barParts.push(`<a class="pp-ch-p ${cls}"${href} style="left:${x(p.from)};width:${wpc(p.from, p.to)}"${title ? ` title="${esc(title)}"` : ''}></a>`);
@@ -452,10 +475,13 @@ function periodLabel(p: ChartPeriod, S: CS, gender: Gender, narrow: boolean): st
     const g = gender === 'male' ? 'm' : gender === 'female' ? 'f' : 'u';
     switch (p.kind) {
         case 'youth': return C.youth;
+        case 'life': return '';
         case 'widowed': return C.widowed[g];
         case 'divorced': return C.divorced;
         default: {
-            const base = p.kind === 'marriage' ? C.marriage(p.name ?? '') : C.partnership(p.name ?? '');
+            // A phone: the word alone ("Marriage"); wider: with the first name and the years.
+            const name = narrow ? '' : p.name ?? '';
+            const base = p.kind === 'marriage' ? C.marriage(name) : C.partnership(name);
             const n = Math.floor(p.to - p.from);
             return narrow || n < 1 ? base : `${base} · ${C.years(n)}`;
         }
@@ -554,6 +580,7 @@ function lineRow(l: ChartLine, input: LifeChartInput, S: CS, xpx: (y: number) =>
         to = l.to;
         label = narrow || l.deathYear === undefined ? l.name : `${l.name} · † ${l.deathYear}`;
     }
+    if (l.fadeStart) cls += ' pp-ch-ln--fs';
     const left = xpx(from);
     const lw = label.length * 6 + 2;
     const atEnd = left + lw > W - 8;
@@ -597,8 +624,10 @@ function legendHtml(input: LifeChartInput, S: CS): string {
     const items: string[] = [];
     const sw = (cls: string, text: string) => `<span class="pp-ch-lg"><span class="pp-ch-sw ${cls}" aria-hidden="true"></span>${esc(text)}</span>`;
     const kinds = new Set(input.periods.map(p => p.kind));
+    // The neutral bar is explained when some period is unknown (a union without a marriage date).
+    if (kinds.has('life') && (input.periods.length > 1 || input.periodsUnknown)) items.push(sw('pp-ch-p--life', L.life));
     if (input.periods.length > 1) {
-        items.push(sw('pp-ch-p--youth', L.youth));
+        if (kinds.has('youth')) items.push(sw('pp-ch-p--youth', L.youth));
         if (kinds.has('marriage') || kinds.has('partnership')) items.push(sw('pp-ch-p--marriage', L.married));
         if (kinds.has('widowed') || kinds.has('divorced')) items.push(sw('pp-ch-p--widowed', L.widowed));
     }

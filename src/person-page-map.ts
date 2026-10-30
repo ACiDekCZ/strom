@@ -429,10 +429,18 @@ export function planPlacesMap(points: readonly PlacePoint[], geo: Readonly<Recor
         rels.push(...relGroups.values());
     }
 
+    // The 180th meridian (round 2): when the places' longitudes span more than 180°, negative longitudes
+    // +360° give the narrower envelope (the same shift for the points and the outlines).
+    const lons = [...ownGeo, ...rels].map(p => p.geo!.lon);
+    const lonSpan = (ls: number[]): number => Math.max(...ls) - Math.min(...ls);
+    const wrap = lonSpan(lons) > 180 && lonSpan(lons.map(l => (l < 0 ? l + 360 : l))) < lonSpan(lons);
+    const lonOf = (geo: PlaceGeo): number => (wrap && geo.lon < 0 ? geo.lon + 360 : geo.lon);
+    const merc = (geo: PlaceGeo) => mercator(lonOf(geo), geo.lat);
+
     // Centre of the neighbourhood: the centroid of the person's places.
     const centroid: PlaceGeo = {
         lat: ownGeo.reduce((s, p) => s + p.geo!.lat, 0) / ownGeo.length,
-        lon: ownGeo.reduce((s, p) => s + p.geo!.lon, 0) / ownGeo.length,
+        lon: ownGeo.reduce((s, p) => s + lonOf(p.geo!), 0) / ownGeo.length,
     };
     const compact = ownGeo.every(p => distanceKm(p.geo!, centroid) <= FAR_KM);
     const near = compact ? rels.filter(p => distanceKm(p.geo!, centroid) <= FAR_KM) : rels;
@@ -440,7 +448,7 @@ export function planPlacesMap(points: readonly PlacePoint[], geo: Readonly<Recor
 
     // Frame: the envelope of the main map's places + 15 % each side, at least 25 km, fitted into the safe area.
     const main = [...ownGeo, ...near];
-    const w = main.map(p => mercator(p.geo!.lon, p.geo!.lat));
+    const w = main.map(p => merc(p.geo!));
     let minX = Math.min(...w.map(p => p.x)), maxX = Math.max(...w.map(p => p.x));
     let minY = Math.min(...w.map(p => p.y)), maxY = Math.max(...w.map(p => p.y));
     const cLat = (Math.min(...main.map(p => p.geo!.lat)) + Math.max(...main.map(p => p.geo!.lat))) / 2;
@@ -451,11 +459,11 @@ export function planPlacesMap(points: readonly PlacePoint[], geo: Readonly<Recor
     const safeW = SAFE.x1 - SAFE.x0, safeH = SAFE.y1 - SAFE.y0;
     const k = Math.min(safeW / spanX, safeH / spanY);
     const view: OutlineView = { x0: cx - VIEW_W / 2 / k, y0: cy - VIEW_H / 2 / k, k, width: VIEW_W, height: VIEW_H };
-    const toView = (lat: number, lon: number) => {
-        const m = mercator(lon, lat);
+    const toView = (geo: PlaceGeo) => {
+        const m = merc(geo);
         return { x: (m.x - view.x0) * k, y: (m.y - view.y0) * k };
     };
-    for (const p of main) Object.assign(p, toView(p.geo!.lat, p.geo!.lon));
+    for (const p of main) Object.assign(p, toView(p.geo!));
 
     // Scale bar (hidden for a world-wide frame: the Mercator scale drifts).
     const unitsPerKm = perKm * k;
@@ -481,7 +489,7 @@ export function planPlacesMap(points: readonly PlacePoint[], geo: Readonly<Recor
         const ownPts = ownGeo.map(p => ({ x: p.x!, y: p.y! }));
         const corner: 'br' | 'tl' = insetHits(ownPts, 'br') <= insetHits(ownPts, 'tl') ? 'br' : 'tl';
         const centre = { x: view.x0 + VIEW_W / 2 / k, y: view.y0 + VIEW_H / 2 / k };
-        const fw = far.map(p => mercator(p.geo!.lon, p.geo!.lat));
+        const fw = far.map(p => merc(p.geo!));
         const xs = [centre.x, ...fw.map(p => p.x)], ys = [centre.y, ...fw.map(p => p.y)];
         const ix = (Math.min(...xs) + Math.max(...xs)) / 2, iy = (Math.min(...ys) + Math.max(...ys)) / 2;
         const minSpan = (40 / 360) * WORLD;
@@ -579,7 +587,7 @@ export function ownEventsText(points: readonly PlacePoint[], S: MapStrings, lang
     return parts.join(', ');
 }
 
-/** "syn Václav: vystěhování 1913, úmrtí 1968; dcera Marie: úmrtí 1950". */
+/** "Václav (syn): vystěhování 1913, úmrtí 1968; Marie (dcera): úmrtí 1950" (the name in the nominative, round 2). */
 export function relativeEventsText(points: readonly PlacePoint[], S: MapStrings): string {
     const M = S.personPage.map;
     const byPerson = new Map<string, PlacePoint[]>();
@@ -595,7 +603,7 @@ export function relativeEventsText(points: readonly PlacePoint[], S: MapStrings)
             const y = yearText(p);
             return y ? `${M.relEv[p.rel!.ev]} ${y}` : M.relEv[p.rel!.ev];
         }).join(', ');
-        return `${M.rel[r.role]} ${r.name}: ${evs}`;
+        return M.kidRow(r.name, M.rel[r.role], evs);
     }).join('; ');
 }
 

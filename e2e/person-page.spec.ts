@@ -416,9 +416,10 @@ test.describe('desktop', () => {
         expect(new Set(boxes).size).toBe(1);
         // The question after the story's place, before the timeline.
         await expect(w.locator('#pp-sec-question .pp-question-text')).toHaveText('Where did his father come from?');
-        // People around: the two godparents.
-        await expect(w.locator('#pp-sec-people dt')).toHaveText(['At baptism 1860']);
+        // People around: the two godparents, the role in the group's heading, the names apart by " · ".
+        await expect(w.locator('#pp-sec-people dt')).toHaveText(['Godparents at baptism 1860']);
         await expect(w.locator('#pp-sec-people li')).toHaveCount(2);
+        await expect(w.locator('#pp-sec-people dd')).toHaveText('Josef Kmotr · Anna Kmotrova');
         // The gallery: the excerpt, zoomed in the window's own layer.
         const gal = w.locator('#pp-sec-materials');
         await expect(gal.locator('.pp-gal-item')).toHaveCount(1);
@@ -539,6 +540,44 @@ async function seedTraveller(page: Page): Promise<void> {
 
 test.describe('person page 2: places of life and the life chart', () => {
     test.use({ viewport: { width: 1280, height: 800 } });
+
+    test('three marriages: the upright tree on a desktop, a union a row, the children in three columns (round 2)', async ({ page }) => {
+        await openApp(page);
+        await seedFisek(page);
+        await page.evaluate(() => {
+            const D = window.Strom.DataManager;
+            const data = D.getData() as unknown as { persons: Record<string, Record<string, unknown>>; partnerships: Record<string, Record<string, unknown>> };
+            const jan = data.persons['jan'] as { partnerships: string[] };
+            for (const [k, name] of [['u3', 'Ludmila'], ['u4', 'Terezie']]) {
+                data.persons[`w${k}`] = { id: `w${k}`, firstName: name, lastName: 'Fiskova', gender: 'female', isPlaceholder: false,
+                    parentIds: [], childIds: [], partnerships: [k], birthDate: '1866', deathDate: '1931' };
+                data.partnerships[k] = { id: k, person1Id: 'jan', person2Id: `w${k}`, childIds: [], status: 'married' };
+                jan.partnerships.push(k);
+            }
+            for (const k of ['k3', 'k4', 'k5', 'k6']) {
+                data.persons[k] = { id: k, firstName: `Kid${k}`, lastName: 'Fisek', gender: 'male', isPlaceholder: false,
+                    parentIds: ['jan', 'marie'], childIds: [], partnerships: [], birthDate: '1895', deathDate: '1960' };
+                (data.persons['jan'].childIds as string[]).push(k);
+                (data.persons['marie'].childIds as string[]).push(k);
+                (data.partnerships['u1'].childIds as string[]).push(k);
+            }
+        });
+        await page.evaluate(() => window.Strom.UI.showPersonPage('jan' as never));
+        const w = win(page);
+        const rail = w.locator('.pp-rail--wide');
+        await expect(rail).toBeVisible();
+        await expect(w.locator('.pp-ft')).toHaveCount(0);
+        await expect(rail.locator('.pp-rail-u')).toHaveCount(3);
+        // The partner on the left, the union's children on the right, three in a row.
+        const u1 = rail.locator('.pp-rail-u').first();
+        const side = (await u1.locator('.pp-rail-side').boundingBox())!;
+        const kids = (await u1.locator('.pp-rail-kids').boundingBox())!;
+        expect(kids.x).toBeGreaterThan(side.x + side.width - 1);
+        const tops = await u1.locator('.pp-rail-kidgrid > *').evaluateAll(els => els.map(e => Math.round(e.getBoundingClientRect().top)));
+        expect(tops.filter(t => t === tops[0])).toHaveLength(3);
+        const fits = await w.locator('.pp-body').evaluate((el) => el.scrollWidth <= el.clientWidth);
+        expect(fits).toBe(true);
+    });
 
     test('the map with its list, Children’s places and selection; a place in the header scrolls to it; the chart leads to the timeline', async ({ page }) => {
         await openApp(page);

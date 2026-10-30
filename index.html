@@ -278,7 +278,9 @@
             --map-geo: #b9ab8e;
             --map-label-bg: rgba(255, 253, 248, .82);
             --chart-young: #e2d6bd;
+            --chart-life: #d6cebe;      /* life chart: one bar when no union has a date */
             --chart-married: #a8c0ad;
+            --card-bg-2: #f6f1e6;       /* tinted second surface (couple story chapters) */
             --chart-band1: #efe8da;
             --chart-band2: #ddd2bc;
             --read-illegible-bg: #e3ddd0;
@@ -434,7 +436,9 @@
             --map-geo: #5d5749;
             --map-label-bg: rgba(44, 42, 36, .85);
             --chart-young: #5a503d;
+            --chart-life: #4a4538;
             --chart-married: #4f6d58;
+            --card-bg-2: #26241f;
             --chart-band1: #34312a;
             --chart-band2: #433e33;
             --read-illegible-bg: #3e3a30;
@@ -9806,8 +9810,9 @@
         }
         .card-story--inline::after { right: 5px; bottom: 5px; width: 5px; height: 5px; }
         /* A couple's story alone (spec 027 §5.6): the same corner hollow, a band
-           along the fold in --accent with the card's own colour inside (pale as a draft). */
-        .card-story.couple:not(.draft) { --fold: var(--accent); }
+           along the fold in the own story's corner colour with the card's own
+           colour inside (pale as a draft). One corner colour on a card; only the
+           shape (full / hollow) and the paleness differ. */
         .card-story.couple {
             background: linear-gradient(135deg, transparent 50%, var(--fold) 50%, var(--fold) 66%, transparent 66%);
         }
@@ -17016,15 +17021,14 @@
         .story-ch-tags { margin: 0; }
         .story-ch-tags .story-draft-tag, .story-ch-tags .story-nv-tag { margin-left: 0; }
         .story-reader-ch--tint {
-            padding: 20px 22px; border-radius: 14px; background: var(--surface-2);
-            /* One step from the window's surface, lighter in dark mode (as on the person page). */
-            background: color-mix(in srgb, var(--card-bg) 95%, var(--text));
+            /* The tinted second surface (as on the person page). */
+            padding: 20px 22px; border-radius: 14px; background: var(--card-bg-2);
         }
         .story-reader-body > .story-reader-ch--tint:not(:first-child) { margin-top: 24px; border-top: 0; }
         .story-reader-ch--tint .story-ch-mono { display: inline-flex; flex-shrink: 0; margin-top: 2px; }
         .story-ch-mono > span {
             display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px;
-            border-radius: 50%; border: 2px solid var(--surface-2); background: var(--card-bg); color: var(--accent-text);
+            border-radius: 50%; border: 2px solid var(--card-bg-2); background: var(--card-bg); color: var(--accent-text);
             font: 600 12px/1 var(--font-sans);
         }
         .story-ch-mono > span + span { margin-left: -9px; }
@@ -17038,6 +17042,19 @@
                 width: 100vw; max-width: 100vw; height: 100vh; height: 100dvh; max-height: none; border-radius: 0;
             }
             .story-chips { flex-wrap: nowrap; overflow-x: auto; margin-right: -12px; padding-bottom: 2px; }
+            /* Chips cut off at an edge: the row fades out there (set by the dialog while it scrolls). */
+            .story-chips--more-end {
+                -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 36px), transparent);
+                mask-image: linear-gradient(90deg, #000 calc(100% - 36px), transparent);
+            }
+            .story-chips--more-start {
+                -webkit-mask-image: linear-gradient(90deg, transparent, #000 36px);
+                mask-image: linear-gradient(90deg, transparent, #000 36px);
+            }
+            .story-chips--more-start.story-chips--more-end {
+                -webkit-mask-image: linear-gradient(90deg, transparent, #000 36px, #000 calc(100% - 36px), transparent);
+                mask-image: linear-gradient(90deg, transparent, #000 36px, #000 calc(100% - 36px), transparent);
+            }
             /* Close stays beside the title, above the scrolling chips, not over the last one. */
             .story-reader--chapters .modal-header > .close-btn { align-self: flex-start; }
             .story-ch-head { flex-wrap: wrap; }
@@ -17048,7 +17065,7 @@
         }
         @media print {
             .story-chips, .story-ch-actions, .story-ch-note { display: none !important; }
-            .story-reader-ch--tint { background: none; border: 1px solid var(--border); }
+            .story-reader-ch--tint { background: transparent; border: 1px solid var(--border); }
         }
 
         /* A new version of an approved story waits (story.draft): amber like

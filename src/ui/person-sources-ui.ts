@@ -10,7 +10,7 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { PartnershipId, PersonId, Source, Story } from '../types.js';
 import { yearOf } from '../dates.js';
 import { personSourceRows as personSourceRowsOf, PersonSourceRow } from '../person-sources.js';
-import { storyProseHtml, coupleStories, coupleStoryYears } from '../story-text.js';
+import { storyProseHtml, coupleStories, coupleStoryYears, coupleChipNames } from '../story-text.js';
 import { personInitials } from '../initials.js';
 import { uiModule } from './module.js';
 import { normalizeModal } from './modal-skeleton.js';
@@ -58,6 +58,19 @@ function wireStoryChips(overlay: HTMLElement): void {
             } else chip.removeAttribute('aria-current');
         }
     };
+    // A row that scrolls sideways (a phone) fades at the edge where chips are cut off.
+    const row = overlay.querySelector<HTMLElement>('.story-chips');
+    const edges = (): void => {
+        if (!row) return;
+        const max = row.scrollWidth - row.clientWidth;
+        row.classList.toggle('story-chips--more-end', max > 1 && row.scrollLeft < max - 1);
+        row.classList.toggle('story-chips--more-start', max > 1 && row.scrollLeft > 1);
+    };
+    if (row) {
+        row.addEventListener('scroll', edges, { passive: true });
+        if (typeof ResizeObserver !== 'undefined') new ResizeObserver(edges).observe(row);
+        edges();
+    }
     for (const chip of chips) {
         chip.addEventListener('click', () => {
             const target = overlay.querySelector<HTMLElement>(`#${chip.dataset.chapter}`);
@@ -281,7 +294,9 @@ export const personSourcesMethods = uiModule({
             const nv = storyWithDraft({ partnershipId: u.id });
             const chId = `person-story-ch-${u.id.replace(/[^\w-]/g, '_')}`;
             const year = yearOf(u.startDate);
-            chips.push({ id: chId, label: P.chip(real?.firstName?.trim() || (real ? shownName(real) : '?'), year !== null ? String(year) : '') });
+            // "Jan a Rozálie · 1883": both first names in the nominative; the full names when the first names match.
+            const [chipA, chipB] = coupleChipNames(person, real, shownName);
+            chips.push({ id: chId, label: P.chip(chipA, chipB, year !== null ? String(year) : '') });
             // Approving a couple's draft in the research (spec 027 §5.3): the research finds the family by both partners.
             const coupleApprove = this.coupleStoryApproveUrl(u.id);
             const mono = many ? `<span class="story-ch-mono" aria-hidden="true"><span>${esc(personInitials(person.firstName, person.lastName) || '?')}</span>`
@@ -290,7 +305,7 @@ export const personSourcesMethods = uiModule({
                     <div class="story-ch-head">
                         ${mono}
                         <div class="story-ch-headtext">
-                            ${many ? `<p class="story-ch-kicker">${esc(P.couple(coupleStoryYears(DataManager.getData(), u)))}</p>` : ''}
+                            <p class="story-ch-kicker">${esc(P.couple(coupleStoryYears(DataManager.getData(), u)))}</p>
                             <h3 class="story-reader-title story-reader-couple-title">${esc(label)}${stateTag(st, !!nv)}</h3>
                             ${st.title?.trim() ? `<p class="story-ch-pair">${esc(pair)}</p>` : ''}
                             ${!locked ? `<p class="story-ch-note">${esc(P.editInResearch)}</p>` : ''}

@@ -883,6 +883,11 @@ const FT_KID_MIN = 110;
 const FT_KID_GAP = 8;
 const FT_GROUP_GAP = 20;
 const FT_KIDS_PER_ROW = 5;
+/** A wrapped row of children: ticks from its bus to the cards, the gap from a row's cards to the next row's bus (K2-2b). */
+const FT_TICK = 12;
+const FT_ROW_GAP = 40;
+/** From this many unions the tree is drawn upright on every width (§4.1, round 2): partners to the sides would cross. */
+const FT_UPRIGHT_UNIONS = 3;
 
 function ftPct(x: number): string {
     return `${+(x / FT_W * 100).toFixed(3)}%`;
@@ -1005,7 +1010,7 @@ function familyTreeData(c: Ctx): FtData {
     return { parents, parentsUnion, unions, solo, siblings: fam.siblings, grandchildren: sortByBirth([...grand], tree) };
 }
 
-/** The desktop and tablet tree (§4.1): parents, the person with partners to the sides, children under their union. */
+/** The desktop and tablet tree (§4.1, 0–2 unions): parents, the person with partners to the sides, children under their union. */
 function familyTreeDesktopHtml(c: Ctx, d: FtData): string {
     const lines: string[] = [];
     const labels: string[] = [];
@@ -1049,23 +1054,18 @@ function familyTreeDesktopHtml(c: Ctx, d: FtData): string {
     card(c.person.id, meX, meTop, FT_CARD, 'pp-ft-card--me');
     bottom = meTop + FT_CARD_H;
 
-    // Partners to the sides: the 1st left, the 2nd right, the 3rd and later under the 2nd.
+    // Partners to the sides: the 1st left, the 2nd right (3 unions and more: the upright tree, familyTreeRailHtml).
     const cy = meTop + FT_CARD_H / 2;
     const stems: { kids: PersonId[]; x: number; y: number }[] = [];
-    d.unions.forEach((u, k) => {
-        let px: number; let py: number; let lx: number; let ly: number;
+    d.unions.slice(0, FT_UPRIGHT_UNIONS - 1).forEach((u, k) => {
+        const py = meTop, ly = cy;
+        let px: number; let lx: number;
         if (k === 0) {
-            px = 0; py = meTop; lx = (FT_CARD + meX) / 2; ly = cy;
+            px = 0; lx = (FT_CARD + meX) / 2;
             hLine(FT_CARD, meX, cy);
-        } else if (k === 1) {
-            px = FT_W - FT_CARD; py = meTop; lx = (meX + FT_CARD + FT_W - FT_CARD) / 2; ly = cy;
-            hLine(meX + FT_CARD, FT_W - FT_CARD, cy);
         } else {
-            px = FT_W - FT_CARD; py = meTop + (k - 1) * (FT_CARD_H + 36); ly = py + FT_CARD_H / 2;
-            const elbow = meX + FT_CARD + 25;
-            lx = (elbow + FT_W - FT_CARD) / 2;
-            vLine(elbow, cy, ly);
-            hLine(elbow, FT_W - FT_CARD, ly);
+            px = FT_W - FT_CARD; lx = (meX + FT_CARD + FT_W - FT_CARD) / 2;
+            hLine(meX + FT_CARD, FT_W - FT_CARD, cy);
         }
         card(u.partner, px, py, FT_CARD, 'pp-ft-card--partner');
         bottom = Math.max(bottom, py + FT_CARD_H);
@@ -1088,10 +1088,13 @@ function familyTreeDesktopHtml(c: Ctx, d: FtData): string {
     }
     stems.sort((a, b) => a.x - b.x);
 
-    // Children under their union: one row, groups centred under their stem and pushed inward.
+    // Children under their union: groups centred under their stem and pushed inward; over 5 children wrap
+    // (K2-2b): every row has its own bus over its cards' centres with 12 px ticks, a trunk from the union's
+    // stem runs down to the last row's bus, a shorter last row is centred under the trunk.
     if (stems.length) {
         const busY = bottom + 14;
-        const kidTop = busY + 14;
+        const kidTop = busY + FT_TICK;
+        const pitch = FT_CARD_H + FT_ROW_GAP + FT_TICK;
         const cols = stems.map(s => Math.min(s.kids.length, FT_KIDS_PER_ROW));
         let kw = FT_KID;
         for (;;) {
@@ -1115,45 +1118,58 @@ function familyTreeDesktopHtml(c: Ctx, d: FtData): string {
         }
         stems.forEach((s, i) => {
             const n = cols[i];
-            s.kids.forEach((k, j) => {
-                const x = lefts[i] + (j % n) * (kw + FT_KID_GAP);
-                const y = kidTop + Math.floor(j / n) * (FT_CARD_H + 10);
-                card(k, x, y, kw, 'pp-ft-card--kid');
-                bottom = Math.max(bottom, y + FT_CARD_H);
-            });
-            const first = Math.min(n, s.kids.length);
-            const c0 = lefts[i] + kw / 2;
-            const c1 = lefts[i] + (first - 1) * (kw + FT_KID_GAP) + kw / 2;
-            vLine(s.x, s.y, busY);
-            hLine(Math.min(c0, s.x), Math.max(c1, s.x), busY);
-            for (let j = 0; j < first; j++) vLine(c0 + j * (kw + FT_KID_GAP), busY, kidTop);
+            const rows = Math.ceil(s.kids.length / n);
+            for (let r = 0; r < rows; r++) {
+                const row = s.kids.slice(r * n, r * n + n);
+                const rowW = row.length * kw + (row.length - 1) * FT_KID_GAP;
+                // A full row fills the group; a shorter one is centred under the trunk (kept inside the group).
+                const left = row.length === n ? lefts[i]
+                    : Math.min(Math.max(s.x - rowW / 2, lefts[i]), lefts[i] + widths[i] - rowW);
+                const top = kidTop + r * pitch;
+                const bus = top - FT_TICK;
+                row.forEach((k, j) => {
+                    const x = left + j * (kw + FT_KID_GAP);
+                    card(k, x, top, kw, 'pp-ft-card--kid');
+                    vLine(x + kw / 2, bus, top);
+                });
+                const c0 = left + kw / 2;
+                const c1 = left + rowW - kw / 2;
+                hLine(Math.min(c0, s.x), Math.max(c1, s.x), bus);
+                bottom = Math.max(bottom, top + FT_CARD_H);
+            }
+            vLine(s.x, s.y, kidTop + (rows - 1) * pitch - FT_TICK);
         });
     }
     return `<div class="pp-ft" style="height:${Math.ceil(bottom) + 2}px">${lines.join('')}${labels.join('')}${cards.join('')}</div>`;
 }
 
-/** The phone tree (§4.2), also in a window narrower than 641 px: parents, the person, a block per union. */
-function familyTreeRailHtml(c: Ctx, d: FtData): string {
+/**
+ * The upright tree (§4.2): on a phone and in a window narrower than 641 px;
+ * with 3 unions and more (`wide`) on every width, where a union's block is a
+ * grid (§4.2, round 2): the label and the partner on the left, "Children (n)"
+ * and the children in 3 columns on the right; the parents in a 4-column grid.
+ */
+function familyTreeRailHtml(c: Ctx, d: FtData, wide = false): string {
     const { P } = c;
     let h = '';
     if (d.parents.length) {
         h += `<p class="pp-kicker pp-rail-kicker">${esc(P.parents)}</p>`
-            + `<div class="pp-rail-2">${d.parents.map(p => ftCard(c, p, 'pp-rail-card', '', relLabel(c, p))).join('')}</div>`
+            + `<div class="pp-rail-2 pp-rail-parents">${d.parents.map(p => ftCard(c, p, 'pp-rail-card', '', relLabel(c, p))).join('')}</div>`
             + `<span class="pp-rail-stem" aria-hidden="true"></span>`;
     }
     h += ftCard(c, c.person.id, 'pp-rail-card pp-ft-card--me');
-    const kidsHtml = (kids: PersonId[]) => kids.length
-        ? `<p class="pp-rail-lab">${esc(P.children(kids.length))}</p><div class="pp-rail-2">${kids.map(k => ftCard(c, k, 'pp-rail-card')).join('')}</div>`
-        : `<p class="pp-rail-lab">${esc(P.tree.noKids)}</p>`;
+    const kidsHtml = (kids: PersonId[]) => `<div class="pp-rail-kids">` + (kids.length
+        ? `<p class="pp-rail-lab">${esc(P.children(kids.length))}</p><div class="pp-rail-2 pp-rail-kidgrid">${kids.map(k => ftCard(c, k, 'pp-rail-card')).join('')}</div>`
+        : `<p class="pp-rail-lab">${esc(P.tree.noKids)}</p>`) + `</div>`;
     for (const u of d.unions) {
         const story = u.story;
-        h += `<div class="pp-rail-u"><p class="pp-rail-lab"><span>${esc(u.long)}</span>${story}</p>`
-            + ftCard(c, u.partner, 'pp-rail-card') + kidsHtml(u.kids) + `</div>`;
+        h += `<div class="pp-rail-u"><div class="pp-rail-side"><p class="pp-rail-lab"><span>${esc(u.long)}</span>${story}</p>`
+            + ftCard(c, u.partner, 'pp-rail-card') + `</div>` + kidsHtml(u.kids) + `</div>`;
     }
     if (d.solo.length) {
-        h += `<div class="pp-rail-u"><p class="pp-rail-lab">${esc(P.tree.otherParent)}</p>${kidsHtml(d.solo)}</div>`;
+        h += `<div class="pp-rail-u"><div class="pp-rail-side"><p class="pp-rail-lab">${esc(P.tree.otherParent)}</p></div>${kidsHtml(d.solo)}</div>`;
     }
-    return `<div class="pp-rail">${h}</div>`;
+    return `<div class="pp-rail${wide ? ' pp-rail--wide' : ''}">${h}</div>`;
 }
 
 /** Under the tree: siblings (folded over 3) and grandchildren (folded), as chips. */
@@ -1189,8 +1205,10 @@ function familyTreeHtml(c: Ctx): string {
     const d = familyTreeData(c);
     const any = d.parents.length || d.unions.length || d.solo.length || d.siblings.length || d.grandchildren.length;
     if (!any) return '';
-    const core = d.parents.length || d.unions.length || d.solo.length
-        ? familyTreeDesktopHtml(c, d) + familyTreeRailHtml(c, d) : '';
+    // 0–2 unions: the tree to the sides (the upright one under 641 px); 3 and more: upright on every width.
+    const upright = d.unions.length >= FT_UPRIGHT_UNIONS;
+    const core = !(d.parents.length || d.unions.length || d.solo.length) ? ''
+        : upright ? familyTreeRailHtml(c, d, true) : familyTreeDesktopHtml(c, d) + familyTreeRailHtml(c, d);
     return section('family', c.P.sec.family, `<div class="pp-fam">${core}${familyTreeMoreHtml(c, d)}</div>`);
 }
 
@@ -1287,6 +1305,8 @@ export interface CoupleChapterContext {
     partnerHtml: string;
     /** Under the prose (inside the fold when folded), e.g. the story's basis. */
     basisHtml?: string;
+    /** Two or more chapters on the page (own story + marriages): the tinted surface and the double monogram. */
+    tint: boolean;
 }
 
 /** The chapter's data from a tree: the person and one of the person's couples with a story (null: none). */
@@ -1314,13 +1334,13 @@ export function coupleChapterData(tree: StromData, person: Person, u: Partnershi
     };
 }
 
-/** A couple's chapter: tinted surface, double monogram, kicker with the years, title, prose, "also on …". */
+/** A couple's chapter: kicker with the years (always), title, prose, "also on …"; tinted with a double monogram from two chapters. */
 export function coupleChapterHtml(ch: CoupleChapterData, cx: CoupleChapterContext): string {
     const S = getStringsForLang(cx.lang);
     const P = S.personPage;
     const id = coupleChapterId(ch.unionId);
     const pair = ch.partnerName ? S.story.couple(ch.selfName, ch.partnerName) : ch.selfName;
-    const mono = `<span class="pp-ch-mono" aria-hidden="true"><span>${esc(ch.selfInitials || '?')}</span>`
+    const mono = !cx.tint ? '' : `<span class="pp-ch-mono" aria-hidden="true"><span>${esc(ch.selfInitials || '?')}</span>`
         + (ch.partnerName ? `<span>${esc(ch.partnerInitials || '?')}</span>` : '') + `</span>`;
     const tag = ch.draft ? ` <span class="pp-draft-tag">${esc(S.story.statusDraft)}</span>` : '';
     const head = `<div class="pp-ch-head">${mono}<div class="pp-ch-headtext">`
@@ -1349,7 +1369,7 @@ export function coupleChapterHtml(ch: CoupleChapterData, cx: CoupleChapterContex
     const also = cx.partnerHtml
         ? `<span class="pp-ch-also">${esc(P.story.also('\u0000')).replace('\u0000', cx.partnerHtml)}</span>` : '';
     const foot = toggle || also ? `<p class="pp-ch-foot">${toggle}${also}</p>` : '';
-    return `<div class="pp-couple-story" id="${id}" tabindex="-1">${head}${text}${foot}</div>`;
+    return `<div class="pp-couple-story${cx.tint ? ' pp-couple-story--tint' : ''}" id="${id}" tabindex="-1">${head}${text}${foot}</div>`;
 }
 
 /** A link that unfolds a couple's chapter and scrolls to it (window: a button; file: an anchor). */
@@ -1404,6 +1424,8 @@ function storyHtml(c: Ctx): string {
             lang: c.page.lang, mode: c.opts.mode,
             // After the person's own story a chapter folds to its first paragraph; alone it is whole.
             foldable: !!own, open: isOpen(c, coupleChapterFoldKey(u.id)),
+            // Every chapter on the page counts (round 2): the tone from two.
+            tint: (own ? 1 : 0) + chapters.length >= 2,
             partnerHtml: ch.partnerId ? personLink(c, esc(ch.partnerName), ch.partnerId) : '',
             basisHtml: storyBasisHtml(c, u.story!, `basis-${uid}`, `pp-basis-${uid}`),
         });
@@ -2069,41 +2091,50 @@ function peopleAroundHtml(c: Ctx): string {
     const { P, person, tree, page } = c;
     const rows: { label: string; items: string[] }[] = [];
     let names = 0;
+    // The role stands in the group's heading (round 2); a name carries only its note ("Václav Dvořák, sedlák").
     const item = (p: EventParticipant): string => {
         if (p.personId && shielded(c, p.personId)) return '';
         const linked = p.personId ? tree.persons[p.personId] : undefined;
         const name = linked ? shownNameOrEmpty(linked) : p.name?.trim() ?? '';
         if (!name) return '';
         names++;
-        const role = P.people.role[p.role in P.people.role ? p.role : 'other'][genderKey(linked)];
         const note = p.note?.trim() ? stripResearchIds(p.note).text.trim() : '';
-        return `<li><strong>${personLink(c, esc(name), linked?.id)}</strong>${note ? `, ${esc(note)}` : ''}`
-            + ` <span class="pp-people-role">(${esc(role)})</span></li>`;
+        return `<strong>${personLink(c, esc(name), linked?.id)}</strong>${note ? `, ${esc(note)}` : ''}`;
+    };
+    const group = (label: string, list: readonly EventParticipant[]): void => {
+        const items = list.map(item).filter(Boolean);
+        if (items.length) rows.push({ label, items });
+    };
+    const yearText = (date: string | undefined): string => {
+        const y = yearOf(date);
+        return y !== null ? String(y) : '';
     };
     const bapt = (person.events ?? []).find(e => e.type === 'baptism' && e.participants?.length);
     if (bapt) {
-        const items = bapt.participants!.map(item).filter(Boolean);
-        const y = yearOf(bapt.date);
-        if (items.length) rows.push({ label: P.people.baptism(y !== null ? String(y) : ''), items });
+        const y = yearText(bapt.date);
+        group(P.people.godparents(y), bapt.participants!.filter(p => p.role === 'godparent'));
+        group(P.people.othersBaptism(y), bapt.participants!.filter(p => p.role !== 'godparent'));
     }
     for (const u of familyOf(tree, person).unions) {
-        const items = (u.participants ?? []).map(item).filter(Boolean);
-        const y = yearOf(u.startDate);
-        if (items.length) rows.push({ label: P.people.marriage(y !== null ? String(y) : ''), items });
+        const y = yearText(u.startDate);
+        group(P.people.witnesses(y), (u.participants ?? []).filter(p => p.role === 'witness'));
+        group(P.people.others(y), (u.participants ?? []).filter(p => p.role !== 'witness'));
     }
     const god = page.godchildren.filter(gc => tree.persons[gc.id] && !shielded(c, gc.id));
     if (god.length) {
         const items = god.slice(0, GODCHILDREN_SHOWN).map(gc => {
             names++;
-            return `<li><strong>${personLink(c, esc(nameOf(c, gc.id) || '?'), gc.id)}</strong>`
-                + ` <span class="pp-people-role">(${esc(P.people.baptismOf(gc.year !== null ? String(gc.year) : ''))})</span></li>`;
+            return `<strong>${personLink(c, esc(nameOf(c, gc.id) || '?'), gc.id)}</strong>`
+                + ` <span class="pp-people-note">(${esc(P.people.baptismOf(gc.year !== null ? String(gc.year) : ''))})</span>`;
         });
-        if (god.length > GODCHILDREN_SHOWN) items.push(`<li class="pp-people-more">${esc(P.people.more(god.length - GODCHILDREN_SHOWN))}</li>`);
+        if (god.length > GODCHILDREN_SHOWN) items.push(`<span class="pp-people-more">${esc(P.people.more(god.length - GODCHILDREN_SHOWN))}</span>`);
         rows.push({ label: P.people.godparentOf[genderKey(person)], items });
     }
     if (names < 2) return '';
+    // Names in a row separated by " · " (the separator is text, so a copied or read line keeps it).
+    const sep = '<span class="pp-people-sep" aria-hidden="true"> · </span>';
     return section('people', P.people.title, `<dl class="pp-people">${rows.map(r =>
-        `<div class="pp-people-row"><dt>${esc(r.label)}</dt><dd><ul>${r.items.join('')}</ul></dd></div>`).join('')}</dl>`);
+        `<div class="pp-people-row"><dt>${esc(r.label)}</dt><dd><ul>${r.items.map((it, i) => `<li>${i ? sep : ''}${it}</li>`).join('')}</ul></dd></div>`).join('')}</dl>`);
 }
 
 // ── Sources ──
@@ -2332,9 +2363,8 @@ export function personPageTocCurrent(
 function documentTitle(page: PersonPageData): string {
     const p = page.tree.persons[page.personId];
     if (!p) return getStringsForLang(page.lang).personPage.title;
-    const b = yearOf(p.birthDate);
-    const d = yearOf(p.deathDate);
-    const years = b !== null || d !== null ? `${b ?? ''}–${d ?? ''}` : '';
+    // "1798–1850", "* 1798" or "† 1850" (never an open "1798–").
+    const years = yearsOf(p);
     const name = shownNameOrEmpty(p) || getStringsForLang(page.lang).personPage.title;
     return years ? `${name} (${years})` : name;
 }
@@ -2377,12 +2407,22 @@ export function personPageFileName(page: PersonPageData): string {
     return `${safeFileName(stem, prefix)}.html`;
 }
 
-/** The saved file's size in bytes (UTF-8) and the images it embeds. */
+/**
+ * The saved file's size in bytes (UTF-8) and the images "Attach images"
+ * adds: the excerpts and image attachments, each once (the portrait in the
+ * header is not one of them), so the dialog's two numbers agree.
+ */
 export function estimatePersonPageSize(page: PersonPageData, opts: PersonPageOptions): { bytes: number; images: number } {
     const html = buildPersonPageDocument(page, opts);
-    // The window's <img> or the file's one rule per image.
-    const images = (html.match(/<img\s/g) ?? []).length + (html.match(/background-image:url\(/g) ?? []).length;
-    return { bytes: utf8Length(html), images };
+    return { bytes: utf8Length(html), images: attachedImageCount(html) };
+}
+
+/** Distinct excerpt and attachment images of a page's HTML (file: one class per image; window: the src). */
+function attachedImageCount(html: string): number {
+    const seen = new Set<string>();
+    for (const m of html.matchAll(/class="pp-img pp-(?:fig|gal)-img img-(\d+)"/g)) seen.add(`n${m[1]}`);
+    for (const m of html.matchAll(/<img class="pp-(?:fig|gal)-img" src="([^"]*)"/g)) seen.add(`s${m[1]}`);
+    return seen.size;
 }
 
 /** "2,4" (cs, de) / "2.4" (en): the saved file's size in MB, one decimal, 0.1 at least (§5.1). */

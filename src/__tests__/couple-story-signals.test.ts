@@ -5,6 +5,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { personStoryState, stateStripesHtml, storySignalText } from '../card-signals.js';
 import { strings } from '../strings.js';
 import { coupleStories } from '../story-text.js';
@@ -63,6 +65,39 @@ describe('the corner and its words (spec 027 §5.6)', () => {
         expect(stateStripesHtml(null, { kind: 'own', final: true })).toBe('<span class="card-story" aria-hidden="true"></span>');
         expect(stateStripesHtml(null, { kind: 'couple', final: true })).toBe('<span class="card-story couple" aria-hidden="true"></span>');
         expect(stateStripesHtml(null, { kind: 'couple', final: false })).toBe('<span class="card-story draft couple" aria-hidden="true"></span>');
+    });
+
+    it('the hollow corner keeps the own story\'s corner colour, never --accent (round 2, point 11)', () => {
+        const css = readFileSync(join(__dirname, '../../index.html'), 'utf8');
+        // Every rule that sets the corner colour: none may take --accent.
+        const sets = css.split('\n').filter(line => /--fold\s*:/.test(line));
+        expect(sets.length).toBeGreaterThan(0);
+        for (const line of sets) expect(line).not.toMatch(/--fold\s*:\s*var\(--accent/);
+        expect(css).toMatch(/\.card-story \{\s*--fold: var\(--story-fold\)/);
+    });
+
+    it('a tinted chapter sits on the --card-bg-2 surface: light, dark, print, and the saved file\'s tokens (round 2, point 10)', async () => {
+        const css = readFileSync(join(__dirname, '../../index.html'), 'utf8');
+        expect(css).toMatch(/--card-bg-2:\s*#f6f1e6/);
+        expect(css).toMatch(/--card-bg-2:\s*#26241f/);
+        const tint = css.split('\n').findIndex(l => l.includes('.story-reader-ch--tint {'));
+        expect(css.split('\n').slice(tint, tint + 4).join('\n')).toContain('background: var(--card-bg-2)');
+        const { PERSON_PAGE_LIGHT_TOKENS, PERSON_PAGE_CSS } = await import('../person-page-css.js');
+        expect(PERSON_PAGE_LIGHT_TOKENS).toContain('--card-bg-2: #f6f1e6');
+        expect(PERSON_PAGE_CSS).toMatch(/\.pp-couple-story--tint \{[^}]*background: var\(--card-bg-2\)/);
+        expect(PERSON_PAGE_CSS).toMatch(/\.pp-couple-story--tint \{[^}]*background: transparent[^}]*border: 1px solid var\(--border\)/);
+    });
+
+    it('the chapter chips fade at the edge where they are cut off on a phone (round 2, c)', () => {
+        const css = readFileSync(join(__dirname, '../../index.html'), 'utf8');
+        for (const cls of ['.story-chips--more-end {', '.story-chips--more-start {', '.story-chips--more-start.story-chips--more-end {']) {
+            const at = css.indexOf(cls);
+            expect(at).toBeGreaterThan(0);
+            expect(css.slice(at, at + 300)).toContain('mask-image: linear-gradient(90deg');
+        }
+        const ui = readFileSync(join(__dirname, '../ui/person-sources-ui.ts'), 'utf8');
+        expect(ui).toContain("classList.toggle('story-chips--more-end'");
+        expect(ui).toContain("classList.toggle('story-chips--more-start'");
     });
 
     it('says whose story it is, its title, a draft and a new version', () => {

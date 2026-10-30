@@ -162,7 +162,7 @@ test.describe('a story\'s new version', () => {
         await page.evaluate((id) => window.Strom.UI.runPersonMenuAction(id, 'story'), jan);
         const reader = page.locator('#person-story-modal');
         const chips = reader.locator('.story-chips .story-chip');
-        await expect(chips).toHaveText(['Jan Vlk', 'With Marie']);
+        await expect(chips).toHaveText(['Jan Vlk', 'Jan and Marie']);
         await expect(chips.first()).toHaveAttribute('aria-current', 'true');
         const couple = reader.locator('.story-reader-couple');
         await expect(couple).toHaveClass(/story-reader-ch--tint/);
@@ -244,7 +244,9 @@ test.describe('a story\'s new version', () => {
         const reader = page.locator('#person-story-modal');
         // The window is titled after it: no chips, no tinted surface, nothing to edit here.
         await expect(reader.locator('#person-story-heading')).toHaveText('Story of the marriage');
-        await expect(reader.locator('.story-chips, .story-reader-ch--tint')).toHaveCount(0);
+        await expect(reader.locator('.story-chips, .story-reader-ch--tint, .story-ch-mono')).toHaveCount(0);
+        // The kicker stays on a chapter alone.
+        await expect(reader.locator('.story-ch-kicker')).toHaveText('Story of the marriage · –1874');
         await expect(reader.locator('.story-ch-note')).toHaveText('Edited in research.');
         await expect(reader.locator('.story-reader-couple-title')).toHaveText('Marie Vlková and Jan Vlk New version waiting');
         await expect(reader.locator('.story-reader-text')).toHaveText('Svatba byla v únoru.');

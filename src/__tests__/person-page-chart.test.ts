@@ -70,8 +70,50 @@ describe('lifeChartInput', () => {
         const t = tree();
         t.persons[JAN].partnerships = [];
         const input = lifeChartInput(t, JAN, { now: NOW })!;
-        expect(input.periods.map(x => x.kind)).toEqual(['youth']);
+        expect(input.periods.map(x => x.kind)).toEqual(['life']);
         expect(lifeChartHtml(input, { lang: 'cs', mode: 'file' })).toContain('pp-ch-p--life');
+    });
+
+    it('a marriage without a date: a neutral life bar, no marriage period, a line from the first common child (round 2, point 4)', () => {
+        const t = tree();
+        delete t.partnerships['u1' as PartnershipId].startDate;
+        delete t.partnerships['u2' as PartnershipId].startDate;
+        const input = lifeChartInput(t, JAN, { now: NOW })!;
+        expect(input.periods.map(x => x.kind)).toEqual(['life']);
+        expect(input.periodsUnknown).toBe(true);
+        expect(input.marks.some(m => m.kind === 'marriage')).toBe(false);
+        // Partner lines start at the first common child's point and fade in there.
+        const roza = input.lines.find(l => l.kind === 'partner' && l.name === 'Rozálie')!;
+        expect(Math.floor(roza.from)).toBe(1885);
+        expect(roza.fadeStart).toBe(true);
+        const html = lifeChartHtml(input, { lang: 'cs', mode: 'file' });
+        expect(html).toContain('pp-ch-p--life');
+        expect(html).not.toContain('pp-ch-p--youth');
+        expect(html).toContain('pp-ch-ln--fs');
+        // The legend names the neutral bar as a life whose periods are unknown.
+        expect(html.slice(html.indexOf('pp-chart-legend'))).toContain('život (období neznámá)');
+        expect(lifeChartHtml(input, { lang: 'en', mode: 'file' })).toContain('life (periods unknown)');
+    });
+
+    it('one marriage dated, an earlier one not: life before, then the dated marriage (round 2, point 4)', () => {
+        const t = tree();
+        delete t.partnerships['u1' as PartnershipId].startDate;
+        const input = lifeChartInput(t, JAN, { now: NOW })!;
+        // The undated union's first child (1885) precedes the dated marriage (1905): the start is "life", not "youth".
+        expect(input.periods[0].kind).toBe('life');
+        expect(input.periods.some(x => x.kind === 'marriage' && x.name === 'Marie')).toBe(true);
+        expect(input.periods.some(x => x.name === 'Rozálie')).toBe(false);
+    });
+
+    it('a marriage without a date and without children: no partner line at all', () => {
+        const t = tree();
+        delete t.partnerships['u1' as PartnershipId].startDate;
+        t.partnerships['u1' as PartnershipId].childIds = [];
+        t.persons['anezka' as PersonId].parentIds = ['jan'] as PersonId[];
+        t.persons['vaclav' as PersonId].parentIds = ['jan'] as PersonId[];
+        const input = lifeChartInput(t, JAN, { now: NOW })!;
+        expect(input.lines.some(l => l.kind === 'partner' && l.name === 'Rozálie')).toBe(false);
+        expect(input.lines.some(l => l.kind === 'partner' && l.name === 'Marie')).toBe(true);
     });
 
     it('places lived: runs of one place up to the next place', () => {
@@ -112,18 +154,26 @@ describe('lifeChartInput', () => {
         expect(withSet.marks.filter(m => m.kind === 'marriage').length).toBe(1);
     });
 
-    it('uncertain dates: ~year, only a year, a range', () => {
+    it('uncertain dates: ~year and a range fade, a year alone does not (round 2, point 6)', () => {
         const t = tree();
         t.persons[JAN].birthDate = '~1860';
         t.persons[JAN].deathDate = '1920';
         const input = lifeChartInput(t, JAN, { now: NOW })!;
         expect(input.birth!.uncertain).toBe(true);
         expect(input.birth!.label).toBe('~1860');
-        expect(input.death!.uncertain).toBe(true);
+        // A year alone is an exact year, not an uncertain one.
+        expect(input.death!.uncertain).toBe(false);
         const html = lifeChartHtml(input, { lang: 'cs', mode: 'file' });
         expect(html).toContain('pp-ch-fade-s');
-        expect(html).toContain('pp-ch-fade-e');
+        expect(html).not.toContain('pp-ch-fade-e');
         expect(html).toContain('~1860');
+        const yearOnly = tree();
+        yearOnly.persons[JAN].birthDate = '1860';
+        expect(lifeChartInput(yearOnly, JAN, { now: NOW })!.birth!.uncertain).toBe(false);
+        expect(lifeChartHtml(lifeChartInput(yearOnly, JAN, { now: NOW }), { lang: 'cs', mode: 'file' })).not.toContain('pp-ch-fade');
+        const range = tree();
+        range.persons[JAN].birthDate = '1858..1860';
+        expect(lifeChartInput(range, JAN, { now: NOW })!.birth!.uncertain).toBe(true);
         // An exact date does not fade.
         const exact = lifeChartHtml(lifeChartInput(tree(), JAN, { now: NOW }), { lang: 'cs', mode: 'file' });
         expect(exact).not.toContain('pp-ch-fade');
@@ -219,7 +269,9 @@ describe('lifeChartHtml', () => {
         expect(wide).toContain('>bydliště<');
         expect(narrow).not.toContain('>bydliště<');
         // Period label with its length only on a desktop.
-        expect(wide).toMatch(/Manželství – Rozálie · 17 let/);
+        expect(wide).toMatch(/Manželství · Rozálie · 17 let/);
+        // The partner's name stands alone, never declined (round 2, point 8).
+        expect(wide).not.toContain('Manželství s');
     });
 
     it('marks: * † ⚭ with anchors to the text timeline rows', () => {

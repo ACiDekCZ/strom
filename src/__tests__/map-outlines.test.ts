@@ -28,6 +28,14 @@ function pathPoints(d: string): [number, number][] {
 }
 
 describe('map outlines', () => {
+    it('a frame across the 180th meridian draws the land on both sides of it (round 2, point 7)', () => {
+        // Bering Strait, centred on lon 180 (x = WORLD): Chukotka left of the middle, Alaska right of it.
+        const v = viewAround(64, 180, 40);
+        const pts = pathPoints(outlinePaths(v, '110m').coast);
+        expect(pts.some(([x]) => x > 20 && x < 300)).toBe(true);
+        expect(pts.some(([x]) => x > 340 && x < 620)).toBe(true);
+    });
+
     it('projects like the application map (zoom 0)', () => {
         for (const g of [{ lat: 50.08, lon: 14.43 }, { lat: -33.9, lon: 151.2 }, { lat: 89, lon: -170 }]) {
             const a = mercator(g.lon, g.lat), b = project(g, 0);

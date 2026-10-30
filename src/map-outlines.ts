@@ -246,8 +246,28 @@ export interface OutlinePaths {
     land: string;
 }
 
-/** The outlines of a view at the given resolution, as SVG path data. */
+/**
+ * The outlines of a view at the given resolution, as SVG path data. A view
+ * across the 180th meridian (its longitudes past ±180, as the person page's
+ * map frames places on both sides of it) also gets the world's copy there.
+ */
 export function outlinePaths(v: OutlineView, res: OutlineResolution, want: { land?: boolean } = {}): OutlinePaths {
+    const out: OutlinePaths = { borders: '', coast: '', land: '' };
+    for (const shift of [0, WORLD, -WORLD]) {
+        const sv = shift ? { ...v, x0: v.x0 - shift } : v;
+        if (shift) {
+            const b = viewBounds(sv);
+            if (b.east < -180 || b.west > 180) continue;
+        }
+        const one = outlinePathsOnce(sv, res, want);
+        out.borders += one.borders;
+        out.coast += one.coast;
+        out.land += one.land;
+    }
+    return out;
+}
+
+function outlinePathsOnce(v: OutlineView, res: OutlineResolution, want: { land?: boolean }): OutlinePaths {
     if (res === '50m') {
         return { borders: polylinePath(lines('borders50'), v), coast: polylinePath(lines('coast50'), v), land: '' };
     }

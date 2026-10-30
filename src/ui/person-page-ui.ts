@@ -811,7 +811,9 @@ export const personPageMethods = uiModule({
         let fullProt = protectPersonPageTree(data, 'full', now);
         const full = preparePersonPageData(data, fileOpts({ ...PERSON_PAGE_ALL_GROUPS }, 'full'), { ...ctx, protected: fullProt });
         const shown = GROUP_ORDER.filter(g => full.counts[g] > 0);
-        const imageCount = full.counts.excerpts + full.counts.materials;
+        // The images "Attach images" adds, counted as the size line counts them (the portrait aside).
+        const imageCount = full.counts.excerpts + full.counts.materials
+            ? estimatePersonPageSize(full, fileOpts({ ...PERSON_PAGE_ALL_GROUPS }, 'full')).images : 0;
         const living = full.living.size > 0;
         const treeId = DataManager.getCurrentTreeId();
         const saved = treeId ? TreeManager.getPersonPageExport(treeId) : undefined;

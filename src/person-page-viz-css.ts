@@ -12,13 +12,13 @@
 export const PERSON_PAGE_VIZ_LIGHT_TOKENS = [
     '--accent: #b0703c',
     '--map-land: #f4efe4', '--map-land2: #e9e1d0', '--map-geo: #b9ab8e', '--map-label-bg: rgba(255, 253, 248, .82)',
-    '--chart-young: #e2d6bd', '--chart-married: #a8c0ad', '--chart-band1: #efe8da', '--chart-band2: #ddd2bc',
+    '--chart-young: #e2d6bd', '--chart-life: #d6cebe', '--chart-married: #a8c0ad', '--chart-band1: #efe8da', '--chart-band2: #ddd2bc',
 ].join('; ') + ';';
 
 /** Print values (greys) of the map and chart tokens. */
 export const PERSON_PAGE_VIZ_PRINT_TOKENS = [
     '--map-land: #ffffff', '--map-land2: #eeeeee', '--map-geo: #9a9a9a', '--map-label-bg: rgba(255, 255, 255, .9)',
-    '--chart-young: #e0e0e0', '--chart-married: #b8b8b8', '--chart-band1: #f0f0f0', '--chart-band2: #d9d9d9',
+    '--chart-young: #e0e0e0', '--chart-life: #d0d0d0', '--chart-married: #b8b8b8', '--chart-band1: #f0f0f0', '--chart-band2: #d9d9d9',
     '--primary: #444444', '--accent: #111111', '--hist-mark: #555555', '--hist-place: #333333', '--hist-local: #777777',
 ].join('; ') + ';';
 
@@ -142,7 +142,8 @@ export const PERSON_PAGE_CHART_CSS = `
 .pp-ch-barin { position: absolute; top: 0; height: 16px; border-radius: 4px; overflow: hidden; }
 .pp-ch-bari { position: absolute; top: 0; height: 100%; }
 .pp-ch-p { position: absolute; top: 0; height: 100%; display: block; }
-.pp-ch-p--youth, .pp-ch-p--life { background: var(--chart-young); }
+.pp-ch-p--youth { background: var(--chart-young); }
+.pp-ch-p--life { background: var(--chart-life); }
 .pp-ch-p--marriage { background: var(--chart-married); }
 .pp-ch-p--widowed, .pp-ch-p--divorced { background: repeating-linear-gradient(135deg, var(--text-faint) 0 1.5px, transparent 1.5px 4px); }
 .pp-ch-fade-s { -webkit-mask-image: linear-gradient(90deg, rgba(0,0,0,.12), #000 18%); mask-image: linear-gradient(90deg, rgba(0,0,0,.12), #000 18%); }
@@ -174,6 +175,9 @@ export const PERSON_PAGE_CHART_CSS = `
 .pp-ch-ln--on.pp-ch-ln--partner { background: linear-gradient(90deg, var(--accent) 80%, transparent); }
 .pp-ch-ln--on.pp-ch-ln--child { background: linear-gradient(90deg, var(--primary) 80%, transparent); }
 .pp-ch-ln--short { min-width: 6px; border-radius: 3px; }
+/* An undated union: the partner's line starts at the first known point (the first common child), faded in. */
+.pp-ch-ln--fs.pp-ch-ln--partner { background: linear-gradient(90deg, transparent, var(--accent) 30%); }
+.pp-ch-ln--fs.pp-ch-ln--on.pp-ch-ln--partner { background: linear-gradient(90deg, transparent, var(--accent) 30%, var(--accent) 80%, transparent); }
 .pp-ch-lb { position: absolute; left: 0; bottom: 5px; color: var(--text-light); font-size: 10.5px; line-height: 12px; white-space: nowrap; }
 .pp-ch-lb--end { left: auto; right: 0; }
 .pp-ch-axis { height: 18px; border-top: 1px solid var(--divider); }

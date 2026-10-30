@@ -10,7 +10,7 @@ import { PERSON_PAGE_VIZ_CSS, PERSON_PAGE_VIZ_LIGHT_TOKENS } from './person-page
 
 /** The light ("paper") values of the app tokens the page uses — the file's :root and print. */
 export const PERSON_PAGE_LIGHT_TOKENS = [
-    '--surface: #fffdf8', '--surface-2: #f6f2ea', '--surface-modal: #fbf8f1',
+    '--surface: #fffdf8', '--surface-2: #f6f2ea', '--surface-modal: #fbf8f1', '--card-bg-2: #f6f1e6',
     '--text: #2b2822', '--text-light: #5c5546', '--text-faint: #746c5c',
     '--border: #ddd4c2', '--divider: #ece5d6',
     '--primary: #3f6b4f', '--primary-soft: #e6efe8', '--on-primary: #ffffff',
@@ -74,8 +74,10 @@ span.pp-pdf-name { color: var(--text); }
 .pp-people-row { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 2px 16px; }
 .pp-people dt { padding-top: 2px; font-size: 13.5px; color: var(--text-light); }
 .pp-people dd { margin: 0; min-width: 0; }
-.pp-people ul { display: flex; flex-direction: column; gap: 3px; margin: 0; padding: 0; list-style: none; font-size: 15px; overflow-wrap: anywhere; }
-.pp-people-role, .pp-people-more { font-size: 13.5px; color: var(--text-light); }
+.pp-people ul { display: block; margin: 0; padding: 0; list-style: none; font-size: 15px; line-height: 1.55; overflow-wrap: anywhere; }
+.pp-people li { display: inline; }
+.pp-people-sep { color: var(--text-faint); }
+.pp-people-note, .pp-people-more { font-size: 13.5px; color: var(--text-light); }
 /* The family tree (§4): absolute cards and 1 px lines on a 680 px column (in %), the rail when narrow. */
 .pp-fam { display: flex; flex-direction: column; gap: 0; margin-top: 12px; }
 .pp-ft { position: relative; width: 100%; }
@@ -102,7 +104,16 @@ button.pp-ft-card, a.pp-ft-card { cursor: pointer; }
 .pp-rail-card { min-height: 50px; }
 .pp-rail-stem { display: block; width: 0; height: 12px; margin: -4px 0 -4px 50%; border-left: 1px solid var(--border); }
 .pp-rail-u { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 0 24px; padding-left: 14px; border-left: 1px solid var(--border); }
+.pp-rail-side, .pp-rail-kids { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .pp-rail-lab { display: flex; flex-wrap: wrap; gap: 2px 10px; font-size: 13px; color: var(--text-light); overflow-wrap: anywhere; }
+/* 3 unions and more, wider than 640 px (§4.2, round 2): the upright tree with each union's block as a grid,
+   the label and partner on the left, the children in 3 columns on the right; the parents in a 4-column grid
+   (the narrow rules below put it back into one column). */
+.pp-rail--wide { display: flex; }
+.pp-rail--wide .pp-rail-parents { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.pp-rail--wide .pp-rail-stem { margin-left: 24px; }
+.pp-rail--wide .pp-rail-u { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 8px 14px; align-items: start; padding-left: 16px; }
+.pp-rail--wide .pp-rail-kidgrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .pp-ft-more { display: flex; flex-direction: column; margin-top: 14px; }
 .pp-ft-row--open { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-height: 48px; }
 .pp-ft-row-h { font-size: 13.5px; font-weight: 600; color: var(--text-light); }
@@ -249,6 +260,9 @@ span.pp-gal-thumb { cursor: default; }
   .pp-gal { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pp-ft { display: none; }
   .pp-rail { display: flex; }
+  .pp-rail--wide .pp-rail-parents, .pp-rail--wide .pp-rail-kidgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pp-rail--wide .pp-rail-stem { margin-left: 50%; }
+  .pp-rail--wide .pp-rail-u { display: flex; padding-left: 14px; }
 }
 @media (hover: hover) {
   .pp-portrait-zoom { opacity: 0; transition: opacity 0.15s; }
@@ -277,6 +291,9 @@ span.pp-gal-thumb { cursor: default; }
   .pp-gal { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pp-ft { display: none; }
   .pp-rail { display: flex; }
+  .pp-rail--wide .pp-rail-parents, .pp-rail--wide .pp-rail-kidgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pp-rail--wide .pp-rail-stem { margin-left: 50%; }
+  .pp-rail--wide .pp-rail-u { display: flex; padding-left: 14px; }
   .pp { gap: 26px; }
   .pp-hero { gap: 14px; }
   .pp-fig { max-width: 100%; }
@@ -295,7 +312,9 @@ span.pp-gal-thumb { cursor: default; }
   .pp-head, .pp-toc, .pp-toggles, .pp-zoom, .pp-fold-state, .pp-differs, .pp-act, .pp-more, .pp-lb, .pp-portrait-zoom, .js-only { display: none !important; }
   /* Print: the desktop tree, every image and relative (the folds open). */
   .pp-ft { display: block !important; }
-  .pp-rail { display: none !important; }
+  .pp-rail:not(.pp-rail--wide) { display: none !important; }
+  .pp-rail--wide { display: flex !important; }
+  .pp-rail-u { break-inside: avoid; }
   .pp-gal-more .pp-fold-body, #pp-sibs .pp-fold-body, #pp-grand .pp-fold-body { display: block !important; }
   .pp-gal-more > .pp-disc { display: none !important; }
   .pp-gal { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -316,17 +335,19 @@ span.pp-gal-thumb { cursor: default; }
   a[href^="http"]::after { content: " (" attr(href) ")"; font-size: 8pt; }
 }
 /* ── A couple's story as a chapter (spec 027 §5.2, §6.1) ──
-   A tinted surface one step from the page (lighter in dark mode), a double
-   monogram, the kicker with the years, the title; after the person's own
-   story it folds to its first paragraph ("Read all ▾"). Print: everything
-   unfolded, the surface a thin frame. */
-.pp .pp-couple-story { margin-top: 20px; padding: 20px 22px; border-radius: 14px; background: var(--surface-2); background: color-mix(in srgb, var(--surface) 95%, var(--text)); scroll-margin-top: 16px; outline: none; }
+   The kicker with the years, the title; after the person's own story it
+   folds to its first paragraph ("Read all ▾"). From two chapters on the page
+   (own + marriages) a tinted surface (--card-bg-2) and a double monogram;
+   a single chapter has neither. Print: everything unfolded, the tinted
+   surface a thin frame. */
+.pp .pp-couple-story { margin-top: 20px; scroll-margin-top: 16px; outline: none; }
+.pp .pp-couple-story--tint { padding: 20px 22px; border-radius: 14px; background: var(--card-bg-2); }
 .pp .pp-story-kicker + .pp-couple-story, .pp .pp-story-title + .pp-couple-story { margin-top: 8px; }
 .pp .pp-couple-story:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .pp-ch-head { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
 .pp-ch-headtext { min-width: 0; }
 .pp-ch-mono { display: inline-flex; flex-shrink: 0; }
-.pp-ch-mono > span { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; box-sizing: border-box; border-radius: 50%; border: 2px solid var(--surface-2); background: var(--surface); color: var(--accent-text); font-family: var(--font-sans); font-size: 12px; font-weight: 600; line-height: 1; }
+.pp-ch-mono > span { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; box-sizing: border-box; border-radius: 50%; border: 2px solid var(--card-bg-2); background: var(--surface); color: var(--accent-text); font-family: var(--font-sans); font-size: 12px; font-weight: 600; line-height: 1; }
 .pp-ch-mono > span + span { margin-left: -9px; }
 .pp .pp-ch-kicker { margin: 0; }
 .pp-ch-pair { margin: 1px 0 0; font-family: var(--font-sans); font-size: 13px; color: var(--text-light); overflow-wrap: anywhere; }
@@ -350,11 +371,12 @@ a.pp-story-jump { text-decoration: underline; text-underline-offset: 3px; }
   .pp .pp-ch-more, .pp-story-jump { display: inline-flex; align-items: center; min-height: 44px; }
 }
 @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
-  .pp .pp-couple-story { padding: 16px; }
+  .pp .pp-couple-story--tint { padding: 16px; }
   .pp .pp-ch-title { font-size: 20px; }
 }
 @media print {
-  .pp .pp-couple-story { background: none; border: 1px solid var(--border); break-inside: auto; }
+  .pp .pp-couple-story { break-inside: auto; }
+  .pp .pp-couple-story--tint { background: transparent; border: 1px solid var(--border); }
   .pp-ch-rest[hidden] { display: block !important; }
   .pp-ch-more, .pp-story-cont { display: none !important; }
   details.pp-ch-fold { display: block; }

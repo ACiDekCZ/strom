@@ -270,10 +270,12 @@ describe('a childless couple’s story in the book (spec 027 §5.7)', () => {
         const html = buildFamilyBook(tree(), { lang: 'cs', privacyMode: 'full' });
         const ch = chapters(html);
         expect(ch).toHaveLength(1);
-        expect(ch[0]).toContain('<div class="book-story book-story-couple book-story-sub"><h4 class="book-story-head">Manželství – Marie Dvořáková · 1901–1920 <span class="book-story-title">Druhá svatba</span></h4><p>Vzali se ve mlýně.</p></div>');
+        expect(ch[0]).toContain('<div class="book-story book-story-couple book-story-sub"><h4 class="book-story-head">Manželství: Jan Novák a Marie Dvořáková · 1901–1920 <span class="book-story-title">Druhá svatba</span></h4><p>Vzali se ve mlýně.</p></div>');
         expect(ch[0].indexOf('Jan byl mlynář.')).toBeLessThan(ch[0].indexOf('Vzali se ve mlýně.'));
-        expect(buildFamilyBook(tree(), { lang: 'en', privacyMode: 'full' })).toContain('Marriage to Marie Dvořáková · 1901–1920');
-        expect(buildFamilyBook(tree(), { lang: 'de', privacyMode: 'full' })).toContain('Ehe mit Marie Dvořáková · 1901–1920');
+        expect(buildFamilyBook(tree(), { lang: 'en', privacyMode: 'full' })).toContain('Marriage: Jan Novák and Marie Dvořáková · 1901–1920');
+        expect(buildFamilyBook(tree(), { lang: 'de', privacyMode: 'full' })).toContain('Ehe: Jan Novák und Marie Dvořáková · 1901–1920');
+        // Both names stand alone in the nominative (round 2, point 8).
+        expect(html).not.toContain('Manželství s');
     });
 
     it('without the partner’s own story it follows the couple; a living partner leaves it out under privacy', () => {
