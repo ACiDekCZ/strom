@@ -150,6 +150,11 @@ embedded in the app's HTML (a comment in `<head>`):
   (https://www.naturalearthdata.com, public domain), as packaged in
   **world-atlas** 2.0.2 (ISC License, Copyright 2013-2019 Michael Bostock);
   an extract is bundled in `src/map-outlines-data.ts`.
+- For a small neighbourhood the map adds towns, rivers and first-level
+  regions from **Natural Earth** (populated places, rivers and lake
+  centrelines, admin-1 states and provinces; public domain), with country
+  polygons from **world-atlas** as above; an extract is bundled in
+  `src/map-context-data.ts`.
 - Map tiles are loaded at run time from OpenStreetMap (© OpenStreetMap
   contributors, https://www.openstreetmap.org/copyright); the map shows this
   attribution.

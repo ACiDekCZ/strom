@@ -27,8 +27,20 @@ export function mercator(lon: number, lat: number): XY {
     return { x: ((lon + 180) / 360) * WORLD, y: (0.5 - Math.log((1 + sin) / (1 - sin)) / (4 * Math.PI)) * WORLD };
 }
 
+/** World pixel at zoom 0 → lon/lat (the inverse of `mercator`). */
+export function unmercator(x: number, y: number): { lon: number; lat: number } {
+    const n = Math.PI - 2 * Math.PI * (y / WORLD);
+    return { lon: (x / WORLD) * 360 - 180, lat: (180 / Math.PI) * Math.atan(Math.sinh(n)) };
+}
+
 /** A decoded line: flat [lon, lat, lon, lat, …] with its bounding box. */
-interface Line { c: Float64Array; w: number; s: number; e: number; n: number }
+export interface GeoLine { c: Float64Array; w: number; s: number; e: number; n: number }
+type Line = GeoLine;
+
+/** Decode a space-separated set of delta-coded lines (the data modules' format). */
+export function decodeLines(text: string, scale: number): GeoLine[] {
+    return decodeSet(text, scale);
+}
 
 function decodeSet(text: string, scale: number): Line[] {
     const out: Line[] = [];
@@ -235,6 +247,54 @@ function polygonPath(set: Line[], v: OutlineView): string {
         d += pathOf(arr, Array.from({ length: arr.length / 2 }, (_, i) => i), step, true);
     }
     return d;
+}
+
+/** Polylines (rivers) of a view as SVG path data: clipped to the view + margin, thinned. */
+export function linesPath(set: readonly GeoLine[], v: OutlineView): string {
+    return polylinePath(set as GeoLine[], v);
+}
+
+/** Closed rings (a country) of a view as one even-odd SVG path. */
+export function ringsPath(set: readonly GeoLine[], v: OutlineView): string {
+    return polygonPath(set as GeoLine[], v);
+}
+
+/** Length (view units) of the lines inside the view rectangle itself (no margin). */
+export function lengthInView(set: readonly GeoLine[], v: OutlineView): number {
+    const b = viewBounds({ ...v, margin: 0 });
+    let len = 0;
+    for (const l of set) {
+        if (!intersects(l, b)) continue;
+        const p = projectLine(l, v);
+        for (let i = 0; i + 3 < p.length; i += 2) len += clippedLength(p[i], p[i + 1], p[i + 2], p[i + 3], v.width, v.height);
+    }
+    return len;
+}
+
+/** Length of segment a→b inside [0, w] × [0, h] (Liang–Barsky). */
+function clippedLength(ax: number, ay: number, bx: number, by: number, w: number, h: number): number {
+    let t0 = 0, t1 = 1;
+    const dx = bx - ax, dy = by - ay;
+    const p = [-dx, dx, -dy, dy];
+    const q = [ax, w - ax, ay, h - ay];
+    for (let i = 0; i < 4; i++) {
+        if (p[i] === 0) { if (q[i] < 0) return 0; continue; }
+        const t = q[i] / p[i];
+        if (p[i] < 0) { if (t > t1) return 0; if (t > t0) t0 = t; }
+        else { if (t < t0) return 0; if (t < t1) t1 = t; }
+    }
+    return t1 > t0 ? (t1 - t0) * Math.hypot(dx, dy) : 0;
+}
+
+/**
+ * Length (view units) of the country borders and coastlines inside a view at
+ * a resolution — the measure of "nothing to show" (§1.3a: under 15 % of the
+ * width is a small neighbourhood).
+ */
+export function outlineLengthInView(v: OutlineView, res: OutlineResolution): number {
+    return res === '50m'
+        ? lengthInView(lines('borders50'), v) + lengthInView(lines('coast50'), v)
+        : lengthInView(lines('borders110'), v) + lengthInView(lines('land110'), v);
 }
 
 export interface OutlinePaths {

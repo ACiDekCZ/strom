@@ -173,8 +173,8 @@ describe('planPlacesMap', () => {
         expect(plan.scale).toBeUndefined(); // a frame across the ocean has no scale bar
     });
 
-    it('a minimum span of 25 km for places close together', () => {
-        const geo = { [placeKey('Čapkov')]: { lat: 49.6, lon: 15.2 }, [placeKey('Lhotka')]: { lat: 49.6, lon: 15.2001 } };
+    it('a minimum span of 25 km for places close together (just over 3 km apart; closer ones get no map)', () => {
+        const geo = { [placeKey('Čapkov')]: { lat: 49.6, lon: 15.2 }, [placeKey('Lhotka')]: { lat: 49.6, lon: 15.25 } };
         const points: PlacePoint[] = [
             { placeKey: placeKey('Čapkov'), place: 'Čapkov', sortKey: 1860.1, year: 1860, kind: 'birth' },
             { placeKey: placeKey('Lhotka'), place: 'Lhotka', sortKey: 1900.1, year: 1900, kind: 'death' },

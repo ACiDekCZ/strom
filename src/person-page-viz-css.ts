@@ -12,12 +12,14 @@
 export const PERSON_PAGE_VIZ_LIGHT_TOKENS = [
     '--accent: #b0703c',
     '--map-land: #f4efe4', '--map-land2: #e9e1d0', '--map-geo: #b9ab8e', '--map-label-bg: rgba(255, 253, 248, .82)',
+    '--map-water: #b7c6cf', '--map-ring: #d4c8b0', '--map-anchor: #8f8574', '--map-region: #ddd2bd',
     '--chart-young: #e2d6bd', '--chart-life: #d6cebe', '--chart-married: #a8c0ad', '--chart-band1: #efe8da', '--chart-band2: #ddd2bc',
 ].join('; ') + ';';
 
 /** Print values (greys) of the map and chart tokens. */
 export const PERSON_PAGE_VIZ_PRINT_TOKENS = [
     '--map-land: #ffffff', '--map-land2: #eeeeee', '--map-geo: #9a9a9a', '--map-label-bg: rgba(255, 255, 255, .9)',
+    '--map-water: #bdbdbd', '--map-ring: #c4c4c4', '--map-anchor: #6d6d6d', '--map-region: #e3e3e3',
     '--chart-young: #e0e0e0', '--chart-life: #d0d0d0', '--chart-married: #b8b8b8', '--chart-band1: #f0f0f0', '--chart-band2: #d9d9d9',
     '--primary: #444444', '--accent: #111111', '--hist-mark: #555555', '--hist-place: #333333', '--hist-local: #777777',
 ].join('; ') + ';';
@@ -78,9 +80,38 @@ export const PERSON_PAGE_MAP_CSS = `
 .pp-map-amb { color: var(--text-faint); font-size: 13px; }
 .pp-map-row--nopos { color: var(--text-light); }
 .pp-map-note { margin-top: 8px !important; color: var(--text-faint); font-size: 13px; }
+/* A small neighbourhood (§1.3a, round 3): rivers, distance rings, a town, an arrow, the region, "where in the country". */
+.pp-map-river { fill: none; stroke: var(--map-water); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.pp-map-ring { fill: none; stroke: var(--map-ring); stroke-width: 1; stroke-dasharray: 3 4; vector-effect: non-scaling-stroke; }
+.pp-map-rl { position: absolute; transform: translate(3px, -100%); color: var(--text-faint); font-size: 10.5px; line-height: 12px; white-space: nowrap; pointer-events: none; }
+.pp-map-region { position: absolute; left: 50%; top: 81%; transform: translate(-50%, -50%); color: var(--map-region); font-family: var(--font-serif, Georgia, serif); font-size: 22px; line-height: 1; letter-spacing: .32em; text-transform: uppercase; white-space: nowrap; pointer-events: none; }
+.pp-map-region--long { font-size: 16px; letter-spacing: .2em; }
+.pp-map-rvl { position: absolute; transform: translate(4px, -110%); color: var(--text-faint); font-size: 10.5px; font-style: italic; line-height: 12px; white-space: nowrap; pointer-events: none; }
+.pp-map-anc { position: absolute; transform: translate(-3.5px, -50%); padding-left: 12px; color: var(--text-light); font-size: 12px; line-height: 16px; white-space: nowrap; pointer-events: none; }
+.pp-map-anc::before { content: ''; position: absolute; left: 0; top: 4.5px; width: 7px; height: 7px; background: var(--map-anchor); }
+.pp-map-arrow { position: absolute; z-index: 4; padding: 2px 7px; border-radius: 5px; background: var(--map-label-bg); color: var(--text-light); font-size: 11.5px; line-height: 15px; white-space: nowrap; }
+.pp-map-arrow--r { right: 8px; transform: translateY(-50%); }
+.pp-map-arrow--l { left: 8px; transform: translateY(-50%); }
+.pp-map-arrow--u, .pp-map-arrow--d { left: var(--xd); transform: translateX(-50%); }
+.pp-map-arrow--u { top: 8px; }
+.pp-map-arrow--d { bottom: 8px; }
+.pp-map-where { position: absolute; z-index: 4; right: 12px; bottom: 12px; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+.pp-map-where--tl { right: auto; bottom: auto; left: 12px; top: 12px; align-items: flex-start; }
+.pp-map-where svg { display: block; width: 150px; height: 86px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.pp-map-cty { fill: var(--map-land2); fill-rule: evenodd; stroke: var(--map-geo); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.pp-map-wframe { stroke-width: 1.6; }
+.pp-map-wdot { fill: var(--primary); }
+.pp-map-wattr { color: var(--text-faint); font-size: 10px; line-height: 12px; }
+.pp-map-where--side { position: static; flex: 0 0 auto; }
+.pp-map-where--side svg { width: 96px; height: 56px; border-radius: 7px; background: var(--map-land); }
+.pp-map-brief { display: flex; align-items: flex-start; gap: 16px; }
+.pp-map-brief-main { flex: 1 1 auto; min-width: 0; }
+.pp-map-sub { margin: -4px 0 8px !important; color: var(--text-light); font-size: 13px; }
+.pp-map-from { color: var(--text-light); }
 @media (min-width: 641px) {
   .lb-d-l { transform: translate(calc(-100% - 16px), -50%); }
   .lb-d-hide { display: none; }
+  .pp-map-rl--p { display: none; }
 }
 @media (max-width: 640px) {
   .pp-map { aspect-ratio: 4 / 3; }
@@ -93,12 +124,23 @@ export const PERSON_PAGE_MAP_CSS = `
   .pp-map-scale { width: calc(var(--u) * 100% / 426.667); }
   .pp-map-inset { width: 40%; }
   .pp-map-row { font-size: 13.5px; }
+  .pp-map-ring--2, .pp-map-rl--2, .pp-map-rl--d, .pp-map-anc, .pp-map-rvl { display: none; }
+  .pp-map-region { font-size: 15px; letter-spacing: .28em; }
+  .pp-map-region--long { font-size: 11px; letter-spacing: .16em; }
+  .pp-map-arrow { font-size: 11px; padding: 2px 6px; }
+  .pp-map-arrow--u, .pp-map-arrow--d { left: var(--xp); }
+  .pp-map-where { right: 8px; bottom: 8px; }
+  .pp-map-where--tl { left: 8px; top: 8px; }
+  .pp-map-where svg { width: 96px; height: 56px; border-radius: 7px; }
+  .pp-map-brief { gap: 12px; }
 }
 @media ${LANDSCAPE} {
   .pp-map { aspect-ratio: 3 / 1; }
   .pp-map-in { left: 0; width: 100%; top: -25%; height: 150%; }
   .pp-map-scale { width: calc(var(--u) * 100% / 640); }
   .pp-map-inset { width: 24%; }
+  .pp-map-anc, .pp-map-rvl { display: none; }
+  .pp-map-region { top: 70%; font-size: 15px; }
 }
 @media (hover: hover) {
   .pp-map-row[data-pp-map-place]:hover { background: var(--hover-bg); }

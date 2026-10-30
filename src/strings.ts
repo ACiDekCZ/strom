@@ -5710,6 +5710,12 @@ const stringsEN = {
             km: (n: number) => `${n} km`,
             inset: 'area shown',
             aria: 'Map of the places of life',
+            // A small neighbourhood (§1.3a): places within 3 km, the distance and direction from place 1, a city beyond the frame.
+            tiny: 'The places lie within 3 km of each other.',
+            near: (km: number, side: string, name: string) => ` · ${km} km ${side} of ${name}`,
+            dirs: ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'] as readonly string[],
+            toTown: (name: string, km: number, arrow: string) => (arrow === '←' ? `← ${name} ${km} km` : `${name} ${km} km ${arrow}`),
+            where: 'Location in the country',
             undated: 'no date',
             ev: {
                 birth: 'birth', birthBaptism: 'birth and baptism', death: 'death', deathBurial: 'death and burial',
@@ -11445,6 +11451,12 @@ const stringsCZ: StringsType = {
             km: (n: number) => `${n} km`,
             inset: 'výřez',
             aria: 'Mapa míst života',
+            // A small neighbourhood (§1.3a); the place name stays in the nominative ("od místa Čapkov").
+            tiny: 'Místa leží do 3 km od sebe.',
+            near: (km: number, side: string, name: string) => ` · ${km} km ${side} od místa ${name}`,
+            dirs: ['S', 'SV', 'V', 'JV', 'J', 'JZ', 'Z', 'SZ'] as readonly string[],
+            toTown: (name: string, km: number, arrow: string) => (arrow === '←' ? `← ${name} ${km} km` : `${name} ${km} km ${arrow}`),
+            where: 'Poloha v zemi',
             undated: 'bez data',
             ev: {
                 birth: 'narození', birthBaptism: 'narození a křest', death: 'úmrtí', deathBurial: 'úmrtí a pohřeb',
@@ -17097,6 +17109,11 @@ const stringsDE: StringsType = {
             km: (n: number) => `${n} km`,
             inset: 'Ausschnitt',
             aria: 'Karte der Lebensorte',
+            tiny: 'Die Orte liegen höchstens 3 km voneinander entfernt.',
+            near: (km: number, side: string, name: string) => ` · ${km} km ${side} von ${name}`,
+            dirs: ['N', 'NO', 'O', 'SO', 'S', 'SW', 'W', 'NW'] as readonly string[],
+            toTown: (name: string, km: number, arrow: string) => (arrow === '←' ? `← ${name} ${km} km` : `${name} ${km} km ${arrow}`),
+            where: 'Lage im Land',
             undated: 'ohne Datum',
             ev: {
                 birth: 'Geburt', birthBaptism: 'Geburt und Taufe', death: 'Tod', deathBurial: 'Tod und Begräbnis',

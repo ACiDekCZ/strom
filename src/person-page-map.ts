@@ -13,6 +13,13 @@
  * sideways 3 : 1 (y 53.3–266.7). The person's places are therefore fitted
  * into the middle 2/3 of the view (the "safe area", visible in every shape)
  * and the rest of the frame shows the surroundings.
+ *
+ * A small neighbourhood (§1.3a, round 3): when the frame holds almost no
+ * border or coast, an orientation layer replaces the graticule (distance
+ * rings, a nearby town, an arrow to the regional city beyond the frame,
+ * rivers, the region's name, a "where in the country" inset; Natural Earth,
+ * src/map-context.ts). Places all within 3 km get no map: the list names the
+ * distance and direction from place 1, beside the country inset.
  */
 
 import type { Language } from './strings.js';
@@ -23,7 +30,11 @@ import { placeKey } from './places.js';
 import { yearOf, yearFraction, parseFlexDate } from './dates.js';
 import { isLivingPerson } from './privacy.js';
 import { lifeEventLabel, coupleEventLabelIn } from './person-sources.js';
-import { mercator, outlinePaths, outlineResolution, viewBounds, WORLD, type OutlineView } from './map-outlines.js';
+import {
+    mercator, unmercator, outlinePaths, outlineResolution, outlineLengthInView, viewBounds, linesPath, ringsPath, lengthInView,
+    WORLD, type OutlineView, type GeoLine, type GeoBounds,
+} from './map-outlines.js';
+import { towns, rivers, regionOf, regionName, countryAt, ringsBounds, type Region } from './map-context.js';
 import { chartAnchorId } from './person-page-chart.js';
 
 // ─── Points ─────────────────────────────────────────────────────────────────
@@ -237,13 +248,46 @@ export interface PlannedPlace {
     inset?: { x: number; y: number };
     /** Label side on desktop/tablet and on a phone. */
     side?: { d: LabelSide; p: LabelSide };
+    /** Places within 3 km (state 'tiny'): distance (km, at least 1) and compass sector (0 = N … 7 = NW) from place 1. */
+    from1?: { km: number; dir: number };
 }
 
 export type LabelSide = 'l' | 'r' | 'hide';
 
+/** The orientation layer of a small neighbourhood (§1.3a); positions in view units. */
+export interface SmallLayer {
+    /** Distance rings around place 1 (the second one not on a phone). */
+    rings: {
+        x: number; y: number; r: number[]; km: number[];
+        /** Each ring's label: its point on the ring, desktop (d) and phone (p), none where no free spot. */
+        lab?: { d?: { x: number; y: number }; p?: { x: number; y: number } }[];
+    };
+    /** The nearest town of 10 000+ in the frame that is not one of the places (not on a phone). */
+    anchor?: { name: string; x: number; y: number };
+    /** The nearest regional city (or 50 000+) when it lies beyond the frame: a label on that edge. */
+    arrow?: { name: string; km: number; dir: 'r' | 'l' | 'u' | 'd'; /** y (r, l) or x (u, d) on the edge, view units */ at: number };
+    /** Where the longest river in the frame is named (desktop and tablet). */
+    river?: { name: string; x: number; y: number };
+    /** The first-level region that holds the whole frame. */
+    region?: Pick<Region, 'name' | 'en' | 'de'>;
+}
+
+/** The "where in the country" inset: the country's outline with the frame (map) or a dot (no map). */
+export interface WhereInset {
+    /** Map state: the inset's corner; none beside the list. */
+    corner?: 'br' | 'tl';
+    view: OutlineView;
+    rings: GeoLine[];
+    rect?: Rect;
+    dot?: { x: number; y: number };
+}
+
 export interface MapPlan {
-    /** 'map': map + list; 'list': list only (one place with a position); 'noGeo': list, no position at all; 'none': no section. */
-    state: 'map' | 'list' | 'noGeo' | 'none';
+    /**
+     * 'map': map + list; 'tiny': ≥ 2 places within 3 km — list with distances, no map; 'list': list only
+     * (one place with a position); 'noGeo': list, no position at all; 'none': no section.
+     */
+    state: 'map' | 'tiny' | 'list' | 'noGeo' | 'none';
     places: PlannedPlace[];
     /** The person's places without a position (the "Not on the map" row). */
     noPos: PlannedPlace[];
@@ -260,6 +304,10 @@ export interface MapPlan {
         /** Centre of the main frame in inset units (where the arcs start). */
         from: { x: number; y: number };
     };
+    /** A small neighbourhood (§1.3a): the orientation layer instead of the graticule. */
+    small?: SmallLayer;
+    /** The "where in the country" inset (small neighbourhood without the world inset, 'tiny', 'list'). */
+    where?: WhereInset;
 }
 
 /** Great-circle distance in km. */
@@ -326,8 +374,8 @@ export interface Rect { x: number; y: number; w: number; h: number }
 const overlaps = (a: Rect, b: Rect): boolean => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 
 /** How many numbered places (with their 22 px point) fall into an inset corner. */
-function insetHits(pts: readonly { x: number; y: number }[], corner: 'br' | 'tl'): number {
-    const r = insetRects(corner);
+function insetHits(pts: readonly { x: number; y: number }[], corner: 'br' | 'tl', rects: typeof insetRects = insetRects): number {
+    const r = rects(corner);
     const pad = 14;
     let n = 0;
     for (const p of pts) {
@@ -410,7 +458,10 @@ export function planPlacesMap(points: readonly PlacePoint[], geo: Readonly<Recor
     const ownGeo = own.filter(p => p.geo);
     const noPos = own.filter(p => !p.geo);
     if (!ownGeo.length) return { ...empty, state: 'noGeo', places: own, noPos: [] };
-    if (ownGeo.length === 1) return { ...empty, state: 'list', places: own, noPos: [] };
+    if (ownGeo.length === 1) {
+        const where = whereInset(ownGeo[0].geo!);
+        return { ...empty, state: 'list', places: own, noPos: [], ...(where ? { where } : {}) };
+    }
     ownGeo.forEach((p, i) => { p.num = i + 1; });
 
     // Relatives' places with a position (when the switch is on).
@@ -427,6 +478,20 @@ export function planPlacesMap(points: readonly PlacePoint[], geo: Readonly<Recor
             gp.points.push(p);
         }
         rels.push(...relGroups.values());
+    }
+
+    // All within 3 km (§1.3a): no map, the list with the distance and direction from place 1.
+    const close = [...ownGeo, ...rels];
+    let maxKm = 0;
+    for (let i = 0; i < close.length; i++) for (let j = i + 1; j < close.length; j++) maxKm = Math.max(maxKm, distanceKm(close[i].geo!, close[j].geo!));
+    if (maxKm <= TINY_KM) {
+        const g1 = ownGeo[0].geo!;
+        for (const p of close.slice(1)) {
+            const km = distanceKm(g1, p.geo!);
+            if (km >= 0.05) p.from1 = { km: Math.max(1, Math.round(km)), dir: compassSector(g1, p.geo!) };
+        }
+        const where = whereInset(centroidOf(ownGeo.map(p => p.geo!)));
+        return { ...empty, state: 'tiny', places: close, noPos, ...(where ? { where } : {}) };
     }
 
     // The 180th meridian (round 2): when the places' longitudes span more than 180°, negative longitudes
@@ -504,18 +569,315 @@ export function planPlacesMap(points: readonly PlacePoint[], geo: Readonly<Recor
         inset = { corner, view: iv, rect: { x: from.x - rw / 2, y: from.y - rh / 2, w: rw, h: rh }, from };
     }
 
+    // A small neighbourhood (§1.3a): next to nothing of a border or coast in the frame.
+    let small: SmallLayer | undefined;
+    let where: WhereInset | undefined;
+    const ownPtsView = [...ownGeo, ...near].map(p => ({ x: p.x!, y: p.y! }));
+    if (outlineLengthInView(view, outlineResolution(viewBounds(view))) < SMALL_SHARE * VIEW_W) {
+        if (!inset) {
+            const corner: 'br' | 'tl' = insetHits(ownPtsView, 'br', whereRects) <= insetHits(ownPtsView, 'tl', whereRects) ? 'br' : 'tl';
+            where = whereInset(centroid, viewBounds({ ...view, margin: 0 }), corner);
+        }
+        small = smallLayer({
+            view, unitsPerKm, merc, lonOf, p1: ownGeo[0], places: [...ownGeo, ...near],
+            obstacles: where?.corner ? [whereRects(where.corner).d] : inset ? [insetRects(inset.corner).d] : [],
+            topRightFree: !!where,
+            corner: where?.corner ?? inset?.corner,
+        });
+    }
+
     // Labels: desktop (the whole view) and phone (the middle 2/3, short years).
     const onMain = [...ownGeo, ...near];
-    const deskObst = inset ? [insetRects(inset.corner).d] : [];
-    const phoneObst = inset ? [insetRects(inset.corner).p] : [];
+    const deskObst = inset ? [insetRects(inset.corner).d] : where?.corner ? [whereRects(where.corner).d] : [];
+    const phoneObst = inset ? [insetRects(inset.corner).p] : where?.corner ? [whereRects(where.corner).p] : [];
+    if (small?.anchor) deskObst.push(anchorRect(small.anchor));
+    if (small?.arrow) { deskObst.push(arrowRect(small.arrow, 'd')); phoneObst.push(arrowRect(small.arrow, 'p')); }
     const attr: Rect = { x: VIEW_W - 150, y: 0, w: 150, h: 18 };
     const sideD = placeLabelSides(onMain.map(p => ({ x: p.x!, y: p.y!, w: labelWidthPx(p.name, labelYears(p.points).d) })),
         { minX: 4, maxX: VIEW_W - 4, minY: 2, maxY: VIEW_H - 2, pxToUnit: UNITS_ACROSS.desk / BOX_PX.desk, obstacles: [...deskObst, attr] });
     const sideP = placeLabelSides(onMain.map(p => ({ x: p.x!, y: p.y!, w: labelWidthPx(p.name, labelYears(p.points).p) })),
         { minX: SAFE.x0 + 3, maxX: SAFE.x1 - 3, minY: 2, maxY: VIEW_H - 2, pxToUnit: UNITS_ACROSS.phone / BOX_PX.phone, obstacles: phoneObst });
     onMain.forEach((p, i) => { p.side = { d: sideD[i], p: sideP[i] }; });
+    if (small) {
+        const labRects = (mode: 'd' | 'p'): Rect[] => {
+            const u = mode === 'd' ? UNITS_ACROSS.desk / BOX_PX.desk : UNITS_ACROSS.phone / BOX_PX.phone;
+            return onMain.flatMap(p => {
+                const side = p.side![mode];
+                if (side === 'hide') return [];
+                const w = labelWidthPx(p.name, labelYears(p.points)[mode]) * u, off = 16 * u, h = 20 * u, pr = 11 * u;
+                return [{ x: side === 'r' ? p.x! + off : p.x! - off - w, y: p.y! - h / 2, w, h }, { x: p.x! - pr, y: p.y! - pr, w: 2 * pr, h: 2 * pr }];
+            });
+        };
+        small.rings.lab = ringLabelSpots(small.rings, route, {
+            d: [...labRects('d'), ...deskObst, ...(where ? [] : [attr])], p: [...labRects('p'), ...phoneObst],
+        });
+    }
 
-    return { state: 'map', places: [...ownGeo, ...near, ...far], noPos, view, ...(scale ? { scale } : {}), route, ...(inset ? { inset } : {}) };
+    return {
+        state: 'map', places: [...ownGeo, ...near, ...far], noPos, view, ...(scale ? { scale } : {}), route,
+        ...(inset ? { inset } : {}), ...(small ? { small } : {}), ...(where ? { where } : {}),
+    };
+}
+
+// ─── Small neighbourhood (§1.3a) ────────────────────────────────────────────
+
+/** Places at most this far apart get no map (the list names distances). */
+export const TINY_KM = 3;
+/** Borders and coast inside the frame shorter than this share of its width: a small neighbourhood. */
+export const SMALL_SHARE = 0.15;
+/** The "where in the country" inset, view box (desktop 150 × 86 px, phone 96 × 56 px). */
+export const WHERE_W = 150;
+export const WHERE_H = 86;
+/** Ring label angles (degrees, counter-clockwise from east): up and to the right first. */
+const RING_LABEL_ANGLES = [45, 135, -45, -135, 70, 110, -70, -110, 20, 160, -20, -160];
+
+/** Does the segment a–b pass through the rectangle (sampled every 2 units)? */
+function segmentHits(a: { x: number; y: number }, b: { x: number; y: number }, r: Rect): boolean {
+    const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / 2));
+    for (let i = 0; i <= n; i++) {
+        const x = a.x + ((b.x - a.x) * i) / n, y = a.y + ((b.y - a.y) * i) / n;
+        if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) return true;
+    }
+    return false;
+}
+
+/**
+ * Where each ring's distance label goes (its text starts 3 px right of the
+ * point, its bottom on it): the first angle whose box stays in the visible
+ * part and clear of the points, the place labels, the route, the insets and
+ * the other ring label. The phone shows only the first ring.
+ */
+function ringLabelSpots(
+    rings: SmallLayer['rings'], route: readonly { x: number; y: number }[], obstacles: { d: readonly Rect[]; p: readonly Rect[] },
+): NonNullable<SmallLayer['rings']['lab']> {
+    const placed: Record<'d' | 'p', Rect[]> = { d: [], p: [] };
+    return rings.r.map((r, i) => {
+        const chars = String(rings.km[i]).length + 3;
+        const spot = (mode: 'd' | 'p'): { x: number; y: number } | undefined => {
+            const u = mode === 'd' ? UNITS_ACROSS.desk / BOX_PX.desk : UNITS_ACROSS.phone / BOX_PX.phone;
+            const [minX, maxX] = mode === 'd' ? [4, VIEW_W - 4] : [SAFE.x0 + 3, SAFE.x1 - 3];
+            for (const deg of RING_LABEL_ANGLES) {
+                const a = (deg * Math.PI) / 180;
+                const x = rings.x + r * Math.cos(a), y = rings.y - r * Math.sin(a);
+                const box: Rect = { x: x + 2 * u, y: y - 13 * u, w: (chars * 6 + 4) * u, h: 13 * u };
+                if (box.x < minX || box.x + box.w > maxX || box.y < 2 || box.y + box.h > VIEW_H - 2) continue;
+                if ([...obstacles[mode], ...placed[mode]].some(q => overlaps(q, box))) continue;
+                if (route.some((p, j) => j > 0 && segmentHits(route[j - 1], p, box))) continue;
+                placed[mode].push(box);
+                return { x, y };
+            }
+            return undefined;
+        };
+        const d = spot('d');
+        const p = i === 0 ? spot('p') : undefined;
+        return { ...(d ? { d } : {}), ...(p ? { p } : {}) };
+    });
+}
+
+/** Ring pairs (km): the first whose inner ring is at least 40 units across (5 and 10 km in a usual frame). */
+const RING_STEPS: readonly [number, number][] = [[5, 10], [10, 20], [25, 50], [50, 100], [100, 200]];
+
+function centroidOf(gs: readonly PlaceGeo[]): PlaceGeo {
+    return { lat: gs.reduce((s, g) => s + g.lat, 0) / gs.length, lon: gs.reduce((s, g) => s + g.lon, 0) / gs.length };
+}
+
+/** Compass sector from a to b: 0 = N, 1 = NE … 7 = NW. */
+export function compassSector(a: PlaceGeo, b: PlaceGeo): number {
+    const dx = (b.lon - a.lon) * Math.cos((((a.lat + b.lat) / 2) * Math.PI) / 180);
+    const dy = b.lat - a.lat;
+    const deg = (Math.atan2(dx, dy) * 180) / Math.PI;
+    return ((Math.round(deg / 45) % 8) + 8) % 8;
+}
+
+/** The "where" inset's rectangles (view units, with its attribution line) per box shape and corner. */
+export function whereRects(corner: 'br' | 'tl'): { d: Rect; p: Rect; l: Rect } {
+    const du = UNITS_ACROSS.desk / BOX_PX.desk, pu = UNITS_ACROSS.phone / BOX_PX.phone;
+    const dw = WHERE_W * du, dh = (WHERE_H + 16) * du, dm = 12 * du;
+    const pw = 96 * pu, ph = (56 + 14) * pu, pm = 8 * pu;
+    if (corner === 'br') {
+        return {
+            d: { x: VIEW_W - dm - dw, y: VIEW_H - dm - dh, w: dw, h: dh },
+            p: { x: SAFE.x1 - pm - pw, y: VIEW_H - pm - ph, w: pw, h: ph },
+            l: { x: VIEW_W - dm - dw, y: SAFE.y1 - dm - dh, w: dw, h: dh },
+        };
+    }
+    return {
+        d: { x: dm, y: dm, w: dw, h: dh },
+        p: { x: SAFE.x0 + pm, y: pm, w: pw, h: ph },
+        l: { x: dm, y: SAFE.y0 + dm, w: dw, h: dh },
+    };
+}
+
+/**
+ * The "where in the country" inset (§1.3a, item 6): the country at `at`
+ * fitted into 150 × 86 with the main frame as a rectangle (`frame`) or a dot.
+ * Null when the point lies in no country of the data (the open sea).
+ */
+export function whereInset(at: PlaceGeo, frame?: GeoBounds, corner?: 'br' | 'tl'): WhereInset | undefined {
+    const norm = (lon: number) => ((((lon + 180) % 360) + 360) % 360) - 180;
+    const rings = countryAt(norm(at.lon), at.lat);
+    if (!rings?.length) return undefined;
+    const b = ringsBounds(rings);
+    const a = mercator(b.west, b.north), z = mercator(b.east, b.south);
+    const pad = 7;
+    const k = Math.min((WHERE_W - 2 * pad) / Math.max(z.x - a.x, 1e-9), (WHERE_H - 2 * pad) / Math.max(z.y - a.y, 1e-9));
+    const cx = (a.x + z.x) / 2, cy = (a.y + z.y) / 2;
+    const view: OutlineView = { x0: cx - WHERE_W / 2 / k, y0: cy - WHERE_H / 2 / k, k, width: WHERE_W, height: WHERE_H, margin: 4, minStep: 1 };
+    const toW = (lon: number, lat: number) => {
+        const m = mercator(norm(lon), lat);
+        return { x: (m.x - view.x0) * k, y: (m.y - view.y0) * k };
+    };
+    const out: WhereInset = { view, rings, ...(corner ? { corner } : {}) };
+    if (frame) {
+        const shift = frame.west > 180 ? -360 : 0;
+        const p = toW(frame.west + shift, frame.north), q = toW(frame.east + shift, frame.south);
+        const w = Math.max(q.x - p.x, 5), h = Math.max(q.y - p.y, 3);
+        const mx = (p.x + q.x) / 2, my = (p.y + q.y) / 2;
+        out.rect = { x: mx - w / 2, y: my - h / 2, w, h };
+    } else {
+        out.dot = toW(at.lon, at.lat);
+    }
+    return out;
+}
+
+const pxD = UNITS_ACROSS.desk / BOX_PX.desk;
+const pxP = UNITS_ACROSS.phone / BOX_PX.phone;
+
+function anchorRect(a: { name: string; x: number }  & { y: number }): Rect {
+    return { x: a.x - 6 * pxD, y: a.y - 10 * pxD, w: (16 + a.name.length * 6.6) * pxD, h: 20 * pxD };
+}
+
+/** The arrow label's box (view units) on desktop ('d') or a phone ('p'). */
+function arrowRect(a: NonNullable<SmallLayer['arrow']>, box: 'd' | 'p'): Rect {
+    const u = box === 'd' ? pxD : pxP;
+    const w = (a.name.length + String(a.km).length + 6) * 6.4 * u + 14 * u, h = 20 * u;
+    const x0 = box === 'd' ? 0 : SAFE.x0, x1 = box === 'd' ? VIEW_W : SAFE.x1;
+    const m = 8 * u;
+    if (a.dir === 'r') return { x: x1 - m - w, y: a.at - h / 2, w, h };
+    if (a.dir === 'l') return { x: x0 + m, y: a.at - h / 2, w, h };
+    const at = box === 'd' ? arrowX(a.at).d : SAFE.x0 + arrowX(a.at).p * (SAFE.x1 - SAFE.x0) / 100;
+    return { x: at - w / 2, y: a.dir === 'u' ? m : VIEW_H - m - h, w, h };
+}
+
+/** An up/down arrow's x: desktop in view units, phone in percent of the visible width (clear of the scale bar and the inset). */
+function arrowX(at: number): { d: number; p: number } {
+    const d = Math.min(430, Math.max(190, at));
+    const p = Math.min(SAFE.x0 + 235, Math.max(SAFE.x0 + 170, at));
+    return { d, p: ((p - SAFE.x0) / (SAFE.x1 - SAFE.x0)) * 100 };
+}
+
+interface SmallInput {
+    view: OutlineView;
+    unitsPerKm: number;
+    merc: (g: PlaceGeo) => { x: number; y: number };
+    lonOf: (g: PlaceGeo) => number;
+    p1: PlannedPlace;
+    places: readonly PlannedPlace[];
+    obstacles: readonly Rect[];
+    /** The attribution is not in the top right (it sits under the "where" inset). */
+    topRightFree: boolean;
+    /** The corner the inset takes (the arrow keeps clear of it). */
+    corner?: 'br' | 'tl';
+}
+
+/** The orientation layer (§1.3a, items 1–5). */
+function smallLayer(o: SmallInput): SmallLayer {
+    const { view, unitsPerKm } = o;
+    const g1 = o.p1.geo!;
+    const toView = (lon: number, lat: number) => {
+        const m = o.merc({ lon, lat });
+        return { x: (m.x - view.x0) * view.k, y: (m.y - view.y0) * view.k };
+    };
+    const inView = (q: { x: number; y: number }, m = 0) => q.x >= m && q.x <= VIEW_W - m && q.y >= m && q.y <= VIEW_H - m;
+    const wrapLon = (lon: number) => o.lonOf({ lon, lat: 0 });
+
+    // 1. Distance rings around place 1.
+    const pair = RING_STEPS.find(([a]) => a * unitsPerKm >= 40) ?? RING_STEPS[RING_STEPS.length - 1];
+    const rings = { x: o.p1.x!, y: o.p1.y!, km: [...pair], r: pair.map(km => km * unitsPerKm) };
+
+    // The person's places: a town there is not an anchor (by name or within 2 km).
+    const placeNames = new Set(o.places.flatMap(p => [placeKey(p.name), placeKey(p.full)]));
+    const isPlace = (t: { name: string; lon: number; lat: number }) =>
+        placeNames.has(placeKey(t.name)) || o.places.some(p => distanceKm(p.geo!, t) < 2);
+    const pointBoxes: Rect[] = o.places.map(p => ({ x: p.x! - 14, y: p.y! - 14, w: 28, h: 28 }));
+    const attr: Rect = { x: VIEW_W - 150, y: 0, w: 150, h: 18 };
+    const blocked = (r: Rect) => [...pointBoxes, ...o.obstacles, ...(o.topRightFree ? [] : [attr])].some(q => overlaps(q, r));
+
+    // Towns near place 1 (a box of about ±330 km), with view positions.
+    const near = towns().filter(t => Math.abs(t.lat - g1.lat) < 3 && Math.abs(wrapLon(t.lon) - o.lonOf(g1)) < 5)
+        .map(t => ({ ...t, km: distanceKm(g1, t), v: toView(wrapLon(t.lon), t.lat) }))
+        .sort((a, b) => a.km - b.km);
+
+    // 2. The nearest town of 10 000+ inside the frame that is not a place of the person.
+    let anchor: SmallLayer['anchor'];
+    for (const t of near) {
+        if (!inView(t.v, 16) || isPlace(t)) continue;
+        const a = { name: t.name, x: t.v.x, y: t.v.y };
+        const r = anchorRect(a);
+        if (r.x + r.w > VIEW_W - 4 || blocked(r)) continue;
+        anchor = a;
+        break;
+    }
+
+    // 3. The nearest regional city (or 50 000+), when it lies beyond the frame.
+    let arrow: SmallLayer['arrow'];
+    const city = near.find(t => t.big);
+    if (city && city.km <= FAR_KM && !inView(city.v)) {
+        const dx = city.v.x - rings.x, dy = city.v.y - rings.y;
+        const horiz = Math.abs(dx) >= Math.abs(dy);
+        const dir: 'r' | 'l' | 'u' | 'd' = horiz ? (dx > 0 ? 'r' : 'l') : (dy < 0 ? 'u' : 'd');
+        const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
+        let at: number;
+        if (horiz) {
+            const ex = dx > 0 ? VIEW_W : 0;
+            const y = rings.y + dy * ((ex - rings.x) / dx);
+            // Clear of the attribution (top right), the scale bar (bottom left) and the inset's corner.
+            const lo = dir === 'r' ? (o.topRightFree ? 0.1 : 0.14) : o.corner === 'tl' ? 0.42 : 0.1;
+            const hi = dir === 'r' ? (o.corner === 'br' ? 0.6 : 0.86) : 0.8;
+            at = clamp(y, lo * VIEW_H, hi * VIEW_H);
+        } else {
+            const ey = dy < 0 ? 0 : VIEW_H;
+            at = clamp(rings.x + dx * ((ey - rings.y) / dy), 0, VIEW_W);
+        }
+        arrow = { name: city.name, km: Math.max(1, Math.round(city.km)), dir, at };
+    }
+
+    // 4. Rivers: name the longest one in the frame (on a vertex clear of the points and the inset).
+    let river: SmallLayer['river'];
+    let best = 60;
+    for (const rv of rivers()) {
+        if (!rv.name) continue;
+        const len = lengthInView(rv.lines, view);
+        if (len <= best) continue;
+        const vs: { x: number; y: number }[] = [];
+        for (const l of rv.lines) for (let i = 0; i + 1 < l.c.length; i += 2) {
+            const q = toView(wrapLon(l.c[i]), l.c[i + 1]);
+            if (inView(q, 24)) vs.push(q);
+        }
+        const mid = Math.floor(vs.length / 2);
+        const order = vs.map((q, i) => ({ q, d: Math.abs(i - mid) })).sort((a, b) => a.d - b.d).map(e => e.q);
+        const spot = order.find(q => {
+            const r = { x: q.x - 4, y: q.y - 18, w: rv.name.length * 6 + 8, h: 16 };
+            return !blocked(r) && !(anchor && overlaps(r, anchorRect(anchor)));
+        });
+        if (!spot) continue;
+        best = len;
+        river = { name: rv.name, x: spot.x, y: spot.y };
+    }
+
+    // 5. The region, when it holds the whole frame (a grid of 5 × 3 points and the places).
+    const probe: { lon: number; lat: number }[] = [];
+    for (const fx of [0, 0.25, 0.5, 0.75, 1]) for (const fy of [0, 0.5, 1]) {
+        probe.push(unmercator(view.x0 + (fx * VIEW_W) / view.k, view.y0 + (fy * VIEW_H) / view.k));
+    }
+    probe.push(...o.places.map(p => ({ lon: p.geo!.lon, lat: p.geo!.lat })));
+    const reg = regionOf(probe);
+
+    return {
+        rings,
+        ...(anchor ? { anchor } : {}), ...(arrow ? { arrow } : {}), ...(river ? { river } : {}),
+        ...(reg ? { region: { name: reg.name, en: reg.en, de: reg.de } } : {}),
+    };
 }
 
 // ─── HTML ───────────────────────────────────────────────────────────────────
@@ -635,35 +997,100 @@ export function placesMapHtml(points: readonly PlacePoint[], geo: Readonly<Recor
 
     const hasRel = points.some(p => p.rel && geo?.[p.placeKey]);
     const tools: string[] = [];
-    if (app && plan.state === 'map' && hasRel) {
+    const mapLike = plan.state === 'map' || plan.state === 'tiny';
+    if (app && mapLike && hasRel) {
         tools.push(`<button type="button" class="pp-toggle" role="switch" aria-checked="${ctx.kidPlaces}" data-pp-switch="kidPlaces">${esc(M.kids)}</button>`);
     }
-    if (app && plan.state === 'map') tools.push(`<button type="button" class="pp-act pp-map-open" data-pp-action="map:open">${esc(M.open)}</button>`);
+    if (app && mapLike) tools.push(`<button type="button" class="pp-act pp-map-open" data-pp-action="map:open">${esc(M.open)}</button>`);
     const head = `<div class="pp-sec-head"><h2>${esc(M.title)}</h2>${tools.length ? `<div class="pp-toggles pp-map-tools">${tools.join('')}</div>` : ''}</div>`;
 
-    const map = plan.state === 'map' ? mapHtml(plan, S, sel) : '';
+    const map = plan.state === 'map' ? mapHtml(plan, S, sel, ctx.lang) : '';
     const list = listHtml(plan, S, ctx, sel);
     const note = plan.state === 'noGeo'
         ? `<p class="pp-map-note">${esc(M.noGeo)}${app ? ` ${esc(M.noGeoHint)}` : ''}</p>` : '';
-    return `<section class="pp-sec pp-sec--places pp-places" id="${esc(id)}">${head}${map}${list}${note}</section>`;
+    // No map ('tiny', 'list'): the list beside the "where in the country" inset (§1.3a).
+    if (plan.state !== 'map' && plan.where) {
+        const sub = plan.state === 'tiny' ? `<p class="pp-map-sub">${esc(M.tiny)}</p>` : '';
+        return `<section class="pp-sec pp-sec--places pp-places" id="${esc(id)}">${head}`
+            + `<div class="pp-map-brief"><div class="pp-map-brief-main">${sub}${list}</div>${whereHtml(plan.where, S)}</div>${note}</section>`;
+    }
+    const sub = plan.state === 'tiny' ? `<p class="pp-map-sub">${esc(M.tiny)}</p>` : '';
+    return `<section class="pp-sec pp-sec--places pp-places" id="${esc(id)}">${head}${sub}${map}${list}${note}</section>`;
 }
 
-function mapHtml(plan: MapPlan, S: MapStrings, sel: string | null): string {
+/** The "where in the country" inset: the country, the frame (map) or a dot (beside the list), the attribution under it. */
+function whereHtml(w: WhereInset, S: MapStrings): string {
+    const M = S.personPage.map;
+    const land = ringsPath(w.rings, w.view);
+    const mark = w.rect
+        ? `<rect class="pp-map-frame pp-map-wframe" x="${f1(w.rect.x)}" y="${f1(w.rect.y)}" width="${f1(w.rect.w)}" height="${f1(w.rect.h)}"/>`
+        : w.dot ? `<circle class="pp-map-wdot" cx="${f1(w.dot.x)}" cy="${f1(w.dot.y)}" r="3"/>` : '';
+    const cls = w.corner ? `pp-map-where pp-map-where--${w.corner}` : 'pp-map-where pp-map-where--side';
+    return `<div class="${cls}"><svg viewBox="0 0 ${WHERE_W} ${WHERE_H}" role="img" aria-label="${esc(M.where)}" focusable="false">`
+        + (land ? `<path class="pp-map-cty" d="${land}"/>` : '') + `${mark}</svg><span class="pp-map-wattr">${esc(M.attr)}</span></div>`;
+}
+
+/** The orientation layer's SVG (rivers, rings) and its HTML labels (§1.3a). */
+function smallHtml(plan: MapPlan, S: MapStrings, lang: Language): { svg: string; html: string; box: string } {
+    const M = S.personPage.map;
+    const sm = plan.small!;
+    const v = plan.view!;
+    const riverLines = rivers().flatMap(r => r.lines);
+    const riverD = linesPath(riverLines, v);
+    let svg = riverD ? `<path class="pp-map-river" d="${riverD}"/>` : '';
+    sm.rings.r.forEach((r, i) => {
+        svg += `<circle class="pp-map-ring${i ? ' pp-map-ring--2' : ''}" cx="${f1(sm.rings.x)}" cy="${f1(sm.rings.y)}" r="${f1(r)}"/>`;
+    });
+    let html = '';
+    // Ring labels on the ring, where the plan found room (desktop and phone apart when they differ).
+    (sm.rings.lab ?? []).forEach((lab, i) => {
+        const span = (q: { x: number; y: number }, only: '' | 'd' | 'p') =>
+            `<span class="pp-map-rl${i ? ' pp-map-rl--2' : ''}${only ? ` pp-map-rl--${only}` : ''}" style="left:${pct(q.x, VIEW_W)};top:${pct(q.y, VIEW_H)}" aria-hidden="true">${esc(M.km(sm.rings.km[i]))}</span>`;
+        const same = lab.d && lab.p && lab.d.x === lab.p.x && lab.d.y === lab.p.y;
+        if (same) html += span(lab.d!, '');
+        else {
+            if (lab.d) html += span(lab.d, 'd');
+            if (lab.p) html += span(lab.p, 'p');
+        }
+    });
+    if (sm.region) {
+        const name = regionName(sm.region as Region, lang).toLocaleUpperCase(lang);
+        html += `<span class="pp-map-region${name.length > 14 ? ' pp-map-region--long' : ''}" aria-hidden="true">${esc(name)}</span>`;
+    }
+    if (sm.river) {
+        html += `<span class="pp-map-rvl" style="left:${pct(sm.river.x, VIEW_W)};top:${pct(sm.river.y, VIEW_H)}" aria-hidden="true">${esc(sm.river.name)}</span>`;
+    }
+    if (sm.anchor) {
+        html += `<span class="pp-map-anc" style="left:${pct(sm.anchor.x, VIEW_W)};top:${pct(sm.anchor.y, VIEW_H)}">${esc(sm.anchor.name)}</span>`;
+    }
+    let box = '';
+    if (sm.arrow) {
+        const a = sm.arrow;
+        const glyph = { r: '→', l: '←', u: '↑', d: '↓' }[a.dir];
+        const pos = a.dir === 'r' || a.dir === 'l' ? `top:${pct(a.at, VIEW_H)}` : `--xd:${f1(arrowX(a.at).d / VIEW_W * 100)}%;--xp:${f1(arrowX(a.at).p)}%`;
+        box = `<span class="pp-map-arrow pp-map-arrow--${a.dir}" style="${pos}">${esc(M.toTown(a.name, a.km, glyph))}</span>`;
+    }
+    return { svg, html, box };
+}
+
+function mapHtml(plan: MapPlan, S: MapStrings, sel: string | null, lang: Language): string {
     const M = S.personPage.map;
     const v = plan.view!;
     const b = viewBounds(v);
     const res = outlineResolution(b);
     const lines = outlinePaths(v, res);
+    const small = plan.small ? smallHtml(plan, S, lang) : null;
 
-    // Graticule: meridians and parallels at a round step (0.05°, 0.1° … in a neighbourhood).
+    // Graticule: meridians and parallels at a round step (0.05°, 0.1° … in a neighbourhood);
+    // a small neighbourhood has the distance rings instead (§1.3a).
     const lonSpan = b.east - b.west;
     const step = [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30].find(s => lonSpan / s <= 10) ?? 30;
     let grid = '';
-    for (let lon = Math.ceil(b.west / step) * step; lon <= b.east; lon += step) {
+    if (!small) for (let lon = Math.ceil(b.west / step) * step; lon <= b.east; lon += step) {
         const x = (mercator(lon, 0).x - v.x0) * v.k;
         grid += `M${f1(x)} -40V360`;
     }
-    for (let lat = Math.ceil(b.south / step) * step; lat <= b.north; lat += step) {
+    if (!small) for (let lat = Math.ceil(b.south / step) * step; lat <= b.north; lat += step) {
         const y = (mercator(0, lat).y - v.y0) * v.k;
         grid += `M-40 ${f1(y)}H680`;
     }
@@ -672,6 +1099,7 @@ function mapHtml(plan: MapPlan, S: MapStrings, sel: string | null): string {
         ? `<path class="pp-map-route" d="M${plan.route.map(p => `${f1(p.x)} ${f1(p.y)}`).join('L')}"/>` : '';
     const svg = `<svg class="pp-map-svg" viewBox="0 0 ${VIEW_W} ${VIEW_H}" preserveAspectRatio="none" aria-hidden="true" focusable="false">`
         + (grid ? `<path class="pp-map-grid" d="${grid}"/>` : '')
+        + (small?.svg ?? '')
         + (lines.coast ? `<path class="pp-map-coast" d="${lines.coast}"/>` : '')
         + (lines.borders ? `<path class="pp-map-border" d="${lines.borders}"/>` : '')
         + route + '</svg>';
@@ -698,8 +1126,10 @@ function mapHtml(plan: MapPlan, S: MapStrings, sel: string | null): string {
     const scale = plan.scale
         ? `<div class="pp-map-scale" style="--u:${f1(plan.scale.units)}" aria-hidden="true"><span class="pp-map-scale-bar"></span><span class="pp-map-scale-t">${esc(M.km(plan.scale.km))}</span></div>` : '';
     const inset = plan.inset ? insetHtml(plan, S, sel) : '';
-    return `<div class="pp-map" role="group" aria-label="${esc(M.aria)}"><div class="pp-map-in">${svg}${pts}${labels}</div>`
-        + `<div class="pp-map-attr">${esc(M.attr)}</div>${scale}${inset}</div>`;
+    // The attribution sits under the "where" inset when there is one, else top right.
+    const attr = plan.where?.corner ? whereHtml(plan.where, S) : `<div class="pp-map-attr">${esc(M.attr)}</div>`;
+    return `<div class="pp-map${small ? ' pp-map--small' : ''}" role="group" aria-label="${esc(M.aria)}"><div class="pp-map-in">${svg}${small?.html ?? ''}${pts}${labels}</div>`
+        + `${attr}${small?.box ?? ''}${scale}${inset}</div>`;
 }
 
 /** The inset's width in px: on a desktop (31 % of a ~680 px map) and on a phone (40 % of ~350 px). */
@@ -778,6 +1208,7 @@ function insetHtml(plan: MapPlan, S: MapStrings, sel: string | null): string {
 function listHtml(plan: MapPlan, S: MapStrings, ctx: PlacesMapCtx, sel: string | null): string {
     const M = S.personPage.map;
     const rows: string[] = [];
+    const first = plan.places.find(p => p.num === 1);
     const badge = (p: PlannedPlace): string => {
         if (plan.state === 'noGeo') return '<span class="pp-map-badge pp-map-badge--none" aria-hidden="true"></span>';
         if (plan.state === 'list') return `<span class="pp-map-badge pp-map-badge--${p.geo ? 'dot' : 'none'}" aria-hidden="true"></span>`;
@@ -790,11 +1221,12 @@ function listHtml(plan: MapPlan, S: MapStrings, ctx: PlacesMapCtx, sel: string |
     for (const p of ordered) {
         const text = p.rel ? relativeEventsText(p.points, S) : ownEventsText(p.points, S, ctx.lang);
         const osa = p.rel ? '' : osaOf(p);
-        const selectable = plan.state === 'map';
+        const selectable = plan.state === 'map' || plan.state === 'tiny';
+        const from = p.from1 && first ? `<span class="pp-map-from">${esc(M.near(p.from1.km, M.dirs[p.from1.dir], first.name))}</span>` : '';
         const attrs = selectable
             ? ` tabindex="0" data-pp-map-place="${esc(p.placeKey)}"${osa ? ` data-pp-osa="${osa}"` : ''}` : osa ? ` data-pp-osa="${osa}"` : '';
         rows.push(`<li class="pp-map-row${p.rel ? ' pp-map-row--rel' : ''}${selectable && sel === p.placeKey ? ' is-sel' : ''}"${attrs}>`
-            + `${badge(p)}<span class="pp-map-rt"><b class="pp-map-name">${esc(p.full)}</b>${text ? ` · <span class="pp-map-ev">${esc(text)}</span>` : ''}${plan.state !== 'map' ? ambiguous(p) : ''}</span></li>`);
+            + `${badge(p)}<span class="pp-map-rt"><b class="pp-map-name">${esc(p.full)}</b>${from}${text ? ` · <span class="pp-map-ev">${esc(text)}</span>` : ''}${plan.state !== 'map' ? ambiguous(p) : ''}</span></li>`);
     }
     if (plan.noPos.length) {
         const items = plan.noPos.map(p => {
