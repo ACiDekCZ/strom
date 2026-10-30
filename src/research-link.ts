@@ -42,9 +42,32 @@ export function researchLinkScheme(value: unknown): string {
 export const RESEARCH_LINK_ACTIONS = [
     'send', 'excerpt', 'app', 'open', 'chat', 'task', 'review', 'research',
     'new', 'update', 'sessions', 'conflict', 'story', 'sync-undo', 'setup', 'live',
-    'direction', 'finish', 'media', 'archive', 'seal', 'experiment', 'history', 'fixes',
+    'direction', 'finish', 'media', 'archive', 'seal', 'experiment', 'history', 'fixes', 'doctor',
 ] as const;
 export type ResearchLinkAction = typeof RESEARCH_LINK_ACTIONS[number];
+
+/** A group of the research tools, in this order: look, assign work, run the agent (from free to paid). */
+export type ResearchToolGroup = 'look' | 'task' | 'agent';
+export const RESEARCH_TOOL_GROUPS: readonly ResearchToolGroup[] = ['look', 'task', 'agent'];
+
+/** One research tool: the link it opens (tree only), its group, its texts (`strings.research.tools`), whether an agent runs. */
+export interface ResearchToolAction {
+    action: ResearchLinkAction;
+    group: ResearchToolGroup;
+    titleKey: string;
+    descKey: string;
+    ai: boolean;
+}
+
+/**
+ * "Research tools ›" of the Research menu: the research's own actions with no list or context in the app.
+ * A new one is one entry here and its texts; an item shows only while the research announces its link.
+ * Actions of an object (a person, a place, a source) belong to that object's menu, not here; actions with a
+ * list of their own in the app ("Tree fixes") have their own item.
+ */
+export const RESEARCH_TOOL_ACTIONS: readonly ResearchToolAction[] = [
+    { action: 'doctor', group: 'look', titleKey: 'doctor', descKey: 'doctorDesc', ai: false },
+];
 
 /** The known actions in `value` (an array, or a space-separated header value); anything else is dropped. */
 export function sanitizeResearchLinks(value: unknown): ResearchLinkAction[] {
@@ -220,6 +243,7 @@ export function researchSchemeUrl(action: ResearchLinkAction, p: ResearchLinkPar
         case 'setup':
         case 'live':
         case 'seal':
+        case 'doctor':
             return base;
         case 'excerpt': {
             const source = researchSourceRef(p.source);

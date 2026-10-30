@@ -6388,6 +6388,39 @@
             background: none; color: var(--text); font-size: 24px; line-height: 1; cursor: pointer;
         }
         @media (hover: hover) { .research-menu-back:hover { background: var(--hover-bg); } }
+        /* "Research tools ›" and its page in place of the menu: "‹" back, groups with a heading,
+           each tool its title and a one-line description, the footer (the sheet: 48 px rows, no description). */
+        .research-item-chev { flex: none; margin-left: auto; color: var(--text-light); font-size: 16px; line-height: 1; }
+        .research-tools-heading { padding: 6px 14px 4px 6px; }
+        .research-tools-back, .toolbar .research-tools-back {
+            flex: none; min-width: 32px; min-height: 32px; padding: 0; border: 0; border-radius: 8px;
+            background: none; color: var(--text); font-size: 20px; line-height: 1; cursor: pointer;
+        }
+        @media (hover: hover) { .research-tools-back:hover { background: var(--hover-bg); } }
+        .research-tools-group-title {
+            padding: 8px 14px 2px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em;
+            text-transform: uppercase; color: var(--text-faint);
+        }
+        .research-tools-group + .research-tools-group { margin-top: 4px; border-top: 1px solid var(--divider); }
+        .research-tool-item .research-item-label { flex: 1; min-width: 0; }
+        .research-tool-title { font-size: 13.5px; }
+        .research-tool-desc { font-size: 12px; color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .research-tools-foot {
+            max-width: 320px; margin-top: 6px; padding: 8px 14px 2px; border-top: 1px solid var(--divider);
+            font-size: 12px; line-height: 1.4; color: var(--text-light); white-space: normal;
+        }
+        .research-sheet-body .research-tools-heading { padding: 0 8px 8px 4px; font-size: 15px; }
+        .research-sheet-body .research-tools-back { min-width: 44px; min-height: 44px; font-size: 24px; }
+        .research-sheet-body .tree-switcher-action.research-tool-item { min-height: 48px; }
+        .research-sheet-body .research-tool-title { font-size: 15px; }
+        .research-sheet-body .research-tool-desc { display: none; }
+        .research-sheet-body .research-tools-group-title { padding: 10px 16px 4px; }
+        .research-sheet-body .research-tools-foot { max-width: none; padding: 10px 16px 4px; }
+        @media (pointer: coarse) {
+            .research-tools-back, .toolbar .research-tools-back { min-width: 44px; min-height: 44px; }
+            .research-tool-item { min-height: 48px; }
+            .research-tool-desc { display: none; }
+        }
         .research-sheet-body .tree-switcher-action { min-height: 44px; box-sizing: border-box; padding: 10px 16px; font-size: 15px; }
         .research-sheet-body .research-sync-block { margin: 0 12px 8px; }
         .research-sheet-body .research-sync-btn, .research-sheet-body .research-sync-link { min-height: 44px; }

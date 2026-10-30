@@ -2178,6 +2178,15 @@ const stringsEN = {
                 return nEn(n, one, other);
             },
         },
+        tools: {
+            title: 'Research tools',
+            groupLook: 'Look',
+            groupTask: 'Assign work',
+            groupAgent: 'Run the agent',
+            foot: 'Everything is confirmed in the research. For AI, the research shows the cost before it starts.',
+            doctor: 'Research check',
+            doctorDesc: 'Checks the installation and the data of the research (doctor).',
+        },
         waitingCountSr: (n: number) => `Awaiting action: ${n}`,
         personSection: 'Research',
         reviewAction: 'Review again…',
@@ -7993,6 +8002,15 @@ const stringsCZ: StringsType = {
                 return nCs(n, one, few, other);
             },
         },
+        tools: {
+            title: 'Nástroje výzkumu',
+            groupLook: 'Podívat se',
+            groupTask: 'Zadat práci',
+            groupAgent: 'Spustit agenta',
+            foot: 'Vše se potvrzuje ve výzkumu. U AI ukáže výzkum cenu před spuštěním.',
+            doctor: 'Kontrola výzkumu',
+            doctorDesc: 'Zkontroluje instalaci a data výzkumu (doctor).',
+        },
         waitingCountSr: (n: number) => `Čeká na vyřízení: ${n}`,
         personSection: 'Výzkum',
         reviewAction: 'Prověřit znovu…',
@@ -13748,6 +13766,15 @@ const stringsDE: StringsType = {
                 const [one, other] = u[unit] ?? u.item;
                 return nDe(n, one, other);
             },
+        },
+        tools: {
+            title: 'Forschungswerkzeuge',
+            groupLook: 'Ansehen',
+            groupTask: 'Arbeit vergeben',
+            groupAgent: 'Agent starten',
+            foot: 'Alles wird in der Forschung bestätigt. Bei KI zeigt die Forschung die Kosten vor dem Start.',
+            doctor: 'Forschung prüfen',
+            doctorDesc: 'Prüft die Installation und die Daten der Forschung (doctor).',
         },
         waitingCountSr: (n: number) => `Wartet auf Bearbeitung: ${n}`,
         personSection: 'Forschung',

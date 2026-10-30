@@ -764,7 +764,7 @@ export const bottomSheetMethods = uiModule({
                 }
                 // An item done closes the sheet (unless it put another sheet in its place).
                 const item = target?.closest('[role="menuitem"]');
-                if (!item || item.matches('.research-trial-tag, .research-item-more, [data-action="cancelLoad"], [data-action="conflicts"]')) return;
+                if (!item || item.matches('.research-trial-tag, .research-item-more, #research-item-tools, .research-tools-back, [data-action="cancelLoad"], [data-action="conflicts"]')) return;
                 if (this.bottomSheet === overlay) this.hideBottomSheet();
             });
             sheet.appendChild(researchPage);

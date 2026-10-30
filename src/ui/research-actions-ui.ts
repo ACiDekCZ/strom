@@ -13,7 +13,10 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { formatLiveClock } from '../live-time.js';
 import { PersonId, PartnershipId } from '../types.js';
 import { yearOf } from '../dates.js';
-import { RESEARCH_LINK_ACTIONS, ResearchReviewScope, ResearchStoryDo, researchPersonRef } from '../research-link.js';
+import {
+    RESEARCH_LINK_ACTIONS, RESEARCH_TOOL_ACTIONS, RESEARCH_TOOL_GROUPS, ResearchLinkAction, ResearchReviewScope, ResearchStoryDo,
+    ResearchToolAction, researchPersonRef,
+} from '../research-link.js';
 import { uiModule } from './module.js';
 import { onComputer } from './research-ui.js';
 import { PersonMenuAction } from './context-menu.js';
@@ -118,6 +121,8 @@ interface ResearchMenuModel {
     /** The footer's whole sentence: its title and the description of every item with the mark. */
     note: string;
     waiting: number;
+    /** The research tools it announced ("Research tools ›", §8); empty: no item. */
+    tools: ResearchToolAction[];
 }
 
 /** A row of the More sheet's research group. */
@@ -185,7 +190,7 @@ function submenuItemHtml(item: SubmenuItem, desc = ''): string {
             + `<span class="research-item-label">${esc(item.link.label)}</span>${researchOpenMark({ sr: false })}</div>`
         : '';
     return `<div class="tree-switcher-action${item.disabled ? ' is-disabled' : ''}${item.sub ? ' research-item--two' : ''}" id="${item.id}" role="menuitem" tabindex="0"`
-        + ` aria-label="${esc(itemAria(item))}"${item.ext ? described : ''}${item.disabled ? ' aria-disabled="true"' : ` onclick="${itemCall(item)}"`}>`
+        + ` aria-label="${esc(itemAria(item))}"${item.ext ? described : ''}${item.submenu ? ' aria-haspopup="menu"' : ''}${item.disabled ? ' aria-disabled="true"' : ` onclick="${itemCall(item)}"`}>`
         + (item.dot ? '<span class="research-item-dot" aria-hidden="true"></span>' : '')
         + (item.sub
             ? `<span class="research-item-label research-item-label--two"><span>${esc(item.label)}</span><span class="research-item-sub">${esc(item.sub)}</span></span>`
@@ -227,6 +232,48 @@ let menuOpener: HTMLElement | null = null;
 
 /** "Other actions" is open (until the menu closes; the More sheet's page opens with it open). */
 let moreOpen = false;
+
+/** The menu shows its "Research tools" page (until the menu closes or "‹" goes back). */
+let toolsOpen = false;
+
+/** A research tool's title or description (its key in `strings.research.tools`). */
+function toolText(key: string): string {
+    return (strings.research.tools as unknown as Record<string, string>)[key] ?? key;
+}
+
+/** A research tool's row: its title and one-line description, AI where an agent runs, the mark. */
+function toolItemHtml(tool: ResearchToolAction): string {
+    const r = strings.research;
+    const title = toolText(tool.titleKey);
+    const desc = toolText(tool.descKey);
+    const aria = [title, ...(tool.ai ? [r.aiBadge] : []), r.opensInResearchSr].join(', ');
+    return `<div class="tree-switcher-action research-tool-item" id="research-tool-${tool.action}" role="menuitem" tabindex="0"`
+        + ` data-tool="${tool.action}" aria-label="${esc(aria)}" aria-description="${esc(desc)}"`
+        + ` onclick="${call('researchActionTool', `'${tool.action}'`)}">`
+        + `<span class="research-item-label research-item-label--two"><span class="research-tool-title">${esc(title)}</span>`
+        + `<span class="research-tool-desc" aria-hidden="true">${esc(desc)}</span></span>`
+        + researchOpenMark({ ai: tool.ai, sr: false })
+        + '</div>';
+}
+
+/** The "Research tools" page: "‹" back, the groups in their order (an empty one without its heading), the footer. */
+function toolsPageHtml(tools: ResearchToolAction[], titleId: string): string {
+    const t = strings.research.tools;
+    const heads: Record<string, string> = { look: t.groupLook, task: t.groupTask, agent: t.groupAgent };
+    const groups = RESEARCH_TOOL_GROUPS.map(g => {
+        const items = tools.filter(x => x.group === g);
+        if (!items.length) return '';
+        return `<div class="research-menu-group research-tools-group" role="group" aria-labelledby="research-tools-group-${g}">`
+            + `<div class="research-tools-group-title" id="research-tools-group-${g}" role="presentation">${esc(heads[g])}</div>`
+            + items.map(toolItemHtml).join('') + '</div>';
+    }).join('');
+    return '<div class="research-menu-heading research-tools-heading">'
+        + `<button type="button" class="research-tools-back" role="menuitem" aria-label="${esc(strings.contextMenu.back)}"`
+        + ` onclick="${call('closeResearchTools')}"><span aria-hidden="true">‹</span></button>`
+        + `<span class="research-menu-title" id="${titleId}">${esc(t.title)}</span>`
+        + '</div>' + groups
+        + `<div class="research-tools-foot" role="none">${esc(t.foot)}</div>`;
+}
 
 /** The More sheet's research page is showing (the menu is drawn there, not in the dropdown). */
 function sheetResearchBody(): HTMLElement | null {
@@ -320,6 +367,7 @@ export const researchActionsMethods = uiModule({
         let moreQuiet: SubmenuItem[];
         let note = r.footerFull;
         let moreAttention = '';
+        let tools: ResearchToolAction[] = [];
         if (!this.researchAnyAnnounced()) {
             // No strom-research:// links here (an older research, none announced, or
             // switched off): the way back, and what it is. A research that says what
@@ -374,6 +422,9 @@ export const researchActionsMethods = uiModule({
             // "Tree fixes" (§7): a list of its own in the app, so here and not among the research tools (§8 rule 5).
             const fixes = this.researchFixesMenuEntry();
             if (fixes) more.push({ id: 'research-item-fixes', method: 'researchActionFixes', ...fixes });
+            // "Research tools ›" (§8): the actions the research announced that have no place of their own here.
+            tools = RESEARCH_TOOL_ACTIONS.filter(t => this.researchLinkAvailable(t.action) && !(t.ai && noAgent));
+            if (tools.length) more.push({ id: 'research-item-tools', label: strings.research.tools.title, method: 'openResearchTools', submenu: true });
             // Occasional: the ways back, the settings.
             moreQuiet = [];
             // "Restore the state before loading" until the next edit (or 7 days); its first hour is the block above.
@@ -432,12 +483,14 @@ export const researchActionsMethods = uiModule({
             : '';
         // An older research (it never said what it takes): a state block of its own, "How to update…".
         const blocks = (syncBlock || followingBlock) + this.researchOlderBlockHtml();
-        return { foot: !!ctx, blocks, first, more, moreQuiet, moreAttention, note, waiting };
+        return { foot: !!ctx, blocks, first, more, moreQuiet, moreAttention, note, waiting, tools };
     },
 
     /** The research menu's HTML; on the More sheet's page a title with "‹" back comes first. */
     researchMenuHtml(model: ResearchMenuModel, opts: { back?: boolean } = {}): string {
         const r = strings.research;
+        // The "Research tools" page in place of the menu (the sheet's title id kept: the page is labelled by it).
+        if (toolsOpen && model.tools.length) return toolsPageHtml(model.tools, opts.back ? 'research-menu-title' : 'research-tools-title');
         const heading = opts.back
             ? '<div class="research-menu-heading">'
                 + `<button type="button" class="research-menu-back" role="menuitem" aria-label="${esc(strings.contextMenu.back)}"><span aria-hidden="true">‹</span></button>`
@@ -491,6 +544,36 @@ export const researchActionsMethods = uiModule({
     /** The More sheet's page shows the menu with "Other actions" open; it closes again with the page or the menu. */
     setResearchMoreOpen(open: boolean): void {
         moreOpen = open;
+        toolsOpen = false;
+    },
+
+    /** "Research tools ›": the menu shows the tools page in place, focus on its first tool. */
+    openResearchTools(): void {
+        toolsOpen = true;
+        // After the click is done: the clicked row leaves the page (an outside click otherwise).
+        setTimeout(() => {
+            this.refreshResearchMenu();
+            const menu = sheetResearchBody() ?? document.getElementById('research-menu');
+            (menu?.querySelector<HTMLElement>('.research-tool-item') ?? menu?.querySelector<HTMLElement>('.research-tools-back'))?.focus();
+        }, 0);
+    },
+
+    /** "‹" on the tools page: back to the menu, focus on "Research tools ›". */
+    closeResearchTools(): void {
+        toolsOpen = false;
+        setTimeout(() => {
+            this.refreshResearchMenu();
+            const menu = sheetResearchBody() ?? document.getElementById('research-menu');
+            menu?.querySelector<HTMLElement>('#research-item-tools')?.focus();
+        }, 0);
+    },
+
+    /** A research tool: its link into the research's terminal (the research asks there first). */
+    researchActionTool(action: string): void {
+        this.closeActionsMenu();
+        const tool = RESEARCH_TOOL_ACTIONS.find(t => t.action === action);
+        const url = tool ? this.activeResearchLink(tool.action as ResearchLinkAction) : null;
+        if (url) this.launchResearchLink(url);
     },
 
     /**
@@ -510,6 +593,16 @@ export const researchActionsMethods = uiModule({
                 if (moreOpen) menuItems(target.closest<HTMLElement>('.research-menu-body') ?? document.body).find(el => !!el.closest('#research-menu-more'))?.focus();
                 else this.toggleResearchMore('first');
             }
+            return;
+        }
+        if (target.id === 'research-item-tools' && e.key === 'ArrowRight') {
+            e.preventDefault();
+            this.openResearchTools();
+            return;
+        }
+        if (toolsOpen && e.key === 'ArrowLeft' && target.closest('.research-tool-item, .research-tools-back')) {
+            e.preventDefault();
+            this.closeResearchTools();
             return;
         }
         if (e.key === 'ArrowLeft' && moreOpen && target.closest('#research-menu-more')) {
@@ -588,7 +681,7 @@ export const researchActionsMethods = uiModule({
         // An item done closes the menu (its own action may have opened a dialog already).
         menu.addEventListener('click', (e) => {
             const item = (e.target as Element | null)?.closest('[role="menuitem"]');
-            if (!item || item.matches('.research-trial-tag, .research-item-more, [data-action="cancelLoad"], [data-action="conflicts"], [aria-disabled="true"]')) return;
+            if (!item || item.matches('.research-trial-tag, .research-item-more, #research-item-tools, .research-tools-back, [data-action="cancelLoad"], [data-action="conflicts"], [aria-disabled="true"]')) return;
             if (this.isResearchMenuOpen()) this.closeResearchMenu();
         });
         menu.addEventListener('keydown', (e) => this.researchMenuKeydown(e));
@@ -663,6 +756,7 @@ export const researchActionsMethods = uiModule({
         this.hideWhatsNewCard();
         menuOpener = opts.opener ?? null;
         moreOpen = false;
+        toolsOpen = false;
         menu.classList.add('active');
         btn.setAttribute('aria-expanded', 'true');
         btn.classList.add('is-open');
@@ -682,6 +776,7 @@ export const researchActionsMethods = uiModule({
             // The last write said there was seen: the next opening says the tree is in sync.
             this.researchNoteMenuWrittenSeen(menu);
             moreOpen = false;
+            toolsOpen = false;
             menu!.classList.remove('active');
             btn?.setAttribute('aria-expanded', 'false');
             btn?.classList.remove('is-open');

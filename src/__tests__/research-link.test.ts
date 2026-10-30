@@ -20,8 +20,9 @@ import { parseGedcom, convertToStrom } from '../ged-parser.js';
 import {
     isResearchHead, parseSendBridge, pickSendDefault, researchHeaderLines, sanitizeResearchField,
     sanitizeSyncReply, isFaithfulExport, readResearchHeader as readHeader, sanitizeLiveStatus as liveStatus, unknownSexFromTie,
-    MAX_STATUS_FEATURES,
+    MAX_STATUS_FEATURES, RESEARCH_TOOL_ACTIONS, RESEARCH_TOOL_GROUPS,
 } from '../research-link.js';
+import { getStringsForLang } from '../strings.js';
 import { exportToGedcom } from '../ged-exporter.js';
 import { StromData, PersonId } from '../types.js';
 
@@ -1357,5 +1358,24 @@ describe('history manager status fields and link (1028)', () => {
         expect(researchSchemeUrl('fixes', { tree: UUID, fix: '-street' })).toBeNull();
         expect(researchSchemeUrl('fixes', { tree: UUID, fixDo: 'undo' })).toBeNull();
         expect(researchSchemeUrl('fixes', { tree: UUID, fix: 'street-places', fixDo: 'run' as 'undo' })).toBeNull();
+    });
+
+    it('the research tools: each one a link of the tree alone, in a known group, with its title and description in every language (§8)', () => {
+        expect(RESEARCH_TOOL_ACTIONS.length).toBeGreaterThan(0);
+        expect(sanitizeResearchLinks('open doctor')).toEqual(['open', 'doctor']);
+        for (const tool of RESEARCH_TOOL_ACTIONS) {
+            expect(researchSchemeUrl(tool.action, { tree: UUID })).toBe(`strom-research://${tool.action}?tree=${UUID}`);
+            expect(RESEARCH_TOOL_GROUPS).toContain(tool.group);
+            // An agent's work is the "Run the agent" group, and only it.
+            expect(tool.ai).toBe(tool.group === 'agent');
+            for (const lang of ['en', 'cs', 'de'] as const) {
+                const t = getStringsForLang(lang).research.tools as unknown as Record<string, string>;
+                expect(typeof t[tool.titleKey], `${lang} ${tool.titleKey}`).toBe('string');
+                expect(typeof t[tool.descKey], `${lang} ${tool.descKey}`).toBe('string');
+            }
+        }
+        // Actions of an object or with a list of their own in the app are not tools.
+        expect(RESEARCH_TOOL_ACTIONS.map(t => t.action)).not.toContain('history');
+        expect(RESEARCH_TOOL_ACTIONS.map(t => t.action)).not.toContain('fixes');
     });
 });
