@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { lifeChartInput, lifeChartHtml, chartAnchorId, chartHistAnchorId, chartSet, CHART_WIDE, CHART_NARROW, historyGlyphs, historyLabelLanes } from '../person-page-chart.js';
+import { lifeChartInput, lifeChartHtml, chartAnchorId, chartHistAnchorId, chartSet, CHART_WIDE, CHART_NARROW, historyGlyphs, historyLabelLanes, residenceLabel } from '../person-page-chart.js';
 import type { ChartHistory } from '../person-page-chart.js';
 import { computePersonLifeline } from '../timeline.js';
 import { getStringsForLang } from '../strings.js';
@@ -300,6 +300,21 @@ describe('lifeChartInput', () => {
 
 describe('lifeChartHtml', () => {
     const input = () => lifeChartInput(tree(), JAN, { now: NOW });
+
+    it('a place lived names its place and years in its tooltip and accessible name, also where the band is too narrow for its name', () => {
+        const S = getStringsForLang('en');
+        for (const [w, narrow] of [[CHART_WIDE, false], [CHART_NARROW, true]] as const) {
+            const set = chartSet(input()!, S, { lang: 'en', mode: 'file' }, w, narrow);
+            const bands = [...set.matchAll(/<a class="pp-ch-res[^"]*"[^>]*title="([^"]*)" aria-label="([^"]*)">([^<]*)<\/a>/g)];
+            expect(bands.map(b => b[1])).toEqual(['Čapkov 1860–1880', 'Praha 1880–1883', 'Lhotka 1883–1890', 'Kolín 1890–1920']);
+            for (const b of bands) expect(b[2]).toBe(b[1]);
+            // On a phone the short runs have no room for their name: the label still says it.
+            if (narrow) expect(bands.some(b => b[3] === '')).toBe(true);
+        }
+        // Within one year, a single year; a run to the end of a life without a death, open.
+        expect(residenceLabel({ from: 1916.2, to: 1916.9, place: 'Bristol' }, false)).toBe('Bristol 1916');
+        expect(residenceLabel({ from: 1990.4, to: 2026.8, place: 'Bristol' }, true)).toBe('Bristol 1990–');
+    });
 
     it('a file carries two sets, the window one for its width', () => {
         const file = lifeChartHtml(input(), { lang: 'cs', mode: 'file' });

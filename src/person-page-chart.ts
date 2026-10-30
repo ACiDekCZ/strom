@@ -482,7 +482,8 @@ export function chartSet(input: LifeChartInput, S: CS, ctx: LifeChartCtx, W: num
         rows.push(`<div class="pp-ch-row pp-ch-band">${input.residence.map((r, i) => {
             const name = r.place.split(',')[0].trim() || r.place;
             const fits = wpx(r.from, r.to) > name.length * CH_PX + 8;
-            return `<a class="pp-ch-res pp-ch-res--${i % 2 ? 2 : 1}" href="#${r.anchor}" data-pp-osa="${r.anchor}" style="left:${x(r.from)};width:${wpc(r.from, r.to)}" title="${esc(r.place)}">${fits ? esc(name) : ''}</a>`;
+            const label = residenceLabel(r, i === input.residence.length - 1 && input.endKind !== 'death');
+            return `<a class="pp-ch-res pp-ch-res--${i % 2 ? 2 : 1}" href="#${r.anchor}" data-pp-osa="${r.anchor}" style="left:${x(r.from)};width:${wpc(r.from, r.to)}" title="${esc(label)}" aria-label="${esc(label)}">${fits ? esc(name) : ''}</a>`;
         }).join('')}</div>`);
     }
 
@@ -499,6 +500,16 @@ export function chartSet(input: LifeChartInput, S: CS, ctx: LifeChartCtx, W: num
     rows.push(`<div class="pp-ch-row pp-ch-axis" aria-hidden="true">${ticks.map(y => `<span style="left:${x(y)}">${y}</span>`).join('')}</div>`);
 
     return rows.join('');
+}
+
+/**
+ * A place lived as words, for the band's tooltip and accessible name (a narrow
+ * band has no room for its name): "Bristol 1916–1921", "Bristol 1916" within a
+ * year, "Bristol 1990–" when the run goes on to the end of a life not closed by a death.
+ */
+export function residenceLabel(r: Pick<ChartResidence, 'from' | 'to' | 'place'>, open: boolean): string {
+    const a = Math.floor(r.from), b = Math.floor(r.to);
+    return `${r.place} ${open ? `${a}–` : a === b ? a : `${a}–${b}`}`;
 }
 
 function periodLabel(p: ChartPeriod, S: CS, gender: Gender, narrow: boolean): string {
