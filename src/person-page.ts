@@ -12,7 +12,7 @@
  * the output.
  */
 
-import { StromData, Person, PersonId, Partnership, Source, SourceExcerpt, LifeEvent, EventParticipant, Story, Attachment, PlaceGeo } from './types.js';
+import { StromData, Person, PersonId, Partnership, Source, SourceExcerpt, LifeEvent, EventParticipant, Story, Attachment, PlaceGeo, FactStatus } from './types.js';
 import { applyLivingPrivacy, stripResearchWork, isLivingPerson, inferBirthUpperBounds, PrivacyMode } from './privacy.js';
 import { computePersonLifeline, LifelinePoint } from './timeline.js';
 import {
@@ -750,6 +750,10 @@ interface ResearchItems {
     tips: string[];
     pending: string[];
     hypotheses: string[];
+    /** The research's status of each fact that has one ("Birth 1860: Proven"). */
+    certainty: string[];
+    /** "Backed by sources: 3 of 5 facts" ('' = the person has no facts). */
+    sourced: string;
     count: number;
     /** Open conflicts about the birth / the death. */
     differsBirth: boolean;
@@ -779,7 +783,7 @@ function sourceByRef(tree: StromData, ref: string): Source | undefined {
 function researchItems(page: PersonPageData, lang: Language, c?: Ctx): ResearchItems {
     const S = getStringsForLang(lang);
     const P = S.personPage;
-    const out: ResearchItems = { conflicts: [], tips: [], pending: [], hypotheses: [], count: 0, differsBirth: false, differsDeath: false };
+    const out: ResearchItems = { conflicts: [], tips: [], pending: [], hypotheses: [], certainty: [], sourced: '', count: 0, differsBirth: false, differsDeath: false };
     if (!page.groups.research) return out;
     const person = page.tree.persons[page.personId];
     if (!person) return out;
@@ -816,7 +820,57 @@ function researchItems(page: PersonPageData, lang: Language, c?: Ctx): ResearchI
         const note = h.note ? ` — ${esc(stripResearchIds(h.note).text)}` : '';
         out.hypotheses.push(`<strong>${esc(stripResearchIds(h.title).text)}</strong>${note}${h.id ? act('research:open', h.id, P.openResearch) : ''}`);
     }
-    out.count = out.conflicts.length + out.tips.length + out.pending.length + out.hypotheses.length;
+    const facts = personFacts(page, S);
+    for (const f of facts) if (f.status) out.certainty.push(`<strong>${esc(f.label)}:</strong> ${esc(S.factStatus[f.status])}`);
+    // The count only once the person cites a source or the research rated a fact: else "0 of 1" on every page.
+    const anySource = Object.keys(page.tree.sources ?? {}).length > 0;
+    if (facts.length && (anySource || out.certainty.length)) {
+        out.sourced = esc(P.research.sourced(facts.filter(f => f.sourced).length, facts.length));
+    }
+    out.count = out.conflicts.length + out.tips.length + out.pending.length + out.hypotheses.length
+        + out.certainty.length + (out.sourced ? 1 : 0);
+    return out;
+}
+
+interface PersonFact { label: string; status?: FactStatus; sourced: boolean }
+
+/**
+ * The person's facts for the researchers' section (§0.6): the birth, the death,
+ * each life event, each marriage (and its divorce, the couple's events) with a
+ * date or a place — with the research's status and whether a source on the
+ * page backs it. A union with a living partner in a protected file is left out.
+ */
+function personFacts(page: PersonPageData, S: S): PersonFact[] {
+    const person = page.tree.persons[page.personId];
+    if (!person) return [];
+    const catalog = page.tree.sources ?? {};
+    const cited = (ids: readonly string[] | undefined) => (ids ?? []).some(id => !!catalog[id]);
+    const withYear = (label: string, date: string | undefined) => {
+        const y = yearOf(date);
+        return y !== null ? `${label} ${y}` : label;
+    };
+    const out: PersonFact[] = [];
+    const add = (label: string, status: FactStatus | undefined, sourced: boolean) =>
+        out.push({ label, ...(status ? { status } : {}), sourced });
+    if (person.birthDate || person.birthPlace) add(withYear(S.events.types.birth, person.birthDate), person.birthStatus, cited(person.birthSourceIds));
+    if (person.deathDate || person.deathPlace) add(withYear(S.events.types.death, person.deathDate), person.deathStatus, cited(person.deathSourceIds));
+    for (const ev of person.events ?? []) {
+        if (!ev.date && !ev.place) continue;
+        add(withYear(lifeEventLabel(ev, S), ev.date), ev.status, cited(ev.sourceIds));
+    }
+    const protect = page.privacy !== 'full';
+    for (const uid of person.partnerships) {
+        const u = page.tree.partnerships[uid];
+        if (!u) continue;
+        const other = u.person1Id === person.id ? u.person2Id : u.person1Id;
+        if (protect && page.living.has(other)) continue;
+        if (u.startDate || u.startPlace) add(S.personSources.citeUnion(yearOf(u.startDate)), u.startStatus, cited(u.sourceIds));
+        if (u.endDate || u.endPlace) add(withYear(S.fields.divorceRow, u.endDate), u.endStatus, cited(u.sourceIds));
+        for (const ev of u.events ?? []) {
+            if (!ev.date && !ev.place) continue;
+            add(withYear(coupleEventLabelIn(ev, S), ev.date), ev.status, cited(ev.sourceIds));
+        }
+    }
     return out;
 }
 
@@ -2241,8 +2295,10 @@ function researchHtml(c: Ctx, items: ResearchItems, rows: PersonSourceRow[]): st
     }
     const known = new Set(rows.map(r => r.source.refn).filter(Boolean));
     for (const id of c.ids) if (!known.has(id)) ids.push(`<code>${esc(id)}</code>`);
+    const certainty = [...(items.sourced ? [items.sourced] : []), ...items.certainty];
     const body = group(P.research.conflicts, items.conflicts) + group(P.research.tips, items.tips)
         + group(P.research.pending, items.pending) + group(P.research.hypotheses, items.hypotheses)
+        + group(P.research.certainty, certainty)
         + group(P.research.ids, ids, ' pp-ids');
     if (!body) return '';
     const head = `<span class="pp-sum-main"><span class="pp-h2-text">${esc(P.sec.research)}</span></span>` + foldState(`${P.expand} ▸`, `${P.collapse} ▾`);

@@ -405,6 +405,37 @@ describe('header', () => {
         expect(personPageYear('1890..1892', 'cs')).toBe('1890–1892');
         expect(personPageYear('1890-05-01', 'cs')).toBe('1890');
     });
+    it('for researchers: the certainty of the facts and how many a source backs (§0.6)', () => {
+        const d = fiskTree();
+        d.persons['jan' as PersonId].birthStatus = 'proven';
+        d.partnerships['u1' as PartnershipId].startStatus = 'probable';
+        const html = body(d);
+        const sec = html.slice(html.indexOf('id="pp-sec-research"'));
+        expect(sec).toContain('<p class="pp-kicker">Jistota údajů</p>');
+        // Birth, death, baptism, burial, emigration, the marriage: birth, death, baptism and marriage cite a source.
+        expect(sec).toContain('<li>Doloženo prameny: 4 z 6 údajů</li>');
+        expect(sec).toContain('<li><strong>Narození 1860:</strong> Doložené</li>');
+        expect(sec).toContain('<li><strong>Sňatek 1888:</strong> Pravděpodobné</li>');
+        expect(body(d, { lang: 'en' })).toContain('Backed by sources: 4 of 6 facts');
+        expect(body(d, { lang: 'de' })).toContain('Durch Quellen belegt: 4 von 6 Angaben');
+        expect(body(d, { research: false })).not.toContain('Jistota údajů');
+        // A protected file: a marriage to a living partner counts neither its status nor its sources.
+        const live = fiskTree();
+        live.partnerships['u1' as PartnershipId].startStatus = 'probable';
+        // Marie living: no death and no children born long ago to date her.
+        Object.assign(live.persons['marie' as PersonId], { birthDate: '1950', deathDate: undefined, childIds: [] });
+        live.partnerships['u1' as PartnershipId].childIds = [];
+        for (const k of ['petr', 'rosa']) live.persons[k as PersonId].parentIds = ids('jan');
+        Object.assign(live.persons['jan' as PersonId], { birthDate: '1948-03-12', deathDate: '2010-11-02' });
+        live.persons['jan' as PersonId].events = [];
+        live.partnerships['u1' as PartnershipId].startDate = '1975-02-02';
+        const prot = doc(live, { privacy: 'initials' });
+        expect(prot).toContain('Doloženo prameny: 2 z 2 údajů');
+        expect(prot).not.toContain('Pravděpodobné');
+        expect(doc(live)).toContain('Doloženo prameny: 3 z 3 údajů');
+        // A living person's own page in a protected file: the header alone.
+        expect(doc(live, { personId: 'marie' as PersonId, privacy: 'initials' })).not.toContain('Jistota údajů');
+    });
     it('an open birth conflict gives the differs badge leading to the researchers section', () => {
         const d = fiskTree();
         d.persons['jan' as PersonId].research = {
