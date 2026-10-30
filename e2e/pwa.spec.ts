@@ -72,3 +72,32 @@ test.describe('Safari\'s own app is told apart by name and icon', () => {
         await ipad.ctx.close();
     });
 });
+
+/**
+ * The new-version prompt floats above everything at the bottom centre, where
+ * a dialog has its footer (Read documents, Suggest to the tree): it covered
+ * the dialog's buttons. While a dialog is open it waits, and it is back once
+ * the dialog closes.
+ */
+for (const width of [1440, 390]) {
+    test(`the new-version prompt waits while a dialog is open (${width})`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 800 });
+        await openApp(page);
+        await page.evaluate(() => window.Strom.UI.showUpdateAvailable());
+        const prompt = page.locator('.pwa-update');
+        await expect(prompt).toBeVisible();
+
+        await page.evaluate(() => window.Strom.UI.showAboutDialog());
+        const footer = page.locator('.modal-overlay.active .buttons button').last();
+        await expect(footer).toBeVisible();
+        await expect(prompt).toBeHidden();
+        const box = (await footer.boundingBox())!;
+        const onTop = await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest('.pwa-update') !== null,
+            [box.x + box.width / 2, box.y + box.height / 2]);
+        expect(onTop).toBe(false);
+
+        await page.keyboard.press('Escape');
+        await expect(page.locator('.modal-overlay.active')).toHaveCount(0);
+        await expect(prompt).toBeVisible();
+    });
+}

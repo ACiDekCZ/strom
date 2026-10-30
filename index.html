@@ -7478,6 +7478,13 @@
             transition: opacity 0.2s, transform 0.2s;
         }
         .pwa-update.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        /* It floats above everything (z-index 250) at the bottom centre, where a dialog has its
+           footer (Read documents, Suggest to the tree): while a dialog is open it waits, and is
+           back, unchanged, once the dialog closes. */
+        body:has(.modal-overlay.active) .pwa-update { display: none; }
+        @supports not (selector(:has(*))) {
+            body.has-active-modal .pwa-update { display: none; }
+        }
         .pwa-update-btn {
             border: none; background: var(--primary); color: var(--on-primary);
             border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer;
