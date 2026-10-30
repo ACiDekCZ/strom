@@ -5544,6 +5544,7 @@ const stringsEN = {
             : `The research has not looked for the history of ${a} and ${b} yet.`,
         findMore: 'More in the manager',
         findShort: (r: string) => `${r} not searched yet.`,
+        findShortRegion: (r: string) => `Region ${r} not searched yet.`,
         findShortLink: 'Find first',
         // The card's line for a tree whose research does not search yet (spec 020 K1.6).
         stripNoSearch: "The research does not look for the history of the ancestors' places yet.",
@@ -11294,6 +11295,7 @@ const stringsCZ: StringsType = {
             : `Výzkum ještě nehledal dějiny regionů ${a} a ${b}.`,
         findMore: 'Další ve správě',
         findShort: (r: string) => `${r} ještě nebyla hledaná.`,
+        findShortRegion: (r: string) => `Region ${r} ještě nebyl hledaný.`,
         findShortLink: 'Najít jako první',
         // Řádek karty u stromu, jehož výzkum zatím nehledá (spec 020 K1.6).
         stripNoSearch: 'Dějiny k místům předků výzkum zatím nehledá.',
@@ -16960,6 +16962,7 @@ const stringsDE: StringsType = {
             : `Die Forschung hat für ${a} und ${b} noch nicht gesucht.`,
         findMore: 'Weitere in der Verwaltung',
         findShort: (r: string) => `${r} noch nicht gesucht.`,
+        findShortRegion: (r: string) => `Region ${r} noch nicht gesucht.`,
         findShortLink: 'Als Erstes suchen',
         // Zeile der Karte bei einem Stammbaum, dessen Forschung noch nicht sucht (Spec 020 K1.6).
         stripNoSearch: 'Die Forschung sucht noch kein Zeitgeschehen zu den Orten der Vorfahren.',

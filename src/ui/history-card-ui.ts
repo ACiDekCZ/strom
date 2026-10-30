@@ -273,7 +273,7 @@ export const historyCardMethods = uiModule({
             + '<span class="pm-lifeline-glyph" aria-hidden="true"></span>'
             + `<span class="pm-lifeline-desc">${esc(text)}${extra}</span></div>`;
         const st = history.state;
-        const find = this.lifelineHistoryFindRow(history.find ?? [], stateRow);
+        const find = this.lifelineHistoryFindRow(history.find ?? [], stateRow, !!history.placeRow);
         switch (st.kind) {
             case 'events': if (st.somePending) tail += find || stateRow(h.stateSomePending); break;
             case 'noPlace': tail += stateRow(h.stateNoPlace); break;
@@ -287,8 +287,8 @@ export const historyCardMethods = uiModule({
             // 9 (all hidden): only "Hidden: n"; 11 (incomplete, a place missing): nothing.
             default: break;
         }
-        // §6a: the main place's own history, only when §5 offers nothing.
-        if (!find && history.placeRow) tail += this.lifelineHistoryPlaceRow(history.placeRow);
+        // §6a: the main place's own history, after the region's row when both are there.
+        if (history.placeRow) tail += this.lifelineHistoryPlaceRow(history.placeRow);
         if (history.hidden.length) {
             rowHidden = history.hidden;
             const items = history.hidden.map((item, j) => {
@@ -319,8 +319,10 @@ export const historyCardMethods = uiModule({
      * with most of the person's facts ('' none): one region, several (the
      * first one's link + "More in the manager ›"), on a phone one short line;
      * a region asked first already or answered says the answer instead.
+     * `withPlace`: the place's own row follows, so the phone's short line
+     * names the region as one (the place's line says "{place} and surroundings").
      */
-    lifelineHistoryFindRow(regions: readonly HistoryFindRegion[], stateRow: (text: string, extra?: string) => string): string {
+    lifelineHistoryFindRow(regions: readonly HistoryFindRegion[], stateRow: (text: string, extra?: string) => string, withPlace = false): string {
         const list = regions.filter(r => !findGone.has(r.id));
         const top = list[0];
         if (!top) return '';
@@ -340,7 +342,7 @@ export const historyCardMethods = uiModule({
             return '<div class="pm-lifeline-row k-historyState is-region is-find-one">'
                 + '<span class="pm-lifeline-hmark" aria-hidden="true"></span><span class="pm-lifeline-year"></span>'
                 + '<span class="pm-lifeline-glyph" aria-hidden="true"></span>'
-                + `<span class="pm-lifeline-desc"><span class="pm-lifeline-hfind-text">${esc(h.findShort(name(top.id)))}</span>${link(h.findShortLink)}</span></div>`;
+                + `<span class="pm-lifeline-desc"><span class="pm-lifeline-hfind-text">${esc((withPlace ? h.findShortRegion : h.findShort)(name(top.id)))}</span>${link(h.findShortLink)}</span></div>`;
         }
         if (list.length === 1) return stateRow(h.findOne(name(top.id)), ` ${link(h.findRegion(name(top.id)))}`);
         return stateRow(h.findMany(name(list[0].id), name(list[1].id), list.length - 2),

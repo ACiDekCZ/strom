@@ -430,10 +430,11 @@ export const historyMethods = uiModule({
             const find = historyFindRegions(DataManager.getData(), personId, payload, status.treeState ? { treeState: status.treeState } : {});
             if (find.length) history.find = find;
         }
-        // §6a: the main place's own history as the last row, only when §5 offers nothing (always one offer).
+        // §6a: the main place's own history as the last row — also under a §5
+        // region offer: the region and the place are two searches, each row says which.
         const { kinds, placeShown } = this.historyKindsNow();
         const placeState = ['events', 'searching', 'none', 'allHidden'].includes(history.state.kind);
-        if (placeShown && kinds.place && placeState && !history.find?.length && payload.regions) {
+        if (placeShown && kinds.place && placeState && payload.regions) {
             const canOffer = !!status && (status.features ?? []).includes(HISTORY_PLACE_FEATURE)
                 && (searchOn ?? payload.state.on) && split?.places !== false && !historyWaiting(payload, status.treeState);
             const row = historyPlaceRow(payload, historyMainPlace(DataManager.getData(), personId, payload), canOffer);

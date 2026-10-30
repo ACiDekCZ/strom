@@ -11,9 +11,12 @@ import {
  * each answer in that row; a phone's one line; without `history.first`
  * nothing. Invented data (fakeHistoryR1): Jan lived in Čapkov 1860–1910;
  * Čapkov is still being looked at, so the row replaces "still looking".
+ * The main suite runs without `history.place` (the region alone); with it the
+ * place's own row follows the region's (both offers, BACKLOG 29 Oct).
  */
 
 const LINKS = ['send', 'open', 'live', 'app', 'setup', 'experiment'];
+const REGION_ONLY = HISTORY_R1_FEATURES.filter(f => f !== 'history.place');
 const STILL_LOOKING = "For some of this person's places the research is still looking.";
 
 /** Bohemia not searched yet (and with `many` the Austrian Empire too). */
@@ -31,7 +34,7 @@ async function setup(page: Page, opts: { history?: FakeHistory; features?: strin
     if (opts.width) await page.setViewportSize({ width: opts.width, height: opts.height ?? 844 });
     const history = opts.history ?? unsearched();
     const ged = historyGed();
-    const bridge = await fakeBridge(page, { features: opts.features ?? HISTORY_R1_FEATURES, history, treeGed: ged, links: LINKS });
+    const bridge = await fakeBridge(page, { features: opts.features ?? REGION_ONLY, history, treeGed: ged, links: LINKS });
     await openResearch(page, { ged });
     await poll(page);
     await expect.poll(() => history.reads).toBeGreaterThan(0);
@@ -49,6 +52,15 @@ async function openCard(page: Page, first: string): Promise<void> {
 
 const lastRow = (page: Page) => page.locator('#pm-lifeline-body .pm-lifeline-row.k-historyState');
 const findLink = (page: Page) => lastRow(page).locator('button.pm-lifeline-hfind');
+const regionRow = (page: Page) => page.locator('#pm-lifeline-body .pm-lifeline-row.k-historyState:not([data-place-row])');
+const placeRow = (page: Page) => page.locator('#pm-lifeline-body .pm-lifeline-row[data-place-row]');
+const PLACE_OFFER = 'The research has not looked for the history of Čapkov and surroundings yet. Find local history…';
+/** On a phone: the row's sentence and its link on one line, inside the row. */
+const oneLine = (row: ReturnType<Page['locator']>) => row.locator('.pm-lifeline-desc').evaluate(el => {
+    const link = el.querySelector('button')!.getBoundingClientRect();
+    const text = el.querySelector('.pm-lifeline-hfind-text')!.getBoundingClientRect();
+    return Math.abs(link.top - text.top) < 12 && link.right <= el.getBoundingClientRect().right + 1;
+});
 const refuse = (status: number, code: string, text: string) => ({ status, body: { error: text, code, text } });
 
 test.describe('History of places: "Find the history of …" in the card', () => {
@@ -116,12 +128,7 @@ test.describe('History of places: "Find the history of …" in the card', () => 
         await expect(row).toHaveClass(/is-find-one/);
         await expect(row.locator('.pm-lifeline-hfind-text')).toHaveText('Bohemia not searched yet.');
         await expect(findLink(page)).toHaveText('Find first');
-        const one = await row.locator('.pm-lifeline-desc').evaluate(el => {
-            const link = el.querySelector('button')!.getBoundingClientRect();
-            const text = el.querySelector('.pm-lifeline-hfind-text')!.getBoundingClientRect();
-            return Math.abs(link.top - text.top) < 12 && link.right <= el.getBoundingClientRect().right + 1;
-        });
-        expect(one).toBe(true);
+        expect(await oneLine(row)).toBe(true);
     });
 
     test('without history.first the row says "still looking" and offers no region; the main place is offered (K7.1a)', async ({ page }) => {
@@ -130,5 +137,47 @@ test.describe('History of places: "Find the history of …" in the card', () => 
         await expect(lastRow(page)).toHaveText([STILL_LOOKING,
             'The research has not looked for the history of Čapkov and surroundings yet. Find local history…']);
         await expect(lastRow(page).locator('button[data-find]')).toHaveCount(0);
+    });
+});
+
+/** Both offers (BACKLOG 29 Oct): the region's row and, after it, the main place's own row — each says which it is. */
+test.describe('History of places: the region and the place both offered in the card', () => {
+    test('two rows: the region\'s and the place\'s, each with its own link; the region asked first, the place is still offered', async ({ page }) => {
+        const { history } = await setup(page, { features: HISTORY_R1_FEATURES });
+        await openCard(page, 'Jan');
+        await expect(lastRow(page)).toHaveText([
+            'The research has not looked for the history of Bohemia yet. Find the history of Bohemia',
+            PLACE_OFFER,
+        ]);
+        await expect(placeRow(page)).toHaveAttribute('data-place-row', 'offer');
+        await regionRow(page).locator('button[data-find]').click();
+        await expect.poll(() => history.writes.first).toEqual([{ region: 'cz-bohemia' }]);
+        await expect(regionRow(page)).toContainText('The history of Bohemia comes first of the regions');
+        await expect(placeRow(page)).toHaveText(PLACE_OFFER);
+        // The place's link still leads to its confirmation, as when it is alone.
+        await placeRow(page).locator('button[data-place-find]').click();
+        await expect(page.locator('#history-place-modal')).toBeVisible();
+        expect(history.writes.place).toEqual([]);
+    });
+
+    test('the place searched meanwhile: the region is offered beside the place\'s state', async ({ page }) => {
+        const h = unsearched();
+        h.payload.places['Čapkov'].history = 'running';
+        await setup(page, { history: h, features: HISTORY_R1_FEATURES });
+        await openCard(page, 'Jan');
+        await expect(lastRow(page)).toHaveText([
+            'The research has not looked for the history of Bohemia yet. Find the history of Bohemia',
+            'The research is looking for the history of Čapkov and surroundings right now.',
+        ]);
+    });
+
+    test('phone (390 px): two lines, "Region Bohemia" and "Čapkov and surroundings", each with its link whole', async ({ page }) => {
+        await setup(page, { width: 390, features: HISTORY_R1_FEATURES });
+        await openCard(page, 'Jan');
+        await expect(regionRow(page).locator('.pm-lifeline-hfind-text')).toHaveText('Region Bohemia not searched yet.');
+        await expect(regionRow(page).locator('button[data-find]')).toHaveText('Find first');
+        await expect(placeRow(page)).toHaveText('Čapkov and surroundings: Find history…');
+        expect(await oneLine(regionRow(page))).toBe(true);
+        expect(await oneLine(placeRow(page))).toBe(true);
     });
 });
