@@ -242,6 +242,8 @@ export const personSourcesMethods = uiModule({
         const P = strings.personPage.story;
         const locked = DataManager.isReadOnly() || DataManager.isPersonLocked(personId);
         const editable = !!own && !locked;
+        // A couple's story is edited in the research: said only in a tree linked to one.
+        const inResearch = !locked && this.activeResearchId() !== null;
         // From two chapters: chips to move between them, the couples' chapters on a tinted surface.
         const many = (own ? 1 : 0) + couples.length >= 2;
         // A research draft can be approved there (the label changes with the next version).
@@ -308,7 +310,7 @@ export const personSourcesMethods = uiModule({
                             <p class="story-ch-kicker">${esc(P.couple(coupleStoryYears(DataManager.getData(), u, P.until)))}</p>
                             <h3 class="story-reader-title story-reader-couple-title">${esc(label)}${stateTag(st, !!nv)}</h3>
                             ${st.title?.trim() ? `<p class="story-ch-pair">${esc(pair)}</p>` : ''}
-                            ${!locked ? `<p class="story-ch-note">${esc(P.editInResearch)}</p>` : ''}
+                            ${inResearch ? `<p class="story-ch-note">${esc(P.editInResearch)}</p>` : ''}
                         </div>
                         ${coupleApprove ? `<div class="story-ch-actions">${approveBtn(`data-approve-partnership="${esc(u.id)}"`)}</div>` : ''}
                     </div>

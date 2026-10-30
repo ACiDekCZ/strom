@@ -274,6 +274,25 @@ test.describe('a story\'s new version', () => {
         expect(await launched(page)).toEqual([`strom-research://story?tree=${UUID}&person=P0001&partner=P0002&do=final`]);
     });
 
+    test('a tree without the research: the couple\'s chapter does not say it is edited in the research', async ({ page }) => {
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await openApp(page);
+        // The same family, exported as a plain GEDCOM (no research tree behind it).
+        const plain = researchGed().split('\n').filter(l => !/^1 (SOUR STROM_RESEARCH|_STROM_)/.test(l)).join('\n');
+        await dropFile(page, plain);
+        await page.getByRole('button', { name: /Import as a new tree/ }).click();
+        await page.getByRole('button', { name: 'Import', exact: true }).click();
+        await expect(card(page, 'Marie')).toBeVisible();
+        expect(await page.evaluate(() => window.Strom.UI.activeResearchId())).toBeNull();
+        const marie = await personId(page, 'P0002');
+        await page.evaluate((id) => window.Strom.UI.runPersonMenuAction(id, 'story'), marie);
+        const reader = page.locator('#person-story-modal');
+        await expect(reader.locator('.story-reader-text')).toHaveText('Svatba byla v únoru.');
+        await expect(reader.locator('.story-ch-kicker')).toHaveText('Story of the marriage · until 1874');
+        await expect(reader.locator('.story-ch-note')).toHaveCount(0);
+        await expect(reader.locator('[data-approve-partnership]')).toHaveCount(0);
+    });
+
     test('keep the approved one', async ({ page }) => {
         await setup(page);
         const jan = await personId(page, 'P0001');
