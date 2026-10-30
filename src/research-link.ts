@@ -42,7 +42,7 @@ export function researchLinkScheme(value: unknown): string {
 export const RESEARCH_LINK_ACTIONS = [
     'send', 'excerpt', 'app', 'open', 'chat', 'task', 'review', 'research',
     'new', 'update', 'sessions', 'conflict', 'story', 'sync-undo', 'setup', 'live',
-    'direction', 'finish', 'media', 'archive', 'seal', 'experiment', 'history',
+    'direction', 'finish', 'media', 'archive', 'seal', 'experiment', 'history', 'fixes',
 ] as const;
 export type ResearchLinkAction = typeof RESEARCH_LINK_ACTIONS[number];
 
@@ -146,6 +146,10 @@ export interface ResearchLinkParams {
     place?: string;
     /** `history`: search the place's history (the research's terminal says the estimate and asks). */
     historyDo?: 'search';
+    /** `fixes`: one tree fix by its id ("street-places"); without it the list of fixes. */
+    fix?: string;
+    /** `fixes`: ask to undo what the fix fixed (only with `fix`); the research asks in its terminal. */
+    fixDo?: 'undo';
 }
 
 /**
@@ -252,6 +256,14 @@ export function researchSchemeUrl(action: ResearchLinkAction, p: ResearchLinkPar
             // Only the place's record id and a fixed value (R6): never a place name.
             const place = typeof p.place === 'string' && /^L\d{1,7}$/.test(p.place) ? p.place : null;
             return place && p.historyDo === 'search' ? `${base}&place=${place}&do=search` : null;
+        }
+        case 'fixes': {
+            // A fix's id from the research's fixed list and the fixed `do=undo`: nothing else (ZADANI_VYZKUM §1).
+            if (p.fix === undefined) return p.fixDo === undefined ? base : null;
+            const fix = typeof p.fix === 'string' && /^[a-z0-9][a-z0-9-]{0,47}$/.test(p.fix) ? p.fix : null;
+            if (!fix) return null;
+            if (p.fixDo === undefined) return `${base}&id=${fix}`;
+            return p.fixDo === 'undo' ? `${base}&id=${fix}&do=undo` : null;
         }
         case 'media': {
             const sha = typeof p.sha === 'string' && /^[0-9a-f]{64}$/.test(p.sha) ? p.sha : null;

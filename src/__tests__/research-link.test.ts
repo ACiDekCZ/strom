@@ -1342,4 +1342,20 @@ describe('history manager status fields and link (1028)', () => {
         expect(researchSchemeUrl('history', { tree: UUID, place: 'Lhota', historyDo: 'search' })).toBeNull();
         expect(researchSchemeUrl('history', { tree: UUID, place: 'L0042' })).toBeNull();
     });
+
+    it('builds the tree fixes link: the list, one fix by its id, its undo (symbols of history §7)', () => {
+        expect(sanitizeResearchLinks('open fixes')).toEqual(['open', 'fixes']);
+        expect(researchSchemeUrl('fixes', { tree: UUID })).toBe(`strom-research://fixes?tree=${UUID}`);
+        expect(researchSchemeUrl('fixes', { tree: UUID, fix: 'street-places' })).toBe(`strom-research://fixes?tree=${UUID}&id=street-places`);
+        expect(researchSchemeUrl('fixes', { tree: UUID, fix: 'participant-names', fixDo: 'undo' }))
+            .toBe(`strom-research://fixes?tree=${UUID}&id=participant-names&do=undo`);
+        expect(researchSchemeUrl('fixes', { tree: UUID, fix: 'blind-reduced' }, 'strom-research-beta'))
+            .toBe(`strom-research-beta://fixes?tree=${UUID}&id=blind-reduced`);
+        // Nothing the research does not take: no other id, no `do` without an id, no other `do`.
+        expect(researchSchemeUrl('fixes', { tree: UUID, fix: 'Street places' })).toBeNull();
+        expect(researchSchemeUrl('fixes', { tree: UUID, fix: 'x&do=run' })).toBeNull();
+        expect(researchSchemeUrl('fixes', { tree: UUID, fix: '-street' })).toBeNull();
+        expect(researchSchemeUrl('fixes', { tree: UUID, fixDo: 'undo' })).toBeNull();
+        expect(researchSchemeUrl('fixes', { tree: UUID, fix: 'street-places', fixDo: 'run' as 'undo' })).toBeNull();
+    });
 });

@@ -2154,6 +2154,30 @@ const stringsEN = {
         aiCostHint: 'An AI agent works – uses an AI subscription or credit. Confirmation happens in the research.',
         opensInResearchSr: 'opens in the research',
         opensInResearchTitle: 'Opens in the research (Strom Research terminal)',
+        fixes: {
+            menu: 'Tree fixes',
+            menuCountSr: (n: number) => `Tree fixes, available: ${n}`,
+            title: 'Tree fixes',
+            intro: 'Bulk data fixes the research can apply. Running and undoing are confirmed in the research; the changes then arrive with sync.',
+            open: 'Open in the research',
+            undo: 'Undo in the research',
+            stateAvailable: 'Available',
+            stateApplied: (date: string) => `Applied ${date}`,
+            stateUndone: (date: string) => `Undone ${date}`,
+            stateDeclined: (date: string) => date ? `Left unchanged ${date}` : 'Left unchanged',
+            statePending: 'Opened in the research · confirmed there',
+            empty: 'No fixes are available.',
+            refreshed: (time: string) => `List from the research · refreshed at sync ${time}`,
+            count: (unit: string, n: number): string => {
+                const u: Record<string, [string, string]> = {
+                    reading: ['reading', 'readings'], place: ['place', 'places'], participant: ['participant', 'participants'],
+                    finding: ['finding', 'findings'], fact: ['fact', 'facts'], person: ['person', 'people'], family: ['family', 'families'],
+                    event: ['event', 'events'], source: ['source', 'sources'], item: ['item', 'items'],
+                };
+                const [one, other] = u[unit] ?? u.item;
+                return nEn(n, one, other);
+            },
+        },
         waitingCountSr: (n: number) => `Awaiting action: ${n}`,
         personSection: 'Research',
         reviewAction: 'Review again…',
@@ -7944,6 +7968,31 @@ const stringsCZ: StringsType = {
         aiCostHint: 'Pracuje AI agent – čerpá předplatné nebo kredit. Potvrzuje se ve výzkumu.',
         opensInResearchSr: 'otevře se ve výzkumu',
         opensInResearchTitle: 'Otevře se ve výzkumu (terminál Strom Research)',
+        fixes: {
+            menu: 'Opravy stromu',
+            menuCountSr: (n: number) => `Opravy stromu, dostupné: ${n}`,
+            title: 'Opravy stromu',
+            intro: 'Hromadné opravy dat, které umí výzkum. Spuštění i vrácení se potvrzuje ve výzkumu, změny pak přijdou synchronizací.',
+            open: 'Otevřít ve výzkumu',
+            undo: 'Vrátit ve výzkumu',
+            stateAvailable: 'Dostupná',
+            stateApplied: (date: string) => `Použitá ${date}`,
+            stateUndone: (date: string) => `Vrácená ${date}`,
+            stateDeclined: (date: string) => date ? `Ponechaná beze změny ${date}` : 'Ponechaná beze změny',
+            statePending: 'Otevřeno ve výzkumu · potvrzení proběhne tam',
+            empty: 'Žádné opravy nejsou k dispozici.',
+            refreshed: (time: string) => `Seznam z výzkumu · obnoveno při synchronizaci ${time}`,
+            count: (unit: string, n: number): string => {
+                const u: Record<string, [string, string, string]> = {
+                    reading: ['čtení', 'čtení', 'čtení'], place: ['místo', 'místa', 'míst'], participant: ['účastník', 'účastníci', 'účastníků'],
+                    finding: ['nález', 'nálezy', 'nálezů'], fact: ['údaj', 'údaje', 'údajů'], person: ['osoba', 'osoby', 'osob'],
+                    family: ['rodina', 'rodiny', 'rodin'], event: ['událost', 'události', 'událostí'], source: ['pramen', 'prameny', 'pramenů'],
+                    item: ['položka', 'položky', 'položek'],
+                };
+                const [one, few, other] = u[unit] ?? u.item;
+                return nCs(n, one, few, other);
+            },
+        },
         waitingCountSr: (n: number) => `Čeká na vyřízení: ${n}`,
         personSection: 'Výzkum',
         reviewAction: 'Prověřit znovu…',
@@ -13676,6 +13725,30 @@ const stringsDE: StringsType = {
         aiCostHint: 'Ein KI-Agent arbeitet – nutzt das eigene Abo oder Guthaben. Bestätigung in der Forschung.',
         opensInResearchSr: 'öffnet sich in der Forschung',
         opensInResearchTitle: 'Öffnet sich in der Forschung (Terminal Strom Research)',
+        fixes: {
+            menu: 'Baumkorrekturen',
+            menuCountSr: (n: number) => `Baumkorrekturen, verfügbar: ${n}`,
+            title: 'Baumkorrekturen',
+            intro: 'Sammelkorrekturen der Daten, die die Forschung beherrscht. Ausführen und Rückgängigmachen werden in der Forschung bestätigt, die Änderungen kommen dann mit der Synchronisierung.',
+            open: 'In der Forschung öffnen',
+            undo: 'In der Forschung rückgängig machen',
+            stateAvailable: 'Verfügbar',
+            stateApplied: (date: string) => `Angewendet am ${date}`,
+            stateUndone: (date: string) => `Rückgängig gemacht am ${date}`,
+            stateDeclined: (date: string) => date ? `Unverändert belassen am ${date}` : 'Unverändert belassen',
+            statePending: 'In der Forschung geöffnet · Bestätigung dort',
+            empty: 'Keine Korrekturen verfügbar.',
+            refreshed: (time: string) => `Liste aus der Forschung · aktualisiert bei der Synchronisierung ${time}`,
+            count: (unit: string, n: number): string => {
+                const u: Record<string, [string, string]> = {
+                    reading: ['Lesung', 'Lesungen'], place: ['Ort', 'Orte'], participant: ['Beteiligter', 'Beteiligte'],
+                    finding: ['Befund', 'Befunde'], fact: ['Angabe', 'Angaben'], person: ['Person', 'Personen'], family: ['Familie', 'Familien'],
+                    event: ['Ereignis', 'Ereignisse'], source: ['Quelle', 'Quellen'], item: ['Eintrag', 'Einträge'],
+                };
+                const [one, other] = u[unit] ?? u.item;
+                return nDe(n, one, other);
+            },
+        },
         waitingCountSr: (n: number) => `Wartet auf Bearbeitung: ${n}`,
         personSection: 'Forschung',
         reviewAction: 'Erneut prüfen…',

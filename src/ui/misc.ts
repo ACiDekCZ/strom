@@ -965,6 +965,10 @@ export const miscMethods = uiModule({
                         this.closeResearchReviewDialog();
                         return;
                     }
+                    if (currentDialog === 'research-fixes-modal') {
+                        this.closeResearchFixesDialog();
+                        return;
+                    }
                     if (currentDialog === 'person-research-modal') {
                         this.closePersonResearchDialog();
                         return;

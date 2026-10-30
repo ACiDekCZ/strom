@@ -145,6 +145,32 @@ export interface FakeBridge {
      * `surnames.suggest` in `features` (`surnames.read`: it reads the groups' NOTEs).
      */
     surnames?: FakeSurnames;
+    /** The research's tree fixes (`GET /fixes`, feature `fixes.list`). */
+    fixes?: FakeFixes;
+}
+
+/** The research's tree fixes (`GET /fixes`, ZADANI_VYZKUM akce-z-aplikace §1). */
+export interface FakeFixes {
+    rev: string;
+    fixes: Record<string, unknown>[];
+    /** How many times `GET /fixes` was asked. */
+    asks: number;
+}
+
+export function fakeFixes(init: Partial<FakeFixes> = {}): FakeFixes {
+    return { rev: 'f1', fixes: [], asks: 0, ...init };
+}
+
+/** The answer to `GET /fixes` (null: not it; 404 when not said in `features`). */
+function serveFixes(b: FakeBridge, method: string, url: URL): { status: number; body: unknown } | null {
+    const f = b.fixes;
+    const rest = url.pathname.replace(/^\/[^/]+/, '');
+    if (!f || rest !== '/fixes') return null;
+    if (method !== 'GET' || !(b.features ?? []).includes('fixes.list')) {
+        return { status: 404, body: { error: 'Not found.', code: 'route.unknown' } };
+    }
+    f.asks += 1;
+    return { status: 200, body: { rev: f.rev, fixes: f.fixes } };
 }
 
 /** The research's spelling suggestions (`GET /surnames`, R1). */
@@ -1255,6 +1281,8 @@ export async function fakeBridge(page: Page, init: Partial<FakeBridge> = {}): Pr
             return route.fulfill({ status: names.status, headers: { ...cors, 'content-type': 'application/json',
                 ...(names.retryAfter ? { 'retry-after': names.retryAfter, 'access-control-expose-headers': 'Retry-After' } : {}) }, body: JSON.stringify(names.body) });
         }
+        const fx = serveFixes(b, method, url);
+        if (fx) return json(fx.status, fx.body);
         const rd = b.read;
         // A read page's image (`read/<id>/page/<n>.jpg`): a drawn sheet with ruled lines (invented, no real document).
         const pageImg = /\/read\/([^/]+)\/page\/(\d+)\.jpg$/.exec(url.pathname);

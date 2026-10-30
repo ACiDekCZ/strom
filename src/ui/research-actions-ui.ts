@@ -82,6 +82,8 @@ interface SubmenuItem {
     ai?: boolean;
     /** A count at the end ("Awaiting action  2"). */
     count?: number;
+    /** What the count says to a screen reader (default: "Awaiting action: 2"). */
+    countSr?: string;
     /** A quiet second line ("sent 11:20"). */
     sub?: string;
     /** A state pill at the end ("on · 2", "connection problem"). */
@@ -159,7 +161,7 @@ function itemCall(item: SubmenuItem): string {
 /** An item's accessible name: label (with its count: "Awaiting action: 2"), AI, second line, "opens in the research". */
 function itemAria(item: SubmenuItem): string {
     const r = strings.research;
-    const aria = [item.count ? r.waitingCountSr(item.count) : item.label];
+    const aria = [item.count ? item.countSr ?? r.waitingCountSr(item.count) : item.label];
     if (item.val) aria.push(item.val);
     if (item.pill) aria.push(item.pill.text);
     if (item.ai) aria.push(r.aiBadge);
@@ -369,6 +371,9 @@ export const researchActionsMethods = uiModule({
                     ? { id: 'research-item-update', label: r.updateRow, val: version, method: 'researchActionUpdate', ext: true, attn: true }
                     : { id: 'research-item-update', label: r.updateRow, sub: r.updateAvailable(version), method: 'researchActionUpdate', disabled: true, attn: true });
             }
+            // "Tree fixes" (§7): a list of its own in the app, so here and not among the research tools (§8 rule 5).
+            const fixes = this.researchFixesMenuEntry();
+            if (fixes) more.push({ id: 'research-item-fixes', method: 'researchActionFixes', ...fixes });
             // Occasional: the ways back, the settings.
             moreQuiet = [];
             // "Restore the state before loading" until the next edit (or 7 days); its first hour is the block above.
