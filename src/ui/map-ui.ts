@@ -20,7 +20,8 @@ import { SettingsManager } from '../settings.js';
 import { strings, getCurrentLanguage } from '../strings.js';
 import { PersonId, PlaceGeo } from '../types.js';
 import {
-    collectPlaces, orphanedPlaceKeys, placeKey, PlaceUsage, sortPlacesByName, placeFilterText, placeMatchesFilter,
+    collectPlaces, orphanedPlaceKeys, placeKey, PlaceUsage, sortPlacesForManager, placeFilterText, placeMatchesFilter,
+    isPlacesSort,
 } from '../places.js';
 import { collectDatedPlacePoints, DatedPlaceHarvest } from '../map-time.js';
 import { yearOf } from '../dates.js';
@@ -881,10 +882,11 @@ export const mapMethods = uiModule({
         const data = DataManager.getData();
         const filter: ReadonlySet<PersonId> | undefined =
             scope === 'tree' ? undefined : TreeRenderer.getVisiblePersonIds();
-        // By name, as the UI language sorts — a long list is read like an index.
-        // The places without coordinates have their own chip (and stay marked).
-        return sortPlacesByName([...collectPlaces(data, filter)]
-            .map(([key, usage]) => ({ key, usage, geo: data.places?.[key] })), getCurrentLanguage());
+        // By name, as the UI language sorts, unless the dialog's sort says
+        // otherwise — a long list is read like an index. The places without
+        // coordinates have their own chip (and stay marked).
+        return sortPlacesForManager([...collectPlaces(data, filter)]
+            .map(([key, usage]) => ({ key, usage, geo: data.places?.[key] })), this.placesSort, getCurrentLanguage());
     },
 
     /**
@@ -955,7 +957,11 @@ export const mapMethods = uiModule({
                 <button type="button" class="hm-search-clear" id="places-filter-clear" hidden aria-label="${this.escapeHtml(m.filterClear)}">&times;</button>
             </div>
             ${unplaced ? `<button type="button" class="hd-chip places-unplaced-chip" id="places-unplaced" aria-pressed="${f.unplacedOnly}"
-                title="${this.escapeHtml(m.filterUnplacedLabel)}">${this.escapeHtml(m.filterUnplaced)} <span class="hd-chip-n">${unplaced}</span></button>` : ''}`;
+                title="${this.escapeHtml(m.filterUnplacedLabel)}">${this.escapeHtml(m.filterUnplaced)} <span class="hd-chip-n">${unplaced}</span></button>` : ''}
+            <select class="places-sort" id="places-sort" aria-label="${this.escapeHtml(m.sortLabel)}" title="${this.escapeHtml(m.sortLabel)}">
+                ${([['name', m.sortName], ['people', m.sortPeople], ['unplaced', m.sortUnplaced]] as const)
+                    .map(([v, label]) => `<option value="${v}"${this.placesSort === v ? ' selected' : ''}>${this.escapeHtml(label)}</option>`).join('')}
+            </select>`;
         modal.insertBefore(bar, modal.querySelector(':scope > .modal-content'));
         const input = bar.querySelector('#places-filter') as HTMLInputElement;
         const setQuery = (q: string): void => {
@@ -982,6 +988,13 @@ export const mapMethods = uiModule({
             this.placesFilter.unplacedOnly = !this.placesFilter.unplacedOnly;
             chip.setAttribute('aria-pressed', String(this.placesFilter.unplacedOnly));
             this.applyPlacesFilter();
+        };
+
+        const sortSelect = bar.querySelector('#places-sort') as HTMLSelectElement;
+        sortSelect.onchange = () => {
+            if (!isPlacesSort(sortSelect.value)) return;
+            this.placesSort = sortSelect.value;
+            this.applyPlacesSort();
         };
 
         const close = (): void => this.closePlacesManager();
@@ -1033,6 +1046,22 @@ export const mapMethods = uiModule({
             row.dataset.search = usage ? placeFilterText(key, usage, aliases.get(key)) : placeKey(key);
         }
         this.applyPlacesFilter();
+    },
+
+    /**
+     * Put the rows in the order of the chosen sort. The row elements move, they
+     * are not redrawn: an open search in a row, its results and a typed new
+     * name all stay.
+     */
+    applyPlacesSort(): void {
+        const list = document.querySelector<HTMLElement>('#places-modal .places-list');
+        if (!list) return;
+        const geos = DataManager.getData().places ?? {};
+        const rows = new Map([...list.querySelectorAll<HTMLElement>(':scope > .place-row[data-key]')]
+            .map(r => [r.dataset.key ?? '', r] as const));
+        const sorted = sortPlacesForManager([...managerPlaces].filter(([key]) => rows.has(key))
+            .map(([key, usage]) => ({ key, usage, geo: geos[key] })), this.placesSort, getCurrentLanguage());
+        for (const p of sorted) list.appendChild(rows.get(p.key)!);
     },
 
     /** Show the rows the search and the "No location" chip let through; the count and the empty state. */

@@ -217,8 +217,62 @@ test.describe('the Places dialog: order, search and the "No location" chip', () 
         await expect.poll(() => shownKeys(page)).toHaveLength(6);
     });
 
+    test('the sort: by name, by number of people or the places without coordinates first; it stays for the next open', async ({ page }) => {
+        await setup(page);
+        await page.evaluate(() => {
+            const dm = window.Strom.DataManager;
+            const by = (n: string) => dm.getAllPersons().find(p => p.firstName === n)!.id;
+            dm.updatePerson(by('Marie'), { deathPlace: 'Hlinsko' });
+            dm.updatePerson(by('Petra'), { deathPlace: 'Hlinsko' });
+            dm.updatePerson(by('Hana'), { deathPlace: 'Ivančice' });
+        });
+        await open(page);
+        const sort = modal(page).locator('#places-sort');
+        await expect(sort).toHaveValue('name');
+        await expect(sort).toHaveAttribute('aria-label', 'Řazení');
+        await expect(sort.locator('option')).toHaveText(['Podle názvu', 'Podle počtu osob', 'Bez polohy napřed']);
+
+        // A row's open search stays open while the rows move.
+        await modal(page).locator('.place-row[data-key="chvojkov"] .place-change').click();
+        await sort.selectOption('people');
+        await expect.poll(() => shownKeys(page)).toEqual(['hlinsko', 'ivancice', 'cetkovice', 'capkov', 'chmelnik', 'chvojkov']);
+        await expect(modal(page).locator('.place-row[data-key="chvojkov"] .place-search')).toBeVisible();
+
+        await sort.selectOption('unplaced');
+        await expect.poll(() => shownKeys(page)).toEqual(['capkov', 'chmelnik', 'chvojkov', 'ivancice', 'cetkovice', 'hlinsko']);
+        // Together with the search.
+        await modal(page).locator('#places-filter').fill('c');
+        await expect.poll(() => shownKeys(page)).toEqual(['capkov', 'chmelnik', 'chvojkov', 'ivancice', 'cetkovice']);
+
+        // Closed and opened again: the same sort, also after a redraw.
+        await page.evaluate(() => window.Strom.UI.closePlacesManager());
+        await open(page);
+        await expect(sort).toHaveValue('unplaced');
+        expect(await shownKeys(page)).toEqual(['capkov', 'chmelnik', 'chvojkov', 'ivancice', 'cetkovice', 'hlinsko']);
+        await page.evaluate(() => window.Strom.UI.refreshPlacesManager());
+        await expect(sort).toHaveValue('unplaced');
+        expect(await shownKeys(page)).toEqual(['capkov', 'chmelnik', 'chvojkov', 'ivancice', 'cetkovice', 'hlinsko']);
+
+        await sort.selectOption('name');
+        await expect.poll(() => shownKeys(page)).toEqual(['cetkovice', 'capkov', 'hlinsko', 'chmelnik', 'chvojkov', 'ivancice']);
+    });
+
     test.describe('phone', () => {
         test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+        test('the sort fits inside the screen, 44 px to tap, nothing in the bar overflows', async ({ page }) => {
+            await setup(page);
+            await open(page);
+            await expect(modal(page).locator('#places-sort')).toBeVisible();
+            const box = await page.evaluate(() => {
+                const bar = document.querySelector('#places-modal .places-bar')!;
+                const s = document.querySelector('#places-sort')!.getBoundingClientRect();
+                return { right: s.right, left: s.left, h: s.height, vw: window.innerWidth, over: bar.scrollWidth - bar.clientWidth };
+            });
+            expect(box.left).toBeGreaterThanOrEqual(0);
+            expect(box.right).toBeLessThanOrEqual(box.vw);
+            expect(box.h).toBeGreaterThanOrEqual(44);
+            expect(box.over).toBeLessThanOrEqual(0);
+        });
         test('the search and the chip share one row inside the screen, 44 px to tap', async ({ page }) => {
             await setup(page);
             await open(page);

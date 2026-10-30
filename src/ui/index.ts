@@ -112,6 +112,7 @@ import { genLabelsMethods } from './gen-labels.js';
 import { anniversariesUiMethods } from './anniversaries-ui.js';
 import { slideshowMethods } from './slideshow.js';
 import { mapMethods, MapScope } from './map-ui.js';
+import type { PlacesSort } from '../places.js';
 import { splitMethods } from './split-ui.js';
 import { splitFamiliesMethods } from './split-families-ui.js';
 import { surnamesMethods } from './surnames-ui.js';
@@ -356,6 +357,8 @@ export class UIClass {
     placesManagerParent: string | null = null;
     /** Places dialog: its search and the "No location" chip (kept over a redraw, cleared on a fresh open). */
     placesFilter: { query: string; unplacedOnly: boolean } = { query: '', unplacedOnly: false };
+    /** Places dialog: its sort (kept while the app runs, also over closing the dialog). */
+    placesSort: PlacesSort = 'name';
 
     // Migration-over-time (P5): the time slider on the map. All in-memory —
     // nothing is persisted (no settings key, no per-tree state).

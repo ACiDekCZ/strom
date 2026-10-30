@@ -5,7 +5,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { placeKey, collectPlaces, placeList, placesWithVariants, renamePlace, orphanedPlaceKeys,
-    sortPlacesByName, placeFilterText, placeMatchesFilter } from '../places.js';
+    sortPlacesByName, sortPlacesForManager, isPlacesSort, placeFilterText, placeMatchesFilter } from '../places.js';
 import { StromData, Person, PersonId, PartnershipId } from '../types.js';
 
 function person(id: string, o: Partial<Person> = {}): Person {
@@ -157,6 +157,23 @@ describe('the Places dialog: order and search', () => {
         // English keeps "Ch" among the C's.
         const en = names(sortPlacesByName(rows, 'en'));
         expect(en.indexOf('Chmelník')).toBeLessThan(en.indexOf('Hlinsko'));
+    });
+
+    it('sorts by the number of people (most first) or the places without coordinates first, by name within a tie', () => {
+        const at = (display: string, people: number, count: number, geo?: { lat: number; lon: number }) => {
+            const r = row(display);
+            return { ...r, usage: { ...r.usage, count, personIds: Array.from({ length: people }, (_, i) => `p${i}` as PersonId) }, geo };
+        };
+        const pin = { lat: 50, lon: 15 };
+        const rows = [at('Hlinsko', 2, 2, pin), at('Chmelník', 3, 3), at('Čapkov', 2, 5), at('Cetkovice', 2, 2, pin), at('Ivančice', 1, 1)];
+        expect(names(sortPlacesForManager(rows, 'people', 'cs')))
+            .toEqual(['Chmelník', 'Čapkov', 'Cetkovice', 'Hlinsko', 'Ivančice']);
+        expect(names(sortPlacesForManager(rows, 'unplaced', 'cs')))
+            .toEqual(['Čapkov', 'Chmelník', 'Ivančice', 'Cetkovice', 'Hlinsko']);
+        expect(names(sortPlacesForManager(rows, 'name', 'cs')))
+            .toEqual(['Cetkovice', 'Čapkov', 'Hlinsko', 'Chmelník', 'Ivančice']);
+        expect(isPlacesSort('people')).toBe(true);
+        expect(isPlacesSort('alpha')).toBe(false);
     });
 
     it('finds a place without diacritics, by any of its spellings and by its other names', () => {

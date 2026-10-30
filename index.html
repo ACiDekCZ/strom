@@ -4932,6 +4932,12 @@
             #places-modal button.hm-search-clear:hover, #places-modal button.hd-chip:hover { background: var(--hover-bg); color: var(--text); }
             #places-modal button.hd-chip[aria-pressed="true"]:hover { background: var(--primary-soft); }
         }
+        /* The sort: a small select at the end of the bar (wraps under the search on a phone). */
+        .modal select.places-sort {
+            flex: none; width: auto; max-width: 100%; height: 34px; margin-left: auto; padding: 0 8px;
+            border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text);
+            font: inherit; font-size: 13px; cursor: pointer;
+        }
         .places-empty { margin: 0; padding: 14px 0 6px; font-size: 13px; color: var(--text-faint); }
         .places-empty[hidden], .place-row[hidden] { display: none; }
         .place-row {
@@ -5016,6 +5022,7 @@
         @media (pointer: coarse) {
             #places-modal button.hm-search-clear { width: 44px; height: 44px; }
             #places-modal button.hd-chip { min-height: 44px; }
+            .modal select.places-sort { height: 44px; }
         }
 
         /* ---- Godparents & witnesses on an event (K2) ---- */

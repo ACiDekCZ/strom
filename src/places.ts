@@ -99,6 +99,31 @@ export function sortPlacesByName<T extends { key: string; usage: PlaceUsage }>(r
         || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
 }
 
+/** The Places dialog's sort choices: by name (default), most people first, places without coordinates first. */
+export type PlacesSort = 'name' | 'people' | 'unplaced';
+
+export function isPlacesSort(v: unknown): v is PlacesSort {
+    return v === 'name' || v === 'people' || v === 'unplaced';
+}
+
+/**
+ * The Places dialog's order for a sort choice. Every choice ends in the name
+ * order of sortPlacesByName, so equal places keep reading like an index:
+ *   - 'people': most people connected first (then most uses in the tree),
+ *   - 'unplaced': the places without coordinates first.
+ */
+export function sortPlacesForManager<T extends { key: string; usage: PlaceUsage; geo?: unknown }>(
+    rows: readonly T[], sort: PlacesSort, lang: string,
+): T[] {
+    const byName = sortPlacesByName(rows, lang);
+    // Array.prototype.sort is stable: the name order stays within each tie.
+    if (sort === 'people') {
+        return byName.sort((a, b) => b.usage.personIds.length - a.usage.personIds.length || b.usage.count - a.usage.count);
+    }
+    if (sort === 'unplaced') return byName.sort((a, b) => Number(!!a.geo) - Number(!!b.geo));
+    return byName;
+}
+
 /**
  * What the Places dialog's search looks in, folded like a key: the shown name,
  * every spelling the tree uses, and other names of the place (`also`: the
