@@ -16,10 +16,60 @@
  */
 
 import type { Partnership, Person, StromData } from './types.js';
+import { yearOf } from './dates.js';
 
-/** The person's couples with a story of their own (Partnership.story), in the person's order. */
+/**
+ * The person's couples with a story of their own (Partnership.story), in the
+ * order of the marriages (wedding year; undated ones keep the person's order, last).
+ */
 export function coupleStories(data: StromData, person: Person): Partnership[] {
-    return person.partnerships.map(id => data.partnerships[id]).filter((u): u is Partnership => !!u?.story?.text?.trim());
+    return person.partnerships.map(id => data.partnerships[id]).filter((u): u is Partnership => !!u?.story?.text?.trim())
+        .map((u, i) => ({ u, i, y: yearOf(u.startDate) ?? Infinity }))
+        .sort((a, b) => a.y - b.y || a.i - b.i)
+        .map(x => x.u);
+}
+
+/** How many story chapters the person has: the own story and one per couple's story. */
+export function personStoryChapterCount(data: StromData, person: Person): number {
+    return (person.story?.text?.trim() ? 1 : 0) + coupleStories(data, person).length;
+}
+
+/**
+ * The years of a marriage for its story: the wedding → the end of the union,
+ * else the death of the first partner to die. "1885–1910", "1885", "–1910" or "".
+ */
+export function coupleStoryYears(data: StromData, u: Partnership): string {
+    const from = yearOf(u.startDate);
+    const deaths = [u.person1Id, u.person2Id].map(id => yearOf(data.persons[id]?.deathDate)).filter((y): y is number => y !== null);
+    const to = yearOf(u.endDate) ?? (deaths.length ? Math.min(...deaths) : null);
+    if (from !== null && to !== null) return to > from ? `${from}–${to}` : String(from);
+    if (from !== null) return String(from);
+    return to !== null ? `–${to}` : '';
+}
+
+/**
+ * The top-level blocks of storyProseHtml's output (paragraphs, lists,
+ * subheadings), in order. The renderer never nests a block in another of its
+ * kind, so the first closing tag of the same name ends a block.
+ */
+export function proseBlocks(html: string): string[] {
+    const out: string[] = [];
+    const re = /<(p|ul|h[1-6])\b[^>]*>[\s\S]*?<\/\1>/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(html))) out.push(m[0]);
+    return out;
+}
+
+/**
+ * The prose split for a folded chapter: the lead up to and including the
+ * first paragraph or list (a subheading before it goes with it), and the rest.
+ * A single paragraph has no rest (it is never folded).
+ */
+export function splitProseLead(html: string): { lead: string; rest: string } {
+    const blocks = proseBlocks(html);
+    const first = blocks.findIndex(b => !/^<h[1-6]/.test(b));
+    if (first < 0 || first === blocks.length - 1) return { lead: html, rest: '' };
+    return { lead: blocks.slice(0, first + 1).join(''), rest: blocks.slice(first + 1).join('') };
 }
 
 function esc(text: string): string {

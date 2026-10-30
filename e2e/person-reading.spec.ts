@@ -215,8 +215,12 @@ test('story reader: paragraphs, bold, escaped HTML, Draft tag; Edit lands in the
     await expect(text).not.toContainText('#');
     await expect(text).toContainText('<script>window.__x = 1</script>');
     expect(await page.evaluate(() => (window as unknown as { __x?: number }).__x)).toBeUndefined();
-    await expect(reader.locator('.story-reader-title')).toHaveText('Kovar z Lipan');
-    await expect(reader.locator('.story-draft-tag')).toHaveText('Draft');
+    // The tag sits in the chapter's heading, Edit at the chapter (the footer has Close only).
+    await expect(reader.locator('.story-reader-title')).toHaveText('Kovar z Lipan Draft');
+    await expect(reader.locator('.story-reader-title .story-draft-tag')).toHaveText('Draft');
+    await expect(reader.locator('.story-chips')).toHaveCount(0);
+    await expect(reader.locator('.buttons button')).toHaveText(['Close']);
+    await expect(reader.locator('#person-story-ch-own .story-ch-actions #person-story-edit')).toHaveText('Edit');
     await expect(reader.locator('.story-reader-facts li')).toHaveText(['krest 1865, Lipany']);
     await expect(reader.locator('.story-reader-note')).toHaveText('Neni to pramen.');
     expect(await page.evaluate(() => document.activeElement?.id)).toBe('person-story-body');

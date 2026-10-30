@@ -28,7 +28,7 @@ import {
     measureCardTexts, cardFontsPending, CARD_HEAD_HEIGHT, CARD_EDGE_PILL_ROOM, CARD_EDGE_PILL_RIGHT, CARD_EDGE_PILL_LEFT,
 } from './card-width.js';
 import { checkRecordedAge, ageBirthDate } from './recorded-age.js';
-import { ACTION_GLYPH, AGENT_DONE_MS, AGENT_DONE_FADE_MS, AGENT_SPIN_MS, CardSignalContext, CardSignalInfo, cardSignalInfo, researchCardInfoNow, sharedPhaseDelay, stateStripesHtml } from './card-signals.js';
+import { ACTION_GLYPH, AGENT_DONE_MS, AGENT_DONE_FADE_MS, AGENT_SPIN_MS, CardSignalContext, CardSignalInfo, cardSignalInfo, researchCardInfoNow, sharedPhaseDelay, stateStripesHtml, storySignalText } from './card-signals.js';
 import { EvidenceLevel, treeHasAnySource, unionsByPerson } from './evidence-level.js';
 import { EdgeHypoFamilyLink, EdgeView, edgeHypoFamilies, edgeMoves, edgeNamedOptions, edgeView } from './research-edge.js';
 import {
@@ -4923,7 +4923,7 @@ class TreeRendererClass {
         const files = s.materials ?? s.attachments;
         if (s.story || files > 0) {
             const bits: string[] = [];
-            if (s.story) bits.push(s.story === 'draft' ? c.ttStoryDraft : s.storyNew ? c.ttStoryNew : c.ttStory);
+            if (s.story) bits.push(storySignalText(s.story, c.story));
             if (files > 0) bits.push(s.materials !== null ? c.ttMaterials(files) : c.ttAttachments(files));
             rows.push(`<div class="tt-line tt-story">${stateStripesHtml(null, s.story, true)}${this.escapeHtml(bits.join(' · '))}</div>`);
         }
@@ -4949,7 +4949,7 @@ class TreeRendererClass {
         const c = strings.card;
         const parts = [shownNameFull(person)];
         if (s.showEvidence && s.evidence) parts.push(c.ariaEv[s.evidence.level]);
-        if (s.showStory) parts.push(s.story === 'draft' ? c.ariaStoryDraft : s.storyNew ? c.ariaStoryNew : c.ariaStory);
+        if (s.showStory && s.story) parts.push(storySignalText(s.story, c.story));
         if (s.action === 'waiting') parts.push(c.ariaWaiting);
         else if (s.action === 'conflict') parts.push(c.ariaConflict);
         else if (s.action === 'question') parts.push(c.ariaQuestion);

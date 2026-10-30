@@ -17,7 +17,7 @@ import { sortCoupleEvents, sortLifeEvents } from './events.js';
 import { assignGenerations } from './generations.js';
 import { getStringsForLang } from './strings.js';
 import { personInitials } from './initials.js';
-import { storyProseHtml } from './story-text.js';
+import { storyProseHtml, coupleStoryYears } from './story-text.js';
 import { storyCompareHtml, STORY_COMPARE_CSS } from './story-compare.js';
 import { shownName, shownNameOrEmpty } from './person-name.js';
 
@@ -228,7 +228,7 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
         return `<div class="book-nv"><span>${sentence}</span><button type="button" class="book-nv-compare" data-story-compare="${id}">${esc(L.compare)}</button></div>`;
     };
 
-    const storyHtml = (story: Story, kind: 'person' | 'couple', who: string, person?: Person, couple?: Partnership): string => {
+    const storyHtml = (story: Story, kind: 'person' | 'couple', who: string, person?: Person, couple?: Partnership, sub = false): string => {
         const paragraphs = proseHtml(story.text, story.title);
         if (!paragraphs) return '';
         const nv = person ? newVersionHtml(story, { person }) : couple ? newVersionHtml(story, { couple }) : '';
@@ -242,7 +242,7 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
         const approve = story.status === 'draft' && person ? options.approveStoryUrl?.(person) : null;
         const approveHtml = approve
             ? `<p class="book-story-approve"><a href="${esc(approve)}">${esc(S.research.approveStory)}</a></p>` : '';
-        return `<div class="book-story book-story-${kind}">${nv}${head}${paragraphs}${approveHtml}</div>`;
+        return `<div class="book-story book-story-${kind}${sub ? ' book-story-sub' : ''}">${nv}${head}${paragraphs}${approveHtml}</div>`;
     };
 
     // Photo (circular) or initials.
@@ -343,6 +343,34 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
         return parts.join(', ');
     };
 
+    // A childless couple's story has no chapter of its own: it becomes a
+    // subchapter in the chapter of the partner on the main line (the first
+    // chapter where that partner is one of the couple), right after that
+    // partner's own story (spec 027 §5.7). Keyed by chapter union, then partner.
+    const subStories = new Map<string, Map<PersonId, Partnership[]>>();
+    for (const u of Object.values(partnerships)) {
+        if (!u.story?.text?.trim() || chapterNo.has(u.id)) continue;
+        const pick = [u.person1Id, u.person2Id]
+            .map(pid => ({ pid, n: pid ? parentChapter.get(pid) : undefined }))
+            .filter((x): x is { pid: PersonId; n: number } => x.n !== undefined)
+            .sort((a, b) => a.n - b.n)[0];
+        if (!pick) continue;
+        const host = chapterUnions[pick.n - 1].id;
+        const byPartner = subStories.get(host) ?? new Map<PersonId, Partnership[]>();
+        byPartner.set(pick.pid, [...(byPartner.get(pick.pid) ?? []), u]);
+        subStories.set(host, byPartner);
+    }
+    const subStoriesHtml = (host: Partnership, p?: Person): string[] => {
+        if (!p) return [];
+        const list = [...(subStories.get(host.id)?.get(p.id) ?? [])]
+            .sort((a, b) => (yearOf(a.startDate) ?? 9999) - (yearOf(b.startDate) ?? 9999));
+        return list.map(u => {
+            const other = persons[u.person1Id === p.id ? u.person2Id : u.person1Id];
+            const who = other && !other.isPlaceholder ? shownNameOrEmpty(other) : '?';
+            return storyHtml(u.story!, 'couple', esc(B.coupleSub(who, coupleStoryYears(tree, u))), undefined, u, true);
+        });
+    };
+
     const chapters = chapterUnions.map(u => {
         const p1 = persons[u.person1Id];
         const p2 = persons[u.person2Id];
@@ -370,12 +398,15 @@ export function buildFamilyBook(data: StromData, options: BookOptions): string {
         }).join('');
 
         // Prose runs below the couple, in reading order: his, hers, theirs —
-        // a long note first, then the narrative written about that person.
+        // a long note first, then the narrative written about that person
+        // (and the stories of that person's childless marriages after it).
         const stories = [
             ...(isLongNote(p1) ? [longNoteHtml(p1!)] : []),
             ...(p1?.story ? [storyHtml(p1.story, 'person', name(p1), p1)] : []),
+            ...subStoriesHtml(u, p1),
             ...(isLongNote(p2) ? [longNoteHtml(p2!)] : []),
             ...(p2?.story ? [storyHtml(p2.story, 'person', name(p2), p2)] : []),
+            ...subStoriesHtml(u, p2),
             ...(u.story ? [storyHtml(u.story, 'couple',
                 `${name(p1)}${p2 ? ` <span class="book-amp">&amp;</span> ${name(p2)}` : ''}`, undefined, u)] : []),
         ].join('');

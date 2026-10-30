@@ -313,6 +313,53 @@ span.pp-gal-thumb { cursor: default; }
   #pp-sec-sources .pp-src-body, #pp-sec-sources .pp-src-intro, #pp-sec-sources .pp-peek { display: none !important; }
   a[href^="http"]::after { content: " (" attr(href) ")"; font-size: 8pt; }
 }
+/* ── A couple's story as a chapter (spec 027 §5.2, §6.1) ──
+   A tinted surface one step from the page (lighter in dark mode), a double
+   monogram, the kicker with the years, the title; after the person's own
+   story it folds to its first paragraph ("Read all ▾"). Print: everything
+   unfolded, the surface a thin frame. */
+.pp .pp-couple-story { margin-top: 20px; padding: 20px 22px; border-radius: 14px; background: var(--surface-2); background: color-mix(in srgb, var(--surface) 95%, var(--text)); scroll-margin-top: 16px; outline: none; }
+.pp .pp-story-kicker + .pp-couple-story, .pp .pp-story-title + .pp-couple-story { margin-top: 8px; }
+.pp .pp-couple-story:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.pp-ch-head { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.pp-ch-headtext { min-width: 0; }
+.pp-ch-mono { display: inline-flex; flex-shrink: 0; }
+.pp-ch-mono > span { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; box-sizing: border-box; border-radius: 50%; border: 2px solid var(--surface-2); background: var(--surface); color: var(--accent-text); font-family: var(--font-sans); font-size: 12px; font-weight: 600; line-height: 1; }
+.pp-ch-mono > span + span { margin-left: -9px; }
+.pp .pp-ch-kicker { margin: 0; }
+.pp-ch-pair { margin: 1px 0 0; font-family: var(--font-sans); font-size: 13px; color: var(--text-light); overflow-wrap: anywhere; }
+.pp .pp-ch-title { font-family: var(--font-serif); font-size: 22px; font-weight: 600; line-height: 1.3; margin: 0 0 10px; overflow-wrap: anywhere; hyphens: manual; }
+.pp-ch-rest[hidden] { display: none; }
+.pp .pp-ch-more { display: inline; padding: 0; border: 0; background: none; font: inherit; font-family: var(--font-sans); font-size: 14px; font-weight: 500; color: var(--primary); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; list-style: none; }
+.pp-ch-more::-webkit-details-marker { display: none; }
+.pp-ch-more .pp-st-open, .pp-ch-more[aria-expanded="true"] .pp-st-closed, .pp-ch-fold[open] > summary .pp-st-closed { display: none; }
+.pp-ch-more[aria-expanded="true"] .pp-st-open, .pp-ch-fold[open] > summary .pp-st-open { display: inline; }
+.pp-ch-fold > summary { margin: 0 0 0.9em; }
+.pp-ch-foot { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; margin: 10px 0 0; font-family: var(--font-sans); font-size: 13px; color: var(--text-faint); }
+.pp-ch-also { flex: 1 1 auto; min-width: 0; }
+.pp-story-cont { margin: 14px 0 0; font-family: var(--font-sans); font-size: 14px; color: var(--text-light); }
+.pp-story-cont > span { margin-right: 4px; }
+.pp-story-jump { margin-right: 10px; color: var(--primary); }
+a.pp-story-jump { text-decoration: underline; text-underline-offset: 3px; }
+@media (hover: hover) {
+  .pp .pp-ch-more:hover { text-decoration-thickness: 2px; }
+}
+@media (pointer: coarse) {
+  .pp .pp-ch-more, .pp-story-jump { display: inline-flex; align-items: center; min-height: 44px; }
+}
+@media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+  .pp .pp-couple-story { padding: 16px; }
+  .pp .pp-ch-title { font-size: 20px; }
+}
+@media print {
+  .pp .pp-couple-story { background: none; border: 1px solid var(--border); break-inside: auto; }
+  .pp-ch-rest[hidden] { display: block !important; }
+  .pp-ch-more, .pp-story-cont { display: none !important; }
+  details.pp-ch-fold { display: block; }
+  details.pp-ch-fold > * { display: block; }
+  details.pp-ch-fold > summary { display: none !important; }
+  details.pp-ch-fold::details-content { content-visibility: visible; display: contents; }
+}
 `;
 
 /** The saved file's own frame (paper look, centred column) and the no-JS rules. */
@@ -354,4 +401,17 @@ d.addEventListener('keydown',function(e){var h=location.hash,t=h.indexOf('#obr-'
 var folds=q('#pp-sources-fold, details.pp-gal-more, details.pp-sibs, details.pp-grand'),was=[];
 window.addEventListener('beforeprint',function(){was=folds.map(function(f){var o=f.open;f.open=true;return o})});
 window.addEventListener('afterprint',function(){folds.forEach(function(f,i){f.open=!!was[i]})});
+})();`;
+
+/**
+ * The saved file's script for the couples' chapters (spec 027 §6.1): a link
+ * to a chapter opens its fold before the jump; printing opens every fold
+ * (and closes them again afterwards).
+ */
+export const PERSON_PAGE_STORY_SCRIPT = `(function(){var d=document;
+var q=function(s){return Array.prototype.slice.call(d.querySelectorAll(s))};
+q('a[data-pp-story]').forEach(function(l){l.addEventListener('click',function(){var c=d.getElementById(l.getAttribute('data-pp-story'));var f=c&&c.querySelector('details.pp-ch-fold');if(f)f.open=true})});
+var shut=[];
+window.addEventListener('beforeprint',function(){shut=q('details.pp-ch-fold:not([open])');shut.forEach(function(f){f.open=true})});
+window.addEventListener('afterprint',function(){shut.forEach(function(f){f.open=false});shut=[]});
 })();`;

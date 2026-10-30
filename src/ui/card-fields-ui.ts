@@ -201,7 +201,7 @@ export function forgetCardTypeCopy(): void {
  * for `viewWidth`, the drawn view's card width, when given).
  */
 function sampleCard(density: CardDensity, on: CardSignals, viewWidth: number | undefined): { html: string; width: number; height: number } {
-    const stripes = stateStripesHtml(on.evidence ? 'partial' : null, on.story ? 'draft' : null);
+    const stripes = stateStripesHtml(on.evidence ? 'partial' : null, on.story ? { kind: 'own', final: false } : null);
     const action: ActionSignal | null = on.waiting ? 'waiting' : on.conflict ? 'conflict' : on.question ? 'question' : null;
     const badge = action ? `<span class="card-signal signal-${action}">${ACTION_GLYPH[action]}</span>` : '';
     const dot = action ? `<span class="card-signal-dot signal-${action}"></span>` : '';

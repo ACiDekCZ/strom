@@ -77,9 +77,9 @@ test.describe('a story\'s new version', () => {
         const jan = await personId(page, 'P0001');
         await page.evaluate((id) => window.Strom.UI.runPersonMenuAction(id, 'story'), jan);
         const reader = page.locator('#person-story-modal');
-        // Jan's own story (his couple's follows under it, see below).
-        const own = reader.locator('#person-story-body');
-        await expect(reader.locator('.audit-log-subtitle .story-nv-tag')).toHaveText('New version waiting');
+        // Jan's own story (his couple's follows under it, see below): the tag at its heading.
+        const own = reader.locator('#person-story-ch-own');
+        await expect(own.locator('.story-reader-title')).toHaveText('Jan Vlk New version waiting');
         await expect(reader.locator('.story-draft-tag')).toHaveCount(0);
         await expect(own.locator(':scope > .story-nv-banner')).toContainText('Research wrote a new text on 2 Oct 2026. This one stays approved until a decision is made.');
         // The book's text is still the approved one.
@@ -135,7 +135,7 @@ test.describe('a story\'s new version', () => {
         });
         await page.keyboard.press('Escape');
         await page.evaluate((id) => window.Strom.UI.runPersonMenuAction(id, 'story'), jan);
-        await expect(page.locator('#person-story-body > .story-nv-banner')).toHaveCount(0);
+        await expect(page.locator('#person-story-ch-own > .story-nv-banner')).toHaveCount(0);
         // The couple's new version still waits (only the person's went).
         await expect(page.locator('#person-story-modal .story-reader-couple .story-nv-banner')).toHaveCount(1);
     });
@@ -154,17 +154,94 @@ test.describe('a story\'s new version', () => {
         await expect(cmp).toContainText('Svatba byla v únoru 1845 v Chlumech.');
     });
 
+    test('two chapters: chips under the title, the couple\'s chapter tinted, the actions at each chapter; the menu counts them (spec 027)', async ({ page }) => {
+        await setup(page);
+        const jan = await personId(page, 'P0001');
+        const item = await page.evaluate((id) => window.Strom.UI.getPersonMenuActions(id).find((a: { action: string }) => a.action === 'story'), jan);
+        expect(item).toMatchObject({ label: 'Story', meta: '2', ariaLabel: 'Story, 2 chapters' });
+        await page.evaluate((id) => window.Strom.UI.runPersonMenuAction(id, 'story'), jan);
+        const reader = page.locator('#person-story-modal');
+        const chips = reader.locator('.story-chips .story-chip');
+        await expect(chips).toHaveText(['Jan Vlk', 'With Marie']);
+        await expect(chips.first()).toHaveAttribute('aria-current', 'true');
+        const couple = reader.locator('.story-reader-couple');
+        await expect(couple).toHaveClass(/story-reader-ch--tint/);
+        // No wedding date: the years end at the first death.
+        await expect(couple.locator('.story-ch-kicker')).toHaveText('Story of the marriage · –1874');
+        await expect(couple.locator('.story-ch-mono > span')).toHaveText(['JV', 'MV']);
+        // Compare at each chapter; the footer has Close only.
+        await expect(reader.locator('#person-story-ch-own #person-story-compare')).toHaveCount(1);
+        await expect(couple.locator('.story-nv-compare')).toHaveCount(1);
+        await expect(reader.locator('.buttons button')).toHaveText(['Close']);
+        await chips.nth(1).click();
+        await expect(chips.nth(1)).toHaveAttribute('aria-current', 'true');
+        await expect(chips.first()).not.toHaveAttribute('aria-current', 'true');
+        await expect(couple).toBeInViewport();
+    });
+
+    test('phone: the reader is the whole screen, the chips one row', async ({ browser }) => {
+        const context = await browser.newContext({ viewport: { width: 360, height: 740 }, hasTouch: true, isMobile: true });
+        const page = await context.newPage();
+        await setup(page);
+        await page.setViewportSize({ width: 360, height: 740 });
+        const jan = await personId(page, 'P0001');
+        await page.evaluate((id) => window.Strom.UI.runPersonMenuAction(id, 'story'), jan);
+        const box = await page.locator('#person-story-modal .modal').boundingBox();
+        expect(box).toMatchObject({ x: 0, y: 0, width: 360, height: 740 });
+        const tops = await page.locator('#person-story-modal .story-chip').evaluateAll(els => els.map(e => Math.round(e.getBoundingClientRect().top)));
+        expect(new Set(tops).size).toBe(1);
+        const h = await page.locator('#person-story-modal .story-chip').first().evaluate(e => e.getBoundingClientRect().height);
+        expect(h).toBeGreaterThanOrEqual(44);
+        await context.close();
+    });
+
+    test('the person page: the own story leads on to the couple\'s chapter, folded to its first paragraph; the link unfolds it', async ({ page }) => {
+        await setup(page);
+        const jan = await personId(page, 'P0001');
+        await page.evaluate((id) => {
+            const p = window.Strom.DataManager.getPerson(id)!;
+            const u = window.Strom.DataManager.getPartnership(p.partnerships[0])!;
+            u.story!.text = 'Svatba byla v únoru.\n\nPak přišel mlýn.';
+        }, jan);
+        await page.evaluate((id) => window.Strom.UI.showPersonPage(id), jan);
+        const w = page.locator('#person-page-modal');
+        const jump = w.locator('.pp-story-cont .pp-story-jump');
+        await expect(jump).toHaveText('Jan and Marie ↓');
+        const chapter = w.locator('.pp-couple-story');
+        await expect(chapter.locator('.pp-ch-rest')).toBeHidden();
+        await expect(chapter.locator('.pp-ch-more .pp-st-closed')).toHaveText('Read all ▾');
+        await expect(chapter.locator('.pp-ch-more .pp-st-open')).toBeHidden();
+        await jump.click();
+        await expect(chapter.locator('.pp-ch-rest')).toBeVisible();
+        await expect(chapter.locator('.pp-ch-more .pp-st-open')).toHaveText('Collapse ▴');
+        await expect(chapter.locator('.pp-ch-more .pp-st-closed')).toBeHidden();
+        await expect(chapter).toBeFocused();
+        await chapter.locator('.pp-ch-more').click();
+        await expect(chapter.locator('.pp-ch-rest')).toBeHidden();
+    });
+
     test('a partner with only the couple\'s story: the fold on the card, Story in the menu, the reader with that story alone', async ({ page }) => {
         await setup(page);
         const marie = await personId(page, 'P0002');
         // Approved with a new version waiting beside it (the couple's).
         await expect(card(page, 'Marie').locator(':scope > .card-story')).toBeVisible();
         await expect(card(page, 'Marie').locator(':scope > .card-story')).not.toHaveClass(/draft/);
-        expect(await card(page, 'Marie').getAttribute('aria-label')).toContain('has a story, new version waiting');
+        // A couple's story alone: the hollow corner, and the words say whose story it is.
+        await expect(card(page, 'Marie').locator(':scope > .card-story')).toHaveClass(/couple/);
+        await expect(card(page, 'Jan').locator(':scope > .card-story')).not.toHaveClass(/couple/);
+        expect(await card(page, 'Marie').getAttribute('aria-label')).toContain('Story of the marriage · new version waiting');
         const actions = await page.evaluate((id) => window.Strom.UI.getPersonMenuActions(id).map((a: { action: string }) => a.action), marie);
         expect(actions).toContain('story');
+        // The menu item is named after it, without a count (one chapter).
+        const item = await page.evaluate((id) => window.Strom.UI.getPersonMenuActions(id).find((a: { action: string }) => a.action === 'story'), marie);
+        expect(item).toMatchObject({ label: 'Story of the marriage' });
+        expect(item.meta).toBeUndefined();
         await page.evaluate((id) => window.Strom.UI.runPersonMenuAction(id, 'story'), marie);
         const reader = page.locator('#person-story-modal');
+        // The window is titled after it: no chips, no tinted surface, nothing to edit here.
+        await expect(reader.locator('#person-story-heading')).toHaveText('Story of the marriage');
+        await expect(reader.locator('.story-chips, .story-reader-ch--tint')).toHaveCount(0);
+        await expect(reader.locator('.story-ch-note')).toHaveText('Edited in research.');
         await expect(reader.locator('.story-reader-couple-title')).toHaveText('Marie Vlková and Jan Vlk New version waiting');
         await expect(reader.locator('.story-reader-text')).toHaveText('Svatba byla v únoru.');
         // Her own story: none — no subtitle tag, nothing to edit or approve here.
@@ -181,9 +258,14 @@ test.describe('a story\'s new version', () => {
             window.Strom.DataManager.replaceWithSourceData(data);
         });
         await expect(card(page, 'Marie').locator(':scope > .card-story')).toHaveClass(/draft/);
-        expect(await card(page, 'Marie').getAttribute('aria-label')).toContain('story in draft');
+        expect(await card(page, 'Marie').getAttribute('aria-label')).toContain('Story of the marriage (draft)');
         await page.evaluate((id) => window.Strom.UI.runPersonMenuAction(id, 'story'), marie);
         await expect(reader.locator('.story-reader-couple-title .story-draft-tag')).toHaveText('Draft');
+        // A couple's draft is approved in the research at its chapter: the family by both partners.
+        const approve = reader.locator('.story-reader-couple [data-approve-partnership]');
+        await expect(approve).toHaveText('Approve in the research ↗');
+        await approve.click();
+        expect(await launched(page)).toEqual([`strom-research://story?tree=${UUID}&person=P0001&partner=P0002&do=final`]);
     });
 
     test('keep the approved one', async ({ page }) => {
@@ -243,7 +325,7 @@ test.describe('a story\'s new version', () => {
         await setup(page, ALL, [STORY_ITEM]);
         await expect(card(page, 'Jan').locator('.card-tooltip .tt-story')).toHaveText('Story · new version waiting');
         await expect(card(page, 'Jan').locator('.card-tooltip .tt-action')).toHaveText(['Awaiting action: New version of the story']);
-        await expect(card(page, 'Jan')).toHaveAttribute('aria-label', /has a story, new version waiting, waiting for an answer/);
+        await expect(card(page, 'Jan')).toHaveAttribute('aria-label', /Story · new version waiting, waiting for an answer/);
         await card(page, 'Jan').locator('.card-signal').click();
         await expect(page.locator('#story-compare-modal')).toBeVisible();
         await expect(page.locator('.context-menu')).toHaveCount(0);

@@ -5,7 +5,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { personStoryState } from '../card-signals.js';
+import { personStoryState, stateStripesHtml, storySignalText } from '../card-signals.js';
+import { strings } from '../strings.js';
 import { coupleStories } from '../story-text.js';
 import { Partnership, Person, PersonId, Story, StromData } from '../types.js';
 
@@ -25,33 +26,50 @@ function tree(own: Story | undefined, couples: (Story | undefined)[]): { data: S
     return { data: { persons, partnerships } as unknown as StromData, anna, karel };
 }
 
-const final = (text: string, draft?: string): Story => ({ text, status: 'final', ...(draft ? { draft: { text: draft } } : {}) }) as Story;
+const final = (text: string, draft?: string, title?: string): Story => ({ text, status: 'final', ...(title ? { title } : {}), ...(draft ? { draft: { text: draft } } : {}) }) as Story;
 const draft = (text: string): Story => ({ text, status: 'draft' }) as Story;
 
 describe('personStoryState', () => {
     it('only a couple\'s story: both partners carry it', () => {
         const { data, anna, karel } = tree(undefined, [final('Svatba v Lysé.')]);
-        expect(personStoryState(anna, data)).toEqual({ story: 'final', storyNew: false });
-        expect(personStoryState(karel, data)).toEqual({ story: 'final', storyNew: false });
+        expect(personStoryState(anna, data)).toEqual({ kind: 'couple', final: true, title: '', storyNew: false });
+        expect(personStoryState(karel, data)).toEqual({ kind: 'couple', final: true, title: '', storyNew: false });
     });
 
     it('a couple\'s draft is a draft; its waiting new version counts', () => {
-        expect(personStoryState(...pick(tree(undefined, [draft('Návrh.')])))).toEqual({ story: 'draft', storyNew: false });
-        expect(personStoryState(...pick(tree(undefined, [final('Svatba.', 'Svatba v květnu.')])))).toEqual({ story: 'final', storyNew: true });
+        expect(personStoryState(...pick(tree(undefined, [draft('Návrh.')])))).toEqual({ kind: 'couple', final: false, title: '', storyNew: false });
+        expect(personStoryState(...pick(tree(undefined, [final('Svatba.', 'Svatba v květnu.')])))).toEqual({ kind: 'couple', final: true, title: '', storyNew: true });
     });
 
     it('approved when any couple\'s story is', () => {
-        expect(personStoryState(...pick(tree(undefined, [draft('Návrh.'), final('Druhá svatba.')])))).toEqual({ story: 'final', storyNew: false });
+        expect(personStoryState(...pick(tree(undefined, [draft('Návrh.'), final('Druhá svatba.', undefined, 'Druhá')])))).toEqual({ kind: 'couple', final: true, title: 'Druhá', storyNew: false });
     });
 
     it('the person\'s own story decides the state; a couple\'s new version still counts', () => {
-        expect(personStoryState(...pick(tree(draft('Vlastní.'), [final('Svatba.')])))).toEqual({ story: 'draft', storyNew: false });
-        expect(personStoryState(...pick(tree(final('Vlastní.'), [draft('Návrh.')])))).toEqual({ story: 'final', storyNew: false });
-        expect(personStoryState(...pick(tree(final('Vlastní.'), [final('Svatba.', 'Nová.')])))).toEqual({ story: 'final', storyNew: true });
+        expect(personStoryState(...pick(tree(draft('Vlastní.'), [final('Svatba.')])))).toEqual({ kind: 'own', final: false, title: '', storyNew: false });
+        expect(personStoryState(...pick(tree(final('Vlastní.', undefined, 'Mládí'), [draft('Návrh.')])))).toEqual({ kind: 'own', final: true, title: 'Mládí', storyNew: false });
+        expect(personStoryState(...pick(tree(final('Vlastní.'), [final('Svatba.', 'Nová.')])))).toEqual({ kind: 'own', final: true, title: '', storyNew: true });
     });
 
     it('nothing written: no story (an empty couple text neither)', () => {
-        expect(personStoryState(...pick(tree(undefined, [undefined, { text: '  ' } as Story])))).toEqual({ story: null, storyNew: false });
+        expect(personStoryState(...pick(tree(undefined, [undefined, { text: '  ' } as Story])))).toBeNull();
+    });
+});
+
+describe('the corner and its words (spec 027 §5.6)', () => {
+    const words = strings.card.story;
+
+    it('own story: a full corner; a couple\'s alone: a hollow one; a draft is pale', () => {
+        expect(stateStripesHtml(null, { kind: 'own', final: true })).toBe('<span class="card-story" aria-hidden="true"></span>');
+        expect(stateStripesHtml(null, { kind: 'couple', final: true })).toBe('<span class="card-story couple" aria-hidden="true"></span>');
+        expect(stateStripesHtml(null, { kind: 'couple', final: false })).toBe('<span class="card-story draft couple" aria-hidden="true"></span>');
+    });
+
+    it('says whose story it is, its title, a draft and a new version', () => {
+        expect(storySignalText({ kind: 'own', final: true, title: 'Mládí', storyNew: false }, words)).toBe(words.own('Mládí'));
+        expect(storySignalText({ kind: 'couple', final: true, title: '', storyNew: false }, words)).toBe(words.couple(''));
+        expect(storySignalText({ kind: 'couple', final: false, title: 'Svatba', storyNew: false }, words)).toBe(words.draft(words.couple('Svatba')));
+        expect(storySignalText({ kind: 'own', final: true, title: '', storyNew: true }, words)).toBe(words.nv(words.own('')));
     });
 });
 
@@ -59,6 +77,15 @@ describe('coupleStories', () => {
     it('the person\'s couples with a story, in the person\'s order', () => {
         const { data, anna } = tree(undefined, [final('První.'), undefined, final('Třetí.')]);
         expect(coupleStories(data, anna).map(u => u.id)).toEqual(['u0', 'u2']);
+    });
+
+    it('in the order of the marriages: by wedding year, undated ones last', () => {
+        const { data, anna } = tree(undefined, [final('První.'), final('Druhá.'), final('Třetí.')]);
+        const u = data.partnerships as Record<string, Partnership>;
+        u.u0.startDate = undefined;
+        u.u1.startDate = '1910';
+        u.u2.startDate = '1890';
+        expect(coupleStories(data, anna).map(u => u.id)).toEqual(['u2', 'u1', 'u0']);
     });
 });
 

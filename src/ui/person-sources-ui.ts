@@ -10,7 +10,8 @@ import { strings, getCurrentLanguage } from '../strings.js';
 import { PartnershipId, PersonId, Source, Story } from '../types.js';
 import { yearOf } from '../dates.js';
 import { personSourceRows as personSourceRowsOf, PersonSourceRow } from '../person-sources.js';
-import { storyProseHtml, coupleStories } from '../story-text.js';
+import { storyProseHtml, coupleStories, coupleStoryYears } from '../story-text.js';
+import { personInitials } from '../initials.js';
 import { uiModule } from './module.js';
 import { normalizeModal } from './modal-skeleton.js';
 import { storyWithDraft, draftDate } from './story-compare-ui.js';
@@ -40,6 +41,47 @@ export function personSubtitle(personId: PersonId): string {
     const died = yearOf(p?.deathDate);
     const years = born !== null || died !== null ? `${born ?? ''}–${died ?? ''}` : '';
     return [fullName(personId), years].filter(Boolean).join(' · ');
+}
+
+/**
+ * The story reader's chapter chips (spec 027 §5.3): a click scrolls the body
+ * to the chapter; the chip of the chapter being read is marked as it scrolls.
+ */
+function wireStoryChips(overlay: HTMLElement): void {
+    const chips = [...overlay.querySelectorAll<HTMLButtonElement>('.story-chip')];
+    const scroller = overlay.querySelector<HTMLElement>('.modal-content') ?? overlay.querySelector<HTMLElement>('#person-story-body');
+    const mark = (id: string): void => {
+        for (const chip of chips) {
+            if (chip.dataset.chapter === id) {
+                chip.setAttribute('aria-current', 'true');
+                chip.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+            } else chip.removeAttribute('aria-current');
+        }
+    };
+    for (const chip of chips) {
+        chip.addEventListener('click', () => {
+            const target = overlay.querySelector<HTMLElement>(`#${chip.dataset.chapter}`);
+            if (!target) return;
+            const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+            target.scrollIntoView({ block: 'start', behavior: reduce ? 'auto' : 'smooth' });
+            mark(chip.dataset.chapter!);
+        });
+    }
+    if (typeof IntersectionObserver === 'undefined' || !scroller) return;
+    // The topmost chapter crossing the upper part of the body is the one being read.
+    const visible = new Set<string>();
+    const order = chips.map(c => c.dataset.chapter!);
+    const io = new IntersectionObserver(entries => {
+        for (const e of entries) {
+            if (e.isIntersecting) visible.add(e.target.id); else visible.delete(e.target.id);
+        }
+        const first = order.find(id => visible.has(id));
+        if (first) mark(first);
+    }, { root: scroller, rootMargin: '0px 0px -60% 0px' });
+    for (const id of order) {
+        const el = overlay.querySelector(`#${id}`);
+        if (el) io.observe(el);
+    }
 }
 
 /** The person's sources, one row per source (see src/person-sources.ts). */
@@ -184,7 +226,11 @@ export const personSourcesMethods = uiModule({
         const couples = coupleStories(DataManager.getData(), person);
         if (!own && !couples.length) return;
         const s = strings.story;
-        const editable = !!own && !DataManager.isReadOnly() && !DataManager.isPersonLocked(personId);
+        const P = strings.personPage.story;
+        const locked = DataManager.isReadOnly() || DataManager.isPersonLocked(personId);
+        const editable = !!own && !locked;
+        // From two chapters: chips to move between them, the couples' chapters on a tinted surface.
+        const many = (own ? 1 : 0) + couples.length >= 2;
         // A research draft can be approved there (the label changes with the next version).
         const approveUrl = own ? this.storyApproveUrl(personId) : null;
         // An approved story with a new version waiting: say so and offer the comparison.
@@ -200,38 +246,76 @@ export const personSourcesMethods = uiModule({
                 ${story.note ? `<p class="story-reader-note">${esc(story.note)}</p>` : ''}
             </div>`;
         };
-        const ownHtml = own ? `
-                    ${waiting ? nvBanner(waiting, 'id="person-story-compare"') : ''}
-                    ${own.title ? `<h3 class="story-reader-title">${esc(own.title)}</h3>` : ''}
-                    <div class="story-reader-text">${storyProseHtml(own.text, { title: own.title })}</div>
-                    ${extraHtml(own)}` : '';
+        const stateTag = (story: Story, nv: boolean): string => nv
+            ? ` <span class="story-nv-tag">${esc(s.nvBadge)}</span>`
+            : story.status === 'draft' ? ` <span class="story-draft-tag">${esc(s.statusDraft)}</span>` : '';
+        const approveBtn = (attrs: string): string =>
+            `<button type="button" class="secondary story-approve" ${attrs}>${esc(strings.research.approveStory)}</button>`;
         const self = shownName(person);
+        const chips: { id: string; label: string }[] = [];
+
+        let ownHtml = '';
+        if (own) {
+            chips.push({ id: 'person-story-ch-own', label: self });
+            // The heading: the story's title (the person's name when chapters follow).
+            const title = own.title?.trim() || (many ? self : '');
+            const tag = stateTag(own, !!waiting);
+            const actions = (editable ? `<button type="button" class="secondary" id="person-story-edit">${esc(s.edit)}</button>` : '')
+                + (approveUrl ? approveBtn('id="person-story-approve"') : '');
+            const headText = title ? `<h3 class="story-reader-title">${esc(title)}${tag}</h3>`
+                : tag ? `<p class="story-ch-tags">${tag.trim()}</p>` : '';
+            ownHtml = `<section class="story-reader-own story-reader-ch" id="person-story-ch-own">
+                    ${headText || actions ? `<div class="story-ch-head"><div class="story-ch-headtext">${headText}</div>${actions ? `<div class="story-ch-actions">${actions}</div>` : ''}</div>` : ''}
+                    ${waiting ? nvBanner(waiting, 'id="person-story-compare"') : ''}
+                    <div class="story-reader-text">${storyProseHtml(own.text, { title: own.title })}</div>
+                    ${extraHtml(own)}
+                </section>`;
+        }
+
         const couplesHtml = couples.map(u => {
             const st = u.story!;
             const partner = DataManager.getPerson(u.person1Id === personId ? u.person2Id : u.person1Id);
-            const label = st.title?.trim() || (partner ? s.couple(self, shownName(partner)) : self);
+            const real = partner && !partner.isPlaceholder ? partner : undefined;
+            const pair = real ? s.couple(self, shownName(real)) : self;
+            const label = st.title?.trim() || pair;
             const nv = storyWithDraft({ partnershipId: u.id });
-            const tag = nv ? ` <span class="story-nv-tag">${esc(s.nvBadge)}</span>`
-                : st.status === 'draft' ? ` <span class="story-draft-tag">${esc(s.statusDraft)}</span>` : '';
-            return `<section class="story-reader-couple" data-partnership-id="${esc(u.id)}">
-                    <h3 class="story-reader-title story-reader-couple-title">${esc(label)}${tag}</h3>
+            const chId = `person-story-ch-${u.id.replace(/[^\w-]/g, '_')}`;
+            const year = yearOf(u.startDate);
+            chips.push({ id: chId, label: P.chip(real?.firstName?.trim() || (real ? shownName(real) : '?'), year !== null ? String(year) : '') });
+            // Approving a couple's draft in the research (spec 027 §5.3): the research finds the family by both partners.
+            const coupleApprove = this.coupleStoryApproveUrl(u.id);
+            const mono = many ? `<span class="story-ch-mono" aria-hidden="true"><span>${esc(personInitials(person.firstName, person.lastName) || '?')}</span>`
+                + (real ? `<span>${esc(personInitials(real.firstName, real.lastName) || '?')}</span>` : '') + `</span>` : '';
+            return `<section class="story-reader-couple story-reader-ch${many ? ' story-reader-ch--tint' : ''}" id="${chId}" data-partnership-id="${esc(u.id)}">
+                    <div class="story-ch-head">
+                        ${mono}
+                        <div class="story-ch-headtext">
+                            ${many ? `<p class="story-ch-kicker">${esc(P.couple(coupleStoryYears(DataManager.getData(), u)))}</p>` : ''}
+                            <h3 class="story-reader-title story-reader-couple-title">${esc(label)}${stateTag(st, !!nv)}</h3>
+                            ${st.title?.trim() ? `<p class="story-ch-pair">${esc(pair)}</p>` : ''}
+                            ${!locked ? `<p class="story-ch-note">${esc(P.editInResearch)}</p>` : ''}
+                        </div>
+                        ${coupleApprove ? `<div class="story-ch-actions">${approveBtn(`data-approve-partnership="${esc(u.id)}"`)}</div>` : ''}
+                    </div>
                     ${nv ? nvBanner(nv, `data-partnership-id="${esc(u.id)}"`) : ''}
                     <div class="story-reader-text">${storyProseHtml(st.text, { title: st.title })}</div>
                     ${extraHtml(st)}
                 </section>`;
         }).join('');
 
+        const chipsHtml = many ? `<nav class="story-chips" aria-label="${esc(P.chipsLabel)}">${chips.map((ch, i) =>
+            `<button type="button" class="story-chip" data-chapter="${ch.id}"${i === 0 ? ' aria-current="true"' : ''}>${esc(ch.label)}</button>`).join('')}</nav>` : '';
+
         const overlay = document.createElement('div');
         overlay.className = 'modal-overlay active';
         overlay.id = STORY_ID;
         overlay.innerHTML = `
-            <div class="modal modal--md story-reader" role="dialog" data-dialog-kind="info" aria-modal="true" aria-labelledby="person-story-heading">
+            <div class="modal modal--md story-reader${many ? ' story-reader--chapters' : ''}" role="dialog" data-dialog-kind="info" aria-modal="true" aria-labelledby="person-story-heading">
                 <div class="modal-header">
                     <div class="audit-log-heading">
-                        <h2 id="person-story-heading">${esc(s.readerTitle)}</h2>
-                        <div class="audit-log-subtitle">${esc(personSubtitle(personId))}${waiting
-                            ? ` <span class="story-nv-tag">${esc(s.nvBadge)}</span>`
-                            : own?.status === 'draft' ? ` <span class="story-draft-tag">${esc(s.statusDraft)}</span>` : ''}</div>
+                        <h2 id="person-story-heading">${esc(own ? s.readerTitle : P.titleCouple)}</h2>
+                        <div class="audit-log-subtitle">${esc(personSubtitle(personId))}</div>
+                        ${chipsHtml}
                     </div>
                     <button type="button" class="close-btn" id="person-story-close-x" aria-label="${esc(strings.buttons.close)}">&times;</button>
                 </div>
@@ -240,9 +324,7 @@ export const personSourcesMethods = uiModule({
                     ${couplesHtml}
                 </div>
                 <div class="buttons">
-                    ${approveUrl ? `<button type="button" class="link-button story-approve" id="person-story-approve">${esc(strings.research.approveStory)}</button>` : ''}
                     <button type="button" class="secondary" id="person-story-close" data-dismiss>${esc(strings.buttons.close)}</button>
-                    ${editable ? `<button type="button" class="primary" id="person-story-edit">${esc(s.edit)}</button>` : ''}
                 </div>
             </div>`;
         document.body.appendChild(overlay);
@@ -258,9 +340,16 @@ export const personSourcesMethods = uiModule({
         (overlay.querySelector('#person-story-approve') as HTMLButtonElement | null)?.addEventListener('click', () => {
             if (approveUrl) this.launchResearchLink(approveUrl);
         });
+        overlay.querySelectorAll<HTMLButtonElement>('[data-approve-partnership]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const url = this.coupleStoryApproveUrl(btn.dataset.approvePartnership as PartnershipId);
+                if (url) this.launchResearchLink(url);
+            });
+        });
         // Focus the text body (not a control), so arrows / PgDn scroll it —
         // after the skeleton has wrapped the body (moving a node drops focus).
         normalizeModal(overlay.querySelector('.modal') as HTMLElement);
+        if (many) wireStoryChips(overlay);
         (overlay.querySelector('#person-story-body') as HTMLElement).focus({ preventScroll: true });
     },
 

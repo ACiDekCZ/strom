@@ -149,3 +149,34 @@ test('family book, every card density (compact, normal, detailed, register): the
         });
     }
 });
+
+test('family book: a childless couple\'s story is a subchapter in the main-line partner\'s chapter (spec 027)', async ({ page, context }) => {
+    await openApp(page);
+    await page.getByRole('button', { name: 'Try a sample tree' }).click();
+    await expect(page.locator('#empty-state')).toBeHidden();
+    // A second, childless marriage of a parent from the first chapter, with a story of its own.
+    await page.evaluate(() => {
+        type U = { id: string; person1Id: string; person2Id: string; childIds: string[] };
+        const data = structuredClone(window.Strom.DataManager.getData());
+        const host = (Object.values(data.partnerships) as U[]).find(u => u.childIds.length > 0)!;
+        const h = data.persons[host.person1Id];
+        data.persons['p-rozalie'] = { id: 'p-rozalie', firstName: 'Rozalie', lastName: 'Testova', gender: 'female', isPlaceholder: false,
+            parentIds: [], childIds: [], partnerships: ['u-rozalie'], birthDate: '1700', deathDate: '1780' };
+        data.partnerships['u-rozalie'] = { id: 'u-rozalie', person1Id: h.id, person2Id: 'p-rozalie', status: 'married', childIds: [],
+            startDate: '1730', story: { status: 'final', text: 'The second marriage was short.' } };
+        h.partnerships.push('u-rozalie');
+        window.Strom.DataManager.replaceWithSourceData(data);
+    });
+    await page.evaluate(() => window.Strom.UI.showBookDialog());
+    await page.locator('#book-privacy-mode').selectOption('full');
+    const [book] = await Promise.all([
+        context.waitForEvent('page'),
+        page.locator('#book-modal').getByRole('button', { name: 'Open book' }).click(),
+    ]);
+    await book.waitForLoadState('domcontentloaded');
+    const sub = book.locator('.book-chapter .book-story-sub');
+    await expect(sub).toHaveCount(1);
+    await expect(sub.locator('.book-story-head')).toContainText('Marriage to Rozalie Testova · 1730–');
+    await expect(sub).toContainText('The second marriage was short.');
+    await book.close();
+});

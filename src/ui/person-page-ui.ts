@@ -481,6 +481,8 @@ export const personPageMethods = uiModule({
         }
 
         // The page's content (delegation on .pp-body).
+        const storyJump = target.closest<HTMLElement>('[data-pp-story]');
+        if (storyJump) { e.preventDefault(); this.openPersonPageStory(storyJump.dataset.ppStory ?? ''); return; }
         const personBtn = target.closest<HTMLElement>('[data-pp-person]');
         if (personBtn) { this.navigatePersonPage(personBtn.dataset.ppPerson as PersonId); return; }
         const placeBtn = target.closest<HTMLElement>('[data-pp-place]');
@@ -520,6 +522,21 @@ export const personPageMethods = uiModule({
         }
         const act = target.closest<HTMLElement>('[data-pp-action]');
         if (act) this.runPersonPageAction(act.dataset.ppAction ?? '', act);
+    },
+
+    /**
+     * A link to a couple's chapter (continued reading, the family tree at the
+     * wedding; spec 027 §5.1): unfold the chapter, scroll to it, focus it.
+     */
+    openPersonPageStory(chapterId: string): void {
+        const body = bodyEl();
+        const chapter = chapterId ? body?.querySelector<HTMLElement>(`#${CSS.escape(chapterId)}`) : null;
+        if (!chapter) return;
+        const more = chapter.querySelector<HTMLElement>(`[data-pp-toggle][aria-controls="${CSS.escape(`${chapterId}-rest`)}"]`);
+        if (more) this.togglePersonPageFold(more, true);
+        const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+        chapter.scrollIntoView({ block: 'start', behavior: reduce ? 'auto' : 'smooth' });
+        chapter.focus({ preventScroll: true });
     },
 
     /** Open or close a fold (Sources, a source card, For researchers, siblings, the story's basis). */

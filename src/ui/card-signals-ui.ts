@@ -9,7 +9,7 @@ import { TreeRenderer } from '../renderer.js';
 import { SettingsManager, CardSignals, CARD_SIGNAL_KEYS } from '../settings.js';
 import { strings } from '../strings.js';
 import { PersonId } from '../types.js';
-import { ActionSignal, CardSignalInfo, ACTION_GLYPH, stateStripesHtml } from '../card-signals.js';
+import { ActionSignal, CardSignalInfo, ACTION_GLYPH, stateStripesHtml, storySignalText } from '../card-signals.js';
 import { TreeManager } from '../tree-manager.js';
 import { announcedResearchLinks } from '../research-device.js';
 import { researchConflictRef } from '../research-link.js';
@@ -75,7 +75,11 @@ export const cardSignalsUiMethods = uiModule({
         if (touch && (s.showEvidence || s.showStory)) {
             const bits: string[] = [];
             if (s.showEvidence && s.evidence) bits.push(c.ariaEv[s.evidence.level]);
-            if (s.showStory) bits.push(s.story === 'draft' ? c.ttStoryDraft.toLowerCase() : c.ttStory.toLowerCase());
+            if (s.showStory && s.story) {
+                // Inside the line the words run on in lower case ("documented by sources · story (draft)").
+                const t = storySignalText(s.story, c.story);
+                bits.push(t.charAt(0).toLocaleLowerCase() + t.slice(1));
+            }
             const stripes = stateStripesHtml(s.showEvidence && s.evidence ? s.evidence.level : null, s.showStory ? s.story : null, true);
             html += `<div class="menu-person-state">${stripes}${this.escapeHtml(bits.join(' · '))}</div>`;
         }
