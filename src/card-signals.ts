@@ -155,6 +155,15 @@ export function storySignalText(
     return s.storyNew ? words.nv(base) : base;
 }
 
+/**
+ * The story words inside the person's status line run on in lower case
+ * ("documented by sources · story (draft)"), except in German, whose nouns
+ * keep their capital ("Geschichte der Ehe: …").
+ */
+export function storySignalInLine(text: string, lang: string): string {
+    return lang === 'de' ? text : text.charAt(0).toLocaleLowerCase() + text.slice(1);
+}
+
 export function cardSignalInfo(p: Person, ctx: CardSignalContext): CardSignalInfo {
     const evidence = ctx.treeHasSources ? personEvidence(p, ctx.data, ctx.unions) : null;
     const story = personStoryState(p, ctx.data);

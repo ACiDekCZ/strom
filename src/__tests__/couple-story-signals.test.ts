@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { personStoryState, stateStripesHtml, storySignalText } from '../card-signals.js';
+import { personStoryState, stateStripesHtml, storySignalInLine, storySignalText } from '../card-signals.js';
 import { strings } from '../strings.js';
 import { coupleStories } from '../story-text.js';
 import { Partnership, Person, PersonId, Story, StromData } from '../types.js';
@@ -105,6 +105,12 @@ describe('the corner and its words (spec 027 §5.6)', () => {
         expect(storySignalText({ kind: 'couple', final: true, title: '', storyNew: false }, words)).toBe(words.couple(''));
         expect(storySignalText({ kind: 'couple', final: false, title: 'Svatba', storyNew: false }, words)).toBe(words.draft(words.couple('Svatba')));
         expect(storySignalText({ kind: 'own', final: true, title: '', storyNew: true }, words)).toBe(words.nv(words.own('')));
+    });
+
+    it('runs on in lower case inside the status line, except German nouns keep their capital', () => {
+        expect(storySignalInLine('Story of the marriage: Second union', 'en')).toBe('story of the marriage: Second union');
+        expect(storySignalInLine('Vyprávění manželství: Druhý svazek', 'cs')).toBe('vyprávění manželství: Druhý svazek');
+        expect(storySignalInLine('Geschichte der Ehe: Zweite Ehe', 'de')).toBe('Geschichte der Ehe: Zweite Ehe');
     });
 });
 
