@@ -11822,7 +11822,7 @@ const stringsDE: StringsType = {
             johanStoryNote: 'Nach den Familienbriefen nacherzählt; keine Quelle.',
             coupleStoryTitle: 'Das Schulhaus an der Cedar Avenue',
             johanIdaStoryTitle: 'Eine Hochzeit auf Øvre Strand',
-            johanIdaStory: 'Johan und Ida heirateten am 2. Juni 1850 in der Kirche von Voss, gefeiert wurde auf Øvre Strand, dem Hof, auf dem Ida mit ihrer Mutter Kari aufgewachsen war. Trauzeugen waren Johans Vater Peter und der Lehrer Nils Holm.\n\nSie übernahmen eine kleine Stelle unterhalb von Nedre Berg. Im Sommer darauf kam Erik zur Welt, im April 1855 die Zwillinge Hanna und Clara; Clara lebte nur achtzehn Tage.\n\nIm April 1868 verließen sie mit Erik und Hanna Bergen. Idas Mutter Kari blieb in Voss, sie sahen sie nie wieder. Die Familienbibel aus Voss bewahrte Ida ihr Leben lang auf; sie überlebte Johan um sechs Jahre.',
+            johanIdaStory: 'Johan und Ida heirateten am 2. Juni 1850 in der Kirche von Voss, gefeiert wurde auf Øvre Strand, dem Hof, auf dem Ida mit ihrer Mutter Kari aufgewachsen war. Trauzeugen waren Johans Vater Peter und der Lehrer Nils Holm.\n\nDas Paar übernahm eine kleine Stelle unterhalb von Nedre Berg. Im Sommer darauf kam Erik zur Welt, im April 1855 die Zwillinge Hanna und Clara; Clara lebte nur achtzehn Tage.\n\nIm April 1868 verließen sie mit Erik und Hanna Bergen. Idas Mutter Kari blieb in Voss, sie sahen sie nie wieder. Die Familienbibel aus Voss bewahrte Ida ihr Leben lang auf; sie überlebte Johan um sechs Jahre.',
             coupleStory: 'David und Emma lernten sich an der Schule kennen, an der beide unterrichteten. 1905 heirateten sie und vermieteten ein Zimmer, so war das Haus immer voll.',
         }
     },
