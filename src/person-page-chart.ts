@@ -438,7 +438,7 @@ export function chartSet(input: LifeChartInput, S: CS, ctx: LifeChartCtx, W: num
 
     // History of the places.
     const hist = input.history.filter(h => (h.to ?? h.from) >= Math.floor(input.start) && h.from <= input.end);
-    if (hist.length) rows.push(historyRow(hist, S, xpx, x, wpc, narrow));
+    if (hist.length) rows.push(historyRow(hist, S, xpx, x, wpc, narrow, W));
 
     // Period labels and the bar.
     const labelParts: string[] = [];
@@ -609,15 +609,34 @@ function lineRow(l: ChartLine, input: LifeChartInput, S: CS, xpx: (y: number) =>
         + `<span class="pp-ch-lb${atEnd ? ' pp-ch-lb--end' : ''}">${esc(label)}</span></a></div>`;
 }
 
-function historyRow(items: readonly ChartHistory[], S: CS, xpx: (y: number) => number, x: (y: number) => string,
-    wpc: (a: number, b: number) => string, narrow: boolean): string {
+/** History glyphs closer than this (px) join into one cluster (round 3 §2.4): wide, narrow. */
+const HIST_CLUSTER_PX = 16;
+const HIST_CLUSTER_PX_NARROW = 14;
+/** A history label's width estimate (10.5 px text). */
+const HIST_CH_PX = 5.6;
+/** The two label lines under the glyphs (px from the row's top). */
+const HIST_LANES = [28, 42];
+
+/** One glyph of the history row: the events of one year, or a cluster of near years. */
+export interface ChartHistGlyph {
+    /** px of the first event. */
+    x: number;
+    scope: ChartHistory['scope'];
+    anchor: string;
+    /** Events in it (a badge with the count from 2 years on). */
+    count: number;
+    cluster: boolean;
+    label: string;
+    title: string;
+}
+
+/**
+ * The point events of the history row as glyphs (round 3 §2.4): the events of
+ * one year are one glyph (their kinds joined), glyphs closer than `gap` px
+ * chain into a cluster led by its first year's glyph, with the count.
+ */
+export function historyGlyphs(items: readonly ChartHistory[], S: CS, xpx: (y: number) => number, gap: number): ChartHistGlyph[] {
     const kinds = S.history.kinds as Record<string, string>;
-    let html = '';
-    // Events of more years: a 6 px bar, text only in the title.
-    for (const h of items.filter(i => i.to !== undefined && i.to - i.from > 1)) {
-        html += `<a class="pp-ch-hbar" href="#${h.anchor}" data-pp-osa="${h.anchor}" style="left:${x(h.from)};width:${wpc(h.from, h.to! + 1)}" title="${esc(`${h.from}–${h.to} ${h.text}`)}"></a>`;
-    }
-    // Point events: one glyph a year, kinds joined.
     const byYear = new Map<number, ChartHistory[]>();
     for (const h of items.filter(i => !(i.to !== undefined && i.to - i.from > 1))) {
         const list = byYear.get(h.from) ?? [];
@@ -625,18 +644,76 @@ function historyRow(items: readonly ChartHistory[], S: CS, xpx: (y: number) => n
         byYear.set(h.from, list);
     }
     const scopeRank = { local: 0, place: 1, region: 2 } as const;
-    let lastPx = -Infinity;
-    for (const [year, list] of [...byYear.entries()].sort((a, b) => a[0] - b[0])) {
-        const lead = [...list].sort((a, b) => scopeRank[a.scope] - scopeRank[b.scope])[0];
-        const glyph = lead.scope === 'local' ? '■' : lead.scope === 'place' ? '▲' : '◇';
-        const label = [...new Set(list.map(h => kinds[h.kind] ?? h.kind))].join(', ');
-        const px = xpx(year + 0.5);
-        const showLabel = !narrow && px - lastPx > label.length * 5.8 + 14;
-        if (showLabel) lastPx = px;
-        html += `<a class="pp-ch-hm pp-ch-hm--${lead.scope}" href="#${lead.anchor}" data-pp-osa="${lead.anchor}" style="left:${x(year + 0.5)}" title="${esc(list.map(h => `${year} ${h.text}`).join(' · '))}">`
-            + `<span class="pp-ch-hg">${glyph}</span>${showLabel ? `<span class="pp-ch-hl">${esc(label)}</span>` : ''}</a>`;
+    const years = [...byYear.entries()].sort((a, b) => a[0] - b[0]).map(([year, list]) => ({
+        year, x: xpx(year + 0.5), list,
+        lead: [...list].sort((a, b) => scopeRank[a.scope] - scopeRank[b.scope])[0],
+    }));
+    const groups: (typeof years)[] = [];
+    for (const y of years) {
+        const last = groups[groups.length - 1];
+        if (last && y.x - last[last.length - 1].x < gap) last.push(y);
+        else groups.push([y]);
     }
-    return `<div class="pp-ch-row pp-ch-hist">${html}</div>`;
+    return groups.map(g => {
+        const count = g.reduce((n, y) => n + y.list.length, 0);
+        const cluster = g.length > 1;
+        const label = cluster ? S.personPage.chart.hist.cluster(count)
+            : [...new Set(g[0].list.map(h => kinds[h.kind] ?? h.kind))].join(', ');
+        return {
+            x: g[0].x, scope: g[0].lead.scope, anchor: g[0].lead.anchor, count, cluster, label,
+            title: g.flatMap(y => y.list.map(h => `${y.year} ${h.text}`)).join('; '),
+        };
+    });
+}
+
+/**
+ * Where the glyphs' labels go (round 3 §2.4, wide sets only): left to right,
+ * from 5 px left of the glyph (kept inside the width), on the first of two
+ * lines with 6 px free after the line's previous label; a label with room on
+ * neither is left out (the glyph keeps its title). `null`: no label.
+ */
+export function historyLabelLanes(glyphs: readonly Pick<ChartHistGlyph, 'x' | 'label'>[], W: number): ({ left: number; lane: number; width: number } | null)[] {
+    const ends = HIST_LANES.map(() => -Infinity);
+    return glyphs.map(g => {
+        const width = g.label.length * HIST_CH_PX + 4;
+        const left = Math.max(0, Math.min(W - width, g.x - 5));
+        const lane = ends.findIndex(e => left >= e + 6);
+        if (lane < 0) return null;
+        ends[lane] = left + width;
+        return { left, lane, width };
+    });
+}
+
+function historyRow(items: readonly ChartHistory[], S: CS, xpx: (y: number) => number, x: (y: number) => string,
+    wpc: (a: number, b: number) => string, narrow: boolean, W: number): string {
+    let html = '';
+    // Events of more years: a 6 px bar on a line of its own at the top, its label above it only when it fits (wide).
+    const bars = items.filter(i => i.to !== undefined && i.to - i.from > 1);
+    let barLabels = false;
+    const kinds = S.history.kinds as Record<string, string>;
+    for (const h of bars) {
+        const label = narrow ? '' : (kinds[h.kind] ?? h.kind);
+        const fits = !!label && xpx(h.to! + 1) - xpx(h.from) >= label.length * HIST_CH_PX + 4;
+        if (fits) barLabels = true;
+        html += `<a class="pp-ch-hbar" href="#${h.anchor}" data-pp-osa="${h.anchor}" style="left:${x(h.from)};width:${wpc(h.from, h.to! + 1)}" title="${esc(`${h.from}–${h.to} ${h.text}`)}">`
+            + `${fits ? `<span class="pp-ch-hbl" aria-hidden="true">${esc(label)}</span>` : ''}</a>`;
+    }
+    // Point events: a glyph a year, near ones clustered with the count; their labels in two lines (wide only).
+    const glyphs = historyGlyphs(items, S, xpx, narrow ? HIST_CLUSTER_PX_NARROW : HIST_CLUSTER_PX);
+    const pc = (n: number): string => `${(Math.round((n / W) * 10000) / 100).toString()}%`;
+    for (const g of glyphs) {
+        const glyph = g.scope === 'local' ? '■' : g.scope === 'place' ? '▲' : '◇';
+        html += `<a class="pp-ch-hm pp-ch-hm--${g.scope}${g.cluster ? ' pp-ch-hm--c' : ''}" href="#${g.anchor}" data-pp-osa="${g.anchor}" style="left:${pc(g.x)}" title="${esc(g.title)}">`
+            + `<span class="pp-ch-hg">${glyph}</span>${g.cluster ? `<span class="pp-ch-hn">${g.count}</span>` : ''}</a>`;
+    }
+    if (!narrow) {
+        historyLabelLanes(glyphs, W).forEach((l, i) => {
+            if (!l) return;
+            const g = glyphs[i];
+            html += `<span class="pp-ch-hl${g.cluster ? ' pp-ch-hl--c' : ''}" aria-hidden="true" style="left:${pc(l.left)};top:${HIST_LANES[l.lane]}px">${esc(g.label)}</span>`;
+        });
+    }
+    return `<div class="pp-ch-row pp-ch-hist${narrow ? ' pp-ch-hist--n' : ''}${barLabels ? ' pp-ch-hist--bl' : ''}">${html}</div>`;
 }
 
 function legendHtml(input: LifeChartInput, S: CS): string {

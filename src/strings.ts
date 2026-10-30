@@ -5723,6 +5723,8 @@ const stringsEN = {
         },
         chart: {
             aria: 'Life at a glance',
+            /** History glyphs closer than 16 px (14 on a phone) joined into one (round 3 §2.4). */
+            hist: { cluster: (n: number) => nEn(n, 'event', 'events') },
             youth: 'Childhood and youth',
             marriage: (name: string) => (name ? `Marriage · ${name}` : 'Marriage'),
             partnership: (name: string) => (name ? `Partnership · ${name}` : 'Partnership'),
@@ -11454,6 +11456,7 @@ const stringsCZ: StringsType = {
         },
         chart: {
             aria: 'Život v přehledu',
+            hist: { cluster: (n: number) => nCs(n, 'událost', 'události', 'událostí') },
             youth: 'Dětství a mládí',
             marriage: (name: string) => (name ? `Manželství · ${name}` : 'Manželství'),
             partnership: (name: string) => (name ? `Partnerství · ${name}` : 'Partnerství'),
@@ -17104,6 +17107,7 @@ const stringsDE: StringsType = {
         },
         chart: {
             aria: 'Leben im Überblick',
+            hist: { cluster: (n: number) => nDe(n, 'Ereignis', 'Ereignisse') },
             youth: 'Kindheit und Jugend',
             marriage: (name: string) => (name ? `Ehe · ${name}` : 'Ehe'),
             partnership: (name: string) => (name ? `Partnerschaft · ${name}` : 'Partnerschaft'),

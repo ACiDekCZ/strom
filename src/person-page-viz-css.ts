@@ -129,13 +129,20 @@ export const PERSON_PAGE_CHART_CSS = `
 .pp-ch-ages { height: 16px; font-size: 10.5px; }
 .pp-ch-ages span, .pp-ch-axis span { position: absolute; top: 2px; transform: translateX(-50%); white-space: nowrap; }
 .pp-ch-ages .pp-ch-age--e { left: auto; right: 0; transform: none; }
-.pp-ch-hist { height: 26px; }
-.pp-ch-hbar { position: absolute; top: 12px; height: 6px; border-radius: 3px; background: var(--hist-mark); opacity: .55; }
-.pp-ch-hm { position: absolute; top: 4px; width: 0; }
+/* History (round 3 §2.4): the bars of periods on a line of their own at the top, the glyphs under them
+   (near ones clustered with a count), their labels in two lines under the glyphs (wide sets only). */
+.pp-ch-hist { height: 54px; }
+.pp-ch-hist--bl { margin-top: 14px; }
+.pp-ch-hist--n { height: 26px; }
+.pp-ch-hbar { position: absolute; top: 0; height: 6px; border-radius: 3px; background: var(--hist-mark); opacity: .55; }
+.pp-ch-hbl { position: absolute; left: 0; bottom: 8px; font-size: 10px; line-height: 12px; white-space: nowrap; color: var(--text-faint); }
+.pp-ch-hm { position: absolute; top: 12px; width: 0; height: 14px; }
 .pp-ch-hg { position: absolute; left: 0; top: 0; transform: translateX(-50%); font-size: 12px; line-height: 14px; color: var(--hist-mark); }
 .pp-ch-hm--place .pp-ch-hg { color: var(--hist-place); }
 .pp-ch-hm--local .pp-ch-hg { color: var(--hist-local); }
-.pp-ch-hl { position: absolute; left: 8px; top: 1px; font-size: 10.5px; white-space: nowrap; color: var(--text-faint); }
+.pp-ch-hn { position: absolute; left: 6px; top: 0; box-sizing: border-box; min-width: 13px; height: 13px; padding: 0 3px; border-radius: 7px; background: var(--hist-mark); color: var(--pp-bg, #fff); font-size: 9.5px; font-weight: 600; line-height: 13px; text-align: center; }
+.pp-ch-hl { position: absolute; font-size: 10.5px; line-height: 12px; white-space: nowrap; color: var(--text-faint); }
+.pp-ch-hl--c { font-weight: 600; color: var(--text-light); }
 .pp-ch-plabels { height: 18px; }
 .pp-ch-pl { position: absolute; bottom: 3px; overflow: hidden; padding-left: 2px; color: var(--text-light); font-size: 11.5px; font-weight: 600; white-space: nowrap; text-overflow: ellipsis; }
 .pp-ch-bar { height: 16px; }
@@ -201,8 +208,8 @@ export const PERSON_PAGE_CHART_CSS = `
   /* The shorter rows keep their labels apart: the ages above the periods, a mark above its year. */
   .pp-ch-ages span { top: 0; }
   .pp-ch-gl { line-height: 10px; }
-  .pp-ch-hist { height: 21px; }
-  .pp-ch-hbar { top: 9px; }
+  .pp-ch-hist--n { height: 22px; }
+  .pp-ch-hist--n .pp-ch-hm { top: 9px; }
   .pp-ch-plabels { height: 15px; }
   .pp-ch-pl { bottom: 1px; line-height: 14px; }
   .pp-ch-bar, .pp-ch-barin, .pp-ch-dash { height: 13px; }

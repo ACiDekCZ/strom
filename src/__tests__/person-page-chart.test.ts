@@ -7,7 +7,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { lifeChartInput, lifeChartHtml, chartAnchorId, chartHistAnchorId, chartSet, CHART_WIDE, CHART_NARROW } from '../person-page-chart.js';
+import { lifeChartInput, lifeChartHtml, chartAnchorId, chartHistAnchorId, chartSet, CHART_WIDE, CHART_NARROW, historyGlyphs, historyLabelLanes } from '../person-page-chart.js';
+import type { ChartHistory } from '../person-page-chart.js';
 import { computePersonLifeline } from '../timeline.js';
 import { getStringsForLang } from '../strings.js';
 import type { LifelineHistoryItem } from '../history.js';
@@ -359,6 +360,51 @@ describe('lifeChartHtml', () => {
         expect(html).toContain('pp-ch-hbar');
         expect(html).toContain(`href="#${chartHistAnchorId('h3')}"`);
         expect(lifeChartHtml(input(), { lang: 'cs', mode: 'file' })).not.toContain('pp-ch-hist');
+    });
+
+    it('history (round 3): glyphs closer than 16 px (14 on a phone) chain into one with the count, labels in two lines never overlap, bars on a line of their own', () => {
+        const S = getStringsForLang('cs');
+        const h = (id: string, from: number, scope: ChartHistory['scope'], kind = 'war', to?: number): ChartHistory =>
+            ({ from, ...(to !== undefined ? { to } : {}), scope, kind, text: `Text ${id}`, anchor: `a-${id}` });
+        const xpx = (y: number): number => (y - 1850) * 5; // 5 px a year
+        // 1860, 1862, 1863 lie 10 and 5 px apart: one cluster of 3; 1880 stands alone; 1883 is 15 px from it.
+        const items = [h('a', 1860, 'region'), h('b', 1862, 'local', 'census'), h('c', 1863, 'place', 'epidemic'),
+            h('d', 1880, 'region'), h('e', 1883, 'region', 'flood'), h('bar', 1914, 'region', 'war', 1918)];
+        const wide = historyGlyphs(items, S, xpx, 16);
+        expect(wide.map(g => g.count)).toEqual([3, 2]);
+        expect(wide[0]).toMatchObject({ cluster: true, label: '3 události', anchor: 'a-a', x: xpx(1860.5) });
+        expect(wide[0].title).toBe('1860 Text a; 1862 Text b; 1863 Text c');
+        // On a phone 15 px is no longer "near".
+        const narrow = historyGlyphs(items, S, xpx, 14);
+        expect(narrow.map(g => g.count)).toEqual([3, 1, 1]);
+        expect(narrow[1]).toMatchObject({ cluster: false, label: 'válka', anchor: 'a-d' });
+        // The bar is no glyph.
+        expect(wide.some(g => g.anchor === 'a-bar')).toBe(false);
+
+        // Labels: two lines, at least 6 px free between neighbours on a line, none past the width; no room → left out.
+        const many = [0, 10, 20, 30, 300].map(x => ({ x, label: 'epidemie, válka' }));
+        const lanes = historyLabelLanes(many, 340);
+        expect(lanes.map(l => l?.lane ?? null)).toEqual([0, 1, null, null, 0]);
+        for (const lane of [0, 1]) {
+            const on = lanes.filter((l): l is NonNullable<typeof l> => !!l && l.lane === lane).sort((a, b) => a.left - b.left);
+            for (let i = 1; i < on.length; i++) expect(on[i].left).toBeGreaterThanOrEqual(on[i - 1].left + on[i - 1].width + 6);
+            for (const l of on) expect(l.left + l.width).toBeLessThanOrEqual(340);
+        }
+
+        // In the chart: the cluster's badge and label, the left-out label's glyph keeps its title, the bar on its own line.
+        const hist = [
+            ...[1860, 1861, 1862].map((y, i) => ({ ev: { id: `c${i}`, from: y, kind: 'war', scope: 'region', text: { cs: `Válka ${y}` } }, year: y, age: '', place: 'Čapkov', placeKey: 'capkov', text: `Válka ${y}`, textLang: 'cs' })),
+            { ev: { id: 'w', from: 1914, to: 1918, kind: 'war', scope: 'region', text: { cs: 'Velká válka' } }, year: 1914, age: '', place: 'Čapkov', placeKey: 'capkov', text: 'Velká válka', textLang: 'cs' },
+        ] as unknown as LifelineHistoryItem[];
+        const html = lifeChartHtml(lifeChartInput(tree(), JAN, { now: NOW, history: hist }), { lang: 'cs', mode: 'file' });
+        expect(html).toContain('pp-ch-hm--c');
+        expect(html).toMatch(/<span class="pp-ch-hn">3<\/span>/);
+        expect(html).toContain('<span class="pp-ch-hl pp-ch-hl--c"');
+        expect(html).toContain('3 události');
+        expect(html).toContain('title="1860 Válka 1860; 1861 Válka 1861; 1862 Válka 1862"');
+        expect(html).toMatch(/pp-ch-hist--n/); // the phone set: no labels there
+        const narrowSet = html.slice(html.lastIndexOf('pp-ch-hist--n'));
+        expect(narrowSet.slice(0, narrowSet.indexOf('</div>'))).not.toContain('pp-ch-hl');
     });
 
     it('escapes names', () => {
