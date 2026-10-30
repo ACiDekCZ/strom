@@ -28,6 +28,7 @@ import { storyProseHtml, coupleStories, coupleStoryYears, splitProseLead } from 
 import { excerptImageUrl } from './excerpts.js';
 import { personSourceRows, lifeEventLabel, coupleEventLabelIn, PersonSourceRow } from './person-sources.js';
 import { personInitials } from './initials.js';
+import { recordedAgeGap, readRecordedAge, ageBirthDate } from './recorded-age.js';
 import { clipText } from './text-clip.js';
 import { PERSON_PAGE_SCRIPT, PERSON_PAGE_STORY_SCRIPT, personPageFileCss } from './person-page-css.js';
 import { findRelationship } from './kinship.js';
@@ -1496,6 +1497,21 @@ function participantNames(c: Ctx, list: readonly EventParticipant[] | undefined,
     }).filter(Boolean).join(', ');
 }
 
+/**
+ * The age a record gives at a row's event (deathAge, an event's age, the age at
+ * a wedding), only when it differs from the age the dates give or the dates give
+ * none (§0.6); '' otherwise. A plain number of years is worded, anything else
+ * ("3 měsíce", "kojenec") is quoted as written.
+ */
+function recordedAgeText(c: Ctx, recorded: string | undefined, eventDate: string | undefined): string {
+    const text = recorded?.trim();
+    if (!text) return '';
+    if (recordedAgeGap(text, ageBirthDate(c.person), eventDate) === 0) return '';
+    const a = readRecordedAge(text);
+    return a?.kind === 'span' && !a.qualifier && !a.months && !a.weeks && !a.days
+        ? c.P.detail.recordedAge(a.years) : c.P.detail.recordedAs(text);
+}
+
 function detailsLine(c: Ctx, pt: LifelinePoint, merged?: LifelinePoint): string {
     const { P } = c;
     const parts: string[] = [];
@@ -1524,6 +1540,11 @@ function detailsLine(c: Ctx, pt: LifelinePoint, merged?: LifelinePoint): string 
         if (others) parts.push(c.S.personModal.lifelineWith('\u0000').split('\u0000').map(esc).join(others));
     }
     if (pt.details?.cause) parts.push(esc(pt.details.cause));
+    const age = recordedAgeText(c, pt.details?.age, pointDate(c, pt));
+    if (age) parts.push(esc(age));
+    const mergedAge = merged && merged.details?.age?.trim() !== pt.details?.age?.trim()
+        ? recordedAgeText(c, merged.details?.age, pointDate(c, merged)) : '';
+    if (mergedAge) parts.push(esc(mergedAge));
     const note = pt.kind === 'event' && ev?.note?.trim() && !pt.detail ? ev.note.trim()
         : pt.kind === 'marriage' ? u?.note?.trim() : '';
     if (note) parts.push(esc(stripResearchIds(note).text));

@@ -5796,6 +5796,10 @@ const stringsEN = {
             burial: (d: string) => `buried ${d}`,
             godparents: (s: string) => `godparents ${s}`,
             witnesses: (s: string) => `witnesses ${s}`,
+            /** A recorded age shown only when it differs from the dates' age, or the dates give none (spec 025 §0.6). */
+            recordedAge: (n: number) => `${nEn(n, 'year', 'years')} per the record`,
+            /** A recorded age that is not a plain number of years ("3 months", "infant"), as written. */
+            recordedAs: (text: string) => `per the record: ${text}`,
         },
         more: 'more',
         age: (n: number) => `age ${n}`,
@@ -11516,6 +11520,8 @@ const stringsCZ: StringsType = {
             burial: (d: string) => `pohřeb ${d}`,
             godparents: (s: string) => `kmotři ${s}`,
             witnesses: (s: string) => `svědci ${s}`,
+            recordedAge: (n: number) => `podle záznamu ${nCs(n, 'rok', 'roky', 'let')}`,
+            recordedAs: (text: string) => `podle záznamu: ${text}`,
         },
         more: 'více',
         age: (n: number) => `věk ${n}`,
@@ -17157,6 +17163,8 @@ const stringsDE: StringsType = {
             burial: (d: string) => `begraben ${d}`,
             godparents: (s: string) => `Paten ${s}`,
             witnesses: (s: string) => `Trauzeugen ${s}`,
+            recordedAge: (n: number) => `laut Eintrag ${nDe(n, 'Jahr', 'Jahre')}`,
+            recordedAs: (text: string) => `laut Eintrag: ${text}`,
         },
         more: 'mehr',
         age: (n: number) => `Alter ${n}`,

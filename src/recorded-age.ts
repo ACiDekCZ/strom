@@ -156,17 +156,25 @@ export function checkRecordedAge(recorded: string | undefined, birth?: string, e
     const range = span.min === span.max
         ? strings.gedcomNotes.ageUnit(span.min, 'y')
         : `${span.min}–${span.max} ${unit}`;
-    const age = readRecordedAge(recorded);
-    let differs = '';
-    if (age?.kind === 'span' && !age.qualifier) {
-        const years = age.years;
-        const gap = years < span.min ? span.min - years : years > span.max ? years - span.max : 0;
-        // Months, weeks or days alone are under a year: they agree with an age of 0.
-        if (gap > 0 && !(years === 0 && span.min === 0)) {
-            differs = `${gap} ${plural(lang, gap, ...yearWords(lang))}`;
-        }
-    }
+    const gap = recordedAgeGap(recorded, birth, event) ?? 0;
+    const differs = gap > 0 ? `${gap} ${plural(lang, gap, ...yearWords(lang))}` : '';
     return { range, differs };
+}
+
+/**
+ * Whole years the recorded age lies outside the range the dates give: 0 when
+ * it agrees or cannot be compared (a word, a qualifier, an unreadable value),
+ * null when the dates give no age (no birth, or an estimate on either side).
+ */
+export function recordedAgeGap(recorded: string | undefined, birth?: string, event?: string): number | null {
+    const span = ageRangeBetween(birth, event);
+    if (!span) return null;
+    const age = readRecordedAge(recorded);
+    if (age?.kind !== 'span' || age.qualifier) return 0;
+    const years = age.years;
+    const gap = years < span.min ? span.min - years : years > span.max ? years - span.max : 0;
+    // Months, weeks or days alone are under a year: they agree with an age of 0.
+    return gap > 0 && !(years === 0 && span.min === 0) ? gap : 0;
 }
 
 function yearWords(lang: Language): [string, string, string] {

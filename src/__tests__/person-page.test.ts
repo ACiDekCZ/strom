@@ -420,6 +420,31 @@ describe('header', () => {
 });
 
 describe('timeline', () => {
+    it('a recorded age shows in the row only when it differs from the dates, or the dates give none (§0.6)', () => {
+        const d = fiskTree();
+        const jan = d.persons['jan' as PersonId];
+        // Jan died aged 50 by the dates (1860-03-12 → 1910-11-02).
+        jan.deathAge = '50 let';
+        d.partnerships['u1' as PartnershipId].ages = { jan: '27 let' };
+        expect(body(d)).not.toContain('podle záznamu');
+        jan.deathAge = '54 let';
+        d.partnerships['u1' as PartnershipId].ages = { jan: '25 let' };
+        const html = body(d);
+        expect(html).toContain('podle záznamu 54 let');
+        expect(html).toContain('podle záznamu 25 let');
+        expect(body(d, { lang: 'en' })).toContain('54 years per the record');
+        expect(body(d, { lang: 'de' })).toContain('laut Eintrag 54 Jahre');
+        // Without a birth (nor a baptism) the record is the only age there is; a non-number is quoted as written.
+        delete jan.birthDate;
+        jan.events = jan.events!.filter(e => e.type !== 'baptism');
+        jan.events.push({ id: 'e9', type: 'military', date: '1880', age: '1 rok' });
+        jan.deathAge = 'kmet';
+        const noBirth = body(d);
+        expect(noBirth).toContain('podle záznamu 1 rok');
+        expect(noBirth).toContain('podle záznamu: kmet');
+        expect(getStringsForLang('cs').personPage.detail.recordedAge(3)).toBe('podle záznamu 3 roky');
+    });
+
     const d = fiskTree();
     const points = computePersonLifeline(d, 'jan', { childEvents: true });
 
