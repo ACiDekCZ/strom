@@ -9,7 +9,7 @@ import { describe, it, expect } from 'vitest';
 import {
     collectPersonPlacePoints, planPlacesMap, placesMapHtml, placeLabelSides, labelRect, scaleBar, labelYears,
     numberRanges, chainClusters, clusterLabel, isSelected, PLACES_MAP_SCRIPT,
-    ownEventsText, relativeEventsText, distanceKm, insetRects, insetLabels, SAFE, VIEW_W, VIEW_H, type PlacePoint,
+    ownEventsText, relativeEventsText, distanceKm, insetRects, insetLabels, insetHitHalves, SAFE, VIEW_W, VIEW_H, type PlacePoint,
 } from '../person-page-map.js';
 import { chartAnchorId } from '../person-page-chart.js';
 import { placeKey } from '../places.js';
@@ -533,5 +533,29 @@ describe('clusters with children\'s and partners\' places (round 5, K5-33)', () 
         }
         expect(PERSON_PAGE_MAP_CSS).toContain('.pp-map-cl--rel { border-color: var(--primary); background: var(--surface); color: var(--primary);');
         expect(PERSON_PAGE_MAP_CSS).toMatch(/\.pp-map-cl-ring \{[^}]*width: 8px; height: 8px;[^}]*border: 1\.5px solid #fff/);
+    });
+});
+
+describe('the world inset is clickable (round 5, answer 39)', () => {
+    it('each dot (a place or a cluster) is a target that selects its rows; touch 44 px narrowed to half the distance', () => {
+        const t = tree();
+        t.persons['eva' as PersonId].events = [{ id: 'ev1', type: 'emigration', date: '1950', place: 'Milwaukee' }];
+        const geo = { ...GEO, [placeKey('Milwaukee')]: { lat: 43.04, lon: -87.91 } };
+        const pts = collectPersonPlacePoints(t, JAN, { now: 2026 });
+        const html = placesMapHtml(pts, geo, { lang: 'cs', mode: 'file', kidPlaces: true });
+        const inset = html.slice(html.indexOf('<div class="pp-map-inset'));
+        expect(inset).toMatch(/^<div class="pp-map-inset pp-map-inset--\w+" role="group"/);
+        const keys = `${placeKey('Chicago')}\t${placeKey('Milwaukee')}`;
+        expect(inset).toMatch(new RegExp(`<button type="button" class="pp-map-ihit" style="left:[^"]*" data-pp-map-place="${keys}" aria-label="Chicago · Milwaukee"></button>`));
+        // The dot follows the selection (as the main map's points do).
+        expect(inset).toMatch(new RegExp(`<circle class="pp-map-ipt"[^>]*data-pp-map-place="${keys}"/>`));
+        const sel = placesMapHtml(pts, geo, { lang: 'cs', mode: 'app', kidPlaces: true, selected: placeKey('Milwaukee') });
+        expect(sel).toMatch(/class="pp-map-ihit is-sel"/);
+        expect(sel).toMatch(/class="pp-map-ipt is-sel"/);
+        // Targets: Chebyshev distance, half of it under 22 px; far apart the full size.
+        expect(insetHitHalves([{ x: 0, y: 0 }, { x: 24, y: 12 }, { x: 200, y: 100 }], 240)).toEqual([12, 12, undefined]);
+        expect(insetHitHalves([{ x: 0, y: 0 }, { x: 24, y: 12 }], 120)).toEqual([6, 6]);
+        expect(PERSON_PAGE_MAP_CSS).toMatch(/@media \(pointer: coarse\) \{[^@]*\.pp-map-ihit \{ width: min\(44px, calc\(2 \* var\(--n\)\)\)/);
+        expect(PERSON_PAGE_MAP_CSS).toMatch(/@media \(max-width: 640px\) \{[^@]*\.pp-map-ihit \{ --n: var\(--np, 22px\); \}/);
     });
 });

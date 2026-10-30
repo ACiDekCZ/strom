@@ -1397,6 +1397,24 @@ function insetDots(far: readonly PlannedPlace[], min: number, S: MapStrings): In
     return out;
 }
 
+/** Half a touch target (px) of the inset's dots, at most 22. */
+const INSET_HIT_HALF = 22;
+
+/**
+ * Per inset dot, half the distance (px, Chebyshev: the square targets never
+ * overlap) to the nearest other dot when that is less than a touch target's
+ * half (22 px); `undefined`: the full size. `px`: the inset's width in px.
+ */
+export function insetHitHalves(dots: readonly { x: number; y: number }[], px: number): (number | undefined)[] {
+    const k = px / INSET_W;
+    return dots.map((d, i) => {
+        let near = Infinity;
+        dots.forEach((o, j) => { if (j !== i) near = Math.min(near, Math.max(Math.abs(o.x - d.x), Math.abs(o.y - d.y)) * k); });
+        const half = Math.floor((near / 2) * 10) / 10;
+        return half < INSET_HIT_HALF ? half : undefined;
+    });
+}
+
 /**
  * The inset's labels (at most three), each beside its dot: on the side with room, then above or
  * below it; a label that finds no free place is left out (the list under the map names the place).
@@ -1451,16 +1469,25 @@ function insetHtml(plan: MapPlan, S: MapStrings, sel: string | null): string {
     const groupsFor = (px: number, min: number): InsetDot[] => insetDots(far, min * INSET_W / px, S);
     const wide = groupsFor(INSET_PX_WIDE, 26), small = groupsFor(INSET_PX_PHONE, 24);
     const same = wide.length === small.length && wide.every((d, i) => d.keys.join(KEY_SEP) === small[i].keys.join(KEY_SEP));
+    // Each dot (one place or a cluster) is clickable like a point of the main map (round 5): it selects its rows.
+    let hits = '';
+    const gapsWide = insetHitHalves(wide, INSET_PX_WIDE), gapsSmall = insetHitHalves(small, INSET_PX_PHONE);
     const drawDots = (list: InsetDot[], only: '' | 'd' | 'p') => {
-        for (const d of list) {
+        list.forEach((d, i) => {
             const a = ins.from;
             const mx = (a.x + d.x) / 2, my = (a.y + d.y) / 2;
             const lift = Math.max(8, Math.hypot(d.x - a.x, d.y - a.y) * 0.3);
             const arc = `M${f1(a.x)} ${f1(a.y)}Q${f1(mx)} ${f1(my - lift)} ${f1(d.x)} ${f1(d.y)}`;
             if (only) dots += `<path class="pp-map-arc pp-map-i--${only}" d="${arc}"/>`;
             else arcs += arc;
-            dots += `<circle class="pp-map-ipt${isSelected(sel, d.keys) ? ' is-sel' : ''}${only ? ` pp-map-i--${only}` : ''}" cx="${f1(d.x)}" cy="${f1(d.y)}" r="3.5"/>`;
-        }
+            const keys = esc(d.keys.join(KEY_SEP));
+            const isSel = isSelected(sel, d.keys) ? ' is-sel' : '';
+            dots += `<circle class="pp-map-ipt${isSel}${only ? ` pp-map-i--${only}` : ''}" cx="${f1(d.x)}" cy="${f1(d.y)}" r="3.5" data-pp-map-place="${keys}"/>`;
+            // The target: 22 px (touch 44), narrowed to half the distance to a neighbouring dot.
+            const nd = only === 'p' ? undefined : gapsWide[i], np = only === 'd' ? undefined : gapsSmall[i];
+            const vars = `${nd !== undefined ? `;--nd:${nd}px` : ''}${np !== undefined ? `;--np:${np}px` : ''}`;
+            hits += `<button type="button" class="pp-map-ihit${only ? ` pp-map-i--${only}` : ''}${isSel}" style="left:${pct(d.x, INSET_W)};top:${pct(d.y, INSET_H)}${vars}" data-pp-map-place="${keys}" aria-label="${esc(d.name)}"></button>`;
+        });
     };
     drawDots(wide, same ? '' : 'd');
     if (!same) drawDots(small, 'p');
@@ -1472,7 +1499,7 @@ function insetHtml(plan: MapPlan, S: MapStrings, sel: string | null): string {
         + (land ? `<path class="pp-map-land" d="${land}"/>` : '')
         + `<rect class="pp-map-frame" x="${f1(r.x)}" y="${f1(r.y)}" width="${f1(r.w)}" height="${f1(r.h)}"/>`
         + `<path class="pp-map-arc" d="${arcs}"/>${dots}</svg>`;
-    return `<div class="pp-map-inset pp-map-inset--${ins.corner}" role="img" aria-label="${esc(M.inset)}">${svg}${labels}</div>`;
+    return `<div class="pp-map-inset pp-map-inset--${ins.corner}" role="group" aria-label="${esc(M.inset)}">${svg}${labels}${hits}</div>`;
 }
 
 function listHtml(plan: MapPlan, S: MapStrings, ctx: PlacesMapCtx, sel: string | null): string {
