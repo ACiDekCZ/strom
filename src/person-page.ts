@@ -1942,6 +1942,15 @@ interface GalleryItem {
     caption: string;
     sub: string;
     year: number | null;
+    /** A record or document at least twice as wide as high (round 4, K4-31): a tile over two columns. */
+    wide: boolean;
+}
+
+/** Width : height from which a record or document is a wide tile (a register line). */
+const GAL_WIDE_RATIO = 2;
+
+function isWide(kind: GalleryItem['kind'], w: number, h: number): boolean {
+    return kind !== 'photo' && w > 0 && h > 0 && w / h >= GAL_WIDE_RATIO;
 }
 
 interface PdfItem {
@@ -2004,7 +2013,8 @@ function galleryItems(c: Ctx, rows: PersonSourceRow[]): GalleryItem[] {
                 const src = shownExcerpt(e);
                 if (!src) continue;
                 const caption = main || stripResearchIds(e.caption?.trim() ?? '').text || peekTitle(title);
-                out.push({ src, kind, caption, sub: sub === caption ? '' : sub, year });
+                const size = e.width > 0 && e.height > 0 ? { w: e.width, h: e.height } : dataUrlImageSize(src);
+                out.push({ src, kind, caption, sub: sub === caption ? '' : sub, year, wide: !!size && isWide(kind, size.w, size.h) });
             }
         }
     }
@@ -2017,7 +2027,9 @@ function galleryItems(c: Ctx, rows: PersonSourceRow[]): GalleryItem[] {
         const year = m ? Number(m[1]) : null;
         const s = a.sourceId ? c.tree.sources?.[a.sourceId] : undefined;
         const sub = [s ? peekTitle(s.title) : '', year !== null && !caption.includes(String(year)) ? String(year) : ''].filter(Boolean).join(', ');
-        out.push({ src, kind: a.sourceId || DOCUMENT_WORDS.test(`${a.name} ${a.note ?? ''}`) ? 'document' : 'photo', caption, sub, year });
+        const kind: GalleryItem['kind'] = a.sourceId || DOCUMENT_WORDS.test(`${a.name} ${a.note ?? ''}`) ? 'document' : 'photo';
+        const size = dataUrlImageSize(src);
+        out.push({ src, kind, caption, sub, year, wide: !!size && isWide(kind, size.w, size.h) });
     }
     return out
         .map((it, i) => ({ it, i }))
@@ -2069,7 +2081,7 @@ function galleryHtml(c: Ctx): string {
         } else {
             pic = `<span class="pp-gal-thumb"><img class="pp-gal-img" src="${esc(it.src)}" alt="${esc(it.caption)}" loading="lazy"></span>`;
         }
-        return `<figure class="pp-gal-item">${pic}<figcaption>${galleryCaption(it, P)}</figcaption></figure>`;
+        return `<figure class="pp-gal-item pp-gal-item--${it.kind}${it.wide ? ' pp-gal-item--wide' : ''}">${pic}<figcaption>${galleryCaption(it, P)}</figcaption></figure>`;
     };
     const first = c.opts.mode === 'print' ? items : items.slice(0, 6);
     const rest = c.opts.mode === 'print' ? [] : items.slice(6);

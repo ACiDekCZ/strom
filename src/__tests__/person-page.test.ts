@@ -13,6 +13,7 @@ import {
     PERSON_PAGE_ALL_GROUPS, PersonPageOptions, personPageFileToggles, personPageSizeMb, personPageLivingNames, personPageExportPrivacy,
     personPageTocCurrent, dataUrlImageSize, personPageChartInput, personPageYear,
 } from '../person-page.js';
+import { PERSON_PAGE_CSS } from '../person-page-css.js';
 import { buildFamilyBook } from '../book.js';
 import { getDemoTree } from '../demo-tree.js';
 import { personSourceRows } from '../person-sources.js';
@@ -1191,7 +1192,7 @@ describe('person page 2 (§0, §3, §4)', () => {
         const sec = html.match(/<section class="pp-sec pp-sec--materials" id="pp-sec-materials">.*?<\/section>/)?.[0] ?? '';
         // 2 excerpts + 6 photos + 1 PDF.
         expect(sec).toContain('<span class="pp-count">9</span>');
-        expect(sec.match(/<figure class="pp-gal-item">/g)).toHaveLength(8);
+        expect(sec.match(/<figure class="pp-gal-item pp-gal-item--(record|photo)">/g)).toHaveLength(8);
         expect(sec).toContain('aria-controls="pp-gal-more-body"');
         expect(sec).toContain('Zobrazit další (2)');
         expect(sec).toContain('<button type="button" class="pp-gal-thumb" data-pp-zoom');
@@ -1202,6 +1203,37 @@ describe('person page 2 (§0, §3, §4)', () => {
         expect(sec).toContain('<span class="pp-gal-kind">Fotografie</span><span class="pp-gal-cap">Fotografie 1</span>');
         // The print shows them all.
         expect(body(d, { mode: 'print', links: 'plain' })).not.toContain('pp-gal-more');
+    });
+
+    it('the gallery (round 4, K4-31): a record or document whole on a paper ground, a wide one (2 : 1) over two columns, a photo cropped', () => {
+        const d = fiskTree();
+        // A register line 900 x 300 (3 : 1), a near-square entry, a wide photo and a wide document attachment.
+        d.sources!['s1'].excerpts = [{ id: 'x1', dataUrl: png(900, 300), width: 900, height: 300, sizeBytes: 100 }];
+        d.sources!['s2'].excerpts = [{ id: 'x2', dataUrl: png(400, 300), width: 400, height: 300, sizeBytes: 100 }];
+        d.persons['jan' as PersonId].attachments = [
+            { id: 'a1', name: 'krajina.png', mimeType: 'image/png', dataUrl: png(1000, 400), sizeBytes: 50, note: 'Pohled na Čapkov' },
+            { id: 'a2', name: 'dopis.png', mimeType: 'image/png', dataUrl: png(800, 400), sizeBytes: 50, note: 'Dopis bratrovi' },
+        ];
+        for (const html of [body(d), doc(d)]) {
+            const sec = html.match(/<section class="pp-sec pp-sec--materials" id="pp-sec-materials">.*?<\/section>/)?.[0] ?? '';
+            const classes = [...sec.matchAll(/<figure class="([^"]+)">/g)].map(m => m[1]);
+            expect(classes).toEqual(expect.arrayContaining([
+                'pp-gal-item pp-gal-item--record pp-gal-item--wide',
+                'pp-gal-item pp-gal-item--record',
+                'pp-gal-item pp-gal-item--photo',
+                'pp-gal-item pp-gal-item--document pp-gal-item--wide',
+            ]));
+            expect(classes).toHaveLength(4);
+        }
+        // A size from the excerpt's fields, else from the image itself.
+        d.sources!['s1'].excerpts = [{ id: 'x1', dataUrl: png(900, 300), width: 0, height: 0, sizeBytes: 100 }];
+        expect(body(d)).toContain('<figure class="pp-gal-item pp-gal-item--record pp-gal-item--wide">');
+        // The CSS: contain on the paper ground with 6 px, span 2 at 8 : 3, dense flow; a phone's wide tile over the whole row.
+        expect(PERSON_PAGE_CSS).toContain('.pp-gal { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-flow: dense;');
+        expect(PERSON_PAGE_CSS).toContain('.pp-gal-item--record .pp-gal-thumb, .pp-gal-item--document .pp-gal-thumb { box-sizing: border-box; padding: 6px; background-color: var(--card-bg-2); }');
+        expect(PERSON_PAGE_CSS).toContain('.pp-gal-item--record .pp-gal-img, .pp-gal-item--document .pp-gal-img { object-fit: contain; background-size: contain; }');
+        expect(PERSON_PAGE_CSS).toContain('.pp-gal-item--wide { grid-column: span 2; }\n.pp-gal-item--wide .pp-gal-thumb { aspect-ratio: 8 / 3; }');
+        expect(PERSON_PAGE_CSS.match(/@media \(max-width: 640px\) \{[^@]*\.pp-gal-item--wide \{ grid-column: 1 \/ -1; \}/)).not.toBeNull();
     });
 
     it('the size line\'s image count is the attached images, each once, without the portrait (round 2, b)', () => {

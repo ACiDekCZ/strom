@@ -217,11 +217,16 @@ button.pp-chip, a.pp-chip { cursor: pointer; }
 .pp-fig-link .pp-zoom { display: flex; align-items: center; justify-content: center; }
 .pp-fig .pp-fig-img { width: 100%; aspect-ratio: var(--pp-ar, 4 / 3); background-size: contain; background-color: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; }
 /* Images and documents (§3.2): one gallery, 6 at once, the PDFs as rows under it. */
-.pp-gal { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px 12px; }
+.pp-gal { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-flow: dense; gap: 16px 12px; }
 .pp-gal-item { display: flex; flex-direction: column; gap: 6px; min-width: 0; margin: 0; }
 .pp-gal-thumb { display: block; width: 100%; aspect-ratio: 4 / 3; padding: 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background-color: var(--surface-2); cursor: zoom-in; }
 span.pp-gal-thumb { cursor: default; }
 .pp-gal-img { display: block; width: 100%; height: 100%; object-fit: cover; }
+/* Round 4 (K4-31): a register entry or a document whole on a paper ground, a photo cropped; a wide one over two columns. */
+.pp-gal-item--record .pp-gal-thumb, .pp-gal-item--document .pp-gal-thumb { box-sizing: border-box; padding: 6px; background-color: var(--card-bg-2); }
+.pp-gal-item--record .pp-gal-img, .pp-gal-item--document .pp-gal-img { object-fit: contain; background-size: contain; }
+.pp-gal-item--wide { grid-column: span 2; }
+.pp-gal-item--wide .pp-gal-thumb { aspect-ratio: 8 / 3; }
 .pp-gal-item figcaption { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .pp-gal-kind { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent-text); }
 .pp-gal-cap { font-size: 13.5px; line-height: 1.35; overflow-wrap: anywhere; }
@@ -270,6 +275,7 @@ span.pp-gal-thumb { cursor: default; }
   .pp-sum--3 .pp-sum-cell:last-child { grid-column: span 2; }
   .pp-people-row { grid-template-columns: minmax(0, 1fr); }
   .pp-gal { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pp-gal-item--wide { grid-column: 1 / -1; }
   .pp-ft { display: none; }
   .pp-rail { display: flex; }
   .pp-rail--wide .pp-rail-parents, .pp-rail--wide .pp-rail-kidgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -302,6 +308,7 @@ span.pp-gal-thumb { cursor: default; }
   .pp-sum--3 .pp-sum-cell:last-child { grid-column: span 2; }
   .pp-people-row { grid-template-columns: minmax(0, 1fr); }
   .pp-gal { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pp-gal-item--wide { grid-column: 1 / -1; }
   .pp-ft { display: none; }
   .pp-rail { display: flex; }
   .pp-rail--wide .pp-rail-parents, .pp-rail--wide .pp-rail-kidgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
