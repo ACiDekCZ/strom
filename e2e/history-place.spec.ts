@@ -338,5 +338,22 @@ test.describe('History of places: a place\'s own history on request (§6a)', () 
             expect(Math.round(close.width)).toBeGreaterThanOrEqual(44);
             expect(Math.round(close.height)).toBeGreaterThanOrEqual(44);
         });
+
+        test('phone (390 px), the place offered alone: "Čapkov und Umgebung:" whole (it may wrap), the link inside the row', async ({ page }) => {
+            await setup(page, { width: 390 });
+            await openCard(page);
+            await expect(page.locator('#pm-lifeline-body .pm-lifeline-row.k-historyState:not([data-place-row])')).toHaveCount(0);
+            await expect(placeRow(page)).toHaveText('Čapkov und Umgebung: Geschichte suchen…');
+            const fit = await placeRow(page).locator('.pm-lifeline-desc').evaluate(el => {
+                const text = el.querySelector<HTMLElement>('.pm-lifeline-hfind-text')!;
+                const link = el.querySelector('button')!.getBoundingClientRect();
+                const row = el.getBoundingClientRect();
+                return { whole: text.scrollWidth <= text.clientWidth + 1,
+                    linkIn: link.right <= row.right + 1 && link.left >= row.left - 1 };
+            });
+            expect(fit.whole).toBe(true);
+            expect(fit.linkIn).toBe(true);
+            expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+        });
     });
 });

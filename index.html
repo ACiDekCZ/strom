@@ -5658,11 +5658,11 @@
         .k-historyState.is-find-one .pm-lifeline-desc { display: flex; align-items: baseline; gap: 6px; white-space: nowrap; }
         .pm-lifeline-hfind-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
         .k-historyState.is-find-one .pm-lifeline-hfind { flex: none; }
-        /* Region and place offered together: the sentences wrap, the link follows (or goes under it). */
+        /* Region and place offered together, and the place's offer alone: the sentence wraps whole, the link follows (or goes under it). */
         .k-historyState.is-find-both .pm-lifeline-desc,
-        .k-historyState.is-find-both ~ .is-place-row.is-find-one .pm-lifeline-desc { flex-wrap: wrap; column-gap: 6px; row-gap: 0; white-space: normal; }
+        .k-historyState.is-place-row.is-find-one .pm-lifeline-desc { flex-wrap: wrap; column-gap: 6px; row-gap: 0; white-space: normal; }
         .k-historyState.is-find-both .pm-lifeline-hfind-text,
-        .k-historyState.is-find-both ~ .is-place-row.is-find-one .pm-lifeline-hfind-text { overflow: visible; }
+        .k-historyState.is-place-row.is-find-one .pm-lifeline-hfind-text { overflow: visible; }
         /* "Not searched yet" with its close button (spec 020 K1.6); a phone: one line like the find row. */
         .k-historyState.is-strip .pm-lifeline-desc { padding-right: 26px; }
         .k-historyState.is-find-one .pm-lifeline-hstrip-on { flex: none; white-space: nowrap; }
