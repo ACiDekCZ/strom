@@ -5765,6 +5765,12 @@ const stringsEN = {
             placeN: (n: number) => `place ${n}`,
             // A cluster of close points (K4-29): two names, or the first and how many more.
             cluster: (names: readonly string[]) => (names.length > 2 ? `${names[0]} +${names.length - 1}` : names.join(' · ')),
+            // A cluster with children's and partners' places (round 5, K5-33): "Places 1–2 and 1 children's place";
+            // `nums` '' for a pill of those places only.
+            clusterAria: (nums: string, own: number, rel: number) => {
+                const r = `${rel} ${rel === 1 ? 'children’s place' : 'children’s places'}`;
+                return nums ? `${own === 1 ? 'Place' : 'Places'} ${nums} and ${r}` : r;
+            },
             dirs: ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'] as readonly string[],
             toTown: (name: string, km: number, arrow: string) => (arrow === '←' ? `← ${name} ${km} km` : `${name} ${km} km ${arrow}`),
             where: 'Location in the country',
@@ -11556,6 +11562,12 @@ const stringsCZ: StringsType = {
             placeN: (n: number) => `místa ${n}`,
             // A cluster of close points (K4-29): two names, or the first and how many more.
             cluster: (names: readonly string[]) => (names.length > 2 ? `${names[0]} +${names.length - 1}` : names.join(' · ')),
+            // A cluster with children's and partners' places (round 5, K5-33): "Místa 1–2 a 1 místo dětí";
+            // `nums` '' for a pill of those places only.
+            clusterAria: (nums: string, own: number, rel: number) => {
+                const r = `${nCs(rel, 'místo', 'místa', 'míst')} dětí`;
+                return nums ? `${own === 1 ? 'Místo' : 'Místa'} ${nums} a ${r}` : r;
+            },
             dirs: ['S', 'SV', 'V', 'JV', 'J', 'JZ', 'Z', 'SZ'] as readonly string[],
             toTown: (name: string, km: number, arrow: string) => (arrow === '←' ? `← ${name} ${km} km` : `${name} ${km} km ${arrow}`),
             where: 'Poloha v zemi',
@@ -17262,6 +17274,12 @@ const stringsDE: StringsType = {
             placeN: (n: number) => `Ort ${n}`,
             // A cluster of close points (K4-29): two names, or the first and how many more.
             cluster: (names: readonly string[]) => (names.length > 2 ? `${names[0]} +${names.length - 1}` : names.join(' · ')),
+            // A cluster with children's and partners' places (round 5, K5-33): "Orte 1–2 und 1 Ort der Kinder";
+            // `nums` '' for a pill of those places only.
+            clusterAria: (nums: string, own: number, rel: number) => {
+                const r = `${nDe(rel, 'Ort', 'Orte')} der Kinder`;
+                return nums ? `${own === 1 ? 'Ort' : 'Orte'} ${nums} und ${r}` : r;
+            },
             dirs: ['N', 'NO', 'O', 'SO', 'S', 'SW', 'W', 'NW'] as readonly string[],
             toTown: (name: string, km: number, arrow: string) => (arrow === '←' ? `← ${name} ${km} km` : `${name} ${km} km ${arrow}`),
             where: 'Lage im Land',

@@ -8,7 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     collectPersonPlacePoints, planPlacesMap, placesMapHtml, placeLabelSides, labelRect, scaleBar, labelYears,
-    numberRanges, chainClusters, isSelected, PLACES_MAP_SCRIPT,
+    numberRanges, chainClusters, clusterLabel, isSelected, PLACES_MAP_SCRIPT,
     ownEventsText, relativeEventsText, distanceKm, insetRects, insetLabels, SAFE, VIEW_W, VIEW_H, type PlacePoint,
 } from '../person-page-map.js';
 import { chartAnchorId } from '../person-page-chart.js';
@@ -314,8 +314,13 @@ describe('list texts', () => {
 });
 
 describe('clusters of close points (round 4, K4-29)', () => {
-    const pts = () => collectPersonPlacePoints(tree(), JAN, { now: 2026 });
     // Wien (a daughter's place) widens the frame: Čapkov and Lhotka come within 26 px of each other.
+    // The wife's birthplace (Bystřice, near Čapkov) is left out here: it would join the cluster (round 5, below).
+    const pts = () => {
+        const t = tree();
+        delete t.persons['roza' as PersonId].birthPlace;
+        return collectPersonPlacePoints(t, JAN, { now: 2026 });
+    };
 
     it('numbers as ranges, names of a cluster', () => {
         expect(numberRanges([1, 2])).toBe('1–2');
@@ -395,7 +400,7 @@ describe('placesMapHtml', () => {
         expect(html).toContain('pp-map-inset');
         expect(html).toContain('obrysy Natural Earth');
         expect(html).toContain('class="pp-map-scale"');
-        expect(html).toContain('class="pp-map-route"');
+        expect(html).toContain('class="pp-map-route');
         expect((html.match(/class="pp-map-pt( cl-d)?( cl-p)?( is-sel)?"/g) ?? []).length).toBe(3);
         expect(html).toContain('pp-map-pt--rel');
         expect(html).toContain('Bez polohy na mapě: Kutná Hora (povolání)');
@@ -481,5 +486,52 @@ describe('placesMapHtml', () => {
     it('the view constants: 2 : 1', () => {
         expect(VIEW_W / VIEW_H).toBe(2);
         expect(distanceKm({ lat: 50, lon: 14 }, { lat: 50, lon: 15 })).toBeGreaterThan(70);
+    });
+});
+
+describe('clusters with children\'s and partners\' places (round 5, K5-33)', () => {
+    it('a relative\'s hollow point joins a cluster: the numbers and a ring, the label from the person\'s places only', () => {
+        // The wife's birthplace Bystřice lies next to Čapkov.
+        const pts = collectPersonPlacePoints(tree(), JAN, { now: 2026 });
+        const plan = planPlacesMap(pts, GEO, { kidPlaces: true });
+        const c = plan.clusters!.d[0];
+        expect(c.members.map(m => m.name)).toEqual(['Čapkov', 'Lhotka']);
+        expect(c.rels.map(m => m.name)).toEqual(['Bystřice']);
+        expect(c.text).toBe('1–2');
+        expect(clusterLabel(c, cs).name).toBe('Čapkov · Lhotka');
+        const byst = plan.places.find(m => m.name === 'Bystřice')!;
+        expect(byst.cl?.d).toBe(0);
+        expect(byst.side!.d).toBe('hide');
+        const html = placesMapHtml(pts, GEO, { lang: 'cs', mode: 'file', kidPlaces: true });
+        const keys = `${placeKey('Čapkov')}\t${placeKey('Lhotka')}\t${placeKey('Bystřice')}`;
+        expect(html).toMatch(new RegExp(`class="pp-map-pt pp-map-cl pp-map-cl--d" style="[^"]*" data-pp-map-place="${keys}" aria-label="Místa 1–2 a 1 místo dětí">1–2<span class="pp-map-cl-ring" aria-hidden="true"></span></button>`));
+        // The hollow point gives way to the pill in the box where it is clustered.
+        expect(html).toMatch(/class="pp-map-pt pp-map-pt--rel cl-d[^"]*"[^>]*data-pp-map-place="bystrice"/);
+        // Selecting the relative's row selects the pill too.
+        const sel = placesMapHtml(pts, GEO, { lang: 'cs', mode: 'app', kidPlaces: true, selected: placeKey('Bystřice') });
+        expect(sel).toMatch(/class="pp-map-pt pp-map-cl pp-map-cl--d is-sel"/);
+    });
+
+    it('relatives\' places alone: a hollow pill with their count, no label, the names in the tooltip', () => {
+        const t = tree();
+        delete t.persons['roza' as PersonId].birthPlace;
+        t.persons['vaclav' as PersonId].deathPlace = 'Mödling';
+        t.persons['vaclav' as PersonId].events = [];
+        const geo = { ...GEO, [placeKey('Mödling')]: { lat: 48.08, lon: 16.28 } };
+        const pts = collectPersonPlacePoints(t, JAN, { now: 2026 });
+        const plan = planPlacesMap(pts, geo, { kidPlaces: true });
+        const c = plan.clusters!.d.find(x => !x.members.length)!;
+        expect(c.rels.map(m => m.name).sort()).toEqual(['Mödling', 'Wien']);
+        expect(c.text).toBe('2');
+        const html = placesMapHtml(pts, geo, { lang: 'en', mode: 'file', kidPlaces: true });
+        expect(html).toMatch(/class="pp-map-pt pp-map-cl pp-map-cl--rel[^"]*" style="[^"]*" data-pp-map-place="[^"]*" aria-label="2 children’s places" title="(Wien, Mödling|Mödling, Wien)">2<\/button>/);
+        expect(html).not.toMatch(/pp-map-lb--cl[^>]*>(Wien|Mödling)/);
+        for (const lang of ['cs', 'en', 'de'] as const) {
+            const M = getStringsForLang(lang).personPage.map;
+            expect(M.clusterAria('', 0, 2)).toBe({ cs: '2 místa dětí', en: '2 children’s places', de: '2 Orte der Kinder' }[lang]);
+            expect(M.clusterAria('3', 1, 5)).toBe({ cs: 'Místo 3 a 5 míst dětí', en: 'Place 3 and 5 children’s places', de: 'Ort 3 und 5 Orte der Kinder' }[lang]);
+        }
+        expect(PERSON_PAGE_MAP_CSS).toContain('.pp-map-cl--rel { border-color: var(--primary); background: var(--surface); color: var(--primary);');
+        expect(PERSON_PAGE_MAP_CSS).toMatch(/\.pp-map-cl-ring \{[^}]*width: 8px; height: 8px;[^}]*border: 1\.5px solid #fff/);
     });
 });

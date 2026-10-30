@@ -42,6 +42,11 @@ export const PERSON_PAGE_MAP_CSS = `
 .pp-map-pt:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .pp-map-cl { width: auto; min-width: 22px; margin: 0; padding: 0 6px; border-radius: 11px; transform: translate(-50%, -50%); white-space: nowrap; }
 .pp-map-cl.is-sel { width: auto; min-width: 26px; height: 26px; margin: 0; padding: 0 8px; border-radius: 13px; }
+/* Round 5 (K5-33): a cluster with relatives' places has a hollow ring after the numbers; a cluster of those
+   places only is a hollow pill with their count. */
+.pp-map-cl-ring { display: inline-block; box-sizing: border-box; width: 8px; height: 8px; margin-left: 4px; border: 1.5px solid #fff; border-radius: 50%; vertical-align: 0; }
+.pp-map-cl--rel { border-color: var(--primary); background: var(--surface); color: var(--primary); box-shadow: none; }
+.pp-map-cl--rel.is-sel { border-color: var(--accent); background: var(--surface); color: var(--accent); }
 .pp-map-lb--cl { font-weight: 600; }
 .pp-map-lb { --hw: 11px; position: absolute; z-index: 1; transform: translate(calc(var(--hw) + 5px), -50%); padding: 1px 6px; border-radius: 5px; background: var(--map-label-bg); color: var(--text); font-size: 12.5px; font-weight: 600; line-height: 18px; white-space: nowrap; pointer-events: none; }
 .pp-map-lb--rel { font-weight: 500; color: var(--text-light); }

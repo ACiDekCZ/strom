@@ -272,11 +272,16 @@ export type LabelSide = 'l' | 'r' | 'a' | 'b' | 'hide';
  * ("1–2", "1, 3–4") with one label. Its members' rows are selected together.
  */
 export interface MapCluster {
-    /** The members in the order of their numbers. */
+    /** The person's places in it, in the order of their numbers. */
     members: PlannedPlace[];
+    /**
+     * Children's and partners' places in it (round 5, K5-33): with places of the person a hollow ring
+     * after the numbers; alone a hollow pill with their count, no label.
+     */
+    rels: PlannedPlace[];
     x: number;
     y: number;
-    /** The pill's text: the numbers as ranges. */
+    /** The pill's text: the numbers as ranges; the count of places for a pill of relatives' places only. */
     text: string;
     side: LabelSide;
 }
@@ -503,6 +508,11 @@ export function pillHalfWidth(text: string): number {
     return Math.max(11, Math.ceil((16 + text.length * 6.5) / 2));
 }
 
+/** A cluster's pill half width in px: with places of the person and relatives, the ring (8 px, 4 px off) after the numbers. */
+export function clusterHalfWidth(c: Pick<MapCluster, 'text' | 'members' | 'rels'>): number {
+    return pillHalfWidth(c.text) + (c.members.length && c.rels.length ? 6 : 0);
+}
+
 /** A cluster's label: the members' names (more than two: "first +n") and, on desktop, their years first–last. */
 export function clusterLabel(c: Pick<MapCluster, 'members'>, S: MapStrings): { name: string; years: string } {
     const name = S.personPage.map.cluster(c.members.map(m => m.name));
@@ -654,17 +664,20 @@ export function planPlacesMap(
     }
     const route = routePlaces.map(p => ({ x: p.x!, y: p.y! }));
 
-    // Clusters (K4-29): numbered points closer than 26 px on desktop, 24 px on a phone, chained.
+    // Clusters (K4-29): points closer than 26 px on desktop, 24 px on a phone, chained; the relatives'
+    // hollow points join them the same way (round 5, K5-33).
     const clusters: { d: MapCluster[]; p: MapCluster[] } = { d: [], p: [] };
     for (const mode of ['d', 'p'] as const) {
         const min = mode === 'd' ? 26 * pxD : 24 * pxP;
-        for (const members of chainClusters(ownGeo.map(q => ({ q, x: q.x!, y: q.y! })), min)) {
-            const ms = members.map(m => m.q).sort((a, b) => a.num - b.num);
+        for (const group of chainClusters([...ownGeo, ...near].map(q => ({ q, x: q.x!, y: q.y! })), min)) {
+            const all = group.map(m => m.q);
+            const ms = all.filter(m => !m.rel).sort((a, b) => a.num - b.num);
+            const rs = all.filter(m => m.rel);
             const idx = clusters[mode].length;
-            for (const m of ms) m.cl = { ...m.cl, [mode]: idx };
+            for (const m of all) m.cl = { ...m.cl, [mode]: idx };
             clusters[mode].push({
-                members: ms, side: 'hide', text: numberRanges(ms.map(m => m.num)),
-                x: ms.reduce((t, m) => t + m.x!, 0) / ms.length, y: ms.reduce((t, m) => t + m.y!, 0) / ms.length,
+                members: ms, rels: rs, side: 'hide', text: ms.length ? numberRanges(ms.map(m => m.num)) : String(rs.length),
+                x: all.reduce((t, m) => t + m.x!, 0) / all.length, y: all.reduce((t, m) => t + m.y!, 0) / all.length,
             });
         }
     }
@@ -726,6 +739,13 @@ export function planPlacesMap(
     const phoneObst = inset ? [insetRects(inset.corner).p] : where?.corner ? [whereRects(where.corner).p] : [];
     if (small?.anchor) deskObst.push(anchorRect(small.anchor));
     if (small?.arrow) { deskObst.push(arrowRect(small.arrow, 'd')); phoneObst.push(arrowRect(small.arrow, 'p')); }
+    // A pill of relatives' places only has no label, but no other label may cover it.
+    for (const mode of ['d', 'p'] as const) {
+        for (const c of clusters[mode]) {
+            if (c.members.length) continue;
+            (mode === 'd' ? deskObst : phoneObst).push(pointRect({ x: c.x, y: c.y, w: 0, hw: clusterHalfWidth(c) }, mode === 'd' ? pxD : pxP));
+        }
+    }
     const attr: Rect = { x: VIEW_W - 150, y: 0, w: 150, h: 18 };
     // Per mode the labels of the points outside a cluster and of the clusters, in the order of the places.
     type Item = { input: LabelInput; set: (side: LabelSide) => void };
@@ -742,7 +762,7 @@ export function planPlacesMap(
             const c = clusters[mode][ci];
             if (c.members[0] !== p) continue;
             const lab = clusterLabel(c, S);
-            out.push({ input: { x: c.x, y: c.y, w: labelWidthPx(lab.name, mode === 'd' ? lab.years : ''), hw: pillHalfWidth(c.text) },
+            out.push({ input: { x: c.x, y: c.y, w: labelWidthPx(lab.name, mode === 'd' ? lab.years : ''), hw: clusterHalfWidth(c) },
                 set: side => { c.side = side; } });
         }
         return out;
@@ -1301,11 +1321,11 @@ function mapHtml(plan: MapPlan, S: MapStrings, sel: string | null, lang: Languag
     for (const p of [...onMain.filter(q => q.rel), ...onMain.filter(q => !q.rel)]) {
         const isSel = isSelected(sel, [p.placeKey]) ? ' is-sel' : '';
         const pos = `left:${pct(p.x!, VIEW_W)};top:${pct(p.y!, VIEW_H)}`;
+        // A point inside a cluster gives way to the cluster's pill in that box.
+        const inCl = `${p.cl?.d !== undefined ? ' cl-d' : ''}${p.cl?.p !== undefined ? ' cl-p' : ''}`;
         if (p.rel) {
-            pts += `<button type="button" class="pp-map-pt pp-map-pt--rel${isSel}" style="${pos}" data-pp-map-place="${esc(p.placeKey)}" aria-label="${esc(p.full)}"></button>`;
+            pts += `<button type="button" class="pp-map-pt pp-map-pt--rel${inCl}${isSel}" style="${pos}" data-pp-map-place="${esc(p.placeKey)}" aria-label="${esc(p.full)}"></button>`;
         } else {
-            // A point inside a cluster gives way to the cluster's pill in that box.
-            const inCl = `${p.cl?.d !== undefined ? ' cl-d' : ''}${p.cl?.p !== undefined ? ' cl-p' : ''}`;
             pts += `<button type="button" class="pp-map-pt${inCl}${isSel}" style="${pos}" data-pp-map-place="${esc(p.placeKey)}" aria-label="${p.num} ${esc(p.full)}">${p.num}</button>`;
         }
         const yrs = labelYears(p.points);
@@ -1317,17 +1337,24 @@ function mapHtml(plan: MapPlan, S: MapStrings, sel: string | null, lang: Languag
 
     // Clusters (K4-29): one pill and one label each, per box; a cluster alike in both boxes once.
     const cd = plan.clusters?.d ?? [], cp = plan.clusters?.p ?? [];
-    const sameAs = (c: MapCluster, list: MapCluster[]) =>
-        list.find(o => o.members.length === c.members.length && o.members.every((m, i) => m === c.members[i]));
+    const same = (a: PlannedPlace[], b: PlannedPlace[]) => a.length === b.length && a.every((m, i) => m === b[i]);
+    const sameAs = (c: MapCluster, list: MapCluster[]) => list.find(o => same(o.members, c.members) && same(o.rels, c.rels));
     const clusterHtml = (c: MapCluster, sides: { d: LabelSide; p: LabelSide }, only: '' | 'd' | 'p') => {
-        const keys = c.members.map(m => m.placeKey);
+        // The relatives' places are selected with the pill too (round 5, K5-33).
+        const keys = [...c.members, ...c.rels].map(m => m.placeKey);
         const isSel = isSelected(sel, keys) ? ' is-sel' : '';
         const pos = `left:${pct(c.x, VIEW_W)};top:${pct(c.y, VIEW_H)}`;
         const lab = clusterLabel(c, S);
-        const aria = `${c.text} ${c.members.map(m => m.full).join(', ')}`;
-        pts += `<button type="button" class="pp-map-pt pp-map-cl${only ? ` pp-map-cl--${only}` : ''}${isSel}" style="${pos}" data-pp-map-place="${esc(keys.join(KEY_SEP))}" aria-label="${esc(aria)}">${esc(c.text)}</button>`;
-        if (sides.d === 'hide' && sides.p === 'hide') return;
-        labels += `<span class="pp-map-lb pp-map-lb--cl lb-d-${sides.d} lb-p-${sides.p}" style="${pos};--hw:${pillHalfWidth(c.text)}px" aria-hidden="true">`
+        const relOnly = !c.members.length;
+        const aria = c.rels.length
+            ? M.clusterAria(relOnly ? '' : c.text, c.members.length, c.rels.length)
+            : `${c.text} ${c.members.map(m => m.full).join(', ')}`;
+        // A pill of relatives' places only names them in its tooltip (it has no label).
+        const title = relOnly ? ` title="${esc(c.rels.map(m => m.name).join(', '))}"` : '';
+        const ring = c.rels.length && !relOnly ? '<span class="pp-map-cl-ring" aria-hidden="true"></span>' : '';
+        pts += `<button type="button" class="pp-map-pt pp-map-cl${relOnly ? ' pp-map-cl--rel' : ''}${only ? ` pp-map-cl--${only}` : ''}${isSel}" style="${pos}" data-pp-map-place="${esc(keys.join(KEY_SEP))}" aria-label="${esc(aria)}"${title}>${esc(c.text)}${ring}</button>`;
+        if (relOnly || (sides.d === 'hide' && sides.p === 'hide')) return;
+        labels += `<span class="pp-map-lb pp-map-lb--cl lb-d-${sides.d} lb-p-${sides.p}" style="${pos};--hw:${clusterHalfWidth(c)}px" aria-hidden="true">`
             + `${esc(lab.name)}${lab.years ? `<span class="pp-map-yr y-d">${esc(lab.years)}</span>` : ''}</span>`;
     };
     for (const c of cd) {
