@@ -328,6 +328,16 @@ test.describe('person menu: Research ›', () => {
         const ask = sub.locator('[data-action="research-ask"]');
         await expect(ask.locator('.research-ai-badge')).toHaveText('AI');
         await expect(ask).toHaveAttribute('aria-label', 'Ask the agent, AI, opens in the research');
+        // A new direction is the agent's work: AI and the mark.
+        const ancestors = sub.locator('[data-action="research-ancestors"]');
+        await expect(ancestors.locator('.research-ai-badge')).toHaveText('AI');
+        await expect(ancestors.locator('.research-open-mark')).toHaveCount(1);
+        await expect(ancestors).toHaveAttribute('aria-label', 'Find ancestors, AI, opens in the research');
+        // "Review again" opens a dialog of the app first: no mark (its button carries it), the name is the label alone.
+        const review = sub.locator('[data-action="research-review"]');
+        await expect(review.locator('.research-open-mark')).toHaveCount(0);
+        await expect(review.locator('.research-ai-badge')).toHaveCount(0);
+        await expect(review).not.toHaveAttribute('aria-label', /opens in the research/);
         await sub.locator('[data-action="research-ancestors"]').click();
         await personMenu(page, 'Jan');
         await openPersonSubmenu(page, 'research');
@@ -354,6 +364,7 @@ test.describe('person menu: Research ›', () => {
         await expect(dialog).toContainText('Jan Fíšek · 1865–1932');
         await expect(dialog.getByRole('radio', { name: 'Only this person' })).toBeChecked();
         await expect(dialog.locator('.research-review-living')).toHaveCount(0);
+        await expect(dialog.locator('#research-review-submit .research-open-mark')).toHaveCount(1);
         await dialog.getByText('With family').click();
         await dialog.getByRole('button', { name: 'Add in the research, opens in the research' }).click();
         await expect(dialog).toHaveCount(0);

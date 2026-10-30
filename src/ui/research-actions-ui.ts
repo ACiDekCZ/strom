@@ -994,8 +994,8 @@ export const researchActionsMethods = uiModule({
         const r = strings.research;
         const items: PersonMenuAction[] = [];
         if (this.researchLinkAvailable('review')) {
-            // Opens "Review again" here first; its button then opens the research.
-            items.push({ action: 'research-review', label: r.reviewAction, external: true, ariaLabel: `${r.reviewAction}, ${r.opensInResearchSr}` });
+            // Opens "Review again" here first (an app dialog: no mark); its button then opens the research and carries the mark.
+            items.push({ action: 'research-review', label: r.reviewAction });
         }
         if (this.researchLinkAvailable('research')) {
             // A new direction is the agent's work (§6 state 3: AI and the mark).
@@ -1011,8 +1011,9 @@ export const researchActionsMethods = uiModule({
             if (d.state === 'active') {
                 items[i] = { ...items[i], external: false, badge: undefined, state: r.dirRunning, ariaLabel: `${items[i].label}, ${r.dirRunning}` };
             } else if (this.researchLinkAvailable('direction')) {
+                // Resuming is the agent's work again (§6 state 3: AI and the mark).
                 const note = r.dirResumeNote(d.state === 'paused' ? r.dirStatePaused : r.dirStateDone);
-                items[i] = { ...items[i], external: true, badge: undefined, note, ariaLabel: `${items[i].label}, ${note}, ${r.opensInResearchSr}` };
+                items[i] = { ...items[i], external: true, badge: 'ai', note, ariaLabel: `${items[i].label}, ${note}, ${r.aiBadge}, ${r.opensInResearchSr}` };
             }
         }
         if (this.researchLinkAvailable('chat')) {
