@@ -16,7 +16,7 @@ import { fitFlyout, FLYOUT_MARGIN } from './flyout.js';
 import { shownName, shownNameFull, nameHtml } from '../person-name.js';
 import { displayYear } from '../dates.js';
 import { menuOffersLineJumps } from '../card-tap.js';
-import { coupleStories } from '../story-text.js';
+import { personStoryChapterCount } from '../story-text.js';
 
 /** The menu action of a row that moves the view to a child drawn elsewhere (+ the child's id). */
 const CHILD_ELSEWHERE_ACTION = 'child-elsewhere:';
@@ -151,7 +151,9 @@ export const contextMenuMethods = uiModule({
         // normal mode "Sources" always (its dialog is the quick way to cite).
         const sourceCount = this.personSourceCount(personId);
         // The person's own story or a couple's (the reader shows both).
-        const hasStory = !!person.story?.text?.trim() || coupleStories(DataManager.getData(), person).length > 0;
+        const hasOwnStory = !!person.story?.text?.trim();
+        const storyChapters = personStoryChapterCount(DataManager.getData(), person);
+        const hasStory = storyChapters > 0;
         const readItems = (always: boolean): PersonMenuAction[] => {
             const out: PersonMenuAction[] = [];
             if (always || sourceCount > 0) {
@@ -164,7 +166,14 @@ export const contextMenuMethods = uiModule({
             // The person's materials (attachments and the research's files), right under Sources.
             const materials = this.personMaterialsCount(personId);
             if (materials > 0) out.push({ action: 'materials', label: strings.materials.menu, meta: String(materials) });
-            if (hasStory) out.push({ action: 'story', label: c.showStory });
+            // The reader's chapters (the own story and one per couple's) as the meta from two up;
+            // a couple's story alone: the item is named after it (spec 027 §5.5).
+            if (hasStory) {
+                out.push({
+                    action: 'story', label: hasOwnStory ? c.showStory : strings.personPage.story.titleCouple,
+                    ...(storyChapters >= 2 ? { meta: String(storyChapters), ariaLabel: strings.personPage.story.menuSr(storyChapters) } : {}),
+                });
+            }
             return out;
         };
 

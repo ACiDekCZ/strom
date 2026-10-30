@@ -134,6 +134,9 @@ describe('deciding it in the research', () => {
     it('names a couple by both partners', () => {
         expect(researchSchemeUrl('story', { tree: TREE, person: 'P0001', partner: 'P0002', storyDo: 'keep' }))
             .toBe(`strom-research://story?${t}&person=P0001&partner=P0002&do=keep`);
+        // Approving a couple's draft story: the same link without a choice (spec 027 §5.3).
+        expect(researchSchemeUrl('story', { tree: TREE, person: 'P0001', partner: 'P0002' }))
+            .toBe(`strom-research://story?${t}&person=P0001&partner=P0002&do=final`);
         expect(researchSchemeUrl('story', { tree: TREE, person: 'P0001', partner: 'P0001' })).toBeNull();
         expect(researchSchemeUrl('story', { tree: TREE, person: 'P0001', partner: 'Marie' })).toBeNull();
     });

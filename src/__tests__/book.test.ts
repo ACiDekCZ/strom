@@ -249,6 +249,45 @@ describe('narratives in the book', () => {
     });
 });
 
+describe('a childless couple’s story in the book (spec 027 §5.7)', () => {
+    /** Jan: a family with Anna (son Josef), then a childless second marriage to Marie with a story. */
+    const tree = (): StromData => ({
+        persons: mkPersons(
+            { ...p('h', 'Jan', 'Novák', 'male', { birthDate: '1863', deathDate: '1920', childIds: ['c'], partnerships: ['u1', 'u2'] }),
+                story: { status: 'final', text: 'Jan byl mlynář.' } },
+            p('w', 'Anna', 'Nováková', 'female', { birthDate: '1865', deathDate: '1899', childIds: ['c'], partnerships: ['u1'] }),
+            p('m', 'Marie', 'Dvořáková', 'female', { birthDate: '1870', deathDate: '1940', partnerships: ['u2'] }),
+            p('c', 'Josef', 'Novák', 'male', { birthDate: '1890', deathDate: '1960', parentIds: ['h', 'w'] }),
+        ),
+        partnerships: {
+            ...union('u1', 'h', 'w', ['c']),
+            u2: { id: 'u2' as PartnershipId, person1Id: 'h' as PersonId, person2Id: 'm' as PersonId, status: 'married', childIds: [],
+                startDate: '1901', story: { status: 'final', title: 'Druhá svatba', text: 'Vzali se ve mlýně.' } },
+        } as StromData['partnerships'],
+    });
+
+    it('becomes a subchapter in the main-line partner’s chapter, right after the partner’s own story', () => {
+        const html = buildFamilyBook(tree(), { lang: 'cs', privacyMode: 'full' });
+        const ch = chapters(html);
+        expect(ch).toHaveLength(1);
+        expect(ch[0]).toContain('<div class="book-story book-story-couple book-story-sub"><h4 class="book-story-head">Manželství – Marie Dvořáková · 1901–1920 <span class="book-story-title">Druhá svatba</span></h4><p>Vzali se ve mlýně.</p></div>');
+        expect(ch[0].indexOf('Jan byl mlynář.')).toBeLessThan(ch[0].indexOf('Vzali se ve mlýně.'));
+        expect(buildFamilyBook(tree(), { lang: 'en', privacyMode: 'full' })).toContain('Marriage to Marie Dvořáková · 1901–1920');
+        expect(buildFamilyBook(tree(), { lang: 'de', privacyMode: 'full' })).toContain('Ehe mit Marie Dvořáková · 1901–1920');
+    });
+
+    it('without the partner’s own story it follows the couple; a living partner leaves it out under privacy', () => {
+        const d = tree();
+        delete d.persons['h' as PersonId].story;
+        expect(chapters(buildFamilyBook(d, { lang: 'cs', privacyMode: 'full' }))[0]).toContain('Vzali se ve mlýně.');
+        const m = d.persons['m' as PersonId];
+        // Marked living (the 1901 wedding alone would make her long dead).
+        delete m.deathDate;
+        m.isDeceased = false;
+        expect(buildFamilyBook(d, { lang: 'cs', privacyMode: 'initials' })).not.toContain('Vzali se ve mlýně.');
+    });
+});
+
 describe('a narrative is not squeezed into the medallion', () => {
     /**
      * Two medallions stand side by side, so a story rendered inside one came

@@ -9767,6 +9767,16 @@
             width: 10px; height: 10px; border-bottom-right-radius: 3px;
         }
         .card-story--inline::after { right: 5px; bottom: 5px; width: 5px; height: 5px; }
+        /* A couple's story alone (spec 027 §5.6): the same corner hollow, a band
+           along the fold in --accent with the card's own colour inside (pale as a draft). */
+        .card-story.couple:not(.draft) { --fold: var(--accent); }
+        .card-story.couple {
+            background: linear-gradient(135deg, transparent 50%, var(--fold) 50%, var(--fold) 66%, transparent 66%);
+        }
+        .card-story.couple::after { display: none; }
+        .card-story--inline.couple {
+            background: linear-gradient(135deg, transparent 50%, var(--fold) 50%, var(--fold) 70%, transparent 70%);
+        }
         .card-avatar-wrap { position: relative; flex: 0 0 auto; display: flex; }
         .card-signal {
             position: absolute; top: -6px; right: -6px; z-index: 2;
@@ -14597,8 +14607,7 @@
         @media (hover: hover) { #person-modal .pm-conflict-tag:hover { background: var(--hover-bg); color: var(--text); } }
         #person-modal .pm-conflict-tag:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
 
-        /* Story reader: "Approve in the research ↗" on the left of the footer. */
-        .story-reader .buttons .story-approve { margin-right: auto; }
+        /* Story reader: "Approve in the research ↗" sits at its chapter (see the story reader's chapters). */
 
         /* "Start research with this tree": the explanation variant and the hand-over. */
         .research-info-step { font-size: 14px; line-height: 1.45; color: var(--text); padding-top: 1px; }
@@ -16930,6 +16939,76 @@
             .story-reader-title { font-size: 20px; }
             .story-reader-couple-title { font-size: 18px; }
             .story-reader-text .story-subhead { font-size: 17px; }
+        }
+        /* The story reader's chapters (spec 027 §5.3): chips under the title from
+           two chapters, the actions at each chapter, the couples' chapters on a
+           tinted surface (as on the person page); the footer has Close only. */
+        .story-chips {
+            display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px;
+            scrollbar-width: none;
+        }
+        .story-chips::-webkit-scrollbar { display: none; }
+        .modal .story-chips button.story-chip {
+            flex: 0 0 auto; width: auto; min-height: 30px; margin: 0; padding: 4px 12px;
+            border: 1px solid var(--border); border-radius: 999px; background: transparent; box-shadow: none;
+            font: 500 13px/1.3 var(--font-sans); color: var(--text-light); cursor: pointer; white-space: nowrap;
+        }
+        .modal .story-chips button.story-chip[aria-current="true"] {
+            border-color: var(--accent); background: var(--surface-2); color: var(--text);
+        }
+        .modal .story-chips button.story-chip:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+        @media (hover: hover) { .modal .story-chips button.story-chip:hover { background: var(--hover-bg); color: var(--text); } }
+        .story-reader-ch { scroll-margin-top: 12px; }
+        .story-reader-body > .story-reader-ch { max-width: none; }
+        .story-reader-ch > * { max-width: 62ch; }
+        .story-reader-ch > .story-nv-banner { max-width: none; margin-bottom: 14px; }
+        .story-ch-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 4px; max-width: none; }
+        .story-ch-headtext { flex: 1 1 auto; min-width: 0; }
+        .story-ch-headtext .story-reader-title { margin-bottom: 4px; }
+        .story-ch-head + .story-reader-text, .story-ch-head + .story-nv-banner { margin-top: 10px; }
+        .story-ch-actions { display: flex; flex-wrap: wrap; gap: 8px; flex-shrink: 0; margin-top: 4px; }
+        .modal .story-ch-actions button { width: auto; margin: 0; }
+        .modal .story-ch-actions button.secondary { color: var(--primary); }
+        .story-ch-kicker {
+            margin: 0 0 2px; font: 600 11.5px/1.4 var(--font-sans); letter-spacing: 0.06em; text-transform: uppercase;
+            color: var(--accent-text);
+        }
+        .story-ch-pair { margin: 0; font-size: 13px; color: var(--text-light); }
+        .story-ch-note { margin: 2px 0 0; font-size: 12px; color: var(--text-faint); }
+        .story-ch-tags { margin: 0; }
+        .story-ch-tags .story-draft-tag, .story-ch-tags .story-nv-tag { margin-left: 0; }
+        .story-reader-ch--tint {
+            padding: 20px 22px; border-radius: 14px; background: var(--surface-2);
+            /* One step from the window's surface, lighter in dark mode (as on the person page). */
+            background: color-mix(in srgb, var(--card-bg) 95%, var(--text));
+        }
+        .story-reader-body > .story-reader-ch--tint:not(:first-child) { margin-top: 24px; border-top: 0; }
+        .story-reader-ch--tint .story-ch-mono { display: inline-flex; flex-shrink: 0; margin-top: 2px; }
+        .story-ch-mono > span {
+            display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px;
+            border-radius: 50%; border: 2px solid var(--surface-2); background: var(--card-bg); color: var(--accent-text);
+            font: 600 12px/1 var(--font-sans);
+        }
+        .story-ch-mono > span + span { margin-left: -9px; }
+        @media (pointer: coarse) {
+            .modal .story-ch-actions button, .modal .story-chips button.story-chip { min-height: 44px; }
+        }
+        /* A phone (and one held sideways): the whole screen; the chips in one
+           scrolling row; the actions under the chapter's heading; Close full width. */
+        @media (max-width: 640px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+            .modal.story-reader {
+                width: 100vw; max-width: 100vw; height: 100vh; height: 100dvh; max-height: none; border-radius: 0;
+            }
+            .story-chips { flex-wrap: nowrap; overflow-x: auto; margin-right: -12px; padding-bottom: 2px; }
+            .story-ch-head { flex-wrap: wrap; }
+            .story-ch-actions { flex: 1 1 100%; margin-top: 0; }
+            .modal .story-ch-actions button { min-height: 44px; }
+            .story-reader-ch--tint { padding: 16px; }
+            .story-reader .buttons button[data-dismiss] { flex: 1 1 auto; }
+        }
+        @media print {
+            .story-chips, .story-ch-actions, .story-ch-note { display: none !important; }
+            .story-reader-ch--tint { background: none; border: 1px solid var(--border); }
         }
 
         /* A new version of an approved story waits (story.draft): amber like

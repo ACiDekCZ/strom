@@ -23,12 +23,12 @@ import { parseFlexDate, formatFlexDate, yearOf, ageBetween } from './dates.js';
 import { nameHtml, shownName, shownNameOrEmpty } from './person-name.js';
 import { asciiSlug, safeFileName } from './filenames.js';
 import { isSafeExcerptDataUrl, safeHttpUrl, isOriginalOnlyAttachment } from './validation.js';
-import { storyProseHtml, coupleStories } from './story-text.js';
+import { storyProseHtml, coupleStories, coupleStoryYears, splitProseLead } from './story-text.js';
 import { excerptImageUrl } from './excerpts.js';
 import { personSourceRows, lifeEventLabel, coupleEventLabelIn, PersonSourceRow } from './person-sources.js';
 import { personInitials } from './initials.js';
 import { clipText } from './text-clip.js';
-import { PERSON_PAGE_SCRIPT, personPageFileCss } from './person-page-css.js';
+import { PERSON_PAGE_SCRIPT, PERSON_PAGE_STORY_SCRIPT, personPageFileCss } from './person-page-css.js';
 import { findRelationship } from './kinship.js';
 
 // ─── Interface (ZADANI §2.6) ────────────────────────────────────────────────
@@ -830,11 +830,159 @@ function storyBasisHtml(c: Ctx, st: Story, key: string, id: string): string {
     });
 }
 
+// ── Couple's chapters (spec 027 §5–§6) ──
+// A couple's story (Partnership.story) is told whole on both partners' pages,
+// as a chapter "Story of the marriage" under the person's own story, in the
+// order of the marriages. coupleChapterHtml is a pure block (data → HTML), to
+// be reused by a couple's page; the window folds with a button (the open set
+// of the page, so Back restores it), the file with <details>, print unfolds.
+
+/** The anchor id of a couple's chapter on the person page (stable: the family tree links to it). */
+export function coupleChapterId(unionId: string): string {
+    return `pp-story-${unionId.replace(/[^\w-]/g, '_')}`;
+}
+
+/** The key of a chapter's fold in the window's open set. */
+function coupleChapterFoldKey(unionId: string): string {
+    return `story-${unionId.replace(/[^\w-]/g, '_')}`;
+}
+
+/**
+ * The label of a link to a couple's chapter (the family tree at the wedding):
+ * the story's title with ↓, else "story ↓"; '' when the couple has no story.
+ */
+export function coupleChapterLinkLabel(u: Partnership, lang: Language): string {
+    if (!u.story?.text?.trim()) return '';
+    const title = u.story.title?.trim() ? stripResearchIds(u.story.title).text.trim() : '';
+    return title ? `${title} ↓` : getStringsForLang(lang).personPage.story.link;
+}
+
+/** What a couple's chapter shows, from the person's side (coupleChapterHtml renders it). */
+export interface CoupleChapterData {
+    unionId: string;
+    /** The page's person first, the partner second (monogram, the names line). */
+    selfName: string;
+    partnerName: string;
+    /** First names for short labels ("Jan and Rozálie"). */
+    selfShort: string;
+    partnerShort: string;
+    selfInitials: string;
+    partnerInitials: string;
+    partnerId?: PersonId;
+    /** "1885–1910" (wedding → end of the union or the first death). */
+    years: string;
+    /** The title without research ids ('' = none: the two names are the heading). */
+    title: string;
+    /** The prose as HTML, research ids removed. */
+    prose: string;
+    draft: boolean;
+    /** Research ids the story carried (for the researchers' section). */
+    ids: string[];
+}
+
+export interface CoupleChapterContext {
+    lang: Language;
+    /** Window: a button folds the rest; file: <details>; print: all unfolded. */
+    mode: PersonPageMode;
+    /** Folded to its first paragraph (the chapter follows the person's own story). */
+    foldable: boolean;
+    /** Window: the chapter is unfolded now. */
+    open: boolean;
+    /** The partner's name as HTML for "The same story is also on …" ('' = no such line). */
+    partnerHtml: string;
+    /** Under the prose (inside the fold when folded), e.g. the story's basis. */
+    basisHtml?: string;
+}
+
+/** The chapter's data from a tree: the person and one of the person's couples with a story (null: none). */
+export function coupleChapterData(tree: StromData, person: Person, u: Partnership): CoupleChapterData | null {
+    const st = u.story;
+    if (!st?.text?.trim()) return null;
+    const pid = u.person1Id === person.id ? u.person2Id : u.person1Id;
+    const partner = pid ? tree.persons[pid] : undefined;
+    const real = partner && !partner.isPlaceholder ? partner : undefined;
+    const stripped = stripResearchIds(st.text);
+    const title = st.title?.trim() ? stripResearchIds(st.title).text.trim() : '';
+    const short = (p: Person) => p.firstName?.trim() || shownNameOrEmpty(p);
+    return {
+        unionId: u.id,
+        selfName: shownNameOrEmpty(person), partnerName: real ? shownNameOrEmpty(real) : '',
+        selfShort: short(person), partnerShort: real ? short(real) : '',
+        selfInitials: personInitials(person.firstName, person.lastName),
+        partnerInitials: real ? personInitials(real.firstName, real.lastName) : '',
+        ...(real ? { partnerId: real.id } : {}),
+        years: coupleStoryYears(tree, u),
+        title,
+        prose: storyProseHtml(stripped.text, { title: title || undefined, headingLevel: 4 }),
+        draft: st.status === 'draft',
+        ids: stripped.ids,
+    };
+}
+
+/** A couple's chapter: tinted surface, double monogram, kicker with the years, title, prose, "also on …". */
+export function coupleChapterHtml(ch: CoupleChapterData, cx: CoupleChapterContext): string {
+    const S = getStringsForLang(cx.lang);
+    const P = S.personPage;
+    const id = coupleChapterId(ch.unionId);
+    const pair = ch.partnerName ? S.story.couple(ch.selfName, ch.partnerName) : ch.selfName;
+    const mono = `<span class="pp-ch-mono" aria-hidden="true"><span>${esc(ch.selfInitials || '?')}</span>`
+        + (ch.partnerName ? `<span>${esc(ch.partnerInitials || '?')}</span>` : '') + `</span>`;
+    const tag = ch.draft ? ` <span class="pp-draft-tag">${esc(S.story.statusDraft)}</span>` : '';
+    const head = `<div class="pp-ch-head">${mono}<div class="pp-ch-headtext">`
+        + `<p class="pp-kicker pp-ch-kicker">${esc(P.story.couple(ch.years))}</p>`
+        + (ch.title ? `<p class="pp-ch-pair">${esc(pair)}</p>` : '')
+        + `</div></div><h3 class="pp-ch-title">${esc(ch.title || pair)}${tag}</h3>`;
+    const basis = cx.basisHtml ?? '';
+    const { lead, rest } = cx.foldable && cx.mode !== 'print' ? splitProseLead(ch.prose) : { lead: ch.prose, rest: '' };
+    const label = (closed: string, open: string) =>
+        `<span class="pp-st-closed">${esc(closed)}</span><span class="pp-st-open">${esc(open)}</span>`;
+    let text: string;
+    let toggle = '';
+    if (!rest) {
+        text = `<div class="pp-prose">${lead}</div>${basis}`;
+    } else if (cx.mode === 'app') {
+        text = `<div class="pp-prose">${lead}</div>`
+            + `<div class="pp-ch-rest" id="${id}-rest"${cx.open ? '' : ' hidden'}><div class="pp-prose">${rest}</div>${basis}</div>`;
+        toggle = `<button type="button" class="pp-ch-more" aria-expanded="${cx.open}" aria-controls="${id}-rest" `
+            + `data-pp-toggle="${esc(coupleChapterFoldKey(ch.unionId))}">${label(P.story.readAll, P.story.collapse)}</button>`;
+    } else {
+        // The file: the first paragraph outside, the rest in <details> (the summary reads as a link).
+        text = `<div class="pp-prose">${lead}</div>`
+            + `<details class="pp-ch-fold"><summary class="pp-ch-more">${label(P.story.readAll, P.story.collapse)}</summary>`
+            + `<div class="pp-prose">${rest}</div>${basis}</details>`;
+    }
+    const also = cx.partnerHtml
+        ? `<span class="pp-ch-also">${esc(P.story.also('\u0000')).replace('\u0000', cx.partnerHtml)}</span>` : '';
+    const foot = toggle || also ? `<p class="pp-ch-foot">${toggle}${also}</p>` : '';
+    return `<div class="pp-couple-story" id="${id}" tabindex="-1">${head}${text}${foot}</div>`;
+}
+
+/** A link that unfolds a couple's chapter and scrolls to it (window: a button; file: an anchor). */
+function storyJumpHtml(c: Ctx, unionId: string, label: string): string {
+    const id = coupleChapterId(unionId);
+    if (c.app) return `<button type="button" class="pp-link pp-story-jump" data-pp-story="${esc(id)}">${esc(label)}</button>`;
+    return `<a class="pp-story-jump" href="#${esc(id)}" data-pp-story="${esc(id)}">${esc(label)}</a>`;
+}
+
+/**
+ * The family tree's link to a couple's chapter at the wedding (§5.1): the
+ * title or "story ↓"; '' when the page has no chapter for the couple (no
+ * story, or privacy left it out with a living partner).
+ */
+function coupleChapterLinkHtml(c: Ctx, u: Partnership): string {
+    const shown = c.tree.partnerships[u.id];
+    if (!shown || !c.person.partnerships.includes(u.id)) return '';
+    const label = coupleChapterLinkLabel(shown, c.page.lang);
+    return label ? storyJumpHtml(c, u.id, label) : '';
+}
+
 function storyHtml(c: Ctx): string {
     const { P, S, person } = c;
     const own = person.story?.text?.trim() ? person.story : undefined;
-    const couples = coupleStories(c.tree, person);
-    if (!own && !couples.length) return '';
+    const chapters = coupleStories(c.tree, person)
+        .map(u => ({ u, ch: coupleChapterData(c.tree, person, u) }))
+        .filter((x): x is { u: Partnership; ch: CoupleChapterData } => !!x.ch);
+    if (!own && !chapters.length) return '';
     let head = `<h2 class="pp-kicker pp-story-kicker">${esc(P.sec.story)}</h2>`;
     let body = '';
     if (own) {
@@ -847,20 +995,23 @@ function storyHtml(c: Ctx): string {
             : `<h2 class="pp-kicker pp-story-kicker">${esc(P.sec.story)}${tag}</h2>`;
         body += `<div class="pp-prose">${storyProseHtml(stripped.text, { title: title || undefined, headingLevel: 3 })}</div>`
             + storyBasisHtml(c, own, 'basis', 'pp-basis');
+        // Continued reading (§6.1): the own story leads on to the marriages' chapters.
+        if (chapters.length) {
+            const links = chapters.map(({ u, ch }) =>
+                storyJumpHtml(c, u.id, `${ch.title || (ch.partnerShort ? S.story.couple(ch.selfShort, ch.partnerShort) : ch.selfShort)} ↓`));
+            body += `<p class="pp-story-cont"><span>${esc(P.story.continues)}</span> ${links.join(' ')}</p>`;
+        }
     }
-    // A couple's story under the person's own, one per marriage: its title, or "<person> and <partner>".
-    for (const u of couples) {
-        const st = u.story!;
-        const stripped = stripResearchIds(st.text);
-        stripped.ids.forEach(id => c.ids.add(id));
-        const title = st.title?.trim() ? stripResearchIds(st.title).text : '';
-        const self = nameOf(c, person.id);
-        const partner = nameOf(c, u.person1Id === person.id ? u.person2Id : u.person1Id);
-        const label = title || (partner ? S.story.couple(self, partner) : self);
+    for (const { u, ch } of chapters) {
+        ch.ids.forEach(id => c.ids.add(id));
         const uid = u.id.replace(/[^\w-]/g, '_');
-        body += `<div class="pp-couple-story" id="pp-story-${uid}"><h3 class="pp-couple-story-title">${esc(label)}${draftTag(c, st)}</h3>`
-            + `<div class="pp-prose">${storyProseHtml(stripped.text, { title: title || undefined, headingLevel: 4 })}</div>`
-            + storyBasisHtml(c, st, `basis-${uid}`, `pp-basis-${uid}`) + `</div>`;
+        body += coupleChapterHtml(ch, {
+            lang: c.page.lang, mode: c.opts.mode,
+            // After the person's own story a chapter folds to its first paragraph; alone it is whole.
+            foldable: !!own, open: isOpen(c, coupleChapterFoldKey(u.id)),
+            partnerHtml: ch.partnerId ? personLink(c, esc(ch.partnerName), ch.partnerId) : '',
+            basisHtml: storyBasisHtml(c, u.story!, `basis-${uid}`, `pp-basis-${uid}`),
+        });
     }
     return section('story', P.sec.story, body, head);
 }
@@ -1301,7 +1452,7 @@ export function personPageDocumentShell(lang: Language, title: string, body: str
         + `<style>${personPageFileCss(fontCss)}</style>`
         + `</head><body><script>document.documentElement.className='js'</script>`
         + `<main class="pp-file">${body}</main>`
-        + `<script>${PERSON_PAGE_SCRIPT}</script></body></html>`;
+        + `<script>${PERSON_PAGE_SCRIPT}</script><script>${PERSON_PAGE_STORY_SCRIPT}</script></body></html>`;
 }
 
 /** The whole saved file (§5.6). */

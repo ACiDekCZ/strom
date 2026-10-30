@@ -119,7 +119,7 @@ test.describe('card signals', () => {
         await expect(card(page, 'Josef').locator('.card-signal')).toHaveCount(0);
         await expect(card(page, 'Eva').locator('.card-signal')).toHaveAttribute('aria-label', 'Awaiting action: Uložte snímek oddací matriky');
 
-        await expect(card(page, 'Jan')).toHaveAttribute('aria-label', 'Jan Fíšek, documented by sources, story in draft, conflicting sources');
+        await expect(card(page, 'Jan')).toHaveAttribute('aria-label', 'Jan Fíšek, documented by sources, Story (draft), conflicting sources');
         const tt = card(page, 'Jan').locator('.card-tooltip .tt-signals');
         await expect(tt.locator('.tt-ev')).toHaveText('1 source · birth documented');
         await expect(tt.locator('.tt-story')).toHaveText('Story (draft)');
@@ -291,7 +291,7 @@ test.describe('card signals', () => {
             }
             // The tooltip and the aria-label say the state as on every card.
             await expect(jan.locator('.card-tooltip .tt-ev'), why('tooltip')).toHaveCount(1);
-            expect(await jan.getAttribute('aria-label'), why('aria-label')).toContain('documented by sources, story in draft, conflicting sources');
+            expect(await jan.getAttribute('aria-label'), why('aria-label')).toContain('documented by sources, Story (draft), conflicting sources');
             expect(await anna.getAttribute('aria-label'), why('aria-label')).toContain('open question');
         }
         // Zoomed far out (below 0.55): the badges give way to dots on every type.

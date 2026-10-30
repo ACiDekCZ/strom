@@ -1009,6 +1009,18 @@ export const researchActionsMethods = uiModule({
     },
 
     /**
+     * "Approve in the research ↗" for a couple's draft story (Partnership.story),
+     * or null. The research finds the family by both partners (spec 027 §5.3).
+     */
+    coupleStoryApproveUrl(partnershipId: PartnershipId): string | null {
+        const u = DataManager.getPartnership(partnershipId);
+        if (u?.story?.status !== 'draft') return null;
+        const person = this.personResearchRef(u.person1Id);
+        const partner = this.personResearchRef(u.person2Id);
+        return person && partner ? this.activeResearchLink('story', { person, partner }) : null;
+    },
+
+    /**
      * A person's approved story has a new version waiting: "take the new one"
      * (final) or "keep the original" (keep) in the research, or null.
      */

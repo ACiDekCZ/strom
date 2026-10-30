@@ -87,9 +87,8 @@ export interface CardSignalContext {
 export interface CardSignalInfo {
     /** The evidence (null: placeholder, or no source anywhere in the tree). */
     evidence: PersonEvidence | null;
-    story: 'final' | 'draft' | null;
-    /** The approved story has a new version waiting beside it (Story.draft). */
-    storyNew: boolean;
+    /** The story the corner speaks for (null: none). */
+    story: PersonStoryState | null;
     attachments: number;
     /** Materials (attachments and the research's files) when the tree shows them; null: attachments only. */
     materials: number | null;
@@ -114,30 +113,56 @@ export interface CardSignalInfo {
     doneSince: number | null;
 }
 
+/** The corner's look: a full corner for the person's own story, a hollow one for a couple's alone; pale as a draft. */
+export interface StoryMark {
+    kind: 'own' | 'couple';
+    final: boolean;
+}
+
+/** The story the card signals (spec 027 §5.6). */
+export interface PersonStoryState extends StoryMark {
+    /** The title of the story the corner speaks for ('' = none). */
+    title: string;
+    /** An approved story has a new version waiting beside it (Story.draft). */
+    storyNew: boolean;
+}
+
 /**
- * The story the card signals: the person's own decides; without one, the
- * stories of the person's couples (Partnership.story) do — approved when any
- * of them is, a draft when all are drafts. A new version waiting beside any
- * approved one of them counts.
+ * The story the card signals: the person's own decides (kind 'own'); without
+ * one, the stories of the person's couples (Partnership.story) do (kind
+ * 'couple') — approved when any of them is, a draft when all are drafts. A
+ * new version waiting beside any approved one of them counts. Null: none.
  */
-export function personStoryState(p: Person, data: StromData): { story: 'final' | 'draft' | null; storyNew: boolean } {
+export function personStoryState(p: Person, data: StromData): PersonStoryState | null {
     const own = p.story?.text?.trim() ? p.story : undefined;
-    const stories = [...(own ? [own] : []), ...coupleStories(data, p).map(u => u.story!)];
-    if (!stories.length) return { story: null, storyNew: false };
-    const final = own ? own.status !== 'draft' : stories.some(st => st.status !== 'draft');
+    const couples = coupleStories(data, p).map(u => u.story!);
+    const stories = [...(own ? [own] : []), ...couples];
+    if (!stories.length) return null;
+    const final = own ? own.status !== 'draft' : couples.some(st => st.status !== 'draft');
     const storyNew = final && stories.some(st => st.status === 'final' && !!st.draft?.text?.trim());
-    return { story: final ? 'final' : 'draft', storyNew };
+    // The title of the story the state comes from: the own one, else the first approved couple's (the first one as a draft).
+    const lead = own ?? (couples.find(st => st.status !== 'draft') ?? couples[0]);
+    return { kind: own ? 'own' : 'couple', final, title: lead.title?.trim() ?? '', storyNew };
+}
+
+/** The words of the card's story corner (tooltip, aria-label): "Story: …", "Story of the marriage: …", "(draft)". */
+export function storySignalText(
+    s: PersonStoryState,
+    words: { own: (t: string) => string; couple: (t: string) => string; draft: (s: string) => string; nv: (s: string) => string },
+): string {
+    const base = s.kind === 'own' ? words.own(s.title) : words.couple(s.title);
+    if (!s.final) return words.draft(base);
+    return s.storyNew ? words.nv(base) : base;
 }
 
 export function cardSignalInfo(p: Person, ctx: CardSignalContext): CardSignalInfo {
     const evidence = ctx.treeHasSources ? personEvidence(p, ctx.data, ctx.unions) : null;
-    const { story, storyNew } = personStoryState(p, ctx.data);
+    const story = personStoryState(p, ctx.data);
     const research = p.refn ? ctx.research.get(p.refn) : undefined;
     const conflicts = (researchConflictsProvider?.(p.id) ?? p.research?.conflicts ?? []).filter(c => c.status !== 'decided').length;
     const info: CardSignalInfo = {
         evidence,
         story,
-        storyNew,
         attachments: p.attachments?.length ?? 0,
         materials: materialsCountProvider?.(p) ?? null,
         waiting: research?.waiting ?? null,
@@ -171,16 +196,17 @@ export function cardSignalInfo(p: Person, ctx: CardSignalContext): CardSignalInf
 
 /**
  * The person's status: evidence stripes (2 full, 1 partial, none: nothing)
- * and the story as a folded corner (faint as a draft). Empty when there is
- * nothing to show. On the card the stripes sit in the bottom-right corner
- * (left of the fold when there is one) and the fold covers the card's corner;
- * `inline`: both side by side in a tooltip or menu line.
+ * and the story as a folded corner (faint as a draft; hollow for a couple's
+ * story alone). Empty when there is nothing to show. On the card the stripes
+ * sit in the bottom-right corner (left of the fold when there is one) and the
+ * fold covers the card's corner; `inline`: both side by side in a tooltip or
+ * menu line.
  */
-export function stateStripesHtml(evidence: EvidenceLevel | null, story: 'final' | 'draft' | null, inline = false): string {
+export function stateStripesHtml(evidence: EvidenceLevel | null, story: StoryMark | null, inline = false): string {
     const ev = evidence === 'full' ? 2 : evidence === 'partial' ? 1 : 0;
     const stripes = ev > 0 ? `<span class="st-group st-ev">${'<i></i>'.repeat(ev)}</span>` : '';
     const fold = story
-        ? `<span class="card-story${story === 'draft' ? ' draft' : ''}${inline ? ' card-story--inline' : ''}" aria-hidden="true"></span>`
+        ? `<span class="card-story${story.final ? '' : ' draft'}${story.kind === 'couple' ? ' couple' : ''}${inline ? ' card-story--inline' : ''}" aria-hidden="true"></span>`
         : '';
     if (inline) return stripes || fold ? `<span class="card-state card-state--inline" aria-hidden="true">${stripes}${fold}</span>` : '';
     return (stripes ? `<span class="card-state${story ? ' beside-story' : ''}" aria-hidden="true">${stripes}</span>` : '') + fold;

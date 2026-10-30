@@ -128,22 +128,70 @@ describe('sections', () => {
         d.partnerships['u1' as PartnershipId].story = { status: 'draft', text: 'Jan a Marie hospodařili na čísle 12. [S0042]' };
         const html = body(d);
         const own = html.indexOf('Oženil se s Marií.');
-        const couple = html.indexOf('<div class="pp-couple-story" id="pp-story-u1"><h3 class="pp-couple-story-title">Jan Fíšek a Marie Dvořáková <span class="pp-draft-tag">Návrh</span></h3>');
+        const couple = html.indexOf('<div class="pp-couple-story" id="pp-story-u1" tabindex="-1">');
         expect(own).toBeGreaterThan(0);
         expect(couple).toBeGreaterThan(own);
+        expect(html).toContain('<h3 class="pp-ch-title">Jan Fíšek a Marie Dvořáková <span class="pp-draft-tag">Návrh</span></h3>');
         expect(html).toContain('Jan a Marie hospodařili na čísle 12.');
         expect(html).not.toContain('hospodařili na čísle 12. [S0042]');
-        // Marie's page tells it too, she first; a title replaces the names.
-        expect(body(d, { personId: 'marie' as PersonId })).toContain('<h3 class="pp-couple-story-title">Marie Dvořáková a Jan Fíšek <span class="pp-draft-tag">Návrh</span></h3>');
+        // Marie's page tells it too, she first (monogram and names); a title replaces the names as the heading.
+        const marie = body(d, { personId: 'marie' as PersonId });
+        expect(marie).toContain('<h3 class="pp-ch-title">Marie Dvořáková a Jan Fíšek <span class="pp-draft-tag">Návrh</span></h3>');
+        expect(marie).toContain('<span class="pp-ch-mono" aria-hidden="true"><span>MD</span><span>JF</span></span>');
         d.partnerships['u1' as PartnershipId].story!.title = 'Dvůr pod kopcem';
         d.partnerships['u1' as PartnershipId].story!.status = 'final';
-        expect(body(d, { lang: 'de' })).toContain('<h3 class="pp-couple-story-title">Dvůr pod kopcem</h3>');
+        const de = body(d, { lang: 'de' });
+        expect(de).toContain('<h3 class="pp-ch-title">Dvůr pod kopcem</h3>');
+        expect(de).toContain('<p class="pp-ch-pair">Jan Fíšek und Marie Dvořáková</p>');
         // Only the couple's story: the section and its place in the contents remain, in the file as well.
         delete d.persons['jan' as PersonId].story;
         const only = body(d);
         expect(only).toContain('<h2 class="pp-kicker pp-story-kicker">Vyprávění</h2><div class="pp-couple-story"');
         expect(personPageSections(only, 'cs').map(x => x.key)).toContain('story');
-        expect(doc(d, { lang: 'en' })).toContain('<h3 class="pp-couple-story-title">Dvůr pod kopcem</h3>');
+        expect(doc(d, { lang: 'en' })).toContain('<h3 class="pp-ch-title">Dvůr pod kopcem</h3>');
+    });
+
+    it('the couple’s chapter: kicker with the marriage’s years, the partner named under it (spec 027 §5.2)', () => {
+        const d = fiskTree();
+        d.partnerships['u1' as PartnershipId].story = { status: 'final', text: 'Hospodařili spolu.' };
+        const html = body(d);
+        // 1888 (wedding) → 1910 (Jan, the first to die).
+        expect(html).toContain('<p class="pp-kicker pp-ch-kicker">Vyprávění manželství · 1888–1910</p>');
+        expect(html).toContain('<p class="pp-ch-foot"><span class="pp-ch-also">Stejné vyprávění je i na stránce osoby <button type="button" class="pp-link" data-pp-person="marie"');
+        expect(body(d, { lang: 'en' })).toContain('The same story is also on <button');
+    });
+
+    it('continued reading: the own story leads on to the chapters; after it a chapter folds to its first paragraph (spec 027 §6.1)', () => {
+        const d = fiskTree();
+        d.partnerships['u1' as PartnershipId].story = { status: 'final', text: 'Svatba byla v únoru.\n\nPak přišel mlýn.\n\nA pak děti.' };
+        const html = body(d);
+        expect(html).toContain('<p class="pp-story-cont"><span>Pokračuje vyprávěním manželství:</span> <button type="button" class="pp-link pp-story-jump" data-pp-story="pp-story-u1">Jan a Marie ↓</button></p>');
+        // The window: the first paragraph, the rest hidden behind "Read all ▾" (state in the open set).
+        expect(html).toContain('<div class="pp-prose"><p>Svatba byla v únoru.</p></div><div class="pp-ch-rest" id="pp-story-u1-rest" hidden><div class="pp-prose"><p>Pak přišel mlýn.</p><p>A pak děti.</p></div>');
+        expect(html).toContain('<button type="button" class="pp-ch-more" aria-expanded="false" aria-controls="pp-story-u1-rest" data-pp-toggle="story-u1"><span class="pp-st-closed">Číst celé ▾</span><span class="pp-st-open">Sbalit ▴</span></button>');
+        const open = body(d, { open: new Set(['story-u1']) });
+        expect(open).toContain('<div class="pp-ch-rest" id="pp-story-u1-rest"><div class="pp-prose">');
+        expect(open).toContain('aria-expanded="true"');
+        // The file: the first paragraph outside, the rest in <details>; the jump is an anchor.
+        const file = doc(d);
+        expect(file).toContain('<div class="pp-prose"><p>Svatba byla v únoru.</p></div><details class="pp-ch-fold"><summary class="pp-ch-more">');
+        expect(file).toContain('<a class="pp-story-jump" href="#pp-story-u1" data-pp-story="pp-story-u1">Jan a Marie ↓</a>');
+        // Print: everything unfolded.
+        const print = body(d, { mode: 'print', links: 'plain' });
+        expect(print).toContain('<p>Svatba byla v únoru.</p><p>Pak přišel mlýn.</p><p>A pak děti.</p>');
+        expect(print).not.toContain('pp-ch-more');
+        // The couple's story titled: the link carries the title.
+        d.partnerships['u1' as PartnershipId].story!.title = 'Mlýn';
+        expect(body(d)).toContain('data-pp-story="pp-story-u1">Mlýn ↓</button>');
+        // A single paragraph never folds.
+        d.partnerships['u1' as PartnershipId].story!.text = 'Jen jeden odstavec.';
+        expect(body(d)).not.toContain('pp-ch-more');
+        // Without the own story (Marie's page has none) the chapter is whole, no continuation line.
+        d.partnerships['u1' as PartnershipId].story!.text = 'Svatba byla v únoru.\n\nPak přišel mlýn.';
+        const marie = body(d, { personId: 'marie' as PersonId });
+        expect(marie).not.toContain('pp-ch-more');
+        expect(marie).not.toContain('pp-story-cont');
+        expect(marie).toContain('<p>Svatba byla v únoru.</p><p>Pak přišel mlýn.</p>');
     });
 
     it('privacy leaves out a couple’s story with a living partner; a deceased couple keeps theirs', () => {
