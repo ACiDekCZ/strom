@@ -2242,6 +2242,15 @@ export function personPageChartInput(page: PersonPageData, now: Date): LifeChart
     });
 }
 
+/**
+ * The switches a saved file starts with: exactly the window's at the moment of
+ * saving — History, Children's events and Children's places (what is visible
+ * is what gets saved). The file's own switches can still turn them back on.
+ */
+export function personPageFileToggles(shown: { history: boolean; childEvents: boolean; kidPlaces?: boolean }): PersonPageOptions['toggles'] {
+    return { history: shown.history, childEvents: shown.childEvents, kidPlaces: shown.kidPlaces !== false };
+}
+
 /** The page's body: `<article class="pp">…</article>`. */
 export function buildPersonPageBody(page: PersonPageData, opts: PersonPageOptions): string {
     const c = makeCtx(page, opts);

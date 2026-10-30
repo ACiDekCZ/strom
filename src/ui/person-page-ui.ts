@@ -22,7 +22,7 @@ import {
     PERSON_PAGE_ALL_GROUPS, PersonPageGroups, PersonPageOptions, PersonPageContext, PersonPageData,
     preparePersonPageData, protectPersonPageTree, buildPersonPageBody, buildPersonPageDocument, personPageSections,
     personPageFileName, estimatePersonPageSize, personPageSizeMb, personPageLivingNames, personPageTocCurrent,
-    PERSON_PAGE_DEFAULT_PRIVACY, PERSON_PAGE_PRIVACY_MODES, personPageExportPrivacy, personPageChartInput,
+    PERSON_PAGE_DEFAULT_PRIVACY, PERSON_PAGE_PRIVACY_MODES, personPageExportPrivacy, personPageChartInput, personPageFileToggles,
 } from '../person-page.js';
 import { selectMapPlace, placeOrderKey, PlacePoint } from '../person-page-map.js';
 import { lifeChartHtml } from '../person-page-chart.js';
@@ -793,8 +793,8 @@ export const personPageMethods = uiModule({
         const fontCss = appFontFaceCss([...POSTER_SERIF_FACES, ...POSTER_LINE_FACES]);
         const fileOpts = (groups: PersonPageGroups, privacy: PrivacyMode): PersonPageOptions => this.personPageOptions(personId, {
             mode: 'file', links: 'plain', groups, privacy, now, fontCss, open: new Set(),
-            // Children's places as the window shows them when saving (§1.2).
-            toggles: { history: true, childEvents: true, kidPlaces: state?.current.toggles.kidPlaces ?? true },
+            // Every switch as the window shows it when saving: what is visible is what gets saved.
+            toggles: personPageFileToggles(state?.current.toggles ?? { history: true, childEvents: true, kidPlaces: true }),
         });
         // The groups, their counts and the living people come from the full page.
         let fullProt = protectPersonPageTree(data, 'full', now);

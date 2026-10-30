@@ -651,6 +651,41 @@ test.describe('person page 2: places of life and the life chart', () => {
     });
 });
 
+test.describe('person page 2: the saved file follows the window\'s switches', () => {
+    test.use({ viewport: { width: 1280, height: 800 } });
+
+    test('Children\'s events and Children\'s places off in the window: the file starts with both off', async ({ page, browser }) => {
+        await openApp(page);
+        await seedTraveller(page);
+        await page.evaluate(() => window.Strom.UI.showPersonPage('karl' as never));
+        const w = win(page);
+        await w.locator('[data-pp-switch="childEvents"]').click();
+        await w.locator('[data-pp-switch="kidPlaces"]').click();
+        await expect(w.locator('[data-pp-switch="childEvents"]')).toHaveAttribute('aria-checked', 'false');
+        await expect(w.locator('[data-pp-switch="kidPlaces"]')).toHaveAttribute('aria-checked', 'false');
+        await w.locator('.pp-save').click();
+        const dlg = page.locator('#person-page-export-modal');
+        await dlg.locator('[data-ppx-privacy="full"]').click();
+        const [download] = await Promise.all([page.waitForEvent('download'), dlg.locator('[data-ppx="save"]').click()]);
+        const html = readFileSync(await download.path(), 'utf-8');
+        expect(html).toMatch(/<article class="pp pp-no-kids"/);
+        const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+        const filePage = await ctx.newPage();
+        await filePage.setContent(html, { waitUntil: 'load' });
+        const sw = filePage.locator('[data-pp-switch="childEvents"]');
+        await expect(sw).toHaveAttribute('aria-checked', 'false');
+        await expect(filePage.locator('.pp-row--kid').first()).toBeHidden();
+        await expect(filePage.locator('.pp-chart .pp-ch-kid').first()).toBeHidden();
+        // The children's places are not on the map (Toronto is the living daughter's, Linz the son's).
+        await expect(filePage.locator('.pp-map-pt--rel')).toHaveCount(0);
+        await expect(filePage.locator('.pp-map-row', { hasText: 'Linz' })).toHaveCount(0);
+        // The file's own switch brings the children's rows back.
+        await sw.click();
+        await expect(filePage.locator('.pp-row--kid').first()).toBeVisible();
+        await ctx.close();
+    });
+});
+
 test.describe('a research tree with history', () => {
     test.use({ viewport: { width: 1280, height: 720 } });
 
@@ -713,6 +748,20 @@ test.describe('a research tree with history', () => {
         await expect(filePage.locator('.pp-row--hist')).toBeHidden();
         expect(requests).toEqual([]);
         await offline.close();
+
+        // History off in the window when saving: the file starts with it off too (its switch brings it back).
+        await sw.click();
+        await expect(sw).toHaveAttribute('aria-checked', 'false');
+        await w.locator('.pp-save').click();
+        const [offDownload] = await Promise.all([page.waitForEvent('download'), dlg.locator('[data-ppx="save"]').click()]);
+        const offCtx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+        const offPage = await offCtx.newPage();
+        await offPage.setContent(readFileSync(await offDownload.path(), 'utf-8'), { waitUntil: 'load' });
+        await expect(offPage.locator('[data-pp-switch="history"]')).toHaveAttribute('aria-checked', 'false');
+        await expect(offPage.locator('.pp-row--hist')).toBeHidden();
+        await offPage.locator('[data-pp-switch="history"]').click();
+        await expect(offPage.locator('.pp-row--hist')).toContainText('Austro-Prussian War');
+        await offCtx.close();
     });
 });
 

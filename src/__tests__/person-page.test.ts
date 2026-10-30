@@ -10,7 +10,7 @@ import { describe, it, expect } from 'vitest';
 import {
     preparePersonPageData, buildPersonPageBody, buildPersonPageDocument, personPageFileName, estimatePersonPageSize,
     personPageTimeline, personPageSections, protectPersonPageTree, stripResearchIds, registerKindOf, personPageDate,
-    PERSON_PAGE_ALL_GROUPS, PersonPageOptions, personPageSizeMb, personPageLivingNames, personPageExportPrivacy,
+    PERSON_PAGE_ALL_GROUPS, PersonPageOptions, personPageFileToggles, personPageSizeMb, personPageLivingNames, personPageExportPrivacy,
     personPageTocCurrent, dataUrlImageSize,
 } from '../person-page.js';
 import { buildFamilyBook } from '../book.js';
@@ -396,6 +396,17 @@ describe('timeline', () => {
         expect(html).toMatch(/<article class="pp pp-no-kids"/);
         expect(html).toContain('pp-seg--kid');
         expect(body(fiskTree(), { groups: { ...PERSON_PAGE_ALL_GROUPS, childEvents: false } })).not.toContain('pp-row--kid');
+    });
+
+    it('the saved file starts with every switch as the window shows it (what is visible is what gets saved)', () => {
+        expect(personPageFileToggles({ history: false, childEvents: false, kidPlaces: false })).toEqual({ history: false, childEvents: false, kidPlaces: false });
+        expect(personPageFileToggles({ history: true, childEvents: true })).toEqual({ history: true, childEvents: true, kidPlaces: true });
+        const off = doc(fiskTree(), { toggles: personPageFileToggles({ history: false, childEvents: false, kidPlaces: true }) });
+        // The rows stay in the file (its own switch turns them back on), hidden by the article's classes.
+        expect(off).toMatch(/<article class="pp pp-no-history pp-no-kids"/);
+        expect(off).toContain('aria-checked="false" data-pp-switch="childEvents"');
+        expect(off).toContain('pp-row--kid');
+        expect(doc(fiskTree(), { toggles: personPageFileToggles({ history: true, childEvents: true }) })).toMatch(/<article class="pp"/);
     });
 
     it('main excerpts sit at the birth and marriage rows; the source refers to them', () => {
