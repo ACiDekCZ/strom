@@ -179,6 +179,27 @@ test.describe('History in the life timeline: the person card', () => {
         await expect(warRow(page)).toBeVisible();
     });
 
+    test('a range of years: the start over "–end" in the narrow year column, "age 20–24" never broken (round 4)', async ({ page }) => {
+        const base = fakeHistory();
+        base.payload.events.push({ id: 'E4', from: 1880, to: 1884, kind: 'economy', scope: 'region',
+            text: { cs: 'Neúroda.', en: 'Years of bad harvests.' },
+            source: { title: 'Invented chronicle', url: 'https://example.org/harvest', checked: '2026-10-01' } });
+        (base.payload.places['Čapkov'] as { events: string[] }).events.push('E4');
+        await setup(page, { history: base, width: 390 });
+        await openCard(page, 'Jan');
+        const row = historyRows(page).filter({ hasText: 'Years of bad harvests.' });
+        await expect(row.locator('.pm-lifeline-year')).toHaveText('1880–1884');
+        await expect(row.locator('.pm-lifeline-year .pp-yr b')).toHaveText('1880');
+        await expect(row.locator('.pm-lifeline-year .pp-yr small')).toHaveText('–1884');
+        // Two lines, the dash at the start of the second; the column no wider than a single year's.
+        const [b, small] = await Promise.all([row.locator('.pp-yr b').boundingBox(), row.locator('.pp-yr small').boundingBox()]);
+        expect(small!.y).toBeGreaterThan(b!.y + b!.height - 2);
+        expect(await body(page).evaluate(el => el.classList.contains('has-ranges'))).toBe(false);
+        const age = row.locator('.pm-lifeline-hmeta .pp-nw');
+        await expect(age).toHaveText('age 20–24');
+        expect(await age.evaluate(el => getComputedStyle(el).whiteSpace)).toBe('nowrap');
+    });
+
     test('a year with two events is one folded row; Enter and Space unfold it', async ({ page }) => {
         const base = fakeHistory();
         base.payload.events.push({ id: 'E3', from: 1866, kind: 'epidemic', scope: 'region',
