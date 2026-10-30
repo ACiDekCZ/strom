@@ -10,7 +10,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-    collectPersonPlacePoints, planPlacesMap, placesMapHtml, compassSector, regionWidthPx, TINY_KM, type PlacePoint,
+    collectPersonPlacePoints, planPlacesMap, placesMapHtml, compassSector, regionWidthPx, regionSpot, TINY_KM, type PlacePoint, type Rect,
 } from '../person-page-map.js';
 import { towns, rivers, riverName, regionOf } from '../map-context.js';
 import { PERSON_PAGE_MAP_CSS } from '../person-page-viz-css.js';
@@ -152,7 +152,7 @@ describe('small neighbourhood: the orientation layer', () => {
         expect(fits(17, [15, 13, 12], 343)).toBe(13);
     });
 
-    it('round 4: the region is not drawn where it would cover a place\'s label', () => {
+    it('round 5 (K5-36): the region moves aside in the top band (centre, left, right) before it gets smaller', () => {
         // Three places in a row high up, one far below: Mlýnec's label has room only above it, where the name would go.
         const row = [...three(), mk('Kozákov', 1890)];
         const geo = {
@@ -162,8 +162,22 @@ describe('small neighbourhood: the orientation layer', () => {
         const plan = planPlacesMap(row, geo, { kidPlaces: true, lang: 'cs' });
         expect(plan.small?.region?.name).toBe('Vysočina');
         expect(plan.places.find(p => p.name === 'Mlýnec')!.side).toEqual({ d: 'a', p: 'a' });
-        expect(plan.small!.regionFont).toEqual({});
-        expect(placesMapHtml(row, geo, { lang: 'cs', mode: 'file', kidPlaces: true })).not.toContain('pp-map-region');
+        // Not at the centre any more: the full size on the side instead (round 4 left it out).
+        expect(plan.small!.regionFont).toEqual({ d: 22, p: 15 });
+        expect(plan.small!.regionPos).toEqual({ d: 'l', p: 'l' });
+        expect(placesMapHtml(row, geo, { lang: 'cs', mode: 'file', kidPlaces: true })).toContain('<span class="pp-map-region rg-d-l rg-p-l" style="--fd:22px;--fp:15px" aria-hidden="true">VYSOČINA</span>');
+        expect(PERSON_PAGE_MAP_CSS).toMatch(/@media \(min-width: 641px\) \{[^@]*\.pp-map-region\.rg-d-l \{ left: 16px; transform: none; \}/);
+        expect(PERSON_PAGE_MAP_CSS).toMatch(/@media \(max-width: 640px\) \{[^@]*\.pp-map-region\.rg-p-r \{ left: auto; right: calc\(100% \/ 6 \+ 12px\); transform: none; \}/);
+        // The order: each size at the centre, left, right before the next size; none when no size has a place.
+        const band = (x: number, w: number): Rect => ({ x, y: 30, w, h: 30 });
+        const at = (rects: Rect[]) => { const r = regionSpot('VYSOČINA', 'd', rects); return r && `${r.size}${r.pos}`; };
+        expect(at([])).toBe('22c');
+        expect(at([band(300, 40)])).toBe('22l');
+        expect(at([band(300, 40), band(10, 40)])).toBe('22r');
+        // The centre of a smaller size is free, but the full size on a side wins.
+        expect(at([band(250, 140), band(10, 40)])).toBe('22r');
+        expect(at([band(0, 640)])).toBeUndefined();
+        expect(regionSpot('VYSOČINA', 'p', [band(250, 150)])?.pos).toBe('l');
         // Without the row the name is drawn.
         expect(placesMapHtml(three(), VYSOCINA, { lang: 'cs', mode: 'file', kidPlaces: true })).toContain('pp-map-region');
     });

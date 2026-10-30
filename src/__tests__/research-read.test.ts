@@ -206,6 +206,9 @@ describe('GET read/<id>', () => {
         const e = r.entries[0];
         expect(e.transcript).toBe('Joannes[?] filius legitimus\nAntonii Nowak [...] Lhota');
         expect(e.variants).toEqual([{ at: 'Joannes[?]', other: 'Josephus' }]);
+        // What differs (research 2026-10) is kept; a field that is no text is left out.
+        const withField = sanitizeReadResult({ ...full, entries: [{ ...full.entries[0], variants: [{ field: 'p2.role', at: 'father', other: 'witness' }, { field: 7, at: 'a', other: 'b' }] }] })!;
+        expect(withField.entries[0].variants).toEqual([{ at: 'father', other: 'witness', field: 'p2.role' }, { at: 'a', other: 'b' }]);
         expect(e.glossary.map(g => g.kind)).toEqual(['term', 'abbr']);
         expect(e.persons[0]).toMatchObject({ ref: 'p1', role: 'child', roleText: 'pokřtěný', sex: 'M', age: '', uncertain: ['given'], match: [{ person: 'P0012', score: 0.82 }] });
         expect(e.persons[1].region).toBeNull();

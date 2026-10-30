@@ -567,8 +567,16 @@ function marksRow(input: LifeChartInput, S: CS, xpx: (y: number) => number, x: (
         if (g && px - g.px < 8) g.marks.push(m);
         else groups.push({ marks: [m], px });
     }
+    // The open end's label ("after 1871 ?", "today") ends at the bar's end; it is placed first, a mark's label
+    // under it is left out (the mark keeps its title).
+    const endText = input.endKind === 'unknown' && input.lastYear !== undefined ? `${C.after(String(input.lastYear))} ?`
+        : input.endKind === 'living' && app ? C.today : '';
     // Labels: most important first, a label left out when it would overlap one already placed.
     const taken: [number, number][] = [];
+    if (endText) {
+        const r = Math.min(W, xpx(input.barEnd));
+        taken.push([Math.max(0, r - (endText.length * 5.8 + 4)), r]);
+    }
     const labelOf = new Map<number, string>();
     const order = groups.map((g, i) => ({ g, i })).sort((a, b) => Math.min(...a.g.marks.map(prio)) - Math.min(...b.g.marks.map(prio)) || a.g.px - b.g.px);
     for (const { g, i } of order) {
@@ -592,10 +600,10 @@ function marksRow(input: LifeChartInput, S: CS, xpx: (y: number) => number, x: (
             + `<span class="pp-ch-tick"></span>${glyph ? `<span class="pp-ch-gl">${glyph}</span>` : ''}${label ? `<span class="pp-ch-ml">${esc(label)}</span>` : ''}</a>`;
     });
     // The open end: "after 1871 ?" for an unknown death, "today" for a living person (window only).
-    if (input.endKind === 'unknown' && input.lastYear !== undefined) {
-        html += `<span class="pp-ch-end pp-ch-mk--e" style="left:${x(input.barEnd)}"><span class="pp-ch-ml">${esc(C.after(String(input.lastYear)))} ?</span></span>`;
-    } else if (input.endKind === 'living' && app) {
-        html += `<span class="pp-ch-end pp-ch-end--today pp-ch-mk--e" style="left:${x(input.barEnd)}"><span class="pp-ch-tick"></span><span class="pp-ch-ml">${esc(C.today)}</span></span>`;
+    if (input.endKind === 'unknown' && endText) {
+        html += `<span class="pp-ch-end pp-ch-mk--e" style="left:${x(input.barEnd)}"><span class="pp-ch-ml">${esc(endText)}</span></span>`;
+    } else if (input.endKind === 'living' && endText) {
+        html += `<span class="pp-ch-end pp-ch-end--today pp-ch-mk--e" style="left:${x(input.barEnd)}"><span class="pp-ch-tick"></span><span class="pp-ch-ml">${esc(endText)}</span></span>`;
     }
     return `<div class="pp-ch-row pp-ch-marks">${html}</div>`;
 }
@@ -653,6 +661,15 @@ export function historyTouchHalves(xs: readonly number[]): { l?: number; r?: num
         ...(i > 0 && half(x - xs[i - 1]) !== undefined ? { l: half(x - xs[i - 1]) } : {}),
         ...(i < xs.length - 1 && half(xs[i + 1] - x) !== undefined ? { r: half(xs[i + 1] - x) } : {}),
     }));
+}
+
+/**
+ * Whether a period bar (a link of its own) lies over the horizontal span of a
+ * glyph's touch target (round 5, K5-38): the target then stops half way up to
+ * the bar instead of reaching over it.
+ */
+export function barsOver(bars: readonly (readonly [number, number])[], left: number, right: number): boolean {
+    return bars.some(([a, b]) => a < right && b > left);
 }
 
 /** One glyph of the history row: the events of one year, or a cluster of near years. */
@@ -740,11 +757,14 @@ function historyRow(items: readonly ChartHistory[], S: CS, xpx: (y: number) => n
     const glyphs = historyGlyphs(items, S, xpx, narrow ? HIST_CLUSTER_PX_NARROW : HIST_CLUSTER_PX);
     const pc = (n: number): string => `${(Math.round((n / W) * 10000) / 100).toString()}%`;
     const touch = historyTouchHalves(glyphs.map(g => g.x));
+    const barSpans = bars.map(h => [xpx(h.from), xpx(h.to! + 1)] as const);
     glyphs.forEach((g, i) => {
         const glyph = g.scope === 'local' ? '■' : g.scope === 'place' ? '▲' : '◇';
         const t = touch[i];
         const tv = `${t.l !== undefined ? `;--tl:${t.l}px` : ''}${t.r !== undefined ? `;--tr:${t.r}px` : ''}`;
-        html += `<a class="pp-ch-hm pp-ch-hm--${g.scope}${g.cluster ? ' pp-ch-hm--c' : ''}" href="#${g.anchor}" data-pp-osa="${g.anchor}" style="left:${pc(g.x)}${tv}" title="${esc(g.title)}">`
+        // Round 5 (K5-38): the target reaches up into the period bars' line only where no bar lies over it.
+        const under = barsOver(barSpans, g.x - (t.l ?? HIST_TOUCH_HALF), g.x + (t.r ?? HIST_TOUCH_HALF));
+        html += `<a class="pp-ch-hm pp-ch-hm--${g.scope}${g.cluster ? ' pp-ch-hm--c' : ''}${under ? ' pp-ch-hm--ub' : ''}" href="#${g.anchor}" data-pp-osa="${g.anchor}" style="left:${pc(g.x)}${tv}" title="${esc(g.title)}">`
             + `<span class="pp-ch-hg">${glyph}</span>${g.cluster ? `<span class="pp-ch-hn">${g.count}</span>` : ''}</a>`;
     });
     if (!narrow) {

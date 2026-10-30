@@ -42,6 +42,11 @@ export const PERSON_PAGE_MAP_CSS = `
 .pp-map-pt:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .pp-map-cl { width: auto; min-width: 22px; margin: 0; padding: 0 6px; border-radius: 11px; transform: translate(-50%, -50%); white-space: nowrap; }
 .pp-map-cl.is-sel { width: auto; min-width: 26px; height: 26px; margin: 0; padding: 0 8px; border-radius: 13px; }
+/* Round 5 (K5-33): a cluster with relatives' places has a hollow ring after the numbers; a cluster of those
+   places only is a hollow pill with their count. */
+.pp-map-cl-ring { display: inline-block; box-sizing: border-box; width: 8px; height: 8px; margin-left: 4px; border: 1.5px solid #fff; border-radius: 50%; vertical-align: 0; }
+.pp-map-cl--rel { border-color: var(--primary); background: var(--surface); color: var(--primary); box-shadow: none; }
+.pp-map-cl--rel.is-sel { border-color: var(--accent); background: var(--surface); color: var(--accent); }
 .pp-map-lb--cl { font-weight: 600; }
 .pp-map-lb { --hw: 11px; position: absolute; z-index: 1; transform: translate(calc(var(--hw) + 5px), -50%); padding: 1px 6px; border-radius: 5px; background: var(--map-label-bg); color: var(--text); font-size: 12.5px; font-weight: 600; line-height: 18px; white-space: nowrap; pointer-events: none; }
 .pp-map-lb--rel { font-weight: 500; color: var(--text-light); }
@@ -59,6 +64,9 @@ export const PERSON_PAGE_MAP_CSS = `
 .pp-map-arc { fill: none; stroke: var(--accent); stroke-width: 1.2; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
 .pp-map-ipt { fill: var(--surface); stroke: var(--primary); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .pp-map-ipt.is-sel { stroke: var(--accent); }
+/* A dot of the world inset is clickable (round 5): 22 px, touch 44 px, narrowed to half the distance to a neighbour (--nd, --np). */
+.pp-map-ihit { --n: var(--nd, 22px); position: absolute; z-index: 1; width: min(22px, calc(2 * var(--n))); height: min(22px, calc(2 * var(--n))); margin: 0; padding: 0; border: 0; border-radius: 50%; background: none; transform: translate(-50%, -50%); cursor: pointer; }
+.pp-map-ihit:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
 .pp-map-ilb { --tx: 6px; --ty: -50%; position: absolute; transform: translate(var(--tx), var(--ty)); padding: 0 3px; border-radius: 3px; background: var(--map-label-bg); color: var(--text-light); font-size: 10px; line-height: 13px; white-space: nowrap; }
 .pp-map-ilb--l { --tx: calc(-100% - 6px); }
 .pp-map-ilb--up { --ty: calc(-100% - 1px); }
@@ -118,6 +126,9 @@ export const PERSON_PAGE_MAP_CSS = `
   .lb-d-hide { display: none; }
   .pp-map-rl--p { display: none; }
   .pp-map-pt.cl-d, .pp-map-cl--p, .pp-map-route.r-p, .pp-map-i--p, .rg-d-hide { display: none; }
+  /* Round 5 (K5-36): the region's name moved aside from a label, 16 px off the edge. */
+  .pp-map-region.rg-d-l { left: 16px; transform: none; }
+  .pp-map-region.rg-d-r { left: auto; right: 16px; transform: none; }
 }
 @media (max-width: 640px) {
   .pp-map { aspect-ratio: 4 / 3; }
@@ -132,9 +143,13 @@ export const PERSON_PAGE_MAP_CSS = `
   .pp-map-yr.y-p { display: inline; }
   .pp-map-scale { width: calc(var(--u) * 100% / 426.667); }
   .pp-map-inset { width: 40%; }
+  .pp-map-ihit { --n: var(--np, 22px); }
   .pp-map-row { font-size: 13.5px; }
   .pp-map-ring--2, .pp-map-rl--2, .pp-map-rl--d, .pp-map-anc, .pp-map-rvl { display: none; }
   .pp-map-region { top: 14px; font-size: var(--fp, 15px); letter-spacing: .28em; }
+  /* The phone shows the middle 2/3 of the map: 12 px off its edges. */
+  .pp-map-region.rg-p-l { left: calc(100% / 6 + 12px); transform: none; }
+  .pp-map-region.rg-p-r { left: auto; right: calc(100% / 6 + 12px); transform: none; }
   .pp-map-arrow { font-size: 11px; padding: 2px 6px; }
   .pp-map-arrow--u, .pp-map-arrow--d { left: var(--xp); }
   .pp-map-where { right: 8px; bottom: 8px; }
@@ -151,6 +166,7 @@ export const PERSON_PAGE_MAP_CSS = `
   .pp-map-region { top: calc(100% / 6 + 8px); }
 }
 @media (hover: hover) {
+  .pp-map-ihit:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
   .pp-map-row[data-pp-map-place]:hover { background: var(--hover-bg); }
   .pp-map-pt:hover { filter: brightness(1.12); }
 }
@@ -158,6 +174,7 @@ export const PERSON_PAGE_MAP_CSS = `
   .pp-map-tools .pp-act { min-height: 44px; }
   .pp-map-pt::before { content: ''; position: absolute; inset: -11px; border-radius: 50%; }
   .pp-map-pt--rel::before { inset: -15px; }
+  .pp-map-ihit { width: min(44px, calc(2 * var(--n))); height: min(44px, calc(2 * var(--n))); }
   .pp-map-row { min-height: 44px; align-items: center; }
 }
 @media print {
@@ -285,6 +302,15 @@ export const PERSON_PAGE_CHART_CSS = `
   .pp-ch-mk--e::before { left: -44px; }
   /* History glyphs and clusters (round 4): 44 x 44 px around the glyph, narrowed to half the gap to a neighbour. */
   .pp-ch-hm::before { content: ''; position: absolute; top: -15px; left: calc(-1 * var(--tl, 22px)); width: calc(var(--tl, 22px) + var(--tr, 22px)); height: 44px; }
+  /* Round 5 (K5-38): up into the ages and below into the period names the target may reach (nothing tappable there);
+     a period bar over it (a link) stops it half way: the bar ends 6 px down the row, the glyph starts at 12 px. */
+  .pp-ch-hm--ub::before { top: -3px; height: 32px; }
+}
+@media ${LANDSCAPE} and (pointer: coarse) {
+  /* The phone's set held sideways: the glyph 9 px down a 22 px row, the bar of life 15 px under the row. The target
+     stops half way to the bar (7 px under the glyph) and to a period bar over it (1.5 px above the glyph). */
+  .pp-ch-hist--n .pp-ch-hm::before { top: -15px; height: 36px; }
+  .pp-ch-hist--n .pp-ch-hm--ub::before { top: -1.5px; height: 22.5px; }
 }
 @media print {
   .pp-chart { break-inside: avoid; }

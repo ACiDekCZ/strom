@@ -347,7 +347,13 @@ export interface ReadPage {
     image: string;
 }
 
-export interface ReadVariant { at: string; other: string }
+/**
+ * Where the two readers differ: `at` the first reader's text, `other` the blind one's. `field` (research 2026-10):
+ * what differs, "transcript" (words of the transcription), "p2.surname" / "p2.given" / "p2.role" (a person's name
+ * or role), "p2" (a person only the first reader has), "person" (one only the blind reader has), "entry", "birth.date"…;
+ * none from an older research (then a transcription's words).
+ */
+export interface ReadVariant { at: string; other: string; field?: string }
 
 export interface ReadGloss { term: string; meaning: string; kind: 'term' | 'occupation' | 'abbr' | 'symbol' }
 
@@ -513,7 +519,8 @@ function sanitizeEntry(v: unknown, index: number): ReadEntry | null {
     for (const item of Array.isArray(e.variants) ? e.variants.slice(0, 100) : []) {
         const r = asRecord(item);
         const at = r ? cleanText(r.at, 300) : '';
-        if (r && at) variants.push({ at, other: cleanText(r.other, 300) });
+        const field = r && typeof r.field === 'string' ? cleanText(r.field, 40) : '';
+        if (r && at) variants.push({ at, other: cleanText(r.other, 300), ...(field ? { field } : {}) });
     }
     const glossary: ReadGloss[] = [];
     for (const item of Array.isArray(e.glossary) ? e.glossary.slice(0, 100) : []) {

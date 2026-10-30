@@ -356,6 +356,60 @@ describe('family', () => {
         const last = hs.find(h => h.top === lastBus)!;
         expect(Math.abs(last.left + last.w / 2 - trunk.left)).toBeLessThan(0.5);
     });
+    it('in the 960 px column the tree keeps 680 px in the middle, only the children\'s row is wider: up to 7 cards (round 5, K5-37)', () => {
+        const d = fiskTree();
+        // Two children fit the 680 px tree as they are: no wide variant.
+        expect(body(d)).not.toContain('<div class="pp-ft9"');
+        const kids = ['k1', 'k2', 'k3', 'k4', 'k5', 'k6', 'k7'];
+        for (const [i, k] of kids.entries()) {
+            d.persons[k as PersonId] = p(k, `Dítě${i + 1}`, 'Fíšek', 'male', { birthDate: `${1889 + i}`, deathDate: '1950', parentIds: ids('jan', 'marie') });
+        }
+        d.persons['jan' as PersonId].childIds = ids(...kids);
+        d.persons['marie' as PersonId].childIds = ids(...kids);
+        d.partnerships['u1' as PartnershipId].childIds = ids(...kids);
+        delete d.persons['petr' as PersonId];
+        delete d.persons['rosa' as PersonId];
+        const html = body(d);
+        const wide = html.match(/<div class="pp-ft9"[^>]*>.*?<\/div>(?=<div class="pp-ft")/)?.[0] ?? '';
+        expect(wide).not.toBe('');
+        // The 680 px tree is still there (under 1280 px, print).
+        expect(tree(html)).toContain('data-pp-person="k7"');
+        const box = (id: string) => {
+            const at = id === 'jan' ? 'pp-ft-card--me"' : `data-pp-person="${id}"`;
+            const m = wide.match(new RegExp(`${at} style="left:([\\d.]+)%;top:(\\d+)px;width:([\\d.]+)%`))!;
+            return { left: +m[1] * 9.6, top: +m[2], w: +m[3] * 9.6 };
+        };
+        // The person and the partner: the 680 px geometry moved 140 px into the middle of 960.
+        expect(box('jan').left).toBeCloseTo(140 + 265, 0);
+        expect(box('jan').w).toBeCloseTo(150, 0);
+        expect(box('marie').left).toBeCloseTo(140, 0);
+        // Seven children in one row of 126 px cards 10 px apart.
+        const row = kids.map(box);
+        expect(new Set(row.map(r => r.top)).size).toBe(1);
+        expect(row.every(r => Math.abs(r.w - 126) < 0.5)).toBe(true);
+        expect(row[1].left - row[0].left).toBeCloseTo(136, 0);
+        const trunk = [...wide.matchAll(/<span class="pp-ft-v" style="left:([\d.]+)%;top:(\d+)px;height:(\d+)px"/g)]
+            .map(m => ({ x: +m[1] * 9.6, end: +m[2] + +m[3] })).find(v => v.end === row[0].top - 12)!;
+        // The row (942 px) is pushed into the column; the union's trunk ends on its bus.
+        expect(row[0].left).toBeGreaterThanOrEqual(0);
+        expect(row[6].left + 126).toBeLessThanOrEqual(960.5);
+        expect(trunk.x).toBeGreaterThan(row[0].left);
+        expect(trunk.x).toBeLessThan(row[6].left + 126);
+        // Four children under the left partner: at 680 the group is pushed to the edge, at 960 it sits centred under the trunk.
+        const four = kids.slice(0, 4);
+        d.partnerships['u1' as PartnershipId].childIds = ids(...four);
+        d.persons['jan' as PersonId].childIds = ids(...four);
+        d.persons['marie' as PersonId].childIds = ids(...four);
+        for (const k of kids.slice(4)) delete d.persons[k as PersonId];
+        const w4 = body(d).match(/<div class="pp-ft9"[^>]*>.*?<\/div>(?=<div class="pp-ft")/)?.[0] ?? '';
+        const lefts = four.map(k => +w4.match(new RegExp(`data-pp-person="${k}" style="left:([\\d.]+)%`))![1] * 9.6);
+        const stem = [...w4.matchAll(/<span class="pp-ft-v" style="left:([\d.]+)%;top:(\d+)px;height:(\d+)px"/g)].map(m => +m[1] * 9.6);
+        expect(stem.some(x => Math.abs((lefts[0] + lefts[3] + 126) / 2 - x) < 0.5)).toBe(true);
+        // The CSS shows it only from 1280 px, never in print.
+        expect(PERSON_PAGE_CSS).toMatch(/@media screen and \(min-width: 1280px\) \{[^}]*\}[^@]*\.pp-fam\.pp-wide \.pp-ft9 \{ display: block; max-width: 960px/);
+        expect(PERSON_PAGE_CSS).toContain('.pp-fam.pp-wide .pp-ft9 + .pp-ft { display: none; }');
+        expect(PERSON_PAGE_CSS).toContain('.pp-ft9 { display: none !important; }');
+    });
     it('a step-parent is labelled and joined by a dashed line; a couple without children says so', () => {
         const d = fiskTree();
         d.persons['jan' as PersonId].parentRelTypes = { otec: 'step' } as Person['parentRelTypes'];

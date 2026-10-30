@@ -968,15 +968,15 @@ const FT_KID_MIN = 110;
 const FT_KID_GAP = 8;
 const FT_GROUP_GAP = 20;
 const FT_KIDS_PER_ROW = 5;
+/** The tree in the 960 px column (round 5 §0.8, K5-37): only the children's row is wider, up to 7 cards 10 px apart. */
+const FT_W_WIDE = 960;
+const FT_KIDS_PER_ROW_WIDE = 7;
+const FT_KID_GAP_WIDE = 10;
 /** A wrapped row of children: ticks from its bus to the cards, the gap from a row's cards to the next row's bus (K2-2b). */
 const FT_TICK = 12;
 const FT_ROW_GAP = 40;
 /** From this many unions the tree is drawn upright on every width (§4.1, round 2): partners to the sides would cross. */
 const FT_UPRIGHT_UNIONS = 3;
-
-function ftPct(x: number): string {
-    return `${+(x / FT_W * 100).toFixed(3)}%`;
-}
 
 /** A living person under a privacy other than full: "E. F. · * 1952", never a link (§4.1). */
 function shielded(c: Ctx, pid: PersonId): boolean {
@@ -1102,27 +1102,38 @@ function familyTreeData(c: Ctx): FtData {
     return { parents, parentsUnion, unions, solo, siblings: fam.siblings, grandchildren: sortByBirth([...grand], tree) };
 }
 
-/** The desktop and tablet tree (§4.1, 0–2 unions): parents, the person with partners to the sides, children under their union. */
-function familyTreeDesktopHtml(c: Ctx, d: FtData): string {
+/**
+ * The desktop and tablet tree (§4.1, 0–2 unions): parents, the person with partners to the sides, children under their union.
+ * `wide` (round 5 §0.8, K5-37): the variant for the 960 px column; the tree keeps its 680 px geometry in the middle, only
+ * the children's row may use the whole width (up to 7 cards in a row, 10 px apart). Coordinates below are the 680 px
+ * column's; `off` moves them into the wider one. `kids` describes the children's placement (in the 680 px coordinates),
+ * to tell whether the wide variant places them otherwise at all.
+ */
+function familyTreeDesktopHtml(c: Ctx, d: FtData, wide = false, gap = wide ? FT_KID_GAP_WIDE : FT_KID_GAP): { html: string; kids: string } {
+    const W = wide ? FT_W_WIDE : FT_W;
+    const off = (W - FT_W) / 2;
+    const pct = (x: number): string => `${+(x / W * 100).toFixed(3)}%`;
+    const perRow = wide ? FT_KIDS_PER_ROW_WIDE : FT_KIDS_PER_ROW;
+    const kidsAt: string[] = [];
     const lines: string[] = [];
     const labels: string[] = [];
     const cards: string[] = [];
     const hLine = (x1: number, x2: number, y: number, dashed = false) => {
         const l = Math.min(x1, x2);
         const w = Math.abs(x2 - x1);
-        if (w > 0) lines.push(`<span class="pp-ft-h${dashed ? ' pp-ft-dash' : ''}" style="left:${ftPct(l)};top:${y}px;width:${ftPct(w)}"></span>`);
+        if (w > 0) lines.push(`<span class="pp-ft-h${dashed ? ' pp-ft-dash' : ''}" style="left:${pct(l + off)};top:${y}px;width:${pct(w)}"></span>`);
     };
     const vLine = (x: number, y1: number, y2: number, dashed = false) => {
         const t = Math.min(y1, y2);
         const h = Math.abs(y2 - y1);
-        if (h > 0) lines.push(`<span class="pp-ft-v${dashed ? ' pp-ft-dash' : ''}" style="left:${ftPct(x)};top:${t}px;height:${h}px"></span>`);
+        if (h > 0) lines.push(`<span class="pp-ft-v${dashed ? ' pp-ft-dash' : ''}" style="left:${pct(x + off)};top:${t}px;height:${h}px"></span>`);
     };
     // A label between two cards never grows wider than the gap (round 3 §4.1): it would run under the cards.
     const label = (x: number, y: number, html: string, maxW = 0) => {
-        if (html) labels.push(`<span class="pp-ft-lab" style="left:${ftPct(x)};top:${y}px${maxW ? `;max-width:${ftPct(maxW)}` : ''}">${html}</span>`);
+        if (html) labels.push(`<span class="pp-ft-lab" style="left:${pct(x + off)};top:${y}px${maxW ? `;max-width:${pct(maxW)}` : ''}">${html}</span>`);
     };
     const card = (pid: PersonId, x: number, y: number, w: number, cls: string, extra = '', h = FT_CARD_H) =>
-        cards.push(ftCard(c, pid, cls, `left:${ftPct(x)};top:${y}px;width:${ftPct(w)};height:${h}px`, extra));
+        cards.push(ftCard(c, pid, cls, `left:${pct(x + off)};top:${y}px;width:${pct(w)};height:${h}px`, extra));
     const mid = FT_W / 2;
     const meX = mid - FT_CARD / 2;
     let bottom = 0;
@@ -1182,32 +1193,32 @@ function familyTreeDesktopHtml(c: Ctx, d: FtData): string {
     }
     stems.sort((a, b) => a.x - b.x);
 
-    // Children under their union: groups centred under their stem and pushed inward; over 5 children wrap
+    // Children under their union: groups centred under their stem and pushed inward; over 5 (wide: 7) children wrap
     // (K2-2b): every row has its own bus over its cards' centres with 12 px ticks, a trunk from the union's
     // stem runs down to the last row's bus, a shorter last row is centred under the trunk.
     if (stems.length) {
         const busY = bottom + 14;
         const kidTop = busY + FT_TICK;
         const pitch = FT_CARD_H + FT_ROW_GAP + FT_TICK;
-        const cols = stems.map(s => Math.min(s.kids.length, FT_KIDS_PER_ROW));
+        const cols = stems.map(s => Math.min(s.kids.length, perRow));
         let kw = FT_KID;
         for (;;) {
-            const fixed = cols.reduce((n, k) => n + (k - 1) * FT_KID_GAP, 0) + (stems.length - 1) * FT_GROUP_GAP;
+            const fixed = cols.reduce((n, k) => n + (k - 1) * gap, 0) + (stems.length - 1) * FT_GROUP_GAP;
             const sum = cols.reduce((n, k) => n + k, 0);
-            kw = Math.min(FT_KID, Math.floor((FT_W - fixed) / sum));
+            kw = Math.min(FT_KID, Math.floor((W - fixed) / sum));
             if (kw >= FT_KID_MIN) break;
             const widest = cols.indexOf(Math.max(...cols));
             if (cols[widest] <= 1) { kw = Math.max(kw, 60); break; }
             cols[widest]--;
         }
-        const widths = cols.map(k => k * kw + (k - 1) * FT_KID_GAP);
+        const widths = cols.map(k => k * kw + (k - 1) * gap);
         const lefts = stems.map((s, i) => s.x - widths[i] / 2);
         for (let i = 0; i < lefts.length; i++) {
-            lefts[i] = Math.max(lefts[i], 0, i ? lefts[i - 1] + widths[i - 1] + FT_GROUP_GAP : 0);
+            lefts[i] = Math.max(lefts[i], -off, i ? lefts[i - 1] + widths[i - 1] + FT_GROUP_GAP : -off);
         }
-        let bound = FT_W;
+        let bound = FT_W + off;
         for (let i = lefts.length - 1; i >= 0; i--) {
-            lefts[i] = Math.max(0, Math.min(lefts[i], bound - widths[i]));
+            lefts[i] = Math.max(-off, Math.min(lefts[i], bound - widths[i]));
             bound = lefts[i] - FT_GROUP_GAP;
         }
         stems.forEach((s, i) => {
@@ -1215,15 +1226,16 @@ function familyTreeDesktopHtml(c: Ctx, d: FtData): string {
             const rows = Math.ceil(s.kids.length / n);
             for (let r = 0; r < rows; r++) {
                 const row = s.kids.slice(r * n, r * n + n);
-                const rowW = row.length * kw + (row.length - 1) * FT_KID_GAP;
+                const rowW = row.length * kw + (row.length - 1) * gap;
                 // A full row fills the group; a shorter one is centred under the trunk (kept inside the group).
                 const left = row.length === n ? lefts[i]
                     : Math.min(Math.max(s.x - rowW / 2, lefts[i]), lefts[i] + widths[i] - rowW);
                 const top = kidTop + r * pitch;
                 const bus = top - FT_TICK;
                 row.forEach((k, j) => {
-                    const x = left + j * (kw + FT_KID_GAP);
+                    const x = left + j * (kw + gap);
                     card(k, x, top, kw, 'pp-ft-card--kid');
+                    kidsAt.push(`${k}:${Math.round(x)},${top},${kw}`);
                     vLine(x + kw / 2, bus, top);
                 });
                 const c0 = left + kw / 2;
@@ -1234,7 +1246,10 @@ function familyTreeDesktopHtml(c: Ctx, d: FtData): string {
             vLine(s.x, s.y, kidTop + (rows - 1) * pitch - FT_TICK);
         });
     }
-    return `<div class="pp-ft" style="height:${Math.ceil(bottom) + 2}px">${lines.join('')}${labels.join('')}${cards.join('')}</div>`;
+    return {
+        html: `<div class="${wide ? 'pp-ft9' : 'pp-ft'}" style="height:${Math.ceil(bottom) + 2}px">${lines.join('')}${labels.join('')}${cards.join('')}</div>`,
+        kids: kidsAt.join(' '),
+    };
 }
 
 /**
@@ -1292,6 +1307,17 @@ function familyTreeMoreHtml(c: Ctx, d: FtData): string {
 }
 
 /**
+ * The desktop tree, and when its children would sit otherwise in the 960 px column (more than 5 in a union, a group
+ * pushed inward at 680) also the wide variant `.pp-ft9` (round 5, K5-37); the CSS shows it from a 1280 px window.
+ * The wide gap alone (10 px instead of 8) is no reason for a second tree.
+ */
+function familyTreeDesktopBothHtml(c: Ctx, d: FtData): string {
+    const narrow = familyTreeDesktopHtml(c, d);
+    if (familyTreeDesktopHtml(c, d, true, FT_KID_GAP).kids === narrow.kids) return narrow.html;
+    return familyTreeDesktopHtml(c, d, true).html + narrow.html;
+}
+
+/**
  * The family as a small tree (§4): `.pp-ft` on a page wider than 640 px,
  * `.pp-rail` below that (the CSS picks one by the window's or file's width),
  * the siblings' and grandchildren's rows under both.
@@ -1303,7 +1329,7 @@ function familyTreeHtml(c: Ctx): string {
     // 0–2 unions: the tree to the sides (the upright one under 641 px); 3 and more: upright on every width.
     const upright = d.unions.length >= FT_UPRIGHT_UNIONS;
     const core = !(d.parents.length || d.unions.length || d.solo.length) ? ''
-        : upright ? familyTreeRailHtml(c, d, true) : familyTreeDesktopHtml(c, d) + familyTreeRailHtml(c, d);
+        : upright ? familyTreeRailHtml(c, d, true) : familyTreeDesktopBothHtml(c, d) + familyTreeRailHtml(c, d);
     return section('family', c.P.sec.family, `<div class="pp-fam pp-wide">${core}${familyTreeMoreHtml(c, d)}</div>`);
 }
 

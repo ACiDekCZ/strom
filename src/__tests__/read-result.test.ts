@@ -69,6 +69,18 @@ describe('transcription', () => {
         expect(parsed.marks).toEqual({ uncertain: true, illegible: false, variant: true });
     });
 
+    it('a role, a name field or an event the readers differ in is no text of the line: not lit up there', () => {
+        // "other" (a role code) would be found inside "Mother".
+        const roleOnly = parseTranscript(entry({ transcript: 'Mother ERIKA MARIA', variants: [{ at: 'other', other: 'writer', field: 'p2.role' }] }));
+        expect(roleOnly.lines[0].variant).toBe(false);
+        expect(roleOnly.lines[0].segs).toEqual([{ t: 'text', s: 'Mother ERIKA MARIA' }]);
+        expect(roleOnly.marks.variant).toBe(false);
+        // The transcription's own words (and an older research without a field) still are.
+        for (const v of [{ at: 'ERIKA', other: 'ERIKO', field: 'transcript' }, { at: 'ERIKA', other: 'ERIKO' }]) {
+            expect(parseTranscript(entry({ transcript: 'Mother ERIKA MARIA', variants: [v] })).lines[0].variant).toBe(true);
+        }
+    });
+
     it('says which marks occur (the legend shows only those)', () => {
         expect(parseTranscript(entry({ transcript: 'Anna [...]' })).marks).toEqual({ uncertain: false, illegible: true, variant: false });
         expect(parseTranscript(entry({ transcript: 'Anna Nováková' })).marks).toEqual({ uncertain: false, illegible: false, variant: false });
