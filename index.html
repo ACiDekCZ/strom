@@ -16875,8 +16875,9 @@
                 background: var(--border); margin: 8px auto 2px;
             }
             .pp-export .modal-header { padding-top: 6px; padding-bottom: 10px; }
+            /* The content's heading only after the privacy of the living (first under the title it goes without). */
             .pp-export .ppx-sub--who, .pp-export .ppx-sec--file, .pp-export .modal-header .close-btn,
-            .pp-export #ppx-content-h, .pp-export .ppx-always, .pp-export .ppx-size-hint { display: none; }
+            .pp-export .ppx-sec--file + .ppx-sec #ppx-content-h, .pp-export .ppx-always, .pp-export .ppx-size-hint { display: none; }
             .pp-export .ppx-sub--file { display: block; font-size: 13px; }
             .pp-export .ppx-checks { gap: 0; }
             .modal label.ppx-check {

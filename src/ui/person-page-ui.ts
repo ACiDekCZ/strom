@@ -836,6 +836,8 @@ export const personPageMethods = uiModule({
                 <span class="ppx-check-label">${esc(X.group[g])}</span>
                 <span class="ppx-count">${full.counts[g]}</span>
             </label>`).join('');
+        // The privacy of the living leads (after the file name): the choice and the names it covers stay in view
+        // at the dialog's first height, the content groups (whose note says what the living lose) follow.
         const privacyHtml = living ? `
             <div class="ppx-sec">
                 <div class="ppx-label" id="ppx-privacy-h">${esc(X.privacy)}</div>
@@ -877,6 +879,7 @@ export const personPageMethods = uiModule({
                     <div class="ppx-label">${esc(X.file)}</div>
                     <div class="ppx-file" id="ppx-file"></div>
                 </div>
+                ${privacyHtml}
                 <div class="ppx-sec" role="group" aria-labelledby="ppx-content-h">
                     <div class="ppx-label" id="ppx-content-h">${esc(X.content)}</div>
                     <div class="ppx-checks">
@@ -889,7 +892,6 @@ export const personPageMethods = uiModule({
                     <p class="ppx-note ppx-drops" id="ppx-drops" hidden>${esc(X.privacyDrops)}</p>
                 </div>
                 ${mediaHtml}
-                ${privacyHtml}
                 <div class="ppx-size">
                     <strong id="ppx-size-mb"></strong>
                     <span class="ppx-size-hint">${esc(X.sizeHint)}</span>

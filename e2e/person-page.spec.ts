@@ -311,6 +311,14 @@ test.describe('desktop', () => {
         // Nothing remembered yet: initials + birth year (K2.4).
         await expect(dlg.locator('[data-ppx-privacy="initials"]')).toHaveAttribute('aria-checked', 'true');
         await expect(dlg.locator('.ppx-note', { hasText: 'Applies to living people only' })).toContainText('Evelina Mala');
+        // The choice and the names it covers lead (after the file name): in view at the dialog's first height (1280 × 720),
+        // not under the scroll area's fade.
+        const inView = await dlg.evaluate((el) => {
+            const body = el.querySelector('.modal-content')!.getBoundingClientRect();
+            const note = el.querySelector('.ppx-privacy + .ppx-note')!.getBoundingClientRect();
+            return note.top >= body.top && note.bottom <= body.bottom - 24;
+        });
+        expect(inView).toBe(true);
         // Sources and excerpts stay on: only the living lose them, the note says so (K2.7).
         await expect(dlg.locator('#ppx-drops')).toBeVisible();
         await expect(dlg.locator('#ppx-drops')).toContainText('for living people only');
